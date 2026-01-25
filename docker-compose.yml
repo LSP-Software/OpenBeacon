@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: openbeacon
+      POSTGRES_USER: openbeacon
+      POSTGRES_PASSWORD: openbeacon
+    ports:
+      - "5432:5432"
+    volumes:
+      - openbeacon_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openbeacon -d openbeacon"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  backend:
+    image: oven/bun:1.3.6
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - bun_cache:/root/.bun
+    command: sh -lc "bun install && bun --cwd apps/backend run dev"
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://openbeacon:openbeacon@db:5432/openbeacon
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  openbeacon_db:
+  bun_cache:
