@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: openbeacon
+      POSTGRES_USER: openbeacon
+      POSTGRES_PASSWORD: openbeacon
+    ports:
+      - "5432:5432"
+    volumes:
+      - openbeacon_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openbeacon -d openbeacon"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  openbeacon_db:
