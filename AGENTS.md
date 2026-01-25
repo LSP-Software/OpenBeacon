@@ -9,7 +9,7 @@ Bun will be used in the backend, do not use npm/yarn/pnpm etc
 Backend wil be written in NestJS with strict types. The only time a type shouldn't be strictly typed is if given explicit consent by the user.
 We should be using zod for input validation
 For environment variables in the backend we should be using the @t3-oss/env-core
-Database: PostgreSQL with PostGIS for geospatial data using Prisma for a connector
+Database: PostgreSQL with PostGIS for geospatial data using Drizzle for a connector
 Deployment through Docker containers
 All code will be stored in a monorepo using Turborepo
 App will be Android only at the moment and written in Kotlin.
@@ -29,5 +29,5 @@ Biome for linting/formatting with all TS apps
   /ios # IOS app (not implemented yet)
   /site # Web app (not implemented yet)
 /packages # All shared code
-  /database # Prisma Database
+  /database # Drizzle Database ORM
   /tsconfig # tsconfig shared logic
