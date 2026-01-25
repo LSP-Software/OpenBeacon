@@ -20,6 +20,7 @@ Biome for linting/formatting with all TS apps
 1. Do not leave comments, code should be understandable by default, if a comment is needed code should ideally be re-written so it's more easily digestible, only time comments should be left is when working around dodgy implementations of other APIs.
 2. When installing new packages always install the latest with the bun install command, don't guess the version number.
 3. We need to add strong tools/rules to ensure that we are writing high quality code so that AI tools don't introduce errors, make sure with anything you're adding we have strict type checking rules.
+4. After making changes, always run the ci script (`bun run ci`) to ensure your changes haven't broken anything.
 
 # Project Structure
 /apps # All deployed applications
