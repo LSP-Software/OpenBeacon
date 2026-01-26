@@ -4,7 +4,10 @@ import { AppModule } from "./app.module.js";
 import { env } from "./env.js";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { abortOnError: false });
+  const app = await NestFactory.create(AppModule, {
+    abortOnError: false,
+    bodyParser: false,
+  });
   await app.listen(env.PORT);
 }
 
