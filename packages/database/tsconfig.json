@@ -4,6 +4,7 @@
     "rootDir": ".",
     "outDir": "./dist",
     "types": ["node"],
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true
   },
   "include": ["src/**/*.ts", "drizzle.config.ts"],
