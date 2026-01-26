@@ -1,34 +1,83 @@
-This project "OpenBeacon" is an open source location tracking app with an optional self hosted backend so you can manage your own data.
+This project "OpenBeacon" is an open source, privacy-first family location tracking app with an optional self-hosted backend so users can manage their own data.
 
 Users should be able to either host their own backend on their own hardware easily, or pay a simple monthly fee for us to host their own backend.
 
-The core concept of this app is to be privacy focused so if users pay for us to host their own backend we shouldn't be able to know anything they are doing as it should be encrypted by default.
+The core concept of this app is to be privacy focused so if users pay for us to host their own backend we shouldn't be able to know anything they are doing as it should be encrypted by default (server stores ciphertext only).
 
 # Technology
+
+## Backend
 - Bun will be used in the backend, do not use npm/yarn/pnpm etc
-- Backend wil be written in NestJS with strict types. The only time a type shouldn't be strictly typed is if given explicit consent by the user.
+- Backend will be written in NestJS with strict types. The only time a type shouldn't be strictly typed is if given explicit consent by the user.
 - We should be using zod for input validation
 - For environment variables in the backend we should be using the @t3-oss/env-core
 - Database: PostgreSQL with PostGIS for geospatial data using Drizzle for a connector
+- Better Auth for authentication
 - Deployment through Docker containers
 - All code will be stored in a monorepo using Turborepo
-- App will be Android only at the moment and written in Kotlin.
-- Better Auth for authentication
 - Biome for linting/formatting with all TS apps
 
+## Mobile App (Priority: reliable background location)
+### Framework + DX
+- React Native + TypeScript
+- Expo (development builds) for local dev speed; do not depend on paid Expo cloud services
+- Expo Router for navigation/routing
+- NativeWind for Tailwind-style utility classes in React Native
+
+### UI policy
+- Native-first: use React Native core components (View/Text/Pressable/etc) and platform APIs.
+- Do not use UI frameworks/component libraries. Build reusable UI primitives in-repo on top of native components.
+
+### State, forms, data
+- Server state: TanStack Query
+- Local UI/app state: Zustand
+- Forms: React Hook Form
+- Validation: zod
+
+### Storage
+- Fast local KV: MMKV
+- Secrets: SecureStore (Keychain/Keystore-backed)
+
+### Animations + gestures
+- Reanimated
+- Gesture Handler
+
+### Maps
+- MapLibre + OpenStreetMap-compatible tiles; allow self-hosting tile server for fully self-hostable deployments
+
+### Background location engine (must be native)
+- Background location tracking must be implemented with native OS primitives:
+  - iOS: Core Location with “Always” permission + background location mode; use a low-power strategy (significant-change / geofences) when appropriate and high-accuracy updates only when needed
+  - Android: foreground service with location service type when actively tracking; respect modern background execution restrictions
+- Use a small native “location engine” module (Swift/Obj-C + Kotlin) exposed to TS via a React Native native module (TurboModule / bridged module)
+- Do not depend on paid / closed-source SDKs or services for background location tracking
+
+### Location data pipeline
+- Offline-first: write location points to a local queue first
+- Encrypt locally before upload; server never sees plaintext locations
+- Opportunistic upload + retry (background fetch can be used only for flushing the queue, not as the primary tracking mechanism)
+
+### Testing + release
+- Unit/component tests: Jest + React Native Testing Library (RNTL)
+- E2E tests: Detox or Maestro
+- Releases: fastlane (build/sign/release automation)
+
 # Project Rules
-1. Do not leave comments, code should be understandable by default, if a comment is needed code should ideally be re-written so it's more easily digestible, only time comments should be left is when working around dodgy implementations of other APIs.
-2. When installing new packages always install the latest with the bun install command, don't guess the version number.
-3. We need to add strong tools/rules to ensure that we are writing high quality code so that AI tools don't introduce errors, make sure with anything you're adding we have strict type checking rules.
+1. Do not leave comments; code should be understandable by default. Only leave comments when working around dodgy implementations of other APIs.
+2. When installing new packages always install the latest with the bun install command; don't guess the version number.
+3. We need strong tools/rules to ensure high quality code so AI tools don't introduce errors. Anything added must keep strict type checking rules.
 4. After making changes, always run the ci script (`bun run ci`) to ensure your changes haven't broken anything.
 5. When making database changes make sure to create a migration with the db:generate script in the database package.
+6. The mobile app must never rely on background JS timers for tracking. The “always works” tracking path must be native.
+7. Mobile UI must be built from React Native core components; do not introduce UI frameworks/component libraries.
 
 # Project Structure
 /apps # All deployed applications
-  /backend # NestJS backend
-  /android # Android App (not implemented yet)
-  /ios # IOS app (not implemented yet)
-  /site # Web app (not implemented yet)
+  /backend # NestJS backend (Bun)
+  /mobile # React Native app (TypeScript)
+
 /packages # All shared code
   /database # Drizzle Database ORM
   /tsconfig # tsconfig shared logic
+  /shared # shared TS utilities/types (non-platform-specific)
+  /location-engine # React Native native module + TS API (iOS + Android native code lives here)
