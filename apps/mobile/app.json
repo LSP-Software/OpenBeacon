@@ -27,8 +27,6 @@
       "favicon": "./assets/favicon.png"
     },
     "scheme": "openbeacon",
-    "plugins": [
-      "expo-router"
-    ]
+    "plugins": ["expo-router"]
   }
 }
