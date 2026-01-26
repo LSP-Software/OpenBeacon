@@ -11,7 +11,7 @@ The core concept of this app is to be privacy focused so if users pay for us to 
 - Backend will be written in NestJS with strict types. The only time a type shouldn't be strictly typed is if given explicit consent by the user.
 - We should be using zod for input validation
 - For environment variables in the backend we should be using the @t3-oss/env-core
-- Database: PostgreSQL using Drizzle for a connector
+- Database: PostgreSQL using Prisma for a connector
 - Better Auth for authentication
 - Deployment through Docker containers
 - All code will be stored in a monorepo using Turborepo
@@ -77,7 +77,7 @@ The core concept of this app is to be privacy focused so if users pay for us to 
   /mobile # React Native app (TypeScript)
 
 /packages # All shared code
-  /database # Drizzle Database ORM
+  /database # Prisma Database ORM
   /tsconfig # tsconfig shared logic
   /shared # shared TS utilities/types (non-platform-specific)
   /location-engine # React Native native module + TS API (iOS + Android native code lives here)
