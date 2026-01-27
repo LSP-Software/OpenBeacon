@@ -47,6 +47,10 @@
         "drizzle-kit": "^0.31.8",
       },
     },
+    "packages/shared": {
+      "name": "@openbeacon/shared",
+      "version": "0.0.0",
+    },
     "packages/tsconfig": {
       "name": "@openbeacon/tsconfig",
       "version": "0.0.0",
@@ -174,6 +178,8 @@
     "@openbeacon/backend": ["@openbeacon/backend@workspace:apps/backend"],
 
     "@openbeacon/database": ["@openbeacon/database@workspace:packages/database"],
+
+    "@openbeacon/shared": ["@openbeacon/shared@workspace:packages/shared"],
 
     "@openbeacon/tsconfig": ["@openbeacon/tsconfig@workspace:packages/tsconfig"],
 

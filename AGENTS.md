@@ -65,11 +65,12 @@ The core concept of this app is to be privacy focused so if users pay for us to 
 # Project Rules
 1. Do not leave comments; code should be understandable by default. Only leave comments when working around dodgy implementations of other APIs.
 2. When installing new packages always install the latest with the bun install command; don't guess the version number.
-3. We need strong tools/rules to ensure high quality code so AI tools don't introduce errors. Anything added must keep strict type checking rules.
-4. After making changes, always run the ci script (`bun run ci`) to ensure your changes haven't broken anything.
-5. When making database changes make sure to create a migration with the db:generate script in the database package.
-6. The mobile app must never rely on background JS timers for tracking. The “always works” tracking path must be native.
-7. Mobile UI must be built from React Native core components; do not introduce UI frameworks/component libraries.
+3. Before committing, run `bun install --frozen-lockfile`; if it fails due to lockfile changes, run `bun install`, commit `bun.lock`, then re-run the frozen install.
+4. We need strong tools/rules to ensure high quality code so AI tools don't introduce errors. Anything added must keep strict type checking rules.
+5. After making changes, always run the ci script (`bun run ci`) to ensure your changes haven't broken anything.
+6. When making database changes make sure to create a migration with the db:generate script in the database package.
+7. The mobile app must never rely on background JS timers for tracking. The “always works” tracking path must be native.
+8. Mobile UI must be built from React Native core components; do not introduce UI frameworks/component libraries.
 
 # Project Structure
 /apps # All deployed applications
