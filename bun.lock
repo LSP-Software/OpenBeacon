@@ -21,7 +21,6 @@
         "@t3-oss/env-core": "0.13.10",
         "@thallesp/nestjs-better-auth": "^2.2.2",
         "better-auth": "^1.4.17",
-        "graphql": "^16.12.0",
         "reflect-metadata": "0.2.2",
         "rxjs": "7.8.2",
         "zod": "4.3.6",
