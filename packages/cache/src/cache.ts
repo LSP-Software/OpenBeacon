@@ -1,4 +1,4 @@
-import { type DatabaseClient, db } from "@openbeacon/database";
+import type { DatabaseClient } from "@openbeacon/database";
 import { cacheClient } from "./client.js";
 
 export type CacheSerializer<T> = (value: T) => string;
@@ -41,6 +41,11 @@ export const setInCache = async <T>(
   }
 };
 
+const getDatabaseClient = async (): Promise<DatabaseClient> => {
+  const { db } = await import("@openbeacon/database");
+  return db;
+};
+
 export const getOrSet = async <T>(key: string, options: GetOrSetOptions<T>): Promise<T> => {
   const deserialize = options.deserialize ?? defaultDeserialize;
   const cached = await getFromCache(key, deserialize);
@@ -48,7 +53,7 @@ export const getOrSet = async <T>(key: string, options: GetOrSetOptions<T>): Pro
     return cached;
   }
 
-  const database = options.dbClient ?? db;
+  const database = options.dbClient ?? (await getDatabaseClient());
   const value = await options.fetch(database);
   const cacheOptions: {
     ttlSeconds?: number;

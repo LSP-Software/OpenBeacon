@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
+import { CacheModule } from "@openbeacon/cache";
 import { AuthModule } from "@thallesp/nestjs-better-auth";
 import { auth } from "./auth.js";
-import { CacheModule } from "./cache/cache.module.js";
 import { HealthModule } from "./health/health.module.js";
 
 @Module({

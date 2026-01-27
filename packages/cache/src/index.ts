@@ -1,9 +1,12 @@
-export type {
-  CacheDeserializer,
-  CacheSerializer,
-  GetOrSetOptions,
-} from "./cache.js";
+export type { CacheDeserializer, CacheSerializer, GetOrSetOptions } from "./cache.js";
 export { getFromCache, getOrSet, setInCache } from "./cache.js";
+export { RateLimitCache } from "./caches/rate-limit.js";
+export { CacheManager, CacheManager as default } from "./classes/cache-manager.js";
 export type { CacheClient } from "./client.js";
 export { cacheClient } from "./client.js";
 export { env } from "./env.js";
+export { CacheModule } from "./nest/cache.module.js";
+export { CacheService } from "./nest/cache.service.js";
+export type { RateLimitOptions } from "./nest/rate-limit.decorator.js";
+export { RateLimit } from "./nest/rate-limit.decorator.js";
+export type { CachedRateLimit, RateLimitResult } from "./types/rate-limit.js";

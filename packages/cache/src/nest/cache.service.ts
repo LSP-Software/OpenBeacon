@@ -2,23 +2,27 @@ import { Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/com
 import {
   type CacheDeserializer,
   type CacheSerializer,
-  cacheClient,
   type GetOrSetOptions,
   getFromCache,
   getOrSet,
   setInCache,
-} from "@openbeacon/cache";
-
-export type RateLimitResult = {
-  allowed: boolean;
-  limit: number;
-  remaining: number;
-  resetSeconds: number;
-  count: number;
-};
+} from "../cache.js";
+import { CacheManager } from "../classes/cache-manager.js";
+import { cacheClient } from "../client.js";
+import { env } from "../env.js";
+import type { RateLimitResult } from "../types/rate-limit.js";
 
 @Injectable()
 export class CacheService implements OnModuleInit, OnModuleDestroy {
+  private manager: CacheManager;
+
+  constructor() {
+    this.manager = new CacheManager({
+      redis: cacheClient,
+      prefix: env.CACHE_PREFIX,
+    });
+  }
+
   async onModuleInit(): Promise<void> {
     await cacheClient.connect();
   }
@@ -27,8 +31,8 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     cacheClient.close();
   }
 
-  getClient() {
-    return cacheClient;
+  getManager(): CacheManager {
+    return this.manager;
   }
 
   async get<T>(key: string, deserialize?: CacheDeserializer<T>): Promise<T | null> {
@@ -50,22 +54,12 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     return getOrSet(key, options);
   }
 
-  async rateLimit(key: string, limit: number, windowSeconds: number): Promise<RateLimitResult> {
-    const count = await cacheClient.incr(key);
-    if (count === 1) {
-      await cacheClient.expire(key, windowSeconds);
-    }
-
-    const ttl = await cacheClient.ttl(key);
-    const resetSeconds = ttl > 0 ? ttl : windowSeconds;
-    const remaining = Math.max(0, limit - count);
-
-    return {
-      allowed: count <= limit,
-      limit,
-      remaining,
-      resetSeconds,
-      count,
-    };
+  async rateLimit(options: {
+    ip: string;
+    path: string;
+    limit: number;
+    windowSeconds: number;
+  }): Promise<RateLimitResult> {
+    return this.manager.rateLimit.check(options);
   }
 }

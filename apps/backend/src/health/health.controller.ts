@@ -1,6 +1,6 @@
 import { Controller, Get } from "@nestjs/common";
+import { RateLimit } from "@openbeacon/cache";
 import { AllowAnonymous } from "@thallesp/nestjs-better-auth";
-import { RateLimit } from "../cache/rate-limit.decorator.js";
 
 @Controller("health")
 export class HealthController {

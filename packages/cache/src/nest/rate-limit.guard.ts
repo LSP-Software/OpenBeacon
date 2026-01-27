@@ -13,11 +13,14 @@ import { RATE_LIMIT_METADATA_KEY, type RateLimitOptions } from "./rate-limit.dec
 @Injectable()
 export class RateLimitGuard implements CanActivate {
   constructor(
-    private readonly reflector: Reflector = new Reflector(),
+    private readonly reflector: Reflector,
     private readonly cacheService: CacheService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    if (!(this.reflector instanceof Reflector)) {
+      throw new Error("Reflector unavailable");
+    }
     if (!(this.cacheService instanceof CacheService)) {
       throw new Error("Cache service unavailable");
     }
@@ -36,9 +39,13 @@ export class RateLimitGuard implements CanActivate {
     const ip = this.getClientIp(request);
     const route = `${request.method}:${request.baseUrl}${request.route?.path ?? request.path}`;
     const keyPrefix = options.keyPrefix ?? "ratelimit";
-    const key = `${keyPrefix}:${ip}:${route}`;
 
-    const result = await this.cacheService.rateLimit(key, options.limit, options.windowSeconds);
+    const result = await this.cacheService.rateLimit({
+      ip: `${keyPrefix}:${ip}`,
+      path: route,
+      limit: options.limit,
+      windowSeconds: options.windowSeconds,
+    });
 
     response.setHeader("X-RateLimit-Limit", result.limit.toString());
     response.setHeader("X-RateLimit-Remaining", result.remaining.toString());
