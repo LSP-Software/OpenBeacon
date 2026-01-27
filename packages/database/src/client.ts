@@ -1,21 +1,13 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "@prisma/client";
 import { env } from "./env.ts";
-import { schema } from "./schema.ts";
 
-const connectionOptions = {
-  max: env.DATABASE_MAX_CONNECTIONS,
-  idle_timeout: env.DATABASE_IDLE_TIMEOUT_SECONDS,
-  connect_timeout: env.DATABASE_CONNECT_TIMEOUT_SECONDS,
-} as const;
-
-const sslOptions = env.DATABASE_SSL ? { ssl: "require" as const } : {};
-
-export const queryClient = postgres(env.DATABASE_URL, {
-  ...connectionOptions,
-  ...sslOptions,
+const adapter = new PrismaPg({
+  connectionString: env.DATABASE_URL,
 });
 
-export const db = drizzle(queryClient, { schema });
+export const db = new PrismaClient({
+  adapter,
+});
 
-export type DatabaseClient = typeof db;
+export type DatabaseClient = PrismaClient;
