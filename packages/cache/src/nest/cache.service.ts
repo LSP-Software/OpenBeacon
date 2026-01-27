@@ -6,11 +6,11 @@ import {
   getFromCache,
   getOrSet,
   setInCache,
-} from "../cache.js";
-import { CacheManager } from "../classes/cache-manager.js";
-import { cacheClient } from "../client.js";
-import { env } from "../env.js";
-import type { RateLimitResult } from "../types/rate-limit.js";
+} from "../cache.ts";
+import { CacheManager } from "../classes/cache-manager.ts";
+import { cacheClient } from "../client.ts";
+import { env } from "../env.ts";
+import type { RateLimitResult } from "../types/rate-limit.ts";
 
 @Injectable()
 export class CacheService implements OnModuleInit, OnModuleDestroy {

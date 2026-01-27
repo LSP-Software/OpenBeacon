@@ -70,6 +70,7 @@ The core concept of this app is to be privacy focused so if users pay for us to 
 5. When making database changes make sure to create a migration with the db:generate script in the database package.
 6. The mobile app must never rely on background JS timers for tracking. The “always works” tracking path must be native.
 7. Mobile UI must be built from React Native core components; do not introduce UI frameworks/component libraries.
+8. All TypeScript import paths must end with `.ts`, not `.js`.
 
 # Project Structure
 /apps # All deployed applications

@@ -1,4 +1,4 @@
-export type { DatabaseClient } from "./client.js";
-export { db, queryClient } from "./client.js";
-export { env } from "./env.js";
-export { schema } from "./schema.js";
+export type { DatabaseClient } from "./client.ts";
+export { db, queryClient } from "./client.ts";
+export { env } from "./env.ts";
+export { schema } from "./schema.ts";

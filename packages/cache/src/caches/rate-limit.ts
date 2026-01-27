@@ -3,7 +3,7 @@ import {
   type CachedRateLimit,
   CachedRateLimitSchema,
   type RateLimitResult,
-} from "../types/rate-limit.js";
+} from "../types/rate-limit.ts";
 
 export class RateLimitCache {
   private prefix: string;

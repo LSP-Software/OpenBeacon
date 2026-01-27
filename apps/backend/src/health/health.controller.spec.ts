@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { HealthController } from "./health.controller.js";
+import { HealthController } from "./health.controller.ts";
 
 describe("HealthController", () => {
   it("returns ok status", () => {

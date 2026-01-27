@@ -1,6 +1,6 @@
 import type { DatabaseClient } from "@openbeacon/database";
 import type { RedisClient } from "bun";
-import { RateLimitCache } from "../caches/rate-limit.js";
+import { RateLimitCache } from "../caches/rate-limit.ts";
 
 export class CacheManager {
   redis: RedisClient;

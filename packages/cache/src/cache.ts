@@ -1,5 +1,5 @@
 import type { DatabaseClient } from "@openbeacon/database";
-import { cacheClient } from "./client.js";
+import { cacheClient } from "./client.ts";
 
 export type CacheSerializer<T> = (value: T) => string;
 export type CacheDeserializer<T> = (value: string) => T;

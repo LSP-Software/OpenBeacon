@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { env } from "./env.js";
-import { schema } from "./schema.js";
+import { env } from "./env.ts";
+import { schema } from "./schema.ts";
 
 const connectionOptions = {
   max: env.DATABASE_MAX_CONNECTIONS,

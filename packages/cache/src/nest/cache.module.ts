@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
-import { CacheService } from "./cache.service.js";
-import { RateLimitGuard } from "./rate-limit.guard.js";
+import { CacheService } from "./cache.service.ts";
+import { RateLimitGuard } from "./rate-limit.guard.ts";
 
 @Module({
   providers: [
