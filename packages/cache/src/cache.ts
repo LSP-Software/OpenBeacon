@@ -16,18 +16,29 @@ const defaultSerialize = <T>(value: T): string => JSON.stringify(value);
 const defaultDeserialize = <T>(value: string): T => JSON.parse(value) as T;
 const NULL_SENTINEL = "__openbeacon:null__";
 
+const getCacheEntry = async <T>(
+  key: string,
+  deserialize: CacheDeserializer<T> = defaultDeserialize,
+): Promise<{ hit: true; value: T | null } | { hit: false }> => {
+  const cached = await cacheClient.get(key);
+  if (cached === null) {
+    return { hit: false };
+  }
+  if (cached === NULL_SENTINEL) {
+    return { hit: true, value: null };
+  }
+  return { hit: true, value: deserialize(cached) };
+};
+
 export const getFromCache = async <T>(
   key: string,
   deserialize: CacheDeserializer<T> = defaultDeserialize,
 ): Promise<T | null> => {
-  const cached = await cacheClient.get(key);
-  if (cached === null) {
+  const entry = await getCacheEntry(key, deserialize);
+  if (!entry.hit) {
     return null;
   }
-  if (cached === NULL_SENTINEL) {
-    return null;
-  }
-  return deserialize(cached);
+  return entry.value;
 };
 
 export const setInCache = async <T>(
@@ -52,9 +63,9 @@ const getDatabaseClient = async (): Promise<DatabaseClient> => {
 
 export const getOrSet = async <T>(key: string, options: GetOrSetOptions<T>): Promise<T> => {
   const deserialize = options.deserialize ?? defaultDeserialize;
-  const cached = await getFromCache(key, deserialize);
-  if (cached !== null) {
-    return cached;
+  const entry = await getCacheEntry(key, deserialize);
+  if (entry.hit) {
+    return entry.value as T;
   }
 
   const database = options.dbClient ?? (await getDatabaseClient());
