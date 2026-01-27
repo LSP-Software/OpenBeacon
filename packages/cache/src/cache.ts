@@ -14,6 +14,7 @@ export type GetOrSetOptions<T> = {
 
 const defaultSerialize = <T>(value: T): string => JSON.stringify(value);
 const defaultDeserialize = <T>(value: string): T => JSON.parse(value) as T;
+const NULL_SENTINEL = "__openbeacon:null__";
 
 export const getFromCache = async <T>(
   key: string,
@@ -21,6 +22,9 @@ export const getFromCache = async <T>(
 ): Promise<T | null> => {
   const cached = await cacheClient.get(key);
   if (cached === null) {
+    return null;
+  }
+  if (cached === NULL_SENTINEL) {
     return null;
   }
   return deserialize(cached);
@@ -55,6 +59,13 @@ export const getOrSet = async <T>(key: string, options: GetOrSetOptions<T>): Pro
 
   const database = options.dbClient ?? (await getDatabaseClient());
   const value = await options.fetch(database);
+  if (value === null) {
+    await cacheClient.set(key, NULL_SENTINEL);
+    if (options.ttlSeconds !== undefined) {
+      await cacheClient.expire(key, options.ttlSeconds);
+    }
+    return value;
+  }
   const cacheOptions: {
     ttlSeconds?: number;
     serialize?: CacheSerializer<T>;

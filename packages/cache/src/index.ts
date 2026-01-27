@@ -9,4 +9,4 @@ export { CacheModule } from "./nest/cache.module.ts";
 export { CacheService } from "./nest/cache.service.ts";
 export type { RateLimitOptions } from "./nest/rate-limit.decorator.ts";
 export { RateLimit } from "./nest/rate-limit.decorator.ts";
-export type { CachedRateLimit, RateLimitResult } from "./types/rate-limit.ts";
+export type { RateLimitResult } from "./types/rate-limit.ts";
