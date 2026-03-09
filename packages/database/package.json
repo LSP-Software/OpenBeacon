@@ -8,11 +8,6 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts",
       "default": "./src/index.ts"
-    },
-    "./browser": {
-      "types": "./generated/client/browser.d.ts",
-      "import": "./generated/client/browser.js",
-      "default": "./generated/client/browser.js"
     }
   },
   "types": "./src/index.ts",
@@ -30,8 +25,7 @@
   "dependencies": {
     "@prisma/client": "^7.4.2",
     "@prisma/adapter-pg": "^7.4.2",
-    "pg": "^8.20.0",
-    "zod": "^4.3.6"
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "@types/node": "^25.0.10",

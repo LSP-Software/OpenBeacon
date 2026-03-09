@@ -3,9 +3,7 @@ import { env } from "./env";
 import type { AuthType } from "./helpers/betterAuth";
 import authRouter from "./routes/auth";
 
-const app = new Hono<{ Variables: AuthType }>({
-  strict: false,
-});
+const app = new Hono<{ Variables: AuthType }>();
 
 const routes = [authRouter] as const;
 

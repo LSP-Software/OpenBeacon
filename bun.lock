@@ -56,7 +56,6 @@
         "@prisma/adapter-pg": "^7.4.2",
         "@prisma/client": "^7.4.2",
         "pg": "^8.20.0",
-        "zod": "^4.3.6",
       },
       "devDependencies": {
         "@types/node": "^25.0.10",

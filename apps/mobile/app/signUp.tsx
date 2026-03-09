@@ -8,7 +8,7 @@ export default function SignUp() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleLogin = async () => {
+  const handleSignUp = async () => {
     const response = await authClient.signUp.email({
       email,
       password,
@@ -16,7 +16,7 @@ export default function SignUp() {
     });
 
     if (response.error) {
-      Alert.alert(response.error.message ?? "An error occured");
+      Alert.alert(response.error.message ?? "An error occurred");
       return;
     }
 
@@ -33,7 +33,7 @@ export default function SignUp() {
         onChangeText={setPassword}
         secureTextEntry={true}
       />
-      <Button title="Sign Up" onPress={handleLogin} />
+      <Button title="Sign Up" onPress={handleSignUp} />
       <Link href="/signIn">Already have an account? Sign in</Link>
     </View>
   );

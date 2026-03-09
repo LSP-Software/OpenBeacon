@@ -14,7 +14,7 @@ export default function SignIn() {
     });
 
     if (response.error) {
-      Alert.alert(response.error.message ?? "An error occured");
+      Alert.alert(response.error.message ?? "An error occurred");
       return;
     }
 
