@@ -1,7 +1,7 @@
+import { Link, router } from "expo-router";
 import { useState } from "react";
 import { Alert, Button, TextInput, View } from "react-native";
 import { authClient } from "../lib/auth-client";
-import { Link, router } from "expo-router";
 
 export default function SignIn() {
   const [email, setEmail] = useState("");
