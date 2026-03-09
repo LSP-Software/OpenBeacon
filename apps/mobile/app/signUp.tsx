@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Button, TextInput, View } from "react-native";
+import { Alert, Button, TextInput, View } from "react-native";
 import { authClient } from "../lib/auth-client";
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
 
 export default function SignUp() {
   const [email, setEmail] = useState("");
@@ -9,11 +9,17 @@ export default function SignUp() {
   const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
-    await authClient.signUp.email({
+    const response = await authClient.signUp.email({
       email,
       password,
       name,
     });
+
+    if (response.error) {
+      Alert.alert(response.error.message ?? "An error occured");
+      return;
+    }
+
     router.push("/");
   };
 
@@ -28,6 +34,7 @@ export default function SignUp() {
         secureTextEntry={true}
       />
       <Button title="Sign Up" onPress={handleLogin} />
+      <Link href="/signIn">Already have an account? Sign in</Link>
     </View>
   );
 }

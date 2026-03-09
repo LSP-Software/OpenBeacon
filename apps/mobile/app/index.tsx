@@ -13,6 +13,7 @@ export default function HomeScreen() {
       {session && <Text>Welcome, {session.user.name}</Text>}
       {!session && <Button title="Sign In" onPress={() => router.push("/signIn")} />}
       {!session && <Button title="Sign Up" onPress={() => router.push("/signUp")} />}
+      {session && <Button title="Sign out" onPress={() => authClient.signOut()} />}
     </View>
   );
 }
