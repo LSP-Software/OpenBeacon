@@ -7,6 +7,7 @@ export const env = createEnv({
     DATABASE_URL: z.url(),
     REDIS_URL: z.url(),
     OPENBEACON_API_PORT: z.coerce.number().min(1).max(65535).default(3000),
+    OPENBEACON_API_HOSTNAME: z.ipv4().default("0.0.0.0"),
   },
   runtimeEnv: process.env,
 });

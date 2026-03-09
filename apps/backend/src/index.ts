@@ -16,5 +16,5 @@ routes.forEach((route) => {
 export default {
   fetch: app.fetch,
   port: env.OPENBEACON_API_PORT,
-  hostname: "0.0.0.0",
+  hostname: env.OPENBEACON_API_HOSTNAME,
 };
