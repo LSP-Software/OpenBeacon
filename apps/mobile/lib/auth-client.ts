@@ -15,7 +15,7 @@ export const authClient = createAuthClient({
   baseURL: getBaseURL(),
   plugins: [
     expoClient({
-      scheme: "myaopenbeaconpp",
+      scheme: "openbeacon",
       storagePrefix: "openbeacon",
       storage: SecureStore,
     }),
