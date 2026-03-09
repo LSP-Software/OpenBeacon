@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, TextInput, View } from "react-native";
 import { authClient } from "../lib/auth-client";
+import { router } from "expo-router";
 
 export default function SignUp() {
   const [email, setEmail] = useState("");
@@ -13,6 +14,7 @@ export default function SignUp() {
       password,
       name,
     });
+    router.push("/");
   };
 
   return (
