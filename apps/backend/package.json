@@ -1,5 +1,6 @@
 {
   "name": "@openbeacon/backend",
+  "private": true,
   "scripts": {
     "dev": "bun run --env-file=../../.env --hot src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
