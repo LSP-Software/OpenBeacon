@@ -16,7 +16,12 @@ export default function SignIn() {
   return (
     <View>
       <TextInput placeholder="Email" value={email} onChangeText={setEmail} />
-      <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry={true} />
+      <TextInput
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry={true}
+      />
       <Button title="Login" onPress={handleLogin} />
     </View>
   );

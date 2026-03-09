@@ -1,11 +1,11 @@
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../generated/client/client";
+import { PrismaClient } from "../generated/client/client.js";
 
 const globalForPrisma = globalThis as {
   prisma?: PrismaClient;
 };
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env["DATABASE_URL"];
 
 if (!databaseUrl) {
   throw new Error("DATABASE_URL is required");

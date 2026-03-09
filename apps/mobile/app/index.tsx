@@ -1,4 +1,4 @@
-import { Redirect, router } from "expo-router";
+import { router } from "expo-router";
 import { Button, StyleSheet, Text, View } from "react-native";
 import { authClient } from "../lib/auth-client";
 

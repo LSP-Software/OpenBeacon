@@ -19,7 +19,12 @@ export default function SignUp() {
     <View>
       <TextInput placeholder="Name" value={name} onChangeText={setName} />
       <TextInput placeholder="Email" value={email} onChangeText={setEmail} />
-      <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry={true} />
+      <TextInput
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry={true}
+      />
       <Button title="Sign Up" onPress={handleLogin} />
     </View>
   );
