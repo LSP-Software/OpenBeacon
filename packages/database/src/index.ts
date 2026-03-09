@@ -1,3 +1,2 @@
-export type { DatabaseClient } from "./client.ts";
-export { db } from "./client.ts";
-export { env } from "./env.ts";
+export * from "../generated/client/client";
+export { prisma } from "./client";

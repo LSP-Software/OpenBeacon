@@ -1,5 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": [
+    "DATABASE_URL",
+    "REDIS_URL",
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_URL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": [
@@ -12,7 +18,10 @@
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "dependsOn": [
+        "^db:generate"
+      ]
     },
     "lint": {},
     "format": {
@@ -32,6 +41,11 @@
         "^typecheck"
       ],
       "outputs": []
+    },
+    "db:generate": {
+      "outputs": [
+        "generated/**"
+      ]
     }
   }
 }
