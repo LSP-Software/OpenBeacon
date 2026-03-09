@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { env } from "./env";
 import type { AuthType } from "./helpers/betterAuth";
 import authRouter from "./routes/auth";
 
@@ -14,6 +15,6 @@ routes.forEach((route) => {
 
 export default {
   fetch: app.fetch,
-  port: 3000,
+  port: env.OPENBEACON_API_PORT,
   hostname: "0.0.0.0",
 };

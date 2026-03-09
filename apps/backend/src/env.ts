@@ -6,6 +6,7 @@ export const env = createEnv({
     BETTER_AUTH_URL: z.url(),
     DATABASE_URL: z.url(),
     REDIS_URL: z.url(),
+    OPENBEACON_API_PORT: z.coerce.number().min(1).max(65535).default(3000),
   },
   runtimeEnv: process.env,
 });
