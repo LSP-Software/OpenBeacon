@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@better-auth/expo": "^1.5.4",
-    "@openbeacon/cache": "workspace:*",
     "@openbeacon/database": "workspace:*",
     "@prisma/adapter-pg": "^7.4.2",
     "@t3-oss/env-core": "^0.13.10",
