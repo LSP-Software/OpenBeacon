@@ -1,12 +1,7 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.3.12/schema.json",
   "files": {
-    "includes": [
-      "**/*",
-      "!!**/dist/**",
-      "!!**/build/**",
-      "!!**/node_modules/**"
-    ]
+    "includes": ["**/*", "!!**/dist", "!!**/build", "!!**/node_modules", "!**/generated"]
   },
   "formatter": {
     "enabled": true,

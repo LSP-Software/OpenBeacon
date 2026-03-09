@@ -1,14 +1,10 @@
 {
   "name": "@openbeacon/backend",
-  "version": "0.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
-    "build": "bun build src/main.ts --outdir dist --target bun --packages external --production --bytecode",
-    "start": "bun dist/main.js",
+    "dev": "bun run --env-file=../../.env --hot src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "bun test",
+    "test": "bun test --pass-with-no-tests",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "format:check": "biome format .",
@@ -16,23 +12,17 @@
     "ci": "bun run typecheck && bun run check && bun run test"
   },
   "dependencies": {
-    "@nestjs/common": "11.1.12",
-    "@nestjs/core": "11.1.12",
-    "@nestjs/platform-express": "11.1.12",
-    "@openbeacon/cache": "workspace:*",
+    "@better-auth/expo": "^1.5.4",
     "@openbeacon/database": "workspace:*",
-    "@t3-oss/env-core": "0.13.10",
-    "@thallesp/nestjs-better-auth": "^2.2.2",
-    "better-auth": "^1.4.17",
-    "reflect-metadata": "0.2.2",
-    "rxjs": "7.8.2",
-    "zod": "4.3.6"
+    "@prisma/adapter-pg": "^7.4.2",
+    "@t3-oss/env-core": "^0.13.10",
+    "better-auth": "^1.5.4",
+    "hono": "^4.12.5",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.6",
-    "@types/express": "^5.0.6",
+    "@types/bun": "^1.3.10",
     "@types/node": "^25.0.10",
-    "tsx": "4.21.0",
-    "typescript": "5.9.3"
+    "typescript": "^5.9.3"
   }
 }

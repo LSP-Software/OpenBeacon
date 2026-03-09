@@ -1,13 +1,23 @@
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
-import { env } from "./env.ts";
+import { PrismaClient } from "../generated/client/client.js";
 
-const adapter = new PrismaPg({
-  connectionString: env.DATABASE_URL,
-});
+const globalForPrisma = globalThis as {
+  prisma?: PrismaClient;
+};
 
-export const db = new PrismaClient({
-  adapter,
-});
+// biome-ignore lint/complexity/useLiteralKeys: eslint requires this
+const databaseUrl = process.env["DATABASE_URL"];
 
-export type DatabaseClient = PrismaClient;
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL is required");
+}
+
+const adapter = new PrismaPg({ connectionString: databaseUrl });
+const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
+
+export { prisma };
+export default prisma;

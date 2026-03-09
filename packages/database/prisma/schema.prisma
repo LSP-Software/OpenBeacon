@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/client"
 }
 
 datasource db {
@@ -36,20 +37,20 @@ model Session {
 }
 
 model Account {
-  id                    String   @id
-  accountId             String   @map("account_id")
-  providerId            String   @map("provider_id")
-  userId                String   @map("user_id")
-  accessToken           String?  @map("access_token")
-  refreshToken          String?  @map("refresh_token")
-  idToken               String?  @map("id_token")
+  id                    String    @id
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
   accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
   refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
   scope                 String?
   password              String?
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "account_user_id_user_id_fk")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "account_user_id_user_id_fk")
 
   @@index([userId], map: "account_userId_idx")
   @@map("account")
