@@ -31,19 +31,20 @@ export default function SignUp() {
   const handleSignUp = async () => {
     if (!name.trim() || !email.trim() || !password) return;
     setLoading(true);
-    const response = await authClient.signUp.email({
-      email: email.trim(),
-      password,
-      name: name.trim(),
-    });
-    setLoading(false);
-
-    if (response.error) {
-      Alert.alert("Sign up failed", response.error.message ?? "An error occurred");
-      return;
+    try {
+      const response = await authClient.signUp.email({
+        email: email.trim(),
+        password,
+        name: name.trim(),
+      });
+      if (response.error) {
+        Alert.alert("Sign up failed", response.error.message ?? "An error occurred");
+        return;
+      }
+      router.replace("/");
+    } finally {
+      setLoading(false);
     }
-
-    router.replace("/");
   };
 
   return (

@@ -29,15 +29,16 @@ export default function SignIn() {
   const handleLogin = async () => {
     if (!email.trim() || !password) return;
     setLoading(true);
-    const response = await authClient.signIn.email({ email: email.trim(), password });
-    setLoading(false);
-
-    if (response.error) {
-      Alert.alert("Sign in failed", response.error.message ?? "An error occurred");
-      return;
+    try {
+      const response = await authClient.signIn.email({ email: email.trim(), password });
+      if (response.error) {
+        Alert.alert("Sign in failed", response.error.message ?? "An error occurred");
+        return;
+      }
+      router.replace("/");
+    } finally {
+      setLoading(false);
     }
-
-    router.replace("/");
   };
 
   return (

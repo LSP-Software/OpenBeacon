@@ -22,9 +22,17 @@ export default function ServerUrl() {
 
   const handleSave = () => {
     const trimmed = url.trim();
-    if (trimmed && !trimmed.startsWith("http")) {
-      Alert.alert("Invalid URL", "Server URL must start with http:// or https://");
-      return;
+    if (trimmed) {
+      try {
+        const parsed = new URL(trimmed);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          Alert.alert("Invalid URL", "Server URL must start with http:// or https://");
+          return;
+        }
+      } catch {
+        Alert.alert("Invalid URL", "Server URL must start with http:// or https://");
+        return;
+      }
     }
     setServerUrl(trimmed);
     Alert.alert(
@@ -39,6 +47,9 @@ export default function ServerUrl() {
   const handleClear = () => {
     setUrl("");
     setServerUrl("");
+    Alert.alert("Using default server", "Restart the app to switch back to the default server.", [
+      { text: "OK", onPress: () => router.back() },
+    ]);
   };
 
   return (
