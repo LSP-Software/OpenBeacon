@@ -17,9 +17,7 @@ export default function MapScreen() {
         >
           <View style={styles.noGroupInner}>
             <View style={styles.noGroupText}>
-              <Text style={[styles.noGroupTitle, { color: colors.text }]}>
-                No active group
-              </Text>
+              <Text style={[styles.noGroupTitle, { color: colors.text }]}>No active group</Text>
               <Text style={[styles.noGroupSub, { color: colors.textMuted }]}>
                 Create or join a group to see family locations on the map
               </Text>

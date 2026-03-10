@@ -32,6 +32,7 @@
       "version": "1.0.0",
       "dependencies": {
         "@better-auth/expo": "^1.5.4",
+        "@react-navigation/bottom-tabs": "^7.15.5",
         "@types/node": "^25.4.0",
         "better-auth": "^1.5.4",
         "expo": "~54.0.32",

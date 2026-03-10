@@ -85,8 +85,8 @@ export default function GroupsScreen() {
           <View style={styles.emptyTextBlock}>
             <Text style={[styles.emptyTitle, { color: colors.text }]}>No groups yet</Text>
             <Text style={[styles.emptyBody, { color: colors.textSecondary }]}>
-              Groups keep your family connected. Create one to start sharing locations privately
-              — only members of your group can see each other.
+              Groups keep your family connected. Create one to start sharing locations privately —
+              only members of your group can see each other.
             </Text>
           </View>
           <Pressable
@@ -94,19 +94,19 @@ export default function GroupsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Create your first group"
           >
-            <Text style={[styles.createBtnText, { color: colors.onPrimary }]}>
-              Create a Group
-            </Text>
+            <Text style={[styles.createBtnText, { color: colors.onPrimary }]}>Create a Group</Text>
           </Pressable>
         </View>
 
         <View
-          style={[styles.privacyNote, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          style={[
+            styles.privacyNote,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
         >
           <View style={[styles.privacyDot, { backgroundColor: colors.primary }]} />
           <Text style={[styles.privacyText, { color: colors.textSecondary }]}>
-            Location data is encrypted end-to-end. The server never stores your plaintext
-            location.
+            Location data is encrypted end-to-end. The server never stores your plaintext location.
           </Text>
         </View>
       </ScrollView>

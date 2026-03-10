@@ -94,7 +94,10 @@ export default function AccountScreen() {
         </View>
 
         <View
-          style={[styles.settingsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          style={[
+            styles.settingsCard,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
         >
           <SettingRow
             label="Profile details"
@@ -128,7 +131,9 @@ export default function AccountScreen() {
           <Text style={[styles.signOutText, { color: colors.primary }]}>Sign Out</Text>
         </Pressable>
 
-        <Text style={[styles.buildLabel, { color: colors.textMuted }]}>OpenBeacon · Open Source</Text>
+        <Text style={[styles.buildLabel, { color: colors.textMuted }]}>
+          OpenBeacon · Open Source
+        </Text>
       </ScrollView>
     </View>
   );

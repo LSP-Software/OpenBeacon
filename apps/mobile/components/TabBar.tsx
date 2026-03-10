@@ -156,12 +156,7 @@ function SideTab({
         ) : (
           <PersonIcon color={color} size={22} />
         )}
-        <Text
-          style={[
-            styles.tabLabel,
-            { color, fontWeight: isActive ? "700" : "400" },
-          ]}
-        >
+        <Text style={[styles.tabLabel, { color, fontWeight: isActive ? "700" : "400" }]}>
           {label}
         </Text>
       </Animated.View>
@@ -252,12 +247,7 @@ function CenterMapButton({
       >
         <LocationPinIcon color="#FFFFFF" size={30} />
       </Animated.View>
-      <Text
-        style={[
-          styles.centerLabel,
-          { color: isActive ? colors.primary : colors.textMuted },
-        ]}
-      >
+      <Text style={[styles.centerLabel, { color: isActive ? colors.primary : colors.textMuted }]}>
         Maps
       </Text>
     </Pressable>
@@ -289,12 +279,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
         backgroundColor: colors.background,
       }}
     >
-      <View
-        style={[
-          styles.bar,
-          { backgroundColor: colors.surface, borderColor: colors.border },
-        ]}
-      >
+      <View style={[styles.bar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         {state.routes.map((route, index) => {
           const isActive = state.index === index;
           if (route.name === "map") {
