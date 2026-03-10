@@ -14,9 +14,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: always
   redis:
     image: docker.dragonflydb.io/dragonflydb/dragonfly
     ports:
       - "6379:6379"
+    restart: always
 volumes:
   openbeacon_db:
