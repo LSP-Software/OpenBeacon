@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@better-auth/expo": "^1.5.4",
+    "@types/node": "^25.4.0",
     "better-auth": "^1.5.4",
     "expo": "~54.0.32",
     "expo-constants": "~18.0.13",
