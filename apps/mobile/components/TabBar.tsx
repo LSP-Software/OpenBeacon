@@ -1,18 +1,27 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { useEffect, useRef } from "react";
-import { Animated, Dimensions, Easing, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect } from "react";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import { useColors } from "../lib/theme.ts";
 
 type TabRoute = { key: string; name: string };
 
-const { width: SCREEN_W } = Dimensions.get("window");
 const LIFT = 20;
 const CENTER_SIZE = 66;
 const BAR_HEIGHT = 62;
 const BAR_MARGIN = 16;
 const OUTER_HEIGHT = BAR_HEIGHT + LIFT;
 const CENTER_HIT = CENTER_SIZE + 24;
-const CENTER_HIT_LEFT = SCREEN_W / 2 - CENTER_HIT / 2;
 
 function GroupsIcon({ color, size }: { color: string; size: number }) {
   const dot = Math.round(size * 0.44);
@@ -119,24 +128,18 @@ function SideTab({
   onPress: () => void;
   colors: ReturnType<typeof useColors>;
 }) {
-  const scale = useRef(new Animated.Value(1)).current;
+  const scale = useSharedValue(1);
   const label = route.name === "groups" ? "Groups" : "Account";
 
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
   const handlePress = () => {
-    Animated.sequence([
-      Animated.timing(scale, {
-        toValue: 0.78,
-        duration: 75,
-        useNativeDriver: true,
-        easing: Easing.in(Easing.quad),
-      }),
-      Animated.spring(scale, {
-        toValue: 1,
-        useNativeDriver: true,
-        tension: 320,
-        friction: 10,
-      }),
-    ]).start();
+    scale.value = withSequence(
+      withTiming(0.78, { duration: 75, easing: Easing.in(Easing.quad) }),
+      withSpring(1, { stiffness: 320, damping: 10 }),
+    );
     onPress();
   };
 
@@ -150,7 +153,7 @@ function SideTab({
       accessibilityLabel={label}
       accessibilityState={{ selected: isActive }}
     >
-      <Animated.View style={{ alignItems: "center", gap: 4, transform: [{ scale }] }}>
+      <Animated.View style={[styles.sideTabInner, animatedStyle]}>
         {route.name === "groups" ? (
           <GroupsIcon color={color} size={22} />
         ) : (
@@ -173,78 +176,58 @@ function CenterMapButton({
   onPress: () => void;
   colors: ReturnType<typeof useColors>;
 }) {
-  const glow = useRef(new Animated.Value(0)).current;
-  const pressScale = useRef(new Animated.Value(1)).current;
+  const { width } = useWindowDimensions();
+  const centerHitLeft = width / 2 - CENTER_HIT / 2;
+  const glow = useSharedValue(0);
+  const pressScale = useSharedValue(1);
 
   useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glow, {
-          toValue: 1,
-          duration: 1900,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(glow, {
-          toValue: 0,
-          duration: 1900,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
+    glow.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1900, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration: 1900, easing: Easing.inOut(Easing.sin) }),
+      ),
+      -1,
     );
-    anim.start();
-    return () => anim.stop();
+    return () => cancelAnimation(glow);
   }, [glow]);
 
-  const glowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.5] });
-  const glowScale = glow.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] });
+  const glowAnimatedStyle = useAnimatedStyle(
+    () => ({
+      backgroundColor: colors.primary,
+      opacity: interpolate(glow.value, [0, 1], [0.2, 0.5]),
+      transform: [{ scale: interpolate(glow.value, [0, 1], [1, 1.3]) }],
+    }),
+    [colors.primary],
+  );
+
+  const centerBtnAnimatedStyle = useAnimatedStyle(
+    () => ({
+      backgroundColor: colors.primary,
+      transform: [{ scale: pressScale.value }],
+      shadowColor: colors.primary,
+    }),
+    [colors.primary],
+  );
 
   const handlePress = () => {
-    Animated.sequence([
-      Animated.timing(pressScale, {
-        toValue: 0.86,
-        duration: 80,
-        useNativeDriver: true,
-      }),
-      Animated.spring(pressScale, {
-        toValue: 1,
-        useNativeDriver: true,
-        tension: 280,
-        friction: 9,
-      }),
-    ]).start();
+    pressScale.value = withSequence(
+      withTiming(0.86, { duration: 80 }),
+      withSpring(1, { stiffness: 280, damping: 9 }),
+    );
     onPress();
   };
 
   return (
     <Pressable
       onPress={handlePress}
-      style={[styles.centerHitArea, { left: CENTER_HIT_LEFT }]}
+      style={[styles.centerHitArea, { left: centerHitLeft }]}
       accessibilityRole="tab"
       accessibilityLabel="Maps"
       accessibilityState={{ selected: isActive }}
     >
-      <Animated.View
-        style={[
-          styles.glowRing,
-          {
-            backgroundColor: colors.primary,
-            opacity: glowOpacity,
-            transform: [{ scale: glowScale }],
-          },
-        ]}
-      />
-      <Animated.View
-        style={[
-          styles.centerBtn,
-          {
-            backgroundColor: colors.primary,
-            transform: [{ scale: pressScale }],
-            shadowColor: colors.primary,
-          },
-        ]}
-      >
+      <Animated.View style={[styles.glowRing, glowAnimatedStyle]} />
+      <Animated.View style={[styles.centerBtn, centerBtnAnimatedStyle]}>
         <LocationPinIcon color="#FFFFFF" size={30} />
       </Animated.View>
       <Text style={[styles.centerLabel, { color: isActive ? colors.primary : colors.textMuted }]}>
@@ -325,6 +308,10 @@ const styles = StyleSheet.create({
     height: "100%",
     alignItems: "center",
     justifyContent: "center",
+  },
+  sideTabInner: {
+    alignItems: "center",
+    gap: 4,
   },
   centerSlot: {
     width: CENTER_SIZE + 20,
