@@ -1,5 +1,6 @@
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
+import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
@@ -56,6 +57,7 @@ function SettingRow({ label, sublabel, accentColor, onPress, colors }: SettingRo
 export default function AccountScreen() {
   const colors = useColors();
   const { data: session } = authClient.useSession();
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const name = session?.user.name ?? "";
   const email = session?.user.email ?? "";
@@ -66,6 +68,8 @@ export default function AccountScreen() {
     .join("");
 
   const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
     const sessionTokenToRevoke = session?.session?.token ?? null;
     try {
       const result = await authClient.signOut();
@@ -77,6 +81,7 @@ export default function AccountScreen() {
         await SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke);
       }
     } finally {
+      setIsSigningOut(false);
       router.replace("/");
     }
   };
@@ -129,18 +134,21 @@ export default function AccountScreen() {
 
         <Pressable
           onPress={handleSignOut}
+          disabled={isSigningOut}
           style={({ pressed }) => [
             styles.signOutBtn,
             {
               backgroundColor: colors.surface,
               borderColor: colors.border,
-              opacity: pressed ? 0.65 : 1,
+              opacity: isSigningOut ? 0.6 : pressed ? 0.65 : 1,
             },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Sign out"
+          accessibilityLabel={isSigningOut ? "Signing out" : "Sign out"}
         >
-          <Text style={[styles.signOutText, { color: colors.primary }]}>Sign Out</Text>
+          <Text style={[styles.signOutText, { color: colors.primary }]}>
+            {isSigningOut ? "Signing out…" : "Sign Out"}
+          </Text>
         </Pressable>
 
         <Text style={[styles.buildLabel, { color: colors.textMuted }]}>
