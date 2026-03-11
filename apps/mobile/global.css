@@ -7,34 +7,33 @@
 
 /* brand 340 100% 54% */
 
-@layer base {
-  :root {
-    --background: 264 50% 96%;
-    --surface: 	0 0% 100%;
-    --border: 261 52% 90%;
-    --text: 269 40% 10%;
-    --text-secondary: 262 15% 44%;
-    --text-muted: 260 22% 68%;
-    --primary: 340 100% 54%;
-    --on-primary: 0 0% 100%;
-    --primary-dim: 340 100% 54%;
-    --input-background: 0 0% 100%;
-    --input-border: 258 53% 87%;
-    --input-border-focused: 340 100% 54%;
-  }
-  
-  .dark {
-    --background: 253 33% 5%;
-    --surface: 256 33% 9%;
-    --border: 258 33% 18%;
-    --text: 263 39% 94%;
-    --text-secondary: 261 13% 50%;
-    --text-muted: 259 20% 31%;
-    --primary: 340 100% 54%;
-    --onPrimary: 0 0% 100%;
-    --primary-dim: 340 100% 54%;
-    --input-background: 253 37% 7%;
-    --input-border: 258 33% 18%;
-    --input-border-focused: 340 100% 54%;
-  }
+:root {
+  --foreground: 269 40% 10%;
+  --background: 264 50% 96%;
+  --surface: 	0 0% 100%;
+  --border: 261 52% 90%;
+  --text: 269 40% 10%;
+  --text-secondary: 262 15% 44%;
+  --muted: 260 22% 68%;
+  --primary: 340 100% 54%;
+  --on-primary: 0 0% 100%;
+  --primary-dim: 340 100% 54%;
+  --input-background: 0 0% 100%;
+  --input-border: 258 53% 87%;
+  --input-border-focused: 340 100% 54%;
+}
+
+.dark {
+  --foreground: 263 39% 94%;
+  --background: 253 33% 5%;
+  --surface: 256 33% 9%;
+  --border: 258 33% 18%;
+  --text-secondary: 261 13% 50%;
+  --muted: 259 20% 31%;
+  --primary: 340 100% 54%;
+  --onPrimary: 0 0% 100%;
+  --primary-dim: 340 100% 54%;
+  --input-background: 253 37% 7%;
+  --input-border: 258 33% 18%;
+  --input-border-focused: 340 100% 54%;
 }

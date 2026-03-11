@@ -1,6 +1,7 @@
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../components/Button";
+import { Text } from "../components/Text";
 import { useState } from "react";
 
 export default function Test() {
@@ -13,6 +14,7 @@ export default function Test() {
         className={`${scheme === "dark" ? "dark" : ""} flex-1 items-center justify-center px-6 bg-background`}
       >
         <Text className="text-3xl">nativewind is working</Text>
+        <Text className="text-xl text-muted">muted text</Text>
         <Button
           title={`change scheme ${scheme}`}
           onPress={() => setScheme(scheme === "light" ? "dark" : "light")}

@@ -5,12 +5,12 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        foreground: 'hsl(var(--foreground) / <alpha-value>)',
         background: 'hsl(var(--background) / <alpha-value>)',
         surface: 'hsl(var(--surface) / <alpha-value>)',
         border: 'hsl(var(--border) / <alpha-value>)',
-        text: 'hsl(var(--text) / <alpha-value>)',
         "text-secondary": 'hsl(var(--text-secondary) / <alpha-value>)',
-        "text-muted": 'hsl(var(--text-muted) / <alpha-value>)',
+        "muted": 'hsl(var(--muted) / <alpha-value>)',
         primary: 'hsl(var(--primary) / <alpha-value>)',
         "on-primary": 'hsl(var(--on-primary) / <alpha-value>)',
         "primary-dim": 'hsl(var(--primary-dim) / <alpha-value>)',
