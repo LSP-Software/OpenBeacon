@@ -157,6 +157,7 @@ export default function HomeScreen() {
                 variant="secondary"
                 onPress={() => router.push("/signUp")}
               />
+              <Button variant="ghost" title="Test" onPress={() => router.push("/test")} />
             </View>
 
             <Pressable
