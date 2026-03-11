@@ -5,20 +5,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
 import { useColors } from "../../lib/theme.ts";
 
-const EXPO_AUTH_COOKIE_KEY = "openbeacon_cookie";
-
-function getSessionTokenFromCookieStore(): string | null {
-  try {
-    const raw = SecureStore.getItem(EXPO_AUTH_COOKIE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Record<string, { value: string; expires?: string | null }>;
-    const entry = Object.entries(parsed).find(([key]) => key.includes("session_token"));
-    return entry?.[1]?.value ?? null;
-  } catch {
-    return null;
-  }
-}
-
 function ChevronRight({ color }: { color: string }) {
   return (
     <View style={{ width: 16, height: 16, alignItems: "center", justifyContent: "center" }}>
@@ -80,7 +66,7 @@ export default function AccountScreen() {
     .join("");
 
   const handleSignOut = async () => {
-    const sessionTokenToRevoke = getSessionTokenFromCookieStore();
+    const sessionTokenToRevoke = session?.session?.token ?? null;
     try {
       const result = await authClient.signOut();
       if (result?.error && sessionTokenToRevoke) {
