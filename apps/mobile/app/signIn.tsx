@@ -38,7 +38,7 @@ export default function SignIn() {
       }
       const tokenToRevoke = await SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
       if (tokenToRevoke) {
-        void authClient.revokeSession({ token: tokenToRevoke }).finally(async () => {
+        void authClient.revokeSession({ token: tokenToRevoke }).then(async () => {
           await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
         });
       }
