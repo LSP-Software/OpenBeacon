@@ -38,8 +38,10 @@ export default function SignIn() {
       }
       const tokenToRevoke = await SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
       if (tokenToRevoke) {
-        void authClient.revokeSession({ token: tokenToRevoke }).then(async () => {
-          await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
+        void authClient.revokeSession({ token: tokenToRevoke }).then(async (result) => {
+          if (!result?.error) {
+            await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
+          }
         });
       }
       router.replace("/");
