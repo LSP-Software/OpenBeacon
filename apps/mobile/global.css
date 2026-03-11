@@ -4,7 +4,6 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-
 @layer base {
   :root {
     --background: 223 100% 60%;
