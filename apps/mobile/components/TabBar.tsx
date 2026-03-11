@@ -2,6 +2,7 @@ import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useEffect } from "react";
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, {
+  cancelAnimation,
   Easing,
   interpolate,
   useAnimatedStyle,
@@ -188,6 +189,7 @@ function CenterMapButton({
       ),
       -1,
     );
+    return () => cancelAnimation(glow)
   }, [glow]);
 
   const glowAnimatedStyle = useAnimatedStyle(
