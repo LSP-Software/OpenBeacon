@@ -12,7 +12,7 @@ export default function Test() {
         key={scheme}
         className={`${scheme === "dark" ? "dark" : ""} flex-1 items-center justify-center px-6 bg-background`}
       >
-        <Text className="text-3xl text-white">nativewind is working</Text>
+        <Text className="text-3xl">nativewind is working</Text>
         <Button
           title={`change scheme ${scheme}`}
           onPress={() => setScheme(scheme === "light" ? "dark" : "light")}
