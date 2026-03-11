@@ -1,18 +1,10 @@
 import { router } from "expo-router";
 import { useEffect, useRef } from "react";
-import {
-  Animated,
-  Dimensions,
-  Easing,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Animated, Dimensions, Easing, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BeaconIcon } from "../components/BeaconIcon.tsx";
 import { Button } from "../components/Button.tsx";
+import { Text } from "../components/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
 import { useColors } from "../lib/theme.ts";
 
@@ -43,8 +35,8 @@ function LoadingScreen({ colors }: { colors: ReturnType<typeof useColors> }) {
   }, [pulse]);
 
   return (
-    <View style={[styles.flex, styles.loadingContainer, { backgroundColor: colors.background }]}>
-      <View style={styles.loadingDecor} pointerEvents="none">
+    <View className="flex-1 items-center justify-center bg-background">
+      <View className="absolute inset-0 items-center justify-center" pointerEvents="none">
         {RING_DIAMETERS.map((d, i) => (
           <View
             key={d}
@@ -82,14 +74,17 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={[styles.flex, { backgroundColor: colors.background }]}>
+    <View className="flex-1 bg-background">
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerClassName={"flex-grow"}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <SafeAreaView style={styles.safeContent}>
-          <View style={styles.bgDecorContainer} pointerEvents="none">
+        <SafeAreaView className="flex-1 px-8 py-6 justify-between min-h-[600]">
+          <View
+            className="absolute inset-0 items-center justify-center top-[-15%]"
+            pointerEvents="none"
+          >
             {RING_DIAMETERS.map((d, i) => (
               <View
                 key={d}
@@ -98,44 +93,38 @@ export default function HomeScreen() {
                   width: d,
                   height: d,
                   borderRadius: d / 2,
-                  borderWidth: 1,
-                  borderColor: colors.primary,
                   opacity: RING_OPACITIES[i],
                 }}
+                className="border-primary border"
               />
             ))}
           </View>
 
-          <View style={styles.heroBlock}>
+          <View className="flex-1 items-center justify-center gap-10 pt-10">
             <BeaconIcon size={96} color={colors.primary} />
-            <View style={styles.titleBlock}>
-              <Text style={[styles.appName, { color: colors.text }]}>OPENBEACON</Text>
-              <Text style={[styles.tagline, { color: colors.textSecondary }]}>
-                Your family.{"\n"}Your data.
-              </Text>
+            <View className="items-center gap-4">
+              <Text className="font-bold text-5xl">OPENBEACON</Text>
+              <Text className="text-xl text-muted text-center">Your family.{"\n"}Your data.</Text>
             </View>
           </View>
 
-          <View style={styles.actionsBlock}>
-            <View style={styles.actions}>
+          <View className="gap-6 pb-8">
+            <View className="gap-3">
               <Button title="Sign In" onPress={() => router.push("/signIn")} />
               <Button
                 title="Create Account"
                 variant="secondary"
                 onPress={() => router.push("/signUp")}
               />
-              <Button variant="ghost" title="Test" onPress={() => router.push("/test")} />
             </View>
 
             <Pressable
-              style={styles.serverLink}
+              className="items-center py-2"
               onPress={() => router.push("/serverUrl")}
               accessibilityRole="button"
               accessibilityLabel="Configure custom server"
             >
-              <Text style={[styles.serverLinkText, { color: colors.textMuted }]}>
-                Using a self-hosted server?
-              </Text>
+              <Text className="text-sm text-muted">Using a self-hosted server?</Text>
             </Pressable>
           </View>
         </SafeAreaView>
@@ -143,73 +132,3 @@ export default function HomeScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  loadingContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingDecor: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  safeContent: {
-    flex: 1,
-    paddingHorizontal: 32,
-    paddingVertical: 24,
-    justifyContent: "space-between",
-    minHeight: 600,
-  },
-  bgDecorContainer: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    top: "-15%",
-  },
-  heroBlock: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 36,
-    paddingTop: 40,
-  },
-  titleBlock: {
-    alignItems: "center",
-    gap: 16,
-  },
-  appName: {
-    fontSize: 36,
-    fontWeight: "800",
-    letterSpacing: 6,
-    textAlign: "center",
-  },
-  tagline: {
-    fontSize: 22,
-    fontWeight: "300",
-    textAlign: "center",
-    lineHeight: 32,
-    letterSpacing: 0.3,
-  },
-  actionsBlock: {
-    gap: 24,
-    paddingBottom: 8,
-  },
-  actions: {
-    gap: 12,
-  },
-  serverLink: {
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  serverLinkText: {
-    fontSize: 13,
-    letterSpacing: 0.2,
-  },
-});

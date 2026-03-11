@@ -14,7 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../components/Button.tsx";
 import { FormInput } from "../components/FormInput.tsx";
 import { authClient } from "../lib/auth-client.ts";
-import { ArrowLeftIcon } from "lucide-react-native";
+import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 
 export default function SignUp() {
   const [name, setName] = useState("");
@@ -52,15 +52,7 @@ export default function SignUp() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Pressable
-            className="flex flex-row items-center gap-1"
-            onPress={() => router.push("/")}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <ArrowLeftIcon />
-            <Text className="text-primary">Back</Text>
-          </Pressable>
+          <ReturnToHomeHeader />
 
           <View className="gap-5">
             <Text className="font-bold text-5xl">Create{"\n"}account.</Text>

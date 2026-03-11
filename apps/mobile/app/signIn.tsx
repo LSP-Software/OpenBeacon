@@ -15,7 +15,7 @@ import { Button } from "../components/Button.tsx";
 import { Text } from "../components/Text.tsx";
 import { FormInput } from "../components/FormInput.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
-import { ArrowLeftIcon } from "lucide-react-native";
+import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 
 export default function SignIn() {
   const [email, setEmail] = useState("");
@@ -55,20 +55,11 @@ export default function SignIn() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Pressable
-            className="flex flex-row items-center gap-1"
-            onPress={() => router.push("/")}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <ArrowLeftIcon />
-            <Text className="text-primary">Back</Text>
-          </Pressable>
+          <ReturnToHomeHeader />
           <View className="gap-5">
             <Text className="font-bold text-5xl">Welcome{"\n"}back.</Text>
             <Text className="text-lg text-muted">Sign in to your account</Text>
           </View>
-
           <View className="gap-5">
             <FormInput
               label="Email"
@@ -100,7 +91,6 @@ export default function SignIn() {
               disabled={loading}
             />
           </View>
-
           <View className="items-center gap-4 pt-2">
             <Pressable onPress={() => router.push("/signUp")} accessibilityRole="link">
               <Text className="text-muted">
