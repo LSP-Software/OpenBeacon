@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import { useRef, useState } from "react";
 import {
   Alert,
@@ -15,7 +16,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../components/Button.tsx";
 import { FormInput } from "../components/FormInput.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
-import { storage } from "../lib/storage.ts";
 import { useColors } from "../lib/theme.ts";
 
 export default function SignIn() {
@@ -36,10 +36,10 @@ export default function SignIn() {
         Alert.alert("Sign in failed", response.error.message ?? "An error occurred");
         return;
       }
-      const tokenToRevoke = storage.getString(SESSION_TOKEN_TO_REVOKE_KEY);
+      const tokenToRevoke = await SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
       if (tokenToRevoke) {
-        void authClient.revokeSession({ token: tokenToRevoke }).finally(() => {
-          storage.remove(SESSION_TOKEN_TO_REVOKE_KEY);
+        void authClient.revokeSession({ token: tokenToRevoke }).finally(async () => {
+          await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
         });
       }
       router.replace("/");

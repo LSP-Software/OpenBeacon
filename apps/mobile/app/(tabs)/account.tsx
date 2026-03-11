@@ -3,7 +3,6 @@ import * as SecureStore from "expo-secure-store";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
-import { storage } from "../../lib/storage.ts";
 import { useColors } from "../../lib/theme.ts";
 
 const EXPO_AUTH_COOKIE_KEY = "openbeacon_cookie";
@@ -85,11 +84,11 @@ export default function AccountScreen() {
     try {
       const result = await authClient.signOut();
       if (result?.error && sessionTokenToRevoke) {
-        storage.set(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke);
+        await SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke);
       }
     } catch {
       if (sessionTokenToRevoke) {
-        storage.set(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke);
+        await SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke);
       }
     } finally {
       router.replace("/");
