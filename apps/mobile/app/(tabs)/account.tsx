@@ -1,8 +1,24 @@
 import { router } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { authClient } from "../../lib/auth-client.ts";
+import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
+import { storage } from "../../lib/storage.ts";
 import { useColors } from "../../lib/theme.ts";
+
+const EXPO_AUTH_COOKIE_KEY = "openbeacon_cookie";
+
+function getSessionTokenFromCookieStore(): string | null {
+  try {
+    const raw = SecureStore.getItem(EXPO_AUTH_COOKIE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, { value: string; expires?: string | null }>;
+    const entry = Object.entries(parsed).find(([key]) => key.includes("session_token"));
+    return entry?.[1]?.value ?? null;
+  } catch {
+    return null;
+  }
+}
 
 function ChevronRight({ color }: { color: string }) {
   return (
@@ -65,8 +81,19 @@ export default function AccountScreen() {
     .join("");
 
   const handleSignOut = async () => {
-    await authClient.signOut();
-    router.replace("/");
+    const sessionTokenToRevoke = getSessionTokenFromCookieStore();
+    try {
+      const result = await authClient.signOut();
+      if (result?.error && sessionTokenToRevoke) {
+        storage.set(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke);
+      }
+    } catch {
+      if (sessionTokenToRevoke) {
+        storage.set(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke);
+      }
+    } finally {
+      router.replace("/");
+    }
   };
 
   return (
