@@ -189,7 +189,7 @@ function CenterMapButton({
       ),
       -1,
     );
-    return () => cancelAnimation(glow)
+    return () => cancelAnimation(glow);
   }, [glow]);
 
   const glowAnimatedStyle = useAnimatedStyle(
