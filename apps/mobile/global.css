@@ -4,23 +4,20 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-
-/* brand 340 100% 54% */
-
 :root {
+  --brand: 340 100% 54%;
   --foreground: 269 40% 10%;
   --background: 264 50% 96%;
   --surface: 	0 0% 100%;
   --border: 261 52% 90%;
-  --text: 269 40% 10%;
   --text-secondary: 262 15% 44%;
-  --muted: 260 22% 68%;
-  --primary: 340 100% 54%;
+  --muted: 260 22% 35%;
+  --primary: var(--brand);
   --on-primary: 0 0% 100%;
-  --primary-dim: 340 100% 54%;
+  --primary-dim: var(--brand);
   --input-background: 0 0% 100%;
   --input-border: 258 53% 87%;
-  --input-border-focused: 340 100% 54%;
+  --input-border-focused: var(--brand);
 }
 
 .dark {
@@ -30,10 +27,10 @@
   --border: 258 33% 18%;
   --text-secondary: 261 13% 50%;
   --muted: 259 20% 31%;
-  --primary: 340 100% 54%;
+  --primary: var(--brand);
   --onPrimary: 0 0% 100%;
-  --primary-dim: 340 100% 54%;
+  --primary-dim: var(--brand);
   --input-background: 253 37% 7%;
   --input-border: 258 33% 18%;
-  --input-border-focused: 340 100% 54%;
+  --input-border-focused: var(--brand);
 }

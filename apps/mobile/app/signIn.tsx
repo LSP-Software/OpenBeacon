@@ -7,20 +7,17 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
-  Text,
   type TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../components/Button.tsx";
+import { Text } from "../components/Text.tsx";
 import { FormInput } from "../components/FormInput.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
-import { useColors } from "../lib/theme.ts";
+import { ArrowLeftIcon } from "lucide-react-native";
 
 export default function SignIn() {
-  const colors = useColors();
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -51,33 +48,28 @@ export default function SignIn() {
   };
 
   return (
-    <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.select({ ios: "padding", android: undefined })}
-      >
+    <SafeAreaView>
+      <KeyboardAvoidingView behavior={Platform.select({ ios: "padding", android: undefined })}>
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerClassName="px-8 pt-4 pb-10 gap-10"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <Pressable
-            style={styles.backButton}
             onPress={() => router.back()}
             accessibilityRole="button"
             accessibilityLabel="Go back"
+            className="flex flex-row items-center gap-1"
           >
-            <Text style={[styles.backText, { color: colors.primary }]}>← Back</Text>
+            <ArrowLeftIcon />
+            <Text className="text-primary">Back</Text>
           </Pressable>
-
-          <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.text }]}>Welcome{"\n"}back.</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Sign in to your account
-            </Text>
+          <View className="gap-5">
+            <Text className="font-bold text-5xl">Welcome{"\n"}back.</Text>
+            <Text className="text-lg text-muted">Sign in to your account</Text>
           </View>
 
-          <View style={styles.form}>
+          <View className="gap-5">
             <FormInput
               label="Email"
               value={email}
@@ -109,21 +101,19 @@ export default function SignIn() {
             />
           </View>
 
-          <View style={styles.footer}>
+          <View className="items-center gap-4 pt-2">
             <Pressable onPress={() => router.push("/signUp")} accessibilityRole="link">
-              <Text style={[styles.footerText, { color: colors.textSecondary }]}>
+              <Text className="text-muted">
                 Don't have an account?{" "}
-                <Text style={[styles.footerLink, { color: colors.primary }]}>Create one</Text>
+                <Text className="font-semibold text-primary">Create one</Text>
               </Text>
             </Pressable>
             <Pressable
-              style={styles.serverLinkPressable}
+              className="py-1"
               onPress={() => router.push("/serverUrl")}
               accessibilityRole="button"
             >
-              <Text style={[styles.serverLinkText, { color: colors.textMuted }]}>
-                Using a self-hosted server?
-              </Text>
+              <Text className="text-secondary">Using a self-hosted server?</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -131,57 +121,3 @@ export default function SignIn() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 32,
-    paddingTop: 16,
-    paddingBottom: 40,
-    gap: 36,
-  },
-  backButton: {
-    alignSelf: "flex-start",
-    paddingVertical: 4,
-  },
-  backText: {
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  header: {
-    gap: 12,
-  },
-  title: {
-    fontSize: 44,
-    fontWeight: "800",
-    letterSpacing: -1.5,
-    lineHeight: 50,
-  },
-  subtitle: {
-    fontSize: 16,
-    fontWeight: "400",
-  },
-  form: {
-    gap: 20,
-  },
-  footer: {
-    alignItems: "center",
-    gap: 16,
-    paddingTop: 8,
-  },
-  footerText: {
-    fontSize: 15,
-  },
-  footerLink: {
-    fontWeight: "600",
-  },
-  serverLinkPressable: {
-    paddingVertical: 4,
-  },
-  serverLinkText: {
-    fontSize: 13,
-  },
-});

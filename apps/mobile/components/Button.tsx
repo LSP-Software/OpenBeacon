@@ -1,5 +1,5 @@
-import { Pressable, StyleSheet, Text } from "react-native";
-import { useColors } from "../lib/theme.ts";
+import { Pressable } from "react-native";
+import { Text } from "./Text";
 
 type Props = {
   title: string;
@@ -9,52 +9,33 @@ type Props = {
 };
 
 export function Button({ title, onPress, variant = "primary", disabled = false }: Props) {
-  const colors = useColors();
+  const containerBase = "rounded-[14px] py-4 px-6 items-center justify-center";
+  const labelBase = "text-base font-semibold tracking-[0.2px]";
+  const variantContainer =
+    variant === "primary"
+      ? "bg-primary"
+      : variant === "secondary"
+        ? "bg-transparent border-[1.5px] border-primary"
+        : "bg-transparent";
+  const variantLabel =
+    variant === "primary"
+      ? "text-on-primary"
+      : variant === "secondary"
+        ? "text-primary"
+        : "text-text-secondary text-sm";
 
   return (
     <Pressable
-      style={({ pressed }) => [
-        styles.base,
-        variant === "primary" && { backgroundColor: colors.primary },
-        variant === "secondary" && {
-          backgroundColor: "transparent",
-          borderWidth: 1.5,
-          borderColor: colors.primary,
-        },
-        variant === "ghost" && { backgroundColor: "transparent" },
-        pressed && { opacity: 0.72 },
-        disabled && { opacity: 0.38 },
-      ]}
+      className={`${containerBase} ${variantContainer}`}
+      style={({ pressed }) => ({
+        opacity: disabled ? 0.38 : pressed ? 0.72 : 1,
+      })}
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={title}
     >
-      <Text
-        style={[
-          styles.label,
-          variant === "primary" && { color: colors.onPrimary },
-          variant === "secondary" && { color: colors.primary },
-          variant === "ghost" && { color: colors.textSecondary, fontSize: 14 },
-        ]}
-      >
-        {title}
-      </Text>
+      <Text className={`${labelBase} ${variantLabel}`}>{title}</Text>
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  base: {
-    borderRadius: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: "600",
-    letterSpacing: 0.2,
-  },
-});

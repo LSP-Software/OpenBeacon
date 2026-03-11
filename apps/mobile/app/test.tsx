@@ -16,6 +16,7 @@ export default function Test() {
         <Text className="text-3xl">nativewind is working</Text>
         <Text className="text-xl text-muted">muted text</Text>
         <Button
+          variant="primary"
           title={`change scheme ${scheme}`}
           onPress={() => setScheme(scheme === "light" ? "dark" : "light")}
         />
