@@ -1,6 +1,6 @@
+import { View } from "react-native";
 import "../global.css";
 import { Stack } from "expo-router";
-import { View } from "react-native";
 
 export default function RootLayout() {
   return (
@@ -8,7 +8,6 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: "transparent" },
         }}
       />
     </View>

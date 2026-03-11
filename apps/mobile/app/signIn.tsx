@@ -56,10 +56,10 @@ export default function SignIn() {
           showsVerticalScrollIndicator={false}
         >
           <Pressable
-            onPress={() => router.back()}
+            className="flex flex-row items-center gap-1"
+            onPress={() => router.push("/")}
             accessibilityRole="button"
             accessibilityLabel="Go back"
-            className="flex flex-row items-center gap-1"
           >
             <ArrowLeftIcon />
             <Text className="text-primary">Back</Text>
