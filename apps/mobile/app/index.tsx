@@ -71,47 +71,14 @@ export default function HomeScreen() {
   const { data: session, isPending } = authClient.useSession();
   const colors = useColors();
 
-  if (isPending) {
+  useEffect(() => {
+    if (!isPending && session) {
+      router.replace("/(tabs)/map");
+    }
+  }, [session, isPending]);
+
+  if (isPending || session) {
     return <LoadingScreen colors={colors} />;
-  }
-
-  if (session) {
-    return (
-      <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-        <View style={styles.authedContainer}>
-          <View style={styles.authedDecor} pointerEvents="none">
-            {RING_DIAMETERS.map((d, i) => (
-              <View
-                key={d}
-                style={{
-                  position: "absolute",
-                  width: d,
-                  height: d,
-                  borderRadius: d / 2,
-                  borderWidth: 1,
-                  borderColor: colors.primary,
-                  opacity: RING_OPACITIES[i],
-                }}
-              />
-            ))}
-          </View>
-
-          <View style={styles.authedContent}>
-            <BeaconIcon size={88} color={colors.primary} />
-            <View style={styles.authedTextBlock}>
-              <Text style={[styles.authedGreeting, { color: colors.textSecondary }]}>
-                Welcome back
-              </Text>
-              <Text style={[styles.authedName, { color: colors.text }]}>{session.user.name}</Text>
-            </View>
-          </View>
-
-          <View style={styles.authedActions}>
-            <Button title="Sign Out" variant="secondary" onPress={() => authClient.signOut()} />
-          </View>
-        </View>
-      </SafeAreaView>
-    );
   }
 
   return (
@@ -244,39 +211,5 @@ const styles = StyleSheet.create({
   serverLinkText: {
     fontSize: 13,
     letterSpacing: 0.2,
-  },
-  authedContainer: {
-    flex: 1,
-    paddingHorizontal: 32,
-    paddingVertical: 40,
-    justifyContent: "center",
-    gap: 48,
-  },
-  authedDecor: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  authedContent: {
-    alignItems: "center",
-    gap: 28,
-  },
-  authedTextBlock: {
-    alignItems: "center",
-    gap: 8,
-  },
-  authedGreeting: {
-    fontSize: 15,
-    fontWeight: "400",
-    letterSpacing: 2,
-    textTransform: "uppercase",
-  },
-  authedName: {
-    fontSize: 32,
-    fontWeight: "700",
-    letterSpacing: -0.5,
-  },
-  authedActions: {
-    gap: 12,
   },
 });
