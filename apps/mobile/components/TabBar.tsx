@@ -1,6 +1,6 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useEffect } from "react";
-import { Dimensions, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, {
   Easing,
   interpolate,
@@ -15,14 +15,12 @@ import { useColors } from "../lib/theme.ts";
 
 type TabRoute = { key: string; name: string };
 
-const { width: SCREEN_W } = Dimensions.get("window");
 const LIFT = 20;
 const CENTER_SIZE = 66;
 const BAR_HEIGHT = 62;
 const BAR_MARGIN = 16;
 const OUTER_HEIGHT = BAR_HEIGHT + LIFT;
 const CENTER_HIT = CENTER_SIZE + 24;
-const CENTER_HIT_LEFT = SCREEN_W / 2 - CENTER_HIT / 2;
 
 function GroupsIcon({ color, size }: { color: string; size: number }) {
   const dot = Math.round(size * 0.44);
@@ -177,6 +175,8 @@ function CenterMapButton({
   onPress: () => void;
   colors: ReturnType<typeof useColors>;
 }) {
+  const { width } = useWindowDimensions();
+  const centerHitLeft = width / 2 - CENTER_HIT / 2;
   const glow = useSharedValue(0);
   const pressScale = useSharedValue(1);
 
@@ -219,7 +219,7 @@ function CenterMapButton({
   return (
     <Pressable
       onPress={handlePress}
-      style={[styles.centerHitArea, { left: CENTER_HIT_LEFT }]}
+      style={[styles.centerHitArea, { left: centerHitLeft }]}
       accessibilityRole="tab"
       accessibilityLabel="Maps"
       accessibilityState={{ selected: isActive }}
