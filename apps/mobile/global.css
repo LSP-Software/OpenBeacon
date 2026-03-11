@@ -1,3 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+
+@layer base {
+  :root {
+    --background: 223 100% 60%;
+  }
+
+  .dark {
+    --background: 79 100% 60%;
+  }
+}
