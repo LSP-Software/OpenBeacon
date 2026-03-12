@@ -9,7 +9,7 @@
 
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
-import { z, ZodError } from "zod/v4";
+import { ZodError, z } from "zod/v4";
 import { auth } from "./auth.ts";
 import { db } from "./db.ts";
 
