@@ -40,8 +40,9 @@ export default function SignUp() {
       setLoading(false);
       return;
     }
-    router.replace("/");
+    
     setLoading(false);
+    router.replace("/");
 
   };
 
