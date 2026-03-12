@@ -1,5 +1,6 @@
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import { Button } from "../../components/Button.tsx";
+import { Text } from "../../components/Text.tsx";
 
 export default function MapScreen() {
   return (
@@ -14,7 +15,7 @@ export default function MapScreen() {
                 Create or join a group to see family locations on the map
               </Text>
             </View>
-            <Button title="View Groups" variant="secondary" onPress={() => {}} />
+            <Button title="View Groups" variant="secondary" onPress={() => { }} />
           </View>
         </View>
       </View>

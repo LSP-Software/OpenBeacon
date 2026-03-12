@@ -37,13 +37,13 @@ export const FormInput = forwardRef<TextInput, Props>(function FormInput(
 
   return (
     <View className="gap-2">
-      <Text className="text-sm font-bold tracking-wide">{label.toUpperCase()}</Text>
+      <Text className="text-foreground text-sm font-bold tracking-wide">{label.toUpperCase()}</Text>
       <View
         className={`rounded-lg border border-border bg-input-background ${focused && "border-primary"}`}
       >
         <TextInput
           ref={ref}
-          className="py-4 px-4"
+          className="py-4 px-4 text-foreground"
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder ?? label}
