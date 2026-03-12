@@ -11,10 +11,8 @@
     "web": "expo start --web",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests",
-    "lint": "biome lint .",
-    "format": "biome format --write .",
-    "format:check": "biome format .",
     "check": "biome check .",
+    "check:fix": "biome check --write .",
     "ci": "bun run typecheck && bun run check && bun run test"
   },
   "dependencies": {

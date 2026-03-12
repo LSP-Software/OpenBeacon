@@ -13,10 +13,8 @@
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "DATABASE_URL=postgresql://localhost:5432/openbeacon prisma generate && tsc -p tsconfig.json --noEmit",
-    "lint": "biome lint .",
-    "format": "biome format --write .",
-    "format:check": "biome format .",
     "check": "biome check .",
+    "check:fix": "biome check --write .",
     "test": "bun test --pass-with-no-tests",
     "db:generate": "bun run --env-file=../../.env prisma generate",
     "db:migrate:deploy": "bun run --env-file=../../.env prisma migrate deploy",

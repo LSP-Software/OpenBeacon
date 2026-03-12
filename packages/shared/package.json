@@ -8,10 +8,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "biome lint .",
-    "format": "biome format --write .",
-    "format:check": "biome format .",
     "check": "biome check .",
+    "check:fix": "biome check --write .",
     "test": "bun test --pass-with-no-tests"
   }
 }

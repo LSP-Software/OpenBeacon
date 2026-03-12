@@ -1,9 +1,9 @@
 import { View } from "react-native";
 import "../global.css";
-import { Stack } from "expo-router";
-import { ThemeProvider } from "../providers/ThemeProvider";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { Stack } from "expo-router";
 import { queryClient } from "../lib/api";
+import { ThemeProvider } from "../providers/ThemeProvider";
 
 export default function RootLayout() {
   return (
