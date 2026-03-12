@@ -13,6 +13,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useColors } from "../lib/theme.ts";
+import { UserIcon, Users } from "lucide-react-native";
 
 type TabRoute = { key: string; name: string };
 
@@ -23,43 +24,15 @@ const BAR_MARGIN = 16;
 const OUTER_HEIGHT = BAR_HEIGHT + LIFT;
 const CENTER_HIT = CENTER_SIZE + 24;
 
-function GroupsIcon({ color, size }: { color: string; size: number }) {
-  const dot = Math.round(size * 0.44);
-  const overlap = Math.round(dot * 0.28);
-  return (
-    <View style={{ width: size, height: size, justifyContent: "center", alignItems: "center" }}>
-      <View style={{ flexDirection: "row" }}>
-        <View
-          style={{
-            width: dot,
-            height: dot,
-            borderRadius: dot / 2,
-            backgroundColor: color,
-            opacity: 0.5,
-          }}
-        />
-        <View
-          style={{
-            width: dot,
-            height: dot,
-            borderRadius: dot / 2,
-            backgroundColor: color,
-            marginLeft: -overlap,
-          }}
-        />
-      </View>
-    </View>
-  );
-}
-
 function LocationPinIcon({ color, size }: { color: string; size: number }) {
   const circleW = Math.round(size * 0.6);
   const dotS = Math.round(circleW * 0.3);
   const tipHalfW = Math.round(circleW * 0.28);
   const tipH = Math.round(circleW * 0.35);
+
   return (
-    <View style={{ width: size, height: size, justifyContent: "center", alignItems: "center" }}>
-      <View style={{ alignItems: "center" }}>
+    <View className="items-center justify-center" style={{ width: size, height: size }}>
+      <View className="items-center">
         <View
           style={{
             width: circleW,
@@ -89,30 +62,6 @@ function LocationPinIcon({ color, size }: { color: string; size: number }) {
           }}
         />
       </View>
-    </View>
-  );
-}
-
-function PersonIcon({ color, size }: { color: string; size: number }) {
-  const headD = Math.round(size * 0.38);
-  const bodyW = Math.round(size * 0.6);
-  const bodyH = Math.round(size * 0.26);
-  return (
-    <View
-      style={{ width: size, height: size, justifyContent: "center", alignItems: "center", gap: 3 }}
-    >
-      <View
-        style={{ width: headD, height: headD, borderRadius: headD / 2, backgroundColor: color }}
-      />
-      <View
-        style={{
-          width: bodyW,
-          height: bodyH,
-          borderRadius: bodyH,
-          backgroundColor: color,
-          opacity: 0.7,
-        }}
-      />
     </View>
   );
 }
@@ -148,18 +97,17 @@ function SideTab({
   return (
     <Pressable
       onPress={handlePress}
-      style={styles.sideTab}
+      className="flex-1 h-full items-center justify-center"
       accessibilityRole="tab"
       accessibilityLabel={label}
       accessibilityState={{ selected: isActive }}
     >
-      <Animated.View style={[styles.sideTabInner, animatedStyle]}>
-        {route.name === "groups" ? (
-          <GroupsIcon color={color} size={22} />
-        ) : (
-          <PersonIcon color={color} size={22} />
-        )}
-        <Text style={[styles.tabLabel, { color, fontWeight: isActive ? "700" : "400" }]}>
+      <Animated.View className="items-center gap-" style={animatedStyle}>
+        {route.name === "groups" ? <Users size={22} /> : <UserIcon size={22} />}
+        <Text
+          className="text-sm font-bold tracking-wide"
+          style={{ color, fontWeight: isActive ? "700" : "400" }}
+        >
           {label}
         </Text>
       </Animated.View>
@@ -230,9 +178,7 @@ function CenterMapButton({
       <Animated.View style={[styles.centerBtn, centerBtnAnimatedStyle]}>
         <LocationPinIcon color="#FFFFFF" size={30} />
       </Animated.View>
-      <Text style={[styles.centerLabel, { color: isActive ? colors.primary : colors.textMuted }]}>
-        Maps
-      </Text>
+      <Text className="text-sm text-muted font-bold uppercase mt-1">Maps</Text>
     </Pressable>
   );
 }
@@ -309,10 +255,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sideTabInner: {
-    alignItems: "center",
-    gap: 4,
-  },
   centerSlot: {
     width: CENTER_SIZE + 20,
   },
@@ -348,10 +290,5 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginTop: 5,
     fontWeight: "600",
-  },
-  tabLabel: {
-    fontSize: 10,
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
   },
 });
