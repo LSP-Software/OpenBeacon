@@ -51,8 +51,11 @@ export default function AccountScreen() {
 
     const {error: signOutError} = await tryCatch(authClient.signOut());
 
+    const {error: signOutError} = await tryCatch(authClient.signOut());
+
     if (signOutError && sessionTokenToRevoke) {
       await SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke);
+    }
 
     setIsSigningOut(false);
     router.replace("/");
