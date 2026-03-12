@@ -1,5 +1,5 @@
 import { forwardRef, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import { useColors } from "../lib/theme.ts";
 
 type Props = {
@@ -36,22 +36,14 @@ export const FormInput = forwardRef<TextInput, Props>(function FormInput(
   const [focused, setFocused] = useState(false);
 
   return (
-    <View style={styles.wrapper}>
-      <Text style={[styles.label, { color: focused ? colors.primary : colors.textSecondary }]}>
-        {label.toUpperCase()}
-      </Text>
+    <View className="gap-2">
+      <Text className="text-sm font-bold tracking-wide">{label.toUpperCase()}</Text>
       <View
-        style={[
-          styles.inputContainer,
-          {
-            backgroundColor: colors.inputBackground,
-            borderColor: focused ? colors.inputBorderFocused : colors.inputBorder,
-          },
-        ]}
+        className={`rounded-lg border border-border bg-input-background ${focused && "border-primary"}`}
       >
         <TextInput
           ref={ref}
-          style={[styles.input, { color: colors.text }]}
+          className="py-4 px-4"
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder ?? label}
@@ -71,25 +63,4 @@ export const FormInput = forwardRef<TextInput, Props>(function FormInput(
       </View>
     </View>
   );
-});
-
-const styles = StyleSheet.create({
-  wrapper: {
-    gap: 7,
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-  },
-  inputContainer: {
-    borderRadius: 12,
-    borderWidth: 1.5,
-    overflow: "hidden",
-  },
-  input: {
-    fontSize: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
 });

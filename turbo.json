@@ -1,27 +1,15 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalPassThroughEnv": [
-    "DATABASE_URL",
-    "REDIS_URL",
-    "BETTER_AUTH_SECRET",
-    "BETTER_AUTH_URL"
-  ],
+  "globalPassThroughEnv": ["DATABASE_URL", "REDIS_URL", "BETTER_AUTH_SECRET", "BETTER_AUTH_URL"],
   "tasks": {
     "build": {
-      "dependsOn": [
-        "^build"
-      ],
-      "outputs": [
-        "dist/**",
-        "build/**"
-      ]
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "build/**"]
     },
     "dev": {
       "cache": false,
       "persistent": true,
-      "dependsOn": [
-        "^db:generate"
-      ]
+      "dependsOn": ["^db:generate"]
     },
     "lint": {},
     "format": {
@@ -37,15 +25,11 @@
       "outputs": []
     },
     "typecheck": {
-      "dependsOn": [
-        "^typecheck"
-      ],
+      "dependsOn": ["^typecheck"],
       "outputs": []
     },
     "db:generate": {
-      "outputs": [
-        "generated/**"
-      ]
+      "outputs": ["generated/**"]
     }
   }
 }

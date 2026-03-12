@@ -1,23 +1,14 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../components/Button.tsx";
 import { FormInput } from "../components/FormInput.tsx";
+import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
+import { Text } from "../components/Text.tsx";
 import { getServerUrl, hasCustomServerUrl, setServerUrl } from "../lib/server-url.ts";
-import { useColors } from "../lib/theme.ts";
 
 export default function ServerUrl() {
-  const colors = useColors();
   const [url, setUrl] = useState(() => getServerUrl());
 
   const handleSave = () => {
@@ -53,34 +44,24 @@ export default function ServerUrl() {
   };
 
   return (
-    <SafeAreaView style={[styles.flex, { backgroundColor: colors.background }]}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.select({ ios: "padding", android: undefined })}
-      >
+    <SafeAreaView>
+      <KeyboardAvoidingView behavior={Platform.select({ ios: "padding", android: undefined })}>
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerClassName="px-8 pt-4 pb-10 gap-10"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Pressable
-            style={styles.backButton}
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <Text style={[styles.backText, { color: colors.primary }]}>← Back</Text>
-          </Pressable>
+          <ReturnToHomeHeader />
 
-          <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.text }]}>Custom{"\n"}server.</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          <View className="gap-5">
+            <Text className="font-bold text-5xl">Custom{"\n"}server</Text>
+            <Text className="text-lg text-muted">
               Point OpenBeacon at your own self-hosted backend. Leave blank to use the default
               hosted server.
             </Text>
           </View>
 
-          <View style={styles.form}>
+          <View className="gap-5">
             <FormInput
               label="Server URL"
               value={url}
@@ -94,13 +75,8 @@ export default function ServerUrl() {
               onSubmitEditing={handleSave}
             />
 
-            <View
-              style={[
-                styles.infoBox,
-                { backgroundColor: colors.primaryDim, borderColor: colors.inputBorder },
-              ]}
-            >
-              <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+            <View className="bg-primary/10 rounded-lg p-4 border border-primary/15">
+              <Text className="text-sm text-muted">
                 Changes take effect after restarting the app. Your current session will remain
                 active.
               </Text>
@@ -112,11 +88,11 @@ export default function ServerUrl() {
             )}
           </View>
 
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <View className="h-px bg-gray-200" />
 
-          <View style={styles.docsSection}>
-            <Text style={[styles.docsTitle, { color: colors.text }]}>Self-hosting OpenBeacon</Text>
-            <Text style={[styles.docsText, { color: colors.textSecondary }]}>
+          <View className="gap-2">
+            <Text className="font-semibold text-lg">Self-hosting OpenBeacon</Text>
+            <Text className="text-muted">
               OpenBeacon is fully open source. You can run your own backend using Docker — see the
               project README for setup instructions.
             </Text>
@@ -126,64 +102,3 @@ export default function ServerUrl() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 32,
-    paddingTop: 16,
-    paddingBottom: 48,
-    gap: 32,
-  },
-  backButton: {
-    alignSelf: "flex-start",
-    paddingVertical: 4,
-  },
-  backText: {
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  header: {
-    gap: 12,
-  },
-  title: {
-    fontSize: 44,
-    fontWeight: "800",
-    letterSpacing: -1.5,
-    lineHeight: 50,
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 23,
-  },
-  form: {
-    gap: 16,
-  },
-  infoBox: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 14,
-  },
-  infoText: {
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-  },
-  docsSection: {
-    gap: 10,
-  },
-  docsTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    letterSpacing: 0.1,
-  },
-  docsText: {
-    fontSize: 14,
-    lineHeight: 22,
-  },
-});
