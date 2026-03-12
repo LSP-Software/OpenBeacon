@@ -1,7 +1,15 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.3.12/schema.json",
   "files": {
-    "includes": ["**/*", "!!**/dist", "!!**/build", "!!**/node_modules", "!**/generated", "!**/.cxx"]
+    "includes": [
+      "**/*",
+      "!!**/dist",
+      "!!**/build",
+      "!!**/node_modules",
+      "!**/generated",
+      "!**/.cxx",
+      "!apps/mobile/global.css"
+    ]
   },
   "formatter": {
     "enabled": true,
