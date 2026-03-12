@@ -15,6 +15,7 @@ import { FormInput } from "../components/FormInput.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 import { Text } from "../components/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
+import { tryCatch } from "../lib/trycatch.ts";
 
 export default function SignUp() {
   const [name, setName] = useState("");
@@ -28,20 +29,19 @@ export default function SignUp() {
   const handleSignUp = async () => {
     if (!name.trim() || !email.trim() || !password) return;
     setLoading(true);
-    try {
-      const response = await authClient.signUp.email({
-        email: email.trim(),
-        password,
-        name: name.trim(),
-      });
-      if (response.error) {
-        Alert.alert("Sign up failed", response.error.message ?? "An error occurred");
-        return;
-      }
-      router.replace("/");
-    } finally {
-      setLoading(false);
+
+    const {error: signUpError} = await tryCatch(authClient.signUp.email({
+      email: email.trim(),
+      password,
+      name: name.trim(),
+    }));
+    if (signUpError) {
+      Alert.alert("Sign up failed", signUpError.message ?? "An error occurred");
+      return;
     }
+    router.replace("/");
+    setLoading(false);
+
   };
 
   return (

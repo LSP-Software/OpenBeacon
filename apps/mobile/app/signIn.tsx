@@ -16,6 +16,7 @@ import { FormInput } from "../components/FormInput.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 import { Text } from "../components/Text.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
+import { tryCatch } from "../lib/trycatch.ts";
 
 export default function SignIn() {
   const [email, setEmail] = useState("");
@@ -27,10 +28,10 @@ export default function SignIn() {
   const handleLogin = async () => {
     if (!email.trim() || !password) return;
     setLoading(true);
-    try {
-      const response = await authClient.signIn.email({ email: email.trim(), password });
-      if (response.error) {
-        Alert.alert("Sign in failed", response.error.message ?? "An error occurred");
+ 
+    const {data: signInResponse, error: signInError} = await tryCatch(authClient.signIn.email({ email: email.trim(), password }));
+      if (signInError) {
+        Alert.alert("Sign in failed", signInError.message ?? "An error occurred");
         return;
       }
       const tokenToRevoke = await SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
@@ -42,9 +43,8 @@ export default function SignIn() {
         });
       }
       router.replace("/");
-    } finally {
       setLoading(false);
-    }
+
   };
 
   return (
