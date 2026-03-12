@@ -1,5 +1,6 @@
 {
   "name": "@openbeacon/backend",
+  "license": "SEE LICENSE IN LICENSE.md",
   "private": true,
   "scripts": {
     "dev": "bun run --cwd ../.. --env-file=.env --hot apps/backend/src/index.ts",

@@ -1,5 +1,6 @@
 {
   "name": "@openbeacon/mobile",
+  "license": "SEE LICENSE IN LICENSE.md",
   "version": "1.0.0",
   "private": true,
   "main": "expo-router/entry",
