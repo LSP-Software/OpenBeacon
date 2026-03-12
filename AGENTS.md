@@ -14,6 +14,24 @@ The core concept of this app is to be privacy focused so if users pay for us to 
 7. The mobile app must never rely on background JS timers for tracking. The “always works” tracking path must be native.
 8. Mobile UI must be built from React Native core components; do not introduce UI frameworks/component libraries.
 9. All TypeScript import paths must end with `.ts`, not `.js`.
+10. Always use our custom tryCatch function instead of the standard try catch logic.
+  ```ts
+    // WRONG
+    try {
+      const result = await addTwoNumbers(1, 2);
+      console.log(result)
+    } catch (e) {
+      console.log('ERROR');
+    }
+
+    //Correct
+    const result = await tryCatch(addTwoNumbers(1, 2));
+    if (result.error) {
+      console.log('ERROR');
+      return
+    }
+    console.log(result.data)
+  ```
 
 # Technology
 
