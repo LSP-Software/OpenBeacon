@@ -42,8 +42,6 @@ export default function SignIn() {
         });
       }
       router.replace("/");
-      setLoading(false);
-
   };
 
   return (

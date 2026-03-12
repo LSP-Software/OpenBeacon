@@ -15,7 +15,6 @@ import { FormInput } from "../components/FormInput.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 import { Text } from "../components/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
-import { tryCatch } from "../lib/trycatch.ts";
 
 export default function SignUp() {
   const [name, setName] = useState("");
@@ -41,9 +40,7 @@ export default function SignUp() {
       return;
     }
     
-    setLoading(false);
     router.replace("/");
-
   };
 
   return (
