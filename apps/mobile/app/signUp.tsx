@@ -30,13 +30,13 @@ export default function SignUp() {
     if (!name.trim() || !email.trim() || !password) return;
     setLoading(true);
 
-    const {error: signUpError, data: signUpResponse} = await tryCatch(authClient.signUp.email({
+    const signUpResponse = await authClient.signUp.email({
       email: email.trim(),
       password,
       name: name.trim(),
-    }));
-    if (signUpError || signUpResponse?.error) {
-      Alert.alert("Sign up failed", signUpError?.message ?? signUpResponse?.error?.message ?? "An error occurred");
+    });
+    if (signUpResponse.error) {
+      Alert.alert("Sign up failed", signUpResponse.error.message ?? "An error occurred");
       setLoading(false);
       return;
     }
