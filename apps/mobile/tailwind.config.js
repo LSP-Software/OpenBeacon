@@ -22,6 +22,9 @@ module.exports = {
       textColor: {
         "secondary": 'hsl(var(--text-secondary) / <alpha-value>)',
       },
+      borderColor: {
+        "border": 'hsl(var(--border) / <alpha-value>)',
+      }
     },
   },
   plugins: [],
