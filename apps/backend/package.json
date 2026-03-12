@@ -5,17 +5,18 @@
     "dev": "bun run --env-file=../../.env --hot src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests",
-    "lint": "biome lint .",
-    "format": "biome format --write .",
-    "format:check": "biome format .",
     "check": "biome check .",
+    "check:fix": "biome check --write .",
     "ci": "bun run typecheck && bun run check && bun run test"
   },
   "dependencies": {
     "@better-auth/expo": "^1.5.4",
+    "@openbeacon/api": "workspace:*",
     "@openbeacon/database": "workspace:*",
+    "@openbeacon/auth": "workspace:*",
     "@prisma/adapter-pg": "^7.4.2",
     "@t3-oss/env-core": "^0.13.10",
+    "@trpc/server": "^11.12.0",
     "better-auth": "^1.5.4",
     "hono": "^4.12.5",
     "zod": "^4.3.6"

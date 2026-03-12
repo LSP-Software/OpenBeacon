@@ -1,5 +1,5 @@
 {
-  "name": "@openbeacon/shared",
+  "name": "@openbeacon/auth",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,5 +11,9 @@
     "check": "biome check .",
     "check:fix": "biome check --write .",
     "test": "bun test --pass-with-no-tests"
+  },
+  "dependencies": {
+    "better-auth": "^1.5.5",
+    "@openbeacon/database": "workspace:*"
   }
 }
