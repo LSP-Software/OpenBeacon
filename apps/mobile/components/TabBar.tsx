@@ -102,7 +102,7 @@ function SideTab({
       accessibilityLabel={label}
       accessibilityState={{ selected: isActive }}
     >
-      <Animated.View className="items-center gap-" style={animatedStyle}>
+      <Animated.View className="items-center gap-1" style={animatedStyle}>
         {route.name === "groups" ? <Users size={22} /> : <UserIcon size={22} />}
         <Text
           className="text-sm font-bold tracking-wide"

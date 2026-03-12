@@ -6,12 +6,12 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Text,
   type TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../components/Button.tsx";
+import { Text } from "../components/Text.tsx";
 import { FormInput } from "../components/FormInput.tsx";
 import { authClient } from "../lib/auth-client.ts";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";

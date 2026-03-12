@@ -48,8 +48,11 @@ export default function SignIn() {
   };
 
   return (
-    <SafeAreaView>
-      <KeyboardAvoidingView behavior={Platform.select({ ios: "padding", android: undefined })}>
+    <SafeAreaView className="flex-1">
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.select({ ios: "padding", android: undefined })}
+      >
         <ScrollView
           contentContainerClassName="px-8 pt-4 pb-10 gap-10"
           keyboardShouldPersistTaps="handled"
