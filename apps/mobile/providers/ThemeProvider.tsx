@@ -10,12 +10,10 @@ interface ThemeProviderProps {
 
 type ThemeContextType = {
   theme: "light" | "dark";
-  toggleTheme: () => void;
 };
 
 export const ThemeContext = createContext<ThemeContextType>({
   theme: "light",
-  toggleTheme: () => {},
 });
 
 export const ThemeProvider = ({ children }: ThemeProviderProps) => {
@@ -23,15 +21,13 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
   const [currentTheme, setCurrentTheme] = useState<"light" | "dark">(systemColorScheme ?? "light");
 
   useEffect(() => {
-    colorScheme.set(currentTheme);
-  }, [currentTheme]);
-
-  const toggleTheme = () => {
-    setCurrentTheme((prev) => (prev === "light" ? "dark" : "light"));
-  };
+    if (systemColorScheme) {
+      setCurrentTheme(systemColorScheme);
+    }
+  }, [systemColorScheme]);
 
   return (
-    <ThemeContext.Provider value={{ theme: currentTheme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme: currentTheme }}>
       <StatusBar style={currentTheme === "dark" ? "light" : "dark"} />
       <View className={`flex-1 ${currentTheme === "dark" ? "dark" : ""}`} key={currentTheme}>
         {children}
