@@ -67,3 +67,11 @@ model Verification {
   @@index([identifier], map: "verification_identifier_idx")
   @@map("verification")
 }
+
+model Group {
+  id   String @id @default(uuid(7))
+  name String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
