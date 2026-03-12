@@ -2,7 +2,7 @@
   "name": "@openbeacon/backend",
   "private": true,
   "scripts": {
-    "dev": "bun run --env-file=../../.env --hot src/index.ts",
+    "dev": "bun run --cwd ../.. --env-file=.env --hot apps/backend/src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests",
     "check": "biome check .",
