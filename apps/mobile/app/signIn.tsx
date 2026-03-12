@@ -29,9 +29,9 @@ export default function SignIn() {
     if (!email.trim() || !password) return;
     setLoading(true);
  
-    const {data: signInResponse, error: signInError} = await tryCatch(authClient.signIn.email({ email: email.trim(), password }));
-      if (signInError) {
-        Alert.alert("Sign in failed", signInError.message ?? "An error occurred");
+    const signInResponse = await authClient.signIn.email({ email: email.trim(), password });
+      if (signInResponse.error) {
+        Alert.alert("Sign in failed", signInResponse.error.message ?? "An error occurred");
         return;
       }
       const tokenToRevoke = await SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
