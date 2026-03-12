@@ -30,7 +30,7 @@ The core concept of this app is to be privacy focused so if users pay for us to 
       console.log('ERROR');
       return
     }
-    console.log(result)
+    console.log(result.data)
   ```
 
 # Technology
