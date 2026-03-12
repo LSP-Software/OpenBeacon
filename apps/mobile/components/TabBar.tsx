@@ -1,4 +1,5 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { UserIcon, Users } from "lucide-react-native";
 import { useEffect } from "react";
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Animated, {
@@ -13,7 +14,6 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useColors } from "../lib/theme.ts";
-import { UserIcon, Users } from "lucide-react-native";
 
 type TabRoute = { key: string; name: string };
 

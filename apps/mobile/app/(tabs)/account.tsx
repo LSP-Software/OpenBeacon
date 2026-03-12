@@ -1,11 +1,11 @@
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
+import { ChevronRightIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
-import { ChevronRightIcon } from "lucide-react-native";
 import { Button } from "../../components/Button.tsx";
+import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
 
 type SettingRowProps = {
   label: string;

@@ -1,8 +1,8 @@
+import { StatusBar } from "expo-status-bar";
+import { colorScheme } from "nativewind";
 import type React from "react";
 import { createContext, useContext, useState } from "react";
 import { View } from "react-native";
-import { StatusBar } from "expo-status-bar";
-import { colorScheme } from "nativewind";
 
 interface ThemeProviderProps {
   children: React.ReactNode;

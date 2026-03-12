@@ -12,10 +12,10 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../components/Button.tsx";
-import { Text } from "../components/Text.tsx";
 import { FormInput } from "../components/FormInput.tsx";
-import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
+import { Text } from "../components/Text.tsx";
+import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
 
 export default function SignIn() {
   const [email, setEmail] = useState("");

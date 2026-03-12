@@ -1,8 +1,8 @@
+import { PlusIcon, ShieldIcon } from "lucide-react-native";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { PlusIcon, ShieldIcon } from "lucide-react-native";
-import { Text } from "../../components/Text.tsx";
 import { Button } from "../../components/Button.tsx";
+import { Text } from "../../components/Text.tsx";
 
 export default function GroupsScreen() {
   const handleCreateGroup = () => {

@@ -4,9 +4,9 @@ import { Alert, KeyboardAvoidingView, Platform, ScrollView, View } from "react-n
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../components/Button.tsx";
 import { FormInput } from "../components/FormInput.tsx";
-import { getServerUrl, hasCustomServerUrl, setServerUrl } from "../lib/server-url.ts";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 import { Text } from "../components/Text.tsx";
+import { getServerUrl, hasCustomServerUrl, setServerUrl } from "../lib/server-url.ts";
 
 export default function ServerUrl() {
   const [url, setUrl] = useState(() => getServerUrl());
