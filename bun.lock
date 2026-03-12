@@ -72,6 +72,7 @@
       "name": "@openbeacon/api",
       "version": "0.0.0",
       "dependencies": {
+        "@openbeacon/auth": "workspace:*",
         "@openbeacon/database": "workspace:*",
         "@trpc/server": "^11.12.0",
         "superjson": "^2.2.6",
@@ -82,6 +83,7 @@
       "name": "@openbeacon/auth",
       "version": "0.0.0",
       "dependencies": {
+        "@openbeacon/database": "workspace:*",
         "better-auth": "^1.5.5",
       },
     },

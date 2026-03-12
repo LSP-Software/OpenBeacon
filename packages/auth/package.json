@@ -13,6 +13,7 @@
     "test": "bun test --pass-with-no-tests"
   },
   "dependencies": {
-    "better-auth": "^1.5.5"
+    "better-auth": "^1.5.5",
+    "@openbeacon/database": "workspace:*"
   }
 }
