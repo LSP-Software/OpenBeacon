@@ -1,5 +1,4 @@
 import { StatusBar } from "expo-status-bar";
-import { colorScheme } from "nativewind";
 import type React from "react";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useColorScheme, View } from "react-native";
