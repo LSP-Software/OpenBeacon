@@ -44,8 +44,11 @@ export default function ServerUrl() {
   };
 
   return (
-    <SafeAreaView>
-      <KeyboardAvoidingView behavior={Platform.select({ ios: "padding", android: undefined })}>
+    <SafeAreaView className="flex-1 bg-background">
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.select({ ios: "padding", android: undefined })}
+      >
         <ScrollView
           contentContainerClassName="px-8 pt-4 pb-10 gap-10"
           keyboardShouldPersistTaps="handled"
@@ -88,7 +91,7 @@ export default function ServerUrl() {
             )}
           </View>
 
-          <View className="h-px bg-gray-200" />
+          <View className="h-px bg-border" />
 
           <View className="gap-2">
             <Text className="font-semibold text-lg">Self-hosting OpenBeacon</Text>

@@ -1,8 +1,7 @@
 import { StatusBar } from "expo-status-bar";
-import { colorScheme } from "nativewind";
 import type React from "react";
-import { createContext, useContext, useState } from "react";
-import { View } from "react-native";
+import { createContext, useContext, useEffect, useState } from "react";
+import { useColorScheme, View } from "react-native";
 
 interface ThemeProviderProps {
   children: React.ReactNode;
@@ -10,29 +9,26 @@ interface ThemeProviderProps {
 
 type ThemeContextType = {
   theme: "light" | "dark";
-  toggleTheme: () => void;
 };
 
 export const ThemeContext = createContext<ThemeContextType>({
   theme: "light",
-  toggleTheme: () => {},
 });
 
 export const ThemeProvider = ({ children }: ThemeProviderProps) => {
-  const [currentTheme, setCurrentTheme] = useState<"light" | "dark">("light");
+  const systemColorScheme = useColorScheme();
+  const [currentTheme, setCurrentTheme] = useState<"light" | "dark">(systemColorScheme ?? "light");
 
-  const toggleTheme = () => {
-    const newTheme = currentTheme === "light" ? "dark" : "light";
-    setCurrentTheme(newTheme);
-    colorScheme.set(newTheme);
-  };
+  useEffect(() => {
+    if (systemColorScheme) {
+      setCurrentTheme(systemColorScheme);
+    }
+  }, [systemColorScheme]);
 
   return (
-    <ThemeContext.Provider value={{ theme: currentTheme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme: currentTheme }}>
       <StatusBar style={currentTheme === "dark" ? "light" : "dark"} />
-      <View className={`flex-1 ${currentTheme === "dark" ? "dark" : ""}`} key={currentTheme}>
-        {children}
-      </View>
+      <View className={`flex-1 ${currentTheme === "dark" ? "dark" : ""}`}>{children}</View>
     </ThemeContext.Provider>
   );
 };
