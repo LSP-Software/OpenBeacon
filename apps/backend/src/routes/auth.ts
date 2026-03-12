@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { type AuthType, auth } from "../helpers/betterAuth";
+import { type AuthType, auth } from "../helpers/betterAuth.ts";
 
 const router = new Hono<{ Variables: AuthType }>();
 

@@ -4,7 +4,12 @@
     "DATABASE_URL",
     "REDIS_URL",
     "BETTER_AUTH_SECRET",
-    "BETTER_AUTH_URL"
+    "BETTER_AUTH_URL",
+    "B2_KEY_ID",
+    "B2_APPLICATION_KEY",
+    "B2_BUCKET_ID",
+    "B2_BUCKET_NAME",
+    "B2_PUBLIC_URL"
   ],
   "tasks": {
     "build": {
