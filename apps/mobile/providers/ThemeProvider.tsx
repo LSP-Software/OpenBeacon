@@ -28,7 +28,7 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
   return (
     <ThemeContext.Provider value={{ theme: currentTheme }}>
       <StatusBar style={currentTheme === "dark" ? "light" : "dark"} />
-      <View className={`flex-1 ${currentTheme === "dark" ? "dark" : ""}`} key={currentTheme}>
+      <View className={`flex-1 ${currentTheme === "dark" ? "dark" : ""}`}>
         {children}
       </View>
     </ThemeContext.Provider>
