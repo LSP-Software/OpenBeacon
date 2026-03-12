@@ -29,7 +29,9 @@ export default function SignIn() {
     if (!email.trim() || !password) return;
     setLoading(true);
  
-    const {data: signInResponse, error: signInError} = await tryCatch(authClient.signIn.email({ email: email.trim(), password }));
+    const { error: signInError } = await tryCatch(
+      authClient.signIn.email({ email: email.trim(), password }),
+    );
       if (signInError) {
         Alert.alert("Sign in failed", signInError.message ?? "An error occurred");
         return;
