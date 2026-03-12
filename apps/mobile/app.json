@@ -11,18 +11,17 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#090911"
+      "backgroundColor": "#F4F0FA",
+      "dark": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#090911"
+      }
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "net.openbeacon.app",
-      "buildNumber": "1",
-      "infoPlist": {
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Open Beacon uses your location to share it with family members you've invited.",
-        "NSLocationWhenInUseUsageDescription": "Open Beacon uses your location to share it with family members you've invited.",
-        "NSLocationAlwaysUsageDescription": "Open Beacon uses your location in the background to keep your family updated even when the app is closed.",
-        "UIBackgroundModes": ["location", "fetch"]
-      }
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
@@ -33,15 +32,7 @@
       "predictiveBackGestureEnabled": false,
       "package": "net.openbeacon.app",
       "versionCode": 1,
-      "permissions": [
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.INTERNET",
-        "android.permission.RECEIVE_BOOT_COMPLETED"
-      ]
+      "permissions": []
     },
     "web": {
       "favicon": "./assets/favicon.png",
