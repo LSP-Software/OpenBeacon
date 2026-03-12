@@ -37,6 +37,7 @@ export default function SignUp() {
     }));
     if (signUpError) {
       Alert.alert("Sign up failed", signUpError.message ?? "An error occurred");
+      setLoading(false);
       return;
     }
     router.replace("/");
