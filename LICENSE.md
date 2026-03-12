@@ -95,7 +95,7 @@ License along with this program. If not, see
  
 ## Notice
 
-Copyright (c) [2026] [LSP SOFTWARE LTD]
+Copyright (c) 2026 LSP SOFTWARE LTD
 
 Licensed under the AGPL-3.0 with Commons Clause restriction.
 See above for the full license terms.

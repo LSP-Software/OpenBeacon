@@ -1,5 +1,5 @@
-// Copyright (c) 2026 [LSP SOFTWARE LTD]
-// SPDX-License-Identifier: AGPL-3.0-only WITH Commons-Clause
+// Copyright (c) 2026 LSP SOFTWARE LTD
+// SPDX-License-Identifier: AGPL-3.0-only AND LicenseRef-Commons-Clause
 // See LICENSE.md for full terms.
 
 import type { AuthType } from "@openbeacon/auth";
