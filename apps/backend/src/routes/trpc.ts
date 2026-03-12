@@ -1,7 +1,7 @@
 import { appRouter, createTRPCContext } from "@openbeacon/api";
+import type { AuthType } from "@openbeacon/auth";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { Hono } from "hono";
-import type { AuthType } from "../helpers/betterAuth";
 
 const router = new Hono<{ Variables: AuthType }>();
 

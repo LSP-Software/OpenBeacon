@@ -15,6 +15,7 @@
       "dependencies": {
         "@better-auth/expo": "^1.5.4",
         "@openbeacon/api": "workspace:*",
+        "@openbeacon/auth": "workspace:*",
         "@openbeacon/database": "workspace:*",
         "@prisma/adapter-pg": "^7.4.2",
         "@t3-oss/env-core": "^0.13.10",
@@ -75,6 +76,13 @@
         "@trpc/server": "^11.12.0",
         "superjson": "^2.2.6",
         "zod": "^4.3.6",
+      },
+    },
+    "packages/auth": {
+      "name": "@openbeacon/auth",
+      "version": "0.0.0",
+      "dependencies": {
+        "better-auth": "^1.5.5",
       },
     },
     "packages/database": {
@@ -442,6 +450,8 @@
     "@nodelib/fs.walk": ["@nodelib/fs.walk@1.2.8", "", { "dependencies": { "@nodelib/fs.scandir": "2.1.5", "fastq": "^1.6.0" } }, "sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg=="],
 
     "@openbeacon/api": ["@openbeacon/api@workspace:packages/api"],
+
+    "@openbeacon/auth": ["@openbeacon/auth@workspace:packages/auth"],
 
     "@openbeacon/backend": ["@openbeacon/backend@workspace:apps/backend"],
 

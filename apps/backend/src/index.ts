@@ -1,6 +1,6 @@
+import type { AuthType } from "@openbeacon/auth";
 import { Hono } from "hono";
 import { env } from "./env";
-import type { AuthType } from "./helpers/betterAuth";
 import authRouter from "./routes/auth";
 import trpcRouter from "./routes/trpc";
 

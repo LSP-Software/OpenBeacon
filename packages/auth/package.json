@@ -1,5 +1,5 @@
 {
-  "name": "@openbeacon/api",
+  "name": "@openbeacon/auth",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,10 +13,6 @@
     "test": "bun test --pass-with-no-tests"
   },
   "dependencies": {
-    "zod": "^4.3.6",
-    "superjson": "^2.2.6",
-    "@trpc/server": "^11.12.0",
-    "@openbeacon/database": "workspace:*",
-    "@openbeacon/auth": "workspace:*"
+    "better-auth": "^1.5.5"
   }
 }

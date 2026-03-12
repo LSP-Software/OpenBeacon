@@ -1,5 +1,5 @@
+import { type AuthType, auth } from "@openbeacon/auth";
 import { Hono } from "hono";
-import { type AuthType, auth } from "../helpers/betterAuth";
 
 const router = new Hono<{ Variables: AuthType }>();
 
