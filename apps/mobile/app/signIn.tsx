@@ -32,11 +32,12 @@ export default function SignIn() {
     const {error: signInError, data: signInResponse} = await tryCatch(authClient.signIn.email({ email: email.trim(), password }));
       if (signInResponse?.error || signInError) {
         Alert.alert("Sign in failed", signInResponse?.error?.message ?? signInError?.message ?? "An error occurred");
+        setLoading(false);
         return;
       }
 
-      const tokenToRevoke = await SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
-      if (tokenToRevoke) {
+      const {data: tokenToRevoke, error: tokenToRevokeError} = await tryCatch(SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY));
+      if (tokenToRevoke && !tokenToRevokeError) {
         void authClient.revokeSession({ token: tokenToRevoke }).then(async (result) => {
           if (!result?.error) {
             await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
