@@ -15,7 +15,7 @@ import { FormInput } from "../components/FormInput.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 import { Text } from "../components/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
-import { tryCatch } from "../lib/trycatch.ts";
+import { tryCatch } from "../lib/tryCatch.ts";
 
 export default function SignUp() {
   const [name, setName] = useState("");

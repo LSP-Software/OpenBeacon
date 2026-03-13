@@ -16,7 +16,7 @@ import { FormInput } from "../components/FormInput.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 import { Text } from "../components/Text.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
-import { tryCatch } from "../lib/trycatch.ts";
+import { tryCatch } from "../lib/tryCatch.ts";
 
 export default function SignIn() {
   const [email, setEmail] = useState("");
