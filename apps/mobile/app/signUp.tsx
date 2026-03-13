@@ -30,17 +30,22 @@ export default function SignUp() {
     if (!name.trim() || !email.trim() || !password) return;
     setLoading(true);
 
-    const {error: signUpError, data: signUpResponse} = await tryCatch(authClient.signUp.email({
-      email: email.trim(),
-      password,
-      name: name.trim(),
-    }));
+    const { error: signUpError, data: signUpResponse } = await tryCatch(
+      authClient.signUp.email({
+        email: email.trim(),
+        password,
+        name: name.trim(),
+      }),
+    );
     if (signUpError || signUpResponse?.error) {
-      Alert.alert("Sign up failed", signUpResponse?.error?.message ?? signUpError?.message ?? "An error occurred");
+      Alert.alert(
+        "Sign up failed",
+        signUpResponse?.error?.message ?? signUpError?.message ?? "An error occurred",
+      );
       setLoading(false);
       return;
     }
-    
+
     router.replace("/");
   };
 

@@ -28,23 +28,30 @@ export default function SignIn() {
   const handleLogin = async () => {
     if (!email.trim() || !password) return;
     setLoading(true);
- 
-    const {error: signInError, data: signInResponse} = await tryCatch(authClient.signIn.email({ email: email.trim(), password }));
-      if (signInResponse?.error || signInError) {
-        Alert.alert("Sign in failed", signInResponse?.error?.message ?? signInError?.message ?? "An error occurred");
-        setLoading(false);
-        return;
-      }
 
-      const {data: tokenToRevoke} = await tryCatch(SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY));
-      if (tokenToRevoke) {
-        void authClient.revokeSession({ token: tokenToRevoke }).then(async (result) => {
-          if (!result?.error) {
-            await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
-          }
-        });
-      }
-      router.replace("/");
+    const { error: signInError, data: signInResponse } = await tryCatch(
+      authClient.signIn.email({ email: email.trim(), password }),
+    );
+    if (signInResponse?.error || signInError) {
+      Alert.alert(
+        "Sign in failed",
+        signInResponse?.error?.message ?? signInError?.message ?? "An error occurred",
+      );
+      setLoading(false);
+      return;
+    }
+
+    const { data: tokenToRevoke } = await tryCatch(
+      SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY),
+    );
+    if (tokenToRevoke) {
+      void authClient.revokeSession({ token: tokenToRevoke }).then(async (result) => {
+        if (!result?.error) {
+          await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
+        }
+      });
+    }
+    router.replace("/");
   };
 
   return (
