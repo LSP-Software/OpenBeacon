@@ -6,15 +6,33 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        border: "hsl(var(--border) / <alpha-value>)",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
         brand: "hsl(var(--brand) / <alpha-value>)",
         foreground: "hsl(var(--foreground) / <alpha-value>)",
         background: "hsl(var(--background) / <alpha-value>)",
-        border: "hsl(var(--border) / <alpha-value>)",
-        secondary: "hsl(var(--secondary) / <alpha-value>)",
-        muted: "hsl(var(--muted) / <alpha-value>)",
-        primary: "hsl(var(--primary) / <alpha-value>)",
-        "on-primary": "hsl(var(--on-primary) / <alpha-value>)",
-        "input-border": "hsl(var(--input-border) / <alpha-value>)",
+
+        primary: {
+          DEFAULT: "hsl(var(--primary) / <alpha-value>)",
+          foreground: "hsl(var(--primary-foreground))",
+        },
+
+        secondary: {
+          DEFAULT: "hsl(var(--secondary) / <alpha-value>)",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+
+        muted: {
+          DEFAULT: "hsl(var(--muted) / <alpha-value>)",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
@@ -27,6 +45,8 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+
+        "on-primary": "hsl(var(--on-primary) / <alpha-value>)", // todo: remove this and replace it in all compoonents its used in
       },
       borderRadius: {
         lg: "var(--radius)",

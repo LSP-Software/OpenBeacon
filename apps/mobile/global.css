@@ -17,7 +17,6 @@
   --primary: var(--brand);
   --primary-foreground: 0 0% 9%;
   --input: 0 0% 100%;
-  --input-border: 258 53% 87%;
   --popover: 0 0% 100%;
   --popover-foreground: 0 0% 3.9%;
   --secondary: 0 0% 96.1%;
@@ -48,7 +47,6 @@
   --primary: var(--brand);
   --primary-foreground: 0 0% 9%;
   --input: 253 37% 7%;
-  --input-border: 258 33% 18%;
   --popover: 0 0% 3.9%;
   --popover-foreground: 0 0% 98%;
   --secondary: 0 0% 14.9%;
