@@ -190,6 +190,7 @@ export default function AccountScreen() {
             imageUrl={profile?.imageUrl ?? null}
             size={80}
             showEditButton
+            isLoading={isUploading}
             onEditPress={handleEditProfileImage}
           />
           <View className="items-center gap-1">

@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import { PencilIcon } from "lucide-react-native";
-import { Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { useColors } from "../lib/theme.ts";
 
 type ProfileImageProps = {
@@ -8,6 +8,7 @@ type ProfileImageProps = {
   size: number;
   onEditPress?: () => void;
   showEditButton?: boolean;
+  isLoading?: boolean;
 };
 
 export function ProfileImage({
@@ -15,13 +16,14 @@ export function ProfileImage({
   size,
   onEditPress,
   showEditButton = false,
+  isLoading = false,
 }: ProfileImageProps) {
   const colors = useColors();
   const editButtonSize = Math.round(size * 0.32);
   const editIconSize = Math.round(editButtonSize * 0.5);
 
   return (
-    <View style={{ width: size, height: size }}>
+    <View style={{ width: size, height: size, position: "relative" }}>
       {imageUrl ? (
         <Image
           source={{ uri: imageUrl }}
@@ -43,9 +45,29 @@ export function ProfileImage({
         />
       )}
 
+      {isLoading && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            borderRadius: size / 2,
+            backgroundColor: "rgba(0,0,0,0.3)",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <ActivityIndicator color={colors.onPrimary} />
+        </View>
+      )}
+
       {showEditButton && onEditPress && (
         <Pressable
           onPress={onEditPress}
+          disabled={isLoading}
           accessibilityRole="button"
           accessibilityLabel="Edit profile picture"
           style={{
@@ -60,6 +82,7 @@ export function ProfileImage({
             justifyContent: "center",
             borderWidth: 2,
             borderColor: colors.background,
+            opacity: isLoading ? 0.7 : 1,
           }}
         >
           <PencilIcon size={editIconSize} color={colors.onPrimary} />
