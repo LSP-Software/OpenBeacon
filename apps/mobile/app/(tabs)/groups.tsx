@@ -1,17 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronRightIcon, PlusIcon, ShieldIcon } from "lucide-react-native";
+import { PlusIcon, ShieldIcon } from "lucide-react-native";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/Button.tsx";
 import { Text } from "../../components/Text.tsx";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "../../components/ui/Card.tsx";
+import { Card, CardDescription, CardHeader, CardTitle } from "../../components/ui/Card.tsx";
 import { trpc } from "../../lib/api.ts";
 
 export default function GroupsScreen() {
@@ -21,15 +14,9 @@ export default function GroupsScreen() {
     refetch: refetchGroupList,
   } = useQuery(trpc.groups.list.queryOptions());
   const createGroupMutation = useMutation(trpc.groups.create.mutationOptions());
-  const deleteGroupMutation = useMutation(trpc.groups.delete.mutationOptions());
 
   const handleCreateGroup = async () => {
     await createGroupMutation.mutateAsync({ name: "Test" });
-    refetchGroupList();
-  };
-
-  const handleDeleteGroup = async (groupId: string) => {
-    await deleteGroupMutation.mutateAsync({ id: groupId });
     refetchGroupList();
   };
 
@@ -87,9 +74,6 @@ export default function GroupsScreen() {
         ) : (
           <View className="gap-2">
             <Text className="text-foreground font-bold text-lg">Your Groups</Text>
-            <View className="bg-red-400 p-4">
-              <Text className="text-foreground font-bold text-lg">Your Groups</Text>
-            </View>
             {groupList.map((group) => (
               <Card key={group.id}>
                 <CardHeader>
