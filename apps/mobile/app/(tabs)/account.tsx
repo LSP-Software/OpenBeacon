@@ -91,7 +91,9 @@ export default function AccountScreen() {
     setIsUploading(true);
     let processedUri: string | null = null;
 
-    const { data: processed, error: processError } = await tryCatch(processImage(imagePath, MAX_PFP_IMAGE_RESOLUTION));
+    const { data: processed, error: processError } = await tryCatch(
+      processImage(imagePath, MAX_PFP_IMAGE_RESOLUTION),
+    );
     if (processError) {
       Alert.alert("Image processing failed", processError.message);
       setIsUploading(false);
