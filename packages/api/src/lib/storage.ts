@@ -74,14 +74,14 @@ export async function getPresignedUploadUrl(
   prefix: string,
   fileName: string,
   contentType: string,
-  checksumSha256: string,
+  contentHash: string,
 ): Promise<string> {
   const client = getStorageClient();
   const command = new PutObjectCommand({
     Bucket: env.S3_BUCKET_NAME,
     Key: buildKey(prefix, fileName),
     ContentType: contentType,
-    ChecksumSHA256: checksumSha256,
+    ChecksumSHA256: contentHash,
   });
   return getSignedUrl(client, command, {
     expiresIn: 60,
