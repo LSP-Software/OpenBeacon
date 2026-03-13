@@ -21,7 +21,33 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-export async function pickAndCropImage(size: number = DEFAULT_IMAGE_SIZE): Promise<string | null> {
+const PICKER_CANCELLED_CODES = ["E_PICKER_CANCELLED", "E_CROPPER_CANCELLED"] as const;
+const CANCELLED_MESSAGES = ["user cancelled", "user canceled", "cancelled image selection"];
+
+function isPickerCancellation(error: unknown): boolean {
+  const err = error as { code?: string; message?: string };
+  const code = err?.code ?? "";
+  const message = (err?.message ?? "").toLowerCase();
+  if (PICKER_CANCELLED_CODES.includes(code as (typeof PICKER_CANCELLED_CODES)[number])) return true;
+  return CANCELLED_MESSAGES.some((m) => message.includes(m));
+}
+
+export function isPermissionError(error: unknown): boolean {
+  const err = error as { code?: string; message?: string };
+  const code = err?.code ?? "";
+  const message = (err?.message ?? "").toLowerCase();
+  if (code === "E_NO_LIBRARY_PERMISSION") return true;
+  return /permission|grant|access denied|denied access/.test(message);
+}
+
+export type PickImageResult =
+  | { ok: true; path: string }
+  | { ok: false; cancelled: true }
+  | { ok: false; error: Error };
+
+export async function pickAndCropImage(
+  size: number = DEFAULT_IMAGE_SIZE,
+): Promise<PickImageResult> {
   const { data: image, error } = await tryCatch(
     ImageCropPicker.openPicker({
       cropping: true,
@@ -32,8 +58,13 @@ export async function pickAndCropImage(size: number = DEFAULT_IMAGE_SIZE): Promi
     }),
   );
 
-  if (error) return null;
-  return image.path;
+  if (!error) {
+    return { ok: true, path: image.path };
+  }
+  if (isPickerCancellation(error)) {
+    return { ok: false, cancelled: true };
+  }
+  return { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
 }
 
 export async function processImage(

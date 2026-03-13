@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { ChevronRightIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/Button.tsx";
 import { ProfileImage } from "../../components/ProfileImage.tsx";
@@ -60,15 +60,33 @@ export default function AccountScreen() {
       cleanupTempFile,
       computeSha256Base64,
       getFileSize,
+      isPermissionError,
       pickAndCropImage,
       processImage,
       uploadToPresignedUrl,
     } = await import("../../lib/image-upload.ts");
 
-    console.log("MAX_PFP_IMAGE_RESOLUTION:", MAX_PFP_IMAGE_RESOLUTION);
-
-    const imagePath = await pickAndCropImage(MAX_PFP_IMAGE_RESOLUTION);
-    if (!imagePath) return;
+    const pickResult = await pickAndCropImage(MAX_PFP_IMAGE_RESOLUTION);
+    if (pickResult.ok) {
+      /* use path below */
+    } else if ("cancelled" in pickResult) {
+      return;
+    } else {
+      const err = pickResult.error;
+      const isPermission = isPermissionError(err);
+      Alert.alert(
+        isPermission ? "Photo access needed" : "Could not open photos",
+        err.message,
+        isPermission
+          ? [
+              { text: "Cancel", style: "cancel" },
+              { text: "Open settings", onPress: () => Linking.openSettings() },
+            ]
+          : [{ text: "OK" }],
+      );
+      return;
+    }
+    const imagePath = pickResult.path;
 
     setIsUploading(true);
     let processedUri: string | null = null;
