@@ -36,8 +36,8 @@ export default function SignIn() {
         return;
       }
 
-      const {data: tokenToRevoke, error: tokenToRevokeError} = await tryCatch(SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY));
-      if (tokenToRevoke && !tokenToRevokeError) {
+      const {data: tokenToRevoke} = await tryCatch(SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY));
+      if (tokenToRevoke) {
         void authClient.revokeSession({ token: tokenToRevoke }).then(async (result) => {
           if (!result?.error) {
             await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
