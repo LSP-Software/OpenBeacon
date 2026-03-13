@@ -97,6 +97,7 @@ export default function AccountScreen() {
     const { data: processed, error: processError } = await tryCatch(
       processImage(pickResult.path, MAX_PFP_IMAGE_RESOLUTION),
     );
+    cleanupTempFile(pickResult.path);
     if (processError) {
       Alert.alert("Image processing failed", processError.message);
       setIsUploading(false);

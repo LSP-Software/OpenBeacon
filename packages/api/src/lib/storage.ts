@@ -34,7 +34,7 @@ export async function verifyStorageConnectivity(): Promise<void> {
   console.log("Bucket name:", env.S3_BUCKET_NAME);
   console.log("Endpoint:", env.S3_ENDPOINT);
   console.log("Region:", env.S3_REGION);
-  
+
   const result = await tryCatch(client.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET_NAME })));
   if (result.error) {
     const name = (result.error as Error & { name?: string }).name ?? "";
@@ -68,6 +68,10 @@ export async function verifyStorageConnectivity(): Promise<void> {
 
 function buildKey(prefix: string, fileName: string): string {
   return prefix ? `${prefix}/${fileName}` : fileName;
+}
+
+function getCdnBase(): string {
+  return env.S3_CDN_URL.replace(/\/+$/, "");
 }
 
 export async function getPresignedUploadUrl(
@@ -153,11 +157,11 @@ export async function deleteFile(prefix: string, fileName: string): Promise<void
 
 export function buildPublicUrl(prefix: string, fileName: string): string {
   const key = buildKey(prefix, fileName);
-  return `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}/${key}`;
+  return `${getCdnBase()}/${env.S3_BUCKET_NAME}/${key}`;
 }
 
 export function extractStorageKey(imageUrl: string): { prefix: string; fileName: string } | null {
-  const baseUrl = `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`;
+  const baseUrl = `${getCdnBase()}/${env.S3_BUCKET_NAME}`;
   if (!imageUrl?.startsWith(baseUrl)) return null;
 
   const path = imageUrl.slice(baseUrl.length + 1);
