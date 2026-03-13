@@ -64,6 +64,7 @@ export default function AccountScreen() {
       isPermissionError,
       pickAndCropImage,
       processImage,
+      readImageBytes,
       uploadToPresignedUrl,
     } = await import("../../lib/image-upload.ts");
 
@@ -112,17 +113,21 @@ export default function AccountScreen() {
       return;
     }
 
-    const { data: hashResult, error: hashError } = await tryCatch(
-      computeSha256Base64(processedUri),
-    );
+    const { data: bytes, error: readError } = await tryCatch(readImageBytes(processedUri));
+    if (readError) {
+      Alert.alert("Image processing failed", readError.message);
+      cleanupTempFile(processedUri);
+      setIsUploading(false);
+      return;
+    }
+
+    const { data: contentHash, error: hashError } = await tryCatch(computeSha256Base64(bytes));
     if (hashError) {
       Alert.alert("Image processing failed", hashError.message);
       cleanupTempFile(processedUri);
       setIsUploading(false);
       return;
     }
-    const contentHash = hashResult.hash;
-    const bytes = hashResult.bytes;
 
     const { data: uploadData, error: requestError } = await tryCatch(
       requestUploadMutation.mutateAsync({ fileSize, contentHash }),

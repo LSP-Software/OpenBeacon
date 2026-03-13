@@ -83,12 +83,18 @@ export function getFileSize(uri: string): number {
   return size;
 }
 
-export async function computeSha256Base64(
-  uri: string,
-): Promise<{ hash: string; bytes: ArrayBuffer }> {
-  const fileBytes = await new FSFile(ensureFileUri(uri)).bytes();
-  const hashBuffer = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, fileBytes);
-  return { hash: arrayBufferToBase64(hashBuffer), bytes: fileBytes.buffer };
+export async function readImageBytes(uri: string): Promise<ArrayBuffer> {
+  const file = new FSFile(ensureFileUri(uri));
+  const bytes = await file.bytes();
+  return bytes.buffer;
+}
+
+export async function computeSha256Base64(bytes: ArrayBuffer): Promise<string> {
+  const hashBuffer = await Crypto.digest(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    new Uint8Array(bytes),
+  );
+  return arrayBufferToBase64(hashBuffer);
 }
 
 async function parseS3ErrorBody(response: Response): Promise<string> {
