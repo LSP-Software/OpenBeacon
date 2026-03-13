@@ -51,7 +51,7 @@ export default function AccountScreen() {
 
     const {
       cleanupTempFile,
-      computeSha1,
+      computeSha256Base64,
       getFileSize,
       pickAndCropImage,
       processImage,
@@ -73,7 +73,9 @@ export default function AccountScreen() {
     processedUri = processed;
 
     const fileSize = getFileSize(processedUri);
-    const { data: contentHash, error: hashError } = await tryCatch(computeSha1(processedUri));
+    const { data: contentHash, error: hashError } = await tryCatch(
+      computeSha256Base64(processedUri),
+    );
     if (hashError) {
       Alert.alert("Image processing failed", hashError.message);
       cleanupTempFile(processedUri);
@@ -92,7 +94,7 @@ export default function AccountScreen() {
     }
 
     const { error: uploadError } = await tryCatch(
-      uploadToPresignedUrl(uploadData.presignedUrl, processedUri),
+      uploadToPresignedUrl(uploadData.presignedUrl, processedUri, contentHash),
     );
     if (uploadError) {
       Alert.alert("Image upload failed", uploadError.message);

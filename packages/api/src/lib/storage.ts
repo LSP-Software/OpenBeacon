@@ -72,14 +72,19 @@ export async function getPresignedUploadUrl(
   prefix: string,
   fileName: string,
   contentType: string,
+  checksumSha256: string,
 ): Promise<string> {
   const client = getStorageClient();
   const command = new PutObjectCommand({
     Bucket: env.S3_BUCKET_NAME,
     Key: buildKey(prefix, fileName),
     ContentType: contentType,
+    ChecksumSHA256: checksumSha256,
   });
-  return getSignedUrl(client, command, { expiresIn: 3600 });
+  return getSignedUrl(client, command, {
+    expiresIn: 30,
+    signableHeaders: new Set(["x-amz-checksum-sha256"]),
+  });
 }
 
 export async function getFileSize(prefix: string, fileName: string): Promise<number | null> {
@@ -88,7 +93,8 @@ export async function getFileSize(prefix: string, fileName: string): Promise<num
     Bucket: env.S3_BUCKET_NAME,
     Key: buildKey(prefix, fileName),
   });
-  const response = await client.send(command);
+  const { data: response, error: responseError } = await tryCatch(client.send(command));
+  if (responseError) return null;
   if (response.$metadata.httpStatusCode !== 200) return null;
   return response.ContentLength ?? null;
 }

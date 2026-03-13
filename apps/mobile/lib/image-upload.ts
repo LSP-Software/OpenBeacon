@@ -12,13 +12,13 @@ function ensureFileUri(path: string): string {
   return `file://${path}`;
 }
 
-function arrayBufferToHex(buffer: ArrayBuffer): string {
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
-  let hex = "";
+  let binary = "";
   for (const byte of bytes) {
-    hex += byte.toString(16).padStart(2, "0");
+    binary += String.fromCharCode(byte);
   }
-  return hex;
+  return btoa(binary);
 }
 
 export async function pickAndCropImage(): Promise<string | null> {
@@ -44,13 +44,15 @@ export async function processImage(uri: string): Promise<string> {
 }
 
 export function getFileSize(uri: string): number {
-  return new FSFile(ensureFileUri(uri)).size;
+  const size = new FSFile(ensureFileUri(uri)).size;
+  if (size === undefined) throw new Error("Could not determine file size: file may not exist");
+  return size;
 }
 
-export async function computeSha1(uri: string): Promise<string> {
+export async function computeSha256Base64(uri: string): Promise<string> {
   const fileBytes = await new FSFile(ensureFileUri(uri)).bytes();
-  const hashBuffer = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA1, fileBytes);
-  return arrayBufferToHex(hashBuffer);
+  const hashBuffer = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, fileBytes);
+  return arrayBufferToBase64(hashBuffer);
 }
 
 async function parseS3ErrorBody(response: Response): Promise<string> {
@@ -65,13 +67,20 @@ async function parseS3ErrorBody(response: Response): Promise<string> {
   return parts.join(": ");
 }
 
-export async function uploadToPresignedUrl(presignedUrl: string, fileUri: string): Promise<void> {
+export async function uploadToPresignedUrl(
+  presignedUrl: string,
+  fileUri: string,
+  contentHash: string,
+): Promise<void> {
   const file = new FSFile(ensureFileUri(fileUri));
   const bytes = await file.bytes();
   const response = await fetch(presignedUrl, {
     method: "PUT",
     body: bytes,
-    headers: { "Content-Type": "image/webp" },
+    headers: {
+      "Content-Type": "image/webp",
+      "x-amz-checksum-sha256": contentHash,
+    },
   });
 
   if (!response.ok) {

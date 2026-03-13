@@ -42,7 +42,7 @@ export const accountRouter = {
       const fileName = `${crypto.randomUUID()}.webp`;
 
       const { data: presignedUrl, error: presignError } = await tryCatch(
-        getPresignedUploadUrl(PROFILE_IMAGE_PREFIX, fileName, "image/webp"),
+        getPresignedUploadUrl(PROFILE_IMAGE_PREFIX, fileName, "image/webp", input.contentHash),
       );
 
       if (presignError) {
@@ -58,7 +58,9 @@ export const accountRouter = {
   confirmImageUpload: protectedProcedure
     .input(
       z.object({
-        fileName: z.string(),
+        fileName: z
+          .string()
+          .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.webp$/),
       }),
     )
     .mutation(async ({ ctx, input }) => {
