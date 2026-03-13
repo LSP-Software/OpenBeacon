@@ -16,6 +16,7 @@ import { FormInput } from "../components/FormInput.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 import { Text } from "../components/Text.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
+import { tryCatch } from "../lib/trycatch.ts";
 
 export default function SignIn() {
   const [email, setEmail] = useState("");
@@ -28,11 +29,12 @@ export default function SignIn() {
     if (!email.trim() || !password) return;
     setLoading(true);
  
-    const signInResponse = await authClient.signIn.email({ email: email.trim(), password });
-      if (signInResponse.error) {
-        Alert.alert("Sign in failed", signInResponse.error.message ?? "An error occurred");
+    const {error: signInError, data: signInResponse} = await tryCatch(authClient.signIn.email({ email: email.trim(), password }));
+      if (signInResponse?.error || signInError) {
+        Alert.alert("Sign in failed", signInResponse?.error?.message ?? signInError?.message ?? "An error occurred");
         return;
       }
+
       const tokenToRevoke = await SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
       if (tokenToRevoke) {
         void authClient.revokeSession({ token: tokenToRevoke }).then(async (result) => {
