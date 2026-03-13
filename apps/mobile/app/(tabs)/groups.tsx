@@ -1,15 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import {
-  ChevronRightIcon,
-  CircleChevronLeft,
-  PlusIcon,
-  ShieldIcon,
-  TrashIcon,
-} from "lucide-react-native";
+import { PlusIcon, ShieldIcon } from "lucide-react-native";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/Button.tsx";
 import { Text } from "../../components/Text.tsx";
+import { Card, CardDescription, CardHeader, CardTitle } from "../../components/ui/Card.tsx";
 import { trpc } from "../../lib/api.ts";
 
 export default function GroupsScreen() {
@@ -19,15 +14,9 @@ export default function GroupsScreen() {
     refetch: refetchGroupList,
   } = useQuery(trpc.groups.list.queryOptions());
   const createGroupMutation = useMutation(trpc.groups.create.mutationOptions());
-  const deleteGroupMutation = useMutation(trpc.groups.delete.mutationOptions());
 
   const handleCreateGroup = async () => {
     await createGroupMutation.mutateAsync({ name: "Test" });
-    refetchGroupList();
-  };
-
-  const handleDeleteGroup = async (groupId: string) => {
-    await deleteGroupMutation.mutateAsync({ id: groupId });
     refetchGroupList();
   };
 
@@ -74,7 +63,7 @@ export default function GroupsScreen() {
               <Button title="Create a Group" variant="primary" onPress={handleCreateGroup} />
             </View>
 
-            <View className="flex flex-row items-start gap-2 p-4 mt-4 rounded-lg bg-surface border-border border">
+            <View className="flex flex-row items-start gap-2 p-4 mt-4 rounded-lg bg-card border-border border">
               <View className="w-2 h-2 rounded-full mt-2 bg-primary" />
               <Text className="text-sm text-muted">
                 Location data is encrypted end-to-end. The server never stores your plaintext
@@ -86,23 +75,12 @@ export default function GroupsScreen() {
           <View className="gap-2">
             <Text className="text-foreground font-bold text-lg">Your Groups</Text>
             {groupList.map((group) => (
-              <View
-                key={group.id}
-                className="flex-row items-center justify-between bg-surface rounded-lg p-4 border border-border"
-              >
-                <View className="flex-row items-center justify-center gap-2">
-                  <View className="w-2 h-2 rounded-full bg-primary" />
-                  <View>
-                    <Text className="text-foreground font-bold text-base">{group.name}</Text>
-                    <Text className="text-muted text-sm">{group.members.length} members</Text>
-                  </View>
-                </View>
-                <ChevronRightIcon
-                  size={20}
-                  color="gray"
-                  onPress={() => handleDeleteGroup(group.id)}
-                />
-              </View>
+              <Card key={group.id}>
+                <CardHeader>
+                  <CardTitle>{group.name}</CardTitle>
+                  <CardDescription>{group.members.length} members</CardDescription>
+                </CardHeader>
+              </Card>
             ))}
           </View>
         )}
