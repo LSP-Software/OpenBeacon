@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 
 export const env = createEnv({
   server: {
-    S3_ENDPOINT: z.url().default("https://s3.us-east-005.backblazeb2.com/"),
+    S3_ENDPOINT: z.url().default("https://s3.us-east-005.backblazeb2.com"),
     S3_REGION: z.string().default("us-east-005"),
     S3_ACCESS_KEY_ID: z.string(),
     S3_ACCESS_KEY: z.string(),
