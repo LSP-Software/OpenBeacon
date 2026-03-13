@@ -154,13 +154,6 @@ export function buildPublicUrl(prefix: string, fileName: string): string {
   return `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}/${key}`;
 }
 
-export async function verifyPublicUrl(url: string): Promise<boolean> {
-  if (!url) return false;
-  const result = await tryCatch(fetch(url, { method: "HEAD" }));
-  if (result.error) return false;
-  return result.data.ok;
-}
-
 export function extractStorageKey(imageUrl: string): { prefix: string; fileName: string } | null {
   const baseUrl = `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`;
   if (!imageUrl?.startsWith(baseUrl)) return null;

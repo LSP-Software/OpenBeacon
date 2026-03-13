@@ -7,7 +7,6 @@ import {
   extractStorageKey,
   getFileSize,
   getPresignedUploadUrl,
-  verifyPublicUrl,
 } from "../lib/storage.ts";
 import { tryCatch } from "../lib/tryCatch.ts";
 import { protectedProcedure } from "../trpc.ts";
@@ -96,18 +95,6 @@ export const accountRouter = {
       }
 
       const imageUrl = buildPublicUrl(PROFILE_IMAGE_PREFIX, input.fileName);
-
-      const { data: isPubliclyAccessible, error: verifyUrlError } = await tryCatch(
-        verifyPublicUrl(imageUrl),
-      );
-      if (verifyUrlError || !isPubliclyAccessible) {
-        await tryCatch(deleteFile(PROFILE_IMAGE_PREFIX, input.fileName));
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message:
-            "Uploaded image is not publicly accessible. The file was uploaded but the CDN URL is unreachable.",
-        });
-      }
 
       const currentUser = await ctx.db.user.findUnique({
         where: { id: ctx.session.user.id },
