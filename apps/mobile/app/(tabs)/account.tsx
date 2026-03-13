@@ -86,7 +86,7 @@ export default function AccountScreen() {
           </View>
         </View>
 
-        <View className="rounded-lg overflow-hidden border border-border bg-surface">
+        <View className="rounded-lg overflow-hidden border border-border bg-card">
           <SettingRow
             label="Profile details"
             sublabel="Name, email and account"
