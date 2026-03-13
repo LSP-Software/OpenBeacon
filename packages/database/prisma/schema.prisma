@@ -8,15 +8,16 @@ datasource db {
 }
 
 model User {
-  id            String    @id
+  id            String        @id
   name          String
-  email         String    @unique(map: "user_email_unique")
-  emailVerified Boolean   @default(false) @map("email_verified")
+  email         String        @unique(map: "user_email_unique")
+  emailVerified Boolean       @default(false) @map("email_verified")
   image         String?
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
   sessions      Session[]
   accounts      Account[]
+  groupMembers  GroupMember[]
 
   @@map("user")
 }
@@ -69,9 +70,30 @@ model Verification {
 }
 
 model Group {
-  id   String @id @default(uuid(7))
-  name String
+  id    String  @id @default(uuid(7))
+  name  String
+  image String?
+
+  groupMembers GroupMember[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model GroupMember {
+  id String @id @default(uuid(7))
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  groupId String?
+  group   Group?  @relation(fields: [groupId], references: [id])
+
+  role GroupRole
+}
+
+enum GroupRole {
+  OWNER
+  ADMIN
+  MEMBER
 }

@@ -17,6 +17,7 @@
     "check:fix": "biome check --write .",
     "test": "bun test --pass-with-no-tests",
     "db:generate": "bun run --env-file=../../.env prisma generate",
+    "db:push": "bun run --env-file=../../.env prisma db push",
     "db:migrate:deploy": "bun run --env-file=../../.env prisma migrate deploy",
     "db:migrate": "bun run --env-file=../../.env prisma migrate dev",
     "db:studio": "prisma studio"

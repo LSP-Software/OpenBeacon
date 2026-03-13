@@ -1,5 +1,11 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { PlusIcon, ShieldIcon, TrashIcon } from "lucide-react-native";
+import {
+  ChevronRightIcon,
+  CircleChevronLeft,
+  PlusIcon,
+  ShieldIcon,
+  TrashIcon,
+} from "lucide-react-native";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/Button.tsx";
@@ -77,11 +83,25 @@ export default function GroupsScreen() {
             </View>
           </>
         ) : (
-          <View>
+          <View className="gap-2">
+            <Text className="text-foreground font-bold text-lg">Your Groups</Text>
             {groupList.map((group) => (
-              <View key={group.id} className="flex-row items-center justify-between">
-                <Text>{group.name}</Text>
-                <TrashIcon size={20} color="red" onPress={() => handleDeleteGroup(group.id)} />
+              <View
+                key={group.id}
+                className="flex-row items-center justify-between bg-surface rounded-lg p-4 border border-border"
+              >
+                <View className="flex-row items-center justify-center gap-2">
+                  <View className="w-2 h-2 rounded-full bg-primary" />
+                  <View>
+                    <Text className="text-foreground font-bold text-base">{group.name}</Text>
+                    <Text className="text-muted text-sm">{group.members.length} members</Text>
+                  </View>
+                </View>
+                <ChevronRightIcon
+                  size={20}
+                  color="gray"
+                  onPress={() => handleDeleteGroup(group.id)}
+                />
               </View>
             ))}
           </View>
