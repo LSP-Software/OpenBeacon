@@ -100,9 +100,10 @@ export default function AccountScreen() {
       return;
     }
     processedUri = processed;
+    const uri = processedUri;
 
     const { data: fileSize, error: fileSizeError } = await tryCatch(
-      Promise.resolve().then(() => getFileSize(processedUri)),
+      Promise.resolve().then(() => getFileSize(uri)),
     );
     if (fileSizeError) {
       Alert.alert("Image processing failed", fileSizeError.message);

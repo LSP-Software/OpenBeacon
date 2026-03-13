@@ -29,10 +29,12 @@ function getStorageClient(): S3Client {
 
 export async function verifyStorageConnectivity(): Promise<void> {
   const client = getStorageClient();
+
   console.log("Verifying storage connectivity...");
   console.log("Bucket name:", env.S3_BUCKET_NAME);
   console.log("Endpoint:", env.S3_ENDPOINT);
   console.log("Region:", env.S3_REGION);
+  
   const result = await tryCatch(client.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET_NAME })));
   if (result.error) {
     const name = (result.error as Error & { name?: string }).name ?? "";

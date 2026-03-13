@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { tryCatch } from "../lib/tryCatch.ts";
 
@@ -80,15 +80,37 @@ async function getJavaMajorFromExecutable(javaExecutable: string): Promise<numbe
   return parseJavaVersionOutput(output);
 }
 
-function getLinuxJavaHomes(): string[] {
-  return [
-    getEnvValue("JAVA_HOME") ?? "",
+const LINUX_OPENJDK_PATTERN = /^java-(17|21|24)-openjdk/;
+
+async function getLinuxJavaHomes(): Promise<string[]> {
+  const homes: string[] = [getEnvValue("JAVA_HOME") ?? ""];
+
+  const generic = [
     "/usr/lib/jvm/java-24-openjdk",
     "/usr/lib/jvm/java-21-openjdk",
     "/usr/lib/jvm/java-17-openjdk",
     "/usr/lib/jvm/default",
     "/usr/lib/jvm/default-runtime",
-  ].filter(Boolean);
+  ];
+  for (const p of generic) {
+    if (p) homes.push(p);
+  }
+
+  const jvmDir = "/usr/lib/jvm";
+  if (existsSync(jvmDir)) {
+    const { data: entries } = await tryCatch(
+      (async () => readdirSync(jvmDir, { withFileTypes: true }))(),
+    );
+    if (entries) {
+      for (const e of entries) {
+        if (e.isDirectory() && LINUX_OPENJDK_PATTERN.test(e.name)) {
+          homes.push(join(jvmDir, e.name));
+        }
+      }
+    }
+  }
+
+  return homes.filter(Boolean);
 }
 
 async function getMacJavaHomes(): Promise<string[]> {
@@ -107,7 +129,7 @@ async function getMacJavaHomes(): Promise<string[]> {
 }
 
 async function getCandidateJavaHomes(): Promise<string[]> {
-  const homes = process.platform === "darwin" ? await getMacJavaHomes() : getLinuxJavaHomes();
+  const homes = process.platform === "darwin" ? await getMacJavaHomes() : await getLinuxJavaHomes();
 
   const seen = new Set<string>();
   return homes.filter((home) => {
