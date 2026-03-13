@@ -50,12 +50,13 @@ export default function AccountScreen() {
   const confirmUploadMutation = useMutation(trpc.account.confirmImageUpload.mutationOptions());
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
 
   const name = session?.user.name ?? "";
   const email = session?.user.email ?? "";
 
   const handleEditProfileImage = async () => {
-    if (isUploading) return;
+    if (isUploading || isPickerOpen) return;
 
     const {
       cleanupTempFile,
@@ -68,7 +69,9 @@ export default function AccountScreen() {
       uploadToPresignedUrl,
     } = await import("../../lib/image-upload.ts");
 
+    setIsPickerOpen(true);
     const pickResult = await pickAndCropImage(MAX_PFP_IMAGE_RESOLUTION);
+    setIsPickerOpen(false);
     if (pickResult.ok) {
       setIsUploading(true);
     } else if ("cancelled" in pickResult) {
@@ -197,7 +200,7 @@ export default function AccountScreen() {
             imageUrl={profile?.imageUrl ?? null}
             size={80}
             showEditButton
-            isLoading={isUploading}
+            isLoading={isPickerOpen || isUploading}
             onEditPress={handleEditProfileImage}
           />
           <View className="items-center gap-1">
