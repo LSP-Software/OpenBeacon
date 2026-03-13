@@ -82,7 +82,7 @@ export async function getPresignedUploadUrl(
     ChecksumSHA256: checksumSha256,
   });
   return getSignedUrl(client, command, {
-    expiresIn: 30,
+    expiresIn: 60,
     signableHeaders: new Set(["x-amz-checksum-sha256"]),
     unhoistableHeaders: new Set(["x-amz-checksum-sha256"]),
   });

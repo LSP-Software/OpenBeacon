@@ -91,7 +91,7 @@ export default function AccountScreen() {
     setIsUploading(true);
     let processedUri: string | null = null;
 
-    const { data: processed, error: processError } = await tryCatch(processImage(imagePath));
+    const { data: processed, error: processError } = await tryCatch(processImage(imagePath, MAX_PFP_IMAGE_RESOLUTION));
     if (processError) {
       Alert.alert("Image processing failed", processError.message);
       setIsUploading(false);
@@ -99,7 +99,16 @@ export default function AccountScreen() {
     }
     processedUri = processed;
 
-    const fileSize = getFileSize(processedUri);
+    const { data: fileSize, error: fileSizeError } = await tryCatch(
+      Promise.resolve(getFileSize(processedUri)),
+    );
+    if (fileSizeError) {
+      Alert.alert("Image processing failed", fileSizeError.message);
+      cleanupTempFile(processedUri);
+      setIsUploading(false);
+      return;
+    }
+
     const { data: contentHash, error: hashError } = await tryCatch(
       computeSha256Base64(processedUri),
     );
