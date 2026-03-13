@@ -27,7 +27,7 @@ export const accountRouter = {
   requestImageUpload: protectedProcedure
     .input(
       z.object({
-        fileSize: z.number(),
+        fileSize: z.number().int().nonnegative(),
         contentHash: z.string(),
       }),
     )
@@ -114,17 +114,17 @@ export const accountRouter = {
         select: { image: true },
       });
 
+      await ctx.db.user.update({
+        where: { id: ctx.session.user.id },
+        data: { image: imageUrl },
+      });
+
       if (currentUser?.image) {
         const oldKey = extractStorageKey(currentUser.image);
         if (oldKey) {
           await tryCatch(deleteFile(oldKey.prefix, oldKey.fileName));
         }
       }
-
-      await ctx.db.user.update({
-        where: { id: ctx.session.user.id },
-        data: { image: imageUrl },
-      });
 
       return { imageUrl };
     }),

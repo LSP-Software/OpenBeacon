@@ -95,7 +95,11 @@ export async function getFileSize(prefix: string, fileName: string): Promise<num
     Key: buildKey(prefix, fileName),
   });
   const { data: response, error: responseError } = await tryCatch(client.send(command));
-  if (responseError) return null;
+  if (responseError) {
+    const name = (responseError as { name?: string }).name ?? "";
+    if (name === "NotFound" || name === "NoSuchKey") return null;
+    throw responseError;
+  }
   if (response.$metadata.httpStatusCode !== 200) return null;
   return response.ContentLength ?? null;
 }
