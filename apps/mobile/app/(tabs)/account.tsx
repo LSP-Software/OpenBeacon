@@ -11,6 +11,13 @@ import { queryClient, trpc } from "../../lib/api.ts";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
 import { tryCatch } from "../../lib/tryCatch.ts";
 
+const DEFAULT_MAX_PFP_IMAGE_RESOLUTION = 1024;
+const envMaxPfpResolution = process.env["EXPO_PUBLIC_MAX_PFP_IMAGE_RESOLUTION"];
+const MAX_PFP_IMAGE_RESOLUTION =
+  envMaxPfpResolution !== undefined
+    ? Number.parseInt(envMaxPfpResolution, 10) || DEFAULT_MAX_PFP_IMAGE_RESOLUTION
+    : DEFAULT_MAX_PFP_IMAGE_RESOLUTION;
+
 type SettingRowProps = {
   label: string;
   sublabel?: string;
@@ -58,7 +65,9 @@ export default function AccountScreen() {
       uploadToPresignedUrl,
     } = await import("../../lib/image-upload.ts");
 
-    const imagePath = await pickAndCropImage();
+    console.log("MAX_PFP_IMAGE_RESOLUTION:", MAX_PFP_IMAGE_RESOLUTION);
+
+    const imagePath = await pickAndCropImage(MAX_PFP_IMAGE_RESOLUTION);
     if (!imagePath) return;
 
     setIsUploading(true);

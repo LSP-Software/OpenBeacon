@@ -4,7 +4,7 @@ import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import ImageCropPicker from "react-native-image-crop-picker";
 import { tryCatch } from "./tryCatch.ts";
 
-const IMAGE_SIZE = 1024;
+const DEFAULT_IMAGE_SIZE = 1024;
 const IMAGE_QUALITY = 0.85;
 
 function ensureFileUri(path: string): string {
@@ -21,13 +21,13 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-export async function pickAndCropImage(): Promise<string | null> {
+export async function pickAndCropImage(size: number = DEFAULT_IMAGE_SIZE): Promise<string | null> {
   const { data: image, error } = await tryCatch(
     ImageCropPicker.openPicker({
       cropping: true,
       cropperCircleOverlay: true,
-      width: IMAGE_SIZE,
-      height: IMAGE_SIZE,
+      width: size,
+      height: size,
       mediaType: "photo",
     }),
   );
@@ -36,9 +36,12 @@ export async function pickAndCropImage(): Promise<string | null> {
   return image.path;
 }
 
-export async function processImage(uri: string): Promise<string> {
+export async function processImage(
+  uri: string,
+  size: number = DEFAULT_IMAGE_SIZE,
+): Promise<string> {
   const context = ImageManipulator.manipulate(ensureFileUri(uri));
-  const imageRef = await context.resize({ width: IMAGE_SIZE, height: IMAGE_SIZE }).renderAsync();
+  const imageRef = await context.resize({ width: size, height: size }).renderAsync();
   const result = await imageRef.saveAsync({ format: SaveFormat.WEBP, compress: IMAGE_QUALITY });
   return result.uri;
 }
