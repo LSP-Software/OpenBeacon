@@ -7,7 +7,7 @@ export default function MapScreen() {
     <View className="flex-1 bg-background">
       <View className="flex-1" />
       <View className="px-4 pb-24">
-        <View className="rounded-lg overflow-hidden border border-border bg-surface">
+        <View className="rounded-lg overflow-hidden border border-border bg-card">
           <View className="p-4 gap-2">
             <View className="gap-1">
               <Text className="text-lg font-semibold">No active group</Text>
