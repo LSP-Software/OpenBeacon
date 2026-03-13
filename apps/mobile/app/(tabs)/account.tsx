@@ -6,6 +6,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/Button.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
+import { tryCatch } from "../../lib/tryCatch.ts";
 
 type SettingRowProps = {
   label: string;
@@ -47,19 +48,15 @@ export default function AccountScreen() {
     if (isSigningOut) return;
     setIsSigningOut(true);
     const sessionTokenToRevoke = session?.session?.token ?? null;
-    try {
-      const result = await authClient.signOut();
-      if (result?.error && sessionTokenToRevoke) {
-        await SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke);
-      }
-    } catch {
-      if (sessionTokenToRevoke) {
-        await SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke);
-      }
-    } finally {
-      setIsSigningOut(false);
-      router.replace("/");
+
+    const { error: signOutError } = await tryCatch(authClient.signOut());
+
+    if (signOutError && sessionTokenToRevoke) {
+      await tryCatch(SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke));
     }
+
+    setIsSigningOut(false);
+    router.replace("/");
   };
 
   return (
