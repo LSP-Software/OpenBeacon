@@ -53,16 +53,31 @@ export async function computeSha1(uri: string): Promise<string> {
   return arrayBufferToHex(hashBuffer);
 }
 
+async function parseS3ErrorBody(response: Response): Promise<string> {
+  const { data: body } = await tryCatch(response.text());
+  if (!body) return "";
+
+  const codeMatch = body.match(/<Code>(.+?)<\/Code>/);
+  const messageMatch = body.match(/<Message>(.+?)<\/Message>/);
+  const parts: string[] = [];
+  if (codeMatch?.[1]) parts.push(codeMatch[1]);
+  if (messageMatch?.[1]) parts.push(messageMatch[1]);
+  return parts.join(": ");
+}
+
 export async function uploadToPresignedUrl(presignedUrl: string, fileUri: string): Promise<void> {
   const file = new FSFile(ensureFileUri(fileUri));
+  const bytes = await file.bytes();
   const response = await fetch(presignedUrl, {
     method: "PUT",
-    body: file as unknown as Blob,
+    body: bytes,
     headers: { "Content-Type": "image/webp" },
   });
 
   if (!response.ok) {
-    throw new Error(`Upload failed with status ${response.status.toString()}`);
+    const detail = await parseS3ErrorBody(response);
+    const summary = `Failed to upload image to S3 (HTTP ${response.status.toString()})`;
+    throw new Error(detail ? `${summary}\n${detail}` : summary);
   }
 }
 

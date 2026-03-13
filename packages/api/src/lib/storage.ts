@@ -1,7 +1,9 @@
 import {
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectVersionsCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -33,7 +35,6 @@ export async function verifyStorageConnectivity(): Promise<void> {
   console.log("Region:", env.S3_REGION);
   const result = await tryCatch(client.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET_NAME })));
   if (result.error) {
-
     const name = (result.error as Error & { name?: string }).name ?? "";
 
     if (name === "NotFound" || name === "NoSuchBucket") {
@@ -50,8 +51,11 @@ export async function verifyStorageConnectivity(): Promise<void> {
       );
     }
     if (name === "Unknown") {
-      const statusCode = (result.error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
-      throw new Error(`Failed to connect to S3 at ${env.S3_ENDPOINT}. S3 endpoint returned an error the SDK could not interpret (often seen with S3-compatible backends like B2 or MinIO). Check endpoint, bucket, region, and credentials. HTTP status code: ${statusCode ?? "unknown"}`);
+      const statusCode = (result.error as { $metadata?: { httpStatusCode?: number } }).$metadata
+        ?.httpStatusCode;
+      throw new Error(
+        `Failed to connect to S3 at ${env.S3_ENDPOINT}. S3 endpoint returned an error the SDK could not interpret (often seen with S3-compatible backends like B2 or MinIO). Check endpoint, bucket, region, and credentials. HTTP status code: ${statusCode ?? "unknown"}`,
+      );
     }
     throw new Error(
       `Failed to connect to S3 at ${env.S3_ENDPOINT}: ${result.error instanceof Error ? result.error.message : String(result.error)}`,
@@ -61,57 +65,103 @@ export async function verifyStorageConnectivity(): Promise<void> {
 }
 
 function buildKey(prefix: string, fileName: string): string {
-  return `${prefix}/${fileName}`;
+  return prefix ? `${prefix}/${fileName}` : fileName;
 }
 
 export async function getPresignedUploadUrl(
   prefix: string,
   fileName: string,
   contentType: string,
-  contentLength: number,
 ): Promise<string> {
   const client = getStorageClient();
   const command = new PutObjectCommand({
     Bucket: env.S3_BUCKET_NAME,
     Key: buildKey(prefix, fileName),
     ContentType: contentType,
-    ContentLength: contentLength,
   });
   return getSignedUrl(client, command, { expiresIn: 3600 });
 }
 
-export async function verifyFileExists(prefix: string, fileName: string): Promise<boolean> {
+export async function getFileSize(prefix: string, fileName: string): Promise<number | null> {
   const client = getStorageClient();
   const command = new HeadObjectCommand({
     Bucket: env.S3_BUCKET_NAME,
     Key: buildKey(prefix, fileName),
   });
   const response = await client.send(command);
-  return response.$metadata.httpStatusCode === 200;
+  if (response.$metadata.httpStatusCode !== 200) return null;
+  return response.ContentLength ?? null;
 }
 
 export async function deleteFile(prefix: string, fileName: string): Promise<void> {
   const client = getStorageClient();
-  const command = new DeleteObjectCommand({
-    Bucket: env.S3_BUCKET_NAME,
-    Key: buildKey(prefix, fileName),
-  });
-  await client.send(command);
+  const key = buildKey(prefix, fileName);
+
+  const listResult = await tryCatch(
+    client.send(
+      new ListObjectVersionsCommand({
+        Bucket: env.S3_BUCKET_NAME,
+        Prefix: key,
+      }),
+    ),
+  );
+
+  if (listResult.error) {
+    await client.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET_NAME, Key: key }));
+    return;
+  }
+
+  const objectsToDelete: { Key: string; VersionId: string }[] = [];
+
+  for (const version of listResult.data.Versions ?? []) {
+    if (version.Key === key && version.VersionId) {
+      objectsToDelete.push({ Key: key, VersionId: version.VersionId });
+    }
+  }
+
+  for (const marker of listResult.data.DeleteMarkers ?? []) {
+    if (marker.Key === key && marker.VersionId) {
+      objectsToDelete.push({ Key: key, VersionId: marker.VersionId });
+    }
+  }
+
+  if (objectsToDelete.length === 0) {
+    await client.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET_NAME, Key: key }));
+    return;
+  }
+
+  await client.send(
+    new DeleteObjectsCommand({
+      Bucket: env.S3_BUCKET_NAME,
+      Delete: { Objects: objectsToDelete },
+    }),
+  );
 }
 
 export function buildPublicUrl(prefix: string, fileName: string): string {
+  const key = buildKey(prefix, fileName);
   const version = Date.now();
-  return `${env.S3_CDN_URL}/${prefix}/${fileName}?v=${version}`;
+  return `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}/${key}?v=${version}`;
+}
+
+export async function verifyPublicUrl(url: string): Promise<boolean> {
+  const urlWithoutQuery = url.split("?")[0];
+  if (!urlWithoutQuery) return false;
+  const result = await tryCatch(fetch(urlWithoutQuery, { method: "HEAD" }));
+  if (result.error) return false;
+  return result.data.ok;
 }
 
 export function extractStorageKey(imageUrl: string): { prefix: string; fileName: string } | null {
-  const cdnUrl = env.S3_CDN_URL;
+  const baseUrl = `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`;
   const urlWithoutQuery = imageUrl.split("?")[0];
-  if (!urlWithoutQuery?.startsWith(cdnUrl)) return null;
+  if (!urlWithoutQuery?.startsWith(baseUrl)) return null;
 
-  const path = urlWithoutQuery.slice(cdnUrl.length + 1);
+  const path = urlWithoutQuery.slice(baseUrl.length + 1);
+  if (!path) return null;
+
   const slashIndex = path.indexOf("/");
-  if (slashIndex === -1) return null;
+  if (slashIndex === -1) return { prefix: "", fileName: path };
 
   return {
     prefix: path.slice(0, slashIndex),

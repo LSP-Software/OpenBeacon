@@ -39,10 +39,6 @@
       "bundler": "metro"
     },
     "scheme": "openbeacon",
-    "plugins": [
-      "expo-router",
-      "expo-secure-store",
-      "expo-web-browser"
-    ]
+    "plugins": ["expo-router", "expo-secure-store", "expo-web-browser"]
   }
 }

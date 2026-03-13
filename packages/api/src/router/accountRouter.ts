@@ -5,13 +5,14 @@ import {
   buildPublicUrl,
   deleteFile,
   extractStorageKey,
+  getFileSize,
   getPresignedUploadUrl,
-  verifyFileExists,
+  verifyPublicUrl,
 } from "../lib/storage.ts";
 import { tryCatch } from "../lib/tryCatch.ts";
 import { protectedProcedure } from "../trpc.ts";
 
-const PROFILE_IMAGE_PREFIX = "ob_pfp";
+const PROFILE_IMAGE_PREFIX = "";
 
 export const accountRouter = {
   getProfile: protectedProcedure.query(async ({ ctx }) => {
@@ -41,13 +42,13 @@ export const accountRouter = {
       const fileName = `${crypto.randomUUID()}.webp`;
 
       const { data: presignedUrl, error: presignError } = await tryCatch(
-        getPresignedUploadUrl(PROFILE_IMAGE_PREFIX, fileName, "image/webp", input.fileSize),
+        getPresignedUploadUrl(PROFILE_IMAGE_PREFIX, fileName, "image/webp"),
       );
 
       if (presignError) {
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to prepare upload. Please try again.",
+          message: `Failed to generate presigned URL: ${presignError.message}`,
         });
       }
 
@@ -61,14 +62,48 @@ export const accountRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const { data: exists, error: verifyError } = await tryCatch(
-        verifyFileExists(PROFILE_IMAGE_PREFIX, input.fileName),
+      const { data: fileSize, error: verifyError } = await tryCatch(
+        getFileSize(PROFILE_IMAGE_PREFIX, input.fileName),
       );
 
-      if (verifyError || !exists) {
+      if (verifyError) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `Upload verification failed: ${verifyError.message}`,
+        });
+      }
+      if (fileSize === null) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Upload could not be verified. Please try uploading again.",
+          message: "Uploaded file not found in storage. The upload may have failed or expired.",
+        });
+      }
+      if (fileSize === 0) {
+        await tryCatch(deleteFile(PROFILE_IMAGE_PREFIX, input.fileName));
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Uploaded file is empty (zero bytes). The upload may have failed.",
+        });
+      }
+      if (fileSize > env.MAX_IMAGE_FILE_SIZE) {
+        await tryCatch(deleteFile(PROFILE_IMAGE_PREFIX, input.fileName));
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `File size exceeds the maximum allowed size of ${Math.floor(env.MAX_IMAGE_FILE_SIZE / 1024 / 1024)}MB.`,
+        });
+      }
+
+      const imageUrl = buildPublicUrl(PROFILE_IMAGE_PREFIX, input.fileName);
+
+      const { data: isPubliclyAccessible, error: verifyUrlError } = await tryCatch(
+        verifyPublicUrl(imageUrl),
+      );
+      if (verifyUrlError || !isPubliclyAccessible) {
+        await tryCatch(deleteFile(PROFILE_IMAGE_PREFIX, input.fileName));
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message:
+            "Uploaded image is not publicly accessible. The file was uploaded but the CDN URL is unreachable.",
         });
       }
 
@@ -83,8 +118,6 @@ export const accountRouter = {
           await tryCatch(deleteFile(oldKey.prefix, oldKey.fileName));
         }
       }
-
-      const imageUrl = buildPublicUrl(PROFILE_IMAGE_PREFIX, input.fileName);
 
       await ctx.db.user.update({
         where: { id: ctx.session.user.id },

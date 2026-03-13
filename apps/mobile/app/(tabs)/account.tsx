@@ -66,7 +66,7 @@ export default function AccountScreen() {
 
     const { data: processed, error: processError } = await tryCatch(processImage(imagePath));
     if (processError) {
-      Alert.alert("Error", "Failed to process the image. Please try again.");
+      Alert.alert("Image processing failed", processError.message);
       setIsUploading(false);
       return;
     }
@@ -75,7 +75,7 @@ export default function AccountScreen() {
     const fileSize = getFileSize(processedUri);
     const { data: contentHash, error: hashError } = await tryCatch(computeSha1(processedUri));
     if (hashError) {
-      Alert.alert("Error", "Failed to process the image. Please try again.");
+      Alert.alert("Image processing failed", hashError.message);
       cleanupTempFile(processedUri);
       setIsUploading(false);
       return;
@@ -85,7 +85,7 @@ export default function AccountScreen() {
       requestUploadMutation.mutateAsync({ fileSize, contentHash }),
     );
     if (requestError) {
-      Alert.alert("Error", "Failed to prepare upload. Please try again.");
+      Alert.alert("Upload request failed", requestError.message);
       cleanupTempFile(processedUri);
       setIsUploading(false);
       return;
@@ -95,7 +95,7 @@ export default function AccountScreen() {
       uploadToPresignedUrl(uploadData.presignedUrl, processedUri),
     );
     if (uploadError) {
-      Alert.alert("Error", "Failed to upload image. Please check your connection and try again.");
+      Alert.alert("Image upload failed", uploadError.message);
       cleanupTempFile(processedUri);
       setIsUploading(false);
       return;
@@ -105,7 +105,7 @@ export default function AccountScreen() {
       confirmUploadMutation.mutateAsync({ fileName: uploadData.fileName }),
     );
     if (confirmError) {
-      Alert.alert("Error", "Failed to confirm upload. Please try again.");
+      Alert.alert("Upload confirmation failed", confirmError.message);
       cleanupTempFile(processedUri);
       setIsUploading(false);
       return;
