@@ -12,7 +12,6 @@ export const getBaseUrl = () => {
    * baseUrl to your production API URL.
    */
 
-  // biome-ignore lint/complexity/useLiteralKeys: TS4111 requires bracket notation for index signatures
   const localhost = process.env["EXPO_PUBLIC_DEV_API_URL"];
 
   if (!localhost) {

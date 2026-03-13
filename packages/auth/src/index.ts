@@ -7,10 +7,8 @@ export const auth = betterAuth({
     provider: "postgresql",
   }),
   // TODO: use env package
-  // biome-ignore lint/complexity/useLiteralKeys: TS4111 requires bracket notation for index signatures
   secret: process.env["BETTER_AUTH_SECRET"],
   // TODO: use env package
-  // biome-ignore lint/complexity/useLiteralKeys: TS4111 requires bracket notation for index signatures
   baseURL: process.env["BETTER_AUTH_URL"],
   emailAndPassword: {
     // TODO: Should only support magic links

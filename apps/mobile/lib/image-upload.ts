@@ -77,9 +77,12 @@ export async function processImage(
   return result.uri;
 }
 
-export function getFileSize(uri: string): number {
+export function getFileSize(uri: string): number | undefined {
   const size = new FSFile(ensureFileUri(uri)).size;
-  if (size === undefined) throw new Error("Could not determine file size: file may not exist");
+  if (size === undefined) {
+    console.error("Could not determine file size: file may not exist");
+    return;
+  }
   return size;
 }
 

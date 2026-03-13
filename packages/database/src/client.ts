@@ -5,7 +5,6 @@ const globalForPrisma = globalThis as {
   prisma?: PrismaClient;
 };
 
-// biome-ignore lint/complexity/useLiteralKeys: eslint requires this
 const databaseUrl = process.env["DATABASE_URL"];
 
 if (!databaseUrl) {
