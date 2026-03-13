@@ -111,7 +111,7 @@ export default function AccountScreen() {
       return;
     }
 
-    const { data: contentHash, error: hashError } = await tryCatch(
+    const { data: hashResult, error: hashError } = await tryCatch(
       computeSha256Base64(processedUri),
     );
     if (hashError) {
@@ -120,6 +120,8 @@ export default function AccountScreen() {
       setIsUploading(false);
       return;
     }
+    const contentHash = hashResult.hash;
+    const bytes = hashResult.bytes;
 
     const { data: uploadData, error: requestError } = await tryCatch(
       requestUploadMutation.mutateAsync({ fileSize, contentHash }),
@@ -131,9 +133,11 @@ export default function AccountScreen() {
       return;
     }
 
-    const { error: uploadError } = await tryCatch(
-      uploadToPresignedUrl(uploadData.presignedUrl, processedUri, contentHash),
-    );
+    const { error: uploadError } = await tryCatch(uploadToPresignedUrl(
+      uploadData.presignedUrl,
+      bytes,
+      contentHash,
+    ));
     if (uploadError) {
       Alert.alert("Image upload failed", uploadError.message);
       cleanupTempFile(processedUri);

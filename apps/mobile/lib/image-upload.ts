@@ -83,10 +83,12 @@ export function getFileSize(uri: string): number {
   return size;
 }
 
-export async function computeSha256Base64(uri: string): Promise<string> {
+export async function computeSha256Base64(
+  uri: string,
+): Promise<{ hash: string; bytes: ArrayBuffer }> {
   const fileBytes = await new FSFile(ensureFileUri(uri)).bytes();
   const hashBuffer = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, fileBytes);
-  return arrayBufferToBase64(hashBuffer);
+  return { hash: arrayBufferToBase64(hashBuffer), bytes: fileBytes.buffer };
 }
 
 async function parseS3ErrorBody(response: Response): Promise<string> {
@@ -103,11 +105,9 @@ async function parseS3ErrorBody(response: Response): Promise<string> {
 
 export async function uploadToPresignedUrl(
   presignedUrl: string,
-  fileUri: string,
+  bytes: ArrayBuffer,
   contentHash: string,
 ): Promise<void> {
-  const file = new FSFile(ensureFileUri(fileUri));
-  const bytes = await file.bytes();
   const response = await fetch(presignedUrl, {
     method: "PUT",
     body: bytes,
