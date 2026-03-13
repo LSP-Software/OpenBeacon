@@ -32,6 +32,7 @@ The core concept of this app is to be privacy focused so if users pay for us to 
     }
     console.log(result.data)
   ```
+11. Always use const name = () => {} over function name () {}
 
 # Technology
 
