@@ -6,4 +6,3 @@ node_modules
 dist
 .idea
 !.env.example
-app.apk
