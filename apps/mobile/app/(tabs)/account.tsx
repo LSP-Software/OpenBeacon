@@ -12,6 +12,7 @@ import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.t
 import { tryCatch } from "../../lib/tryCatch.ts";
 
 const DEFAULT_MAX_PFP_IMAGE_RESOLUTION = 1024;
+// biome-ignore lint/complexity/useLiteralKeys: TS index signature requires bracket access
 const envMaxPfpResolution = process.env["EXPO_PUBLIC_MAX_PFP_IMAGE_RESOLUTION"];
 const MAX_PFP_IMAGE_RESOLUTION =
   envMaxPfpResolution !== undefined
@@ -102,7 +103,7 @@ export default function AccountScreen() {
     processedUri = processed;
 
     const { data: fileSize, error: fileSizeError } = await tryCatch(
-      Promise.resolve(getFileSize(processedUri)),
+      Promise.resolve().then(() => getFileSize(processedUri)),
     );
     if (fileSizeError) {
       Alert.alert("Image processing failed", fileSizeError.message);
@@ -133,11 +134,9 @@ export default function AccountScreen() {
       return;
     }
 
-    const { error: uploadError } = await tryCatch(uploadToPresignedUrl(
-      uploadData.presignedUrl,
-      bytes,
-      contentHash,
-    ));
+    const { error: uploadError } = await tryCatch(
+      uploadToPresignedUrl(uploadData.presignedUrl, bytes, contentHash),
+    );
     if (uploadError) {
       Alert.alert("Image upload failed", uploadError.message);
       cleanupTempFile(processedUri);
