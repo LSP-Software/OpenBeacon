@@ -70,7 +70,7 @@ export default function AccountScreen() {
 
     const pickResult = await pickAndCropImage(MAX_PFP_IMAGE_RESOLUTION);
     if (pickResult.ok) {
-      /* use path below */
+      setIsUploading(true);
     } else if ("cancelled" in pickResult) {
       return;
     } else {
@@ -88,13 +88,11 @@ export default function AccountScreen() {
       );
       return;
     }
-    const imagePath = pickResult.path;
 
-    setIsUploading(true);
     let processedUri: string | null = null;
 
     const { data: processed, error: processError } = await tryCatch(
-      processImage(imagePath, MAX_PFP_IMAGE_RESOLUTION),
+      processImage(pickResult.path, MAX_PFP_IMAGE_RESOLUTION),
     );
     if (processError) {
       Alert.alert("Image processing failed", processError.message);
