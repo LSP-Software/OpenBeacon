@@ -91,23 +91,6 @@ export default function GroupsScreen() {
               <Text className="text-foreground font-bold text-lg">Your Groups</Text>
             </View>
             {groupList.map((group) => (
-              // <View
-              //   key={group.id}
-              //   className="flex-row items-center justify-between bg-surface rounded-lg p-4 border border-border"
-              // >
-              //   <View className="flex-row items-center justify-center gap-2">
-              //     <View className="w-2 h-2 rounded-full bg-primary" />
-              //     <View>
-              //       <Text className="text-foreground font-bold text-base">{group.name}</Text>
-              //       <Text className="text-muted text-sm">{group.members.length} members</Text>
-              //     </View>
-              //   </View>
-              //   <ChevronRightIcon
-              //     size={20}
-              //     color="gray"
-              //     onPress={() => handleDeleteGroup(group.id)}
-              //   />
-              // </View>
               <Card key={group.id}>
                 <CardHeader>
                   <CardTitle>{group.name}</CardTitle>
