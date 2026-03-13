@@ -1,10 +1,13 @@
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { ChevronRightIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/Button.tsx";
+import { ProfileImage } from "../../components/ProfileImage.tsx";
+import { queryClient, trpc } from "../../lib/api.ts";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
 import { tryCatch } from "../../lib/tryCatch.ts";
 
@@ -34,15 +37,84 @@ function SettingRow({ label, sublabel, onPress }: SettingRowProps) {
 
 export default function AccountScreen() {
   const { data: session } = authClient.useSession();
+  const { data: profile } = useQuery(trpc.account.getProfile.queryOptions());
+  const requestUploadMutation = useMutation(trpc.account.requestImageUpload.mutationOptions());
+  const confirmUploadMutation = useMutation(trpc.account.confirmImageUpload.mutationOptions());
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const name = session?.user.name ?? "";
   const email = session?.user.email ?? "";
-  const initials = name
-    .split(" ")
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join("");
+
+  const handleEditProfileImage = async () => {
+    if (isUploading) return;
+
+    const {
+      cleanupTempFile,
+      computeSha1,
+      getFileSize,
+      pickAndCropImage,
+      processImage,
+      uploadToPresignedUrl,
+    } = await import("../../lib/image-upload.ts");
+
+    const imagePath = await pickAndCropImage();
+    if (!imagePath) return;
+
+    setIsUploading(true);
+    let processedUri: string | null = null;
+
+    const { data: processed, error: processError } = await tryCatch(processImage(imagePath));
+    if (processError) {
+      Alert.alert("Error", "Failed to process the image. Please try again.");
+      setIsUploading(false);
+      return;
+    }
+    processedUri = processed;
+
+    const fileSize = getFileSize(processedUri);
+    const { data: contentHash, error: hashError } = await tryCatch(computeSha1(processedUri));
+    if (hashError) {
+      Alert.alert("Error", "Failed to process the image. Please try again.");
+      cleanupTempFile(processedUri);
+      setIsUploading(false);
+      return;
+    }
+
+    const { data: uploadData, error: requestError } = await tryCatch(
+      requestUploadMutation.mutateAsync({ fileSize, contentHash }),
+    );
+    if (requestError) {
+      Alert.alert("Error", "Failed to prepare upload. Please try again.");
+      cleanupTempFile(processedUri);
+      setIsUploading(false);
+      return;
+    }
+
+    const { error: uploadError } = await tryCatch(
+      uploadToPresignedUrl(uploadData.presignedUrl, processedUri),
+    );
+    if (uploadError) {
+      Alert.alert("Error", "Failed to upload image. Please check your connection and try again.");
+      cleanupTempFile(processedUri);
+      setIsUploading(false);
+      return;
+    }
+
+    const { error: confirmError } = await tryCatch(
+      confirmUploadMutation.mutateAsync({ fileName: uploadData.fileName }),
+    );
+    if (confirmError) {
+      Alert.alert("Error", "Failed to confirm upload. Please try again.");
+      cleanupTempFile(processedUri);
+      setIsUploading(false);
+      return;
+    }
+
+    cleanupTempFile(processedUri);
+    await queryClient.invalidateQueries({ queryKey: trpc.account.getProfile.queryKey() });
+    setIsUploading(false);
+  };
 
   const handleSignOut = async () => {
     if (isSigningOut) return;
@@ -74,9 +146,12 @@ export default function AccountScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="items-center py-6 gap-4">
-          <View className="w-20 h-20 rounded-full bg-primary items-center justify-center">
-            <Text className="text-on-primary text-2xl font-bold">{initials}</Text>
-          </View>
+          <ProfileImage
+            imageUrl={profile?.imageUrl ?? null}
+            size={80}
+            showEditButton
+            onEditPress={handleEditProfileImage}
+          />
           <View className="items-center gap-1">
             <Text className="text-foreground text-2xl font-bold">{name}</Text>
             <Text className="text-muted text-sm">{email}</Text>
