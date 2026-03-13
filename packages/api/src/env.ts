@@ -8,9 +8,8 @@ export const env = createEnv({
     S3_ACCESS_KEY_ID: z.string(),
     S3_ACCESS_KEY: z.string(),
     S3_BUCKET_NAME: z.string(),
-    S3_CDN_URL: z.url().default("https://api.openbeacon.app/file"),
+    S3_CDN_URL: z.url().default("https://cnd.openbeacon.net/file"),
     MAX_IMAGE_FILE_SIZE: z.coerce.number().default(5242880),
-    MAX_IMAGE_RESOLUTION: z.coerce.number().default(1024),
   },
   runtimeEnv: process.env,
 });

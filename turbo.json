@@ -12,7 +12,7 @@
     "S3_BUCKET_NAME",
     "S3_CDN_URL",
     "MAX_IMAGE_FILE_SIZE",
-    "MAX_IMAGE_RESOLUTION"
+    "MAX_PFP_IMAGE_RESOLUTION"
   ],
   "tasks": {
     "build": {
