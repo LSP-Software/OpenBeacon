@@ -99,7 +99,9 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Write Google service account key
-        run: echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}' > /tmp/google-service-account.json
+        run: printenv GOOGLE_SERVICE_ACCOUNT_JSON > /tmp/google-service-account.json
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
 
       - name: Build Android AAB
         working-directory: apps/mobile
