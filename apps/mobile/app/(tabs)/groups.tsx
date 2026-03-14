@@ -1,11 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PlusIcon, ShieldIcon, TrashIcon } from "lucide-react-native";
-import { Alert, Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/Button.tsx";
 import { Text } from "../../components/Text.tsx";
 import { trpc } from "../../lib/api.ts";
-import { tryCatch } from "../../lib/tryCatch.ts";
 
 export default function GroupsScreen() {
   const {
@@ -17,20 +16,12 @@ export default function GroupsScreen() {
   const deleteGroupMutation = useMutation(trpc.groups.delete.mutationOptions());
 
   const handleCreateGroup = async () => {
-    const { error } = await tryCatch(createGroupMutation.mutateAsync({ name: "Test" }));
-    if (error) {
-      Alert.alert("Failed to create group", error.message);
-      return;
-    }
+    await createGroupMutation.mutateAsync({ name: "Test" });
     refetchGroupList();
   };
 
   const handleDeleteGroup = async (groupId: string) => {
-    const { error } = await tryCatch(deleteGroupMutation.mutateAsync({ id: groupId }));
-    if (error) {
-      Alert.alert("Failed to delete group", error.message);
-      return;
-    }
+    await deleteGroupMutation.mutateAsync({ id: groupId });
     refetchGroupList();
   };
 
