@@ -13,7 +13,6 @@ import {
   cleanupTempFile,
   computeSha256Base64,
   getFileSize,
-  isPermissionError,
   pickAndCropImage,
   processImage,
   readImageBytes,
@@ -70,18 +69,7 @@ const AccountScreen = () => {
     } else if ("cancelled" in pickResult) {
       return;
     } else {
-      const err = pickResult.error;
-      const isPermission = isPermissionError(err);
-      Alert.alert(
-        isPermission ? "Photo access needed" : "Could not open photos",
-        err.message,
-        isPermission
-          ? [
-              { text: "Cancel", style: "cancel" },
-              { text: "Open settings", onPress: () => Linking.openSettings() },
-            ]
-          : [{ text: "OK" }],
-      );
+      Alert.alert("Image selection failed", pickResult.error.message);
       return;
     }
 

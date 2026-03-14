@@ -21,25 +21,6 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return btoa(binary);
 };
 
-const PICKER_CANCELLED_CODES = ["E_PICKER_CANCELLED", "E_CROPPER_CANCELLED"] as const;
-const CANCELLED_MESSAGES = ["user cancelled", "user canceled", "cancelled image selection"];
-
-const isPickerCancellation = (error: unknown): boolean => {
-  const err = error as { code?: string; message?: string };
-  const code = err?.code ?? "";
-  const message = (err?.message ?? "").toLowerCase();
-  if (PICKER_CANCELLED_CODES.includes(code as (typeof PICKER_CANCELLED_CODES)[number])) return true;
-  return CANCELLED_MESSAGES.some((m) => message.includes(m));
-};
-
-export const isPermissionError = (error: unknown): boolean => {
-  const err = error as { code?: string; message?: string };
-  const code = err?.code ?? "";
-  const message = (err?.message ?? "").toLowerCase();
-  if (code === "E_NO_LIBRARY_PERMISSION") return true;
-  return /permission|grant|access denied|denied access/.test(message);
-};
-
 export type PickImageResult =
   | { ok: true; path: string }
   | { ok: false; cancelled: true }
@@ -61,10 +42,10 @@ export const pickAndCropImage = async (
   if (!error) {
     return { ok: true, path: image.path };
   }
-  if (isPickerCancellation(error)) {
+  if (error.message.includes("User cancelled")) {
     return { ok: false, cancelled: true };
   }
-  return { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
+  return { ok: false, error: new Error(String(error)) };
 };
 
 export const processImage = async (
