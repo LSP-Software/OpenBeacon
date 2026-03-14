@@ -98,7 +98,11 @@ export const uploadToPresignedUrl = async (
 
 export const cleanupTempFile = (uri: string): void => {
   const file = new FSFile(uri);
-  if (file.exists) {
-    file.delete();
+  try {
+    if (file.exists) {
+      file.delete();
+    }
+  } catch {
+    // best-effort cleanup; ignore errors
   }
 };
