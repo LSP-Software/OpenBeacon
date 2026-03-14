@@ -1,7 +1,14 @@
 import { Image } from "expo-image";
 import { PencilIcon } from "lucide-react-native";
+import { cssInterop } from "nativewind";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { useColors } from "../lib/theme.ts";
+
+cssInterop(Image, { className: "style" });
+
+const size = 80;
+const editButtonSize = Math.round(size * 0.32);
+const editIconSize = Math.round(editButtonSize * 0.5);
 
 type ProfileImageProps = {
   imageUrl: string | null;
@@ -16,48 +23,26 @@ export const ProfileImage = ({
   showEditButton = false,
   isLoading = false,
 }: ProfileImageProps) => {
-  const size = 80;
   const colors = useColors();
-  const editButtonSize = Math.round(size * 0.32);
-  const editIconSize = Math.round(editButtonSize * 0.5);
 
   return (
-    <View style={{ width: size, height: size, position: "relative" }}>
+    <View className="w-20 h-20 relative">
       {imageUrl ? (
         <Image
           source={{ uri: imageUrl }}
-          style={{ width: size, height: size, borderRadius: size / 2 }}
+          className="w-20 h-20 rounded-full"
           cachePolicy="disk"
           contentFit="cover"
           transition={200}
         />
       ) : (
-        <View
-          style={{
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            backgroundColor: colors.surface,
-            borderWidth: 1,
-            borderColor: colors.border,
-          }}
-        />
+        <View className="w-20 h-20 rounded-full bg-surface border border-border" />
       )}
 
       {isLoading && (
         <View
           pointerEvents="none"
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            borderRadius: size / 2,
-            backgroundColor: "rgba(0,0,0,0.3)",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+          className="absolute inset-0 rounded-full bg-black/30 items-center justify-center"
         >
           <ActivityIndicator color={colors.onPrimary} />
         </View>
@@ -69,20 +54,7 @@ export const ProfileImage = ({
           disabled={isLoading}
           accessibilityRole="button"
           accessibilityLabel="Edit profile picture"
-          style={{
-            position: "absolute",
-            bottom: 0,
-            right: 0,
-            width: editButtonSize,
-            height: editButtonSize,
-            borderRadius: editButtonSize / 2,
-            backgroundColor: colors.primary,
-            alignItems: "center",
-            justifyContent: "center",
-            borderWidth: 2,
-            borderColor: colors.background,
-            opacity: isLoading ? 0.7 : 1,
-          }}
+          className={`absolute bottom-0 right-0 w-[26px] h-[26px] rounded-full bg-primary items-center justify-center border-2 border-background ${isLoading ? "opacity-70" : ""}`}
         >
           <PencilIcon size={editIconSize} color={colors.onPrimary} />
         </Pressable>
