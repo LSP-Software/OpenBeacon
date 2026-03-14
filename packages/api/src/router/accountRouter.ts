@@ -26,17 +26,11 @@ export const accountRouter = {
   requestImageUpload: protectedProcedure
     .input(
       z.object({
-        fileSize: z.number().int().nonnegative(),
+        fileSize: z.number().int().nonnegative().max(env.MAX_IMAGE_FILE_SIZE),
         contentHash: z.string(),
       }),
     )
     .mutation(async ({ input }) => {
-      if (input.fileSize > env.MAX_IMAGE_FILE_SIZE) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `File size exceeds the maximum allowed size of ${Math.floor(env.MAX_IMAGE_FILE_SIZE / 1024 / 1024)}MB.`,
-        });
-      }
 
       const fileName = `${crypto.randomUUID()}.webp`;
 
