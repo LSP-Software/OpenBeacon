@@ -5,7 +5,6 @@ import { useColors } from "../lib/theme.ts";
 
 type ProfileImageProps = {
   imageUrl: string | null;
-  size: number;
   onEditPress: () => void;
   showEditButton: boolean;
   isLoading: boolean;
@@ -13,11 +12,11 @@ type ProfileImageProps = {
 
 export function ProfileImage({
   imageUrl,
-  size,
   onEditPress,
   showEditButton = false,
   isLoading = false,
 }: ProfileImageProps) {
+  const size = 80;
   const colors = useColors();
   const editButtonSize = Math.round(size * 0.32);
   const editIconSize = Math.round(editButtonSize * 0.5);

@@ -191,7 +191,6 @@ export default function AccountScreen() {
         <View className="items-center py-6 gap-4">
           <ProfileImage
             imageUrl={profile?.imageUrl ?? null}
-            size={80}
             showEditButton
             isLoading={isPickerOpen || isUploading}
             onEditPress={handleEditProfileImage}
