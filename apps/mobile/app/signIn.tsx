@@ -14,7 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../components/Button.tsx";
 import { FormInput } from "../components/FormInput.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
-import { Text } from "../components/Text.tsx";
+import { Text } from "../components/ui/Text.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
 
 export default function SignIn() {

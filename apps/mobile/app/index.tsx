@@ -4,7 +4,7 @@ import { Animated, Dimensions, Easing, Pressable, ScrollView, View } from "react
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BeaconIcon } from "../components/BeaconIcon.tsx";
 import { Button } from "../components/Button.tsx";
-import { Text } from "../components/Text.tsx";
+import { Text } from "../components/ui/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
 import { useColors } from "../lib/theme.ts";
 

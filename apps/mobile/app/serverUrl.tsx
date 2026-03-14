@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../components/Button.tsx";
 import { FormInput } from "../components/FormInput.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
-import { Text } from "../components/Text.tsx";
+import { Text } from "../components/ui/Text.tsx";
 import { getServerUrl, hasCustomServerUrl, setServerUrl } from "../lib/server-url.ts";
 
 export default function ServerUrl() {

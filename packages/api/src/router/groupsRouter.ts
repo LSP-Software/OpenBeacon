@@ -1,21 +1,43 @@
 import { GroupRole } from "@openbeacon/database";
-import type { TRPCRouterRecord } from "@trpc/server";
+import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { protectedProcedure } from "../trpc.ts";
 
 export const groupsRouter = {
+  invites: protectedProcedure.query(async ({ ctx }) => {
+    return [
+      {
+        id: "1",
+        groupName: "Group 1",
+        groupImage: "placeholder.png",
+        inviter: {
+          id: "1",
+          name: "John Doe",
+          image: "placeholder.png",
+        },
+      },
+    ];
+  }),
   list: protectedProcedure.query(async ({ ctx }) => {
     const groups = await ctx.db.group.findMany({
-      include: {
+      where: {
         groupMembers: {
-          where: {
+          some: {
             userId: ctx.session.user.id,
           },
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        image: true,
+        groupMembers: {
           select: {
             id: true,
             role: true,
             user: {
               select: {
+                id: true,
                 name: true,
                 image: true,
               },
@@ -28,6 +50,7 @@ export const groupsRouter = {
     return groups.map((group) => ({
       id: group.id,
       name: group.name,
+      image: group.image,
       members: group.groupMembers.map((member) => ({
         id: member.id,
         name: member.user.name,
@@ -55,9 +78,12 @@ export const groupsRouter = {
         },
       });
 
+      if (!group) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create group" });
+      }
+
       return {
-        id: group.id,
-        name: group.name,
+        message: "Group created successfully",
       };
     }),
   delete: protectedProcedure

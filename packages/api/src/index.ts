@@ -17,6 +17,6 @@ type RouterInputs = inferRouterInputs<AppRouter>;
  */
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 
-export { type AppRouter, appRouter } from "./root.ts";
+export { appRouter, type AppRouter } from "./root.ts";
 export { createTRPCContext } from "./trpc.ts";
 export type { RouterInputs, RouterOutputs };

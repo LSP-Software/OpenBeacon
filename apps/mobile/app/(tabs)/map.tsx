@@ -1,6 +1,6 @@
 import { View } from "react-native";
 import { Button } from "../../components/Button.tsx";
-import { Text } from "../../components/Text.tsx";
+import { Text } from "../../components/ui/Text.tsx";
 
 export default function MapScreen() {
   return (

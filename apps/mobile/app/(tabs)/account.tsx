@@ -78,7 +78,7 @@ export default function AccountScreen() {
       >
         <View className="items-center py-6 gap-4">
           <View className="w-20 h-20 rounded-full bg-primary items-center justify-center">
-            <Text className="text-on-primary text-2xl font-bold">{initials}</Text>
+            <Text className="text-white text-2xl font-bold">{initials}</Text>
           </View>
           <View className="items-center gap-1">
             <Text className="text-foreground text-2xl font-bold">{name}</Text>

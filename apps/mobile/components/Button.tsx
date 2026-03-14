@@ -1,5 +1,5 @@
 import { Pressable } from "react-native";
-import { Text } from "./Text";
+import { Text } from "./ui/Text.tsx";
 
 type Props = {
   title: string;
@@ -19,7 +19,7 @@ export function Button({ title, onPress, variant = "primary", disabled = false }
         : "bg-transparent";
   const variantLabel =
     variant === "primary"
-      ? "text-on-primary"
+      ? "text-white"
       : variant === "secondary"
         ? "text-primary"
         : "text-text-secondary text-sm";
