@@ -9,9 +9,7 @@ import { Button } from "../../components/Button.tsx";
 import { ProfileImage } from "../../components/ProfileImage.tsx";
 import { queryClient, trpc } from "../../lib/api.ts";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
-import { tryCatch } from "../../lib/tryCatch.ts";
-
-const {
+import {
   cleanupTempFile,
   computeSha256Base64,
   getFileSize,
@@ -20,7 +18,8 @@ const {
   processImage,
   readImageBytes,
   uploadToPresignedUrl,
-} = await import("../../lib/image-upload.ts");
+} from "../../lib/image-upload.ts";
+import { tryCatch } from "../../lib/tryCatch.ts";
 
 const MAX_PFP_IMAGE_RESOLUTION = 512;
 
@@ -123,7 +122,7 @@ const AccountScreen = () => {
     }
 
     const { data: uploadData, error: requestError } = await tryCatch(
-      requestUploadMutation.mutateAsync({ fileSize, contentHash }),
+      requestUploadMutation.mutateAsync({ fileSize: fileSize ?? 0, contentHash }),
     );
     if (requestError) {
       Alert.alert("Upload request failed", requestError.message);
