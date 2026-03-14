@@ -71,14 +71,14 @@ export const accountRouter = {
         });
       }
       if (fileSize === 0) {
-        await tryCatch(deleteFile(PROFILE_IMAGE_PREFIX, input.fileName));
+        await tryCatch(deleteFile(env.S3_BUCKET_NAME, PROFILE_IMAGE_PREFIX, input.fileName));
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Uploaded file is empty (zero bytes). The upload may have failed.",
         });
       }
       if (fileSize > env.MAX_IMAGE_FILE_SIZE) {
-        await tryCatch(deleteFile(PROFILE_IMAGE_PREFIX, input.fileName));
+        await tryCatch(deleteFile(env.S3_BUCKET_NAME, PROFILE_IMAGE_PREFIX, input.fileName));
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: `File size exceeds the maximum allowed size of ${Math.floor(env.MAX_IMAGE_FILE_SIZE / 1024 / 1024)}MB.`,
@@ -100,7 +100,7 @@ export const accountRouter = {
       if (currentUser?.image) {
         const oldKey = extractStorageKey(currentUser.image);
         if (oldKey) {
-          await tryCatch(deleteFile(oldKey.prefix, oldKey.fileName));
+          await tryCatch(deleteFile(env.S3_BUCKET_NAME, oldKey.prefix, oldKey.fileName));
         }
       }
 

@@ -106,21 +106,25 @@ export const getFileSize = async (prefix: string, fileName: string): Promise<num
   return response.ContentLength ?? null;
 };
 
-export const deleteFile = async (prefix: string, fileName: string): Promise<void> => {
+export const deleteFile = async (
+  bucketName: string,
+  prefix: string,
+  fileName: string,
+): Promise<void> => {
   const client = getStorageClient();
   const key = buildKey(prefix, fileName);
 
   const listResult = await tryCatch(
     client.send(
       new ListObjectVersionsCommand({
-        Bucket: env.S3_BUCKET_NAME,
+        Bucket: bucketName,
         Prefix: key,
       }),
     ),
   );
 
   if (listResult.error) {
-    await client.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET_NAME, Key: key }));
+    await client.send(new DeleteObjectCommand({ Bucket: bucketName, Key: key }));
     return;
   }
 
@@ -139,13 +143,13 @@ export const deleteFile = async (prefix: string, fileName: string): Promise<void
   }
 
   if (objectsToDelete.length === 0) {
-    await client.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET_NAME, Key: key }));
+    await client.send(new DeleteObjectCommand({ Bucket: bucketName, Key: key }));
     return;
   }
 
   await client.send(
     new DeleteObjectsCommand({
-      Bucket: env.S3_BUCKET_NAME,
+      Bucket: bucketName,
       Delete: { Objects: objectsToDelete },
     }),
   );
