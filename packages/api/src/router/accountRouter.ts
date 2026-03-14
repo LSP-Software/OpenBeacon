@@ -15,12 +15,10 @@ const PROFILE_IMAGE_PREFIX = "";
 
 export const accountRouter = {
   getProfile: protectedProcedure.query(async ({ ctx }) => {
-    const user = await ctx.db.user.findUnique({
+    return  await ctx.db.user.findUnique({
       where: { id: ctx.session.user.id },
       select: { image: true },
     });
-
-    return { imageUrl: user?.image ?? null };
   }),
 
   requestImageUpload: protectedProcedure
