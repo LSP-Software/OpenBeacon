@@ -44,7 +44,18 @@ export const accountRouter = {
         where: { userId: ctx.session.user.id },
       });
       if (existing) {
-        await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, existing.fileName));
+        const currentUser = await ctx.db.user.findUnique({
+          where: { id: ctx.session.user.id },
+          select: { image: true },
+        });
+        const pendingUrl = buildPublicUrl(ctx.session.user.id, existing.fileName);
+        const isCurrentProfilePicture = currentUser?.image === pendingUrl;
+        if (!isCurrentProfilePicture) {
+          await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, existing.fileName));
+        }
+        await ctx.db.pendingProfileImageUpload.delete({
+          where: { userId: ctx.session.user.id },
+        });
       }
 
       await ctx.db.pendingProfileImageUpload.upsert({
