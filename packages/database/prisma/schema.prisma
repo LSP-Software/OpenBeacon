@@ -75,3 +75,11 @@ model Group {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model PendingProfileImageUpload {
+  userId    String   @id @map("user_id")
+  fileName  String   @map("file_name")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("pending_profile_image_upload")
+}

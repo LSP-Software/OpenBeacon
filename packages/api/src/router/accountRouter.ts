@@ -40,49 +40,71 @@ export const accountRouter = {
         });
       }
 
-      return { presignedUrl, fileName };
-    }),
-
-  confirmImageUpload: protectedProcedure
-    .input(
-      z.object({
-        fileName: z
-          .string()
-          .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.webp$/),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const { data: fileSize, error: verifyError } = await tryCatch(
-        getFileSize(ctx.session.user.id, input.fileName),
-      );
-
-      if (verifyError || fileSize === null || fileSize === 0 || fileSize > env.MAX_IMAGE_FILE_SIZE) {
-        await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, input.fileName));
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: `Upload verification failed: ${verifyError?.message ?? "Unknown error."}`,
-        });
+      const existing = await ctx.db.pendingProfileImageUpload.findUnique({
+        where: { userId: ctx.session.user.id },
+      });
+      if (existing) {
+        await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, existing.fileName));
       }
 
-      const imageUrl = buildPublicUrl(ctx.session.user.id, input.fileName);
-
-      const currentUser = await ctx.db.user.findUnique({
-        where: { id: ctx.session.user.id },
-        select: { image: true },
+      await ctx.db.pendingProfileImageUpload.upsert({
+        where: { userId: ctx.session.user.id },
+        create: { userId: ctx.session.user.id, fileName },
+        update: { fileName },
       });
 
-      await ctx.db.user.update({
-        where: { id: ctx.session.user.id },
-        data: { image: imageUrl },
-      });
-
-      if (currentUser?.image) {
-        const oldKey = extractStorageKey(currentUser.image);
-        if (oldKey) {
-          await tryCatch(deleteFile(env.S3_BUCKET_NAME, oldKey.path, oldKey.fileName));
-        }
-      }
-
-      return { imageUrl };
+      return { presignedUrl };
     }),
+
+  confirmImageUpload: protectedProcedure.mutation(async ({ ctx }) => {
+    const pending = await ctx.db.pendingProfileImageUpload.findUnique({
+      where: { userId: ctx.session.user.id },
+    });
+    if (!pending) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "No pending profile image upload to confirm.",
+      });
+    }
+
+    const { data: fileSize, error: verifyError } = await tryCatch(
+      getFileSize(ctx.session.user.id, pending.fileName),
+    );
+
+    if (verifyError || fileSize === null || fileSize === 0 || fileSize > env.MAX_IMAGE_FILE_SIZE) {
+      await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName));
+      await ctx.db.pendingProfileImageUpload.delete({
+        where: { userId: ctx.session.user.id },
+      });
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: `Upload verification failed: ${verifyError?.message ?? "Unknown error."}`,
+      });
+    }
+
+    const imageUrl = buildPublicUrl(ctx.session.user.id, pending.fileName);
+
+    const currentUser = await ctx.db.user.findUnique({
+      where: { id: ctx.session.user.id },
+      select: { image: true },
+    });
+
+    await ctx.db.user.update({
+      where: { id: ctx.session.user.id },
+      data: { image: imageUrl },
+    });
+
+    await ctx.db.pendingProfileImageUpload.delete({
+      where: { userId: ctx.session.user.id },
+    });
+
+    if (currentUser?.image) {
+      const oldKey = extractStorageKey(currentUser.image);
+      if (oldKey) {
+        await tryCatch(deleteFile(env.S3_BUCKET_NAME, oldKey.path, oldKey.fileName));
+      }
+    }
+
+    return { imageUrl };
+  }),
 } satisfies TRPCRouterRecord;
