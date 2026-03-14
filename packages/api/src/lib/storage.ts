@@ -70,10 +70,6 @@ const buildKey = (prefix: string, fileName: string): string => {
   return prefix ? `${prefix}/${fileName}` : fileName;
 };
 
-const getCdnBase = (): string => {
-  return env.S3_CDN_URL.replace(/\/+$/, "");
-};
-
 export const getPresignedUploadUrl = async (
   prefix: string,
   fileName: string,
@@ -157,13 +153,13 @@ export const deleteFile = async (prefix: string, fileName: string): Promise<void
 
 export const buildPublicUrl = (prefix: string, fileName: string): string => {
   const key = buildKey(prefix, fileName);
-  return `${getCdnBase()}/${env.S3_BUCKET_NAME}/${key}`;
+  return `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}/${key}`;
 };
 
 export const extractStorageKey = (
   imageUrl: string,
 ): { prefix: string; fileName: string } | null => {
-  const baseUrl = `${getCdnBase()}/${env.S3_BUCKET_NAME}`;
+  const baseUrl = `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`;
   if (!imageUrl?.startsWith(baseUrl)) return null;
 
   const path = imageUrl.slice(baseUrl.length + 1);
