@@ -13,7 +13,7 @@ import { tryCatch } from "./tryCatch.ts";
 
 let storageClient: S3Client | null = null;
 
-function getStorageClient(): S3Client {
+const getStorageClient = (): S3Client => {
   if (!storageClient) {
     storageClient = new S3Client({
       endpoint: env.S3_ENDPOINT,
@@ -25,9 +25,9 @@ function getStorageClient(): S3Client {
     });
   }
   return storageClient;
-}
+};
 
-export async function verifyStorageConnectivity(): Promise<void> {
+export const verifyStorageConnectivity = async (): Promise<void> => {
   const client = getStorageClient();
 
   console.log("Verifying storage connectivity...");
@@ -64,22 +64,22 @@ export async function verifyStorageConnectivity(): Promise<void> {
     );
   }
   console.log("S3 bucket connected successfully.");
-}
+};
 
-function buildKey(prefix: string, fileName: string): string {
+const buildKey = (prefix: string, fileName: string): string => {
   return prefix ? `${prefix}/${fileName}` : fileName;
-}
+};
 
-function getCdnBase(): string {
+const getCdnBase = (): string => {
   return env.S3_CDN_URL.replace(/\/+$/, "");
-}
+};
 
-export async function getPresignedUploadUrl(
+export const getPresignedUploadUrl = async (
   prefix: string,
   fileName: string,
   contentType: string,
   contentHash: string,
-): Promise<string> {
+): Promise<string> => {
   const client = getStorageClient();
   const command = new PutObjectCommand({
     Bucket: env.S3_BUCKET_NAME,
@@ -92,9 +92,9 @@ export async function getPresignedUploadUrl(
     signableHeaders: new Set(["x-amz-checksum-sha256"]),
     unhoistableHeaders: new Set(["x-amz-checksum-sha256"]),
   });
-}
+};
 
-export async function getFileSize(prefix: string, fileName: string): Promise<number | null> {
+export const getFileSize = async (prefix: string, fileName: string): Promise<number | null> => {
   const client = getStorageClient();
   const command = new HeadObjectCommand({
     Bucket: env.S3_BUCKET_NAME,
@@ -108,9 +108,9 @@ export async function getFileSize(prefix: string, fileName: string): Promise<num
   }
   if (response.$metadata.httpStatusCode !== 200) return null;
   return response.ContentLength ?? null;
-}
+};
 
-export async function deleteFile(prefix: string, fileName: string): Promise<void> {
+export const deleteFile = async (prefix: string, fileName: string): Promise<void> => {
   const client = getStorageClient();
   const key = buildKey(prefix, fileName);
 
@@ -153,14 +153,16 @@ export async function deleteFile(prefix: string, fileName: string): Promise<void
       Delete: { Objects: objectsToDelete },
     }),
   );
-}
+};
 
-export function buildPublicUrl(prefix: string, fileName: string): string {
+export const buildPublicUrl = (prefix: string, fileName: string): string => {
   const key = buildKey(prefix, fileName);
   return `${getCdnBase()}/${env.S3_BUCKET_NAME}/${key}`;
-}
+};
 
-export function extractStorageKey(imageUrl: string): { prefix: string; fileName: string } | null {
+export const extractStorageKey = (
+  imageUrl: string,
+): { prefix: string; fileName: string } | null => {
   const baseUrl = `${getCdnBase()}/${env.S3_BUCKET_NAME}`;
   if (!imageUrl?.startsWith(baseUrl)) return null;
 
@@ -174,4 +176,4 @@ export function extractStorageKey(imageUrl: string): { prefix: string; fileName:
     prefix: path.slice(0, slashIndex),
     fileName: path.slice(slashIndex + 1),
   };
-}
+};

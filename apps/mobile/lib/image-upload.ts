@@ -7,47 +7,47 @@ import { tryCatch } from "./tryCatch.ts";
 const DEFAULT_IMAGE_SIZE = 1024;
 const IMAGE_QUALITY = 0.85;
 
-function ensureFileUri(path: string): string {
+const ensureFileUri = (path: string): string => {
   if (path.startsWith("file://")) return path;
   return `file://${path}`;
-}
+};
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
+const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   const bytes = new Uint8Array(buffer);
   let binary = "";
   for (const byte of bytes) {
     binary += String.fromCharCode(byte);
   }
   return btoa(binary);
-}
+};
 
 const PICKER_CANCELLED_CODES = ["E_PICKER_CANCELLED", "E_CROPPER_CANCELLED"] as const;
 const CANCELLED_MESSAGES = ["user cancelled", "user canceled", "cancelled image selection"];
 
-function isPickerCancellation(error: unknown): boolean {
+const isPickerCancellation = (error: unknown): boolean => {
   const err = error as { code?: string; message?: string };
   const code = err?.code ?? "";
   const message = (err?.message ?? "").toLowerCase();
   if (PICKER_CANCELLED_CODES.includes(code as (typeof PICKER_CANCELLED_CODES)[number])) return true;
   return CANCELLED_MESSAGES.some((m) => message.includes(m));
-}
+};
 
-export function isPermissionError(error: unknown): boolean {
+export const isPermissionError = (error: unknown): boolean => {
   const err = error as { code?: string; message?: string };
   const code = err?.code ?? "";
   const message = (err?.message ?? "").toLowerCase();
   if (code === "E_NO_LIBRARY_PERMISSION") return true;
   return /permission|grant|access denied|denied access/.test(message);
-}
+};
 
 export type PickImageResult =
   | { ok: true; path: string }
   | { ok: false; cancelled: true }
   | { ok: false; error: Error };
 
-export async function pickAndCropImage(
+export const pickAndCropImage = async (
   size: number = DEFAULT_IMAGE_SIZE,
-): Promise<PickImageResult> {
+): Promise<PickImageResult> => {
   const { data: image, error } = await tryCatch(
     ImageCropPicker.openPicker({
       cropping: true,
@@ -65,42 +65,42 @@ export async function pickAndCropImage(
     return { ok: false, cancelled: true };
   }
   return { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
-}
+};
 
-export async function processImage(
+export const processImage = async (
   uri: string,
   size: number = DEFAULT_IMAGE_SIZE,
-): Promise<string> {
+): Promise<string> => {
   const context = ImageManipulator.manipulate(ensureFileUri(uri));
   const imageRef = await context.resize({ width: size, height: size }).renderAsync();
   const result = await imageRef.saveAsync({ format: SaveFormat.WEBP, compress: IMAGE_QUALITY });
   return result.uri;
-}
+};
 
-export function getFileSize(uri: string): number | undefined {
+export const getFileSize = (uri: string): number | undefined => {
   const size = new FSFile(ensureFileUri(uri)).size;
   if (size === undefined) {
     console.error("Could not determine file size: file may not exist");
     return;
   }
   return size;
-}
+};
 
-export async function readImageBytes(uri: string): Promise<ArrayBuffer> {
+export const readImageBytes = async (uri: string): Promise<ArrayBuffer> => {
   const file = new FSFile(ensureFileUri(uri));
   const bytes = await file.bytes();
   return bytes.buffer;
-}
+};
 
-export async function computeSha256Base64(bytes: ArrayBuffer): Promise<string> {
+export const computeSha256Base64 = async (bytes: ArrayBuffer): Promise<string> => {
   const hashBuffer = await Crypto.digest(
     Crypto.CryptoDigestAlgorithm.SHA256,
     new Uint8Array(bytes),
   );
   return arrayBufferToBase64(hashBuffer);
-}
+};
 
-async function parseS3ErrorBody(response: Response): Promise<string> {
+const parseS3ErrorBody = async (response: Response): Promise<string> => {
   const { data: body } = await tryCatch(response.text());
   if (!body) return "";
 
@@ -110,13 +110,13 @@ async function parseS3ErrorBody(response: Response): Promise<string> {
   if (codeMatch?.[1]) parts.push(codeMatch[1]);
   if (messageMatch?.[1]) parts.push(messageMatch[1]);
   return parts.join(": ");
-}
+};
 
-export async function uploadToPresignedUrl(
+export const uploadToPresignedUrl = async (
   presignedUrl: string,
   bytes: ArrayBuffer,
   contentHash: string,
-): Promise<void> {
+): Promise<void> => {
   const response = await fetch(presignedUrl, {
     method: "PUT",
     body: bytes,
@@ -131,11 +131,11 @@ export async function uploadToPresignedUrl(
     const summary = `Failed to upload image to S3 (HTTP ${response.status.toString()})`;
     throw new Error(detail ? `${summary}\n${detail}` : summary);
   }
-}
+};
 
-export function cleanupTempFile(uri: string): void {
+export const cleanupTempFile = (uri: string): void => {
   const file = new FSFile(ensureFileUri(uri));
   if (file.exists) {
     file.delete();
   }
-}
+};

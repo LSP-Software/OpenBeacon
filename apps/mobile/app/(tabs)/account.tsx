@@ -30,7 +30,7 @@ type SettingRowProps = {
   onPress: () => void;
 };
 
-function SettingRow({ label, sublabel, onPress }: SettingRowProps) {
+const SettingRow = ({ label, sublabel, onPress }: SettingRowProps) => {
   return (
     <Pressable
       onPress={onPress}
@@ -46,9 +46,9 @@ function SettingRow({ label, sublabel, onPress }: SettingRowProps) {
       <ChevronRightIcon />
     </Pressable>
   );
-}
+};
 
-export default function AccountScreen() {
+const AccountScreen = () => {
   const { data: session } = authClient.useSession();
   const { data: profile } = useQuery(trpc.account.getProfile.queryOptions());
   const requestUploadMutation = useMutation(trpc.account.requestImageUpload.mutationOptions());
@@ -62,8 +62,6 @@ export default function AccountScreen() {
 
   const handleEditProfileImage = async () => {
     if (isUploading || isPickerOpen) return;
-
-
 
     setIsPickerOpen(true);
     const pickResult = await pickAndCropImage(MAX_PFP_IMAGE_RESOLUTION);
@@ -219,4 +217,6 @@ export default function AccountScreen() {
       </ScrollView>
     </View>
   );
-}
+};
+
+export default AccountScreen;

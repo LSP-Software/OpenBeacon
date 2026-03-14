@@ -10,12 +10,12 @@ type ProfileImageProps = {
   isLoading: boolean;
 };
 
-export function ProfileImage({
+export const ProfileImage = ({
   imageUrl,
   onEditPress,
   showEditButton = false,
   isLoading = false,
-}: ProfileImageProps) {
+}: ProfileImageProps) => {
   const size = 80;
   const colors = useColors();
   const editButtonSize = Math.round(size * 0.32);
@@ -89,4 +89,4 @@ export function ProfileImage({
       )}
     </View>
   );
-}
+};
