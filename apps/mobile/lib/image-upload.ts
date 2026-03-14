@@ -7,7 +7,6 @@ import { tryCatch } from "./tryCatch.ts";
 const DEFAULT_IMAGE_SIZE = 1024;
 const IMAGE_QUALITY = 0.85;
 
-
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   const bytes = new Uint8Array(buffer);
   let binary = "";

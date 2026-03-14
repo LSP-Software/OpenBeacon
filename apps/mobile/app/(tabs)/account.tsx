@@ -1,26 +1,13 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { ChevronRightIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/Button.tsx";
 import { ProfileImage } from "../../components/ProfileImage.tsx";
-import { queryClient, trpc } from "../../lib/api.ts";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
-import {
-  cleanupTempFile,
-  computeSha256Base64,
-  getFileSize,
-  pickAndCropImage,
-  processImage,
-  readImageBytes,
-  uploadToPresignedUrl,
-} from "../../lib/image-upload.ts";
 import { tryCatch } from "../../lib/tryCatch.ts";
-
-const MAX_PFP_IMAGE_RESOLUTION = 512;
 
 type SettingRowProps = {
   label: string;
@@ -48,72 +35,10 @@ const SettingRow = ({ label, sublabel, onPress }: SettingRowProps) => {
 
 const AccountScreen = () => {
   const { data: session } = authClient.useSession();
-  const { data: profile } = useQuery(trpc.account.getProfile.queryOptions());
-  const requestUploadMutation = useMutation(trpc.account.requestImageUpload.mutationOptions());
-  const confirmUploadMutation = useMutation(trpc.account.confirmImageUpload.mutationOptions());
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
 
   const name = session?.user.name ?? "";
   const email = session?.user.email ?? "";
-
-  const handleEditProfileImage = async () => {
-    if (isUploading || isPickerOpen) return;
-
-    setIsPickerOpen(true);
-    const pickResult = await pickAndCropImage(MAX_PFP_IMAGE_RESOLUTION);
-    setIsPickerOpen(false);
-    if (pickResult.ok) {
-      setIsUploading(true);
-    } else if ("cancelled" in pickResult) {
-      return;
-    } else {
-      Alert.alert("Image selection failed", pickResult.error.message);
-      return;
-    }
-
-    const { data: processedUri, error: processError } = await tryCatch(processImage(pickResult.path, MAX_PFP_IMAGE_RESOLUTION));
-    cleanupTempFile(pickResult.path);
-    if (processError) {
-      Alert.alert("Image processing failed", processError.message);
-      setIsUploading(false);
-      return;
-    }
-
-    const uploadError = await uploadProfilePhoto(processedUri);
-    cleanupTempFile(processedUri);
-    if (uploadError) {
-      Alert.alert("Upload failed", uploadError);
-      setIsUploading(false);
-      return;
-    }
-
-    await queryClient.invalidateQueries({ queryKey: trpc.account.getProfile.queryKey() });
-    setIsUploading(false);
-  };
-
-  const uploadProfilePhoto = async (uri: string): Promise<string | undefined> => {
-    const fileSize = await getFileSize(uri);
-    if (!fileSize) return "unable to get file size";
-
-    const { data: bytes, error: readError } = await tryCatch(readImageBytes(uri));
-    if (readError) return "unable to read image bytes";
-
-    const { data: contentHash, error: hashError } = await tryCatch(computeSha256Base64(bytes));
-    if (hashError) return "unable to compute content hash";
-
-    const { data: uploadData, error: requestError } = await tryCatch(requestUploadMutation.mutateAsync({ fileSize, contentHash }));
-    if (requestError) return "unable to request upload";
-
-    const { error: uploadError } = await tryCatch(uploadToPresignedUrl(uploadData.presignedUrl, bytes, contentHash));
-    if (uploadError) return "unable to upload image";
-
-    const { error: confirmError } = await tryCatch(confirmUploadMutation.mutateAsync({ fileName: uploadData.fileName }),);
-    if (confirmError) return "unable to confirm upload";
-
-    return undefined;
-  };
 
   const handleSignOut = async () => {
     if (isSigningOut) return;
@@ -145,12 +70,7 @@ const AccountScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <View className="items-center py-6 gap-4">
-          <ProfileImage
-            imageUrl={profile?.image ?? null}
-            showEditButton
-            isLoading={isPickerOpen || isUploading}
-            onEditPress={handleEditProfileImage}
-          />
+          <ProfileImage showEditButton />
           <View className="items-center gap-1">
             <Text className="text-foreground text-2xl font-bold">{name}</Text>
             <Text className="text-muted text-sm">{email}</Text>
