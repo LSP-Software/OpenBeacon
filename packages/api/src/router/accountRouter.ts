@@ -15,7 +15,7 @@ const PROFILE_IMAGE_PREFIX = "";
 
 export const accountRouter = {
   getProfile: protectedProcedure.query(async ({ ctx }) => {
-    return  await ctx.db.user.findUnique({
+    return await ctx.db.user.findUnique({
       where: { id: ctx.session.user.id },
       select: { image: true },
     });
@@ -29,7 +29,6 @@ export const accountRouter = {
       }),
     )
     .mutation(async ({ input }) => {
-
       const fileName = `${crypto.randomUUID()}.webp`;
 
       const { data: presignedUrl, error: presignError } = await tryCatch(
