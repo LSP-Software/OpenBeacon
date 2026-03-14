@@ -53,13 +53,17 @@ export const ProfileImage = ({
     const { data: contentHash, error: hashError } = await tryCatch(computeSha256Base64(bytes));
     if (hashError) return "unable to compute content hash";
 
-    const { data: uploadData, error: requestError } = await tryCatch(requestUploadMutation.mutateAsync({ fileSize, contentHash }));
+    const { data: uploadData, error: requestError } = await tryCatch(
+      requestUploadMutation.mutateAsync({ fileSize, contentHash }),
+    );
     if (requestError) return "unable to request upload";
 
-    const { error: uploadError } = await tryCatch(uploadToPresignedUrl(uploadData.presignedUrl, bytes, contentHash));
+    const { error: uploadError } = await tryCatch(
+      uploadToPresignedUrl(uploadData.presignedUrl, bytes, contentHash),
+    );
     if (uploadError) return "unable to upload image";
 
-    const { error: confirmError } = await tryCatch(confirmUploadMutation.mutateAsync({ fileName: uploadData.fileName }));
+    const { error: confirmError } = await tryCatch(confirmUploadMutation.mutateAsync());
     if (confirmError) return "unable to confirm upload";
 
     return undefined;
@@ -80,7 +84,9 @@ export const ProfileImage = ({
       return;
     }
 
-    const { data: processedUri, error: processError } = await tryCatch(processImage(pickResult.path, MAX_PFP_IMAGE_RESOLUTION));
+    const { data: processedUri, error: processError } = await tryCatch(
+      processImage(pickResult.path, MAX_PFP_IMAGE_RESOLUTION),
+    );
     cleanupTempFile(pickResult.path);
     if (processError) {
       Alert.alert("Image processing failed", processError.message);
