@@ -7,7 +7,6 @@
   "scripts": {
     "start": "expo start",
     "dev": "expo start --android --ios",
-    "android:handlejava": "bun run ./scripts/run-android.ts",
     "android": "expo prebuild -p android && expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
