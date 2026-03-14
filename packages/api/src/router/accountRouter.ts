@@ -83,17 +83,26 @@ export const accountRouter = {
     );
 
     if (verifyError) {
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Upload verification failed: ${verifyError.message ?? "Unknown error."}` });
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: `Upload verification failed: ${verifyError.message ?? "Unknown error."}`,
+      });
     }
     if (fileSize === null || fileSize === 0) {
       await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName));
       await ctx.db.pendingProfileImageUpload.delete({ where: { userId: ctx.session.user.id } });
-      throw new TRPCError({ code: "BAD_REQUEST", message: "Uploaded file not found or is empty in storage." });
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Uploaded file not found or is empty in storage.",
+      });
     }
     if (fileSize > env.MAX_IMAGE_FILE_SIZE) {
       await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName));
       await ctx.db.pendingProfileImageUpload.delete({ where: { userId: ctx.session.user.id } });
-      throw new TRPCError({ code: "BAD_REQUEST", message: "Uploaded file exceeds the maximum allowed size." });
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Uploaded file exceeds the maximum allowed size.",
+      });
     }
 
     const imageUrl = buildPublicUrl(ctx.session.user.id, pending.fileName);
