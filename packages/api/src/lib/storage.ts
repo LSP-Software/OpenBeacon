@@ -102,7 +102,6 @@ export const getFileSize = async (path: string, fileName: string): Promise<numbe
     if (name === "NotFound" || name === "NoSuchKey") return null;
     throw responseError;
   }
-  if (response.$metadata.httpStatusCode !== 200) return null;
   return response.ContentLength ?? null;
 };
 
