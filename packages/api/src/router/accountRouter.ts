@@ -105,9 +105,11 @@ export const accountRouter = {
       data: { image: imageUrl },
     });
 
-    await tryCatch(ctx.db.pendingProfileImageUpload.delete({
-      where: { userId: ctx.session.user.id },
-    }));
+    await tryCatch(
+      ctx.db.pendingProfileImageUpload.delete({
+        where: { userId: ctx.session.user.id },
+      }),
+    );
 
     if (currentUser?.image) {
       const oldKey = extractStorageKey(currentUser.image);
