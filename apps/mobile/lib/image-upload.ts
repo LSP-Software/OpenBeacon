@@ -100,18 +100,6 @@ export const computeSha256Base64 = async (bytes: ArrayBuffer): Promise<string> =
   return arrayBufferToBase64(hashBuffer);
 };
 
-const parseS3ErrorBody = async (response: Response): Promise<string> => {
-  const { data: body } = await tryCatch(response.text());
-  if (!body) return "";
-
-  const codeMatch = body.match(/<Code>(.+?)<\/Code>/);
-  const messageMatch = body.match(/<Message>(.+?)<\/Message>/);
-  const parts: string[] = [];
-  if (codeMatch?.[1]) parts.push(codeMatch[1]);
-  if (messageMatch?.[1]) parts.push(messageMatch[1]);
-  return parts.join(": ");
-};
-
 export const uploadToPresignedUrl = async (
   presignedUrl: string,
   bytes: ArrayBuffer,
@@ -127,9 +115,8 @@ export const uploadToPresignedUrl = async (
   });
 
   if (!response.ok) {
-    const detail = await parseS3ErrorBody(response);
     const summary = `Failed to upload image to S3 (HTTP ${response.status.toString()})`;
-    throw new Error(detail ? `${summary}\n${detail}` : summary);
+    throw new Error(`${summary}\n${response}`);
   }
 };
 
