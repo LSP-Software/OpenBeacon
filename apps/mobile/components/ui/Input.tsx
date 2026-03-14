@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { type Control, Controller, type FieldPath, type FieldValues } from "react-hook-form";
-import { Platform, TextInput, type TextInputProps } from "react-native";
+import { Platform, TextInput, type TextInputProps, View } from "react-native";
 import { cn } from "../../lib/cn";
-import { Field, FieldError } from "./Field";
+import { Field, FieldDescription, FieldError, FieldLabel } from "./Field";
 
 type FormInputProps<TFieldValues extends FieldValues, TName extends FieldPath<TFieldValues>> = Omit<
   TextInputProps,
@@ -10,7 +10,8 @@ type FormInputProps<TFieldValues extends FieldValues, TName extends FieldPath<TF
 > & {
   control: Control<TFieldValues>;
   name: TName;
-  label: string;
+  label?: string;
+  description?: string;
   fieldClassName?: string;
   hideError?: boolean;
 };
@@ -19,6 +20,7 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
   control,
   name,
   label,
+  description,
   fieldClassName,
   hideError = false,
   className,
@@ -35,8 +37,19 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
       render={({ field, fieldState }) => {
         return (
           <Field data-invalid={fieldState.invalid}>
+            <View className="flex flex-col">
+              {label && (
+                <FieldLabel className="text-lg font-medium" htmlFor={name}>
+                  {label}
+                </FieldLabel>
+              )}
+              {description && (
+                <FieldDescription>Choose a name that describes your group.</FieldDescription>
+              )}
+            </View>
             <TextInput
               {...field}
+              autoComplete="off"
               onChangeText={field.onChange}
               onFocus={() => setInputFocused(true)}
               onBlur={() => {

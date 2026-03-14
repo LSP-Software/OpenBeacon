@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createGroupSchema } from "@openbeacon/schemas";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import type z from "zod";
 import { trpc } from "../../lib/api";
@@ -14,6 +14,7 @@ interface CreateGroupDialogProps {
 }
 
 export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => {
+  const queryClient = useQueryClient();
   const createGroupMutation = useMutation(trpc.groups.create.mutationOptions());
 
   const form = useForm<z.infer<typeof createGroupSchema>>({
@@ -26,14 +27,19 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
   });
 
   const onSubmit = async (data: z.infer<typeof createGroupSchema>) => {
-    console.log("submitted", data);
-
     await createGroupMutation.mutateAsync(data, {
       onError: (error) => {
         console.log("error", error);
       },
       onSuccess: (data) => {
-        console.log("success", data);
+        queryClient.setQueryData(trpc.groups.list.queryKey(), (previous) => {
+          if (!previous) {
+            return [data.newGroup];
+          }
+          return [data.newGroup, ...previous];
+        });
+        form.reset();
+        setOpen(false);
       },
     });
   };

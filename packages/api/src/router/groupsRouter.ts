@@ -3,6 +3,18 @@ import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { protectedProcedure } from "../trpc.ts";
 
+interface GroupListItem {
+  id: string;
+  name: string;
+  image: string | null;
+  members: {
+    id: string;
+    name: string;
+    image: string | null;
+    role: GroupRole;
+  }[];
+}
+
 export const groupsRouter = {
   invites: protectedProcedure.query(async ({ ctx }) => {
     return [
@@ -47,17 +59,20 @@ export const groupsRouter = {
       },
     });
 
-    return groups.map((group) => ({
-      id: group.id,
-      name: group.name,
-      image: group.image,
-      members: group.groupMembers.map((member) => ({
-        id: member.id,
-        name: member.user.name,
-        image: member.user.image,
-        role: member.role,
-      })),
-    }));
+    return groups.map(
+      (group) =>
+        ({
+          id: group.id,
+          name: group.name,
+          image: group.image,
+          members: group.groupMembers.map((member) => ({
+            id: member.id,
+            name: member.user.name,
+            image: member.user.image,
+            role: member.role,
+          })),
+        }) satisfies GroupListItem,
+    );
   }),
   create: protectedProcedure
     .input(
@@ -76,6 +91,21 @@ export const groupsRouter = {
             },
           },
         },
+        include: {
+          groupMembers: {
+            select: {
+              id: true,
+              role: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  image: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       if (!group) {
@@ -84,6 +114,17 @@ export const groupsRouter = {
 
       return {
         message: "Group created successfully",
+        newGroup: {
+          id: group.id,
+          name: group.name,
+          image: group.image,
+          members: group.groupMembers.map((member) => ({
+            id: member.id,
+            name: member.user.name,
+            image: member.user.image,
+            role: member.role,
+          })),
+        } satisfies GroupListItem,
       };
     }),
   delete: protectedProcedure

@@ -52,8 +52,9 @@ export default function GroupsScreen() {
             className="w-10 h-10 rounded-full items-center justify-center bg-primary"
             accessibilityRole="button"
             accessibilityLabel="Create new group"
+            onPress={() => setCreateGroupDialogOpen(true)}
           >
-            <PlusIcon color="white" size={16} onPress={() => setCreateGroupDialogOpen(true)} />
+            <PlusIcon color="white" size={16} />
           </Pressable>
         </View>
       </SafeAreaView>
