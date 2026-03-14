@@ -73,9 +73,7 @@ const AccountScreen = () => {
       return;
     }
 
-    const { data: processedUri, error: processError } = await tryCatch(
-      processImage(pickResult.path, MAX_PFP_IMAGE_RESOLUTION),
-    );
+    const { data: processedUri, error: processError } = await tryCatch(processImage(pickResult.path, MAX_PFP_IMAGE_RESOLUTION));
     cleanupTempFile(pickResult.path);
     if (processError) {
       Alert.alert("Image processing failed", processError.message);
@@ -83,65 +81,38 @@ const AccountScreen = () => {
       return;
     }
 
-    const { data: fileSize, error: fileSizeError } = await tryCatch(
-      Promise.resolve().then(() => getFileSize(processedUri)),
-    );
-    if (fileSizeError) {
-      Alert.alert("Image processing failed", fileSizeError.message);
-      cleanupTempFile(processedUri);
-      setIsUploading(false);
-      return;
-    }
-
-    const { data: bytes, error: readError } = await tryCatch(readImageBytes(processedUri));
-    if (readError) {
-      Alert.alert("Image processing failed", readError.message);
-      cleanupTempFile(processedUri);
-      setIsUploading(false);
-      return;
-    }
-
-    const { data: contentHash, error: hashError } = await tryCatch(computeSha256Base64(bytes));
-    if (hashError) {
-      Alert.alert("Image processing failed", hashError.message);
-      cleanupTempFile(processedUri);
-      setIsUploading(false);
-      return;
-    }
-
-    const { data: uploadData, error: requestError } = await tryCatch(
-      requestUploadMutation.mutateAsync({ fileSize: fileSize ?? 0, contentHash }),
-    );
-    if (requestError) {
-      Alert.alert("Upload request failed", requestError.message);
-      cleanupTempFile(processedUri);
-      setIsUploading(false);
-      return;
-    }
-
-    const { error: uploadError } = await tryCatch(
-      uploadToPresignedUrl(uploadData.presignedUrl, bytes, contentHash),
-    );
-    if (uploadError) {
-      Alert.alert("Image upload failed", uploadError.message);
-      cleanupTempFile(processedUri);
-      setIsUploading(false);
-      return;
-    }
-
-    const { error: confirmError } = await tryCatch(
-      confirmUploadMutation.mutateAsync({ fileName: uploadData.fileName }),
-    );
-    if (confirmError) {
-      Alert.alert("Upload confirmation failed", confirmError.message);
-      cleanupTempFile(processedUri);
-      setIsUploading(false);
-      return;
-    }
-
+    const uploadError = await uploadProfilePhoto(processedUri);
     cleanupTempFile(processedUri);
+    if (uploadError) {
+      Alert.alert("Upload failed", uploadError);
+      setIsUploading(false);
+      return;
+    }
+
     await queryClient.invalidateQueries({ queryKey: trpc.account.getProfile.queryKey() });
     setIsUploading(false);
+  };
+
+  const uploadProfilePhoto = async (uri: string): Promise<string | undefined> => {
+    const fileSize = await getFileSize(uri);
+    if (!fileSize) return "unable to get file size";
+
+    const { data: bytes, error: readError } = await tryCatch(readImageBytes(uri));
+    if (readError) return "unable to read image bytes";
+
+    const { data: contentHash, error: hashError } = await tryCatch(computeSha256Base64(bytes));
+    if (hashError) return "unable to compute content hash";
+
+    const { data: uploadData, error: requestError } = await tryCatch(requestUploadMutation.mutateAsync({ fileSize, contentHash }));
+    if (requestError) return "unable to request upload";
+
+    const { error: uploadError } = await tryCatch(uploadToPresignedUrl(uploadData.presignedUrl, bytes, contentHash));
+    if (uploadError) return "unable to upload image";
+
+    const { error: confirmError } = await tryCatch(confirmUploadMutation.mutateAsync({ fileName: uploadData.fileName }),);
+    if (confirmError) return "unable to confirm upload";
+
+    return undefined;
   };
 
   const handleSignOut = async () => {
