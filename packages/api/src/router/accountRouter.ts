@@ -95,16 +95,16 @@ export const accountRouter = {
       });
     }
     if (fileSize === null || fileSize === 0) {
-      await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName));
-      await ctx.db.pendingProfileImageUpload.delete({ where: { userId: ctx.session.user.id } });
+      await tryCatch(tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName)));
+      await tryCatch(ctx.db.pendingProfileImageUpload.delete({ where: { userId: ctx.session.user.id } }));
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "Uploaded file not found or is empty in storage.",
       });
     }
     if (fileSize > env.MAX_IMAGE_FILE_SIZE) {
-      await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName));
-      await ctx.db.pendingProfileImageUpload.delete({ where: { userId: ctx.session.user.id } });
+      await tryCatch(tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName)));
+      await tryCatch(ctx.db.pendingProfileImageUpload.delete({ where: { userId: ctx.session.user.id } }));
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "Uploaded file exceeds the maximum allowed size.",
