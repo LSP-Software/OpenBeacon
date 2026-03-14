@@ -11,6 +11,14 @@ import {
 import { tryCatch } from "../lib/tryCatch.ts";
 import { protectedProcedure } from "../trpc.ts";
 
+const userIdToLockKey = (userId: string): number => {
+  let h = 0;
+  for (let i = 0; i < userId.length; i++) {
+    h = ((h << 5) - h + userId.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+};
+
 export const accountRouter = {
   getProfile: protectedProcedure.query(async ({ ctx }) => {
     return await ctx.db.user.findUnique({
@@ -40,29 +48,27 @@ export const accountRouter = {
         });
       }
 
-      const existing = await ctx.db.pendingProfileImageUpload.findUnique({
-        where: { userId: ctx.session.user.id },
-      });
-      if (existing) {
-        const currentUser = await ctx.db.user.findUnique({
-          where: { id: ctx.session.user.id },
-          select: { image: true },
-        });
-        const pendingUrl = buildPublicUrl(ctx.session.user.id, existing.fileName);
-        const isCurrentProfilePicture = currentUser?.image === pendingUrl;
-        if (!isCurrentProfilePicture) {
-          await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, existing.fileName));
-        }
-        await ctx.db.pendingProfileImageUpload.delete({
-          where: { userId: ctx.session.user.id },
-        });
-      }
+      let oldFileName: string | null = null;
+      const userId = ctx.session.user.id;
 
-      await ctx.db.pendingProfileImageUpload.upsert({
-        where: { userId: ctx.session.user.id },
-        create: { userId: ctx.session.user.id, fileName },
-        update: { fileName },
+      await ctx.db.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${userIdToLockKey(userId)})`;
+        const existing = await tx.pendingProfileImageUpload.findUnique({
+          where: { userId },
+          select: { fileName: true },
+        });
+        if (existing) {
+          oldFileName = existing.fileName;
+          await tx.pendingProfileImageUpload.delete({ where: { userId } });
+        }
+        await tx.pendingProfileImageUpload.create({
+          data: { userId, fileName },
+        });
       });
+
+      if (oldFileName) {
+        await tryCatch(deleteFile(env.S3_BUCKET_NAME, userId, oldFileName));
+      }
 
       return { presignedUrl };
     }),
