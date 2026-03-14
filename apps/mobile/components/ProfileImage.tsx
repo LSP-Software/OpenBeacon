@@ -6,9 +6,9 @@ import { useColors } from "../lib/theme.ts";
 type ProfileImageProps = {
   imageUrl: string | null;
   size: number;
-  onEditPress?: () => void;
-  showEditButton?: boolean;
-  isLoading?: boolean;
+  onEditPress: () => void;
+  showEditButton: boolean;
+  isLoading: boolean;
 };
 
 export function ProfileImage({
