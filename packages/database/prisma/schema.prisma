@@ -8,15 +8,16 @@ datasource db {
 }
 
 model User {
-  id            String    @id
-  name          String
-  email         String    @unique(map: "user_email_unique")
-  emailVerified Boolean   @default(false) @map("email_verified")
-  image         String?
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  sessions      Session[]
-  accounts      Account[]
+  id                       String                     @id
+  name                     String
+  email                    String                     @unique(map: "user_email_unique")
+  emailVerified            Boolean                    @default(false) @map("email_verified")
+  image                    String?
+  createdAt                DateTime                   @default(now()) @map("created_at")
+  updatedAt                DateTime                   @updatedAt @map("updated_at")
+  sessions                 Session[]
+  accounts                 Account[]
+  pendingProfileImageUpload PendingProfileImageUpload?
 
   @@map("user")
 }
@@ -80,6 +81,7 @@ model PendingProfileImageUpload {
   userId    String   @id @map("user_id")
   fileName  String   @map("file_name")
   createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("pending_profile_image_upload")
 }
