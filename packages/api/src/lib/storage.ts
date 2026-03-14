@@ -66,12 +66,12 @@ export const verifyStorageConnectivity = async (): Promise<void> => {
   console.log("S3 bucket connected successfully.");
 };
 
-const buildKey = (prefix: string, fileName: string): string => {
-  return prefix ? `${prefix}/${fileName}` : fileName;
+const buildKey = (path: string, fileName: string): string => {
+  return path ? `${path}/${fileName}` : fileName;
 };
 
 export const getPresignedUploadUrl = async (
-  prefix: string,
+  path: string,
   fileName: string,
   contentType: string,
   contentHash: string,
@@ -79,7 +79,7 @@ export const getPresignedUploadUrl = async (
   const client = getStorageClient();
   const command = new PutObjectCommand({
     Bucket: env.S3_BUCKET_NAME,
-    Key: buildKey(prefix, fileName),
+    Key: buildKey(path, fileName),
     ContentType: contentType,
     ChecksumSHA256: contentHash,
   });
@@ -90,11 +90,11 @@ export const getPresignedUploadUrl = async (
   });
 };
 
-export const getFileSize = async (prefix: string, fileName: string): Promise<number | null> => {
+export const getFileSize = async (path: string, fileName: string): Promise<number | null> => {
   const client = getStorageClient();
   const command = new HeadObjectCommand({
     Bucket: env.S3_BUCKET_NAME,
-    Key: buildKey(prefix, fileName),
+    Key: buildKey(path, fileName),
   });
   const { data: response, error: responseError } = await tryCatch(client.send(command));
   if (responseError) {
@@ -108,11 +108,11 @@ export const getFileSize = async (prefix: string, fileName: string): Promise<num
 
 export const deleteFile = async (
   bucketName: string,
-  prefix: string,
+  path: string,
   fileName: string,
 ): Promise<void> => {
   const client = getStorageClient();
-  const key = buildKey(prefix, fileName);
+  const key = buildKey(path, fileName);
 
   const listResult = await tryCatch(
     client.send(
@@ -155,14 +155,12 @@ export const deleteFile = async (
   );
 };
 
-export const buildPublicUrl = (prefix: string, fileName: string): string => {
-  const key = buildKey(prefix, fileName);
+export const buildPublicUrl = (path: string, fileName: string): string => {
+  const key = buildKey(path, fileName);
   return `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}/${key}`;
 };
 
-export const extractStorageKey = (
-  imageUrl: string,
-): { prefix: string; fileName: string } | null => {
+export const extractStorageKey = (imageUrl: string): { path: string; fileName: string } | null => {
   const baseUrl = `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`;
   if (!imageUrl?.startsWith(baseUrl)) return null;
 
@@ -170,10 +168,10 @@ export const extractStorageKey = (
   if (!path) return null;
 
   const slashIndex = path.indexOf("/");
-  if (slashIndex === -1) return { prefix: "", fileName: path };
+  if (slashIndex === -1) return { path: "", fileName: path };
 
   return {
-    prefix: path.slice(0, slashIndex),
+    path: path.slice(0, slashIndex),
     fileName: path.slice(slashIndex + 1),
   };
 };

@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { ChevronRightIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/Button.tsx";
 import { ProfileImage } from "../../components/ProfileImage.tsx";

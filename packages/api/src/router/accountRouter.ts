@@ -11,8 +11,6 @@ import {
 import { tryCatch } from "../lib/tryCatch.ts";
 import { protectedProcedure } from "../trpc.ts";
 
-const PROFILE_IMAGE_PREFIX = "";
-
 export const accountRouter = {
   getProfile: protectedProcedure.query(async ({ ctx }) => {
     return await ctx.db.user.findUnique({
@@ -28,11 +26,11 @@ export const accountRouter = {
         contentHash: z.string(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const fileName = `${crypto.randomUUID()}.webp`;
 
       const { data: presignedUrl, error: presignError } = await tryCatch(
-        getPresignedUploadUrl(PROFILE_IMAGE_PREFIX, fileName, "image/webp", input.contentHash),
+        getPresignedUploadUrl(ctx.session.user.id, fileName, "image/webp", input.contentHash),
       );
 
       if (presignError) {
@@ -55,7 +53,7 @@ export const accountRouter = {
     )
     .mutation(async ({ ctx, input }) => {
       const { data: fileSize, error: verifyError } = await tryCatch(
-        getFileSize(PROFILE_IMAGE_PREFIX, input.fileName),
+        getFileSize(ctx.session.user.id, input.fileName),
       );
 
       if (verifyError) {
@@ -71,21 +69,21 @@ export const accountRouter = {
         });
       }
       if (fileSize === 0) {
-        await tryCatch(deleteFile(env.S3_BUCKET_NAME, PROFILE_IMAGE_PREFIX, input.fileName));
+        await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, input.fileName));
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Uploaded file is empty (zero bytes). The upload may have failed.",
         });
       }
       if (fileSize > env.MAX_IMAGE_FILE_SIZE) {
-        await tryCatch(deleteFile(env.S3_BUCKET_NAME, PROFILE_IMAGE_PREFIX, input.fileName));
+        await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, input.fileName));
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: `File size exceeds the maximum allowed size of ${Math.floor(env.MAX_IMAGE_FILE_SIZE / 1024 / 1024)}MB.`,
         });
       }
 
-      const imageUrl = buildPublicUrl(PROFILE_IMAGE_PREFIX, input.fileName);
+      const imageUrl = buildPublicUrl(ctx.session.user.id, input.fileName);
 
       const currentUser = await ctx.db.user.findUnique({
         where: { id: ctx.session.user.id },
@@ -100,7 +98,7 @@ export const accountRouter = {
       if (currentUser?.image) {
         const oldKey = extractStorageKey(currentUser.image);
         if (oldKey) {
-          await tryCatch(deleteFile(env.S3_BUCKET_NAME, oldKey.prefix, oldKey.fileName));
+          await tryCatch(deleteFile(env.S3_BUCKET_NAME, oldKey.path, oldKey.fileName));
         }
       }
 
