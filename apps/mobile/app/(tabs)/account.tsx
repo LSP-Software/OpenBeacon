@@ -11,6 +11,17 @@ import { queryClient, trpc } from "../../lib/api.ts";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
 import { tryCatch } from "../../lib/tryCatch.ts";
 
+const {
+  cleanupTempFile,
+  computeSha256Base64,
+  getFileSize,
+  isPermissionError,
+  pickAndCropImage,
+  processImage,
+  readImageBytes,
+  uploadToPresignedUrl,
+} = await import("../../lib/image-upload.ts");
+
 const MAX_PFP_IMAGE_RESOLUTION = 512;
 
 type SettingRowProps = {
@@ -52,16 +63,7 @@ export default function AccountScreen() {
   const handleEditProfileImage = async () => {
     if (isUploading || isPickerOpen) return;
 
-    const {
-      cleanupTempFile,
-      computeSha256Base64,
-      getFileSize,
-      isPermissionError,
-      pickAndCropImage,
-      processImage,
-      readImageBytes,
-      uploadToPresignedUrl,
-    } = await import("../../lib/image-upload.ts");
+
 
     setIsPickerOpen(true);
     const pickResult = await pickAndCropImage(MAX_PFP_IMAGE_RESOLUTION);
