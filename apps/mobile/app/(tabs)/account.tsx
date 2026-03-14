@@ -187,7 +187,7 @@ const AccountScreen = () => {
       >
         <View className="items-center py-6 gap-4">
           <ProfileImage
-            imageUrl={profile?.imageUrl ?? null}
+            imageUrl={profile?.image ?? null}
             showEditButton
             isLoading={isPickerOpen || isUploading}
             onEditPress={handleEditProfileImage}
