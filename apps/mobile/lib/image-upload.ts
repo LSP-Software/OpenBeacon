@@ -92,7 +92,7 @@ export const uploadToPresignedUrl = async (
 
   if (!response.ok) {
     const summary = `Failed to upload image to S3 (HTTP ${response.status.toString()})`;
-    throw new Error(`${summary}\n${response.body}`);
+    throw new Error(`${summary}\n${response.text()}`);
   }
 };
 
