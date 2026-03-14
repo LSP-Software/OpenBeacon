@@ -11,13 +11,7 @@ import { queryClient, trpc } from "../../lib/api.ts";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
 import { tryCatch } from "../../lib/tryCatch.ts";
 
-const DEFAULT_MAX_PFP_IMAGE_RESOLUTION = 1024;
-// biome-ignore lint/complexity/useLiteralKeys: TS index signature requires bracket access
-const envMaxPfpResolution = process.env["EXPO_PUBLIC_MAX_PFP_IMAGE_RESOLUTION"];
-const MAX_PFP_IMAGE_RESOLUTION =
-  envMaxPfpResolution !== undefined
-    ? Number.parseInt(envMaxPfpResolution, 10) || DEFAULT_MAX_PFP_IMAGE_RESOLUTION
-    : DEFAULT_MAX_PFP_IMAGE_RESOLUTION;
+const MAX_PFP_IMAGE_RESOLUTION = 512;
 
 type SettingRowProps = {
   label: string;
