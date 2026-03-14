@@ -73,7 +73,7 @@ export const getFileSize = (uri: string): number | undefined => {
 export const readImageBytes = async (uri: string): Promise<ArrayBuffer> => {
   const file = new FSFile(uri);
   const bytes = await file.bytes();
-  return bytes.buffer;
+  return bytes.slice().buffer;
 };
 
 export const uploadToPresignedUrl = async (
