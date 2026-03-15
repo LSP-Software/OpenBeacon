@@ -100,7 +100,7 @@ export const accountRouter = {
         message: `Upload verification failed: ${verifyError.message ?? "Unknown error."}`,
       });
     }
-    if (fileSize === null || fileSize === 0) {
+    if (!fileSize) {
       await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName));
       await tryCatch(
         ctx.db.pendingProfileImageUpload.delete({ where: { userId: ctx.session.user.id } }),

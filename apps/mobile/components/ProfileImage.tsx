@@ -45,35 +45,32 @@ export const ProfileImage = ({
 
   const uploadProfilePhoto = async (
     uri: string,
-  ): Promise<{ data: string | null; error: string | null }> => {
+  ): Promise<{ data?: string | null; error?: string | Error | null }> => {
     const fileSize = getFileSize(uri);
-    if (fileSize === undefined) return { data: null, error: "unable to get file size" };
+    if (fileSize === undefined) return { error: "unable to get file size" };
 
     const { data: bytes, error: readError } = await tryCatch(readImageBytes(uri));
-    if (readError) return { data: null, error: `Unable to read image bytes: ${readError.message}` };
+    if (readError) return { error: `Unable to read image bytes: ${readError.message}` };
 
     const { data: contentHash, error: hashError } = await tryCatch(computeSha256Base64(bytes));
-    if (hashError)
-      return { data: null, error: `Unable to compute content hash: ${hashError.message}` };
+    if (hashError) return { error: `Unable to compute content hash: ${hashError.message}` };
 
     const { data: uploadData, error: requestError } = await tryCatch(
       requestUploadMutation.mutateAsync({ fileSize, contentHash }),
     );
-    if (requestError)
-      return { data: null, error: `Unable to request upload: ${requestError.message}` };
+    if (requestError) return { error: `Unable to request upload: ${requestError.message}` };
 
     const { error: uploadError } = await tryCatch(
       uploadToPresignedUrl(uploadData.presignedUrl, bytes, contentHash),
     );
-    if (uploadError) return { data: null, error: `Unable to upload image: ${uploadError.message}` };
+    if (uploadError) return { error: `Unable to upload image: ${uploadError.message}` };
 
     const { data: confirmData, error: confirmError } = await tryCatch(
       confirmUploadMutation.mutateAsync(),
     );
-    if (confirmError)
-      return { data: null, error: `Unable to confirm upload: ${confirmError.message}` };
+    if (confirmError) return { error: `Unable to confirm upload: ${confirmError.message}` };
 
-    return { data: confirmData.imageUrl, error: null };
+    return { data: confirmData.imageUrl };
   };
 
   const handleEditPress = async () => {
@@ -104,12 +101,17 @@ export const ProfileImage = ({
     const { data: imageUrl, error: uploadError } = await uploadProfilePhoto(processedUri);
     cleanupTempFile(processedUri);
     if (uploadError) {
-      Alert.alert("Upload failed", uploadError);
+      Alert.alert(
+        "Upload failed",
+        uploadError instanceof Error ? uploadError.message : uploadError,
+      );
       setIsUploading(false);
       return;
     }
 
-    await queryClient.setQueryData(trpc.account.getProfile.queryKey(), { image: imageUrl });
+    if (imageUrl){
+      await queryClient.setQueryData(trpc.account.getProfile.queryKey(), { image: imageUrl });
+    }
     setIsUploading(false);
   };
 
