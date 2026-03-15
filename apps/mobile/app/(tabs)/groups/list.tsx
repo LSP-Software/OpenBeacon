@@ -1,16 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "expo-router";
 import { ChevronRightIcon, PlusIcon, ShieldIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button } from "../../components/Button.tsx";
-import { CreateGroupDialog } from "../../components/dialogs/CreateGroupDialog.tsx";
-import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
-import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/Avatar.tsx";
-import { Card, CardDescription, CardHeader, CardTitle } from "../../components/ui/Card.tsx";
-import { Icon } from "../../components/ui/Icon.tsx";
-import { Text } from "../../components/ui/Text.tsx";
-import { type RouterOutputs, trpc } from "../../lib/api.ts";
+import { Button } from "../../../components/Button";
+import { CreateGroupDialog } from "../../../components/dialogs/CreateGroupDialog";
+import { LoadingIndicator } from "../../../components/LoadingIndicator";
+import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/Avatar";
+import { Card, CardDescription, CardHeader, CardTitle } from "../../../components/ui/Card";
+import { Icon } from "../../../components/ui/Icon";
+import { Text } from "../../../components/ui/Text";
+import { type RouterOutputs, trpc } from "../../../lib/api";
 
 export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
@@ -31,7 +32,7 @@ export default function GroupsScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1">
       <Button
         title="Refresh"
         onPress={() => {
@@ -146,51 +147,53 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
             const membersToShow = group.members.slice(0, maxMembersToShow);
 
             return (
-              <Card key={group.id}>
-                <CardHeader className="flex-row items-center justify-between">
-                  <View className="flex-row items-center gap-3">
-                    <Avatar alt={`${group.name}'s image`} className="size-12">
-                      <AvatarImage source={{ uri: group.image ?? "" }} />
-                      <AvatarFallback>
-                        <Text className="font-bold">
-                          {(group.name.charAt(0) + group.name.charAt(1)).toUpperCase()}
-                        </Text>
-                      </AvatarFallback>
-                    </Avatar>
-                    <View className="gap-1">
-                      <CardTitle>{group.name}</CardTitle>
-                      <CardDescription>{group.members.length} members</CardDescription>
-                    </View>
-                  </View>
-
-                  <View className="flex-row items-center gap-4">
-                    <View className="flex-row items-center">
-                      {membersToShow.map((member) => (
-                        <Avatar
-                          key={member.id}
-                          alt={member.name}
-                          className="border border-card size-8 -mr-2"
-                        >
-                          <AvatarImage source={{ uri: member.image ?? "" }} />
-                          <AvatarFallback>
-                            <Text className="font-bold">
-                              {(member.name.charAt(0) + member.name.charAt(1)).toUpperCase()}
-                            </Text>
-                          </AvatarFallback>
-                        </Avatar>
-                      ))}
-                      {group.members.length > maxMembersToShow && (
-                        <View className="size-8 rounded-full bg-gray-100 border border-card flex items-center justify-center">
-                          <Text className="font-medium text-secondary">
-                            +{group.members.length - maxMembersToShow}
+              <Link href={`/groups/${group.id}`} key={group.id}>
+                <Card className="w-full">
+                  <CardHeader className="flex-row items-center justify-between">
+                    <View className="flex-row items-center gap-3">
+                      <Avatar alt={`${group.name}'s image`} className="size-12">
+                        <AvatarImage source={{ uri: group.image ?? "" }} />
+                        <AvatarFallback>
+                          <Text className="font-bold">
+                            {(group.name.charAt(0) + group.name.charAt(1)).toUpperCase()}
                           </Text>
-                        </View>
-                      )}
+                        </AvatarFallback>
+                      </Avatar>
+                      <View className="gap-1">
+                        <CardTitle>{group.name}</CardTitle>
+                        <CardDescription>{group.members.length} members</CardDescription>
+                      </View>
                     </View>
-                    <Icon as={ChevronRightIcon} size={20} className="text-muted-foreground" />
-                  </View>
-                </CardHeader>
-              </Card>
+
+                    <View className="flex-row items-center gap-4">
+                      <View className="flex-row items-center">
+                        {membersToShow.map((member) => (
+                          <Avatar
+                            key={member.id}
+                            alt={member.name}
+                            className="border border-card size-8 -mr-2"
+                          >
+                            <AvatarImage source={{ uri: member.image ?? "" }} />
+                            <AvatarFallback>
+                              <Text className="font-bold">
+                                {(member.name.charAt(0) + member.name.charAt(1)).toUpperCase()}
+                              </Text>
+                            </AvatarFallback>
+                          </Avatar>
+                        ))}
+                        {group.members.length > maxMembersToShow && (
+                          <View className="size-8 rounded-full bg-gray-100 border border-card flex items-center justify-center">
+                            <Text className="font-medium text-secondary">
+                              +{group.members.length - maxMembersToShow}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <Icon as={ChevronRightIcon} size={20} className="text-muted-foreground" />
+                    </View>
+                  </CardHeader>
+                </Card>
+              </Link>
             );
           })}
         </View>

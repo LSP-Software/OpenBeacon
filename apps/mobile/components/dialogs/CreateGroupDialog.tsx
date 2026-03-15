@@ -1,12 +1,16 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createGroupSchema } from "@openbeacon/schemas";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { CameraIcon } from "lucide-react-native";
 import { useForm } from "react-hook-form";
+import { View } from "react-native";
 import type z from "zod";
 import { trpc } from "../../lib/api";
-import { Button } from "../Button";
+import { Button } from "../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/Dialog";
+import { Icon } from "../ui/Icon";
 import { Input } from "../ui/Input";
+import { Text } from "../ui/Text";
 
 interface CreateGroupDialogProps {
   open: boolean;
@@ -38,10 +42,14 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
           }
           return [data.newGroup, ...previous];
         });
-        form.reset();
-        setOpen(false);
+        closeForm();
       },
     });
+  };
+
+  const closeForm = () => {
+    setOpen(false);
+    form.reset();
   };
 
   return (
@@ -53,6 +61,12 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
             Create a new group to start sharing locations privately; All location data is end to end
             encrypted. Only members of your group can see each other.
           </DialogDescription>
+        </DialogHeader>
+
+        <View className="flex flex-row items-center gap-4">
+          <View className="relative flex size-20 shrink-0  items-center justify-center rounded-lg border-border border-2 border-dashed transition-all">
+            <Icon as={CameraIcon} size={20} className="text-secondary" />
+          </View>
           <Input
             control={form.control}
             name="name"
@@ -60,8 +74,20 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
             placeholder="Group name"
             autoComplete="off"
           />
-          <Button title="Submit" onPress={form.handleSubmit(onSubmit)} />
-        </DialogHeader>
+        </View>
+
+        <View className="flex-row gap-4 justify-between">
+          <Button className="flex-1" onPress={closeForm}>
+            <Text>Cancel</Text>
+          </Button>
+          <Button
+            className="flex-1"
+            onPress={form.handleSubmit(onSubmit)}
+            loading={createGroupMutation.isPending}
+          >
+            <Text>Create Group</Text>
+          </Button>
+        </View>
       </DialogContent>
     </Dialog>
   );

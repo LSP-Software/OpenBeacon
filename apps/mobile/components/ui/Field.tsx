@@ -50,7 +50,7 @@ function Field({
     >
       <View
         className={cn(
-          "flex w-full gap-2",
+          "flex w-full shrink min-w-0 gap-2",
           {
             "flex-row items-center": orientation === "horizontal",
           },

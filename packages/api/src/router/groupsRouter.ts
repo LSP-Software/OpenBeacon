@@ -1,4 +1,5 @@
 import { GroupRole } from "@openbeacon/database";
+import { inviteMemberToGroupSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { protectedProcedure } from "../trpc.ts";
@@ -16,6 +17,57 @@ interface GroupListItem {
 }
 
 export const groupsRouter = {
+  inviteMember: protectedProcedure
+    .input(inviteMemberToGroupSchema)
+    .mutation(async ({ ctx, input }) => {
+      return {
+        message: "Member invited successfully",
+      };
+    }),
+  get: protectedProcedure.input(z.object({ groupId: z.string() })).query(async ({ ctx, input }) => {
+    const group = await ctx.db.group.findUnique({
+      where: { id: input.groupId },
+    });
+    return group;
+  }),
+  members: protectedProcedure
+    .input(z.object({ groupId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const members = await ctx.db.groupMember.findMany({
+        where: { groupId: input.groupId },
+        select: {
+          id: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+            },
+          },
+          role: true,
+        },
+      });
+
+      const places = ["Home", "Work", "School", "Gym", "Other"];
+      const membersWithMockData = members.map((member) => {
+        return {
+          ...member,
+          battery: {
+            level: Math.floor(Math.random() * 100),
+            charging: Math.random() < 0.5,
+          },
+          batteryLevel: Math.floor(Math.random() * 100),
+          lastLocation: {
+            latitude: Math.random() * 180 - 90,
+            longitude: Math.random() * 360 - 180,
+            timestamp: new Date(Date.now() - Math.floor(Math.random() * 1000000)),
+            place: places[Math.floor(Math.random() * places.length)],
+          },
+        };
+      });
+
+      return membersWithMockData;
+    }),
   invites: protectedProcedure.query(async ({ ctx }) => {
     return [
       {
@@ -81,6 +133,8 @@ export const groupsRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+
       const group = await ctx.db.group.create({
         data: {
           name: input.name,

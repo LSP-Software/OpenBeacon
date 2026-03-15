@@ -4,7 +4,7 @@ import { Text } from "../../components/ui/Text.tsx";
 
 export default function MapScreen() {
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1">
       <View className="flex-1" />
       <View className="px-4 pb-24">
         <View className="rounded-lg overflow-hidden border border-border bg-card">

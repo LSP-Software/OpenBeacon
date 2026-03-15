@@ -14,6 +14,7 @@ type FormInputProps<TFieldValues extends FieldValues, TName extends FieldPath<TF
   description?: string;
   fieldClassName?: string;
   hideError?: boolean;
+  descriptionPosition?: "aboveInput" | "belowInput";
 };
 
 function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldValues>>({
@@ -26,6 +27,7 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
   className,
   onBlur,
   onFocus,
+  descriptionPosition = "aboveInput",
   ...props
 }: FormInputProps<TFieldValues, TName>) {
   const [inputFocused, setInputFocused] = useState(false);
@@ -37,16 +39,17 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
       render={({ field, fieldState }) => {
         return (
           <Field data-invalid={fieldState.invalid}>
-            <View className="flex flex-col">
-              {label && (
-                <FieldLabel className="text-lg font-medium" htmlFor={name}>
-                  {label}
-                </FieldLabel>
-              )}
-              {description && (
-                <FieldDescription>Choose a name that describes your group.</FieldDescription>
-              )}
-            </View>
+            {(label || description) && (
+              <View className={cn("flex flex-col", descriptionPosition === "aboveInput" && "mb-2")}>
+                {label && (
+                  <FieldLabel className="text-lg font-medium" htmlFor={name}>
+                    {label}
+                  </FieldLabel>
+                )}
+                {description && <FieldDescription>{description}</FieldDescription>}
+              </View>
+            )}
+
             <TextInput
               {...field}
               autoComplete="off"
@@ -57,7 +60,7 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
                 field.onBlur();
               }}
               className={cn(
-                `rounded-lg border border-border bg-input ${inputFocused && "border-primary"} py-4 px-4 `,
+                `rounded-lg border border-border bg-input ${inputFocused && "border-primary"} py-4 px-4`,
                 props.editable === false &&
                   cn(
                     "opacity-50",
@@ -67,7 +70,7 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
                   ),
                 Platform.select({
                   web: cn(
-                    "placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground outline-none transition-[color,box-shadow] md:text-sm",
+                    "placeholder:text-muted-foreground selection:bg-primary outline-none transition-[color,box-shadow] md:text-sm",
                     "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
                     "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
                   ),

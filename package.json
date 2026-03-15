@@ -19,8 +19,5 @@
     "@biomejs/biome": "2.3.12",
     "turbo": "2.7.6",
     "typescript": "5.9.3"
-  },
-  "dependencies": {
-    "@rn-primitives/dialog": "^1.2.0"
   }
 }
