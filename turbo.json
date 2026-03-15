@@ -11,8 +11,7 @@
     "S3_ACCESS_KEY",
     "S3_BUCKET_NAME",
     "S3_CDN_URL",
-    "MAX_IMAGE_FILE_SIZE",
-    "MAX_PFP_IMAGE_RESOLUTION"
+    "MAX_IMAGE_FILE_SIZE"
   ],
   "tasks": {
     "build": {
