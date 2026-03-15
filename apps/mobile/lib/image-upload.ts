@@ -7,21 +7,17 @@ import { tryCatch } from "./tryCatch.ts";
 const DEFAULT_IMAGE_SIZE = 1024;
 const IMAGE_QUALITY = 0.85;
 
-const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return btoa(binary);
-};
-
 export const computeSha256Base64 = async (bytes: ArrayBuffer): Promise<string> => {
   const hashBuffer = await Crypto.digest(
     Crypto.CryptoDigestAlgorithm.SHA256,
     new Uint8Array(bytes),
   );
-  return arrayBufferToBase64(hashBuffer);
+  const hashBytes = new Uint8Array(hashBuffer);
+  let binary = "";
+  for (const byte of hashBytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
 };
 
 export type PickImageResult =
@@ -59,21 +55,6 @@ export const processImage = async (
   const imageRef = await context.resize({ width: size, height: size }).renderAsync();
   const result = await imageRef.saveAsync({ format: SaveFormat.WEBP, compress: IMAGE_QUALITY });
   return result.uri;
-};
-
-export const getFileSize = (uri: string): number | undefined => {
-  const size = new FSFile(uri).size;
-  if (size === undefined) {
-    console.error("Could not determine file size: file may not exist");
-    return;
-  }
-  return size;
-};
-
-export const readImageBytes = async (uri: string): Promise<ArrayBuffer> => {
-  const file = new FSFile(uri);
-  const bytes = await file.bytes();
-  return bytes.slice().buffer;
 };
 
 export const uploadToPresignedUrl = async (

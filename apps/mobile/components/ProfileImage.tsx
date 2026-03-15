@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { File as FSFile } from "expo-file-system";
 import { Image } from "expo-image";
 import { PencilIcon } from "lucide-react-native";
 import { cssInterop } from "nativewind";
@@ -8,10 +9,8 @@ import { queryClient, trpc } from "../lib/api.ts";
 import {
   cleanupTempFile,
   computeSha256Base64,
-  getFileSize,
   pickAndCropImage,
   processImage,
-  readImageBytes,
   uploadToPresignedUrl,
 } from "../lib/image-upload.ts";
 import { useColors } from "../lib/theme.ts";
@@ -43,18 +42,19 @@ export const ProfileImage = ({
   const imageUrl = imageUrlProp ?? profile?.image ?? null;
   const isLoading = isPickerOpen || isUploading;
 
-  type Result<T, E = string> =
-  | { data: T; error?: never }
-  | { data?: never; error: E };
+  type Result<T, E = string> = { data: T; error?: never } | { data?: never; error: E };
 
-  const uploadProfilePhoto = async (
-    uri: string,
-  ): Promise<Result<string | null>> => {
-    const fileSize = getFileSize(uri);
-    if (fileSize === undefined) return { error: "unable to get file size" };
-
-    const { data: bytes, error: readError } = await tryCatch(readImageBytes(uri));
+  const uploadProfilePhoto = async (uri: string): Promise<Result<string | null>> => {
+    const file = new FSFile(uri);
+    const { data: bytes, error: readError } = await tryCatch(
+      (async () => {
+        const b = await file.bytes();
+        return b.slice().buffer;
+      })(),
+    );
     if (readError) return { error: `Unable to read image bytes: ${readError.message}` };
+
+    const fileSize = bytes.byteLength;
 
     const { data: contentHash, error: hashError } = await tryCatch(computeSha256Base64(bytes));
     if (hashError) return { error: `Unable to compute content hash: ${hashError.message}` };
@@ -105,15 +105,12 @@ export const ProfileImage = ({
     const { data: imageUrl, error: uploadError } = await uploadProfilePhoto(processedUri);
     cleanupTempFile(processedUri);
     if (uploadError) {
-      Alert.alert(
-        "Upload failed",
-        uploadError instanceof Error ? uploadError.message : uploadError,
-      );
+      Alert.alert(`Upload failed: ${uploadError}`);
       setIsUploading(false);
       return;
     }
 
-    if (imageUrl){
+    if (imageUrl) {
       await queryClient.setQueryData(trpc.account.getProfile.queryKey(), { image: imageUrl });
     }
     setIsUploading(false);
