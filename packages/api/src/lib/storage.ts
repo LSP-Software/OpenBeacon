@@ -70,7 +70,7 @@ const verifyStorageBucketConnectivity = async (
 };
 
 export const verifyStorageConnectivity = async (): Promise<void> => {
-  await verifyStorageBucketConnectivity(env.S3_BUCKET_NAME, "profile image");
+  await verifyStorageBucketConnectivity(env.S3_PROFILE_IMAGE_BUCKET_NAME, "profile image");
   await verifyStorageBucketConnectivity(env.S3_GROUP_IMAGE_BUCKET_NAME, "group image");
 };
 
