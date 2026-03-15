@@ -95,9 +95,7 @@ export const accountRouter = {
       });
     }
     if (fileSize === null || fileSize === 0) {
-      await tryCatch(
-        deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName),
-      );
+      await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName));
       await tryCatch(
         ctx.db.pendingProfileImageUpload.delete({ where: { userId: ctx.session.user.id } }),
       );
@@ -107,9 +105,7 @@ export const accountRouter = {
       });
     }
     if (fileSize > env.MAX_IMAGE_FILE_SIZE) {
-      await tryCatch(
-        deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName),
-      );
+      await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName));
       await tryCatch(
         ctx.db.pendingProfileImageUpload.delete({ where: { userId: ctx.session.user.id } }),
       );
