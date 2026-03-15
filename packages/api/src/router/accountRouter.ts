@@ -38,7 +38,13 @@ export const accountRouter = {
       const fileName = `${crypto.randomUUID()}.webp`;
 
       const { data: presignedUrl, error: presignError } = await tryCatch(
-        getPresignedUploadUrl(ctx.session.user.id, fileName, "image/webp", input.contentHash),
+        getPresignedUploadUrl(
+          env.S3_BUCKET_NAME,
+          ctx.session.user.id,
+          fileName,
+          "image/webp",
+          input.contentHash,
+        ),
       );
 
       if (presignError) {
@@ -85,7 +91,7 @@ export const accountRouter = {
     }
 
     const { data: fileSize, error: verifyError } = await tryCatch(
-      getFileSize(ctx.session.user.id, pending.fileName),
+      getFileSize(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName),
     );
 
     if (verifyError) {

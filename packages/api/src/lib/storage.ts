@@ -71,6 +71,7 @@ const buildKey = (path: string, fileName: string): string => {
 };
 
 export const getPresignedUploadUrl = async (
+  bucketName: string,
   path: string,
   fileName: string,
   contentType: string,
@@ -78,7 +79,7 @@ export const getPresignedUploadUrl = async (
 ): Promise<string> => {
   const client = getStorageClient();
   const command = new PutObjectCommand({
-    Bucket: env.S3_BUCKET_NAME,
+    Bucket: bucketName,
     Key: buildKey(path, fileName),
     ContentType: contentType,
     ChecksumSHA256: contentHash,
@@ -90,10 +91,14 @@ export const getPresignedUploadUrl = async (
   });
 };
 
-export const getFileSize = async (path: string, fileName: string): Promise<number | null> => {
+export const getFileSize = async (
+  bucketName: string,
+  path: string,
+  fileName: string,
+): Promise<number | null> => {
   const client = getStorageClient();
   const command = new HeadObjectCommand({
-    Bucket: env.S3_BUCKET_NAME,
+    Bucket: bucketName,
     Key: buildKey(path, fileName),
   });
   const { data: response, error: responseError } = await tryCatch(client.send(command));
