@@ -43,30 +43,37 @@ export const ProfileImage = ({
   const imageUrl = imageUrlProp ?? profile?.image ?? null;
   const isLoading = isPickerOpen || isUploading;
 
-  const uploadProfilePhoto = async (uri: string): Promise<string | undefined> => {
+  const uploadProfilePhoto = async (
+    uri: string,
+  ): Promise<{ data: string | null; error: string | null }> => {
     const fileSize = getFileSize(uri);
-    if (fileSize === undefined) return "unable to get file size";
+    if (fileSize === undefined) return { data: null, error: "unable to get file size" };
 
     const { data: bytes, error: readError } = await tryCatch(readImageBytes(uri));
-    if (readError) return "unable to read image bytes";
+    if (readError) return { data: null, error: `Unable to read image bytes: ${readError.message}` };
 
     const { data: contentHash, error: hashError } = await tryCatch(computeSha256Base64(bytes));
-    if (hashError) return "unable to compute content hash";
+    if (hashError)
+      return { data: null, error: `Unable to compute content hash: ${hashError.message}` };
 
     const { data: uploadData, error: requestError } = await tryCatch(
       requestUploadMutation.mutateAsync({ fileSize, contentHash }),
     );
-    if (requestError) return "unable to request upload";
+    if (requestError)
+      return { data: null, error: `Unable to request upload: ${requestError.message}` };
 
     const { error: uploadError } = await tryCatch(
       uploadToPresignedUrl(uploadData.presignedUrl, bytes, contentHash),
     );
-    if (uploadError) return "unable to upload image";
+    if (uploadError) return { data: null, error: `Unable to upload image: ${uploadError.message}` };
 
-    const { error: confirmError } = await tryCatch(confirmUploadMutation.mutateAsync());
-    if (confirmError) return "unable to confirm upload";
+    const { data: confirmData, error: confirmError } = await tryCatch(
+      confirmUploadMutation.mutateAsync(),
+    );
+    if (confirmError)
+      return { data: null, error: `Unable to confirm upload: ${confirmError.message}` };
 
-    return undefined;
+    return { data: confirmData.imageUrl, error: null };
   };
 
   const handleEditPress = async () => {
@@ -94,7 +101,7 @@ export const ProfileImage = ({
       return;
     }
 
-    const uploadError = await uploadProfilePhoto(processedUri);
+    const { data: imageUrl, error: uploadError } = await uploadProfilePhoto(processedUri);
     cleanupTempFile(processedUri);
     if (uploadError) {
       Alert.alert("Upload failed", uploadError);
@@ -102,7 +109,7 @@ export const ProfileImage = ({
       return;
     }
 
-    await queryClient.invalidateQueries({ queryKey: trpc.account.getProfile.queryKey() });
+    await queryClient.setQueryData(trpc.account.getProfile.queryKey(), { image: imageUrl });
     setIsUploading(false);
   };
 
