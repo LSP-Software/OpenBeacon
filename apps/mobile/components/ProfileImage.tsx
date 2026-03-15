@@ -43,9 +43,13 @@ export const ProfileImage = ({
   const imageUrl = imageUrlProp ?? profile?.image ?? null;
   const isLoading = isPickerOpen || isUploading;
 
+  type Result<T, E = string> =
+  | { data: T; error?: never }
+  | { data?: never; error: E };
+
   const uploadProfilePhoto = async (
     uri: string,
-  ): Promise<{ data?: string | null; error?: string | Error | null }> => {
+  ): Promise<Result<string | null>> => {
     const fileSize = getFileSize(uri);
     if (fileSize === undefined) return { error: "unable to get file size" };
 
