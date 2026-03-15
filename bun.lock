@@ -36,6 +36,7 @@
       "dependencies": {
         "@better-auth/expo": "^1.5.4",
         "@openbeacon/api": "workspace:*",
+        "@openbeacon/shared": "workspace:*",
         "@react-navigation/bottom-tabs": "^7.15.5",
         "@trpc/client": "^11.12.0",
         "@trpc/tanstack-react-query": "^11.12.0",
@@ -81,6 +82,7 @@
         "@aws-sdk/s3-request-presigner": "^3.1008.0",
         "@openbeacon/auth": "workspace:*",
         "@openbeacon/database": "workspace:*",
+        "@openbeacon/shared": "workspace:*",
         "@t3-oss/env-core": "^0.13.10",
         "@trpc/server": "^11.12.0",
         "superjson": "^2.2.6",

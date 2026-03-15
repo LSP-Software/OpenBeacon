@@ -27,20 +27,23 @@ const getStorageClient = (): S3Client => {
   return storageClient;
 };
 
-export const verifyStorageConnectivity = async (): Promise<void> => {
+const verifyStorageBucketConnectivity = async (
+  bucketName: string,
+  storageLabel: string,
+): Promise<void> => {
   const client = getStorageClient();
 
-  console.log("Verifying storage connectivity...");
-  console.log("Bucket name:", env.S3_BUCKET_NAME);
+  console.log(`Verifying ${storageLabel} storage connectivity...`);
+  console.log("Bucket name:", bucketName);
   console.log("Endpoint:", env.S3_ENDPOINT);
   console.log("Region:", env.S3_REGION);
 
-  const result = await tryCatch(client.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET_NAME })));
+  const result = await tryCatch(client.send(new HeadBucketCommand({ Bucket: bucketName })));
   if (result.error) {
     const name = (result.error as Error & { name?: string }).name ?? "";
 
     if (name === "NotFound" || name === "NoSuchBucket") {
-      throw new Error(`S3 bucket "${env.S3_BUCKET_NAME}" does not exist at ${env.S3_ENDPOINT}`);
+      throw new Error(`S3 bucket "${bucketName}" does not exist at ${env.S3_ENDPOINT}`);
     }
     if (name === "CredentialsProviderError" || name === "InvalidAccessKeyId") {
       throw new Error(
@@ -49,7 +52,7 @@ export const verifyStorageConnectivity = async (): Promise<void> => {
     }
     if (name === "AccessDenied" || name === "Forbidden") {
       throw new Error(
-        `S3 access denied to bucket "${env.S3_BUCKET_NAME}" — ensure the credentials have permission to access this bucket`,
+        `S3 access denied to bucket "${bucketName}" — ensure the credentials have permission to access this bucket`,
       );
     }
     if (name === "Unknown") {
@@ -63,7 +66,12 @@ export const verifyStorageConnectivity = async (): Promise<void> => {
       `Failed to connect to S3 at ${env.S3_ENDPOINT}: ${result.error instanceof Error ? result.error.message : String(result.error)}`,
     );
   }
-  console.log("S3 bucket connected successfully.");
+  console.log(`${storageLabel} S3 bucket connected successfully.`);
+};
+
+export const verifyStorageConnectivity = async (): Promise<void> => {
+  await verifyStorageBucketConnectivity(env.S3_BUCKET_NAME, "profile image");
+  await verifyStorageBucketConnectivity(env.S3_GROUP_IMAGE_BUCKET_NAME, "group image");
 };
 
 const buildKey = (path: string, fileName: string): string => {
@@ -159,23 +167,35 @@ export const deleteFile = async (
   );
 };
 
-export const buildPublicUrl = (path: string, fileName: string): string => {
+export const buildImagePublicUrl = (bucketName: string, path: string, fileName: string): string => {
   const key = buildKey(path, fileName);
-  return `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}/${key}`;
+  return `${env.S3_CDN_URL}/${bucketName}/${key}`;
 };
 
-export const extractStorageKey = (imageUrl: string): { path: string; fileName: string } | null => {
-  const baseUrl = `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`;
+export const extractImageStorageObject = (
+  imageUrl: string,
+): { bucketName: string; path: string; fileName: string } | null => {
+  const baseUrl = `${env.S3_CDN_URL}/`;
   if (!imageUrl?.startsWith(baseUrl)) return null;
 
-  const path = imageUrl.slice(baseUrl.length + 1);
-  if (!path) return null;
+  const imagePath = imageUrl.slice(baseUrl.length);
+  if (!imagePath) return null;
 
-  const slashIndex = path.indexOf("/");
-  if (slashIndex === -1) return { path: "", fileName: path };
+  const firstSlashIndex = imagePath.indexOf("/");
+  if (firstSlashIndex === -1) return null;
+
+  const bucketName = imagePath.slice(0, firstSlashIndex);
+  const key = imagePath.slice(firstSlashIndex + 1);
+  if (!bucketName || !key) return null;
+
+  const slashIndex = key.indexOf("/");
+  if (slashIndex === -1) {
+    return { bucketName, path: "", fileName: key };
+  }
 
   return {
-    path: path.slice(0, slashIndex),
-    fileName: path.slice(slashIndex + 1),
+    bucketName,
+    path: key.slice(0, slashIndex),
+    fileName: key.slice(slashIndex + 1),
   };
 };

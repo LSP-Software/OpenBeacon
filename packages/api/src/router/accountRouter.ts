@@ -1,22 +1,86 @@
-import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
-import { z } from "zod/v4";
+import type { TRPCRouterRecord } from "@trpc/server";
 import { env } from "../env.ts";
 import {
-  buildPublicUrl,
-  deleteFile,
-  extractStorageKey,
-  getFileSize,
-  getPresignedUploadUrl,
-} from "../lib/storage.ts";
-import { tryCatch } from "../lib/tryCatch.ts";
-import { protectedProcedure } from "../trpc.ts";
+  confirmImageUpload,
+  createImageOwnerLockKey,
+  requestImageUpload,
+  requestImageUploadInputSchema,
+} from "../lib/image-upload.ts";
+import { protectedProcedure, type TRPCContext } from "../trpc.ts";
 
-const userIdToLockKey = (userId: string): number => {
-  let h = 0;
-  for (let i = 0; i < userId.length; i++) {
-    h = ((h << 5) - h + userId.charCodeAt(i)) | 0;
-  }
-  return Math.abs(h);
+type ProtectedTRPCContext = TRPCContext & {
+  session: NonNullable<TRPCContext["session"]>;
+};
+
+const requestProfileImageUpload = async ({
+  ctx,
+  contentHash,
+}: {
+  ctx: ProtectedTRPCContext;
+  contentHash: string;
+}) => {
+  const userId = ctx.session.user.id;
+
+  return requestImageUpload({
+    bucketName: env.S3_BUCKET_NAME,
+    contentHash,
+    imagePath: userId,
+    replacePendingImageUpload: async (fileName) => {
+      let oldFileName: string | null = null;
+
+      await ctx.db.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${createImageOwnerLockKey(userId)})`;
+
+        const existingPendingProfileImageUpload = await tx.pendingProfileImageUpload.findUnique({
+          where: { userId },
+          select: { fileName: true },
+        });
+
+        if (existingPendingProfileImageUpload) {
+          oldFileName = existingPendingProfileImageUpload.fileName;
+          await tx.pendingProfileImageUpload.delete({ where: { userId } });
+        }
+
+        await tx.pendingProfileImageUpload.create({
+          data: { userId, fileName },
+        });
+      });
+
+      return oldFileName;
+    },
+  });
+};
+
+const confirmProfileImageUpload = async ({ ctx }: { ctx: ProtectedTRPCContext }) => {
+  const userId = ctx.session.user.id;
+
+  return confirmImageUpload({
+    bucketName: env.S3_BUCKET_NAME,
+    imagePath: userId,
+    getPendingImageUpload: () =>
+      ctx.db.pendingProfileImageUpload.findUnique({
+        where: { userId },
+        select: { fileName: true },
+      }),
+    clearPendingImageUpload: async () => {
+      await ctx.db.pendingProfileImageUpload.delete({ where: { userId } });
+    },
+    getCurrentImageUrl: async () => {
+      const currentUser = await ctx.db.user.findUnique({
+        where: { id: userId },
+        select: { image: true },
+      });
+
+      return currentUser?.image ?? null;
+    },
+    setCurrentImageUrl: async (imageUrl) => {
+      await ctx.db.user.update({
+        where: { id: userId },
+        data: { image: imageUrl },
+      });
+    },
+    noPendingImageUploadMessage: "No pending profile image upload to confirm.",
+  });
 };
 
 export const accountRouter = {
@@ -27,125 +91,13 @@ export const accountRouter = {
     });
   }),
 
-  requestImageUpload: protectedProcedure
-    .input(
-      z.object({
-        fileSize: z.number().int().nonnegative().max(env.MAX_IMAGE_FILE_SIZE),
-        contentHash: z.string(),
-      }),
-    )
+  requestProfileImageUpload: protectedProcedure
+    .input(requestImageUploadInputSchema)
     .mutation(async ({ ctx, input }) => {
-      const fileName = `${crypto.randomUUID()}.webp`;
-
-      const { data: presignedUrl, error: presignError } = await tryCatch(
-        getPresignedUploadUrl(
-          env.S3_BUCKET_NAME,
-          ctx.session.user.id,
-          fileName,
-          "image/webp",
-          input.contentHash,
-        ),
-      );
-
-      if (presignError) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: `Failed to generate presigned URL: ${presignError.message}`,
-        });
-      }
-
-      let oldFileName: string | null = null;
-      const userId = ctx.session.user.id;
-
-      await ctx.db.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${userIdToLockKey(userId)})`;
-        const existing = await tx.pendingProfileImageUpload.findUnique({
-          where: { userId },
-          select: { fileName: true },
-        });
-        if (existing) {
-          oldFileName = existing.fileName;
-          await tx.pendingProfileImageUpload.delete({ where: { userId } });
-        }
-        await tx.pendingProfileImageUpload.create({
-          data: { userId, fileName },
-        });
-      });
-
-      if (oldFileName) {
-        await tryCatch(deleteFile(env.S3_BUCKET_NAME, userId, oldFileName));
-      }
-
-      return { presignedUrl };
+      return requestProfileImageUpload({ ctx, contentHash: input.contentHash });
     }),
 
-  confirmImageUpload: protectedProcedure.mutation(async ({ ctx }) => {
-    const pending = await ctx.db.pendingProfileImageUpload.findUnique({
-      where: { userId: ctx.session.user.id },
-    });
-    if (!pending) {
-      throw new TRPCError({
-        code: "PRECONDITION_FAILED",
-        message: "No pending profile image upload to confirm.",
-      });
-    }
-
-    const { data: fileSize, error: verifyError } = await tryCatch(
-      getFileSize(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName),
-    );
-
-    if (verifyError) {
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: `Upload verification failed: ${verifyError.message ?? "Unknown error."}`,
-      });
-    }
-    if (!fileSize) {
-      await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName));
-      await tryCatch(
-        ctx.db.pendingProfileImageUpload.delete({ where: { userId: ctx.session.user.id } }),
-      );
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Uploaded file not found or is empty in storage.",
-      });
-    }
-    if (fileSize > env.MAX_IMAGE_FILE_SIZE) {
-      await tryCatch(deleteFile(env.S3_BUCKET_NAME, ctx.session.user.id, pending.fileName));
-      await tryCatch(
-        ctx.db.pendingProfileImageUpload.delete({ where: { userId: ctx.session.user.id } }),
-      );
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Uploaded file exceeds the maximum allowed size.",
-      });
-    }
-
-    const imageUrl = buildPublicUrl(ctx.session.user.id, pending.fileName);
-
-    const currentUser = await ctx.db.user.findUnique({
-      where: { id: ctx.session.user.id },
-      select: { image: true },
-    });
-
-    await ctx.db.user.update({
-      where: { id: ctx.session.user.id },
-      data: { image: imageUrl },
-    });
-
-    await tryCatch(
-      ctx.db.pendingProfileImageUpload.delete({
-        where: { userId: ctx.session.user.id },
-      }),
-    );
-
-    if (currentUser?.image) {
-      const oldKey = extractStorageKey(currentUser.image);
-      if (oldKey) {
-        await tryCatch(deleteFile(env.S3_BUCKET_NAME, oldKey.path, oldKey.fileName));
-      }
-    }
-
-    return { imageUrl };
+  confirmProfileImageUpload: protectedProcedure.mutation(async ({ ctx }) => {
+    return confirmProfileImageUpload({ ctx });
   }),
 } satisfies TRPCRouterRecord;

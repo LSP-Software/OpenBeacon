@@ -1,12 +1,155 @@
-import type { TRPCRouterRecord } from "@trpc/server";
-import z from "zod";
-import { protectedProcedure } from "../trpc.ts";
+import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
+import { z } from "zod/v4";
+import { env } from "../env.ts";
+import {
+  confirmImageUpload,
+  createImageOwnerLockKey,
+  requestImageUpload,
+  requestImageUploadInputSchema,
+} from "../lib/image-upload.ts";
+import { deleteFile, extractImageStorageObject } from "../lib/storage.ts";
+import { tryCatch } from "../lib/tryCatch.ts";
+import { protectedProcedure, type TRPCContext } from "../trpc.ts";
+
+type ProtectedTRPCContext = TRPCContext & {
+  session: NonNullable<TRPCContext["session"]>;
+};
+
+const groupImageInputSchema = z.object({ groupId: z.string() });
+
+const getGroupForGroupImageOrThrow = async ({
+  ctx,
+  groupId,
+}: {
+  ctx: ProtectedTRPCContext;
+  groupId: string;
+}) => {
+  const group = await ctx.db.group.findUnique({
+    where: { id: groupId },
+    select: { id: true, image: true },
+  });
+
+  if (!group) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Group not found.",
+    });
+  }
+
+  return group;
+};
+
+const requestGroupImageUpload = async ({
+  ctx,
+  groupId,
+  contentHash,
+}: {
+  ctx: ProtectedTRPCContext;
+  groupId: string;
+  contentHash: string;
+}) => {
+  await getGroupForGroupImageOrThrow({ ctx, groupId });
+
+  return requestImageUpload({
+    bucketName: env.S3_GROUP_IMAGE_BUCKET_NAME,
+    contentHash,
+    imagePath: groupId,
+    replacePendingImageUpload: async (fileName) => {
+      let oldFileName: string | null = null;
+
+      await ctx.db.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${createImageOwnerLockKey(groupId)})`;
+
+        const existingPendingGroupImageUpload = await tx.pendingGroupImageUpload.findUnique({
+          where: { groupId },
+          select: { fileName: true },
+        });
+
+        if (existingPendingGroupImageUpload) {
+          oldFileName = existingPendingGroupImageUpload.fileName;
+          await tx.pendingGroupImageUpload.delete({ where: { groupId } });
+        }
+
+        await tx.pendingGroupImageUpload.create({
+          data: { groupId, fileName },
+        });
+      });
+
+      return oldFileName;
+    },
+  });
+};
+
+const confirmGroupImageUpload = async ({
+  ctx,
+  groupId,
+}: {
+  ctx: ProtectedTRPCContext;
+  groupId: string;
+}) => {
+  const group = await getGroupForGroupImageOrThrow({ ctx, groupId });
+
+  return confirmImageUpload({
+    bucketName: env.S3_GROUP_IMAGE_BUCKET_NAME,
+    imagePath: groupId,
+    getPendingImageUpload: () =>
+      ctx.db.pendingGroupImageUpload.findUnique({
+        where: { groupId },
+        select: { fileName: true },
+      }),
+    clearPendingImageUpload: async () => {
+      await ctx.db.pendingGroupImageUpload.delete({ where: { groupId } });
+    },
+    getCurrentImageUrl: async () => group.image ?? null,
+    setCurrentImageUrl: async (imageUrl) => {
+      await ctx.db.group.update({
+        where: { id: groupId },
+        data: { image: imageUrl },
+      });
+    },
+    noPendingImageUploadMessage: "No pending group image upload to confirm.",
+  });
+};
 
 export const groupsRouter = {
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      const group = await ctx.db.group.findUnique({
+        where: { id: input.id },
+        select: {
+          image: true,
+          pendingGroupImageUpload: {
+            select: { fileName: true },
+          },
+        },
+      });
+
       await ctx.db.group.delete({ where: { id: input.id } });
+
+      if (group?.image) {
+        const groupImageStorageObject = extractImageStorageObject(group.image);
+        if (groupImageStorageObject) {
+          await tryCatch(
+            deleteFile(
+              groupImageStorageObject.bucketName,
+              groupImageStorageObject.path,
+              groupImageStorageObject.fileName,
+            ),
+          );
+        }
+      }
+
+      if (group?.pendingGroupImageUpload) {
+        await tryCatch(
+          deleteFile(
+            env.S3_GROUP_IMAGE_BUCKET_NAME,
+            input.id,
+            group.pendingGroupImageUpload.fileName,
+          ),
+        );
+      }
+
       return {
         message: "Group deleted successfully",
       };
@@ -26,15 +169,37 @@ export const groupsRouter = {
 
       return {
         id: group.id,
+        image: group.image,
         name: group.name,
       };
     }),
   list: protectedProcedure.query(async ({ ctx }) => {
-    const groups = await ctx.db.group.findMany();
+    const groups = await ctx.db.group.findMany({
+      select: {
+        id: true,
+        image: true,
+        name: true,
+      },
+    });
 
     return groups.map((group) => ({
       id: group.id,
+      image: group.image,
       name: group.name,
     }));
   }),
+  requestGroupImageUpload: protectedProcedure
+    .input(requestImageUploadInputSchema.extend({ groupId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      return requestGroupImageUpload({
+        ctx,
+        groupId: input.groupId,
+        contentHash: input.contentHash,
+      });
+    }),
+  confirmGroupImageUpload: protectedProcedure
+    .input(groupImageInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      return confirmGroupImageUpload({ ctx, groupId: input.groupId });
+    }),
 } satisfies TRPCRouterRecord;

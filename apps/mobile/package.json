@@ -19,6 +19,7 @@
   "dependencies": {
     "@better-auth/expo": "^1.5.4",
     "@openbeacon/api": "workspace:*",
+    "@openbeacon/shared": "workspace:*",
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@trpc/client": "^11.12.0",
     "@trpc/tanstack-react-query": "^11.12.0",
