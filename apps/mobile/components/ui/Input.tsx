@@ -61,6 +61,7 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
               }}
               className={cn(
                 `rounded-lg border border-border bg-input ${inputFocused && "border-primary"} py-4 px-4`,
+                className,
                 props.editable === false &&
                   cn(
                     "opacity-50",
@@ -89,24 +90,3 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
 }
 
 export { Input };
-
-// biome-ignore lint/complexity/noUselessLoneBlockStatements: 123
-{
-  /* <Controller
-  name="name"
-  control={form.control}
-  render={({ field, fieldState }) => (
-    <Field data-invalid={fieldState.invalid}>
-      <FieldLabel htmlFor="form-rhf-demo-title">Bug Title</FieldLabel>
-      <Input
-        {...field}
-        onChangeText={field.onChange}
-        aria-invalid={fieldState.invalid}
-        placeholder="Group name"
-        autoComplete="off"
-      />
-      {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-    </Field>
-  )}
-/>; */
-}

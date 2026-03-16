@@ -60,28 +60,6 @@ interface MemberCardProps {
   member: RouterOutputs["groups"]["members"][number];
 }
 
-const getBatteryVisual = ({
-  batteryLevel,
-  charging,
-}: {
-  batteryLevel: number;
-  charging: boolean;
-}) => {
-  if (charging) {
-    return { icon: BatteryChargingIcon, colorClass: "text-green-500" };
-  }
-
-  if (batteryLevel <= 25) {
-    return { icon: BatteryLowIcon, colorClass: "text-red-500" };
-  }
-
-  if (batteryLevel <= 60) {
-    return { icon: BatteryMediumIcon, colorClass: "text-orange-500" };
-  }
-
-  return { icon: BatteryFullIcon, colorClass: "text-green-500" };
-};
-
 const MemberCard = ({ member }: MemberCardProps) => {
   const { icon: BatteryIcon, colorClass } = getBatteryVisual({
     batteryLevel: member.batteryLevel,
@@ -125,4 +103,26 @@ const MemberCard = ({ member }: MemberCardProps) => {
       </View>
     </View>
   );
+};
+
+const getBatteryVisual = ({
+  batteryLevel,
+  charging,
+}: {
+  batteryLevel: number;
+  charging: boolean;
+}) => {
+  if (charging) {
+    return { icon: BatteryChargingIcon, colorClass: "text-green-500" };
+  }
+
+  if (batteryLevel <= 25) {
+    return { icon: BatteryLowIcon, colorClass: "text-red-500" };
+  }
+
+  if (batteryLevel <= 60) {
+    return { icon: BatteryMediumIcon, colorClass: "text-orange-500" };
+  }
+
+  return { icon: BatteryFullIcon, colorClass: "text-green-500" };
 };
