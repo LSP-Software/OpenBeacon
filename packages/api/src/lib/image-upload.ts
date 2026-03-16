@@ -96,27 +96,32 @@ export const getPendingImageUploadForGroup = async ({
   db,
   groupId,
   uploadType,
+  userId,
 }: {
   db: PendingUploadDb;
   groupId: string;
   uploadType: ImageUploadType;
-}): Promise<{ fileName: string } | null> =>
-  db.pendingUpload.findFirst({
-    where: { uploadType, groupId },
-    select: { fileName: true },
+  userId: string;
+}): Promise<{ fileName: string } | null> => {
+  const row = await db.pendingUpload.findUnique({
+    where: { userId_uploadType: { userId, uploadType } },
+    select: { fileName: true, groupId: true },
   });
+  if (!row || row.groupId !== groupId) return null;
+  return { fileName: row.fileName };
+};
 
 export const clearPendingImageUploadForGroup = async ({
   db,
-  groupId,
   uploadType,
+  userId,
 }: {
   db: PendingUploadDb;
-  groupId: string;
   uploadType: ImageUploadType;
+  userId: string;
 }): Promise<void> => {
-  await db.pendingUpload.deleteMany({
-    where: { uploadType, groupId },
+  await db.pendingUpload.delete({
+    where: { userId_uploadType: { userId, uploadType } },
   });
 };
 

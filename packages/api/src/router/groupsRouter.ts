@@ -42,6 +42,7 @@ export const groupsRouter = {
   confirmGroupImageUpload: protectedProcedure
     .input(groupImageInputSchema)
     .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
       const group = await getGroupForGroupImageOrThrow({ db: ctx.db, groupId: input.groupId });
 
       return confirmImageUpload({
@@ -52,12 +53,13 @@ export const groupsRouter = {
             db: ctx.db,
             groupId: input.groupId,
             uploadType: "groupAvatar",
+            userId,
           }),
         clearPendingImageUpload: () =>
           clearPendingImageUploadForGroup({
             db: ctx.db,
-            groupId: input.groupId,
             uploadType: "groupAvatar",
+            userId,
           }),
         getCurrentImageUrl: async () => group.image ?? null,
         setCurrentImageUrl: async (imageUrl) => {
