@@ -20,6 +20,7 @@
     "@better-auth/expo": "^1.5.4",
     "@maplibre/maplibre-react-native": "^10.4.2",
     "@openbeacon/api": "workspace:*",
+    "@protomaps/basemaps": "^5.7.2",
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@trpc/client": "^11.12.0",
     "@trpc/tanstack-react-query": "^11.12.0",

@@ -1,13 +1,24 @@
+import { layers, namedFlavor } from "@protomaps/basemaps";
+
 export type ProtomapsStyleVariant = "light" | "dark";
 
-const BASE_STYLE_URL = "https://api.protomaps.com/styles/v5";
+const ATTRIBUTION =
+  '<a href="https://github.com/protomaps/basemaps">Protomaps</a> © <a href="https://osm.org/copyright">OpenStreetMap</a>';
+const GLYPHS_URL = "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf";
+const SPRITE_BASE_URL = "https://protomaps.github.io/basemaps-assets/sprites/v4";
 
-export function getProtomapsStyleUrl(variant: ProtomapsStyleVariant): string | null {
-  const apiKey = process.env.EXPO_PUBLIC_PROTOMAPS_API_KEY?.trim();
-
-  if (!apiKey) {
-    return null;
-  }
-
-  return `${BASE_STYLE_URL}/${variant}/en.json?key=${encodeURIComponent(apiKey)}`;
+export function getProtomapsMapStyle(variant: ProtomapsStyleVariant, pmtilesUrl: string) {
+  return {
+    version: 8,
+    sources: {
+      protomaps: {
+        type: "vector",
+        attribution: ATTRIBUTION,
+        url: `pmtiles://${pmtilesUrl}`,
+      },
+    },
+    layers: layers("protomaps", namedFlavor(variant), { lang: "en" }),
+    glyphs: GLYPHS_URL,
+    sprite: `${SPRITE_BASE_URL}/${variant}`,
+  };
 }
