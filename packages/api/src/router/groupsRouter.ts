@@ -51,9 +51,9 @@ const requestGroupImageUpload = async ({
   await getGroupForGroupImageOrThrow({ ctx, groupId });
 
   return requestImageUpload({
-    bucketName: env.S3_GROUP_IMAGE_BUCKET_NAME,
+    bucketName: env.S3_BUCKET_NAME,
     contentHash,
-    imagePath: groupId,
+    imagePath: `group/${groupId}/uploads/avatar`,
     replacePendingImageUpload: async (fileName) => {
       let oldFileName: string | null = null;
 
@@ -90,8 +90,8 @@ const confirmGroupImageUpload = async ({
   const group = await getGroupForGroupImageOrThrow({ ctx, groupId });
 
   return confirmImageUpload({
-    bucketName: env.S3_GROUP_IMAGE_BUCKET_NAME,
-    imagePath: groupId,
+    bucketName: env.S3_BUCKET_NAME,
+    imagePath: `group/${groupId}/uploads/avatar`,
     getPendingImageUpload: () =>
       ctx.db.pendingGroupImageUpload.findUnique({
         where: { groupId },
@@ -143,8 +143,8 @@ export const groupsRouter = {
       if (group?.pendingGroupImageUpload) {
         await tryCatch(
           deleteFile(
-            env.S3_GROUP_IMAGE_BUCKET_NAME,
-            input.id,
+            env.S3_BUCKET_NAME,
+            `group/${input.id}/uploads/avatar`,
             group.pendingGroupImageUpload.fileName,
           ),
         );

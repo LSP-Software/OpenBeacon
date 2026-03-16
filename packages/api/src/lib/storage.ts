@@ -70,8 +70,7 @@ const verifyStorageBucketConnectivity = async (
 };
 
 export const verifyStorageConnectivity = async (): Promise<void> => {
-  await verifyStorageBucketConnectivity(env.S3_PROFILE_IMAGE_BUCKET_NAME, "profile image");
-  await verifyStorageBucketConnectivity(env.S3_GROUP_IMAGE_BUCKET_NAME, "group image");
+  await verifyStorageBucketConnectivity(env.S3_BUCKET_NAME, "image");
 };
 
 const buildKey = (path: string, fileName: string): string => {
@@ -188,14 +187,14 @@ export const extractImageStorageObject = (
   const key = imagePath.slice(firstSlashIndex + 1);
   if (!bucketName || !key) return null;
 
-  const slashIndex = key.indexOf("/");
-  if (slashIndex === -1) {
+  const lastSlashIndex = key.lastIndexOf("/");
+  if (lastSlashIndex === -1) {
     return { bucketName, path: "", fileName: key };
   }
 
   return {
     bucketName,
-    path: key.slice(0, slashIndex),
-    fileName: key.slice(slashIndex + 1),
+    path: key.slice(0, lastSlashIndex),
+    fileName: key.slice(lastSlashIndex + 1),
   };
 };

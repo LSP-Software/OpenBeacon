@@ -7,8 +7,7 @@ export const env = createEnv({
     S3_REGION: z.string().default("us-east-005"),
     S3_ACCESS_KEY_ID: z.string(),
     S3_ACCESS_KEY: z.string(),
-    S3_PROFILE_IMAGE_BUCKET_NAME: z.string(),
-    S3_GROUP_IMAGE_BUCKET_NAME: z.string(),
+    S3_BUCKET_NAME: z.string(),
     S3_CDN_URL: z
       .string()
       .url()

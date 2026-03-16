@@ -22,9 +22,9 @@ const requestProfileImageUpload = async ({
   const userId = ctx.session.user.id;
 
   return requestImageUpload({
-    bucketName: env.S3_PROFILE_IMAGE_BUCKET_NAME,
+    bucketName: env.S3_BUCKET_NAME,
     contentHash,
-    imagePath: userId,
+    imagePath: `user/${userId}/uploads/avatar`,
     replacePendingImageUpload: async (fileName) => {
       let oldFileName: string | null = null;
 
@@ -55,8 +55,8 @@ const confirmProfileImageUpload = async ({ ctx }: { ctx: ProtectedTRPCContext })
   const userId = ctx.session.user.id;
 
   return confirmImageUpload({
-    bucketName: env.S3_PROFILE_IMAGE_BUCKET_NAME,
-    imagePath: userId,
+    bucketName: env.S3_BUCKET_NAME,
+    imagePath: `user/${userId}/uploads/avatar`,
     getPendingImageUpload: () =>
       ctx.db.pendingProfileImageUpload.findUnique({
         where: { userId },
