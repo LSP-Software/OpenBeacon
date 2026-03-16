@@ -86,7 +86,10 @@ type UploadImageFromUriResult<T, E = string> =
 
 type UploadImageFromUriOptions = {
   uri: string;
-  requestImageUpload: (input: { fileSize: number; contentHash: string; }) => Promise<{ presignedUrl: string; }>;
+  requestImageUpload: (input: {
+    fileSize: number;
+    contentHash: string;
+  }) => Promise<{ presignedUrl: string }>;
   confirmImageUpload: () => Promise<{ imageUrl: string }>;
 };
 

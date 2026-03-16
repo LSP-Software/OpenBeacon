@@ -11,7 +11,6 @@ import {
 } from "../lib/image-upload.ts";
 import { protectedProcedure } from "../trpc.ts";
 
-
 export const accountRouter = {
   getProfile: protectedProcedure.query(async ({ ctx }) => {
     return await ctx.db.user.findUnique({

@@ -163,7 +163,9 @@ export const requestImageUpload = async ({
   bucketName: string;
   contentHash: string;
   imagePath: string;
-  replacePendingImageUpload: (fileName: string) => Promise<{ oldFileName: string | null; oldGroupId: string | null }>;
+  replacePendingImageUpload: (
+    fileName: string,
+  ) => Promise<{ oldFileName: string | null; oldGroupId: string | null }>;
 }): Promise<{ presignedUrl: string }> => {
   const fileName = `${crypto.randomUUID()}.${ImageFileExtension}`;
 
