@@ -97,7 +97,7 @@ export const groupsRouter = {
     .input(z.object({ inviteId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.groupMemberInvite.delete({
-        where: { id: input.inviteId },
+        where: { id: input.inviteId, recipientId: ctx.session.user.id },
       });
 
       return {
