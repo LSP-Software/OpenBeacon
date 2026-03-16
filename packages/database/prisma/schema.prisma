@@ -15,9 +15,9 @@ model User {
   image                     String?
   createdAt                 DateTime                    @default(now()) @map("created_at")
   updatedAt                 DateTime                    @updatedAt @map("updated_at")
-  sessions                  Session[]
-  accounts                  Account[]
-  pendingProfileImageUpload PendingProfileImageUpload?
+  sessions     Session[]
+  accounts     Account[]
+  pendingUploads PendingUpload[]
 
   @@map("user")
 }
@@ -70,29 +70,26 @@ model Verification {
 }
 
 model Group {
-  id                      String                   @id @default(uuid(7))
-  name                    String
-  image                   String?
-  pendingGroupImageUpload PendingGroupImageUpload?
+  id            String          @id @default(uuid(7))
+  name          String
+  image         String?
+  pendingUploads PendingUpload[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-model PendingProfileImageUpload {
-  userId    String   @id @map("user_id")
+model PendingUpload {
+  userId    String   @map("user_id")
+  uploadType String  @map("upload_type")
   fileName  String   @map("file_name")
   createdAt DateTime @default(now()) @map("created_at")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupId   String?  @map("group_id")
 
-  @@map("pending_profile_image_upload")
-}
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-model PendingGroupImageUpload {
-  groupId    String   @id @map("group_id")
-  fileName   String   @map("file_name")
-  createdAt  DateTime @default(now()) @map("created_at")
-  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  @@map("pending_group_image_upload")
+  @@id([userId, uploadType])
+  @@index([groupId])
+  @@map("pending_upload")
 }
