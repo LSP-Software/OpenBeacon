@@ -39,6 +39,7 @@ export const replacePendingImageUploadForUser = async ({
   groupId?: string;
 }): Promise<{ oldFileName: string | null; oldGroupId: string | null }> => {
   let oldFileName: string | null = null;
+  let oldGroupId: string | null = null;
 
   await db.$transaction(async (tx) => {
     const lockKey = Math.abs(createHash("sha256").update(userId, "utf8").digest().readInt32BE(0));
@@ -51,6 +52,7 @@ export const replacePendingImageUploadForUser = async ({
 
     if (existing) {
       oldFileName = existing.fileName;
+      oldGroupId = existing.groupId ?? null;
       await tx.pendingUpload.delete({
         where: { userId_uploadType: { userId, uploadType } },
       });
@@ -61,7 +63,7 @@ export const replacePendingImageUploadForUser = async ({
     });
   });
 
-  return { oldFileName, oldGroupId: groupId ?? null };
+  return { oldFileName, oldGroupId };
 };
 
 export const getPendingImageUploadForUser = async ({
