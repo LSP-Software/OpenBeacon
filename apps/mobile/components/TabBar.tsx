@@ -1,7 +1,7 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { UserIcon, Users } from "lucide-react-native";
 import { useEffect } from "react";
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Pressable, Text, useWindowDimensions, View } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -20,7 +20,7 @@ type TabRoute = { key: string; name: string };
 const LIFT = 20;
 const CENTER_SIZE = 66;
 const BAR_HEIGHT = 62;
-const BAR_MARGIN = 16;
+const FLOAT_OFFSET = 24;
 const OUTER_HEIGHT = BAR_HEIGHT + LIFT;
 const CENTER_HIT = CENTER_SIZE + 24;
 
@@ -173,13 +173,28 @@ function CenterMapButton({
   return (
     <Pressable
       onPress={handlePress}
-      style={[styles.centerHitArea, { left: centerHitLeft }]}
+      className="absolute top-0 h-[82px] w-[90px] items-center justify-start"
+      style={{ left: centerHitLeft }}
       accessibilityRole="tab"
       accessibilityLabel="Maps"
       accessibilityState={{ selected: isActive }}
     >
-      <Animated.View style={[styles.glowRing, glowAnimatedStyle]} />
-      <Animated.View style={[styles.centerBtn, centerBtnAnimatedStyle]}>
+      <Animated.View
+        className="absolute top-0 h-[66px] w-[66px] rounded-full"
+        style={glowAnimatedStyle}
+      />
+      <Animated.View
+        className="h-[66px] w-[66px] items-center justify-center rounded-full shadow-lg"
+        style={[
+          centerBtnAnimatedStyle,
+          {
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.55,
+            shadowRadius: 14,
+            elevation: 10,
+          },
+        ]}
+      >
         <LocationPinIcon color="#FFFFFF" size={30} />
       </Animated.View>
       <Text className="text-sm text-muted font-bold uppercase mt-1">Maps</Text>
@@ -206,17 +221,22 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
 
   return (
     <View
+      pointerEvents="box-none"
+      className="absolute left-0 right-0"
       style={{
+        bottom: FLOAT_OFFSET,
         height: OUTER_HEIGHT + insets.bottom,
         paddingBottom: insets.bottom,
-        backgroundColor: colors.background,
       }}
     >
-      <View style={[styles.bar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View
+        className="absolute bottom-0 left-4 right-4 h-[62px] flex-row items-center rounded-full border"
+        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+      >
         {state.routes.map((route, index) => {
           const isActive = state.index === index;
           if (route.name === "map") {
-            return <View key={route.key} style={styles.centerSlot} />;
+            return <View key={route.key} className="w-[86px]" />;
           }
           return (
             <SideTab
@@ -240,59 +260,3 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  bar: {
-    position: "absolute",
-    bottom: 0,
-    left: BAR_MARGIN,
-    right: BAR_MARGIN,
-    height: BAR_HEIGHT,
-    borderRadius: BAR_HEIGHT / 2,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  sideTab: {
-    flex: 1,
-    height: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  centerSlot: {
-    width: CENTER_SIZE + 20,
-  },
-  centerHitArea: {
-    position: "absolute",
-    top: 0,
-    width: CENTER_HIT,
-    height: OUTER_HEIGHT,
-    alignItems: "center",
-    justifyContent: "flex-start",
-  },
-  glowRing: {
-    position: "absolute",
-    top: 0,
-    width: CENTER_SIZE,
-    height: CENTER_SIZE,
-    borderRadius: CENTER_SIZE / 2,
-  },
-  centerBtn: {
-    width: CENTER_SIZE,
-    height: CENTER_SIZE,
-    borderRadius: CENTER_SIZE / 2,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.55,
-    shadowRadius: 14,
-    elevation: 10,
-  },
-  centerLabel: {
-    fontSize: 10,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-    marginTop: 5,
-    fontWeight: "600",
-  },
-});
