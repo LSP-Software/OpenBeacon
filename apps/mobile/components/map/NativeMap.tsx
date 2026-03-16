@@ -6,7 +6,6 @@ import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
 import { getProtomapsMapStyle } from "../../lib/protomaps-style.ts";
 import { useColors } from "../../lib/theme.ts";
 import { Text } from "../Text.tsx";
-import { LoadingMap } from "./shared.tsx";
 
 export const NativeMap = () => {
   const colors = useColors();
@@ -44,7 +43,7 @@ export const NativeMap = () => {
     );
   }
 
-  if (!mapStyle) {
+  if (!mapStyle || (signedPmtilesUrlQuery.isError && !signedPmtilesUrlQuery.isLoading)) {
     return (
       <View className="flex-1 items-center justify-center bg-background px-6">
         <View className="w-full max-w-80 gap-5">
