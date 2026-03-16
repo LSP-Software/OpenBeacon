@@ -13,6 +13,7 @@
     "test": "bun test --pass-with-no-tests"
   },
   "dependencies": {
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "@openbeacon/database": "workspace:*"
   }
 }

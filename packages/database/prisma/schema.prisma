@@ -8,16 +8,18 @@ datasource db {
 }
 
 model User {
-  id            String        @id
-  name          String
-  email         String        @unique(map: "user_email_unique")
-  emailVerified Boolean       @default(false) @map("email_verified")
-  image         String?
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
-  sessions      Session[]
-  accounts      Account[]
-  groupMembers  GroupMember[]
+  id                         String              @id
+  name                       String
+  email                      String              @unique(map: "user_email_unique")
+  emailVerified              Boolean             @default(false) @map("email_verified")
+  image                      String?
+  createdAt                  DateTime            @default(now()) @map("created_at")
+  updatedAt                  DateTime            @updatedAt @map("updated_at")
+  sessions                   Session[]
+  accounts                   Account[]
+  groupMembers               GroupMember[]
+  sentGroupMemberInvites     GroupMemberInvite[] @relation("GroupMemberInviteInviter")
+  receivedGroupMemberInvites GroupMemberInvite[] @relation("GroupMemberInviteRecipient")
 
   @@map("user")
 }
@@ -75,9 +77,32 @@ model Group {
   image String?
 
   groupMembers GroupMember[]
+  groupInvites GroupMemberInvite[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model GroupMemberInvite {
+  id String @id @default(uuid(7))
+
+  inviterId String
+  inviter   User   @relation("GroupMemberInviteInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+
+  recipientId String
+  recipient   User   @relation("GroupMemberInviteRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  role GroupRole
+
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([inviterId, groupId])
 }
 
 model GroupMember {
@@ -89,7 +114,11 @@ model GroupMember {
   groupId String?
   group   Group?  @relation(fields: [groupId], references: [id])
 
-  role GroupRole
+  joinedAt DateTime  @default(now())
+  role     GroupRole
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum GroupRole {

@@ -25,7 +25,6 @@ interface MembersTabProps {
 
 export default function MembersTab({ groupId }: MembersTabProps) {
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
-
   const { data: members, isFetching: isFetchingMembers } = useQuery(
     trpc.groups.members.queryOptions({ groupId }),
   );
@@ -36,7 +35,11 @@ export default function MembersTab({ groupId }: MembersTabProps) {
 
   return (
     <View className="gap-4">
-      <InviteMemberToGroupDialog open={addMemberDialogOpen} setOpen={setAddMemberDialogOpen} />
+      <InviteMemberToGroupDialog
+        open={addMemberDialogOpen}
+        setOpen={setAddMemberDialogOpen}
+        groupId={groupId}
+      />
       <View className="gap-4">
         <View className="flex-row items-center justify-between">
           <Text className="text-muted font-semibold text-lg">Group Members</Text>

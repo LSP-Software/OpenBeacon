@@ -1,7 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { GroupRole } from "@openbeacon/database";
 import { inviteMemberToGroupSchema } from "@openbeacon/schemas";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { LinkIcon, MailIcon, PlusIcon, Trash2Icon } from "lucide-react-native";
 import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
@@ -10,7 +9,7 @@ import type z from "zod";
 import { trpc } from "../../lib/api";
 import { FormSelectInput } from "../formInputs/FormSelectInput";
 import { Button } from "../ui/Button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/Dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Input } from "../ui/Input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/Tabs";
@@ -19,9 +18,14 @@ import { Text } from "../ui/Text";
 interface InviteMemberToGroupDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
+  groupId: string;
 }
 
-export const InviteMemberToGroupDialog = ({ open, setOpen }: InviteMemberToGroupDialogProps) => {
+export const InviteMemberToGroupDialog = ({
+  open,
+  setOpen,
+  groupId,
+}: InviteMemberToGroupDialogProps) => {
   const [value, setValue] = useState("email");
 
   return (
@@ -29,10 +33,6 @@ export const InviteMemberToGroupDialog = ({ open, setOpen }: InviteMemberToGroup
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Invite a member</DialogTitle>
-          <DialogDescription className="text-secondary">
-            Invite a member to the group. They will receive an email with a link to join the group
-            and start sharing locations privately.
-          </DialogDescription>
         </DialogHeader>
         <Tabs value={value} onValueChange={setValue}>
           <TabsList className="flex justify-center w-full bg-secondary mb-4">
@@ -46,7 +46,7 @@ export const InviteMemberToGroupDialog = ({ open, setOpen }: InviteMemberToGroup
             </TabsTrigger>
           </TabsList>
           <TabsContent value="email" className="flex flex-col gap-4">
-            <InviteMembersInputs />
+            <InviteMembersInputs groupId={groupId} setOpen={setOpen} />
           </TabsContent>
           <TabsContent value="Link">
             <Text>Phone</Text>
@@ -57,11 +57,17 @@ export const InviteMemberToGroupDialog = ({ open, setOpen }: InviteMemberToGroup
   );
 };
 
-export const InviteMembersInputs = () => {
+interface InviteMembersInputsProps {
+  groupId: string;
+  setOpen: (open: boolean) => void;
+}
+
+export const InviteMembersInputs = ({ groupId, setOpen }: InviteMembersInputsProps) => {
   const form = useForm<z.infer<typeof inviteMemberToGroupSchema>>({
     resolver: zodResolver(inviteMemberToGroupSchema),
-    mode: "all",
+    mode: "onBlur",
     defaultValues: {
+      groupId: groupId,
       invites: [
         {
           email: "",
@@ -85,12 +91,12 @@ export const InviteMembersInputs = () => {
     remove(index);
   };
 
-  const queryClient = useQueryClient();
-  const inviteMemberMutation = useMutation(trpc.groups.inviteMember.mutationOptions());
+  const inviteMemberMutation = useMutation(trpc.groups.sendInvites.mutationOptions());
   const onSubmit = async (data: z.infer<typeof inviteMemberToGroupSchema>) => {
     await inviteMemberMutation.mutateAsync(data, {
-      onSuccess: (data) => {
-        console.log(data);
+      onSuccess: () => {
+        form.reset();
+        setOpen(false);
       },
       onError: (error) => {
         console.log(error);
@@ -155,7 +161,11 @@ export const InviteMembersInputs = () => {
             and manage group settings
           </Text>
         </View>
-        <Button size="sm" onPress={form.handleSubmit(onSubmit)}>
+        <Button
+          size="sm"
+          onPress={form.handleSubmit(onSubmit)}
+          loading={inviteMemberMutation.isPending}
+        >
           <Icon as={MailIcon} className="text-white" />
           <Text>Send invitation{fields.length > 1 ? "s" : ""}</Text>
         </Button>

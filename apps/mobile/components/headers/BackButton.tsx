@@ -1,8 +1,8 @@
 import { router } from "expo-router";
 import { ArrowLeftIcon } from "lucide-react-native";
 import { Pressable } from "react-native";
-import { Text } from "../ui/Text.tsx";
 import { Icon } from "../ui/Icon.tsx";
+import { Text } from "../ui/Text.tsx";
 
 export const BackButton = () => {
   return (

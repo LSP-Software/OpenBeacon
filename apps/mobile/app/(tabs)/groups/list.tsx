@@ -1,13 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { ChevronRightIcon, PlusIcon, ShieldIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button } from "../../../components/Button";
 import { CreateGroupDialog } from "../../../components/dialogs/CreateGroupDialog";
 import { LoadingIndicator } from "../../../components/LoadingIndicator";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/Avatar";
+import { Button } from "../../../components/ui/Button";
 import { Card, CardDescription, CardHeader, CardTitle } from "../../../components/ui/Card";
 import { Icon } from "../../../components/ui/Icon";
 import { Text } from "../../../components/ui/Text";
@@ -16,39 +16,24 @@ import { type RouterOutputs, trpc } from "../../../lib/api";
 export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
 
-  const {
-    data: groupList,
-    refetch: refetchGroupList,
-    isFetching: isFetchingGroupList,
-  } = useQuery(trpc.groups.list.queryOptions());
-  const {
-    data: groupInvites,
-    refetch: refetchGroupInvites,
-    isFetching: isFetchingGroupInvites,
-  } = useQuery(trpc.groups.invites.queryOptions());
+  const { data: groupList, isFetching: isFetchingGroupList } = useQuery(
+    trpc.groups.list.queryOptions(),
+  );
+  const { data: groupInvites, isFetching: isFetchingGroupInvites } = useQuery(
+    trpc.groups.invites.queryOptions(),
+  );
 
   if (isFetchingGroupList || isFetchingGroupInvites) {
     return <LoadingIndicator />;
   }
 
   return (
-    <View className="flex-1">
-      <Button
-        title="Refresh"
-        onPress={() => {
-          refetchGroupList();
-          refetchGroupInvites();
-        }}
-      />
-
+    <View className="flex-1 bg-background">
       <CreateGroupDialog open={createGroupDialogOpen} setOpen={setCreateGroupDialogOpen} />
 
       <SafeAreaView edges={["top"]} className="z-10">
         <View className="flex-row items-center justify-between px-8 pt-4 pb-10">
-          <View>
-            <Text className="text-muted font-bold uppercase">Your family</Text>
-            <Text className="text-foreground font-bold text-3xl">Groups</Text>
-          </View>
+          <Text className="text-foreground font-bold text-3xl">Your Groups</Text>
           <Pressable
             className="w-10 h-10 rounded-full items-center justify-center bg-primary"
             accessibilityRole="button"
@@ -79,6 +64,51 @@ interface GroupInvitesListProps {
 }
 
 export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
+  const queryClient = useQueryClient();
+  const acceptInviteMutation = useMutation(trpc.groups.acceptInvite.mutationOptions());
+  const declineInviteMutation = useMutation(trpc.groups.declineInvite.mutationOptions());
+
+  const handleAcceptInvite = async (inviteId: string) => {
+    await acceptInviteMutation.mutateAsync(
+      { inviteId },
+      {
+        onSuccess: (data) => {
+          queryClient.setQueryData(trpc.groups.invites.queryKey(), (previous) => {
+            if (!previous) {
+              return [];
+            }
+            return previous.filter((invite) => invite.id !== inviteId);
+          });
+
+          queryClient.setQueryData(trpc.groups.list.queryKey(), (previous) => {
+            return [
+              ...(previous ?? []),
+              {
+                ...data.group,
+                members: data.group.members,
+              },
+            ] satisfies RouterOutputs["groups"]["list"];
+          });
+        },
+      },
+    );
+  };
+  const handleDeclineInvite = async (inviteId: string) => {
+    await declineInviteMutation.mutateAsync(
+      { inviteId },
+      {
+        onSuccess: () => {
+          queryClient.setQueryData(trpc.groups.invites.queryKey(), (previous) => {
+            if (!previous) {
+              return [];
+            }
+            return previous.filter((invite) => invite.id !== inviteId);
+          });
+        },
+      },
+    );
+  };
+
   if (!groupInvites?.length) {
     return null;
   }
@@ -90,11 +120,24 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
         <Card key={invite.id}>
           <CardHeader>
             <Text>
-              {invite.inviter.name} invited you to join {invite.groupName}
+              {invite.inviter.name} invited you to join {invite.group.name}
             </Text>
             <View className="flex-row items-center justify-between gap-2">
-              <Button title="Decline" variant="secondary" onPress={() => {}} />
-              <Button title="Accept" onPress={() => {}} />
+              <Button
+                size="sm"
+                variant="secondary"
+                onPress={() => handleDeclineInvite(invite.id)}
+                loading={declineInviteMutation.isPending}
+              >
+                <Text>Decline</Text>
+              </Button>
+              <Button
+                size="sm"
+                onPress={() => handleAcceptInvite(invite.id)}
+                loading={acceptInviteMutation.isPending}
+              >
+                <Text>Accept</Text>
+              </Button>
             </View>
           </CardHeader>
         </Card>
@@ -124,11 +167,9 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
                 only members of your group can see each other.
               </Text>
             </View>
-            <Button
-              title="Create a Group"
-              variant="primary"
-              onPress={() => setCreateGroupDialogOpen(true)}
-            />
+            <Button onPress={() => setCreateGroupDialogOpen(true)}>
+              <Text>Create a Group</Text>
+            </Button>
           </View>
 
           <View className="flex flex-row items-start gap-2 p-4 mt-4 rounded-lg bg-card border-border border">

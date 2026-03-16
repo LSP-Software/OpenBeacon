@@ -8,6 +8,7 @@
  */
 
 import { auth } from "@openbeacon/auth";
+import { GroupRole } from "@openbeacon/database/enums";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError, z } from "zod/v4";
@@ -44,16 +45,18 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
  */
 const t = initTRPC.context<typeof createTRPCContext>().create({
   transformer: superjson,
-  errorFormatter: ({ shape, error }) => ({
-    ...shape,
-    data: {
-      ...shape.data,
-      zodError:
-        error.cause instanceof ZodError
-          ? z.flattenError(error.cause as ZodError<Record<string, unknown>>)
-          : null,
-    },
-  }),
+  errorFormatter: ({ shape, error }) => {
+    return {
+      ...shape,
+      data: {
+        ...shape.data,
+        zodError:
+          error.cause instanceof ZodError
+            ? z.flattenError(error.cause as ZodError<Record<string, unknown>>)
+            : null,
+      },
+    };
+  },
 });
 
 /**
@@ -119,5 +122,51 @@ export const protectedProcedure = t.procedure.use(timingMiddleware).use(({ ctx, 
       // infers the `session` as non-nullable
       session: { ...ctx.session, user: ctx.session.user },
     },
+  });
+});
+
+export const groupMemberProcedure = protectedProcedure
+  .input(z.object({ groupId: z.string() }))
+  .use(async ({ ctx, next, input }) => {
+    const group = await ctx.db.group.findUnique({
+      where: {
+        id: input.groupId,
+      },
+      include: {
+        groupMembers: {
+          where: {
+            userId: ctx.session.user.id,
+          },
+        },
+      },
+    });
+
+    const groupMember = group?.groupMembers.find((member) => member.userId === ctx.session.user.id);
+    if (!groupMember) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "You are not a member of this group" });
+    }
+
+    return next({
+      ctx: { ...ctx, user: ctx.session.user, group, groupMember },
+    });
+  });
+
+export const groupAdminProcedure = groupMemberProcedure.use(async ({ ctx, next }) => {
+  if (ctx.groupMember.role !== GroupRole.ADMIN) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
+  }
+
+  return next({
+    ctx: { ...ctx, user: ctx.session.user },
+  });
+});
+
+export const groupOwnerProcedure = groupMemberProcedure.use(async ({ ctx, next }) => {
+  if (ctx.groupMember.role !== GroupRole.OWNER) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "You are not the owner of this group" });
+  }
+
+  return next({
+    ctx: { ...ctx, user: ctx.session.user },
   });
 });
