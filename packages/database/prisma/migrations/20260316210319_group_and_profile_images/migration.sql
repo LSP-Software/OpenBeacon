@@ -1,3 +1,6 @@
+-- CreateEnum
+CREATE TYPE "ImageUploadType" AS ENUM ('userAvatar', 'groupAvatar');
+
 -- CreateTable
 CREATE TABLE "user" (
     "id" TEXT NOT NULL,
@@ -69,13 +72,13 @@ CREATE TABLE "Group" (
 
 -- CreateTable
 CREATE TABLE "pending_upload" (
-    "user_id" TEXT NOT NULL,
-    "upload_type" TEXT NOT NULL,
-    "file_name" TEXT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "group_id" TEXT,
+    "userId" TEXT NOT NULL,
+    "uploadType" "ImageUploadType" NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "groupId" TEXT,
 
-    CONSTRAINT "pending_upload_pkey" PRIMARY KEY ("user_id","upload_type")
+    CONSTRAINT "pending_upload_pkey" PRIMARY KEY ("userId","uploadType")
 );
 
 -- CreateIndex
@@ -94,7 +97,7 @@ CREATE INDEX "account_userId_idx" ON "account"("user_id");
 CREATE INDEX "verification_identifier_idx" ON "verification"("identifier");
 
 -- CreateIndex
-CREATE INDEX "pending_upload_group_id_idx" ON "pending_upload"("group_id");
+CREATE INDEX "pending_upload_groupId_idx" ON "pending_upload"("groupId");
 
 -- AddForeignKey
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -103,7 +106,7 @@ ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "pending_upload" ADD CONSTRAINT "pending_upload_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "pending_upload" ADD CONSTRAINT "pending_upload_userId_fkey" FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "pending_upload" ADD CONSTRAINT "pending_upload_group_id_fkey" FOREIGN KEY ("group_id") REFERENCES "Group"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "pending_upload" ADD CONSTRAINT "pending_upload_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "Group"("id") ON DELETE CASCADE ON UPDATE CASCADE;

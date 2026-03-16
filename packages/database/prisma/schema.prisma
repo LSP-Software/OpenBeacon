@@ -69,6 +69,11 @@ model Verification {
   @@map("verification")
 }
 
+enum ImageUploadType {
+  userAvatar
+  groupAvatar
+}
+
 model Group {
   id            String          @id @default(uuid(7))
   name          String
@@ -80,11 +85,11 @@ model Group {
 }
 
 model PendingUpload {
-  userId    String   @map("user_id")
-  uploadType String  @map("upload_type")
-  fileName  String   @map("file_name")
-  createdAt DateTime @default(now()) @map("created_at")
-  groupId   String?  @map("group_id")
+  userId    String
+  uploadType ImageUploadType
+  fileName  String
+  createdAt DateTime @default(now())
+  groupId   String?
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   group Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
