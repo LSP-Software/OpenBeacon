@@ -33,6 +33,10 @@ The core concept of this app is to be privacy focused so if users pay for us to 
     console.log(result.data)
   ```
 11. Always use const name = () => {} over function name () {}
+12. When using types we should be careful about how we define them.
+  a. If a type is only used in one place (say a return) we should just hard code it as the return value, don't define it as it's own type.
+  b. If a type is used in multiple places in the same file, define the type as it's own separate thing inside of that file.
+  c. If a type is used across multiple files, define it in it's own type file. Feel free to put a type in an existing type file if it matches the theme.
 
 # Technology
 
