@@ -1,27 +1,12 @@
-import type {
-  Camera as CameraComponent,
-  MapView as MapViewComponent,
-} from "@maplibre/maplibre-react-native";
+import { Camera, MapView } from "@maplibre/maplibre-react-native";
 import { router } from "expo-router";
 import { useEffect, useMemo, useRef } from "react";
-import { Platform, View } from "react-native";
+import { Button, Platform, View } from "react-native";
 import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
 import { getProtomapsMapStyle } from "../../lib/protomaps-style.ts";
 import { useColors } from "../../lib/theme.ts";
-import { LoadingMap, MapLoadError, UnsupportedMap } from "./shared.tsx";
-
-type MapLibreModule = {
-  Camera: typeof CameraComponent;
-  MapView: typeof MapViewComponent;
-};
-
-const getMapLibreModule = (): MapLibreModule | null => {
-  if (Platform.OS === "web") {
-    return null;
-  }
-
-  return require("@maplibre/maplibre-react-native") as MapLibreModule;
-};
+import { Text } from "../Text.tsx";
+import { LoadingMap } from "./shared.tsx";
 
 export const NativeMap = () => {
   const colors = useColors();
@@ -51,32 +36,29 @@ export const NativeMap = () => {
     router.replace("/");
   }, [signedPmtilesUrlQuery.error]);
 
-  if (Platform.OS === "web") {
-    return <UnsupportedMap />;
-  }
-
   if (signedPmtilesUrlQuery.isLoading && !mapStyle) {
-    return <LoadingMap />;
-  }
-
-  const mapLibre = getMapLibreModule();
-
-  if (!mapLibre) {
-    return <UnsupportedMap />;
+    return (
+      <View className="flex-1 items-center justify-center bg-background px-6">
+        <Text className="text-center text-base text-muted">Loading map…</Text>
+      </View>
+    );
   }
 
   if (!mapStyle) {
     return (
-      <MapLoadError
-        title="The map URL could not be loaded."
-        onRetry={() => {
-          void signedPmtilesUrlQuery.refetch();
-        }}
-      />
+      <View className="flex-1 items-center justify-center bg-background px-6">
+        <View className="w-full max-w-80 gap-5">
+          <Text className="text-center text-base text-muted">The map URL could not be loaded.</Text>
+          <Button
+            title="Retry"
+            onPress={() => {
+              void signedPmtilesUrlQuery.refetch();
+            }}
+          />
+        </View>
+      </View>
     );
   }
-
-  const { Camera, MapView } = mapLibre;
 
   return (
     <View className="flex-1">
@@ -84,9 +66,8 @@ export const NativeMap = () => {
         key={pmtilesUrl}
         style={{ flex: 1 }}
         mapStyle={mapStyle}
-        attributionEnabled
-        logoEnabled={false}
-        compassEnabled={false}
+        attributionEnabled={false}
+        logoEnabled={true}
         pitchEnabled={false}
         rotateEnabled={false}
         surfaceView={Platform.OS === "android"}
