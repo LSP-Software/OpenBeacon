@@ -111,14 +111,16 @@ model GroupMember {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  groupId String?
-  group   Group?  @relation(fields: [groupId], references: [id])
+  groupId String
+  group   Group? @relation(fields: [groupId], references: [id])
 
   joinedAt DateTime  @default(now())
   role     GroupRole
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([userId, groupId])
 }
 
 enum GroupRole {

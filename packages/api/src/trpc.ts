@@ -11,7 +11,7 @@ import { auth } from "@openbeacon/auth";
 import { GroupRole } from "@openbeacon/database/enums";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
-import { z, ZodError } from "zod/v4";
+import { ZodError, z } from "zod/v4";
 import { db } from "./db.ts";
 
 /**
