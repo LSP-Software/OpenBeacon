@@ -18,6 +18,7 @@
     "test": "bun test --pass-with-no-tests",
     "db:generate": "bun run --env-file=../../.env prisma generate",
     "db:migrate:deploy": "bun run --env-file=../../.env prisma migrate deploy",
+    "db:migrate:reset": "bun run --env-file=../../.env prisma migrate reset",
     "db:migrate": "bun run --env-file=../../.env prisma migrate dev",
     "db:studio": "prisma studio"
   },
