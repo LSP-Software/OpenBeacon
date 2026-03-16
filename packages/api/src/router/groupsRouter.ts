@@ -2,8 +2,11 @@ import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod/v4";
 import { env } from "../env.ts";
 import {
+  buildGroupAvatarPath,
+  clearPendingImageUploadForGroup,
   confirmImageUpload,
-  createImageOwnerLockKey,
+  getPendingImageUploadForGroup,
+  replacePendingImageUploadForUser,
   requestImageUpload,
   requestImageUploadInputSchema,
 } from "../lib/image-upload.ts";
@@ -54,32 +57,15 @@ const requestGroupImageUpload = async ({
   return requestImageUpload({
     bucketName: env.S3_BUCKET_NAME,
     contentHash,
-    imagePath: `group/${groupId}/uploads/avatar`,
-    replacePendingImageUpload: async (fileName) => {
-      let oldFileName: string | null = null;
-
-      await ctx.db.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${createImageOwnerLockKey(userId)})`;
-
-        const existingPendingGroupImageUpload = await tx.pendingUpload.findUnique({
-          where: { userId_uploadType: { userId, uploadType: "groupAvatar" } },
-          select: { fileName: true },
-        });
-
-        if (existingPendingGroupImageUpload) {
-          oldFileName = existingPendingGroupImageUpload.fileName;
-          await tx.pendingUpload.delete({
-            where: { userId_uploadType: { userId, uploadType: "groupAvatar" } },
-          });
-        }
-
-        await tx.pendingUpload.create({
-          data: { userId, uploadType: "groupAvatar", groupId, fileName },
-        });
-      });
-
-      return oldFileName;
-    },
+    imagePath: buildGroupAvatarPath(groupId),
+    replacePendingImageUpload: (fileName) =>
+      replacePendingImageUploadForUser({
+        db: ctx.db,
+        userId,
+        uploadType: "groupAvatar",
+        fileName,
+        groupId,
+      }),
   });
 };
 
@@ -94,17 +80,19 @@ const confirmGroupImageUpload = async ({
 
   return confirmImageUpload({
     bucketName: env.S3_BUCKET_NAME,
-    imagePath: `group/${groupId}/uploads/avatar`,
+    imagePath: buildGroupAvatarPath(groupId),
     getPendingImageUpload: () =>
-      ctx.db.pendingUpload.findFirst({
-        where: { uploadType: "groupAvatar", groupId },
-        select: { fileName: true },
+      getPendingImageUploadForGroup({
+        db: ctx.db,
+        groupId,
+        uploadType: "groupAvatar",
       }),
-    clearPendingImageUpload: async () => {
-      await ctx.db.pendingUpload.deleteMany({
-        where: { uploadType: "groupAvatar", groupId },
-      });
-    },
+    clearPendingImageUpload: () =>
+      clearPendingImageUploadForGroup({
+        db: ctx.db,
+        groupId,
+        uploadType: "groupAvatar",
+      }),
     getCurrentImageUrl: async () => group.image ?? null,
     setCurrentImageUrl: async (imageUrl) => {
       await ctx.db.group.update({
@@ -148,10 +136,9 @@ export const groupsRouter = {
       });
 
       if (pendingUploads.length > 0) {
+        const avatarPath = buildGroupAvatarPath(input.id);
         for (const pending of pendingUploads) {
-          await tryCatch(
-            deleteFile(env.S3_BUCKET_NAME, `group/${input.id}/uploads/avatar`, pending.fileName),
-          );
+          await tryCatch(deleteFile(env.S3_BUCKET_NAME, avatarPath, pending.fileName));
         }
         await ctx.db.pendingUpload.deleteMany({
           where: { uploadType: "groupAvatar", groupId: input.id },

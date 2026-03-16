@@ -1,3 +1,4 @@
+import type { PrismaClient } from "@openbeacon/database";
 import { ImageContentType, ImageFileExtension } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
@@ -10,6 +11,108 @@ import {
   getPresignedUploadUrl,
 } from "./storage.ts";
 import { tryCatch } from "./tryCatch.ts";
+
+export type ImageUploadType = "userAvatar" | "groupAvatar";
+
+export const buildUserAvatarPath = (userId: string): string => `user/${userId}/uploads/avatar`;
+
+export const buildGroupAvatarPath = (groupId: string): string => `group/${groupId}/uploads/avatar`;
+
+type PendingUploadDb = Pick<PrismaClient, "$transaction" | "pendingUpload">;
+
+export const replacePendingImageUploadForUser = async ({
+  db,
+  userId,
+  uploadType,
+  fileName,
+  groupId,
+}: {
+  db: PendingUploadDb;
+  userId: string;
+  uploadType: ImageUploadType;
+  fileName: string;
+  groupId?: string;
+}): Promise<string | null> => {
+  let oldFileName: string | null = null;
+
+  await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${createImageOwnerLockKey(userId)})`;
+
+    const existing = await tx.pendingUpload.findUnique({
+      where: { userId_uploadType: { userId, uploadType } },
+      select: { fileName: true },
+    });
+
+    if (existing) {
+      oldFileName = existing.fileName;
+      await tx.pendingUpload.delete({
+        where: { userId_uploadType: { userId, uploadType } },
+      });
+    }
+
+    await tx.pendingUpload.create({
+      data: { userId, uploadType, fileName, ...(groupId != null && { groupId }) },
+    });
+  });
+
+  return oldFileName;
+};
+
+export const getPendingImageUploadForUser = async ({
+  db,
+  userId,
+  uploadType,
+}: {
+  db: PendingUploadDb;
+  userId: string;
+  uploadType: ImageUploadType;
+}): Promise<{ fileName: string } | null> =>
+  db.pendingUpload.findUnique({
+    where: { userId_uploadType: { userId, uploadType } },
+    select: { fileName: true },
+  });
+
+export const clearPendingImageUploadForUser = async ({
+  db,
+  userId,
+  uploadType,
+}: {
+  db: PendingUploadDb;
+  userId: string;
+  uploadType: ImageUploadType;
+}): Promise<void> => {
+  await db.pendingUpload.delete({
+    where: { userId_uploadType: { userId, uploadType } },
+  });
+};
+
+export const getPendingImageUploadForGroup = async ({
+  db,
+  groupId,
+  uploadType,
+}: {
+  db: PendingUploadDb;
+  groupId: string;
+  uploadType: ImageUploadType;
+}): Promise<{ fileName: string } | null> =>
+  db.pendingUpload.findFirst({
+    where: { uploadType, groupId },
+    select: { fileName: true },
+  });
+
+export const clearPendingImageUploadForGroup = async ({
+  db,
+  groupId,
+  uploadType,
+}: {
+  db: PendingUploadDb;
+  groupId: string;
+  uploadType: ImageUploadType;
+}): Promise<void> => {
+  await db.pendingUpload.deleteMany({
+    where: { uploadType, groupId },
+  });
+};
 
 export const requestImageUploadInputSchema = z.object({
   fileSize: z.number().int().nonnegative().max(env.MAX_IMAGE_FILE_SIZE),

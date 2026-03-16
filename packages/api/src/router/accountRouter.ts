@@ -1,8 +1,11 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 import { env } from "../env.ts";
 import {
+  buildUserAvatarPath,
+  clearPendingImageUploadForUser,
   confirmImageUpload,
-  createImageOwnerLockKey,
+  getPendingImageUploadForUser,
+  replacePendingImageUploadForUser,
   requestImageUpload,
   requestImageUploadInputSchema,
 } from "../lib/image-upload.ts";
@@ -24,32 +27,14 @@ const requestProfileImageUpload = async ({
   return requestImageUpload({
     bucketName: env.S3_BUCKET_NAME,
     contentHash,
-    imagePath: `user/${userId}/uploads/avatar`,
-    replacePendingImageUpload: async (fileName) => {
-      let oldFileName: string | null = null;
-
-      await ctx.db.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${createImageOwnerLockKey(userId)})`;
-
-        const existingPendingProfileImageUpload = await tx.pendingUpload.findUnique({
-          where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
-          select: { fileName: true },
-        });
-
-        if (existingPendingProfileImageUpload) {
-          oldFileName = existingPendingProfileImageUpload.fileName;
-          await tx.pendingUpload.delete({
-            where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
-          });
-        }
-
-        await tx.pendingUpload.create({
-          data: { userId, uploadType: "userAvatar", fileName },
-        });
-      });
-
-      return oldFileName;
-    },
+    imagePath: buildUserAvatarPath(userId),
+    replacePendingImageUpload: (fileName) =>
+      replacePendingImageUploadForUser({
+        db: ctx.db,
+        userId,
+        uploadType: "userAvatar",
+        fileName,
+      }),
   });
 };
 
@@ -58,17 +43,19 @@ const confirmProfileImageUpload = async ({ ctx }: { ctx: ProtectedTRPCContext })
 
   return confirmImageUpload({
     bucketName: env.S3_BUCKET_NAME,
-    imagePath: `user/${userId}/uploads/avatar`,
+    imagePath: buildUserAvatarPath(userId),
     getPendingImageUpload: () =>
-      ctx.db.pendingUpload.findUnique({
-        where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
-        select: { fileName: true },
+      getPendingImageUploadForUser({
+        db: ctx.db,
+        userId,
+        uploadType: "userAvatar",
       }),
-    clearPendingImageUpload: async () => {
-      await ctx.db.pendingUpload.delete({
-        where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
-      });
-    },
+    clearPendingImageUpload: () =>
+      clearPendingImageUploadForUser({
+        db: ctx.db,
+        userId,
+        uploadType: "userAvatar",
+      }),
     getCurrentImageUrl: async () => {
       const currentUser = await ctx.db.user.findUnique({
         where: { id: userId },
