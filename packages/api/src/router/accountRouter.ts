@@ -31,18 +31,20 @@ const requestProfileImageUpload = async ({
       await ctx.db.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${createImageOwnerLockKey(userId)})`;
 
-        const existingPendingProfileImageUpload = await tx.pendingProfileImageUpload.findUnique({
-          where: { userId },
+        const existingPendingProfileImageUpload = await tx.pendingUpload.findUnique({
+          where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
           select: { fileName: true },
         });
 
         if (existingPendingProfileImageUpload) {
           oldFileName = existingPendingProfileImageUpload.fileName;
-          await tx.pendingProfileImageUpload.delete({ where: { userId } });
+          await tx.pendingUpload.delete({
+            where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
+          });
         }
 
-        await tx.pendingProfileImageUpload.create({
-          data: { userId, fileName },
+        await tx.pendingUpload.create({
+          data: { userId, uploadType: "userAvatar", fileName },
         });
       });
 
@@ -58,12 +60,14 @@ const confirmProfileImageUpload = async ({ ctx }: { ctx: ProtectedTRPCContext })
     bucketName: env.S3_BUCKET_NAME,
     imagePath: `user/${userId}/uploads/avatar`,
     getPendingImageUpload: () =>
-      ctx.db.pendingProfileImageUpload.findUnique({
-        where: { userId },
+      ctx.db.pendingUpload.findUnique({
+        where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
         select: { fileName: true },
       }),
     clearPendingImageUpload: async () => {
-      await ctx.db.pendingProfileImageUpload.delete({ where: { userId } });
+      await ctx.db.pendingUpload.delete({
+        where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
+      });
     },
     getCurrentImageUrl: async () => {
       const currentUser = await ctx.db.user.findUnique({

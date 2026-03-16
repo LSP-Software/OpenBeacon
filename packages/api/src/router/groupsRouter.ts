@@ -48,6 +48,7 @@ const requestGroupImageUpload = async ({
   groupId: string;
   contentHash: string;
 }) => {
+  const userId = ctx.session.user.id;
   await getGroupForGroupImageOrThrow({ ctx, groupId });
 
   return requestImageUpload({
@@ -58,20 +59,22 @@ const requestGroupImageUpload = async ({
       let oldFileName: string | null = null;
 
       await ctx.db.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${createImageOwnerLockKey(groupId)})`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${createImageOwnerLockKey(userId)})`;
 
-        const existingPendingGroupImageUpload = await tx.pendingGroupImageUpload.findUnique({
-          where: { groupId },
+        const existingPendingGroupImageUpload = await tx.pendingUpload.findUnique({
+          where: { userId_uploadType: { userId, uploadType: "groupAvatar" } },
           select: { fileName: true },
         });
 
         if (existingPendingGroupImageUpload) {
           oldFileName = existingPendingGroupImageUpload.fileName;
-          await tx.pendingGroupImageUpload.delete({ where: { groupId } });
+          await tx.pendingUpload.delete({
+            where: { userId_uploadType: { userId, uploadType: "groupAvatar" } },
+          });
         }
 
-        await tx.pendingGroupImageUpload.create({
-          data: { groupId, fileName },
+        await tx.pendingUpload.create({
+          data: { userId, uploadType: "groupAvatar", groupId, fileName },
         });
       });
 
@@ -93,12 +96,14 @@ const confirmGroupImageUpload = async ({
     bucketName: env.S3_BUCKET_NAME,
     imagePath: `group/${groupId}/uploads/avatar`,
     getPendingImageUpload: () =>
-      ctx.db.pendingGroupImageUpload.findUnique({
-        where: { groupId },
+      ctx.db.pendingUpload.findFirst({
+        where: { uploadType: "groupAvatar", groupId },
         select: { fileName: true },
       }),
     clearPendingImageUpload: async () => {
-      await ctx.db.pendingGroupImageUpload.delete({ where: { groupId } });
+      await ctx.db.pendingUpload.deleteMany({
+        where: { uploadType: "groupAvatar", groupId },
+      });
     },
     getCurrentImageUrl: async () => group.image ?? null,
     setCurrentImageUrl: async (imageUrl) => {
@@ -119,9 +124,6 @@ export const groupsRouter = {
         where: { id: input.id },
         select: {
           image: true,
-          pendingGroupImageUpload: {
-            select: { fileName: true },
-          },
         },
       });
 
@@ -140,14 +142,20 @@ export const groupsRouter = {
         }
       }
 
-      if (group?.pendingGroupImageUpload) {
-        await tryCatch(
-          deleteFile(
-            env.S3_BUCKET_NAME,
-            `group/${input.id}/uploads/avatar`,
-            group.pendingGroupImageUpload.fileName,
-          ),
-        );
+      const pendingUploads = await ctx.db.pendingUpload.findMany({
+        where: { uploadType: "groupAvatar", groupId: input.id },
+        select: { fileName: true },
+      });
+
+      if (pendingUploads.length > 0) {
+        for (const pending of pendingUploads) {
+          await tryCatch(
+            deleteFile(env.S3_BUCKET_NAME, `group/${input.id}/uploads/avatar`, pending.fileName),
+          );
+        }
+        await ctx.db.pendingUpload.deleteMany({
+          where: { uploadType: "groupAvatar", groupId: input.id },
+        });
       }
 
       return {
