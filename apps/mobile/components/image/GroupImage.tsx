@@ -1,7 +1,7 @@
 import { GroupImageConfig } from "@openbeacon/shared";
 import { useMutation } from "@tanstack/react-query";
-import { queryClient, trpc } from "../lib/api.ts";
-import { uploadImageFromUri } from "../lib/image-upload.ts";
+import { queryClient, trpc } from "../../lib/api.ts";
+import { uploadImageFromUri } from "../../lib/image-upload.ts";
 import { EditableImage } from "./EditableImage.tsx";
 
 type GroupImageProps = {

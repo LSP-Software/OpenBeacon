@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/Button.tsx";
-import { ProfileImage } from "../../components/ProfileImage.tsx";
+import { ProfileImage } from "../../components/image/ProfileImage.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
 import { tryCatch } from "../../lib/tryCatch.ts";
 

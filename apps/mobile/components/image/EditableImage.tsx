@@ -4,9 +4,9 @@ import { PencilIcon } from "lucide-react-native";
 import { cssInterop } from "nativewind";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
-import { cleanupTempFile, pickAndCropImage, processImage } from "../lib/image-upload.ts";
-import { useColors } from "../lib/theme.ts";
-import { tryCatch } from "../lib/tryCatch.ts";
+import { cleanupTempFile, pickAndCropImage, processImage } from "../../lib/image-upload.ts";
+import { useColors } from "../../lib/theme.ts";
+import { tryCatch } from "../../lib/tryCatch.ts";
 
 cssInterop(Image, { className: "style" });
 
