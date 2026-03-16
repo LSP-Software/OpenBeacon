@@ -82,7 +82,12 @@ export const EditableImage = ({
     }
 
     if (uploadedImageUrl && onImageUploaded) {
-      await onImageUploaded(uploadedImageUrl);
+      const { error: callbackError } = await tryCatch(
+        Promise.resolve(onImageUploaded(uploadedImageUrl)),
+      );
+      if (callbackError) {
+        Alert.alert("Failed to update image", callbackError.message);
+      }
     }
 
     setIsUploading(false);
