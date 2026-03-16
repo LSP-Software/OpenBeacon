@@ -9,70 +9,8 @@ import {
   requestImageUpload,
   requestImageUploadInputSchema,
 } from "../lib/image-upload.ts";
-import { protectedProcedure, type TRPCContext } from "../trpc.ts";
+import { protectedProcedure } from "../trpc.ts";
 
-type ProtectedTRPCContext = TRPCContext & {
-  session: NonNullable<TRPCContext["session"]>;
-};
-
-const requestProfileImageUpload = async ({
-  ctx,
-  contentHash,
-}: {
-  ctx: ProtectedTRPCContext;
-  contentHash: string;
-}) => {
-  const userId = ctx.session.user.id;
-
-  return requestImageUpload({
-    bucketName: env.S3_BUCKET_NAME,
-    contentHash,
-    imagePath: buildUserAvatarPath(userId),
-    replacePendingImageUpload: (fileName) =>
-      replacePendingImageUploadForUser({
-        db: ctx.db,
-        userId,
-        uploadType: "userAvatar",
-        fileName,
-      }),
-  });
-};
-
-const confirmProfileImageUpload = async ({ ctx }: { ctx: ProtectedTRPCContext }) => {
-  const userId = ctx.session.user.id;
-
-  return confirmImageUpload({
-    bucketName: env.S3_BUCKET_NAME,
-    imagePath: buildUserAvatarPath(userId),
-    getPendingImageUpload: () =>
-      getPendingImageUploadForUser({
-        db: ctx.db,
-        userId,
-        uploadType: "userAvatar",
-      }),
-    clearPendingImageUpload: () =>
-      clearPendingImageUploadForUser({
-        db: ctx.db,
-        userId,
-        uploadType: "userAvatar",
-      }),
-    getCurrentImageUrl: async () => {
-      const currentUser = await ctx.db.user.findUnique({
-        where: { id: userId },
-        select: { image: true },
-      });
-
-      return currentUser?.image ?? null;
-    },
-    setCurrentImageUrl: async (imageUrl) => {
-      await ctx.db.user.update({
-        where: { id: userId },
-        data: { image: imageUrl },
-      });
-    },
-    noPendingImageUploadMessage: "No pending profile image upload to confirm.",
-  });
-};
 
 export const accountRouter = {
   getProfile: protectedProcedure.query(async ({ ctx }) => {
@@ -85,10 +23,55 @@ export const accountRouter = {
   requestProfileImageUpload: protectedProcedure
     .input(requestImageUploadInputSchema)
     .mutation(async ({ ctx, input }) => {
-      return requestProfileImageUpload({ ctx, contentHash: input.contentHash });
+      const userId = ctx.session.user.id;
+
+      return requestImageUpload({
+        bucketName: env.S3_BUCKET_NAME,
+        contentHash: input.contentHash,
+        imagePath: buildUserAvatarPath(userId),
+        replacePendingImageUpload: (fileName) =>
+          replacePendingImageUploadForUser({
+            db: ctx.db,
+            userId,
+            uploadType: "userAvatar",
+            fileName,
+          }),
+      });
     }),
 
   confirmProfileImageUpload: protectedProcedure.mutation(async ({ ctx }) => {
-    return confirmProfileImageUpload({ ctx });
+    const userId = ctx.session.user.id;
+
+    return confirmImageUpload({
+      bucketName: env.S3_BUCKET_NAME,
+      imagePath: buildUserAvatarPath(userId),
+      getPendingImageUpload: () =>
+        getPendingImageUploadForUser({
+          db: ctx.db,
+          userId,
+          uploadType: "userAvatar",
+        }),
+      clearPendingImageUpload: () =>
+        clearPendingImageUploadForUser({
+          db: ctx.db,
+          userId,
+          uploadType: "userAvatar",
+        }),
+      getCurrentImageUrl: async () => {
+        const currentUser = await ctx.db.user.findUnique({
+          where: { id: userId },
+          select: { image: true },
+        });
+  
+        return currentUser?.image ?? null;
+      },
+      setCurrentImageUrl: async (imageUrl) => {
+        await ctx.db.user.update({
+          where: { id: userId },
+          data: { image: imageUrl },
+        });
+      },
+      noPendingImageUploadMessage: "No pending profile image upload to confirm.",
+    });
   }),
 } satisfies TRPCRouterRecord;

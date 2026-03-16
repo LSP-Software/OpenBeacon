@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@openbeacon/database";
 import { ImageContentType, ImageFileExtension } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
+import { createHash } from "node:crypto";
 import { z } from "zod/v4";
 import { env } from "../env.ts";
 import {
@@ -20,6 +21,8 @@ export const buildGroupAvatarPath = (groupId: string): string => `group/${groupI
 
 type PendingUploadDb = Pick<PrismaClient, "$transaction" | "pendingUpload">;
 
+type GroupDB = Pick<PrismaClient, "$transaction" | "group">;
+
 export const replacePendingImageUploadForUser = async ({
   db,
   userId,
@@ -36,7 +39,10 @@ export const replacePendingImageUploadForUser = async ({
   let oldFileName: string | null = null;
 
   await db.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${createImageOwnerLockKey(userId)})`;
+    const lockKey = Math.abs(
+      createHash("sha256").update(userId, "utf8").digest().readInt32BE(0),
+    );
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
 
     const existing = await tx.pendingUpload.findUnique({
       where: { userId_uploadType: { userId, uploadType } },
@@ -114,46 +120,45 @@ export const clearPendingImageUploadForGroup = async ({
   });
 };
 
+export const getGroupForGroupImageOrThrow = async ({
+  db,
+  groupId,
+}: {
+  db: GroupDB;
+  groupId: string;
+}) => {
+  const group = await db.group.findUnique({
+    where: { id: groupId },
+    select: { id: true, image: true },
+  });
+
+  if (!group) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Group not found.",
+    });
+  }
+
+  return group;
+};
+
+
 export const requestImageUploadInputSchema = z.object({
   fileSize: z.number().int().nonnegative().max(env.MAX_IMAGE_FILE_SIZE),
   contentHash: z.string(),
 });
-
-type RequestImageUploadOptions = {
-  bucketName: string;
-  contentHash: string;
-  imagePath: string;
-  replacePendingImageUpload: (fileName: string) => Promise<string | null>;
-};
-
-type PendingImageUpload = {
-  fileName: string;
-};
-
-type ConfirmImageUploadOptions = {
-  bucketName: string;
-  imagePath: string;
-  getPendingImageUpload: () => Promise<PendingImageUpload | null>;
-  clearPendingImageUpload: () => Promise<void>;
-  getCurrentImageUrl: () => Promise<string | null>;
-  setCurrentImageUrl: (imageUrl: string) => Promise<void>;
-  noPendingImageUploadMessage: string;
-};
-
-export const createImageOwnerLockKey = (imageOwnerId: string): number => {
-  let hash = 0;
-  for (let index = 0; index < imageOwnerId.length; index++) {
-    hash = ((hash << 5) - hash + imageOwnerId.charCodeAt(index)) | 0;
-  }
-  return Math.abs(hash);
-};
 
 export const requestImageUpload = async ({
   bucketName,
   contentHash,
   imagePath,
   replacePendingImageUpload,
-}: RequestImageUploadOptions): Promise<{ presignedUrl: string }> => {
+}: {
+  bucketName: string;
+  contentHash: string;
+  imagePath: string;
+  replacePendingImageUpload: (fileName: string) => Promise<string | null>;
+}): Promise<{ presignedUrl: string }> => {
   const fileName = `${crypto.randomUUID()}.${ImageFileExtension}`;
 
   const { data: presignedUrl, error: presignError } = await tryCatch(
@@ -198,7 +203,15 @@ export const confirmImageUpload = async ({
   getCurrentImageUrl,
   setCurrentImageUrl,
   noPendingImageUploadMessage,
-}: ConfirmImageUploadOptions): Promise<{ imageUrl: string }> => {
+}: {
+  bucketName: string;
+  imagePath: string;
+  getPendingImageUpload: () => Promise<{ fileName: string; } | null>;
+  clearPendingImageUpload: () => Promise<void>;
+  getCurrentImageUrl: () => Promise<string | null>;
+  setCurrentImageUrl: (imageUrl: string) => Promise<void>;
+  noPendingImageUploadMessage: string;
+}): Promise<{ imageUrl: string }> => {
   const pendingImageUpload = await getPendingImageUpload();
   if (!pendingImageUpload) {
     throw new TRPCError({
