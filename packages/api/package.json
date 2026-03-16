@@ -14,11 +14,11 @@
     "test": "bun test --pass-with-no-tests"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1008.0",
-    "@aws-sdk/s3-request-presigner": "^3.1008.0",
+    "@openbeacon/shared": "workspace:*",
+    "@aws-sdk/client-s3": "^3.1010.0",
+    "@aws-sdk/s3-request-presigner": "^3.1010.0",
     "@openbeacon/auth": "workspace:*",
     "@openbeacon/database": "workspace:*",
-    "@openbeacon/shared": "workspace:*",
     "@t3-oss/env-core": "^0.13.10",
     "@trpc/server": "^11.12.0",
     "superjson": "^2.2.6",
