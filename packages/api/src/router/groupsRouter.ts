@@ -55,19 +55,24 @@ export const groupsRouter = {
             uploadType: "groupAvatar",
             userId,
           }),
+        commitImageUpload: async (imageUrl) => {
+          await ctx.db.$transaction(async (tx) => {
+            await tx.group.update({
+              where: { id: input.groupId },
+              data: { image: imageUrl },
+            });
+            await tx.pendingUpload.delete({
+              where: { userId_uploadType: { userId, uploadType: "groupAvatar" } },
+            });
+          });
+        },
+        getCurrentImageUrl: async () => group.image ?? null,
         clearPendingImageUpload: () =>
           clearPendingImageUploadForGroup({
             db: ctx.db,
             uploadType: "groupAvatar",
             userId,
           }),
-        getCurrentImageUrl: async () => group.image ?? null,
-        setCurrentImageUrl: async (imageUrl) => {
-          await ctx.db.group.update({
-            where: { id: input.groupId },
-            data: { image: imageUrl },
-          });
-        },
         noPendingImageUploadMessage: "No pending group image upload to confirm.",
       });
     }),

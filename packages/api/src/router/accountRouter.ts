@@ -51,26 +51,31 @@ export const accountRouter = {
           userId,
           uploadType: "userAvatar",
         }),
+      commitImageUpload: async (imageUrl) => {
+        await ctx.db.$transaction(async (tx) => {
+          await tx.user.update({
+            where: { id: userId },
+            data: { image: imageUrl },
+          });
+          await tx.pendingUpload.delete({
+            where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
+          });
+        });
+      },
+      getCurrentImageUrl: async () => {
+        const currentUser = await ctx.db.user.findUnique({
+          where: { id: userId },
+          select: { image: true },
+        });
+
+        return currentUser?.image ?? null;
+      },
       clearPendingImageUpload: () =>
         clearPendingImageUploadForUser({
           db: ctx.db,
           userId,
           uploadType: "userAvatar",
         }),
-      getCurrentImageUrl: async () => {
-        const currentUser = await ctx.db.user.findUnique({
-          where: { id: userId },
-          select: { image: true },
-        });
-  
-        return currentUser?.image ?? null;
-      },
-      setCurrentImageUrl: async (imageUrl) => {
-        await ctx.db.user.update({
-          where: { id: userId },
-          data: { image: imageUrl },
-        });
-      },
       noPendingImageUploadMessage: "No pending profile image upload to confirm.",
     });
   }),

@@ -204,17 +204,17 @@ export const confirmImageUpload = async ({
   bucketName,
   imagePath,
   getPendingImageUpload,
-  clearPendingImageUpload,
+  commitImageUpload,
   getCurrentImageUrl,
-  setCurrentImageUrl,
+  clearPendingImageUpload,
   noPendingImageUploadMessage,
 }: {
   bucketName: string;
   imagePath: string;
   getPendingImageUpload: () => Promise<{ fileName: string } | null>;
-  clearPendingImageUpload: () => Promise<void>;
+  commitImageUpload: (imageUrl: string) => Promise<void>;
   getCurrentImageUrl: () => Promise<string | null>;
-  setCurrentImageUrl: (imageUrl: string) => Promise<void>;
+  clearPendingImageUpload: () => Promise<void>;
   noPendingImageUploadMessage: string;
 }): Promise<{ imageUrl: string }> => {
   const pendingImageUpload = await getPendingImageUpload();
@@ -265,8 +265,7 @@ export const confirmImageUpload = async ({
   const imageUrl = buildImagePublicUrl(bucketName, imagePath, pendingImageUpload.fileName);
   const currentImageUrl = await getCurrentImageUrl();
 
-  await setCurrentImageUrl(imageUrl);
-  await tryCatch(clearPendingImageUpload());
+  await commitImageUpload(imageUrl);
 
   if (currentImageUrl) {
     const currentImageStorageObject = extractImageStorageObject(currentImageUrl);
