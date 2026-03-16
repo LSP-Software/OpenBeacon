@@ -13,7 +13,6 @@ import trpcRouter from "./routes/trpc.ts";
 const storageCheck = await tryCatch(verifyStorageConnectivity());
 if (storageCheck.error) {
   console.error(`[startup] ${storageCheck.error.message}`);
-  process.exit(1);
 }
 
 const app = new Hono<{ Variables: AuthType }>();
