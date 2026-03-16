@@ -1,7 +1,7 @@
-import type { PrismaClient } from "@openbeacon/database";
-import { ImageContentType, ImageFileExtension } from "@openbeacon/shared";
-import { TRPCError } from "@trpc/server";
 import { createHash } from "node:crypto";
+import type { PrismaClient } from "@openbeacon/database";
+import { ImageContentType } from "@openbeacon/shared";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 import { env } from "../env.ts";
 import {
@@ -23,6 +23,8 @@ type PendingUploadDb = Pick<PrismaClient, "$transaction" | "pendingUpload">;
 
 type GroupDB = Pick<PrismaClient, "$transaction" | "group">;
 
+const ImageFileExtension = "webp";
+
 export const replacePendingImageUploadForUser = async ({
   db,
   userId,
@@ -35,18 +37,16 @@ export const replacePendingImageUploadForUser = async ({
   uploadType: ImageUploadType;
   fileName: string;
   groupId?: string;
-}): Promise<string | null> => {
+}): Promise<{ oldFileName: string | null; oldGroupId: string | null }> => {
   let oldFileName: string | null = null;
 
   await db.$transaction(async (tx) => {
-    const lockKey = Math.abs(
-      createHash("sha256").update(userId, "utf8").digest().readInt32BE(0),
-    );
+    const lockKey = Math.abs(createHash("sha256").update(userId, "utf8").digest().readInt32BE(0));
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
 
     const existing = await tx.pendingUpload.findUnique({
       where: { userId_uploadType: { userId, uploadType } },
-      select: { fileName: true },
+      select: { fileName: true, groupId: true },
     });
 
     if (existing) {
@@ -61,7 +61,7 @@ export const replacePendingImageUploadForUser = async ({
     });
   });
 
-  return oldFileName;
+  return { oldFileName, oldGroupId: groupId ?? null };
 };
 
 export const getPendingImageUploadForUser = async ({
@@ -142,7 +142,6 @@ export const getGroupForGroupImageOrThrow = async ({
   return group;
 };
 
-
 export const requestImageUploadInputSchema = z.object({
   fileSize: z.number().int().nonnegative().max(env.MAX_IMAGE_FILE_SIZE),
   contentHash: z.string(),
@@ -157,7 +156,7 @@ export const requestImageUpload = async ({
   bucketName: string;
   contentHash: string;
   imagePath: string;
-  replacePendingImageUpload: (fileName: string) => Promise<string | null>;
+  replacePendingImageUpload: (fileName: string) => Promise<{ oldFileName: string | null; oldGroupId: string | null }>;
 }): Promise<{ presignedUrl: string }> => {
   const fileName = `${crypto.randomUUID()}.${ImageFileExtension}`;
 
@@ -172,9 +171,10 @@ export const requestImageUpload = async ({
     });
   }
 
-  const oldFileName = await replacePendingImageUpload(fileName);
+  const { oldFileName, oldGroupId } = await replacePendingImageUpload(fileName);
   if (oldFileName) {
-    await tryCatch(deleteFile(bucketName, imagePath, oldFileName));
+    const oldImagePath = oldGroupId ? buildGroupAvatarPath(oldGroupId) : imagePath;
+    await tryCatch(deleteFile(bucketName, oldImagePath, oldFileName));
   }
 
   return { presignedUrl };
@@ -206,7 +206,7 @@ export const confirmImageUpload = async ({
 }: {
   bucketName: string;
   imagePath: string;
-  getPendingImageUpload: () => Promise<{ fileName: string; } | null>;
+  getPendingImageUpload: () => Promise<{ fileName: string } | null>;
   clearPendingImageUpload: () => Promise<void>;
   getCurrentImageUrl: () => Promise<string | null>;
   setCurrentImageUrl: (imageUrl: string) => Promise<void>;

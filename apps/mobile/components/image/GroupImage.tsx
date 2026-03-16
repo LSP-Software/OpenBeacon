@@ -1,4 +1,3 @@
-import { GroupImageConfig } from "@openbeacon/shared";
 import { useMutation } from "@tanstack/react-query";
 import { queryClient, trpc } from "../../lib/api.ts";
 import { uploadImageFromUri } from "../../lib/image-upload.ts";
@@ -8,6 +7,11 @@ type GroupImageProps = {
   groupId: string;
   imageUrl?: string | null;
   showEditButton?: boolean;
+};
+
+export const GroupImageConfig = {
+  cropShape: "rectangle" as const,
+  maxResolution: 512,
 };
 
 export const GroupImage = ({

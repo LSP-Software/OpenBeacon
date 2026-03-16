@@ -1,4 +1,3 @@
-import { ProfileImageConfig } from "@openbeacon/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, trpc } from "../../lib/api.ts";
 import { uploadImageFromUri } from "../../lib/image-upload.ts";
@@ -7,6 +6,11 @@ import { EditableImage } from "./EditableImage.tsx";
 type ProfileImageProps = {
   imageUrl?: string | null;
   showEditButton?: boolean;
+};
+
+const ProfileImageConfig = {
+  cropShape: "circle" as const,
+  maxResolution: 512,
 };
 
 export const ProfileImage = ({

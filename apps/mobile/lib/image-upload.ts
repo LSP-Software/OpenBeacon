@@ -1,9 +1,4 @@
-import type {
-  ImageCropShape,
-  ImageUploadConfirmResult,
-  ImageUploadRequestInput,
-  ImageUploadRequestResult,
-} from "@openbeacon/shared";
+import type { ImageCropShape } from "@openbeacon/shared";
 import { ImageContentType } from "@openbeacon/shared";
 import * as Crypto from "expo-crypto";
 import { File as FSFile } from "expo-file-system";
@@ -91,8 +86,8 @@ type UploadImageFromUriResult<T, E = string> =
 
 type UploadImageFromUriOptions = {
   uri: string;
-  requestImageUpload: (input: ImageUploadRequestInput) => Promise<ImageUploadRequestResult>;
-  confirmImageUpload: () => Promise<ImageUploadConfirmResult>;
+  requestImageUpload: (input: { fileSize: number; contentHash: string; }) => Promise<{ presignedUrl: string; }>;
+  confirmImageUpload: () => Promise<{ imageUrl: string }>;
 };
 
 export const uploadImageFromUri = async ({
