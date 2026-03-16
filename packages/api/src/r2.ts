@@ -13,7 +13,7 @@ const r2Client = new S3Client({
 
 export const PM_TILES_URL_EXPIRES_IN_SECONDS = 60 * 10;
 
-export async function createSignedPmtilesUrl() {
+export const createSignedPmtilesUrl = async () => {
   const command = new GetObjectCommand({
     Bucket: env.R2_BUCKET,
     Key: env.R2_PM_TILES_KEY,
@@ -29,4 +29,4 @@ export async function createSignedPmtilesUrl() {
     url,
     expiresAt,
   };
-}
+};

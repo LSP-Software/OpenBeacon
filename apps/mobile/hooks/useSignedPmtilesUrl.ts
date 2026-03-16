@@ -4,7 +4,7 @@ import { trpc } from "../lib/api.ts";
 
 const PM_TILES_URL_REFRESH_BUFFER_MS = 60 * 1000;
 
-export function useSignedPmtilesUrl() {
+export const useSignedPmtilesUrl = () => {
   const query = useQuery({
     ...trpc.maps.getSignedPmtilesUrl.queryOptions(),
     retry: false,
@@ -32,4 +32,4 @@ export function useSignedPmtilesUrl() {
   }, [query.data?.expiresAt, query.refetch]);
 
   return query;
-}
+};

@@ -2,7 +2,7 @@ import { View } from "react-native";
 import { Button } from "../Button.tsx";
 import { Text } from "../Text.tsx";
 
-export function UnsupportedMap() {
+export const UnsupportedMap = () => {
   return (
     <View className="flex-1 items-center justify-center bg-background px-6">
       <Text className="text-center text-base text-muted">
@@ -10,23 +10,23 @@ export function UnsupportedMap() {
       </Text>
     </View>
   );
-}
+};
 
-export function LoadingMap() {
+export const LoadingMap = () => {
   return (
     <View className="flex-1 items-center justify-center bg-background px-6">
       <Text className="text-center text-base text-muted">Loading map…</Text>
     </View>
   );
-}
+};
 
-export function MapLoadError({
+export const MapLoadError = ({
   onRetry,
   title = "The map could not be loaded.",
 }: {
   onRetry: () => void;
   title?: string;
-}) {
+}) => {
   return (
     <View className="flex-1 items-center justify-center bg-background px-6">
       <View className="w-full max-w-80 gap-5">
@@ -35,4 +35,4 @@ export function MapLoadError({
       </View>
     </View>
   );
-}
+};

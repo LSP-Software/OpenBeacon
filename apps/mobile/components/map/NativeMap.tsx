@@ -15,15 +15,15 @@ type MapLibreModule = {
   MapView: typeof MapViewComponent;
 };
 
-function getMapLibreModule(): MapLibreModule | null {
+const getMapLibreModule = (): MapLibreModule | null => {
   if (Platform.OS === "web") {
     return null;
   }
 
   return require("@maplibre/maplibre-react-native") as MapLibreModule;
-}
+};
 
-export function NativeMap() {
+export const NativeMap = () => {
   const colors = useColors();
   const signedPmtilesUrlQuery = useSignedPmtilesUrl();
   const didRetryAfterMapFailureRef = useRef(false);
@@ -106,4 +106,4 @@ export function NativeMap() {
       </MapView>
     </View>
   );
-}
+};
