@@ -88,7 +88,7 @@ export default function ServerUrl() {
             <Button onPress={handleSave}>
               <Text>Save</Text>
             </Button>
-            {!hasCustomServerUrl() && (
+            {hasCustomServerUrl() && (
               <Button variant="outline" onPress={handleClear}>
                 <Text>Use Default Server</Text>
               </Button>
