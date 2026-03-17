@@ -10,9 +10,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button } from "../components/Button.tsx";
 import { FormInput } from "../components/FormInput.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
+import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
 import { tryCatch } from "../lib/tryCatch.ts";
@@ -104,11 +104,9 @@ export default function SignUp() {
               returnKeyType="done"
               onSubmitEditing={handleSignUp}
             />
-            <Button
-              title={loading ? "Creating account…" : "Create Account"}
-              onPress={handleSignUp}
-              disabled={loading}
-            />
+            <Button onPress={handleSignUp} disabled={loading}>
+              <Text>{loading ? "Creating account…" : "Create Account"}</Text>
+            </Button>
           </View>
 
           <View className="items-center gap-4 pt-2">
