@@ -1,5 +1,6 @@
 {
   "name": "openbeacon",
+  "license": "SEE LICENSE IN LICENSE.md",
   "private": true,
   "packageManager": "bun@1.3.10",
   "workspaces": [

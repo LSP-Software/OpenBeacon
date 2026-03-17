@@ -1,5 +1,6 @@
 {
   "name": "@openbeacon/mobile",
+  "license": "SEE LICENSE IN LICENSE.md",
   "version": "1.0.0",
   "private": true,
   "main": "expo-router/entry",
@@ -30,6 +31,8 @@
     "@rn-primitives/separator": "^1.2.0",
     "@rn-primitives/slot": "^1.2.0",
     "@rn-primitives/tabs": "^1.2.0",
+    "@maplibre/maplibre-react-native": "^10.4.2",
+    "@protomaps/basemaps": "^5.7.2",
     "@trpc/client": "^11.12.0",
     "@trpc/tanstack-react-query": "^11.12.0",
     "@types/node": "^25.4.0",

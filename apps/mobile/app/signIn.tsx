@@ -16,6 +16,7 @@ import { FormInput } from "../components/FormInput.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
+import { tryCatch } from "../lib/tryCatch.ts";
 
 export default function SignIn() {
   const [email, setEmail] = useState("");
@@ -27,24 +28,30 @@ export default function SignIn() {
   const handleLogin = async () => {
     if (!email.trim() || !password) return;
     setLoading(true);
-    try {
-      const response = await authClient.signIn.email({ email: email.trim(), password });
-      if (response.error) {
-        Alert.alert("Sign in failed", response.error.message ?? "An error occurred");
-        return;
-      }
-      const tokenToRevoke = await SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
-      if (tokenToRevoke) {
-        void authClient.revokeSession({ token: tokenToRevoke }).then(async (result) => {
-          if (!result?.error) {
-            await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
-          }
-        });
-      }
-      router.replace("/");
-    } finally {
+
+    const { error: signInError, data: signInResponse } = await tryCatch(
+      authClient.signIn.email({ email: email.trim(), password }),
+    );
+    if (signInResponse?.error || signInError) {
+      Alert.alert(
+        "Sign in failed",
+        signInResponse?.error?.message ?? signInError?.message ?? "An error occurred",
+      );
       setLoading(false);
+      return;
     }
+
+    const { data: tokenToRevoke } = await tryCatch(
+      SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY),
+    );
+    if (tokenToRevoke) {
+      void authClient.revokeSession({ token: tokenToRevoke }).then(async (result) => {
+        if (!result?.error) {
+          await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
+        }
+      });
+    }
+    router.replace("/");
   };
 
   return (
