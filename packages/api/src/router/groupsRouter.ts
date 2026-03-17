@@ -1,5 +1,5 @@
 import { GroupRole } from "@openbeacon/database";
-import { inviteMemberToGroupSchema } from "@openbeacon/schemas";
+import { createGroupSchema, inviteMemberToGroupSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { groupAdminProcedure, groupMemberProcedure, protectedProcedure } from "../trpc.ts";
@@ -288,57 +288,51 @@ export const groupsRouter = {
         }) satisfies GroupListItem,
     );
   }),
-  create: protectedProcedure
-    .input(
-      z.object({
-        name: z.string(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const group = await ctx.db.group.create({
-        data: {
-          name: input.name,
-          groupMembers: {
-            create: {
-              userId: ctx.session.user.id,
-              role: GroupRole.OWNER,
-            },
+  create: protectedProcedure.input(createGroupSchema).mutation(async ({ ctx, input }) => {
+    const group = await ctx.db.group.create({
+      data: {
+        name: input.name,
+        groupMembers: {
+          create: {
+            userId: ctx.session.user.id,
+            role: GroupRole.OWNER,
           },
         },
-        include: {
-          groupMembers: {
-            select: {
-              id: true,
-              role: true,
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  image: true,
-                },
+      },
+      include: {
+        groupMembers: {
+          select: {
+            id: true,
+            role: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                image: true,
               },
             },
           },
         },
-      });
+      },
+    });
 
-      if (!group) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create group" });
-      }
+    if (!group) {
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create group" });
+    }
 
-      return {
-        message: "Group created successfully",
-        newGroup: {
-          id: group.id,
-          name: group.name,
-          image: group.image,
-          members: group.groupMembers.map((member) => ({
-            id: member.id,
-            name: member.user.name,
-            image: member.user.image,
-            role: member.role,
-          })),
-        } satisfies GroupListItem,
-      };
-    }),
+    return {
+      message: "Group created successfully",
+      newGroup: {
+        id: group.id,
+        name: group.name,
+        image: group.image,
+        members: group.groupMembers.map((member) => ({
+          id: member.id,
+          name: member.user.name,
+          image: member.user.image,
+          role: member.role,
+        })),
+      } satisfies GroupListItem,
+    };
+  }),
 } satisfies TRPCRouterRecord;
