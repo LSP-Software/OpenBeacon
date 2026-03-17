@@ -148,7 +148,7 @@ export const getGroupForGroupImageOrThrow = async ({
 };
 
 export const requestImageUploadInputSchema = z.object({
-  fileSize: z.number().int().nonnegative().max(env.MAX_IMAGE_FILE_SIZE),
+  fileSize: z.number().int().nonnegative().max(env.MAX_IMAGE_FILE_SIZE).min(1),
   contentHash: z.string(),
 });
 
