@@ -39,6 +39,6 @@
       "bundler": "metro"
     },
     "scheme": "openbeacon",
-    "plugins": ["expo-router"]
+    "plugins": ["expo-router", "@maplibre/maplibre-react-native"]
   }
 }
