@@ -125,28 +125,6 @@ export const clearPendingImageUploadForGroup = async ({
   });
 };
 
-export const getGroupForGroupImageOrThrow = async ({
-  db,
-  groupId,
-}: {
-  db: Pick<PrismaClient, "$transaction" | "group">;
-  groupId: string;
-}) => {
-  const group = await db.group.findUnique({
-    where: { id: groupId },
-    select: { id: true, image: true },
-  });
-
-  if (!group) {
-    throw new TRPCError({
-      code: "NOT_FOUND",
-      message: "Group not found.",
-    });
-  }
-
-  return group;
-};
-
 export const requestImageUploadInputSchema = z.object({
   fileSize: z.number().int().nonnegative().max(env.MAX_IMAGE_FILE_SIZE).min(1),
   contentHash: z.string(),

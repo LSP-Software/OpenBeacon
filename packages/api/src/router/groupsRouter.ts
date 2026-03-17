@@ -5,7 +5,6 @@ import {
   buildGroupAvatarPath,
   clearPendingImageUploadForGroup,
   confirmImageUpload,
-  getGroupForGroupImageOrThrow,
   getPendingImageUploadForGroup,
   replacePendingImageUploadForUser,
   requestImageUpload,
@@ -100,7 +99,6 @@ export const groupsRouter = {
     .input(requestImageUploadInputSchema.extend({ groupId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      await getGroupForGroupImageOrThrow({ db: ctx.db, groupId: input.groupId });
 
       return requestImageUpload({
         bucketName: env.S3_BUCKET_NAME,
@@ -122,7 +120,6 @@ export const groupsRouter = {
     .input(groupImageInputSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const group = await getGroupForGroupImageOrThrow({ db: ctx.db, groupId: input.groupId });
 
       return confirmImageUpload({
         bucketName: env.S3_BUCKET_NAME,
@@ -145,7 +142,13 @@ export const groupsRouter = {
             });
           });
         },
-        getCurrentImageUrl: async () => group.image ?? null,
+        getCurrentImageUrl: async () => {
+          const currentGroup = await ctx.db.group.findUnique({
+            where: { id: input.groupId },
+            select: { image: true },
+          });
+          return currentGroup?.image ?? null;
+        },
         clearPendingImageUpload: () =>
           clearPendingImageUploadForGroup({
             db: ctx.db,
