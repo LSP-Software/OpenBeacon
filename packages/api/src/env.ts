@@ -5,9 +5,9 @@ export const env = createEnv({
   server: {
     S3_ENDPOINT: z.url().default("https://s3.us-east-005.backblazeb2.com"),
     S3_REGION: z.string().default("us-east-005"),
-    S3_ACCESS_KEY_ID: z.string(),
-    S3_ACCESS_KEY: z.string(),
-    S3_BUCKET_NAME: z.string(),
+    S3_ACCESS_KEY_ID: z.string().min(20),
+    S3_ACCESS_KEY: z.string().min(20),
+    S3_BUCKET_NAME: z.string().min(1),
     S3_CDN_URL: z
       .string()
       .url()

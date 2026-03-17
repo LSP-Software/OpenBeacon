@@ -84,20 +84,18 @@ type UploadImageFromUriResult<T, E = string> =
   | { data: T; error?: never }
   | { data?: never; error: E };
 
-type UploadImageFromUriOptions = {
+export const uploadImageFromUri = async ({
+  uri,
+  requestImageUpload,
+  confirmImageUpload,
+}: {
   uri: string;
   requestImageUpload: (input: {
     fileSize: number;
     contentHash: string;
   }) => Promise<{ presignedUrl: string }>;
   confirmImageUpload: () => Promise<{ imageUrl: string }>;
-};
-
-export const uploadImageFromUri = async ({
-  uri,
-  requestImageUpload,
-  confirmImageUpload,
-}: UploadImageFromUriOptions): Promise<UploadImageFromUriResult<string | null>> => {
+}): Promise<UploadImageFromUriResult<string | null>> => {
   const file = new FSFile(uri);
   const { data: bytes, error: readError } = await tryCatch(
     (async () => {

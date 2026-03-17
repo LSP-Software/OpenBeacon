@@ -10,10 +10,6 @@ import { tryCatch } from "../../lib/tryCatch.ts";
 
 cssInterop(Image, { className: "style" });
 
-type EditableImageUploadResult =
-  | { data: string | null; error?: never }
-  | { data?: never; error: string };
-
 type EditableImageProps = {
   accessibilityLabel: string;
   cropShape: ImageCropShape;
@@ -23,7 +19,9 @@ type EditableImageProps = {
   maxResolution: number;
   onImageUploaded?: (imageUrl: string) => Promise<void> | void;
   showEditButton?: boolean;
-  uploadImage: (uri: string) => Promise<EditableImageUploadResult>;
+  uploadImage: (
+    uri: string,
+  ) => Promise<{ data: string | null; error?: never } | { data?: never; error: string }>;
 };
 
 export const EditableImage = ({

@@ -21,8 +21,6 @@ export const buildGroupAvatarPath = (groupId: string): string => `group/${groupI
 
 type PendingUploadDb = Pick<PrismaClient, "$transaction" | "pendingUpload">;
 
-type GroupDB = Pick<PrismaClient, "$transaction" | "group">;
-
 const ImageFileExtension = "webp";
 
 export const replacePendingImageUploadForUser = async ({
@@ -131,7 +129,7 @@ export const getGroupForGroupImageOrThrow = async ({
   db,
   groupId,
 }: {
-  db: GroupDB;
+  db: Pick<PrismaClient, "$transaction" | "group">;
   groupId: string;
 }) => {
   const group = await db.group.findUnique({
