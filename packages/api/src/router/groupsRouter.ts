@@ -20,62 +20,66 @@ export const groupsRouter = {
   acceptInvite: protectedProcedure
     .input(z.object({ inviteId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const invite = await ctx.db.groupMemberInvite.findUnique({
-        where: { id: input.inviteId, recipientId: ctx.session.user.id },
-      });
+      const member = await ctx.db.$transaction(async (tx) => {
+        const invite = await tx.groupMemberInvite.findUnique({
+          where: { id: input.inviteId, recipientId: ctx.session.user.id },
+        });
 
-      if (!invite) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
-      }
+        if (!invite) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
+        }
 
-      const member = await ctx.db.groupMember.create({
-        data: {
-          userId: invite.recipientId,
-          groupId: invite.groupId,
-          role: invite.role,
-        },
-        select: {
-          id: true,
-          user: {
-            select: {
-              id: true,
-              name: true,
-              image: true,
-            },
+        const createdMember = await tx.groupMember.create({
+          data: {
+            userId: invite.recipientId,
+            groupId: invite.groupId,
+            role: invite.role,
           },
-          role: true,
-          group: {
-            select: {
-              id: true,
-              name: true,
-              image: true,
-              groupMembers: {
-                select: {
-                  id: true,
-                  role: true,
-                  user: {
-                    select: {
-                      id: true,
-                      name: true,
-                      image: true,
+          select: {
+            id: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                image: true,
+              },
+            },
+            role: true,
+            group: {
+              select: {
+                id: true,
+                name: true,
+                image: true,
+                groupMembers: {
+                  select: {
+                    id: true,
+                    role: true,
+                    user: {
+                      select: {
+                        id: true,
+                        name: true,
+                        image: true,
+                      },
                     },
                   },
                 },
               },
             },
           },
-        },
-      });
-
-      if (!member.group) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to accept invite, group does not exist.",
         });
-      }
 
-      await ctx.db.groupMemberInvite.delete({
-        where: { id: input.inviteId },
+        if (!createdMember.group) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to accept invite, group does not exist.",
+          });
+        }
+
+        await tx.groupMemberInvite.delete({
+          where: { id: input.inviteId },
+        });
+
+        return createdMember;
       });
 
       return {
