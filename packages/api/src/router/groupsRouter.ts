@@ -139,7 +139,6 @@ export const groupsRouter = {
             recipientId: user.id,
             groupId: input.groupId,
             role: invite.role,
-            expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
           };
         })
         .filter((invite) => invite !== undefined);

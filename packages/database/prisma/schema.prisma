@@ -86,18 +86,13 @@ model Group {
 model GroupMemberInvite {
   id String @id @default(uuid(7))
 
-  inviterId String
-  inviter   User   @relation("GroupMemberInviteInviter", fields: [inviterId], references: [id], onDelete: Cascade)
-
+  inviterId   String
+  inviter     User      @relation("GroupMemberInviteInviter", fields: [inviterId], references: [id], onDelete: Cascade)
   recipientId String
-  recipient   User   @relation("GroupMemberInviteRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-
-  groupId String
-  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  role GroupRole
-
-  expiresAt DateTime
+  recipient   User      @relation("GroupMemberInviteRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  groupId     String
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  role        GroupRole
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
