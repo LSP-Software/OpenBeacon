@@ -27,23 +27,20 @@ const getStorageClient = (): S3Client => {
   return storageClient;
 };
 
-const verifyStorageBucketConnectivity = async (
-  bucketName: string,
-  storageLabel: string,
-): Promise<void> => {
+export const verifyStorageConnectivity = async (): Promise<void> => {
   const client = getStorageClient();
 
-  console.log(`Verifying ${storageLabel} storage connectivity...`);
-  console.log("Bucket name:", bucketName);
+  console.log(`Verifying S3 storage connectivity...`);
+  console.log("Bucket name:", env.S3_BUCKET_NAME);
   console.log("Endpoint:", env.S3_ENDPOINT);
   console.log("Region:", env.S3_REGION);
 
-  const result = await tryCatch(client.send(new HeadBucketCommand({ Bucket: bucketName })));
+  const result = await tryCatch(client.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET_NAME })));
   if (result.error) {
     const name = (result.error as Error & { name?: string }).name ?? "";
 
     if (name === "NotFound" || name === "NoSuchBucket") {
-      throw new Error(`S3 bucket "${bucketName}" does not exist at ${env.S3_ENDPOINT}`);
+      throw new Error(`S3 bucket "${env.S3_BUCKET_NAME}" does not exist at ${env.S3_ENDPOINT}`);
     }
     if (name === "CredentialsProviderError" || name === "InvalidAccessKeyId") {
       throw new Error(
@@ -52,7 +49,7 @@ const verifyStorageBucketConnectivity = async (
     }
     if (name === "AccessDenied" || name === "Forbidden") {
       throw new Error(
-        `S3 access denied to bucket "${bucketName}" — ensure the credentials have permission to access this bucket`,
+        `S3 access denied to bucket "${env.S3_BUCKET_NAME}" — ensure the credentials have permission to access this bucket`,
       );
     }
     if (name === "Unknown") {
@@ -66,11 +63,7 @@ const verifyStorageBucketConnectivity = async (
       `Failed to connect to S3 at ${env.S3_ENDPOINT}: ${result.error instanceof Error ? result.error.message : String(result.error)}`,
     );
   }
-  console.log(`${storageLabel} S3 bucket connected successfully.`);
-};
-
-export const verifyStorageConnectivity = async (): Promise<void> => {
-  await verifyStorageBucketConnectivity(env.S3_BUCKET_NAME, "image");
+  console.log(`S3 bucket connected successfully.`);
 };
 
 const buildKey = (path: string, fileName: string): string => {
