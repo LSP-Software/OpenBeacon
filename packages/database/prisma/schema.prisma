@@ -107,7 +107,7 @@ model GroupMember {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   groupId String
-  group   Group? @relation(fields: [groupId], references: [id])
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   joinedAt DateTime  @default(now())
   role     GroupRole
