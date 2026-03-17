@@ -109,8 +109,7 @@ model GroupMember {
   groupId String
   group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-  joinedAt DateTime  @default(now())
-  role     GroupRole
+  role GroupRole
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
