@@ -94,7 +94,7 @@ export const getPresignedUploadUrl = async (
     ContentLength: contentSize,
   });
   return getSignedUrl(client, command, {
-    expiresIn: 60,
+    expiresIn: 300,
     signableHeaders: new Set(["x-amz-checksum-sha256"]),
     unhoistableHeaders: new Set(["x-amz-checksum-sha256"]),
   });
