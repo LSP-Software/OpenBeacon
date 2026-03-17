@@ -74,7 +74,7 @@ export const EditableImage = ({
     cleanupTempFile(processedUri);
 
     if (uploadError) {
-      Alert.alert(`Upload failed: ${uploadError}`);
+      Alert.alert("Upload failed", uploadError);
       setIsUploading(false);
       return;
     }
