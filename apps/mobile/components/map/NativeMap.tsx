@@ -2,10 +2,10 @@ import { Camera, MapView } from "@maplibre/maplibre-react-native";
 import { router } from "expo-router";
 import { useEffect, useMemo, useRef } from "react";
 import { Button, Platform, View } from "react-native";
+import { Text } from "../../components/ui/Text.tsx";
 import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
 import { getProtomapsMapStyle } from "../../lib/protomaps-style.ts";
 import { useColors } from "../../lib/theme.ts";
-import { Text } from "../Text.tsx";
 
 export const NativeMap = () => {
   const colors = useColors();
