@@ -96,9 +96,9 @@ export default function SignUp() {
               autoComplete="password"
               textContentType="password"
               returnKeyType="done"
-              onSubmitEditing={handleSignUp}
+              onSubmitEditing={form.handleSubmit(handleSignUp)}
             />
-            <Button onPress={handleSignUp} disabled={loading}>
+            <Button onPress={form.handleSubmit(handleSignUp)} disabled={loading}>
               <Text>{loading ? "Creating account…" : "Create Account"}</Text>
             </Button>
           </View>

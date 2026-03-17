@@ -43,7 +43,10 @@ export default function SignIn() {
     );
     if (tokenToRevoke) {
       const revokeResult = await authClient.revokeSession({ token: tokenToRevoke });
-      if (revokeResult.error) return;
+      if (revokeResult.error) {
+        setLoading(false);
+        return;
+      }
       await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
     }
     router.replace("/");
@@ -88,7 +91,7 @@ export default function SignIn() {
               textContentType="password"
               returnKeyType="done"
             />
-            <Button onPress={handleLogin} disabled={loading}>
+            <Button onPress={form.handleSubmit(handleLogin)} disabled={loading}>
               <Text>{loading ? "Signing in…" : "Sign In"}</Text>
             </Button>
           </View>

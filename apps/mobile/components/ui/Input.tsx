@@ -40,7 +40,7 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
         return (
           <Field data-invalid={fieldState.invalid}>
             {(label || description) && (
-              <View className={cn("flex flex-col", descriptionPosition === "aboveInput")}>
+              <View className={"flex flex-col"}>
                 {label && (
                   <FieldLabel className="text-lg font-medium" htmlFor={name}>
                     {label}
