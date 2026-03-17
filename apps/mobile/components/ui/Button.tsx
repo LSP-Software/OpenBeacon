@@ -99,7 +99,7 @@ function Button({ className, variant, size, loading, disabled, ...props }: Butto
     <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
       <Pressable
         className={cn(
-          disabled || (loading && "opacity-80"),
+          (disabled || loading) && "opacity-80",
           buttonVariants({ variant, size }),
           className,
         )}
