@@ -1,40 +1,40 @@
+import { zodResolver } from "@hookform/resolvers/zod";
+import { signUpSchema } from "@openbeacon/schemas";
 import { router } from "expo-router";
-import { useRef, useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  type TextInput,
-  View,
-} from "react-native";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { FormInput } from "../components/FormInput.tsx";
+import type { z } from "zod";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 import { Button } from "../components/ui/Button.tsx";
+import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
 import { tryCatch } from "../lib/tryCatch.ts";
 
 export default function SignUp() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const emailRef = useRef<TextInput>(null);
-  const passwordRef = useRef<TextInput>(null);
+  const form = useForm<z.infer<typeof signUpSchema>>({
+    resolver: zodResolver(signUpSchema),
+    mode: "onTouched",
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+    },
+    shouldFocusError: true,
+  });
 
   const handleSignUp = async () => {
-    if (!name.trim() || !email.trim() || !password) return;
+    const { name, email, password } = form.getValues();
     setLoading(true);
 
     const { error: signUpError, data: signUpResponse } = await tryCatch(
       authClient.signUp.email({
-        email: email.trim(),
+        email,
         password,
-        name: name.trim(),
+        name,
       }),
     );
     if (signUpError || signUpResponse?.error) {
@@ -67,36 +67,30 @@ export default function SignUp() {
             <Text className="text-lg text-muted">Join OpenBeacon today</Text>
           </View>
 
-          <View className="gap-5">
-            <FormInput
+          <View className="gap-4">
+            <Input
+              control={form.control}
+              name="name"
               label="Name"
-              value={name}
-              onChangeText={setName}
               placeholder="Your name"
               autoCapitalize="words"
               autoComplete="name"
               textContentType="name"
-              returnKeyType="next"
-              onSubmitEditing={() => emailRef.current?.focus()}
             />
-            <FormInput
-              ref={emailRef}
+            <Input
+              control={form.control}
+              name="email"
               label="Email"
-              value={email}
-              onChangeText={setEmail}
               placeholder="you@example.com"
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
-              textContentType="emailAddress"
-              returnKeyType="next"
-              onSubmitEditing={() => passwordRef.current?.focus()}
             />
-            <FormInput
-              ref={passwordRef}
+            <Input
+              control={form.control}
+              name="password"
               label="Password"
-              value={password}
-              onChangeText={setPassword}
+              placeholder="Password"
               secureTextEntry
               autoCapitalize="none"
               autoComplete="password"
