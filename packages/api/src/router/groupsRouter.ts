@@ -122,10 +122,24 @@ export const groupsRouter = {
         },
       });
 
+      const existingMembers = await ctx.db.groupMember.findMany({
+        where: {
+          groupId: input.groupId,
+          userId: {
+            in: users.map((user) => user.id),
+          },
+        },
+      });
+
+      const existingMemberIds = new Set(existingMembers.map((member) => member.userId));
+
       const invitesToCreate = users
         .map((user) => {
           // don't allow the user to invite themselves
           if (user.id === ctx.session.user.id) return undefined;
+
+          // don't allow the user to invite someone who is already a member of the group
+          if (existingMemberIds.has(user.id)) return undefined;
 
           const invite = input.invites.find((invite) => invite.email === user.email);
           if (!invite) return undefined;
