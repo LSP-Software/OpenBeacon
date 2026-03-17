@@ -24,7 +24,7 @@ const buttonVariants = cva(
           }),
         ),
         outline: cn(
-          "border-border bg-background active:bg-accent dark:bg-input/30 dark:border-input dark:active:bg-input/50 border shadow-sm shadow-black/5",
+          "bg-transparent border-[1.5px] border-primary",
           Platform.select({
             web: "hover:bg-accent dark:hover:bg-input/50",
           }),
@@ -63,10 +63,7 @@ const buttonTextVariants = cva(
       variant: {
         default: "text-white",
         destructive: "text-destructive-foreground",
-        outline: cn(
-          "group-active:text-accent-foreground",
-          Platform.select({ web: "group-hover:text-accent-foreground" }),
-        ),
+        outline: cn("text-primary", Platform.select({ web: "group-hover:text-accent-foreground" })),
         secondary: "text-secondary-foreground",
         ghost: "group-active:text-accent-foreground",
         link: cn(
@@ -102,7 +99,7 @@ function Button({ className, variant, size, loading, disabled, ...props }: Butto
     <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
       <Pressable
         className={cn(
-          disabled || (loading && "opacity-80"),
+          (disabled || loading) && "opacity-80",
           buttonVariants({ variant, size }),
           className,
         )}

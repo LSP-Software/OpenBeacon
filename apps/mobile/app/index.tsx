@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { Animated, Dimensions, Easing, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BeaconIcon } from "../components/BeaconIcon.tsx";
-import { Button } from "../components/Button.tsx";
+import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
 import { useColors } from "../lib/theme.ts";
@@ -110,12 +110,12 @@ export default function HomeScreen() {
 
           <View className="gap-6 pb-8">
             <View className="gap-3">
-              <Button title="Sign In" onPress={() => router.push("/signIn")} />
-              <Button
-                title="Create Account"
-                variant="secondary"
-                onPress={() => router.push("/signUp")}
-              />
+              <Button onPress={() => router.push("/signIn")}>
+                <Text>Sign In</Text>
+              </Button>
+              <Button variant="outline" onPress={() => router.push("/signUp")}>
+                <Text>Create Account</Text>
+              </Button>
             </View>
 
             <Pressable

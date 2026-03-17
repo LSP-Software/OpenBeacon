@@ -2,9 +2,9 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button } from "../components/Button.tsx";
 import { FormInput } from "../components/FormInput.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
+import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { getServerUrl, hasCustomServerUrl, setServerUrl } from "../lib/server-url.ts";
 
@@ -85,9 +85,13 @@ export default function ServerUrl() {
               </Text>
             </View>
 
-            <Button title="Save" onPress={handleSave} />
+            <Button onPress={handleSave}>
+              <Text>Save</Text>
+            </Button>
             {hasCustomServerUrl() && (
-              <Button title="Use Default Server" variant="secondary" onPress={handleClear} />
+              <Button variant="outline" onPress={handleClear}>
+                <Text>Use Default Server</Text>
+              </Button>
             )}
           </View>
 

@@ -2,9 +2,10 @@ import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { ChevronRightIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button } from "../../components/Button";
+import { Button } from "../../components/ui/Button";
+import { Text } from "../../components/ui/Text.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
 import { tryCatch } from "../../lib/tryCatch.ts";
 
@@ -96,7 +97,9 @@ export default function AccountScreen() {
           />
         </View>
 
-        <Button title="Sign out" onPress={handleSignOut} variant="primary" />
+        <Button onPress={handleSignOut}>
+          <Text>Sign out</Text>
+        </Button>
         <Text className="text-muted text-sm text-center">OpenBeacon · Open Source</Text>
       </ScrollView>
     </View>

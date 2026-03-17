@@ -11,9 +11,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button } from "../components/Button.tsx";
 import { FormInput } from "../components/FormInput.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
+import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
 import { tryCatch } from "../lib/tryCatch.ts";
@@ -95,11 +95,9 @@ export default function SignIn() {
               returnKeyType="done"
               onSubmitEditing={handleLogin}
             />
-            <Button
-              title={loading ? "Signing in…" : "Sign In"}
-              onPress={handleLogin}
-              disabled={loading}
-            />
+            <Button onPress={handleLogin} disabled={loading}>
+              <Text>{loading ? "Signing in…" : "Sign In"}</Text>
+            </Button>
           </View>
           <View className="items-center gap-4 pt-2">
             <Pressable onPress={() => router.push("/signUp")} accessibilityRole="link">
