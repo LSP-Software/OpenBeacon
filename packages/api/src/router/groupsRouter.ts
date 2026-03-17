@@ -105,6 +105,7 @@ export const groupsRouter = {
       return requestImageUpload({
         bucketName: env.S3_BUCKET_NAME,
         contentHash: input.contentHash,
+        fileSize: input.fileSize,
         imagePath: buildGroupAvatarPath(input.groupId),
         replacePendingImageUpload: (fileName) =>
           replacePendingImageUploadForUser({

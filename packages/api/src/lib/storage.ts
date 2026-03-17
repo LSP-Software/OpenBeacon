@@ -83,6 +83,7 @@ export const getPresignedUploadUrl = async (
   fileName: string,
   contentType: string,
   contentHash: string,
+  contentSize: number,
 ): Promise<string> => {
   const client = getStorageClient();
   const command = new PutObjectCommand({
@@ -90,6 +91,7 @@ export const getPresignedUploadUrl = async (
     Key: buildKey(path, fileName),
     ContentType: contentType,
     ChecksumSHA256: contentHash,
+    ContentLength: contentSize,
   });
   return getSignedUrl(client, command, {
     expiresIn: 60,

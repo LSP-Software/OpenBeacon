@@ -27,6 +27,7 @@ export const accountRouter = {
       return requestImageUpload({
         bucketName: env.S3_BUCKET_NAME,
         contentHash: input.contentHash,
+        fileSize: input.fileSize,
         imagePath: buildUserAvatarPath(userId),
         replacePendingImageUpload: (fileName) =>
           replacePendingImageUploadForUser({

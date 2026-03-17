@@ -155,11 +155,13 @@ export const requestImageUploadInputSchema = z.object({
 export const requestImageUpload = async ({
   bucketName,
   contentHash,
+  fileSize,
   imagePath,
   replacePendingImageUpload,
 }: {
   bucketName: string;
   contentHash: string;
+  fileSize: number;
   imagePath: string;
   replacePendingImageUpload: (
     fileName: string,
@@ -168,7 +170,7 @@ export const requestImageUpload = async ({
   const fileName = `${crypto.randomUUID()}.${ImageFileExtension}`;
 
   const { data: presignedUrl, error: presignError } = await tryCatch(
-    getPresignedUploadUrl(bucketName, imagePath, fileName, ImageContentType, contentHash),
+    getPresignedUploadUrl(bucketName, imagePath, fileName, ImageContentType, contentHash, fileSize),
   );
 
   if (presignError) {
