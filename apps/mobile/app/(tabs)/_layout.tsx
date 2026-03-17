@@ -1,7 +1,13 @@
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import { TabBar } from "../../components/TabBar.tsx";
+import { authClient } from "../../lib/auth-client.ts";
 
 export default function TabsLayout() {
+  const { data: session } = authClient.useSession();
+  if (!session) {
+    return <Redirect href="/signIn" />;
+  }
+
   return (
     <Tabs
       initialRouteName="groups/list"
@@ -18,8 +24,8 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="groups/list" />
-      <Tabs.Screen name="map" />
-      <Tabs.Screen name="account" />
+      <Tabs.Screen name="map/index" />
+      <Tabs.Screen name="account/overview" />
     </Tabs>
   );
 }

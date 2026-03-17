@@ -7,8 +7,8 @@ import { Icon } from "./ui/Icon.tsx";
 
 const TABS: Record<string, { label: string; icon: LucideIcon; prefix: string }> = {
   "groups/list": { label: "Groups", icon: UsersIcon, prefix: "groups/" },
-  map: { label: "Map", icon: MapIcon, prefix: "map" },
-  account: { label: "Account", icon: UserIcon, prefix: "account" },
+  "map/index": { label: "Map", icon: MapIcon, prefix: "map/" },
+  "account/overview": { label: "Account", icon: UserIcon, prefix: "account/" },
 };
 
 export function TabBar({ state, navigation }: BottomTabBarProps) {
