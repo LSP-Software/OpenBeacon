@@ -21,8 +21,6 @@ export const buildGroupAvatarPath = (groupId: string): string => `group/${groupI
 
 type PendingUploadDb = Pick<PrismaClient, "$transaction" | "pendingUpload">;
 
-const ImageFileExtension = "webp";
-
 export const replacePendingImageUploadForUser = async ({
   db,
   userId,
@@ -145,7 +143,7 @@ export const requestImageUpload = async ({
     fileName: string,
   ) => Promise<{ oldFileName: string | null; oldGroupId: string | null }>;
 }): Promise<{ presignedUrl: string }> => {
-  const fileName = `${crypto.randomUUID()}.${ImageFileExtension}`;
+  const fileName = `${crypto.randomUUID()}.webp`;
 
   const { data: presignedUrl, error: presignError } = await tryCatch(
     getPresignedUploadUrl(bucketName, imagePath, fileName, ImageContentType, contentHash, fileSize),

@@ -3,12 +3,6 @@ import { queryClient, trpc } from "../../lib/api.ts";
 import { uploadImageFromUri } from "../../lib/image-upload.ts";
 import { EditableImage } from "./EditableImage.tsx";
 
-type GroupImageProps = {
-  groupId: string;
-  imageUrl?: string | null;
-  showEditButton?: boolean;
-};
-
 export const GroupImageConfig = {
   cropShape: "rectangle" as const,
   maxResolution: 512,
@@ -18,7 +12,11 @@ export const GroupImage = ({
   groupId,
   imageUrl = null,
   showEditButton = false,
-}: GroupImageProps) => {
+}: {
+  groupId: string;
+  imageUrl?: string | null;
+  showEditButton?: boolean;
+}) => {
   const requestGroupImageUploadMutation = useMutation(
     trpc.groups.requestGroupImageUpload.mutationOptions(),
   );

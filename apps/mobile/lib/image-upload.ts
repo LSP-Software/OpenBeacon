@@ -22,15 +22,12 @@ export const computeSha256Base64 = async (bytes: ArrayBuffer): Promise<string> =
   return btoa(binary);
 };
 
-export type PickImageResult =
-  | { ok: true; path: string }
-  | { ok: false; cancelled: true }
-  | { ok: false; error: Error };
-
 export const pickAndCropImage = async (
   size: number = DEFAULT_IMAGE_SIZE,
   cropShape: ImageCropShape = "circle",
-): Promise<PickImageResult> => {
+): Promise<
+  { ok: true; path: string } | { ok: false; cancelled: true } | { ok: false; error: Error }
+> => {
   const { data: image, error } = await tryCatch(
     ImageCropPicker.openPicker({
       cropping: true,
@@ -80,10 +77,6 @@ export const uploadToPresignedUrl = async (
   }
 };
 
-type UploadImageFromUriResult<T, E = string> =
-  | { data: T; error?: never }
-  | { data?: never; error: E };
-
 export const uploadImageFromUri = async ({
   uri,
   requestImageUpload,
@@ -95,7 +88,7 @@ export const uploadImageFromUri = async ({
     contentHash: string;
   }) => Promise<{ presignedUrl: string }>;
   confirmImageUpload: () => Promise<{ imageUrl: string }>;
-}): Promise<UploadImageFromUriResult<string | null>> => {
+}): Promise<{ data: string | null; error?: never } | { data?: never; error: string }> => {
   const file = new FSFile(uri);
   const { data: bytes, error: readError } = await tryCatch(
     (async () => {
