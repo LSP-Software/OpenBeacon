@@ -4,10 +4,10 @@ import { ChevronRightIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button } from "../../components/ui/Button";
-import { Text } from "../../components/ui/Text.tsx";
-import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
-import { tryCatch } from "../../lib/tryCatch.ts";
+import { Button } from "../../../components/ui/Button.tsx";
+import { Text } from "../../../components/ui/Text.tsx";
+import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client.ts";
+import { tryCatch } from "../../../lib/tryCatch.ts";
 
 type SettingRowProps = {
   label: string;
@@ -61,7 +61,7 @@ export default function AccountScreen() {
   };
 
   return (
-    <View className="flex-1">
+    <View className="flex-1 bg-background">
       <SafeAreaView edges={["top"]} className="z-10">
         <View className="px-8 pt-4 pb-10">
           <Text className="text-muted uppercase font-bold">Your</Text>
