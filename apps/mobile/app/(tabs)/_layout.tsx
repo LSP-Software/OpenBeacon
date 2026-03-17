@@ -4,7 +4,7 @@ import { TabBar } from "../../components/TabBar.tsx";
 export default function TabsLayout() {
   return (
     <Tabs
-      initialRouteName="map"
+      initialRouteName="groups/list"
       tabBar={(props) => <TabBar {...props} />}
       screenOptions={{
         headerShown: false,
@@ -17,7 +17,7 @@ export default function TabsLayout() {
         },
       }}
     >
-      <Tabs.Screen name="groups" />
+      <Tabs.Screen name="groups/list" />
       <Tabs.Screen name="map" />
       <Tabs.Screen name="account" />
     </Tabs>

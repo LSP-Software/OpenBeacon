@@ -4,7 +4,7 @@ import { ChevronRightIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button } from "../../components/Button.tsx";
+import { Button } from "../../components/Button";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
 import { tryCatch } from "../../lib/tryCatch.ts";
 
@@ -60,7 +60,7 @@ export default function AccountScreen() {
   };
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1">
       <SafeAreaView edges={["top"]} className="z-10">
         <View className="px-8 pt-4 pb-10">
           <Text className="text-muted uppercase font-bold">Your</Text>
@@ -75,7 +75,7 @@ export default function AccountScreen() {
       >
         <View className="items-center py-6 gap-4">
           <View className="w-20 h-20 rounded-full bg-primary items-center justify-center">
-            <Text className="text-on-primary text-2xl font-bold">{initials}</Text>
+            <Text className="text-white text-2xl font-bold">{initials}</Text>
           </View>
           <View className="items-center gap-1">
             <Text className="text-foreground text-2xl font-bold">{name}</Text>
@@ -83,7 +83,7 @@ export default function AccountScreen() {
           </View>
         </View>
 
-        <View className="rounded-lg overflow-hidden border border-border bg-surface">
+        <View className="rounded-lg overflow-hidden border border-border bg-card">
           <SettingRow
             label="Profile details"
             sublabel="Name, email and account"

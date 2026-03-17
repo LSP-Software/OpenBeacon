@@ -8,15 +8,18 @@ datasource db {
 }
 
 model User {
-  id            String    @id
-  name          String
-  email         String    @unique(map: "user_email_unique")
-  emailVerified Boolean   @default(false) @map("email_verified")
-  image         String?
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  sessions      Session[]
-  accounts      Account[]
+  id                         String              @id
+  name                       String
+  email                      String              @unique(map: "user_email_unique")
+  emailVerified              Boolean             @default(false) @map("email_verified")
+  image                      String?
+  createdAt                  DateTime            @default(now()) @map("created_at")
+  updatedAt                  DateTime            @updatedAt @map("updated_at")
+  sessions                   Session[]
+  accounts                   Account[]
+  groupMembers               GroupMember[]
+  sentGroupMemberInvites     GroupMemberInvite[] @relation("GroupMemberInviteInviter")
+  receivedGroupMemberInvites GroupMemberInvite[] @relation("GroupMemberInviteRecipient")
 
   @@map("user")
 }
@@ -69,9 +72,54 @@ model Verification {
 }
 
 model Group {
-  id   String @id @default(uuid(7))
-  name String
+  id    String  @id @default(uuid(7))
+  name  String
+  image String?
+
+  groupMembers GroupMember[]
+  groupInvites GroupMemberInvite[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model GroupMemberInvite {
+  id String @id @default(uuid(7))
+
+  inviterId   String
+  inviter     User      @relation("GroupMemberInviteInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient   User      @relation("GroupMemberInviteRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  groupId     String
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  role        GroupRole
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([recipientId, groupId])
+}
+
+model GroupMember {
+  id String @id @default(uuid(7))
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  joinedAt DateTime  @default(now())
+  role     GroupRole
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, groupId])
+}
+
+enum GroupRole {
+  OWNER
+  ADMIN
+  MEMBER
 }

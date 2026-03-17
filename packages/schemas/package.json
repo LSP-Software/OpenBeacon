@@ -1,0 +1,19 @@
+{
+  "name": "@openbeacon/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "test": "bun test --pass-with-no-tests"
+  },
+  "dependencies": {
+    "zod": "^4.3.6",
+    "@openbeacon/database": "workspace:*"
+  }
+}

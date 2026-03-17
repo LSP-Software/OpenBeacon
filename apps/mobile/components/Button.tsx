@@ -1,14 +1,21 @@
-import { Pressable } from "react-native";
-import { Text } from "./Text";
+import { ActivityIndicator, Pressable } from "react-native";
+import { Text } from "./ui/Text.tsx";
 
 type Props = {
   title: string;
   onPress: () => void;
   variant?: "primary" | "secondary" | "ghost";
   disabled?: boolean;
+  loading?: boolean;
 };
 
-export function Button({ title, onPress, variant = "primary", disabled = false }: Props) {
+export function Button({
+  title,
+  onPress,
+  variant = "primary",
+  disabled = false,
+  loading = false,
+}: Props) {
   const containerBase = "rounded-[14px] py-4 px-6 items-center justify-center";
   const labelBase = "text-base font-semibold tracking-[0.2px]";
   const variantContainer =
@@ -19,7 +26,7 @@ export function Button({ title, onPress, variant = "primary", disabled = false }
         : "bg-transparent";
   const variantLabel =
     variant === "primary"
-      ? "text-on-primary"
+      ? "text-white"
       : variant === "secondary"
         ? "text-primary"
         : "text-text-secondary text-sm";
@@ -31,11 +38,15 @@ export function Button({ title, onPress, variant = "primary", disabled = false }
         opacity: disabled ? 0.38 : pressed ? 0.72 : 1,
       })}
       onPress={onPress}
-      disabled={disabled}
+      disabled={disabled || loading}
       accessibilityRole="button"
       accessibilityLabel={title}
     >
-      <Text className={`${labelBase} ${variantLabel}`}>{title}</Text>
+      {loading ? (
+        <ActivityIndicator size="small" color="white" />
+      ) : (
+        <Text className={`${labelBase} ${variantLabel}`}>{title}</Text>
+      )}
     </Pressable>
   );
 }
