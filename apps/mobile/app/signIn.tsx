@@ -1,42 +1,39 @@
+import { zodResolver } from "@hookform/resolvers/zod";
+import { signInSchema } from "@openbeacon/schemas";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import { useRef, useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  type TextInput,
-  View,
-} from "react-native";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { FormInput } from "../components/FormInput.tsx";
+import type { z } from "zod";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
 import { Button } from "../components/ui/Button.tsx";
+import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
 import { tryCatch } from "../lib/tryCatch.ts";
 
 export default function SignIn() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const passwordRef = useRef<TextInput>(null);
+  const form = useForm<z.infer<typeof signInSchema>>({
+    resolver: zodResolver(signInSchema),
+    mode: "onTouched",
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+    shouldFocusError: true,
+  });
 
   const handleLogin = async () => {
-    if (!email.trim() || !password) return;
     setLoading(true);
+    const { email, password } = form.getValues();
 
-    const { error: signInError, data: signInResponse } = await tryCatch(
-      authClient.signIn.email({ email: email.trim(), password }),
-    );
-    if (signInResponse?.error || signInError) {
-      Alert.alert(
-        "Sign in failed",
-        signInResponse?.error?.message ?? signInError?.message ?? "An error occurred",
-      );
+    const result = await authClient.signIn.email({ email: email, password });
+    if (result.error) {
+      Alert.alert("Sign in failed", result.error.message);
       setLoading(false);
       return;
     }
@@ -45,11 +42,12 @@ export default function SignIn() {
       SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY),
     );
     if (tokenToRevoke) {
-      void authClient.revokeSession({ token: tokenToRevoke }).then(async (result) => {
-        if (!result?.error) {
-          await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
-        }
-      });
+      const revokeResult = await authClient.revokeSession({ token: tokenToRevoke });
+      if (revokeResult.error) {
+        setLoading(false);
+        return;
+      }
+      await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
     }
     router.replace("/");
   };
@@ -71,31 +69,30 @@ export default function SignIn() {
             <Text className="text-lg text-muted">Sign in to your account</Text>
           </View>
           <View className="gap-5">
-            <FormInput
+            <Input
+              control={form.control}
+              name="email"
               label="Email"
-              value={email}
-              onChangeText={setEmail}
               placeholder="you@example.com"
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
               textContentType="emailAddress"
               returnKeyType="next"
-              onSubmitEditing={() => passwordRef.current?.focus()}
             />
-            <FormInput
-              ref={passwordRef}
+            <Input
+              control={form.control}
+              name="password"
               label="Password"
-              value={password}
-              onChangeText={setPassword}
+              placeholder="Password"
               secureTextEntry
               autoCapitalize="none"
               autoComplete="password"
               textContentType="password"
               returnKeyType="done"
-              onSubmitEditing={handleLogin}
+              onSubmitEditing={form.handleSubmit(handleLogin)}
             />
-            <Button onPress={handleLogin} disabled={loading}>
+            <Button onPress={form.handleSubmit(handleLogin)} disabled={loading}>
               <Text>{loading ? "Signing in…" : "Sign In"}</Text>
             </Button>
           </View>
