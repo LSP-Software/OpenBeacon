@@ -50,7 +50,7 @@ export default function AccountScreen() {
     setIsSigningOut(true);
     const sessionTokenToRevoke = session?.session?.token ?? null;
 
-    const { error: signOutError } = await tryCatch(authClient.signOut());
+    const { error: signOutError } = await authClient.signOut();
 
     if (signOutError && sessionTokenToRevoke) {
       await tryCatch(SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke));

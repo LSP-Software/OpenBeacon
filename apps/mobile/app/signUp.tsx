@@ -11,7 +11,6 @@ import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
-import { tryCatch } from "../lib/tryCatch.ts";
 
 export default function SignUp() {
   const [loading, setLoading] = useState(false);
@@ -30,18 +29,14 @@ export default function SignUp() {
     const { name, email, password } = form.getValues();
     setLoading(true);
 
-    const { error: signUpError, data: signUpResponse } = await tryCatch(
-      authClient.signUp.email({
-        email,
-        password,
-        name,
-      }),
-    );
-    if (signUpError || signUpResponse?.error) {
-      Alert.alert(
-        "Sign up failed",
-        signUpResponse?.error?.message ?? signUpError?.message ?? "An error occurred",
-      );
+    const result = await authClient.signUp.email({
+      email,
+      password,
+      name,
+    });
+
+    if (result.error) {
+      Alert.alert("Sign up failed", result.error.message);
       setLoading(false);
       return;
     }
@@ -85,6 +80,7 @@ export default function SignUp() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
+              textContentType="emailAddress"
             />
             <Input
               control={form.control}

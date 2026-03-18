@@ -90,6 +90,7 @@ export default function SignIn() {
               autoComplete="password"
               textContentType="password"
               returnKeyType="done"
+              onSubmitEditing={form.handleSubmit(handleLogin)}
             />
             <Button onPress={form.handleSubmit(handleLogin)} disabled={loading}>
               <Text>{loading ? "Signing in…" : "Sign In"}</Text>
