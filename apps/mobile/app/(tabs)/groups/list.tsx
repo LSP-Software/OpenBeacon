@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { ChevronRightIcon, PlusIcon, ShieldIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CreateGroupDialog } from "../../../components/dialogs/CreateGroupDialog";
 import { LoadingIndicator } from "../../../components/LoadingIndicator";
+import { RefreshablePage } from "../../../components/RefreshablePage";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/Avatar";
 import { Button } from "../../../components/ui/Button";
 import { Card, CardDescription, CardHeader, CardTitle } from "../../../components/ui/Card";
@@ -28,11 +29,10 @@ export default function GroupsScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background">
-      <CreateGroupDialog open={createGroupDialogOpen} setOpen={setCreateGroupDialogOpen} />
-
-      <SafeAreaView edges={["top"]} className="z-10">
-        <View className="flex-row items-center justify-between px-8 pt-4 pb-10">
+    <RefreshablePage>
+      <SafeAreaView className="flex-1 bg-background px-6 py-4" edges={["top"]}>
+        <CreateGroupDialog open={createGroupDialogOpen} setOpen={setCreateGroupDialogOpen} />
+        <View className="flex-row items-center justify-between pb-10">
           <Text className="text-foreground font-bold text-3xl">Your Groups</Text>
           <Pressable
             className="w-10 h-10 rounded-full items-center justify-center bg-primary"
@@ -43,19 +43,13 @@ export default function GroupsScreen() {
             <PlusIcon color="white" size={16} />
           </Pressable>
         </View>
-      </SafeAreaView>
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="px-6 pb-28 gap-4"
-        showsVerticalScrollIndicator={false}
-      >
         <GroupInvitesList groupInvites={groupInvites ?? []} />
         <GroupList
           groupList={groupList ?? []}
           setCreateGroupDialogOpen={setCreateGroupDialogOpen}
         />
-      </ScrollView>
-    </View>
+      </SafeAreaView>
+    </RefreshablePage>
   );
 }
 
