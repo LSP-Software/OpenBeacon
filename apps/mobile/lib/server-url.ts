@@ -7,12 +7,11 @@ export function getServerUrl(): string {
 }
 
 export function setServerUrl(url: string): void {
-  const trimmed = url.trim();
-  if (trimmed) {
-    storage.set(KEY, trimmed);
-  } else {
+  if (!url) {
     storage.remove(KEY);
+    return;
   }
+  storage.set(KEY, url);
 }
 
 export function hasCustomServerUrl(): boolean {
