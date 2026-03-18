@@ -16,6 +16,9 @@ import { protectedProcedure } from "../trpc.ts";
 
 const groupImageInputSchema = z.object({ groupId: z.string() });
 
+//TODO: Move all of the protected procedures to group spesific procedures.
+//TODO: Check permission for the group before changing the image.
+
 export const groupsRouter = {
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
