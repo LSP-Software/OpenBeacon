@@ -6,6 +6,7 @@ import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../../../../components/headers/BackButton";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator";
+import { RefreshablePage } from "../../../../components/RefreshablePage";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../../components/ui/Avatar";
 import { Icon } from "../../../../components/ui/Icon";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../../components/ui/Tabs";
@@ -61,37 +62,39 @@ export default function GroupScreen() {
   }
 
   return (
-    <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background px-4 py-5 gap-4">
-      <GroupHeader group={group} />
-      <Tabs value={value} onValueChange={onValueChange}>
-        <TabsList className="-mx-4 px-4 w-auto justify-between bg-transparent rounded-none p-0 h-auto border-0 border-y border-border">
-          {GROUP_TABS.map((tab) => (
-            <TabsTrigger
-              key={tab.value}
-              value={tab.value}
-              className={cn(
-                "flex-1 rounded-none border-0 border-b-2 border-transparent px-0 py-2 h-auto bg-transparent",
-                value === tab.value && "border-primary",
-              )}
-            >
-              <Text
+    <RefreshablePage>
+      <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background px-4 py-5 gap-4">
+        <GroupHeader group={group} />
+        <Tabs value={value} onValueChange={onValueChange}>
+          <TabsList className="-mx-4 px-4 w-auto justify-between bg-transparent rounded-none p-0 h-auto border-0 border-y border-border">
+            {GROUP_TABS.map((tab) => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
                 className={cn(
-                  "text-muted-foreground text-lg",
-                  value === tab.value && "text-primary",
+                  "flex-1 rounded-none border-0 border-b-2 border-transparent px-0 py-2 h-auto bg-transparent",
+                  value === tab.value && "border-primary",
                 )}
               >
-                {tab.label}
-              </Text>
-            </TabsTrigger>
+                <Text
+                  className={cn(
+                    "text-muted-foreground text-lg",
+                    value === tab.value && "text-primary",
+                  )}
+                >
+                  {tab.label}
+                </Text>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {GROUP_TABS.map((tab) => (
+            <TabsContent key={tab.value} value={tab.value}>
+              <tab.content groupId={groupId} />
+            </TabsContent>
           ))}
-        </TabsList>
-        {GROUP_TABS.map((tab) => (
-          <TabsContent key={tab.value} value={tab.value}>
-            <tab.content groupId={groupId} />
-          </TabsContent>
-        ))}
-      </Tabs>
-    </SafeAreaView>
+        </Tabs>
+      </SafeAreaView>
+    </RefreshablePage>
   );
 }
 
