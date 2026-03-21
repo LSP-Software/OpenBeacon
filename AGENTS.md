@@ -33,12 +33,43 @@ The core concept of this app is to be privacy focused so if users pay for us to 
   ```
 10. Always use const name = () => {} over function name () {}
 11. When using types we should be careful about how we define them.
-  a. If a type is only used in one place (say a return) we should just hard code it as the return value, don't define it as it's own type.
-  b. If a type is used in multiple places in the same file, define the type as it's own separate thing inside of that file.
-  c. If a type is used across multiple files, define it in it's own type file. Feel free to put a type in an existing type file if it matches the theme.
+  a. If a type is only used once in a file, inline it. This applies to props, context values, params, and return types.
+  b. Do not create `FooProps`, `FooState`, `FooContextType` or similar aliases unless that exact type is reused in multiple places in the same file.
+  c. If a type is used in multiple places in the same file, define the type separately inside that file.
+  d. If a type is used across multiple files, define it in its own type file. Feel free to put a type in an existing type file if it matches the theme.
+  e. If a type alias only names an object literal used in one place, inline it instead.
+  f. Only extract a local type when inlining would make the code materially harder to read.
+  g. Prefer inline types by default. Extracted local types are the exception, not the rule.
 
 # Testing
 When logic is added we should add tests around it to ensure high quality code. Test should be thoughtful and well considered and not just be added to test everything. We don't need to test that a button works, however logic around encryption etc should be tested to ensure we cannot break it.
 
 # Code Styling
 Code should be written as simply as possible to help with readability in the future. Functions should only be split into separate functions when either the original function becomes extremely long, or when logic inside of that function is reused. Things such as constants shouldn't be extracted unless they're re-used, same with types etc.
+
+## Type Style Examples
+Prefer this:
+```ts
+const ExampleContext = createContext<{
+  value: string;
+  setValue: (value: string) => void;
+} | null>(null);
+
+export const ExampleProvider = ({ children }: { children: React.ReactNode }) => {
+```
+
+Avoid this unless the type is reused more than once in the same file:
+```ts
+type ExampleContextType = {
+  value: string;
+  setValue: (value: string) => void;
+};
+
+type ExampleProviderProps = {
+  children: React.ReactNode;
+};
+
+const ExampleContext = createContext<ExampleContextType | null>(null);
+
+export const ExampleProvider = ({ children }: ExampleProviderProps) => {
+```

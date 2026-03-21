@@ -5,9 +5,12 @@ import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../../components/ui/Button.tsx";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/Card.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client.ts";
+import { getLocationPermissionWarningTitle } from "../../../lib/locationPermissions.ts";
 import { tryCatch } from "../../../lib/tryCatch.ts";
+import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
 
 type SettingRowProps = {
   label: string;
@@ -35,6 +38,7 @@ function SettingRow({ label, sublabel, onPress }: SettingRowProps) {
 
 export default function AccountScreen() {
   const { data: session } = authClient.useSession();
+  const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   const name = session?.user.name ?? "";
@@ -60,6 +64,10 @@ export default function AccountScreen() {
     router.replace("/");
   };
 
+  const locationPermissionWarningTitle = permissionState
+    ? getLocationPermissionWarningTitle(permissionState)
+    : "";
+
   return (
     <View className="flex-1 bg-background">
       <SafeAreaView edges={["top"]} className="z-10">
@@ -83,6 +91,23 @@ export default function AccountScreen() {
             <Text className="text-muted text-sm">{email}</Text>
           </View>
         </View>
+
+        {permissionState?.shouldShowAccountWarning ? (
+          <Card className="gap-4 py-0">
+            <CardHeader className="px-5 pt-5">
+              <CardTitle>{locationPermissionWarningTitle}</CardTitle>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 gap-4">
+              <Text className="text-muted">
+                OpenBeacon needs precise foreground and background location to share your location
+                with your family. Location tracking won't be active without it.
+              </Text>
+              <Button variant="outline" onPress={openLocationPermissionSettings}>
+                <Text>Open Settings</Text>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <View className="rounded-lg overflow-hidden border border-border bg-card">
           <SettingRow
