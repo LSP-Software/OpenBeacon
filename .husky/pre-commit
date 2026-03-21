@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+bun install --frozen-lockfile
+bun run ci
