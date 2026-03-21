@@ -27,6 +27,7 @@ export type LocationPermissionState = {
   foregroundStatus: LocationPermissionStatus;
   backgroundStatus: LocationPermissionStatus;
   preciseEnabled: boolean;
+  canRequestBackgroundInApp: boolean;
   isReadyForSharing: boolean;
   shouldShowAccountWarning: boolean;
   missing: LocationPermissionRequirement[];
@@ -58,6 +59,24 @@ const getPreciseEnabled = (foregroundPermission: LocationPermissionResponse): bo
   return true;
 };
 
+const getCanRequestBackgroundInApp = ({
+  foregroundPermission,
+  backgroundPermission,
+}: {
+  foregroundPermission: LocationPermissionResponse;
+  backgroundPermission: LocationPermissionResponse;
+}): boolean => {
+  if (!foregroundPermission.granted || !getPreciseEnabled(foregroundPermission)) {
+    return false;
+  }
+
+  if (backgroundPermission.granted) {
+    return false;
+  }
+
+  return !foregroundPermission.ios || foregroundPermission.ios.scope !== "whenInUse";
+};
+
 const normalizeLocationPermissionState = ({
   foregroundPermission,
   backgroundPermission,
@@ -77,6 +96,10 @@ const normalizeLocationPermissionState = ({
     foregroundStatus: foregroundPermission.status,
     backgroundStatus: backgroundPermission.status,
     preciseEnabled: getPreciseEnabled(foregroundPermission),
+    canRequestBackgroundInApp: getCanRequestBackgroundInApp({
+      foregroundPermission,
+      backgroundPermission,
+    }),
     isReadyForSharing: missing.length === 0,
     shouldShowAccountWarning: missing.length > 0,
     missing,

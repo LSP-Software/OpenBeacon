@@ -34,8 +34,23 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
   const [isRequestingBackgroundPermission, setIsRequestingBackgroundPermission] = useState(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const isCheckingPermissionsRef = useRef(false);
+  const shouldOpenBackgroundPermissionDialog = useCallback(
+    ({
+      flow,
+      nextPermissionState,
+    }: {
+      flow: "refresh" | "launchRequest";
+      nextPermissionState: LocationPermissionState;
+    }): boolean =>
+      flow === "launchRequest" &&
+      nextPermissionState.foregroundStatus === "granted" &&
+      nextPermissionState.preciseEnabled &&
+      nextPermissionState.backgroundStatus !== "granted" &&
+      nextPermissionState.canRequestBackgroundInApp,
+    [],
+  );
   const syncLocationPermissions = useCallback(
-    async (shouldRequestPermissions: boolean): Promise<LocationPermissionState | null> => {
+    async (flow: "refresh" | "launchRequest"): Promise<LocationPermissionState | null> => {
       if (!session || isCheckingPermissionsRef.current) {
         return null;
       }
@@ -43,7 +58,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
       isCheckingPermissionsRef.current = true;
 
       const permissionResult = await tryCatch(
-        shouldRequestPermissions
+        flow === "launchRequest"
           ? requestLocationPermissionsForLaunch()
           : getLocationPermissionState(),
       );
@@ -56,15 +71,15 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
 
       setPermissionState(permissionResult.data);
       setIsBackgroundPermissionDialogOpen(
-        shouldRequestPermissions &&
-          permissionResult.data.foregroundStatus === "granted" &&
-          permissionResult.data.preciseEnabled &&
-          permissionResult.data.backgroundStatus !== "granted",
+        shouldOpenBackgroundPermissionDialog({
+          flow,
+          nextPermissionState: permissionResult.data,
+        }),
       );
 
       return permissionResult.data;
     },
-    [session],
+    [session, shouldOpenBackgroundPermissionDialog],
   );
 
   useEffect(() => {
@@ -77,7 +92,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
       return;
     }
 
-    void syncLocationPermissions(true);
+    void syncLocationPermissions("launchRequest");
   }, [isPending, session, syncLocationPermissions]);
 
   useEffect(() => {
@@ -92,7 +107,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
         return;
       }
 
-      void syncLocationPermissions(true);
+      void syncLocationPermissions("refresh");
     });
 
     return () => {
@@ -101,7 +116,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
   }, [syncLocationPermissions]);
 
   const refreshLocationPermissionState = async (): Promise<LocationPermissionState | null> =>
-    syncLocationPermissions(false);
+    syncLocationPermissions("refresh");
 
   const openLocationPermissionSettings = async (): Promise<void> => {
     await openLocationSettings();

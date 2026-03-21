@@ -69,9 +69,7 @@ export default function HomeScreen() {
       return;
     }
 
-    if (!isPending && session) {
-      router.replace("/(tabs)/map");
-    }
+    router.replace("/(tabs)/map");
   }, [rootNavigationState?.key, session, isPending]);
 
   if (isPending || session) {
