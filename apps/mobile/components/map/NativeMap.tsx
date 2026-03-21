@@ -1,5 +1,5 @@
 import { Camera, MapView } from "@maplibre/maplibre-react-native";
-import { router } from "expo-router";
+import { router, useRootNavigationState } from "expo-router";
 import { useEffect, useMemo, useRef } from "react";
 import { Button, Platform, View } from "react-native";
 import { Text } from "../../components/ui/Text.tsx";
@@ -10,6 +10,7 @@ import { useColors } from "../../lib/theme.ts";
 export const NativeMap = () => {
   const colors = useColors();
   const signedPmtilesUrlQuery = useSignedPmtilesUrl();
+  const rootNavigationState = useRootNavigationState();
   const didRetryAfterMapFailureRef = useRef(false);
   const lastPmtilesUrlRef = useRef<string | null>(null);
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
@@ -28,12 +29,12 @@ export const NativeMap = () => {
   }, [colors.isDark, pmtilesUrl]);
 
   useEffect(() => {
-    if (signedPmtilesUrlQuery.error?.data?.code !== "UNAUTHORIZED") {
+    if (!rootNavigationState?.key || signedPmtilesUrlQuery.error?.data?.code !== "UNAUTHORIZED") {
       return;
     }
 
     router.replace("/");
-  }, [signedPmtilesUrlQuery.error]);
+  }, [rootNavigationState?.key, signedPmtilesUrlQuery.error]);
 
   if (signedPmtilesUrlQuery.isLoading && !mapStyle) {
     return (

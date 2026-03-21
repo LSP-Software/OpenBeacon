@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useRootNavigationState } from "expo-router";
 import { useEffect, useRef } from "react";
 import { Animated, Dimensions, Easing, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -62,12 +62,17 @@ function LoadingScreen({ colors }: { colors: ReturnType<typeof useColors> }) {
 export default function HomeScreen() {
   const { data: session, isPending } = authClient.useSession();
   const colors = useColors();
+  const rootNavigationState = useRootNavigationState();
 
   useEffect(() => {
+    if (!rootNavigationState?.key || isPending || !session) {
+      return;
+    }
+
     if (!isPending && session) {
       router.replace("/(tabs)/map");
     }
-  }, [session, isPending]);
+  }, [rootNavigationState?.key, session, isPending]);
 
   if (isPending || session) {
     return <LoadingScreen colors={colors} />;
