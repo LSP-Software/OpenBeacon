@@ -3,11 +3,6 @@ import { queryClient, trpc } from "../../lib/api.ts";
 import { uploadImageFromUri } from "../../lib/image-upload.ts";
 import { EditableImage } from "./EditableImage.tsx";
 
-export const GroupImageConfig = {
-  cropShape: "rectangle" as const,
-  maxResolution: 512,
-};
-
 export const GroupImage = ({
   groupId,
   imageUrl = null,
@@ -44,10 +39,10 @@ export const GroupImage = ({
   return (
     <EditableImage
       accessibilityLabel="Edit group photo"
-      cropShape={GroupImageConfig.cropShape}
+      cropShape={"circle"}
       imageBorderRadius={24}
       imageUrl={imageUrl}
-      maxResolution={GroupImageConfig.maxResolution}
+      maxResolution={512}
       onImageUploaded={handleGroupImageUploaded}
       showEditButton={showEditButton}
       uploadImage={uploadGroupImage}

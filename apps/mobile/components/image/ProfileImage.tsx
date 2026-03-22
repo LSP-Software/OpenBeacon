@@ -3,11 +3,6 @@ import { queryClient, trpc } from "../../lib/api.ts";
 import { uploadImageFromUri } from "../../lib/image-upload.ts";
 import { EditableImage } from "./EditableImage.tsx";
 
-const ProfileImageConfig = {
-  cropShape: "circle" as const,
-  maxResolution: 512,
-};
-
 export const ProfileImage = ({
   imageUrl: imageUrlProp,
   showEditButton = false,
@@ -42,10 +37,10 @@ export const ProfileImage = ({
   return (
     <EditableImage
       accessibilityLabel="Edit profile picture"
-      cropShape={ProfileImageConfig.cropShape}
+      cropShape={"circle"}
       imageBorderRadius={999}
       imageUrl={imageUrl}
-      maxResolution={ProfileImageConfig.maxResolution}
+      maxResolution={512}
       onImageUploaded={handleProfileImageUploaded}
       showEditButton={showEditButton}
       uploadImage={uploadProfileImage}
