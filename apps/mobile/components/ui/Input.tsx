@@ -84,7 +84,6 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
               }}
               className={cn(
                 `rounded-lg border border-border bg-input ${inputFocused && "border-primary"} py-4 px-4`,
-                className,
                 props.editable === false &&
                   cn(
                     "opacity-50",
