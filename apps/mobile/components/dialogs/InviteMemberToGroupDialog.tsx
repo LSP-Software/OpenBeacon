@@ -1,12 +1,14 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { inviteMemberToGroupSchema } from "@openbeacon/schemas";
+import { createInviteMemberToGroupSchema } from "@openbeacon/schemas";
 import { useMutation } from "@tanstack/react-query";
 import { LinkIcon, MailIcon, PlusIcon, Trash2Icon } from "lucide-react-native";
 import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { Pressable, View } from "react-native";
+import { toast } from "sonner-native";
 import type z from "zod";
 import { trpc } from "../../lib/api";
+import { authClient } from "../../lib/auth-client.ts";
 import { FormSelectInput } from "../formInputs/FormSelectInput";
 import { Button } from "../ui/Button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/Dialog";
@@ -63,8 +65,11 @@ interface InviteMembersInputsProps {
 }
 
 export const InviteMembersInputs = ({ groupId, setOpen }: InviteMembersInputsProps) => {
-  const form = useForm<z.infer<typeof inviteMemberToGroupSchema>>({
-    resolver: zodResolver(inviteMemberToGroupSchema),
+  const { data: session } = authClient.useSession();
+  const inviteMemberFormSchema = createInviteMemberToGroupSchema(session?.user.email);
+
+  const form = useForm<z.infer<typeof inviteMemberFormSchema>>({
+    resolver: zodResolver(inviteMemberFormSchema),
     mode: "onBlur",
     defaultValues: {
       groupId: groupId,
@@ -92,14 +97,15 @@ export const InviteMembersInputs = ({ groupId, setOpen }: InviteMembersInputsPro
   };
 
   const inviteMemberMutation = useMutation(trpc.groups.sendInvites.mutationOptions());
-  const onSubmit = async (data: z.infer<typeof inviteMemberToGroupSchema>) => {
+  const onSubmit = async (data: z.infer<typeof inviteMemberFormSchema>) => {
     await inviteMemberMutation.mutateAsync(data, {
-      onSuccess: () => {
+      onSuccess: (data) => {
         form.reset();
         setOpen(false);
+        toast.success(data.message);
       },
       onError: (error) => {
-        console.log(error);
+        toast.error(error.message);
       },
     });
   };

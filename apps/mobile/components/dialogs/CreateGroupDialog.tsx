@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CameraIcon } from "lucide-react-native";
 import { useForm } from "react-hook-form";
 import { View } from "react-native";
+import { toast } from "sonner-native";
 import type z from "zod";
 import { trpc } from "../../lib/api";
 import { Button } from "../ui/Button";
@@ -33,9 +34,10 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
   const onSubmit = async (data: z.infer<typeof createGroupSchema>) => {
     await createGroupMutation.mutateAsync(data, {
       onError: (error) => {
-        console.log("error", error);
+        toast.error(error.message);
       },
       onSuccess: (data) => {
+        toast.success(data.message);
         queryClient.setQueryData(trpc.groups.list.queryKey(), (previous) => {
           if (!previous) {
             return [data.newGroup];
