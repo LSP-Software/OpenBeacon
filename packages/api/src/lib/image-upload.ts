@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "@openbeacon/database";
-import { ImageContentType } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod/v4";
 import { env } from "../env.ts";
@@ -147,7 +146,7 @@ export const requestImageUpload = async ({
   const fileName = `${crypto.randomUUID()}.webp`;
 
   const { data: presignedUrl, error: presignError } = await tryCatch(
-    getPresignedUploadUrl(bucketName, imagePath, fileName, ImageContentType, contentHash, fileSize),
+    getPresignedUploadUrl(bucketName, imagePath, fileName, "image/webp", contentHash, fileSize),
   );
 
   if (presignError) {

@@ -1,5 +1,4 @@
 
-import { ImageContentType } from "@openbeacon/shared";
 import * as Crypto from "expo-crypto";
 import { File as FSFile } from "expo-file-system";
 
@@ -26,7 +25,7 @@ export const uploadToPresignedUrl = async (
     method: "PUT",
     body: bytes,
     headers: {
-      "Content-Type": ImageContentType,
+      "Content-Type": "image/webp",
       "x-amz-checksum-sha256": contentHash,
     },
   });
