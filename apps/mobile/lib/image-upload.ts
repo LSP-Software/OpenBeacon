@@ -3,9 +3,6 @@ import { ImageContentType } from "@openbeacon/shared";
 import * as Crypto from "expo-crypto";
 import { File as FSFile } from "expo-file-system";
 
-import { tryCatch } from "./tryCatch.ts";
-
-
 
 export const computeSha256Base64 = async (bytes: ArrayBuffer): Promise<string> => {
   const hashBuffer = await Crypto.digest(
@@ -53,32 +50,19 @@ export const uploadImageFromUri = async ({
   confirmImageUpload: () => Promise<{ imageUrl: string }>;
 }): Promise<{ data: string | null; error?: never } | { data?: never; error: string }> => {
   const file = new FSFile(uri);
-  const { data: bytes, error: readError } = await tryCatch(
-    (async () => {
-      const fileBytes = await file.bytes();
-      return fileBytes.slice().buffer;
-    })(),
-  );
-  if (readError) return { error: `Unable to read image bytes: ${readError.message}` };
-
-  const { data: contentHash, error: hashError } = await tryCatch(computeSha256Base64(bytes));
-  if (hashError) return { error: `Unable to compute content hash: ${hashError.message}` };
-
-  const { data: uploadData, error: requestError } = await tryCatch(
-    requestImageUpload({ contentHash, fileSize: bytes.byteLength }),
-  );
-  if (requestError) return { error: `Unable to request upload: ${requestError.message}` };
-
-  const { error: uploadError } = await tryCatch(
-    uploadToPresignedUrl(uploadData.presignedUrl, bytes, contentHash),
-  );
-  if (uploadError) return { error: `Unable to upload image: ${uploadError.message}` };
-
-  const { data: confirmData, error: confirmError } = await tryCatch(confirmImageUpload());
-  if (confirmError) return { error: `Unable to confirm upload: ${confirmError.message}` };
-
-  return { data: confirmData.imageUrl };
+  try {
+    const rawfileBytes = await file.bytes();
+    const bytes = rawfileBytes.slice().buffer;
+    const contentHash = await computeSha256Base64(bytes);
+    const uploadData = await requestImageUpload({ contentHash, fileSize: bytes.byteLength });
+    await uploadToPresignedUrl(uploadData.presignedUrl, bytes, contentHash)
+    const confirmData = await confirmImageUpload();
+    return { data: confirmData.imageUrl };
+  } catch (error) {
+    return { error: `Unable to upload image: ${String(error)}`  };
+  }
 };
+
 
 export const cleanupTempFile = (uri: string): void => {
   const file = new FSFile(uri);
