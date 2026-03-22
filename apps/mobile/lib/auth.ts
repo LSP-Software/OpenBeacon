@@ -4,18 +4,28 @@ import { Platform } from "react-native";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "./auth-client.ts";
 import { tryCatch } from "./tryCatch.ts";
 
-const env = process.env as {
-  EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?: string;
-  EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME?: string;
-  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?: string;
+const getGoogleWebClientId = () => process.env["EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"];
+
+const getGoogleIosClientId = () => process.env["EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID"];
+
+const getGoogleIosUrlScheme = () => process.env["EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME"];
+
+export const isNativeGoogleSignInConfiguredForPlatform = (platform: typeof Platform.OS) => {
+  const googleWebClientId = getGoogleWebClientId();
+
+  if (!googleWebClientId || platform === "web") {
+    return false;
+  }
+
+  if (platform === "ios") {
+    return Boolean(getGoogleIosClientId() && getGoogleIosUrlScheme());
+  }
+
+  return true;
 };
 
-const googleWebClientId = env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-const googleIosClientId = env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
-const googleIosUrlScheme = env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
-
-export const isNativeGoogleSignInConfigured = Boolean(
-  Platform.OS !== "web" && googleWebClientId && googleIosClientId && googleIosUrlScheme,
+export const isNativeGoogleSignInConfigured = isNativeGoogleSignInConfiguredForPlatform(
+  Platform.OS,
 );
 
 let googleSignInConfigured = false;
@@ -29,19 +39,28 @@ const getErrorMessage = (error: unknown) => {
 };
 
 const configureGoogleSignIn = () => {
-  if (
-    googleSignInConfigured ||
-    !googleWebClientId ||
-    !googleIosClientId ||
-    !isNativeGoogleSignInConfigured
-  ) {
+  const googleWebClientId = getGoogleWebClientId();
+
+  if (googleSignInConfigured || !googleWebClientId || !isNativeGoogleSignInConfigured) {
     return;
   }
 
-  GoogleSignin.configure({
-    webClientId: googleWebClientId,
-    iosClientId: googleIosClientId,
-  });
+  if (Platform.OS === "ios") {
+    const googleIosClientId = getGoogleIosClientId();
+
+    if (!googleIosClientId) {
+      return;
+    }
+
+    GoogleSignin.configure({
+      webClientId: googleWebClientId,
+      iosClientId: googleIosClientId,
+    });
+  } else {
+    GoogleSignin.configure({
+      webClientId: googleWebClientId,
+    });
+  }
 
   googleSignInConfigured = true;
 };
