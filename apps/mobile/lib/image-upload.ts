@@ -1,13 +1,11 @@
-import type { ImageCropShape } from "@openbeacon/shared";
+
 import { ImageContentType } from "@openbeacon/shared";
 import * as Crypto from "expo-crypto";
 import { File as FSFile } from "expo-file-system";
-import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
-import ImageCropPicker from "react-native-image-crop-picker";
+
 import { tryCatch } from "./tryCatch.ts";
 
-const DEFAULT_IMAGE_SIZE = 1024;
-const IMAGE_QUALITY = 0.85;
+
 
 export const computeSha256Base64 = async (bytes: ArrayBuffer): Promise<string> => {
   const hashBuffer = await Crypto.digest(
@@ -20,41 +18,6 @@ export const computeSha256Base64 = async (bytes: ArrayBuffer): Promise<string> =
     binary += String.fromCharCode(byte);
   }
   return btoa(binary);
-};
-
-export const pickAndCropImage = async (
-  size: number = DEFAULT_IMAGE_SIZE,
-  cropShape: ImageCropShape = "circle",
-): Promise<
-  { ok: true; path: string } | { ok: false; cancelled: true } | { ok: false; error: Error }
-> => {
-  const { data: image, error } = await tryCatch(
-    ImageCropPicker.openPicker({
-      cropping: true,
-      cropperCircleOverlay: cropShape === "circle",
-      width: size,
-      height: size,
-      mediaType: "photo",
-    }),
-  );
-
-  if (!error) {
-    return { ok: true, path: image.path };
-  }
-  if (error.message.includes("User cancelled")) {
-    return { ok: false, cancelled: true };
-  }
-  return { ok: false, error: new Error(String(error)) };
-};
-
-export const processImage = async (
-  uri: string,
-  size: number = DEFAULT_IMAGE_SIZE,
-): Promise<string> => {
-  const context = ImageManipulator.manipulate(uri);
-  const imageRef = await context.resize({ width: size, height: size }).renderAsync();
-  const result = await imageRef.saveAsync({ format: SaveFormat.WEBP, compress: IMAGE_QUALITY });
-  return result.uri;
 };
 
 export const uploadToPresignedUrl = async (
