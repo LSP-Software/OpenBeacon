@@ -40,7 +40,6 @@ export const ProfileImage = ({
       cropShape={"circle"}
       imageBorderRadius={999}
       imageUrl={imageUrl}
-      maxResolution={512}
       onImageUploaded={handleProfileImageUploaded}
       showEditButton={showEditButton}
       uploadImage={uploadProfileImage}

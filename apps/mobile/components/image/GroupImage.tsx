@@ -42,7 +42,6 @@ export const GroupImage = ({
       cropShape={"circle"}
       imageBorderRadius={24}
       imageUrl={imageUrl}
-      maxResolution={512}
       onImageUploaded={handleGroupImageUploaded}
       showEditButton={showEditButton}
       uploadImage={uploadGroupImage}

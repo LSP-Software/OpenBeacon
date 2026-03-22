@@ -9,9 +9,6 @@ import { cleanupTempFile } from "../../lib/image-upload.ts";
 import { useColors } from "../../lib/theme.ts";
 import { tryCatch } from "../../lib/tryCatch.ts";
 
-const DEFAULT_IMAGE_SIZE = 1024;
-const IMAGE_QUALITY = 0.85;
-
 cssInterop(Image, { className: "style" });
 
 type ImageCropShape = "circle" | "rectangle";
@@ -22,7 +19,6 @@ type EditableImageProps = {
   imageBorderRadius: number;
   imageSize?: number;
   imageUrl?: string | null;
-  maxResolution: number;
   onImageUploaded?: (imageUrl: string) => Promise<void> | void;
   showEditButton?: boolean;
   uploadImage: (
@@ -36,7 +32,6 @@ export const EditableImage = ({
   imageBorderRadius,
   imageSize = 80,
   imageUrl,
-  maxResolution,
   onImageUploaded,
   showEditButton = false,
   uploadImage,
@@ -50,7 +45,6 @@ export const EditableImage = ({
   const editIconSize = Math.round(editButtonSize * 0.5);
 
   const pickAndCropImage = async (
-    size: number = DEFAULT_IMAGE_SIZE,
     cropShape: ImageCropShape = "circle",
   ): Promise<
     { ok: true; path: string } | { ok: false; cancelled: true } | { ok: false; error: Error }
@@ -59,8 +53,8 @@ export const EditableImage = ({
       ImageCropPicker.openPicker({
         cropping: true,
         cropperCircleOverlay: cropShape === "circle",
-        width: size,
-        height: size,
+        width: 512,
+        height: 512,
         mediaType: "photo",
       }),
     );
@@ -74,10 +68,10 @@ export const EditableImage = ({
     return { ok: false, error: new Error(String(error)) };
   };
 
-  const processImage = async (uri: string, size: number = DEFAULT_IMAGE_SIZE): Promise<string> => {
+  const processImage = async (uri: string): Promise<string> => {
     const context = ImageManipulator.manipulate(uri);
-    const imageRef = await context.resize({ width: size, height: size }).renderAsync();
-    const result = await imageRef.saveAsync({ format: SaveFormat.WEBP, compress: IMAGE_QUALITY });
+    const imageRef = await context.resize({ width: 512, height: 512 }).renderAsync();
+    const result = await imageRef.saveAsync({ format: SaveFormat.WEBP, compress: 0.85 });
     return result.uri;
   };
 
@@ -85,7 +79,7 @@ export const EditableImage = ({
     if (isLoading) return;
 
     setIsPickerOpen(true);
-    const pickResult = await pickAndCropImage(maxResolution, cropShape);
+    const pickResult = await pickAndCropImage(cropShape);
     setIsPickerOpen(false);
 
     if ("cancelled" in pickResult) return;
@@ -96,7 +90,7 @@ export const EditableImage = ({
     setIsUploading(true);
 
     const { data: processedUri, error: processError } = await tryCatch(
-      processImage(pickResult.path, maxResolution),
+      processImage(pickResult.path),
     );
     cleanupTempFile(pickResult.path);
 
