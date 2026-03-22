@@ -1,7 +1,16 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { getAuthCapabilities } from "./capabilities.ts";
 import { db } from "./db.ts";
 import { env } from "./env.ts";
+
+const googleClientId = env.GOOGLE_CLIENT_ID;
+const googleClientSecret = env.GOOGLE_CLIENT_SECRET;
+
+export const authCapabilities = getAuthCapabilities({
+  GOOGLE_CLIENT_ID: googleClientId,
+  GOOGLE_CLIENT_SECRET: googleClientSecret,
+});
 
 export const auth = betterAuth({
   database: prismaAdapter(db, {
@@ -13,6 +22,16 @@ export const auth = betterAuth({
     // TODO: Should only support magic links
     enabled: true,
   },
+  socialProviders:
+    authCapabilities.google && googleClientId && googleClientSecret
+      ? {
+          google: {
+            clientId: googleClientId,
+            clientSecret: googleClientSecret,
+            scope: ["email", "profile"],
+          },
+        }
+      : undefined,
   trustedOrigins: [
     "openbeacon://",
     ...(process.env.NODE_ENV === "development"

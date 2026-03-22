@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signInSchema } from "@openbeacon/schemas";
+import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import * as SecureStore from "expo-secure-store";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
@@ -11,11 +11,18 @@ import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx
 import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
-import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
-import { tryCatch } from "../lib/tryCatch.ts";
+import { trpc } from "../lib/api.ts";
+import {
+  isNativeGoogleSignInConfigured,
+  revokePendingSessionToken,
+  signInWithGoogle,
+} from "../lib/auth.ts";
+import { authClient } from "../lib/auth-client.ts";
 
-export default function SignIn() {
-  const [loading, setLoading] = useState(false);
+const SignIn = () => {
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
 
   const form = useForm<z.infer<typeof signInSchema>>({
     resolver: zodResolver(signInSchema),
@@ -27,28 +34,36 @@ export default function SignIn() {
     shouldFocusError: true,
   });
 
+  const isSubmitting = emailLoading || googleLoading;
+  const isGoogleEnabled = providers?.google === true && isNativeGoogleSignInConfigured;
+
   const handleLogin = async () => {
-    setLoading(true);
+    setEmailLoading(true);
     const { email, password } = form.getValues();
 
     const result = await authClient.signIn.email({ email: email, password });
     if (result.error) {
       Alert.alert("Sign in failed", result.error.message);
-      setLoading(false);
+      setEmailLoading(false);
       return;
     }
 
-    const { data: tokenToRevoke } = await tryCatch(
-      SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY),
-    );
-    if (tokenToRevoke) {
-      const revokeResult = await authClient.revokeSession({ token: tokenToRevoke });
-      if (revokeResult.error) {
-        setLoading(false);
-        return;
-      }
-      await SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY);
+    await revokePendingSessionToken();
+    router.replace("/");
+  };
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+
+    const result = await signInWithGoogle();
+
+    if (result.error) {
+      Alert.alert("Google sign in failed", result.error.message);
+      setGoogleLoading(false);
+      return;
     }
+
+    await revokePendingSessionToken();
     router.replace("/");
   };
 
@@ -69,6 +84,18 @@ export default function SignIn() {
             <Text className="text-lg text-muted">Sign in to your account</Text>
           </View>
           <View className="gap-5">
+            {isGoogleEnabled ? (
+              <>
+                <Button variant="outline" onPress={handleGoogleSignIn} loading={googleLoading}>
+                  <Text>Continue with Google</Text>
+                </Button>
+                <View className="flex-row items-center gap-4">
+                  <View className="flex-1 h-px bg-border" />
+                  <Text className="text-sm uppercase tracking-[0.18em] text-muted">or</Text>
+                  <View className="flex-1 h-px bg-border" />
+                </View>
+              </>
+            ) : null}
             <Input
               control={form.control}
               name="email"
@@ -92,8 +119,8 @@ export default function SignIn() {
               returnKeyType="done"
               onSubmitEditing={form.handleSubmit(handleLogin)}
             />
-            <Button onPress={form.handleSubmit(handleLogin)} disabled={loading}>
-              <Text>{loading ? "Signing in…" : "Sign In"}</Text>
+            <Button onPress={form.handleSubmit(handleLogin)} disabled={isSubmitting}>
+              <Text>{emailLoading ? "Signing in…" : "Sign In"}</Text>
             </Button>
           </View>
           <View className="items-center gap-4 pt-2">
@@ -115,4 +142,6 @@ export default function SignIn() {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-}
+};
+
+export default SignIn;
