@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type RefObject, useState } from "react";
 import { type Control, Controller, type FieldPath, type FieldValues } from "react-hook-form";
 import { Platform, TextInput, type TextInputProps, View } from "react-native";
 import { cn } from "../../lib/cn";
@@ -15,6 +15,7 @@ type FormInputProps<TFieldValues extends FieldValues, TName extends FieldPath<TF
   fieldClassName?: string;
   hideError?: boolean;
   descriptionPosition?: "aboveInput" | "belowInput";
+  inputRef?: ((instance: TextInput | null) => void) | RefObject<TextInput | null>;
 };
 
 function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldValues>>({
@@ -27,6 +28,7 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
   className,
   onBlur,
   onFocus,
+  inputRef,
   descriptionPosition = "aboveInput",
   ...props
 }: FormInputProps<TFieldValues, TName>) {
@@ -40,9 +42,18 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
         return (
           <Field data-invalid={fieldState.invalid}>
             {(label || description) && (
-              <View className={"flex flex-col"}>
+              <View
+                className={"flex flex-col"}
+                accessible={Platform.OS === "web"}
+                focusable={Platform.OS === "web"}
+                importantForAccessibility={Platform.OS === "web" ? "auto" : "no"}
+                pointerEvents={Platform.OS === "web" ? "auto" : "none"}
+              >
                 {label && (
-                  <FieldLabel className="text-lg font-medium" htmlFor={name}>
+                  <FieldLabel
+                    className="text-lg font-medium"
+                    {...(Platform.OS === "web" ? { htmlFor: name } : {})}
+                  >
                     {label}
                   </FieldLabel>
                 )}
@@ -53,9 +64,21 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
             <TextInput
               {...field}
               autoComplete="off"
+              accessibilityLabel={props.accessibilityLabel ?? label}
               onChangeText={field.onChange}
-              onFocus={() => setInputFocused(true)}
-              onBlur={() => {
+              ref={(instance) => {
+                field.ref(instance);
+                if (!inputRef) return;
+
+                if (typeof inputRef === "function") return inputRef(instance);
+                inputRef.current = instance;
+              }}
+              onFocus={(event) => {
+                onFocus?.(event);
+                setInputFocused(true);
+              }}
+              onBlur={(event) => {
+                onBlur?.(event);
                 setInputFocused(false);
                 field.onBlur();
               }}

@@ -11,6 +11,15 @@ function Label({
   disabled,
   ...props
 }: LabelPrimitive.TextProps & React.RefAttributes<LabelPrimitive.TextRef>) {
+  if (Platform.OS !== "web") {
+    return (
+      <LabelPrimitive.Text
+        className={cn("text-foreground text-sm font-medium", className)}
+        {...props}
+      />
+    );
+  }
+
   return (
     <LabelPrimitive.Root
       className={cn(
