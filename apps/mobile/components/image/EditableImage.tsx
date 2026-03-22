@@ -88,14 +88,12 @@ export const EditableImage = ({
     const pickResult = await pickAndCropImage(maxResolution, cropShape);
     setIsPickerOpen(false);
 
-    if (pickResult.ok) {
-      setIsUploading(true);
-    } else if ("cancelled" in pickResult) {
-      return;
-    } else {
+    if ("cancelled" in pickResult) return;
+    if (!pickResult.ok) {
       Alert.alert("Image selection failed", pickResult.error.message);
       return;
     }
+    setIsUploading(true);
 
     const { data: processedUri, error: processError } = await tryCatch(
       processImage(pickResult.path, maxResolution),
