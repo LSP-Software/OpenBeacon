@@ -2,7 +2,7 @@ import * as LabelPrimitive from "@rn-primitives/label";
 import { Platform } from "react-native";
 import { cn } from "../../lib/cn";
 
-function Label({
+const Label = ({
   className,
   onPress,
   onLongPress,
@@ -10,7 +10,16 @@ function Label({
   onPressOut,
   disabled,
   ...props
-}: LabelPrimitive.TextProps & React.RefAttributes<LabelPrimitive.TextRef>) {
+}: LabelPrimitive.TextProps & React.RefAttributes<LabelPrimitive.TextRef>) => {
+  if (Platform.OS !== "web") {
+    return (
+      <LabelPrimitive.Text
+        className={cn("text-foreground text-sm font-medium", className)}
+        {...props}
+      />
+    );
+  }
+
   return (
     <LabelPrimitive.Root
       className={cn(
@@ -32,10 +41,15 @@ function Label({
           Platform.select({ web: "leading-none" }),
           className,
         )}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        disabled={disabled}
         {...props}
       />
     </LabelPrimitive.Root>
   );
-}
+};
 
 export { Label };
