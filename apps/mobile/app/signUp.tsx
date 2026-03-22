@@ -12,12 +12,9 @@ import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { trpc } from "../lib/api.ts";
-import {
-  isNativeGoogleSignInConfigured,
-  revokePendingSessionToken,
-  signInWithGoogle,
-} from "../lib/auth.ts";
+import { isNativeGoogleSignInConfigured, revokePendingSessionToken } from "../lib/auth.ts";
 import { authClient } from "../lib/auth-client.ts";
+import { performGoogleAuth } from "../lib/googleAuth.ts";
 
 const SignUp = () => {
   const [emailLoading, setEmailLoading] = useState(false);
@@ -58,18 +55,12 @@ const SignUp = () => {
   };
 
   const handleGoogleSignUp = async () => {
-    setGoogleLoading(true);
-
-    const result = await signInWithGoogle();
-
-    if (result.error) {
-      Alert.alert("Google sign up failed", result.error.message);
-      setGoogleLoading(false);
-      return;
-    }
-
-    await revokePendingSessionToken();
-    router.replace("/");
+    await performGoogleAuth({
+      setLoading: setGoogleLoading,
+      failureTitle: "Google sign up failed",
+      onSuccess: () => router.replace("/"),
+      alert: Alert.alert,
+    });
   };
 
   return (
@@ -93,7 +84,12 @@ const SignUp = () => {
           <View className="gap-4">
             {isGoogleEnabled ? (
               <>
-                <Button variant="outline" onPress={handleGoogleSignUp} loading={googleLoading}>
+                <Button
+                  variant="outline"
+                  onPress={handleGoogleSignUp}
+                  loading={googleLoading}
+                  disabled={isSubmitting || googleLoading}
+                >
                   <Text>Continue with Google</Text>
                 </Button>
                 <View className="flex-row items-center gap-4">

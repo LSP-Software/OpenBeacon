@@ -72,8 +72,8 @@ export const revokePendingSessionToken = async () => {
     return;
   }
 
-  const revokeResult = await authClient.revokeSession({ token: tokenResult.data });
-  if (revokeResult.error) {
+  const revokeResult = await tryCatch(authClient.revokeSession({ token: tokenResult.data }));
+  if (revokeResult.error || revokeResult.data.error) {
     return;
   }
 

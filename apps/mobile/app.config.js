@@ -1,12 +1,18 @@
 const appJson = require("./app.json");
 
-module.exports = () => {
-  const googleIosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
-  const plugins = [...appJson.expo.plugins];
+const GOOGLE_PLUGIN_NAME = "@react-native-google-signin/google-signin";
 
-  if (googleIosUrlScheme) {
+const createExpoConfig = (config = appJson) => {
+  const googleIosUrlScheme = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
+  const plugins = Array.isArray(config?.expo?.plugins) ? [...config.expo.plugins] : [];
+  const hasGooglePlugin = plugins.some(
+    (entry) =>
+      entry === GOOGLE_PLUGIN_NAME || (Array.isArray(entry) && entry[0] === GOOGLE_PLUGIN_NAME),
+  );
+
+  if (googleIosUrlScheme && !hasGooglePlugin) {
     plugins.push([
-      "@react-native-google-signin/google-signin",
+      GOOGLE_PLUGIN_NAME,
       {
         iosUrlScheme: googleIosUrlScheme,
       },
@@ -14,7 +20,10 @@ module.exports = () => {
   }
 
   return {
-    ...appJson.expo,
+    ...config.expo,
     plugins,
   };
 };
+
+module.exports = createExpoConfig;
+module.exports.createExpoConfig = createExpoConfig;

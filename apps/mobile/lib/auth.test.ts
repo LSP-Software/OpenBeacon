@@ -4,6 +4,11 @@ let configureCalls: Array<{
   webClientId: string;
   iosClientId?: string;
 }> = [];
+let storedToken: string | null = null;
+const deleteItemAsyncMock = mock(async () => {});
+const revokeSessionMock = mock(async () => ({
+  error: null,
+}));
 
 mock.module("@react-native-google-signin/google-signin", () => ({
   GoogleSignin: {
@@ -33,8 +38,8 @@ mock.module("@react-native-google-signin/google-signin", () => ({
 }));
 
 mock.module("expo-secure-store", () => ({
-  getItemAsync: async () => null,
-  deleteItemAsync: async () => {},
+  getItemAsync: async () => storedToken,
+  deleteItemAsync: deleteItemAsyncMock,
 }));
 
 mock.module("react-native", () => ({
@@ -52,9 +57,7 @@ mock.module("react-native", () => ({
 mock.module("./auth-client.ts", () => ({
   SESSION_TOKEN_TO_REVOKE_KEY: "session-token",
   authClient: {
-    revokeSession: async () => ({
-      error: null,
-    }),
+    revokeSession: revokeSessionMock,
     signIn: {
       social: async ({ provider, idToken }: { provider: string; idToken: { token: string } }) => ({
         data: {
@@ -74,6 +77,9 @@ const importAuthModule = async () =>
 describe("auth Google sign-in configuration", () => {
   beforeEach(() => {
     configureCalls = [];
+    storedToken = null;
+    deleteItemAsyncMock.mockClear();
+    revokeSessionMock.mockClear();
     delete process.env["EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"];
     delete process.env["EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID"];
     delete process.env["EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME"];
@@ -109,5 +115,21 @@ describe("auth Google sign-in configuration", () => {
         webClientId: "web-client-id",
       },
     ]);
+  });
+
+  test("does not delete the pending token when revokeSession throws", async () => {
+    storedToken = "pending-session-token";
+    revokeSessionMock.mockImplementationOnce(async () => {
+      throw new Error("network failed");
+    });
+
+    const { revokePendingSessionToken } = await importAuthModule();
+
+    await revokePendingSessionToken();
+
+    expect(revokeSessionMock).toHaveBeenCalledWith({
+      token: "pending-session-token",
+    });
+    expect(deleteItemAsyncMock).not.toHaveBeenCalled();
   });
 });
