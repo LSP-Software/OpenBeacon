@@ -18,7 +18,7 @@ export const buildUserAvatarPath = (userId: string): string => `user/${userId}/u
 
 export const buildGroupAvatarPath = (groupId: string): string => `group/${groupId}/uploads/avatar`;
 
-type PendingUploadDb = Pick<PrismaClient, "$transaction" | "pendingUpload">;
+
 
 export const replacePendingImageUploadForUser = async ({
   db,
@@ -27,7 +27,7 @@ export const replacePendingImageUploadForUser = async ({
   fileName,
   groupId,
 }: {
-  db: PendingUploadDb;
+  db: PrismaClient;
   userId: string;
   uploadType: ImageUploadType;
   fileName: string;
@@ -66,7 +66,7 @@ export const getPendingImageUploadForUser = async ({
   userId,
   uploadType,
 }: {
-  db: PendingUploadDb;
+  db: PrismaClient;
   userId: string;
   uploadType: ImageUploadType;
 }): Promise<{ fileName: string } | null> =>
@@ -80,7 +80,7 @@ export const clearPendingImageUploadForUser = async ({
   userId,
   uploadType,
 }: {
-  db: PendingUploadDb;
+  db: PrismaClient;
   userId: string;
   uploadType: ImageUploadType;
 }): Promise<void> => {
@@ -95,7 +95,7 @@ export const getPendingImageUploadForGroup = async ({
   uploadType,
   userId,
 }: {
-  db: PendingUploadDb;
+  db: PrismaClient;
   groupId: string;
   uploadType: ImageUploadType;
   userId: string;
@@ -113,7 +113,7 @@ export const clearPendingImageUploadForGroup = async ({
   uploadType,
   userId,
 }: {
-  db: PendingUploadDb;
+  db: PrismaClient;
   uploadType: ImageUploadType;
   userId: string;
 }): Promise<void> => {
