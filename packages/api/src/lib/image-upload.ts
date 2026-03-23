@@ -18,21 +18,23 @@ export const buildUserAvatarPath = (userId: string): string => `user/${userId}/u
 
 export const buildGroupAvatarPath = (groupId: string): string => `group/${groupId}/uploads/avatar`;
 
-
-
-export const replacePendingImageUploadForUser = async ({
+export const setPendingImageUploadForUser = async ({
   db,
   userId,
   uploadType,
   fileName,
   groupId,
+  bucketName,
+  currentImagePath,
 }: {
   db: PrismaClient;
   userId: string;
   uploadType: ImageUploadType;
   fileName: string;
   groupId?: string;
-}): Promise<{ oldFileName: string | null; oldGroupId: string | null }> => {
+  bucketName: string;
+  currentImagePath: string;
+}): Promise<void> => {
   let oldFileName: string | null = null;
   let oldGroupId: string | null = null;
 
@@ -54,72 +56,14 @@ export const replacePendingImageUploadForUser = async ({
     }
 
     await tx.pendingUpload.create({
-      data: { userId, uploadType, fileName, ...(groupId != null && { groupId }) },
+      data: { userId, uploadType, fileName, groupId: groupId ?? null },
     });
   });
 
-  return { oldFileName, oldGroupId };
-};
-
-export const getPendingImageUploadForUser = async ({
-  db,
-  userId,
-  uploadType,
-}: {
-  db: PrismaClient;
-  userId: string;
-  uploadType: ImageUploadType;
-}): Promise<{ fileName: string } | null> =>
-  db.pendingUpload.findUnique({
-    where: { userId_uploadType: { userId, uploadType } },
-    select: { fileName: true },
-  });
-
-export const clearPendingImageUploadForUser = async ({
-  db,
-  userId,
-  uploadType,
-}: {
-  db: PrismaClient;
-  userId: string;
-  uploadType: ImageUploadType;
-}): Promise<void> => {
-  await db.pendingUpload.delete({
-    where: { userId_uploadType: { userId, uploadType } },
-  });
-};
-
-export const getPendingImageUploadForGroup = async ({
-  db,
-  groupId,
-  uploadType,
-  userId,
-}: {
-  db: PrismaClient;
-  groupId: string;
-  uploadType: ImageUploadType;
-  userId: string;
-}): Promise<{ fileName: string } | null> => {
-  const row = await db.pendingUpload.findUnique({
-    where: { userId_uploadType: { userId, uploadType } },
-    select: { fileName: true, groupId: true },
-  });
-  if (!row || row.groupId !== groupId) return null;
-  return { fileName: row.fileName };
-};
-
-export const clearPendingImageUploadForGroup = async ({
-  db,
-  uploadType,
-  userId,
-}: {
-  db: PrismaClient;
-  uploadType: ImageUploadType;
-  userId: string;
-}): Promise<void> => {
-  await db.pendingUpload.delete({
-    where: { userId_uploadType: { userId, uploadType } },
-  });
+  if (oldFileName) {
+    const oldImagePath = oldGroupId ? buildGroupAvatarPath(oldGroupId) : currentImagePath;
+    await tryCatch(deleteFile(bucketName, oldImagePath, oldFileName));
+  }
 };
 
 //TODO: Move this to schemas package.
@@ -133,18 +77,14 @@ export const requestImageUpload = async ({
   contentHash,
   fileSize,
   imagePath,
-  replacePendingImageUpload,
+  fileName,
 }: {
   bucketName: string;
   contentHash: string;
   fileSize: number;
   imagePath: string;
-  replacePendingImageUpload: (
-    fileName: string,
-  ) => Promise<{ oldFileName: string | null; oldGroupId: string | null }>;
+  fileName: string;
 }): Promise<{ presignedUrl: string }> => {
-  const fileName = `${crypto.randomUUID()}.webp`;
-
   const { data: presignedUrl, error: presignError } = await tryCatch(
     getPresignedUploadUrl(bucketName, imagePath, fileName, "image/webp", contentHash, fileSize),
   );
@@ -156,49 +96,31 @@ export const requestImageUpload = async ({
     });
   }
 
-  const { oldFileName, oldGroupId } = await replacePendingImageUpload(fileName);
-  if (oldFileName) {
-    const oldImagePath = oldGroupId ? buildGroupAvatarPath(oldGroupId) : imagePath;
-    await tryCatch(deleteFile(bucketName, oldImagePath, oldFileName));
-  }
-
   return { presignedUrl };
 };
 
-const clearInvalidPendingImageUpload = async ({
-  bucketName,
-  imagePath,
-  fileName,
-  clearPendingImageUpload,
-}: {
-  bucketName: string;
-  imagePath: string;
-  fileName: string;
-  clearPendingImageUpload: () => Promise<void>;
-}): Promise<void> => {
-  await tryCatch(deleteFile(bucketName, imagePath, fileName));
-  await tryCatch(clearPendingImageUpload());
-};
-
 export const confirmImageUpload = async ({
+  db,
+  userId,
+  uploadType,
   bucketName,
   imagePath,
-  getPendingImageUpload,
-  commitImageUpload,
-  getCurrentImageUrl,
-  clearPendingImageUpload,
+  pendingFileName,
+  currentImageUrl,
   noPendingImageUploadMessage,
+  commitImageUpload,
 }: {
+  db: PrismaClient;
+  userId: string;
+  uploadType: ImageUploadType;
   bucketName: string;
   imagePath: string;
-  getPendingImageUpload: () => Promise<{ fileName: string } | null>;
+  pendingFileName: string | null;
   commitImageUpload: (imageUrl: string) => Promise<void>;
-  getCurrentImageUrl: () => Promise<string | null>;
-  clearPendingImageUpload: () => Promise<void>;
+  currentImageUrl: string | null;
   noPendingImageUploadMessage: string;
 }): Promise<{ imageUrl: string }> => {
-  const pendingImageUpload = await getPendingImageUpload();
-  if (!pendingImageUpload) {
+  if (!pendingFileName) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
       message: noPendingImageUploadMessage,
@@ -206,7 +128,7 @@ export const confirmImageUpload = async ({
   }
 
   const { data: fileSize, error: verifyError } = await tryCatch(
-    getFileSize(bucketName, imagePath, pendingImageUpload.fileName),
+    getFileSize(bucketName, imagePath, pendingFileName),
   );
 
   if (verifyError) {
@@ -216,34 +138,20 @@ export const confirmImageUpload = async ({
     });
   }
 
-  if (!fileSize) {
-    await clearInvalidPendingImageUpload({
-      bucketName,
-      imagePath,
-      fileName: pendingImageUpload.fileName,
-      clearPendingImageUpload,
-    });
+  if (!fileSize || fileSize > env.MAX_IMAGE_FILE_SIZE) {
+    await tryCatch(deleteFile(bucketName, imagePath, pendingFileName));
+    await tryCatch(
+      db.pendingUpload.delete({
+        where: { userId_uploadType: { userId, uploadType } },
+      }),
+    );
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Uploaded file not found or is empty in storage.",
+      message: "Uploaded failed verification.",
     });
   }
 
-  if (fileSize > env.MAX_IMAGE_FILE_SIZE) {
-    await clearInvalidPendingImageUpload({
-      bucketName,
-      imagePath,
-      fileName: pendingImageUpload.fileName,
-      clearPendingImageUpload,
-    });
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "Uploaded file exceeds the maximum allowed size.",
-    });
-  }
-
-  const imageUrl = buildImagePublicUrl(bucketName, imagePath, pendingImageUpload.fileName);
-  const currentImageUrl = await getCurrentImageUrl();
+  const imageUrl = buildImagePublicUrl(bucketName, imagePath, pendingFileName);
 
   await commitImageUpload(imageUrl);
 
