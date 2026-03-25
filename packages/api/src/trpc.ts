@@ -10,7 +10,7 @@
 import { auth } from "@openbeacon/auth";
 import { initTRPC } from "@trpc/server";
 import superjson from "superjson";
-import { ZodError, z } from "zod/v4";
+import { ZodError, z } from "zod";
 import { db } from "./db.ts";
 
 /**
