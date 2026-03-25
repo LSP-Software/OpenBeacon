@@ -77,7 +77,7 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
         </View>
 
         <View className="flex-row gap-4 justify-between">
-          <Button className="flex-1" onPress={closeForm}>
+          <Button className="flex-1" onPress={closeForm} variant={"secondary"}>
             <Text>Cancel</Text>
           </Button>
           <Button
