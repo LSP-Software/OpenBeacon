@@ -1,5 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signUpSchema } from "@openbeacon/schemas";
+import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -10,10 +11,15 @@ import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx
 import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
+import { trpc } from "../lib/api.ts";
+import { isNativeGoogleSignInConfigured, revokePendingSessionToken } from "../lib/auth.ts";
 import { authClient } from "../lib/auth-client.ts";
+import { performGoogleAuth } from "../lib/googleAuth.ts";
 
-export default function SignUp() {
-  const [loading, setLoading] = useState(false);
+const SignUp = () => {
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
   const form = useForm<z.infer<typeof signUpSchema>>({
     resolver: zodResolver(signUpSchema),
     mode: "onTouched",
@@ -25,9 +31,12 @@ export default function SignUp() {
     shouldFocusError: true,
   });
 
+  const isSubmitting = emailLoading || googleLoading;
+  const isGoogleEnabled = providers?.google === true && isNativeGoogleSignInConfigured;
+
   const handleSignUp = async () => {
     const { name, email, password } = form.getValues();
-    setLoading(true);
+    setEmailLoading(true);
 
     const result = await authClient.signUp.email({
       email,
@@ -37,11 +46,21 @@ export default function SignUp() {
 
     if (result.error) {
       Alert.alert("Sign up failed", result.error.message);
-      setLoading(false);
+      setEmailLoading(false);
       return;
     }
 
+    await revokePendingSessionToken();
     router.replace("/");
+  };
+
+  const handleGoogleSignUp = async () => {
+    await performGoogleAuth({
+      setLoading: setGoogleLoading,
+      failureTitle: "Google sign up failed",
+      onSuccess: () => router.replace("/"),
+      alert: Alert.alert,
+    });
   };
 
   return (
@@ -63,6 +82,23 @@ export default function SignUp() {
           </View>
 
           <View className="gap-4">
+            {isGoogleEnabled ? (
+              <>
+                <Button
+                  variant="outline"
+                  onPress={handleGoogleSignUp}
+                  loading={googleLoading}
+                  disabled={isSubmitting || googleLoading}
+                >
+                  <Text>Continue with Google</Text>
+                </Button>
+                <View className="flex-row items-center gap-4">
+                  <View className="flex-1 h-px bg-border" />
+                  <Text className="text-sm uppercase tracking-[0.18em] text-muted">or</Text>
+                  <View className="flex-1 h-px bg-border" />
+                </View>
+              </>
+            ) : null}
             <Input
               control={form.control}
               name="name"
@@ -94,8 +130,8 @@ export default function SignUp() {
               returnKeyType="done"
               onSubmitEditing={form.handleSubmit(handleSignUp)}
             />
-            <Button onPress={form.handleSubmit(handleSignUp)} disabled={loading}>
-              <Text>{loading ? "Creating account…" : "Create Account"}</Text>
+            <Button onPress={form.handleSubmit(handleSignUp)} disabled={isSubmitting}>
+              <Text>{emailLoading ? "Creating account…" : "Create Account"}</Text>
             </Button>
           </View>
 
@@ -117,4 +153,6 @@ export default function SignUp() {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-}
+};
+
+export default SignUp;
