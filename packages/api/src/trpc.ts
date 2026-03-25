@@ -8,10 +8,9 @@
  */
 
 import { auth } from "@openbeacon/auth";
-import { GroupRole } from "@openbeacon/database/enums";
-import { initTRPC, TRPCError } from "@trpc/server";
+import { initTRPC } from "@trpc/server";
 import superjson from "superjson";
-import { ZodError, z } from "zod/v4";
+import { ZodError, z } from "zod";
 import { db } from "./db.ts";
 
 /**
@@ -43,7 +42,7 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
  * This is where the trpc api is initialized, connecting the context and
  * transformer
  */
-const t = initTRPC.context<typeof createTRPCContext>().create({
+export const t = initTRPC.context<typeof createTRPCContext>().create({
   transformer: superjson,
   errorFormatter: ({ shape, error }) => {
     return {
@@ -71,102 +70,3 @@ const t = initTRPC.context<typeof createTRPCContext>().create({
  * @see https://trpc.io/docs/router
  */
 export const createTRPCRouter = t.router;
-
-/**
- * Middleware for timing procedure execution and adding an articifial delay in development.
- *
- * You can remove this if you don't like it, but it can help catch unwanted waterfalls by simulating
- * network latency that would occur in production but not in local development.
- */
-const timingMiddleware = t.middleware(async ({ next, path }) => {
-  const start = Date.now();
-
-  if (t._config.isDev) {
-    // artificial delay in dev 100-500ms
-    const waitMs = Math.floor(Math.random() * 400) + 100;
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
-  }
-
-  const result = await next();
-
-  const end = Date.now();
-  console.log(`[TRPC] ${path} took ${end - start}ms to execute`);
-
-  return result;
-});
-
-/**
- * Public (unauthed) procedure
- *
- * This is the base piece you use to build new queries and mutations on your
- * tRPC API. It does not guarantee that a user querying is authorized, but you
- * can still access user session data if they are logged in
- */
-export const publicProcedure = t.procedure.use(timingMiddleware);
-
-/**
- * Protected (authenticated) procedure
- *
- * If you want a query or mutation to ONLY be accessible to logged in users, use this. It verifies
- * the session is valid and guarantees `ctx.session.user` is not null.
- *
- * @see https://trpc.io/docs/procedures
- */
-export const protectedProcedure = t.procedure.use(timingMiddleware).use(({ ctx, next }) => {
-  if (!ctx.session?.user) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
-
-  return next({
-    ctx: {
-      // infers the `session` as non-nullable
-      session: { ...ctx.session, user: ctx.session.user },
-    },
-  });
-});
-
-export const groupMemberProcedure = protectedProcedure
-  .input(z.object({ groupId: z.string() }))
-  .use(async ({ ctx, next, input }) => {
-    const group = await ctx.db.group.findUnique({
-      where: {
-        id: input.groupId,
-      },
-      include: {
-        groupMembers: {
-          where: {
-            userId: ctx.session.user.id,
-          },
-        },
-      },
-    });
-
-    const groupMember = group?.groupMembers.find((member) => member.userId === ctx.session.user.id);
-    if (!groupMember) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "You are not a member of this group" });
-    }
-
-    return next({
-      ctx: { ...ctx, user: ctx.session.user, group, groupMember },
-    });
-  });
-
-export const groupAdminProcedure = groupMemberProcedure.use(async ({ ctx, next }) => {
-  if (ctx.groupMember.role !== GroupRole.OWNER && ctx.groupMember.role !== GroupRole.ADMIN) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
-  }
-
-  return next({
-    ctx: { ...ctx, user: ctx.session.user },
-  });
-});
-
-export const groupOwnerProcedure = groupMemberProcedure.use(async ({ ctx, next }) => {
-  if (ctx.groupMember.role !== GroupRole.OWNER) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "You are not the owner of this group" });
-  }
-
-  return next({
-    ctx: { ...ctx, user: ctx.session.user },
-  });
-});
