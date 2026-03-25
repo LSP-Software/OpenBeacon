@@ -2,6 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { optionalEnvString } from "./env.ts";
 
 describe("optionalEnvString", () => {
+  test("returns undefined when the input is undefined", () => {
+    expect(optionalEnvString.parse(undefined)).toBeUndefined();
+  });
+
+  test("converts an empty string to undefined", () => {
+    expect(optionalEnvString.parse("")).toBeUndefined();
+  });
+
   test("accepts a non-empty trimmed string", () => {
     expect(optionalEnvString.parse(" value ")).toBe("value");
   });

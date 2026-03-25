@@ -1,14 +1,22 @@
-import { GoogleSignin, isSuccessResponse } from "@react-native-google-signin/google-signin";
+import {
+  GoogleSignin,
+  isCancelledResponse,
+  isSuccessResponse,
+} from "@react-native-google-signin/google-signin";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "./auth-client.ts";
 import { tryCatch } from "./tryCatch.ts";
 
-const getGoogleWebClientId = () => process.env["EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"];
+const GOOGLE_WEB_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID";
+const GOOGLE_IOS_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID";
+const GOOGLE_IOS_URL_SCHEME_ENV = "EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME";
 
-const getGoogleIosClientId = () => process.env["EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID"];
+const getGoogleWebClientId = () => process.env[GOOGLE_WEB_CLIENT_ID_ENV];
 
-const getGoogleIosUrlScheme = () => process.env["EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME"];
+const getGoogleIosClientId = () => process.env[GOOGLE_IOS_CLIENT_ID_ENV];
+
+const getGoogleIosUrlScheme = () => process.env[GOOGLE_IOS_URL_SCHEME_ENV];
 
 export const isNativeGoogleSignInConfiguredForPlatform = (platform: typeof Platform.OS) => {
   const googleWebClientId = getGoogleWebClientId();
@@ -111,7 +119,11 @@ export const signInWithGoogle = async () => {
     };
   }
 
-  if (!isSuccessResponse(googleSignInResult.data) || !googleSignInResult.data.data.idToken) {
+  if (isCancelledResponse(googleSignInResult.data)) {
+    return {};
+  }
+
+  if (!isSuccessResponse(googleSignInResult.data)) {
     return {
       error: {
         message: "Google sign in did not return an ID token.",
@@ -119,10 +131,31 @@ export const signInWithGoogle = async () => {
     };
   }
 
-  return authClient.signIn.social({
-    provider: "google",
-    idToken: {
-      token: googleSignInResult.data.data.idToken,
-    },
-  });
+  if (!googleSignInResult.data.data.idToken) {
+    return {
+      error: {
+        message: "Google sign in did not return an ID token.",
+      },
+    };
+  }
+
+  const signInResult = await tryCatch(
+    authClient.signIn.social({
+      provider: "google",
+      idToken: {
+        token: googleSignInResult.data.data.idToken,
+      },
+    }),
+  );
+  if (signInResult.error) {
+    return {
+      error: {
+        message: String(
+          signInResult.error instanceof Error ? signInResult.error.message : signInResult.error,
+        ),
+      },
+    };
+  }
+
+  return signInResult.data;
 };

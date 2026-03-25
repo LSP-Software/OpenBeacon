@@ -42,6 +42,7 @@
     "clsx": "^2.1.1",
     "expo": "~54.0.32",
     "expo-constants": "~18.0.13",
+    "expo-dev-client": "~6.0.20",
     "expo-glass-effect": "^55.0.7",
     "expo-linking": "~8.0.11",
     "expo-location": "^55.1.4",

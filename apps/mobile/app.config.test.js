@@ -18,14 +18,14 @@ describe("app config", () => {
   test("returns an empty plugins array when expo plugins are missing", () => {
     const createExpoConfig = loadCreateExpoConfig();
 
-    expect(createExpoConfig({ expo: {} }).plugins).toEqual([]);
+    expect(createExpoConfig({}).plugins).toEqual([]);
   });
 
   test("adds the Google plugin when the iOS URL scheme is configured", () => {
     process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME = "com.googleusercontent.apps.test";
     const createExpoConfig = loadCreateExpoConfig();
 
-    expect(createExpoConfig({ expo: { plugins: ["expo-router"] } }).plugins).toEqual([
+    expect(createExpoConfig({ plugins: ["expo-router"] }).plugins).toEqual([
       "expo-router",
       [
         "@react-native-google-signin/google-signin",
@@ -42,9 +42,7 @@ describe("app config", () => {
 
     expect(
       createExpoConfig({
-        expo: {
-          plugins: ["expo-router", "@react-native-google-signin/google-signin"],
-        },
+        plugins: ["expo-router", "@react-native-google-signin/google-signin"],
       }).plugins,
     ).toEqual(["expo-router", "@react-native-google-signin/google-signin"]);
   });
@@ -55,17 +53,15 @@ describe("app config", () => {
 
     expect(
       createExpoConfig({
-        expo: {
-          plugins: [
-            "expo-router",
-            [
-              "@react-native-google-signin/google-signin",
-              {
-                iosUrlScheme: "existing-scheme",
-              },
-            ],
+        plugins: [
+          "expo-router",
+          [
+            "@react-native-google-signin/google-signin",
+            {
+              iosUrlScheme: "existing-scheme",
+            },
           ],
-        },
+        ],
       }).plugins,
     ).toEqual([
       "expo-router",
@@ -76,5 +72,25 @@ describe("app config", () => {
         },
       ],
     ]);
+  });
+
+  test("preserves the expo config shape when Expo passes the request object", () => {
+    const appConfig = require("./app.config.js");
+
+    expect(
+      appConfig({
+        config: {
+          android: {
+            package: "net.openbeacon.app",
+          },
+          plugins: ["expo-router"],
+        },
+      }),
+    ).toEqual({
+      android: {
+        package: "net.openbeacon.app",
+      },
+      plugins: ["expo-router"],
+    });
   });
 });
