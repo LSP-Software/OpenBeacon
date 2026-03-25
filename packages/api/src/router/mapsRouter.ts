@@ -1,7 +1,7 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 import { env } from "../env.ts";
+import { protectedProcedure } from "../procedures/auth/base.ts";
 import { createSignedPmtilesUrl } from "../r2.ts";
-import { protectedProcedure } from "../trpc.ts";
 
 export const mapsRouter = {
   getSignedPmtilesUrl: protectedProcedure.query(async ({ ctx }) => {
