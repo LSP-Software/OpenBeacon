@@ -1,5 +1,6 @@
 import { authCapabilities } from "@openbeacon/auth";
-import { createTRPCRouter, publicProcedure } from "../trpc.ts";
+import { publicProcedure } from "../procedures/auth/base.ts";
+import { createTRPCRouter } from "../trpc.ts";
 
 export const authRouter = createTRPCRouter({
   providers: publicProcedure.query(() => authCapabilities),

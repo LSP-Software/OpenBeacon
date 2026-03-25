@@ -1,5 +1,7 @@
 const { afterEach, beforeEach, describe, expect, test } = require("bun:test");
 
+const ORIGINAL_EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME = process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
+
 const loadCreateExpoConfig = () => {
   const appConfigPath = require.resolve("./app.config.js");
   delete require.cache[appConfigPath];
@@ -12,7 +14,12 @@ describe("app config", () => {
   });
 
   afterEach(() => {
-    delete process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
+    if (ORIGINAL_EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME === undefined) {
+      delete process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
+      return;
+    }
+
+    process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME = ORIGINAL_EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
   });
 
   test("returns an empty plugins array when expo plugins are missing", () => {
