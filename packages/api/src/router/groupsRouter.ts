@@ -2,7 +2,8 @@ import { GroupRole } from "@openbeacon/database";
 import { createGroupSchema, inviteMemberToGroupSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
-import { groupAdminProcedure, groupMemberProcedure, protectedProcedure } from "../trpc.ts";
+import { protectedProcedure } from "../procedures/auth/base.ts";
+import { groupAdminProcedure, groupMemberProcedure } from "../procedures/auth/group.ts";
 
 interface GroupListItem {
   id: string;
