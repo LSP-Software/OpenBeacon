@@ -19,7 +19,7 @@ interface CreateGroupDialogProps {
 
 export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => {
   const queryClient = useQueryClient();
-  const createGroupMutation = useMutation(trpc.groups.create.mutationOptions());
+  const createGroupMutation = useMutation(trpc.groupLifecycle.create.mutationOptions());
 
   const form = useForm<z.infer<typeof createGroupSchema>>({
     resolver: zodResolver(createGroupSchema),
@@ -36,7 +36,7 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
         console.log("error", error);
       },
       onSuccess: (data) => {
-        queryClient.setQueryData(trpc.groups.list.queryKey(), (previous) => {
+        queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
           if (!previous) {
             return [data.newGroup];
           }
@@ -77,7 +77,7 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
         </View>
 
         <View className="flex-row gap-4 justify-between">
-          <Button className="flex-1" onPress={closeForm}>
+          <Button className="flex-1" onPress={closeForm} variant={"secondary"}>
             <Text>Cancel</Text>
           </Button>
           <Button

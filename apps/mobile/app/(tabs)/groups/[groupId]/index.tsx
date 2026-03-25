@@ -50,7 +50,7 @@ export default function GroupScreen() {
   };
 
   const { data: group, isFetching: isFetchingGroup } = useQuery(
-    trpc.groups.get.queryOptions({ groupId }),
+    trpc.groupMembership.get.queryOptions({ groupId }),
   );
 
   if (isFetchingGroup) {
@@ -99,7 +99,7 @@ export default function GroupScreen() {
 }
 
 interface GroupHeaderProps {
-  group: NonNullable<RouterOutputs["groups"]["get"]>;
+  group: NonNullable<RouterOutputs["groupMembership"]["get"]>;
 }
 
 const GroupHeader = ({ group }: GroupHeaderProps) => {

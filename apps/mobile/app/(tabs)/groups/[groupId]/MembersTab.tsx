@@ -26,7 +26,7 @@ interface MembersTabProps {
 export default function MembersTab({ groupId }: MembersTabProps) {
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const { data: members, isFetching: isFetchingMembers } = useQuery(
-    trpc.groups.members.queryOptions({ groupId }),
+    trpc.groupMembership.members.queryOptions({ groupId }),
   );
 
   if (isFetchingMembers) {
@@ -60,7 +60,7 @@ export default function MembersTab({ groupId }: MembersTabProps) {
 }
 
 interface MemberCardProps {
-  member: RouterOutputs["groups"]["members"][number];
+  member: RouterOutputs["groupMembership"]["members"][number];
 }
 
 const MemberCard = ({ member }: MemberCardProps) => {
