@@ -75,6 +75,8 @@ describe("app config", () => {
   });
 
   test("preserves the expo config shape when Expo passes the request object", () => {
+    const appConfigPath = require.resolve("./app.config.js");
+    delete require.cache[appConfigPath];
     const appConfig = require("./app.config.js");
 
     expect(
