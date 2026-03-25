@@ -1,5 +1,8 @@
 
 
+# requirements
+java 17
+
 # setup
 bun i
 bun run db:migrate
