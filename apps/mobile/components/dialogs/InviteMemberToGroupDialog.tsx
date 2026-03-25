@@ -91,7 +91,7 @@ export const InviteMembersInputs = ({ groupId, setOpen }: InviteMembersInputsPro
     remove(index);
   };
 
-  const inviteMemberMutation = useMutation(trpc.groups.sendInvites.mutationOptions());
+  const inviteMemberMutation = useMutation(trpc.groupInvites.send.mutationOptions());
   const onSubmit = async (data: z.infer<typeof inviteMemberToGroupSchema>) => {
     await inviteMemberMutation.mutateAsync(data, {
       onSuccess: () => {

@@ -18,10 +18,10 @@ export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
 
   const { data: groupList, isFetching: isFetchingGroupList } = useQuery(
-    trpc.groups.list.queryOptions(),
+    trpc.groupMembership.list.queryOptions(),
   );
   const { data: groupInvites, isFetching: isFetchingGroupInvites } = useQuery(
-    trpc.groups.invites.queryOptions(),
+    trpc.groupInvites.list.queryOptions(),
   );
 
   if (isFetchingGroupList || isFetchingGroupInvites) {
@@ -54,34 +54,34 @@ export default function GroupsScreen() {
 }
 
 interface GroupInvitesListProps {
-  groupInvites: RouterOutputs["groups"]["invites"];
+  groupInvites: RouterOutputs["groupInvites"]["list"];
 }
 
 export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
   const queryClient = useQueryClient();
-  const acceptInviteMutation = useMutation(trpc.groups.acceptInvite.mutationOptions());
-  const declineInviteMutation = useMutation(trpc.groups.declineInvite.mutationOptions());
+  const acceptInviteMutation = useMutation(trpc.groupInvites.accept.mutationOptions());
+  const declineInviteMutation = useMutation(trpc.groupInvites.decline.mutationOptions());
 
   const handleAcceptInvite = async (inviteId: string) => {
     await acceptInviteMutation.mutateAsync(
       { inviteId },
       {
         onSuccess: (data) => {
-          queryClient.setQueryData(trpc.groups.invites.queryKey(), (previous) => {
+          queryClient.setQueryData(trpc.groupInvites.list.queryKey(), (previous) => {
             if (!previous) {
               return [];
             }
             return previous.filter((invite) => invite.id !== inviteId);
           });
 
-          queryClient.setQueryData(trpc.groups.list.queryKey(), (previous) => {
+          queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
             return [
               ...(previous ?? []),
               {
                 ...data.group,
                 members: data.group.members,
               },
-            ] satisfies RouterOutputs["groups"]["list"];
+            ] satisfies RouterOutputs["groupMembership"]["list"];
           });
         },
       },
@@ -92,7 +92,7 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
       { inviteId },
       {
         onSuccess: () => {
-          queryClient.setQueryData(trpc.groups.invites.queryKey(), (previous) => {
+          queryClient.setQueryData(trpc.groupInvites.list.queryKey(), (previous) => {
             if (!previous) {
               return [];
             }
@@ -141,7 +141,7 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
 };
 
 interface GroupListProps {
-  groupList: RouterOutputs["groups"]["list"];
+  groupList: RouterOutputs["groupMembership"]["list"];
   setCreateGroupDialogOpen: (open: boolean) => void;
 }
 
