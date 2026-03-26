@@ -3,6 +3,7 @@ import { PencilIcon, UserIcon } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
 import ImageCropPicker from "react-native-image-crop-picker";
+import type { ImageUploadResult } from "../../lib/image-upload.ts";
 import { cleanupTempFile } from "../../lib/image-upload.ts";
 import { tryCatch } from "../../lib/tryCatch.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
@@ -96,15 +97,15 @@ export const EditableImage = ({
         return;
       }
 
-      const { data: uploadedImageUrl, error: uploadError } = await uploadImage(processedUri);
-      if (uploadError) {
-        Alert.alert("Upload failed", uploadError);
+      const uploadResult = await uploadImage(processedUri);
+      if ("error" in uploadResult) {
+        Alert.alert("Upload failed", uploadResult.error);
         return;
       }
 
-      if (uploadedImageUrl && onImageUploaded) {
+      if (onImageUploaded) {
         const { error: callbackError } = await tryCatch(
-          Promise.resolve(onImageUploaded(uploadedImageUrl)),
+          Promise.resolve(onImageUploaded(uploadResult.data)),
         );
         if (callbackError) {
           Alert.alert("Failed to update image", callbackError.message);
@@ -157,8 +158,6 @@ interface EditableImageProps {
   onImageUploaded?: (imageUrl: string) => Promise<void> | void;
   showEditButton?: boolean;
   size?: "sm" | "md" | "lg";
-  uploadImage: (
-    uri: string,
-  ) => Promise<{ data: string | null; error?: never } | { data?: never; error: string }>;
+  uploadImage: (uri: string) => Promise<ImageUploadResult>;
   alt: string;
 }
