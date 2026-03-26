@@ -92,18 +92,18 @@ export const revokePendingSessionToken = async () => {
 export const completeAuthenticatedSessionSetup = async () => {
   await revokePendingSessionToken();
 
-  const registrationResult = await tryCatch(ensureDeviceKeyRegistration());
-  if (registrationResult.error) {
+  const { error, data } = await tryCatch(ensureDeviceKeyRegistration());
+  if (error) {
     return {
       data: null,
       error: {
-        message: getErrorMessage(registrationResult.error, "Unable to register this device."),
+        message: getErrorMessage(error, "Unable to register this device."),
       },
     };
   }
 
   return {
-    data: registrationResult.data,
+    data,
     error: null,
   };
 };
