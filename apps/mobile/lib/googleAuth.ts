@@ -1,4 +1,5 @@
 import { revokePendingSessionToken, signInWithGoogle } from "./auth.ts";
+import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 
 export const performGoogleAuth = async ({
   setLoading,
@@ -22,5 +23,6 @@ export const performGoogleAuth = async ({
   }
 
   await revokePendingSessionToken();
+  await ensureDeviceKeyRegistration();
   await onSuccess();
 };

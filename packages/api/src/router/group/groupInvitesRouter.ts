@@ -1,16 +1,31 @@
-import { inviteMemberToGroupSchema } from "@openbeacon/schemas";
+import { groupEpochBundleSchema, inviteMemberToGroupSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
+import { getInviteAcceptanceContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { protectedProcedure } from "../../procedures/auth/base.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 
 export const groupInvitesRouter = {
+  acceptanceContext: protectedProcedure
+    .input(z.object({ inviteId: z.string().min(1) }))
+    .query(async ({ ctx, input }) =>
+      getInviteAcceptanceContext({
+        db: ctx.db,
+        inviteId: input.inviteId,
+        userId: ctx.session.user.id,
+      }),
+    ),
   accept: protectedProcedure
-    .input(z.object({ inviteId: z.string() }))
+    .input(
+      z.object({
+        inviteId: z.string().min(1),
+        nextEpoch: groupEpochBundleSchema,
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const member = await ctx.db.$transaction(async (tx) => {
-        const invite = await tx.groupMemberInvite.findUnique({
+        const invite = await tx.groupMemberInvite.findFirst({
           where: { id: input.inviteId, recipientId: ctx.session.user.id },
         });
 
@@ -66,6 +81,13 @@ export const groupInvitesRouter = {
 
         await tx.groupMemberInvite.delete({
           where: { id: input.inviteId },
+        });
+
+        await persistGroupEpoch({
+          db: tx,
+          epoch: input.nextEpoch,
+          groupId: invite.groupId,
+          userId: ctx.session.user.id,
         });
 
         return createdMember;

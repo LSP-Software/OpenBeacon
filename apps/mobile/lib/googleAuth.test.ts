@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 const alertMock = mock(() => {});
+const ensureDeviceKeyRegistrationMock = mock(async () => {});
 const revokePendingSessionTokenMock = mock(async () => {});
 const signInWithGoogleMock = mock(
   async (): Promise<{
@@ -14,6 +15,10 @@ mock.module("./auth.ts", () => ({
   signInWithGoogle: signInWithGoogleMock,
 }));
 
+mock.module("./deviceKeys.ts", () => ({
+  ensureDeviceKeyRegistration: ensureDeviceKeyRegistrationMock,
+}));
+
 const importGoogleAuthModule = async () =>
   import(`./googleAuth.ts?test=${Math.random().toString(36).slice(2)}`) as Promise<
     typeof import("./googleAuth.ts")
@@ -22,6 +27,7 @@ const importGoogleAuthModule = async () =>
 describe("performGoogleAuth", () => {
   beforeEach(() => {
     alertMock.mockClear();
+    ensureDeviceKeyRegistrationMock.mockClear();
     revokePendingSessionTokenMock.mockClear();
     signInWithGoogleMock.mockClear();
   });
@@ -67,6 +73,7 @@ describe("performGoogleAuth", () => {
     });
 
     expect(loadingStates).toEqual([true]);
+    expect(ensureDeviceKeyRegistrationMock).toHaveBeenCalledTimes(1);
     expect(revokePendingSessionTokenMock).toHaveBeenCalledTimes(1);
     expect(onSuccess).toHaveBeenCalledTimes(1);
     expect(alertMock).not.toHaveBeenCalled();

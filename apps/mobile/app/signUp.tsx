@@ -14,6 +14,7 @@ import { Text } from "../components/ui/Text.tsx";
 import { trpc } from "../lib/api.ts";
 import { isNativeGoogleSignInConfigured, revokePendingSessionToken } from "../lib/auth.ts";
 import { authClient } from "../lib/auth-client.ts";
+import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
 import { performGoogleAuth } from "../lib/googleAuth.ts";
 
 const SignUp = () => {
@@ -51,6 +52,7 @@ const SignUp = () => {
     }
 
     await revokePendingSessionToken();
+    await ensureDeviceKeyRegistration();
     router.replace("/");
   };
 

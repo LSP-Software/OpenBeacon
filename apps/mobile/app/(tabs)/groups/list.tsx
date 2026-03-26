@@ -13,6 +13,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "../../../component
 import { Icon } from "../../../components/ui/Icon";
 import { Text } from "../../../components/ui/Text";
 import { type RouterOutputs, trpc } from "../../../lib/api";
+import { buildAcceptInviteInput } from "../../../lib/groupEncryption.ts";
 
 export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
@@ -63,29 +64,28 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
   const declineInviteMutation = useMutation(trpc.groupInvites.decline.mutationOptions());
 
   const handleAcceptInvite = async (inviteId: string) => {
-    await acceptInviteMutation.mutateAsync(
-      { inviteId },
-      {
-        onSuccess: (data) => {
-          queryClient.setQueryData(trpc.groupInvites.list.queryKey(), (previous) => {
-            if (!previous) {
-              return [];
-            }
-            return previous.filter((invite) => invite.id !== inviteId);
-          });
+    const acceptInviteInput = await buildAcceptInviteInput({ inviteId });
 
-          queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
-            return [
-              ...(previous ?? []),
-              {
-                ...data.group,
-                members: data.group.members,
-              },
-            ] satisfies RouterOutputs["groupMembership"]["list"];
-          });
-        },
+    await acceptInviteMutation.mutateAsync(acceptInviteInput, {
+      onSuccess: (data) => {
+        queryClient.setQueryData(trpc.groupInvites.list.queryKey(), (previous) => {
+          if (!previous) {
+            return [];
+          }
+          return previous.filter((invite) => invite.id !== inviteId);
+        });
+
+        queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
+          return [
+            ...(previous ?? []),
+            {
+              ...data.group,
+              members: data.group.members,
+            },
+          ] satisfies RouterOutputs["groupMembership"]["list"];
+        });
       },
-    );
+    });
   };
   const handleDeclineInvite = async (inviteId: string) => {
     await declineInviteMutation.mutateAsync(

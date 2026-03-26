@@ -40,6 +40,7 @@
         "@hookform/resolvers": "^5.2.2",
         "@maplibre/maplibre-react-native": "^10.4.2",
         "@openbeacon/api": "workspace:*",
+        "@openbeacon/encryption": "workspace:*",
         "@openbeacon/schemas": "workspace:*",
         "@protomaps/basemaps": "^5.7.2",
         "@react-native-google-signin/google-signin": "^16.1.2",
@@ -102,6 +103,8 @@
         "@aws-sdk/s3-request-presigner": "^3.1010.0",
         "@openbeacon/auth": "workspace:*",
         "@openbeacon/database": "workspace:*",
+        "@openbeacon/encryption": "workspace:*",
+        "@openbeacon/schemas": "workspace:*",
         "@t3-oss/env-core": "^0.13.10",
         "@trpc/server": "^11.12.0",
         "superjson": "^2.2.6",
@@ -130,11 +133,21 @@
         "prisma": "^7.4.2",
       },
     },
+    "packages/encryption": {
+      "name": "@openbeacon/encryption",
+      "version": "0.0.0",
+      "dependencies": {
+        "@noble/ciphers": "^2.1.1",
+        "@noble/curves": "^2.0.1",
+        "@noble/hashes": "^2.0.1",
+      },
+    },
     "packages/schemas": {
       "name": "@openbeacon/schemas",
       "version": "0.0.0",
       "dependencies": {
         "@openbeacon/database": "workspace:*",
+        "@openbeacon/encryption": "workspace:*",
         "zod": "^4.3.6",
       },
     },
@@ -578,6 +591,8 @@
 
     "@noble/ciphers": ["@noble/ciphers@2.1.1", "", {}, "sha512-bysYuiVfhxNJuldNXlFEitTVdNnYUc+XNJZd7Qm2a5j1vZHgY+fazadNFWFaMK/2vye0JVlxV3gHmC0WDfAOQw=="],
 
+    "@noble/curves": ["@noble/curves@2.0.1", "", { "dependencies": { "@noble/hashes": "2.0.1" } }, "sha512-vs1Az2OOTBiP4q0pwjW5aF0xp9n4MxVrmkFBxc6EKZc6ddYx5gaZiAsZoq0uRRXWbi3AT/sBqn05eRPtn1JCPw=="],
+
     "@noble/hashes": ["@noble/hashes@2.0.1", "", {}, "sha512-XlOlEbQcE9fmuXxrVTXCTlG2nlRXa9Rj3rr5Ue/+tX+nmkgbX720YHh0VR3hBF9xDvwnb8D2shVGOwNx+ulArw=="],
 
     "@nodelib/fs.scandir": ["@nodelib/fs.scandir@2.1.5", "", { "dependencies": { "@nodelib/fs.stat": "2.0.5", "run-parallel": "^1.1.9" } }, "sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g=="],
@@ -593,6 +608,8 @@
     "@openbeacon/backend": ["@openbeacon/backend@workspace:apps/backend"],
 
     "@openbeacon/database": ["@openbeacon/database@workspace:packages/database"],
+
+    "@openbeacon/encryption": ["@openbeacon/encryption@workspace:packages/encryption"],
 
     "@openbeacon/mobile": ["@openbeacon/mobile@workspace:apps/mobile"],
 

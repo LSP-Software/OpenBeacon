@@ -21,6 +21,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@maplibre/maplibre-react-native": "^10.4.2",
     "@openbeacon/api": "workspace:*",
+    "@openbeacon/encryption": "workspace:*",
     "@openbeacon/schemas": "workspace:*",
     "@protomaps/basemaps": "^5.7.2",
     "@react-native-google-signin/google-signin": "^16.1.2",

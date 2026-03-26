@@ -18,6 +18,7 @@ model User {
   sessions                   Session[]
   accounts                   Account[]
   groupMembers               GroupMember[]
+  devices                    UserDevice[]
   sentGroupMemberInvites     GroupMemberInvite[] @relation("GroupMemberInviteInviter")
   receivedGroupMemberInvites GroupMemberInvite[] @relation("GroupMemberInviteRecipient")
 
@@ -78,6 +79,7 @@ model Group {
 
   groupMembers GroupMember[]
   groupInvites GroupMemberInvite[]
+  groupEpochs  GroupEpoch[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -115,6 +117,54 @@ model GroupMember {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, groupId])
+}
+
+model UserDevice {
+  id                 String                 @id
+  userId             String                 @map("user_id")
+  user               User                   @relation(fields: [userId], references: [id], onDelete: Cascade, map: "user_device_user_id_user_id_fk")
+  name               String?
+  publicKey          String                 @map("public_key")
+  publicKeyAlgorithm String                 @map("public_key_algorithm")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  lastSeenAt         DateTime               @default(now()) @map("last_seen_at")
+  revokedAt          DateTime?              @map("revoked_at")
+  createdGroupEpochs GroupEpoch[]           @relation("GroupEpochCreatedByDevice")
+  recipientEpochKeys GroupEpochRecipientKey[] @relation("GroupEpochRecipientDevice")
+
+  @@index([userId], map: "user_device_userId_idx")
+  @@map("user_device")
+}
+
+model GroupEpoch {
+  id                String                  @id
+  groupId           String                  @map("group_id")
+  group             Group                   @relation(fields: [groupId], references: [id], onDelete: Cascade, map: "group_epoch_group_id_group_id_fk")
+  epochNumber       Int                     @map("epoch_number")
+  createdByDeviceId String                  @map("created_by_device_id")
+  createdByDevice   UserDevice              @relation("GroupEpochCreatedByDevice", fields: [createdByDeviceId], references: [id], onDelete: Restrict, map: "group_epoch_created_by_device_id_user_device_id_fk")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  recipientKeys     GroupEpochRecipientKey[]
+
+  @@unique([groupId, epochNumber], map: "group_epoch_groupId_epochNumber_unique")
+  @@index([groupId, createdAt], map: "group_epoch_groupId_createdAt_idx")
+  @@map("group_epoch")
+}
+
+model GroupEpochRecipientKey {
+  id                String     @id @default(uuid(7))
+  groupEpochId      String     @map("group_epoch_id")
+  groupEpoch        GroupEpoch @relation(fields: [groupEpochId], references: [id], onDelete: Cascade, map: "group_epoch_recipient_key_group_epoch_id_group_epoch_id_fk")
+  recipientDeviceId String     @map("recipient_device_id")
+  recipientDevice   UserDevice @relation("GroupEpochRecipientDevice", fields: [recipientDeviceId], references: [id], onDelete: Restrict, map: "group_epoch_recipient_key_recipient_device_id_user_device_id_fk")
+  wrappedKey        String     @map("wrapped_key")
+  ephemeralPublicKey String    @map("ephemeral_public_key")
+  nonce             String
+  algorithm         String
+  createdAt         DateTime   @default(now()) @map("created_at")
+
+  @@unique([groupEpochId, recipientDeviceId], map: "group_epoch_recipient_key_groupEpochId_recipientDeviceId_unique")
+  @@map("group_epoch_recipient_key")
 }
 
 enum GroupRole {

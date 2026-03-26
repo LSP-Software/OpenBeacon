@@ -1,7 +1,37 @@
 import { authCapabilities } from "@openbeacon/auth";
-import { publicProcedure } from "../procedures/auth/base.ts";
+import { registerDeviceKeySchema } from "@openbeacon/schemas";
+import { upsertUserDevice } from "../lib/groupEpochs.ts";
+import { protectedProcedure, publicProcedure } from "../procedures/auth/base.ts";
 import { createTRPCRouter } from "../trpc.ts";
 
 export const authRouter = createTRPCRouter({
   providers: publicProcedure.query(() => authCapabilities),
+  registerDeviceKey: protectedProcedure
+    .input(registerDeviceKeySchema)
+    .mutation(async ({ ctx, input }) =>
+      upsertUserDevice({
+        db: ctx.db,
+        input,
+        userId: ctx.session.user.id,
+      }),
+    ),
+  listMyDeviceKeys: protectedProcedure.query(async ({ ctx }) =>
+    ctx.db.userDevice.findMany({
+      orderBy: {
+        createdAt: "asc",
+      },
+      select: {
+        createdAt: true,
+        id: true,
+        lastSeenAt: true,
+        name: true,
+        publicKey: true,
+        publicKeyAlgorithm: true,
+        revokedAt: true,
+      },
+      where: {
+        userId: ctx.session.user.id,
+      },
+    }),
+  ),
 });

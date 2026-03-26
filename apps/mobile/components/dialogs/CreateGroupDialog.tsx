@@ -3,9 +3,10 @@ import { createGroupSchema } from "@openbeacon/schemas";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CameraIcon } from "lucide-react-native";
 import { useForm } from "react-hook-form";
-import { View } from "react-native";
+import { Alert, View } from "react-native";
 import type z from "zod";
-import { trpc } from "../../lib/api";
+import { trpc } from "../../lib/api.ts";
+import { buildCreateGroupInput } from "../../lib/groupEncryption.ts";
 import { Button } from "../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
@@ -31,9 +32,11 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
   });
 
   const onSubmit = async (data: z.infer<typeof createGroupSchema>) => {
-    await createGroupMutation.mutateAsync(data, {
+    const createGroupInput = await buildCreateGroupInput({ name: data.name });
+
+    await createGroupMutation.mutateAsync(createGroupInput, {
       onError: (error) => {
-        console.log("error", error);
+        Alert.alert("Unable to create group", error.message);
       },
       onSuccess: (data) => {
         queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
