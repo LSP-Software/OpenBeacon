@@ -79,6 +79,7 @@ mock.module("@react-native-google-signin/google-signin", () => ({
 }));
 
 mock.module("expo-secure-store", () => ({
+  setItemAsync: async () => {},
   getItemAsync: async () => storedToken,
   deleteItemAsync: deleteItemAsyncMock,
 }));

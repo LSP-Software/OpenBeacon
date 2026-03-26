@@ -106,6 +106,34 @@ export const listActiveGroupRecipientPublicKeys = async ({
   return mapRecipientPublicKeys(devices);
 };
 
+export const listUserRecipientPublicKeys = async ({
+  db,
+  userId,
+}: {
+  db: UserDeviceDb;
+  userId: string;
+}): Promise<RecipientPublicKeyMaterial[]> => {
+  const devices = await db.userDevice.findMany({
+    orderBy: {
+      id: "asc",
+    },
+    select: {
+      createdAt: true,
+      id: true,
+      publicKey: true,
+      publicKeyAlgorithm: true,
+      revokedAt: true,
+      userId: true,
+    },
+    where: {
+      revokedAt: null,
+      userId,
+    },
+  });
+
+  return mapRecipientPublicKeys(devices);
+};
+
 export const getInviteAcceptanceContext = async ({
   db,
   inviteId,

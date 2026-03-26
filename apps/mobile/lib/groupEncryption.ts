@@ -62,21 +62,13 @@ export const buildCreateGroupInput = async ({
   name: string;
 }): Promise<RouterInputs["groupLifecycle"]["create"]> => {
   const deviceRegistration = await ensureDeviceKeyRegistration();
+  const deviceKeyContext = await trpcClient.auth.deviceKeyContext.query();
 
   const groupId = createClientId("group");
   const initialEpoch = createInitialGroupEpoch({
     createdByDeviceId: deviceRegistration.deviceId,
     groupId,
-    recipients: [
-      {
-        algorithm: deviceRegistration.algorithm,
-        createdAt: new Date(),
-        deviceId: deviceRegistration.deviceId,
-        publicKey: deviceRegistration.publicKey,
-        revokedAt: null,
-        userId: "",
-      },
-    ],
+    recipients: deviceKeyContext.recipients,
   });
 
   return {
