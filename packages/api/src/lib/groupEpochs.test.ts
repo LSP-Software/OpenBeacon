@@ -4,35 +4,26 @@ import { getInviteAcceptanceContext, persistGroupEpoch, upsertUserDevice } from 
 
 describe("group epoch helpers", () => {
   test("registers a device without persisting a private key", async () => {
-    const upsert = mock(
-      async ({
-        create,
-        update,
-      }: {
-        create: Record<string, unknown>;
-        update: Record<string, unknown>;
-      }) => ({
-        createdAt: new Date("2026-03-26T12:00:00.000Z"),
-        id: create.id as string,
-        lastSeenAt: update.lastSeenAt as Date,
-        name: create.name as null | string,
-        publicKey: create.publicKey as string,
-        publicKeyAlgorithm: create.publicKeyAlgorithm as string,
-        revokedAt: null,
-        userId: create.userId as string,
-      }),
-    );
+    const create = mock(async ({ data }: { data: Record<string, unknown> }) => ({
+      createdAt: new Date("2026-03-26T12:00:00.000Z"),
+      id: data.id as string,
+      lastSeenAt: new Date("2026-03-26T12:00:00.000Z"),
+      publicKey: data.publicKey as string,
+      publicKeyAlgorithm: data.publicKeyAlgorithm as string,
+      revokedAt: null,
+      userId: data.userId as string,
+    }));
 
     const result = await upsertUserDevice({
       db: {
         userDevice: {
-          upsert,
+          create,
+          findUnique: async () => null,
         },
       },
       input: {
         algorithm: DEVICE_KEY_ALGORITHM,
         deviceId: "device-a",
-        name: "Alice's phone",
         publicKey: "public-key",
       },
       userId: "user-a",
@@ -40,6 +31,58 @@ describe("group epoch helpers", () => {
 
     expect(result.publicKey).toBe("public-key");
     expect("privateKey" in result).toBe(false);
+  });
+
+  test("updates an existing device for the same user", async () => {
+    const update = mock(async ({ data }: { data: Record<string, unknown> }) => ({
+      createdAt: new Date("2026-03-26T12:00:00.000Z"),
+      id: "device-a",
+      lastSeenAt: data.lastSeenAt as Date,
+      publicKey: data.publicKey as string,
+      publicKeyAlgorithm: data.publicKeyAlgorithm as string,
+      revokedAt: null,
+      userId: "user-a",
+    }));
+
+    const result = await upsertUserDevice({
+      db: {
+        userDevice: {
+          findUnique: async () => ({
+            userId: "user-a",
+          }),
+          update,
+        },
+      },
+      input: {
+        algorithm: DEVICE_KEY_ALGORITHM,
+        deviceId: "device-a",
+        publicKey: "public-key-next",
+      },
+      userId: "user-a",
+    });
+
+    expect(update).toHaveBeenCalled();
+    expect(result.publicKey).toBe("public-key-next");
+  });
+
+  test("rejects attempts to register another user's device", async () => {
+    await expect(() =>
+      upsertUserDevice({
+        db: {
+          userDevice: {
+            findUnique: async () => ({
+              userId: "user-b",
+            }),
+          },
+        },
+        input: {
+          algorithm: DEVICE_KEY_ALGORITHM,
+          deviceId: "device-a",
+          publicKey: "public-key",
+        },
+        userId: "user-a",
+      }),
+    ).toThrow("This device is already registered to another user.");
   });
 
   test("builds invite acceptance context with all post-accept devices", async () => {

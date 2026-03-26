@@ -24,7 +24,6 @@ export const authRouter = createTRPCRouter({
         createdAt: true,
         id: true,
         lastSeenAt: true,
-        name: true,
         publicKey: true,
         publicKeyAlgorithm: true,
         revokedAt: true,

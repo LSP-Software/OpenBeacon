@@ -4,7 +4,6 @@ import z from "zod";
 export const registerDeviceKeySchema = z.object({
   algorithm: z.literal(DEVICE_KEY_ALGORITHM),
   deviceId: z.string().min(1),
-  name: z.string().trim().min(1).max(100).nullable(),
   publicKey: z.string().min(1),
 });
 

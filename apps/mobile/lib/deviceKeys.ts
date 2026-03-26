@@ -76,7 +76,6 @@ export const ensureDeviceKeyRegistration = async () => {
   await trpcClient.auth.registerDeviceKey.mutate({
     algorithm: context.algorithm,
     deviceId: context.deviceId,
-    name: null,
     publicKey: context.publicKey,
   });
 

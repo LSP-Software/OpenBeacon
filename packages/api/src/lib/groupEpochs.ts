@@ -415,7 +415,6 @@ export const upsertUserDevice = async ({
   input: {
     algorithm: string;
     deviceId: string;
-    name: null | string;
     publicKey: string;
   };
   userId: string;
@@ -424,23 +423,62 @@ export const upsertUserDevice = async ({
     throw new TRPCError({ code: "BAD_REQUEST", message: "Unsupported device key algorithm." });
   }
 
-  return db.userDevice.upsert({
-    create: {
-      id: input.deviceId,
-      name: input.name,
-      publicKey: input.publicKey,
-      publicKeyAlgorithm: input.algorithm,
-      userId,
-    },
-    update: {
-      lastSeenAt: new Date(),
-      name: input.name,
-      publicKey: input.publicKey,
-      publicKeyAlgorithm: input.algorithm,
-      revokedAt: null,
+  const existingDevice = await db.userDevice.findUnique({
+    select: {
+      userId: true,
     },
     where: {
       id: input.deviceId,
     },
   });
+
+  if (existingDevice && existingDevice.userId !== userId) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "This device is already registered to another user.",
+    });
+  }
+
+  if (existingDevice) {
+    return db.userDevice.update({
+      data: {
+        lastSeenAt: new Date(),
+        publicKey: input.publicKey,
+        publicKeyAlgorithm: input.algorithm,
+        revokedAt: null,
+      },
+      where: {
+        id: input.deviceId,
+      },
+    });
+  }
+
+  try {
+    return await db.userDevice.create({
+      data: {
+        id: input.deviceId,
+        publicKey: input.publicKey,
+        publicKeyAlgorithm: input.algorithm,
+        userId,
+      },
+    });
+  } catch (error) {
+    const conflictingDevice = await db.userDevice.findUnique({
+      select: {
+        userId: true,
+      },
+      where: {
+        id: input.deviceId,
+      },
+    });
+
+    if (conflictingDevice && conflictingDevice.userId !== userId) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "This device is already registered to another user.",
+      });
+    }
+
+    throw error;
+  }
 };

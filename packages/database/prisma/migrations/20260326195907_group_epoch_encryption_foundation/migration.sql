@@ -2,7 +2,6 @@
 CREATE TABLE "user_device" (
     "id" TEXT NOT NULL,
     "user_id" TEXT NOT NULL,
-    "name" TEXT,
     "public_key" TEXT NOT NULL,
     "public_key_algorithm" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

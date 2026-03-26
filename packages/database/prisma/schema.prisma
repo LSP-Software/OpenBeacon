@@ -123,7 +123,6 @@ model UserDevice {
   id                 String                 @id
   userId             String                 @map("user_id")
   user               User                   @relation(fields: [userId], references: [id], onDelete: Cascade, map: "user_device_user_id_user_id_fk")
-  name               String?
   publicKey          String                 @map("public_key")
   publicKeyAlgorithm String                 @map("public_key_algorithm")
   createdAt          DateTime               @default(now()) @map("created_at")

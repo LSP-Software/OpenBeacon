@@ -3,7 +3,7 @@
   "license": "SEE LICENSE IN LICENSE.md",
   "version": "1.0.0",
   "private": true,
-  "main": "expo-router/entry",
+  "main": "index.ts",
   "scripts": {
     "start": "expo start",
     "dev": "expo start --android --ios",
@@ -43,6 +43,7 @@
     "clsx": "^2.1.1",
     "expo": "~54.0.32",
     "expo-constants": "~18.0.13",
+    "expo-crypto": "~15.0.8",
     "expo-dev-client": "~6.0.20",
     "expo-glass-effect": "^55.0.7",
     "expo-linking": "~8.0.11",
