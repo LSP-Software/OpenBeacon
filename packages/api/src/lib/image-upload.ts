@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "@openbeacon/database";
+import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import { env } from "../env.ts";
 import {
@@ -9,7 +10,6 @@ import {
   getFileSize,
   getPresignedUploadUrl,
 } from "./storage.ts";
-import { tryCatch } from "./tryCatch.ts";
 
 export type ImageUploadType = "userAvatar" | "groupAvatar";
 
@@ -131,12 +131,11 @@ export const confirmImageUpload = async ({
   }
 
   if (!fileSize || fileSize > env.MAX_IMAGE_FILE_SIZE) {
-    await tryCatch(deleteFile(bucketName, imagePath, pendingFileName));
-    await tryCatch(
-      db.pendingUpload.delete({
-        where: { userId_uploadType: { userId, uploadType } },
-      }),
-    );
+    await deleteFile(bucketName, imagePath, pendingFileName);
+    await db.pendingUpload.delete({
+      where: { userId_uploadType: { userId, uploadType } },
+    });
+
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Uploaded failed verification.",

@@ -1,3 +1,4 @@
+import { tryCatch } from "@openbeacon/shared";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { ChevronRightIcon } from "lucide-react-native";
@@ -10,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui
 import { Text } from "../../../components/ui/Text.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client";
 import { getLocationPermissionWarningTitle } from "../../../lib/locationPermissions";
-import { tryCatch } from "../../../lib/tryCatch";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
 
 type SettingRowProps = {

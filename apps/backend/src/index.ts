@@ -4,9 +4,9 @@
 
 import { verifyStorageConnectivity } from "@openbeacon/api";
 import type { AuthType } from "@openbeacon/auth";
+import { tryCatch } from "@openbeacon/shared";
 import { Hono } from "hono";
 import { env } from "./env.ts";
-import { tryCatch } from "./helpers/tryCatch.ts";
 import authRouter from "./routes/auth.ts";
 import trpcRouter from "./routes/trpc.ts";
 

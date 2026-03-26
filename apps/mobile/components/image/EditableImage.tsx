@@ -1,3 +1,4 @@
+import { tryCatch } from "@openbeacon/shared";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { PencilIcon, UserIcon } from "lucide-react-native";
 import { useState } from "react";
@@ -5,7 +6,6 @@ import { ActivityIndicator, Alert, Pressable, View } from "react-native";
 import ImageCropPicker from "react-native-image-crop-picker";
 import type { ImageUploadResult } from "../../lib/image-upload.ts";
 import { cleanupTempFile } from "../../lib/image-upload.ts";
-import { tryCatch } from "../../lib/tryCatch.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Icon } from "../ui/Icon.tsx";
 

@@ -9,7 +9,6 @@ export const env = createEnv({
     S3_ACCESS_KEY: z.string().min(20),
     S3_BUCKET_NAME: z.string().min(1),
     S3_CDN_URL: z
-      .string()
       .url()
       .default("https://cdn.openbeacon.net/file")
       .transform((url) => url.replace(/\/+$/, "")),

@@ -53,7 +53,7 @@ export const uploadImageFromUri = async ({
     const rawfileBytes = await file.bytes();
     const bytes = rawfileBytes.slice().buffer;
     const contentHash = await computeSha256Base64(bytes);
-    const uploadData: Awaited<ReturnType<typeof requestImageUpload>> = await requestImageUpload({
+    const uploadData = await requestImageUpload({
       contentHash,
       fileSize: bytes.byteLength,
     });
@@ -61,8 +61,9 @@ export const uploadImageFromUri = async ({
     const confirmData: Awaited<ReturnType<typeof confirmImageUpload>> = await confirmImageUpload();
     return { data: confirmData.imageUrl };
   } catch (error) {
+    console.error(error);
     return {
-      error: `Unable to upload image: ${String(error)}`,
+      error: `Unable to upload image`,
     };
   } finally {
     cleanupTempFile(uri);
