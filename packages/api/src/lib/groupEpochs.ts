@@ -453,6 +453,8 @@ export const upsertUserDevice = async ({
 
   const existingDevice = await db.userDevice.findUnique({
     select: {
+      publicKey: true,
+      publicKeyAlgorithm: true,
       userId: true,
     },
     where: {
@@ -468,11 +470,19 @@ export const upsertUserDevice = async ({
   }
 
   if (existingDevice) {
+    if (
+      existingDevice.publicKey !== input.publicKey ||
+      existingDevice.publicKeyAlgorithm !== input.algorithm
+    ) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "This device ID is already registered with different key material.",
+      });
+    }
+
     return db.userDevice.update({
       data: {
         lastSeenAt: new Date(),
-        publicKey: input.publicKey,
-        publicKeyAlgorithm: input.algorithm,
         revokedAt: null,
       },
       where: {

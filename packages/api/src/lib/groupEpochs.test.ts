@@ -33,13 +33,13 @@ describe("group epoch helpers", () => {
     expect("privateKey" in result).toBe(false);
   });
 
-  test("updates an existing device for the same user", async () => {
+  test("updates an existing device for the same user without replacing key material", async () => {
     const update = mock(async ({ data }: { data: Record<string, unknown> }) => ({
       createdAt: new Date("2026-03-26T12:00:00.000Z"),
       id: "device-a",
       lastSeenAt: data.lastSeenAt as Date,
-      publicKey: data.publicKey as string,
-      publicKeyAlgorithm: data.publicKeyAlgorithm as string,
+      publicKey: "public-key",
+      publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
       revokedAt: null,
       userId: "user-a",
     }));
@@ -48,6 +48,8 @@ describe("group epoch helpers", () => {
       db: {
         userDevice: {
           findUnique: async () => ({
+            publicKey: "public-key",
+            publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
             userId: "user-a",
           }),
           update,
@@ -56,13 +58,44 @@ describe("group epoch helpers", () => {
       input: {
         algorithm: DEVICE_KEY_ALGORITHM,
         deviceId: "device-a",
-        publicKey: "public-key-next",
+        publicKey: "public-key",
       },
       userId: "user-a",
     });
 
     expect(update).toHaveBeenCalled();
-    expect(result.publicKey).toBe("public-key-next");
+    expect(update.mock.calls[0]?.[0]).toEqual({
+      data: {
+        lastSeenAt: expect.any(Date),
+        revokedAt: null,
+      },
+      where: {
+        id: "device-a",
+      },
+    });
+    expect(result.publicKey).toBe("public-key");
+  });
+
+  test("rejects attempts to change the public key for an existing device", async () => {
+    await expect(() =>
+      upsertUserDevice({
+        db: {
+          userDevice: {
+            findUnique: async () => ({
+              publicKey: "public-key",
+              publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
+              userId: "user-a",
+            }),
+          },
+        },
+        input: {
+          algorithm: DEVICE_KEY_ALGORITHM,
+          deviceId: "device-a",
+          publicKey: "public-key-next",
+        },
+        userId: "user-a",
+      }),
+    ).toThrow("This device ID is already registered with different key material.");
   });
 
   test("rejects attempts to register another user's device", async () => {
@@ -71,6 +104,8 @@ describe("group epoch helpers", () => {
         db: {
           userDevice: {
             findUnique: async () => ({
+              publicKey: "public-key",
+              publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
               userId: "user-b",
             }),
           },
