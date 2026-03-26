@@ -39,6 +39,7 @@ export const GroupImage = ({
   return (
     <EditableImage
       accessibilityLabel="Edit group photo"
+      alt="Group avatar"
       imageUrl={imageUrl}
       onImageUploaded={handleGroupImageUploaded}
       showEditButton={showEditButton}

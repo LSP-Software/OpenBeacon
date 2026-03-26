@@ -30,7 +30,7 @@ export const uploadToPresignedUrl = async (
 
   if (!response.ok) {
     const summary = `${response.status.toString()}`;
-    throw new Error(`${summary}\n${await response.text()}`);
+    throw new Error(`${summary}`);
   }
 };
 
@@ -47,8 +47,8 @@ export const uploadImageFromUri = async ({
   confirmImageUpload: () => Promise<{ imageUrl: string }>;
 }): Promise<{ data: string | null; error?: never } | { data?: never; error: string }> => {
   const file = new FSFile(uri);
-  let confirmData: Awaited<ReturnType<typeof confirmImageUpload>> | undefined;
 
+  let confirmData: Awaited<ReturnType<typeof confirmImageUpload>> | undefined;
   try {
     const rawfileBytes = await file.bytes();
     const bytes = rawfileBytes.slice().buffer;

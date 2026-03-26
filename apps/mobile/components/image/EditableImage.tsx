@@ -8,17 +8,6 @@ import { tryCatch } from "../../lib/tryCatch.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Icon } from "../ui/Icon.tsx";
 
-type EditableImageProps = {
-  accessibilityLabel: string;
-  imageUrl?: string | null;
-  onImageUploaded?: (imageUrl: string) => Promise<void> | void;
-  showEditButton?: boolean;
-  size?: "sm" | "md" | "lg";
-  uploadImage: (
-    uri: string,
-  ) => Promise<{ data: string | null; error?: never } | { data?: never; error: string }>;
-};
-
 export const EditableImage = ({
   accessibilityLabel,
   imageUrl,
@@ -26,8 +15,10 @@ export const EditableImage = ({
   showEditButton = false,
   size = "md",
   uploadImage,
+  alt,
 }: EditableImageProps) => {
   const [isUploading, setIsUploading] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const isLoading = isUploading;
   const sizeClassNames = {
     sm: {
@@ -85,16 +76,18 @@ export const EditableImage = ({
   };
 
   const handleEditPress = async () => {
-    if (isLoading) return;
-    const pickResult = await pickAndCropImage();
+    if (isLoading || pickerOpen) return;
+    setPickerOpen(true);
 
-    if ("cancelled" in pickResult) return;
-    if (!pickResult.ok) {
-      Alert.alert("Image selection failed", pickResult.error.message);
-      return;
-    }
-    setIsUploading(true);
     try {
+      const pickResult = await pickAndCropImage();
+      if ("cancelled" in pickResult) return;
+      if (!pickResult.ok) {
+        Alert.alert("Image selection failed", pickResult.error.message);
+        return;
+      }
+      setIsUploading(true);
+
       const { data: processedUri, error: processError } = await tryCatch(
         processImage(pickResult.path),
       );
@@ -121,12 +114,13 @@ export const EditableImage = ({
       Alert.alert("Upload failed", error instanceof Error ? error.message : String(error));
     } finally {
       setIsUploading(false);
+      setPickerOpen(false);
     }
   };
 
   return (
     <View>
-      <Avatar alt={`profile photo`} className={currentSizeClassNames.avatar}>
+      <Avatar alt={alt} className={currentSizeClassNames.avatar}>
         <AvatarImage source={{ uri: imageUrl ?? "" }} />
         <AvatarFallback>
           <Icon as={UserIcon} className={currentSizeClassNames.fallbackIcon} />
@@ -156,3 +150,15 @@ export const EditableImage = ({
     </View>
   );
 };
+
+interface EditableImageProps {
+  accessibilityLabel: string;
+  imageUrl?: string | null;
+  onImageUploaded?: (imageUrl: string) => Promise<void> | void;
+  showEditButton?: boolean;
+  size?: "sm" | "md" | "lg";
+  uploadImage: (
+    uri: string,
+  ) => Promise<{ data: string | null; error?: never } | { data?: never; error: string }>;
+  alt: string;
+}

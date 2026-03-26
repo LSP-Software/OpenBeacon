@@ -37,6 +37,7 @@ export const ProfileImage = ({
   return (
     <EditableImage
       accessibilityLabel="Edit profile picture"
+      alt="Profile avatar"
       imageUrl={imageUrl}
       onImageUploaded={handleProfileImageUploaded}
       showEditButton={showEditButton}
