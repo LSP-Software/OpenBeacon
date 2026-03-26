@@ -47,17 +47,24 @@ export const uploadImageFromUri = async ({
   confirmImageUpload: () => Promise<{ imageUrl: string }>;
 }): Promise<{ data: string | null; error?: never } | { data?: never; error: string }> => {
   const file = new FSFile(uri);
+  let confirmData: Awaited<ReturnType<typeof confirmImageUpload>> | undefined;
+
   try {
     const rawfileBytes = await file.bytes();
     const bytes = rawfileBytes.slice().buffer;
     const contentHash = await computeSha256Base64(bytes);
     const uploadData = await requestImageUpload({ contentHash, fileSize: bytes.byteLength });
     await uploadToPresignedUrl(uploadData.presignedUrl, bytes, contentHash);
-    const confirmData = await confirmImageUpload();
-    return { data: confirmData.imageUrl };
+    confirmData = await confirmImageUpload();
   } catch (error) {
-    return { error: `Unable to upload image: ${String(error)}` };
+    return {
+      error: `Unable to upload image: ${String(error)}`,
+    };
+  } finally {
+    cleanupTempFile(uri);
   }
+
+  return { data: confirmData.imageUrl };
 };
 
 export const cleanupTempFile = (uri: string): void => {

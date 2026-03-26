@@ -70,14 +70,18 @@ export const EditableImage = ({
     if (error.message.includes("User cancelled")) {
       return { ok: false, cancelled: true };
     }
-    return { ok: false, error: new Error(String(error)) };
+    return { ok: false, error: new Error(error.message) };
   };
 
   const processImage = async (uri: string): Promise<string> => {
-    const context = ImageManipulator.manipulate(uri);
-    const imageRef = await context.resize({ width: 512, height: 512 }).renderAsync();
-    const result = await imageRef.saveAsync({ format: SaveFormat.WEBP, compress: 0.85 });
-    return result.uri;
+    try {
+      const context = ImageManipulator.manipulate(uri);
+      const imageRef = await context.resize({ width: 512, height: 512 }).renderAsync();
+      const result = await imageRef.saveAsync({ format: SaveFormat.WEBP, compress: 0.85 });
+      return result.uri;
+    } finally {
+      cleanupTempFile(uri);
+    }
   };
 
   const handleEditPress = async () => {
@@ -90,37 +94,34 @@ export const EditableImage = ({
       return;
     }
     setIsUploading(true);
-
-    const { data: processedUri, error: processError } = await tryCatch(
-      processImage(pickResult.path),
-    );
-    cleanupTempFile(pickResult.path);
-
-    if (processError) {
-      Alert.alert("Image processing failed", processError.message);
-      setIsUploading(false);
-      return;
-    }
-
-    const { data: uploadedImageUrl, error: uploadError } = await uploadImage(processedUri);
-    cleanupTempFile(processedUri);
-
-    if (uploadError) {
-      Alert.alert("Upload failed", uploadError);
-      setIsUploading(false);
-      return;
-    }
-
-    if (uploadedImageUrl && onImageUploaded) {
-      const { error: callbackError } = await tryCatch(
-        Promise.resolve(onImageUploaded(uploadedImageUrl)),
+    try {
+      const { data: processedUri, error: processError } = await tryCatch(
+        processImage(pickResult.path),
       );
-      if (callbackError) {
-        Alert.alert("Failed to update image", callbackError.message);
+      if (processError) {
+        Alert.alert("Image processing failed", processError.message);
+        return;
       }
-    }
 
-    setIsUploading(false);
+      const { data: uploadedImageUrl, error: uploadError } = await uploadImage(processedUri);
+      if (uploadError) {
+        Alert.alert("Upload failed", uploadError);
+        return;
+      }
+
+      if (uploadedImageUrl && onImageUploaded) {
+        const { error: callbackError } = await tryCatch(
+          Promise.resolve(onImageUploaded(uploadedImageUrl)),
+        );
+        if (callbackError) {
+          Alert.alert("Failed to update image", callbackError.message);
+        }
+      }
+    } catch (error) {
+      Alert.alert("Upload failed", error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
