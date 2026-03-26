@@ -1,7 +1,8 @@
 import { router } from "expo-router";
 import { ArrowLeftIcon } from "lucide-react-native";
 import { Pressable } from "react-native";
-import { Text } from "../Text";
+import { Icon } from "../ui/Icon.tsx";
+import { Text } from "../ui/Text.tsx";
 
 export const ReturnToHomeHeader = () => {
   return (
@@ -11,7 +12,7 @@ export const ReturnToHomeHeader = () => {
       accessibilityRole="button"
       accessibilityLabel="Go back"
     >
-      <ArrowLeftIcon />
+      <Icon as={ArrowLeftIcon} className="text-primary" />
       <Text className="text-primary">Back</Text>
     </Pressable>
   );

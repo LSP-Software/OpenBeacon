@@ -1,34 +1,47 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useForm } from "react-hook-form";
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button } from "../components/Button.tsx";
-import { FormInput } from "../components/FormInput.tsx";
+import z from "zod";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
-import { Text } from "../components/Text.tsx";
+import { Button } from "../components/ui/Button.tsx";
+import { Input } from "../components/ui/Input.tsx";
+import { Separator } from "../components/ui/Separator.tsx";
+import { Text } from "../components/ui/Text.tsx";
 import { getServerUrl, hasCustomServerUrl, setServerUrl } from "../lib/server-url.ts";
 
-export default function ServerUrl() {
-  const [url, setUrl] = useState(() => getServerUrl());
+const serverUrlSchema = z.object({
+  url: z.url({ error: "Invalid server url" }).trim(),
+});
 
-  const handleSave = () => {
-    const trimmed = url.trim();
-    if (trimmed) {
-      try {
-        const parsed = new URL(trimmed);
-        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-          Alert.alert("Invalid URL", "Server URL must start with http:// or https://");
-          return;
-        }
-      } catch {
+export default function ServerUrl() {
+  const form = useForm<z.infer<typeof serverUrlSchema>>({
+    resolver: zodResolver(serverUrlSchema),
+    mode: "onTouched",
+    defaultValues: {
+      url: getServerUrl(),
+    },
+    shouldFocusError: true,
+  });
+
+  const handleSave = (data: z.infer<typeof serverUrlSchema>) => {
+    const { url } = data;
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
         Alert.alert("Invalid URL", "Server URL must start with http:// or https://");
         return;
       }
+    } catch {
+      Alert.alert("Invalid URL", "Server URL must start with http:// or https://");
+      return;
     }
-    setServerUrl(trimmed);
+
+    setServerUrl(url);
     Alert.alert(
-      trimmed ? "Server saved" : "Using default server",
-      trimmed
+      url ? "Server saved" : "Using default server",
+      url
         ? "Restart the app to connect to your custom server."
         : "Restart the app to switch back to the default server.",
       [{ text: "OK", onPress: () => router.back() }],
@@ -36,7 +49,6 @@ export default function ServerUrl() {
   };
 
   const handleClear = () => {
-    setUrl("");
     setServerUrl("");
     Alert.alert("Using default server", "Restart the app to switch back to the default server.", [
       { text: "OK", onPress: () => router.back() },
@@ -65,17 +77,17 @@ export default function ServerUrl() {
           </View>
 
           <View className="gap-5">
-            <FormInput
+            <Input
+              control={form.control}
+              name="url"
               label="Server URL"
-              value={url}
-              onChangeText={setUrl}
               placeholder="https://your-server.example.com"
               keyboardType="default"
               autoCapitalize="none"
               autoComplete="off"
               textContentType="URL"
               returnKeyType="done"
-              onSubmitEditing={handleSave}
+              onSubmitEditing={form.handleSubmit(handleSave)}
             />
 
             <View className="bg-primary/10 rounded-lg p-4 border border-primary/15">
@@ -85,13 +97,17 @@ export default function ServerUrl() {
               </Text>
             </View>
 
-            <Button title="Save" onPress={handleSave} />
+            <Button onPress={form.handleSubmit(handleSave)} disabled={!form.formState.isDirty}>
+              <Text>Save</Text>
+            </Button>
             {hasCustomServerUrl() && (
-              <Button title="Use Default Server" variant="secondary" onPress={handleClear} />
+              <Button variant="outline" onPress={handleClear}>
+                <Text>Use Default Server</Text>
+              </Button>
             )}
           </View>
 
-          <View className="h-px bg-border" />
+          <Separator />
 
           <View className="gap-2">
             <Text className="font-semibold text-lg">Self-hosting OpenBeacon</Text>

@@ -1,5 +1,5 @@
 import { View } from "react-native";
-import { NativeMap } from "../../components/map/NativeMap.tsx";
+import { NativeMap } from "../../../components/map/NativeMap";
 
 export default function MapScreen() {
   return (

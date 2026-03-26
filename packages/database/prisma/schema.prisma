@@ -8,65 +8,64 @@ datasource db {
 }
 
 model User {
-  id                        String                      @id
-  name                      String
-  email                     String                      @unique(map: "user_email_unique")
-  emailVerified             Boolean                     @default(false) @map("email_verified")
-  image                     String?
-  createdAt                 DateTime                    @default(now()) @map("created_at")
-  updatedAt                 DateTime                    @updatedAt @map("updated_at")
-  sessions     Session[]
-  accounts     Account[]
+  id             String          @id
+  name           String
+  email          String          @unique
+  emailVerified  Boolean         @default(false)
+  image          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  sessions       Session[]
+  accounts       Account[]
   pendingUploads PendingUpload[]
 
-  @@map("user")
+  groupMembers               GroupMember[]
+  sentGroupMemberInvites     GroupMemberInvite[] @relation("GroupMemberInviteInviter")
+  receivedGroupMemberInvites GroupMemberInvite[] @relation("GroupMemberInviteRecipient")
 }
 
 model Session {
   id        String   @id
-  expiresAt DateTime @map("expires_at")
-  token     String   @unique(map: "session_token_unique")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  ipAddress String?  @map("ip_address")
-  userAgent String?  @map("user_agent")
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "session_user_id_user_id_fk")
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId], map: "session_userId_idx")
-  @@map("session")
+  @@index([userId])
 }
 
 model Account {
   id                    String    @id
-  accountId             String    @map("account_id")
-  providerId            String    @map("provider_id")
-  userId                String    @map("user_id")
-  accessToken           String?   @map("access_token")
-  refreshToken          String?   @map("refresh_token")
-  idToken               String?   @map("id_token")
-  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
-  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
   scope                 String?
   password              String?
-  createdAt             DateTime  @default(now()) @map("created_at")
-  updatedAt             DateTime  @updatedAt @map("updated_at")
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "account_user_id_user_id_fk")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId], map: "account_userId_idx")
-  @@map("account")
+  @@index([userId])
 }
 
 model Verification {
   id         String   @id
   identifier String
   value      String
-  expiresAt  DateTime @map("expires_at")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
 
-  @@index([identifier], map: "verification_identifier_idx")
-  @@map("verification")
+  @@index([identifier])
 }
 
 enum ImageUploadType {
@@ -75,26 +74,68 @@ enum ImageUploadType {
 }
 
 model Group {
-  id            String          @id @default(uuid(7))
-  name          String
-  image         String?
+  id             String          @id @default(uuid(7))
+  name           String
+  image          String?
   pendingUploads PendingUpload[]
+
+  groupMembers GroupMember[]
+  groupInvites GroupMemberInvite[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model PendingUpload {
-  userId    String
+  userId     String
   uploadType ImageUploadType
-  fileName  String
-  createdAt DateTime @default(now())
-  groupId   String?
+  fileName   String
+  createdAt  DateTime        @default(now())
+  groupId    String?
 
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   group Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@id([userId, uploadType])
   @@index([groupId])
-  @@map("pending_upload")
+}
+
+model GroupMemberInvite {
+  id String @id @default(uuid(7))
+
+  inviterId   String
+  inviter     User      @relation("GroupMemberInviteInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient   User      @relation("GroupMemberInviteRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  groupId     String
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  role        GroupRole
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([recipientId, groupId])
+}
+
+model GroupMember {
+  id String @id @default(uuid(7))
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  role GroupRole
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, groupId])
+}
+
+enum GroupRole {
+  OWNER
+  ADMIN
+  MEMBER
 }

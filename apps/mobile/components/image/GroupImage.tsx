@@ -13,10 +13,10 @@ export const GroupImage = ({
   showEditButton?: boolean;
 }) => {
   const requestGroupImageUploadMutation = useMutation(
-    trpc.groups.requestGroupImageUpload.mutationOptions(),
+    trpc.groupSettings.requestGroupImageUpload.mutationOptions(),
   );
   const confirmGroupImageUploadMutation = useMutation(
-    trpc.groups.confirmGroupImageUpload.mutationOptions(),
+    trpc.groupSettings.confirmGroupImageUpload.mutationOptions(),
   );
 
   const uploadGroupImage = async (uri: string) => {
@@ -29,7 +29,7 @@ export const GroupImage = ({
   };
 
   const handleGroupImageUploaded = async (uploadedImageUrl: string) => {
-    queryClient.setQueryData(trpc.groups.list.queryKey(), (currentGroups) =>
+    queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (currentGroups) =>
       currentGroups?.map((group) =>
         group.id === groupId ? { ...group, image: uploadedImageUrl } : group,
       ),

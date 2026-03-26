@@ -2,12 +2,16 @@ import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { ChevronRightIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button } from "../../components/Button.tsx";
-import { ProfileImage } from "../../components/image/ProfileImage.tsx";
-import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../lib/auth-client.ts";
-import { tryCatch } from "../../lib/tryCatch.ts";
+import { ProfileImage } from "../../../components/image/ProfileImage";
+import { Button } from "../../../components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/Card";
+import { Text } from "../../../components/ui/Text.tsx";
+import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client";
+import { getLocationPermissionWarningTitle } from "../../../lib/locationPermissions";
+import { tryCatch } from "../../../lib/tryCatch";
+import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
 
 type SettingRowProps = {
   label: string;
@@ -35,6 +39,7 @@ const SettingRow = ({ label, sublabel, onPress }: SettingRowProps) => {
 
 const AccountScreen = () => {
   const { data: session } = authClient.useSession();
+  const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   const name = session?.user.name ?? "";
@@ -45,7 +50,7 @@ const AccountScreen = () => {
     setIsSigningOut(true);
     const sessionTokenToRevoke = session?.session?.token ?? null;
 
-    const { error: signOutError } = await tryCatch(authClient.signOut());
+    const { error: signOutError } = await authClient.signOut();
 
     if (signOutError && sessionTokenToRevoke) {
       await tryCatch(SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke));
@@ -54,6 +59,10 @@ const AccountScreen = () => {
     setIsSigningOut(false);
     router.replace("/");
   };
+
+  const locationPermissionWarningTitle = permissionState
+    ? getLocationPermissionWarningTitle(permissionState)
+    : "";
 
   return (
     <View className="flex-1 bg-background">
@@ -77,7 +86,24 @@ const AccountScreen = () => {
           </View>
         </View>
 
-        <View className="rounded-lg overflow-hidden border border-border bg-surface">
+        {permissionState?.shouldShowAccountWarning ? (
+          <Card className="gap-4 py-0">
+            <CardHeader className="px-5 pt-5">
+              <CardTitle>{locationPermissionWarningTitle}</CardTitle>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 gap-4">
+              <Text className="text-muted">
+                OpenBeacon needs precise foreground and background location to share your location
+                with your family. Location tracking won't be active without it.
+              </Text>
+              <Button variant="outline" onPress={openLocationPermissionSettings}>
+                <Text>Open Settings</Text>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <View className="rounded-lg overflow-hidden border border-border bg-card">
           <SettingRow
             label="Profile details"
             sublabel="Name, email and account"
@@ -90,7 +116,9 @@ const AccountScreen = () => {
           />
         </View>
 
-        <Button title="Sign out" onPress={handleSignOut} variant="primary" />
+        <Button onPress={handleSignOut}>
+          <Text>Sign out</Text>
+        </Button>
         <Text className="text-muted text-sm text-center">OpenBeacon · Open Source</Text>
       </ScrollView>
     </View>

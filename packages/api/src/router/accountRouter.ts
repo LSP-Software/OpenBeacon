@@ -1,13 +1,13 @@
+import { requestImageUploadInputSchema } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
 import { env } from "../env.ts";
 import {
   buildUserAvatarPath,
   confirmImageUpload,
   requestImageUpload,
-  requestImageUploadInputSchema,
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
-import { protectedProcedure } from "../trpc.ts";
+import { protectedProcedure } from "../procedures/auth/base.ts";
 
 export const accountRouter = {
   getProfile: protectedProcedure.query(async ({ ctx }) => {
@@ -16,9 +16,8 @@ export const accountRouter = {
       select: { image: true },
     });
   }),
-
   requestProfileImageUpload: protectedProcedure
-    .input(requestImageUploadInputSchema)
+    .input(requestImageUploadInputSchema({ maxImageFileSize: env.MAX_IMAGE_FILE_SIZE }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const imagePath = buildUserAvatarPath(userId);
@@ -43,7 +42,6 @@ export const accountRouter = {
 
       return { presignedUrl };
     }),
-
   confirmProfileImageUpload: protectedProcedure.mutation(async ({ ctx }) => {
     const userId = ctx.session.user.id;
 
@@ -56,7 +54,6 @@ export const accountRouter = {
       where: { id: userId },
       select: { image: true },
     });
-    const currentImageUrl = currentUser?.image ?? null;
 
     return confirmImageUpload({
       db: ctx.db,
@@ -65,7 +62,7 @@ export const accountRouter = {
       bucketName: env.S3_BUCKET_NAME,
       imagePath: buildUserAvatarPath(userId),
       pendingFileName: pendingUpload?.fileName ?? null,
-      currentImageUrl,
+      currentImageUrl: currentUser?.image ?? null,
       noPendingImageUploadMessage: "No pending profile image upload to confirm.",
       commitImageUpload: async (imageUrl) => {
         await ctx.db.$transaction(async (tx) => {

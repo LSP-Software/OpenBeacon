@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
-import { z } from "zod/v4";
 import { env } from "../env.ts";
 import {
   buildImagePublicUrl,
@@ -15,7 +14,6 @@ import { tryCatch } from "./tryCatch.ts";
 export type ImageUploadType = "userAvatar" | "groupAvatar";
 
 export const buildUserAvatarPath = (userId: string): string => `user/${userId}/uploads/avatar`;
-
 export const buildGroupAvatarPath = (groupId: string): string => `group/${groupId}/uploads/avatar`;
 
 export const setPendingImageUploadForUser = async ({
@@ -65,12 +63,6 @@ export const setPendingImageUploadForUser = async ({
     await tryCatch(deleteFile(bucketName, oldImagePath, oldFileName));
   }
 };
-
-//TODO: Move this to schemas package.
-export const requestImageUploadInputSchema = z.object({
-  fileSize: z.number().int().nonnegative().max(env.MAX_IMAGE_FILE_SIZE).min(1),
-  contentHash: z.string().regex(/^[A-Za-z0-9+/]{43}=$/),
-});
 
 export const requestImageUpload = async ({
   bucketName,

@@ -8,6 +8,11 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./enums": {
+      "types": "./generated/client/enums.ts",
+      "import": "./generated/client/enums.ts",
+      "default": "./generated/client/enums.ts"
     }
   },
   "types": "./src/index.ts",
@@ -17,9 +22,10 @@
     "check:fix": "biome check --write .",
     "test": "bun test --pass-with-no-tests",
     "db:generate": "bun run --env-file=../../.env prisma generate",
+    "db:push": "bun run --env-file=../../.env prisma db push",
     "db:migrate:deploy": "bun run --env-file=../../.env prisma migrate deploy",
-    "db:migrate:reset": "bun run --env-file=../../.env prisma migrate reset",
     "db:migrate": "bun run --env-file=../../.env prisma migrate dev",
+    "db:migrate:reset": "bun run --env-file=../../.env prisma migrate reset",
     "db:studio": "prisma studio"
   },
   "dependencies": {

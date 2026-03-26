@@ -1,52 +1,66 @@
+import { zodResolver } from "@hookform/resolvers/zod";
+import { signUpSchema } from "@openbeacon/schemas";
+import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { useRef, useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  type TextInput,
-  View,
-} from "react-native";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button } from "../components/Button.tsx";
-import { FormInput } from "../components/FormInput.tsx";
+import type { z } from "zod";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
-import { Text } from "../components/Text.tsx";
+import { Button } from "../components/ui/Button.tsx";
+import { Input } from "../components/ui/Input.tsx";
+import { Text } from "../components/ui/Text.tsx";
+import { trpc } from "../lib/api.ts";
+import { isNativeGoogleSignInConfigured, revokePendingSessionToken } from "../lib/auth.ts";
 import { authClient } from "../lib/auth-client.ts";
-import { tryCatch } from "../lib/tryCatch.ts";
+import { performGoogleAuth } from "../lib/googleAuth.ts";
 
-export default function SignUp() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+const SignUp = () => {
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
+  const form = useForm<z.infer<typeof signUpSchema>>({
+    resolver: zodResolver(signUpSchema),
+    mode: "onTouched",
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+    },
+    shouldFocusError: true,
+  });
 
-  const emailRef = useRef<TextInput>(null);
-  const passwordRef = useRef<TextInput>(null);
+  const isSubmitting = emailLoading || googleLoading;
+  const isGoogleEnabled = providers?.google === true && isNativeGoogleSignInConfigured;
 
   const handleSignUp = async () => {
-    if (!name.trim() || !email.trim() || !password) return;
-    setLoading(true);
+    const { name, email, password } = form.getValues();
+    setEmailLoading(true);
 
-    const { error: signUpError, data: signUpResponse } = await tryCatch(
-      authClient.signUp.email({
-        email: email.trim(),
-        password,
-        name: name.trim(),
-      }),
-    );
-    if (signUpError || signUpResponse?.error) {
-      Alert.alert(
-        "Sign up failed",
-        signUpResponse?.error?.message ?? signUpError?.message ?? "An error occurred",
-      );
-      setLoading(false);
+    const result = await authClient.signUp.email({
+      email,
+      password,
+      name,
+    });
+
+    if (result.error) {
+      Alert.alert("Sign up failed", result.error.message);
+      setEmailLoading(false);
       return;
     }
 
+    await revokePendingSessionToken();
     router.replace("/");
+  };
+
+  const handleGoogleSignUp = async () => {
+    await performGoogleAuth({
+      setLoading: setGoogleLoading,
+      failureTitle: "Google sign up failed",
+      onSuccess: () => router.replace("/"),
+      alert: Alert.alert,
+    });
   };
 
   return (
@@ -67,48 +81,58 @@ export default function SignUp() {
             <Text className="text-lg text-muted">Join OpenBeacon today</Text>
           </View>
 
-          <View className="gap-5">
-            <FormInput
+          <View className="gap-4">
+            {isGoogleEnabled ? (
+              <>
+                <Button
+                  variant="outline"
+                  onPress={handleGoogleSignUp}
+                  loading={googleLoading}
+                  disabled={isSubmitting || googleLoading}
+                >
+                  <Text>Continue with Google</Text>
+                </Button>
+                <View className="flex-row items-center gap-4">
+                  <View className="flex-1 h-px bg-border" />
+                  <Text className="text-sm uppercase tracking-[0.18em] text-muted">or</Text>
+                  <View className="flex-1 h-px bg-border" />
+                </View>
+              </>
+            ) : null}
+            <Input
+              control={form.control}
+              name="name"
               label="Name"
-              value={name}
-              onChangeText={setName}
               placeholder="Your name"
               autoCapitalize="words"
               autoComplete="name"
               textContentType="name"
-              returnKeyType="next"
-              onSubmitEditing={() => emailRef.current?.focus()}
             />
-            <FormInput
-              ref={emailRef}
+            <Input
+              control={form.control}
+              name="email"
               label="Email"
-              value={email}
-              onChangeText={setEmail}
               placeholder="you@example.com"
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
               textContentType="emailAddress"
-              returnKeyType="next"
-              onSubmitEditing={() => passwordRef.current?.focus()}
             />
-            <FormInput
-              ref={passwordRef}
+            <Input
+              control={form.control}
+              name="password"
               label="Password"
-              value={password}
-              onChangeText={setPassword}
+              placeholder="Password"
               secureTextEntry
               autoCapitalize="none"
               autoComplete="password"
               textContentType="password"
               returnKeyType="done"
-              onSubmitEditing={handleSignUp}
+              onSubmitEditing={form.handleSubmit(handleSignUp)}
             />
-            <Button
-              title={loading ? "Creating account…" : "Create Account"}
-              onPress={handleSignUp}
-              disabled={loading}
-            />
+            <Button onPress={form.handleSubmit(handleSignUp)} disabled={isSubmitting}>
+              <Text>{emailLoading ? "Creating account…" : "Create Account"}</Text>
+            </Button>
           </View>
 
           <View className="items-center gap-4 pt-2">
@@ -129,4 +153,6 @@ export default function SignUp() {
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-}
+};
+
+export default SignUp;

@@ -1,7 +1,5 @@
-
 import * as Crypto from "expo-crypto";
 import { File as FSFile } from "expo-file-system";
-
 
 export const computeSha256Base64 = async (bytes: ArrayBuffer): Promise<string> => {
   const hashBuffer = await Crypto.digest(
@@ -54,14 +52,13 @@ export const uploadImageFromUri = async ({
     const bytes = rawfileBytes.slice().buffer;
     const contentHash = await computeSha256Base64(bytes);
     const uploadData = await requestImageUpload({ contentHash, fileSize: bytes.byteLength });
-    await uploadToPresignedUrl(uploadData.presignedUrl, bytes, contentHash)
+    await uploadToPresignedUrl(uploadData.presignedUrl, bytes, contentHash);
     const confirmData = await confirmImageUpload();
     return { data: confirmData.imageUrl };
   } catch (error) {
-    return { error: `Unable to upload image: ${String(error)}`  };
+    return { error: `Unable to upload image: ${String(error)}` };
   }
 };
-
 
 export const cleanupTempFile = (uri: string): void => {
   const file = new FSFile(uri);
