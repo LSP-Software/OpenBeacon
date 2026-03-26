@@ -15,6 +15,7 @@
     "@better-auth/expo": "^1.5.4",
     "@openbeacon/api": "workspace:*",
     "@openbeacon/database": "workspace:*",
+    "@openbeacon/shared": "workspace:*",
     "@openbeacon/auth": "workspace:*",
     "@openbeacon/schemas": "workspace:*",
     "@prisma/adapter-pg": "^7.4.2",

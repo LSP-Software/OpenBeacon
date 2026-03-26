@@ -17,7 +17,6 @@ type RouterInputs = inferRouterInputs<AppRouter>;
  */
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 
-export { verifyStorageConnectivity } from "./lib/storage.ts";
 export { type AppRouter, appRouter } from "./root.ts";
 export { createTRPCContext } from "./trpc.ts";
 export type { RouterInputs, RouterOutputs };

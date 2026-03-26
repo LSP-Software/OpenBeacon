@@ -43,9 +43,7 @@ export const EditableImage = ({
   } as const;
   const currentSizeClassNames = sizeClassNames[size];
 
-  const pickAndCropImage = async (): Promise<
-    { ok: true; path: string } | { ok: false; cancelled: true } | { ok: false; error: Error }
-  > => {
+  const pickAndCropImage = async (): Promise<{ ok: true; path: string } | undefined> => {
     const { data: image, error } = await tryCatch(
       ImageCropPicker.openPicker({
         cropping: true,
@@ -56,13 +54,9 @@ export const EditableImage = ({
       }),
     );
 
-    if (!error) {
-      return { ok: true, path: image.path };
-    }
-    if (error.message.includes("User cancelled")) {
-      return { ok: false, cancelled: true };
-    }
-    return { ok: false, error: new Error(error.message) };
+    if (error) return;
+
+    return { ok: true, path: image.path };
   };
 
   const processImage = async (uri: string): Promise<string> => {
@@ -82,11 +76,7 @@ export const EditableImage = ({
 
     try {
       const pickResult = await pickAndCropImage();
-      if ("cancelled" in pickResult) return;
-      if (!pickResult.ok) {
-        Alert.alert("Image selection failed", pickResult.error.message);
-        return;
-      }
+      if (!pickResult) return;
       setIsUploading(true);
 
       const { data: processedUri, error: processError } = await tryCatch(

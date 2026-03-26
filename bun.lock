@@ -19,6 +19,7 @@
         "@openbeacon/auth": "workspace:*",
         "@openbeacon/database": "workspace:*",
         "@openbeacon/schemas": "workspace:*",
+        "@openbeacon/shared": "workspace:*",
         "@prisma/adapter-pg": "^7.4.2",
         "@t3-oss/env-core": "^0.13.10",
         "@trpc/server": "^11.12.0",

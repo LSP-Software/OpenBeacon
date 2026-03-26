@@ -12,7 +12,7 @@ export const env = createEnv({
       .url()
       .default("https://cdn.openbeacon.net/file")
       .transform((url) => url.replace(/\/+$/, "")),
-    MAX_IMAGE_FILE_SIZE: z.coerce.number().default(5242880),
+    MAX_IMAGE_FILE_SIZE: z.coerce.number().min(1).default(5242880),
     R2_ACCOUNT_ID: z.string().min(1),
     R2_ACCESS_KEY_ID: z.string().min(1),
     R2_SECRET_ACCESS_KEY: z.string().min(1),
