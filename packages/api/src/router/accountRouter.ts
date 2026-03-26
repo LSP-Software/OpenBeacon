@@ -10,12 +10,6 @@ import {
 import { protectedProcedure } from "../procedures/auth/base.ts";
 
 export const accountRouter = {
-  getProfile: protectedProcedure.query(async ({ ctx }) => {
-    return await ctx.db.user.findUnique({
-      where: { id: ctx.session.user.id },
-      select: { image: true },
-    });
-  }),
   requestProfileImageUpload: protectedProcedure
     .input(requestImageUploadInputSchema({ maxImageFileSize: env.MAX_IMAGE_FILE_SIZE }))
     .mutation(async ({ ctx, input }) => {
