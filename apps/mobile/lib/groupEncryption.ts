@@ -6,15 +6,8 @@ import {
   type RecipientPublicKeyMaterial,
 } from "@openbeacon/encryption";
 import { trpcClient } from "./api.ts";
+import { createSecureId } from "./createSecureId.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
-
-const createClientId = (prefix: string) => {
-  if (typeof globalThis.crypto?.randomUUID === "function") {
-    return `${prefix}_${globalThis.crypto.randomUUID()}`;
-  }
-
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
-};
 
 const createEpochBundle = ({
   currentDeviceId,
@@ -64,7 +57,7 @@ export const buildCreateGroupInput = async ({
   const deviceRegistration = await ensureDeviceKeyRegistration();
   const deviceKeyContext = await trpcClient.auth.deviceKeyContext.query();
 
-  const groupId = createClientId("group");
+  const groupId = createSecureId("group");
   const initialEpoch = createInitialGroupEpoch({
     createdByDeviceId: deviceRegistration.deviceId,
     groupId,

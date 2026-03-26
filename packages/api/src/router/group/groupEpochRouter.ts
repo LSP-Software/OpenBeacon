@@ -60,7 +60,7 @@ export const groupEpochRouter = {
         return null;
       }
 
-      return ctx.db.groupEpochRecipientKey.findFirst({
+      const wrappedKey = await ctx.db.groupEpochRecipientKey.findFirst({
         select: {
           algorithm: true,
           createdAt: true,
@@ -81,5 +81,16 @@ export const groupEpochRouter = {
           },
         },
       });
+
+      if (!wrappedKey) {
+        return null;
+      }
+
+      const { groupEpochId, ...wrappedEpochKey } = wrappedKey;
+
+      return {
+        ...wrappedEpochKey,
+        epochId: groupEpochId,
+      };
     }),
 } satisfies TRPCRouterRecord;

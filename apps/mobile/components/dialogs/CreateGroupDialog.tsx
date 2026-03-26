@@ -7,6 +7,7 @@ import { Alert, View } from "react-native";
 import type z from "zod";
 import { trpc } from "../../lib/api.ts";
 import { buildCreateGroupInput } from "../../lib/groupEncryption.ts";
+import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 import { Button } from "../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
@@ -21,6 +22,7 @@ interface CreateGroupDialogProps {
 export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => {
   const queryClient = useQueryClient();
   const createGroupMutation = useMutation(trpc.groupLifecycle.create.mutationOptions());
+  const createGroupSubmission = useSingleFlight<"create-group">();
 
   const form = useForm<z.infer<typeof createGroupSchema>>({
     resolver: zodResolver(createGroupSchema),
@@ -32,21 +34,24 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
   });
 
   const onSubmit = async (data: z.infer<typeof createGroupSchema>) => {
-    const createGroupInput = await buildCreateGroupInput({ name: data.name });
+    await createGroupSubmission.run("create-group", async () => {
+      try {
+        const createGroupInput = await buildCreateGroupInput({ name: data.name });
+        const createdGroup = await createGroupMutation.mutateAsync(createGroupInput);
 
-    await createGroupMutation.mutateAsync(createGroupInput, {
-      onError: (error) => {
-        Alert.alert("Unable to create group", error.message);
-      },
-      onSuccess: (data) => {
         queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
           if (!previous) {
-            return [data.newGroup];
+            return [createdGroup.newGroup];
           }
-          return [data.newGroup, ...previous];
+          return [createdGroup.newGroup, ...previous];
         });
         closeForm();
-      },
+      } catch (error) {
+        Alert.alert(
+          "Unable to create group",
+          error instanceof Error ? error.message : "Something went wrong.",
+        );
+      }
     });
   };
 
@@ -86,7 +91,7 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
           <Button
             className="flex-1"
             onPress={form.handleSubmit(onSubmit)}
-            loading={createGroupMutation.isPending}
+            loading={createGroupSubmission.isPending || createGroupMutation.isPending}
           >
             <Text>Create Group</Text>
           </Button>

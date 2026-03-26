@@ -7,6 +7,7 @@ import {
 } from "@openbeacon/encryption";
 import * as SecureStore from "expo-secure-store";
 import { trpcClient } from "./api.ts";
+import { createSecureId } from "./createSecureId.ts";
 import { storage } from "./storage.ts";
 import { tryCatch } from "./tryCatch.ts";
 
@@ -21,14 +22,6 @@ const getScopedDeviceKeyNames = (userId: string) => ({
   privateKeyKey: getScopedDeviceKey(DEVICE_PRIVATE_KEY_KEY, userId),
   publicKeyKey: getScopedDeviceKey(DEVICE_PUBLIC_KEY_KEY, userId),
 });
-
-const createLocalId = (prefix: string) => {
-  if (typeof globalThis.crypto?.randomUUID === "function") {
-    return `${prefix}_${globalThis.crypto.randomUUID()}`;
-  }
-
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
-};
 
 const getSecureStoreOptions = () => ({
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -162,7 +155,7 @@ export const getOrCreateDeviceKeyContext = async (userId: string) => {
   }
 
   const deviceKeyPair = createDeviceKeyPair();
-  const deviceId = createLocalId("device");
+  const deviceId = createSecureId("device");
 
   await persistStoredDeviceKeyContext({
     deviceId,

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { ChevronRightIcon, PlusIcon, ShieldIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, View } from "react-native";
+import { Alert, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CreateGroupDialog } from "../../../components/dialogs/CreateGroupDialog";
 import { LoadingIndicator } from "../../../components/LoadingIndicator";
@@ -12,8 +12,9 @@ import { Button } from "../../../components/ui/Button";
 import { Card, CardDescription, CardHeader, CardTitle } from "../../../components/ui/Card";
 import { Icon } from "../../../components/ui/Icon";
 import { Text } from "../../../components/ui/Text";
-import { type RouterOutputs, trpc } from "../../../lib/api";
+import { type RouterOutputs, trpc } from "../../../lib/api.ts";
 import { buildAcceptInviteInput } from "../../../lib/groupEncryption.ts";
+import { useSingleFlight } from "../../../lib/useSingleFlight.ts";
 
 export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
@@ -62,12 +63,14 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
   const queryClient = useQueryClient();
   const acceptInviteMutation = useMutation(trpc.groupInvites.accept.mutationOptions());
   const declineInviteMutation = useMutation(trpc.groupInvites.decline.mutationOptions());
+  const acceptInviteSubmission = useSingleFlight<string>();
 
   const handleAcceptInvite = async (inviteId: string) => {
-    const acceptInviteInput = await buildAcceptInviteInput({ inviteId });
+    await acceptInviteSubmission.run(inviteId, async () => {
+      try {
+        const acceptInviteInput = await buildAcceptInviteInput({ inviteId });
+        const data = await acceptInviteMutation.mutateAsync(acceptInviteInput);
 
-    await acceptInviteMutation.mutateAsync(acceptInviteInput, {
-      onSuccess: (data) => {
         queryClient.setQueryData(trpc.groupInvites.list.queryKey(), (previous) => {
           if (!previous) {
             return [];
@@ -84,7 +87,12 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
             },
           ] satisfies RouterOutputs["groupMembership"]["list"];
         });
-      },
+      } catch (error) {
+        Alert.alert(
+          "Unable to accept invite",
+          error instanceof Error ? error.message : "Something went wrong.",
+        );
+      }
     });
   };
   const handleDeclineInvite = async (inviteId: string) => {
@@ -110,32 +118,38 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
   return (
     <View className="gap-4">
       <Text className="text-foreground font-bold text-lg">Group Invites</Text>
-      {groupInvites?.map((invite) => (
-        <Card key={invite.id}>
-          <CardHeader>
-            <Text>
-              {invite.inviter.name} invited you to join {invite.group.name}
-            </Text>
-            <View className="flex-row items-center justify-between gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onPress={() => handleDeclineInvite(invite.id)}
-                loading={declineInviteMutation.isPending}
-              >
-                <Text>Decline</Text>
-              </Button>
-              <Button
-                size="sm"
-                onPress={() => handleAcceptInvite(invite.id)}
-                loading={acceptInviteMutation.isPending}
-              >
-                <Text>Accept</Text>
-              </Button>
-            </View>
-          </CardHeader>
-        </Card>
-      ))}
+      {groupInvites?.map((invite) => {
+        const isAcceptingInvite = acceptInviteSubmission.pendingKey === invite.id;
+
+        return (
+          <Card key={invite.id}>
+            <CardHeader>
+              <Text>
+                {invite.inviter.name} invited you to join {invite.group.name}
+              </Text>
+              <View className="flex-row items-center justify-between gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onPress={() => handleDeclineInvite(invite.id)}
+                  loading={declineInviteMutation.isPending}
+                  disabled={acceptInviteSubmission.isPending}
+                >
+                  <Text>Decline</Text>
+                </Button>
+                <Button
+                  size="sm"
+                  onPress={() => handleAcceptInvite(invite.id)}
+                  loading={isAcceptingInvite}
+                  disabled={acceptInviteSubmission.isPending && !isAcceptingInvite}
+                >
+                  <Text>Accept</Text>
+                </Button>
+              </View>
+            </CardHeader>
+          </Card>
+        );
+      })}
     </View>
   );
 };
