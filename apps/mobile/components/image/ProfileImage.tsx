@@ -37,8 +37,6 @@ export const ProfileImage = ({
   return (
     <EditableImage
       accessibilityLabel="Edit profile picture"
-      cropShape={"circle"}
-      imageBorderRadius={999}
       imageUrl={imageUrl}
       onImageUploaded={handleProfileImageUploaded}
       showEditButton={showEditButton}

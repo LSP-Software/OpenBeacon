@@ -1,26 +1,19 @@
-import { Image } from "expo-image";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
-import { PencilIcon } from "lucide-react-native";
-import { cssInterop } from "nativewind";
+import { PencilIcon, UserIcon } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
 import ImageCropPicker from "react-native-image-crop-picker";
 import { cleanupTempFile } from "../../lib/image-upload.ts";
-import { useColors } from "../../lib/theme.ts";
 import { tryCatch } from "../../lib/tryCatch.ts";
-
-cssInterop(Image, { className: "style" });
-
-type ImageCropShape = "circle" | "rectangle";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
+import { Icon } from "../ui/Icon.tsx";
 
 type EditableImageProps = {
   accessibilityLabel: string;
-  cropShape: ImageCropShape;
-  imageBorderRadius: number;
-  imageSize?: number;
   imageUrl?: string | null;
   onImageUploaded?: (imageUrl: string) => Promise<void> | void;
   showEditButton?: boolean;
+  size?: "sm" | "md" | "lg";
   uploadImage: (
     uri: string,
   ) => Promise<{ data: string | null; error?: never } | { data?: never; error: string }>;
@@ -28,31 +21,43 @@ type EditableImageProps = {
 
 export const EditableImage = ({
   accessibilityLabel,
-  cropShape,
-  imageBorderRadius,
-  imageSize = 80,
   imageUrl,
   onImageUploaded,
   showEditButton = false,
+  size = "md",
   uploadImage,
 }: EditableImageProps) => {
-  const colors = useColors();
   const [isUploading, setIsUploading] = useState(false);
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const isLoading = isUploading;
+  const sizeClassNames = {
+    sm: {
+      avatar: "size-16",
+      fallbackIcon: "size-5",
+      editButton: "size-6 border",
+      editIcon: "size-3",
+    },
+    md: {
+      avatar: "size-24",
+      fallbackIcon: "size-6",
+      editButton: "size-8 border-2",
+      editIcon: "size-4",
+    },
+    lg: {
+      avatar: "size-32",
+      fallbackIcon: "size-8",
+      editButton: "size-10 border-2",
+      editIcon: "size-5",
+    },
+  } as const;
+  const currentSizeClassNames = sizeClassNames[size];
 
-  const isLoading = isPickerOpen || isUploading;
-  const editButtonSize = Math.round(imageSize * 0.32);
-  const editIconSize = Math.round(editButtonSize * 0.5);
-
-  const pickAndCropImage = async (
-    cropShape: ImageCropShape = "circle",
-  ): Promise<
+  const pickAndCropImage = async (): Promise<
     { ok: true; path: string } | { ok: false; cancelled: true } | { ok: false; error: Error }
   > => {
     const { data: image, error } = await tryCatch(
       ImageCropPicker.openPicker({
         cropping: true,
-        cropperCircleOverlay: cropShape === "circle",
+        cropperCircleOverlay: true,
         width: 512,
         height: 512,
         mediaType: "photo",
@@ -77,10 +82,7 @@ export const EditableImage = ({
 
   const handleEditPress = async () => {
     if (isLoading) return;
-
-    setIsPickerOpen(true);
-    const pickResult = await pickAndCropImage(cropShape);
-    setIsPickerOpen(false);
+    const pickResult = await pickAndCropImage();
 
     if ("cancelled" in pickResult) return;
     if (!pickResult.ok) {
@@ -122,29 +124,20 @@ export const EditableImage = ({
   };
 
   return (
-    <View style={{ height: imageSize, position: "relative", width: imageSize }}>
-      {imageUrl ? (
-        <Image
-          source={{ uri: imageUrl }}
-          style={{ borderRadius: imageBorderRadius, height: imageSize, width: imageSize }}
-          cachePolicy="disk"
-          contentFit="cover"
-          transition={200}
-        />
-      ) : (
-        <View
-          className="bg-surface border border-border"
-          style={{ borderRadius: imageBorderRadius, height: imageSize, width: imageSize }}
-        />
-      )}
+    <View>
+      <Avatar alt={`profile photo`} className={currentSizeClassNames.avatar}>
+        <AvatarImage source={{ uri: imageUrl ?? "" }} />
+        <AvatarFallback>
+          <Icon as={UserIcon} className={currentSizeClassNames.fallbackIcon} />
+        </AvatarFallback>
+      </Avatar>
 
       {isLoading && (
         <View
           pointerEvents="none"
-          className="absolute inset-0 bg-black/30 items-center justify-center"
-          style={{ borderRadius: imageBorderRadius }}
+          className="absolute inset-0 bg-black/30 items-center justify-center rounded-full"
         >
-          <ActivityIndicator color={colors.onPrimary} />
+          <ActivityIndicator className="text-primary" />
         </View>
       )}
 
@@ -154,10 +147,9 @@ export const EditableImage = ({
           disabled={isLoading}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
-          className={`absolute bottom-0 right-0 rounded-full bg-primary items-center justify-center border-2 border-background ${isLoading ? "opacity-70" : ""}`}
-          style={{ height: editButtonSize, width: editButtonSize }}
+          className={`absolute bottom-0 right-0 rounded-full bg-primary items-center justify-center border-background ${currentSizeClassNames.editButton} ${isLoading ? "opacity-70" : ""}`}
         >
-          <PencilIcon size={editIconSize} color={colors.onPrimary} />
+          <Icon as={PencilIcon} className={`${currentSizeClassNames.editIcon} text-white`} />
         </Pressable>
       )}
     </View>

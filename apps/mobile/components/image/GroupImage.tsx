@@ -39,8 +39,6 @@ export const GroupImage = ({
   return (
     <EditableImage
       accessibilityLabel="Edit group photo"
-      cropShape={"circle"}
-      imageBorderRadius={24}
       imageUrl={imageUrl}
       onImageUploaded={handleGroupImageUploaded}
       showEditButton={showEditButton}
