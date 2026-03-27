@@ -1,3 +1,4 @@
+import { accountRouter } from "./router/accountRouter.ts";
 import { authRouter } from "./router/authRouter.ts";
 import { groupInvitesRouter } from "./router/group/groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./router/group/groupLifecycleRouter.ts";
@@ -7,6 +8,7 @@ import { mapsRouter } from "./router/mapsRouter.ts";
 import { createTRPCRouter } from "./trpc.ts";
 
 export const appRouter = createTRPCRouter({
+  account: accountRouter,
   groupSettings: groupSettingsRouter,
   groupLifecycle: groupLifecycleRouter,
   groupInvites: groupInvitesRouter,

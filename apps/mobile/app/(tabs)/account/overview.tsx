@@ -1,15 +1,16 @@
+import { tryCatch } from "@openbeacon/shared";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { ChevronRightIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button } from "../../../components/ui/Button.tsx";
-import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/Card.tsx";
+import { ProfileImage } from "../../../components/image/ProfileImage";
+import { Button } from "../../../components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/Card";
 import { Text } from "../../../components/ui/Text.tsx";
-import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client.ts";
-import { getLocationPermissionWarningTitle } from "../../../lib/locationPermissions.ts";
-import { tryCatch } from "../../../lib/tryCatch.ts";
+import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client";
+import { getLocationPermissionWarningTitle } from "../../../lib/locationPermissions";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
 
 type SettingRowProps = {
@@ -18,7 +19,7 @@ type SettingRowProps = {
   onPress: () => void;
 };
 
-function SettingRow({ label, sublabel, onPress }: SettingRowProps) {
+const SettingRow = ({ label, sublabel, onPress }: SettingRowProps) => {
   return (
     <Pressable
       onPress={onPress}
@@ -34,20 +35,15 @@ function SettingRow({ label, sublabel, onPress }: SettingRowProps) {
       <ChevronRightIcon />
     </Pressable>
   );
-}
+};
 
-export default function AccountScreen() {
+const AccountScreen = () => {
   const { data: session } = authClient.useSession();
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   const name = session?.user.name ?? "";
   const email = session?.user.email ?? "";
-  const initials = name
-    .split(" ")
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join("");
 
   const handleSignOut = async () => {
     if (isSigningOut) return;
@@ -83,9 +79,7 @@ export default function AccountScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="items-center py-6 gap-4">
-          <View className="w-20 h-20 rounded-full bg-primary items-center justify-center">
-            <Text className="text-white text-2xl font-bold">{initials}</Text>
-          </View>
+          <ProfileImage showEditButton />
           <View className="items-center gap-1">
             <Text className="text-foreground text-2xl font-bold">{name}</Text>
             <Text className="text-muted text-sm">{email}</Text>
@@ -129,4 +123,6 @@ export default function AccountScreen() {
       </ScrollView>
     </View>
   );
-}
+};
+
+export default AccountScreen;

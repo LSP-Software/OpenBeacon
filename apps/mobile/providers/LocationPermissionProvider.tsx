@@ -1,3 +1,4 @@
+import { tryCatch } from "@openbeacon/shared";
 import type React from "react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
@@ -19,7 +20,6 @@ import {
   requestBackgroundLocationPermissions,
   requestLocationPermissionsForLaunch,
 } from "../lib/locationPermissions.ts";
-import { tryCatch } from "../lib/tryCatch.ts";
 
 const LocationPermissionContext = createContext<{
   permissionState: LocationPermissionState | null;
