@@ -1,9 +1,10 @@
 import { tryCatch } from "@openbeacon/shared";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import * as ImagePicker from "expo-image-picker";
 import { PencilIcon, UserIcon } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
-import ImageCropPicker from "react-native-image-crop-picker";
+
 import type { ImageUploadResult } from "../../lib/image-upload.ts";
 import { cleanupTempFile } from "../../lib/image-upload.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
@@ -44,19 +45,47 @@ export const EditableImage = ({
   const currentSizeClassNames = sizeClassNames[size];
 
   const pickAndCropImage = async (): Promise<{ ok: true; path: string } | undefined> => {
-    const { data: image, error } = await tryCatch(
-      ImageCropPicker.openPicker({
-        cropping: true,
-        cropperCircleOverlay: true,
-        width: 512,
-        height: 512,
-        mediaType: "photo",
-      }),
-    );
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert("Permission required", "Permission to access the media library is required.");
+      return;
+    }
 
-    if (error) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+      allowsMultipleSelection: false,
+      exif: false,
+      shape: "oval",
+    });
 
-    return { ok: true, path: image.path };
+    if (result.canceled) {
+      return;
+    }
+
+    const photo = result.assets[0];
+    if (!photo) {
+      Alert.alert("No photo selected");
+      return;
+    }
+
+    return { ok: true, path: photo.uri };
+
+    // const { data: image, error } = await tryCatch(
+    //   ImageCropPicker.openPicker({
+    //     cropping: true,
+    //     cropperCircleOverlay: true,
+    //     width: 512,
+    //     height: 512,
+    //     mediaType: "photo",
+    //   }),
+    // );
+
+    // if (error) return;
+
+    // return { ok: true, path: image.path };
   };
 
   const processImage = async (uri: string): Promise<string> => {

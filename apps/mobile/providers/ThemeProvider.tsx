@@ -1,23 +1,17 @@
 import { StatusBar } from "expo-status-bar";
 import type React from "react";
 import { createContext, useContext, useEffect, useState } from "react";
-import { useColorScheme, View } from "react-native";
+import { type ColorSchemeName, useColorScheme, View } from "react-native";
 
 interface ThemeProviderProps {
   children: React.ReactNode;
 }
 
-type ThemeContextType = {
-  theme: "light" | "dark";
-};
-
-export const ThemeContext = createContext<ThemeContextType>({
-  theme: "light",
-});
+export const ThemeContext = createContext<ColorSchemeName>("light");
 
 export const ThemeProvider = ({ children }: ThemeProviderProps) => {
   const systemColorScheme = useColorScheme();
-  const [currentTheme, setCurrentTheme] = useState<"light" | "dark">(systemColorScheme ?? "light");
+  const [currentTheme, setCurrentTheme] = useState<ColorSchemeName>(systemColorScheme ?? "light");
 
   useEffect(() => {
     if (systemColorScheme) {
@@ -26,7 +20,7 @@ export const ThemeProvider = ({ children }: ThemeProviderProps) => {
   }, [systemColorScheme]);
 
   return (
-    <ThemeContext.Provider value={{ theme: currentTheme }}>
+    <ThemeContext.Provider value={currentTheme}>
       <StatusBar style={currentTheme === "dark" ? "light" : "dark"} />
       <View className={`flex-1 ${currentTheme === "dark" ? "dark" : ""}`}>{children}</View>
     </ThemeContext.Provider>

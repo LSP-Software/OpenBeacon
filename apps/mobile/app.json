@@ -41,7 +41,6 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "@maplibre/maplibre-react-native",
       [
         "expo-location",
         {
@@ -49,6 +48,12 @@
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to access your precise location in the background so you can share your location privately with your family.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos."
         }
       ]
     ]
