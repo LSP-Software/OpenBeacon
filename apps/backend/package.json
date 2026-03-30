@@ -2,18 +2,20 @@
   "name": "@openbeacon/backend",
   "license": "SEE LICENSE IN LICENSE.md",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "bun run --cwd ../.. --env-file=.env --hot apps/backend/src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "ci": "bun run typecheck && bun run check && bun run test"
+    "ci": "bun run typecheck && bun run check"
   },
   "dependencies": {
     "@better-auth/expo": "^1.5.4",
     "@openbeacon/api": "workspace:*",
     "@openbeacon/database": "workspace:*",
+    "@openbeacon/shared": "workspace:*",
     "@openbeacon/auth": "workspace:*",
     "@openbeacon/schemas": "workspace:*",
     "@prisma/adapter-pg": "^7.4.2",

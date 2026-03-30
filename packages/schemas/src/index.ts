@@ -9,6 +9,7 @@ import {
 import { createGroupSchema } from "./schemas/group/create.ts";
 import { inviteMemberToGroupSchema } from "./schemas/group/inviteMember.ts";
 import { removeGroupMemberSchema } from "./schemas/group/removeMember.ts";
+import { requestImageUploadInputSchema } from "./schemas/image/requestImageUpload.ts";
 
 export {
   createGroupSchema,
@@ -17,6 +18,7 @@ export {
   optionalEnvString,
   registerDeviceKeySchema,
   removeGroupMemberSchema,
+  requestImageUploadInputSchema,
   signInSchema,
   signUpSchema,
   wrappedEpochKeySchema,

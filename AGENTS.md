@@ -39,7 +39,7 @@ The core concept of this app is to be privacy focused so if users pay for us to 
   d. If a type is used across multiple files, define it in its own type file. Feel free to put a type in an existing type file if it matches the theme.
   e. If a type alias only names an object literal used in one place, inline it instead.
   f. Only extract a local type when inlining would make the code materially harder to read.
-  g. Prefer inline types by default. Extracted local types are the exception, not the rule.
+  g. Whilst rules a-f provide default guidance, prioritise readability above all. When extracting any local type for readability, place function types at the bottom of the file and other types near their first usage.
 
 # Testing
 When logic is added we should add tests around it to ensure high quality code. Test should be thoughtful and well considered and not just be added to test everything. We don't need to test that a button works, however logic around encryption etc should be tested to ensure we cannot break it.

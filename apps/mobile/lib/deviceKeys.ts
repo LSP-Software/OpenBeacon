@@ -5,11 +5,11 @@ import {
   decodeBase64,
   encodeBase64,
 } from "@openbeacon/encryption";
+import { tryCatch } from "@openbeacon/shared";
 import * as SecureStore from "expo-secure-store";
 import { trpcClient } from "./api.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { storage } from "./storage.ts";
-import { tryCatch } from "./tryCatch.ts";
 
 const DEVICE_ID_KEY = "encryption.device.id";
 const DEVICE_PUBLIC_KEY_KEY = "encryption.device.publicKey";

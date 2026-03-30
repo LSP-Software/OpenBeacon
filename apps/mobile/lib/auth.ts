@@ -1,3 +1,4 @@
+import { tryCatch } from "@openbeacon/shared";
 import {
   GoogleSignin,
   isCancelledResponse,
@@ -7,7 +8,6 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "./auth-client.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
-import { tryCatch } from "./tryCatch.ts";
 
 const GOOGLE_WEB_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID";
 const GOOGLE_IOS_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID";

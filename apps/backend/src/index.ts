@@ -4,9 +4,9 @@
 
 import type { AuthType } from "@openbeacon/auth";
 import { Hono } from "hono";
-import { env } from "./env";
-import authRouter from "./routes/auth";
-import trpcRouter from "./routes/trpc";
+import { env } from "./env.ts";
+import authRouter from "./routes/auth.ts";
+import trpcRouter from "./routes/trpc.ts";
 
 const app = new Hono<{ Variables: AuthType }>();
 
