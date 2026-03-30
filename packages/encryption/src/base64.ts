@@ -30,7 +30,21 @@ export const encodeBase64 = (bytes: Uint8Array) => {
 
 export const decodeBase64 = (value: string) => {
   const sanitizedValue = value.replace(/\s+/g, "");
-  const paddingLength = getBase64Padding(sanitizedValue.length);
+  const paddingStartIndex = sanitizedValue.indexOf("=");
+
+  if (sanitizedValue.length % 4 === 1) {
+    throw new Error("Invalid base64 value.");
+  }
+
+  if (paddingStartIndex !== -1) {
+    const padding = sanitizedValue.slice(paddingStartIndex);
+
+    if (padding.length > 2 || padding !== "=".repeat(padding.length)) {
+      throw new Error("Invalid base64 value.");
+    }
+  }
+
+  const paddingLength = paddingStartIndex === -1 ? getBase64Padding(sanitizedValue.length) : 0;
   const paddedValue = `${sanitizedValue}${"=".repeat(paddingLength)}`;
 
   if (paddedValue.length % 4 !== 0) {

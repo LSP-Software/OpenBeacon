@@ -8,11 +8,14 @@ import { useSingleFlight } from "./useSingleFlight.ts";
 
 const createDeferred = <T,>() => {
   let resolve: (value: T | PromiseLike<T>) => void = () => {};
+  let reject: (reason?: unknown) => void = () => {};
 
   return {
-    promise: new Promise<T>((resolvePromise) => {
+    promise: new Promise<T>((resolvePromise, rejectPromise) => {
       resolve = resolvePromise;
+      reject = rejectPromise;
     }),
+    reject,
     resolve,
   };
 };
@@ -43,13 +46,20 @@ const renderHookHarness = async ({
 }) => {
   const Harness = () => {
     const singleFlight = useSingleFlight<string>();
+    const run = (key: string, operation: () => Promise<void>) => {
+      const result = singleFlight.run(key, operation);
+
+      if (result) {
+        void result.catch(() => {});
+      }
+    };
 
     return (
       <>
-        <button onClick={() => void singleFlight.run("first", onFirstRun)} type="button">
+        <button onClick={() => run("first", onFirstRun)} type="button">
           First
         </button>
-        <button onClick={() => void singleFlight.run("second", onSecondRun)} type="button">
+        <button onClick={() => run("second", onSecondRun)} type="button">
           Second
         </button>
       </>
@@ -97,6 +107,41 @@ describe("useSingleFlight", () => {
 
     await act(async () => {
       await firstRunDeferred.promise;
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      pressButton(renderer, 1);
+      await Promise.resolve();
+    });
+
+    expect(calls).toEqual(["first", "second"]);
+  });
+
+  test("clears the single-flight gate after a rejected run", async () => {
+    const calls: string[] = [];
+    const firstRunDeferred = createDeferred<void>();
+    const rejectedRun = firstRunDeferred.promise.catch(() => undefined);
+    const renderer = await renderHookHarness({
+      onFirstRun: async () => {
+        calls.push("first");
+        await firstRunDeferred.promise;
+      },
+      onSecondRun: async () => {
+        calls.push("second");
+      },
+    });
+
+    await act(async () => {
+      pressButton(renderer, 0);
+      await Promise.resolve();
+    });
+
+    expect(calls).toEqual(["first"]);
+
+    await act(async () => {
+      firstRunDeferred.reject(new Error("failed"));
+      await rejectedRun;
       await Promise.resolve();
     });
 

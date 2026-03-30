@@ -503,6 +503,8 @@ export const upsertUserDevice = async ({
   } catch (error) {
     const conflictingDevice = await db.userDevice.findUnique({
       select: {
+        publicKey: true,
+        publicKeyAlgorithm: true,
         userId: true,
       },
       where: {
@@ -514,6 +516,29 @@ export const upsertUserDevice = async ({
       throw new TRPCError({
         code: "FORBIDDEN",
         message: "This device is already registered to another user.",
+      });
+    }
+
+    if (
+      conflictingDevice &&
+      conflictingDevice.publicKey === input.publicKey &&
+      conflictingDevice.publicKeyAlgorithm === input.algorithm
+    ) {
+      return db.userDevice.update({
+        data: {
+          lastSeenAt: new Date(),
+          revokedAt: null,
+        },
+        where: {
+          id: input.deviceId,
+        },
+      });
+    }
+
+    if (conflictingDevice) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "This device ID is already registered with different key material.",
       });
     }
 

@@ -1,7 +1,6 @@
 import type { TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { listActiveGroupRecipientPublicKeys } from "../../lib/groupEpochs.ts";
-import { protectedProcedure } from "../../procedures/auth/base.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 
 export const groupEpochRouter = {
@@ -40,7 +39,7 @@ export const groupEpochRouter = {
       groupId: input.groupId,
     }),
   ),
-  getWrappedKey: protectedProcedure
+  getWrappedKey: groupMemberProcedure
     .input(
       z.object({
         deviceId: z.string().min(1),
@@ -49,17 +48,6 @@ export const groupEpochRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
-      const groupMember = await ctx.db.groupMember.findFirst({
-        where: {
-          groupId: input.groupId,
-          userId: ctx.session.user.id,
-        },
-      });
-
-      if (!groupMember) {
-        return null;
-      }
-
       const wrappedKey = await ctx.db.groupEpochRecipientKey.findFirst({
         select: {
           algorithm: true,

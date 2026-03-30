@@ -1,10 +1,22 @@
-import { DEVICE_KEY_ALGORITHM, WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
+import {
+  DEVICE_KEY_ALGORITHM,
+  decodeBase64,
+  WRAPPED_EPOCH_KEY_ALGORITHM,
+} from "@openbeacon/encryption";
 import z from "zod";
+
+const devicePublicKeySchema = z.string().refine((publicKey) => {
+  try {
+    return decodeBase64(publicKey).length === 32;
+  } catch {
+    return false;
+  }
+}, "Invalid device public key.");
 
 export const registerDeviceKeySchema = z.object({
   algorithm: z.literal(DEVICE_KEY_ALGORITHM),
   deviceId: z.string().min(1),
-  publicKey: z.string().min(1),
+  publicKey: devicePublicKeySchema,
 });
 
 export const wrappedEpochKeySchema = z.object({

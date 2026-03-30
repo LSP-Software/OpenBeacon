@@ -1,73 +1,69 @@
 import { describe, expect, mock, test } from "bun:test";
 
-const GroupRole = {
-  ADMIN: "ADMIN",
-  MEMBER: "MEMBER",
-  OWNER: "OWNER",
-} as const;
-
-mock.module("@openbeacon/database", () => ({
-  GroupRole,
-}));
-
-const importAssertGroupMemberCanBeRemovedModule = async () =>
+const importGroupMemberRemovalModule = async () =>
   import(
     `./assertGroupMemberCanBeRemoved.ts?test=${Math.random().toString(36).slice(2)}`
   ) as Promise<typeof import("./assertGroupMemberCanBeRemoved.ts")>;
 
 describe("group membership removal guard", () => {
   test("rejects removing the only owner", async () => {
-    const { assertGroupMemberCanBeRemoved } = await importAssertGroupMemberCanBeRemovedModule();
-    const count = mock(async () => 0);
+    const { removeGroupMemberWithOwnerGuard } = await importGroupMemberRemovalModule();
+    const queryRaw = mock(async () => [{ deleted: false, memberExists: true }]);
 
-    await expect(() =>
-      assertGroupMemberCanBeRemoved({
+    await expect(
+      removeGroupMemberWithOwnerGuard({
         db: {
-          groupMember: {
-            count,
-          },
+          $queryRaw: queryRaw,
         },
         groupId: "group-1",
         memberId: "member-1",
-        role: GroupRole.OWNER,
       }),
-    ).toThrow("Cannot remove the only owner from the group.");
+    ).rejects.toThrow("Cannot remove the only owner from the group.");
+    expect(queryRaw).toHaveBeenCalledTimes(1);
   });
 
   test("allows removing an owner when another owner remains", async () => {
-    const { assertGroupMemberCanBeRemoved } = await importAssertGroupMemberCanBeRemovedModule();
-    const count = mock(async () => 1);
+    const { removeGroupMemberWithOwnerGuard } = await importGroupMemberRemovalModule();
+    const queryRaw = mock(async () => [{ deleted: true, memberExists: true }]);
 
     await expect(
-      assertGroupMemberCanBeRemoved({
+      removeGroupMemberWithOwnerGuard({
         db: {
-          groupMember: {
-            count,
-          },
+          $queryRaw: queryRaw,
         },
         groupId: "group-1",
         memberId: "member-1",
-        role: GroupRole.OWNER,
       }),
     ).resolves.toBeUndefined();
   });
 
-  test("skips the owner check for non-owner members", async () => {
-    const { assertGroupMemberCanBeRemoved } = await importAssertGroupMemberCanBeRemovedModule();
-    const count = mock(async () => 0);
+  test("allows removing a non-owner member", async () => {
+    const { removeGroupMemberWithOwnerGuard } = await importGroupMemberRemovalModule();
+    const queryRaw = mock(async () => [{ deleted: true, memberExists: true }]);
 
     await expect(
-      assertGroupMemberCanBeRemoved({
+      removeGroupMemberWithOwnerGuard({
         db: {
-          groupMember: {
-            count,
-          },
+          $queryRaw: queryRaw,
         },
         groupId: "group-1",
         memberId: "member-1",
-        role: GroupRole.ADMIN,
       }),
     ).resolves.toBeUndefined();
-    expect(count).not.toHaveBeenCalled();
+  });
+
+  test("rejects removing a missing member", async () => {
+    const { removeGroupMemberWithOwnerGuard } = await importGroupMemberRemovalModule();
+    const queryRaw = mock(async () => [{ deleted: false, memberExists: false }]);
+
+    await expect(
+      removeGroupMemberWithOwnerGuard({
+        db: {
+          $queryRaw: queryRaw,
+        },
+        groupId: "group-1",
+        memberId: "member-1",
+      }),
+    ).rejects.toThrow("Group member not found");
   });
 });

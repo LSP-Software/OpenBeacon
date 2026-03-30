@@ -42,6 +42,7 @@ const ensureDeviceKeyRegistrationMock = mock(async () => ({
   publicKey: "public-key",
 }));
 const deleteItemAsyncMock = mock(async () => {});
+const setItemAsyncMock = mock(async () => {});
 const revokeSessionMock = mock(async () => ({
   error: null,
 }));
@@ -79,7 +80,7 @@ mock.module("@react-native-google-signin/google-signin", () => ({
 }));
 
 mock.module("expo-secure-store", () => ({
-  setItemAsync: async () => {},
+  setItemAsync: setItemAsyncMock,
   getItemAsync: async () => storedToken,
   deleteItemAsync: deleteItemAsyncMock,
 }));
@@ -128,6 +129,7 @@ describe("auth Google sign-in configuration", () => {
     socialSignInMock.mockClear();
     ensureDeviceKeyRegistrationMock.mockClear();
     deleteItemAsyncMock.mockClear();
+    setItemAsyncMock.mockClear();
     revokeSessionMock.mockClear();
     delete process.env[GOOGLE_WEB_CLIENT_ID_ENV];
     delete process.env[GOOGLE_IOS_CLIENT_ID_ENV];

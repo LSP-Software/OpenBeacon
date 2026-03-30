@@ -1,12 +1,11 @@
 import { removeGroupMemberSchema } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
-import { TRPCError } from "@trpc/server";
 import z from "zod";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { protectedProcedure } from "../../procedures/auth/base.ts";
 import { groupAdminProcedure, groupMemberProcedure } from "../../procedures/auth/group.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
-import { assertGroupMemberCanBeRemoved } from "./assertGroupMemberCanBeRemoved.ts";
+import { removeGroupMemberWithOwnerGuard } from "./assertGroupMemberCanBeRemoved.ts";
 
 export const groupMembershipRouter = {
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -105,31 +104,10 @@ export const groupMembershipRouter = {
     }),
   remove: groupAdminProcedure.input(removeGroupMemberSchema).mutation(async ({ ctx, input }) => {
     return ctx.db.$transaction(async (tx) => {
-      const member = await tx.groupMember.findFirst({
-        where: {
-          groupId: input.groupId,
-          id: input.memberId,
-        },
-        select: {
-          role: true,
-        },
-      });
-
-      if (!member) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Group member not found" });
-      }
-
-      await assertGroupMemberCanBeRemoved({
+      await removeGroupMemberWithOwnerGuard({
         db: tx,
         groupId: input.groupId,
         memberId: input.memberId,
-        role: member.role,
-      });
-
-      await tx.groupMember.delete({
-        where: {
-          id: input.memberId,
-        },
       });
 
       await persistGroupEpoch({

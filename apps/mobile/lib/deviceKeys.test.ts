@@ -4,18 +4,25 @@ import { createDeviceKeyPair, encodeBase64 } from "@openbeacon/encryption";
 const secureStoreValues = new Map<string, string>();
 const storageValues = new Map<string, string>();
 let currentUserId = "user-a";
+let secureStoreSetError: Error | null = null;
 
 const registerDeviceKeyMock = mock(async () => ({}));
+const deleteItemAsyncMock = mock(async (key: string) => {
+  secureStoreValues.delete(key);
+});
+const setItemAsyncMock = mock(async (key: string, value: string) => {
+  if (secureStoreSetError) {
+    throw secureStoreSetError;
+  }
+
+  secureStoreValues.set(key, value);
+});
 
 mock.module("expo-secure-store", () => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: "when-unlocked-this-device-only",
-  deleteItemAsync: async (key: string) => {
-    secureStoreValues.delete(key);
-  },
+  deleteItemAsync: deleteItemAsyncMock,
   getItemAsync: async (key: string) => secureStoreValues.get(key) ?? null,
-  setItemAsync: async (key: string, value: string) => {
-    secureStoreValues.set(key, value);
-  },
+  setItemAsync: setItemAsyncMock,
 }));
 
 mock.module("./api.ts", () => ({
@@ -54,7 +61,10 @@ describe("device key registration", () => {
     secureStoreValues.clear();
     storageValues.clear();
     currentUserId = "user-a";
+    secureStoreSetError = null;
+    deleteItemAsyncMock.mockClear();
     registerDeviceKeyMock.mockClear();
+    setItemAsyncMock.mockClear();
   });
 
   test("stores a separate device context for each authenticated user", async () => {
@@ -93,9 +103,26 @@ describe("device key registration", () => {
 
     expect(deviceContext.deviceId).not.toBe("legacy-device");
     expect(storageValues.get("encryption.device.id")).toBeUndefined();
+    expect(storageValues.get("encryption.device.publicKey")).toBeUndefined();
     expect(storageValues.get("encryption.device.id.user-b")).toBe(deviceContext.deviceId);
+    expect(storageValues.get("encryption.device.publicKey.user-b")).toBe(deviceContext.publicKey);
     expect(secureStoreValues.has("encryption.device.privateKey")).toBe(false);
     expect(secureStoreValues.has("encryption.device.privateKey.user-b")).toBe(true);
     expect(registerDeviceKeyMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("rolls back scoped storage when secure store persistence fails", async () => {
+    secureStoreSetError = new Error("secure store failed");
+
+    const { getOrCreateDeviceKeyContext } = await importDeviceKeysModule();
+
+    await expect(getOrCreateDeviceKeyContext("user-a")).rejects.toThrow("secure store failed");
+    expect(storageValues.get("encryption.device.id.user-a")).toBeUndefined();
+    expect(storageValues.get("encryption.device.publicKey.user-a")).toBeUndefined();
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(false);
+    expect(deleteItemAsyncMock).toHaveBeenCalledWith(
+      "encryption.device.privateKey.user-a",
+      expect.any(Object),
+    );
   });
 });

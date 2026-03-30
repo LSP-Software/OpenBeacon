@@ -77,11 +77,22 @@ const persistStoredDeviceKeyContext = async ({
   publicKey: string;
   userId: string;
 }) => {
-  const privateKeyKey = getScopedDeviceKey(DEVICE_PRIVATE_KEY_KEY, userId);
+  const { deviceIdKey, privateKeyKey, publicKeyKey } = getScopedDeviceKeyNames(userId);
 
-  await SecureStore.setItemAsync(privateKeyKey, encodeBase64(privateKey), getSecureStoreOptions());
-  storage.set(getScopedDeviceKey(DEVICE_ID_KEY, userId), deviceId);
-  storage.set(getScopedDeviceKey(DEVICE_PUBLIC_KEY_KEY, userId), publicKey);
+  try {
+    storage.set(deviceIdKey, deviceId);
+    storage.set(publicKeyKey, publicKey);
+    await SecureStore.setItemAsync(
+      privateKeyKey,
+      encodeBase64(privateKey),
+      getSecureStoreOptions(),
+    );
+  } catch (error) {
+    storage.remove(deviceIdKey);
+    storage.remove(publicKeyKey);
+    await SecureStore.deleteItemAsync(privateKeyKey, getSecureStoreOptions());
+    throw error;
+  }
 };
 
 const getLegacyDeviceKeyContext = async () =>

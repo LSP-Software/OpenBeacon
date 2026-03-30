@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { createDeviceKeyPair, DEVICE_KEY_ALGORITHM } from "@openbeacon/encryption";
+import { createDeviceKeyPair, DEVICE_KEY_ALGORITHM, unwrapEpochKey } from "@openbeacon/encryption";
 
 const deviceAKeyPair = createDeviceKeyPair();
 const deviceBKeyPair = createDeviceKeyPair();
@@ -69,6 +69,30 @@ describe("group encryption helpers", () => {
     expect(
       result.initialEpoch.recipientKeys.map((recipientKey) => recipientKey.recipientDeviceId),
     ).toEqual(["device-a", "device-b"]);
+    const wrappedKeyForDeviceA = result.initialEpoch.recipientKeys.find(
+      (recipientKey) => recipientKey.recipientDeviceId === "device-a",
+    );
+    const wrappedKeyForDeviceB = result.initialEpoch.recipientKeys.find(
+      (recipientKey) => recipientKey.recipientDeviceId === "device-b",
+    );
+
+    if (!wrappedKeyForDeviceA || !wrappedKeyForDeviceB) {
+      throw new Error("Missing wrapped key");
+    }
+
+    expect(
+      unwrapEpochKey({
+        recipientDeviceId: "device-a",
+        recipientPrivateKey: deviceAKeyPair.privateKey,
+        wrappedEpochKey: wrappedKeyForDeviceA,
+      }).expose(),
+    ).toEqual(
+      unwrapEpochKey({
+        recipientDeviceId: "device-b",
+        recipientPrivateKey: deviceBKeyPair.privateKey,
+        wrappedEpochKey: wrappedKeyForDeviceB,
+      }).expose(),
+    );
     expect(ensureDeviceKeyRegistrationMock).toHaveBeenCalledTimes(1);
     expect(deviceKeyContextQueryMock).toHaveBeenCalledTimes(1);
   });

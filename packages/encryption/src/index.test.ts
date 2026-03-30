@@ -3,8 +3,10 @@ import {
   createDeviceKeyPair,
   createInitialGroupEpoch,
   createNextGroupEpoch,
+  decodeBase64,
   decodeJsonPayload,
   decryptGroupPayload,
+  encodeBase64,
   encryptGroupPayload,
   serializeRecipientPublicKeyMaterial,
   unwrapEpochKey,
@@ -40,6 +42,31 @@ const getWrappedKeyForDevice = (
 };
 
 describe("group epoch encryption", () => {
+  test("round-trips base64-encoded bytes", () => {
+    const cases = [
+      new Uint8Array([]),
+      new Uint8Array([7]),
+      new Uint8Array([7, 8]),
+      new Uint8Array([1, 2, 3, 4, 5]),
+    ];
+
+    for (const bytes of cases) {
+      expect(decodeBase64(encodeBase64(bytes))).toEqual(bytes);
+    }
+  });
+
+  test("rejects impossible base64 lengths", () => {
+    expect(() => decodeBase64("A")).toThrow("Invalid base64 value.");
+  });
+
+  test("rejects interior base64 padding", () => {
+    expect(() => decodeBase64("AA=A")).toThrow("Invalid base64 value.");
+  });
+
+  test("rejects over-padded base64 values", () => {
+    expect(() => decodeBase64("AAAA===")).toThrow("Invalid base64 value.");
+  });
+
   test("encrypts and decrypts a payload", () => {
     const { keyPair, recipient } = createRecipient("device-a", "user-a");
     const { epoch, wrappedKeys } = createInitialGroupEpoch({
