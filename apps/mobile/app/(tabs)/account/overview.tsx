@@ -1,49 +1,79 @@
 import { tryCatch } from "@openbeacon/shared";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import { ChevronRightIcon } from "lucide-react-native";
+import {
+  BellIcon,
+  CameraIcon,
+  ChevronRightIcon,
+  HelpCircleIcon,
+  InfoIcon,
+  LockIcon,
+  MailIcon,
+  MapPinCheckIcon,
+  SunIcon,
+  UserCircleIcon,
+} from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ProfileImage } from "../../../components/image/ProfileImage.tsx";
+import { EditableImage } from "../../../components/image/EditableImage.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
-import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/Card.tsx";
+import { Icon } from "../../../components/ui/Icon.tsx";
+import { Separator } from "../../../components/ui/Separator.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client.ts";
-import { getLocationPermissionWarningTitle } from "../../../lib/locationPermissions.ts";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
 
-type SettingRowProps = {
-  label: string;
-  sublabel?: string;
-  onPress: () => void;
-};
-
-const SettingRow = ({ label, sublabel, onPress }: SettingRowProps) => {
-  return (
-    <Pressable
-      onPress={onPress}
-      className="flex-row items-center justify-between gap-2 px-4 py-3 border-b border-border"
-      accessibilityRole="button"
-      accessibilityLabel={label}
-    >
-      <View className="w-2 h-2 rounded-full bg-primary items-center" />
-      <View className="flex-1 gap-1">
-        <Text className="text-foreground font-medium">{label}</Text>
-        {sublabel !== undefined && <Text className="text-muted text-sm">{sublabel}</Text>}
-      </View>
-      <ChevronRightIcon />
-    </Pressable>
-  );
-};
+const categories = [
+  {
+    label: "Account",
+    settings: [
+      {
+        label: "Manage Profile",
+        icon: UserCircleIcon,
+      },
+      {
+        label: "Notifications",
+        icon: BellIcon,
+      },
+      {
+        label: "Password and Security",
+        icon: LockIcon,
+      },
+    ],
+  },
+  {
+    label: "Preferences",
+    settings: [
+      {
+        label: "Theme",
+        icon: SunIcon,
+      },
+    ],
+  },
+  {
+    label: "Support",
+    settings: [
+      {
+        label: "Help Center",
+        icon: HelpCircleIcon,
+      },
+      {
+        label: "Contact Us",
+        icon: MailIcon,
+      },
+      {
+        label: "About",
+        icon: InfoIcon,
+      },
+    ],
+  },
+];
 
 const AccountScreen = () => {
   const { data: session } = authClient.useSession();
-  const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
+  useLocationPermissions();
   const [isSigningOut, setIsSigningOut] = useState(false);
-
-  const name = session?.user.name ?? "";
-  const email = session?.user.email ?? "";
 
   const handleSignOut = async () => {
     if (isSigningOut) return;
@@ -60,66 +90,95 @@ const AccountScreen = () => {
     router.replace("/");
   };
 
-  const locationPermissionWarningTitle = permissionState
-    ? getLocationPermissionWarningTitle(permissionState)
-    : "";
-
   return (
     <View className="flex-1 bg-background">
-      <SafeAreaView edges={["top"]} className="z-10">
-        <View className="px-8 pt-4 pb-10">
-          <Text className="text-muted uppercase font-bold">Your</Text>
-          <Text className="text-foreground text-3xl font-bold">Account</Text>
-        </View>
+      <SafeAreaView
+        edges={["top"]}
+        className="flex flex-row justify-center py-4 bg-white border-b border-border"
+      >
+        <Text className="text-foreground text-2xl font-bold">Account</Text>
       </SafeAreaView>
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="px-6 pb-28 gap-4"
+        contentContainerClassName="px-6 gap-4 my-4 pb-32"
         showsVerticalScrollIndicator={false}
       >
-        <View className="items-center py-6 gap-4">
-          <ProfileImage showEditButton />
-          <View className="items-center gap-1">
-            <Text className="text-foreground text-2xl font-bold">{name}</Text>
-            <Text className="text-muted text-sm">{email}</Text>
+        <View className="bg-white rounded-lg border border-border overflow-hidden">
+          <View className="relative">
+            <View className="flex flex-row justify-end p-3 bg-primary w-full h-20">
+              <View className="size-8 flex items-center justify-center bg-gray-700/20 rounded-full">
+                <Icon as={CameraIcon} className="text-white size-5" />
+              </View>
+            </View>
+            <View className="absolute left-4 -bottom-12 z-10">
+              <EditableImage
+                accessibilityLabel={`${session?.user.name}'s profile picture`}
+                alt="Profile picture"
+                size="md"
+                imageUrl={session?.user?.image ?? null}
+              />
+            </View>
+          </View>
+          <View className="flex flex-col px-4 pb-4 pt-14">
+            <Text className="text-foreground font-semibold text-2xl">{session?.user.name}</Text>
+            <Text className="text-muted text-base">{session?.user.email}</Text>
+
+            <Separator className="my-4" />
+            {/* TODO: Add devices count */}
+            <View className="flex flex-row items-center gap-6">
+              <View className="flex flex-col items-center">
+                <Text className="text-foreground font-bold text-xl">24</Text>
+                <Text className="text-muted text-base font-medium">Groups</Text>
+              </View>
+
+              <Separator className="my-4" orientation="vertical" />
+
+              {/* TODO: Add devices count */}
+              <View className="flex flex-col items-center">
+                <Text className="text-foreground font-bold text-xl">4</Text>
+                <Text className="text-muted text-base font-medium">Devices</Text>
+              </View>
+
+              <Separator className="my-4" orientation="vertical" />
+
+              <View className="flex flex-row justify-end items-center gap-2">
+                <Icon as={MapPinCheckIcon} className="text-primary size-5" />
+                <Text className="text-muted text-sm">London, UK</Text>
+              </View>
+            </View>
           </View>
         </View>
+        {categories.map((category) => {
+          return (
+            <View key={category.label}>
+              <Text className="font-medium text-muted text-lg mb-1">{category.label}</Text>
+              <View className="bg-white p-4 rounded-lg border border-border flex flex-col gap-3">
+                {category.settings.map((setting, settingIndex) => {
+                  const isLastSetting = settingIndex === category.settings.length - 1;
 
-        {permissionState?.shouldShowAccountWarning ? (
-          <Card className="gap-4 py-0">
-            <CardHeader className="px-5 pt-5">
-              <CardTitle>{locationPermissionWarningTitle}</CardTitle>
-            </CardHeader>
-            <CardContent className="px-5 pb-5 gap-4">
-              <Text className="text-muted">
-                OpenBeacon needs precise foreground and background location to share your location
-                with your family. Location tracking won't be active without it.
-              </Text>
-              <Button variant="outline" onPress={openLocationPermissionSettings}>
-                <Text>Open Settings</Text>
-              </Button>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <View className="rounded-lg overflow-hidden border border-border bg-card">
-          <SettingRow
-            label="Profile details"
-            sublabel="Name, email and account"
-            onPress={() => {}}
-          />
-          <SettingRow
-            label="Server Configuration"
-            sublabel="Self-hosted or managed"
-            onPress={() => router.push("/serverUrl")}
-          />
-        </View>
-
+                  return (
+                    <View
+                      key={setting.label}
+                      className={`flex flex-row items-center justify-between ${
+                        isLastSetting ? "" : "border-b-[0.5px] border-border/30 pb-3"
+                      }`}
+                    >
+                      <View className="flex flex-row items-center gap-3">
+                        <Icon as={setting.icon} className="text-muted size-6" />
+                        <Text className="text-foreground font-medium">{setting.label}</Text>
+                      </View>
+                      <Icon as={ChevronRightIcon} className="text-muted size-6" />
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })}
         <Button onPress={handleSignOut}>
           <Text>Sign out</Text>
         </Button>
-        <Text className="text-muted text-sm text-center">OpenBeacon · Open Source</Text>
       </ScrollView>
     </View>
   );

@@ -6,11 +6,9 @@ import { EditableImage } from "./EditableImage.tsx";
 export const GroupImage = ({
   groupId,
   imageUrl = null,
-  showEditButton = false,
 }: {
   groupId: string;
   imageUrl?: string | null;
-  showEditButton?: boolean;
 }) => {
   const requestGroupImageUploadMutation = useMutation(
     trpc.groupSettings.requestGroupImageUpload.mutationOptions(),
@@ -42,7 +40,6 @@ export const GroupImage = ({
       alt="Group avatar"
       imageUrl={imageUrl}
       onImageUploaded={handleGroupImageUploaded}
-      showEditButton={showEditButton}
       uploadImage={uploadGroupImage}
     />
   );
