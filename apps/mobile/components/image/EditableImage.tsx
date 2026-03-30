@@ -4,17 +4,26 @@ import * as ImagePicker from "expo-image-picker";
 import { PencilIcon, UserIcon } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, View } from "react-native";
-
+import { cn } from "../../lib/cn.ts";
 import type { ImageUploadResult } from "../../lib/image-upload.ts";
 import { cleanupTempFile } from "../../lib/image-upload.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Icon } from "../ui/Icon.tsx";
 
+interface EditableImageProps {
+  accessibilityLabel: string;
+  imageUrl?: string | null;
+  onImageUploaded?: (imageUrl: string) => Promise<void> | void;
+  showEditButton?: boolean;
+  size?: "sm" | "md" | "lg";
+  uploadImage?: (uri: string) => Promise<ImageUploadResult>;
+  alt: string;
+}
+
 export const EditableImage = ({
   accessibilityLabel,
   imageUrl,
   onImageUploaded,
-  showEditButton = false,
   size = "md",
   uploadImage,
   alt,
@@ -42,7 +51,6 @@ export const EditableImage = ({
       editIcon: "size-5",
     },
   } as const;
-  const currentSizeClassNames = sizeClassNames[size];
 
   const pickAndCropImage = async (): Promise<{ ok: true; path: string } | undefined> => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -72,20 +80,6 @@ export const EditableImage = ({
     }
 
     return { ok: true, path: photo.uri };
-
-    // const { data: image, error } = await tryCatch(
-    //   ImageCropPicker.openPicker({
-    //     cropping: true,
-    //     cropperCircleOverlay: true,
-    //     width: 512,
-    //     height: 512,
-    //     mediaType: "photo",
-    //   }),
-    // );
-
-    // if (error) return;
-
-    // return { ok: true, path: image.path };
   };
 
   const processImage = async (uri: string): Promise<string> => {
@@ -100,7 +94,7 @@ export const EditableImage = ({
   };
 
   const handleEditPress = async () => {
-    if (isLoading || pickerOpen) return;
+    if (isLoading || pickerOpen || !uploadImage) return;
     setPickerOpen(true);
 
     try {
@@ -140,10 +134,10 @@ export const EditableImage = ({
 
   return (
     <View>
-      <Avatar alt={alt} className={currentSizeClassNames.avatar}>
+      <Avatar alt={alt} className={cn(sizeClassNames[size].avatar, "border-2 border-white")}>
         <AvatarImage source={{ uri: imageUrl ?? "" }} />
         <AvatarFallback>
-          <Icon as={UserIcon} className={currentSizeClassNames.fallbackIcon} />
+          <Icon as={UserIcon} className={sizeClassNames[size].fallbackIcon} />
         </AvatarFallback>
       </Avatar>
 
@@ -156,27 +150,17 @@ export const EditableImage = ({
         </View>
       )}
 
-      {showEditButton && (
+      {uploadImage !== undefined && (
         <Pressable
           onPress={handleEditPress}
           disabled={isLoading}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
-          className={`absolute bottom-0 right-0 rounded-full bg-primary items-center justify-center border-background ${currentSizeClassNames.editButton} ${isLoading ? "opacity-70" : ""}`}
+          className={`absolute bottom-0 right-0 rounded-full bg-primary items-center justify-center border-background ${sizeClassNames[size].editButton} ${isLoading ? "opacity-70" : ""}`}
         >
-          <Icon as={PencilIcon} className={`${currentSizeClassNames.editIcon} text-white`} />
+          <Icon as={PencilIcon} className={`${sizeClassNames[size].editIcon} text-white`} />
         </Pressable>
       )}
     </View>
   );
 };
-
-interface EditableImageProps {
-  accessibilityLabel: string;
-  imageUrl?: string | null;
-  onImageUploaded?: (imageUrl: string) => Promise<void> | void;
-  showEditButton?: boolean;
-  size?: "sm" | "md" | "lg";
-  uploadImage: (uri: string) => Promise<ImageUploadResult>;
-  alt: string;
-}

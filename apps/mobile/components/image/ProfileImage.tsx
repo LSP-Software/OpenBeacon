@@ -5,13 +5,7 @@ import { authClient } from "../../lib/auth-client.ts";
 import { uploadImageFromUri } from "../../lib/image-upload.ts";
 import { EditableImage } from "./EditableImage.tsx";
 
-export const ProfileImage = ({
-  imageUrl,
-  showEditButton = false,
-}: {
-  imageUrl?: string | null;
-  showEditButton?: boolean;
-}) => {
+export const ProfileImage = ({ imageUrl }: { imageUrl?: string | null }) => {
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const { data: session } = authClient.useSession();
   const requestProfileImageUploadMutation = useMutation(
@@ -39,7 +33,6 @@ export const ProfileImage = ({
       alt="Profile avatar"
       imageUrl={uploadedImageUrl ?? session?.user?.image ?? imageUrl ?? null}
       onImageUploaded={handleProfileImageUploaded}
-      showEditButton={showEditButton}
       uploadImage={uploadProfileImage}
     />
   );
