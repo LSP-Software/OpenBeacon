@@ -6,14 +6,14 @@ import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { Pressable, View } from "react-native";
 import type z from "zod";
-import { trpc } from "../../lib/api";
-import { FormSelectInput } from "../formInputs/FormSelectInput";
-import { Button } from "../ui/Button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/Dialog";
-import { Icon } from "../ui/Icon";
-import { Input } from "../ui/Input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/Tabs";
-import { Text } from "../ui/Text";
+import { trpc } from "../../lib/api.ts";
+import { FormSelectInput } from "../formInputs/FormSelectInput.tsx";
+import { Button } from "../ui/Button.tsx";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/Dialog.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { Input } from "../ui/Input.tsx";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/Tabs.tsx";
+import { Text } from "../ui/Text.tsx";
 
 interface InviteMemberToGroupDialogProps {
   open: boolean;

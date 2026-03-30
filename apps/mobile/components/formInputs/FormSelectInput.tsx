@@ -1,7 +1,7 @@
 import { type Control, Controller, type FieldPath, type FieldValues } from "react-hook-form";
 import { type TextInputProps, View } from "react-native";
-import { cn } from "../../lib/cn";
-import { Field, FieldDescription, FieldError, FieldLabel } from "../ui/Field";
+import { cn } from "../../lib/cn.ts";
+import { Field, FieldDescription, FieldError, FieldLabel } from "../ui/Field.tsx";
 import {
   type Option,
   Select,
@@ -10,7 +10,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../ui/Select";
+} from "../ui/Select.tsx";
 
 type FormInputProps<TFieldValues extends FieldValues, TName extends FieldPath<TFieldValues>> = Omit<
   TextInputProps,

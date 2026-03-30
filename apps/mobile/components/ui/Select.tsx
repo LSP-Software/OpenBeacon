@@ -4,10 +4,10 @@ import * as React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { FadeIn, FadeOut } from "react-native-reanimated";
 import { FullWindowOverlay as RNFullWindowOverlay } from "react-native-screens";
-import { cn } from "../../lib/cn";
-import { Icon } from "./Icon";
-import { NativeOnlyAnimatedView } from "./NativeOnlyAnimatedView";
-import { TextClassContext } from "./Text";
+import { cn } from "../../lib/cn.ts";
+import { Icon } from "./Icon.tsx";
+import { NativeOnlyAnimatedView } from "./NativeOnlyAnimatedView.tsx";
+import { TextClassContext } from "./Text.tsx";
 
 type Option = SelectPrimitive.Option;
 

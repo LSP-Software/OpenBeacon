@@ -5,12 +5,18 @@ import { CameraIcon } from "lucide-react-native";
 import { useForm } from "react-hook-form";
 import { View } from "react-native";
 import type z from "zod";
-import { trpc } from "../../lib/api";
-import { Button } from "../ui/Button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/Dialog";
-import { Icon } from "../ui/Icon";
-import { Input } from "../ui/Input";
-import { Text } from "../ui/Text";
+import { trpc } from "../../lib/api.ts";
+import { Button } from "../ui/Button.tsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/Dialog.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { Input } from "../ui/Input.tsx";
+import { Text } from "../ui/Text.tsx";
 
 interface CreateGroupDialogProps {
   open: boolean;

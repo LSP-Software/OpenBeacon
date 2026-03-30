@@ -2,9 +2,9 @@ import { EyeIcon, EyeOffIcon } from "lucide-react-native";
 import { type RefObject, useState } from "react";
 import { type Control, Controller, type FieldPath, type FieldValues } from "react-hook-form";
 import { Platform, Pressable, TextInput, type TextInputProps, View } from "react-native";
-import { cn } from "../../lib/cn";
-import { Field, FieldDescription, FieldError, FieldLabel } from "./Field";
-import { Icon } from "./Icon";
+import { cn } from "../../lib/cn.ts";
+import { Field, FieldDescription, FieldError, FieldLabel } from "./Field.tsx";
+import { Icon } from "./Icon.tsx";
 
 type FormInputProps<TFieldValues extends FieldValues, TName extends FieldPath<TFieldValues>> = Omit<
   TextInputProps,
