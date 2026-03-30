@@ -1,5 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createGroupSchema } from "@openbeacon/schemas";
+import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CameraIcon } from "lucide-react-native";
 import { useForm } from "react-hook-form";
@@ -41,21 +42,25 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
 
   const onSubmit = async (data: z.infer<typeof createGroupSchema>) => {
     await createGroupSubmission.run("create-group", async () => {
-      try {
-        const createGroupInput = await buildCreateGroupInput({ name: data.name });
-        const createdGroup = await createGroupMutation.mutateAsync(createGroupInput);
+      const result = await tryCatch(
+        (async () => {
+          const createGroupInput = await buildCreateGroupInput({ name: data.name });
+          const createdGroup = await createGroupMutation.mutateAsync(createGroupInput);
 
-        queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
-          if (!previous) {
-            return [createdGroup.newGroup];
-          }
-          return [createdGroup.newGroup, ...previous];
-        });
-        closeForm();
-      } catch (error) {
+          queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
+            if (!previous) {
+              return [createdGroup.newGroup];
+            }
+            return [createdGroup.newGroup, ...previous];
+          });
+          closeForm();
+        })(),
+      );
+
+      if (result.error) {
         Alert.alert(
           "Unable to create group",
-          error instanceof Error ? error.message : "Something went wrong.",
+          result.error instanceof Error ? result.error.message : "Something went wrong.",
         );
       }
     });

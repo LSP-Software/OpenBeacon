@@ -3,19 +3,20 @@ import { createDeviceKeyPair, DEVICE_KEY_ALGORITHM, encodeBase64 } from "@openbe
 import { registerDeviceKeySchema } from "./registerDeviceKey.ts";
 
 describe("registerDeviceKeySchema", () => {
-  test("accepts a valid X25519 public key", () => {
+  test("accepts a valid X25519 public key and trims surrounding whitespace", () => {
     const deviceKeyPair = createDeviceKeyPair();
+    const publicKey = ` ${deviceKeyPair.publicKey.slice(0, 8)}\n${deviceKeyPair.publicKey.slice(8)} `;
 
     expect(
       registerDeviceKeySchema.parse({
         algorithm: deviceKeyPair.algorithm,
         deviceId: "device-a",
-        publicKey: ` ${deviceKeyPair.publicKey.slice(0, 8)}\n${deviceKeyPair.publicKey.slice(8)} `,
+        publicKey,
       }),
     ).toEqual({
       algorithm: deviceKeyPair.algorithm,
       deviceId: "device-a",
-      publicKey: ` ${deviceKeyPair.publicKey.slice(0, 8)}\n${deviceKeyPair.publicKey.slice(8)} `,
+      publicKey: publicKey.trim(),
     });
   });
 

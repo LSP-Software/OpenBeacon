@@ -1,3 +1,4 @@
+import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { ChevronRightIcon, PlusIcon, ShieldIcon } from "lucide-react-native";
@@ -66,31 +67,39 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
   const acceptInviteSubmission = useSingleFlight<string>();
 
   const handleAcceptInvite = async (inviteId: string) => {
+    if (declineInviteMutation.isPending) {
+      return;
+    }
+
     await acceptInviteSubmission.run(inviteId, async () => {
-      try {
-        const acceptInviteInput = await buildAcceptInviteInput({ inviteId });
-        const data = await acceptInviteMutation.mutateAsync(acceptInviteInput);
+      const result = await tryCatch(
+        (async () => {
+          const acceptInviteInput = await buildAcceptInviteInput({ inviteId });
+          const data = await acceptInviteMutation.mutateAsync(acceptInviteInput);
 
-        queryClient.setQueryData(trpc.groupInvites.list.queryKey(), (previous) => {
-          if (!previous) {
-            return [];
-          }
-          return previous.filter((invite) => invite.id !== inviteId);
-        });
+          queryClient.setQueryData(trpc.groupInvites.list.queryKey(), (previous) => {
+            if (!previous) {
+              return [];
+            }
+            return previous.filter((invite) => invite.id !== inviteId);
+          });
 
-        queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
-          return [
-            ...(previous ?? []),
-            {
-              ...data.group,
-              members: data.group.members,
-            },
-          ] satisfies RouterOutputs["groupMembership"]["list"];
-        });
-      } catch (error) {
+          queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
+            return [
+              ...(previous ?? []),
+              {
+                ...data.group,
+                members: data.group.members,
+              },
+            ] satisfies RouterOutputs["groupMembership"]["list"];
+          });
+        })(),
+      );
+
+      if (result.error) {
         Alert.alert(
           "Unable to accept invite",
-          error instanceof Error ? error.message : "Something went wrong.",
+          result.error instanceof Error ? result.error.message : "Something went wrong.",
         );
       }
     });
@@ -119,7 +128,8 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
     <View className="gap-4">
       <Text className="text-foreground font-bold text-lg">Group Invites</Text>
       {groupInvites?.map((invite) => {
-        const isAcceptingInvite = acceptInviteSubmission.pendingKey === invite.id;
+        const isAcceptingInvite =
+          acceptInviteSubmission.pendingKey === invite.id && !declineInviteMutation.isPending;
 
         return (
           <Card key={invite.id}>
@@ -141,7 +151,10 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
                   size="sm"
                   onPress={() => handleAcceptInvite(invite.id)}
                   loading={isAcceptingInvite}
-                  disabled={acceptInviteSubmission.isPending && !isAcceptingInvite}
+                  disabled={
+                    declineInviteMutation.isPending ||
+                    (acceptInviteSubmission.isPending && !isAcceptingInvite)
+                  }
                 >
                   <Text>Accept</Text>
                 </Button>

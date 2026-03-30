@@ -142,7 +142,7 @@ describe("group epoch helpers", () => {
   });
 
   test("rejects attempts to change the public key for an existing device", async () => {
-    await expect(() =>
+    await expect(
       upsertUserDevice({
         db: {
           userDevice: {
@@ -160,11 +160,11 @@ describe("group epoch helpers", () => {
         },
         userId: "user-a",
       }),
-    ).toThrow("This device ID is already registered with different key material.");
+    ).rejects.toThrow("This device ID is already registered with different key material.");
   });
 
   test("rejects attempts to register another user's device", async () => {
-    await expect(() =>
+    await expect(
       upsertUserDevice({
         db: {
           userDevice: {
@@ -182,7 +182,7 @@ describe("group epoch helpers", () => {
         },
         userId: "user-a",
       }),
-    ).toThrow("This device is already registered to another user.");
+    ).rejects.toThrow("This device is already registered to another user.");
   });
 
   test("builds invite acceptance context with all post-accept devices", async () => {
@@ -216,6 +216,10 @@ describe("group epoch helpers", () => {
       devices.filter((device) => device.revokedAt === where.revokedAt),
     );
 
+    const findFirstInvite = mock(async () => ({
+      groupId: "group-1",
+    }));
+
     const result = await getInviteAcceptanceContext({
       db: {
         groupEpoch: {
@@ -228,9 +232,7 @@ describe("group epoch helpers", () => {
           }),
         },
         groupMemberInvite: {
-          findFirst: async () => ({
-            groupId: "group-1",
-          }),
+          findFirst: findFirstInvite,
         },
         userDevice: {
           findMany,
@@ -240,6 +242,15 @@ describe("group epoch helpers", () => {
       userId: "user-b",
     });
 
+    expect(findFirstInvite).toHaveBeenCalledWith({
+      select: {
+        groupId: true,
+      },
+      where: {
+        id: "invite-1",
+        recipientId: "user-b",
+      },
+    });
     expect(findMany).toHaveBeenCalledWith({
       orderBy: {
         id: "asc",
@@ -280,6 +291,12 @@ describe("group epoch helpers", () => {
   test("persists the next epoch for the current device set", async () => {
     const create = mock(async () => ({}));
     const createMany = mock(async () => ({}));
+    const findFirstMember = mock(async () => ({
+      id: "member-a",
+    }));
+    const findFirstDevice = mock(async () => ({
+      id: "device-a",
+    }));
     const devices = [
       {
         createdAt: new Date("2026-03-26T12:00:00.000Z"),
@@ -323,14 +340,10 @@ describe("group epoch helpers", () => {
           createMany,
         },
         groupMember: {
-          findFirst: async () => ({
-            id: "member-a",
-          }),
+          findFirst: findFirstMember,
         },
         userDevice: {
-          findFirst: async () => ({
-            id: "device-a",
-          }),
+          findFirst: findFirstDevice,
           findMany,
         },
       },
@@ -363,6 +376,25 @@ describe("group epoch helpers", () => {
       userId: "user-a",
     });
 
+    expect(findFirstMember).toHaveBeenCalledWith({
+      select: {
+        id: true,
+      },
+      where: {
+        groupId: "group-1",
+        userId: "user-a",
+      },
+    });
+    expect(findFirstDevice).toHaveBeenCalledWith({
+      select: {
+        id: true,
+      },
+      where: {
+        id: "device-a",
+        revokedAt: null,
+        userId: "user-a",
+      },
+    });
     expect(findMany).toHaveBeenCalledWith({
       orderBy: {
         id: "asc",
@@ -419,7 +451,7 @@ describe("group epoch helpers", () => {
   });
 
   test("rejects mismatched recipient sets", async () => {
-    await expect(() =>
+    await expect(
       persistGroupEpoch({
         db: {
           groupEpoch: {
@@ -480,6 +512,6 @@ describe("group epoch helpers", () => {
         groupId: "group-1",
         userId: "user-a",
       }),
-    ).toThrow("Epoch recipient set does not match the active group devices.");
+    ).rejects.toThrow("Epoch recipient set does not match the active group devices.");
   });
 });

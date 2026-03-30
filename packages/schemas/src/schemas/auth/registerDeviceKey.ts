@@ -5,13 +5,16 @@ import {
 } from "@openbeacon/encryption";
 import z from "zod";
 
-const devicePublicKeySchema = z.string().refine((publicKey) => {
-  try {
-    return decodeBase64(publicKey).length === 32;
-  } catch {
-    return false;
-  }
-}, "Invalid device public key.");
+const devicePublicKeySchema = z
+  .string()
+  .transform((publicKey) => publicKey.trim())
+  .refine((publicKey) => {
+    try {
+      return decodeBase64(publicKey).length === 32;
+    } catch {
+      return false;
+    }
+  }, "Invalid device public key.");
 
 export const registerDeviceKeySchema = z.object({
   algorithm: z.literal(DEVICE_KEY_ALGORITHM),

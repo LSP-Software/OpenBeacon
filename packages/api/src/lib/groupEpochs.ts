@@ -6,6 +6,7 @@ import {
   WRAPPED_EPOCH_KEY_ALGORITHM,
   type WrappedEpochKey,
 } from "@openbeacon/encryption";
+import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 
 type DeviceRecord = {
@@ -24,12 +25,10 @@ type InviteAcceptanceDb =
 type GroupRemovalDb =
   | Pick<PrismaClient, "groupEpoch" | "groupMember" | "userDevice">
   | Pick<Prisma.TransactionClient, "groupEpoch" | "groupMember" | "userDevice">;
-type GroupEpochPersistenceDb =
-  | Pick<PrismaClient, "groupEpoch" | "groupEpochRecipientKey" | "groupMember" | "userDevice">
-  | Pick<
-      Prisma.TransactionClient,
-      "groupEpoch" | "groupEpochRecipientKey" | "groupMember" | "userDevice"
-    >;
+type GroupEpochPersistenceDb = Pick<
+  Prisma.TransactionClient,
+  "groupEpoch" | "groupEpochRecipientKey" | "groupMember" | "userDevice"
+>;
 
 const sortIds = (ids: string[]) => ids.slice().sort((left, right) => left.localeCompare(right));
 
@@ -491,73 +490,79 @@ export const upsertUserDevice = async ({
     });
   }
 
-  try {
-    return await db.userDevice.create({
+  const createResult = await tryCatch(
+    db.userDevice.create({
       data: {
         id: input.deviceId,
         publicKey: input.publicKey,
         publicKeyAlgorithm: input.algorithm,
         userId,
       },
+    }),
+  );
+
+  if (!createResult.error) {
+    return createResult.data;
+  }
+
+  const error = createResult.error;
+
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+    throw error;
+  }
+
+  const uniqueTarget = error.meta?.["target"];
+  const targets =
+    typeof uniqueTarget === "string"
+      ? [uniqueTarget]
+      : Array.isArray(uniqueTarget)
+        ? uniqueTarget.filter((target): target is string => typeof target === "string")
+        : [];
+
+  if (targets.length > 0 && !targets.includes("id")) {
+    throw error;
+  }
+
+  const conflictingDevice = await db.userDevice.findUnique({
+    select: {
+      publicKey: true,
+      publicKeyAlgorithm: true,
+      userId: true,
+    },
+    where: {
+      id: input.deviceId,
+    },
+  });
+
+  if (conflictingDevice && conflictingDevice.userId !== userId) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "This device is already registered to another user.",
     });
-  } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
-      throw error;
-    }
+  }
 
-    const uniqueTarget = error.meta?.["target"];
-    const targets =
-      typeof uniqueTarget === "string"
-        ? [uniqueTarget]
-        : Array.isArray(uniqueTarget)
-          ? uniqueTarget.filter((target): target is string => typeof target === "string")
-          : [];
-
-    if (targets.length > 0 && !targets.includes("id")) {
-      throw error;
-    }
-
-    const conflictingDevice = await db.userDevice.findUnique({
-      select: {
-        publicKey: true,
-        publicKeyAlgorithm: true,
-        userId: true,
+  if (
+    conflictingDevice &&
+    conflictingDevice.publicKey === input.publicKey &&
+    conflictingDevice.publicKeyAlgorithm === input.algorithm
+  ) {
+    return db.userDevice.update({
+      data: {
+        lastSeenAt: new Date(),
+        revokedAt: null,
       },
       where: {
         id: input.deviceId,
       },
     });
-
-    if (conflictingDevice && conflictingDevice.userId !== userId) {
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "This device is already registered to another user.",
-      });
-    }
-
-    if (
-      conflictingDevice &&
-      conflictingDevice.publicKey === input.publicKey &&
-      conflictingDevice.publicKeyAlgorithm === input.algorithm
-    ) {
-      return db.userDevice.update({
-        data: {
-          lastSeenAt: new Date(),
-          revokedAt: null,
-        },
-        where: {
-          id: input.deviceId,
-        },
-      });
-    }
-
-    if (conflictingDevice) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "This device ID is already registered with different key material.",
-      });
-    }
-
-    throw error;
   }
+
+  if (conflictingDevice) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "This device ID is already registered with different key material.",
+    });
+  }
+
+  throw error;
 };
