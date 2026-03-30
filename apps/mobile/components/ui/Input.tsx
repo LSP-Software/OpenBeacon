@@ -89,7 +89,7 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
                   field.onBlur();
                 }}
                 className={cn(
-                  `rounded-lg border border-border bg-input ${inputFocused && "border-primary"} py-4 px-4`,
+                  `rounded-lg border border-border bg-input text-foreground ${inputFocused && "border-primary"} py-4 px-4`,
                   isPasswordInput && "pr-12",
                   props.editable === false &&
                     cn(
