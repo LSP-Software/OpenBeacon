@@ -4,15 +4,15 @@ import { ChevronRightIcon, PlusIcon, ShieldIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CreateGroupDialog } from "../../../components/dialogs/CreateGroupDialog";
-import { LoadingIndicator } from "../../../components/LoadingIndicator";
-import { RefreshablePage } from "../../../components/RefreshablePage";
-import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/Avatar";
-import { Button } from "../../../components/ui/Button";
-import { Card, CardDescription, CardHeader, CardTitle } from "../../../components/ui/Card";
-import { Icon } from "../../../components/ui/Icon";
-import { Text } from "../../../components/ui/Text";
-import { type RouterOutputs, trpc } from "../../../lib/api";
+import { CreateGroupDialog } from "../../../components/dialogs/CreateGroupDialog.tsx";
+import { LoadingIndicator } from "../../../components/LoadingIndicator.tsx";
+import { RefreshablePage } from "../../../components/RefreshablePage.tsx";
+import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/Avatar.tsx";
+import { Button } from "../../../components/ui/Button.tsx";
+import { Card, CardDescription, CardHeader, CardTitle } from "../../../components/ui/Card.tsx";
+import { Icon } from "../../../components/ui/Icon.tsx";
+import { Text } from "../../../components/ui/Text.tsx";
+import { type RouterOutputs, trpc } from "../../../lib/api.ts";
 
 export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);

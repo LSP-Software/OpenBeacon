@@ -4,18 +4,18 @@ import { MoreVerticalIcon } from "lucide-react-native";
 import { useState } from "react";
 import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../../../../components/headers/BackButton";
-import { LoadingIndicator } from "../../../../components/LoadingIndicator";
-import { RefreshablePage } from "../../../../components/RefreshablePage";
-import { Avatar, AvatarFallback, AvatarImage } from "../../../../components/ui/Avatar";
-import { Icon } from "../../../../components/ui/Icon";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../../components/ui/Tabs";
-import { Text } from "../../../../components/ui/Text";
-import { type RouterOutputs, trpc } from "../../../../lib/api";
-import { cn } from "../../../../lib/cn";
-import HistoryTab from "./HistoryTab";
-import MembersTab from "./MembersTab";
-import SettingsTab from "./SettingsTab";
+import { BackButton } from "../../../../components/headers/BackButton.tsx";
+import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
+import { RefreshablePage } from "../../../../components/RefreshablePage.tsx";
+import { Avatar, AvatarFallback, AvatarImage } from "../../../../components/ui/Avatar.tsx";
+import { Icon } from "../../../../components/ui/Icon.tsx";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../../components/ui/Tabs.tsx";
+import { Text } from "../../../../components/ui/Text.tsx";
+import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
+import { cn } from "../../../../lib/cn.ts";
+import HistoryTab from "./HistoryTab.tsx";
+import MembersTab from "./MembersTab.tsx";
+import SettingsTab from "./SettingsTab.tsx";
 
 const GROUP_TABS = [
   {

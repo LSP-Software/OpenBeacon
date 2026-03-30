@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { RefreshControl, ScrollView } from "react-native";
-import { queryClient } from "../lib/api";
+import { queryClient } from "../lib/api.ts";
 
 export const RefreshablePage = ({ children }: { children: React.ReactNode }) => {
   const [refreshing, setRefreshing] = useState(false);

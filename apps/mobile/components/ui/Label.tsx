@@ -1,6 +1,6 @@
 import * as LabelPrimitive from "@rn-primitives/label";
 import { Platform } from "react-native";
-import { cn } from "../../lib/cn";
+import { cn } from "../../lib/cn.ts";
 
 const Label = ({
   className,
