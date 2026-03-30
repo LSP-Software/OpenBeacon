@@ -177,7 +177,7 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
         <>
           <View className="items-center pt-10 gap-6">
             <View className="w-20 h-20 rounded-full border border-primary/30 items-center justify-center bg-primary/15">
-              <ShieldIcon size={40} />
+              <Icon as={ShieldIcon} size={40} className="text-primary" />
             </View>
             <View className="items-center gap-2">
               <Text className="text-foreground font-bold text-2xl">No groups yet</Text>
@@ -191,12 +191,24 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
             </Button>
           </View>
 
-          <View className="flex flex-row items-start gap-2 p-4 mt-4 rounded-lg bg-card border-border border">
-            <View className="w-2 h-2 rounded-full mt-2 bg-primary" />
-            <Text className="text-sm text-muted">
-              Location data is encrypted end-to-end. The server never stores your plaintext
-              location.
-            </Text>
+          <View className="mt-6 overflow-hidden rounded-2xl border border-primary/20 bg-card px-5 py-4">
+            <View className="flex-row items-center gap-3 pr-6">
+              <View className="size-10 items-center justify-center rounded-full border border-primary/20 bg-primary/10">
+                <Icon as={ShieldIcon} size={18} className="text-primary" />
+              </View>
+              <View className="flex-1 gap-1">
+                <Text className="text-xs font-semibold uppercase tracking-[1px] text-primary">
+                  Privacy-first by default
+                </Text>
+                <Text className="text-base font-semibold text-foreground">
+                  Location data is encrypted end-to-end
+                </Text>
+                <Text className="text-sm leading-6 text-muted-foreground">
+                  The server never stores your plaintext location, so only members of your group can
+                  read it.
+                </Text>
+              </View>
+            </View>
           </View>
         </>
       ) : (
