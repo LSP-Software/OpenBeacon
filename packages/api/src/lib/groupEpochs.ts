@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "@openbeacon/database";
+import { Prisma, type PrismaClient } from "@openbeacon/database";
 import {
   DEVICE_KEY_ALGORITHM,
   type RecipientPublicKeyMaterial,
@@ -501,6 +501,22 @@ export const upsertUserDevice = async ({
       },
     });
   } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+      throw error;
+    }
+
+    const uniqueTarget = error.meta?.["target"];
+    const targets =
+      typeof uniqueTarget === "string"
+        ? [uniqueTarget]
+        : Array.isArray(uniqueTarget)
+          ? uniqueTarget.filter((target): target is string => typeof target === "string")
+          : [];
+
+    if (targets.length > 0 && !targets.includes("id")) {
+      throw error;
+    }
+
     const conflictingDevice = await db.userDevice.findUnique({
       select: {
         publicKey: true,

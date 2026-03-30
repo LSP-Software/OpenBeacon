@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { Prisma } from "@openbeacon/database";
 import { DEVICE_KEY_ALGORITHM, WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { getInviteAcceptanceContext, persistGroupEpoch, upsertUserDevice } from "./groupEpochs.ts";
 
@@ -79,7 +80,13 @@ describe("group epoch helpers", () => {
   test("treats same-user create races as an idempotent success", async () => {
     let findUniqueCallCount = 0;
     const create = mock(async () => {
-      throw new Error("Unique constraint failed");
+      throw new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+        clientVersion: "test",
+        code: "P2002",
+        meta: {
+          target: ["id"],
+        },
+      });
     });
     const update = mock(async ({ data }: { data: Record<string, unknown> }) => ({
       createdAt: new Date("2026-03-26T12:00:00.000Z"),

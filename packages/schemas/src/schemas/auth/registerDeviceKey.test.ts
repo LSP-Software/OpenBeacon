@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createDeviceKeyPair, encodeBase64 } from "@openbeacon/encryption";
+import { createDeviceKeyPair, DEVICE_KEY_ALGORITHM, encodeBase64 } from "@openbeacon/encryption";
 import { registerDeviceKeySchema } from "./registerDeviceKey.ts";
 
 describe("registerDeviceKeySchema", () => {
@@ -22,7 +22,7 @@ describe("registerDeviceKeySchema", () => {
   test("rejects malformed base64", () => {
     expect(() =>
       registerDeviceKeySchema.parse({
-        algorithm: "x25519-xsalsa20-poly1305",
+        algorithm: DEVICE_KEY_ALGORITHM,
         deviceId: "device-a",
         publicKey: "not-base64!",
       }),
@@ -32,7 +32,7 @@ describe("registerDeviceKeySchema", () => {
   test("rejects decoded keys with the wrong length", () => {
     expect(() =>
       registerDeviceKeySchema.parse({
-        algorithm: "x25519-xsalsa20-poly1305",
+        algorithm: DEVICE_KEY_ALGORITHM,
         deviceId: "device-a",
         publicKey: encodeBase64(new Uint8Array([1, 2, 3])),
       }),

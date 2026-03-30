@@ -47,11 +47,7 @@ const renderHookHarness = async ({
   const Harness = () => {
     const singleFlight = useSingleFlight<string>();
     const run = (key: string, operation: () => Promise<void>) => {
-      const result = singleFlight.run(key, operation);
-
-      if (result) {
-        void result.catch(() => {});
-      }
+      void singleFlight.run(key, operation).catch(() => {});
     };
 
     return (

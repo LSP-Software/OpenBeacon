@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { TRPCError } from "@trpc/server";
 
@@ -69,6 +69,9 @@ const createGroupFindUniqueMock = (isMember: boolean) =>
 const createWrappedKeyFindFirstMock = (result: WrappedKeyRecord | null) =>
   mock(async (_args: WrappedKeyFindFirstArgs) => result);
 
+let originalBetterAuthUrl: string | undefined;
+let originalBetterAuthSecret: string | undefined;
+
 const createCaller = async ({
   groupFindUniqueMock,
   wrappedKeyFindFirstMock,
@@ -107,180 +110,141 @@ const createCaller = async ({
 };
 
 describe("groupEpochRouter", () => {
-  test("forbids access for non-members", async () => {
-    const originalBetterAuthUrl = process.env.BETTER_AUTH_URL;
-    const originalBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
-
+  beforeEach(() => {
+    originalBetterAuthUrl = process.env.BETTER_AUTH_URL;
+    originalBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
     process.env.BETTER_AUTH_URL = "http://localhost:3000";
     process.env.BETTER_AUTH_SECRET = "test-secret-000000000000000000000000";
+  });
 
-    try {
-      const { caller, groupFindUniqueMock, wrappedKeyFindFirstMock } = await createCaller({
-        groupFindUniqueMock: createGroupFindUniqueMock(false),
-        wrappedKeyFindFirstMock: createWrappedKeyFindFirstMock(null),
-      });
+  afterEach(() => {
+    if (originalBetterAuthUrl === undefined) {
+      delete process.env.BETTER_AUTH_URL;
+    } else {
+      process.env.BETTER_AUTH_URL = originalBetterAuthUrl;
+    }
 
-      await expect(
-        caller.groupEpoch.getWrappedKey({
-          deviceId: "device-1",
-          epochId: "epoch-1",
-          groupId: "group-1",
-        }),
-      ).rejects.toBeInstanceOf(TRPCError);
-      expect(groupFindUniqueMock).toHaveBeenCalledWith({
-        include: {
-          groupMembers: {
-            where: {
-              userId: "user-1",
-            },
-          },
-        },
-        where: {
-          id: "group-1",
-        },
-      });
-      expect(wrappedKeyFindFirstMock).not.toHaveBeenCalled();
-    } finally {
-      if (originalBetterAuthUrl === undefined) {
-        delete process.env.BETTER_AUTH_URL;
-      } else {
-        process.env.BETTER_AUTH_URL = originalBetterAuthUrl;
-      }
-
-      if (originalBetterAuthSecret === undefined) {
-        delete process.env.BETTER_AUTH_SECRET;
-      } else {
-        process.env.BETTER_AUTH_SECRET = originalBetterAuthSecret;
-      }
+    if (originalBetterAuthSecret === undefined) {
+      delete process.env.BETTER_AUTH_SECRET;
+    } else {
+      process.env.BETTER_AUTH_SECRET = originalBetterAuthSecret;
     }
   });
 
-  test("returns null when the caller is a member without a wrapped key", async () => {
-    const originalBetterAuthUrl = process.env.BETTER_AUTH_URL;
-    const originalBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
+  test("forbids access for non-members", async () => {
+    const { caller, groupFindUniqueMock, wrappedKeyFindFirstMock } = await createCaller({
+      groupFindUniqueMock: createGroupFindUniqueMock(false),
+      wrappedKeyFindFirstMock: createWrappedKeyFindFirstMock(null),
+    });
 
-    process.env.BETTER_AUTH_URL = "http://localhost:3000";
-    process.env.BETTER_AUTH_SECRET = "test-secret-000000000000000000000000";
-
-    try {
-      const { caller, wrappedKeyFindFirstMock } = await createCaller({
-        groupFindUniqueMock: createGroupFindUniqueMock(true),
-        wrappedKeyFindFirstMock: createWrappedKeyFindFirstMock(null),
-      });
-
-      await expect(
-        caller.groupEpoch.getWrappedKey({
-          deviceId: "device-1",
-          epochId: "epoch-1",
-          groupId: "group-1",
-        }),
-      ).resolves.toBeNull();
-      expect(wrappedKeyFindFirstMock).toHaveBeenCalledWith({
-        select: {
-          algorithm: true,
-          createdAt: true,
-          ephemeralPublicKey: true,
-          groupEpochId: true,
-          nonce: true,
-          recipientDeviceId: true,
-          wrappedKey: true,
-        },
-        where: {
-          groupEpoch: {
-            groupId: "group-1",
-          },
-          groupEpochId: "epoch-1",
-          recipientDevice: {
+    await expect(
+      caller.groupEpoch.getWrappedKey({
+        deviceId: "device-1",
+        epochId: "epoch-1",
+        groupId: "group-1",
+      }),
+    ).rejects.toBeInstanceOf(TRPCError);
+    expect(groupFindUniqueMock).toHaveBeenCalledWith({
+      include: {
+        groupMembers: {
+          where: {
             userId: "user-1",
           },
-          recipientDeviceId: "device-1",
         },
-      });
-    } finally {
-      if (originalBetterAuthUrl === undefined) {
-        delete process.env.BETTER_AUTH_URL;
-      } else {
-        process.env.BETTER_AUTH_URL = originalBetterAuthUrl;
-      }
+      },
+      where: {
+        id: "group-1",
+      },
+    });
+    expect(wrappedKeyFindFirstMock).not.toHaveBeenCalled();
+  });
 
-      if (originalBetterAuthSecret === undefined) {
-        delete process.env.BETTER_AUTH_SECRET;
-      } else {
-        process.env.BETTER_AUTH_SECRET = originalBetterAuthSecret;
-      }
-    }
+  test("returns null when the caller is a member without a wrapped key", async () => {
+    const { caller, wrappedKeyFindFirstMock } = await createCaller({
+      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      wrappedKeyFindFirstMock: createWrappedKeyFindFirstMock(null),
+    });
+
+    await expect(
+      caller.groupEpoch.getWrappedKey({
+        deviceId: "device-1",
+        epochId: "epoch-1",
+        groupId: "group-1",
+      }),
+    ).resolves.toBeNull();
+    expect(wrappedKeyFindFirstMock).toHaveBeenCalledWith({
+      select: {
+        algorithm: true,
+        createdAt: true,
+        ephemeralPublicKey: true,
+        groupEpochId: true,
+        nonce: true,
+        recipientDeviceId: true,
+        wrappedKey: true,
+      },
+      where: {
+        groupEpoch: {
+          groupId: "group-1",
+        },
+        groupEpochId: "epoch-1",
+        recipientDevice: {
+          userId: "user-1",
+        },
+        recipientDeviceId: "device-1",
+      },
+    });
   });
 
   test("getWrappedKey returns epochId in the wrapped key shape", async () => {
     const wrappedKeyCreatedAt = new Date("2026-03-26T12:00:00.000Z");
-    const originalBetterAuthUrl = process.env.BETTER_AUTH_URL;
-    const originalBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
-
-    process.env.BETTER_AUTH_URL = "http://localhost:3000";
-    process.env.BETTER_AUTH_SECRET = "test-secret-000000000000000000000000";
-
-    try {
-      const { caller, wrappedKeyFindFirstMock } = await createCaller({
-        groupFindUniqueMock: createGroupFindUniqueMock(true),
-        wrappedKeyFindFirstMock: createWrappedKeyFindFirstMock({
-          algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
-          createdAt: wrappedKeyCreatedAt,
-          ephemeralPublicKey: "ephemeral-public-key",
-          groupEpochId: "epoch-1",
-          nonce: "nonce-1",
-          recipientDeviceId: "device-1",
-          wrappedKey: "wrapped-key-1",
-        }),
-      });
-
-      const result = await caller.groupEpoch.getWrappedKey({
-        deviceId: "device-1",
-        epochId: "epoch-1",
-        groupId: "group-1",
-      });
-
-      expect(wrappedKeyFindFirstMock).toHaveBeenCalledWith({
-        select: {
-          algorithm: true,
-          createdAt: true,
-          ephemeralPublicKey: true,
-          groupEpochId: true,
-          nonce: true,
-          recipientDeviceId: true,
-          wrappedKey: true,
-        },
-        where: {
-          groupEpoch: {
-            groupId: "group-1",
-          },
-          groupEpochId: "epoch-1",
-          recipientDevice: {
-            userId: "user-1",
-          },
-          recipientDeviceId: "device-1",
-        },
-      });
-      expect(result).toEqual({
+    const { caller, wrappedKeyFindFirstMock } = await createCaller({
+      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      wrappedKeyFindFirstMock: createWrappedKeyFindFirstMock({
         algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
         createdAt: wrappedKeyCreatedAt,
         ephemeralPublicKey: "ephemeral-public-key",
-        epochId: "epoch-1",
+        groupEpochId: "epoch-1",
         nonce: "nonce-1",
         recipientDeviceId: "device-1",
         wrappedKey: "wrapped-key-1",
-      });
-    } finally {
-      if (originalBetterAuthUrl === undefined) {
-        delete process.env.BETTER_AUTH_URL;
-      } else {
-        process.env.BETTER_AUTH_URL = originalBetterAuthUrl;
-      }
+      }),
+    });
 
-      if (originalBetterAuthSecret === undefined) {
-        delete process.env.BETTER_AUTH_SECRET;
-      } else {
-        process.env.BETTER_AUTH_SECRET = originalBetterAuthSecret;
-      }
-    }
+    const result = await caller.groupEpoch.getWrappedKey({
+      deviceId: "device-1",
+      epochId: "epoch-1",
+      groupId: "group-1",
+    });
+
+    expect(wrappedKeyFindFirstMock).toHaveBeenCalledWith({
+      select: {
+        algorithm: true,
+        createdAt: true,
+        ephemeralPublicKey: true,
+        groupEpochId: true,
+        nonce: true,
+        recipientDeviceId: true,
+        wrappedKey: true,
+      },
+      where: {
+        groupEpoch: {
+          groupId: "group-1",
+        },
+        groupEpochId: "epoch-1",
+        recipientDevice: {
+          userId: "user-1",
+        },
+        recipientDeviceId: "device-1",
+      },
+    });
+    expect(result).toEqual({
+      algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+      createdAt: wrappedKeyCreatedAt,
+      ephemeralPublicKey: "ephemeral-public-key",
+      epochId: "epoch-1",
+      nonce: "nonce-1",
+      recipientDeviceId: "device-1",
+      wrappedKey: "wrapped-key-1",
+    });
   });
 });
