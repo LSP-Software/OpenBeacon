@@ -1,6 +1,7 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { type LucideIcon, MapIcon, UserIcon, UsersIcon } from "lucide-react-native";
 import { Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { cn } from "../lib/cn.ts";
 import { Button } from "./ui/Button.tsx";
 import { Icon } from "./ui/Icon.tsx";
@@ -11,7 +12,7 @@ const TABS: Record<string, { label: string; icon: LucideIcon; prefix: string }> 
   "account/overview": { label: "Account", icon: UserIcon, prefix: "account/" },
 };
 
-export function TabBar({ state, navigation }: BottomTabBarProps) {
+const TabBar = ({ state, navigation }: BottomTabBarProps) => {
   const currentRouteName = state.routes[state.index]?.name ?? "";
 
   const handleTabPress = (key: string, name: string) => {
@@ -26,8 +27,8 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
   };
 
   return (
-    <View className="absolute bottom-0 bg-white w-full">
-      <View className="flex-row justify-between items-center p-4 border-t border-border">
+    <SafeAreaView edges={["bottom"]} className="absolute bottom-0 left-0 right-0 bg-background">
+      <View className="flex-row items-center justify-between border-t border-border px-4 py-4">
         {state.routes.map((route) => {
           const tab = TABS[route.name];
           if (!tab) return null;
@@ -46,18 +47,21 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
           );
         })}
       </View>
-    </View>
+    </SafeAreaView>
   );
-}
+};
 
-interface TabLinkProps {
+const TabLink = ({
+  label,
+  icon,
+  onPress,
+  isActive,
+}: {
   label: string;
   icon: LucideIcon;
   onPress: () => void;
   isActive: boolean;
-}
-
-const TabLink = ({ label, icon, onPress, isActive }: TabLinkProps) => {
+}) => {
   return (
     <Button
       variant={"link"}
@@ -69,3 +73,5 @@ const TabLink = ({ label, icon, onPress, isActive }: TabLinkProps) => {
     </Button>
   );
 };
+
+export { TabBar };
