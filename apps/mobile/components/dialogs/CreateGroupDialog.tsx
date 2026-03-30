@@ -8,11 +8,17 @@ import type z from "zod";
 import { trpc } from "../../lib/api.ts";
 import { buildCreateGroupInput } from "../../lib/groupEncryption.ts";
 import { useSingleFlight } from "../../lib/useSingleFlight.ts";
-import { Button } from "../ui/Button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/Dialog";
-import { Icon } from "../ui/Icon";
-import { Input } from "../ui/Input";
-import { Text } from "../ui/Text";
+import { Button } from "../ui/Button.tsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/Dialog.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { Input } from "../ui/Input.tsx";
+import { Text } from "../ui/Text.tsx";
 
 interface CreateGroupDialogProps {
   open: boolean;

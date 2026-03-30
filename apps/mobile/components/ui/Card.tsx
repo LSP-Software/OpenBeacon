@@ -1,6 +1,6 @@
 import { View, type ViewProps } from "react-native";
-import { cn } from "../../lib/cn";
-import { Text, TextClassContext } from "./Text";
+import { cn } from "../../lib/cn.ts";
+import { Text, TextClassContext } from "./Text.tsx";
 
 function Card({ className, ...props }: ViewProps & React.RefAttributes<View>) {
   return (

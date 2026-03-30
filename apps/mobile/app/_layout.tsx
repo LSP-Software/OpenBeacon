@@ -3,9 +3,9 @@ import "../global.css";
 import { PortalHost } from "@rn-primitives/portal";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
-import { queryClient } from "../lib/api";
+import { queryClient } from "../lib/api.ts";
 import { LocationPermissionProvider } from "../providers/LocationPermissionProvider.tsx";
-import { ThemeProvider } from "../providers/ThemeProvider";
+import { ThemeProvider } from "../providers/ThemeProvider.tsx";
 
 export default function RootLayout() {
   return (

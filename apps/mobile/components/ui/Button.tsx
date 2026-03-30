@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { ActivityIndicator, Platform, Pressable } from "react-native";
-import { cn } from "../../lib/cn";
-import { TextClassContext } from "./Text";
+import { cn } from "../../lib/cn.ts";
+import { TextClassContext } from "./Text.tsx";
 
 const buttonVariants = cva(
   cn(

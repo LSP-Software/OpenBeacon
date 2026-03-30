@@ -10,14 +10,14 @@ import {
 } from "lucide-react-native";
 import { useState } from "react";
 import { View } from "react-native";
-import { InviteMemberToGroupDialog } from "../../../../components/dialogs/InviteMemberToGroupDialog";
-import { LoadingIndicator } from "../../../../components/LoadingIndicator";
-import { Avatar, AvatarFallback, AvatarImage } from "../../../../components/ui/Avatar";
-import { Button } from "../../../../components/ui/Button";
-import { Icon } from "../../../../components/ui/Icon";
-import { Text } from "../../../../components/ui/Text";
-import { type RouterOutputs, trpc } from "../../../../lib/api";
-import { timeSince } from "../../../../lib/timeSince";
+import { InviteMemberToGroupDialog } from "../../../../components/dialogs/InviteMemberToGroupDialog.tsx";
+import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
+import { Avatar, AvatarFallback, AvatarImage } from "../../../../components/ui/Avatar.tsx";
+import { Button } from "../../../../components/ui/Button.tsx";
+import { Icon } from "../../../../components/ui/Icon.tsx";
+import { Text } from "../../../../components/ui/Text.tsx";
+import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
+import { timeSince } from "../../../../lib/timeSince.ts";
 
 interface MembersTabProps {
   groupId: string;

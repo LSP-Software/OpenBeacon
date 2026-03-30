@@ -1,8 +1,8 @@
 import * as React from "react";
 import { View } from "react-native";
-import { cn } from "../../lib/cn";
-import { Label } from "./Label";
-import { Text } from "./Text";
+import { cn } from "../../lib/cn.ts";
+import { Label } from "./Label.tsx";
+import { Text } from "./Text.tsx";
 
 type FieldOrientation = "vertical" | "horizontal";
 

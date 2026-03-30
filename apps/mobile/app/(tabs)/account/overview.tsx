@@ -5,12 +5,12 @@ import { ChevronRightIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ProfileImage } from "../../../components/image/ProfileImage";
-import { Button } from "../../../components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/Card";
+import { ProfileImage } from "../../../components/image/ProfileImage.tsx";
+import { Button } from "../../../components/ui/Button.tsx";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/Card.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
-import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client";
-import { getLocationPermissionWarningTitle } from "../../../lib/locationPermissions";
+import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client.ts";
+import { getLocationPermissionWarningTitle } from "../../../lib/locationPermissions.ts";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
 
 type SettingRowProps = {
