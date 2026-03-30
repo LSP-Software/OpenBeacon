@@ -32,9 +32,21 @@ export const wrappedEpochKeySchema = z.object({
   wrappedKey: z.string().min(1),
 });
 
-export const groupEpochBundleSchema = z.object({
-  createdByDeviceId: z.string().min(1),
-  epochId: z.string().min(1),
-  epochNumber: z.number().int().positive(),
-  recipientKeys: z.array(wrappedEpochKeySchema).min(1),
-});
+export const groupEpochBundleSchema = z
+  .object({
+    createdByDeviceId: z.string().min(1),
+    epochId: z.string().min(1),
+    epochNumber: z.number().int().positive(),
+    recipientKeys: z.array(wrappedEpochKeySchema).min(1),
+  })
+  .superRefine(({ epochId, recipientKeys }, ctx) => {
+    recipientKeys.forEach((recipient, index) => {
+      if (recipient.epochId !== epochId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Recipient key epochId must match bundle epochId.",
+          path: ["recipientKeys", index, "epochId"],
+        });
+      }
+    });
+  });

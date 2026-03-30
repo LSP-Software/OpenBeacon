@@ -67,9 +67,7 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
   const acceptInviteSubmission = useSingleFlight<string>();
 
   const handleAcceptInvite = async (inviteId: string) => {
-    if (declineInviteMutation.isPending) {
-      return;
-    }
+    if (declineInviteMutation.isPending) return;
 
     await acceptInviteSubmission.run(inviteId, async () => {
       const result = await tryCatch(

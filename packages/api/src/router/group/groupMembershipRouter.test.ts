@@ -60,6 +60,30 @@ describe("group membership removal guard", () => {
     expect(sqlQuery?.values).toContain(GroupRole.OWNER);
   });
 
+  test("uses current Prisma table and column names", async () => {
+    const { removeGroupMemberWithOwnerGuard } = await importGroupMemberRemovalModule();
+    let sqlQuery: Prisma.Sql | undefined;
+
+    await expect(
+      removeGroupMemberWithOwnerGuard({
+        db: {
+          $queryRaw: async (query) => {
+            sqlQuery = query;
+            return [{ deleted: true, memberExists: true }];
+          },
+        },
+        groupId: "group-1",
+        memberId: "member-1",
+      }),
+    ).resolves.toBeUndefined();
+
+    const queryText = sqlQuery?.strings.join("");
+    expect(queryText).toContain('FROM "GroupMember" AS member');
+    expect(queryText).toContain('WHERE member."groupId" = ');
+    expect(queryText).not.toContain('"group_members"');
+    expect(queryText).not.toContain('"group_id"');
+  });
+
   test("rejects removing a missing member", async () => {
     const { removeGroupMemberWithOwnerGuard } = await importGroupMemberRemovalModule();
     const queryRaw = mock(async () => [{ deleted: false, memberExists: false }]);

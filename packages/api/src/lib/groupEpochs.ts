@@ -71,40 +71,6 @@ const mapRecipientPublicKeys = (devices: DeviceRecord[]) =>
     }),
   );
 
-export const listActiveGroupRecipientPublicKeys = async ({
-  db,
-  groupId,
-}: {
-  db: UserDeviceDb;
-  groupId: string;
-}): Promise<RecipientPublicKeyMaterial[]> => {
-  const devices = await db.userDevice.findMany({
-    orderBy: {
-      id: "asc",
-    },
-    select: {
-      createdAt: true,
-      id: true,
-      publicKey: true,
-      publicKeyAlgorithm: true,
-      revokedAt: true,
-      userId: true,
-    },
-    where: {
-      revokedAt: null,
-      user: {
-        groupMembers: {
-          some: {
-            groupId,
-          },
-        },
-      },
-    },
-  });
-
-  return mapRecipientPublicKeys(devices);
-};
-
 export const listUserRecipientPublicKeys = async ({
   db,
   userId,
