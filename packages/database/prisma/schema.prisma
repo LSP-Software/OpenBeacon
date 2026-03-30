@@ -20,6 +20,7 @@ model User {
   pendingUploads PendingUpload[]
 
   groupMembers               GroupMember[]
+  devices                    UserDevice[]
   sentGroupMemberInvites     GroupMemberInvite[] @relation("GroupMemberInviteInviter")
   receivedGroupMemberInvites GroupMemberInvite[] @relation("GroupMemberInviteRecipient")
 }
@@ -81,6 +82,7 @@ model Group {
 
   groupMembers GroupMember[]
   groupInvites GroupMemberInvite[]
+  groupEpochs  GroupEpoch[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -132,6 +134,50 @@ model GroupMember {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, groupId])
+}
+
+model UserDevice {
+  id                 String                   @id
+  userId             String
+  user               User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publicKey          String
+  publicKeyAlgorithm String
+  createdAt          DateTime                 @default(now())
+  lastSeenAt         DateTime                 @default(now())
+  revokedAt          DateTime?
+  createdGroupEpochs GroupEpoch[]             @relation("GroupEpochCreatedByDevice")
+  recipientEpochKeys GroupEpochRecipientKey[] @relation("GroupEpochRecipientDevice")
+
+  @@index([userId])
+}
+
+model GroupEpoch {
+  id                String                   @id
+  groupId           String
+  group             Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  epochNumber       Int
+  createdByDeviceId String
+  createdByDevice   UserDevice               @relation("GroupEpochCreatedByDevice", fields: [createdByDeviceId], references: [id], onDelete: Restrict)
+  createdAt         DateTime                 @default(now())
+  recipientKeys     GroupEpochRecipientKey[]
+
+  @@unique([groupId, epochNumber])
+  @@index([groupId, createdAt])
+}
+
+model GroupEpochRecipientKey {
+  id                 String     @id @default(uuid(7))
+  groupEpochId       String
+  groupEpoch         GroupEpoch @relation(fields: [groupEpochId], references: [id], onDelete: Cascade)
+  recipientDeviceId  String
+  recipientDevice    UserDevice @relation("GroupEpochRecipientDevice", fields: [recipientDeviceId], references: [id], onDelete: Restrict)
+  wrappedKey         String
+  ephemeralPublicKey String
+  nonce              String
+  algorithm          String
+  createdAt          DateTime   @default(now())
+
+  @@unique([groupEpochId, recipientDeviceId])
 }
 
 enum GroupRole {

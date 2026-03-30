@@ -12,7 +12,7 @@ import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { trpc } from "../lib/api.ts";
-import { isNativeGoogleSignInConfigured, revokePendingSessionToken } from "../lib/auth.ts";
+import { completeAuthenticatedSessionSetup, isNativeGoogleSignInConfigured } from "../lib/auth.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { performGoogleAuth } from "../lib/googleAuth.ts";
 
@@ -45,7 +45,13 @@ const SignIn = () => {
       return;
     }
 
-    await revokePendingSessionToken();
+    const sessionSetupResult = await completeAuthenticatedSessionSetup();
+    if (sessionSetupResult.error) {
+      Alert.alert("Unable to finish sign in", sessionSetupResult.error.message);
+      setEmailLoading(false);
+      return;
+    }
+
     router.replace("/");
   };
 

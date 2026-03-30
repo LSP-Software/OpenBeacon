@@ -1,11 +1,14 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createGroupSchema } from "@openbeacon/schemas";
+import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CameraIcon } from "lucide-react-native";
 import { useForm } from "react-hook-form";
-import { View } from "react-native";
+import { Alert, View } from "react-native";
 import type z from "zod";
 import { trpc } from "../../lib/api.ts";
+import { buildCreateGroupInput } from "../../lib/groupEncryption.ts";
+import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 import { Button } from "../ui/Button.tsx";
 import {
   Dialog,
@@ -26,6 +29,7 @@ interface CreateGroupDialogProps {
 export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => {
   const queryClient = useQueryClient();
   const createGroupMutation = useMutation(trpc.groupLifecycle.create.mutationOptions());
+  const createGroupSubmission = useSingleFlight<"create-group">();
 
   const form = useForm<z.infer<typeof createGroupSchema>>({
     resolver: zodResolver(createGroupSchema),
@@ -37,19 +41,28 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
   });
 
   const onSubmit = async (data: z.infer<typeof createGroupSchema>) => {
-    await createGroupMutation.mutateAsync(data, {
-      onError: (error) => {
-        console.log("error", error);
-      },
-      onSuccess: (data) => {
-        queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
-          if (!previous) {
-            return [data.newGroup];
-          }
-          return [data.newGroup, ...previous];
-        });
-        closeForm();
-      },
+    await createGroupSubmission.run("create-group", async () => {
+      const result = await tryCatch(
+        (async () => {
+          const createGroupInput = await buildCreateGroupInput({ name: data.name });
+          const createdGroup = await createGroupMutation.mutateAsync(createGroupInput);
+
+          queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
+            if (!previous) {
+              return [createdGroup.newGroup];
+            }
+            return [createdGroup.newGroup, ...previous];
+          });
+          closeForm();
+        })(),
+      );
+
+      if (result.error) {
+        Alert.alert(
+          "Unable to create group",
+          result.error instanceof Error ? result.error.message : "Something went wrong.",
+        );
+      }
     });
   };
 
@@ -89,7 +102,7 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
           <Button
             className="flex-1"
             onPress={form.handleSubmit(onSubmit)}
-            loading={createGroupMutation.isPending}
+            loading={createGroupSubmission.isPending || createGroupMutation.isPending}
           >
             <Text>Create Group</Text>
           </Button>

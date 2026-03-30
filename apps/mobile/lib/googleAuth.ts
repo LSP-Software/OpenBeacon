@@ -1,4 +1,4 @@
-import { revokePendingSessionToken, signInWithGoogle } from "./auth.ts";
+import { completeAuthenticatedSessionSetup, signInWithGoogle } from "./auth.ts";
 
 export const performGoogleAuth = async ({
   setLoading,
@@ -21,6 +21,12 @@ export const performGoogleAuth = async ({
     return;
   }
 
-  await revokePendingSessionToken();
+  const sessionSetupResult = await completeAuthenticatedSessionSetup();
+  if (sessionSetupResult.error) {
+    alert(failureTitle, sessionSetupResult.error.message);
+    setLoading(false);
+    return;
+  }
+
   await onSuccess();
 };

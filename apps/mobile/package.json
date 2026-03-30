@@ -3,7 +3,7 @@
   "license": "SEE LICENSE IN LICENSE.md",
   "version": "1.0.0",
   "private": true,
-  "main": "expo-router/entry",
+  "main": "index.ts",
   "scripts": {
     "start": "expo start",
     "dev": "expo start --android --ios",
@@ -14,13 +14,14 @@
     "test": "bun test --pass-with-no-tests",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "ci": "bun run typecheck && biome check . && bun run check"
+    "ci": "bun run typecheck && bun run check && bun run test"
   },
   "dependencies": {
     "@better-auth/expo": "^1.5.4",
     "@hookform/resolvers": "^5.2.2",
     "@maplibre/maplibre-react-native": "^10.4.2",
     "@openbeacon/api": "workspace:*",
+    "@openbeacon/encryption": "workspace:*",
     "@openbeacon/schemas": "workspace:*",
     "@openbeacon/shared": "workspace:*",
     "@protomaps/basemaps": "^5.7.2",

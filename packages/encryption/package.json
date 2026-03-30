@@ -1,5 +1,6 @@
 {
-  "name": "@openbeacon/schemas",
+  "name": "@openbeacon/encryption",
+  "license": "SEE LICENSE IN LICENSE.md",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,11 +11,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "test": "bun test --pass-with-no-tests"
+    "test": "bun test"
   },
   "dependencies": {
-    "@openbeacon/encryption": "workspace:*",
-    "zod": "^4.3.6",
-    "@openbeacon/database": "workspace:*"
+    "@noble/ciphers": "^2.1.1",
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1"
   }
 }

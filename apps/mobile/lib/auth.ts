@@ -7,6 +7,7 @@ import {
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "./auth-client.ts";
+import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 
 const GOOGLE_WEB_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID";
 const GOOGLE_IOS_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID";
@@ -38,12 +39,12 @@ export const isNativeGoogleSignInConfigured = isNativeGoogleSignInConfiguredForP
 
 let googleSignInConfigured = false;
 
-const getErrorMessage = (error: unknown) => {
+const getErrorMessage = (error: unknown, fallbackMessage: string) => {
   if (error instanceof Error && error.message) {
     return error.message;
   }
 
-  return "Unable to sign in with Google.";
+  return fallbackMessage;
 };
 
 const configureGoogleSignIn = () => {
@@ -88,6 +89,25 @@ export const revokePendingSessionToken = async () => {
   await tryCatch(SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY));
 };
 
+export const completeAuthenticatedSessionSetup = async () => {
+  await revokePendingSessionToken();
+
+  const { error, data } = await tryCatch(ensureDeviceKeyRegistration());
+  if (error) {
+    return {
+      data: null,
+      error: {
+        message: getErrorMessage(error, "Unable to register this device."),
+      },
+    };
+  }
+
+  return {
+    data,
+    error: null,
+  };
+};
+
 export const signInWithGoogle = async () => {
   if (!isNativeGoogleSignInConfigured) {
     return {
@@ -104,7 +124,7 @@ export const signInWithGoogle = async () => {
     if (playServicesResult.error) {
       return {
         error: {
-          message: getErrorMessage(playServicesResult.error),
+          message: getErrorMessage(playServicesResult.error, "Unable to sign in with Google."),
         },
       };
     }
@@ -114,7 +134,7 @@ export const signInWithGoogle = async () => {
   if (googleSignInResult.error) {
     return {
       error: {
-        message: getErrorMessage(googleSignInResult.error),
+        message: getErrorMessage(googleSignInResult.error, "Unable to sign in with Google."),
       },
     };
   }

@@ -33,7 +33,16 @@ const socialSignInMock = mock(
     },
   }),
 );
+const ensureDeviceKeyRegistrationMock = mock(async () => ({
+  algorithm: "x25519-xsalsa20-poly1305",
+  deviceId: "device-a",
+  privateKey: {
+    expose: () => new Uint8Array([]),
+  },
+  publicKey: "public-key",
+}));
 const deleteItemAsyncMock = mock(async () => {});
+const setItemAsyncMock = mock(async () => {});
 const revokeSessionMock = mock(async () => ({
   error: null,
 }));
@@ -71,6 +80,7 @@ mock.module("@react-native-google-signin/google-signin", () => ({
 }));
 
 mock.module("expo-secure-store", () => ({
+  setItemAsync: setItemAsyncMock,
   getItemAsync: async () => storedToken,
   deleteItemAsync: deleteItemAsyncMock,
 }));
@@ -97,6 +107,10 @@ mock.module("./auth-client.ts", () => ({
   },
 }));
 
+mock.module("./deviceKeys.ts", () => ({
+  ensureDeviceKeyRegistration: ensureDeviceKeyRegistrationMock,
+}));
+
 const importAuthModule = async () =>
   import(`./auth.ts?test=${Math.random().toString(36).slice(2)}`) as Promise<
     typeof import("./auth.ts")
@@ -113,7 +127,9 @@ describe("auth Google sign-in configuration", () => {
       },
     };
     socialSignInMock.mockClear();
+    ensureDeviceKeyRegistrationMock.mockClear();
     deleteItemAsyncMock.mockClear();
+    setItemAsyncMock.mockClear();
     revokeSessionMock.mockClear();
     delete process.env[GOOGLE_WEB_CLIENT_ID_ENV];
     delete process.env[GOOGLE_IOS_CLIENT_ID_ENV];
@@ -194,5 +210,29 @@ describe("auth Google sign-in configuration", () => {
       token: "pending-session-token",
     });
     expect(deleteItemAsyncMock).not.toHaveBeenCalled();
+  });
+
+  test("completes device setup after authentication", async () => {
+    const { completeAuthenticatedSessionSetup } = await importAuthModule();
+
+    const result = await completeAuthenticatedSessionSetup();
+
+    expect(result.error).toBeNull();
+    expect(ensureDeviceKeyRegistrationMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("returns a readable error when device setup fails", async () => {
+    ensureDeviceKeyRegistrationMock.mockImplementationOnce(async () => {
+      throw new Error("device registration failed");
+    });
+
+    const { completeAuthenticatedSessionSetup } = await importAuthModule();
+
+    await expect(completeAuthenticatedSessionSetup()).resolves.toEqual({
+      data: null,
+      error: {
+        message: "device registration failed",
+      },
+    });
   });
 });
