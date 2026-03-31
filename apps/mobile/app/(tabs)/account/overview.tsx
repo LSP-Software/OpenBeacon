@@ -16,7 +16,7 @@ import {
   UserCircleIcon,
 } from "lucide-react-native";
 import { useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EditableImage } from "../../../components/image/EditableImage.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
@@ -57,6 +57,7 @@ const categories = [
       {
         label: "Theme",
         icon: SunIcon,
+        href: "/account/theme",
       },
     ],
   },
@@ -103,7 +104,7 @@ const AccountScreen = () => {
     <View className="flex-1 bg-background">
       <SafeAreaView
         edges={["top"]}
-        className="flex flex-row justify-center py-4 bg-white border-b border-border"
+        className="flex flex-row justify-center border-b border-border bg-background py-4"
       >
         <Text className="text-foreground text-2xl font-bold">Account</Text>
       </SafeAreaView>
@@ -113,10 +114,10 @@ const AccountScreen = () => {
         contentContainerClassName="px-6 gap-4 my-4 pb-32"
         showsVerticalScrollIndicator={false}
       >
-        <View className="bg-white rounded-2xl border border-border overflow-hidden">
+        <View className="overflow-hidden rounded-lg border border-border bg-card">
           <View className="relative">
             <View className="flex flex-row justify-end p-3 bg-primary w-full h-20">
-              <View className="size-8 flex items-center justify-center bg-gray-700/20 rounded-full">
+              <View className="size-8 flex items-center justify-center rounded-full bg-black/15">
                 <Icon as={CameraIcon} className="text-white size-5" />
               </View>
             </View>
@@ -131,14 +132,14 @@ const AccountScreen = () => {
           </View>
           <View className="flex flex-col px-4 pb-4 pt-14">
             <Text className="text-foreground font-semibold text-2xl">{session?.user.name}</Text>
-            <Text className="text-muted text-base">{session?.user.email}</Text>
+            <Text className="text-muted-foreground text-base">{session?.user.email}</Text>
 
             <Separator className="my-4" />
             {/* TODO: Add devices count */}
             <View className="flex flex-row items-center gap-6">
               <View className="flex flex-col items-center">
                 <Text className="text-foreground font-bold text-xl">24</Text>
-                <Text className="text-muted text-base font-medium">Groups</Text>
+                <Text className="text-muted-foreground text-base font-medium">Groups</Text>
               </View>
 
               <Separator className="my-4" orientation="vertical" />
@@ -146,14 +147,14 @@ const AccountScreen = () => {
               {/* TODO: Add devices count */}
               <View className="flex flex-col items-center">
                 <Text className="text-foreground font-bold text-xl">4</Text>
-                <Text className="text-muted text-base font-medium">Devices</Text>
+                <Text className="text-muted-foreground text-base font-medium">Devices</Text>
               </View>
 
               <Separator className="my-4" orientation="vertical" />
 
               <View className="flex flex-row justify-end items-center gap-2">
                 <Icon as={MapPinCheckIcon} className="text-primary size-5" />
-                <Text className="text-muted text-sm">London, UK</Text>
+                <Text className="text-muted-foreground text-sm">London, UK</Text>
               </View>
             </View>
           </View>
@@ -186,24 +187,36 @@ const AccountScreen = () => {
         {categories.map((category) => {
           return (
             <View key={category.label}>
-              <Text className="font-medium text-muted text-lg mb-1">{category.label}</Text>
-              <View className="bg-white p-4 rounded-2xl border border-border flex flex-col gap-3">
+              <Text className="mb-1 text-lg font-medium text-muted-foreground">
+                {category.label}
+              </Text>
+              <View className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
                 {category.settings.map((setting, settingIndex) => {
                   const isLastSetting = settingIndex === category.settings.length - 1;
 
                   return (
-                    <View
+                    <Pressable
                       key={setting.label}
+                      disabled={!("href" in setting)}
                       className={`flex flex-row items-center justify-between ${
                         isLastSetting ? "" : "border-b-[0.5px] border-border/30 pb-3"
                       }`}
+                      onPress={() => {
+                        if (!("href" in setting)) {
+                          return;
+                        }
+
+                        router.push(setting.href);
+                      }}
                     >
                       <View className="flex flex-row items-center gap-3">
-                        <Icon as={setting.icon} className="text-muted size-6" />
+                        <Icon as={setting.icon} className="text-muted-foreground size-6" />
                         <Text className="text-foreground font-medium">{setting.label}</Text>
                       </View>
-                      <Icon as={ChevronRightIcon} className="text-muted size-6" />
-                    </View>
+                      {"href" in setting ? (
+                        <Icon as={ChevronRightIcon} className="text-muted-foreground size-6" />
+                      ) : null}
+                    </Pressable>
                   );
                 })}
               </View>

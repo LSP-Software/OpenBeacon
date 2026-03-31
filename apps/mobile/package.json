@@ -11,7 +11,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "bun test --pass-with-no-tests",
+    "test": "bun test",
     "check": "biome check .",
     "check:fix": "biome check --write .",
     "ci": "bun run typecheck && bun run check && bun run test"

@@ -4,7 +4,6 @@ import {
   BatteryFullIcon,
   BatteryLowIcon,
   BatteryMediumIcon,
-  ChevronRightIcon,
   MapPinIcon,
   PlusCircleIcon,
 } from "lucide-react-native";
@@ -19,11 +18,7 @@ import { Text } from "../../../../components/ui/Text.tsx";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
 
-interface MembersTabProps {
-  groupId: string;
-}
-
-export default function MembersTab({ groupId }: MembersTabProps) {
+const MembersTab = ({ groupId }: { groupId: string }) => {
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const { data: members, isFetching: isFetchingMembers } = useQuery(
     trpc.groupMembership.members.queryOptions({ groupId }),
@@ -34,43 +29,41 @@ export default function MembersTab({ groupId }: MembersTabProps) {
   }
 
   return (
-    <View className="gap-4">
+    <View className="gap-4 pt-1">
       <InviteMemberToGroupDialog
         open={addMemberDialogOpen}
         setOpen={setAddMemberDialogOpen}
         groupId={groupId}
       />
-      <View className="gap-4">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-muted font-semibold text-lg">Group Members</Text>
-          <Text className="text-foreground text-sm">{members?.length ?? 0} members</Text>
-        </View>
-        <Button size="sm" onPress={() => setAddMemberDialogOpen(true)}>
-          <Icon as={PlusCircleIcon} size={20} className="text-white" />
-          <Text>Invite member</Text>
-        </Button>
+      <View className="flex-row items-center justify-between px-1">
+        <Text className="text-lg font-semibold text-foreground">Members</Text>
+        <Text className="text-sm text-muted-foreground">{members?.length ?? 0}</Text>
       </View>
       {members?.map((member) => (
         <View key={member.id}>
           <MemberCard member={member} />
         </View>
       ))}
+      <Button size="sm" onPress={() => setAddMemberDialogOpen(true)} className="self-start">
+        <Icon as={PlusCircleIcon} size={20} className="text-white" />
+        <Text>Invite member</Text>
+      </Button>
     </View>
   );
-}
+};
 
-interface MemberCardProps {
+const MemberCard = ({
+  member,
+}: {
   member: RouterOutputs["groupMembership"]["members"][number];
-}
-
-const MemberCard = ({ member }: MemberCardProps) => {
+}) => {
   const { icon: BatteryIcon, colorClass } = getBatteryVisual({
     batteryLevel: member.batteryLevel,
     charging: member.battery.charging,
   });
 
   return (
-    <View className="bg-card p-4 rounded-lg border border-border">
+    <View className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-4">
       <View className="flex flex-row items-center gap-3">
         <View className="flex-row items-center gap-3">
           <Avatar alt={member.user.name} className="size-12">
@@ -82,18 +75,15 @@ const MemberCard = ({ member }: MemberCardProps) => {
             </AvatarFallback>
           </Avatar>
         </View>
-        <View className="gap-1 flex-1">
-          <View className="flex-row items-center justify-between">
-            <Text className="text-foreground font-bold text-xl">{member.user.name}</Text>
-            <Icon as={ChevronRightIcon} className="text-muted" />
-          </View>
+        <View className="flex-1 gap-1">
+          <Text className="text-foreground text-xl font-bold">{member.user.name}</Text>
           <View className="flex-row items-start gap-1">
-            <Icon as={MapPinIcon} className="text-secondary size-4 mt-1" />
+            <Icon as={MapPinIcon} className="text-secondary mt-1 size-4" />
             <View className="flex-col items-start">
-              <Text className="text-muted text-md">
+              <Text className="text-md text-muted">
                 <Text className="font-semibold">Current Location:</Text> {member.lastLocation.place}
               </Text>
-              <Text className="text-muted text-sm">
+              <Text className="text-sm text-muted">
                 Location updated {timeSince(member.lastLocation.timestamp)}
               </Text>
             </View>
@@ -129,3 +119,5 @@ const getBatteryVisual = ({
 
   return { icon: BatteryFullIcon, colorClass: "text-green-500" };
 };
+
+export default MembersTab;
