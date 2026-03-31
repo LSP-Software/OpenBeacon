@@ -190,4 +190,13 @@ describe("locationPermissions", () => {
       "Enable precise and background location so your family can see your exact location even when the app is closed.",
     );
   });
+
+  test("formats a combined foreground and background warning", () => {
+    expect(getLocationPermissionWarningTitle({ missing: ["foreground", "background"] })).toBe(
+      "Location access and Background location are off",
+    );
+    expect(getLocationPermissionWarningDescription({ missing: ["foreground", "background"] })).toBe(
+      "Enable location access to continue using the app and share your location with your family.",
+    );
+  });
 });
