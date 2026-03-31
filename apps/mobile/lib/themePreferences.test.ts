@@ -76,6 +76,7 @@ describe("theme preferences", () => {
     expect(resolveThemePreference("system", "dark")).toBe("dark");
     expect(resolveThemePreference("system", "light")).toBe("light");
     expect(resolveThemePreference("system", undefined)).toBe("light");
+    expect(resolveThemePreference("system", null)).toBe("light");
     expect(resolveThemePreference("dark", "light")).toBe("dark");
     expect(resolveThemePreference("light", "dark")).toBe("light");
   });
