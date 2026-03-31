@@ -5,8 +5,8 @@ import { Platform, StyleSheet, View } from "react-native";
 import { FadeIn, FadeOut } from "react-native-reanimated";
 import { FullWindowOverlay as RNFullWindowOverlay } from "react-native-screens";
 import { cn } from "../../lib/cn.ts";
+import { AnimatedView } from "./AnimatedView.tsx";
 import { Icon } from "./Icon.tsx";
-import { AnimatedView } from "./NativeOnlyAnimatedView.tsx";
 import { TextClassContext } from "./Text.tsx";
 
 type Option = SelectPrimitive.Option;

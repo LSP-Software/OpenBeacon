@@ -1,11 +1,12 @@
 import * as DialogPrimitive from "@rn-primitives/dialog";
 import { X } from "lucide-react-native";
-import type * as React from "react";
-import { Text, View, type ViewProps } from "react-native";
+import * as React from "react";
+import { Platform, Text, View, type ViewProps } from "react-native";
 import { FadeIn, FadeOut } from "react-native-reanimated";
+import { FullWindowOverlay as RNFullWindowOverlay } from "react-native-screens";
 import { cn } from "../../lib/cn.ts";
+import { AnimatedView } from "./AnimatedView.tsx";
 import { Icon } from "./Icon.tsx";
-import { AnimatedView } from "./NativeOnlyAnimatedView.tsx";
 
 const Dialog = DialogPrimitive.Root;
 
@@ -14,6 +15,8 @@ const DialogTrigger = DialogPrimitive.Trigger;
 const DialogPortal = DialogPrimitive.Portal;
 
 const DialogClose = DialogPrimitive.Close;
+
+const FullWindowOverlay = Platform.OS === "ios" ? RNFullWindowOverlay : React.Fragment;
 
 const DialogOverlay = ({
   className,
@@ -24,18 +27,20 @@ const DialogOverlay = ({
     children?: React.ReactNode;
   }) => {
   return (
-    <DialogPrimitive.Overlay
-      className={cn(
-        "absolute bottom-0 left-0 right-0 top-0 flex items-center justify-center bg-black/50 p-2",
-        className,
-      )}
-      {...props}
-      asChild
-    >
-      <AnimatedView entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
-        {children}
-      </AnimatedView>
-    </DialogPrimitive.Overlay>
+    <FullWindowOverlay>
+      <DialogPrimitive.Overlay
+        className={cn(
+          "absolute bottom-0 left-0 right-0 top-0 flex items-center justify-center bg-black/50 p-2",
+          className,
+        )}
+        {...props}
+        asChild
+      >
+        <AnimatedView entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
+          {children}
+        </AnimatedView>
+      </DialogPrimitive.Overlay>
+    </FullWindowOverlay>
   );
 };
 
