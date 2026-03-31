@@ -9,12 +9,24 @@ import type { GroupListItem } from "../../types/GroupListItem.ts";
 
 export const groupLifecycleRouter = {
   delete: groupOwnerProcedure
+    .meta({
+      rateLimit: {
+        limit: 5,
+        windowMs: 60_000,
+      },
+    })
     .input(z.object({ groupId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.group.delete({ where: { id: input.groupId } });
       return { message: "Group deleted successfully" };
     }),
   create: protectedProcedure
+    .meta({
+      rateLimit: {
+        limit: 10,
+        windowMs: 60_000,
+      },
+    })
     .input(
       createGroupSchema.extend({
         groupId: z.string().min(1),

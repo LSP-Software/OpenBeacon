@@ -102,24 +102,32 @@ export const groupMembershipRouter = {
 
       return membersWithMockData;
     }),
-  remove: groupAdminProcedure.input(removeGroupMemberSchema).mutation(async ({ ctx, input }) => {
-    return ctx.db.$transaction(async (tx) => {
-      await removeGroupMemberWithOwnerGuard({
-        db: tx,
-        groupId: input.groupId,
-        memberId: input.memberId,
-      });
+  remove: groupAdminProcedure
+    .meta({
+      rateLimit: {
+        limit: 10,
+        windowMs: 60_000,
+      },
+    })
+    .input(removeGroupMemberSchema)
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.$transaction(async (tx) => {
+        await removeGroupMemberWithOwnerGuard({
+          db: tx,
+          groupId: input.groupId,
+          memberId: input.memberId,
+        });
 
-      await persistGroupEpoch({
-        db: tx,
-        epoch: input.nextEpoch,
-        groupId: input.groupId,
-        userId: ctx.session.user.id,
-      });
+        await persistGroupEpoch({
+          db: tx,
+          epoch: input.nextEpoch,
+          groupId: input.groupId,
+          userId: ctx.session.user.id,
+        });
 
-      return {
-        message: "Group member removed.",
-      };
-    });
-  }),
+        return {
+          message: "Group member removed.",
+        };
+      });
+    }),
 } satisfies TRPCRouterRecord;

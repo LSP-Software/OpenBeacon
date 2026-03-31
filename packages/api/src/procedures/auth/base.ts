@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { rateLimitMiddleware } from "../../middlewares/rateLimitMiddleware.ts";
 import { timingMiddleware } from "../../middlewares/timingMiddleware.ts";
 import { t } from "../../trpc.ts";
 
@@ -9,7 +10,7 @@ import { t } from "../../trpc.ts";
  * tRPC API. It does not guarantee that a user querying is authorized, but you
  * can still access user session data if they are logged in
  */
-export const publicProcedure = t.procedure.use(timingMiddleware);
+export const publicProcedure = t.procedure.use(rateLimitMiddleware).use(timingMiddleware);
 
 /**
  * Protected (authenticated) procedure
@@ -19,15 +20,17 @@ export const publicProcedure = t.procedure.use(timingMiddleware);
  *
  * @see https://trpc.io/docs/procedures
  */
-export const protectedProcedure = t.procedure.use(timingMiddleware).use(({ ctx, next }) => {
-  if (!ctx.session?.user) {
-    throw new TRPCError({ code: "UNAUTHORIZED" });
-  }
+export const protectedProcedure = t.procedure
+  .use(({ ctx, next }) => {
+    if (!ctx.session?.user) {
+      throw new TRPCError({ code: "UNAUTHORIZED" });
+    }
 
-  return next({
-    ctx: {
-      // infers the `session` as non-nullable
-      session: { ...ctx.session, user: ctx.session.user },
-    },
-  });
-});
+    return next({
+      ctx: {
+        session: { ...ctx.session, user: ctx.session.user },
+      },
+    });
+  })
+  .use(rateLimitMiddleware)
+  .use(timingMiddleware);

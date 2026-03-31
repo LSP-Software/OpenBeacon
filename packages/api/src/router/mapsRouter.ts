@@ -4,16 +4,23 @@ import { protectedProcedure } from "../procedures/auth/base.ts";
 import { createSignedPmtilesUrl } from "../r2.ts";
 
 export const mapsRouter = {
-  getSignedPmtilesUrl: protectedProcedure.query(async ({ ctx }) => {
-    const signedUrl: {
-      url: string;
-      expiresAt: string;
-    } = await createSignedPmtilesUrl();
+  getSignedPmtilesUrl: protectedProcedure
+    .meta({
+      rateLimit: {
+        limit: 20,
+        windowMs: 60_000,
+      },
+    })
+    .query(async ({ ctx }) => {
+      const signedUrl: {
+        url: string;
+        expiresAt: string;
+      } = await createSignedPmtilesUrl();
 
-    console.info(
-      `[maps.getSignedPmtilesUrl] userId=${ctx.session.user.id} key=${env.R2_PM_TILES_KEY} expiresAt=${signedUrl.expiresAt}`,
-    );
+      console.info(
+        `[maps.getSignedPmtilesUrl] userId=${ctx.session.user.id} key=${env.R2_PM_TILES_KEY} expiresAt=${signedUrl.expiresAt}`,
+      );
 
-    return signedUrl;
-  }),
+      return signedUrl;
+    }),
 } satisfies TRPCRouterRecord;

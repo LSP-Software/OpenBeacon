@@ -12,6 +12,12 @@ import { groupAdminProcedure } from "../../procedures/auth/group.ts";
 
 export const groupSettingsRouter = {
   requestGroupImageUpload: groupAdminProcedure
+    .meta({
+      rateLimit: {
+        limit: 10,
+        windowMs: 60_000,
+      },
+    })
     .input(
       requestImageUploadInputSchema({ maxImageFileSize: env.MAX_IMAGE_FILE_SIZE }).extend({
         groupId: z.string(),
@@ -43,6 +49,12 @@ export const groupSettingsRouter = {
       return { presignedUrl };
     }),
   confirmGroupImageUpload: groupAdminProcedure
+    .meta({
+      rateLimit: {
+        limit: 20,
+        windowMs: 60_000,
+      },
+    })
     .input(z.object({ groupId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;

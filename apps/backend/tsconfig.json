@@ -5,6 +5,7 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "types": ["node", "bun"],
+    "noEmit": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true
   },

@@ -1,14 +1,12 @@
-// Copyright (c) 2026 LSP SOFTWARE LTD
-// SPDX-License-Identifier: AGPL-3.0-only AND LicenseRef-Commons-Clause
-// See LICENSE.md for full terms.
-
-import type { AuthType } from "@openbeacon/auth";
 import { Hono } from "hono";
+import { cache } from "./cache.ts";
+import { db } from "./db.ts";
 import { env } from "./env.ts";
 import authRouter from "./routes/auth.ts";
 import trpcRouter from "./routes/trpc.ts";
+import type { AppEnv } from "./types/AppEnv.ts";
 
-const app = new Hono<{ Variables: AuthType }>();
+const app = new Hono<AppEnv>();
 
 const routes = [authRouter, trpcRouter] as const;
 
@@ -17,7 +15,18 @@ routes.forEach((route) => {
 });
 
 export default {
-  fetch: app.fetch,
+  fetch(request: Request, server: Bun.Server<unknown>) {
+    const forwardedFor = request.headers.get("x-forwarded-for");
+    const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
+    const requestIp = server.requestIP(request)?.address ?? null;
+    const clientIp =
+      request.headers.get("cf-connecting-ip") ??
+      firstForwardedIp ??
+      request.headers.get("x-real-ip") ??
+      requestIp;
+
+    return app.fetch(request, { cache, clientIp, db });
+  },
   port: env.OPENBEACON_API_PORT,
   hostname: env.OPENBEACON_API_HOSTNAME,
 };

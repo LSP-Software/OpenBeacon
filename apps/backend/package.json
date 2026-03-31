@@ -14,6 +14,7 @@
   "dependencies": {
     "@better-auth/expo": "^1.5.4",
     "@openbeacon/api": "workspace:*",
+    "@openbeacon/cache": "workspace:*",
     "@openbeacon/database": "workspace:*",
     "@openbeacon/shared": "workspace:*",
     "@openbeacon/auth": "workspace:*",

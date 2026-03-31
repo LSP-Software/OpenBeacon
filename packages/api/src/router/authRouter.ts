@@ -14,6 +14,12 @@ export const authRouter = createTRPCRouter({
     userId: ctx.session.user.id,
   })),
   registerDeviceKey: protectedProcedure
+    .meta({
+      rateLimit: {
+        limit: 10,
+        windowMs: 60_000,
+      },
+    })
     .input(registerDeviceKeySchema)
     .mutation(async ({ ctx, input }) =>
       upsertUserDevice({
