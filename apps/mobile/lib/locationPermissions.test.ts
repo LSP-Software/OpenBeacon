@@ -32,9 +32,11 @@ mock.module("expo-location", () => ({
   requestBackgroundPermissionsAsync: async () => backgroundPermission,
 }));
 
-const { getLocationPermissionState }: typeof import("./locationPermissions.ts") = await import(
-  "./locationPermissions.ts"
-);
+const {
+  getLocationPermissionState,
+  getLocationPermissionWarningDescription,
+  getLocationPermissionWarningTitle,
+}: typeof import("./locationPermissions.ts") = await import("./locationPermissions.ts");
 
 const createPermissionResponse = ({
   status,
@@ -148,5 +150,53 @@ describe("locationPermissions", () => {
 
     expect(permissionState.missing).toEqual([]);
     expect(permissionState.canRequestBackgroundInApp).toBe(false);
+  });
+
+  test("formats a precise-only warning", () => {
+    expect(getLocationPermissionWarningTitle({ missing: ["precise"] })).toBe(
+      "Precise location is off",
+    );
+    expect(getLocationPermissionWarningDescription({ missing: ["precise"] })).toBe(
+      "Enable precise location so your family can see your exact location.",
+    );
+  });
+
+  test("formats no warning when nothing is missing", () => {
+    expect(getLocationPermissionWarningTitle({ missing: [] })).toBe("");
+    expect(getLocationPermissionWarningDescription({ missing: [] })).toBe("");
+  });
+
+  test("formats a foreground-only warning", () => {
+    expect(getLocationPermissionWarningTitle({ missing: ["foreground"] })).toBe("Location is off");
+    expect(getLocationPermissionWarningDescription({ missing: ["foreground"] })).toBe(
+      "Enable location so your family can see your location.",
+    );
+  });
+
+  test("formats a background-only warning", () => {
+    expect(getLocationPermissionWarningTitle({ missing: ["background"] })).toBe(
+      "Background location is off",
+    );
+    expect(getLocationPermissionWarningDescription({ missing: ["background"] })).toBe(
+      "Allow background location so sharing keeps working when the app is closed.",
+    );
+  });
+
+  test("formats a combined precise and background warning", () => {
+    expect(getLocationPermissionWarningTitle({ missing: ["precise", "background"] })).toBe(
+      "Precise location and Background location are off",
+    );
+    expect(getLocationPermissionWarningDescription({ missing: ["precise", "background"] })).toBe(
+      "Enable precise and background location so your family can see your exact location even when the app is closed.",
+    );
+  });
+
+  test("formats a combined foreground and background warning", () => {
+    expect(getLocationPermissionWarningTitle({ missing: ["foreground", "background"] })).toBe(
+      "Location access and Background location are off",
+    );
+    expect(getLocationPermissionWarningDescription({ missing: ["foreground", "background"] })).toBe(
+      "Enable location access to continue using the app and share your location with your family.",
+    );
   });
 });
