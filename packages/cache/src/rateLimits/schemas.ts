@@ -41,7 +41,10 @@ export const redisOptionsSchema = z
     maxRetries: z.number().int().nonnegative().optional(),
     enableOfflineQueue: z.boolean().optional(),
     tls: z
-      .union([z.boolean(), z.custom<RedisOptions["tls"]>((value) => typeof value === "object")])
+      .union([
+        z.boolean(),
+        z.custom<RedisOptions["tls"]>((value) => value !== null && typeof value === "object"),
+      ])
       .optional(),
     enableAutoPipelining: z.boolean().optional(),
   })

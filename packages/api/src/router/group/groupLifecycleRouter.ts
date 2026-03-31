@@ -3,8 +3,8 @@ import { createGroupSchema, groupEpochBundleSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { persistGroupEpoch } from "../../lib/groupEpochs.ts";
-import { protectedProcedure } from "../../procedures/auth/base.ts";
 import { groupOwnerProcedure } from "../../procedures/auth/group.ts";
+import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 
 export const groupLifecycleRouter = {

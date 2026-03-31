@@ -12,6 +12,7 @@ export const env = createEnv({
     REDIS_URL: z.url(),
     OPENBEACON_API_PORT: z.coerce.number().min(1).max(65535).default(3000),
     OPENBEACON_API_HOSTNAME: z.ipv4().default("0.0.0.0"),
+    TRUSTED_PROXY_PROVIDER: z.enum(["none", "cloudflare", "trusted-proxy"]).default("none"),
   },
   runtimeEnv: process.env,
 });

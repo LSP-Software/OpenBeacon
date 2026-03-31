@@ -1,77 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { TRPCError } from "@trpc/server";
-
-type BucketState = {
-  expiresAt: number;
-  lastMs: number;
-  tokens: number;
-};
-
-class FakeRedis {
-  private readonly buckets = new Map<string, BucketState>();
-
-  public async send(command: string, args: string[]): Promise<string[]> {
-    if (command !== "EVAL") {
-      throw new Error(`Unsupported command: ${command}`);
-    }
-
-    const [, , key, nowMsValue, limitValue, windowMsValue, costValue, shouldConsumeValue] = args;
-
-    if (!key || !nowMsValue || !limitValue || !windowMsValue || !costValue || !shouldConsumeValue) {
-      throw new Error("Missing EVAL arguments.");
-    }
-
-    const nowMs = Number(nowMsValue);
-    const limit = Number(limitValue);
-    const windowMs = Number(windowMsValue);
-    const cost = Number(costValue);
-    const shouldConsume = shouldConsumeValue === "1";
-    const refillRate = limit / windowMs;
-    const existingBucket = this.buckets.get(key);
-    const activeBucket =
-      existingBucket && existingBucket.expiresAt > nowMs
-        ? existingBucket
-        : { tokens: limit, lastMs: nowMs, expiresAt: nowMs + windowMs };
-    const refilledTokens =
-      nowMs > activeBucket.lastMs
-        ? Math.min(limit, activeBucket.tokens + (nowMs - activeBucket.lastMs) * refillRate)
-        : activeBucket.tokens;
-    const remainingTokens =
-      shouldConsume && refilledTokens >= cost ? refilledTokens - cost : refilledTokens;
-    const allowed = refilledTokens >= cost;
-    const retryAfterMs = allowed ? 0 : Math.ceil((cost - remainingTokens) / refillRate);
-    const resetAfterMs = Math.ceil(Math.max(0, limit - remainingTokens) / refillRate);
-
-    this.buckets.set(key, {
-      tokens: remainingTokens,
-      lastMs: nowMs,
-      expiresAt: nowMs + Math.max(windowMs, resetAfterMs),
-    });
-
-    return [
-      allowed ? "1" : "0",
-      String(limit),
-      String(Math.max(0, Math.floor(remainingTokens))),
-      String(Math.max(0, retryAfterMs)),
-      String(Math.max(0, resetAfterMs)),
-    ];
-  }
-
-  public async del(...keys: string[]): Promise<number> {
-    let deletedKeys = 0;
-
-    keys.forEach((key) => {
-      if (this.buckets.delete(key)) {
-        deletedKeys += 1;
-      }
-    });
-
-    return deletedKeys;
-  }
-
-  public close(): void {}
-}
+import { FakeRedis } from "../../../cache/src/rateLimits/testUtils.ts";
+import { createAuthProcedures } from "../procedures/auth/base.ts";
+import { createTRPCComponents } from "../trpc.ts";
+import { createRateLimitMiddleware } from "./rateLimitMiddleware.ts";
+import { createTimingMiddleware } from "./timingMiddleware.ts";
 
 class TestOpenBeaconCache extends OpenBeaconCache {
   protected override createRedisClient(): FakeRedis {
@@ -83,13 +17,22 @@ let originalBetterAuthUrl: string | undefined;
 let originalBetterAuthSecret: string | undefined;
 let originalNodeEnv: string | undefined;
 
-const createModules = async () => {
-  const cacheBuster = `test=${Math.random().toString(36).slice(2)}`;
+const createModules = () => {
+  const { t, createTRPCRouter } = createTRPCComponents();
+  const rateLimitMiddleware = createRateLimitMiddleware({ t });
+  const timingMiddleware = createTimingMiddleware({ t });
+  const { publicProcedure, protectedProcedure } = createAuthProcedures({
+    t,
+    rateLimitMiddleware,
+    timingMiddleware,
+  });
 
-  return Promise.all([
-    import(`../trpc.ts?${cacheBuster}`),
-    import(`../procedures/auth/base.ts?${cacheBuster}`),
-  ]);
+  return {
+    createTRPCRouter,
+    protectedProcedure,
+    publicProcedure,
+    t,
+  };
 };
 
 const createCaller = <TRouter extends { createCaller: (ctx: unknown) => unknown }>({
@@ -99,13 +42,12 @@ const createCaller = <TRouter extends { createCaller: (ctx: unknown) => unknown 
   userId,
 }: {
   cache: OpenBeaconCache;
-  clientIp: string | null;
+  clientIp?: string;
   router: TRouter;
   userId: string | null;
 }) => {
   return router.createCaller({
     cache,
-    clientIp,
     db: {},
     session: userId
       ? {
@@ -114,6 +56,7 @@ const createCaller = <TRouter extends { createCaller: (ctx: unknown) => unknown 
           },
         }
       : null,
+    ...(clientIp !== undefined ? { clientIp } : {}),
   }) as ReturnType<TRouter["createCaller"]>;
 };
 
@@ -152,7 +95,7 @@ describe("rateLimitMiddleware", () => {
       redisUrl: "redis://localhost:6379",
       now: () => 0,
     });
-    const [{ createTRPCRouter }, { publicProcedure }] = await createModules();
+    const { createTRPCRouter, publicProcedure } = createModules();
     const router = createTRPCRouter({
       publicA: publicProcedure.query(() => "public-a"),
       publicB: publicProcedure.query(() => "public-b"),
@@ -186,7 +129,7 @@ describe("rateLimitMiddleware", () => {
       redisUrl: "redis://localhost:6379",
       now: () => 0,
     });
-    const [{ createTRPCRouter }, { publicProcedure }] = await createModules();
+    const { createTRPCRouter, publicProcedure } = createModules();
     const router = createTRPCRouter({
       shared: publicProcedure.query(() => "shared"),
       strict: publicProcedure
@@ -239,7 +182,7 @@ describe("rateLimitMiddleware", () => {
       redisUrl: "redis://localhost:6379",
       now: () => 0,
     });
-    const [{ createTRPCRouter, t }, { protectedProcedure }] = await createModules();
+    const { createTRPCRouter, protectedProcedure, t } = createModules();
     const router = createTRPCRouter({
       protectedRoute: protectedProcedure.query(() => "protected"),
     });
@@ -270,6 +213,16 @@ describe("rateLimitMiddleware", () => {
 
     expect(thrownError).not.toBeNull();
     expect(thrownError?.code).toBe("TOO_MANY_REQUESTS");
+    const thrownErrorCause = thrownError?.cause as {
+      limit: number;
+      remaining: number;
+      retryAfterMs: number;
+      resetAfterMs: number;
+    };
+    expect(thrownErrorCause.limit).toBe(60);
+    expect(thrownErrorCause.remaining).toBe(0);
+    expect(thrownErrorCause.retryAfterMs).toBe(1_000);
+    expect(thrownErrorCause.resetAfterMs).toBe(60_000);
 
     const formattedError = t._config.errorFormatter({
       error: new TRPCError({
@@ -278,7 +231,7 @@ describe("rateLimitMiddleware", () => {
           limit: 60,
           remaining: 0,
           retryAfterMs: 1_000,
-          resetAfterMs: 1_000,
+          resetAfterMs: 60_000,
         },
       }),
       type: "query",
@@ -300,7 +253,28 @@ describe("rateLimitMiddleware", () => {
       limit: 60,
       remaining: 0,
       retryAfterMs: 1_000,
-      resetAfterMs: 1_000,
+      resetAfterMs: 60_000,
+    });
+  });
+
+  test("rejects anonymous requests without a client IP", async () => {
+    const cache = new TestOpenBeaconCache({
+      redisUrl: "redis://localhost:6379",
+      now: () => 0,
+    });
+    const { createTRPCRouter, publicProcedure } = createModules();
+    const router = createTRPCRouter({
+      publicRoute: publicProcedure.query(() => "public"),
+    });
+    const caller = createCaller({
+      cache,
+      router,
+      userId: null,
+    });
+
+    await expect(caller.publicRoute()).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Client IP is required for anonymous rate-limited requests.",
     });
   });
 });

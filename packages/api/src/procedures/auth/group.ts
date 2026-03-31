@@ -1,7 +1,7 @@
 import { GroupRole } from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
 import z from "zod";
-import { protectedProcedure } from "./base.ts";
+import { protectedProcedure } from "./runtime.ts";
 
 export const groupMemberProcedure = protectedProcedure
   .input(z.object({ groupId: z.string() }))

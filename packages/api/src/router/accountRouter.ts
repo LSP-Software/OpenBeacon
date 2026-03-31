@@ -7,7 +7,7 @@ import {
   requestImageUpload,
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
-import { protectedProcedure } from "../procedures/auth/base.ts";
+import { protectedProcedure } from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
   requestProfileImageUpload: protectedProcedure

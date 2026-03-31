@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cache } from "./cache.ts";
 import { db } from "./db.ts";
 import { env } from "./env.ts";
+import { resolveClientIp } from "./helpers/clientIp.ts";
 import authRouter from "./routes/auth.ts";
 import trpcRouter from "./routes/trpc.ts";
 import type { AppEnv } from "./types/AppEnv.ts";
@@ -16,16 +17,17 @@ routes.forEach((route) => {
 
 export default {
   fetch(request: Request, server: Bun.Server<unknown>) {
-    const forwardedFor = request.headers.get("x-forwarded-for");
-    const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
-    const requestIp = server.requestIP(request)?.address ?? null;
-    const clientIp =
-      request.headers.get("cf-connecting-ip") ??
-      firstForwardedIp ??
-      request.headers.get("x-real-ip") ??
-      requestIp;
+    const clientIp = resolveClientIp({
+      headers: request.headers,
+      requestIp: server.requestIP(request)?.address ?? null,
+      trustedProxyProvider: env.TRUSTED_PROXY_PROVIDER,
+    });
 
-    return app.fetch(request, { cache, clientIp, db });
+    return app.fetch(request, {
+      cache,
+      db,
+      ...(clientIp ? { clientIp } : {}),
+    });
   },
   port: env.OPENBEACON_API_PORT,
   hostname: env.OPENBEACON_API_HOSTNAME,

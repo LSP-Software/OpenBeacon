@@ -1,8 +1,8 @@
 import { authCapabilities } from "@openbeacon/auth";
 import { registerDeviceKeySchema } from "@openbeacon/schemas";
 import { listUserRecipientPublicKeys, upsertUserDevice } from "../lib/groupEpochs.ts";
-import { protectedProcedure, publicProcedure } from "../procedures/auth/base.ts";
-import { createTRPCRouter } from "../trpc.ts";
+import { protectedProcedure, publicProcedure } from "../procedures/auth/runtime.ts";
+import { createTRPCRouter } from "../trpcRuntime.ts";
 
 export const authRouter = createTRPCRouter({
   providers: publicProcedure.query(() => authCapabilities),
