@@ -33,6 +33,10 @@
   --chart-5: 27 87% 67%;
   --card: 0 0% 100%;
   --card-foreground: 0 0% 3.9%;
+  --warning: 55 92% 95%;
+  --warning-border: 46 97% 65%;
+  --warning-text: 35 80% 25%;
+  --warning-accent: 45 93% 47%;
 }
 
 .dark {
@@ -60,4 +64,8 @@
   --chart-3: 30 80% 55%;
   --chart-4: 280 65% 60%;
   --chart-5: 340 75% 55%;
+  --warning: 45 30% 12%;
+  --warning-border: 45 60% 35%;
+  --warning-text: 45 80% 75%;
+  --warning-accent: 45 90% 65%;
 }
