@@ -4,10 +4,12 @@ import { uploadImageFromUri } from "../../lib/image-upload.ts";
 import { EditableImage } from "./EditableImage.tsx";
 
 export const GroupImage = ({
+  editable = true,
   groupId,
   imageUrl = null,
   size = "md",
 }: {
+  editable?: boolean;
   groupId: string;
   imageUrl?: string | null;
   size?: "sm" | "md" | "lg";
@@ -46,7 +48,7 @@ export const GroupImage = ({
       imageUrl={imageUrl}
       onImageUploaded={handleGroupImageUploaded}
       size={size}
-      uploadImage={uploadGroupImage}
+      {...(editable ? { uploadImage: uploadGroupImage } : {})}
     />
   );
 };

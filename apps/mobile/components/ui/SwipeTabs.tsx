@@ -151,6 +151,11 @@ export const SwipeTabs = <T extends string>({
   };
 
   const handleTabPress = (tabValue: T) => {
+    if (tabValue === value) {
+      requestedValueRef.current = null;
+      return;
+    }
+
     const nextIndex = getSwipeTabsIndex(tabs, tabValue);
     requestedValueRef.current = tabValue;
 
@@ -159,9 +164,7 @@ export const SwipeTabs = <T extends string>({
       animated: true,
     });
 
-    if (tabValue !== value) {
-      onValueChange(tabValue);
-    }
+    onValueChange(tabValue);
   };
 
   const indicatorStyle = useAnimatedStyle(() => {

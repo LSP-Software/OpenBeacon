@@ -91,6 +91,10 @@ interface GroupHeaderProps {
 }
 
 const GroupHeader = ({ group }: GroupHeaderProps) => {
+  const canEditGroupImage = group.groupMembers.some(
+    (member) => member.role === "OWNER" || member.role === "ADMIN",
+  );
+
   return (
     <View className="gap-4">
       <View className="flex-row items-center justify-between gap-4">
@@ -100,7 +104,12 @@ const GroupHeader = ({ group }: GroupHeaderProps) => {
         </View>
       </View>
       <View className="flex-row items-center gap-4">
-        <GroupImage groupId={group.id} imageUrl={group.image ?? null} size="md" />
+        <GroupImage
+          groupId={group.id}
+          imageUrl={group.image ?? null}
+          size="md"
+          editable={canEditGroupImage}
+        />
         <View className="flex-1">
           <Text className="text-foreground text-3xl font-bold">{group.name}</Text>
         </View>
