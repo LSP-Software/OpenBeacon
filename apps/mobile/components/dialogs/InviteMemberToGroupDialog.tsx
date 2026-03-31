@@ -152,9 +152,7 @@ export const InviteMembersInputs = ({ groupId, setOpen }: InviteMembersInputsPro
           className="mt-2 h-12 rounded-xl border-border bg-card"
         >
           <Icon as={PlusIcon} className="size-5 text-primary" />
-          <Text className="text-primary">
-            Add {fields.length === 1 ? "another email" : "email"}
-          </Text>
+          <Text className="text-primary">Add another email</Text>
         </Button>
       </View>
       <View className="flex flex-col gap-2 rounded-xl p-2">

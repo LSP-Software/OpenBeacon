@@ -41,7 +41,7 @@ const GROUP_TABS: readonly SwipeTabsItem<GroupTabValue>[] = [
   },
 ] as const;
 
-export default function GroupScreen() {
+const GroupScreen = () => {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [value, setValue] = useState<GroupTabValue>("members");
   const { data: group, isFetching: isFetchingGroup } = useQuery(
@@ -84,13 +84,13 @@ export default function GroupScreen() {
       </SafeAreaView>
     </RefreshablePage>
   );
-}
+};
 
-interface GroupHeaderProps {
+const GroupHeader = ({
+  group,
+}: {
   group: NonNullable<RouterOutputs["groupMembership"]["get"]>;
-}
-
-const GroupHeader = ({ group }: GroupHeaderProps) => {
+}) => {
   const canEditGroupImage = group.groupMembers.some(
     (member) => member.role === "OWNER" || member.role === "ADMIN",
   );
@@ -117,3 +117,5 @@ const GroupHeader = ({ group }: GroupHeaderProps) => {
     </View>
   );
 };
+
+export default GroupScreen;

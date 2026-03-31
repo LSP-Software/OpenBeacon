@@ -1,7 +1,7 @@
 import { View } from "react-native";
 import { Text } from "../../../../components/ui/Text.tsx";
 
-export default function SettingsTab({ groupName }: { groupName: string }) {
+const SettingsTab = ({ groupName }: { groupName: string }) => {
   return (
     <View className="pt-1">
       <View className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-5">
@@ -14,4 +14,6 @@ export default function SettingsTab({ groupName }: { groupName: string }) {
       </View>
     </View>
   );
-}
+};
+
+export default SettingsTab;

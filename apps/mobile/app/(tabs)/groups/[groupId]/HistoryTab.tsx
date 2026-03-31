@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { Icon } from "../../../../components/ui/Icon.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
 
-export default function HistoryTab() {
+const HistoryTab = () => {
   return (
     <View className="pt-1">
       <View className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-5">
@@ -22,4 +22,6 @@ export default function HistoryTab() {
       </View>
     </View>
   );
-}
+};
+
+export default HistoryTab;

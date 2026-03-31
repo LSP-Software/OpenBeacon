@@ -27,21 +27,19 @@ export type SwipeTabsItem<T extends string> = {
   icon?: LucideIcon;
 };
 
-type SwipeTabsProps<T extends string> = {
-  ariaLabel?: string;
-  onValueChange: (value: T) => void;
-  renderScene: (value: T) => React.ReactNode;
-  tabs: readonly SwipeTabsItem<T>[];
-  value: T;
-};
-
 export const SwipeTabs = <T extends string>({
   ariaLabel = "Swipe tabs",
   onValueChange,
   renderScene,
   tabs,
   value,
-}: SwipeTabsProps<T>) => {
+}: {
+  ariaLabel?: string;
+  onValueChange: (value: T) => void;
+  renderScene: (value: T) => React.ReactNode;
+  tabs: readonly SwipeTabsItem<T>[];
+  value: T;
+}) => {
   const colors = useColors();
   const { width: windowWidth } = useWindowDimensions();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -49,6 +47,7 @@ export const SwipeTabs = <T extends string>({
   const requestedValueRef = useRef<T | null>(null);
   const scrollX = useSharedValue(0);
   const [containerWidth, setContainerWidth] = useState(windowWidth);
+  const [visited, setVisited] = useState<Set<T>>(() => new Set([value]));
   const pageGap = 16;
   const [tabLayouts, setTabLayouts] = useState<Partial<Record<T, { x: number; width: number }>>>(
     {},
@@ -59,6 +58,18 @@ export const SwipeTabs = <T extends string>({
   const indicatorLeftRange = tabs.map((tab) => tabLayouts[tab.value]?.x ?? 0);
   const indicatorWidthRange = tabs.map((tab) => tabLayouts[tab.value]?.width ?? 0);
   const hasAllTabLayouts = tabs.every((tab) => tabLayouts[tab.value] !== undefined);
+
+  useEffect(() => {
+    setVisited((currentVisited) => {
+      if (currentVisited.has(value)) {
+        return currentVisited;
+      }
+
+      const nextVisited = new Set(currentVisited);
+      nextVisited.add(value);
+      return nextVisited;
+    });
+  }, [value]);
 
   useEffect(() => {
     const nextScrollPosition = activeIndex * pageWidth;
@@ -151,20 +162,17 @@ export const SwipeTabs = <T extends string>({
   };
 
   const handleTabPress = (tabValue: T) => {
-    if (tabValue === value) {
-      requestedValueRef.current = null;
-      return;
+    if (tabValue !== value) {
+      const nextIndex = getSwipeTabsIndex(tabs, tabValue);
+      requestedValueRef.current = tabValue;
+
+      scrollViewRef.current?.scrollTo({
+        x: nextIndex * pageWidth,
+        animated: true,
+      });
+
+      onValueChange(tabValue);
     }
-
-    const nextIndex = getSwipeTabsIndex(tabs, tabValue);
-    requestedValueRef.current = tabValue;
-
-    scrollViewRef.current?.scrollTo({
-      x: nextIndex * pageWidth,
-      animated: true,
-    });
-
-    onValueChange(tabValue);
   };
 
   const indicatorStyle = useAnimatedStyle(() => {
@@ -249,6 +257,7 @@ export const SwipeTabs = <T extends string>({
         {hasAllTabLayouts ? (
           <Animated.View
             pointerEvents="none"
+            accessible={false}
             className="absolute bottom-1 top-1 overflow-hidden rounded-xl"
             style={indicatorStyle}
           >
@@ -303,7 +312,7 @@ export const SwipeTabs = <T extends string>({
                 paddingRight: index === tabs.length - 1 ? 0 : pageGap / 2,
               }}
             >
-              {renderScene(tab.value)}
+              {visited.has(tab.value) ? renderScene(tab.value) : <View />}
             </View>
           ))}
         </Animated.ScrollView>

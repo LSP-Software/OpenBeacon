@@ -18,11 +18,7 @@ import { Text } from "../../../../components/ui/Text.tsx";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
 
-interface MembersTabProps {
-  groupId: string;
-}
-
-export default function MembersTab({ groupId }: MembersTabProps) {
+const MembersTab = ({ groupId }: { groupId: string }) => {
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const { data: members, isFetching: isFetchingMembers } = useQuery(
     trpc.groupMembership.members.queryOptions({ groupId }),
@@ -54,13 +50,13 @@ export default function MembersTab({ groupId }: MembersTabProps) {
       </Button>
     </View>
   );
-}
+};
 
-interface MemberCardProps {
+const MemberCard = ({
+  member,
+}: {
   member: RouterOutputs["groupMembership"]["members"][number];
-}
-
-const MemberCard = ({ member }: MemberCardProps) => {
+}) => {
   const { icon: BatteryIcon, colorClass } = getBatteryVisual({
     batteryLevel: member.batteryLevel,
     charging: member.battery.charging,
@@ -123,3 +119,5 @@ const getBatteryVisual = ({
 
   return { icon: BatteryFullIcon, colorClass: "text-green-500" };
 };
+
+export default MembersTab;
