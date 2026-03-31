@@ -51,7 +51,10 @@ const ThemePreferenceSection = ({
         <Text className="text-foreground text-xl font-semibold">{title}</Text>
         <Text className="text-muted-foreground text-sm">{description}</Text>
       </View>
-      <View className="overflow-hidden rounded-3xl border border-border bg-card">
+      <View
+        accessibilityRole="radiogroup"
+        className="overflow-hidden rounded-3xl border border-border bg-card"
+      >
         {themeOptions.map((themeOption, index) => {
           const selected = themePreference === themeOption.value;
           const isLastOption = index === themeOptions.length - 1;
@@ -60,7 +63,7 @@ const ThemePreferenceSection = ({
             <Pressable
               key={themeOption.value}
               accessibilityRole="radio"
-              accessibilityState={{ selected }}
+              accessibilityState={{ checked: selected }}
               className={cn(
                 "flex-row items-center gap-4 px-5 py-4",
                 !isLastOption && "border-b border-border/50",
