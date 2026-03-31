@@ -140,6 +140,32 @@ export const getLocationPermissionWarningTitle = (
     .join(" and ")} are off`;
 };
 
+export const getLocationPermissionWarningDescription = (
+  state: Pick<LocationPermissionState, "missing">,
+): string => {
+  if (state.missing.length === 0) {
+    return "";
+  }
+
+  if (state.missing.length === 1) {
+    if (state.missing[0] === "foreground") {
+      return "Enable location access to continue using the app.";
+    }
+
+    if (state.missing[0] === "precise") {
+      return "Enable precise location so your family can see your exact location.";
+    }
+
+    return "Allow background location so sharing keeps working when the app is closed.";
+  }
+
+  if (state.missing.includes("foreground")) {
+    return "Enable location access to continue using the app and share your location with your family.";
+  }
+
+  return "Enable precise and background location so your family can see your exact location even when the app is closed.";
+};
+
 export const getLocationPermissionState = async (): Promise<LocationPermissionState> => {
   const [foregroundPermission, backgroundPermission] = await Promise.all([
     getForegroundPermissionsAsync(),
