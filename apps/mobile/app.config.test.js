@@ -28,6 +28,20 @@ describe("app config", () => {
     expect(createExpoConfig({}).plugins).toEqual([]);
   });
 
+  test("preserves native-only platform support", () => {
+    const createExpoConfig = loadCreateExpoConfig();
+
+    expect(
+      createExpoConfig({
+        platforms: ["ios", "android"],
+        plugins: ["expo-router"],
+      }),
+    ).toEqual({
+      platforms: ["ios", "android"],
+      plugins: ["expo-router"],
+    });
+  });
+
   test("adds the Google plugin when the iOS URL scheme is configured", () => {
     process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME = "com.googleusercontent.apps.test";
     const createExpoConfig = loadCreateExpoConfig();

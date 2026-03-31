@@ -19,10 +19,10 @@ const getGoogleIosClientId = () => process.env[GOOGLE_IOS_CLIENT_ID_ENV];
 
 const getGoogleIosUrlScheme = () => process.env[GOOGLE_IOS_URL_SCHEME_ENV];
 
-export const isNativeGoogleSignInConfiguredForPlatform = (platform: typeof Platform.OS) => {
+export const isNativeGoogleSignInConfiguredForPlatform = (platform: "android" | "ios") => {
   const googleWebClientId = getGoogleWebClientId();
 
-  if (!googleWebClientId || platform === "web") {
+  if (!googleWebClientId) {
     return false;
   }
 
@@ -34,7 +34,7 @@ export const isNativeGoogleSignInConfiguredForPlatform = (platform: typeof Platf
 };
 
 export const isNativeGoogleSignInConfigured = isNativeGoogleSignInConfiguredForPlatform(
-  Platform.OS,
+  Platform.OS === "ios" ? "ios" : "android",
 );
 
 let googleSignInConfigured = false;

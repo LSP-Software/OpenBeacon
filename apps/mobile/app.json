@@ -4,6 +4,7 @@
     "slug": "open-beacon",
     "description": "Privacy-first family location sharing. You own your data.",
     "version": "1.0.0",
+    "platforms": ["ios", "android"],
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -32,10 +33,6 @@
       "predictiveBackGestureEnabled": false,
       "package": "net.openbeacon.app",
       "versionCode": 1
-    },
-    "web": {
-      "favicon": "./assets/favicon.png",
-      "bundler": "metro"
     },
     "scheme": "openbeacon",
     "plugins": [
