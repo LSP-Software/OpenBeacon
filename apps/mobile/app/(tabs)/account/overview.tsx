@@ -14,7 +14,7 @@ import {
   UserCircleIcon,
 } from "lucide-react-native";
 import { useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EditableImage } from "../../../components/image/EditableImage.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
@@ -48,6 +48,7 @@ const categories = [
       {
         label: "Theme",
         icon: SunIcon,
+        href: "/account/theme",
       },
     ],
   },
@@ -160,18 +161,28 @@ const AccountScreen = () => {
                   const isLastSetting = settingIndex === category.settings.length - 1;
 
                   return (
-                    <View
+                    <Pressable
                       key={setting.label}
+                      disabled={!("href" in setting)}
                       className={`flex flex-row items-center justify-between ${
                         isLastSetting ? "" : "border-b-[0.5px] border-border/30 pb-3"
                       }`}
+                      onPress={() => {
+                        if (!("href" in setting)) {
+                          return;
+                        }
+
+                        router.push(setting.href);
+                      }}
                     >
                       <View className="flex flex-row items-center gap-3">
                         <Icon as={setting.icon} className="text-muted-foreground size-6" />
                         <Text className="text-foreground font-medium">{setting.label}</Text>
                       </View>
-                      <Icon as={ChevronRightIcon} className="text-muted-foreground size-6" />
-                    </View>
+                      {"href" in setting ? (
+                        <Icon as={ChevronRightIcon} className="text-muted-foreground size-6" />
+                      ) : null}
+                    </Pressable>
                   );
                 })}
               </View>

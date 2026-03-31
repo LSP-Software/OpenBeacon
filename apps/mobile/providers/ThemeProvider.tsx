@@ -1,36 +1,71 @@
 import { StatusBar } from "expo-status-bar";
 import type React from "react";
-import { createContext, useContext, useEffect, useState } from "react";
-import { type ColorSchemeName, useColorScheme, View } from "react-native";
+import { createContext, useContext, useState } from "react";
+import { useColorScheme, View } from "react-native";
+import {
+  getStoredAppThemePreference,
+  getStoredMapThemePreference,
+  type ResolvedTheme,
+  resolveThemePreference,
+  setStoredAppThemePreference,
+  setStoredMapThemePreference,
+  type ThemePreference,
+} from "../lib/themePreferences.ts";
 
-interface ThemeProviderProps {
-  children: React.ReactNode;
-}
+type ThemeContextValue = {
+  appThemePreference: ThemePreference;
+  mapThemePreference: ThemePreference;
+  appTheme: ResolvedTheme;
+  mapTheme: ResolvedTheme;
+  setAppThemePreference: (themePreference: ThemePreference) => void;
+  setMapThemePreference: (themePreference: ThemePreference) => void;
+};
 
-export const ThemeContext = createContext<ColorSchemeName>("light");
+const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-export const ThemeProvider = ({ children }: ThemeProviderProps) => {
+export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const systemColorScheme = useColorScheme();
-  const [currentTheme, setCurrentTheme] = useState<ColorSchemeName>(systemColorScheme ?? "light");
+  const [appThemePreference, setAppThemePreferenceState] = useState<ThemePreference>(() => {
+    return getStoredAppThemePreference();
+  });
+  const [mapThemePreference, setMapThemePreferenceState] = useState<ThemePreference>(() => {
+    return getStoredMapThemePreference();
+  });
+  const appTheme = resolveThemePreference(appThemePreference, systemColorScheme);
+  const mapTheme = resolveThemePreference(mapThemePreference, systemColorScheme);
 
-  useEffect(() => {
-    if (systemColorScheme) {
-      setCurrentTheme(systemColorScheme);
-    }
-  }, [systemColorScheme]);
+  const setAppThemePreference = (themePreference: ThemePreference) => {
+    setStoredAppThemePreference(themePreference);
+    setAppThemePreferenceState(themePreference);
+  };
+
+  const setMapThemePreference = (themePreference: ThemePreference) => {
+    setStoredMapThemePreference(themePreference);
+    setMapThemePreferenceState(themePreference);
+  };
 
   return (
-    <ThemeContext.Provider value={currentTheme}>
-      <StatusBar style={currentTheme === "dark" ? "light" : "dark"} />
-      <View className={`flex-1 ${currentTheme === "dark" ? "dark" : ""}`}>{children}</View>
+    <ThemeContext.Provider
+      value={{
+        appThemePreference,
+        mapThemePreference,
+        appTheme,
+        mapTheme,
+        setAppThemePreference,
+        setMapThemePreference,
+      }}
+    >
+      <StatusBar style={appTheme === "dark" ? "light" : "dark"} />
+      <View className={`flex-1 ${appTheme === "dark" ? "dark" : ""}`}>{children}</View>
     </ThemeContext.Provider>
   );
 };
 
 export const useTheme = () => {
   const context = useContext(ThemeContext);
-  if (!context) {
+  if (context === null) {
     throw new Error("useTheme must be used within a ThemeProvider");
   }
+
   return context;
 };
