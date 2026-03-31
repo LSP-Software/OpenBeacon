@@ -53,7 +53,7 @@ function TabsContent({
   className,
   ...props
 }: TabsPrimitive.ContentProps & React.RefAttributes<TabsPrimitive.ContentRef>) {
-  return <TabsPrimitive.Content {...(className ? { className } : {})} {...props} />;
+  return <TabsPrimitive.Content className={cn(className)} {...props} />;
 }
 
 export { Tabs, TabsContent, TabsList, TabsTrigger };

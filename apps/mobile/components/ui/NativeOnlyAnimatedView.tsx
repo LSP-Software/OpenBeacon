@@ -1,7 +1,7 @@
 import Animated from "react-native-reanimated";
 
-const NativeOnlyAnimatedView = (
+const AnimatedView = (
   props: React.ComponentProps<typeof Animated.View> & React.RefAttributes<Animated.View>,
 ) => <Animated.View {...props} />;
 
-export { NativeOnlyAnimatedView };
+export { AnimatedView };

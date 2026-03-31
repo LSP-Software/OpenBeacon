@@ -12,7 +12,6 @@ import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 const GOOGLE_WEB_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID";
 const GOOGLE_IOS_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID";
 const GOOGLE_IOS_URL_SCHEME_ENV = "EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME";
-type NativePlatform = "android" | "ios";
 
 const getGoogleWebClientId = () => process.env[GOOGLE_WEB_CLIENT_ID_ENV];
 
@@ -20,7 +19,7 @@ const getGoogleIosClientId = () => process.env[GOOGLE_IOS_CLIENT_ID_ENV];
 
 const getGoogleIosUrlScheme = () => process.env[GOOGLE_IOS_URL_SCHEME_ENV];
 
-export const isNativeGoogleSignInConfiguredForPlatform = (platform: NativePlatform) => {
+export const isNativeGoogleSignInConfiguredForPlatform = (platform: "android" | "ios") => {
   const googleWebClientId = getGoogleWebClientId();
 
   if (!googleWebClientId) {

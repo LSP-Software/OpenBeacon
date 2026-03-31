@@ -47,8 +47,6 @@ function AccordionItem({
   );
 }
 
-const Trigger = Pressable;
-
 function AccordionTrigger({
   className,
   children,
@@ -73,7 +71,7 @@ function AccordionTrigger({
     <TextClassContext.Provider value="text-left text-sm font-medium">
       <AccordionPrimitive.Header>
         <AccordionPrimitive.Trigger {...props} asChild>
-          <Trigger
+          <Pressable
             className={cn(
               "flex-row items-start justify-between gap-4 rounded-md py-4 disabled:opacity-50",
               "flex flex-1",
@@ -84,7 +82,7 @@ function AccordionTrigger({
             <Animated.View style={chevronStyle}>
               <Icon as={ChevronDown} size={16} className="text-muted-foreground shrink-0" />
             </Animated.View>
-          </Trigger>
+          </Pressable>
         </AccordionPrimitive.Trigger>
       </AccordionPrimitive.Header>
     </TextClassContext.Provider>

@@ -5,7 +5,7 @@ import { Text, View, type ViewProps } from "react-native";
 import { FadeIn, FadeOut } from "react-native-reanimated";
 import { cn } from "../../lib/cn.ts";
 import { Icon } from "./Icon.tsx";
-import { NativeOnlyAnimatedView } from "./NativeOnlyAnimatedView.tsx";
+import { AnimatedView } from "./NativeOnlyAnimatedView.tsx";
 
 const Dialog = DialogPrimitive.Root;
 
@@ -15,14 +15,14 @@ const DialogPortal = DialogPrimitive.Portal;
 
 const DialogClose = DialogPrimitive.Close;
 
-function DialogOverlay({
+const DialogOverlay = ({
   className,
   children,
   ...props
 }: Omit<DialogPrimitive.OverlayProps, "asChild"> &
   React.RefAttributes<DialogPrimitive.OverlayRef> & {
     children?: React.ReactNode;
-  }) {
+  }) => {
   return (
     <DialogPrimitive.Overlay
       className={cn(
@@ -32,15 +32,14 @@ function DialogOverlay({
       {...props}
       asChild
     >
-      <NativeOnlyAnimatedView entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
-        <NativeOnlyAnimatedView entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
-          {children}
-        </NativeOnlyAnimatedView>
-      </NativeOnlyAnimatedView>
+      <AnimatedView entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
+        {children}
+      </AnimatedView>
     </DialogPrimitive.Overlay>
   );
-}
-function DialogContent({
+};
+
+const DialogContent = ({
   className,
   portalHost,
   children,
@@ -48,7 +47,7 @@ function DialogContent({
 }: DialogPrimitive.ContentProps &
   React.RefAttributes<DialogPrimitive.ContentRef> & {
     portalHost?: string;
-  }) {
+  }) => {
   const portalProps = portalHost ? { hostName: portalHost } : {};
 
   return (
@@ -73,46 +72,46 @@ function DialogContent({
       </DialogOverlay>
     </DialogPortal>
   );
-}
+};
 
-function DialogHeader({ className, ...props }: ViewProps) {
+const DialogHeader = ({ className, ...props }: ViewProps) => {
   return (
     <View className={cn("flex flex-col gap-2 text-center sm:text-left", className)} {...props} />
   );
-}
+};
 
-function DialogFooter({ className, ...props }: ViewProps) {
+const DialogFooter = ({ className, ...props }: ViewProps) => {
   return (
     <View
       className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
       {...props}
     />
   );
-}
+};
 
-function DialogTitle({
+const DialogTitle = ({
   className,
   ...props
-}: DialogPrimitive.TitleProps & React.RefAttributes<DialogPrimitive.TitleRef>) {
+}: DialogPrimitive.TitleProps & React.RefAttributes<DialogPrimitive.TitleRef>) => {
   return (
     <DialogPrimitive.Title
       className={cn("text-foreground text-lg font-semibold leading-none", className)}
       {...props}
     />
   );
-}
+};
 
-function DialogDescription({
+const DialogDescription = ({
   className,
   ...props
-}: DialogPrimitive.DescriptionProps & React.RefAttributes<DialogPrimitive.DescriptionRef>) {
+}: DialogPrimitive.DescriptionProps & React.RefAttributes<DialogPrimitive.DescriptionRef>) => {
   return (
     <DialogPrimitive.Description
       className={cn("text-muted-foreground text-sm", className)}
       {...props}
     />
   );
-}
+};
 
 export {
   Dialog,

@@ -55,12 +55,9 @@ const buttonTextVariants = cva("text-white text-base font-semibold rounded-lg", 
 
 type ButtonProps = React.ComponentProps<typeof Pressable> &
   React.RefAttributes<typeof Pressable> &
-  VariantProps<typeof buttonVariants> &
-  ExtendedButtonProps;
-
-type ExtendedButtonProps = {
-  loading?: boolean;
-};
+  VariantProps<typeof buttonVariants> & {
+    loading?: boolean;
+  };
 
 function Button({ className, variant, size, loading, disabled, ...props }: ButtonProps) {
   return (

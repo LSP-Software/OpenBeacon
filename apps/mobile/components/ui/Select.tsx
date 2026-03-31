@@ -6,7 +6,7 @@ import { FadeIn, FadeOut } from "react-native-reanimated";
 import { FullWindowOverlay as RNFullWindowOverlay } from "react-native-screens";
 import { cn } from "../../lib/cn.ts";
 import { Icon } from "./Icon.tsx";
-import { NativeOnlyAnimatedView } from "./NativeOnlyAnimatedView.tsx";
+import { AnimatedView } from "./NativeOnlyAnimatedView.tsx";
 import { TextClassContext } from "./Text.tsx";
 
 type Option = SelectPrimitive.Option;
@@ -83,9 +83,9 @@ function SelectContent({
   return (
     <SelectPrimitive.Portal {...portalProps}>
       <FullWindowOverlay>
-        <SelectPrimitive.Overlay style={Platform.select({ native: StyleSheet.absoluteFill })}>
+        <SelectPrimitive.Overlay style={StyleSheet.absoluteFill}>
           <TextClassContext.Provider value="text-popover-foreground">
-            <NativeOnlyAnimatedView className="z-50" entering={FadeIn} exiting={FadeOut}>
+            <AnimatedView className="z-50" entering={FadeIn} exiting={FadeOut}>
               <SelectPrimitive.Content
                 className={cn(
                   "bg-popover border-border relative z-50 min-w-[8rem] rounded-md border shadow-md shadow-black/5",
@@ -99,7 +99,7 @@ function SelectContent({
                   {children}
                 </SelectPrimitive.Viewport>
               </SelectPrimitive.Content>
-            </NativeOnlyAnimatedView>
+            </AnimatedView>
           </TextClassContext.Provider>
         </SelectPrimitive.Overlay>
       </FullWindowOverlay>
