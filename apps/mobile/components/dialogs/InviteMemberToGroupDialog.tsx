@@ -145,9 +145,14 @@ export const InviteMembersInputs = ({ groupId, setOpen }: InviteMembersInputsPro
             );
           })}
         </View>
-        <Button variant={"secondary"} size="sm" onPress={handleAddNewInvite} className="mt-2">
-          <Icon as={PlusIcon} className="size-5" />
-          <Text>Add {fields.length === 1 ? "another email" : "email"}</Text>
+        <Button
+          variant="outline"
+          size="sm"
+          onPress={handleAddNewInvite}
+          className="mt-2 h-12 rounded-xl border-border bg-card"
+        >
+          <Icon as={PlusIcon} className="size-5 text-primary" />
+          <Text className="text-primary">Add another email</Text>
         </Button>
       </View>
       <View className="flex flex-col gap-2 rounded-xl p-2">
