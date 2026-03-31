@@ -2,8 +2,8 @@ import { groupEpochBundleSchema, inviteMemberToGroupSchema } from "@openbeacon/s
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { getInviteAcceptanceContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
-import { protectedProcedure } from "../../procedures/auth/base.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";
+import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 
 export const groupInvitesRouter = {

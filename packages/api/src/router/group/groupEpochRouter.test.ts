@@ -79,10 +79,11 @@ const createCaller = async ({
   groupFindUniqueMock: ReturnType<typeof createGroupFindUniqueMock>;
   wrappedKeyFindFirstMock: ReturnType<typeof createWrappedKeyFindFirstMock>;
 }) => {
-  const [{ createTRPCRouter }, { groupEpochRouter }] = await Promise.all([
+  const [{ createTRPCComponents }, { groupEpochRouter }] = await Promise.all([
     import("../../trpc.ts"),
     import(`./groupEpochRouter.ts?test=${Math.random().toString(36).slice(2)}`),
   ]);
+  const { createTRPCRouter } = createTRPCComponents();
   const router = createTRPCRouter({
     groupEpoch: groupEpochRouter,
   });
