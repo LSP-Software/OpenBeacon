@@ -34,28 +34,15 @@ const themeOptions = [
   icon: typeof SmartphoneIcon;
 }[];
 
-const getResolvedThemeLabel = (
-  themePreference: ThemePreference,
-  resolvedTheme: "light" | "dark",
-) => {
-  if (themePreference === "system") {
-    return `Following system (${resolvedTheme})`;
-  }
-
-  return resolvedTheme === "dark" ? "Dark mode active" : "Light mode active";
-};
-
 const ThemePreferenceSection = ({
   title,
   description,
   themePreference,
-  resolvedTheme,
   onChange,
 }: {
   title: string;
   description: string;
   themePreference: ThemePreference;
-  resolvedTheme: "light" | "dark";
   onChange: (themePreference: ThemePreference) => void;
 }) => {
   return (
@@ -109,22 +96,13 @@ const ThemePreferenceSection = ({
           );
         })}
       </View>
-      <Text className="text-muted-foreground text-sm">
-        {getResolvedThemeLabel(themePreference, resolvedTheme)}
-      </Text>
     </View>
   );
 };
 
 const ThemeScreen = () => {
-  const {
-    appTheme,
-    appThemePreference,
-    mapTheme,
-    mapThemePreference,
-    setAppThemePreference,
-    setMapThemePreference,
-  } = useTheme();
+  const { appThemePreference, mapThemePreference, setAppThemePreference, setMapThemePreference } =
+    useTheme();
 
   return (
     <View className="flex-1 bg-background">
@@ -152,7 +130,6 @@ const ThemeScreen = () => {
           title="App theme"
           description="Controls the overall interface, including pages, dialogs, and navigation."
           themePreference={appThemePreference}
-          resolvedTheme={appTheme}
           onChange={setAppThemePreference}
         />
 
@@ -160,7 +137,6 @@ const ThemeScreen = () => {
           title="Map theme"
           description="Changes the map palette separately from the rest of the app."
           themePreference={mapThemePreference}
-          resolvedTheme={mapTheme}
           onChange={setMapThemePreference}
         />
       </ScrollView>
