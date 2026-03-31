@@ -52,7 +52,13 @@ export const redisOptionsSchema = z
 
 export const openBeaconCacheOptionsSchema = z
   .object({
-    redisUrl: z.url(),
+    redisUrl: z.url().refine(
+      (value) => {
+        const parsed = new URL(value);
+        return parsed.protocol === "redis:" || parsed.protocol === "rediss:";
+      },
+      { message: "redisUrl must use redis:// or rediss://" },
+    ),
     keyPrefix: z.string().min(1).optional(),
     redisOptions: redisOptionsSchema.optional(),
     now: z.custom<() => number>((value) => typeof value === "function").optional(),

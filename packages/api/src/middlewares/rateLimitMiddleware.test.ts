@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
+import { FakeRedis } from "@openbeacon/cache/testing";
 import { TRPCError } from "@trpc/server";
-import { FakeRedis } from "../../../cache/src/rateLimits/testUtils.ts";
 import { createAuthProcedures } from "../procedures/auth/base.ts";
 import { createTRPCComponents } from "../trpc.ts";
 import { createRateLimitMiddleware } from "./rateLimitMiddleware.ts";

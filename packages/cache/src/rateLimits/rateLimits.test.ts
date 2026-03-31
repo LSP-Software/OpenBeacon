@@ -17,6 +17,13 @@ describe("OpenBeaconCache rateLimits", () => {
         }),
     ).toThrow();
 
+    expect(
+      () =>
+        new TestOpenBeaconCache({
+          redisUrl: "https://example.com",
+        }),
+    ).toThrowError(expect.objectContaining({ message: expect.stringContaining("redis") }));
+
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
     });

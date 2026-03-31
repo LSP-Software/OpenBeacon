@@ -47,6 +47,41 @@ describe("resolveClientIp", () => {
     ).toBe("198.51.100.2");
   });
 
+  test("cloudflare falls back to x-forwarded-for then x-real-ip when cf-connecting-ip is absent", () => {
+    expect(
+      resolveClientIp({
+        headers: createHeaders({
+          "x-forwarded-for": "198.51.100.2, 198.51.100.3",
+          "x-real-ip": "198.51.100.4",
+        }),
+        requestIp: "203.0.113.10",
+        trustedProxyProvider: "cloudflare",
+      }),
+    ).toBe("198.51.100.2");
+
+    expect(
+      resolveClientIp({
+        headers: createHeaders({
+          "x-real-ip": "198.51.100.4",
+        }),
+        requestIp: "203.0.113.10",
+        trustedProxyProvider: "cloudflare",
+      }),
+    ).toBe("198.51.100.4");
+  });
+
+  test("trusted-proxy falls back to x-real-ip when x-forwarded-for is absent", () => {
+    expect(
+      resolveClientIp({
+        headers: createHeaders({
+          "x-real-ip": "198.51.100.4",
+        }),
+        requestIp: "203.0.113.10",
+        trustedProxyProvider: "trusted-proxy",
+      }),
+    ).toBe("198.51.100.4");
+  });
+
   test("falls back to requestIp or null when trusted headers are missing", () => {
     expect(
       resolveClientIp({

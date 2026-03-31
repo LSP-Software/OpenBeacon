@@ -27,6 +27,25 @@ export class FakeRedis {
     const limit = Number(limitValue);
     const windowMs = Number(windowMsValue);
     const cost = Number(costValue);
+
+    if (!Number.isFinite(nowMs)) {
+      throw new Error("Invalid numeric EVAL argument for nowMs.");
+    }
+    if (!Number.isFinite(limit)) {
+      throw new Error("Invalid numeric EVAL argument for limit.");
+    }
+    if (!Number.isFinite(windowMs)) {
+      throw new Error("Invalid numeric EVAL argument for windowMs.");
+    }
+    if (!Number.isFinite(cost)) {
+      throw new Error("Invalid numeric EVAL argument for cost.");
+    }
+    if (windowMs <= 0) {
+      throw new Error("windowMs must be > 0 for refillRate, retryAfterMs, and resetAfterMs.");
+    }
+    if (shouldConsumeValue !== "0" && shouldConsumeValue !== "1") {
+      throw new Error('shouldConsumeValue must be "0" or "1".');
+    }
     const shouldConsume = shouldConsumeValue === "1";
     const refillRate = limit / windowMs;
     const existingBucket = this.buckets.get(key);
