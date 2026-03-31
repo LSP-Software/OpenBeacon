@@ -115,7 +115,7 @@ export const getLocationPermissionWarningTitle = (
 
   if (state.missing.length === 1) {
     if (state.missing[0] === "foreground") {
-      return "Location access is off";
+      return "Location is off";
     }
 
     if (state.missing[0] === "precise") {
@@ -149,7 +149,7 @@ export const getLocationPermissionWarningDescription = (
 
   if (state.missing.length === 1) {
     if (state.missing[0] === "foreground") {
-      return "Enable location access to continue using the app.";
+      return "Enable location so your family can see your location.";
     }
 
     if (state.missing[0] === "precise") {

@@ -161,6 +161,18 @@ describe("locationPermissions", () => {
     );
   });
 
+  test("formats no warning when nothing is missing", () => {
+    expect(getLocationPermissionWarningTitle({ missing: [] })).toBe("");
+    expect(getLocationPermissionWarningDescription({ missing: [] })).toBe("");
+  });
+
+  test("formats a foreground-only warning", () => {
+    expect(getLocationPermissionWarningTitle({ missing: ["foreground"] })).toBe("Location is off");
+    expect(getLocationPermissionWarningDescription({ missing: ["foreground"] })).toBe(
+      "Enable location so your family can see your location.",
+    );
+  });
+
   test("formats a background-only warning", () => {
     expect(getLocationPermissionWarningTitle({ missing: ["background"] })).toBe(
       "Background location is off",
