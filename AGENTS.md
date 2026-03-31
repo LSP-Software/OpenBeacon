@@ -74,3 +74,26 @@ const ExampleContext = createContext<ExampleContextType | null>(null);
 
 export const ExampleProvider = ({ children }: ExampleProviderProps) => {
 ```
+
+## Cursor Cloud specific instructions
+
+### Services overview
+
+| Service | How to start |
+|---|---|
+| PostgreSQL 16 + DragonflyDB (Redis) | `sudo docker compose up -d` (from repo root) |
+| Backend API (Hono + tRPC + Better Auth) | `bun run dev --filter=@openbeacon/backend` or directly: `bun run --env-file=.env --hot apps/backend/src/index.ts` (port 3000) |
+| Mobile (Expo/React Native) | Cannot run in headless Cloud VM — requires Android/iOS emulator |
+
+### Key commands
+
+See `package.json` scripts at root for `dev`, `ci`, `typecheck`, `check`, `test`. Per the project rules, always run `bun run ci` after changes.
+
+### Non-obvious caveats
+
+- Docker must be running before starting the backend — PostgreSQL and DragonflyDB are required. Start Docker daemon with `sudo dockerd &` if not already running, then `sudo docker compose up -d`.
+- The `.env` file lives at the repo root and is loaded by the backend via `--env-file=.env`. It is **not** committed to the repo. S3/R2 env vars (`S3_ACCESS_KEY_ID`, `S3_ACCESS_KEY`, `S3_BUCKET_NAME`, `R2_*`) are required by env validation even for local dev — use stub values if you don't need image upload or map tile features.
+- Prisma client must be generated before typecheck will pass: `cd packages/database && bun run db:generate`. Migrations: `bun run db:migrate:deploy`.
+- The `database` package typecheck script runs `prisma generate` itself, so `bun run ci` (which runs `turbo typecheck`) will auto-generate the Prisma client as a side effect.
+- Tests (`bun run test`) run across all packages via Turborepo. The API package tests require a running PostgreSQL instance.
+- The pre-commit hook (`.husky/pre-commit`) runs `bun install --frozen-lockfile` then `bun run ci`.
