@@ -14,6 +14,10 @@ module.exports = {
         brand: "hsl(var(--brand) / <alpha-value>)",
         foreground: "hsl(var(--foreground) / <alpha-value>)",
         background: "hsl(var(--background) / <alpha-value>)",
+        warning: "hsl(var(--warning) / <alpha-value>)",
+        "warning-border": "hsl(var(--warning-border) / <alpha-value>)",
+        "warning-text": "hsl(var(--warning-text) / <alpha-value>)",
+        "warning-accent": "hsl(var(--warning-accent) / <alpha-value>)",
         primary: {
           DEFAULT: "hsl(var(--primary) / <alpha-value>)",
           foreground: "hsl(var(--primary-foreground))",

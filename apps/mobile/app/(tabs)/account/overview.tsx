@@ -2,6 +2,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import {
+  AlertCircleIcon,
   BellIcon,
   CameraIcon,
   ChevronRightIcon,
@@ -10,6 +11,7 @@ import {
   LockIcon,
   MailIcon,
   MapPinCheckIcon,
+  MapPinIcon,
   SunIcon,
   UserCircleIcon,
 } from "lucide-react-native";
@@ -18,6 +20,13 @@ import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EditableImage } from "../../../components/image/EditableImage.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../../../components/ui/Card.tsx";
 import { Icon } from "../../../components/ui/Icon.tsx";
 import { Separator } from "../../../components/ui/Separator.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
@@ -73,7 +82,7 @@ const categories = [
 
 const AccountScreen = () => {
   const { data: session } = authClient.useSession();
-  useLocationPermissions();
+  const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   const handleSignOut = async () => {
@@ -150,6 +159,31 @@ const AccountScreen = () => {
             </View>
           </View>
         </View>
+
+        {!permissionState?.shouldShowAccountWarning && (
+          <Card variant="warning">
+            <CardHeader className="flex flex-row items-start gap-2">
+              <Icon as={AlertCircleIcon} className="text-warning-accent size-6" />
+              <View>
+                <CardTitle>
+                  <Text className="text-primary-foreground">Location access is off</Text>
+                </CardTitle>
+                <CardDescription>
+                  <Text className="text-muted">
+                    Enable location access to continue using the app
+                  </Text>
+                </CardDescription>
+              </View>
+            </CardHeader>
+            <CardContent>
+              <Button size="sm" onPress={openLocationPermissionSettings}>
+                <Icon as={MapPinIcon} className="size-5 text-white" />
+                <Text>Grant Location Permissions</Text>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {categories.map((category) => {
           return (
             <View key={category.label}>
