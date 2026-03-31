@@ -1,4 +1,5 @@
-import { useColorScheme } from "react-native";
+import { useTheme } from "../providers/ThemeProvider.tsx";
+import type { ResolvedTheme } from "./themePreferences.ts";
 
 export type Colors = {
   isDark: boolean;
@@ -18,9 +19,8 @@ export type Colors = {
 
 const BRAND = "#FF1464";
 
-export function useColors(): Colors {
-  const scheme = useColorScheme();
-  const dark = scheme === "dark";
+export const getColors = (theme: ResolvedTheme): Colors => {
+  const dark = theme === "dark";
 
   if (dark) {
     return {
@@ -55,4 +55,10 @@ export function useColors(): Colors {
     inputBorder: "#D8CEF0",
     inputBorderFocused: BRAND,
   };
-}
+};
+
+export const useColors = (): Colors => {
+  const { appTheme } = useTheme();
+
+  return getColors(appTheme);
+};

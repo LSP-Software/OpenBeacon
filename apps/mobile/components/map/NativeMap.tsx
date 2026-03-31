@@ -5,10 +5,10 @@ import { Button, Platform, View } from "react-native";
 import { Text } from "../../components/ui/Text.tsx";
 import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
 import { getProtomapsMapStyle } from "../../lib/protomaps-style.ts";
-import { useColors } from "../../lib/theme.ts";
+import { useTheme } from "../../providers/ThemeProvider.tsx";
 
 export const NativeMap = () => {
-  const colors = useColors();
+  const { mapTheme } = useTheme();
   const signedPmtilesUrlQuery = useSignedPmtilesUrl();
   const rootNavigationState = useRootNavigationState();
   const didRetryAfterMapFailureRef = useRef(false);
@@ -25,8 +25,8 @@ export const NativeMap = () => {
       return null;
     }
 
-    return getProtomapsMapStyle(colors.isDark ? "dark" : "light", pmtilesUrl);
-  }, [colors.isDark, pmtilesUrl]);
+    return getProtomapsMapStyle(mapTheme, pmtilesUrl);
+  }, [mapTheme, pmtilesUrl]);
 
   useEffect(() => {
     if (!rootNavigationState?.key || signedPmtilesUrlQuery.error?.data?.code !== "UNAUTHORIZED") {
