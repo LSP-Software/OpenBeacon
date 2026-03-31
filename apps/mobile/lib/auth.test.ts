@@ -148,7 +148,6 @@ describe("auth Google sign-in configuration", () => {
     process.env[GOOGLE_IOS_URL_SCHEME_ENV] = "com.googleusercontent.apps.test";
 
     expect(isNativeGoogleSignInConfiguredForPlatform("ios")).toBe(true);
-    expect(isNativeGoogleSignInConfiguredForPlatform("web")).toBe(false);
   });
 
   test("allows Android sign-in with only the web client id configured", async () => {

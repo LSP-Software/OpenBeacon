@@ -1,11 +1,6 @@
 import * as ExpoCrypto from "expo-crypto";
-import { Platform } from "react-native";
 
 export const installExpoCrypto = () => {
-  if (Platform.OS === "web") {
-    return;
-  }
-
   const existingCrypto = globalThis.crypto;
 
   if (

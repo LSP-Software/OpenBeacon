@@ -1,7 +1,7 @@
 import { EyeIcon, EyeOffIcon } from "lucide-react-native";
 import { type RefObject, useState } from "react";
 import { type Control, Controller, type FieldPath, type FieldValues } from "react-hook-form";
-import { Platform, Pressable, TextInput, type TextInputProps, View } from "react-native";
+import { Pressable, TextInput, type TextInputProps, View } from "react-native";
 import { cn } from "../../lib/cn.ts";
 import { Field, FieldDescription, FieldError, FieldLabel } from "./Field.tsx";
 import { Icon } from "./Icon.tsx";
@@ -47,21 +47,8 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
         return (
           <Field data-invalid={fieldState.invalid}>
             {(label || description) && (
-              <View
-                className={"flex flex-col"}
-                accessible={Platform.OS === "web"}
-                focusable={Platform.OS === "web"}
-                importantForAccessibility={Platform.OS === "web" ? "auto" : "no"}
-                pointerEvents={Platform.OS === "web" ? "auto" : "none"}
-              >
-                {label && (
-                  <FieldLabel
-                    className="text-lg font-medium"
-                    {...(Platform.OS === "web" ? { htmlFor: name } : {})}
-                  >
-                    {label}
-                  </FieldLabel>
-                )}
+              <View className={"flex flex-col"}>
+                {label && <FieldLabel className="text-lg font-medium">{label}</FieldLabel>}
                 {description && <FieldDescription>{description}</FieldDescription>}
               </View>
             )}
@@ -91,21 +78,8 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
                 className={cn(
                   `rounded-lg border border-border bg-input text-foreground ${inputFocused && "border-primary"} py-4 px-4`,
                   isPasswordInput && "pr-12",
-                  props.editable === false &&
-                    cn(
-                      "opacity-50",
-                      Platform.select({
-                        web: "disabled:pointer-events-none disabled:cursor-not-allowed",
-                      }),
-                    ),
-                  Platform.select({
-                    web: cn(
-                      "placeholder:text-muted-foreground selection:bg-primary outline-none transition-[color,box-shadow] md:text-sm",
-                      "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-                      "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
-                    ),
-                    native: "placeholder:text-secondary",
-                  }),
+                  props.editable === false && "opacity-50",
+                  "placeholder:text-secondary",
                   className,
                 )}
                 {...props}

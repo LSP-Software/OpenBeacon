@@ -9,7 +9,6 @@
     "dev": "expo start --android --ios",
     "android": "expo prebuild -p android && expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests",
     "check": "biome check .",
