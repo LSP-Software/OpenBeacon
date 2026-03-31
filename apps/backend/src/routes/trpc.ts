@@ -13,9 +13,9 @@ router.on(["POST", "GET"], "/trpc/*", (c) => {
     createContext: () =>
       createTRPCContext({
         cache: c.env.cache,
-        clientIp: c.env.clientIp,
         db: c.env.db,
         headers: c.req.raw.headers,
+        ...(c.env.clientIp != null ? { clientIp: c.env.clientIp } : {}),
       }),
   });
 });

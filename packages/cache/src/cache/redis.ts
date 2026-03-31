@@ -23,13 +23,23 @@ export const toRedisOptions = (
     return undefined;
   }
 
-  const normalizedRedisOptions: Record<string, unknown> = {};
+  const normalizedRedisOptions = {
+    ...(redisOptions.connectionTimeout !== undefined
+      ? { connectionTimeout: redisOptions.connectionTimeout }
+      : {}),
+    ...(redisOptions.idleTimeout !== undefined ? { idleTimeout: redisOptions.idleTimeout } : {}),
+    ...(redisOptions.autoReconnect !== undefined
+      ? { autoReconnect: redisOptions.autoReconnect }
+      : {}),
+    ...(redisOptions.maxRetries !== undefined ? { maxRetries: redisOptions.maxRetries } : {}),
+    ...(redisOptions.enableOfflineQueue !== undefined
+      ? { enableOfflineQueue: redisOptions.enableOfflineQueue }
+      : {}),
+    ...(redisOptions.tls !== undefined ? { tls: redisOptions.tls } : {}),
+    ...(redisOptions.enableAutoPipelining !== undefined
+      ? { enableAutoPipelining: redisOptions.enableAutoPipelining }
+      : {}),
+  } satisfies Partial<RedisOptions>;
 
-  Object.entries(redisOptions).forEach(([key, value]) => {
-    if (value !== undefined) {
-      normalizedRedisOptions[key] = value;
-    }
-  });
-
-  return normalizedRedisOptions as RedisOptions;
+  return normalizedRedisOptions;
 };

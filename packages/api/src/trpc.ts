@@ -30,7 +30,7 @@ import { rateLimitErrorCauseSchema } from "./middlewares/rateLimit.ts";
 
 export const createTRPCContext = async (opts: {
   cache: OpenBeaconCache;
-  clientIp: string | null;
+  clientIp?: string;
   db: PrismaClient;
   headers: Headers;
 }) => {
@@ -40,9 +40,17 @@ export const createTRPCContext = async (opts: {
 
   return {
     cache: opts.cache,
-    clientIp: opts.clientIp,
     db: opts.db,
     session,
+    ...(opts.clientIp !== undefined ? { clientIp: opts.clientIp } : {}),
+  };
+};
+export type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
+export type TRPCMeta = {
+  rateLimit?: {
+    cost?: number;
+    limit: number;
+    windowMs: number;
   };
 };
 /**
@@ -51,33 +59,34 @@ export const createTRPCContext = async (opts: {
  * This is where the trpc api is initialized, connecting the context and
  * transformer
  */
-export const t = initTRPC
-  .context<typeof createTRPCContext>()
-  .meta<{
-    rateLimit?: {
-      cost?: number;
-      limit: number;
-      windowMs: number;
-    };
-  }>()
-  .create({
-    transformer: superjson,
-    errorFormatter: ({ shape, error }) => {
-      const rateLimitResult = rateLimitErrorCauseSchema.safeParse(error.cause);
+export const createTRPCComponents = () => {
+  const t = initTRPC
+    .context<TRPCContext>()
+    .meta<TRPCMeta>()
+    .create({
+      transformer: superjson,
+      errorFormatter: ({ shape, error }) => {
+        const rateLimitResult = rateLimitErrorCauseSchema.safeParse(error.cause);
 
-      return {
-        ...shape,
-        data: {
-          ...shape.data,
-          rateLimit: rateLimitResult.success ? rateLimitResult.data : null,
-          zodError:
-            error.cause instanceof ZodError
-              ? z.flattenError(error.cause as ZodError<Record<string, unknown>>)
-              : null,
-        },
-      };
-    },
-  });
+        return {
+          ...shape,
+          data: {
+            ...shape.data,
+            rateLimit: rateLimitResult.success ? rateLimitResult.data : null,
+            zodError:
+              error.cause instanceof ZodError
+                ? z.flattenError(error.cause as ZodError<Record<string, unknown>>)
+                : null,
+          },
+        };
+      },
+    });
+
+  return {
+    createTRPCRouter: t.router,
+    t,
+  };
+};
 
 /**
  * 3. ROUTER & PROCEDURE (THE IMPORTANT BIT)
@@ -90,4 +99,3 @@ export const t = initTRPC
  * This is how you create new routers and subrouters in your tRPC API
  * @see https://trpc.io/docs/router
  */
-export const createTRPCRouter = t.router;
