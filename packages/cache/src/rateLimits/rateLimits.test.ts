@@ -149,33 +149,46 @@ describe("OpenBeaconCache rateLimits", () => {
     });
   });
 
-  test("prevents operations after close", async () => {
+  test("stores and expires a single pmtiles signed url per user", async () => {
+    let nowMs = 0;
+    const originalDateNow = Date.now;
+    Date.now = () => nowMs;
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
+      now: () => nowMs,
     });
 
-    cache.close();
+    await expect(cache.pmtilesSignedUrls.get({ userId: "user-1" })).resolves.toBeNull();
 
     await expect(
-      cache.rateLimits.peek({
-        namespace: "route",
-        identifier: {
-          type: "ip",
-          value: "127.0.0.1",
-        },
-        limit: 1,
-        windowMs: 1_000,
+      cache.pmtilesSignedUrls.set({
+        expiresAt: new Date(10_000).toISOString(),
+        url: "https://example.com/pmtiles-a",
+        userId: "user-1",
       }),
-    ).rejects.toThrow("Redis client is closed.");
+    ).resolves.toBeUndefined();
+
+    await expect(cache.pmtilesSignedUrls.get({ userId: "user-1" })).resolves.toEqual({
+      expiresAt: new Date(10_000).toISOString(),
+      url: "https://example.com/pmtiles-a",
+    });
 
     await expect(
-      cache.rateLimits.reset({
-        namespace: "route",
-        identifier: {
-          type: "ip",
-          value: "127.0.0.1",
-        },
+      cache.pmtilesSignedUrls.set({
+        expiresAt: new Date(20_000).toISOString(),
+        url: "https://example.com/pmtiles-b",
+        userId: "user-1",
       }),
-    ).rejects.toThrow("Redis client is closed.");
+    ).resolves.toBeUndefined();
+
+    await expect(cache.pmtilesSignedUrls.get({ userId: "user-1" })).resolves.toEqual({
+      expiresAt: new Date(20_000).toISOString(),
+      url: "https://example.com/pmtiles-b",
+    });
+
+    nowMs = 25_000;
+
+    await expect(cache.pmtilesSignedUrls.get({ userId: "user-1" })).resolves.toBeNull();
+    Date.now = originalDateNow;
   });
 });

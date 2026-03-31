@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { trpc } from "../lib/api.ts";
-
-const PM_TILES_URL_REFRESH_BUFFER_MS = 60 * 1000;
+import { getPmtilesUrlRefreshDelayMs } from "../lib/pmtilesUrl.ts";
 
 export const useSignedPmtilesUrl = () => {
   const query = useQuery({
@@ -11,16 +10,18 @@ export const useSignedPmtilesUrl = () => {
   });
 
   useEffect(() => {
-    const expiresAt = query.data?.expiresAt;
+    const refreshAt = query.data?.refreshAt;
 
-    if (!expiresAt) {
+    if (!refreshAt) {
       return;
     }
 
-    const refreshInMs = Math.max(
-      new Date(expiresAt).getTime() - Date.now() - PM_TILES_URL_REFRESH_BUFFER_MS,
-      0,
-    );
+    const refreshInMs = getPmtilesUrlRefreshDelayMs({ refreshAt });
+
+    if (refreshInMs === 0) {
+      void query.refetch();
+      return;
+    }
 
     const timer = setTimeout(() => {
       void query.refetch();
@@ -29,7 +30,7 @@ export const useSignedPmtilesUrl = () => {
     return () => {
       clearTimeout(timer);
     };
-  }, [query.data?.expiresAt, query.refetch]);
+  }, [query.data?.refreshAt, query.refetch]);
 
   return query;
 };

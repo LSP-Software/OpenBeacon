@@ -1,15 +1,23 @@
 import { Camera, MapView } from "@maplibre/maplibre-react-native";
+import { useMutation } from "@tanstack/react-query";
 import { router, useRootNavigationState } from "expo-router";
 import { useEffect, useMemo, useRef } from "react";
 import { Button, Platform, View } from "react-native";
 import { Text } from "../../components/ui/Text.tsx";
 import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
+import { queryClient, trpc } from "../../lib/api.ts";
 import { getProtomapsMapStyle } from "../../lib/protomaps-style.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
 
 export const NativeMap = () => {
   const { mapTheme } = useTheme();
   const signedPmtilesUrlQuery = useSignedPmtilesUrl();
+  const forceRefreshSignedPmtilesUrlMutation = useMutation({
+    ...trpc.maps.forceRefreshSignedPmtilesUrl.mutationOptions(),
+    onSuccess: (signedPmtilesUrl) => {
+      queryClient.setQueryData(trpc.maps.getSignedPmtilesUrl.queryKey(), signedPmtilesUrl);
+    },
+  });
   const rootNavigationState = useRootNavigationState();
   const didRetryAfterMapFailureRef = useRef(false);
   const lastPmtilesUrlRef = useRef<string | null>(null);
@@ -72,12 +80,16 @@ export const NativeMap = () => {
         rotateEnabled={false}
         surfaceView={Platform.OS === "android"}
         onDidFailLoadingMap={() => {
-          if (didRetryAfterMapFailureRef.current || signedPmtilesUrlQuery.isFetching) {
+          if (
+            didRetryAfterMapFailureRef.current ||
+            signedPmtilesUrlQuery.isFetching ||
+            forceRefreshSignedPmtilesUrlMutation.isPending
+          ) {
             return;
           }
 
           didRetryAfterMapFailureRef.current = true;
-          void signedPmtilesUrlQuery.refetch();
+          forceRefreshSignedPmtilesUrlMutation.mutate();
         }}
         onDidFinishLoadingStyle={() => {
           didRetryAfterMapFailureRef.current = false;

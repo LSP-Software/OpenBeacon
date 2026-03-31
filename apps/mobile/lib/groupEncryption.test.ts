@@ -34,6 +34,20 @@ const deviceKeyContextQueryMock = mock(async () => ({
 }));
 
 mock.module("./api.ts", () => ({
+  queryClient: {
+    setQueryData: () => {},
+  },
+  trpc: {
+    maps: {
+      forceRefreshSignedPmtilesUrl: {
+        mutationOptions: () => ({}),
+      },
+      getSignedPmtilesUrl: {
+        queryKey: () => [["maps", "getSignedPmtilesUrl"]],
+        queryOptions: () => ({}),
+      },
+    },
+  },
   trpcClient: {
     auth: {
       deviceKeyContext: {

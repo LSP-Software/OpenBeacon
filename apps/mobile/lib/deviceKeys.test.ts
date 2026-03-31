@@ -26,6 +26,20 @@ mock.module("expo-secure-store", () => ({
 }));
 
 mock.module("./api.ts", () => ({
+  queryClient: {
+    setQueryData: () => {},
+  },
+  trpc: {
+    maps: {
+      forceRefreshSignedPmtilesUrl: {
+        mutationOptions: () => ({}),
+      },
+      getSignedPmtilesUrl: {
+        queryKey: () => [["maps", "getSignedPmtilesUrl"]],
+        queryOptions: () => ({}),
+      },
+    },
+  },
   trpcClient: {
     auth: {
       deviceKeyContext: {
