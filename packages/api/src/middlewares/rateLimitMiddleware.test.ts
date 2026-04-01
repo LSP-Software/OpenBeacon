@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis } from "@openbeacon/cache/testing";
+import { tryCatch } from "@openbeacon/shared";
 import { type AnyRouter, TRPCError } from "@trpc/server";
 import { createAuthProcedures } from "../procedures/auth/base.ts";
 import { createTRPCComponents } from "../trpc.ts";
@@ -45,8 +46,9 @@ const createCaller = <TRouter extends AnyRouter>({
   clientIp?: string;
   router: TRouter;
   userId: string | null;
-}): ReturnType<TRouter["createCaller"]> =>
-  router.createCaller({
+}): ReturnType<TRouter["createCaller"]> => {
+  type CallerContext = Parameters<TRouter["createCaller"]>[0];
+  const context: CallerContext = {
     cache,
     db: {},
     session: userId
@@ -57,7 +59,9 @@ const createCaller = <TRouter extends AnyRouter>({
         }
       : null,
     ...(clientIp !== undefined ? { clientIp } : {}),
-  } as Parameters<TRouter["createCaller"]>[0]);
+  };
+  return router.createCaller(context);
+};
 
 describe("rateLimitMiddleware", () => {
   beforeEach(() => {
@@ -202,14 +206,9 @@ describe("rateLimitMiddleware", () => {
       await expect(firstCaller.protectedRoute()).resolves.toBe("protected");
     }
 
-    let thrownError: TRPCError | null = null;
-
-    try {
-      await secondCaller.protectedRoute();
-    } catch (error) {
-      thrownError = error as TRPCError;
-    }
-
+    const rateLimitResult = await tryCatch<"protected", TRPCError>(secondCaller.protectedRoute());
+    expect(rateLimitResult.data).toBeNull();
+    const thrownError = rateLimitResult.error;
     expect(thrownError).not.toBeNull();
     expect(thrownError?.code).toBe("TOO_MANY_REQUESTS");
     expect(thrownError?.cause).toMatchObject({

@@ -65,7 +65,19 @@ export const openBeaconCacheOptionsSchema = z
     redisUrl: redisUrlSchema,
     keyPrefix: z.string().min(1).optional(),
     redisOptions: redisOptionsSchema.optional(),
-    now: z.custom<() => number>((value) => typeof value === "function").optional(),
+    now: z
+      .custom<() => number>((value): value is () => number => {
+        if (typeof value !== "function") {
+          return false;
+        }
+        try {
+          const result = (value as () => unknown)();
+          return typeof result === "number" && Number.isFinite(result);
+        } catch {
+          return false;
+        }
+      })
+      .optional(),
   })
   .strict();
 

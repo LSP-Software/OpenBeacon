@@ -24,6 +24,41 @@ describe("OpenBeaconCache rateLimits", () => {
         }),
     ).toThrowError(expect.objectContaining({ message: expect.stringContaining("redis") }));
 
+    expect(
+      () =>
+        new TestOpenBeaconCache({
+          redisUrl: "redis://localhost:6379",
+          now: () => Number.NaN,
+        }),
+    ).toThrow();
+
+    expect(
+      () =>
+        new TestOpenBeaconCache({
+          redisUrl: "redis://localhost:6379",
+          now: () => {
+            throw new Error("clock");
+          },
+        }),
+    ).toThrow();
+
+    expect(
+      () =>
+        new TestOpenBeaconCache({
+          redisUrl: "redis://localhost:6379",
+          now: () => Number.POSITIVE_INFINITY,
+        }),
+    ).toThrow();
+
+    const nonNumericClock = () => "x";
+    expect(
+      () =>
+        new TestOpenBeaconCache({
+          redisUrl: "redis://localhost:6379",
+          now: nonNumericClock as () => number,
+        }),
+    ).toThrow();
+
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
     });
