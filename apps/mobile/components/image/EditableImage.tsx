@@ -137,7 +137,10 @@ export const EditableImage = ({
       <Avatar alt={alt} className={cn(sizeClassNames[size].avatar, "border-2 border-white")}>
         <AvatarImage source={{ uri: imageUrl ?? "" }} />
         <AvatarFallback>
-          <Icon as={UserIcon} className={sizeClassNames[size].fallbackIcon} />
+          <Icon
+            as={UserIcon}
+            className={cn(sizeClassNames[size].fallbackIcon, "text-primary-foreground")}
+          />
         </AvatarFallback>
       </Avatar>
 
