@@ -37,6 +37,7 @@
     "scheme": "openbeacon",
     "plugins": [
       "expo-router",
+      "expo-system-ui",
       "expo-secure-store",
       [
         "expo-location",
