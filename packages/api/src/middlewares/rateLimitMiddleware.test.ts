@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis } from "@openbeacon/cache/testing";
-import { TRPCError } from "@trpc/server";
+import { type AnyRouter, TRPCError } from "@trpc/server";
 import { createAuthProcedures } from "../procedures/auth/base.ts";
 import { createTRPCComponents } from "../trpc.ts";
 import { createRateLimitMiddleware } from "./rateLimitMiddleware.ts";
@@ -35,7 +35,7 @@ const createModules = () => {
   };
 };
 
-const createCaller = <TRouter extends { createCaller: (ctx: unknown) => unknown }>({
+const createCaller = <TRouter extends AnyRouter>({
   cache,
   clientIp,
   router,
@@ -45,8 +45,8 @@ const createCaller = <TRouter extends { createCaller: (ctx: unknown) => unknown 
   clientIp?: string;
   router: TRouter;
   userId: string | null;
-}) => {
-  return router.createCaller({
+}): ReturnType<TRouter["createCaller"]> =>
+  router.createCaller({
     cache,
     db: {},
     session: userId
@@ -57,8 +57,7 @@ const createCaller = <TRouter extends { createCaller: (ctx: unknown) => unknown 
         }
       : null,
     ...(clientIp !== undefined ? { clientIp } : {}),
-  }) as ReturnType<TRouter["createCaller"]>;
-};
+  } as Parameters<TRouter["createCaller"]>[0]);
 
 describe("rateLimitMiddleware", () => {
   beforeEach(() => {
@@ -213,16 +212,12 @@ describe("rateLimitMiddleware", () => {
 
     expect(thrownError).not.toBeNull();
     expect(thrownError?.code).toBe("TOO_MANY_REQUESTS");
-    const thrownErrorCause = thrownError?.cause as {
-      limit: number;
-      remaining: number;
-      retryAfterMs: number;
-      resetAfterMs: number;
-    };
-    expect(thrownErrorCause.limit).toBe(60);
-    expect(thrownErrorCause.remaining).toBe(0);
-    expect(thrownErrorCause.retryAfterMs).toBe(1_000);
-    expect(thrownErrorCause.resetAfterMs).toBe(60_000);
+    expect(thrownError?.cause).toMatchObject({
+      limit: 60,
+      remaining: 0,
+      retryAfterMs: 1_000,
+      resetAfterMs: 60_000,
+    });
 
     const formattedError = t._config.errorFormatter({
       error: new TRPCError({

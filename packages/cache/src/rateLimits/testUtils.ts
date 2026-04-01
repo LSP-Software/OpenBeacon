@@ -1,3 +1,9 @@
+/**
+ * Test-only utilities behind the `@openbeacon/cache/testing` subpath (`./testing` in package.json).
+ * Do not import this module in production; `FakeRedis` and `BucketState` exist to exercise rate limiting
+ * in unit tests. Shipping them in app bundles wastes size and can confuse auditors—configure bundlers to
+ * omit `./testing` from production graphs where possible.
+ */
 export type BucketState = {
   expiresAt: number;
   lastMs: number;
