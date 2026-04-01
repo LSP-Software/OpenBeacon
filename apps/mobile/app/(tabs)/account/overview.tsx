@@ -201,8 +201,8 @@ const AccountScreen = () => {
                 {category.label}
               </Text>
               <View className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
-                {category.settings.map((setting) => {
-                  const isLastSetting = setting === category.settings[category.settings.length - 1];
+                {category.settings.map((setting, settingIndex) => {
+                  const isLastSetting = settingIndex === category.settings.length - 1;
 
                   return (
                     <Link key={setting.label} href={setting.href} asChild>
