@@ -83,7 +83,7 @@ export const ExampleProvider = ({ children }: ExampleProviderProps) => {
 |---|---|
 | PostgreSQL 16 + DragonflyDB (Redis) | `sudo docker compose up -d` (from repo root) |
 | Backend API (Hono + tRPC + Better Auth) | `bun run dev --filter=@openbeacon/backend` or directly: `bun run --env-file=.env --hot apps/backend/src/index.ts` (port 3000) |
-| Mobile (Expo/React Native) | Cannot run in headless Cloud VM — requires Android/iOS emulator |
+| Mobile (Expo/React Native) | See mobile app setup below |
 
 ### Key commands
 
@@ -97,3 +97,27 @@ See `package.json` scripts at root for `dev`, `ci`, `typecheck`, `check`, `test`
 - The `database` package typecheck script runs `prisma generate` itself, so `bun run ci` (which runs `turbo typecheck`) will auto-generate the Prisma client as a side effect.
 - Tests (`bun run test`) run across all packages via Turborepo. The API package tests require a running PostgreSQL instance.
 - The pre-commit hook (`.husky/pre-commit`) runs `bun install --frozen-lockfile` then `bun run ci`.
+
+### Mobile app (Android emulator) setup
+
+The mobile app can run in the Cloud VM using a software-emulated Android emulator, but it is **extremely slow** without KVM hardware acceleration.
+
+**Prerequisites (one-time setup):**
+1. Java 17: `sudo apt-get install -y openjdk-17-jdk-headless` and set `JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64`
+2. Android SDK at `/opt/android-sdk` with: `platform-tools`, `platforms;android-35`, `build-tools;35.0.1`, `system-images;android-35;google_apis;x86_64`, `emulator`
+3. Create AVD: `echo "no" | avdmanager create avd --name openbeacon_test --package "system-images;android-35;google_apis;x86_64" --device pixel_6`
+4. Mobile `.env` at `apps/mobile/.env`: set `EXPO_PUBLIC_DEV_API_URL=http://10.0.2.2:3000`
+5. Expo prebuild: `cd apps/mobile && npx expo prebuild -p android --clean`
+
+**Running the app:**
+1. Start emulator (no KVM): `emulator -avd openbeacon_test -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -accel off &` — boot takes ~3-4 minutes
+2. Start Metro: `cd apps/mobile && npx expo start --port 8081`
+3. Set up adb port forwarding: `adb reverse tcp:8081 tcp:8081 && adb reverse tcp:3000 tcp:3000`
+4. Build and install: `cd apps/mobile && npx expo run:android --no-bundler` — first build takes ~10 minutes
+5. Launch: `adb shell am start -a android.intent.action.VIEW -d "exp+open-beacon://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081" net.openbeacon.app`
+
+**Known issues in Cloud VM:**
+- ANR ("App isn't responding") dialogs appear constantly due to slow software emulation. Dismiss with "Wait".
+- The first bundle takes ~20s to serve; the app splash screen loads behind the ANR dialog.
+- The Expo dev menu appears on first launch — dismiss it by tapping the X button.
+- Overall app interaction is very sluggish (~10-30s per tap response).
