@@ -1,5 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import {
   AlertCircleIcon,
@@ -44,14 +44,17 @@ const categories = [
       {
         label: "Manage Profile",
         icon: UserCircleIcon,
+        href: "/account/manage-profile",
       },
       {
         label: "Notifications",
         icon: BellIcon,
+        href: "/account/notifications",
       },
       {
         label: "Password and Security",
         icon: LockIcon,
+        href: "/account/password-and-security",
       },
     ],
   },
@@ -71,14 +74,17 @@ const categories = [
       {
         label: "Help Center",
         icon: HelpCircleIcon,
+        href: "/account/help-center",
       },
       {
         label: "Contact Us",
         icon: MailIcon,
+        href: "/account/contact-us",
       },
       {
         label: "About",
         icon: InfoIcon,
+        href: "/account/about",
       },
     ],
   },
@@ -199,28 +205,19 @@ const AccountScreen = () => {
                   const isLastSetting = settingIndex === category.settings.length - 1;
 
                   return (
-                    <Pressable
-                      key={setting.label}
-                      disabled={!("href" in setting)}
-                      className={`flex flex-row items-center justify-between ${
-                        isLastSetting ? "" : "border-b-[0.5px] border-border/30 pb-3"
-                      }`}
-                      onPress={() => {
-                        if (!("href" in setting)) {
-                          return;
-                        }
-
-                        router.push(setting.href);
-                      }}
-                    >
-                      <View className="flex flex-row items-center gap-3">
-                        <Icon as={setting.icon} className="text-muted-foreground size-6" />
-                        <Text className="text-foreground font-medium">{setting.label}</Text>
-                      </View>
-                      {"href" in setting ? (
+                    <Link key={setting.label} href={setting.href} asChild>
+                      <Pressable
+                        className={`flex flex-row items-center justify-between ${
+                          isLastSetting ? "" : "border-b-[0.5px] border-border/30 pb-3"
+                        }`}
+                      >
+                        <View className="flex flex-row items-center gap-3">
+                          <Icon as={setting.icon} className="text-muted-foreground size-6" />
+                          <Text className="text-foreground font-medium">{setting.label}</Text>
+                        </View>
                         <Icon as={ChevronRightIcon} className="text-muted-foreground size-6" />
-                      ) : null}
-                    </Pressable>
+                      </Pressable>
+                    </Link>
                   );
                 })}
               </View>
