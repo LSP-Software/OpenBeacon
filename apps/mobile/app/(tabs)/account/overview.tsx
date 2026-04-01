@@ -1,11 +1,10 @@
 import { tryCatch } from "@openbeacon/shared";
-import { Link, router } from "expo-router";
+import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import {
   AlertCircleIcon,
   BellIcon,
   CameraIcon,
-  ChevronRightIcon,
   HelpCircleIcon,
   InfoIcon,
   LockIcon,
@@ -16,8 +15,9 @@ import {
   UserCircleIcon,
 } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { SettingsContainer } from "../../../components/containers/settingsContainer.tsx";
 import { EditableImage } from "../../../components/image/EditableImage.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
 import {
@@ -194,36 +194,9 @@ const AccountScreen = () => {
             </CardContent>
           </Card>
         )}
-        {categories.map((category) => {
-          return (
-            <View key={category.label}>
-              <Text className="mb-1 text-lg font-medium text-muted-foreground">
-                {category.label}
-              </Text>
-              <View className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
-                {category.settings.map((setting, settingIndex) => {
-                  const isLastSetting = settingIndex === category.settings.length - 1;
 
-                  return (
-                    <Link key={setting.label} href={setting.href} asChild>
-                      <Pressable
-                        className={`flex flex-row items-center justify-between ${
-                          isLastSetting ? "" : "border-b-[0.5px] border-border/30 pb-3"
-                        }`}
-                      >
-                        <View className="flex flex-row items-center gap-3">
-                          <Icon as={setting.icon} className="text-muted-foreground size-6" />
-                          <Text className="text-foreground font-medium">{setting.label}</Text>
-                        </View>
-                        <Icon as={ChevronRightIcon} className="text-muted-foreground size-6" />
-                      </Pressable>
-                    </Link>
-                  );
-                })}
-              </View>
-            </View>
-          );
-        })}
+        <SettingsContainer categories={categories} />
+
         <Button onPress={handleSignOut} className="mb-28">
           <Text>Sign out</Text>
         </Button>

@@ -76,7 +76,7 @@ const GroupScreen = () => {
                   return <HistoryTab />;
                 }
 
-                return <SettingsTab groupName={group.name} />;
+                return <SettingsTab />;
               }}
             />
           </View>

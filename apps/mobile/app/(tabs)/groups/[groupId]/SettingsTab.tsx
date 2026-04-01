@@ -1,17 +1,49 @@
+import { UserIcon } from "lucide-react-native";
 import { View } from "react-native";
-import { Text } from "../../../../components/ui/Text.tsx";
+import { SettingsContainer } from "../../../../components/containers/settingsContainer.tsx";
 
-const SettingsTab = ({ groupName }: { groupName: string }) => {
+const SettingsTab = () => {
+  const categories = [
+    {
+      label: "Heading 1",
+      settings: [
+        {
+          label: "example setting 1",
+          icon: UserIcon,
+          href: "/groups/[groupId]/settings/group-name",
+        },
+        {
+          label: "example setting 2",
+          icon: UserIcon,
+          href: "/groups/[groupId]/settings/group-name",
+        },
+        {
+          label: "example setting 3",
+          icon: UserIcon,
+          href: "/groups/[groupId]/settings/group-name",
+        },
+      ],
+    },
+    {
+      label: "Heading 2",
+      settings: [
+        {
+          label: "example setting 4",
+          icon: UserIcon,
+          href: "/groups/[groupId]/settings/group-name",
+        },
+        {
+          label: "example setting 5",
+          icon: UserIcon,
+          href: "/groups/[groupId]/settings/group-name",
+        },
+      ],
+    },
+  ];
+
   return (
     <View className="pt-1">
-      <View className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-5">
-        <View className="gap-2">
-          <Text className="text-xs font-semibold uppercase tracking-[1.2px] text-primary">
-            Group name
-          </Text>
-          <Text className="text-foreground text-2xl font-bold">{groupName}</Text>
-        </View>
-      </View>
+      <SettingsContainer categories={categories} />
     </View>
   );
 };
