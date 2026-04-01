@@ -211,6 +211,18 @@ describe("OpenBeaconCache rateLimits", () => {
     ).rejects.toThrow("Redis client is closed.");
 
     await expect(
+      cache.rateLimits.consume({
+        namespace: "route",
+        identifier: {
+          type: "ip",
+          value: "127.0.0.1",
+        },
+        limit: 1,
+        windowMs: 1_000,
+      }),
+    ).rejects.toThrow("Redis client is closed.");
+
+    await expect(
       cache.rateLimits.reset({
         namespace: "route",
         identifier: {
