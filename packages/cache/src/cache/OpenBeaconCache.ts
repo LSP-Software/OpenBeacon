@@ -16,21 +16,17 @@ import { openBeaconCacheOptionsSchema } from "../rateLimits/schemas.ts";
 import type { RateLimitResult } from "../rateLimits/types.ts";
 import { type RedisLike, toRedisOptions } from "./redis.ts";
 
-type RateLimitsApi = {
-  peek: (input: RateLimitPeekInput) => Promise<RateLimitResult>;
-  consume: (input: RateLimitConsumeInput) => Promise<RateLimitResult>;
-  reset: (input: RateLimitResetInput) => Promise<number>;
-};
-
-type PmtilesSignedUrlsApi = {
-  get: (input: PmtilesSignedUrlInput) => Promise<PmtilesSignedUrlValue | null>;
-  set: (input: SetPmtilesSignedUrlInput) => Promise<void>;
-  reset: (input: PmtilesSignedUrlInput) => Promise<number>;
-};
-
 export class OpenBeaconCache {
-  public readonly pmtilesSignedUrls: PmtilesSignedUrlsApi;
-  public readonly rateLimits: RateLimitsApi;
+  public readonly pmtilesSignedUrls: {
+    get: (input: PmtilesSignedUrlInput) => Promise<PmtilesSignedUrlValue | null>;
+    set: (input: SetPmtilesSignedUrlInput) => Promise<void>;
+    reset: (input: PmtilesSignedUrlInput) => Promise<number>;
+  };
+  public readonly rateLimits: {
+    peek: (input: RateLimitPeekInput) => Promise<RateLimitResult>;
+    consume: (input: RateLimitConsumeInput) => Promise<RateLimitResult>;
+    reset: (input: RateLimitResetInput) => Promise<number>;
+  };
   protected readonly now: () => number;
   protected readonly redis: RedisLike;
   protected readonly keyPrefix: string;

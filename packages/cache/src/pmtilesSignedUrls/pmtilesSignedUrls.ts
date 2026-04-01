@@ -31,7 +31,16 @@ export const createPmtilesSignedUrls = ({
         return null;
       }
 
-      const parsedValue = pmtilesSignedUrlValueSchema.safeParse(JSON.parse(result));
+      let json: unknown;
+
+      try {
+        json = JSON.parse(result);
+      } catch {
+        await redis.del(key);
+        return null;
+      }
+
+      const parsedValue = pmtilesSignedUrlValueSchema.safeParse(json);
 
       if (!parsedValue.success) {
         await redis.del(key);

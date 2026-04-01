@@ -10,14 +10,9 @@ export type BucketState = {
   tokens: number;
 };
 
-type StringValueState = {
-  expiresAt: number;
-  value: string;
-};
-
 export class FakeRedis {
   private readonly buckets = new Map<string, BucketState>();
-  private readonly strings = new Map<string, StringValueState>();
+  private readonly strings = new Map<string, { expiresAt: number; value: string }>();
   private closed = false;
 
   public async send(command: string, args: string[]): Promise<string[] | string | null> {
@@ -129,11 +124,10 @@ export class FakeRedis {
     let deletedKeys = 0;
 
     keys.forEach((key) => {
-      if (this.buckets.delete(key)) {
-        deletedKeys += 1;
-      }
+      const removedFromBuckets = this.buckets.delete(key);
+      const removedFromStrings = this.strings.delete(key);
 
-      if (this.strings.delete(key)) {
+      if (removedFromBuckets || removedFromStrings) {
         deletedKeys += 1;
       }
     });

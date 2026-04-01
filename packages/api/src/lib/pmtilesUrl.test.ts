@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import type { OpenBeaconCache } from "@openbeacon/cache";
 
 const createCache = ({
   cachedSignedPmtilesUrl = null,
@@ -10,15 +11,14 @@ const createCache = ({
 } = {}) => {
   const get = mock(async () => cachedSignedPmtilesUrl);
   const set = mock(async () => undefined);
+  const pmtilesSignedUrls = {
+    get,
+    reset: mock(async () => 1),
+    set,
+  } satisfies OpenBeaconCache["pmtilesSignedUrls"];
 
   return {
-    cache: {
-      pmtilesSignedUrls: {
-        get,
-        reset: mock(async () => 1),
-        set,
-      },
-    },
+    cache: { pmtilesSignedUrls } as OpenBeaconCache,
     get,
     set,
   };
@@ -120,7 +120,7 @@ describe("pmtilesUrl", () => {
     });
 
     const result = await getSignedPmtilesUrlForUser({
-      cache: cache as never,
+      cache,
       createSignedPmtilesUrl: createSignedUrl,
       now: () => now.getTime(),
       userId: "user-1",
@@ -150,7 +150,7 @@ describe("pmtilesUrl", () => {
     }));
 
     const result = await getSignedPmtilesUrlForUser({
-      cache: cache as never,
+      cache,
       createSignedPmtilesUrl: createSignedUrl,
       userId: "user-1",
     });
@@ -186,7 +186,7 @@ describe("pmtilesUrl", () => {
     }));
 
     const result = await getSignedPmtilesUrlForUser({
-      cache: cache as never,
+      cache,
       createSignedPmtilesUrl: createSignedUrl,
       now: () => now.getTime(),
       userId: "user-1",
@@ -213,7 +213,7 @@ describe("pmtilesUrl", () => {
     }));
 
     const result = await forceRefreshSignedPmtilesUrlForUser({
-      cache: cache as never,
+      cache,
       createSignedPmtilesUrl: createSignedUrl,
       userId: "user-1",
     });

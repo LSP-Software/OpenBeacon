@@ -26,7 +26,7 @@ mock.module("@tanstack/react-query", () => ({
   }),
 }));
 
-mock.module("/home/smadger/Desktop/Projects/OpenBeacon/apps/mobile/lib/api.ts", () => ({
+mock.module("../lib/api.ts", () => ({
   queryClient: {
     setQueryData: () => {},
   },
@@ -99,14 +99,16 @@ describe("useSignedPmtilesUrl", () => {
     const originalNow = Date.now;
     Date.now = () => now;
 
-    await renderHookHarness();
+    try {
+      await renderHookHarness();
 
-    Date.now = originalNow;
-
-    expect(lastTimeoutDelay).toBe(30_000);
-    expect(refetch).not.toHaveBeenCalled();
-    lastTimeoutCallback?.();
-    expect(refetch).toHaveBeenCalledTimes(1);
+      expect(lastTimeoutDelay).toBe(30_000);
+      expect(refetch).not.toHaveBeenCalled();
+      lastTimeoutCallback?.();
+      expect(refetch).toHaveBeenCalledTimes(1);
+    } finally {
+      Date.now = originalNow;
+    }
   });
 
   test("refetches immediately when refreshAt is already due", async () => {
@@ -123,11 +125,13 @@ describe("useSignedPmtilesUrl", () => {
     const originalNow = Date.now;
     Date.now = () => now;
 
-    await renderHookHarness();
+    try {
+      await renderHookHarness();
 
-    Date.now = originalNow;
-
-    expect(refetch).toHaveBeenCalledTimes(1);
-    expect(lastTimeoutDelay).toBeNull();
+      expect(refetch).toHaveBeenCalledTimes(1);
+      expect(lastTimeoutDelay).toBeNull();
+    } finally {
+      Date.now = originalNow;
+    }
   });
 });

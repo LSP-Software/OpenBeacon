@@ -100,7 +100,7 @@ mock.module("../../hooks/useSignedPmtilesUrl.ts", () => ({
   useSignedPmtilesUrl: () => currentSignedPmtilesUrlQuery,
 }));
 
-mock.module("/home/smadger/Desktop/Projects/OpenBeacon/apps/mobile/lib/api.ts", () => ({
+mock.module("../../lib/api.ts", () => ({
   queryClient: {
     setQueryData,
   },
