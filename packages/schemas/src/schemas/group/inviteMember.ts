@@ -12,5 +12,6 @@ export const inviteMemberToGroupSchema = z.object({
         }),
       }),
     )
-    .min(1, { message: "At least one invite is required" }),
+    .min(1, { message: "At least one invite is required" })
+    .max(50, { message: "At most 50 invites per request" }),
 });

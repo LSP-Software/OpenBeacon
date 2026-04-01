@@ -7,10 +7,16 @@ import {
   requestImageUpload,
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
-import { protectedProcedure } from "../procedures/auth/base.ts";
+import { protectedProcedure } from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
   requestProfileImageUpload: protectedProcedure
+    .meta({
+      rateLimit: {
+        limit: 10,
+        windowMs: 60_000,
+      },
+    })
     .input(requestImageUploadInputSchema({ maxImageFileSize: env.MAX_IMAGE_FILE_SIZE }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -36,39 +42,46 @@ export const accountRouter = {
 
       return { presignedUrl };
     }),
-  confirmProfileImageUpload: protectedProcedure.mutation(async ({ ctx }) => {
-    const userId = ctx.session.user.id;
-
-    const pendingUpload = await ctx.db.pendingUpload.findUnique({
-      where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
-      select: { fileName: true },
-    });
-
-    const currentUser = await ctx.db.user.findUnique({
-      where: { id: userId },
-      select: { image: true },
-    });
-
-    return confirmImageUpload({
-      db: ctx.db,
-      userId,
-      uploadType: "userAvatar",
-      bucketName: env.S3_BUCKET_NAME,
-      imagePath: buildUserAvatarPath(userId),
-      pendingFileName: pendingUpload?.fileName ?? null,
-      currentImageUrl: currentUser?.image ?? null,
-      noPendingImageUploadMessage: "No pending profile image upload to confirm.",
-      commitImageUpload: async (imageUrl) => {
-        await ctx.db.$transaction(async (tx) => {
-          await tx.user.update({
-            where: { id: userId },
-            data: { image: imageUrl },
-          });
-          await tx.pendingUpload.delete({
-            where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
-          });
-        });
+  confirmProfileImageUpload: protectedProcedure
+    .meta({
+      rateLimit: {
+        limit: 20,
+        windowMs: 60_000,
       },
-    });
-  }),
+    })
+    .mutation(async ({ ctx }) => {
+      const userId = ctx.session.user.id;
+
+      const pendingUpload = await ctx.db.pendingUpload.findUnique({
+        where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
+        select: { fileName: true },
+      });
+
+      const currentUser = await ctx.db.user.findUnique({
+        where: { id: userId },
+        select: { image: true },
+      });
+
+      return confirmImageUpload({
+        db: ctx.db,
+        userId,
+        uploadType: "userAvatar",
+        bucketName: env.S3_BUCKET_NAME,
+        imagePath: buildUserAvatarPath(userId),
+        pendingFileName: pendingUpload?.fileName ?? null,
+        currentImageUrl: currentUser?.image ?? null,
+        noPendingImageUploadMessage: "No pending profile image upload to confirm.",
+        commitImageUpload: async (imageUrl) => {
+          await ctx.db.$transaction(async (tx) => {
+            await tx.user.update({
+              where: { id: userId },
+              data: { image: imageUrl },
+            });
+            await tx.pendingUpload.delete({
+              where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
+            });
+          });
+        },
+      });
+    }),
 } satisfies TRPCRouterRecord;

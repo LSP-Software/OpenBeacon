@@ -2,8 +2,8 @@ import { groupEpochBundleSchema, inviteMemberToGroupSchema } from "@openbeacon/s
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { getInviteAcceptanceContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
-import { protectedProcedure } from "../../procedures/auth/base.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";
+import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 
 export const groupInvitesRouter = {
@@ -17,6 +17,12 @@ export const groupInvitesRouter = {
       }),
     ),
   accept: protectedProcedure
+    .meta({
+      rateLimit: {
+        limit: 10,
+        windowMs: 60_000,
+      },
+    })
     .input(
       z.object({
         inviteId: z.string().min(1),
@@ -109,6 +115,12 @@ export const groupInvitesRouter = {
       };
     }),
   decline: protectedProcedure
+    .meta({
+      rateLimit: {
+        limit: 20,
+        windowMs: 60_000,
+      },
+    })
     .input(z.object({ inviteId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.groupMemberInvite.delete({
@@ -119,66 +131,71 @@ export const groupInvitesRouter = {
         message: "Invite declined.",
       };
     }),
-  send: groupAdminProcedure.input(inviteMemberToGroupSchema).mutation(async ({ ctx, input }) => {
-    const users = await ctx.db.user.findMany({
-      where: {
-        email: {
-          in: input.invites.map((invite) => invite.email),
-        },
+  send: groupAdminProcedure
+    .meta({
+      rateLimit: {
+        limit: 10,
+        windowMs: 60_000,
       },
-      include: {
-        receivedGroupMemberInvites: {
-          where: {
-            groupId: input.groupId,
+    })
+    .input(inviteMemberToGroupSchema)
+    .mutation(async ({ ctx, input }) => {
+      const users = await ctx.db.user.findMany({
+        where: {
+          email: {
+            in: input.invites.map((invite) => invite.email),
           },
         },
-      },
-    });
-
-    const existingMembers = await ctx.db.groupMember.findMany({
-      where: {
-        groupId: input.groupId,
-        userId: {
-          in: users.map((user) => user.id),
+        include: {
+          receivedGroupMemberInvites: {
+            where: {
+              groupId: input.groupId,
+            },
+          },
         },
-      },
-    });
+      });
 
-    const existingMemberIds = new Set(existingMembers.map((member) => member.userId));
-
-    const invitesToCreate = users
-      .map((user) => {
-        // don't allow the user to invite themselves
-        if (user.id === ctx.session.user.id) return undefined;
-
-        // don't allow the user to invite someone who is already a member of the group
-        if (existingMemberIds.has(user.id)) return undefined;
-
-        const invite = input.invites.find((invite) => invite.email === user.email);
-        if (!invite) return undefined;
-
-        // don't allow the user to invite someone who has already been invited to the same group
-        if (user.receivedGroupMemberInvites.find((invite) => invite.groupId === input.groupId))
-          return undefined;
-
-        return {
-          inviterId: ctx.session.user.id,
-          recipientId: user.id,
+      const existingMembers = await ctx.db.groupMember.findMany({
+        where: {
           groupId: input.groupId,
-          role: invite.role,
-        };
-      })
-      .filter((invite) => invite !== undefined);
+          userId: {
+            in: users.map((user) => user.id),
+          },
+        },
+      });
 
-    await ctx.db.groupMemberInvite.createMany({
-      data: invitesToCreate,
-    });
+      const existingMemberIds = new Set(existingMembers.map((member) => member.userId));
 
-    return {
-      message:
-        "If there are accounts associated with the provided emails an invite will be sent to them.",
-    };
-  }),
+      const invitesToCreate = users
+        .map((user) => {
+          if (user.id === ctx.session.user.id) return undefined;
+
+          if (existingMemberIds.has(user.id)) return undefined;
+
+          const invite = input.invites.find((invite) => invite.email === user.email);
+          if (!invite) return undefined;
+
+          if (user.receivedGroupMemberInvites.find((invite) => invite.groupId === input.groupId))
+            return undefined;
+
+          return {
+            inviterId: ctx.session.user.id,
+            recipientId: user.id,
+            groupId: input.groupId,
+            role: invite.role,
+          };
+        })
+        .filter((invite) => invite !== undefined);
+
+      await ctx.db.groupMemberInvite.createMany({
+        data: invitesToCreate,
+      });
+
+      return {
+        message:
+          "If there are accounts associated with the provided emails an invite will be sent to them.",
+      };
+    }),
   list: protectedProcedure.query(async ({ ctx }) => {
     const invites = await ctx.db.groupMemberInvite.findMany({
       where: {

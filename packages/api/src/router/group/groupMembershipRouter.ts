@@ -2,8 +2,8 @@ import { removeGroupMemberSchema } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
-import { protectedProcedure } from "../../procedures/auth/base.ts";
 import { groupAdminProcedure, groupMemberProcedure } from "../../procedures/auth/group.ts";
+import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 import { removeGroupMemberWithOwnerGuard } from "./assertGroupMemberCanBeRemoved.ts";
 
@@ -102,24 +102,32 @@ export const groupMembershipRouter = {
 
       return membersWithMockData;
     }),
-  remove: groupAdminProcedure.input(removeGroupMemberSchema).mutation(async ({ ctx, input }) => {
-    return ctx.db.$transaction(async (tx) => {
-      await removeGroupMemberWithOwnerGuard({
-        db: tx,
-        groupId: input.groupId,
-        memberId: input.memberId,
-      });
+  remove: groupAdminProcedure
+    .meta({
+      rateLimit: {
+        limit: 10,
+        windowMs: 60_000,
+      },
+    })
+    .input(removeGroupMemberSchema)
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.$transaction(async (tx) => {
+        await removeGroupMemberWithOwnerGuard({
+          db: tx,
+          groupId: input.groupId,
+          memberId: input.memberId,
+        });
 
-      await persistGroupEpoch({
-        db: tx,
-        epoch: input.nextEpoch,
-        groupId: input.groupId,
-        userId: ctx.session.user.id,
-      });
+        await persistGroupEpoch({
+          db: tx,
+          epoch: input.nextEpoch,
+          groupId: input.groupId,
+          userId: ctx.session.user.id,
+        });
 
-      return {
-        message: "Group member removed.",
-      };
-    });
-  }),
+        return {
+          message: "Group member removed.",
+        };
+      });
+    }),
 } satisfies TRPCRouterRecord;

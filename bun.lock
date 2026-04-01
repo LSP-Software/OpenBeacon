@@ -17,6 +17,7 @@
         "@better-auth/expo": "^1.5.4",
         "@openbeacon/api": "workspace:*",
         "@openbeacon/auth": "workspace:*",
+        "@openbeacon/cache": "workspace:*",
         "@openbeacon/database": "workspace:*",
         "@openbeacon/schemas": "workspace:*",
         "@openbeacon/shared": "workspace:*",
@@ -109,10 +110,11 @@
         "@aws-sdk/client-s3": "^3.1010.0",
         "@aws-sdk/s3-request-presigner": "^3.1010.0",
         "@openbeacon/auth": "workspace:*",
+        "@openbeacon/cache": "workspace:*",
         "@openbeacon/database": "workspace:*",
-        "@openbeacon/shared": "workspace:*",
         "@openbeacon/encryption": "workspace:*",
         "@openbeacon/schemas": "workspace:*",
+        "@openbeacon/shared": "workspace:*",
         "@t3-oss/env-core": "^0.13.10",
         "@trpc/server": "^11.12.0",
         "superjson": "^2.2.6",
@@ -127,6 +129,13 @@
         "@openbeacon/schemas": "workspace:*",
         "@t3-oss/env-core": "^0.13.10",
         "better-auth": "^1.5.5",
+      },
+    },
+    "packages/cache": {
+      "name": "@openbeacon/cache",
+      "version": "0.0.0",
+      "dependencies": {
+        "zod": "^4.3.6",
       },
     },
     "packages/database": {
@@ -618,6 +627,8 @@
     "@openbeacon/auth": ["@openbeacon/auth@workspace:packages/auth"],
 
     "@openbeacon/backend": ["@openbeacon/backend@workspace:apps/backend"],
+
+    "@openbeacon/cache": ["@openbeacon/cache@workspace:packages/cache"],
 
     "@openbeacon/database": ["@openbeacon/database@workspace:packages/database"],
 
