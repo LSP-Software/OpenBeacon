@@ -205,7 +205,7 @@ const AccountScreen = () => {
                   const isLastSetting = setting === category.settings[category.settings.length - 1];
 
                   return (
-                    <Link key={setting.label} href={setting.href ?? ""} asChild>
+                    <Link key={setting.label} href={setting.href} asChild>
                       <Pressable
                         className={`flex flex-row items-center justify-between ${
                           isLastSetting ? "" : "border-b-[0.5px] border-border/30 pb-3"
