@@ -42,6 +42,13 @@ mock.module("react-native", () => ({
       };
     },
   },
+  Button: ({ onPress, title }: { onPress?: () => void; title: string }) =>
+    React.createElement("button", { onClick: onPress, type: "button" }, title),
+  Platform: {
+    OS: "ios",
+  },
+  View: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement("view", null, children),
 }));
 
 mock.module("../components/ui/Button.tsx", () => ({

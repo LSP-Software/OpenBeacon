@@ -12,11 +12,43 @@ export type BucketState = {
 
 export class FakeRedis {
   private readonly buckets = new Map<string, BucketState>();
+  private readonly strings = new Map<string, { expiresAt: number; value: string }>();
   private closed = false;
 
-  public async send(command: string, args: string[]): Promise<string[]> {
+  public async send(command: string, args: string[]): Promise<string[] | string | null> {
     if (this.closed) {
       throw new Error("Redis client is closed.");
+    }
+
+    if (command === "GET") {
+      const [key] = args;
+
+      if (!key) {
+        throw new Error("Missing GET key.");
+      }
+
+      const value = this.strings.get(key);
+
+      if (!value) {
+        return null;
+      }
+
+      return value.expiresAt > Date.now() ? value.value : null;
+    }
+
+    if (command === "SET") {
+      const [key, value, expirationType, ttlMsValue] = args;
+
+      if (!key || !value || expirationType !== "PX" || !ttlMsValue) {
+        throw new Error("Invalid SET arguments.");
+      }
+
+      this.strings.set(key, {
+        expiresAt: Date.now() + Number(ttlMsValue),
+        value,
+      });
+
+      return "OK";
     }
 
     if (command !== "EVAL") {
@@ -92,7 +124,10 @@ export class FakeRedis {
     let deletedKeys = 0;
 
     keys.forEach((key) => {
-      if (this.buckets.delete(key)) {
+      const removedFromBuckets = this.buckets.delete(key);
+      const removedFromStrings = this.strings.delete(key);
+
+      if (removedFromBuckets || removedFromStrings) {
         deletedKeys += 1;
       }
     });

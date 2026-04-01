@@ -1,4 +1,10 @@
 import { RedisClient, type RedisOptions } from "bun";
+import { createPmtilesSignedUrls } from "../pmtilesSignedUrls/pmtilesSignedUrls.ts";
+import type {
+  PmtilesSignedUrlInput,
+  PmtilesSignedUrlValue,
+  SetPmtilesSignedUrlInput,
+} from "../pmtilesSignedUrls/schemas.ts";
 import { createRateLimits } from "../rateLimits/rateLimits.ts";
 import type {
   OpenBeaconCacheOptions,
@@ -11,6 +17,11 @@ import type { RateLimitResult } from "../rateLimits/types.ts";
 import { type RedisLike, toRedisOptions } from "./redis.ts";
 
 export class OpenBeaconCache {
+  public readonly pmtilesSignedUrls: {
+    get: (input: PmtilesSignedUrlInput) => Promise<PmtilesSignedUrlValue | null>;
+    set: (input: SetPmtilesSignedUrlInput) => Promise<void>;
+    reset: (input: PmtilesSignedUrlInput) => Promise<number>;
+  };
   public readonly rateLimits: {
     peek: (input: RateLimitPeekInput) => Promise<RateLimitResult>;
     consume: (input: RateLimitConsumeInput) => Promise<RateLimitResult>;
@@ -29,6 +40,11 @@ export class OpenBeaconCache {
       parsedOptions.redisUrl,
       toRedisOptions(parsedOptions.redisOptions),
     );
+    this.pmtilesSignedUrls = createPmtilesSignedUrls({
+      redis: this.redis,
+      now: this.now,
+      keyPrefix: this.keyPrefix,
+    });
     this.rateLimits = createRateLimits({
       redis: this.redis,
       now: this.now,

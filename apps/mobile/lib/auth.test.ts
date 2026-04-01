@@ -92,9 +92,14 @@ mock.module("react-native", () => ({
       remove: () => {},
     }),
   },
+  Button: ({ onPress, title }: { onPress?: () => void; title: string }) => ({
+    onPress,
+    title,
+  }),
   Platform: {
     OS: "android",
   },
+  View: ({ children }: { children?: unknown }) => children ?? null,
 }));
 
 mock.module("./auth-client.ts", () => ({

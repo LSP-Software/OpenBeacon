@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import React from "react";
 
 const expoRandomUUID = "123e4567-e89b-12d3-a456-426614174000" as const;
 const getRandomValuesMock = mock(
@@ -26,9 +27,13 @@ mock.module("expo-crypto", () => ({
 }));
 
 mock.module("react-native", () => ({
+  Button: ({ onPress, title }: { onPress?: () => void; title: string }) =>
+    React.createElement("button", { onClick: onPress, type: "button" }, title),
   Platform: {
     OS: platformOS,
   },
+  View: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement("view", null, children),
 }));
 
 const importInstallCryptoModule = async () =>

@@ -191,15 +191,61 @@ describe("OpenBeaconCache rateLimits", () => {
     });
   });
 
-  test("prevents operations after close", async () => {
+  test("stores and expires a single pmtiles signed url per user", async () => {
+    let nowMs = 0;
+    const originalDateNow = Date.now;
+    Date.now = () => nowMs;
+
+    try {
+      const cache = new TestOpenBeaconCache({
+        redisUrl: "redis://localhost:6379",
+        now: () => nowMs,
+      });
+
+      await expect(cache.pmtilesSignedUrls.get({ userId: "user-1" })).resolves.toBeNull();
+
+      await expect(
+        cache.pmtilesSignedUrls.set({
+          expiresAt: new Date(10_000).toISOString(),
+          url: "https://example.com/pmtiles-a",
+          userId: "user-1",
+        }),
+      ).resolves.toBeUndefined();
+
+      await expect(cache.pmtilesSignedUrls.get({ userId: "user-1" })).resolves.toEqual({
+        expiresAt: new Date(10_000).toISOString(),
+        url: "https://example.com/pmtiles-a",
+      });
+
+      await expect(
+        cache.pmtilesSignedUrls.set({
+          expiresAt: new Date(20_000).toISOString(),
+          url: "https://example.com/pmtiles-b",
+          userId: "user-1",
+        }),
+      ).resolves.toBeUndefined();
+
+      await expect(cache.pmtilesSignedUrls.get({ userId: "user-1" })).resolves.toEqual({
+        expiresAt: new Date(20_000).toISOString(),
+        url: "https://example.com/pmtiles-b",
+      });
+
+      nowMs = 25_000;
+
+      await expect(cache.pmtilesSignedUrls.get({ userId: "user-1" })).resolves.toBeNull();
+    } finally {
+      Date.now = originalDateNow;
+    }
+  });
+
+  test("rejects rate limit operations when redis client is closed", async () => {
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
     });
-
     cache.close();
 
     await expect(
-      cache.rateLimits.peek({
+      cache.rateLimits.consume({
         namespace: "route",
         identifier: {
           type: "ip",
@@ -211,7 +257,7 @@ describe("OpenBeaconCache rateLimits", () => {
     ).rejects.toThrow("Redis client is closed.");
 
     await expect(
-      cache.rateLimits.consume({
+      cache.rateLimits.peek({
         namespace: "route",
         identifier: {
           type: "ip",
