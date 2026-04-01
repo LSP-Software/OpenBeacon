@@ -43,19 +43,41 @@ export const redisOptionsSchema = z
     tls: z
       .union([
         z.boolean(),
-        z.custom<RedisOptions["tls"]>((value) => value !== null && typeof value === "object"),
+        z.custom<RedisOptions["tls"]>(
+          (value) => value !== null && typeof value === "object" && !Array.isArray(value),
+        ),
       ])
       .optional(),
     enableAutoPipelining: z.boolean().optional(),
   })
   .strict();
 
+export const redisUrlSchema = z.url().refine(
+  (value) => {
+    const parsed = new URL(value);
+    return parsed.protocol === "redis:" || parsed.protocol === "rediss:";
+  },
+  { message: "redisUrl must use redis:// or rediss://" },
+);
+
 export const openBeaconCacheOptionsSchema = z
   .object({
-    redisUrl: z.url(),
+    redisUrl: redisUrlSchema,
     keyPrefix: z.string().min(1).optional(),
     redisOptions: redisOptionsSchema.optional(),
-    now: z.custom<() => number>((value) => typeof value === "function").optional(),
+    now: z
+      .custom<() => number>((value): value is () => number => {
+        if (typeof value !== "function") {
+          return false;
+        }
+        try {
+          const result = (value as () => unknown)();
+          return typeof result === "number" && Number.isFinite(result);
+        } catch {
+          return false;
+        }
+      })
+      .optional(),
   })
   .strict();
 

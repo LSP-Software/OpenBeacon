@@ -1,3 +1,9 @@
+/**
+ * Test-only utilities behind the `@openbeacon/cache/testing` subpath (`./testing` in package.json).
+ * Do not import this module in production; `FakeRedis` and `BucketState` exist to exercise rate limiting
+ * in unit tests. Shipping them in app bundles wastes size and can confuse auditors—configure bundlers to
+ * omit `./testing` from production graphs where possible.
+ */
 export type BucketState = {
   expiresAt: number;
   lastMs: number;
@@ -64,6 +70,25 @@ export class FakeRedis {
     const limit = Number(limitValue);
     const windowMs = Number(windowMsValue);
     const cost = Number(costValue);
+
+    if (!Number.isFinite(nowMs)) {
+      throw new Error("Invalid numeric EVAL argument for nowMs.");
+    }
+    if (!Number.isFinite(limit)) {
+      throw new Error("Invalid numeric EVAL argument for limit.");
+    }
+    if (!Number.isFinite(windowMs)) {
+      throw new Error("Invalid numeric EVAL argument for windowMs.");
+    }
+    if (!Number.isFinite(cost)) {
+      throw new Error("Invalid numeric EVAL argument for cost.");
+    }
+    if (windowMs <= 0) {
+      throw new Error("windowMs must be > 0 for refillRate, retryAfterMs, and resetAfterMs.");
+    }
+    if (shouldConsumeValue !== "0" && shouldConsumeValue !== "1") {
+      throw new Error('shouldConsumeValue must be "0" or "1".');
+    }
     const shouldConsume = shouldConsumeValue === "1";
     const refillRate = limit / windowMs;
     const existingBucket = this.buckets.get(key);

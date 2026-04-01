@@ -165,8 +165,8 @@ const createCaller = async ({
     groupEpoch: groupEpochRouter,
   });
   const cache = new TestOpenBeaconCache({
-    now: () => 0,
     redisUrl: "redis://localhost:6379",
+    now: () => 0,
   });
   const context = {
     cache,

@@ -4,8 +4,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "description": "The ./testing export exposes FakeRedis and BucketState for tests only; do not import ./testing in production (bundlers should exclude it from prod builds).",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/rateLimits/testUtils.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",

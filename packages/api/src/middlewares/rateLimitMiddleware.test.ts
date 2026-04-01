@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
-import { TRPCError } from "@trpc/server";
-import { FakeRedis } from "../../../cache/src/rateLimits/testUtils.ts";
+import { FakeRedis } from "@openbeacon/cache/testing";
+import { tryCatch } from "@openbeacon/shared";
+import { type AnyRouter, TRPCError } from "@trpc/server";
 import { createAuthProcedures } from "../procedures/auth/base.ts";
 import { createTRPCComponents } from "../trpc.ts";
 import { createRateLimitMiddleware } from "./rateLimitMiddleware.ts";
@@ -35,7 +36,7 @@ const createModules = () => {
   };
 };
 
-const createCaller = <TRouter extends { createCaller: (ctx: unknown) => unknown }>({
+const createCaller = <TRouter extends AnyRouter>({
   cache,
   clientIp,
   router,
@@ -45,8 +46,9 @@ const createCaller = <TRouter extends { createCaller: (ctx: unknown) => unknown 
   clientIp?: string;
   router: TRouter;
   userId: string | null;
-}) => {
-  return router.createCaller({
+}): ReturnType<TRouter["createCaller"]> => {
+  type CallerContext = Parameters<TRouter["createCaller"]>[0];
+  const context: CallerContext = {
     cache,
     db: {},
     session: userId
@@ -57,7 +59,8 @@ const createCaller = <TRouter extends { createCaller: (ctx: unknown) => unknown 
         }
       : null,
     ...(clientIp !== undefined ? { clientIp } : {}),
-  }) as ReturnType<TRouter["createCaller"]>;
+  };
+  return router.createCaller(context);
 };
 
 describe("rateLimitMiddleware", () => {
@@ -203,26 +206,17 @@ describe("rateLimitMiddleware", () => {
       await expect(firstCaller.protectedRoute()).resolves.toBe("protected");
     }
 
-    let thrownError: TRPCError | null = null;
-
-    try {
-      await secondCaller.protectedRoute();
-    } catch (error) {
-      thrownError = error as TRPCError;
-    }
-
+    const rateLimitResult = await tryCatch<"protected", TRPCError>(secondCaller.protectedRoute());
+    expect(rateLimitResult.data).toBeNull();
+    const thrownError = rateLimitResult.error;
     expect(thrownError).not.toBeNull();
     expect(thrownError?.code).toBe("TOO_MANY_REQUESTS");
-    const thrownErrorCause = thrownError?.cause as {
-      limit: number;
-      remaining: number;
-      retryAfterMs: number;
-      resetAfterMs: number;
-    };
-    expect(thrownErrorCause.limit).toBe(60);
-    expect(thrownErrorCause.remaining).toBe(0);
-    expect(thrownErrorCause.retryAfterMs).toBe(1_000);
-    expect(thrownErrorCause.resetAfterMs).toBe(60_000);
+    expect(thrownError?.cause).toMatchObject({
+      limit: 60,
+      remaining: 0,
+      retryAfterMs: 1_000,
+      resetAfterMs: 60_000,
+    });
 
     const formattedError = t._config.errorFormatter({
       error: new TRPCError({

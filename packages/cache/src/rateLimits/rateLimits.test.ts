@@ -17,6 +17,48 @@ describe("OpenBeaconCache rateLimits", () => {
         }),
     ).toThrow();
 
+    expect(
+      () =>
+        new TestOpenBeaconCache({
+          redisUrl: "https://example.com",
+        }),
+    ).toThrowError(expect.objectContaining({ message: expect.stringContaining("redis") }));
+
+    expect(
+      () =>
+        new TestOpenBeaconCache({
+          redisUrl: "redis://localhost:6379",
+          now: () => Number.NaN,
+        }),
+    ).toThrow();
+
+    expect(
+      () =>
+        new TestOpenBeaconCache({
+          redisUrl: "redis://localhost:6379",
+          now: () => {
+            throw new Error("clock");
+          },
+        }),
+    ).toThrow();
+
+    expect(
+      () =>
+        new TestOpenBeaconCache({
+          redisUrl: "redis://localhost:6379",
+          now: () => Number.POSITIVE_INFINITY,
+        }),
+    ).toThrow();
+
+    const nonNumericClock = () => "x";
+    expect(
+      () =>
+        new TestOpenBeaconCache({
+          redisUrl: "redis://localhost:6379",
+          now: nonNumericClock as () => number,
+        }),
+    ).toThrow();
+
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
     });
@@ -190,5 +232,34 @@ describe("OpenBeaconCache rateLimits", () => {
 
     await expect(cache.pmtilesSignedUrls.get({ userId: "user-1" })).resolves.toBeNull();
     Date.now = originalDateNow;
+  });
+
+  test("rejects rate limit operations when redis client is closed", async () => {
+    const cache = new TestOpenBeaconCache({
+      redisUrl: "redis://localhost:6379",
+    });
+    cache.close();
+
+    await expect(
+      cache.rateLimits.consume({
+        namespace: "route",
+        identifier: {
+          type: "ip",
+          value: "127.0.0.1",
+        },
+        limit: 1,
+        windowMs: 1_000,
+      }),
+    ).rejects.toThrow("Redis client is closed.");
+
+    await expect(
+      cache.rateLimits.reset({
+        namespace: "route",
+        identifier: {
+          type: "ip",
+          value: "127.0.0.1",
+        },
+      }),
+    ).rejects.toThrow("Redis client is closed.");
   });
 });
