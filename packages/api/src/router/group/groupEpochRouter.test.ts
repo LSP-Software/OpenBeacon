@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { OpenBeaconCache } from "@openbeacon/cache";
+import { FakeRedis } from "@openbeacon/cache/testing";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { TRPCError } from "@trpc/server";
+
+class TestOpenBeaconCache extends OpenBeaconCache {
+  protected override createRedisClient(): FakeRedis {
+    return new FakeRedis();
+  }
+}
 
 type GroupFindUniqueArgs = {
   include: {
@@ -79,15 +87,20 @@ const createCaller = async ({
   groupFindUniqueMock: ReturnType<typeof createGroupFindUniqueMock>;
   wrappedKeyFindFirstMock: ReturnType<typeof createWrappedKeyFindFirstMock>;
 }) => {
-  const [{ createTRPCComponents }, { groupEpochRouter }] = await Promise.all([
-    import("../../trpc.ts"),
-    import(`./groupEpochRouter.ts?test=${Math.random().toString(36).slice(2)}`),
-  ]);
-  const { createTRPCRouter } = createTRPCComponents();
+  await import("../../trpc.ts");
+  const { createTRPCRouter } = await import("../../trpcRuntime.ts");
+  const { groupEpochRouter } = await import(
+    `./groupEpochRouter.ts?test=${Math.random().toString(36).slice(2)}`
+  );
   const router = createTRPCRouter({
     groupEpoch: groupEpochRouter,
   });
+  const cache = new TestOpenBeaconCache({
+    redisUrl: "redis://localhost:6379",
+    now: () => 0,
+  });
   const context = {
+    cache,
     db: {
       group: {
         findUnique: groupFindUniqueMock,
