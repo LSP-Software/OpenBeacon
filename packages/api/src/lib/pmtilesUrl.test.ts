@@ -1,6 +1,43 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { OpenBeaconCache } from "@openbeacon/cache";
 
+const withEnvSnapshot = (keys: readonly string[]) => {
+  const saved = new Map<string, string | undefined>();
+
+  return {
+    restore: () => {
+      for (const key of keys) {
+        if (!saved.has(key)) {
+          continue;
+        }
+        const value = saved.get(key);
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    },
+    save: () => {
+      saved.clear();
+      for (const key of keys) {
+        saved.set(key, process.env[key]);
+      }
+    },
+  };
+};
+
+const pmtilesUrlTestEnvKeys = [
+  "S3_ACCESS_KEY_ID",
+  "S3_ACCESS_KEY",
+  "S3_BUCKET_NAME",
+  "R2_ACCOUNT_ID",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+  "R2_BUCKET",
+  "R2_PM_TILES_KEY",
+] as const;
+
 const createCache = ({
   cachedSignedPmtilesUrl = null,
 }: {
@@ -25,24 +62,10 @@ const createCache = ({
 };
 
 describe("pmtilesUrl", () => {
-  let originalR2AccessKeyId: string | undefined;
-  let originalR2AccountId: string | undefined;
-  let originalR2Bucket: string | undefined;
-  let originalR2PmTilesKey: string | undefined;
-  let originalR2SecretAccessKey: string | undefined;
-  let originalS3AccessKey: string | undefined;
-  let originalS3AccessKeyId: string | undefined;
-  let originalS3BucketName: string | undefined;
+  const envSnapshot = withEnvSnapshot(pmtilesUrlTestEnvKeys);
 
   beforeEach(() => {
-    originalS3AccessKeyId = process.env.S3_ACCESS_KEY_ID;
-    originalS3AccessKey = process.env.S3_ACCESS_KEY;
-    originalS3BucketName = process.env.S3_BUCKET_NAME;
-    originalR2AccountId = process.env.R2_ACCOUNT_ID;
-    originalR2AccessKeyId = process.env.R2_ACCESS_KEY_ID;
-    originalR2SecretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-    originalR2Bucket = process.env.R2_BUCKET;
-    originalR2PmTilesKey = process.env.R2_PM_TILES_KEY;
+    envSnapshot.save();
     process.env.S3_ACCESS_KEY_ID = "12345678901234567890";
     process.env.S3_ACCESS_KEY = "12345678901234567890";
     process.env.S3_BUCKET_NAME = "test-s3-bucket";
@@ -54,53 +77,7 @@ describe("pmtilesUrl", () => {
   });
 
   afterEach(() => {
-    if (originalS3AccessKeyId === undefined) {
-      delete process.env.S3_ACCESS_KEY_ID;
-    } else {
-      process.env.S3_ACCESS_KEY_ID = originalS3AccessKeyId;
-    }
-
-    if (originalS3AccessKey === undefined) {
-      delete process.env.S3_ACCESS_KEY;
-    } else {
-      process.env.S3_ACCESS_KEY = originalS3AccessKey;
-    }
-
-    if (originalS3BucketName === undefined) {
-      delete process.env.S3_BUCKET_NAME;
-    } else {
-      process.env.S3_BUCKET_NAME = originalS3BucketName;
-    }
-
-    if (originalR2AccountId === undefined) {
-      delete process.env.R2_ACCOUNT_ID;
-    } else {
-      process.env.R2_ACCOUNT_ID = originalR2AccountId;
-    }
-
-    if (originalR2AccessKeyId === undefined) {
-      delete process.env.R2_ACCESS_KEY_ID;
-    } else {
-      process.env.R2_ACCESS_KEY_ID = originalR2AccessKeyId;
-    }
-
-    if (originalR2SecretAccessKey === undefined) {
-      delete process.env.R2_SECRET_ACCESS_KEY;
-    } else {
-      process.env.R2_SECRET_ACCESS_KEY = originalR2SecretAccessKey;
-    }
-
-    if (originalR2Bucket === undefined) {
-      delete process.env.R2_BUCKET;
-    } else {
-      process.env.R2_BUCKET = originalR2Bucket;
-    }
-
-    if (originalR2PmTilesKey === undefined) {
-      delete process.env.R2_PM_TILES_KEY;
-    } else {
-      process.env.R2_PM_TILES_KEY = originalR2PmTilesKey;
-    }
+    envSnapshot.restore();
   });
 
   test("returns a cached url when more than a minute remains", async () => {
