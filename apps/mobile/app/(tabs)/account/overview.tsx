@@ -224,7 +224,7 @@ const AccountScreen = () => {
             </View>
           );
         })}
-        <Button onPress={handleSignOut}>
+        <Button onPress={handleSignOut} className="mb-28">
           <Text>Sign out</Text>
         </Button>
       </ScrollView>
