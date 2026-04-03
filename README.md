@@ -27,7 +27,8 @@ bun install
 Apply database migrations (from the repo root):
 
 ```sh
-bun run --filter=@openbeacon/database db:migrate
+cd /packages/database
+bun run db:migrate
 ```
 
 ## Run the backend
@@ -40,7 +41,11 @@ The API listens on the port in `OPENBEACON_API_PORT` (default `3000`).
 
 ## Run the mobile app
 
-From `apps/mobile` (see `apps/mobile/.env.example` if you need app-specific config):
+From `apps/mobile` copy the example env and fill in values for your machine:
+
+```sh
+cp .env.example .env
+```
 
 ```sh
 cd ./apps/mobile
