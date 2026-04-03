@@ -27,7 +27,7 @@ bun install
 Apply database migrations (from the repo root):
 
 ```sh
-cd /packages/database
+cd ./packages/database
 bun run db:migrate
 ```
 
@@ -44,6 +44,7 @@ The API listens on the port in `OPENBEACON_API_PORT` (default `3000`).
 From `apps/mobile` copy the example env and fill in values for your machine:
 
 ```sh
+cd ./apps/mobile
 cp .env.example .env
 ```
 
