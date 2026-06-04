@@ -75,3 +75,44 @@ const ExampleContext = createContext<ExampleContextType | null>(null);
 
 export const ExampleProvider = ({ children }: ExampleProviderProps) => {
 ```
+
+## Cursor Cloud specific instructions
+
+### Services
+
+| Service | Port | Start command |
+|---------|------|---------------|
+| PostgreSQL 16 | 5432 | `sudo docker compose up -d db` |
+| Dragonfly (Redis) | 6379 | `sudo docker compose up -d redis` |
+| Backend API | 3000 | `bun run dev --filter=@openbeacon/backend` |
+
+In Cloud Agent VMs, Docker is not running by default. Start the daemon once per session before `docker compose`:
+
+```sh
+sudo dockerd > /tmp/dockerd.log 2>&1 &
+```
+
+Use `docker compose up -d` from the repo root for both infra services. Apply migrations with `cd packages/database && bun run db:migrate:deploy` (non-interactive; prefer this over `db:migrate` in automation).
+
+### Environment
+
+Root `.env` and `apps/mobile/.env` are gitignored. Cloud VMs provide the required secrets as environment variables (`BETTER_AUTH_*`, `DATABASE_URL`, `REDIS_URL`, S3/R2 keys, `EXPO_PUBLIC_DEV_API_URL`). Create the files locally from those values before starting the backend.
+
+`DATABASE_URL` should target `localhost:5432/openbeacon` when using the Docker Postgres service (user/password/db: `openbeacon`).
+
+### Commands (see README.md for full setup)
+
+- Install: `bun install --frozen-lockfile` (Bun **1.3.10**, pinned in root `package.json`)
+- Lint/typecheck: `bun run ci` (no Docker services required)
+- Tests: `bun run test` (uses `.env` for packages that need it; Postgres/Redis required for integration paths in `@openbeacon/cache` / `@openbeacon/api`)
+- Backend dev: `bun run dev --filter=@openbeacon/backend`
+
+### Mobile app
+
+The Expo app (`apps/mobile`) targets native Android/iOS and is not runnable end-to-end in Cloud Agent VMs without an emulator or physical device. Backend + auth/tRPC API verification is the practical E2E path here (e.g. `POST /api/auth/sign-up/email`, then `GET /api/auth/get-session`).
+
+### Gotchas
+
+- Backend startup runs `db:generate` via Turbo; first boot may take a few seconds while Prisma client generates.
+- If port 3000 is already in use, stop the existing backend process before starting another dev server.
+- `bun run build` at the repo root currently defines no Turbo build tasks; use package-level scripts if you need builds.
