@@ -100,6 +100,41 @@ describe("uploadGroupTrackingBatch", () => {
     expect(createMany).not.toHaveBeenCalled();
   });
 
+  test("partitions mixed accepted and duplicate clientPointIds in one batch", async () => {
+    findManyPayloads = mock(async () => [{ clientPointId: "point-1" }]);
+
+    const result = await uploadGroupTrackingBatch({
+      db: createDb(),
+      groupId: "group-1",
+      points: [
+        createPoint({ clientPointId: "point-1" }),
+        createPoint({ clientPointId: "point-2" }),
+      ],
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({
+      accepted: ["point-2"],
+      duplicates: ["point-1"],
+    });
+    expect(createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+          ciphertext: "ciphertext",
+          clientPointId: "point-2",
+          epochId: "epoch-1",
+          groupId: "group-1",
+          kind: TRACKING_POINT_KIND,
+          nonce: validNonce,
+          senderDeviceId: "device-1",
+          senderUserId: "user-1",
+        },
+      ],
+      skipDuplicates: true,
+    });
+  });
+
   test("rejects duplicate clientPointIds inside one batch", async () => {
     await expect(
       uploadGroupTrackingBatch({

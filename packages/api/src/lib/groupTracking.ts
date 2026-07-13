@@ -3,8 +3,6 @@ import type { groupTrackingPointSchema } from "@openbeacon/schemas";
 import { TRPCError } from "@trpc/server";
 import type z from "zod";
 
-type GroupTrackingPoint = z.infer<typeof groupTrackingPointSchema>;
-
 type GroupTrackingDb = {
   $queryRaw: <T>(query: Prisma.Sql) => Promise<T>;
   groupEncryptedPayload: {
@@ -97,7 +95,7 @@ export const uploadGroupTrackingBatch = async ({
 }: {
   db: GroupTrackingDb;
   groupId: string;
-  points: GroupTrackingPoint[];
+  points: z.infer<typeof groupTrackingPointSchema>[];
   userId: string;
 }) => {
   const clientPointIds = points.map((point) => point.clientPointId);
@@ -109,17 +107,39 @@ export const uploadGroupTrackingBatch = async ({
   }
 
   const senderDeviceIds = [...new Set(points.map((point) => point.senderDeviceId))];
-  const devices = await db.userDevice.findMany({
-    select: {
-      id: true,
-      userId: true,
-    },
-    where: {
-      id: { in: senderDeviceIds },
-      revokedAt: null,
-      userId,
-    },
-  });
+  const epochIds = [...new Set(points.map((point) => point.epochId))];
+
+  const [devices, epochs, existingRows] = await Promise.all([
+    db.userDevice.findMany({
+      select: {
+        id: true,
+        userId: true,
+      },
+      where: {
+        id: { in: senderDeviceIds },
+        revokedAt: null,
+        userId,
+      },
+    }),
+    db.groupEpoch.findMany({
+      select: {
+        id: true,
+      },
+      where: {
+        groupId,
+        id: { in: epochIds },
+      },
+    }),
+    db.groupEncryptedPayload.findMany({
+      select: {
+        clientPointId: true,
+      },
+      where: {
+        clientPointId: { in: clientPointIds },
+        groupId,
+      },
+    }),
+  ]);
 
   if (devices.length !== senderDeviceIds.length) {
     throw new TRPCError({
@@ -128,17 +148,6 @@ export const uploadGroupTrackingBatch = async ({
     });
   }
 
-  const epochIds = [...new Set(points.map((point) => point.epochId))];
-  const epochs = await db.groupEpoch.findMany({
-    select: {
-      id: true,
-    },
-    where: {
-      groupId,
-      id: { in: epochIds },
-    },
-  });
-
   if (epochs.length !== epochIds.length) {
     throw new TRPCError({
       code: "BAD_REQUEST",
@@ -146,15 +155,6 @@ export const uploadGroupTrackingBatch = async ({
     });
   }
 
-  const existingRows = await db.groupEncryptedPayload.findMany({
-    select: {
-      clientPointId: true,
-    },
-    where: {
-      clientPointId: { in: clientPointIds },
-      groupId,
-    },
-  });
   const existingClientPointIds = new Set(existingRows.map((row) => row.clientPointId));
   const pointsToInsert = points.filter((point) => !existingClientPointIds.has(point.clientPointId));
 
