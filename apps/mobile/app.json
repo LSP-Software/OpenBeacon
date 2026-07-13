@@ -44,9 +44,11 @@
           "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your precise location to center the map and prepare private family location sharing.",
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to access your precise location in the background so you can share your location privately with your family.",
           "isIosBackgroundLocationEnabled": true,
-          "isAndroidBackgroundLocationEnabled": true
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": false
         }
       ],
+      "./modules/openbeacon-tracking/app.plugin.js",
       [
         "expo-image-picker",
         {

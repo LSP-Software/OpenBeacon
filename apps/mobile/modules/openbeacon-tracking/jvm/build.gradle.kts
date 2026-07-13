@@ -22,6 +22,14 @@ sourceSets {
     java {
       srcDir("../android/src/main/java")
       exclude("**/OpenBeaconTrackingModule.kt")
+      exclude("**/TrackingRuntime.kt")
+      exclude("**/TrackingCaptureService.kt")
+      exclude("**/BatteryReader.kt")
+      exclude("**/SecureEpochKeyStore.kt")
+      exclude("**/CiphertextQueueEntity.kt")
+      exclude("**/CiphertextQueueDao.kt")
+      exclude("**/CiphertextQueueDatabase.kt")
+      exclude("**/RoomCiphertextQueue.kt")
     }
   }
   test {
