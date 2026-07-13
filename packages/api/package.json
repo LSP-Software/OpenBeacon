@@ -11,7 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "test": "bun --env-file=../../.env test"
+    "test": "bun --env-file=../../.env.ci --env-file=../../.env test"
   },
   "dependencies": {
     "@openbeacon/cache": "workspace:*",
