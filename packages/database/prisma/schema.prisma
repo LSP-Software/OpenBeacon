@@ -23,6 +23,7 @@ model User {
   devices                    UserDevice[]
   sentGroupMemberInvites     GroupMemberInvite[] @relation("GroupMemberInviteInviter")
   receivedGroupMemberInvites GroupMemberInvite[] @relation("GroupMemberInviteRecipient")
+  groupEncryptedPayloads     GroupEncryptedPayload[]
 }
 
 model Session {
@@ -80,9 +81,10 @@ model Group {
   image          String?
   pendingUploads PendingUpload[]
 
-  groupMembers GroupMember[]
-  groupInvites GroupMemberInvite[]
-  groupEpochs  GroupEpoch[]
+  groupMembers           GroupMember[]
+  groupInvites           GroupMemberInvite[]
+  groupEpochs            GroupEpoch[]
+  groupEncryptedPayloads GroupEncryptedPayload[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -137,32 +139,56 @@ model GroupMember {
 }
 
 model UserDevice {
-  id                 String                   @id
-  userId             String
-  user               User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  publicKey          String
-  publicKeyAlgorithm String
-  createdAt          DateTime                 @default(now())
-  lastSeenAt         DateTime                 @default(now())
-  revokedAt          DateTime?
-  createdGroupEpochs GroupEpoch[]             @relation("GroupEpochCreatedByDevice")
-  recipientEpochKeys GroupEpochRecipientKey[] @relation("GroupEpochRecipientDevice")
+  id                     String                   @id
+  userId                 String
+  user                   User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publicKey              String
+  publicKeyAlgorithm     String
+  createdAt              DateTime                 @default(now())
+  lastSeenAt             DateTime                 @default(now())
+  revokedAt              DateTime?
+  createdGroupEpochs     GroupEpoch[]             @relation("GroupEpochCreatedByDevice")
+  recipientEpochKeys     GroupEpochRecipientKey[] @relation("GroupEpochRecipientDevice")
+  groupEncryptedPayloads GroupEncryptedPayload[]  @relation("GroupEncryptedPayloadSenderDevice")
 
   @@index([userId])
 }
 
 model GroupEpoch {
-  id                String                   @id
-  groupId           String
-  group             Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  epochNumber       Int
-  createdByDeviceId String
-  createdByDevice   UserDevice               @relation("GroupEpochCreatedByDevice", fields: [createdByDeviceId], references: [id], onDelete: Restrict)
-  createdAt         DateTime                 @default(now())
-  recipientKeys     GroupEpochRecipientKey[]
+  id                     String                   @id
+  groupId                String
+  group                  Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  epochNumber            Int
+  createdByDeviceId      String
+  createdByDevice        UserDevice               @relation("GroupEpochCreatedByDevice", fields: [createdByDeviceId], references: [id], onDelete: Restrict)
+  createdAt              DateTime                 @default(now())
+  recipientKeys          GroupEpochRecipientKey[]
+  groupEncryptedPayloads GroupEncryptedPayload[]
 
   @@unique([groupId, epochNumber])
   @@index([groupId, createdAt])
+}
+
+model GroupEncryptedPayload {
+  id             String     @id @default(uuid(7))
+  groupId        String
+  group          Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  epochId        String
+  epoch          GroupEpoch @relation(fields: [epochId], references: [id], onDelete: Restrict)
+  senderDeviceId String
+  senderDevice   UserDevice @relation("GroupEncryptedPayloadSenderDevice", fields: [senderDeviceId], references: [id], onDelete: Restrict)
+  senderUserId   String
+  senderUser     User       @relation(fields: [senderUserId], references: [id], onDelete: Restrict)
+  kind           String
+  algorithm      String
+  nonce          String
+  ciphertext     String
+  clientPointId  String
+  createdAt      DateTime   @default(now())
+
+  @@unique([groupId, clientPointId])
+  @@index([groupId, createdAt, id])
+  @@index([groupId, senderUserId, createdAt])
 }
 
 model GroupEpochRecipientKey {
