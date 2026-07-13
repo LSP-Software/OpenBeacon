@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "algorithm": "XChaCha20-Poly1305",
+  "description": "Cross-language group-payload encrypt interop vectors for OPE-70. Ciphertext must match between TypeScript (@noble/ciphers) and Kotlin (Tink InsecureNonceXChaCha20Poly1305).",
+  "constants": {
+    "domainContext": "openbeacon.group-epoch.v1",
+    "purpose": "payload",
+    "kind": "trackingPoint",
+    "epochKeyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "epochKeyBase64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    "nonceHex": "202122232425262728292a2b2c2d2e2f3031323334353637",
+    "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3"
+  },
+  "cases": [
+    {
+      "name": "tracking-point-with-speed",
+      "metadata": {
+        "epochId": "epoch_interop_1",
+        "groupId": "group_interop_1",
+        "kind": "trackingPoint",
+        "senderDeviceId": "device_interop_1"
+      },
+      "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_interop_1\",\"groupId\":\"group_interop_1\",\"kind\":\"trackingPoint\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_interop_1\"}",
+      "plaintextJson": "{\"v\":1,\"latitude\":51.5074,\"longitude\":-0.1278,\"timestamp\":\"2026-07-13T18:45:00.000Z\",\"speed\":1.4,\"battery\":{\"level\":72,\"charging\":false}}",
+      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6NTEuNTA3NCwibG9uZ2l0dWRlIjotMC4xMjc4LCJ0aW1lc3RhbXAiOiIyMDI2LTA3LTEzVDE4OjQ1OjAwLjAwMFoiLCJzcGVlZCI6MS40LCJiYXR0ZXJ5Ijp7ImxldmVsIjo3MiwiY2hhcmdpbmciOmZhbHNlfX0=",
+      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v5A3xpjaC1U1+RWBXjWtFNEQn49kLPnyVB3mFvRRwAL7IuJimkKTyqlA9TOoJBBVgDMJwmjBLIR741o0zFp8EV7T0Htso2fe3YHOCE0FB1glNTzShRNTQbBM0bBe8/+TqYsa0lHEh9civiG8dYjb7ZRiCqW4b1VXgRfgefB0jCFAjxmszlYZd",
+      "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3"
+    },
+    {
+      "name": "tracking-point-null-speed",
+      "metadata": {
+        "epochId": "epoch_interop_2",
+        "groupId": "group_interop_1",
+        "kind": "trackingPoint",
+        "senderDeviceId": "device_interop_2"
+      },
+      "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_interop_2\",\"groupId\":\"group_interop_1\",\"kind\":\"trackingPoint\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_interop_2\"}",
+      "plaintextJson": "{\"v\":1,\"latitude\":51.5074,\"longitude\":-0.1278,\"timestamp\":\"2026-07-13T18:45:00.000Z\",\"speed\":null,\"battery\":{\"level\":5,\"charging\":true}}",
+      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6NTEuNTA3NCwibG9uZ2l0dWRlIjotMC4xMjc4LCJ0aW1lc3RhbXAiOiIyMDI2LTA3LTEzVDE4OjQ1OjAwLjAwMFoiLCJzcGVlZCI6bnVsbCwiYmF0dGVyeSI6eyJsZXZlbCI6NSwiY2hhcmdpbmciOnRydWV9fQ==",
+      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v5A3xpjaC1U1+RWBXjWtFNEQn49kLPnyVB3mFvRRwAL7IuJimkKTyqlA9TOoJBBVgDMJwmjBLIR741o0zFp8EV7T0Htso2fe3YHOCTBoZlgcNTCGhVcPbNwt1NVm17PfjLN65k3Eh9civiG8dYjb7ZQqRsHgD1dPzMuc4WHkDTRm084Nyt6g=",
+      "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3"
+    }
+  ]
+}
