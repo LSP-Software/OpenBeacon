@@ -240,16 +240,23 @@ export const encryptPayloadWithEpochKey = ({
   epochKey,
   plaintext,
   metadata,
+  nonce: providedNonce,
 }: {
   epochKey: EpochKeyMaterial;
   metadata: Pick<EncryptedPayload, "epochId" | "groupId" | "kind" | "senderDeviceId">;
+  nonce?: Uint8Array;
   plaintext: Uint8Array;
 }): EncryptedPayload => {
   const epochKeyBytes = epochKey.expose();
 
   ensureEpochKeyLength(epochKeyBytes);
 
-  const nonce = randomBytes(XCHACHA20_NONCE_LENGTH);
+  const nonce = providedNonce ?? randomBytes(XCHACHA20_NONCE_LENGTH);
+
+  if (nonce.length !== XCHACHA20_NONCE_LENGTH) {
+    throw new Error("Invalid nonce length.");
+  }
+
   const cipher = xchacha20poly1305(
     epochKeyBytes,
     nonce,
@@ -315,11 +322,13 @@ export const encryptGroupPayload = ({
   payload,
   senderDeviceId,
   epochId,
+  nonce,
 }: {
   epochId: string;
   epochKey: EpochKeyMaterial;
   groupId: string;
   kind: GroupPayloadKind;
+  nonce?: Uint8Array;
   payload: Record<string, unknown> | Uint8Array;
   senderDeviceId: string;
 }) =>
@@ -332,6 +341,7 @@ export const encryptGroupPayload = ({
       senderDeviceId,
     },
     plaintext: encodePayload(payload),
+    ...(nonce === undefined ? {} : { nonce }),
   });
 
 export const decryptGroupPayload = ({

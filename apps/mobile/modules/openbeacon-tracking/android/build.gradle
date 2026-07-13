@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.openbeacontracking'
+version = '0.0.0'
+
+android {
+  namespace "expo.modules.openbeacontracking"
+  defaultConfig {
+    versionCode 1
+    versionName "0.0.0"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  implementation "com.google.crypto.tink:tink-android:1.18.0"
+}
