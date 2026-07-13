@@ -411,6 +411,7 @@ export {
   PAYLOAD_ENCRYPTION_ALGORITHM,
   SensitivePayloadBytes,
   WRAPPED_EPOCH_KEY_ALGORITHM,
+  XCHACHA20_NONCE_LENGTH,
 };
 export type {
   DecryptedGroupPayload,
