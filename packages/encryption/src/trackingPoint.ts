@@ -14,6 +14,43 @@ export type TrackingPointV1 = {
 
 const textEncoder = new TextEncoder();
 
+const isIsoUtcTimestamp = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?Z$/.exec(value);
+
+  if (!match) {
+    return false;
+  }
+
+  const [, yearValue, monthValue, dayValue, hourValue, minuteValue, secondValue] = match;
+  const year = Number(yearValue);
+  const month = Number(monthValue);
+  const day = Number(dayValue);
+  const daysInMonth = [
+    31,
+    year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ];
+
+  return (
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    day <= (daysInMonth[month - 1] ?? 0) &&
+    Number(hourValue) <= 23 &&
+    Number(minuteValue) <= 59 &&
+    Number(secondValue) <= 59
+  );
+};
+
 export const validateTrackingPointV1 = (value: unknown): TrackingPointV1 => {
   if (
     typeof value !== "object" ||
@@ -33,8 +70,7 @@ export const validateTrackingPointV1 = (value: unknown): TrackingPointV1 => {
     value.longitude > 180 ||
     !("timestamp" in value) ||
     typeof value.timestamp !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value.timestamp) ||
-    !Number.isFinite(Date.parse(value.timestamp)) ||
+    !isIsoUtcTimestamp(value.timestamp) ||
     !("speed" in value) ||
     (typeof value.speed !== "number" && value.speed !== null) ||
     (typeof value.speed === "number" && !Number.isFinite(value.speed)) ||

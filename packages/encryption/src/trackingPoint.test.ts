@@ -1,35 +1,32 @@
 import { describe, expect, test } from "bun:test";
+import type { TrackingPointV1 } from "./index.ts";
 import { encodeTrackingPointV1, TRACKING_POINT_KIND, validateTrackingPointV1 } from "./index.ts";
+
+const validTrackingPoint = {
+  v: 1,
+  latitude: 51.5074,
+  longitude: -0.1278,
+  timestamp: "2026-07-13T18:45:00.000Z",
+  speed: 1.4,
+  battery: {
+    level: 72,
+    charging: false,
+  },
+} satisfies TrackingPointV1;
 
 describe("validateTrackingPointV1", () => {
   test("accepts a valid tracking point", () => {
-    const trackingPoint = {
-      v: 1,
-      latitude: 51.5074,
-      longitude: -0.1278,
-      timestamp: "2026-07-13T18:45:00.000Z",
-      speed: 1.4,
-      battery: {
-        level: 72,
-        charging: false,
-      },
-    };
-
-    expect(validateTrackingPointV1(trackingPoint)).toEqual(trackingPoint);
+    expect(validateTrackingPointV1(validTrackingPoint)).toEqual(validTrackingPoint);
   });
 
   test("rejects battery levels outside the integer percentage range", () => {
     for (const level of [-1, 72.5, 101]) {
       expect(() =>
         validateTrackingPointV1({
-          v: 1,
-          latitude: 51.5074,
-          longitude: -0.1278,
-          timestamp: "2026-07-13T18:45:00.000Z",
-          speed: null,
+          ...validTrackingPoint,
           battery: {
+            ...validTrackingPoint.battery,
             level,
-            charging: true,
           },
         }),
       ).toThrow("Invalid tracking point.");
@@ -37,20 +34,8 @@ describe("validateTrackingPointV1", () => {
   });
 
   test("requires every schema field", () => {
-    const trackingPoint = {
-      v: 1,
-      latitude: 51.5074,
-      longitude: -0.1278,
-      timestamp: "2026-07-13T18:45:00.000Z",
-      speed: null,
-      battery: {
-        level: 72,
-        charging: false,
-      },
-    };
-
-    for (const field of Object.keys(trackingPoint)) {
-      const invalidTrackingPoint = { ...trackingPoint };
+    for (const field of Object.keys(validTrackingPoint)) {
+      const invalidTrackingPoint = { ...validTrackingPoint };
       Reflect.deleteProperty(invalidTrackingPoint, field);
 
       expect(() => validateTrackingPointV1(invalidTrackingPoint)).toThrow(
@@ -58,48 +43,29 @@ describe("validateTrackingPointV1", () => {
       );
     }
 
-    expect(() =>
-      validateTrackingPointV1({
-        ...trackingPoint,
-        battery: {
-          level: 72,
-        },
-      }),
-    ).toThrow("Invalid tracking point.");
+    for (const field of Object.keys(validTrackingPoint.battery)) {
+      const invalidBattery = { ...validTrackingPoint.battery };
+      Reflect.deleteProperty(invalidBattery, field);
+
+      expect(() =>
+        validateTrackingPointV1({
+          ...validTrackingPoint,
+          battery: invalidBattery,
+        }),
+      ).toThrow("Invalid tracking point.");
+    }
   });
 
   test("accepts a numeric or null speed and rejects other values", () => {
-    const trackingPoint = {
-      v: 1,
-      latitude: 51.5074,
-      longitude: -0.1278,
-      timestamp: "2026-07-13T18:45:00.000Z",
-      speed: null,
-      battery: {
-        level: 72,
-        charging: false,
-      },
-    };
-
-    expect(validateTrackingPointV1(trackingPoint).speed).toBeNull();
-    expect(validateTrackingPointV1({ ...trackingPoint, speed: 1.4 }).speed).toBe(1.4);
-    expect(() => validateTrackingPointV1({ ...trackingPoint, speed: "1.4" })).toThrow(
+    expect(validateTrackingPointV1({ ...validTrackingPoint, speed: null }).speed).toBeNull();
+    expect(validateTrackingPointV1(validTrackingPoint).speed).toBe(1.4);
+    expect(() => validateTrackingPointV1({ ...validTrackingPoint, speed: "1.4" })).toThrow(
       "Invalid tracking point.",
     );
   });
 
   test("encodes the locked tracking payload as UTF-8 JSON", () => {
-    const encoded = encodeTrackingPointV1({
-      v: 1,
-      latitude: 51.5074,
-      longitude: -0.1278,
-      timestamp: "2026-07-13T18:45:00.000Z",
-      speed: 1.4,
-      battery: {
-        level: 72,
-        charging: false,
-      },
-    });
+    const encoded = encodeTrackingPointV1(validTrackingPoint);
 
     expect(TRACKING_POINT_KIND).toBe("trackingPoint");
     expect(new TextDecoder().decode(encoded)).toBe(
@@ -108,51 +74,42 @@ describe("validateTrackingPointV1", () => {
   });
 
   test("rejects coordinates outside WGS84 bounds and non-UTC timestamps", () => {
-    const trackingPoint = {
-      v: 1,
-      latitude: 51.5074,
-      longitude: -0.1278,
-      timestamp: "2026-07-13T18:45:00.000Z",
-      speed: 1.4,
-      battery: {
-        level: 72,
-        charging: false,
-      },
-    };
-
     for (const value of [
-      { ...trackingPoint, latitude: -91 },
-      { ...trackingPoint, latitude: 91 },
-      { ...trackingPoint, longitude: -181 },
-      { ...trackingPoint, longitude: 181 },
-      { ...trackingPoint, timestamp: "2026-07-13T19:45:00.000+01:00" },
-      { ...trackingPoint, timestamp: "not-a-date" },
+      { ...validTrackingPoint, latitude: -91 },
+      { ...validTrackingPoint, latitude: 91 },
+      { ...validTrackingPoint, longitude: -181 },
+      { ...validTrackingPoint, longitude: 181 },
+      { ...validTrackingPoint, timestamp: "2026-07-13T19:45:00.000+01:00" },
+      { ...validTrackingPoint, timestamp: "not-a-date" },
     ]) {
       expect(() => validateTrackingPointV1(value)).toThrow("Invalid tracking point.");
     }
   });
 
-  test("rejects fields outside the locked plaintext schema", () => {
-    const trackingPoint = {
-      v: 1,
-      latitude: 51.5074,
-      longitude: -0.1278,
-      timestamp: "2026-07-13T18:45:00.000Z",
-      speed: null,
-      battery: {
-        level: 72,
-        charging: false,
-      },
-    };
+  test("accepts valid ISO 8601 UTC precision and rejects impossible dates", () => {
+    expect(
+      validateTrackingPointV1({
+        ...validTrackingPoint,
+        timestamp: "2026-07-13T18:45:00.1234Z",
+      }).timestamp,
+    ).toBe("2026-07-13T18:45:00.1234Z");
+    expect(() =>
+      validateTrackingPointV1({
+        ...validTrackingPoint,
+        timestamp: "2026-02-30T18:45:00Z",
+      }),
+    ).toThrow("Invalid tracking point.");
+  });
 
-    expect(() => validateTrackingPointV1({ ...trackingPoint, accuracy: 4 })).toThrow(
+  test("rejects fields outside the locked plaintext schema", () => {
+    expect(() => validateTrackingPointV1({ ...validTrackingPoint, accuracy: 4 })).toThrow(
       "Invalid tracking point.",
     );
     expect(() =>
       validateTrackingPointV1({
-        ...trackingPoint,
+        ...validTrackingPoint,
         battery: {
-          ...trackingPoint.battery,
+          ...validTrackingPoint.battery,
           state: "full",
         },
       }),
