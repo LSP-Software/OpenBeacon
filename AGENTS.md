@@ -75,3 +75,17 @@ const ExampleContext = createContext<ExampleContextType | null>(null);
 
 export const ExampleProvider = ({ children }: ExampleProviderProps) => {
 ```
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in Linear under the Open Beacon team (`OPE`) using the Linear MCP tools. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Triage uses the five canonical label names without overrides. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+OpenBeacon uses a multi-context domain layout. See `docs/agents/domain.md`.
