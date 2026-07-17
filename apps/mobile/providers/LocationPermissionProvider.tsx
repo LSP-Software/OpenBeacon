@@ -20,6 +20,7 @@ import {
   requestBackgroundLocationPermissions,
   requestLocationPermissionsForLaunch,
 } from "../lib/locationPermissions.ts";
+import { requestNotificationPermissionsForLaunch } from "../lib/notificationPermissions.ts";
 
 const LocationPermissionContext = createContext<{
   permissionState: LocationPermissionState | null;
@@ -92,7 +93,10 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
       return;
     }
 
-    void syncLocationPermissions("launchRequest");
+    void (async () => {
+      await tryCatch(requestNotificationPermissionsForLaunch());
+      await syncLocationPermissions("launchRequest");
+    })();
   }, [isPending, session, syncLocationPermissions]);
 
   useEffect(() => {

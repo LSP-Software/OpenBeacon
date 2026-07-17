@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="openbeacon_tracking_notification_channel">Location sharing</string>
+  <string name="openbeacon_tracking_notification_channel_description">Shown while Open Beacon privately shares your location with your family.</string>
+  <string name="openbeacon_tracking_notification_title">Open Beacon</string>
+  <string name="openbeacon_tracking_notification_body">Private location sharing is active.</string>
+</resources>
