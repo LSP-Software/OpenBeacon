@@ -12,6 +12,12 @@ import {
   XCHACHA20_NONCE_LENGTH,
 } from "./constants.ts";
 import { DevicePrivateKeyMaterial, EpochKeyMaterial, SensitivePayloadBytes } from "./sensitive.ts";
+import type { TrackingPointV1 } from "./trackingPoint.ts";
+import {
+  encodeTrackingPointV1,
+  TRACKING_POINT_KIND,
+  validateTrackingPointV1,
+} from "./trackingPoint.ts";
 import type {
   DecryptedGroupPayload,
   DeviceKeyPair,
@@ -417,9 +423,12 @@ export {
   DEVICE_KEY_ALGORITHM,
   DevicePrivateKeyMaterial,
   encodeBase64,
+  encodeTrackingPointV1,
   EpochKeyMaterial,
   PAYLOAD_ENCRYPTION_ALGORITHM,
   SensitivePayloadBytes,
+  TRACKING_POINT_KIND,
+  validateTrackingPointV1,
   WRAPPED_EPOCH_KEY_ALGORITHM,
   XCHACHA20_NONCE_LENGTH,
 };
@@ -431,5 +440,6 @@ export type {
   GroupEpochCreationResult,
   GroupPayloadKind,
   RecipientPublicKeyMaterial,
+  TrackingPointV1,
   WrappedEpochKey,
 };

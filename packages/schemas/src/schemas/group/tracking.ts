@@ -1,11 +1,10 @@
 import {
   decodeBase64,
   PAYLOAD_ENCRYPTION_ALGORITHM,
+  TRACKING_POINT_KIND,
   XCHACHA20_NONCE_LENGTH,
 } from "@openbeacon/encryption";
 import z from "zod";
-
-export const TRACKING_POINT_KIND = "trackingPoint" as const;
 
 const trackingNonceSchema = z
   .string()
@@ -48,3 +47,5 @@ export const groupTrackingPollSchema = z.object({
 export const groupTrackingGetLatestSchema = z.object({
   groupId: z.string().min(1),
 });
+
+export { TRACKING_POINT_KIND };
