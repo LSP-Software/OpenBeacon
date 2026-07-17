@@ -4,7 +4,7 @@ export type LiveMapMarker = {
   battery: {
     charging: boolean;
     level: number;
-  };
+  } | null;
   image: string | null;
   initials: string;
   isSelf: boolean;
@@ -29,25 +29,25 @@ export const buildLiveMapMarkers = ({
     id: string;
     name: string;
     members: readonly {
-      id: string;
       image: string | null;
       name: string;
+      userId: string;
     }[];
   }[];
   positions: readonly LiveMapPosition[];
   selfUserId: string;
 }): LiveMapMarker[] => {
-  const memberById = new Map<string, { image: string | null; name: string }>();
+  const memberByUserId = new Map<string, { image: string | null; name: string }>();
   for (const group of groups) {
     for (const member of group.members) {
-      if (!memberById.has(member.id)) {
-        memberById.set(member.id, { image: member.image, name: member.name });
+      if (!memberByUserId.has(member.userId)) {
+        memberByUserId.set(member.userId, { image: member.image, name: member.name });
       }
     }
   }
 
   return positions.map((livePosition) => {
-    const member = memberById.get(livePosition.userId);
+    const member = memberByUserId.get(livePosition.userId);
     const name = member?.name ?? "Unknown";
 
     return {
@@ -84,14 +84,15 @@ const otherSharedGroupNames = ({
   groups: readonly {
     id: string;
     name: string;
-    members: readonly { id: string }[];
+    members: readonly { userId: string }[];
   }[];
   sourceGroupId: string;
   userId: string;
 }) => {
   return groups
     .filter(
-      (group) => group.id !== sourceGroupId && group.members.some((member) => member.id === userId),
+      (group) =>
+        group.id !== sourceGroupId && group.members.some((member) => member.userId === userId),
     )
     .map((group) => group.name);
 };

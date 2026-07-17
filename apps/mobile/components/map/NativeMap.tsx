@@ -1,16 +1,20 @@
-import { Camera, MapView, MarkerView } from "@maplibre/maplibre-react-native";
+import { Camera, type CameraRef, MapView, PointAnnotation } from "@maplibre/maplibre-react-native";
 import { useMutation } from "@tanstack/react-query";
 import { router, useRootNavigationState } from "expo-router";
+import { ScanIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef } from "react";
-import { Button, Platform, View } from "react-native";
+import { Button, Platform, Pressable, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/ui/Text.tsx";
 import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
 import { queryClient, trpc } from "../../lib/api.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
+import { fitLiveMapMarkers } from "../../lib/fitLiveMapMarkers.ts";
 import { getProtomapsMapStyle } from "../../lib/protomaps-style.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
-import { LiveMapCallout } from "./LiveMapCallout.tsx";
+import { Icon } from "../ui/Icon.tsx";
 import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
+import { LiveMapPersonSheet } from "./LiveMapPersonSheet.tsx";
 
 export const NativeMap = ({
   markers = [],
@@ -22,6 +26,7 @@ export const NativeMap = ({
   selectedUserId?: string | null;
 } = {}) => {
   const { mapTheme } = useTheme();
+  const insets = useSafeAreaInsets();
   const signedPmtilesUrlQuery = useSignedPmtilesUrl();
   const forceRefreshSignedPmtilesUrlMutation = useMutation({
     ...trpc.maps.forceRefreshSignedPmtilesUrl.mutationOptions(),
@@ -30,11 +35,27 @@ export const NativeMap = ({
     },
   });
   const rootNavigationState = useRootNavigationState();
+  const cameraRef = useRef<CameraRef>(null);
+  const didFitMarkersRef = useRef(false);
   const didRetryAfterMapFailureRef = useRef(false);
   const lastPmtilesUrlRef = useRef<string | null>(null);
-  const suppressMapPressRef = useRef(false);
+  const trackedUserIdRef = useRef<string | null>(null);
+  const markersRef = useRef(markers);
+  markersRef.current = markers;
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
   const selectedMarker = markers.find((marker) => marker.userId === selectedUserId) ?? null;
+  const hasMarkers = markers.length > 0;
+  const selectedLatitude = selectedMarker?.latitude;
+  const selectedLongitude = selectedMarker?.longitude;
+  const cameraPadding = useMemo(
+    () => ({
+      paddingBottom: selectedUserId ? 220 : 48,
+      paddingLeft: 32,
+      paddingRight: 32,
+      paddingTop: insets.top + 56,
+    }),
+    [insets.top, selectedUserId],
+  );
 
   if (lastPmtilesUrlRef.current !== pmtilesUrl) {
     lastPmtilesUrlRef.current = pmtilesUrl;
@@ -49,6 +70,16 @@ export const NativeMap = ({
     return getProtomapsMapStyle(mapTheme, pmtilesUrl);
   }, [mapTheme, pmtilesUrl]);
 
+  const fitEveryoneInFrame = () => {
+    trackedUserIdRef.current = null;
+    onSelectUserId?.(null);
+    fitLiveMapMarkers({
+      camera: cameraRef.current,
+      markers: markersRef.current,
+      padding: cameraPadding,
+    });
+  };
+
   useEffect(() => {
     if (!rootNavigationState?.key || signedPmtilesUrlQuery.error?.data?.code !== "UNAUTHORIZED") {
       return;
@@ -56,6 +87,42 @@ export const NativeMap = ({
 
     router.replace("/");
   }, [rootNavigationState?.key, signedPmtilesUrlQuery.error]);
+
+  useEffect(() => {
+    if (!hasMarkers || didFitMarkersRef.current) {
+      return;
+    }
+
+    didFitMarkersRef.current = true;
+    fitLiveMapMarkers({
+      camera: cameraRef.current,
+      markers,
+      padding: cameraPadding,
+    });
+  }, [cameraPadding, hasMarkers, markers]);
+
+  useEffect(() => {
+    if (
+      selectedUserId === null ||
+      selectedLatitude === undefined ||
+      selectedLongitude === undefined
+    ) {
+      trackedUserIdRef.current = null;
+      return;
+    }
+
+    const coordinate: [number, number] = [selectedLongitude, selectedLatitude];
+    const isNewFocus = trackedUserIdRef.current !== selectedUserId;
+    trackedUserIdRef.current = selectedUserId;
+
+    cameraRef.current?.setCamera({
+      animationDuration: isNewFocus ? 500 : 400,
+      animationMode: isNewFocus ? "flyTo" : "easeTo",
+      centerCoordinate: coordinate,
+      padding: cameraPadding,
+      zoomLevel: 15,
+    });
+  }, [cameraPadding, selectedLatitude, selectedLongitude, selectedUserId]);
 
   if (signedPmtilesUrlQuery.isLoading && !mapStyle) {
     return (
@@ -93,11 +160,6 @@ export const NativeMap = ({
         rotateEnabled={false}
         surfaceView={Platform.OS === "android"}
         onPress={() => {
-          if (suppressMapPressRef.current) {
-            suppressMapPressRef.current = false;
-            return;
-          }
-
           onSelectUserId?.(null);
         }}
         onDidFailLoadingMap={() => {
@@ -116,37 +178,50 @@ export const NativeMap = ({
           didRetryAfterMapFailureRef.current = false;
         }}
       >
-        <Camera centerCoordinate={[0, 0]} zoomLevel={1.25} />
+        <Camera ref={cameraRef} defaultSettings={{ centerCoordinate: [0, 0], zoomLevel: 1.25 }} />
         {markers.map((marker) => (
-          <MarkerView
+          <PointAnnotation
             key={marker.userId}
+            id={marker.userId}
             coordinate={[marker.longitude, marker.latitude]}
-            allowOverlap
-            isSelected={marker.userId === selectedUserId}
+            anchor={{ x: 0.5, y: 0.5 }}
+            selected={marker.userId === selectedUserId}
+            onSelected={() => {
+              onSelectUserId?.(marker.userId);
+            }}
           >
             <LiveMapMarkerPin
               image={marker.image}
               initials={marker.initials}
-              isSelf={marker.isSelf}
               name={marker.name}
               ringColor={marker.ringColor}
-              onPress={() => {
-                suppressMapPressRef.current = true;
-                onSelectUserId?.(marker.userId);
-              }}
             />
-          </MarkerView>
+          </PointAnnotation>
         ))}
       </MapView>
+      {hasMarkers ? (
+        <Pressable
+          accessibilityLabel="Show everyone"
+          accessibilityRole="button"
+          onPress={fitEveryoneInFrame}
+          className="absolute right-3 top-14 size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
+        >
+          <Icon as={ScanIcon} size={20} className="text-foreground" />
+        </Pressable>
+      ) : null}
       {selectedMarker ? (
-        <View className="absolute bottom-6 left-4 right-4" pointerEvents="box-none">
-          <LiveMapCallout
-            battery={selectedMarker.battery}
-            name={selectedMarker.name}
-            otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
-            timestamp={selectedMarker.timestamp}
-          />
-        </View>
+        <LiveMapPersonSheet
+          key={selectedMarker.userId}
+          battery={selectedMarker.battery}
+          image={selectedMarker.image}
+          initials={selectedMarker.initials}
+          name={selectedMarker.name}
+          otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
+          timestamp={selectedMarker.timestamp}
+          onDismiss={() => {
+            onSelectUserId?.(null);
+          }}
+        />
       ) : null}
     </View>
   );

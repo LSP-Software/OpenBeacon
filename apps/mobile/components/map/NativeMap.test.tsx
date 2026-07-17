@@ -39,8 +39,22 @@ mock.module("react-native", () => ({
   Platform: {
     OS: "ios",
   },
+  Pressable: ({ children, onPress }: { children: React.ReactNode; onPress?: () => void }) =>
+    React.createElement("pressable", { onClick: onPress }, children),
   View: ({ children }: { children: React.ReactNode }) =>
     React.createElement("view", null, children),
+}));
+
+mock.module("lucide-react-native", () => ({
+  ScanIcon: () => React.createElement("scan-icon"),
+}));
+
+mock.module("../ui/Icon.tsx", () => ({
+  Icon: () => React.createElement("icon"),
+}));
+
+mock.module("../../lib/fitLiveMapMarkers.ts", () => ({
+  fitLiveMapMarkers: () => {},
 }));
 
 mock.module("@tanstack/react-query", () => ({
@@ -80,8 +94,8 @@ mock.module("@maplibre/maplibre-react-native", () => ({
 
     return React.createElement("map-view", null, children);
   },
-  MarkerView: ({ children }: { children: React.ReactNode }) =>
-    React.createElement("marker-view", null, children),
+  PointAnnotation: ({ children }: { children: React.ReactNode }) =>
+    React.createElement("point-annotation", null, children),
 }));
 
 mock.module("expo-router", () => ({
@@ -90,6 +104,15 @@ mock.module("expo-router", () => ({
   },
   useRootNavigationState: () => ({
     key: "root",
+  }),
+}));
+
+mock.module("react-native-safe-area-context", () => ({
+  useSafeAreaInsets: () => ({
+    bottom: 0,
+    left: 0,
+    right: 0,
+    top: 0,
   }),
 }));
 
@@ -131,8 +154,8 @@ mock.module("../../providers/ThemeProvider.tsx", () => ({
   }),
 }));
 
-mock.module("./LiveMapCallout.tsx", () => ({
-  LiveMapCallout: () => React.createElement("live-map-callout"),
+mock.module("./LiveMapPersonSheet.tsx", () => ({
+  LiveMapPersonSheet: () => React.createElement("live-map-person-sheet"),
 }));
 
 mock.module("./LiveMapMarkerPin.tsx", () => ({

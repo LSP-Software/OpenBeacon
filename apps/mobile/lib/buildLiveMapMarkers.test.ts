@@ -22,8 +22,8 @@ describe("buildLiveMapMarkers", () => {
           id: "family",
           name: "Family",
           members: [
-            { id: "alice", image: "https://example.com/a.png", name: "Alice Smith" },
-            { id: "bob", image: null, name: "Bob Jones" },
+            { image: "https://example.com/a.png", name: "Alice Smith", userId: "alice" },
+            { image: null, name: "Bob Jones", userId: "bob" },
           ],
         },
       ],
@@ -84,22 +84,22 @@ describe("buildLiveMapMarkers", () => {
           id: "family",
           name: "Family",
           members: [
-            { id: "alice", image: null, name: "Alice" },
-            { id: "carol", image: null, name: "Carol" },
+            { image: null, name: "Alice", userId: "alice" },
+            { image: null, name: "Carol", userId: "carol" },
           ],
         },
         {
           id: "hiking",
           name: "Hiking",
           members: [
-            { id: "alice", image: null, name: "Alice" },
-            { id: "carol", image: null, name: "Carol" },
+            { image: null, name: "Alice", userId: "alice" },
+            { image: null, name: "Carol", userId: "carol" },
           ],
         },
         {
           id: "work",
           name: "Work",
-          members: [{ id: "alice", image: null, name: "Alice" }],
+          members: [{ image: null, name: "Alice", userId: "alice" }],
         },
       ],
       positions: [position({ sourceGroupId: "hiking", userId: "carol" })],

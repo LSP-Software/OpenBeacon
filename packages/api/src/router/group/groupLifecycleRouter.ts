@@ -85,6 +85,7 @@ export const groupLifecycleRouter = {
           image: group.image,
           members: group.groupMembers.map((member) => ({
             id: member.id,
+            userId: member.user.id,
             name: member.user.name,
             image: member.user.image,
             role: member.role,

@@ -6,6 +6,7 @@ export interface GroupListItem {
   image: string | null;
   members: {
     id: string;
+    userId: string;
     name: string;
     image: string | null;
     role: GroupRole;
