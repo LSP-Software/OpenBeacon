@@ -59,6 +59,7 @@ class OpenBeaconTrackingModule : Module() {
             )
           }
         ContextCompat.startForegroundService(requireContext(), intent)
+        Unit
       }
 
       AsyncFunction("stopCapture") {
@@ -67,6 +68,7 @@ class OpenBeaconTrackingModule : Module() {
             action = TrackingCaptureService.ACTION_STOP
           }
         requireContext().startService(intent)
+        Unit
       }
 
       Function("isCaptureRunning") {

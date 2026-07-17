@@ -10,7 +10,8 @@ class RoomCiphertextQueue(
   override fun listByStatus(
     status: String,
     limit: Int,
-  ): List<CiphertextQueueRow> = dao.listByStatus(status, limit).map { it.toRow() }
+  ): List<CiphertextQueueRow> =
+    dao.listByStatus(status, limit.coerceAtLeast(0)).map { it.toRow() }
 
   override fun markInFlight(
     ids: List<Long>,

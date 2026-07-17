@@ -1,9 +1,16 @@
 package expo.modules.openbeacontracking.keys
 
 import android.content.Context
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import android.util.Log
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -11,17 +18,11 @@ class SecureEpochKeyStore(
   context: Context,
 ) : EpochKeyStore {
   private val preferences =
-    EncryptedSharedPreferences.create(
-      PREFS_NAME,
-      MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC),
-      context.applicationContext,
-      EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-      EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
+    context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
   @Synchronized
   override fun replaceAll(keys: List<ProvisionedEpochKey>) {
-    preferences.edit().putString(KEYS_JSON, encodeKeys(keys)).apply()
+    preferences.edit().putString(KEYS_JSON, encrypt(encodeKeys(keys))).apply()
   }
 
   @Synchronized
@@ -32,13 +33,71 @@ class SecureEpochKeyStore(
     }
 
     val remaining = list().filterNot { it.groupId in groupIds.toSet() }
-    preferences.edit().putString(KEYS_JSON, encodeKeys(remaining)).apply()
+    preferences.edit().putString(KEYS_JSON, encrypt(encodeKeys(remaining))).apply()
   }
 
   @Synchronized
   override fun list(): List<ProvisionedEpochKey> {
     val raw = preferences.getString(KEYS_JSON, null) ?: return emptyList()
-    return decodeKeys(raw)
+    return try {
+      decodeKeys(decrypt(raw))
+    } catch (error: Exception) {
+      Log.e(TAG, "Failed to read provisioned epoch keys.", error)
+      emptyList()
+    }
+  }
+
+  private fun encrypt(plaintext: String): String {
+    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+    cipher.init(Cipher.ENCRYPT_MODE, getOrCreateEncryptionKey())
+    return JSONObject()
+      .put("version", 1)
+      .put("iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+      .put(
+        "ciphertext",
+        Base64.encodeToString(cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP),
+      ).toString()
+  }
+
+  private fun decrypt(raw: String): String {
+    val payload = JSONObject(raw)
+    require(payload.getInt("version") == 1) { "Unsupported epoch key storage version." }
+    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+    cipher.init(
+      Cipher.DECRYPT_MODE,
+      getOrCreateEncryptionKey(),
+      GCMParameterSpec(128, Base64.decode(payload.getString("iv"), Base64.NO_WRAP)),
+    )
+    return String(
+      cipher.doFinal(Base64.decode(payload.getString("ciphertext"), Base64.NO_WRAP)),
+      Charsets.UTF_8,
+    )
+  }
+
+  private fun getOrCreateEncryptionKey(): SecretKey {
+    val keyStore =
+      KeyStore.getInstance(ANDROID_KEY_STORE).apply {
+        load(null)
+      }
+    val existingKey = keyStore.getKey(KEY_ALIAS, null)
+    if (existingKey is SecretKey) {
+      return existingKey
+    }
+
+    return KeyGenerator
+      .getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE)
+      .apply {
+        init(
+          KeyGenParameterSpec
+            .Builder(
+              KEY_ALIAS,
+              KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+            ).setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .build(),
+        )
+      }.generateKey()
   }
 
   private fun encodeKeys(keys: List<ProvisionedEpochKey>): String {
@@ -75,7 +134,10 @@ class SecureEpochKeyStore(
   }
 
   companion object {
-    private const val PREFS_NAME = "openbeacon_tracking_epoch_keys"
+    private const val TAG = "SecureEpochKeyStore"
+    private const val ANDROID_KEY_STORE = "AndroidKeyStore"
+    private const val KEY_ALIAS = "openbeacon_tracking_epoch_keys_v1"
+    private const val PREFS_NAME = "openbeacon_tracking_epoch_keys_v2"
     private const val KEYS_JSON = "keys"
   }
 }
