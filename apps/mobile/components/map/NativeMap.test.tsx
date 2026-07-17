@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import React from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import React, { act } from "react";
+import { createRoot } from "test-renderer";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -155,10 +155,10 @@ describe("NativeMap", () => {
   });
 
   test("forces one refresh per url after map failures and resets when the url changes", async () => {
-    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    const root = createRoot();
 
     await act(async () => {
-      renderer = TestRenderer.create(<NativeMap />);
+      root.render(<NativeMap />);
       await Promise.resolve();
     });
 
@@ -183,7 +183,7 @@ describe("NativeMap", () => {
     };
 
     await act(async () => {
-      renderer?.update(<NativeMap />);
+      root.render(<NativeMap />);
       await Promise.resolve();
     });
 

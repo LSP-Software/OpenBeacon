@@ -74,11 +74,10 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.14",
-    "@types/react-test-renderer": "^19.1.0",
     "babel-preset-expo": "^55.0.10",
-    "react-test-renderer": "19.2.0",
+    "expo-dev-client": "~55.0.18",
     "tailwindcss": "^3.4.17",
-    "typescript": "~5.9.2",
-    "expo-dev-client": "~55.0.18"
+    "test-renderer": "1.2",
+    "typescript": "~5.9.2"
   }
 }
