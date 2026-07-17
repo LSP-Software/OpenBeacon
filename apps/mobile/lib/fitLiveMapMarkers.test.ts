@@ -18,6 +18,36 @@ const marker = (
 });
 
 describe("fitLiveMapMarkers", () => {
+  test("no-ops when camera or markers are missing", () => {
+    const setCamera = mock(() => {});
+    const fitBounds = mock(() => {});
+
+    fitLiveMapMarkers({
+      camera: null,
+      markers: [marker({ latitude: 51.5, longitude: -0.12, userId: "alice" })],
+      padding: {
+        paddingBottom: 48,
+        paddingLeft: 32,
+        paddingRight: 32,
+        paddingTop: 56,
+      },
+    });
+
+    fitLiveMapMarkers({
+      camera: { setCamera, fitBounds } as never,
+      markers: [],
+      padding: {
+        paddingBottom: 48,
+        paddingLeft: 32,
+        paddingRight: 32,
+        paddingTop: 56,
+      },
+    });
+
+    expect(setCamera).not.toHaveBeenCalled();
+    expect(fitBounds).not.toHaveBeenCalled();
+  });
+
   test("centers and zooms when there is a single marker", () => {
     const setCamera = mock(() => {});
     const fitBounds = mock(() => {});

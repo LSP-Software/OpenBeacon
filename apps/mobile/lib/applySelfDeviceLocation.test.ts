@@ -59,6 +59,23 @@ describe("applySelfDeviceLocation", () => {
     ]);
   });
 
+  test("leaves markers unchanged when self is missing and no fallback profile exists", () => {
+    const bob = marker({ userId: "bob", initials: "Bo", name: "Bob" });
+
+    expect(
+      applySelfDeviceLocation({
+        markers: [bob],
+        selfDeviceLocation: {
+          latitude: 50.8,
+          longitude: -1.1,
+          timestamp: "2026-07-17T12:01:00.000Z",
+        },
+        selfFallback: null,
+        selfUserId: "alice",
+      }),
+    ).toEqual([bob]);
+  });
+
   test("inserts a self marker from device location when poll has no self point yet", () => {
     const bob = marker({ userId: "bob", initials: "Bo", name: "Bob" });
 

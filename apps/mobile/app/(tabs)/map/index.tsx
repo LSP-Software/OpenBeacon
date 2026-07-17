@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeMap } from "../../../components/map/NativeMap.tsx";
-import { Text } from "../../../components/ui/Text.tsx";
 import { useMapLivePositions } from "../../../hooks/useMapLivePositions.ts";
 import { useSelfDeviceLocation } from "../../../hooks/useSelfDeviceLocation.ts";
 import { trpc } from "../../../lib/api.ts";
@@ -22,7 +21,6 @@ export default function MapScreen() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selfUserId = session?.user.id ?? "";
   const selfDeviceLocation = useSelfDeviceLocation(selfUserId.length > 0);
-  const groupCount = groups?.length ?? 0;
 
   const selfFallback = useMemo(() => {
     if (!selfUserId || !groups || groups.length === 0) {
@@ -75,22 +73,6 @@ export default function MapScreen() {
     }
   }, [markers, selectedUserId]);
 
-  useEffect(() => {
-    if (!__DEV__) {
-      return;
-    }
-
-    console.log("[map-live]", {
-      groupCount,
-      live: livePositions.length,
-      markers: markers.length,
-      self: Boolean(selfUserId),
-      selfDevice: selfDeviceLocation
-        ? { lat: selfDeviceLocation.latitude, lng: selfDeviceLocation.longitude }
-        : null,
-    });
-  }, [groupCount, livePositions.length, markers.length, selfDeviceLocation, selfUserId]);
-
   return (
     <View
       className="flex-1 bg-background"
@@ -103,23 +85,6 @@ export default function MapScreen() {
           setSelectedUserId((current) => nextMapMarkerSelection(current, userId));
         }}
       />
-      {__DEV__ ? (
-        <View
-          pointerEvents="none"
-          className="absolute left-3 top-14 rounded-lg bg-black/70 px-3 py-2"
-        >
-          <Text className="text-xs text-white">
-            live {livePositions.length} · markers {markers.length} · groups {groupCount}
-            {selfDeviceLocation ? " · gps" : ""}
-            {selfUserId ? "" : " · no session"}
-          </Text>
-          {livePositions.length === 0 && !selfDeviceLocation ? (
-            <Text className="text-xs text-white/80">
-              Waiting for uploaded encrypted points (capture → upload → decrypt)
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
     </View>
   );
 }

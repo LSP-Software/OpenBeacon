@@ -3,13 +3,15 @@ import { useMutation } from "@tanstack/react-query";
 import { router, useRootNavigationState } from "expo-router";
 import { ScanIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef } from "react";
-import { Button, Platform, Pressable, View } from "react-native";
+import { Button, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/ui/Text.tsx";
 import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
 import { queryClient, trpc } from "../../lib/api.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { fitLiveMapMarkers } from "../../lib/fitLiveMapMarkers.ts";
+import { buildLiveMapTrackingCameraStop } from "../../lib/liveMapTrackingCamera.ts";
+import { shouldForceRefreshAfterMapLoadFailure } from "../../lib/mapPmtilesLoadFailure.ts";
 import { getProtomapsMapStyle } from "../../lib/protomaps-style.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
 import { Icon } from "../ui/Icon.tsx";
@@ -111,17 +113,15 @@ export const NativeMap = ({
       return;
     }
 
-    const coordinate: [number, number] = [selectedLongitude, selectedLatitude];
-    const isNewFocus = trackedUserIdRef.current !== selectedUserId;
-    trackedUserIdRef.current = selectedUserId;
-
-    cameraRef.current?.setCamera({
-      animationDuration: isNewFocus ? 500 : 400,
-      animationMode: isNewFocus ? "flyTo" : "easeTo",
-      centerCoordinate: coordinate,
+    const stop = buildLiveMapTrackingCameraStop({
+      latitude: selectedLatitude,
+      longitude: selectedLongitude,
       padding: cameraPadding,
-      zoomLevel: 15,
+      previouslyTrackedUserId: trackedUserIdRef.current,
+      selectedUserId,
     });
+    trackedUserIdRef.current = selectedUserId;
+    cameraRef.current?.setCamera(stop);
   }, [cameraPadding, selectedLatitude, selectedLongitude, selectedUserId]);
 
   if (signedPmtilesUrlQuery.isLoading && !mapStyle) {
@@ -164,9 +164,11 @@ export const NativeMap = ({
         }}
         onDidFailLoadingMap={() => {
           if (
-            didRetryAfterMapFailureRef.current ||
-            signedPmtilesUrlQuery.isFetching ||
-            forceRefreshSignedPmtilesUrlMutation.isPending
+            !shouldForceRefreshAfterMapLoadFailure({
+              didRetryAfterMapFailure: didRetryAfterMapFailureRef.current,
+              isForceRefreshPending: forceRefreshSignedPmtilesUrlMutation.isPending,
+              isSignedUrlFetching: signedPmtilesUrlQuery.isFetching,
+            })
           ) {
             return;
           }
@@ -200,14 +202,15 @@ export const NativeMap = ({
         ))}
       </MapView>
       {hasMarkers ? (
-        <Pressable
+        <View
           accessibilityLabel="Show everyone"
           accessibilityRole="button"
-          onPress={fitEveryoneInFrame}
+          onStartShouldSetResponder={() => true}
+          onResponderRelease={fitEveryoneInFrame}
           className="absolute right-3 top-14 size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
         >
           <Icon as={ScanIcon} size={20} className="text-foreground" />
-        </Pressable>
+        </View>
       ) : null}
       {selectedMarker ? (
         <LiveMapPersonSheet
