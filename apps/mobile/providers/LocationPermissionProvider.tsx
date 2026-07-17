@@ -94,8 +94,8 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
     }
 
     void (async () => {
-      await syncLocationPermissions("launchRequest");
       await tryCatch(requestNotificationPermissionsForLaunch());
+      await syncLocationPermissions("launchRequest");
     })();
   }, [isPending, session, syncLocationPermissions]);
 

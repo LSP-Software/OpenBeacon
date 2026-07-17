@@ -23,6 +23,7 @@ let launchRequestCalls = 0;
 let refreshCalls = 0;
 let backgroundRequestCalls = 0;
 let notificationRequestCalls = 0;
+let permissionRequestOrder: string[] = [];
 let launchRequestResult: import("../lib/locationPermissions.ts").LocationPermissionState;
 let refreshResult: import("../lib/locationPermissions.ts").LocationPermissionState;
 let backgroundRequestResult: import("../lib/locationPermissions.ts").LocationPermissionState;
@@ -95,6 +96,7 @@ mock.module("../lib/locationPermissions.ts", () => ({
   },
   requestLocationPermissionsForLaunch: async () => {
     launchRequestCalls += 1;
+    permissionRequestOrder.push("location");
     return launchRequestResult;
   },
 }));
@@ -102,6 +104,7 @@ mock.module("../lib/locationPermissions.ts", () => ({
 mock.module("../lib/notificationPermissions.ts", () => ({
   requestNotificationPermissionsForLaunch: async () => {
     notificationRequestCalls += 1;
+    permissionRequestOrder.push("notification");
     return true;
   },
 }));
@@ -191,6 +194,7 @@ describe("LocationPermissionProvider", () => {
     refreshCalls = 0;
     backgroundRequestCalls = 0;
     notificationRequestCalls = 0;
+    permissionRequestOrder = [];
     launchRequestResult = createPermissionState({});
     refreshResult = createPermissionState({});
     backgroundRequestResult = createPermissionState({
@@ -212,6 +216,7 @@ describe("LocationPermissionProvider", () => {
 
     expect(launchRequestCalls).toBe(1);
     expect(notificationRequestCalls).toBe(1);
+    expect(permissionRequestOrder).toEqual(["notification", "location"]);
     expect(refreshCalls).toBe(0);
   });
 
