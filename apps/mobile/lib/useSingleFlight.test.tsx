@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import TestRenderer, { act } from "react-test-renderer";
+import { act } from "react";
+import { createRoot, type Root } from "test-renderer";
 import { useSingleFlight } from "./useSingleFlight.ts";
 
 (
@@ -20,11 +21,11 @@ const createDeferred = <T,>() => {
   };
 };
 
-const getButtons = (renderer: TestRenderer.ReactTestRenderer) =>
-  renderer.root.findAllByType("button");
+const getButtons = (root: Root) =>
+  root.container.queryAll((instance) => instance.type === "button");
 
-const pressButton = (renderer: TestRenderer.ReactTestRenderer, buttonIndex: number) => {
-  const button = getButtons(renderer)[buttonIndex];
+const pressButton = (root: Root, buttonIndex: number) => {
+  const button = getButtons(root)[buttonIndex];
 
   if (!button) {
     throw new Error(`Missing button at index ${buttonIndex}`);
@@ -62,25 +63,21 @@ const renderHookHarness = async ({
     );
   };
 
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
+  const root = createRoot();
 
   await act(async () => {
-    renderer = TestRenderer.create(<Harness />);
+    root.render(<Harness />);
     await Promise.resolve();
   });
 
-  if (renderer === null) {
-    throw new Error("Renderer was not created");
-  }
-
-  return renderer;
+  return root;
 };
 
 describe("useSingleFlight", () => {
   test("ignores duplicate and concurrent submissions until the first call completes", async () => {
     const calls: string[] = [];
     const firstRunDeferred = createDeferred<void>();
-    const renderer = await renderHookHarness({
+    const root = await renderHookHarness({
       onFirstRun: async () => {
         calls.push("first");
         await firstRunDeferred.promise;
@@ -91,9 +88,9 @@ describe("useSingleFlight", () => {
     });
 
     await act(async () => {
-      pressButton(renderer, 0);
-      pressButton(renderer, 0);
-      pressButton(renderer, 1);
+      pressButton(root, 0);
+      pressButton(root, 0);
+      pressButton(root, 1);
       await Promise.resolve();
     });
 
@@ -107,7 +104,7 @@ describe("useSingleFlight", () => {
     });
 
     await act(async () => {
-      pressButton(renderer, 1);
+      pressButton(root, 1);
       await Promise.resolve();
     });
 
@@ -118,7 +115,7 @@ describe("useSingleFlight", () => {
     const calls: string[] = [];
     const firstRunDeferred = createDeferred<void>();
     const rejectedRun = firstRunDeferred.promise.catch(() => undefined);
-    const renderer = await renderHookHarness({
+    const root = await renderHookHarness({
       onFirstRun: async () => {
         calls.push("first");
         await firstRunDeferred.promise;
@@ -129,7 +126,7 @@ describe("useSingleFlight", () => {
     });
 
     await act(async () => {
-      pressButton(renderer, 0);
+      pressButton(root, 0);
       await Promise.resolve();
     });
 
@@ -142,7 +139,7 @@ describe("useSingleFlight", () => {
     });
 
     await act(async () => {
-      pressButton(renderer, 1);
+      pressButton(root, 1);
       await Promise.resolve();
     });
 
