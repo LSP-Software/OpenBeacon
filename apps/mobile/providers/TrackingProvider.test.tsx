@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import TestRenderer, { act } from "react-test-renderer";
+import { act } from "react";
+import { createRoot, type Root } from "test-renderer";
 import { requestTrackingSync } from "../lib/trackingEvents.ts";
 
 (
@@ -20,7 +21,7 @@ let reconcileCalls: Array<{ startCapture: boolean }> = [];
 let flushCalls = 0;
 let revokeCalls = 0;
 let isReadyForSharing = true;
-let renderer: TestRenderer.ReactTestRenderer | null = null;
+let root: Root | null = null;
 const trackingService = {
   reconcileTrackingKeys: async (input: { startCapture: boolean }) => {
     reconcileCalls.push(input);
@@ -79,10 +80,9 @@ const flushEffects = async () => {
 };
 
 const renderProvider = async () => {
+  root = createRoot();
   await act(async () => {
-    renderer = TestRenderer.create(
-      <TrackingProvider service={trackingService}>{null}</TrackingProvider>,
-    );
+    root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -104,13 +104,13 @@ describe("TrackingProvider", () => {
     flushCalls = 0;
     revokeCalls = 0;
     isReadyForSharing = true;
-    renderer = null;
+    root = null;
   });
 
   afterEach(async () => {
-    if (renderer) {
+    if (root) {
       await act(async () => {
-        renderer?.unmount();
+        root?.unmount();
         await Promise.resolve();
       });
     }
@@ -184,7 +184,7 @@ describe("TrackingProvider", () => {
     };
 
     await act(async () => {
-      renderer?.update(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -204,7 +204,7 @@ describe("TrackingProvider", () => {
     };
 
     await act(async () => {
-      renderer?.update(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
       await Promise.resolve();
       await Promise.resolve();
     });

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import TestRenderer, { act } from "react-test-renderer";
+import { act } from "react";
+import { createRoot } from "test-renderer";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -49,18 +50,14 @@ const renderHookHarness = async () => {
     return null;
   };
 
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
+  const root = createRoot();
 
   await act(async () => {
-    renderer = TestRenderer.create(<Harness />);
+    root.render(<Harness />);
     await Promise.resolve();
   });
 
-  if (renderer === null) {
-    throw new Error("Renderer was not created");
-  }
-
-  return renderer;
+  return root;
 };
 
 describe("useSignedPmtilesUrl", () => {

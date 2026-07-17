@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import React from "react";
-import TestRenderer, { act } from "react-test-renderer";
+import React, { act } from "react";
+import { createRoot, type Root } from "test-renderer";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -141,28 +141,23 @@ const flushEffects = async () => {
 };
 
 const renderProvider = async () => {
-  let renderer: TestRenderer.ReactTestRenderer | null = null;
+  const root = createRoot();
 
   await act(async () => {
-    renderer = TestRenderer.create(<LocationPermissionProvider>{null}</LocationPermissionProvider>);
+    root.render(<LocationPermissionProvider>{null}</LocationPermissionProvider>);
     await Promise.resolve();
   });
 
-  if (renderer === null) {
-    throw new Error("Renderer was not created");
-  }
-
-  return renderer;
+  return root;
 };
 
-const getRenderedOutput = (renderer: TestRenderer.ReactTestRenderer) =>
-  JSON.stringify(renderer.toJSON());
+const getRenderedOutput = (root: Root) => JSON.stringify(root.container.toJSON());
 
-const getButtons = (renderer: TestRenderer.ReactTestRenderer) =>
-  renderer.root.findAllByType("button");
+const getButtons = (root: Root) =>
+  root.container.queryAll((instance) => instance.type === "button");
 
-const pressButton = (renderer: TestRenderer.ReactTestRenderer, buttonIndex: number) => {
-  const button = getButtons(renderer)[buttonIndex];
+const pressButton = (root: Root, buttonIndex: number) => {
+  const button = getButtons(root)[buttonIndex];
 
   if (!button) {
     throw new Error(`Missing button at index ${buttonIndex}`);
@@ -233,23 +228,23 @@ describe("LocationPermissionProvider", () => {
   });
 
   test("does not reopen the dialog on resume after the user dismisses it", async () => {
-    const renderer = await renderProvider();
+    const root = await renderProvider();
 
-    expect(getRenderedOutput(renderer)).toContain("Allow background location");
+    expect(getRenderedOutput(root)).toContain("Allow background location");
 
     await act(async () => {
-      pressButton(renderer, 0);
+      pressButton(root, 0);
       await Promise.resolve();
     });
 
-    expect(getRenderedOutput(renderer)).not.toContain("Allow background location");
+    expect(getRenderedOutput(root)).not.toContain("Allow background location");
 
     appStateListener?.("background");
     await flushEffects();
     appStateListener?.("active");
     await flushEffects();
 
-    expect(getRenderedOutput(renderer)).not.toContain("Allow background location");
+    expect(getRenderedOutput(root)).not.toContain("Allow background location");
   });
 
   test("opens the launch dialog only when background escalation is allowed in app", async () => {
@@ -257,9 +252,9 @@ describe("LocationPermissionProvider", () => {
       canRequestBackgroundInApp: true,
     });
 
-    const renderer = await renderProvider();
+    const root = await renderProvider();
 
-    expect(getRenderedOutput(renderer)).toContain("Allow background location");
+    expect(getRenderedOutput(root)).toContain("Allow background location");
   });
 
   test("does not open the launch dialog for the iOS allow once state", async () => {
@@ -267,18 +262,18 @@ describe("LocationPermissionProvider", () => {
       canRequestBackgroundInApp: false,
     });
 
-    const renderer = await renderProvider();
+    const root = await renderProvider();
 
-    expect(getRenderedOutput(renderer)).not.toContain("Allow background location");
+    expect(getRenderedOutput(root)).not.toContain("Allow background location");
   });
 
   test("requests background access only after the continue button is pressed", async () => {
-    const renderer = await renderProvider();
+    const root = await renderProvider();
 
     expect(backgroundRequestCalls).toBe(0);
 
     await act(async () => {
-      pressButton(renderer, 1);
+      pressButton(root, 1);
       await Promise.resolve();
     });
 
