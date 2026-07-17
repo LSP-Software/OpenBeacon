@@ -1,12 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  BatteryChargingIcon,
-  BatteryFullIcon,
-  BatteryLowIcon,
-  BatteryMediumIcon,
-  MapPinIcon,
-  PlusCircleIcon,
-} from "lucide-react-native";
+import { MapPinIcon, PlusCircleIcon } from "lucide-react-native";
 import { useState } from "react";
 import { View } from "react-native";
 import { InviteMemberToGroupDialog } from "../../../../components/dialogs/InviteMemberToGroupDialog.tsx";
@@ -16,6 +9,7 @@ import { Button } from "../../../../components/ui/Button.tsx";
 import { Icon } from "../../../../components/ui/Icon.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
+import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
 
 const MembersTab = ({ groupId }: { groupId: string }) => {
@@ -96,28 +90,6 @@ const MemberCard = ({
       </View>
     </View>
   );
-};
-
-const getBatteryVisual = ({
-  batteryLevel,
-  charging,
-}: {
-  batteryLevel: number;
-  charging: boolean;
-}) => {
-  if (charging) {
-    return { icon: BatteryChargingIcon, colorClass: "text-green-500" };
-  }
-
-  if (batteryLevel <= 25) {
-    return { icon: BatteryLowIcon, colorClass: "text-red-500" };
-  }
-
-  if (batteryLevel <= 60) {
-    return { icon: BatteryMediumIcon, colorClass: "text-orange-500" };
-  }
-
-  return { icon: BatteryFullIcon, colorClass: "text-green-500" };
 };
 
 export default MembersTab;

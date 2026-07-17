@@ -80,6 +80,8 @@ mock.module("@maplibre/maplibre-react-native", () => ({
 
     return React.createElement("map-view", null, children);
   },
+  MarkerView: ({ children }: { children: React.ReactNode }) =>
+    React.createElement("marker-view", null, children),
 }));
 
 mock.module("expo-router", () => ({
@@ -127,6 +129,14 @@ mock.module("../../providers/ThemeProvider.tsx", () => ({
   useTheme: () => ({
     mapTheme: "light" as const,
   }),
+}));
+
+mock.module("./LiveMapCallout.tsx", () => ({
+  LiveMapCallout: () => React.createElement("live-map-callout"),
+}));
+
+mock.module("./LiveMapMarkerPin.tsx", () => ({
+  LiveMapMarkerPin: () => React.createElement("live-map-marker-pin"),
 }));
 
 const { NativeMap }: typeof import("./NativeMap.tsx") = await import("./NativeMap.tsx");
