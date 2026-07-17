@@ -1,8 +1,8 @@
 import { WRAPPED_EPOCH_KEY_ALGORITHM, type WrappedEpochKey } from "@openbeacon/encryption";
 import { trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
-import type { MapTrackingDeps } from "./mapTracking.ts";
 import { createMapTrackingDecryptPoint } from "./mapTrackingDecrypt.ts";
+import type { MapTrackingDeps } from "./mapTrackingTypes.ts";
 
 export const createDefaultMapTrackingDeps = (): MapTrackingDeps => ({
   decryptPoint: createMapTrackingDecryptPoint({

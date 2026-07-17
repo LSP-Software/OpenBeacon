@@ -2,7 +2,8 @@ import { useIsFocused } from "@react-navigation/native";
 import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { createDefaultMapTrackingDeps } from "../lib/createDefaultMapTrackingDeps.ts";
-import { createMapTrackingSession, type LiveMapPosition } from "../lib/mapTracking.ts";
+import { createMapTrackingSession } from "../lib/mapTracking.ts";
+import type { LiveMapPosition } from "../lib/mapTrackingTypes.ts";
 
 export const useMapLivePositions = () => {
   const isFocused = useIsFocused();

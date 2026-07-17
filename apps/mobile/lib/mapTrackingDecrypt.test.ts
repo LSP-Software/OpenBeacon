@@ -6,6 +6,7 @@ import {
   encodeTrackingPointV1,
   encryptGroupPayload,
   TRACKING_POINT_KIND,
+  WRAPPED_EPOCH_KEY_ALGORITHM,
 } from "@openbeacon/encryption";
 import { createMapTrackingDecryptPoint } from "./mapTrackingDecrypt.ts";
 
@@ -167,5 +168,114 @@ describe("createMapTrackingDecryptPoint", () => {
         },
       }),
     ).resolves.toEqual({ status: "ignored" });
+  });
+
+  test("treats malformed wrapped keys as undecryptable", async () => {
+    const { keyPair, recipient } = createRecipient("device-1", "user-1");
+    const decryptPoint = createMapTrackingDecryptPoint({
+      ensureDeviceKeys: async () => ({
+        deviceId: recipient.deviceId,
+        privateKey: keyPair.privateKey,
+      }),
+      getWrappedEpochKey: async () => ({
+        algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+        createdAt: new Date(0),
+        ephemeralPublicKey: "not-a-valid-key",
+        epochId: "epoch-1",
+        nonce: "nonce",
+        recipientDeviceId: recipient.deviceId,
+        wrappedKey: "not-a-valid-wrapped-key",
+      }),
+    });
+
+    await expect(
+      decryptPoint({
+        groupId: "group-1",
+        point: {
+          algorithm: "XChaCha20-Poly1305",
+          ciphertext: "cipher",
+          clientPointId: "client-1",
+          createdAt: new Date("2026-07-17T12:00:00.000Z"),
+          epochId: "epoch-1",
+          id: "server-1",
+          kind: TRACKING_POINT_KIND,
+          nonce: "nonce",
+          senderDeviceId: "device-sender",
+          senderUserId: "user-sender",
+        },
+      }),
+    ).resolves.toEqual({ status: "undecryptable" });
+  });
+
+  test("keeps a cached epoch key when only the point payload is corrupt", async () => {
+    const { keyPair, recipient } = createRecipient("device-1", "user-1");
+    const { epoch, epochKey, wrappedKeys } = createInitialGroupEpoch({
+      createdByDeviceId: recipient.deviceId,
+      groupId: "group-1",
+      recipients: [recipient],
+    });
+    const encrypted = encryptGroupPayload({
+      epochId: epoch.epochId,
+      epochKey,
+      groupId: "group-1",
+      kind: TRACKING_POINT_KIND,
+      payload: encodeTrackingPointV1({
+        battery: { charging: false, level: 10 },
+        latitude: 1,
+        longitude: 2,
+        speed: null,
+        timestamp: "2026-07-17T12:00:00.000Z",
+        v: 1,
+      }),
+      senderDeviceId: "device-sender",
+    });
+    let wrappedKeyFetches = 0;
+    const decryptPoint = createMapTrackingDecryptPoint({
+      ensureDeviceKeys: async () => ({
+        deviceId: recipient.deviceId,
+        privateKey: keyPair.privateKey,
+      }),
+      getWrappedEpochKey: async () => {
+        wrappedKeyFetches += 1;
+        return wrappedKeys[0] ?? null;
+      },
+    });
+
+    await expect(
+      decryptPoint({
+        groupId: "group-1",
+        point: {
+          algorithm: encrypted.algorithm,
+          ciphertext: "AAAA",
+          clientPointId: "client-bad",
+          createdAt: encrypted.createdAt,
+          epochId: encrypted.epochId,
+          id: "server-bad",
+          kind: encrypted.kind,
+          nonce: encrypted.nonce,
+          senderDeviceId: encrypted.senderDeviceId,
+          senderUserId: "user-sender",
+        },
+      }),
+    ).resolves.toEqual({ status: "undecryptable" });
+
+    const good = await decryptPoint({
+      groupId: "group-1",
+      point: {
+        algorithm: encrypted.algorithm,
+        ciphertext: encrypted.ciphertext,
+        clientPointId: "client-good",
+        createdAt: encrypted.createdAt,
+        epochId: encrypted.epochId,
+        id: "server-good",
+        kind: encrypted.kind,
+        nonce: encrypted.nonce,
+        senderDeviceId: encrypted.senderDeviceId,
+        senderUserId: "user-sender",
+      },
+    });
+
+    expect(good.status).toBe("ok");
+    expect(wrappedKeyFetches).toBe(1);
   });
 });

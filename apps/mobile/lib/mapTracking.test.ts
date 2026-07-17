@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { LiveMapEntry } from "./liveMapReducer.ts";
-import type { MapTrackingDeps, MapTrackingEncryptedPoint } from "./mapTracking.ts";
 import { createMapTrackingSession } from "./mapTracking.ts";
+import type { MapTrackingDeps, MapTrackingEncryptedPoint } from "./mapTrackingTypes.ts";
 
 const point = ({
   createdAt,
@@ -474,5 +474,123 @@ describe("createMapTrackingSession", () => {
         userId: "user-2",
       },
     ]);
+  });
+
+  test("keeps a user's older position from a remaining group after the winning group leaves", async () => {
+    let groups = [{ id: "group-1" }, { id: "group-2" }];
+    const { session } = createSession({
+      getLatest: async (groupId) => ({
+        points: [
+          point({
+            createdAt: new Date(
+              groupId === "group-1" ? "2026-07-17T12:00:00.000Z" : "2026-07-17T12:00:01.000Z",
+            ),
+            id: groupId,
+            senderUserId: "user-1",
+          }),
+        ],
+      }),
+      listGroups: async () => groups,
+      poll: async () => ({ points: [] }),
+    });
+
+    session.setActive(true);
+    await session.tick();
+    expect(session.getLivePositions()[0]?.sourceGroupId).toBe("group-2");
+
+    groups = [{ id: "group-1" }];
+    await session.tick();
+    expect(session.getLivePositions()).toEqual([
+      {
+        battery: { charging: false, level: 80 },
+        latitude: 51.5,
+        longitude: -0.12,
+        sourceGroupId: "group-1",
+        speed: null,
+        timestamp: "2026-07-17T12:00:00.000Z",
+        userId: "user-1",
+      },
+    ]);
+  });
+
+  test("stops catch-up when a full page does not advance the cursor", async () => {
+    const coldRow = point({
+      createdAt: new Date("2026-07-17T12:00:00.000Z"),
+      id: "point-0",
+      senderUserId: "user-1",
+    });
+    const stuckPage = Array.from({ length: 100 }, (_, index) =>
+      point({
+        createdAt: new Date("2026-07-17T12:00:01.000Z"),
+        id: `stuck-${index}`,
+        senderUserId: "user-1",
+      }),
+    );
+    let pollCount = 0;
+    const { session } = createSession({
+      getLatest: async () => ({ points: [coldRow] }),
+      poll: async () => {
+        pollCount += 1;
+        return { points: stuckPage };
+      },
+    });
+
+    session.setActive(true);
+    await session.tick();
+    await session.tick();
+    expect(pollCount).toBe(2);
+
+    await session.tick();
+    expect(pollCount).toBe(3);
+  });
+
+  test("stops catch-up when the session becomes inactive", async () => {
+    const coldRow = point({
+      createdAt: new Date("2026-07-17T12:00:00.000Z"),
+      id: "point-0",
+      senderUserId: "user-1",
+    });
+    const firstPoll = {
+      resolve: null as null | ((value: { points: MapTrackingEncryptedPoint[] }) => void),
+    };
+    let pollCount = 0;
+    const { session } = createSession({
+      getLatest: async () => ({ points: [coldRow] }),
+      poll: async () => {
+        pollCount += 1;
+        if (pollCount === 1) {
+          return await new Promise<{ points: MapTrackingEncryptedPoint[] }>((resolve) => {
+            firstPoll.resolve = resolve;
+          });
+        }
+        return {
+          points: Array.from({ length: 100 }, (_, index) =>
+            point({
+              createdAt: new Date(Date.UTC(2026, 6, 17, 12, 1, index)),
+              id: `page-2-${index}`,
+              senderUserId: "user-1",
+            }),
+          ),
+        };
+      },
+    });
+
+    session.setActive(true);
+    await session.tick();
+    const liveTickPromise = session.tick();
+    await Promise.resolve();
+    session.setActive(false);
+    firstPoll.resolve?.({
+      points: Array.from({ length: 100 }, (_, index) =>
+        point({
+          createdAt: new Date(Date.UTC(2026, 6, 17, 12, 0, 1 + index)),
+          id: `page-1-${index}`,
+          senderUserId: "user-1",
+        }),
+      ),
+    });
+    await liveTickPromise;
+
+    expect(pollCount).toBe(1);
   });
 });

@@ -11,7 +11,7 @@ import {
   type WrappedEpochKey,
 } from "@openbeacon/encryption";
 import type { LiveMapEntry } from "./liveMapReducer.ts";
-import type { MapTrackingEncryptedPoint } from "./mapTracking.ts";
+import type { MapTrackingEncryptedPoint } from "./mapTrackingTypes.ts";
 
 export const createMapTrackingDecryptPoint = ({
   ensureDeviceKeys,
@@ -49,16 +49,20 @@ export const createMapTrackingDecryptPoint = ({
       return null;
     }
 
-    const epochKey = unwrapEpochKey({
-      recipientDeviceId: deviceKeys.deviceId,
-      recipientPrivateKey: deviceKeys.privateKey,
-      wrappedEpochKey: {
-        ...wrappedEpochKey,
-        algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
-      },
-    });
-    epochKeys.set(cacheKey, epochKey);
-    return epochKey;
+    try {
+      const epochKey = unwrapEpochKey({
+        recipientDeviceId: deviceKeys.deviceId,
+        recipientPrivateKey: deviceKeys.privateKey,
+        wrappedEpochKey: {
+          ...wrappedEpochKey,
+          algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+        },
+      });
+      epochKeys.set(cacheKey, epochKey);
+      return epochKey;
+    } catch {
+      return null;
+    }
   };
 
   return async ({
@@ -120,7 +124,6 @@ export const createMapTrackingDecryptPoint = ({
         },
       };
     } catch {
-      epochKeys.delete(getCacheKey(groupId, point.epochId));
       return { status: "undecryptable" };
     }
   };

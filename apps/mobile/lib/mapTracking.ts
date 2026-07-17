@@ -1,46 +1,26 @@
 import { tryCatch } from "@openbeacon/shared";
 import { type LiveMapEntry, reduceLivePositions } from "./liveMapReducer.ts";
+import type {
+  LiveMapPosition,
+  MapTrackingCursor,
+  MapTrackingDeps,
+  MapTrackingEncryptedPoint,
+} from "./mapTrackingTypes.ts";
 
-export type MapTrackingEncryptedPoint = {
-  algorithm: string;
-  ciphertext: string;
-  clientPointId: string;
-  createdAt: Date;
-  epochId: string;
-  id: string;
-  kind: string;
-  nonce: string;
-  senderDeviceId: string;
-  senderUserId: string;
-};
-
-export type LiveMapPosition = Omit<LiveMapEntry, "serverCreatedAt" | "serverId">;
-
-export type MapTrackingDeps = {
-  decryptPoint: (input: {
-    groupId: string;
-    point: MapTrackingEncryptedPoint;
-  }) => Promise<
-    { entry: LiveMapEntry; status: "ok" } | { status: "ignored" } | { status: "undecryptable" }
-  >;
-  getLatest: (groupId: string) => Promise<{ points: MapTrackingEncryptedPoint[] }>;
-  listGroups: () => Promise<Array<{ id: string }>>;
-  now: () => number;
-  poll: (input: {
-    cursor: { createdAt: Date; id: string } | null;
-    groupId: string;
-    limit: number;
-  }) => Promise<{ points: MapTrackingEncryptedPoint[] }>;
-  schedule: (callback: () => void, delayMs: number) => { cancel: () => void };
-};
+export type {
+  LiveMapPosition,
+  MapTrackingCursor,
+  MapTrackingDeps,
+  MapTrackingEncryptedPoint,
+} from "./mapTrackingTypes.ts";
 
 const STEADY_INTERVAL_MS = 5_000;
 const MAX_BACKOFF_MS = 60_000;
 const RECONCILE_INTERVAL_MS = 5 * 60_000;
 const POLL_LIMIT = 100;
 
-const maxCursor = (points: readonly MapTrackingEncryptedPoint[]) => {
-  let cursor: { createdAt: Date; id: string } | null = null;
+const maxCursor = (points: readonly MapTrackingEncryptedPoint[]): MapTrackingCursor | null => {
+  let cursor: MapTrackingCursor | null = null;
 
   for (const point of points) {
     if (
@@ -54,6 +34,10 @@ const maxCursor = (points: readonly MapTrackingEncryptedPoint[]) => {
 
   return cursor;
 };
+
+const isCursorAfter = (candidate: MapTrackingCursor, current: MapTrackingCursor) =>
+  candidate.createdAt.getTime() > current.createdAt.getTime() ||
+  (candidate.createdAt.getTime() === current.createdAt.getTime() && candidate.id > current.id);
 
 const toLiveMapPosition = ({
   battery,
@@ -77,19 +61,27 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   let active = false;
   let backoffMs = STEADY_INTERVAL_MS;
   let lastReconcileAt = deps.now();
-  let live = new Map<string, LiveMapEntry>();
   let scheduled: { cancel: () => void } | null = null;
   let tickPromise: Promise<void> | null = null;
   const groupStates = new Map<
     string,
-    { cursor: { createdAt: Date; id: string } | null; mode: "cold" | "live" }
+    { cursor: MapTrackingCursor | null; mode: "cold" | "live" }
   >();
+  const positionsByGroup = new Map<string, Map<string, LiveMapEntry>>();
   const listeners = new Set<() => void>();
 
   const notify = () => {
     for (const listener of listeners) {
       listener();
     }
+  };
+
+  const getLiveMap = () => {
+    let live = new Map<string, LiveMapEntry>();
+    for (const groupEntries of positionsByGroup.values()) {
+      live = reduceLivePositions(live, [...groupEntries.values()]);
+    }
+    return live;
   };
 
   const clearSchedule = () => {
@@ -124,10 +116,13 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       }
     }
 
-    if (entries.length > 0) {
-      live = reduceLivePositions(live, entries);
-      notify();
+    if (entries.length === 0) {
+      return;
     }
+
+    const groupEntries = positionsByGroup.get(groupId) ?? new Map<string, LiveMapEntry>();
+    positionsByGroup.set(groupId, reduceLivePositions(groupEntries, entries));
+    notify();
   };
 
   const coldTick = async (groupId: string) => {
@@ -155,18 +150,31 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     let cursor = state.cursor;
 
     for (;;) {
+      if (!active) {
+        return;
+      }
+
       const { points } = await deps.poll({
         cursor,
         groupId,
         limit: POLL_LIMIT,
       });
 
+      if (!active) {
+        return;
+      }
+
       if (points.length === 0) {
         break;
       }
 
+      const nextCursor = maxCursor(points);
+      if (!nextCursor || !isCursorAfter(nextCursor, cursor)) {
+        break;
+      }
+
       await mergeDecrypted({ groupId, points });
-      cursor = maxCursor(points) ?? cursor;
+      cursor = nextCursor;
       groupStates.set(groupId, { cursor, mode: "live" });
 
       if (points.length < POLL_LIMIT) {
@@ -189,24 +197,16 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     const groupIds = new Set(groups.map(({ id }) => id));
     let removedGroups = false;
 
-    for (const groupId of groupStates.keys()) {
+    for (const groupId of [...groupStates.keys()]) {
       if (!groupIds.has(groupId)) {
         groupStates.delete(groupId);
+        positionsByGroup.delete(groupId);
         removedGroups = true;
       }
     }
 
     if (removedGroups) {
-      const nextLive = new Map<string, LiveMapEntry>();
-      for (const [userId, entry] of live) {
-        if (groupIds.has(entry.sourceGroupId)) {
-          nextLive.set(userId, entry);
-        }
-      }
-      if (nextLive.size !== live.size) {
-        live = nextLive;
-        notify();
-      }
+      notify();
     }
 
     for (const { id: groupId } of groups) {
@@ -270,9 +270,9 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       clearSchedule();
       listeners.clear();
       groupStates.clear();
-      live = new Map();
+      positionsByGroup.clear();
     },
-    getLivePositions: () => [...live.values()].map(toLiveMapPosition),
+    getLivePositions: () => [...getLiveMap().values()].map(toLiveMapPosition),
     setActive: (nextActive: boolean) => {
       if (active === nextActive) {
         if (nextActive) {
