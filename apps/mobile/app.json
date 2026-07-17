@@ -29,7 +29,6 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#090911"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "net.openbeacon.app",
       "versionCode": 1
