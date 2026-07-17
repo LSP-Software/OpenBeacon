@@ -63,11 +63,8 @@ class OpenBeaconTrackingModule : Module() {
       }
 
       AsyncFunction("stopCapture") {
-        val intent =
-          Intent(requireContext(), TrackingCaptureService::class.java).apply {
-            action = TrackingCaptureService.ACTION_STOP
-          }
-        requireContext().startService(intent)
+        val intent = Intent(requireContext(), TrackingCaptureService::class.java)
+        requireContext().stopService(intent)
         Unit
       }
 
