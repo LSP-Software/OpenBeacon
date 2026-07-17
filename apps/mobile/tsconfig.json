@@ -11,5 +11,6 @@
     "skipLibCheck": true,
     "noEmit": true,
     "allowImportingTsExtensions": true
-  }
+  },
+  "exclude": ["modules/**/jvm/build", "modules/**/android/build", "node_modules"]
 }

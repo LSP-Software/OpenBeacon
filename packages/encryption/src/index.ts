@@ -12,6 +12,12 @@ import {
   XCHACHA20_NONCE_LENGTH,
 } from "./constants.ts";
 import { DevicePrivateKeyMaterial, EpochKeyMaterial, SensitivePayloadBytes } from "./sensitive.ts";
+import type { TrackingPointV1 } from "./trackingPoint.ts";
+import {
+  encodeTrackingPointV1,
+  TRACKING_POINT_KIND,
+  validateTrackingPointV1,
+} from "./trackingPoint.ts";
 import type {
   DecryptedGroupPayload,
   DeviceKeyPair,
@@ -240,16 +246,23 @@ export const encryptPayloadWithEpochKey = ({
   epochKey,
   plaintext,
   metadata,
+  nonce: providedNonce,
 }: {
   epochKey: EpochKeyMaterial;
   metadata: Pick<EncryptedPayload, "epochId" | "groupId" | "kind" | "senderDeviceId">;
+  nonce?: Uint8Array;
   plaintext: Uint8Array;
 }): EncryptedPayload => {
   const epochKeyBytes = epochKey.expose();
 
   ensureEpochKeyLength(epochKeyBytes);
 
-  const nonce = randomBytes(XCHACHA20_NONCE_LENGTH);
+  const nonce = providedNonce ?? randomBytes(XCHACHA20_NONCE_LENGTH);
+
+  if (nonce.length !== XCHACHA20_NONCE_LENGTH) {
+    throw new Error("Invalid nonce length.");
+  }
+
   const cipher = xchacha20poly1305(
     epochKeyBytes,
     nonce,
@@ -315,11 +328,13 @@ export const encryptGroupPayload = ({
   payload,
   senderDeviceId,
   epochId,
+  nonce,
 }: {
   epochId: string;
   epochKey: EpochKeyMaterial;
   groupId: string;
   kind: GroupPayloadKind;
+  nonce?: Uint8Array;
   payload: Record<string, unknown> | Uint8Array;
   senderDeviceId: string;
 }) =>
@@ -332,6 +347,7 @@ export const encryptGroupPayload = ({
       senderDeviceId,
     },
     plaintext: encodePayload(payload),
+    ...(nonce === undefined ? {} : { nonce }),
   });
 
 export const decryptGroupPayload = ({
@@ -407,10 +423,14 @@ export {
   DEVICE_KEY_ALGORITHM,
   DevicePrivateKeyMaterial,
   encodeBase64,
+  encodeTrackingPointV1,
   EpochKeyMaterial,
   PAYLOAD_ENCRYPTION_ALGORITHM,
   SensitivePayloadBytes,
+  TRACKING_POINT_KIND,
+  validateTrackingPointV1,
   WRAPPED_EPOCH_KEY_ALGORITHM,
+  XCHACHA20_NONCE_LENGTH,
 };
 export type {
   DecryptedGroupPayload,
@@ -420,5 +440,6 @@ export type {
   GroupEpochCreationResult,
   GroupPayloadKind,
   RecipientPublicKeyMaterial,
+  TrackingPointV1,
   WrappedEpochKey,
 };
