@@ -8,6 +8,7 @@ import { Alert, View } from "react-native";
 import type z from "zod";
 import { trpc } from "../../lib/api.ts";
 import { buildCreateGroupInput } from "../../lib/groupEncryption.ts";
+import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 import { Button } from "../ui/Button.tsx";
 import {
@@ -53,6 +54,7 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
             }
             return [createdGroup.newGroup, ...previous];
           });
+          requestTrackingSync();
           closeForm();
         })(),
       );

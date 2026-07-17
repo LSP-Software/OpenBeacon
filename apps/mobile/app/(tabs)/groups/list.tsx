@@ -15,6 +15,7 @@ import { Icon } from "../../../components/ui/Icon.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { type RouterOutputs, trpc } from "../../../lib/api.ts";
 import { buildAcceptInviteInput } from "../../../lib/groupEncryption.ts";
+import { requestTrackingSync } from "../../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../../lib/useSingleFlight.ts";
 
 export default function GroupsScreen() {
@@ -91,6 +92,7 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
               },
             ] satisfies RouterOutputs["groupMembership"]["list"];
           });
+          requestTrackingSync();
         })(),
       );
 
