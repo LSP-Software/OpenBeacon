@@ -8,8 +8,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "../../../../components/ui/A
 import { Button } from "../../../../components/ui/Button.tsx";
 import { Icon } from "../../../../components/ui/Icon.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
-import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
+import { useGroupLivePositions } from "../../../../hooks/useGroupLivePositions.ts";
+import { trpc } from "../../../../lib/api.ts";
 import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
+import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
 
 const MembersTab = ({ groupId }: { groupId: string }) => {
@@ -17,6 +19,11 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
   const { data: members, isFetching: isFetchingMembers } = useQuery(
     trpc.groupMembership.members.queryOptions({ groupId }),
   );
+  const livePositions = useGroupLivePositions(groupId);
+  const memberStatuses = buildMemberLiveStatuses({
+    members: members ?? [],
+    positions: livePositions,
+  });
 
   if (isFetchingMembers) {
     return <LoadingIndicator />;
@@ -33,7 +40,7 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
         <Text className="text-lg font-semibold text-foreground">Members</Text>
         <Text className="text-sm text-muted-foreground">{members?.length ?? 0}</Text>
       </View>
-      {members?.map((member) => (
+      {memberStatuses.map((member) => (
         <View key={member.id}>
           <MemberCard member={member} />
         </View>
@@ -46,15 +53,13 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
   );
 };
 
-const MemberCard = ({
-  member,
-}: {
-  member: RouterOutputs["groupMembership"]["members"][number];
-}) => {
-  const { icon: BatteryIcon, colorClass } = getBatteryVisual({
-    batteryLevel: member.batteryLevel,
-    charging: member.battery.charging,
-  });
+const MemberCard = ({ member }: { member: ReturnType<typeof buildMemberLiveStatuses>[number] }) => {
+  const batteryVisual = member.battery
+    ? getBatteryVisual({
+        batteryLevel: member.battery.level,
+        charging: member.battery.charging,
+      })
+    : null;
 
   return (
     <View className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-4">
@@ -74,18 +79,25 @@ const MemberCard = ({
           <View className="flex-row items-start gap-1">
             <Icon as={MapPinIcon} className="text-secondary mt-1 size-4" />
             <View className="flex-col items-start">
-              <Text className="text-md text-muted">
-                <Text className="font-semibold">Current Location:</Text> {member.lastLocation.place}
-              </Text>
-              <Text className="text-sm text-muted">
-                Location updated {timeSince(member.lastLocation.timestamp)}
-              </Text>
+              {member.timestamp ? (
+                <Text className="text-md text-muted">
+                  Location updated {timeSince(member.timestamp)}
+                </Text>
+              ) : (
+                <Text className="text-md text-muted">Location unavailable</Text>
+              )}
             </View>
           </View>
-          <View className="flex-row items-center gap-2">
-            <Icon as={BatteryIcon} size={20} className={colorClass} />
-            <Text className={`${colorClass} text-sm`}>Battery: {member.batteryLevel}%</Text>
-          </View>
+          {member.battery && batteryVisual ? (
+            <View className="flex-row items-center gap-2">
+              <Icon as={batteryVisual.icon} size={20} className={batteryVisual.colorClass} />
+              <Text className={`${batteryVisual.colorClass} text-sm`}>
+                Battery: {member.battery.level}%
+              </Text>
+            </View>
+          ) : (
+            <Text className="text-muted text-sm">Battery unavailable</Text>
+          )}
         </View>
       </View>
     </View>

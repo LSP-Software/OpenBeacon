@@ -68,7 +68,7 @@ export const groupMembershipRouter = {
   members: groupMemberProcedure
     .input(z.object({ groupId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const members = await ctx.db.groupMember.findMany({
+      return ctx.db.groupMember.findMany({
         where: { groupId: input.groupId },
         select: {
           id: true,
@@ -82,26 +82,6 @@ export const groupMembershipRouter = {
           role: true,
         },
       });
-
-      const places = ["Home", "Work", "School", "Gym", "Other"];
-      const membersWithMockData = members.map((member) => {
-        return {
-          ...member,
-          battery: {
-            level: Math.floor(Math.random() * 100),
-            charging: Math.random() < 0.5,
-          },
-          batteryLevel: Math.floor(Math.random() * 100),
-          lastLocation: {
-            latitude: Math.random() * 180 - 90,
-            longitude: Math.random() * 360 - 180,
-            timestamp: new Date(Date.now() - Math.floor(Math.random() * 1000000)),
-            place: places[Math.floor(Math.random() * places.length)],
-          },
-        };
-      });
-
-      return membersWithMockData;
     }),
   remove: groupAdminProcedure
     .meta({
