@@ -1,49 +1,12 @@
-import { UserIcon } from "lucide-react-native";
 import { View } from "react-native";
-import { SettingsContainer } from "../../../../components/containers/settingsContainer.tsx";
+import { GroupMapColorPicker } from "../../../../components/map/GroupMapColorPicker.tsx";
+import { Text } from "../../../../components/ui/Text.tsx";
 
-const SettingsTab = () => {
-  const categories = [
-    {
-      label: "Heading 1",
-      settings: [
-        {
-          label: "example setting 1",
-          icon: UserIcon,
-          href: "/groups/[groupId]/settings/group-name",
-        },
-        {
-          label: "example setting 2",
-          icon: UserIcon,
-          href: "/groups/[groupId]/settings/group-name",
-        },
-        {
-          label: "example setting 3",
-          icon: UserIcon,
-          href: "/groups/[groupId]/settings/group-name",
-        },
-      ],
-    },
-    {
-      label: "Heading 2",
-      settings: [
-        {
-          label: "example setting 4",
-          icon: UserIcon,
-          href: "/groups/[groupId]/settings/group-name",
-        },
-        {
-          label: "example setting 5",
-          icon: UserIcon,
-          href: "/groups/[groupId]/settings/group-name",
-        },
-      ],
-    },
-  ];
-
+const SettingsTab = ({ groupId }: { groupId: string }) => {
   return (
-    <View className="pt-1">
-      <SettingsContainer categories={categories} />
+    <View className="gap-3 pt-1">
+      <Text className="mb-1 text-lg font-medium text-muted-foreground">Appearance</Text>
+      <GroupMapColorPicker groupId={groupId} />
     </View>
   );
 };

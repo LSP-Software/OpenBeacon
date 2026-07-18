@@ -107,6 +107,7 @@ export const groupInvitesRouter = {
           image: member.group.image,
           members: member.group.groupMembers.map((groupMember) => ({
             id: groupMember.id,
+            userId: groupMember.user.id,
             name: groupMember.user.name,
             image: groupMember.user.image,
             role: groupMember.role,
