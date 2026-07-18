@@ -3,18 +3,56 @@ import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Text } from "../ui/Text.tsx";
 
 export const LiveMapMarkerPin = ({
+  headingDegrees = null,
   image,
   initials,
   name,
   ringColor,
 }: {
+  headingDegrees?: number | null;
   image: string | null;
   initials: string;
   name: string;
   ringColor: string;
 }) => {
+  const showHeading = headingDegrees !== null;
+
   return (
-    <View style={{ width: 48, height: 48, alignItems: "center", justifyContent: "center" }}>
+    <View
+      style={{
+        width: showHeading ? 56 : 48,
+        height: showHeading ? 56 : 48,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {showHeading ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            width: 56,
+            height: 56,
+            alignItems: "center",
+            justifyContent: "flex-start",
+            transform: [{ rotate: `${headingDegrees}deg` }],
+          }}
+        >
+          <View
+            style={{
+              width: 0,
+              height: 0,
+              marginTop: 1,
+              borderLeftWidth: 8,
+              borderRightWidth: 8,
+              borderBottomWidth: 14,
+              borderLeftColor: "transparent",
+              borderRightColor: "transparent",
+              borderBottomColor: "#FF1464",
+            }}
+          />
+        </View>
+      ) : null}
       <View
         style={{
           width: 46,

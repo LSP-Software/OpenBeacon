@@ -1,4 +1,10 @@
-import { Camera, type CameraRef, MapView, PointAnnotation } from "@maplibre/maplibre-react-native";
+import {
+  Camera,
+  type CameraRef,
+  MapView,
+  PointAnnotation,
+  type PointAnnotationRef,
+} from "@maplibre/maplibre-react-native";
 import { useMutation } from "@tanstack/react-query";
 import { router, useRootNavigationState } from "expo-router";
 import { ScanIcon } from "lucide-react-native";
@@ -22,10 +28,12 @@ export const NativeMap = ({
   markers = [],
   onSelectUserId,
   selectedUserId = null,
+  selfHeadingDegrees = null,
 }: {
   markers?: readonly LiveMapMarker[];
   onSelectUserId?: (userId: string | null) => void;
   selectedUserId?: string | null;
+  selfHeadingDegrees?: number | null;
 } = {}) => {
   const { mapTheme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -193,23 +201,15 @@ export const NativeMap = ({
       >
         <Camera ref={cameraRef} defaultSettings={{ centerCoordinate: [0, 0], zoomLevel: 1.25 }} />
         {markers.map((marker) => (
-          <PointAnnotation
+          <LiveMapPointAnnotation
             key={marker.userId}
-            id={marker.userId}
-            coordinate={[marker.longitude, marker.latitude]}
-            anchor={{ x: 0.5, y: 0.5 }}
+            headingDegrees={marker.isSelf ? selfHeadingDegrees : null}
+            marker={marker}
             selected={marker.userId === selectedUserId}
             onSelected={() => {
               onSelectUserId?.(marker.userId);
             }}
-          >
-            <LiveMapMarkerPin
-              image={marker.image}
-              initials={marker.initials}
-              name={marker.name}
-              ringColor={marker.ringColor}
-            />
-          </PointAnnotation>
+          />
         ))}
       </MapView>
       {hasMarkers ? (
@@ -237,5 +237,48 @@ export const NativeMap = ({
         />
       ) : null}
     </View>
+  );
+};
+
+const LiveMapPointAnnotation = ({
+  headingDegrees,
+  marker,
+  onSelected,
+  selected,
+}: {
+  headingDegrees: number | null;
+  marker: LiveMapMarker;
+  onSelected: () => void;
+  selected: boolean;
+}) => {
+  const annotationRef = useRef<PointAnnotationRef>(null);
+
+  useEffect(() => {
+    if (!marker.isSelf) {
+      return;
+    }
+
+    // PointAnnotation snapshots children to a bitmap on Android; refresh when the wedge rotates or hides.
+    void headingDegrees;
+    annotationRef.current?.refresh();
+  }, [headingDegrees, marker.isSelf]);
+
+  return (
+    <PointAnnotation
+      ref={annotationRef}
+      id={marker.userId}
+      coordinate={[marker.longitude, marker.latitude]}
+      anchor={{ x: 0.5, y: 0.5 }}
+      selected={selected}
+      onSelected={onSelected}
+    >
+      <LiveMapMarkerPin
+        headingDegrees={headingDegrees}
+        image={marker.image}
+        initials={marker.initials}
+        name={marker.name}
+        ringColor={marker.ringColor}
+      />
+    </PointAnnotation>
   );
 };
