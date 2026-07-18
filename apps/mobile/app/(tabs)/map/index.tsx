@@ -13,7 +13,7 @@ import { getGroupColor } from "../../../lib/groupColor.ts";
 import { nextMapMarkerSelection } from "../../../lib/mapMarkerSelection.ts";
 import { TAB_BAR_CONTENT_HEIGHT } from "../../../lib/tabBarLayout.ts";
 
-export default function MapScreen() {
+const MapScreen = () => {
   const insets = useSafeAreaInsets();
   const livePositions = useMapLivePositions();
   const { data: session } = authClient.useSession();
@@ -87,4 +87,6 @@ export default function MapScreen() {
       />
     </View>
   );
-}
+};
+
+export default MapScreen;

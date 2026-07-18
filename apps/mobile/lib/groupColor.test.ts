@@ -57,7 +57,7 @@ describe("groupColor", () => {
   test("rejects setting a color outside the palette", async () => {
     const { getDefaultGroupColor, getGroupColor, setGroupColor } = await importGroupColorModule();
 
-    expect(() => setGroupColor("group-1", "#000000")).toThrow();
+    expect(() => setGroupColor("group-1", "#000000" as never)).toThrow();
     expect(getGroupColor("group-1")).toBe(getDefaultGroupColor("group-1"));
   });
 });

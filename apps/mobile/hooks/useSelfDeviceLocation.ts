@@ -1,15 +1,13 @@
+import { tryCatch } from "@openbeacon/shared";
 import { useIsFocused } from "@react-navigation/native";
 import * as Location from "expo-location";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
+import type { SelfDeviceLocation } from "../lib/selfDeviceLocation.ts";
 
 export const useSelfDeviceLocation = (enabled: boolean) => {
   const isFocused = useIsFocused();
-  const [location, setLocation] = useState<{
-    latitude: number;
-    longitude: number;
-    timestamp: string;
-  } | null>(null);
+  const [location, setLocation] = useState<SelfDeviceLocation | null>(null);
 
   useEffect(() => {
     if (!enabled || !isFocused) {
@@ -17,28 +15,45 @@ export const useSelfDeviceLocation = (enabled: boolean) => {
     }
 
     let cancelled = false;
+    let starting = false;
     let subscription: Location.LocationSubscription | null = null;
 
     const startWatching = async () => {
-      const permission = await Location.getForegroundPermissionsAsync();
-      if (!permission.granted || cancelled) {
+      if (cancelled || starting || subscription) {
         return;
       }
 
-      subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          distanceInterval: 5,
-          timeInterval: 1_000,
-        },
-        (position) => {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            timestamp: new Date(position.timestamp).toISOString(),
-          });
-        },
+      starting = true;
+      const permissionResult = await tryCatch(Location.getForegroundPermissionsAsync());
+      if (permissionResult.error || !permissionResult.data.granted || cancelled || subscription) {
+        starting = false;
+        return;
+      }
+
+      const watchResult = await tryCatch(
+        Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            distanceInterval: 5,
+            timeInterval: 1_000,
+          },
+          (position) => {
+            setLocation({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              timestamp: new Date(position.timestamp).toISOString(),
+            });
+          },
+        ),
       );
+      starting = false;
+
+      if (watchResult.error || cancelled) {
+        watchResult.data?.remove();
+        return;
+      }
+
+      subscription = watchResult.data;
     };
 
     const syncActive = () => {
@@ -48,7 +63,7 @@ export const useSelfDeviceLocation = (enabled: boolean) => {
         return;
       }
 
-      if (!subscription) {
+      if (!subscription && !starting) {
         void startWatching();
       }
     };

@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { router, useRootNavigationState } from "expo-router";
 import { ScanIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef } from "react";
-import { Button, Platform, View } from "react-native";
+import { Button, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/ui/Text.tsx";
 import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
@@ -58,10 +58,21 @@ export const NativeMap = ({
     }),
     [insets.top, selectedUserId],
   );
+  const fitEveryonePadding = useMemo(
+    () => ({
+      paddingBottom: 48,
+      paddingLeft: 32,
+      paddingRight: 32,
+      paddingTop: insets.top + 56,
+    }),
+    [insets.top],
+  );
 
   if (lastPmtilesUrlRef.current !== pmtilesUrl) {
     lastPmtilesUrlRef.current = pmtilesUrl;
     didRetryAfterMapFailureRef.current = false;
+    didFitMarkersRef.current = false;
+    trackedUserIdRef.current = null;
   }
 
   const mapStyle = useMemo(() => {
@@ -78,7 +89,7 @@ export const NativeMap = ({
     fitLiveMapMarkers({
       camera: cameraRef.current,
       markers: markersRef.current,
-      padding: cameraPadding,
+      padding: fitEveryonePadding,
     });
   };
 
@@ -91,7 +102,7 @@ export const NativeMap = ({
   }, [rootNavigationState?.key, signedPmtilesUrlQuery.error]);
 
   useEffect(() => {
-    if (!hasMarkers || didFitMarkersRef.current) {
+    if (!mapStyle || !hasMarkers || didFitMarkersRef.current || !cameraRef.current) {
       return;
     }
 
@@ -101,7 +112,7 @@ export const NativeMap = ({
       markers,
       padding: cameraPadding,
     });
-  }, [cameraPadding, hasMarkers, markers]);
+  }, [cameraPadding, hasMarkers, mapStyle, markers]);
 
   useEffect(() => {
     if (
@@ -202,15 +213,14 @@ export const NativeMap = ({
         ))}
       </MapView>
       {hasMarkers ? (
-        <View
+        <Pressable
           accessibilityLabel="Show everyone"
           accessibilityRole="button"
-          onStartShouldSetResponder={() => true}
-          onResponderRelease={fitEveryoneInFrame}
+          onPress={fitEveryoneInFrame}
           className="absolute right-3 top-14 size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
         >
           <Icon as={ScanIcon} size={20} className="text-foreground" />
-        </View>
+        </Pressable>
       ) : null}
       {selectedMarker ? (
         <LiveMapPersonSheet

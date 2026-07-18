@@ -1,4 +1,5 @@
 import type { LiveMapMarker } from "./buildLiveMapMarkers.ts";
+import type { SelfDeviceLocation } from "./selfDeviceLocation.ts";
 
 export const applySelfDeviceLocation = ({
   markers,
@@ -7,11 +8,7 @@ export const applySelfDeviceLocation = ({
   selfUserId,
 }: {
   markers: readonly LiveMapMarker[];
-  selfDeviceLocation: {
-    latitude: number;
-    longitude: number;
-    timestamp: string;
-  } | null;
+  selfDeviceLocation: SelfDeviceLocation | null;
   selfFallback: {
     image: string | null;
     name: string;

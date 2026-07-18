@@ -43,7 +43,7 @@ export const getGroupColor = (groupId: string): GroupColor => {
   return getDefaultGroupColor(groupId);
 };
 
-export const setGroupColor = (groupId: string, color: string) => {
+export const setGroupColor = (groupId: string, color: GroupColor) => {
   if (!isGroupColor(color)) {
     throw new Error("Group color must be chosen from the palette");
   }

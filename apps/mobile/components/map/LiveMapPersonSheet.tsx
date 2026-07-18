@@ -87,9 +87,18 @@ export const LiveMapPersonSheet = ({
 
   return (
     <Animated.View
+      accessible
+      accessibilityActions={[{ name: "dismiss", label: "Dismiss" }]}
+      accessibilityLabel={`${name} details`}
+      accessibilityRole="summary"
       className="absolute bottom-3 left-3 right-3"
       pointerEvents="box-none"
       style={{ transform: [{ translateY }] }}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === "dismiss") {
+          dismiss();
+        }
+      }}
       {...panResponder.panHandlers}
     >
       <View className="rounded-2xl border border-border bg-card px-5 pb-4 pt-3 shadow-md shadow-black/15">
