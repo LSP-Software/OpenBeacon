@@ -35,6 +35,7 @@ class TrackingCaptureService : Service() {
   private val capturePipeline by lazy { TrackingRuntime.capturePipeline(this) }
   private val captureScope =
     CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+  private val captureStateLock = Any()
 
   private var currentIntervalMs = DEFAULT_INTERVAL_MS
   private var lastQueued: LastQueuedFix? = null
@@ -108,7 +109,9 @@ class TrackingCaptureService : Service() {
         ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
       )
       requestLocationUpdates(intervalMs)
-      TrackingRuntime.isCaptureRunning = true
+      synchronized(captureStateLock) {
+        TrackingRuntime.isCaptureRunning = true
+      }
     } catch (error: SecurityException) {
       Log.e(TAG, "Failed to start location capture.", error)
       stopCapture()
@@ -126,13 +129,17 @@ class TrackingCaptureService : Service() {
 
     fusedLocationClient.removeLocationUpdates(locationCallback)
     fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
-    currentIntervalMs = intervalMs
+    synchronized(captureStateLock) {
+      currentIntervalMs = intervalMs
+    }
   }
 
   private fun stopCapture() {
     fusedLocationClient.removeLocationUpdates(locationCallback)
-    TrackingRuntime.isCaptureRunning = false
-    lastQueued = null
+    synchronized(captureStateLock) {
+      TrackingRuntime.isCaptureRunning = false
+      lastQueued = null
+    }
     stopForeground(STOP_FOREGROUND_REMOVE)
   }
 
@@ -145,18 +152,28 @@ class TrackingCaptureService : Service() {
         null
       }
     val nowMs = System.currentTimeMillis()
-    val queued = lastQueued
+    val (queued, intervalMs, captureRunning) =
+      synchronized(captureStateLock) {
+        Triple(lastQueued, currentIntervalMs, TrackingRuntime.isCaptureRunning)
+      }
+
+    if (!captureRunning) {
+      return
+    }
+
     val decision =
       CaptureSamplingPolicy.evaluate(
         battery = battery,
         speedMetersPerSecond = speed,
         distanceFromLastQueuedMeters =
-          queued?.let { distanceMeters(it.latitude, it.longitude, location.latitude, location.longitude) },
+          queued?.let {
+            distanceMeters(it.latitude, it.longitude, location.latitude, location.longitude)
+          },
         timeSinceLastQueuedMs = queued?.let { nowMs - it.atMs },
       )
 
     val nextIntervalMs = decision.intervalMs.coerceAtLeast(MIN_INTERVAL_MS)
-    if (nextIntervalMs != currentIntervalMs) {
+    if (nextIntervalMs != intervalMs) {
       try {
         requestLocationUpdates(nextIntervalMs)
       } catch (error: SecurityException) {
@@ -177,12 +194,16 @@ class TrackingCaptureService : Service() {
         batteryLevel = battery.level,
         batteryCharging = battery.charging,
       )
-      lastQueued =
-        LastQueuedFix(
-          latitude = location.latitude,
-          longitude = location.longitude,
-          atMs = nowMs,
-        )
+      synchronized(captureStateLock) {
+        if (TrackingRuntime.isCaptureRunning) {
+          lastQueued =
+            LastQueuedFix(
+              latitude = location.latitude,
+              longitude = location.longitude,
+              atMs = nowMs,
+            )
+        }
+      }
     } catch (error: Exception) {
       Log.e(TAG, "Failed to encrypt and queue location fix.", error)
     }
