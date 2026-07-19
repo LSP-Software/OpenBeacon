@@ -1,19 +1,29 @@
 import { View } from "react-native";
-import Svg, { Defs, LinearGradient, Polygon, Stop } from "react-native-svg";
+import Svg, { Defs, Path, RadialGradient, Stop } from "react-native-svg";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Text } from "../ui/Text.tsx";
 
 const PIN_SIZE = 48;
 const PIN_RADIUS = PIN_SIZE / 2;
-const BEAM_INNER = PIN_RADIUS + 2;
-const BEAM_LENGTH = 40;
-const BEAM_HALF_ANGLE_RAD = (38 * Math.PI) / 180;
-const OUTER_SIZE = 2 * (BEAM_INNER + BEAM_LENGTH);
+const SPOT_LENGTH = 42;
+const SPOT_HALF_ANGLE_RAD = (18 * Math.PI) / 180;
+const BEAM_COLOR = "#FF1464";
+const OUTER_RADIUS = PIN_RADIUS + SPOT_LENGTH;
+const OUTER_SIZE = 2 * OUTER_RADIUS;
 const CENTER = OUTER_SIZE / 2;
-const BEAM_POINTS = [
-  `${CENTER},${CENTER - BEAM_INNER}`,
-  `${CENTER - BEAM_LENGTH * Math.sin(BEAM_HALF_ANGLE_RAD)},${CENTER - BEAM_INNER - BEAM_LENGTH * Math.cos(BEAM_HALF_ANGLE_RAD)}`,
-  `${CENTER + BEAM_LENGTH * Math.sin(BEAM_HALF_ANGLE_RAD)},${CENTER - BEAM_INNER - BEAM_LENGTH * Math.cos(BEAM_HALF_ANGLE_RAD)}`,
+
+const polar = (radius: number, angleRad: number) => ({
+  x: CENTER + radius * Math.sin(angleRad),
+  y: CENTER - radius * Math.cos(angleRad),
+});
+
+const leftOuter = polar(OUTER_RADIUS, -SPOT_HALF_ANGLE_RAD);
+const rightOuter = polar(OUTER_RADIUS, SPOT_HALF_ANGLE_RAD);
+const SPOTLIGHT_PATH = [
+  `M ${CENTER} ${CENTER}`,
+  `L ${leftOuter.x} ${leftOuter.y}`,
+  `A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${rightOuter.x} ${rightOuter.y}`,
+  "Z",
 ].join(" ");
 
 export const LiveMapMarkerPin = ({
@@ -52,20 +62,21 @@ export const LiveMapMarkerPin = ({
         >
           <Svg width={OUTER_SIZE} height={OUTER_SIZE}>
             <Defs>
-              <LinearGradient
-                id="selfHeadingBeam"
+              <RadialGradient
+                id="selfHeadingSpotlight"
                 gradientUnits="userSpaceOnUse"
-                x1={CENTER}
-                y1={CENTER - BEAM_INNER}
-                x2={CENTER}
-                y2={CENTER - BEAM_INNER - BEAM_LENGTH}
+                cx={CENTER}
+                cy={CENTER}
+                rx={OUTER_RADIUS}
+                ry={OUTER_RADIUS}
               >
-                <Stop offset="0%" stopColor="#FF1464" stopOpacity="0.45" />
-                <Stop offset="70%" stopColor="#FF1464" stopOpacity="0.14" />
-                <Stop offset="100%" stopColor="#FF1464" stopOpacity="0" />
-              </LinearGradient>
+                <Stop offset="0%" stopColor={BEAM_COLOR} stopOpacity="0.5" />
+                <Stop offset="36%" stopColor={BEAM_COLOR} stopOpacity="0.4" />
+                <Stop offset="70%" stopColor={BEAM_COLOR} stopOpacity="0.14" />
+                <Stop offset="100%" stopColor={BEAM_COLOR} stopOpacity="0" />
+              </RadialGradient>
             </Defs>
-            <Polygon points={BEAM_POINTS} fill="url(#selfHeadingBeam)" />
+            <Path d={SPOTLIGHT_PATH} fill="url(#selfHeadingSpotlight)" />
           </Svg>
         </View>
       ) : null}
