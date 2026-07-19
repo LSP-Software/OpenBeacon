@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   chaseHeadingToward,
+  HEADING_PUBLISH_INTERVAL_MS,
+  isHeadingChaseSettled,
   quantizeHeadingDegrees,
+  resolvePublishedHeading,
   shortestHeadingDelta,
   smoothHeadingSample,
 } from "./smoothDeviceHeading.ts";
@@ -76,5 +79,77 @@ describe("quantizeHeadingDegrees", () => {
   test("keeps tenth-degree precision for gentler visual steps", () => {
     expect(quantizeHeadingDegrees(92.44)).toBe(92.4);
     expect(quantizeHeadingDegrees(92.45)).toBe(92.5);
+  });
+});
+
+describe("resolvePublishedHeading", () => {
+  test("publishes the first usable sample immediately", () => {
+    expect(
+      resolvePublishedHeading({
+        displayed: 92.44,
+        force: true,
+        lastPublishAt: 0,
+        now: 10,
+        published: null,
+      }),
+    ).toEqual({
+      lastPublishAt: 10,
+      published: 92.4,
+    });
+  });
+
+  test("throttles non-forced publishes inside the interval", () => {
+    expect(
+      resolvePublishedHeading({
+        displayed: 100,
+        lastPublishAt: 1_000,
+        now: 1_000 + HEADING_PUBLISH_INTERVAL_MS - 1,
+        published: 90,
+      }),
+    ).toEqual({
+      lastPublishAt: 1_000,
+      published: 90,
+    });
+  });
+
+  test("publishes again once the throttle interval elapses", () => {
+    expect(
+      resolvePublishedHeading({
+        displayed: 100,
+        lastPublishAt: 1_000,
+        now: 1_000 + HEADING_PUBLISH_INTERVAL_MS,
+        published: 90,
+      }),
+    ).toEqual({
+      lastPublishAt: 1_000 + HEADING_PUBLISH_INTERVAL_MS,
+      published: 100,
+    });
+  });
+
+  test("clears a published heading immediately on null", () => {
+    expect(
+      resolvePublishedHeading({
+        displayed: null,
+        force: true,
+        lastPublishAt: 1_000,
+        now: 1_001,
+        published: 90,
+      }),
+    ).toEqual({
+      lastPublishAt: 1_001,
+      published: null,
+    });
+  });
+});
+
+describe("isHeadingChaseSettled", () => {
+  test("reports settled when displayed is near the target", () => {
+    expect(isHeadingChaseSettled(90, 90.1)).toBe(true);
+    expect(isHeadingChaseSettled(90, 100)).toBe(false);
+  });
+
+  test("allows resume after settle when the target moves again", () => {
+    expect(isHeadingChaseSettled(90, 90)).toBe(true);
+    expect(isHeadingChaseSettled(90, 120)).toBe(false);
   });
 });

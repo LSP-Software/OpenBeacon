@@ -284,13 +284,13 @@ const LiveMapPointAnnotation = ({
 }) => {
   const annotationRef = useRef<PointAnnotationRef>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: headingDegrees triggers Android bitmap refresh
   useEffect(() => {
     if (!marker.isSelf) {
       return;
     }
 
     // PointAnnotation snapshots children to a bitmap on Android; refresh when the heading beam rotates or hides.
-    void headingDegrees;
     annotationRef.current?.refresh();
   }, [headingDegrees, marker.isSelf]);
 

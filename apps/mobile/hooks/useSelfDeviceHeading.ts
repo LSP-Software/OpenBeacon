@@ -5,13 +5,10 @@ import { resolveUsableDeviceHeading } from "../lib/resolveUsableDeviceHeading.ts
 import { runForegroundPermissionedWatch } from "../lib/runForegroundPermissionedWatch.ts";
 import {
   chaseHeadingToward,
-  quantizeHeadingDegrees,
-  shortestHeadingDelta,
+  isHeadingChaseSettled,
+  resolvePublishedHeading,
   smoothHeadingSample,
 } from "../lib/smoothDeviceHeading.ts";
-
-const HEADING_PUBLISH_INTERVAL_MS = 50;
-const HEADING_SETTLED_DEGREES = 0.2;
 
 export const useSelfDeviceHeading = (enabled: boolean) => {
   const isFocused = useIsFocused();
@@ -34,19 +31,21 @@ export const useSelfDeviceHeading = (enabled: boolean) => {
     let lastPublishAt = 0;
 
     const publish = (nextDisplayed: number | null, now: number, force = false) => {
-      const nextPublished = nextDisplayed === null ? null : quantizeHeadingDegrees(nextDisplayed);
+      const next = resolvePublishedHeading({
+        displayed: nextDisplayed,
+        force,
+        lastPublishAt,
+        now,
+        published: publishedRef.current,
+      });
+      lastPublishAt = next.lastPublishAt;
 
-      if (nextPublished === publishedRef.current) {
+      if (next.published === publishedRef.current) {
         return;
       }
 
-      if (!force && nextPublished !== null && now - lastPublishAt < HEADING_PUBLISH_INTERVAL_MS) {
-        return;
-      }
-
-      lastPublishAt = now;
-      publishedRef.current = nextPublished;
-      setHeadingDegrees(nextPublished);
+      publishedRef.current = next.published;
+      setHeadingDegrees(next.published);
     };
 
     const tick = (now: number) => {
@@ -58,12 +57,10 @@ export const useSelfDeviceHeading = (enabled: boolean) => {
       displayedRef.current = nextDisplayed;
       publish(nextDisplayed, now, nextDisplayed === null || publishedRef.current === null);
 
-      const settled =
-        nextDisplayed !== null &&
-        targetRef.current !== null &&
-        Math.abs(shortestHeadingDelta(nextDisplayed, targetRef.current)) < HEADING_SETTLED_DEGREES;
-
-      if ((nextDisplayed === null && targetRef.current === null) || settled) {
+      if (
+        (nextDisplayed === null && targetRef.current === null) ||
+        isHeadingChaseSettled(nextDisplayed, targetRef.current)
+      ) {
         animationFrame = null;
         lastFrameAt = null;
         return;
