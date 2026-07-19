@@ -8,7 +8,7 @@ import {
 import { useMutation } from "@tanstack/react-query";
 import { router, useRootNavigationState } from "expo-router";
 import { ScanIcon } from "lucide-react-native";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/ui/Text.tsx";
@@ -60,6 +60,12 @@ export const NativeMap = ({
   const suppressUserCameraControlUntilMsRef = useRef(0);
   const markersRef = useRef(markers);
   markersRef.current = markers;
+  const selectedUserIdRef = useRef(selectedUserId);
+  selectedUserIdRef.current = selectedUserId;
+  const pendingDeselectClearRef = useRef(false);
+  const [annotationRemountTokens, setAnnotationRemountTokens] = useState<Record<string, number>>(
+    {},
+  );
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
   const selectedMarker = markers.find((marker) => marker.userId === selectedUserId) ?? null;
   const hasMarkers = markers.length > 0;
@@ -104,6 +110,31 @@ export const NativeMap = ({
     return getProtomapsMapStyle(mapTheme, pmtilesUrl);
   }, [mapTheme, pmtilesUrl]);
 
+  const clearSelectionFromReact = () => {
+    pendingDeselectClearRef.current = false;
+    const previouslySelectedUserId = selectedUserIdRef.current;
+    if (previouslySelectedUserId !== null) {
+      setAnnotationRemountTokens((tokens) => ({
+        ...tokens,
+        [previouslySelectedUserId]: (tokens[previouslySelectedUserId] ?? 0) + 1,
+      }));
+    }
+    onSelectUserId?.(null);
+  };
+  const handleAnnotationDeselected = () => {
+    pendingDeselectClearRef.current = true;
+    queueMicrotask(() => {
+      if (!pendingDeselectClearRef.current) {
+        return;
+      }
+      pendingDeselectClearRef.current = false;
+      onSelectUserId?.(null);
+    });
+  };
+  const handleAnnotationSelected = (userId: string) => {
+    pendingDeselectClearRef.current = false;
+    onSelectUserId?.(userId);
+  };
   const fitEveryoneInFrame = () => {
     clearLiveMapInitialFitTimer(initialFitTimerRef);
     initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
@@ -112,7 +143,7 @@ export const NativeMap = ({
     trackedUserIdRef.current = null;
     trackedCoordinateRef.current = null;
     followSuspendedRef.current = false;
-    onSelectUserId?.(null);
+    clearSelectionFromReact();
     suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, 600);
     fitLiveMapMarkers({
       camera: cameraRef.current,
@@ -246,9 +277,7 @@ export const NativeMap = ({
         pitchEnabled={false}
         rotateEnabled={false}
         surfaceView={Platform.OS === "android"}
-        onPress={() => {
-          onSelectUserId?.(null);
-        }}
+        onPress={clearSelectionFromReact}
         onRegionDidChange={(feature) => {
           if (!feature.properties.isUserInteraction) {
             return;
@@ -280,21 +309,21 @@ export const NativeMap = ({
         {markers.map((marker) =>
           marker.isSelf ? (
             <SelfLiveMapPointAnnotation
-              key={marker.userId}
+              key={`${marker.userId}:${annotationRemountTokens[marker.userId] ?? 0}`}
               marker={marker}
-              selected={marker.userId === selectedUserId}
+              onDeselected={handleAnnotationDeselected}
               onSelected={() => {
-                onSelectUserId?.(marker.userId);
+                handleAnnotationSelected(marker.userId);
               }}
             />
           ) : (
             <LiveMapPointAnnotation
-              key={marker.userId}
+              key={`${marker.userId}:${annotationRemountTokens[marker.userId] ?? 0}`}
               headingDegrees={null}
               marker={marker}
-              selected={marker.userId === selectedUserId}
+              onDeselected={handleAnnotationDeselected}
               onSelected={() => {
-                onSelectUserId?.(marker.userId);
+                handleAnnotationSelected(marker.userId);
               }}
             />
           ),
@@ -319,9 +348,7 @@ export const NativeMap = ({
           name={selectedMarker.name}
           otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
           timestamp={selectedMarker.timestamp}
-          onDismiss={() => {
-            onSelectUserId?.(null);
-          }}
+          onDismiss={clearSelectionFromReact}
         />
       ) : null}
     </View>
@@ -330,12 +357,12 @@ export const NativeMap = ({
 
 const SelfLiveMapPointAnnotation = ({
   marker,
+  onDeselected,
   onSelected,
-  selected,
 }: {
   marker: LiveMapMarker;
+  onDeselected: () => void;
   onSelected: () => void;
-  selected: boolean;
 }) => {
   const headingDegrees = useSelfDeviceHeading(true);
 
@@ -343,8 +370,8 @@ const SelfLiveMapPointAnnotation = ({
     <LiveMapPointAnnotation
       headingDegrees={headingDegrees}
       marker={marker}
+      onDeselected={onDeselected}
       onSelected={onSelected}
-      selected={selected}
     />
   );
 };
@@ -352,25 +379,20 @@ const SelfLiveMapPointAnnotation = ({
 const LiveMapPointAnnotation = ({
   headingDegrees,
   marker,
+  onDeselected,
   onSelected,
-  selected,
 }: {
   headingDegrees: number | null;
   marker: LiveMapMarker;
+  onDeselected: () => void;
   onSelected: () => void;
-  selected: boolean;
 }) => {
   const annotationRef = useRef<PointAnnotationRef>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: headingDegrees triggers Android bitmap refresh
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Android PointAnnotation bitmaps need an explicit refresh when chrome or heading changes
   useEffect(() => {
-    if (!marker.isSelf) {
-      return;
-    }
-
-    // PointAnnotation snapshots children to a bitmap on Android; refresh when the heading beam rotates or hides.
     annotationRef.current?.refresh();
-  }, [headingDegrees, marker.isSelf]);
+  }, [headingDegrees, marker.image, marker.initials, marker.ringColor]);
 
   return (
     <PointAnnotation
@@ -378,7 +400,7 @@ const LiveMapPointAnnotation = ({
       id={marker.userId}
       coordinate={[marker.longitude, marker.latitude]}
       anchor={{ x: 0.5, y: 0.5 }}
-      selected={selected}
+      onDeselected={onDeselected}
       onSelected={onSelected}
     >
       <LiveMapMarkerPin
@@ -387,6 +409,9 @@ const LiveMapPointAnnotation = ({
         initials={marker.initials}
         name={marker.name}
         ringColor={marker.ringColor}
+        onBitmapContentChange={() => {
+          annotationRef.current?.refresh();
+        }}
       />
     </PointAnnotation>
   );

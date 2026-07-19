@@ -21,12 +21,14 @@ export const LiveMapMarkerPin = ({
   image,
   initials,
   name,
+  onBitmapContentChange,
   ringColor,
 }: {
   headingDegrees?: number | null;
   image: string | null;
   initials: string;
   name: string;
+  onBitmapContentChange?: () => void;
   ringColor: string;
 }) => {
   const showHeading = headingDegrees !== null;
@@ -99,7 +101,14 @@ export const LiveMapMarkerPin = ({
           }}
         >
           <Avatar alt={name} className="size-10">
-            {image ? <AvatarImage source={{ uri: image }} /> : null}
+            {image ? (
+              <AvatarImage
+                source={{ uri: image }}
+                onLoadingStatusChange={(_status: "error" | "loaded") => {
+                  onBitmapContentChange?.();
+                }}
+              />
+            ) : null}
             <AvatarFallback>
               <Text className="font-bold">{initials}</Text>
             </AvatarFallback>

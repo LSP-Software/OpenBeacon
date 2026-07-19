@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import React, { act } from "react";
 import { createRoot, type Root } from "test-renderer";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
+import { nextMapMarkerSelection } from "../../lib/mapMarkerSelection.ts";
 import { createReactNativeTestModule } from "../../test/reactNativeTestModule.ts";
 import {
   createLiveMapMarkerFixture,
   createMapLibreMockModule,
+  emitNativeMapAndroidMarkerTap,
   emitNativeMapAnnotationDeselected,
   emitNativeMapAnnotationSelected,
   emitNativeMapDidFailLoadingMap,
@@ -13,7 +15,9 @@ import {
   emitNativeMapPress,
   emitNativeMapRegionDidChange,
   emitNativeMapShowEveryone,
+  getNativeMapAnnotationMountCount,
   getNativeMapAnnotationRefreshCalls,
+  getNativeMapAnnotationSelectedProp,
   getNativeMapCameraCommands,
   getNativeMapMountedAnnotationIds,
   getNativeMapSelfHeadingDegrees,
@@ -163,7 +167,15 @@ mock.module("./LiveMapPersonSheet.tsx", () => ({
 }));
 
 mock.module("./LiveMapMarkerPin.tsx", () => ({
-  LiveMapMarkerPin: () => React.createElement("live-map-marker-pin"),
+  LiveMapMarkerPin: ({ onBitmapContentChange }: { onBitmapContentChange?: () => void }) => {
+    if (onBitmapContentChange) {
+      (
+        globalThis as typeof globalThis & { __nativeMapPinBitmapContentChange?: () => void }
+      ).__nativeMapPinBitmapContentChange = onBitmapContentChange;
+    }
+
+    return React.createElement("live-map-marker-pin");
+  },
 }));
 
 const { NativeMap }: typeof import("./NativeMap.tsx") = await import("./NativeMap.tsx");
@@ -199,6 +211,39 @@ const renderNativeMap = async (
 
   await act(async () => {
     root?.render(<NativeMap {...props} />);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+};
+
+const renderSelectableNativeMap = async (
+  markers: readonly LiveMapMarker[],
+  selectionHistory: Array<string | null>,
+) => {
+  if (!root) {
+    root = createRoot();
+  }
+
+  const SelectableNativeMap = () => {
+    const [selectedUserId, setSelectedUserId] = React.useState<string | null>(null);
+    const selectedUserIdRef = React.useRef<string | null>(null);
+
+    return (
+      <NativeMap
+        markers={markers}
+        selectedUserId={selectedUserId}
+        onSelectUserId={(userId) => {
+          const next = nextMapMarkerSelection(selectedUserIdRef.current, userId);
+          selectedUserIdRef.current = next;
+          selectionHistory.push(next);
+          setSelectedUserId(next);
+        }}
+      />
+    );
+  };
+
+  await act(async () => {
+    root?.render(<SelectableNativeMap />);
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -625,7 +670,7 @@ describe("NativeMap integration harness", () => {
     expect(selections).toEqual(["alice", null, "bob"]);
   });
 
-  test("exposes a deselect driver for downstream tickets while NativeMap ignores onDeselected", async () => {
+  test("clears selection when Android emits annotation deselect", async () => {
     const selections: Array<string | null> = [];
     const alice = createLiveMapMarkerFixture({ userId: "alice" });
 
@@ -638,8 +683,89 @@ describe("NativeMap integration harness", () => {
     });
 
     emitNativeMapAnnotationDeselected("alice");
+    await flushEffects();
 
-    expect(selections).toEqual([]);
+    expect(selections).toEqual([null]);
+  });
+
+  test("Android marker taps select, toggle off once, and switch people without extra taps", async () => {
+    const alice = createLiveMapMarkerFixture({ userId: "alice" });
+    const bob = createLiveMapMarkerFixture({
+      initials: "BO",
+      name: "Bob",
+      userId: "bob",
+    });
+    const selectionHistory: Array<string | null> = [];
+
+    await renderSelectableNativeMap([alice, bob], selectionHistory);
+
+    await act(async () => {
+      emitNativeMapAndroidMarkerTap("alice");
+      await Promise.resolve();
+    });
+    await flushEffects();
+    expect(selectionHistory).toEqual(["alice"]);
+
+    await act(async () => {
+      emitNativeMapAndroidMarkerTap("alice");
+      await Promise.resolve();
+    });
+    await flushEffects();
+    expect(selectionHistory).toEqual(["alice", null]);
+
+    await act(async () => {
+      emitNativeMapAndroidMarkerTap("alice");
+      await Promise.resolve();
+    });
+    await flushEffects();
+    expect(selectionHistory).toEqual(["alice", null, "alice"]);
+
+    await act(async () => {
+      emitNativeMapAndroidMarkerTap("bob");
+      await Promise.resolve();
+    });
+    await flushEffects();
+    expect(selectionHistory).toEqual(["alice", null, "alice", "bob"]);
+  });
+
+  test("map-background press remounts the prior annotation so the next Android tap selects", async () => {
+    const alice = createLiveMapMarkerFixture({ userId: "alice" });
+    const selectionHistory: Array<string | null> = [];
+
+    await renderSelectableNativeMap([alice], selectionHistory);
+    await act(async () => {
+      emitNativeMapAndroidMarkerTap("alice");
+      await Promise.resolve();
+    });
+    await flushEffects();
+    expect(selectionHistory).toEqual(["alice"]);
+    expect(getNativeMapAnnotationMountCount("alice")).toBe(1);
+
+    await act(async () => {
+      emitNativeMapPress();
+      await Promise.resolve();
+    });
+    await flushEffects();
+    expect(selectionHistory).toEqual(["alice", null]);
+    expect(getNativeMapAnnotationMountCount("alice")).toBe(2);
+
+    await act(async () => {
+      emitNativeMapAndroidMarkerTap("alice");
+      await Promise.resolve();
+    });
+    await flushEffects();
+    expect(selectionHistory).toEqual(["alice", null, "alice"]);
+  });
+
+  test("does not pass a controlled selected prop on Android", async () => {
+    const alice = createLiveMapMarkerFixture({ userId: "alice" });
+
+    await renderNativeMap({
+      markers: [alice],
+      selectedUserId: "alice",
+    });
+
+    expect(getNativeMapAnnotationSelectedProp("alice")).toBeUndefined();
   });
 
   test("observes Android annotation refresh after async self heading changes", async () => {
@@ -695,6 +821,126 @@ describe("NativeMap integration harness", () => {
     expect(
       getNativeMapAnnotationRefreshCalls().filter((id) => id === "self").length,
     ).toBeGreaterThan(refreshCountWithHeading);
+  });
+
+  test("refreshes non-self annotations when avatar, initials, or ring color change", async () => {
+    const alice = createLiveMapMarkerFixture({
+      image: null,
+      initials: "AL",
+      ringColor: "#3366FF",
+      userId: "alice",
+    });
+
+    await renderNativeMap({ markers: [alice] });
+    await flushEffects();
+
+    const refreshCountAfterMount = getNativeMapAnnotationRefreshCalls().filter(
+      (id) => id === "alice",
+    ).length;
+    expect(refreshCountAfterMount).toBeGreaterThan(0);
+
+    await renderNativeMap({
+      markers: [
+        {
+          ...alice,
+          image: "https://cdn.example/alice.png",
+        },
+      ],
+    });
+    await flushEffects();
+
+    const refreshCountAfterImage = getNativeMapAnnotationRefreshCalls().filter(
+      (id) => id === "alice",
+    ).length;
+    expect(refreshCountAfterImage).toBeGreaterThan(refreshCountAfterMount);
+
+    await renderNativeMap({
+      markers: [
+        {
+          ...alice,
+          image: "https://cdn.example/alice.png",
+          initials: "AA",
+        },
+      ],
+    });
+    await flushEffects();
+
+    const refreshCountAfterInitials = getNativeMapAnnotationRefreshCalls().filter(
+      (id) => id === "alice",
+    ).length;
+    expect(refreshCountAfterInitials).toBeGreaterThan(refreshCountAfterImage);
+
+    await renderNativeMap({
+      markers: [
+        {
+          ...alice,
+          image: "https://cdn.example/alice.png",
+          initials: "AA",
+          ringColor: "#FF3366",
+        },
+      ],
+    });
+    await flushEffects();
+
+    expect(
+      getNativeMapAnnotationRefreshCalls().filter((id) => id === "alice").length,
+    ).toBeGreaterThan(refreshCountAfterInitials);
+  });
+
+  test("refreshes annotations when async avatar bitmap content settles", async () => {
+    const alice = createLiveMapMarkerFixture({
+      image: "https://cdn.example/alice.png",
+      userId: "alice",
+    });
+
+    await renderNativeMap({ markers: [alice] });
+    await flushEffects();
+
+    const refreshCountAfterMount = getNativeMapAnnotationRefreshCalls().filter(
+      (id) => id === "alice",
+    ).length;
+
+    const onBitmapContentChange = (
+      globalThis as typeof globalThis & { __nativeMapPinBitmapContentChange?: () => void }
+    ).__nativeMapPinBitmapContentChange;
+    expect(onBitmapContentChange).toBeTypeOf("function");
+
+    await act(async () => {
+      onBitmapContentChange?.();
+      await Promise.resolve();
+    });
+
+    expect(
+      getNativeMapAnnotationRefreshCalls().filter((id) => id === "alice").length,
+    ).toBeGreaterThan(refreshCountAfterMount);
+  });
+
+  test("refreshes annotations when avatar bitmap load fails via the same content-change seam", async () => {
+    const alice = createLiveMapMarkerFixture({
+      image: "https://cdn.example/alice-broken.png",
+      userId: "alice",
+    });
+
+    await renderNativeMap({ markers: [alice] });
+    await flushEffects();
+
+    const refreshCountAfterMount = getNativeMapAnnotationRefreshCalls().filter(
+      (id) => id === "alice",
+    ).length;
+
+    const onBitmapContentChange = (
+      globalThis as typeof globalThis & { __nativeMapPinBitmapContentChange?: () => void }
+    ).__nativeMapPinBitmapContentChange;
+    expect(onBitmapContentChange).toBeTypeOf("function");
+
+    await act(async () => {
+      onBitmapContentChange?.();
+      await Promise.resolve();
+    });
+
+    expect(
+      getNativeMapAnnotationRefreshCalls().filter((id) => id === "alice").length,
+    ).toBeGreaterThan(refreshCountAfterMount);
   });
 
   test("remounts the map view when the signed pmtiles url changes and keeps camera drivers available", async () => {
