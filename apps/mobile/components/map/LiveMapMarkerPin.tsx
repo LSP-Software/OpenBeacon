@@ -104,7 +104,7 @@ export const LiveMapMarkerPin = ({
             {image ? (
               <AvatarImage
                 source={{ uri: image }}
-                onLoadingStatusChange={() => {
+                onLoadingStatusChange={(_status: "error" | "loaded") => {
                   onBitmapContentChange?.();
                 }}
               />

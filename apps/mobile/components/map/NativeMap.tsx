@@ -53,6 +53,7 @@ export const NativeMap = ({
   markersRef.current = markers;
   const selectedUserIdRef = useRef(selectedUserId);
   selectedUserIdRef.current = selectedUserId;
+  const pendingDeselectClearRef = useRef(false);
   const [annotationRemountTokens, setAnnotationRemountTokens] = useState<Record<string, number>>(
     {},
   );
@@ -96,6 +97,7 @@ export const NativeMap = ({
   }, [mapTheme, pmtilesUrl]);
 
   const clearSelectionFromReact = () => {
+    pendingDeselectClearRef.current = false;
     const previouslySelectedUserId = selectedUserIdRef.current;
     if (previouslySelectedUserId !== null) {
       setAnnotationRemountTokens((tokens) => ({
@@ -104,6 +106,20 @@ export const NativeMap = ({
       }));
     }
     onSelectUserId?.(null);
+  };
+  const handleAnnotationDeselected = () => {
+    pendingDeselectClearRef.current = true;
+    queueMicrotask(() => {
+      if (!pendingDeselectClearRef.current) {
+        return;
+      }
+      pendingDeselectClearRef.current = false;
+      onSelectUserId?.(null);
+    });
+  };
+  const handleAnnotationSelected = (userId: string) => {
+    pendingDeselectClearRef.current = false;
+    onSelectUserId?.(userId);
   };
   const fitEveryoneInFrame = () => {
     trackedUserIdRef.current = null;
@@ -217,11 +233,9 @@ export const NativeMap = ({
             <SelfLiveMapPointAnnotation
               key={`${marker.userId}:${annotationRemountTokens[marker.userId] ?? 0}`}
               marker={marker}
-              onDeselected={() => {
-                onSelectUserId?.(null);
-              }}
+              onDeselected={handleAnnotationDeselected}
               onSelected={() => {
-                onSelectUserId?.(marker.userId);
+                handleAnnotationSelected(marker.userId);
               }}
             />
           ) : (
@@ -229,11 +243,9 @@ export const NativeMap = ({
               key={`${marker.userId}:${annotationRemountTokens[marker.userId] ?? 0}`}
               headingDegrees={null}
               marker={marker}
-              onDeselected={() => {
-                onSelectUserId?.(null);
-              }}
+              onDeselected={handleAnnotationDeselected}
               onSelected={() => {
-                onSelectUserId?.(marker.userId);
+                handleAnnotationSelected(marker.userId);
               }}
             />
           ),

@@ -418,6 +418,7 @@ describe("NativeMap integration harness", () => {
     });
 
     emitNativeMapAnnotationDeselected("alice");
+    await flushEffects();
 
     expect(selections).toEqual([null]);
   });
@@ -459,7 +460,7 @@ describe("NativeMap integration harness", () => {
       await Promise.resolve();
     });
     await flushEffects();
-    expect(selectionHistory).toEqual(["alice", null, "alice", null, "bob"]);
+    expect(selectionHistory).toEqual(["alice", null, "alice", "bob"]);
   });
 
   test("map-background press remounts the prior annotation so the next Android tap selects", async () => {
@@ -624,6 +625,34 @@ describe("NativeMap integration harness", () => {
   test("refreshes annotations when async avatar bitmap content settles", async () => {
     const alice = createLiveMapMarkerFixture({
       image: "https://cdn.example/alice.png",
+      userId: "alice",
+    });
+
+    await renderNativeMap({ markers: [alice] });
+    await flushEffects();
+
+    const refreshCountAfterMount = getNativeMapAnnotationRefreshCalls().filter(
+      (id) => id === "alice",
+    ).length;
+
+    const onBitmapContentChange = (
+      globalThis as typeof globalThis & { __nativeMapPinBitmapContentChange?: () => void }
+    ).__nativeMapPinBitmapContentChange;
+    expect(onBitmapContentChange).toBeTypeOf("function");
+
+    await act(async () => {
+      onBitmapContentChange?.();
+      await Promise.resolve();
+    });
+
+    expect(
+      getNativeMapAnnotationRefreshCalls().filter((id) => id === "alice").length,
+    ).toBeGreaterThan(refreshCountAfterMount);
+  });
+
+  test("refreshes annotations when avatar bitmap load fails via the same content-change seam", async () => {
+    const alice = createLiveMapMarkerFixture({
+      image: "https://cdn.example/alice-broken.png",
       userId: "alice",
     });
 
