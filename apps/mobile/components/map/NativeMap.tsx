@@ -184,11 +184,16 @@ export const NativeMap = ({
     }
 
     didFitMarkersRef.current = true;
-    fitMarkersAndPreserveCamera({
-      markersToFit: markers,
+    fitLiveMapMarkers({
+      camera: cameraRef.current,
+      markers,
       padding: cameraPadding,
     });
-  }, [cameraPadding, fitMarkersAndPreserveCamera, hasMarkers, mapStyle, markers]);
+    preservedCameraRef.current = mapCameraAfterFittingMarkers({
+      markers,
+      previousCamera: preservedCameraRef.current,
+    });
+  }, [cameraPadding, hasMarkers, mapStyle, markers]);
 
   useEffect(() => {
     if (
