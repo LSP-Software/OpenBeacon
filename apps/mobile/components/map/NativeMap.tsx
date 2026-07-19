@@ -18,7 +18,16 @@ import { queryClient, trpc } from "../../lib/api.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { fitLiveMapMarkers } from "../../lib/fitLiveMapMarkers.ts";
 import { buildLiveMapTrackingCameraStop } from "../../lib/liveMapTrackingCamera.ts";
-import { shouldForceRefreshAfterMapLoadFailure } from "../../lib/mapPmtilesLoadFailure.ts";
+import {
+  INITIAL_MAP_CAMERA,
+  mapCameraAfterFittingMarkers,
+  mapCameraFromRegionChange,
+} from "../../lib/mapPmtilesCameraState.ts";
+import {
+  MAX_AUTO_FORCE_REFRESH_ATTEMPTS,
+  nextMapLoadFailureState,
+  shouldForceRefreshAfterMapLoadFailure,
+} from "../../lib/mapPmtilesLoadFailure.ts";
 import { getProtomapsMapStyle } from "../../lib/protomaps-style.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
 import { Icon } from "../ui/Icon.tsx";
@@ -37,17 +46,37 @@ export const NativeMap = ({
   const { mapTheme } = useTheme();
   const insets = useSafeAreaInsets();
   const signedPmtilesUrlQuery = useSignedPmtilesUrl();
+  const autoForceRefreshAttemptsRef = useRef(0);
+  const showRecoverableErrorRef = useRef(false);
+  const [showRecoverableError, setShowRecoverableError] = useState(false);
+  const applyMapLoadFailureState = (next: {
+    autoForceRefreshAttempts: number;
+    showRecoverableError: boolean;
+  }) => {
+    autoForceRefreshAttemptsRef.current = next.autoForceRefreshAttempts;
+    showRecoverableErrorRef.current = next.showRecoverableError;
+    setShowRecoverableError(next.showRecoverableError);
+  };
   const forceRefreshSignedPmtilesUrlMutation = useMutation({
     ...trpc.maps.forceRefreshSignedPmtilesUrl.mutationOptions(),
     onSuccess: (signedPmtilesUrl) => {
       queryClient.setQueryData(trpc.maps.getSignedPmtilesUrl.queryKey(), signedPmtilesUrl);
     },
+    onError: () => {
+      applyMapLoadFailureState(
+        nextMapLoadFailureState({
+          autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
+          event: "force_refresh_failed",
+        }),
+      );
+    },
   });
   const rootNavigationState = useRootNavigationState();
   const cameraRef = useRef<CameraRef>(null);
   const didFitMarkersRef = useRef(false);
-  const didRetryAfterMapFailureRef = useRef(false);
-  const lastPmtilesUrlRef = useRef<string | null>(null);
+  const preservedCameraRef = useRef(INITIAL_MAP_CAMERA);
+  const pendingCameraRestoreRef = useRef(false);
+  const previousPmtilesUrlRef = useRef<string | null>(null);
   const trackedUserIdRef = useRef<string | null>(null);
   const markersRef = useRef(markers);
   markersRef.current = markers;
@@ -58,6 +87,12 @@ export const NativeMap = ({
     {},
   );
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
+  if (previousPmtilesUrlRef.current !== pmtilesUrl) {
+    if (previousPmtilesUrlRef.current !== null && pmtilesUrl !== null) {
+      pendingCameraRestoreRef.current = true;
+    }
+    previousPmtilesUrlRef.current = pmtilesUrl;
+  }
   const selectedMarker = markers.find((marker) => marker.userId === selectedUserId) ?? null;
   const hasMarkers = markers.length > 0;
   const selectedLatitude = selectedMarker?.latitude;
@@ -80,13 +115,6 @@ export const NativeMap = ({
     }),
     [insets.top],
   );
-
-  if (lastPmtilesUrlRef.current !== pmtilesUrl) {
-    lastPmtilesUrlRef.current = pmtilesUrl;
-    didRetryAfterMapFailureRef.current = false;
-    didFitMarkersRef.current = false;
-    trackedUserIdRef.current = null;
-  }
 
   const mapStyle = useMemo(() => {
     if (!pmtilesUrl) {
@@ -121,14 +149,57 @@ export const NativeMap = ({
     pendingDeselectClearRef.current = false;
     onSelectUserId?.(userId);
   };
+
+  const fitMarkersAndPreserveCamera = ({
+    markersToFit,
+    padding,
+  }: {
+    markersToFit: readonly LiveMapMarker[];
+    padding: {
+      paddingBottom: number;
+      paddingLeft: number;
+      paddingRight: number;
+      paddingTop: number;
+    };
+  }) => {
+    fitLiveMapMarkers({
+      camera: cameraRef.current,
+      markers: markersToFit,
+      padding,
+    });
+    preservedCameraRef.current = mapCameraAfterFittingMarkers({
+      markers: markersToFit,
+      previousCamera: preservedCameraRef.current,
+    });
+  };
+
   const fitEveryoneInFrame = () => {
     trackedUserIdRef.current = null;
     clearSelectionFromReact();
-    fitLiveMapMarkers({
-      camera: cameraRef.current,
-      markers: markersRef.current,
+    fitMarkersAndPreserveCamera({
+      markersToFit: markersRef.current,
       padding: fitEveryonePadding,
     });
+  };
+
+  const retryMapLoad = () => {
+    if (forceRefreshSignedPmtilesUrlMutation.isPending) {
+      return;
+    }
+
+    applyMapLoadFailureState(
+      nextMapLoadFailureState({
+        autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
+        event: "manual_retry",
+      }),
+    );
+    applyMapLoadFailureState(
+      nextMapLoadFailureState({
+        autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
+        event: "auto_force_refresh_started",
+      }),
+    );
+    forceRefreshSignedPmtilesUrlMutation.mutate();
   };
 
   useEffect(() => {
@@ -149,6 +220,10 @@ export const NativeMap = ({
       camera: cameraRef.current,
       markers,
       padding: cameraPadding,
+    });
+    preservedCameraRef.current = mapCameraAfterFittingMarkers({
+      markers,
+      previousCamera: preservedCameraRef.current,
     });
   }, [cameraPadding, hasMarkers, mapStyle, markers]);
 
@@ -171,8 +246,12 @@ export const NativeMap = ({
     });
     trackedUserIdRef.current = selectedUserId;
     cameraRef.current?.setCamera(stop);
+    preservedCameraRef.current = mapCameraFromRegionChange({
+      latitude: selectedLatitude,
+      longitude: selectedLongitude,
+      zoomLevel: stop.zoomLevel,
+    });
   }, [cameraPadding, selectedLatitude, selectedLongitude, selectedUserId]);
-
   if (signedPmtilesUrlQuery.isLoading && !mapStyle) {
     return (
       <View className="flex-1 items-center justify-center bg-background px-6">
@@ -209,25 +288,98 @@ export const NativeMap = ({
         rotateEnabled={false}
         surfaceView={Platform.OS === "android"}
         onPress={clearSelectionFromReact}
-        onDidFailLoadingMap={() => {
-          if (
-            !shouldForceRefreshAfterMapLoadFailure({
-              didRetryAfterMapFailure: didRetryAfterMapFailureRef.current,
-              isForceRefreshPending: forceRefreshSignedPmtilesUrlMutation.isPending,
-              isSignedUrlFetching: signedPmtilesUrlQuery.isFetching,
-            })
-          ) {
+        onRegionDidChange={(feature) => {
+          const [longitude, latitude] = feature.geometry.coordinates;
+          if (longitude === undefined || latitude === undefined) {
             return;
           }
 
-          didRetryAfterMapFailureRef.current = true;
+          preservedCameraRef.current = mapCameraFromRegionChange({
+            latitude,
+            longitude,
+            zoomLevel: feature.properties.zoomLevel,
+          });
+        }}
+        onDidFailLoadingMap={() => {
+          if (
+            !shouldForceRefreshAfterMapLoadFailure({
+              autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
+              isForceRefreshPending: forceRefreshSignedPmtilesUrlMutation.isPending,
+              isSignedUrlFetching: signedPmtilesUrlQuery.isFetching,
+              showRecoverableError: showRecoverableErrorRef.current,
+            })
+          ) {
+            if (
+              !showRecoverableErrorRef.current &&
+              !forceRefreshSignedPmtilesUrlMutation.isPending &&
+              !signedPmtilesUrlQuery.isFetching &&
+              autoForceRefreshAttemptsRef.current >= MAX_AUTO_FORCE_REFRESH_ATTEMPTS
+            ) {
+              applyMapLoadFailureState(
+                nextMapLoadFailureState({
+                  autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
+                  event: "auto_retries_exhausted",
+                }),
+              );
+            }
+            return;
+          }
+
+          applyMapLoadFailureState(
+            nextMapLoadFailureState({
+              autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
+              event: "auto_force_refresh_started",
+            }),
+          );
           forceRefreshSignedPmtilesUrlMutation.mutate();
         }}
         onDidFinishLoadingStyle={() => {
-          didRetryAfterMapFailureRef.current = false;
+          applyMapLoadFailureState(
+            nextMapLoadFailureState({
+              autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
+              event: "style_loaded",
+            }),
+          );
+
+          if (!pendingCameraRestoreRef.current) {
+            return;
+          }
+
+          pendingCameraRestoreRef.current = false;
+
+          if (
+            selectedUserId !== null &&
+            selectedLatitude !== undefined &&
+            selectedLongitude !== undefined
+          ) {
+            const stop = buildLiveMapTrackingCameraStop({
+              latitude: selectedLatitude,
+              longitude: selectedLongitude,
+              padding: cameraPadding,
+              previouslyTrackedUserId: trackedUserIdRef.current,
+              selectedUserId,
+            });
+            cameraRef.current?.setCamera({
+              ...stop,
+              animationDuration: 0,
+            });
+            trackedUserIdRef.current = selectedUserId;
+            preservedCameraRef.current = mapCameraFromRegionChange({
+              latitude: selectedLatitude,
+              longitude: selectedLongitude,
+              zoomLevel: stop.zoomLevel,
+            });
+            return;
+          }
+
+          cameraRef.current?.setCamera({
+            animationDuration: 0,
+            centerCoordinate: preservedCameraRef.current.centerCoordinate,
+            zoomLevel: preservedCameraRef.current.zoomLevel,
+          });
         }}
       >
-        <Camera ref={cameraRef} defaultSettings={{ centerCoordinate: [0, 0], zoomLevel: 1.25 }} />
+        <Camera ref={cameraRef} defaultSettings={preservedCameraRef.current} />
         {markers.map((marker) =>
           marker.isSelf ? (
             <SelfLiveMapPointAnnotation
@@ -251,6 +403,18 @@ export const NativeMap = ({
           ),
         )}
       </MapView>
+      {showRecoverableError ? (
+        <View className="absolute inset-0 items-center justify-center bg-background/90 px-6">
+          <View className="w-full max-w-80 gap-5">
+            <Text className="text-center text-base text-muted">The map could not be loaded.</Text>
+            <Button
+              disabled={forceRefreshSignedPmtilesUrlMutation.isPending}
+              title="Retry"
+              onPress={retryMapLoad}
+            />
+          </View>
+        </View>
+      ) : null}
       {hasMarkers ? (
         <Pressable
           accessibilityLabel="Show everyone"

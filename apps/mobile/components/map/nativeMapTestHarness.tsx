@@ -29,9 +29,17 @@ let mapViewHandlers: {
   onDidFailLoadingMap?: () => void;
   onDidFinishLoadingStyle?: () => void;
   onPress?: () => void;
+  onRegionDidChange?: (feature: {
+    geometry: { coordinates: [number, number] };
+    properties: { zoomLevel: number };
+  }) => void;
 } = {};
 let mapViewMountCount = 0;
 let latestMapStyle: unknown = null;
+let latestCameraDefaultSettings: {
+  centerCoordinate?: [number, number];
+  zoomLevel?: number;
+} | null = null;
 let selfHeadingDegrees: number | null = null;
 let androidActiveAnnotationId: string | null = null;
 
@@ -62,6 +70,7 @@ export const resetNativeMapHarness = () => {
   mapViewHandlers = {};
   mapViewMountCount = 0;
   latestMapStyle = null;
+  latestCameraDefaultSettings = null;
   selfHeadingDegrees = null;
   androidActiveAnnotationId = null;
 };
@@ -82,6 +91,8 @@ export const getNativeMapViewMountCount = () => mapViewMountCount;
 
 export const getNativeMapStyle = () => latestMapStyle;
 
+export const getNativeMapCameraDefaultSettings = () => latestCameraDefaultSettings;
+
 export const setNativeMapSelfHeadingDegrees = (headingDegrees: number | null) => {
   selfHeadingDegrees = headingDegrees;
 };
@@ -98,6 +109,25 @@ export const emitNativeMapDidFailLoadingMap = () => {
 
 export const emitNativeMapDidFinishLoadingStyle = () => {
   mapViewHandlers.onDidFinishLoadingStyle?.();
+};
+
+export const emitNativeMapRegionDidChange = ({
+  latitude,
+  longitude,
+  zoomLevel,
+}: {
+  latitude: number;
+  longitude: number;
+  zoomLevel: number;
+}) => {
+  mapViewHandlers.onRegionDidChange?.({
+    geometry: {
+      coordinates: [longitude, latitude],
+    },
+    properties: {
+      zoomLevel,
+    },
+  });
 };
 
 export const emitNativeMapAnnotationSelected = (annotationId: string) => {
@@ -128,8 +158,24 @@ export const createMapLibreMockModule = () => {
       fitBounds: (ne: unknown, sw: unknown, padding: unknown, duration: unknown) => void;
       setCamera: (stop: unknown) => void;
     },
-    Record<string, unknown>
-  >((_props, ref) => {
+    {
+      defaultSettings?: {
+        centerCoordinate?: [number, number];
+        zoomLevel?: number;
+      };
+    }
+  >(({ defaultSettings }, ref) => {
+    latestCameraDefaultSettings = defaultSettings
+      ? {
+          ...(defaultSettings.centerCoordinate
+            ? { centerCoordinate: defaultSettings.centerCoordinate }
+            : {}),
+          ...(defaultSettings.zoomLevel !== undefined
+            ? { zoomLevel: defaultSettings.zoomLevel }
+            : {}),
+        }
+      : null;
+
     useImperativeHandle(ref, () => ({
       fitBounds: (ne: unknown, sw: unknown, padding: unknown, duration: unknown) => {
         cameraCommands.push({ type: "fitBounds", ne, sw, padding, duration });
@@ -149,17 +195,23 @@ export const createMapLibreMockModule = () => {
     onDidFailLoadingMap,
     onDidFinishLoadingStyle,
     onPress,
+    onRegionDidChange,
   }: {
     children?: ReactNode;
     mapStyle?: unknown;
     onDidFailLoadingMap?: () => void;
     onDidFinishLoadingStyle?: () => void;
     onPress?: () => void;
+    onRegionDidChange?: (feature: {
+      geometry: { coordinates: [number, number] };
+      properties: { zoomLevel: number };
+    }) => void;
   }) => {
     mapViewHandlers = {
       ...(onDidFailLoadingMap ? { onDidFailLoadingMap } : {}),
       ...(onDidFinishLoadingStyle ? { onDidFinishLoadingStyle } : {}),
       ...(onPress ? { onPress } : {}),
+      ...(onRegionDidChange ? { onRegionDidChange } : {}),
     };
     latestMapStyle = mapStyle ?? null;
 
@@ -174,6 +226,7 @@ export const createMapLibreMockModule = () => {
         onDidFailLoadingMap,
         onDidFinishLoadingStyle,
         onPress,
+        onRegionDidChange,
       },
       children,
     );
