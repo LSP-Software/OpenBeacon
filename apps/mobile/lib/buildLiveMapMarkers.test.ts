@@ -123,29 +123,94 @@ describe("buildLiveMapMarkers", () => {
     ).toEqual([]);
   });
 
-  test("falls back to Unknown and two-letter initials when member metadata is missing", () => {
+  test("omits senders absent from all current shared memberships", () => {
     const markers = buildLiveMapMarkers({
       getGroupColor: () => "#E9C46A",
-      groups: [],
-      positions: [position({ sourceGroupId: "ghost", userId: "mystery" })],
+      groups: [
+        {
+          id: "family",
+          name: "Family",
+          members: [{ image: null, name: "Alice", userId: "alice" }],
+        },
+      ],
+      positions: [
+        position({ sourceGroupId: "family", userId: "alice" }),
+        position({ sourceGroupId: "family", userId: "removed-bob" }),
+      ],
+      selfUserId: "alice",
+    });
+
+    expect(markers.map((marker) => marker.userId)).toEqual(["alice"]);
+  });
+
+  test("omits positions when membership metadata is stale and sender is not listed", () => {
+    const markers = buildLiveMapMarkers({
+      getGroupColor: () => "#E9C46A",
+      groups: [
+        {
+          id: "family",
+          name: "Family",
+          members: [{ image: null, name: "Alice", userId: "alice" }],
+        },
+      ],
+      positions: [position({ sourceGroupId: "family", userId: "newly-joined" })],
+      selfUserId: "alice",
+    });
+
+    expect(markers).toEqual([]);
+  });
+
+  test("includes a newly added member with their membership metadata", () => {
+    const markers = buildLiveMapMarkers({
+      getGroupColor: () => "#2A9D8F",
+      groups: [
+        {
+          id: "family",
+          name: "Family",
+          members: [
+            { image: null, name: "Alice", userId: "alice" },
+            { image: "https://example.com/dana.png", name: "Dana Lee", userId: "dana" },
+          ],
+        },
+      ],
+      positions: [position({ sourceGroupId: "family", userId: "dana" })],
       selfUserId: "alice",
     });
 
     expect(markers).toEqual([
       {
         battery: { charging: false, level: 80 },
-        image: null,
-        initials: "Un",
+        image: "https://example.com/dana.png",
+        initials: "Da",
         isSelf: false,
         latitude: 51.5,
         longitude: -0.12,
-        name: "Unknown",
+        name: "Dana Lee",
         otherSharedGroupNames: [],
-        ringColor: "#E9C46A",
-        sourceGroupId: "ghost",
+        ringColor: "#2A9D8F",
+        sourceGroupId: "family",
         timestamp: "2026-07-17T12:00:00.000Z",
-        userId: "mystery",
+        userId: "dana",
       },
     ]);
+  });
+
+  test("marks the current user when they share group membership", () => {
+    const markers = buildLiveMapMarkers({
+      getGroupColor: () => "#E85D4C",
+      groups: [
+        {
+          id: "family",
+          name: "Family",
+          members: [{ image: null, name: "Alice Smith", userId: "alice" }],
+        },
+      ],
+      positions: [position({ sourceGroupId: "family", userId: "alice" })],
+      selfUserId: "alice",
+    });
+
+    expect(markers).toHaveLength(1);
+    expect(markers[0]?.isSelf).toBe(true);
+    expect(markers[0]?.name).toBe("Alice Smith");
   });
 });
