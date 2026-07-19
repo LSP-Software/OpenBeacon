@@ -188,7 +188,7 @@ export const NativeMap = ({
       markersToFit: markers,
       padding: cameraPadding,
     });
-  }, [cameraPadding, hasMarkers, mapStyle, markers]);
+  }, [cameraPadding, fitMarkersAndPreserveCamera, hasMarkers, mapStyle, markers]);
 
   useEffect(() => {
     if (
