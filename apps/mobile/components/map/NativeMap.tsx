@@ -1,6 +1,7 @@
 import {
   Camera,
   type CameraRef,
+  type CameraStop,
   MapView,
   PointAnnotation,
   type PointAnnotationRef,
@@ -81,6 +82,7 @@ export const NativeMap = ({
   });
   const rootNavigationState = useRootNavigationState();
   const cameraRef = useRef<CameraRef>(null);
+  const cameraCommandReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialFitStateRef = useRef(createLiveMapInitialFitState());
   const initialFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const preservedCameraRef = useRef(INITIAL_MAP_CAMERA);
@@ -182,11 +184,14 @@ export const NativeMap = ({
       paddingTop: number;
     };
   }) => {
-    fitLiveMapMarkers({
+    const animationDuration = fitLiveMapMarkers({
       camera: cameraRef.current,
       markers: markersToFit,
       padding,
     });
+    if (animationDuration !== null) {
+      scheduleCameraCommandRelease(cameraCommandReleaseTimerRef, cameraRef, animationDuration);
+    }
     preservedCameraRef.current = mapCameraAfterFittingMarkers({
       markers: markersToFit,
       previousCamera: preservedCameraRef.current,
@@ -258,6 +263,7 @@ export const NativeMap = ({
 
   useEffect(() => {
     return () => {
+      clearCameraCommandReleaseTimer(cameraCommandReleaseTimerRef);
       clearLiveMapInitialFitTimer(initialFitTimerRef);
     };
   }, []);
@@ -284,11 +290,14 @@ export const NativeMap = ({
 
     if (result.shouldFit) {
       suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, 600);
-      fitLiveMapMarkers({
+      const animationDuration = fitLiveMapMarkers({
         camera: cameraRef.current,
         markers,
         padding: cameraPadding,
       });
+      if (animationDuration !== null) {
+        scheduleCameraCommandRelease(cameraCommandReleaseTimerRef, cameraRef, animationDuration);
+      }
       preservedCameraRef.current = mapCameraAfterFittingMarkers({
         markers,
         previousCamera: preservedCameraRef.current,
@@ -339,7 +348,7 @@ export const NativeMap = ({
       longitude: selectedLongitude,
     };
     suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, stop.animationDuration);
-    cameraRef.current?.setCamera(stop);
+    setCameraAndRelease(cameraCommandReleaseTimerRef, cameraRef, stop);
     preservedCameraRef.current = mapCameraFromRegionChange({
       latitude: selectedLatitude,
       longitude: selectedLongitude,
@@ -461,7 +470,7 @@ export const NativeMap = ({
             if (!stop) {
               return;
             }
-            cameraRef.current?.setCamera({
+            setCameraAndRelease(cameraCommandReleaseTimerRef, cameraRef, {
               ...stop,
               animationDuration: 0,
             });
@@ -479,7 +488,7 @@ export const NativeMap = ({
             return;
           }
 
-          cameraRef.current?.setCamera({
+          setCameraAndRelease(cameraCommandReleaseTimerRef, cameraRef, {
             animationDuration: 0,
             centerCoordinate: preservedCameraRef.current.centerCoordinate,
             zoomLevel: preservedCameraRef.current.zoomLevel,
@@ -618,6 +627,40 @@ const clearLiveMapInitialFitTimer = (timerRef: {
   }
   clearTimeout(timerRef.current);
   timerRef.current = null;
+};
+
+const clearCameraCommandReleaseTimer = (timerRef: {
+  current: ReturnType<typeof setTimeout> | null;
+}) => {
+  if (timerRef.current === null) {
+    return;
+  }
+  clearTimeout(timerRef.current);
+  timerRef.current = null;
+};
+
+const scheduleCameraCommandRelease = (
+  timerRef: { current: ReturnType<typeof setTimeout> | null },
+  cameraRef: { current: CameraRef | null },
+  animationDurationMs: number,
+) => {
+  clearCameraCommandReleaseTimer(timerRef);
+  timerRef.current = setTimeout(() => {
+    timerRef.current = null;
+    cameraRef.current?.setCamera({ animationDuration: 0 });
+  }, animationDurationMs + 50);
+};
+
+const setCameraAndRelease = (
+  timerRef: { current: ReturnType<typeof setTimeout> | null },
+  cameraRef: { current: CameraRef | null },
+  stop: CameraStop,
+) => {
+  if (!cameraRef.current) {
+    return;
+  }
+  cameraRef.current.setCamera(stop);
+  scheduleCameraCommandRelease(timerRef, cameraRef, stop.animationDuration ?? 0);
 };
 
 const suppressUserCameraControlFor = (

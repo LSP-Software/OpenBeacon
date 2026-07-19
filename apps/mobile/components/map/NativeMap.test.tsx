@@ -488,6 +488,7 @@ describe("NativeMap integration harness", () => {
 
   test("scheduled refresh restores selected-person camera after remount", async () => {
     const alice = createLiveMapMarkerFixture({
+      isSelf: true,
       latitude: 51.5,
       longitude: -0.12,
       userId: "alice",
@@ -846,6 +847,91 @@ describe("NativeMap integration harness", () => {
         .slice(commandsAfterQuirk)
         .some((command) => command.type === "setCamera"),
     ).toBe(false);
+  });
+
+  test("releases MapLibre's retained focus target before native marker updates can replay it", async () => {
+    const alice = createLiveMapMarkerFixture({
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "alice",
+    });
+
+    await renderNativeMap({
+      markers: [alice],
+      selectedUserId: "alice",
+    });
+    await flushEffects();
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    });
+
+    expect(getNativeMapCameraCommands().at(-1)).toEqual({
+      type: "setCamera",
+      stop: {
+        animationDuration: 0,
+      },
+    });
+
+    const commandsAfterRelease = getNativeMapCameraCommands().length;
+    setNativeMapSelfHeadingDegrees(90);
+    await renderNativeMap({
+      markers: [
+        createLiveMapMarkerFixture({
+          ...alice,
+          latitude: 51.51,
+          longitude: -0.11,
+        }),
+      ],
+      selectedUserId: "alice",
+    });
+    await flushEffects();
+
+    expect(getNativeMapCameraCommands()).toHaveLength(commandsAfterRelease);
+  });
+
+  test("releases MapLibre's retained Show everyone bounds before native marker updates can replay them", async () => {
+    const alice = createLiveMapMarkerFixture({
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "alice",
+    });
+    const bob = createLiveMapMarkerFixture({
+      latitude: 50.8,
+      longitude: -1.1,
+      userId: "bob",
+    });
+
+    await renderNativeMap({ markers: [alice, bob] });
+    await flushEffects();
+
+    emitNativeMapShowEveryone();
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    });
+
+    expect(getNativeMapCameraCommands().at(-1)).toEqual({
+      type: "setCamera",
+      stop: {
+        animationDuration: 0,
+      },
+    });
+
+    const commandsAfterRelease = getNativeMapCameraCommands().length;
+    await renderNativeMap({
+      markers: [
+        alice,
+        createLiveMapMarkerFixture({
+          ...bob,
+          latitude: 50.81,
+          longitude: -1.09,
+        }),
+      ],
+    });
+    await flushEffects();
+
+    expect(getNativeMapCameraCommands()).toHaveLength(commandsAfterRelease);
   });
 
   test("selection closes initial cohort coalescing so later arrivals do not steal focus", async () => {
