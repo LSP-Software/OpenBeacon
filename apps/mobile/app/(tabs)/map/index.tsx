@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeMap } from "../../../components/map/NativeMap.tsx";
 import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
 import { useMapLivePositions } from "../../../hooks/useMapLivePositions.ts";
+import { useMembershipSnapshot } from "../../../hooks/useMembershipSnapshot.ts";
 import { useSelfDeviceLocation } from "../../../hooks/useSelfDeviceLocation.ts";
 import { trpc } from "../../../lib/api.ts";
 import { applySelfDeviceLocation } from "../../../lib/applySelfDeviceLocation.ts";
@@ -18,7 +19,8 @@ const MapScreen = () => {
   const insets = useSafeAreaInsets();
   const livePositions = useMapLivePositions();
   const { data: session } = authClient.useSession();
-  const { data: groups } = useQuery(trpc.groupMembership.list.queryOptions());
+  const { data: groupsQueryData } = useQuery(trpc.groupMembership.list.queryOptions());
+  const groups = useMembershipSnapshot(groupsQueryData);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selfUserId = session?.user.id ?? "";
   const selfDeviceLocation = useSelfDeviceLocation(selfUserId.length > 0);
@@ -54,14 +56,14 @@ const MapScreen = () => {
 
   const markers = useMemo(() => {
     void groupColorRevision;
-    if (!selfUserId) {
+    if (!selfUserId || !groups) {
       return [];
     }
 
     return applySelfDeviceLocation({
       markers: buildLiveMapMarkers({
         getGroupColor,
-        groups: groups ?? [],
+        groups,
         positions: livePositions,
         selfUserId,
       }),
