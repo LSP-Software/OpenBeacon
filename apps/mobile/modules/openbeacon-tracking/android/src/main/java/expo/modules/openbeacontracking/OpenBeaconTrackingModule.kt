@@ -53,10 +53,9 @@ class OpenBeaconTrackingModule : Module() {
         val intent =
           Intent(requireContext(), TrackingCaptureService::class.java).apply {
             action = TrackingCaptureService.ACTION_START
-            putExtra(
-              TrackingCaptureService.EXTRA_INTERVAL_MS,
-              (intervalMs ?: TrackingCaptureService.DEFAULT_INTERVAL_MS.toDouble()).toLong(),
-            )
+            if (intervalMs != null) {
+              putExtra(TrackingCaptureService.EXTRA_INTERVAL_MS, intervalMs.toLong())
+            }
           }
         ContextCompat.startForegroundService(requireContext(), intent)
         Unit
