@@ -1,7 +1,10 @@
 export const buildLiveMapTrackingCameraStop = ({
+  followSuspended,
   latitude,
   longitude,
   padding,
+  previousLatitude,
+  previousLongitude,
   previouslyTrackedUserId,
   selectedUserId,
 }: {
@@ -19,16 +22,31 @@ export const buildLiveMapTrackingCameraStop = ({
   previouslyTrackedUserId: string | null;
   selectedUserId: string;
 }) => {
-  if (previouslyTrackedUserId === selectedUserId) {
+  const isNewFocus = previouslyTrackedUserId !== selectedUserId;
+
+  if (followSuspended && !isNewFocus) {
     return null;
   }
 
+  if (!isNewFocus && previousLatitude === latitude && previousLongitude === longitude) {
+    return null;
+  }
+
+  if (isNewFocus) {
+    return {
+      animationDuration: 500,
+      animationMode: "flyTo" as const,
+      centerCoordinate: [longitude, latitude] as [number, number],
+      padding,
+      zoomLevel: 15 as const,
+    };
+  }
+
   return {
-    animationDuration: 500,
-    animationMode: "flyTo" as const,
+    animationDuration: 400,
+    animationMode: "easeTo" as const,
     centerCoordinate: [longitude, latitude] as [number, number],
     padding,
-    zoomLevel: 15 as const,
   };
 };
 

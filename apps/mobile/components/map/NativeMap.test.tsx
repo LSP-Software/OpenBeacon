@@ -12,6 +12,7 @@ import {
   emitNativeMapAnnotationSelected,
   emitNativeMapDidFailLoadingMap,
   emitNativeMapDidFinishLoadingStyle,
+  emitNativeMapGoToCurrentLocation,
   emitNativeMapPress,
   emitNativeMapRegionDidChange,
   emitNativeMapRegionIsChanging,
@@ -25,6 +26,7 @@ import {
   getNativeMapSelfHeadingDegrees,
   getNativeMapStyle,
   getNativeMapViewMountCount,
+  registerNativeMapGoToCurrentLocationHandler,
   registerNativeMapShowEveryoneHandler,
   resetNativeMapHarness,
   setNativeMapSelfHeadingDegrees,
@@ -69,12 +71,16 @@ mock.module("react-native", () => {
       if (props.accessibilityLabel === "Show everyone") {
         registerNativeMapShowEveryoneHandler(props.onPress ?? null);
       }
+      if (props.accessibilityLabel === "Go to current location") {
+        registerNativeMapGoToCurrentLocationHandler(props.onPress ?? null);
+      }
       return reactNative.Pressable(props);
     },
   };
 });
 
 mock.module("lucide-react-native", () => ({
+  LocateFixedIcon: () => React.createElement("locate-fixed-icon"),
   ScanIcon: () => React.createElement("scan-icon"),
 }));
 
@@ -647,7 +653,7 @@ describe("NativeMap integration harness", () => {
     ).toHaveLength(1);
   });
 
-  test("focuses selection once with zoom and does not chase later coordinate updates", async () => {
+  test("focuses selection once with zoom, then follows without resetting zoom", async () => {
     const alice = createLiveMapMarkerFixture({
       initials: "AL",
       latitude: 51.5,
@@ -690,11 +696,21 @@ describe("NativeMap integration harness", () => {
     });
     await flushEffects();
 
-    expect(
-      getNativeMapCameraCommands()
-        .slice(commandsAfterFocus)
-        .some((command) => command.type === "setCamera"),
-    ).toBe(false);
+    const followStop = getNativeMapCameraCommands()
+      .slice(commandsAfterFocus)
+      .find((command) => command.type === "setCamera");
+    expect(followStop).toEqual({
+      type: "setCamera",
+      stop: {
+        animationDuration: 400,
+        animationMode: "easeTo",
+        centerCoordinate: [-0.11, 51.51],
+        padding: expect.any(Object),
+      },
+    });
+    expect(followStop && "stop" in followStop ? followStop.stop : null).not.toHaveProperty(
+      "zoomLevel",
+    );
   });
 
   test("heading-only updates do not issue camera commands while following", async () => {
@@ -815,7 +831,7 @@ describe("NativeMap integration harness", () => {
     expect(getNativeMapCameraCommands().length).toBe(commandsAfterPan);
   });
 
-  test("same-person coordinate updates never move the camera after focus", async () => {
+  test("programmatic camera moves do not suspend follow when MapLibre marks them as user interaction", async () => {
     const alice = createLiveMapMarkerFixture({
       latitude: 51.5,
       longitude: -0.12,
@@ -842,11 +858,18 @@ describe("NativeMap integration harness", () => {
     });
     await flushEffects();
 
-    expect(
-      getNativeMapCameraCommands()
-        .slice(commandsAfterQuirk)
-        .some((command) => command.type === "setCamera"),
-    ).toBe(false);
+    const followStop = getNativeMapCameraCommands()
+      .slice(commandsAfterQuirk)
+      .find((command) => command.type === "setCamera");
+    expect(followStop).toEqual({
+      type: "setCamera",
+      stop: {
+        animationDuration: 400,
+        animationMode: "easeTo",
+        centerCoordinate: [-0.1, 51.6],
+        padding: expect.any(Object),
+      },
+    });
   });
 
   test("releases MapLibre's retained focus target before native marker updates can replay it", async () => {
@@ -876,13 +899,7 @@ describe("NativeMap integration harness", () => {
     const commandsAfterRelease = getNativeMapCameraCommands().length;
     setNativeMapSelfHeadingDegrees(90);
     await renderNativeMap({
-      markers: [
-        createLiveMapMarkerFixture({
-          ...alice,
-          latitude: 51.51,
-          longitude: -0.11,
-        }),
-      ],
+      markers: [alice],
       selectedUserId: "alice",
     });
     await flushEffects();
@@ -1003,6 +1020,117 @@ describe("NativeMap integration harness", () => {
       getNativeMapCameraCommands()
         .slice(commandsBeforeShowEveryone)
         .some((command) => command.type === "fitBounds"),
+    ).toBe(true);
+  });
+
+  test("Go to current location selects self and flies to lock on", async () => {
+    const self = createLiveMapMarkerFixture({
+      initials: "ME",
+      isSelf: true,
+      latitude: 51.5074,
+      longitude: -0.1278,
+      name: "Me",
+      userId: "self",
+    });
+    const alice = createLiveMapMarkerFixture({
+      latitude: 50.8,
+      longitude: -1.1,
+      userId: "alice",
+    });
+    const selections: Array<string | null> = [];
+
+    await renderNativeMap({
+      markers: [self, alice],
+      onSelectUserId: (userId) => {
+        selections.push(userId);
+      },
+    });
+    await flushEffects();
+
+    const commandsBeforeGoToCurrentLocation = getNativeMapCameraCommands().length;
+    emitNativeMapGoToCurrentLocation();
+
+    expect(selections).toEqual(["self"]);
+    expect(getNativeMapCameraCommands().slice(commandsBeforeGoToCurrentLocation)).toEqual(
+      expect.arrayContaining([
+        {
+          type: "setCamera",
+          stop: {
+            animationDuration: 500,
+            animationMode: "flyTo",
+            centerCoordinate: [-0.1278, 51.5074],
+            padding: {
+              paddingBottom: 220,
+              paddingLeft: 32,
+              paddingRight: 32,
+              paddingTop: 56,
+            },
+            zoomLevel: 15,
+          },
+        },
+      ]),
+    );
+  });
+
+  test("Go to current location is unavailable without a self marker", async () => {
+    const alice = createLiveMapMarkerFixture({
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "alice",
+    });
+
+    await renderNativeMap({ markers: [alice] });
+    await flushEffects();
+
+    const commandsBeforeGoToCurrentLocation = getNativeMapCameraCommands().length;
+    emitNativeMapGoToCurrentLocation();
+
+    expect(getNativeMapCameraCommands()).toHaveLength(commandsBeforeGoToCurrentLocation);
+  });
+
+  test("Go to current location re-locks after panning without deselecting self", async () => {
+    const self = createLiveMapMarkerFixture({
+      initials: "ME",
+      isSelf: true,
+      latitude: 51.5074,
+      longitude: -0.1278,
+      name: "Me",
+      userId: "self",
+    });
+    const selections: Array<string | null> = [];
+
+    await renderNativeMap({
+      markers: [self],
+      onSelectUserId: (userId) => {
+        selections.push(userId);
+      },
+      selectedUserId: "self",
+    });
+    await flushEffects();
+
+    emitNativeMapRegionDidChange({
+      animated: false,
+      isUserInteraction: true,
+      latitude: 50,
+      longitude: -1,
+      zoomLevel: 10,
+    });
+
+    const commandsBeforeGoToCurrentLocation = getNativeMapCameraCommands().length;
+    emitNativeMapGoToCurrentLocation();
+
+    expect(selections).toEqual([]);
+    expect(
+      getNativeMapCameraCommands()
+        .slice(commandsBeforeGoToCurrentLocation)
+        .some(
+          (command) =>
+            command.type === "setCamera" &&
+            (command.stop as { centerCoordinate?: [number, number] }).centerCoordinate?.[0] ===
+              -0.1278 &&
+            (command.stop as { centerCoordinate?: [number, number] }).centerCoordinate?.[1] ===
+              51.5074,
+        ),
     ).toBe(true);
   });
 
