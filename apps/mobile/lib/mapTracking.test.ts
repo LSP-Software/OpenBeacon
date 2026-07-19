@@ -579,7 +579,10 @@ describe("createMapTrackingSession", () => {
     session.setActive(true);
     await session.tick();
     const liveTickPromise = session.tick();
-    await Promise.resolve();
+    for (let attempt = 0; attempt < 20 && pollCount === 0; attempt += 1) {
+      await Promise.resolve();
+    }
+    expect(pollCount).toBe(1);
     session.setActive(false);
     firstPoll.resolve?.({
       points: Array.from({ length: 100 }, (_, index) =>
@@ -593,6 +596,369 @@ describe("createMapTrackingSession", () => {
     await liveTickPromise;
 
     expect(pollCount).toBe(1);
+  });
+
+  test("a failing group does not slow the steady cadence of a healthy group", async () => {
+    const coldByGroup: Record<string, MapTrackingEncryptedPoint> = {
+      "group-fail": point({
+        createdAt: new Date("2026-07-17T12:00:00.000Z"),
+        id: "fail-0",
+        senderUserId: "user-fail",
+      }),
+      "group-ok": point({
+        createdAt: new Date("2026-07-17T12:00:00.000Z"),
+        id: "ok-0",
+        senderUserId: "user-ok",
+      }),
+    };
+    const { pollCalls, scheduled, session, setNow } = createSession({
+      getLatest: async (groupId) => {
+        const row = coldByGroup[groupId];
+        if (!row) {
+          return { points: [] };
+        }
+        return { points: [row] };
+      },
+      listGroups: async () => [{ id: "group-fail" }, { id: "group-ok" }],
+      poll: async ({ groupId }) => {
+        if (groupId === "group-fail") {
+          throw new Error("group-fail network");
+        }
+        return { points: [] };
+      },
+    });
+
+    const flushScheduled = async () => {
+      const pending = scheduled.splice(0, scheduled.length);
+      for (const handle of pending) {
+        handle.fn();
+      }
+      await Bun.sleep(0);
+    };
+
+    session.setActive(true);
+    await session.tick();
+    await session.tick();
+
+    setNow(5_000);
+    await flushScheduled();
+
+    const failPollsAfterAlignedRetry = pollCalls.filter(
+      (call) => call.groupId === "group-fail",
+    ).length;
+    const okPollsAfterAlignedRetry = pollCalls.filter((call) => call.groupId === "group-ok").length;
+    expect(failPollsAfterAlignedRetry).toBe(2);
+    expect(okPollsAfterAlignedRetry).toBe(2);
+
+    setNow(10_000);
+    await flushScheduled();
+
+    expect(pollCalls.filter((call) => call.groupId === "group-ok").length).toBe(
+      okPollsAfterAlignedRetry + 1,
+    );
+    expect(pollCalls.filter((call) => call.groupId === "group-fail").length).toBe(
+      failPollsAfterAlignedRetry,
+    );
+
+    setNow(15_000);
+    await flushScheduled();
+
+    expect(pollCalls.filter((call) => call.groupId === "group-fail").length).toBe(
+      failPollsAfterAlignedRetry + 1,
+    );
+  });
+
+  test("failing group backoff resets to 5s after a successful poll", async () => {
+    let shouldFail = true;
+    const coldRow = point({
+      createdAt: new Date("2026-07-17T12:00:00.000Z"),
+      id: "point-0",
+      senderUserId: "user-1",
+    });
+    const { pollCalls, scheduled, session, setNow } = createSession({
+      getLatest: async () => ({ points: [coldRow] }),
+      listGroups: async () => [{ id: "group-1" }, { id: "group-2" }],
+      poll: async ({ groupId }) => {
+        if (groupId === "group-1" && shouldFail) {
+          throw new Error("network");
+        }
+        return { points: [] };
+      },
+    });
+
+    const flushScheduled = async () => {
+      const pending = scheduled.splice(0, scheduled.length);
+      for (const handle of pending) {
+        handle.fn();
+      }
+      await Bun.sleep(0);
+    };
+
+    session.setActive(true);
+    await session.tick();
+    await session.tick();
+
+    setNow(5_000);
+    await flushScheduled();
+
+    const failPollsBeforeRecovery = pollCalls.filter((call) => call.groupId === "group-1").length;
+    expect(failPollsBeforeRecovery).toBe(2);
+
+    shouldFail = false;
+    setNow(15_000);
+    await flushScheduled();
+
+    expect(pollCalls.filter((call) => call.groupId === "group-1").length).toBe(
+      failPollsBeforeRecovery + 1,
+    );
+    expect(scheduled.at(-1)?.delayMs).toBe(5_000);
+  });
+
+  test("deactivation during listGroups prevents cold work from applying", async () => {
+    const listGroups = {
+      resolve: null as null | ((value: Array<{ id: string }>) => void),
+    };
+    const { getLatestCalls, session } = createSession({
+      getLatest: async () => ({
+        points: [
+          point({
+            createdAt: new Date("2026-07-17T12:00:00.000Z"),
+            id: "point-1",
+            senderUserId: "user-1",
+          }),
+        ],
+      }),
+      listGroups: async () =>
+        await new Promise<Array<{ id: string }>>((resolve) => {
+          listGroups.resolve = resolve;
+        }),
+    });
+
+    session.setActive(true);
+    const tickPromise = session.tick();
+    await Promise.resolve();
+    session.setActive(false);
+    listGroups.resolve?.([{ id: "group-1" }]);
+    await tickPromise;
+
+    expect(getLatestCalls).toEqual([]);
+    expect(session.getLivePositions()).toEqual([]);
+  });
+
+  test("deactivation during cold getLatest prevents decrypt and state updates", async () => {
+    const getLatest = {
+      resolve: null as null | ((value: { points: MapTrackingEncryptedPoint[] }) => void),
+    };
+    let decryptCalls = 0;
+    const { session } = createSession({
+      decryptPoint: async ({ groupId, point: row }) => {
+        decryptCalls += 1;
+        return {
+          status: "ok",
+          entry: liveEntry({
+            serverCreatedAt: row.createdAt,
+            serverId: row.id,
+            sourceGroupId: groupId,
+            timestamp: row.createdAt.toISOString(),
+            userId: row.senderUserId,
+          }),
+        };
+      },
+      getLatest: async () =>
+        await new Promise<{ points: MapTrackingEncryptedPoint[] }>((resolve) => {
+          getLatest.resolve = resolve;
+        }),
+    });
+
+    session.setActive(true);
+    const tickPromise = session.tick();
+    await Promise.resolve();
+    session.setActive(false);
+    getLatest.resolve?.({
+      points: [
+        point({
+          createdAt: new Date("2026-07-17T12:00:00.000Z"),
+          id: "point-1",
+          senderUserId: "user-1",
+        }),
+      ],
+    });
+    await tickPromise;
+
+    expect(decryptCalls).toBe(0);
+    expect(session.getLivePositions()).toEqual([]);
+  });
+
+  test("destroy during decrypt prevents live positions from repopulating", async () => {
+    const decrypt = {
+      resolve: null as null | ((value: { entry: LiveMapEntry; status: "ok" }) => void),
+    };
+    let decryptStarted = false;
+    const { session } = createSession({
+      decryptPoint: async () => {
+        decryptStarted = true;
+        return await new Promise<{ entry: LiveMapEntry; status: "ok" }>((resolve) => {
+          decrypt.resolve = resolve;
+        });
+      },
+      getLatest: async () => ({
+        points: [
+          point({
+            createdAt: new Date("2026-07-17T12:00:00.000Z"),
+            id: "point-1",
+            senderUserId: "user-1",
+          }),
+        ],
+      }),
+    });
+
+    session.setActive(true);
+    const tickPromise = session.tick();
+    for (let attempt = 0; attempt < 20 && !decryptStarted; attempt += 1) {
+      await Promise.resolve();
+    }
+    expect(decryptStarted).toBe(true);
+
+    session.destroy();
+    decrypt.resolve?.({
+      status: "ok",
+      entry: liveEntry({
+        serverCreatedAt: new Date("2026-07-17T12:00:00.000Z"),
+        serverId: "point-1",
+        sourceGroupId: "group-1",
+        timestamp: "2026-07-17T12:00:00.000Z",
+        userId: "user-1",
+      }),
+    });
+    await tickPromise;
+
+    expect(session.getLivePositions()).toEqual([]);
+  });
+
+  test("group removal ignores in-flight poll results for that group", async () => {
+    let groups = [{ id: "group-1" }, { id: "group-2" }];
+    const pollGroup1 = {
+      resolve: null as null | ((value: { points: MapTrackingEncryptedPoint[] }) => void),
+    };
+    let group1PollStarted = false;
+    let removedMembershipSeen = false;
+    const { session } = createSession({
+      getLatest: async (groupId) => ({
+        points: [
+          point({
+            createdAt: new Date("2026-07-17T12:00:00.000Z"),
+            id: `${groupId}-0`,
+            senderUserId: groupId === "group-1" ? "user-1" : "user-2",
+          }),
+        ],
+      }),
+      listGroups: async () => {
+        if (groups.length === 1) {
+          removedMembershipSeen = true;
+        }
+        return groups;
+      },
+      poll: async ({ groupId }) => {
+        if (groupId === "group-1") {
+          group1PollStarted = true;
+          return await new Promise<{ points: MapTrackingEncryptedPoint[] }>((resolve) => {
+            pollGroup1.resolve = resolve;
+          });
+        }
+        return { points: [] };
+      },
+    });
+
+    session.setActive(true);
+    await session.tick();
+    expect(
+      session
+        .getLivePositions()
+        .map(({ userId }) => userId)
+        .sort(),
+    ).toEqual(["user-1", "user-2"]);
+
+    const liveTickPromise = session.tick();
+    for (let attempt = 0; attempt < 20 && !group1PollStarted; attempt += 1) {
+      await Promise.resolve();
+    }
+    expect(group1PollStarted).toBe(true);
+
+    groups = [{ id: "group-2" }];
+    const membershipTick = session.tick();
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await Promise.resolve();
+      if (
+        removedMembershipSeen &&
+        session.getLivePositions().every((position) => position.userId !== "user-1")
+      ) {
+        break;
+      }
+    }
+    expect(removedMembershipSeen).toBe(true);
+    expect(
+      session
+        .getLivePositions()
+        .map(({ userId }) => userId)
+        .sort(),
+    ).toEqual(["user-2"]);
+
+    pollGroup1.resolve?.({
+      points: [
+        point({
+          createdAt: new Date("2026-07-17T12:00:05.000Z"),
+          id: "group-1-late",
+          senderUserId: "user-1",
+        }),
+      ],
+    });
+    await liveTickPromise;
+    await membershipTick;
+
+    expect(
+      session
+        .getLivePositions()
+        .map(({ userId }) => userId)
+        .sort(),
+    ).toEqual(["user-2"]);
+  });
+
+  test("resume after pause performs one immediate tick per eligible group", async () => {
+    const coldByGroup: Record<string, MapTrackingEncryptedPoint> = {
+      "group-1": point({
+        createdAt: new Date("2026-07-17T12:00:00.000Z"),
+        id: "g1-0",
+        senderUserId: "user-1",
+      }),
+      "group-2": point({
+        createdAt: new Date("2026-07-17T12:00:00.000Z"),
+        id: "g2-0",
+        senderUserId: "user-2",
+      }),
+    };
+    const { getLatestCalls, pollCalls, session } = createSession({
+      getLatest: async (groupId) => {
+        const row = coldByGroup[groupId];
+        if (!row) {
+          return { points: [] };
+        }
+        return { points: [row] };
+      },
+      listGroups: async () => [{ id: "group-1" }, { id: "group-2" }],
+      poll: async () => ({ points: [] }),
+    });
+
+    session.setActive(true);
+    await session.tick();
+    getLatestCalls.length = 0;
+    pollCalls.length = 0;
+
+    session.setActive(false);
+    session.setActive(true);
+    await session.tick();
+
+    expect(pollCalls.map((call) => call.groupId).sort()).toEqual(["group-1", "group-2"]);
+    expect(getLatestCalls).toEqual([]);
   });
 
   test("clears epoch keys for removed groups and on destroy", async () => {
