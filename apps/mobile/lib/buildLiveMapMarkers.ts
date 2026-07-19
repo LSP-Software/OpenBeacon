@@ -46,18 +46,21 @@ export const buildLiveMapMarkers = ({
     }
   }
 
-  return positions.map((livePosition) => {
+  const markers: LiveMapMarker[] = [];
+  for (const livePosition of positions) {
     const member = memberByUserId.get(livePosition.userId);
-    const name = member?.name ?? "Unknown";
+    if (!member) {
+      continue;
+    }
 
-    return {
+    markers.push({
       battery: livePosition.battery,
-      image: member?.image ?? null,
-      initials: initialsFromName(name),
+      image: member.image,
+      initials: initialsFromName(member.name),
       isSelf: livePosition.userId === selfUserId,
       latitude: livePosition.latitude,
       longitude: livePosition.longitude,
-      name,
+      name: member.name,
       otherSharedGroupNames: otherSharedGroupNames({
         groups,
         sourceGroupId: livePosition.sourceGroupId,
@@ -67,8 +70,10 @@ export const buildLiveMapMarkers = ({
       sourceGroupId: livePosition.sourceGroupId,
       timestamp: livePosition.timestamp,
       userId: livePosition.userId,
-    };
-  });
+    });
+  }
+
+  return markers;
 };
 
 const initialsFromName = (name: string) => {
