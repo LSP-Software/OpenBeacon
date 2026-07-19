@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { buildLiveMapTrackingCameraStop } from "./liveMapTrackingCamera.ts";
+import {
+  buildLiveMapTrackingCameraStop,
+  shouldSuspendLiveMapFollowOnRegionChange,
+} from "./liveMapTrackingCamera.ts";
 
 const padding = {
   paddingBottom: 220,
@@ -118,5 +121,49 @@ describe("buildLiveMapTrackingCameraStop", () => {
       padding,
       zoomLevel: 15,
     });
+  });
+});
+
+describe("shouldSuspendLiveMapFollowOnRegionChange", () => {
+  test("ignores non-user region changes", () => {
+    expect(
+      shouldSuspendLiveMapFollowOnRegionChange({
+        animated: false,
+        isUserInteraction: false,
+        nowMs: 1_000,
+        suppressUserCameraControlUntilMs: 0,
+      }),
+    ).toBe(false);
+  });
+
+  test("suspends on a real user pan even inside the programmatic suppress window", () => {
+    expect(
+      shouldSuspendLiveMapFollowOnRegionChange({
+        animated: false,
+        isUserInteraction: true,
+        nowMs: 1_000,
+        suppressUserCameraControlUntilMs: 2_000,
+      }),
+    ).toBe(true);
+  });
+
+  test("ignores Android programmatic setCamera false positives only while suppressed", () => {
+    expect(
+      shouldSuspendLiveMapFollowOnRegionChange({
+        animated: true,
+        isUserInteraction: true,
+        nowMs: 1_000,
+        suppressUserCameraControlUntilMs: 2_000,
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldSuspendLiveMapFollowOnRegionChange({
+        animated: true,
+        isUserInteraction: true,
+        nowMs: 2_500,
+        suppressUserCameraControlUntilMs: 2_000,
+      }),
+    ).toBe(true);
   });
 });

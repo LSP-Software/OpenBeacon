@@ -22,7 +22,10 @@ import {
   LIVE_MAP_INITIAL_FIT_COALESCE_MS,
   reduceLiveMapInitialFit,
 } from "../../lib/liveMapInitialFit.ts";
-import { buildLiveMapTrackingCameraStop } from "../../lib/liveMapTrackingCamera.ts";
+import {
+  buildLiveMapTrackingCameraStop,
+  shouldSuspendLiveMapFollowOnRegionChange,
+} from "../../lib/liveMapTrackingCamera.ts";
 import {
   INITIAL_MAP_CAMERA,
   mapCameraAfterFittingMarkers,
@@ -206,6 +209,25 @@ export const NativeMap = ({
     followSuspendedRef.current = true;
   };
 
+  const maybeSuspendFollowFromRegionChange = (feature: {
+    properties: {
+      animated: boolean;
+      isUserInteraction: boolean;
+    };
+  }) => {
+    if (
+      !shouldSuspendLiveMapFollowOnRegionChange({
+        animated: feature.properties.animated,
+        isUserInteraction: feature.properties.isUserInteraction,
+        nowMs: Date.now(),
+        suppressUserCameraControlUntilMs: suppressUserCameraControlUntilMsRef.current,
+      })
+    ) {
+      return;
+    }
+    noteUserCameraControl();
+  };
+
   const retryMapLoad = () => {
     if (forceRefreshSignedPmtilesUrlMutation.isPending) {
       return;
@@ -350,8 +372,10 @@ export const NativeMap = ({
         logoEnabled={true}
         pitchEnabled={false}
         rotateEnabled={false}
+        regionDidChangeDebounceTime={0}
         surfaceView={Platform.OS === "android"}
         onPress={clearSelectionFromReact}
+        onRegionIsChanging={maybeSuspendFollowFromRegionChange}
         onRegionDidChange={(feature) => {
           const [longitude, latitude] = feature.geometry.coordinates;
           if (longitude !== undefined && latitude !== undefined) {
@@ -362,13 +386,7 @@ export const NativeMap = ({
             });
           }
 
-          if (!feature.properties.isUserInteraction) {
-            return;
-          }
-          if (Date.now() < suppressUserCameraControlUntilMsRef.current) {
-            return;
-          }
-          noteUserCameraControl();
+          maybeSuspendFollowFromRegionChange(feature);
         }}
         onDidFailLoadingMap={() => {
           if (

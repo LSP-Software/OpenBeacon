@@ -49,3 +49,25 @@ export const buildLiveMapTrackingCameraStop = ({
     padding,
   };
 };
+
+export const shouldSuspendLiveMapFollowOnRegionChange = ({
+  animated,
+  isUserInteraction,
+  nowMs,
+  suppressUserCameraControlUntilMs,
+}: {
+  animated: boolean;
+  isUserInteraction: boolean;
+  nowMs: number;
+  suppressUserCameraControlUntilMs: number;
+}) => {
+  if (!isUserInteraction) {
+    return false;
+  }
+
+  if (animated && nowMs < suppressUserCameraControlUntilMs) {
+    return false;
+  }
+
+  return true;
+};

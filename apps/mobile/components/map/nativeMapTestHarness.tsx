@@ -32,6 +32,15 @@ let mapViewHandlers: {
   onRegionDidChange?: (feature: {
     geometry: { coordinates: [number, number] };
     properties: {
+      animated: boolean;
+      isUserInteraction: boolean;
+      zoomLevel: number;
+    };
+  }) => void;
+  onRegionIsChanging?: (feature: {
+    geometry: { coordinates: [number, number] };
+    properties: {
+      animated: boolean;
       isUserInteraction: boolean;
       zoomLevel: number;
     };
@@ -120,6 +129,7 @@ export const emitNativeMapRegionDidChange = (
   input:
     | boolean
     | {
+        animated?: boolean;
         latitude: number;
         longitude: number;
         zoomLevel: number;
@@ -132,6 +142,7 @@ export const emitNativeMapRegionDidChange = (
         coordinates: [0, 0],
       },
       properties: {
+        animated: true,
         isUserInteraction: input,
         zoomLevel: 1,
       },
@@ -144,8 +155,34 @@ export const emitNativeMapRegionDidChange = (
       coordinates: [input.longitude, input.latitude],
     },
     properties: {
+      animated: input.animated ?? true,
       isUserInteraction: input.isUserInteraction ?? true,
       zoomLevel: input.zoomLevel,
+    },
+  });
+};
+
+export const emitNativeMapRegionIsChanging = ({
+  animated = false,
+  isUserInteraction = true,
+  latitude,
+  longitude,
+  zoomLevel,
+}: {
+  animated?: boolean;
+  isUserInteraction?: boolean;
+  latitude: number;
+  longitude: number;
+  zoomLevel: number;
+}) => {
+  mapViewHandlers.onRegionIsChanging?.({
+    geometry: {
+      coordinates: [longitude, latitude],
+    },
+    properties: {
+      animated,
+      isUserInteraction,
+      zoomLevel,
     },
   });
 };
@@ -220,6 +257,7 @@ export const createMapLibreMockModule = () => {
     onDidFinishLoadingStyle,
     onPress,
     onRegionDidChange,
+    onRegionIsChanging,
   }: {
     children?: ReactNode;
     mapStyle?: unknown;
@@ -229,6 +267,15 @@ export const createMapLibreMockModule = () => {
     onRegionDidChange?: (feature: {
       geometry: { coordinates: [number, number] };
       properties: {
+        animated: boolean;
+        isUserInteraction: boolean;
+        zoomLevel: number;
+      };
+    }) => void;
+    onRegionIsChanging?: (feature: {
+      geometry: { coordinates: [number, number] };
+      properties: {
+        animated: boolean;
         isUserInteraction: boolean;
         zoomLevel: number;
       };
@@ -239,6 +286,7 @@ export const createMapLibreMockModule = () => {
       ...(onDidFinishLoadingStyle ? { onDidFinishLoadingStyle } : {}),
       ...(onPress ? { onPress } : {}),
       ...(onRegionDidChange ? { onRegionDidChange } : {}),
+      ...(onRegionIsChanging ? { onRegionIsChanging } : {}),
     };
     latestMapStyle = mapStyle ?? null;
 
@@ -254,6 +302,7 @@ export const createMapLibreMockModule = () => {
         onDidFinishLoadingStyle,
         onPress,
         onRegionDidChange,
+        onRegionIsChanging,
       },
       children,
     );

@@ -14,6 +14,7 @@ import {
   emitNativeMapDidFinishLoadingStyle,
   emitNativeMapPress,
   emitNativeMapRegionDidChange,
+  emitNativeMapRegionIsChanging,
   emitNativeMapShowEveryone,
   getNativeMapAnnotationMountCount,
   getNativeMapAnnotationRefreshCalls,
@@ -197,7 +198,13 @@ const emitUserPanAfterProgrammaticCamera = () => {
   const afterSuppressWindow = originalNow() + 10_000;
   Date.now = () => afterSuppressWindow;
   try {
-    emitNativeMapRegionDidChange(true);
+    emitNativeMapRegionDidChange({
+      animated: false,
+      isUserInteraction: true,
+      latitude: 51.51,
+      longitude: -0.13,
+      zoomLevel: 14,
+    });
   } finally {
     Date.now = originalNow;
   }
@@ -772,6 +779,49 @@ describe("NativeMap integration harness", () => {
           "zoomLevel" in command.stop,
       );
     expect(refocusStop).toBeDefined();
+  });
+
+  test("policy: Android user pans during follow animation still end follow", async () => {
+    const alice = createLiveMapMarkerFixture({
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "alice",
+    });
+    const aliceMoved = createLiveMapMarkerFixture({
+      ...alice,
+      latitude: 51.6,
+      longitude: -0.1,
+    });
+
+    await renderNativeMap({
+      markers: [alice],
+      selectedUserId: "alice",
+    });
+    await flushEffects();
+
+    emitNativeMapRegionIsChanging({
+      animated: false,
+      isUserInteraction: true,
+      latitude: 51.51,
+      longitude: -0.13,
+      zoomLevel: 14,
+    });
+    emitNativeMapRegionDidChange({
+      animated: false,
+      isUserInteraction: true,
+      latitude: 51.51,
+      longitude: -0.13,
+      zoomLevel: 14,
+    });
+
+    const commandsAfterPan = getNativeMapCameraCommands().length;
+    await renderNativeMap({
+      markers: [aliceMoved],
+      selectedUserId: "alice",
+    });
+    await flushEffects();
+
+    expect(getNativeMapCameraCommands().length).toBe(commandsAfterPan);
   });
 
   test("programmatic camera moves do not suspend follow when MapLibre marks them as user interaction", async () => {
