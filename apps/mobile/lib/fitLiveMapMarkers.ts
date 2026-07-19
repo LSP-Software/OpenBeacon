@@ -17,7 +17,7 @@ export const fitLiveMapMarkers = ({
 }) => {
   const [firstMarker, ...rest] = markers;
   if (!camera || !firstMarker) {
-    return;
+    return null;
   }
 
   if (rest.length === 0) {
@@ -27,7 +27,7 @@ export const fitLiveMapMarkers = ({
       padding,
       zoomLevel: 14,
     });
-    return;
+    return 600;
   }
 
   let north = firstMarker.latitude;
@@ -48,4 +48,5 @@ export const fitLiveMapMarkers = ({
     [padding.paddingTop, padding.paddingRight, padding.paddingBottom, padding.paddingLeft],
     600,
   );
+  return 600;
 };

@@ -5,6 +5,7 @@ export const buildLiveMapTrackingCameraStop = ({
   previouslyTrackedUserId,
   selectedUserId,
 }: {
+  followSuspended: boolean;
   latitude: number;
   longitude: number;
   padding: {
@@ -13,16 +14,42 @@ export const buildLiveMapTrackingCameraStop = ({
     paddingRight: number;
     paddingTop: number;
   };
+  previousLatitude: number | null;
+  previousLongitude: number | null;
   previouslyTrackedUserId: string | null;
   selectedUserId: string;
 }) => {
-  const isNewFocus = previouslyTrackedUserId !== selectedUserId;
+  if (previouslyTrackedUserId === selectedUserId) {
+    return null;
+  }
 
   return {
-    animationDuration: isNewFocus ? 500 : 400,
-    animationMode: isNewFocus ? ("flyTo" as const) : ("easeTo" as const),
+    animationDuration: 500,
+    animationMode: "flyTo" as const,
     centerCoordinate: [longitude, latitude] as [number, number],
     padding,
     zoomLevel: 15 as const,
   };
+};
+
+export const shouldSuspendLiveMapFollowOnRegionChange = ({
+  animated,
+  isUserInteraction,
+  nowMs,
+  suppressUserCameraControlUntilMs,
+}: {
+  animated: boolean;
+  isUserInteraction: boolean;
+  nowMs: number;
+  suppressUserCameraControlUntilMs: number;
+}) => {
+  if (!isUserInteraction) {
+    return false;
+  }
+
+  if (animated && nowMs < suppressUserCameraControlUntilMs) {
+    return false;
+  }
+
+  return true;
 };

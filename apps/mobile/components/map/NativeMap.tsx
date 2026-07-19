@@ -1,6 +1,7 @@
 import {
   Camera,
   type CameraRef,
+  type CameraStop,
   MapView,
   PointAnnotation,
   type PointAnnotationRef,
@@ -17,7 +18,15 @@ import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
 import { queryClient, trpc } from "../../lib/api.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { fitLiveMapMarkers } from "../../lib/fitLiveMapMarkers.ts";
-import { buildLiveMapTrackingCameraStop } from "../../lib/liveMapTrackingCamera.ts";
+import {
+  createLiveMapInitialFitState,
+  LIVE_MAP_INITIAL_FIT_COALESCE_MS,
+  reduceLiveMapInitialFit,
+} from "../../lib/liveMapInitialFit.ts";
+import {
+  buildLiveMapTrackingCameraStop,
+  shouldSuspendLiveMapFollowOnRegionChange,
+} from "../../lib/liveMapTrackingCamera.ts";
 import {
   INITIAL_MAP_CAMERA,
   mapCameraAfterFittingMarkers,
@@ -73,11 +82,16 @@ export const NativeMap = ({
   });
   const rootNavigationState = useRootNavigationState();
   const cameraRef = useRef<CameraRef>(null);
-  const didFitMarkersRef = useRef(false);
+  const cameraCommandReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialFitStateRef = useRef(createLiveMapInitialFitState());
+  const initialFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const preservedCameraRef = useRef(INITIAL_MAP_CAMERA);
   const pendingCameraRestoreRef = useRef(false);
   const previousPmtilesUrlRef = useRef<string | null>(null);
   const trackedUserIdRef = useRef<string | null>(null);
+  const trackedCoordinateRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const followSuspendedRef = useRef(false);
+  const suppressUserCameraControlUntilMsRef = useRef(0);
   const markersRef = useRef(markers);
   markersRef.current = markers;
   const selectedUserIdRef = useRef(selectedUserId);
@@ -124,6 +138,14 @@ export const NativeMap = ({
     return getProtomapsMapStyle(mapTheme, pmtilesUrl);
   }, [mapTheme, pmtilesUrl]);
 
+  const cameraDefaultSettings = useMemo(() => {
+    void pmtilesUrl;
+    return {
+      centerCoordinate: [...preservedCameraRef.current.centerCoordinate] as [number, number],
+      zoomLevel: preservedCameraRef.current.zoomLevel,
+    };
+  }, [pmtilesUrl]);
+
   const clearSelectionFromReact = () => {
     pendingDeselectClearRef.current = false;
     const previouslySelectedUserId = selectedUserIdRef.current;
@@ -162,11 +184,14 @@ export const NativeMap = ({
       paddingTop: number;
     };
   }) => {
-    fitLiveMapMarkers({
+    const animationDuration = fitLiveMapMarkers({
       camera: cameraRef.current,
       markers: markersToFit,
       padding,
     });
+    if (animationDuration !== null) {
+      scheduleCameraCommandRelease(cameraCommandReleaseTimerRef, cameraRef, animationDuration);
+    }
     preservedCameraRef.current = mapCameraAfterFittingMarkers({
       markers: markersToFit,
       previousCamera: preservedCameraRef.current,
@@ -174,12 +199,46 @@ export const NativeMap = ({
   };
 
   const fitEveryoneInFrame = () => {
+    clearLiveMapInitialFitTimer(initialFitTimerRef);
+    initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
+      type: "show_everyone",
+    }).state;
     trackedUserIdRef.current = null;
+    trackedCoordinateRef.current = null;
+    followSuspendedRef.current = false;
     clearSelectionFromReact();
+    suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, 600);
     fitMarkersAndPreserveCamera({
       markersToFit: markersRef.current,
       padding: fitEveryonePadding,
     });
+  };
+
+  const noteUserCameraControl = () => {
+    clearLiveMapInitialFitTimer(initialFitTimerRef);
+    initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
+      type: "user_camera_control",
+    }).state;
+    followSuspendedRef.current = true;
+  };
+
+  const maybeSuspendFollowFromRegionChange = (feature: {
+    properties: {
+      animated: boolean;
+      isUserInteraction: boolean;
+    };
+  }) => {
+    if (
+      !shouldSuspendLiveMapFollowOnRegionChange({
+        animated: feature.properties.animated,
+        isUserInteraction: feature.properties.isUserInteraction,
+        nowMs: Date.now(),
+        suppressUserCameraControlUntilMs: suppressUserCameraControlUntilMsRef.current,
+      })
+    ) {
+      return;
+    }
+    noteUserCameraControl();
   };
 
   const retryMapLoad = () => {
@@ -203,6 +262,13 @@ export const NativeMap = ({
   };
 
   useEffect(() => {
+    return () => {
+      clearCameraCommandReleaseTimer(cameraCommandReleaseTimerRef);
+      clearLiveMapInitialFitTimer(initialFitTimerRef);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!rootNavigationState?.key || signedPmtilesUrlQuery.error?.data?.code !== "UNAUTHORIZED") {
       return;
     }
@@ -211,21 +277,34 @@ export const NativeMap = ({
   }, [rootNavigationState?.key, signedPmtilesUrlQuery.error]);
 
   useEffect(() => {
-    if (!mapStyle || !hasMarkers || didFitMarkersRef.current || !cameraRef.current) {
+    if (!mapStyle || !cameraRef.current) {
       return;
     }
 
-    didFitMarkersRef.current = true;
-    fitLiveMapMarkers({
-      camera: cameraRef.current,
-      markers,
-      padding: cameraPadding,
+    const result = reduceLiveMapInitialFit(initialFitStateRef.current, {
+      nowMs: Date.now(),
+      type: "markers",
+      userIds: markers.map((marker) => marker.userId),
     });
-    preservedCameraRef.current = mapCameraAfterFittingMarkers({
-      markers,
-      previousCamera: preservedCameraRef.current,
-    });
-  }, [cameraPadding, hasMarkers, mapStyle, markers]);
+    initialFitStateRef.current = result.state;
+
+    if (result.shouldFit) {
+      suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, 600);
+      const animationDuration = fitLiveMapMarkers({
+        camera: cameraRef.current,
+        markers,
+        padding: cameraPadding,
+      });
+      if (animationDuration !== null) {
+        scheduleCameraCommandRelease(cameraCommandReleaseTimerRef, cameraRef, animationDuration);
+      }
+      preservedCameraRef.current = mapCameraAfterFittingMarkers({
+        markers,
+        previousCamera: preservedCameraRef.current,
+      });
+      scheduleLiveMapInitialFitClose(initialFitTimerRef, initialFitStateRef);
+    }
+  }, [cameraPadding, mapStyle, markers]);
 
   useEffect(() => {
     if (
@@ -234,22 +313,46 @@ export const NativeMap = ({
       selectedLongitude === undefined
     ) {
       trackedUserIdRef.current = null;
+      trackedCoordinateRef.current = null;
+      followSuspendedRef.current = false;
       return;
     }
 
     const stop = buildLiveMapTrackingCameraStop({
+      followSuspended: followSuspendedRef.current,
       latitude: selectedLatitude,
       longitude: selectedLongitude,
       padding: cameraPadding,
+      previousLatitude: trackedCoordinateRef.current?.latitude ?? null,
+      previousLongitude: trackedCoordinateRef.current?.longitude ?? null,
       previouslyTrackedUserId: trackedUserIdRef.current,
       selectedUserId,
     });
+
+    if (!stop) {
+      trackedUserIdRef.current = selectedUserId;
+      return;
+    }
+
+    if (trackedUserIdRef.current !== selectedUserId) {
+      clearLiveMapInitialFitTimer(initialFitTimerRef);
+      initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
+        type: "user_camera_control",
+      }).state;
+    }
+
+    followSuspendedRef.current = false;
     trackedUserIdRef.current = selectedUserId;
-    cameraRef.current?.setCamera(stop);
+    trackedCoordinateRef.current = {
+      latitude: selectedLatitude,
+      longitude: selectedLongitude,
+    };
+    suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, stop.animationDuration);
+    setCameraAndRelease(cameraCommandReleaseTimerRef, cameraRef, stop);
     preservedCameraRef.current = mapCameraFromRegionChange({
       latitude: selectedLatitude,
       longitude: selectedLongitude,
-      zoomLevel: stop.zoomLevel,
+      zoomLevel: stop.zoomLevel ?? preservedCameraRef.current.zoomLevel,
     });
   }, [cameraPadding, selectedLatitude, selectedLongitude, selectedUserId]);
   if (signedPmtilesUrlQuery.isLoading && !mapStyle) {
@@ -286,19 +389,21 @@ export const NativeMap = ({
         logoEnabled={true}
         pitchEnabled={false}
         rotateEnabled={false}
+        regionDidChangeDebounceTime={0}
         surfaceView={Platform.OS === "android"}
         onPress={clearSelectionFromReact}
+        onRegionIsChanging={maybeSuspendFollowFromRegionChange}
         onRegionDidChange={(feature) => {
           const [longitude, latitude] = feature.geometry.coordinates;
-          if (longitude === undefined || latitude === undefined) {
-            return;
+          if (longitude !== undefined && latitude !== undefined) {
+            preservedCameraRef.current = mapCameraFromRegionChange({
+              latitude,
+              longitude,
+              zoomLevel: feature.properties.zoomLevel,
+            });
           }
 
-          preservedCameraRef.current = mapCameraFromRegionChange({
-            latitude,
-            longitude,
-            zoomLevel: feature.properties.zoomLevel,
-          });
+          maybeSuspendFollowFromRegionChange(feature);
         }}
         onDidFailLoadingMap={() => {
           if (
@@ -353,33 +458,44 @@ export const NativeMap = ({
             selectedLongitude !== undefined
           ) {
             const stop = buildLiveMapTrackingCameraStop({
+              followSuspended: false,
               latitude: selectedLatitude,
               longitude: selectedLongitude,
               padding: cameraPadding,
-              previouslyTrackedUserId: trackedUserIdRef.current,
+              previousLatitude: null,
+              previousLongitude: null,
+              previouslyTrackedUserId: null,
               selectedUserId,
             });
-            cameraRef.current?.setCamera({
+            if (!stop) {
+              return;
+            }
+            setCameraAndRelease(cameraCommandReleaseTimerRef, cameraRef, {
               ...stop,
               animationDuration: 0,
             });
             trackedUserIdRef.current = selectedUserId;
+            trackedCoordinateRef.current = {
+              latitude: selectedLatitude,
+              longitude: selectedLongitude,
+            };
+            followSuspendedRef.current = false;
             preservedCameraRef.current = mapCameraFromRegionChange({
               latitude: selectedLatitude,
               longitude: selectedLongitude,
-              zoomLevel: stop.zoomLevel,
+              zoomLevel: stop.zoomLevel ?? preservedCameraRef.current.zoomLevel,
             });
             return;
           }
 
-          cameraRef.current?.setCamera({
+          setCameraAndRelease(cameraCommandReleaseTimerRef, cameraRef, {
             animationDuration: 0,
             centerCoordinate: preservedCameraRef.current.centerCoordinate,
             zoomLevel: preservedCameraRef.current.zoomLevel,
           });
         }}
       >
-        <Camera ref={cameraRef} defaultSettings={preservedCameraRef.current} />
+        <Camera ref={cameraRef} defaultSettings={cameraDefaultSettings} />
         {markers.map((marker) =>
           marker.isSelf ? (
             <SelfLiveMapPointAnnotation
@@ -500,5 +616,79 @@ const LiveMapPointAnnotation = ({
         }}
       />
     </PointAnnotation>
+  );
+};
+
+const clearLiveMapInitialFitTimer = (timerRef: {
+  current: ReturnType<typeof setTimeout> | null;
+}) => {
+  if (timerRef.current === null) {
+    return;
+  }
+  clearTimeout(timerRef.current);
+  timerRef.current = null;
+};
+
+const clearCameraCommandReleaseTimer = (timerRef: {
+  current: ReturnType<typeof setTimeout> | null;
+}) => {
+  if (timerRef.current === null) {
+    return;
+  }
+  clearTimeout(timerRef.current);
+  timerRef.current = null;
+};
+
+const scheduleCameraCommandRelease = (
+  timerRef: { current: ReturnType<typeof setTimeout> | null },
+  cameraRef: { current: CameraRef | null },
+  animationDurationMs: number,
+) => {
+  clearCameraCommandReleaseTimer(timerRef);
+  timerRef.current = setTimeout(() => {
+    timerRef.current = null;
+    cameraRef.current?.setCamera({ animationDuration: 0 });
+  }, animationDurationMs + 50);
+};
+
+const setCameraAndRelease = (
+  timerRef: { current: ReturnType<typeof setTimeout> | null },
+  cameraRef: { current: CameraRef | null },
+  stop: CameraStop,
+) => {
+  if (!cameraRef.current) {
+    return;
+  }
+  cameraRef.current.setCamera(stop);
+  scheduleCameraCommandRelease(timerRef, cameraRef, stop.animationDuration ?? 0);
+};
+
+const suppressUserCameraControlFor = (
+  untilMsRef: { current: number },
+  animationDurationMs: number,
+) => {
+  untilMsRef.current = Math.max(untilMsRef.current, Date.now() + animationDurationMs + 100);
+};
+
+const scheduleLiveMapInitialFitClose = (
+  timerRef: { current: ReturnType<typeof setTimeout> | null },
+  stateRef: { current: ReturnType<typeof createLiveMapInitialFitState> },
+) => {
+  clearLiveMapInitialFitTimer(timerRef);
+  const coalesceStartedAtMs = stateRef.current.coalesceStartedAtMs;
+  if (stateRef.current.phase !== "coalescing" || coalesceStartedAtMs === null) {
+    return;
+  }
+
+  const remainingMs = coalesceStartedAtMs + LIVE_MAP_INITIAL_FIT_COALESCE_MS - Date.now();
+  timerRef.current = setTimeout(
+    () => {
+      timerRef.current = null;
+      stateRef.current = reduceLiveMapInitialFit(stateRef.current, {
+        nowMs: Date.now(),
+        type: "coalesce_elapsed",
+      }).state;
+    },
+    Math.max(0, remainingMs),
   );
 };
