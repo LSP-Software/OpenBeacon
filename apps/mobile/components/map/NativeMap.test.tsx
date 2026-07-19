@@ -457,9 +457,56 @@ describe("NativeMap integration harness", () => {
           command.stop !== null &&
           "centerCoordinate" in command.stop &&
           (command.stop as { centerCoordinate: [number, number] }).centerCoordinate[0] === -0.12 &&
-          (command.stop as { zoomLevel?: number }).zoomLevel === 15,
+          (command.stop as { zoomLevel?: number }).zoomLevel === 15 &&
+          (command.stop as { animationDuration?: number }).animationDuration === 0,
       ),
     ).toBe(true);
+  });
+
+  test("preserves programmatic fit camera across remount without region events", async () => {
+    const alice = createLiveMapMarkerFixture({
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "alice",
+    });
+
+    await renderNativeMap({ markers: [alice] });
+    await flushEffects();
+
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: {
+        expiresAt: "2026-03-31T12:30:00.000Z",
+        refreshAt: "2026-03-31T12:29:00.000Z",
+        url: "https://cached.example/pmtiles-2",
+      },
+    };
+
+    await renderNativeMap({ markers: [alice] });
+    await flushEffects();
+
+    expect(getNativeMapCameraDefaultSettings()).toEqual({
+      centerCoordinate: [-0.12, 51.5],
+      zoomLevel: 14,
+    });
+  });
+
+  test("ignores manual retry while a force refresh is already pending", async () => {
+    forceRefreshMutationSucceeds = false;
+    await renderNativeMap();
+
+    await failMapLoad();
+    expect(forceRefreshMutationCalls).toBe(1);
+    expect(getRenderedOutput()).toContain("The map could not be loaded.");
+
+    forceRefreshMutationPending = true;
+    forceRefreshMutationSucceeds = true;
+    await renderNativeMap();
+    await pressRetryButton();
+    await pressRetryButton();
+
+    expect(forceRefreshMutationCalls).toBe(1);
+    expect(getRenderedOutput()).toContain("The map could not be loaded.");
   });
 
   test("repeated map-load failures show recoverable UI instead of looping", async () => {

@@ -45,10 +45,6 @@ export const nextMapLoadFailureState = ({
         showRecoverableError: true,
       };
     case "style_loaded":
-      return {
-        autoForceRefreshAttempts: 0,
-        showRecoverableError: false,
-      };
     case "manual_retry":
       return {
         autoForceRefreshAttempts: 0,

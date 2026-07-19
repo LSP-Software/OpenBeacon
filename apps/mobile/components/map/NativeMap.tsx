@@ -18,7 +18,11 @@ import { queryClient, trpc } from "../../lib/api.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { fitLiveMapMarkers } from "../../lib/fitLiveMapMarkers.ts";
 import { buildLiveMapTrackingCameraStop } from "../../lib/liveMapTrackingCamera.ts";
-import { INITIAL_MAP_CAMERA, mapCameraFromRegionChange } from "../../lib/mapPmtilesCameraState.ts";
+import {
+  INITIAL_MAP_CAMERA,
+  mapCameraAfterFittingMarkers,
+  mapCameraFromRegionChange,
+} from "../../lib/mapPmtilesCameraState.ts";
 import {
   MAX_AUTO_FORCE_REFRESH_ATTEMPTS,
   nextMapLoadFailureState,
@@ -114,17 +118,43 @@ export const NativeMap = ({
     return getProtomapsMapStyle(mapTheme, pmtilesUrl);
   }, [mapTheme, pmtilesUrl]);
 
+  const fitMarkersAndPreserveCamera = ({
+    markersToFit,
+    padding,
+  }: {
+    markersToFit: readonly LiveMapMarker[];
+    padding: {
+      paddingBottom: number;
+      paddingLeft: number;
+      paddingRight: number;
+      paddingTop: number;
+    };
+  }) => {
+    fitLiveMapMarkers({
+      camera: cameraRef.current,
+      markers: markersToFit,
+      padding,
+    });
+    preservedCameraRef.current = mapCameraAfterFittingMarkers({
+      markers: markersToFit,
+      previousCamera: preservedCameraRef.current,
+    });
+  };
+
   const fitEveryoneInFrame = () => {
     trackedUserIdRef.current = null;
     onSelectUserId?.(null);
-    fitLiveMapMarkers({
-      camera: cameraRef.current,
-      markers: markersRef.current,
+    fitMarkersAndPreserveCamera({
+      markersToFit: markersRef.current,
       padding: fitEveryonePadding,
     });
   };
 
   const retryMapLoad = () => {
+    if (forceRefreshSignedPmtilesUrlMutation.isPending) {
+      return;
+    }
+
     applyMapLoadFailureState(
       nextMapLoadFailureState({
         autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
@@ -154,9 +184,8 @@ export const NativeMap = ({
     }
 
     didFitMarkersRef.current = true;
-    fitLiveMapMarkers({
-      camera: cameraRef.current,
-      markers,
+    fitMarkersAndPreserveCamera({
+      markersToFit: markers,
       padding: cameraPadding,
     });
   }, [cameraPadding, hasMarkers, mapStyle, markers]);
@@ -180,8 +209,12 @@ export const NativeMap = ({
     });
     trackedUserIdRef.current = selectedUserId;
     cameraRef.current?.setCamera(stop);
+    preservedCameraRef.current = mapCameraFromRegionChange({
+      latitude: selectedLatitude,
+      longitude: selectedLongitude,
+      zoomLevel: stop.zoomLevel,
+    });
   }, [cameraPadding, selectedLatitude, selectedLongitude, selectedUserId]);
-
   if (signedPmtilesUrlQuery.isLoading && !mapStyle) {
     return (
       <View className="flex-1 items-center justify-center bg-background px-6">
@@ -284,16 +317,23 @@ export const NativeMap = ({
             selectedLatitude !== undefined &&
             selectedLongitude !== undefined
           ) {
-            cameraRef.current?.setCamera(
-              buildLiveMapTrackingCameraStop({
-                latitude: selectedLatitude,
-                longitude: selectedLongitude,
-                padding: cameraPadding,
-                previouslyTrackedUserId: trackedUserIdRef.current,
-                selectedUserId,
-              }),
-            );
+            const stop = buildLiveMapTrackingCameraStop({
+              latitude: selectedLatitude,
+              longitude: selectedLongitude,
+              padding: cameraPadding,
+              previouslyTrackedUserId: trackedUserIdRef.current,
+              selectedUserId,
+            });
+            cameraRef.current?.setCamera({
+              ...stop,
+              animationDuration: 0,
+            });
             trackedUserIdRef.current = selectedUserId;
+            preservedCameraRef.current = mapCameraFromRegionChange({
+              latitude: selectedLatitude,
+              longitude: selectedLongitude,
+              zoomLevel: stop.zoomLevel,
+            });
             return;
           }
 
@@ -332,7 +372,11 @@ export const NativeMap = ({
         <View className="absolute inset-0 items-center justify-center bg-background/90 px-6">
           <View className="w-full max-w-80 gap-5">
             <Text className="text-center text-base text-muted">The map could not be loaded.</Text>
-            <Button title="Retry" onPress={retryMapLoad} />
+            <Button
+              disabled={forceRefreshSignedPmtilesUrlMutation.isPending}
+              title="Retry"
+              onPress={retryMapLoad}
+            />
           </View>
         </View>
       ) : null}
