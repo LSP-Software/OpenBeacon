@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { nextMembershipSnapshot } from "../lib/nextMembershipSnapshot.ts";
 
 export const useMembershipSnapshot = <T>(incoming: T | undefined): T | null => {
@@ -7,6 +7,8 @@ export const useMembershipSnapshot = <T>(incoming: T | undefined): T | null => {
     incoming,
     previous: previousRef.current,
   });
-  previousRef.current = snapshot;
+  useEffect(() => {
+    previousRef.current = snapshot;
+  }, [snapshot]);
   return snapshot;
 };
