@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Animated, PanResponder, type PanResponderGestureState, View } from "react-native";
+import { useTimeSince } from "../../hooks/useTimeSince.ts";
 import { getBatteryVisual } from "../../lib/batteryVisual.ts";
-import { timeSince } from "../../lib/timeSince.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
@@ -29,6 +29,7 @@ export const LiveMapPersonSheet = ({
 }) => {
   const translateY = useRef(new Animated.Value(HIDDEN_OFFSET)).current;
   const dragOriginY = useRef(0);
+  const updatedAge = useTimeSince(timestamp);
   const batteryVisual = battery
     ? getBatteryVisual({
         batteryLevel: battery.level,
@@ -114,7 +115,7 @@ export const LiveMapPersonSheet = ({
           </Avatar>
           <View className="min-w-0 flex-1 gap-1">
             <Text className="text-foreground text-xl font-bold">{name}</Text>
-            <Text className="text-muted text-sm">Updated {timeSince(timestamp)}</Text>
+            <Text className="text-muted text-sm">Updated {updatedAge}</Text>
           </View>
         </View>
         {battery && batteryVisual ? (
