@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import React, { act, useMemo } from "react";
+import { act, useMemo } from "react";
 import { createRoot, type Root } from "test-renderer";
 import { buildLiveMapMarkers } from "../lib/buildLiveMapMarkers.ts";
 import type { LiveMapPosition } from "../lib/mapTrackingTypes.ts";

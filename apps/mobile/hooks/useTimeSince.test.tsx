@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import React, { act, useState } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "test-renderer";
 import { useTimeSince } from "./useTimeSince.ts";
 
@@ -14,19 +14,20 @@ let originalClearTimeout: typeof clearTimeout;
 let originalSetTimeout: typeof setTimeout;
 let nowMs = Date.parse("2026-07-19T12:00:00.000Z");
 let originalDateNow: typeof Date.now;
+let unmountInner: (() => void) | null = null;
+
+const TimeSinceHarness = ({ value }: { value: string }) => {
+  latestLabel = useTimeSince(value);
+  return null;
+};
 
 const renderUseTimeSince = async (timestamp: string) => {
-  const Harness = ({ value }: { value: string }) => {
-    latestLabel = useTimeSince(value);
-    return null;
-  };
-
   if (!root) {
     root = createRoot();
   }
 
   await act(async () => {
-    root?.render(<Harness value={timestamp} />);
+    root?.render(<TimeSinceHarness value={timestamp} />);
     await Promise.resolve();
   });
 };
@@ -34,6 +35,7 @@ const renderUseTimeSince = async (timestamp: string) => {
 describe("useTimeSince", () => {
   beforeEach(() => {
     latestLabel = "";
+    unmountInner = null;
     scheduledCallbacks = [];
     nowMs = Date.parse("2026-07-19T12:00:00.000Z");
     originalDateNow = Date.now;
@@ -97,19 +99,10 @@ describe("useTimeSince", () => {
 
     const Harness = () => {
       const [mounted, setMounted] = useState(true);
-      return (
-        <>
-          {mounted ? <Inner /> : null}
-          <button
-            onClick={() => {
-              setMounted(false);
-            }}
-            type="button"
-          >
-            Unmount
-          </button>
-        </>
-      );
+      unmountInner = () => {
+        setMounted(false);
+      };
+      return mounted ? <Inner /> : null;
     };
 
     root = createRoot();
@@ -120,9 +113,8 @@ describe("useTimeSince", () => {
 
     expect(scheduledCallbacks).toHaveLength(1);
 
-    const button = root.container.queryAll((instance) => instance.type === "button")[0];
     await act(async () => {
-      (button?.props as { onClick?: () => void }).onClick?.();
+      unmountInner?.();
       await Promise.resolve();
     });
 
