@@ -15,9 +15,3 @@ export const mapCameraFromRegionChange = ({
   centerCoordinate: [longitude, latitude] as [number, number],
   zoomLevel,
 });
-
-export const pmtilesUrlChangeCameraPolicy = () =>
-  ({
-    resetInitialFit: false,
-    resetTrackedUser: false,
-  }) as const;
