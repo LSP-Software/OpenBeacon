@@ -17,6 +17,11 @@ import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
 import { queryClient, trpc } from "../../lib/api.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { fitLiveMapMarkers } from "../../lib/fitLiveMapMarkers.ts";
+import {
+  createLiveMapInitialFitState,
+  LIVE_MAP_INITIAL_FIT_COALESCE_MS,
+  reduceLiveMapInitialFit,
+} from "../../lib/liveMapInitialFit.ts";
 import { buildLiveMapTrackingCameraStop } from "../../lib/liveMapTrackingCamera.ts";
 import { shouldForceRefreshAfterMapLoadFailure } from "../../lib/mapPmtilesLoadFailure.ts";
 import { getProtomapsMapStyle } from "../../lib/protomaps-style.ts";
@@ -45,10 +50,13 @@ export const NativeMap = ({
   });
   const rootNavigationState = useRootNavigationState();
   const cameraRef = useRef<CameraRef>(null);
-  const didFitMarkersRef = useRef(false);
+  const initialFitStateRef = useRef(createLiveMapInitialFitState());
+  const initialFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didRetryAfterMapFailureRef = useRef(false);
   const lastPmtilesUrlRef = useRef<string | null>(null);
   const trackedUserIdRef = useRef<string | null>(null);
+  const trackedCoordinateRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const followSuspendedRef = useRef(false);
   const markersRef = useRef(markers);
   markersRef.current = markers;
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
@@ -78,8 +86,13 @@ export const NativeMap = ({
   if (lastPmtilesUrlRef.current !== pmtilesUrl) {
     lastPmtilesUrlRef.current = pmtilesUrl;
     didRetryAfterMapFailureRef.current = false;
-    didFitMarkersRef.current = false;
+    clearLiveMapInitialFitTimer(initialFitTimerRef);
+    initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
+      type: "reset",
+    }).state;
     trackedUserIdRef.current = null;
+    trackedCoordinateRef.current = null;
+    followSuspendedRef.current = false;
   }
 
   const mapStyle = useMemo(() => {
@@ -91,7 +104,13 @@ export const NativeMap = ({
   }, [mapTheme, pmtilesUrl]);
 
   const fitEveryoneInFrame = () => {
+    clearLiveMapInitialFitTimer(initialFitTimerRef);
+    initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
+      type: "show_everyone",
+    }).state;
     trackedUserIdRef.current = null;
+    trackedCoordinateRef.current = null;
+    followSuspendedRef.current = false;
     onSelectUserId?.(null);
     fitLiveMapMarkers({
       camera: cameraRef.current,
@@ -99,6 +118,20 @@ export const NativeMap = ({
       padding: fitEveryonePadding,
     });
   };
+
+  const noteUserCameraControl = () => {
+    clearLiveMapInitialFitTimer(initialFitTimerRef);
+    initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
+      type: "user_camera_control",
+    }).state;
+    followSuspendedRef.current = true;
+  };
+
+  useEffect(() => {
+    return () => {
+      clearLiveMapInitialFitTimer(initialFitTimerRef);
+    };
+  }, []);
 
   useEffect(() => {
     if (!rootNavigationState?.key || signedPmtilesUrlQuery.error?.data?.code !== "UNAUTHORIZED") {
@@ -109,17 +142,26 @@ export const NativeMap = ({
   }, [rootNavigationState?.key, signedPmtilesUrlQuery.error]);
 
   useEffect(() => {
-    if (!mapStyle || !hasMarkers || didFitMarkersRef.current || !cameraRef.current) {
+    if (!mapStyle || !cameraRef.current) {
       return;
     }
 
-    didFitMarkersRef.current = true;
-    fitLiveMapMarkers({
-      camera: cameraRef.current,
-      markers,
-      padding: cameraPadding,
+    const result = reduceLiveMapInitialFit(initialFitStateRef.current, {
+      nowMs: Date.now(),
+      type: "markers",
+      userIds: markers.map((marker) => marker.userId),
     });
-  }, [cameraPadding, hasMarkers, mapStyle, markers]);
+    initialFitStateRef.current = result.state;
+
+    if (result.shouldFit) {
+      fitLiveMapMarkers({
+        camera: cameraRef.current,
+        markers,
+        padding: cameraPadding,
+      });
+      scheduleLiveMapInitialFitClose(initialFitTimerRef, initialFitStateRef);
+    }
+  }, [cameraPadding, mapStyle, markers]);
 
   useEffect(() => {
     if (
@@ -128,17 +170,40 @@ export const NativeMap = ({
       selectedLongitude === undefined
     ) {
       trackedUserIdRef.current = null;
+      trackedCoordinateRef.current = null;
+      followSuspendedRef.current = false;
       return;
     }
 
     const stop = buildLiveMapTrackingCameraStop({
+      followSuspended: followSuspendedRef.current,
       latitude: selectedLatitude,
       longitude: selectedLongitude,
       padding: cameraPadding,
+      previousLatitude: trackedCoordinateRef.current?.latitude ?? null,
+      previousLongitude: trackedCoordinateRef.current?.longitude ?? null,
       previouslyTrackedUserId: trackedUserIdRef.current,
       selectedUserId,
     });
+
+    if (!stop) {
+      trackedUserIdRef.current = selectedUserId;
+      return;
+    }
+
+    if (trackedUserIdRef.current !== selectedUserId) {
+      clearLiveMapInitialFitTimer(initialFitTimerRef);
+      initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
+        type: "user_camera_control",
+      }).state;
+    }
+
+    followSuspendedRef.current = false;
     trackedUserIdRef.current = selectedUserId;
+    trackedCoordinateRef.current = {
+      latitude: selectedLatitude,
+      longitude: selectedLongitude,
+    };
     cameraRef.current?.setCamera(stop);
   }, [cameraPadding, selectedLatitude, selectedLongitude, selectedUserId]);
 
@@ -179,6 +244,12 @@ export const NativeMap = ({
         surfaceView={Platform.OS === "android"}
         onPress={() => {
           onSelectUserId?.(null);
+        }}
+        onRegionDidChange={(feature) => {
+          if (!feature.properties.isUserInteraction) {
+            return;
+          }
+          noteUserCameraControl();
         }}
         onDidFailLoadingMap={() => {
           if (
@@ -311,5 +382,38 @@ const LiveMapPointAnnotation = ({
         ringColor={marker.ringColor}
       />
     </PointAnnotation>
+  );
+};
+
+const clearLiveMapInitialFitTimer = (timerRef: {
+  current: ReturnType<typeof setTimeout> | null;
+}) => {
+  if (timerRef.current === null) {
+    return;
+  }
+  clearTimeout(timerRef.current);
+  timerRef.current = null;
+};
+
+const scheduleLiveMapInitialFitClose = (
+  timerRef: { current: ReturnType<typeof setTimeout> | null },
+  stateRef: { current: ReturnType<typeof createLiveMapInitialFitState> },
+) => {
+  clearLiveMapInitialFitTimer(timerRef);
+  const coalesceStartedAtMs = stateRef.current.coalesceStartedAtMs;
+  if (stateRef.current.phase !== "coalescing" || coalesceStartedAtMs === null) {
+    return;
+  }
+
+  const remainingMs = coalesceStartedAtMs + LIVE_MAP_INITIAL_FIT_COALESCE_MS - Date.now();
+  timerRef.current = setTimeout(
+    () => {
+      timerRef.current = null;
+      stateRef.current = reduceLiveMapInitialFit(stateRef.current, {
+        nowMs: Date.now(),
+        type: "coalesce_elapsed",
+      }).state;
+    },
+    Math.max(0, remainingMs),
   );
 };

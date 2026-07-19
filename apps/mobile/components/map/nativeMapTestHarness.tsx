@@ -27,10 +27,16 @@ let mapViewHandlers: {
   onDidFailLoadingMap?: () => void;
   onDidFinishLoadingStyle?: () => void;
   onPress?: () => void;
+  onRegionDidChange?: (feature: {
+    properties: {
+      isUserInteraction: boolean;
+    };
+  }) => void;
 } = {};
 let mapViewMountCount = 0;
 let latestMapStyle: unknown = null;
 let selfHeadingDegrees: number | null = null;
+let showEveryonePressHandler: (() => void) | null = null;
 
 export const createLiveMapMarkerFixture = (
   overrides: Partial<LiveMapMarker> & Pick<LiveMapMarker, "userId">,
@@ -58,6 +64,7 @@ export const resetNativeMapHarness = () => {
   mapViewMountCount = 0;
   latestMapStyle = null;
   selfHeadingDegrees = null;
+  showEveryonePressHandler = null;
 };
 
 export const getNativeMapCameraCommands = () => [...cameraCommands];
@@ -86,6 +93,18 @@ export const emitNativeMapDidFailLoadingMap = () => {
 
 export const emitNativeMapDidFinishLoadingStyle = () => {
   mapViewHandlers.onDidFinishLoadingStyle?.();
+};
+
+export const emitNativeMapRegionDidChange = (isUserInteraction: boolean) => {
+  mapViewHandlers.onRegionDidChange?.({
+    properties: {
+      isUserInteraction,
+    },
+  });
+};
+
+export const emitNativeMapShowEveryone = () => {
+  showEveryonePressHandler?.();
 };
 
 export const emitNativeMapAnnotationSelected = (annotationId: string) => {
@@ -123,17 +142,24 @@ export const createMapLibreMockModule = () => {
     onDidFailLoadingMap,
     onDidFinishLoadingStyle,
     onPress,
+    onRegionDidChange,
   }: {
     children?: ReactNode;
     mapStyle?: unknown;
     onDidFailLoadingMap?: () => void;
     onDidFinishLoadingStyle?: () => void;
     onPress?: () => void;
+    onRegionDidChange?: (feature: {
+      properties: {
+        isUserInteraction: boolean;
+      };
+    }) => void;
   }) => {
     mapViewHandlers = {
       ...(onDidFailLoadingMap ? { onDidFailLoadingMap } : {}),
       ...(onDidFinishLoadingStyle ? { onDidFinishLoadingStyle } : {}),
       ...(onPress ? { onPress } : {}),
+      ...(onRegionDidChange ? { onRegionDidChange } : {}),
     };
     latestMapStyle = mapStyle ?? null;
 
@@ -148,6 +174,7 @@ export const createMapLibreMockModule = () => {
         onDidFailLoadingMap,
         onDidFinishLoadingStyle,
         onPress,
+        onRegionDidChange,
       },
       children,
     );
@@ -198,4 +225,8 @@ export const createMapLibreMockModule = () => {
     MapView,
     PointAnnotation,
   };
+};
+
+export const registerNativeMapShowEveryoneHandler = (onPress: (() => void) | null) => {
+  showEveryonePressHandler = onPress;
 };
