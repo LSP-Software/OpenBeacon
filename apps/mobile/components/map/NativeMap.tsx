@@ -95,21 +95,16 @@ export const NativeMap = ({
     return getProtomapsMapStyle(mapTheme, pmtilesUrl);
   }, [mapTheme, pmtilesUrl]);
 
-  const remountAnnotationToClearNativeSelection = (userId: string) => {
-    setAnnotationRemountTokens((tokens) => ({
-      ...tokens,
-      [userId]: (tokens[userId] ?? 0) + 1,
-    }));
-  };
-
   const clearSelectionFromReact = () => {
     const previouslySelectedUserId = selectedUserIdRef.current;
     if (previouslySelectedUserId !== null) {
-      remountAnnotationToClearNativeSelection(previouslySelectedUserId);
+      setAnnotationRemountTokens((tokens) => ({
+        ...tokens,
+        [previouslySelectedUserId]: (tokens[previouslySelectedUserId] ?? 0) + 1,
+      }));
     }
     onSelectUserId?.(null);
   };
-
   const fitEveryoneInFrame = () => {
     trackedUserIdRef.current = null;
     clearSelectionFromReact();
