@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Button, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/ui/Text.tsx";
+import { useSelfDeviceHeading } from "../../hooks/useSelfDeviceHeading.ts";
 import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
 import { queryClient, trpc } from "../../lib/api.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
@@ -28,12 +29,10 @@ export const NativeMap = ({
   markers = [],
   onSelectUserId,
   selectedUserId = null,
-  selfHeadingDegrees = null,
 }: {
   markers?: readonly LiveMapMarker[];
   onSelectUserId?: (userId: string | null) => void;
   selectedUserId?: string | null;
-  selfHeadingDegrees?: number | null;
 } = {}) => {
   const { mapTheme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -200,17 +199,28 @@ export const NativeMap = ({
         }}
       >
         <Camera ref={cameraRef} defaultSettings={{ centerCoordinate: [0, 0], zoomLevel: 1.25 }} />
-        {markers.map((marker) => (
-          <LiveMapPointAnnotation
-            key={marker.userId}
-            headingDegrees={marker.isSelf ? selfHeadingDegrees : null}
-            marker={marker}
-            selected={marker.userId === selectedUserId}
-            onSelected={() => {
-              onSelectUserId?.(marker.userId);
-            }}
-          />
-        ))}
+        {markers.map((marker) =>
+          marker.isSelf ? (
+            <SelfLiveMapPointAnnotation
+              key={marker.userId}
+              marker={marker}
+              selected={marker.userId === selectedUserId}
+              onSelected={() => {
+                onSelectUserId?.(marker.userId);
+              }}
+            />
+          ) : (
+            <LiveMapPointAnnotation
+              key={marker.userId}
+              headingDegrees={null}
+              marker={marker}
+              selected={marker.userId === selectedUserId}
+              onSelected={() => {
+                onSelectUserId?.(marker.userId);
+              }}
+            />
+          ),
+        )}
       </MapView>
       {hasMarkers ? (
         <Pressable
@@ -240,6 +250,27 @@ export const NativeMap = ({
   );
 };
 
+const SelfLiveMapPointAnnotation = ({
+  marker,
+  onSelected,
+  selected,
+}: {
+  marker: LiveMapMarker;
+  onSelected: () => void;
+  selected: boolean;
+}) => {
+  const headingDegrees = useSelfDeviceHeading(true);
+
+  return (
+    <LiveMapPointAnnotation
+      headingDegrees={headingDegrees}
+      marker={marker}
+      onSelected={onSelected}
+      selected={selected}
+    />
+  );
+};
+
 const LiveMapPointAnnotation = ({
   headingDegrees,
   marker,
@@ -258,7 +289,7 @@ const LiveMapPointAnnotation = ({
       return;
     }
 
-    // PointAnnotation snapshots children to a bitmap on Android; refresh when the wedge rotates or hides.
+    // PointAnnotation snapshots children to a bitmap on Android; refresh when the heading beam rotates or hides.
     void headingDegrees;
     annotationRef.current?.refresh();
   }, [headingDegrees, marker.isSelf]);
