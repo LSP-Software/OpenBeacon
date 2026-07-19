@@ -1,28 +1,30 @@
 import { View } from "react-native";
-import Svg, { Defs, LinearGradient, Polygon, Stop } from "react-native-svg";
+import Svg, { Defs, Path, RadialGradient, Stop } from "react-native-svg";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Text } from "../ui/Text.tsx";
 
 const PIN_SIZE = 48;
 const PIN_RADIUS = PIN_SIZE / 2;
-const BEAM_INNER = PIN_RADIUS + 2;
-const BEAM_HALO_LENGTH = 52;
-const BEAM_CORE_LENGTH = 46;
-const BEAM_HALO_HALF_ANGLE_RAD = (30 * Math.PI) / 180;
-const BEAM_CORE_HALF_ANGLE_RAD = (13 * Math.PI) / 180;
+const SPOT_LENGTH = 42;
+const SPOT_HALF_ANGLE_RAD = (18 * Math.PI) / 180;
 const BEAM_COLOR = "#FF1464";
-const OUTER_SIZE = 2 * (BEAM_INNER + BEAM_HALO_LENGTH);
+const OUTER_RADIUS = PIN_RADIUS + SPOT_LENGTH;
+const OUTER_SIZE = 2 * OUTER_RADIUS;
 const CENTER = OUTER_SIZE / 2;
 
-const beamPoints = (length: number, halfAngleRad: number) =>
-  [
-    `${CENTER},${CENTER - BEAM_INNER}`,
-    `${CENTER - length * Math.sin(halfAngleRad)},${CENTER - BEAM_INNER - length * Math.cos(halfAngleRad)}`,
-    `${CENTER + length * Math.sin(halfAngleRad)},${CENTER - BEAM_INNER - length * Math.cos(halfAngleRad)}`,
-  ].join(" ");
+const polar = (radius: number, angleRad: number) => ({
+  x: CENTER + radius * Math.sin(angleRad),
+  y: CENTER - radius * Math.cos(angleRad),
+});
 
-const HALO_POINTS = beamPoints(BEAM_HALO_LENGTH, BEAM_HALO_HALF_ANGLE_RAD);
-const CORE_POINTS = beamPoints(BEAM_CORE_LENGTH, BEAM_CORE_HALF_ANGLE_RAD);
+const leftOuter = polar(OUTER_RADIUS, -SPOT_HALF_ANGLE_RAD);
+const rightOuter = polar(OUTER_RADIUS, SPOT_HALF_ANGLE_RAD);
+const SPOTLIGHT_PATH = [
+  `M ${CENTER} ${CENTER}`,
+  `L ${leftOuter.x} ${leftOuter.y}`,
+  `A ${OUTER_RADIUS} ${OUTER_RADIUS} 0 0 1 ${rightOuter.x} ${rightOuter.y}`,
+  "Z",
+].join(" ");
 
 export const LiveMapMarkerPin = ({
   headingDegrees = null,
@@ -60,46 +62,21 @@ export const LiveMapMarkerPin = ({
         >
           <Svg width={OUTER_SIZE} height={OUTER_SIZE}>
             <Defs>
-              <LinearGradient
-                id="selfHeadingBeamHalo"
+              <RadialGradient
+                id="selfHeadingSpotlight"
                 gradientUnits="userSpaceOnUse"
-                x1={CENTER}
-                y1={CENTER - BEAM_INNER}
-                x2={CENTER}
-                y2={CENTER - BEAM_INNER - BEAM_HALO_LENGTH}
+                cx={CENTER}
+                cy={CENTER}
+                rx={OUTER_RADIUS}
+                ry={OUTER_RADIUS}
               >
-                <Stop offset="0%" stopColor={BEAM_COLOR} stopOpacity="0.38" />
-                <Stop offset="50%" stopColor={BEAM_COLOR} stopOpacity="0.14" />
+                <Stop offset="0%" stopColor={BEAM_COLOR} stopOpacity="0.5" />
+                <Stop offset="36%" stopColor={BEAM_COLOR} stopOpacity="0.4" />
+                <Stop offset="70%" stopColor={BEAM_COLOR} stopOpacity="0.14" />
                 <Stop offset="100%" stopColor={BEAM_COLOR} stopOpacity="0" />
-              </LinearGradient>
-              <LinearGradient
-                id="selfHeadingBeamCoreLift"
-                gradientUnits="userSpaceOnUse"
-                x1={CENTER}
-                y1={CENTER - BEAM_INNER}
-                x2={CENTER}
-                y2={CENTER - BEAM_INNER - BEAM_CORE_LENGTH}
-              >
-                <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.5" />
-                <Stop offset="40%" stopColor="#FFFFFF" stopOpacity="0.16" />
-                <Stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
-              </LinearGradient>
-              <LinearGradient
-                id="selfHeadingBeamCore"
-                gradientUnits="userSpaceOnUse"
-                x1={CENTER}
-                y1={CENTER - BEAM_INNER}
-                x2={CENTER}
-                y2={CENTER - BEAM_INNER - BEAM_CORE_LENGTH}
-              >
-                <Stop offset="0%" stopColor={BEAM_COLOR} stopOpacity="0.9" />
-                <Stop offset="35%" stopColor={BEAM_COLOR} stopOpacity="0.48" />
-                <Stop offset="100%" stopColor={BEAM_COLOR} stopOpacity="0" />
-              </LinearGradient>
+              </RadialGradient>
             </Defs>
-            <Polygon points={HALO_POINTS} fill="url(#selfHeadingBeamHalo)" />
-            <Polygon points={CORE_POINTS} fill="url(#selfHeadingBeamCoreLift)" />
-            <Polygon points={CORE_POINTS} fill="url(#selfHeadingBeamCore)" />
+            <Path d={SPOTLIGHT_PATH} fill="url(#selfHeadingSpotlight)" />
           </Svg>
         </View>
       ) : null}
