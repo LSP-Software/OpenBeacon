@@ -15,6 +15,8 @@ const cameraCommands: Array<
     }
 > = [];
 const annotationRefreshCalls: string[] = [];
+const annotationMountCounts = new Map<string, number>();
+const annotationSelectedProps = new Map<string, boolean | undefined>();
 const annotationHandlersById = new Map<
   string,
   {
@@ -31,6 +33,7 @@ let mapViewHandlers: {
 let mapViewMountCount = 0;
 let latestMapStyle: unknown = null;
 let selfHeadingDegrees: number | null = null;
+let androidActiveAnnotationId: string | null = null;
 
 export const createLiveMapMarkerFixture = (
   overrides: Partial<LiveMapMarker> & Pick<LiveMapMarker, "userId">,
@@ -52,17 +55,26 @@ export const createLiveMapMarkerFixture = (
 export const resetNativeMapHarness = () => {
   cameraCommands.length = 0;
   annotationRefreshCalls.length = 0;
+  annotationMountCounts.clear();
+  annotationSelectedProps.clear();
   annotationHandlersById.clear();
   mountedAnnotationIds.clear();
   mapViewHandlers = {};
   mapViewMountCount = 0;
   latestMapStyle = null;
   selfHeadingDegrees = null;
+  androidActiveAnnotationId = null;
 };
 
 export const getNativeMapCameraCommands = () => [...cameraCommands];
 
 export const getNativeMapAnnotationRefreshCalls = () => [...annotationRefreshCalls];
+
+export const getNativeMapAnnotationMountCount = (annotationId: string) =>
+  annotationMountCounts.get(annotationId) ?? 0;
+
+export const getNativeMapAnnotationSelectedProp = (annotationId: string) =>
+  annotationSelectedProps.get(annotationId);
 
 export const getNativeMapMountedAnnotationIds = () => [...mountedAnnotationIds];
 
@@ -94,6 +106,20 @@ export const emitNativeMapAnnotationSelected = (annotationId: string) => {
 
 export const emitNativeMapAnnotationDeselected = (annotationId: string) => {
   annotationHandlersById.get(annotationId)?.onDeselected?.();
+};
+
+export const emitNativeMapAndroidMarkerTap = (annotationId: string) => {
+  const previouslyActiveId = androidActiveAnnotationId;
+
+  if (previouslyActiveId !== null) {
+    androidActiveAnnotationId = null;
+    emitNativeMapAnnotationDeselected(previouslyActiveId);
+  }
+
+  if (previouslyActiveId !== annotationId) {
+    androidActiveAnnotationId = annotationId;
+    emitNativeMapAnnotationSelected(annotationId);
+  }
 };
 
 export const createMapLibreMockModule = () => {
@@ -169,16 +195,28 @@ export const createMapLibreMockModule = () => {
       },
     }));
 
+    annotationSelectedProps.set(id, selected);
+
+    useEffect(() => {
+      mountedAnnotationIds.add(id);
+      annotationMountCounts.set(id, (annotationMountCounts.get(id) ?? 0) + 1);
+
+      return () => {
+        mountedAnnotationIds.delete(id);
+        if (androidActiveAnnotationId === id) {
+          androidActiveAnnotationId = null;
+        }
+      };
+    }, [id]);
+
     useEffect(() => {
       annotationHandlersById.set(id, {
         ...(onDeselected ? { onDeselected } : {}),
         ...(onSelected ? { onSelected } : {}),
       });
-      mountedAnnotationIds.add(id);
 
       return () => {
         annotationHandlersById.delete(id);
-        mountedAnnotationIds.delete(id);
       };
     }, [id, onDeselected, onSelected]);
 

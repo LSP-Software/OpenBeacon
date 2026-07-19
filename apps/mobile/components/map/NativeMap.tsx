@@ -8,7 +8,7 @@ import {
 import { useMutation } from "@tanstack/react-query";
 import { router, useRootNavigationState } from "expo-router";
 import { ScanIcon } from "lucide-react-native";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/ui/Text.tsx";
@@ -51,6 +51,11 @@ export const NativeMap = ({
   const trackedUserIdRef = useRef<string | null>(null);
   const markersRef = useRef(markers);
   markersRef.current = markers;
+  const selectedUserIdRef = useRef(selectedUserId);
+  selectedUserIdRef.current = selectedUserId;
+  const [annotationRemountTokens, setAnnotationRemountTokens] = useState<Record<string, number>>(
+    {},
+  );
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
   const selectedMarker = markers.find((marker) => marker.userId === selectedUserId) ?? null;
   const hasMarkers = markers.length > 0;
@@ -90,9 +95,24 @@ export const NativeMap = ({
     return getProtomapsMapStyle(mapTheme, pmtilesUrl);
   }, [mapTheme, pmtilesUrl]);
 
+  const remountAnnotationToClearNativeSelection = (userId: string) => {
+    setAnnotationRemountTokens((tokens) => ({
+      ...tokens,
+      [userId]: (tokens[userId] ?? 0) + 1,
+    }));
+  };
+
+  const clearSelectionFromReact = () => {
+    const previouslySelectedUserId = selectedUserIdRef.current;
+    if (previouslySelectedUserId !== null) {
+      remountAnnotationToClearNativeSelection(previouslySelectedUserId);
+    }
+    onSelectUserId?.(null);
+  };
+
   const fitEveryoneInFrame = () => {
     trackedUserIdRef.current = null;
-    onSelectUserId?.(null);
+    clearSelectionFromReact();
     fitLiveMapMarkers({
       camera: cameraRef.current,
       markers: markersRef.current,
@@ -177,9 +197,7 @@ export const NativeMap = ({
         pitchEnabled={false}
         rotateEnabled={false}
         surfaceView={Platform.OS === "android"}
-        onPress={() => {
-          onSelectUserId?.(null);
-        }}
+        onPress={clearSelectionFromReact}
         onDidFailLoadingMap={() => {
           if (
             !shouldForceRefreshAfterMapLoadFailure({
@@ -202,19 +220,23 @@ export const NativeMap = ({
         {markers.map((marker) =>
           marker.isSelf ? (
             <SelfLiveMapPointAnnotation
-              key={marker.userId}
+              key={`${marker.userId}:${annotationRemountTokens[marker.userId] ?? 0}`}
               marker={marker}
-              selected={marker.userId === selectedUserId}
+              onDeselected={() => {
+                onSelectUserId?.(null);
+              }}
               onSelected={() => {
                 onSelectUserId?.(marker.userId);
               }}
             />
           ) : (
             <LiveMapPointAnnotation
-              key={marker.userId}
+              key={`${marker.userId}:${annotationRemountTokens[marker.userId] ?? 0}`}
               headingDegrees={null}
               marker={marker}
-              selected={marker.userId === selectedUserId}
+              onDeselected={() => {
+                onSelectUserId?.(null);
+              }}
               onSelected={() => {
                 onSelectUserId?.(marker.userId);
               }}
@@ -241,9 +263,7 @@ export const NativeMap = ({
           name={selectedMarker.name}
           otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
           timestamp={selectedMarker.timestamp}
-          onDismiss={() => {
-            onSelectUserId?.(null);
-          }}
+          onDismiss={clearSelectionFromReact}
         />
       ) : null}
     </View>
@@ -252,12 +272,12 @@ export const NativeMap = ({
 
 const SelfLiveMapPointAnnotation = ({
   marker,
+  onDeselected,
   onSelected,
-  selected,
 }: {
   marker: LiveMapMarker;
+  onDeselected: () => void;
   onSelected: () => void;
-  selected: boolean;
 }) => {
   const headingDegrees = useSelfDeviceHeading(true);
 
@@ -265,8 +285,8 @@ const SelfLiveMapPointAnnotation = ({
     <LiveMapPointAnnotation
       headingDegrees={headingDegrees}
       marker={marker}
+      onDeselected={onDeselected}
       onSelected={onSelected}
-      selected={selected}
     />
   );
 };
@@ -274,25 +294,20 @@ const SelfLiveMapPointAnnotation = ({
 const LiveMapPointAnnotation = ({
   headingDegrees,
   marker,
+  onDeselected,
   onSelected,
-  selected,
 }: {
   headingDegrees: number | null;
   marker: LiveMapMarker;
+  onDeselected: () => void;
   onSelected: () => void;
-  selected: boolean;
 }) => {
   const annotationRef = useRef<PointAnnotationRef>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: headingDegrees triggers Android bitmap refresh
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Android PointAnnotation bitmaps need an explicit refresh when chrome or heading changes
   useEffect(() => {
-    if (!marker.isSelf) {
-      return;
-    }
-
-    // PointAnnotation snapshots children to a bitmap on Android; refresh when the heading beam rotates or hides.
     annotationRef.current?.refresh();
-  }, [headingDegrees, marker.isSelf]);
+  }, [headingDegrees, marker.image, marker.initials, marker.ringColor]);
 
   return (
     <PointAnnotation
@@ -300,7 +315,7 @@ const LiveMapPointAnnotation = ({
       id={marker.userId}
       coordinate={[marker.longitude, marker.latitude]}
       anchor={{ x: 0.5, y: 0.5 }}
-      selected={selected}
+      onDeselected={onDeselected}
       onSelected={onSelected}
     >
       <LiveMapMarkerPin
@@ -309,6 +324,9 @@ const LiveMapPointAnnotation = ({
         initials={marker.initials}
         name={marker.name}
         ringColor={marker.ringColor}
+        onBitmapContentChange={() => {
+          annotationRef.current?.refresh();
+        }}
       />
     </PointAnnotation>
   );
