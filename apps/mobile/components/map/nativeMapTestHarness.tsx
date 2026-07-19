@@ -54,6 +54,7 @@ let latestCameraDefaultSettings: {
 } | null = null;
 let selfHeadingDegrees: number | null = null;
 let showEveryonePressHandler: (() => void) | null = null;
+let goToCurrentLocationPressHandler: (() => void) | null = null;
 let androidActiveAnnotationId: string | null = null;
 
 export const createLiveMapMarkerFixture = (
@@ -86,6 +87,7 @@ export const resetNativeMapHarness = () => {
   latestCameraDefaultSettings = null;
   selfHeadingDegrees = null;
   showEveryonePressHandler = null;
+  goToCurrentLocationPressHandler = null;
   androidActiveAnnotationId = null;
 };
 
@@ -189,6 +191,10 @@ export const emitNativeMapRegionIsChanging = ({
 
 export const emitNativeMapShowEveryone = () => {
   showEveryonePressHandler?.();
+};
+
+export const emitNativeMapGoToCurrentLocation = () => {
+  goToCurrentLocationPressHandler?.();
 };
 
 export const emitNativeMapAnnotationSelected = (annotationId: string) => {
@@ -369,4 +375,8 @@ export const createMapLibreMockModule = () => {
 
 export const registerNativeMapShowEveryoneHandler = (onPress: (() => void) | null) => {
   showEveryonePressHandler = onPress;
+};
+
+export const registerNativeMapGoToCurrentLocationHandler = (onPress: (() => void) | null) => {
+  goToCurrentLocationPressHandler = onPress;
 };

@@ -8,7 +8,7 @@ import {
 } from "@maplibre/maplibre-react-native";
 import { useMutation } from "@tanstack/react-query";
 import { router, useRootNavigationState } from "expo-router";
-import { ScanIcon } from "lucide-react-native";
+import { LocateFixedIcon, ScanIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -108,6 +108,7 @@ export const NativeMap = ({
     previousPmtilesUrlRef.current = pmtilesUrl;
   }
   const selectedMarker = markers.find((marker) => marker.userId === selectedUserId) ?? null;
+  const selfMarker = markers.find((marker) => marker.isSelf) ?? null;
   const hasMarkers = markers.length > 0;
   const selectedLatitude = selectedMarker?.latitude;
   const selectedLongitude = selectedMarker?.longitude;
@@ -129,6 +130,8 @@ export const NativeMap = ({
     }),
     [insets.top],
   );
+  const cameraPaddingRef = useRef(cameraPadding);
+  cameraPaddingRef.current = cameraPadding;
 
   const mapStyle = useMemo(() => {
     if (!pmtilesUrl) {
@@ -211,6 +214,56 @@ export const NativeMap = ({
     fitMarkersAndPreserveCamera({
       markersToFit: markersRef.current,
       padding: fitEveryonePadding,
+    });
+  };
+
+  const goToCurrentLocation = () => {
+    const currentSelfMarker = markersRef.current.find((marker) => marker.isSelf);
+    if (!currentSelfMarker) {
+      return;
+    }
+
+    clearLiveMapInitialFitTimer(initialFitTimerRef);
+    initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
+      type: "user_camera_control",
+    }).state;
+
+    followSuspendedRef.current = false;
+
+    if (selectedUserIdRef.current !== currentSelfMarker.userId) {
+      handleAnnotationSelected(currentSelfMarker.userId);
+    }
+
+    const stop = buildLiveMapTrackingCameraStop({
+      followSuspended: false,
+      latitude: currentSelfMarker.latitude,
+      longitude: currentSelfMarker.longitude,
+      padding: {
+        paddingBottom: 220,
+        paddingLeft: cameraPaddingRef.current.paddingLeft,
+        paddingRight: cameraPaddingRef.current.paddingRight,
+        paddingTop: cameraPaddingRef.current.paddingTop,
+      },
+      previousLatitude: null,
+      previousLongitude: null,
+      previouslyTrackedUserId: null,
+      selectedUserId: currentSelfMarker.userId,
+    });
+    if (!stop) {
+      return;
+    }
+
+    trackedUserIdRef.current = currentSelfMarker.userId;
+    trackedCoordinateRef.current = {
+      latitude: currentSelfMarker.latitude,
+      longitude: currentSelfMarker.longitude,
+    };
+    suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, stop.animationDuration);
+    setCameraAndRelease(cameraCommandReleaseTimerRef, cameraRef, stop);
+    preservedCameraRef.current = mapCameraFromRegionChange({
+      latitude: currentSelfMarker.latitude,
+      longitude: currentSelfMarker.longitude,
+      zoomLevel: stop.zoomLevel ?? preservedCameraRef.current.zoomLevel,
     });
   };
 
@@ -532,14 +585,26 @@ export const NativeMap = ({
         </View>
       ) : null}
       {hasMarkers ? (
-        <Pressable
-          accessibilityLabel="Show everyone"
-          accessibilityRole="button"
-          onPress={fitEveryoneInFrame}
-          className="absolute right-3 top-14 size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
-        >
-          <Icon as={ScanIcon} size={20} className="text-foreground" />
-        </Pressable>
+        <View className="absolute right-3 top-14 gap-2">
+          <Pressable
+            accessibilityLabel="Show everyone"
+            accessibilityRole="button"
+            onPress={fitEveryoneInFrame}
+            className="size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
+          >
+            <Icon as={ScanIcon} size={20} className="text-foreground" />
+          </Pressable>
+          {selfMarker ? (
+            <Pressable
+              accessibilityLabel="Go to current location"
+              accessibilityRole="button"
+              onPress={goToCurrentLocation}
+              className="size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
+            >
+              <Icon as={LocateFixedIcon} size={20} className="text-foreground" />
+            </Pressable>
+          ) : null}
+        </View>
       ) : null}
       {selectedMarker ? (
         <LiveMapPersonSheet
