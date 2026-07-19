@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeMap } from "../../../components/map/NativeMap.tsx";
+import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
 import { useMapLivePositions } from "../../../hooks/useMapLivePositions.ts";
 import { useMembershipSnapshot } from "../../../hooks/useMembershipSnapshot.ts";
 import { useSelfDeviceLocation } from "../../../hooks/useSelfDeviceLocation.ts";
@@ -24,18 +25,19 @@ const MapScreen = () => {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selfUserId = session?.user.id ?? "";
   const selfDeviceLocation = useSelfDeviceLocation(selfUserId.length > 0);
+  const groupColorRevision = useGroupColorRevision();
 
-  const selfFallback = useMemo(
-    () =>
-      resolveSelfDeviceLocationFallback({
-        getGroupColor,
-        groups: groups ?? [],
-        selfUserId,
-      }),
-    [groups, selfUserId],
-  );
+  const selfFallback = useMemo(() => {
+    void groupColorRevision;
+    return resolveSelfDeviceLocationFallback({
+      getGroupColor,
+      groups: groups ?? [],
+      selfUserId,
+    });
+  }, [groupColorRevision, groups, selfUserId]);
 
   const markers = useMemo(() => {
+    void groupColorRevision;
     if (!selfUserId || !groups) {
       return [];
     }
@@ -51,7 +53,7 @@ const MapScreen = () => {
       selfFallback,
       selfUserId,
     });
-  }, [groups, livePositions, selfDeviceLocation, selfFallback, selfUserId]);
+  }, [groupColorRevision, groups, livePositions, selfDeviceLocation, selfFallback, selfUserId]);
 
   useEffect(() => {
     if (selectedUserId && !markers.some((marker) => marker.userId === selectedUserId)) {
