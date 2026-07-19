@@ -18,32 +18,17 @@ export const applySelfDeviceLocation = ({
   } | null;
   selfUserId: string;
 }): LiveMapMarker[] => {
-  if (!selfDeviceLocation || selfUserId.length === 0) {
-    return [...markers];
-  }
+  const others =
+    selfUserId.length === 0
+      ? [...markers]
+      : markers.filter((marker) => marker.userId !== selfUserId);
 
-  const selfIndex = markers.findIndex((marker) => marker.userId === selfUserId);
-  if (selfIndex >= 0) {
-    return markers.map((marker, index) => {
-      if (index !== selfIndex) {
-        return marker;
-      }
-
-      return {
-        ...marker,
-        latitude: selfDeviceLocation.latitude,
-        longitude: selfDeviceLocation.longitude,
-        timestamp: selfDeviceLocation.timestamp,
-      };
-    });
-  }
-
-  if (!selfFallback) {
-    return [...markers];
+  if (!selfDeviceLocation || selfUserId.length === 0 || !selfFallback) {
+    return others;
   }
 
   return [
-    ...markers,
+    ...others,
     {
       battery: null,
       image: selfFallback.image,

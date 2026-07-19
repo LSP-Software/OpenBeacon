@@ -13,6 +13,7 @@ import { authClient } from "../../../lib/auth-client.ts";
 import { buildLiveMapMarkers } from "../../../lib/buildLiveMapMarkers.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { nextMapMarkerSelection } from "../../../lib/mapMarkerSelection.ts";
+import { resolveSelfDeviceLocationFallback } from "../../../lib/resolveSelfDeviceLocationFallback.ts";
 import { TAB_BAR_CONTENT_HEIGHT } from "../../../lib/tabBarLayout.ts";
 
 const MapScreen = () => {
@@ -28,30 +29,11 @@ const MapScreen = () => {
 
   const selfFallback = useMemo(() => {
     void groupColorRevision;
-    if (!selfUserId || !groups || groups.length === 0) {
-      return null;
-    }
-
-    const memberships = groups.filter((group) =>
-      group.members.some((member) => member.userId === selfUserId),
-    );
-    const primaryGroup = memberships[0];
-    if (!primaryGroup) {
-      return null;
-    }
-
-    const selfMember = primaryGroup.members.find((member) => member.userId === selfUserId);
-    if (!selfMember) {
-      return null;
-    }
-
-    return {
-      image: selfMember.image,
-      name: selfMember.name,
-      otherSharedGroupNames: memberships.slice(1).map((group) => group.name),
-      ringColor: getGroupColor(primaryGroup.id),
-      sourceGroupId: primaryGroup.id,
-    };
+    return resolveSelfDeviceLocationFallback({
+      getGroupColor,
+      groups: groups ?? [],
+      selfUserId,
+    });
   }, [groupColorRevision, groups, selfUserId]);
 
   const markers = useMemo(() => {
