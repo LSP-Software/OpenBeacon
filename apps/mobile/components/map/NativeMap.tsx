@@ -136,6 +136,14 @@ export const NativeMap = ({
     return getProtomapsMapStyle(mapTheme, pmtilesUrl);
   }, [mapTheme, pmtilesUrl]);
 
+  const cameraDefaultSettings = useMemo(() => {
+    void pmtilesUrl;
+    return {
+      centerCoordinate: [...preservedCameraRef.current.centerCoordinate] as [number, number],
+      zoomLevel: preservedCameraRef.current.zoomLevel,
+    };
+  }, [pmtilesUrl]);
+
   const clearSelectionFromReact = () => {
     pendingDeselectClearRef.current = false;
     const previouslySelectedUserId = selectedUserIdRef.current;
@@ -478,7 +486,7 @@ export const NativeMap = ({
           });
         }}
       >
-        <Camera ref={cameraRef} defaultSettings={preservedCameraRef.current} />
+        <Camera ref={cameraRef} defaultSettings={cameraDefaultSettings} />
         {markers.map((marker) =>
           marker.isSelf ? (
             <SelfLiveMapPointAnnotation

@@ -646,7 +646,7 @@ describe("NativeMap integration harness", () => {
     ).toHaveLength(1);
   });
 
-  test("focuses selection once with zoom, then follows without resetting zoom", async () => {
+  test("focuses selection once with zoom and does not chase later coordinate updates", async () => {
     const alice = createLiveMapMarkerFixture({
       initials: "AL",
       latitude: 51.5,
@@ -689,21 +689,11 @@ describe("NativeMap integration harness", () => {
     });
     await flushEffects();
 
-    const followStop = getNativeMapCameraCommands()
-      .slice(commandsAfterFocus)
-      .find((command) => command.type === "setCamera");
-    expect(followStop).toEqual({
-      type: "setCamera",
-      stop: {
-        animationDuration: 400,
-        animationMode: "easeTo",
-        centerCoordinate: [-0.11, 51.51],
-        padding: expect.any(Object),
-      },
-    });
-    expect(followStop && "stop" in followStop ? followStop.stop : null).not.toHaveProperty(
-      "zoomLevel",
-    );
+    expect(
+      getNativeMapCameraCommands()
+        .slice(commandsAfterFocus)
+        .some((command) => command.type === "setCamera"),
+    ).toBe(false);
   });
 
   test("heading-only updates do not issue camera commands while following", async () => {
@@ -824,7 +814,7 @@ describe("NativeMap integration harness", () => {
     expect(getNativeMapCameraCommands().length).toBe(commandsAfterPan);
   });
 
-  test("programmatic camera moves do not suspend follow when MapLibre marks them as user interaction", async () => {
+  test("same-person coordinate updates never move the camera after focus", async () => {
     const alice = createLiveMapMarkerFixture({
       latitude: 51.5,
       longitude: -0.12,
@@ -851,18 +841,11 @@ describe("NativeMap integration harness", () => {
     });
     await flushEffects();
 
-    const followStop = getNativeMapCameraCommands()
-      .slice(commandsAfterQuirk)
-      .find((command) => command.type === "setCamera");
-    expect(followStop).toEqual({
-      type: "setCamera",
-      stop: {
-        animationDuration: 400,
-        animationMode: "easeTo",
-        centerCoordinate: [-0.1, 51.6],
-        padding: expect.any(Object),
-      },
-    });
+    expect(
+      getNativeMapCameraCommands()
+        .slice(commandsAfterQuirk)
+        .some((command) => command.type === "setCamera"),
+    ).toBe(false);
   });
 
   test("selection closes initial cohort coalescing so later arrivals do not steal focus", async () => {

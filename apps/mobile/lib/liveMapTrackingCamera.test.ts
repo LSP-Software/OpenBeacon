@@ -33,7 +33,7 @@ describe("buildLiveMapTrackingCameraStop", () => {
     });
   });
 
-  test("follows the same person to a new coordinate without resetting zoom", () => {
+  test("does not chase coordinate updates for the same selected person", () => {
     expect(
       buildLiveMapTrackingCameraStop({
         followSuspended: false,
@@ -45,12 +45,7 @@ describe("buildLiveMapTrackingCameraStop", () => {
         previouslyTrackedUserId: "alice",
         selectedUserId: "alice",
       }),
-    ).toEqual({
-      animationDuration: 400,
-      animationMode: "easeTo",
-      centerCoordinate: [-1.1, 50.8],
-      padding,
-    });
+    ).toBeNull();
   });
 
   test("flies again when selection switches to another person", () => {
@@ -89,7 +84,7 @@ describe("buildLiveMapTrackingCameraStop", () => {
     ).toBeNull();
   });
 
-  test("policy: manual pan ends follow until the user selects again", () => {
+  test("policy: same-person GPS updates never move the camera after the initial focus", () => {
     expect(
       buildLiveMapTrackingCameraStop({
         followSuspended: true,
