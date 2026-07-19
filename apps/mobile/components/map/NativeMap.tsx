@@ -57,6 +57,7 @@ export const NativeMap = ({
   const trackedUserIdRef = useRef<string | null>(null);
   const trackedCoordinateRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const followSuspendedRef = useRef(false);
+  const suppressUserCameraControlUntilMsRef = useRef(0);
   const markersRef = useRef(markers);
   markersRef.current = markers;
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
@@ -112,6 +113,7 @@ export const NativeMap = ({
     trackedCoordinateRef.current = null;
     followSuspendedRef.current = false;
     onSelectUserId?.(null);
+    suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, 600);
     fitLiveMapMarkers({
       camera: cameraRef.current,
       markers: markersRef.current,
@@ -154,6 +156,7 @@ export const NativeMap = ({
     initialFitStateRef.current = result.state;
 
     if (result.shouldFit) {
+      suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, 600);
       fitLiveMapMarkers({
         camera: cameraRef.current,
         markers,
@@ -204,6 +207,7 @@ export const NativeMap = ({
       latitude: selectedLatitude,
       longitude: selectedLongitude,
     };
+    suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, stop.animationDuration);
     cameraRef.current?.setCamera(stop);
   }, [cameraPadding, selectedLatitude, selectedLongitude, selectedUserId]);
 
@@ -247,6 +251,9 @@ export const NativeMap = ({
         }}
         onRegionDidChange={(feature) => {
           if (!feature.properties.isUserInteraction) {
+            return;
+          }
+          if (Date.now() < suppressUserCameraControlUntilMsRef.current) {
             return;
           }
           noteUserCameraControl();
@@ -393,6 +400,13 @@ const clearLiveMapInitialFitTimer = (timerRef: {
   }
   clearTimeout(timerRef.current);
   timerRef.current = null;
+};
+
+const suppressUserCameraControlFor = (
+  untilMsRef: { current: number },
+  animationDurationMs: number,
+) => {
+  untilMsRef.current = Math.max(untilMsRef.current, Date.now() + animationDurationMs + 100);
 };
 
 const scheduleLiveMapInitialFitClose = (

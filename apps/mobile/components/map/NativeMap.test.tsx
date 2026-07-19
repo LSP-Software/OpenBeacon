@@ -175,6 +175,17 @@ const flushEffects = async () => {
   });
 };
 
+const emitUserPanAfterProgrammaticCamera = () => {
+  const originalNow = Date.now;
+  const afterSuppressWindow = originalNow() + 10_000;
+  Date.now = () => afterSuppressWindow;
+  try {
+    emitNativeMapRegionDidChange(true);
+  } finally {
+    Date.now = originalNow;
+  }
+};
+
 const renderNativeMap = async (
   props: {
     markers?: readonly LiveMapMarker[];
@@ -401,6 +412,29 @@ describe("NativeMap integration harness", () => {
     );
   });
 
+  test("heading-only updates do not issue camera commands while following", async () => {
+    const alice = createLiveMapMarkerFixture({
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "alice",
+    });
+
+    await renderNativeMap({
+      markers: [alice],
+      selectedUserId: "alice",
+    });
+    await flushEffects();
+
+    const commandsAfterFocus = getNativeMapCameraCommands().length;
+    await renderNativeMap({
+      markers: [alice],
+      selectedUserId: "alice",
+    });
+    await flushEffects();
+
+    expect(getNativeMapCameraCommands().length).toBe(commandsAfterFocus);
+  });
+
   test("policy: manual pan ends follow until the user selects again", async () => {
     const alice = createLiveMapMarkerFixture({
       latitude: 51.5,
@@ -419,7 +453,7 @@ describe("NativeMap integration harness", () => {
     });
     await flushEffects();
 
-    emitNativeMapRegionDidChange(true);
+    emitUserPanAfterProgrammaticCamera();
 
     const commandsAfterPan = getNativeMapCameraCommands().length;
     await renderNativeMap({
@@ -451,6 +485,47 @@ describe("NativeMap integration harness", () => {
           "zoomLevel" in command.stop,
       );
     expect(refocusStop).toBeDefined();
+  });
+
+  test("programmatic camera moves do not suspend follow when MapLibre marks them as user interaction", async () => {
+    const alice = createLiveMapMarkerFixture({
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "alice",
+    });
+    const aliceMoved = createLiveMapMarkerFixture({
+      ...alice,
+      latitude: 51.6,
+      longitude: -0.1,
+    });
+
+    await renderNativeMap({
+      markers: [alice],
+      selectedUserId: "alice",
+    });
+    await flushEffects();
+
+    emitNativeMapRegionDidChange(true);
+
+    const commandsAfterQuirk = getNativeMapCameraCommands().length;
+    await renderNativeMap({
+      markers: [aliceMoved],
+      selectedUserId: "alice",
+    });
+    await flushEffects();
+
+    const followStop = getNativeMapCameraCommands()
+      .slice(commandsAfterQuirk)
+      .find((command) => command.type === "setCamera");
+    expect(followStop).toEqual({
+      type: "setCamera",
+      stop: {
+        animationDuration: 400,
+        animationMode: "easeTo",
+        centerCoordinate: [-0.1, 51.6],
+        padding: expect.any(Object),
+      },
+    });
   });
 
   test("selection closes initial cohort coalescing so later arrivals do not steal focus", async () => {
