@@ -11,8 +11,10 @@ import {
   emitNativeMapDidFailLoadingMap,
   emitNativeMapDidFinishLoadingStyle,
   emitNativeMapPress,
+  emitNativeMapRegionDidChange,
   getNativeMapAnnotationRefreshCalls,
   getNativeMapCameraCommands,
+  getNativeMapCameraDefaultSettings,
   getNativeMapMountedAnnotationIds,
   getNativeMapSelfHeadingDegrees,
   getNativeMapStyle,
@@ -59,11 +61,15 @@ mock.module("../ui/Icon.tsx", () => ({
 }));
 
 mock.module("@tanstack/react-query", () => ({
-  useMutation: (options: { onSuccess?: (data: unknown) => void }) => ({
+  useMutation: (options: {
+    onError?: (error: Error) => void;
+    onSuccess?: (data: unknown) => void;
+  }) => ({
     isPending: forceRefreshMutationPending,
     mutate: () => {
       forceRefreshMutationCalls += 1;
       if (!forceRefreshMutationSucceeds) {
+        options.onError?.(new Error("force refresh failed"));
         return;
       }
 
@@ -175,6 +181,48 @@ const renderNativeMap = async (
   });
 };
 
+const getRenderedOutput = () => {
+  if (!root) {
+    return "";
+  }
+
+  return JSON.stringify(root.container.toJSON());
+};
+
+const pressRetryButton = async () => {
+  if (!root) {
+    throw new Error("Missing root");
+  }
+
+  const button = root.container.queryAll((instance) => instance.type === "button")[0];
+  if (!button) {
+    throw new Error("Missing retry button");
+  }
+
+  const props = button.props as {
+    onClick?: () => void;
+  };
+
+  await act(async () => {
+    props.onClick?.();
+    await Promise.resolve();
+  });
+};
+
+const failMapLoad = async () => {
+  await act(async () => {
+    emitNativeMapDidFailLoadingMap();
+    await Promise.resolve();
+  });
+};
+
+const finishLoadingStyle = async () => {
+  await act(async () => {
+    emitNativeMapDidFinishLoadingStyle();
+    await Promise.resolve();
+  });
+};
+
 const defaultSignedUrl = {
   expiresAt: "2026-03-31T12:10:00.000Z",
   refreshAt: "2026-03-31T12:09:00.000Z",
@@ -230,11 +278,11 @@ describe("NativeMap integration harness", () => {
     expect(routerReplace).toHaveBeenCalledWith("/");
   });
 
-  test("forces one refresh per url after map failures and resets when the url changes", async () => {
+  test("forces one auto refresh per failure episode and does not loop when the url changes", async () => {
     await renderNativeMap();
 
-    emitNativeMapDidFailLoadingMap();
-    emitNativeMapDidFailLoadingMap();
+    await failMapLoad();
+    await failMapLoad();
 
     expect(forceRefreshMutationCalls).toBe(1);
     expect(setQueryData).toHaveBeenCalledWith(
@@ -254,41 +302,189 @@ describe("NativeMap integration harness", () => {
     };
 
     await renderNativeMap();
-    emitNativeMapDidFailLoadingMap();
+    await failMapLoad();
 
-    expect(forceRefreshMutationCalls).toBe(2);
+    expect(forceRefreshMutationCalls).toBe(1);
+    expect(getRenderedOutput()).toContain("The map could not be loaded.");
   });
 
   test("does not force refresh while a force-refresh mutation is already pending", async () => {
     forceRefreshMutationPending = true;
     await renderNativeMap();
 
-    emitNativeMapDidFailLoadingMap();
+    await failMapLoad();
 
     expect(forceRefreshMutationCalls).toBe(0);
   });
 
-  test("keeps the retry gate consumed when force refresh fails without a new url", async () => {
+  test("resets retry eligibility and shows recoverable UI when force refresh fails", async () => {
     forceRefreshMutationSucceeds = false;
     await renderNativeMap();
 
-    emitNativeMapDidFailLoadingMap();
-    emitNativeMapDidFailLoadingMap();
+    await failMapLoad();
 
     expect(forceRefreshMutationCalls).toBe(1);
     expect(setQueryData).not.toHaveBeenCalled();
+    expect(getRenderedOutput()).toContain("The map could not be loaded.");
+
+    await failMapLoad();
+    expect(forceRefreshMutationCalls).toBe(1);
+
+    forceRefreshMutationSucceeds = true;
+    await pressRetryButton();
+
+    expect(forceRefreshMutationCalls).toBe(2);
+    expect(setQueryData).toHaveBeenCalledWith(
+      [["maps", "getSignedPmtilesUrl"]],
+      expect.objectContaining({
+        url: "https://forced.example/pmtiles",
+      }),
+    );
   });
 
   test("resets the failure retry gate after the style finishes loading", async () => {
     await renderNativeMap();
 
-    emitNativeMapDidFailLoadingMap();
+    await failMapLoad();
     expect(forceRefreshMutationCalls).toBe(1);
 
-    emitNativeMapDidFinishLoadingStyle();
-    emitNativeMapDidFailLoadingMap();
+    await finishLoadingStyle();
+    await failMapLoad();
 
     expect(forceRefreshMutationCalls).toBe(2);
+  });
+
+  test("scheduled pmtiles url refresh preserves camera and does not refit everyone", async () => {
+    const alice = createLiveMapMarkerFixture({
+      initials: "AL",
+      latitude: 51.5,
+      longitude: -0.12,
+      name: "Alice",
+      userId: "alice",
+    });
+    const bob = createLiveMapMarkerFixture({
+      initials: "BO",
+      latitude: 50.8,
+      longitude: -1.1,
+      name: "Bob",
+      userId: "bob",
+    });
+
+    await renderNativeMap({ markers: [alice, bob] });
+    await flushEffects();
+
+    const fitCountBeforeRefresh = getNativeMapCameraCommands().filter(
+      (command) => command.type === "fitBounds",
+    ).length;
+    expect(fitCountBeforeRefresh).toBe(1);
+
+    emitNativeMapRegionDidChange({
+      latitude: 51.51,
+      longitude: -0.13,
+      zoomLevel: 12.5,
+    });
+
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: {
+        expiresAt: "2026-03-31T12:30:00.000Z",
+        refreshAt: "2026-03-31T12:29:00.000Z",
+        url: "https://cached.example/pmtiles-2",
+      },
+    };
+
+    await renderNativeMap({ markers: [alice, bob] });
+    await flushEffects();
+
+    expect(getNativeMapViewMountCount()).toBe(2);
+    expect(getNativeMapCameraDefaultSettings()).toEqual({
+      centerCoordinate: [-0.13, 51.51],
+      zoomLevel: 12.5,
+    });
+    expect(
+      getNativeMapCameraCommands().filter((command) => command.type === "fitBounds").length,
+    ).toBe(fitCountBeforeRefresh);
+  });
+
+  test("scheduled refresh restores selected-person camera after remount", async () => {
+    const alice = createLiveMapMarkerFixture({
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "alice",
+    });
+    const bob = createLiveMapMarkerFixture({
+      initials: "BO",
+      latitude: 50.8,
+      longitude: -1.1,
+      name: "Bob",
+      userId: "bob",
+    });
+
+    await renderNativeMap({
+      markers: [alice, bob],
+      selectedUserId: "alice",
+    });
+    await flushEffects();
+
+    const fitCountBeforeRefresh = getNativeMapCameraCommands().filter(
+      (command) => command.type === "fitBounds",
+    ).length;
+
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: {
+        expiresAt: "2026-03-31T12:30:00.000Z",
+        refreshAt: "2026-03-31T12:29:00.000Z",
+        url: "https://cached.example/pmtiles-2",
+      },
+    };
+
+    await renderNativeMap({
+      markers: [alice, bob],
+      selectedUserId: "alice",
+    });
+    await flushEffects();
+    await finishLoadingStyle();
+
+    expect(
+      getNativeMapCameraCommands().filter((command) => command.type === "fitBounds").length,
+    ).toBe(fitCountBeforeRefresh);
+    expect(
+      getNativeMapCameraCommands().some(
+        (command) =>
+          command.type === "setCamera" &&
+          typeof command.stop === "object" &&
+          command.stop !== null &&
+          "centerCoordinate" in command.stop &&
+          (command.stop as { centerCoordinate: [number, number] }).centerCoordinate[0] === -0.12 &&
+          (command.stop as { zoomLevel?: number }).zoomLevel === 15,
+      ),
+    ).toBe(true);
+  });
+
+  test("repeated map-load failures show recoverable UI instead of looping", async () => {
+    await renderNativeMap();
+
+    await failMapLoad();
+    expect(forceRefreshMutationCalls).toBe(1);
+
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: {
+        expiresAt: "2026-03-31T12:30:00.000Z",
+        refreshAt: "2026-03-31T12:29:00.000Z",
+        url: "https://forced.example/pmtiles",
+      },
+    };
+    await renderNativeMap();
+    await failMapLoad();
+
+    expect(forceRefreshMutationCalls).toBe(1);
+    expect(getRenderedOutput()).toContain("The map could not be loaded.");
+
+    await failMapLoad();
+    await failMapLoad();
+    expect(forceRefreshMutationCalls).toBe(1);
   });
 
   test("captures camera fit for the initial marker cohort and follow stops for selection", async () => {
@@ -444,7 +640,11 @@ describe("NativeMap integration harness", () => {
       version: 8,
     });
 
-    const cameraCommandsBeforeUrlChange = getNativeMapCameraCommands().length;
+    emitNativeMapRegionDidChange({
+      latitude: 51.5,
+      longitude: -0.12,
+      zoomLevel: 14,
+    });
 
     currentSignedPmtilesUrlQuery = {
       ...currentSignedPmtilesUrlQuery,
@@ -457,12 +657,27 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({ markers: [alice] });
     await flushEffects();
+    await finishLoadingStyle();
 
     expect(getNativeMapViewMountCount()).toBe(2);
     expect(getNativeMapStyle()).toEqual({
       pmtilesUrl: "https://cached.example/pmtiles-2",
       version: 8,
     });
-    expect(getNativeMapCameraCommands().length).toBeGreaterThan(cameraCommandsBeforeUrlChange);
+    expect(getNativeMapCameraDefaultSettings()).toEqual({
+      centerCoordinate: [-0.12, 51.5],
+      zoomLevel: 14,
+    });
+    expect(
+      getNativeMapCameraCommands().some(
+        (command) =>
+          command.type === "setCamera" &&
+          typeof command.stop === "object" &&
+          command.stop !== null &&
+          "centerCoordinate" in command.stop &&
+          (command.stop as { centerCoordinate: [number, number] }).centerCoordinate[0] === -0.12 &&
+          (command.stop as { zoomLevel?: number }).zoomLevel === 14,
+      ),
+    ).toBe(true);
   });
 });
