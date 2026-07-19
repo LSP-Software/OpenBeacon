@@ -10,6 +10,7 @@ export const useSelfDeviceLocation = (enabled: boolean) => {
 
   useEffect(() => {
     if (!enabled || !isFocused) {
+      setLocation(null);
       return;
     }
 
@@ -29,6 +30,9 @@ export const useSelfDeviceLocation = (enabled: boolean) => {
             });
           },
         ),
+      onInactive: () => {
+        setLocation(null);
+      },
     });
   }, [enabled, isFocused]);
 
