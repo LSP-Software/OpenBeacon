@@ -60,4 +60,25 @@ describe("groupColor", () => {
     expect(() => setGroupColor("group-1", "#000000" as never)).toThrow();
     expect(getGroupColor("group-1")).toBe(getDefaultGroupColor("group-1"));
   });
+
+  test("notifies subscribers when a group color is stored", async () => {
+    const { GROUP_COLOR_PALETTE, setGroupColor, subscribeToGroupColorChanges } =
+      await importGroupColorModule();
+    const preferredColor = GROUP_COLOR_PALETTE[3];
+    if (!preferredColor) {
+      throw new Error("expected palette color");
+    }
+
+    let notifications = 0;
+    const unsubscribe = subscribeToGroupColorChanges(() => {
+      notifications += 1;
+    });
+
+    setGroupColor("group-1", preferredColor);
+    expect(notifications).toBe(1);
+
+    unsubscribe();
+    setGroupColor("group-1", GROUP_COLOR_PALETTE[4] ?? preferredColor);
+    expect(notifications).toBe(1);
+  });
 });

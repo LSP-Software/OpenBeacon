@@ -6,21 +6,22 @@ const TIME_UNITS = [
   { label: "minute", seconds: 60 },
 ] as const;
 
-function pluralize(value: number, unit: string): string {
+const pluralize = (value: number, unit: string): string => {
   return `${value} ${unit}${value === 1 ? "" : "s"} ago`;
-}
+};
 
-export function timeSince(input: Date | string | number): string {
-  const date = new Date(input);
-  const timestamp = date.getTime();
-
+const elapsedSecondsSince = (input: Date | string | number, now: number) => {
+  const timestamp = new Date(input).getTime();
   if (Number.isNaN(timestamp)) {
-    return "just now";
+    return null;
   }
+  return Math.floor((now - timestamp) / 1000);
+};
 
-  const elapsedSeconds = Math.floor((Date.now() - timestamp) / 1000);
+export const timeSince = (input: Date | string | number, now: number = Date.now()): string => {
+  const elapsedSeconds = elapsedSecondsSince(input, now);
 
-  if (elapsedSeconds <= 0) {
+  if (elapsedSeconds === null || elapsedSeconds <= 0) {
     return "just now";
   }
 
@@ -32,4 +33,22 @@ export function timeSince(input: Date | string | number): string {
   }
 
   return pluralize(elapsedSeconds, "second");
-}
+};
+
+export const getTimeSinceRefreshIntervalMs = (
+  input: Date | string | number,
+  now: number = Date.now(),
+): number => {
+  const elapsedSeconds = elapsedSecondsSince(input, now);
+
+  if (elapsedSeconds === null || elapsedSeconds < 60) {
+    return 1_000;
+  }
+  if (elapsedSeconds < 60 * 60) {
+    return 60_000;
+  }
+  if (elapsedSeconds < 24 * 60 * 60) {
+    return 3_600_000;
+  }
+  return 86_400_000;
+};

@@ -15,6 +15,9 @@ export type GroupColor = (typeof GROUP_COLOR_PALETTE)[number];
 
 const storageKey = (groupId: string) => `group.color.${groupId}`;
 
+const listeners = new Set<() => void>();
+let revision = 0;
+
 const hashGroupId = (groupId: string) => {
   let hash = 0;
   for (let index = 0; index < groupId.length; index += 1) {
@@ -43,9 +46,22 @@ export const getGroupColor = (groupId: string): GroupColor => {
   return getDefaultGroupColor(groupId);
 };
 
+export const getGroupColorRevision = () => revision;
+
+export const subscribeToGroupColorChanges = (listener: () => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+
 export const setGroupColor = (groupId: string, color: GroupColor) => {
   if (!isGroupColor(color)) {
     throw new Error("Group color must be chosen from the palette");
   }
   storage.set(storageKey(groupId), color);
+  revision += 1;
+  for (const listener of listeners) {
+    listener();
+  }
 };
