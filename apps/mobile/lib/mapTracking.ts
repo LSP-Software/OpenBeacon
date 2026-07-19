@@ -123,7 +123,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     return created;
   };
 
-  const removeGroup = (groupId: string) => {
+  const removeGroup = (groupId: string, { clearKeys = true }: { clearKeys?: boolean } = {}) => {
     const state = groupStates.get(groupId);
     if (state) {
       state.runId += 1;
@@ -131,6 +131,9 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
     groupStates.delete(groupId);
     positionsByGroup.delete(groupId);
+    if (clearKeys) {
+      deps.clearEpochKeys(groupId);
+    }
   };
 
   const scheduleWake = () => {
@@ -427,9 +430,10 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       clearSchedule();
       listeners.clear();
       for (const groupId of [...groupStates.keys()]) {
-        removeGroup(groupId);
+        removeGroup(groupId, { clearKeys: false });
       }
       positionsByGroup.clear();
+      deps.clearEpochKeys();
     },
     getLivePositions: () => [...getLiveMap().values()].map(toLiveMapPosition),
     setActive: (nextActive: boolean) => {

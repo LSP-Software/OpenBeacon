@@ -21,6 +21,7 @@ export type MapTrackingCursor = {
 export type LiveMapPosition = Omit<LiveMapEntry, "serverCreatedAt" | "serverId">;
 
 export type MapTrackingDeps = {
+  clearEpochKeys: (groupId?: string) => void;
   decryptPoint: (input: {
     groupId: string;
     point: MapTrackingEncryptedPoint;

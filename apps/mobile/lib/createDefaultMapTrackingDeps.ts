@@ -4,8 +4,8 @@ import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { createMapTrackingDecryptPoint } from "./mapTrackingDecrypt.ts";
 import type { MapTrackingDeps } from "./mapTrackingTypes.ts";
 
-export const createDefaultMapTrackingDeps = (): MapTrackingDeps => ({
-  decryptPoint: createMapTrackingDecryptPoint({
+export const createDefaultMapTrackingDeps = (): MapTrackingDeps => {
+  const decryptPoint = createMapTrackingDecryptPoint({
     ensureDeviceKeys: ensureDeviceKeyRegistration,
     getWrappedEpochKey: async ({ deviceId, epochId, groupId }) => {
       const wrappedEpochKey = await trpcClient.groupEpoch.getWrappedKey.query({
@@ -23,22 +23,33 @@ export const createDefaultMapTrackingDeps = (): MapTrackingDeps => ({
         algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
       } satisfies WrappedEpochKey;
     },
-  }),
-  getLatest: async (groupId) => trpcClient.groupTracking.getLatest.query({ groupId }),
-  listGroups: async () => trpcClient.groupMembership.list.query(),
-  now: () => Date.now(),
-  poll: async ({ cursor, groupId, limit }) =>
-    trpcClient.groupTracking.poll.query({
-      cursor,
-      groupId,
-      limit,
-    }),
-  schedule: (callback, delayMs) => {
-    const timeoutId = setTimeout(callback, delayMs);
-    return {
-      cancel: () => {
-        clearTimeout(timeoutId);
-      },
-    };
-  },
-});
+  });
+
+  return {
+    clearEpochKeys: (groupId) => {
+      if (groupId) {
+        decryptPoint.clearGroup(groupId);
+        return;
+      }
+      decryptPoint.clear();
+    },
+    decryptPoint,
+    getLatest: async (groupId) => trpcClient.groupTracking.getLatest.query({ groupId }),
+    listGroups: async () => trpcClient.groupMembership.list.query(),
+    now: () => Date.now(),
+    poll: async ({ cursor, groupId, limit }) =>
+      trpcClient.groupTracking.poll.query({
+        cursor,
+        groupId,
+        limit,
+      }),
+    schedule: (callback, delayMs) => {
+      const timeoutId = setTimeout(callback, delayMs);
+      return {
+        cancel: () => {
+          clearTimeout(timeoutId);
+        },
+      };
+    },
+  };
+};

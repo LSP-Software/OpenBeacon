@@ -74,6 +74,7 @@ const createSession = (overrides: Partial<MapTrackingDeps> = {}) => {
   const basePoll: MapTrackingDeps["poll"] = async () => ({ points: [] });
 
   const deps: MapTrackingDeps = {
+    clearEpochKeys: overrides.clearEpochKeys ?? (() => {}),
     decryptPoint: overrides.decryptPoint ?? baseDecrypt,
     getLatest: async (groupId) => {
       getLatestCalls.push(groupId);
@@ -958,5 +959,32 @@ describe("createMapTrackingSession", () => {
 
     expect(pollCalls.map((call) => call.groupId).sort()).toEqual(["group-1", "group-2"]);
     expect(getLatestCalls).toEqual([]);
+  });
+
+  test("clears epoch keys for removed groups and on destroy", async () => {
+    const cleared: Array<string | undefined> = [];
+    const coldRow = point({
+      createdAt: new Date("2026-07-17T12:00:00.000Z"),
+      id: "point-0",
+      senderUserId: "user-1",
+    });
+    let groups = [{ id: "group-1" }, { id: "group-2" }];
+    const { session } = createSession({
+      clearEpochKeys: (groupId) => {
+        cleared.push(groupId);
+      },
+      getLatest: async () => ({ points: [coldRow] }),
+      listGroups: async () => groups,
+    });
+
+    session.setActive(true);
+    await session.tick();
+
+    groups = [{ id: "group-1" }];
+    await session.tick();
+    expect(cleared).toEqual(["group-2"]);
+
+    session.destroy();
+    expect(cleared).toEqual(["group-2", undefined]);
   });
 });
