@@ -6,6 +6,7 @@ import {
   generateGroupEpochKey,
   wrapEpochKeyForRecipient,
 } from "@openbeacon/encryption";
+import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 const deviceKeyPair = createDeviceKeyPair();
 const epochKey1 = generateGroupEpochKey();
@@ -48,11 +49,7 @@ let uploadGroup = async ({ points }: { groupId: string; points: unknown[] }) => 
   duplicates: [],
 });
 
-mock.module("react-native", () => ({
-  Platform: {
-    OS: "android",
-  },
-}));
+mock.module("react-native", () => createReactNativeTestModule({ platformOS: "android" }));
 
 mock.module("./deviceKeys.ts", () => ({
   ensureDeviceKeyRegistration: async () => ({

@@ -1,0 +1,195 @@
+import React, { forwardRef, type ReactNode, useEffect, useImperativeHandle } from "react";
+import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
+
+const cameraCommands: Array<
+  | {
+      type: "setCamera";
+      stop: unknown;
+    }
+  | {
+      type: "fitBounds";
+      ne: unknown;
+      sw: unknown;
+      padding: unknown;
+      duration: unknown;
+    }
+> = [];
+const annotationRefreshCalls: string[] = [];
+const annotationHandlersById = new Map<
+  string,
+  {
+    onDeselected?: () => void;
+    onSelected?: () => void;
+  }
+>();
+const mountedAnnotationIds = new Set<string>();
+let mapViewHandlers: {
+  onDidFailLoadingMap?: () => void;
+  onDidFinishLoadingStyle?: () => void;
+  onPress?: () => void;
+} = {};
+let mapViewMountCount = 0;
+let latestMapStyle: unknown = null;
+let selfHeadingDegrees: number | null = null;
+
+export const createLiveMapMarkerFixture = (
+  overrides: Partial<LiveMapMarker> & Pick<LiveMapMarker, "userId">,
+): LiveMapMarker => ({
+  battery: { charging: false, level: 0.8 },
+  image: null,
+  initials: "AL",
+  isSelf: false,
+  latitude: 51.5,
+  longitude: -0.12,
+  name: "Alice",
+  otherSharedGroupNames: [],
+  ringColor: "#3366FF",
+  sourceGroupId: "group-1",
+  timestamp: "2026-07-19T10:00:00.000Z",
+  ...overrides,
+});
+
+export const resetNativeMapHarness = () => {
+  cameraCommands.length = 0;
+  annotationRefreshCalls.length = 0;
+  annotationHandlersById.clear();
+  mountedAnnotationIds.clear();
+  mapViewHandlers = {};
+  mapViewMountCount = 0;
+  latestMapStyle = null;
+  selfHeadingDegrees = null;
+};
+
+export const getNativeMapCameraCommands = () => [...cameraCommands];
+
+export const getNativeMapAnnotationRefreshCalls = () => [...annotationRefreshCalls];
+
+export const getNativeMapMountedAnnotationIds = () => [...mountedAnnotationIds];
+
+export const getNativeMapViewMountCount = () => mapViewMountCount;
+
+export const getNativeMapStyle = () => latestMapStyle;
+
+export const setNativeMapSelfHeadingDegrees = (headingDegrees: number | null) => {
+  selfHeadingDegrees = headingDegrees;
+};
+
+export const getNativeMapSelfHeadingDegrees = () => selfHeadingDegrees;
+
+export const emitNativeMapPress = () => {
+  mapViewHandlers.onPress?.();
+};
+
+export const emitNativeMapDidFailLoadingMap = () => {
+  mapViewHandlers.onDidFailLoadingMap?.();
+};
+
+export const emitNativeMapDidFinishLoadingStyle = () => {
+  mapViewHandlers.onDidFinishLoadingStyle?.();
+};
+
+export const emitNativeMapAnnotationSelected = (annotationId: string) => {
+  annotationHandlersById.get(annotationId)?.onSelected?.();
+};
+
+export const emitNativeMapAnnotationDeselected = (annotationId: string) => {
+  annotationHandlersById.get(annotationId)?.onDeselected?.();
+};
+
+export const createMapLibreMockModule = () => {
+  const Camera = forwardRef((_props: Record<string, unknown>, ref) => {
+    useImperativeHandle(ref, () => ({
+      fitBounds: (ne: unknown, sw: unknown, padding: unknown, duration: unknown) => {
+        cameraCommands.push({ type: "fitBounds", ne, sw, padding, duration });
+      },
+      setCamera: (stop: unknown) => {
+        cameraCommands.push({ type: "setCamera", stop });
+      },
+    }));
+
+    return React.createElement("camera");
+  });
+  Camera.displayName = "MockMapLibreCamera";
+
+  const MapView = ({
+    children,
+    mapStyle,
+    onDidFailLoadingMap,
+    onDidFinishLoadingStyle,
+    onPress,
+  }: {
+    children?: ReactNode;
+    mapStyle?: unknown;
+    onDidFailLoadingMap?: () => void;
+    onDidFinishLoadingStyle?: () => void;
+    onPress?: () => void;
+  }) => {
+    mapViewHandlers = {
+      ...(onDidFailLoadingMap ? { onDidFailLoadingMap } : {}),
+      ...(onDidFinishLoadingStyle ? { onDidFinishLoadingStyle } : {}),
+      ...(onPress ? { onPress } : {}),
+    };
+    latestMapStyle = mapStyle ?? null;
+
+    useEffect(() => {
+      mapViewMountCount += 1;
+    }, []);
+
+    return React.createElement(
+      "map-view",
+      {
+        mapStyle,
+        onDidFailLoadingMap,
+        onDidFinishLoadingStyle,
+        onPress,
+      },
+      children,
+    );
+  };
+
+  const PointAnnotation = forwardRef<
+    { refresh: () => void },
+    {
+      children?: ReactNode;
+      id: string;
+      onDeselected?: () => void;
+      onSelected?: () => void;
+      selected?: boolean;
+    }
+  >(({ children, id, onDeselected, onSelected, selected }, ref) => {
+    useImperativeHandle(ref, () => ({
+      refresh: () => {
+        annotationRefreshCalls.push(id);
+      },
+    }));
+
+    useEffect(() => {
+      annotationHandlersById.set(id, {
+        ...(onDeselected ? { onDeselected } : {}),
+        ...(onSelected ? { onSelected } : {}),
+      });
+      mountedAnnotationIds.add(id);
+
+      return () => {
+        annotationHandlersById.delete(id);
+        mountedAnnotationIds.delete(id);
+      };
+    }, [id, onDeselected, onSelected]);
+
+    return React.createElement(
+      "point-annotation",
+      {
+        id,
+        selected: selected ?? false,
+      },
+      children,
+    );
+  });
+  PointAnnotation.displayName = "MockMapLibrePointAnnotation";
+
+  return {
+    Camera,
+    MapView,
+    PointAnnotation,
+  };
+};

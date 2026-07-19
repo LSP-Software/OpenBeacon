@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 const GOOGLE_WEB_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID";
 const GOOGLE_IOS_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID";
@@ -85,22 +86,7 @@ mock.module("expo-secure-store", () => ({
   deleteItemAsync: deleteItemAsyncMock,
 }));
 
-mock.module("react-native", () => ({
-  AppState: {
-    currentState: "active",
-    addEventListener: () => ({
-      remove: () => {},
-    }),
-  },
-  Button: ({ onPress, title }: { onPress?: () => void; title: string }) => ({
-    onPress,
-    title,
-  }),
-  Platform: {
-    OS: "android",
-  },
-  View: ({ children }: { children?: unknown }) => children ?? null,
-}));
+mock.module("react-native", () => createReactNativeTestModule({ platformOS: "android" }));
 
 mock.module("./auth-client.ts", () => ({
   SESSION_TOKEN_TO_REVOKE_KEY: "session-token",
