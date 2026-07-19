@@ -1,4 +1,10 @@
-import { Camera, type CameraRef, MapView, PointAnnotation } from "@maplibre/maplibre-react-native";
+import {
+  Camera,
+  type CameraRef,
+  MapView,
+  PointAnnotation,
+  type PointAnnotationRef,
+} from "@maplibre/maplibre-react-native";
 import { useMutation } from "@tanstack/react-query";
 import { router, useRootNavigationState } from "expo-router";
 import { ScanIcon } from "lucide-react-native";
@@ -6,6 +12,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Button, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../../components/ui/Text.tsx";
+import { useSelfDeviceHeading } from "../../hooks/useSelfDeviceHeading.ts";
 import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
 import { queryClient, trpc } from "../../lib/api.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
@@ -192,25 +199,28 @@ export const NativeMap = ({
         }}
       >
         <Camera ref={cameraRef} defaultSettings={{ centerCoordinate: [0, 0], zoomLevel: 1.25 }} />
-        {markers.map((marker) => (
-          <PointAnnotation
-            key={marker.userId}
-            id={marker.userId}
-            coordinate={[marker.longitude, marker.latitude]}
-            anchor={{ x: 0.5, y: 0.5 }}
-            selected={marker.userId === selectedUserId}
-            onSelected={() => {
-              onSelectUserId?.(marker.userId);
-            }}
-          >
-            <LiveMapMarkerPin
-              image={marker.image}
-              initials={marker.initials}
-              name={marker.name}
-              ringColor={marker.ringColor}
+        {markers.map((marker) =>
+          marker.isSelf ? (
+            <SelfLiveMapPointAnnotation
+              key={marker.userId}
+              marker={marker}
+              selected={marker.userId === selectedUserId}
+              onSelected={() => {
+                onSelectUserId?.(marker.userId);
+              }}
             />
-          </PointAnnotation>
-        ))}
+          ) : (
+            <LiveMapPointAnnotation
+              key={marker.userId}
+              headingDegrees={null}
+              marker={marker}
+              selected={marker.userId === selectedUserId}
+              onSelected={() => {
+                onSelectUserId?.(marker.userId);
+              }}
+            />
+          ),
+        )}
       </MapView>
       {hasMarkers ? (
         <Pressable
@@ -237,5 +247,69 @@ export const NativeMap = ({
         />
       ) : null}
     </View>
+  );
+};
+
+const SelfLiveMapPointAnnotation = ({
+  marker,
+  onSelected,
+  selected,
+}: {
+  marker: LiveMapMarker;
+  onSelected: () => void;
+  selected: boolean;
+}) => {
+  const headingDegrees = useSelfDeviceHeading(true);
+
+  return (
+    <LiveMapPointAnnotation
+      headingDegrees={headingDegrees}
+      marker={marker}
+      onSelected={onSelected}
+      selected={selected}
+    />
+  );
+};
+
+const LiveMapPointAnnotation = ({
+  headingDegrees,
+  marker,
+  onSelected,
+  selected,
+}: {
+  headingDegrees: number | null;
+  marker: LiveMapMarker;
+  onSelected: () => void;
+  selected: boolean;
+}) => {
+  const annotationRef = useRef<PointAnnotationRef>(null);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: headingDegrees triggers Android bitmap refresh
+  useEffect(() => {
+    if (!marker.isSelf) {
+      return;
+    }
+
+    // PointAnnotation snapshots children to a bitmap on Android; refresh when the heading beam rotates or hides.
+    annotationRef.current?.refresh();
+  }, [headingDegrees, marker.isSelf]);
+
+  return (
+    <PointAnnotation
+      ref={annotationRef}
+      id={marker.userId}
+      coordinate={[marker.longitude, marker.latitude]}
+      anchor={{ x: 0.5, y: 0.5 }}
+      selected={selected}
+      onSelected={onSelected}
+    >
+      <LiveMapMarkerPin
+        headingDegrees={headingDegrees}
+        image={marker.image}
+        initials={marker.initials}
+        name={marker.name}
+        ringColor={marker.ringColor}
+      />
+    </PointAnnotation>
   );
 };
