@@ -33,7 +33,13 @@ import kotlinx.coroutines.launch
 class TrackingCaptureService : Service() {
   private val fusedLocationClient by lazy { LocationServices.getFusedLocationProviderClient(this) }
   private val capturePipeline by lazy { TrackingRuntime.capturePipeline(this) }
-  private val captureScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+  private val captureScope =
+    CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+
+  private var currentIntervalMs = DEFAULT_INTERVAL_MS
+  private var lastQueuedLatitude: Double? = null
+  private var lastQueuedLongitude: Double? = null
+  private var lastQueuedAtMs: Long? = null
 
   private val locationCallback =
     object : LocationCallback() {
@@ -77,12 +83,6 @@ class TrackingCaptureService : Service() {
   private fun startCapture(intervalMs: Long) {
     ensureNotificationChannel()
     val notification = buildNotification()
-    val request =
-      LocationRequest
-        .Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
-        .setMinUpdateIntervalMillis(intervalMs)
-        .setMaxUpdateDelayMillis(intervalMs)
-        .build()
 
     try {
       ServiceCompat.startForeground(
@@ -91,7 +91,7 @@ class TrackingCaptureService : Service() {
         notification,
         ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
       )
-      fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+      requestLocationUpdates(intervalMs)
       TrackingRuntime.isCaptureRunning = true
     } catch (error: SecurityException) {
       Log.e(TAG, "Failed to start location capture.", error)
@@ -100,9 +100,25 @@ class TrackingCaptureService : Service() {
     }
   }
 
+  private fun requestLocationUpdates(intervalMs: Long) {
+    val request =
+      LocationRequest
+        .Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
+        .setMinUpdateIntervalMillis(intervalMs)
+        .setMaxUpdateDelayMillis(intervalMs)
+        .build()
+
+    fusedLocationClient.removeLocationUpdates(locationCallback)
+    fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+    currentIntervalMs = intervalMs
+  }
+
   private fun stopCapture() {
     fusedLocationClient.removeLocationUpdates(locationCallback)
     TrackingRuntime.isCaptureRunning = false
+    lastQueuedLatitude = null
+    lastQueuedLongitude = null
+    lastQueuedAtMs = null
     stopForeground(STOP_FOREGROUND_REMOVE)
   }
 
@@ -114,6 +130,33 @@ class TrackingCaptureService : Service() {
       } else {
         null
       }
+    val nowMs = System.currentTimeMillis()
+    val distanceFromLastQueuedMeters =
+      distanceMetersFromLastQueued(location.latitude, location.longitude)
+    val timeSinceLastQueuedMs = lastQueuedAtMs?.let { nowMs - it }
+    val decision =
+      CaptureSamplingPolicy.evaluate(
+        powerSaveMode = battery.powerSaveMode,
+        batteryLevel = battery.level,
+        batteryLevelKnown = battery.levelKnown,
+        charging = battery.charging,
+        speedMetersPerSecond = speed,
+        distanceFromLastQueuedMeters = distanceFromLastQueuedMeters,
+        timeSinceLastQueuedMs = timeSinceLastQueuedMs,
+      )
+
+    val nextIntervalMs = decision.intervalMs.coerceAtLeast(MIN_INTERVAL_MS)
+    if (nextIntervalMs != currentIntervalMs) {
+      try {
+        requestLocationUpdates(nextIntervalMs)
+      } catch (error: SecurityException) {
+        Log.e(TAG, "Failed to retune location interval.", error)
+      }
+    }
+
+    if (!decision.shouldQueue) {
+      return
+    }
 
     try {
       capturePipeline.onFix(
@@ -124,9 +167,23 @@ class TrackingCaptureService : Service() {
         batteryLevel = battery.level,
         batteryCharging = battery.charging,
       )
+      lastQueuedLatitude = location.latitude
+      lastQueuedLongitude = location.longitude
+      lastQueuedAtMs = nowMs
     } catch (error: Exception) {
       Log.e(TAG, "Failed to encrypt and queue location fix.", error)
     }
+  }
+
+  private fun distanceMetersFromLastQueued(
+    latitude: Double,
+    longitude: Double,
+  ): Double? {
+    val lastLatitude = lastQueuedLatitude ?: return null
+    val lastLongitude = lastQueuedLongitude ?: return null
+    val results = FloatArray(1)
+    Location.distanceBetween(lastLatitude, lastLongitude, latitude, longitude, results)
+    return results[0].toDouble()
   }
 
   private fun formatTimestamp(epochMillis: Long): String {
@@ -169,7 +226,7 @@ class TrackingCaptureService : Service() {
     const val ACTION_START = "expo.modules.openbeacontracking.action.START"
     const val ACTION_STOP = "expo.modules.openbeacontracking.action.STOP"
     const val EXTRA_INTERVAL_MS = "intervalMs"
-    const val DEFAULT_INTERVAL_MS = 30_000L
+    const val DEFAULT_INTERVAL_MS = CaptureSamplingPolicy.DEFAULT_INTERVAL_MS
     const val MIN_INTERVAL_MS = 5_000L
     private const val TAG = "TrackingCapture"
     private const val CHANNEL_ID = "openbeacon_tracking_capture"
