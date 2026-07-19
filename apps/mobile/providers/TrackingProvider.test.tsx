@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { act } from "react";
 import { createRoot, type Root } from "test-renderer";
 import { requestTrackingSync } from "../lib/trackingEvents.ts";
+import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -35,24 +36,24 @@ const trackingService = {
   },
 };
 
-mock.module("react-native", () => ({
-  AppState: {
-    currentState: "active",
-    addEventListener: (_event: string, listener: (nextAppState: string) => void) => {
-      appStateListener = listener;
-      return {
-        remove: () => {
-          if (appStateListener === listener) {
-            appStateListener = null;
-          }
-        },
-      };
+mock.module("react-native", () =>
+  createReactNativeTestModule({
+    appState: {
+      currentState: "active",
+      addEventListener: (_event: string, listener: (nextAppState: string) => void) => {
+        appStateListener = listener;
+        return {
+          remove: () => {
+            if (appStateListener === listener) {
+              appStateListener = null;
+            }
+          },
+        };
+      },
     },
-  },
-  Platform: {
-    OS: "android",
-  },
-}));
+    platformOS: "android",
+  }),
+);
 
 mock.module("../lib/auth-client.ts", () => ({
   authClient: {

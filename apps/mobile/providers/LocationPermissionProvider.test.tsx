@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import React, { act } from "react";
 import { createRoot, type Root } from "test-renderer";
+import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -29,29 +30,25 @@ let refreshResult: import("../lib/locationPermissions.ts").LocationPermissionSta
 let backgroundRequestResult: import("../lib/locationPermissions.ts").LocationPermissionState;
 let appStateListener: ((nextAppState: string) => void) | null = null;
 
-mock.module("react-native", () => ({
-  AppState: {
-    currentState: "active",
-    addEventListener: (_event: string, listener: (nextAppState: string) => void) => {
-      appStateListener = listener;
+mock.module("react-native", () =>
+  createReactNativeTestModule({
+    appState: {
+      currentState: "active",
+      addEventListener: (_event: string, listener: (nextAppState: string) => void) => {
+        appStateListener = listener;
 
-      return {
-        remove: () => {
-          if (appStateListener === listener) {
-            appStateListener = null;
-          }
-        },
-      };
+        return {
+          remove: () => {
+            if (appStateListener === listener) {
+              appStateListener = null;
+            }
+          },
+        };
+      },
     },
-  },
-  Button: ({ onPress, title }: { onPress?: () => void; title: string }) =>
-    React.createElement("button", { onClick: onPress, type: "button" }, title),
-  Platform: {
-    OS: "ios",
-  },
-  View: ({ children }: { children?: React.ReactNode }) =>
-    React.createElement("view", null, children),
-}));
+    platformOS: "ios",
+  }),
+);
 
 mock.module("../components/ui/Button.tsx", () => ({
   Button: ({ children, onPress }: { children: React.ReactNode; onPress?: () => void }) =>
