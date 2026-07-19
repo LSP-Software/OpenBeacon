@@ -37,9 +37,7 @@ class TrackingCaptureService : Service() {
     CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
 
   private var currentIntervalMs = DEFAULT_INTERVAL_MS
-  private var lastQueuedLatitude: Double? = null
-  private var lastQueuedLongitude: Double? = null
-  private var lastQueuedAtMs: Long? = null
+  private var lastQueued: LastQueuedFix? = null
 
   private val locationCallback =
     object : LocationCallback() {
@@ -65,9 +63,7 @@ class TrackingCaptureService : Service() {
         return START_NOT_STICKY
       }
       else -> {
-        val intervalMs =
-          intent?.getLongExtra(EXTRA_INTERVAL_MS, DEFAULT_INTERVAL_MS) ?: DEFAULT_INTERVAL_MS
-        startCapture(intervalMs.coerceAtLeast(MIN_INTERVAL_MS))
+        startCapture(resolveStartIntervalMs(intent))
       }
     }
 
@@ -78,6 +74,26 @@ class TrackingCaptureService : Service() {
     stopCapture()
     captureScope.cancel()
     super.onDestroy()
+  }
+
+  private fun resolveStartIntervalMs(intent: Intent?): Long {
+    val policyIntervalMs =
+      CaptureSamplingPolicy
+        .evaluate(
+          battery = BatteryReader.read(this),
+          speedMetersPerSecond = null,
+          distanceFromLastQueuedMeters = null,
+          timeSinceLastQueuedMs = null,
+        ).intervalMs
+
+    val overrideIntervalMs =
+      if (intent?.hasExtra(EXTRA_INTERVAL_MS) == true) {
+        intent.getLongExtra(EXTRA_INTERVAL_MS, policyIntervalMs)
+      } else {
+        null
+      }
+
+    return (overrideIntervalMs ?: policyIntervalMs).coerceAtLeast(MIN_INTERVAL_MS)
   }
 
   private fun startCapture(intervalMs: Long) {
@@ -116,9 +132,7 @@ class TrackingCaptureService : Service() {
   private fun stopCapture() {
     fusedLocationClient.removeLocationUpdates(locationCallback)
     TrackingRuntime.isCaptureRunning = false
-    lastQueuedLatitude = null
-    lastQueuedLongitude = null
-    lastQueuedAtMs = null
+    lastQueued = null
     stopForeground(STOP_FOREGROUND_REMOVE)
   }
 
@@ -131,18 +145,14 @@ class TrackingCaptureService : Service() {
         null
       }
     val nowMs = System.currentTimeMillis()
-    val distanceFromLastQueuedMeters =
-      distanceMetersFromLastQueued(location.latitude, location.longitude)
-    val timeSinceLastQueuedMs = lastQueuedAtMs?.let { nowMs - it }
+    val queued = lastQueued
     val decision =
       CaptureSamplingPolicy.evaluate(
-        powerSaveMode = battery.powerSaveMode,
-        batteryLevel = battery.level,
-        batteryLevelKnown = battery.levelKnown,
-        charging = battery.charging,
+        battery = battery,
         speedMetersPerSecond = speed,
-        distanceFromLastQueuedMeters = distanceFromLastQueuedMeters,
-        timeSinceLastQueuedMs = timeSinceLastQueuedMs,
+        distanceFromLastQueuedMeters =
+          queued?.let { distanceMeters(it.latitude, it.longitude, location.latitude, location.longitude) },
+        timeSinceLastQueuedMs = queued?.let { nowMs - it.atMs },
       )
 
     val nextIntervalMs = decision.intervalMs.coerceAtLeast(MIN_INTERVAL_MS)
@@ -167,22 +177,25 @@ class TrackingCaptureService : Service() {
         batteryLevel = battery.level,
         batteryCharging = battery.charging,
       )
-      lastQueuedLatitude = location.latitude
-      lastQueuedLongitude = location.longitude
-      lastQueuedAtMs = nowMs
+      lastQueued =
+        LastQueuedFix(
+          latitude = location.latitude,
+          longitude = location.longitude,
+          atMs = nowMs,
+        )
     } catch (error: Exception) {
       Log.e(TAG, "Failed to encrypt and queue location fix.", error)
     }
   }
 
-  private fun distanceMetersFromLastQueued(
-    latitude: Double,
-    longitude: Double,
-  ): Double? {
-    val lastLatitude = lastQueuedLatitude ?: return null
-    val lastLongitude = lastQueuedLongitude ?: return null
+  private fun distanceMeters(
+    fromLatitude: Double,
+    fromLongitude: Double,
+    toLatitude: Double,
+    toLongitude: Double,
+  ): Double {
     val results = FloatArray(1)
-    Location.distanceBetween(lastLatitude, lastLongitude, latitude, longitude, results)
+    Location.distanceBetween(fromLatitude, fromLongitude, toLatitude, toLongitude, results)
     return results[0].toDouble()
   }
 
@@ -221,6 +234,12 @@ class TrackingCaptureService : Service() {
       .setCategory(NotificationCompat.CATEGORY_SERVICE)
       .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
       .build()
+
+  private data class LastQueuedFix(
+    val latitude: Double,
+    val longitude: Double,
+    val atMs: Long,
+  )
 
   companion object {
     const val ACTION_START = "expo.modules.openbeacontracking.action.START"

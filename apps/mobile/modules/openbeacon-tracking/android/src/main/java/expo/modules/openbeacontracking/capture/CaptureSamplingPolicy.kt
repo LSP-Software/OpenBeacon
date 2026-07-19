@@ -16,21 +16,12 @@ object CaptureSamplingPolicy {
   const val LOW_BATTERY_LEVEL = 15
 
   fun evaluate(
-    powerSaveMode: Boolean,
-    batteryLevel: Int,
-    batteryLevelKnown: Boolean,
-    charging: Boolean,
+    battery: BatterySnapshot,
     speedMetersPerSecond: Double?,
     distanceFromLastQueuedMeters: Double?,
     timeSinceLastQueuedMs: Long?,
   ): CaptureSamplingDecision {
-    val batterySaver =
-      isBatterySaver(
-        powerSaveMode = powerSaveMode,
-        batteryLevel = batteryLevel,
-        batteryLevelKnown = batteryLevelKnown,
-        charging = charging,
-      )
+    val batterySaver = isBatterySaver(battery)
     val moving = isMoving(speedMetersPerSecond)
     val intervalMs =
       when {
@@ -51,14 +42,9 @@ object CaptureSamplingPolicy {
     )
   }
 
-  private fun isBatterySaver(
-    powerSaveMode: Boolean,
-    batteryLevel: Int,
-    batteryLevelKnown: Boolean,
-    charging: Boolean,
-  ): Boolean =
-    powerSaveMode ||
-      (batteryLevelKnown && batteryLevel <= LOW_BATTERY_LEVEL && !charging)
+  private fun isBatterySaver(battery: BatterySnapshot): Boolean =
+    battery.powerSaveMode ||
+      (battery.levelKnown && battery.level <= LOW_BATTERY_LEVEL && !battery.charging)
 
   private fun isMoving(speedMetersPerSecond: Double?): Boolean =
     speedMetersPerSecond != null && speedMetersPerSecond >= MOVING_SPEED_MPS

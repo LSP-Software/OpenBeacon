@@ -6,13 +6,6 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.PowerManager
 
-data class BatterySnapshot(
-  val level: Int,
-  val charging: Boolean,
-  val powerSaveMode: Boolean,
-  val levelKnown: Boolean,
-)
-
 object BatteryReader {
   fun read(context: Context): BatterySnapshot {
     val powerSaveMode =
