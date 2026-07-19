@@ -22,8 +22,20 @@ export const createReactNativeTestModule = ({
   platformOS?: PlatformOSType;
 } = {}) => ({
   AppState: appState,
-  Button: ({ onPress, title }: { onPress?: () => void; title: string }) =>
-    React.createElement("button", { onClick: onPress, type: "button" }, title),
+  Button: ({
+    disabled,
+    onPress,
+    title,
+  }: {
+    disabled?: boolean;
+    onPress?: () => void;
+    title: string;
+  }) =>
+    React.createElement(
+      "button",
+      { disabled: disabled ?? false, onClick: onPress, type: "button" },
+      title,
+    ),
   Platform: {
     OS: platformOS,
   },
