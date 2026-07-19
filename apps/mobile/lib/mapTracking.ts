@@ -59,13 +59,20 @@ const toLiveMapPosition = ({
 
 export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   let active = false;
-  let backoffMs = STEADY_INTERVAL_MS;
-  let lastReconcileAt = deps.now();
   let scheduled: { cancel: () => void } | null = null;
   let tickPromise: Promise<void> | null = null;
+  let tickPhase: "idle" | "listing" | "groups" = "idle";
   const groupStates = new Map<
     string,
-    { cursor: MapTrackingCursor | null; mode: "cold" | "live" }
+    {
+      backoffMs: number;
+      cursor: MapTrackingCursor | null;
+      inFlight: boolean;
+      lastReconcileAt: number;
+      mode: "cold" | "live";
+      nextDueAt: number;
+      runId: number;
+    }
   >();
   const positionsByGroup = new Map<string, Map<string, LiveMapEntry>>();
   const listeners = new Set<() => void>();
@@ -89,34 +96,114 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     scheduled = null;
   };
 
-  const scheduleNext = (delayMs: number) => {
+  const isCurrent = (groupId: string, runId: number) => {
+    if (!active) {
+      return false;
+    }
+    const state = groupStates.get(groupId);
+    return state !== undefined && state.runId === runId;
+  };
+
+  const ensureGroupState = (groupId: string) => {
+    const existing = groupStates.get(groupId);
+    if (existing) {
+      return existing;
+    }
+
+    const created = {
+      backoffMs: STEADY_INTERVAL_MS,
+      cursor: null,
+      inFlight: false,
+      lastReconcileAt: deps.now(),
+      mode: "cold" as const,
+      nextDueAt: deps.now(),
+      runId: 0,
+    };
+    groupStates.set(groupId, created);
+    return created;
+  };
+
+  const removeGroup = (groupId: string) => {
+    const state = groupStates.get(groupId);
+    if (state) {
+      state.runId += 1;
+      state.inFlight = false;
+    }
+    groupStates.delete(groupId);
+    positionsByGroup.delete(groupId);
+  };
+
+  const scheduleWake = () => {
     clearSchedule();
     if (!active) {
       return;
     }
 
-    scheduled = deps.schedule(() => {
-      void tick();
-    }, delayMs);
+    const now = deps.now();
+    let soonest = Number.POSITIVE_INFINITY;
+    for (const state of groupStates.values()) {
+      if (!state.inFlight) {
+        soonest = Math.min(soonest, state.nextDueAt);
+      }
+    }
+
+    if (soonest === Number.POSITIVE_INFINITY) {
+      soonest = now + STEADY_INTERVAL_MS;
+    }
+
+    scheduled = deps.schedule(
+      () => {
+        void tick({ force: false });
+      },
+      Math.max(0, soonest - now),
+    );
+  };
+
+  const markGroupSuccess = (groupId: string, runId: number) => {
+    const state = groupStates.get(groupId);
+    if (!state || state.runId !== runId || !active) {
+      return;
+    }
+    state.backoffMs = STEADY_INTERVAL_MS;
+    state.nextDueAt = deps.now() + STEADY_INTERVAL_MS;
+  };
+
+  const markGroupFailure = (groupId: string, runId: number) => {
+    const state = groupStates.get(groupId);
+    if (!state || state.runId !== runId || !active) {
+      return;
+    }
+    state.nextDueAt = deps.now() + state.backoffMs;
+    state.backoffMs = Math.min(state.backoffMs * 2, MAX_BACKOFF_MS);
   };
 
   const mergeDecrypted = async ({
     groupId,
     points,
+    runId,
   }: {
     groupId: string;
     points: readonly MapTrackingEncryptedPoint[];
+    runId: number;
   }) => {
     const entries: LiveMapEntry[] = [];
 
     for (const point of points) {
+      if (!isCurrent(groupId, runId)) {
+        return;
+      }
+
       const result = await deps.decryptPoint({ groupId, point });
+      if (!isCurrent(groupId, runId)) {
+        return;
+      }
+
       if (result.status === "ok") {
         entries.push(result.entry);
       }
     }
 
-    if (entries.length === 0) {
+    if (entries.length === 0 || !isCurrent(groupId, runId)) {
       return;
     }
 
@@ -125,23 +212,27 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     notify();
   };
 
-  const coldTick = async (groupId: string) => {
+  const coldTick = async (groupId: string, runId: number) => {
     const { points } = await deps.getLatest(groupId);
-    const state = groupStates.get(groupId) ?? { cursor: null, mode: "cold" as const };
-
-    if (points.length === 0) {
-      groupStates.set(groupId, state);
+    if (!isCurrent(groupId, runId)) {
       return;
     }
 
-    await mergeDecrypted({ groupId, points });
-    groupStates.set(groupId, {
-      cursor: maxCursor(points),
-      mode: "live",
-    });
+    const state = groupStates.get(groupId);
+    if (!state || points.length === 0) {
+      return;
+    }
+
+    await mergeDecrypted({ groupId, points, runId });
+    if (!isCurrent(groupId, runId)) {
+      return;
+    }
+
+    state.cursor = maxCursor(points);
+    state.mode = "live";
   };
 
-  const liveTick = async (groupId: string) => {
+  const liveTick = async (groupId: string, runId: number) => {
     const state = groupStates.get(groupId);
     if (!state || state.mode !== "live" || !state.cursor) {
       return;
@@ -150,7 +241,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     let cursor = state.cursor;
 
     for (;;) {
-      if (!active) {
+      if (!isCurrent(groupId, runId)) {
         return;
       }
 
@@ -160,7 +251,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         limit: POLL_LIMIT,
       });
 
-      if (!active) {
+      if (!isCurrent(groupId, runId)) {
         return;
       }
 
@@ -173,9 +264,14 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         break;
       }
 
-      await mergeDecrypted({ groupId, points });
+      await mergeDecrypted({ groupId, points, runId });
+      if (!isCurrent(groupId, runId)) {
+        return;
+      }
+
       cursor = nextCursor;
-      groupStates.set(groupId, { cursor, mode: "live" });
+      state.cursor = cursor;
+      state.mode = "live";
 
       if (points.length < POLL_LIMIT) {
         break;
@@ -183,24 +279,76 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
   };
 
-  const reconcileTick = async (groupId: string) => {
+  const reconcileTick = async (groupId: string, runId: number) => {
     const { points } = await deps.getLatest(groupId);
-    if (points.length === 0) {
+    if (!isCurrent(groupId, runId) || points.length === 0) {
       return;
     }
 
-    await mergeDecrypted({ groupId, points });
+    await mergeDecrypted({ groupId, points, runId });
   };
 
-  const tickInternal = async () => {
-    const groups = await deps.listGroups();
+  const tickGroup = async (groupId: string) => {
+    const state = groupStates.get(groupId);
+    if (!state || !active || state.inFlight) {
+      return;
+    }
+
+    state.inFlight = true;
+    const runId = state.runId;
+
+    const result = await tryCatch(
+      (async () => {
+        if (state.mode === "cold" || !state.cursor) {
+          await coldTick(groupId, runId);
+          return;
+        }
+
+        if (deps.now() - state.lastReconcileAt >= RECONCILE_INTERVAL_MS) {
+          await reconcileTick(groupId, runId);
+          if (isCurrent(groupId, runId)) {
+            state.lastReconcileAt = deps.now();
+          }
+        }
+
+        await liveTick(groupId, runId);
+      })(),
+    );
+
+    const current = groupStates.get(groupId);
+    if (current && current.runId === runId) {
+      current.inFlight = false;
+    }
+
+    if (!isCurrent(groupId, runId)) {
+      return;
+    }
+
+    if (result.error) {
+      markGroupFailure(groupId, runId);
+      return;
+    }
+
+    markGroupSuccess(groupId, runId);
+  };
+
+  const syncMembership = async () => {
+    const groupsResult = await tryCatch(deps.listGroups());
+    if (!active) {
+      return null;
+    }
+
+    if (groupsResult.error) {
+      return null;
+    }
+
+    const groups = groupsResult.data;
     const groupIds = new Set(groups.map(({ id }) => id));
     let removedGroups = false;
 
     for (const groupId of [...groupStates.keys()]) {
       if (!groupIds.has(groupId)) {
-        groupStates.delete(groupId);
-        positionsByGroup.delete(groupId);
+        removeGroup(groupId);
         removedGroups = true;
       }
     }
@@ -210,58 +358,67 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
 
     for (const { id: groupId } of groups) {
-      if (!groupStates.has(groupId)) {
-        groupStates.set(groupId, { cursor: null, mode: "cold" });
-      }
+      ensureGroupState(groupId);
     }
 
-    const shouldReconcile = deps.now() - lastReconcileAt >= RECONCILE_INTERVAL_MS;
+    return groups;
+  };
+
+  const tickInternal = async ({ force }: { force: boolean }) => {
+    tickPhase = "listing";
+    const groups = await syncMembership();
+    if (!active) {
+      tickPhase = "idle";
+      return;
+    }
+
+    if (!groups) {
+      tickPhase = "idle";
+      scheduleWake();
+      return;
+    }
+
+    tickPhase = "groups";
+    const now = deps.now();
 
     await Promise.all(
       groups.map(async ({ id: groupId }) => {
         const state = groupStates.get(groupId);
-        if (!state || state.mode === "cold" || !state.cursor) {
-          await coldTick(groupId);
+        if (!state) {
           return;
         }
-
-        if (shouldReconcile) {
-          await reconcileTick(groupId);
+        if (!force && state.nextDueAt > now) {
+          return;
         }
-
-        await liveTick(groupId);
+        await tickGroup(groupId);
       }),
     );
 
-    if (shouldReconcile) {
-      lastReconcileAt = deps.now();
+    tickPhase = "idle";
+    if (active) {
+      scheduleWake();
     }
   };
 
-  const tick = async () => {
+  const tick = async ({ force }: { force: boolean } = { force: true }) => {
     if (!active) {
       return;
     }
 
     if (tickPromise) {
-      return tickPromise;
+      if (tickPhase === "groups") {
+        await syncMembership();
+      }
+      await tickPromise;
+      return;
     }
 
-    tickPromise = (async () => {
-      const result = await tryCatch(tickInternal());
-      if (result.error) {
-        scheduleNext(backoffMs);
-        backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
-        return;
-      }
-
-      backoffMs = STEADY_INTERVAL_MS;
-      scheduleNext(STEADY_INTERVAL_MS);
-    })().finally(() => {
+    tickPromise = tickInternal({ force }).finally(() => {
       tickPromise = null;
+      tickPhase = "idle";
     });
 
-    return tickPromise;
+    await tickPromise;
   };
 
   return {
@@ -269,14 +426,16 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       active = false;
       clearSchedule();
       listeners.clear();
-      groupStates.clear();
+      for (const groupId of [...groupStates.keys()]) {
+        removeGroup(groupId);
+      }
       positionsByGroup.clear();
     },
     getLivePositions: () => [...getLiveMap().values()].map(toLiveMapPosition),
     setActive: (nextActive: boolean) => {
       if (active === nextActive) {
         if (nextActive) {
-          void tick();
+          void tick({ force: true });
         }
         return;
       }
@@ -284,10 +443,17 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       active = nextActive;
       if (!active) {
         clearSchedule();
+        for (const state of groupStates.values()) {
+          state.runId += 1;
+          state.inFlight = false;
+        }
         return;
       }
 
-      void tick();
+      for (const state of groupStates.values()) {
+        state.nextDueAt = deps.now();
+      }
+      void tick({ force: true });
     },
     subscribe: (listener: () => void) => {
       listeners.add(listener);
@@ -295,6 +461,6 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         listeners.delete(listener);
       };
     },
-    tick,
+    tick: () => tick({ force: true }),
   };
 };
