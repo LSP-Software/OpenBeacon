@@ -201,6 +201,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       if (!groupIds.has(groupId)) {
         groupStates.delete(groupId);
         positionsByGroup.delete(groupId);
+        deps.clearEpochKeys(groupId);
         removedGroups = true;
       }
     }
@@ -271,6 +272,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       listeners.clear();
       groupStates.clear();
       positionsByGroup.clear();
+      deps.clearEpochKeys();
     },
     getLivePositions: () => [...getLiveMap().values()].map(toLiveMapPosition),
     setActive: (nextActive: boolean) => {
