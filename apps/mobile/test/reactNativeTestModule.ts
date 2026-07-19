@@ -1,4 +1,5 @@
 import React, { type ReactNode } from "react";
+import type { PlatformOSType } from "react-native";
 
 export const createReactNativeTestModule = ({
   appState = {
@@ -18,7 +19,7 @@ export const createReactNativeTestModule = ({
       remove: () => void;
     };
   };
-  platformOS?: string;
+  platformOS?: PlatformOSType;
 } = {}) => ({
   AppState: appState,
   Button: ({ onPress, title }: { onPress?: () => void; title: string }) =>

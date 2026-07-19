@@ -97,7 +97,13 @@ export const emitNativeMapAnnotationDeselected = (annotationId: string) => {
 };
 
 export const createMapLibreMockModule = () => {
-  const Camera = forwardRef((_props: Record<string, unknown>, ref) => {
+  const Camera = forwardRef<
+    {
+      fitBounds: (ne: unknown, sw: unknown, padding: unknown, duration: unknown) => void;
+      setCamera: (stop: unknown) => void;
+    },
+    Record<string, unknown>
+  >((_props, ref) => {
     useImperativeHandle(ref, () => ({
       fitBounds: (ne: unknown, sw: unknown, padding: unknown, duration: unknown) => {
         cameraCommands.push({ type: "fitBounds", ne, sw, padding, duration });

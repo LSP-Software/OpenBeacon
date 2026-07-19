@@ -210,6 +210,26 @@ describe("NativeMap integration harness", () => {
     }
   });
 
+  test("redirects home when the signed pmtiles url query is unauthorized", async () => {
+    currentSignedPmtilesUrlQuery = {
+      data: null,
+      error: {
+        data: {
+          code: "UNAUTHORIZED",
+        },
+      },
+      isError: true,
+      isFetching: false,
+      isLoading: false,
+      refetch: async () => {},
+    };
+
+    await renderNativeMap();
+    await flushEffects();
+
+    expect(routerReplace).toHaveBeenCalledWith("/");
+  });
+
   test("forces one refresh per url after map failures and resets when the url changes", async () => {
     await renderNativeMap();
 
