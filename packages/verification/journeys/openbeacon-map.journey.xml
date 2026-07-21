@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<journey>
+  <title>OpenBeacon map smoke (throwaway)</title>
+  <description>
+    Throwaway synthetic journey used to compare local Android agent-verification
+    runners against the real OpenBeacon development build. Uses only a disposable
+    email/password account and a mock GPS fix. No personal, family, or real
+    location data is involved.
+  </description>
+  <precondition>
+    The OpenBeacon development build is installed and loaded from the local Metro
+    dev server, showing the unauthenticated landing screen.
+  </precondition>
+  <steps>
+    <step>Confirm the landing screen shows the "Sign In" and "Create Account" actions.</step>
+    <step>Tap "Sign In".</step>
+    <step>Enter the disposable email into the Email field and the password into the Password field.</step>
+    <step>Tap the "Sign In" button to authenticate.</step>
+    <step>If a "Allow background location" prompt appears, tap "Not now".</step>
+    <step>Confirm the Map tab is active and the MapLibre map surface is visible.</step>
+    <step>Capture a screenshot of the rendered MapLibre map.</step>
+    <step>Pan the map with a swipe gesture and capture a second screenshot.</step>
+    <step>Confirm the app is observing the injected device location (Logcat FusedLocation delivery).</step>
+  </steps>
+  <assertions>
+    <assertion>The landing screen exposes semantic "Sign In" text.</assertion>
+    <assertion>The MapLibre map surface renders map tiles.</assertion>
+    <assertion>The map responds to a pan gesture.</assertion>
+    <assertion>The device location is delivered to the app after the mock GPS fix.</assertion>
+  </assertions>
+</journey>

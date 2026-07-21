@@ -175,6 +175,17 @@
       "name": "@openbeacon/tsconfig",
       "version": "0.0.0",
     },
+    "packages/verification": {
+      "name": "@openbeacon/verification",
+      "version": "0.0.0",
+      "dependencies": {
+        "@openbeacon/shared": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^25.4.0",
+        "typescript": "5.9.3",
+      },
+    },
   },
   "packages": {
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
@@ -640,6 +651,8 @@
     "@openbeacon/shared": ["@openbeacon/shared@workspace:packages/shared"],
 
     "@openbeacon/tsconfig": ["@openbeacon/tsconfig@workspace:packages/tsconfig"],
+
+    "@openbeacon/verification": ["@openbeacon/verification@workspace:packages/verification"],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.1", "", {}, "sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q=="],
 

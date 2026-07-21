@@ -1,0 +1,63 @@
+appId: net.openbeacon.app
+name: OpenBeacon map smoke (throwaway)
+env:
+  EMAIL: ope98-verify@example.test
+  PASSWORD: ope98-verify-pass
+---
+- setLocation:
+    latitude: 51.5072
+    longitude: -0.1276
+- runFlow:
+    when:
+      visible: "This is the developer menu"
+    commands:
+      - tapOn: "Continue"
+- runFlow:
+    when:
+      visible: "Groups"
+    commands:
+      - tapOn: "Account"
+      - assertVisible: "Sign out"
+      - tapOn: "Sign out"
+      - extendedWaitUntil:
+          visible: "Create Account"
+          timeout: 20000
+- extendedWaitUntil:
+    visible: "Create Account"
+    timeout: 30000
+- assertVisible: "Sign In"
+- assertVisible: "Create Account"
+- tapOn: "Sign In"
+- assertVisible: "Sign in to your account"
+- tapOn: "you@example.com"
+- inputText: ${EMAIL}
+- hideKeyboard
+- tapOn:
+    point: "50%, 44%"
+- inputText: ${PASSWORD}
+- hideKeyboard
+- tapOn:
+    text: "Sign In"
+    index: 0
+- extendedWaitUntil:
+    visible: "Groups"
+    timeout: 45000
+- tapOn: "Map"
+- assertVisible: "Map"
+- assertVisible: "Groups"
+- assertVisible: "Account"
+- swipe:
+    start: "50%, 60%"
+    end: "50%, 40%"
+- waitForAnimationToEnd:
+    timeout: 15000
+- takeScreenshot: map
+- swipe:
+    start: "50%, 55%"
+    end: "24%, 34%"
+- waitForAnimationToEnd:
+    timeout: 15000
+- takeScreenshot: map-after-gesture
+- setLocation:
+    latitude: 51.5072
+    longitude: -0.1276

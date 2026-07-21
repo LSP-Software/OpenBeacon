@@ -1,0 +1,25 @@
+{
+  "name": "@openbeacon/verification",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "verify:android": "bun run src/run.ts",
+    "prepare:env": "bun run src/prepareEnv.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@openbeacon/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "typescript": "5.9.3"
+  }
+}

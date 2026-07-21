@@ -8,3 +8,4 @@ node_modules
 dist
 .idea
 run-android.ts
+.verification-artifacts
