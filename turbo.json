@@ -18,24 +18,18 @@
     "R2_ACCESS_KEY_ID",
     "R2_SECRET_ACCESS_KEY",
     "R2_BUCKET",
-    "R2_PM_TILES_KEY"
+    "R2_PM_TILES_KEY",
+    "JAVA_HOME"
   ],
   "tasks": {
     "build": {
-      "dependsOn": [
-        "^build"
-      ],
-      "outputs": [
-        "dist/**",
-        "build/**"
-      ]
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "build/**"]
     },
     "dev": {
       "cache": false,
       "persistent": true,
-      "dependsOn": [
-        "^db:generate"
-      ]
+      "dependsOn": ["^db:generate"]
     },
     "lint": {},
     "format": {
@@ -44,25 +38,15 @@
     "format:check": {
       "outputs": []
     },
-    "check": {
-      "outputs": []
-    },
-    "check:fix": {
-      "outputs": []
-    },
     "test": {
       "outputs": []
     },
     "typecheck": {
-      "dependsOn": [
-        "^typecheck"
-      ],
+      "dependsOn": ["^typecheck"],
       "outputs": []
     },
     "db:generate": {
-      "outputs": [
-        "generated/**"
-      ]
+      "outputs": ["generated/**"]
     }
   }
 }

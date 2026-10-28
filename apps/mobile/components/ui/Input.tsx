@@ -26,12 +26,12 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
   label,
   description,
   fieldClassName,
-  hideError = false,
+  hideError: _hideError = false,
   className,
   onBlur,
   onFocus,
   inputRef,
-  descriptionPosition = "aboveInput",
+  descriptionPosition: _descriptionPosition = "aboveInput",
   secureTextEntry,
   ...props
 }: FormInputProps<TFieldValues, TName>) {

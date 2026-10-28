@@ -40,9 +40,8 @@ mock.module("../lib/api.ts", () => ({
   },
 }));
 
-const { useSignedPmtilesUrl }: typeof import("./useSignedPmtilesUrl.ts") = await import(
-  "./useSignedPmtilesUrl.ts"
-);
+const { useSignedPmtilesUrl }: typeof import("./useSignedPmtilesUrl.ts") =
+  await import("./useSignedPmtilesUrl.ts");
 
 const renderHookHarness = async () => {
   const Harness = () => {

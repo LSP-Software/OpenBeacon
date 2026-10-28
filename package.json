@@ -2,7 +2,7 @@
   "name": "openbeacon",
   "license": "SEE LICENSE IN LICENSE.md",
   "private": true,
-  "packageManager": "bun@1.3.10",
+  "packageManager": "bun@1.4.4-canary.20261028.1",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -11,16 +11,19 @@
     "dev": "turbo dev",
     "prepare": "husky",
     "build": "turbo build",
-    "check:fix": "turbo check:fix",
-    "check": "turbo check",
+    "format": "bun fmt",
+    "format:check": "bun fmt --check",
+    "format:fix": "bun fmt",
+    "lint": "bun lint",
+    "lint:fix": "bun lint --fix",
+    "check": "bun run format:check && bun run lint",
+    "check:fix": "bun run format:fix && bun run lint:fix",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "ci": "bun run typecheck && bun run check && bun run test"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.12",
     "husky": "^9.1.7",
-    "turbo": "2.9.14",
-    "typescript": "5.9.3"
+    "turbo": "2.9.14"
   }
 }

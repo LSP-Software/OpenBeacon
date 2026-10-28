@@ -49,6 +49,7 @@ query($owner: String!, $repo: String!, $pr: Int!) {
 Filter to only threads where `isResolved: false`. If there are no unresolved threads, tell the user "No open review comments found." and stop.
 
 Get the owner and repo from:
+
 ```bash
 gh repo view --json owner,name
 ```
@@ -73,6 +74,7 @@ For each comment, reason carefully about whether it is valid given the **current
 - Is it an opinion/style preference with no clear right answer?
 
 Classify each comment as one of:
+
 - **VALID** — the issue is real and should be fixed
 - **STALE** — the issue was already addressed in the code
 - **DISAGREE** — the suggestion appears technically incorrect or based on a misunderstanding
@@ -83,26 +85,31 @@ Classify each comment as one of:
 Output a clear numbered list like this (do NOT make any changes yet):
 
 ---
+
 **PR #[number]: [title]**
 
 Found [N] open review comment(s):
 
 **Comment 1** — `src/path/to/file.ts` line 42 · @reviewer
-> [quote the comment body]
-→ **VALID** — [one sentence explaining why this is a real issue]
 
-**Comment 2** — `src/other/file.rs` line 17 · @reviewer  
 > [quote the comment body]
-→ **STALE** — [explanation, e.g. "this variable was renamed in commit abc1234"]
+> → **VALID** — [one sentence explaining why this is a real issue]
+
+**Comment 2** — `src/other/file.rs` line 17 · @reviewer
+
+> [quote the comment body]
+> → **STALE** — [explanation, e.g. "this variable was renamed in commit abc1234"]
 
 **Comment 3** — `src/lib.ts` line 88 · @reviewer
+
 > [quote the comment body]
-→ **DISAGREE** — [explanation of why the suggestion appears incorrect]
+> → **DISAGREE** — [explanation of why the suggestion appears incorrect]
 
 ---
 
 Which comments should I fix and resolve? You can say things like:
-- "fix 1 and 3" 
+
+- "fix 1 and 3"
 - "fix all valid ones"
 - "fix all except 3"
 - "fix none, just resolve 2"
@@ -119,6 +126,7 @@ For each comment the user approved:
 1. **Make the fix** using the Edit tool to modify the file as needed. Use good judgment — don't blindly apply suggestions if they need tweaking to work correctly.
 
 2. **Commit the change**:
+
 ```bash
 git add [file]
 git commit -m "fix: address review comment - [brief description]
@@ -127,6 +135,7 @@ Resolves comment by @[author] on [file]:[line]"
 ```
 
 3. **Reply to the comment thread** with the commit hash:
+
 ```bash
 gh api \
   --method POST \
@@ -135,6 +144,7 @@ gh api \
 ```
 
 4. **Resolve the thread** via GraphQL:
+
 ```bash
 gh api graphql -f query='
 mutation($threadId: ID!) {
@@ -159,10 +169,11 @@ git push
 Then output a final summary:
 
 ---
+
 ✅ Done! Here's what was handled:
 
 - **Comment 1** — Fixed in `abc1234`, thread resolved
-- **Comment 2** — Marked stale, thread resolved  
+- **Comment 2** — Marked stale, thread resolved
 - **Comment 3** — Skipped (per your instruction)
 
 [N] thread(s) resolved. Don't forget to re-request review if needed.

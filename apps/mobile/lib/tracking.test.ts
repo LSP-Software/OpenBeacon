@@ -134,9 +134,8 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   },
 }));
 
-const { flushPendingTrackingPoints, reconcileTrackingKeys, revokeTrackingAccess } = await import(
-  "./tracking.ts"
-);
+const { flushPendingTrackingPoints, reconcileTrackingKeys, revokeTrackingAccess } =
+  await import("./tracking.ts");
 
 const createQueueItem = ({
   clientPointId,
