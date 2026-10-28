@@ -69,9 +69,8 @@ mock.module("./LocationPermissionProvider.tsx", () => ({
   }),
 }));
 
-const { TrackingProvider }: typeof import("./TrackingProvider.tsx") = await import(
-  "./TrackingProvider.tsx"
-);
+const { TrackingProvider }: typeof import("./TrackingProvider.tsx") =
+  await import("./TrackingProvider.tsx");
 
 const flushEffects = async () => {
   await act(async () => {

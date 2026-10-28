@@ -34,7 +34,7 @@ export const auth = betterAuth({
       : undefined,
   trustedOrigins: [
     "openbeacon://",
-    ...(process.env.NODE_ENV === "development"
+    ...(process.env["NODE_ENV"] === "development"
       ? [
           "exp://", // Trust all Expo URLs (prefix matching)
           "exp://**", // Trust all Expo URLs (wildcard matching)

@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "bun run --cwd ../.. --env-file=.env --hot apps/backend/src/index.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "bun test",
-    "check": "biome check .",
-    "check:fix": "biome check --write .",
-    "ci": "bun run typecheck && biome check . && bun run check"
+    "format": "bun fmt",
+    "format:check": "bun fmt --check",
+    "lint": "bun lint",
+    "typecheck": "bun check",
+    "test": "bun test --isolate",
+    "ci": "bun run typecheck && bun run format:check && bun run lint"
   },
   "dependencies": {
     "@better-auth/expo": "^1.5.4",

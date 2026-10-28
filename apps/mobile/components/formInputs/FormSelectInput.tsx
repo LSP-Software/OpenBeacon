@@ -37,7 +37,7 @@ export const FormSelectInput = <
   description,
   placeholder = "Select a value",
   fieldClassName = "",
-  hideError = false,
+  hideError: _hideError = false,
   className,
   onBlur,
   onFocus,

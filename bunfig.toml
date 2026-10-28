@@ -1,2 +1,15 @@
 [install]
 linker = "hoisted"
+
+# Options for the built-in `bun fmt` and `bun lint` commands.
+#
+# node_modules, .turbo and dist are skipped automatically because they are
+# gitignored; the remaining exclusions from the old Biome config are listed
+# explicitly.
+
+[fmt]
+printWidth = 100
+ignorePatterns = ["**/build", "**/generated", "**/.cxx", "apps/mobile/global.css"]
+
+[lint]
+ignorePatterns = ["**/build", "**/generated", "**/.cxx", "apps/mobile/global.css"]

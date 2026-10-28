@@ -16,6 +16,7 @@
     "noPropertyAccessFromIndexSignature": true,
     "useUnknownInCatchVariables": true,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": false
+    "skipLibCheck": false,
+    "types": ["node"]
   }
 }

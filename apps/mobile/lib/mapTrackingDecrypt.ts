@@ -57,8 +57,7 @@ export const createMapTrackingDecryptPoint = ({
       return inflight;
     }
 
-    let loadPromise: Promise<EpochKeyMaterial | null>;
-    loadPromise = (async () => {
+    const loadPromise: Promise<EpochKeyMaterial | null> = (async () => {
       const deviceKeys = await ensureDeviceKeys();
       const wrappedEpochKey = await getWrappedEpochKey({
         deviceId: deviceKeys.deviceId,

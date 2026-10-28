@@ -8,10 +8,11 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check": "biome check .",
-    "check:fix": "biome check --write .",
-    "test": "bun test"
+    "format": "bun fmt",
+    "format:check": "bun fmt --check",
+    "lint": "bun lint",
+    "typecheck": "bun check",
+    "test": "bun test --isolate"
   },
   "dependencies": {
     "@openbeacon/schemas": "workspace:*",

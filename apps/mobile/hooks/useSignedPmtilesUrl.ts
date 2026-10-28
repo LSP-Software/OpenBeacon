@@ -9,6 +9,7 @@ export const useSignedPmtilesUrl = () => {
     retry: false,
   });
 
+  // Schedule the next refresh from refreshAt and refetch only, not the whole query object
   useEffect(() => {
     const refreshAt = query.data?.refreshAt;
 
@@ -30,7 +31,7 @@ export const useSignedPmtilesUrl = () => {
     return () => {
       clearTimeout(timer);
     };
-  }, [query.data?.refreshAt, query.refetch]);
+  }, [query.data?.refreshAt, query.refetch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return query;
 };

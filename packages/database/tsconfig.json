@@ -18,7 +18,9 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
     "rootDir": "./",
-    "baseUrl": "./"
+    "paths": {
+      "*": ["./*"]
+    }
   },
   "include": ["src/**/*", "generated/client/**/*.ts"],
   "exclude": ["node_modules"]
