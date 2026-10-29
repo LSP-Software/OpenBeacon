@@ -12,12 +12,13 @@
     "format:check": "bun fmt --check",
     "lint": "bun lint",
     "typecheck": "bun check",
-    "test": "bun test --isolate"
+    "test": "bun --env-file=../../.env.ci --env-file=../../.env test --isolate"
   },
   "dependencies": {
-    "@openbeacon/schemas": "workspace:*",
-    "better-auth": "^1.5.5",
+    "@better-auth/expo": "^1.7.14",
     "@openbeacon/database": "workspace:*",
-    "@t3-oss/env-core": "^0.13.10"
+    "@openbeacon/schemas": "workspace:*",
+    "@t3-oss/env-core": "^0.13.10",
+    "better-auth": "^1.7.14"
   }
 }

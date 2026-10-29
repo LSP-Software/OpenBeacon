@@ -13,17 +13,17 @@
     "ci": "bun run typecheck && bun run format:check && bun run lint"
   },
   "dependencies": {
-    "@better-auth/expo": "^1.5.4",
+    "@better-auth/expo": "^1.7.14",
     "@openbeacon/api": "workspace:*",
+    "@openbeacon/auth": "workspace:*",
     "@openbeacon/cache": "workspace:*",
     "@openbeacon/database": "workspace:*",
-    "@openbeacon/shared": "workspace:*",
-    "@openbeacon/auth": "workspace:*",
     "@openbeacon/schemas": "workspace:*",
+    "@openbeacon/shared": "workspace:*",
     "@prisma/adapter-pg": "^7.4.2",
     "@t3-oss/env-core": "^0.13.10",
     "@trpc/server": "^11.12.0",
-    "better-auth": "^1.5.4",
+    "better-auth": "^1.7.14",
     "hono": "^4.12.5",
     "zod": "^4.3.6"
   },
