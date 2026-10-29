@@ -4,6 +4,8 @@ import {
   groupTrackingUploadBatchSchema,
 } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
+import { Prisma } from "@openbeacon/database";
+import { TRPCError } from "@trpc/server";
 import {
   getLatestGroupTrackingPoints,
   pollGroupTrackingPoints,
@@ -23,11 +25,23 @@ export const groupTrackingRouter = {
     })
     .input(groupTrackingUploadBatchSchema)
     .mutation(async ({ ctx, input }) => {
-      return await uploadGroupTrackingBatch({
-        db: ctx.db,
-        groupId: input.groupId,
-        points: input.points,
-        userId: ctx.session.user.id,
+      return await ctx.db.$transaction(async (tx) => {
+        const members = await tx.$queryRaw<Array<{ id: string; createdAt: Date }>>(Prisma.sql`
+          SELECT id, "createdAt" FROM "GroupMember"
+          WHERE "groupId" = ${input.groupId} AND "userId" = ${ctx.session.user.id}
+          FOR UPDATE
+        `);
+        const member = members[0];
+        if (!member) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You are not a member of this group" });
+        }
+        return uploadGroupTrackingBatch({
+          db: tx,
+          groupId: input.groupId,
+          memberSince: member.createdAt,
+          points: input.points,
+          userId: ctx.session.user.id,
+        });
       });
     }),
   poll: groupMemberProcedure.input(groupTrackingPollSchema).query(async ({ ctx, input }) => {

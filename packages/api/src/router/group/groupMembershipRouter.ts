@@ -1,8 +1,9 @@
 import { removeGroupMemberSchema } from "@openbeacon/schemas";
-import type { TRPCRouterRecord } from "@trpc/server";
+import { GroupRole, Prisma } from "@openbeacon/database";
+import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
-import { groupAdminProcedure, groupMemberProcedure } from "../../procedures/auth/group.ts";
+import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 import { removeGroupMemberWithOwnerGuard } from "./assertGroupMemberCanBeRemoved.ts";
@@ -56,15 +57,22 @@ export const groupMembershipRouter = {
   get: groupMemberProcedure.query(async ({ ctx }) => {
     return ctx.group;
   }),
-  removalContext: groupAdminProcedure
+  removalContext: groupMemberProcedure
     .input(z.object({ groupId: z.string().min(1), memberId: z.string().min(1) }))
-    .query(async ({ ctx, input }) =>
-      getGroupRemovalContext({
+    .query(async ({ ctx, input }) => {
+      if (
+        ctx.groupMember.id !== input.memberId &&
+        ctx.groupMember.role !== GroupRole.OWNER &&
+        ctx.groupMember.role !== GroupRole.ADMIN
+      ) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You cannot remove this member." });
+      }
+      return getGroupRemovalContext({
         db: ctx.db,
         groupId: input.groupId,
         memberId: input.memberId,
-      }),
-    ),
+      });
+    }),
   members: groupMemberProcedure
     .input(z.object({ groupId: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -83,7 +91,7 @@ export const groupMembershipRouter = {
         },
       });
     }),
-  remove: groupAdminProcedure
+  remove: groupMemberProcedure
     .meta({
       rateLimit: {
         limit: 10,
@@ -93,17 +101,44 @@ export const groupMembershipRouter = {
     .input(removeGroupMemberSchema)
     .mutation(async ({ ctx, input }) => {
       return ctx.db.$transaction(async (tx) => {
+        const actors = await tx.$queryRaw<Array<{ id: string; role: GroupRole }>>(Prisma.sql`
+          SELECT id, role FROM "GroupMember"
+          WHERE "groupId" = ${input.groupId} AND "userId" = ${ctx.session.user.id}
+          FOR UPDATE
+        `);
+        const actor = actors[0];
+        if (
+          !actor ||
+          (actor.id !== input.memberId &&
+            actor.role !== GroupRole.OWNER &&
+            actor.role !== GroupRole.ADMIN)
+        ) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You cannot remove this member." });
+        }
+        const member = await tx.groupMember.findFirst({
+          where: { groupId: input.groupId, id: input.memberId },
+          select: { userId: true },
+        });
+        if (!member) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Group member not found" });
+        }
+
+        await persistGroupEpoch({
+          db: tx,
+          epoch: input.nextEpoch,
+          excludedUserId: member.userId,
+          groupId: input.groupId,
+          userId: ctx.session.user.id,
+        });
+
         await removeGroupMemberWithOwnerGuard({
           db: tx,
           groupId: input.groupId,
           memberId: input.memberId,
         });
 
-        await persistGroupEpoch({
-          db: tx,
-          epoch: input.nextEpoch,
-          groupId: input.groupId,
-          userId: ctx.session.user.id,
+        await tx.groupEncryptedPayload.deleteMany({
+          where: { groupId: input.groupId, senderUserId: member.userId },
         });
 
         return {

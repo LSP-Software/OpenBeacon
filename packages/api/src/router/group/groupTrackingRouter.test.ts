@@ -61,24 +61,26 @@ const createCaller = async ({
     redisUrl: "redis://localhost:6379",
     now: () => 0,
   });
+  const db = {
+    $queryRaw:
+      queryRawMock ??
+      mock(async () => [{ id: "group-member-1", createdAt: new Date("2026-01-01") }]),
+    group: { findUnique: groupFindUniqueMock },
+    groupEncryptedPayload: {
+      createMany: createManyMock ?? mock(async () => ({ count: 0 })),
+      findMany: findManyPayloadsMock ?? mock(async () => []),
+    },
+    groupEpoch: { findMany: findManyEpochsMock ?? mock(async () => [{ id: "epoch-1" }]) },
+    userDevice: {
+      findMany: findManyDevicesMock ?? mock(async () => [{ id: "device-1", userId: "user-1" }]),
+    },
+  };
   const context = {
     cache,
     clientIp: "203.0.113.10",
     db: {
-      $queryRaw: queryRawMock ?? mock(async () => []),
-      group: {
-        findUnique: groupFindUniqueMock,
-      },
-      groupEncryptedPayload: {
-        createMany: createManyMock ?? mock(async () => ({ count: 0 })),
-        findMany: findManyPayloadsMock ?? mock(async () => []),
-      },
-      groupEpoch: {
-        findMany: findManyEpochsMock ?? mock(async () => [{ id: "epoch-1" }]),
-      },
-      userDevice: {
-        findMany: findManyDevicesMock ?? mock(async () => [{ id: "device-1", userId: "user-1" }]),
-      },
+      ...db,
+      $transaction: async (callback: (tx: typeof db) => Promise<unknown>) => callback(db),
     },
     session: {
       user: {
@@ -179,6 +181,33 @@ describe("groupTrackingRouter", () => {
       duplicates: [],
     });
     expect(createManyMock).toHaveBeenCalled();
+  });
+
+  test("rejects an upload if membership was removed after authorization", async () => {
+    const createManyMock = mock(async () => ({ count: 1 }));
+    const { caller } = await createCaller({
+      createManyMock,
+      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      queryRawMock: mock(async () => []),
+    });
+
+    await expect(
+      caller.groupTracking.uploadBatch({
+        groupId: "group-1",
+        points: [
+          {
+            algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+            ciphertext: "ciphertext",
+            clientPointId: "point-1",
+            epochId: "epoch-1",
+            kind: TRACKING_POINT_KIND,
+            nonce: validNonce,
+            senderDeviceId: "device-1",
+          },
+        ],
+      }),
+    ).rejects.toThrow("You are not a member of this group");
+    expect(createManyMock).not.toHaveBeenCalled();
   });
 
   test("poll returns points for members", async () => {
