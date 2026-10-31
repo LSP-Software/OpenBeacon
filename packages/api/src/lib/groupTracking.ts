@@ -59,7 +59,7 @@ type GroupTrackingDb = {
   groupEpoch: {
     findMany: (args: {
       select: { id: true };
-      where: { groupId: string; id: { in: string[] } };
+      where: { groupId: string; id: { in: string[] }; createdAt?: { gte: Date } };
     }) => Promise<Array<{ id: string }>>;
   };
   userDevice: {
@@ -90,11 +90,13 @@ export type GroupEncryptedPayloadRow = {
 export const uploadGroupTrackingBatch = async ({
   db,
   groupId,
+  memberSince,
   points,
   userId,
 }: {
   db: GroupTrackingDb;
   groupId: string;
+  memberSince?: Date;
   points: z.infer<typeof groupTrackingPointSchema>[];
   userId: string;
 }) => {
@@ -128,6 +130,7 @@ export const uploadGroupTrackingBatch = async ({
       where: {
         groupId,
         id: { in: epochIds },
+        ...(memberSince ? { createdAt: { gte: memberSince } } : {}),
       },
     }),
     db.groupEncryptedPayload.findMany({

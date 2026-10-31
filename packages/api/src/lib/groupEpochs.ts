@@ -270,6 +270,7 @@ export const getGroupRemovalContext = async ({
 export const persistGroupEpoch = async ({
   db,
   epoch,
+  excludedUserId,
   groupId,
   userId,
 }: {
@@ -280,6 +281,7 @@ export const persistGroupEpoch = async ({
     epochNumber: number;
     recipientKeys: WrappedEpochKey[];
   };
+  excludedUserId?: string;
   groupId: string;
   userId: string;
 }) => {
@@ -362,6 +364,7 @@ export const persistGroupEpoch = async ({
     },
     where: {
       revokedAt: null,
+      ...(excludedUserId ? { userId: { not: excludedUserId } } : {}),
       user: {
         groupMembers: {
           some: {

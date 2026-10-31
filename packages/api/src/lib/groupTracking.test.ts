@@ -83,6 +83,26 @@ describe("uploadGroupTrackingBatch", () => {
     });
   });
 
+  test("rejects an epoch from before the current membership", async () => {
+    const memberSince = new Date("2026-10-29T12:00:00Z");
+    findManyEpochs = mock(async () => []);
+
+    await expect(
+      uploadGroupTrackingBatch({
+        db: createDb(),
+        groupId: "group-1",
+        memberSince,
+        points: [createPoint()],
+        userId: "user-1",
+      }),
+    ).rejects.toThrow("Epoch does not belong to this group.");
+    expect(findManyEpochs).toHaveBeenCalledWith({
+      select: { id: true },
+      where: { groupId: "group-1", id: { in: ["epoch-1"] }, createdAt: { gte: memberSince } },
+    });
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
   test("returns duplicates without inserting existing clientPointIds", async () => {
     findManyPayloads = mock(async () => [{ clientPointId: "point-1" }]);
 
