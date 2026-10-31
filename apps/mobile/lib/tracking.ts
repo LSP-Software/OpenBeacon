@@ -65,6 +65,10 @@ const reconcileTrackingKeysInternal = async ({
     return;
   }
 
+  if (!startCapture && trackingModule.isCaptureRunning()) {
+    await trackingModule.stopCapture();
+  }
+
   const deviceKeyContext = await ensureDeviceKeyRegistration();
   const groups = await trpcClient.groupMembership.list.query();
   const epochs = (
@@ -239,7 +243,7 @@ const uploadClaimedItems = async (
     }
 
     await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
-    return;
+    throw new Error("Tracking upload failed");
   }
 
   const completedClientPointIds = new Set([
@@ -256,6 +260,7 @@ const uploadClaimedItems = async (
   }
   if (incompleteIds.length > 0) {
     await trackingModule.requeueCiphertexts(incompleteIds, "UPLOAD_RESPONSE_INCOMPLETE");
+    throw new Error("Tracking upload response was incomplete");
   }
 };
 
@@ -280,7 +285,7 @@ const flushGroup = async (
   const validIds = validItems.map(({ id }) => id);
   const markResult = await tryCatch(trackingModule.markCiphertextsInFlight(validIds));
   if (markResult.error) {
-    return;
+    throw markResult.error;
   }
 
   const itemsBySender = new Map<string, UploadableQueueItem[]>();
@@ -291,11 +296,14 @@ const flushGroup = async (
     ]);
   }
 
-  await Promise.all(
+  const results = await Promise.allSettled(
     Array.from(itemsBySender.values()).map((senderItems) =>
       uploadClaimedItems(trackingModule, senderItems),
     ),
   );
+  if (results.some((result) => result.status === "rejected")) {
+    throw new Error("Tracking upload failed");
+  }
 };
 
 const flushPendingTrackingPointsInternal = async (): Promise<void> => {
@@ -304,18 +312,23 @@ const flushPendingTrackingPointsInternal = async (): Promise<void> => {
     return;
   }
 
-  const pendingItems = (await trackingModule.listPendingCiphertexts(100)).filter((item) =>
-    isReadyForRetry(item, Date.now()),
-  );
+  const pending = await trackingModule.listPendingCiphertexts(100);
+  const pendingItems = pending.filter((item) => isReadyForRetry(item, Date.now()));
   const itemsByGroup = new Map<string, CiphertextQueueItem[]>();
 
   for (const item of pendingItems) {
     itemsByGroup.set(item.groupId, [...(itemsByGroup.get(item.groupId) ?? []), item]);
   }
 
-  await Promise.all(
+  const results = await Promise.allSettled(
     Array.from(itemsByGroup.values()).map((items) => flushGroup(trackingModule, items)),
   );
+  if (results.some((result) => result.status === "rejected")) {
+    throw new Error("Tracking upload failed");
+  }
+  if (pending.some((item) => !isReadyForRetry(item, Date.now()) && item.lastError)) {
+    throw new Error("Tracking upload is waiting to retry");
+  }
 };
 
 export const flushPendingTrackingPoints = (): Promise<void> => {

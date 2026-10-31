@@ -39,6 +39,7 @@ class TrackingCaptureService : Service() {
 
   private var currentIntervalMs = DEFAULT_INTERVAL_MS
   private var lastQueued: LastQueuedFix? = null
+  private var lastUploadRequestMs = 0L
 
   private val locationCallback =
     object : LocationCallback() {
@@ -186,7 +187,7 @@ class TrackingCaptureService : Service() {
     }
 
     try {
-      capturePipeline.onFix(
+      val queuedCount = capturePipeline.onFix(
         latitude = location.latitude,
         longitude = location.longitude,
         timestampIso = formatTimestamp(location.time),
@@ -194,6 +195,11 @@ class TrackingCaptureService : Service() {
         batteryLevel = battery.level,
         batteryCharging = battery.charging,
       )
+      if (queuedCount > 0 && nowMs - lastUploadRequestMs >= UPLOAD_INTERVAL_MS) {
+        val uploadIntent = Intent(this, TrackingUploadService::class.java)
+        startService(uploadIntent)
+        lastUploadRequestMs = nowMs
+      }
       synchronized(captureStateLock) {
         if (TrackingRuntime.isCaptureRunning) {
           lastQueued =
@@ -271,5 +277,6 @@ class TrackingCaptureService : Service() {
     private const val TAG = "TrackingCapture"
     private const val CHANNEL_ID = "openbeacon_tracking_capture"
     private const val NOTIFICATION_ID = 7260
+    private const val UPLOAD_INTERVAL_MS = 30_000L
   }
 }

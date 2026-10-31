@@ -1,7 +1,7 @@
 import { tryCatch } from "@openbeacon/shared";
 import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
-import { AppState } from "react-native";
+import { Alert, AppState } from "react-native";
 import { authClient } from "../lib/auth-client.ts";
 import { subscribeToTrackingSync } from "../lib/trackingEvents.ts";
 import { useLocationPermissions } from "./LocationPermissionProvider.tsx";
@@ -25,12 +25,14 @@ export const TrackingProvider = ({
   const { permissionState } = useLocationPermissions();
   const activeCycleRef = useRef<Promise<void> | null>(null);
   const appStateRef = useRef(AppState.currentState);
+  const failureReportedRef = useRef(false);
   const completedCycleRef = useRef(0);
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
   const requestedCycleRef = useRef(0);
   const startCaptureRef = useRef(permissionState?.isReadyForSharing ?? false);
   const userId = session?.user.id ?? null;
-  startCaptureRef.current = permissionState?.isReadyForSharing ?? false;
+  const startCapture = permissionState?.isReadyForSharing ?? false;
+  startCaptureRef.current = startCapture;
 
   const runTrackingCycle = useCallback(() => {
     requestedCycleRef.current += 1;
@@ -42,12 +44,23 @@ export const TrackingProvider = ({
     activeCycleRef.current = (async () => {
       while (completedCycleRef.current < requestedCycleRef.current) {
         const cycle = requestedCycleRef.current;
-        await tryCatch(
+        const reconcileResult = await tryCatch(
           service.reconcileTrackingKeys({
             startCapture: startCaptureRef.current,
           }),
         );
-        await tryCatch(service.flushPendingTrackingPoints());
+        const flushResult = await tryCatch(service.flushPendingTrackingPoints());
+        if (reconcileResult.error || flushResult.error) {
+          if (appStateRef.current === "active" && !failureReportedRef.current) {
+            failureReportedRef.current = true;
+            Alert.alert(
+              "Location sharing needs attention",
+              "OpenBeacon could not update location sharing. Check your connection and location permissions. It will retry automatically.",
+            );
+          }
+        } else {
+          failureReportedRef.current = false;
+        }
         completedCycleRef.current = cycle;
       }
     })().finally(() => {
@@ -81,7 +94,7 @@ export const TrackingProvider = ({
 
       await runTrackingCycle();
     })();
-  }, [isPending, runTrackingCycle, service, userId]);
+  }, [isPending, runTrackingCycle, service, startCapture, userId]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
