@@ -11,7 +11,7 @@
     "ios": "expo run:ios",
     "format": "bun fmt",
     "format:check": "bun fmt --check",
-    "lint": "bun lint",
+    "lint": "biome lint .",
     "typecheck": "bun check",
     "test": "bun test --isolate && bun run test:native-crypto",
     "test:native-crypto": "cd modules/openbeacon-tracking/jvm && ./gradlew test --no-daemon",

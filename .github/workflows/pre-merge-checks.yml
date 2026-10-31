@@ -20,9 +20,6 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          # Canary channel: the built-in `bun lint` linter is not enabled in
-          # stable releases yet. `bun check` and `bun fmt` work on both; the
-          # canary pin keeps all three built-ins.
           bun-version: canary
 
       - name: Setup Java
