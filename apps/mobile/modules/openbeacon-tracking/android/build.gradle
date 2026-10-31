@@ -19,6 +19,7 @@ android {
 }
 
 dependencies {
+  implementation "com.facebook.react:react-android"
   implementation "com.google.crypto.tink:tink-android:1.18.0"
   implementation "com.google.android.gms:play-services-location:21.0.1"
   implementation "androidx.core:core-ktx:1.17.0"
