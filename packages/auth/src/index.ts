@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { expo } from "@better-auth/expo";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { getAuthCapabilities } from "./capabilities.ts";
 import { db } from "./db.ts";
@@ -13,6 +14,7 @@ export const authCapabilities = getAuthCapabilities({
 });
 
 export const auth = betterAuth({
+  plugins: [expo()],
   database: prismaAdapter(db, {
     provider: "postgresql",
   }),
