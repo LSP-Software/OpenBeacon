@@ -1,0 +1,33 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
+  "files": {
+    "includes": [
+      "**/*",
+      "!!**/dist",
+      "!!**/build",
+      "!!**/node_modules",
+      "!**/generated",
+      "!**/.cxx",
+      "!apps/mobile/global.css"
+    ]
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "complexity": {
+        "useLiteralKeys": "off"
+      },
+      "correctness": {
+        "noComponentHookFactories": "warn",
+        "noReactNativeRawText": "warn",
+        "useExhaustiveDependencies": "warn",
+        "useReactNativePlatformComponents": "warn",
+        "useImportExtensions": "error"
+      },
+      "suspicious": {
+        "noArrayIndexKey": "warn"
+      }
+    }
+  }
+}

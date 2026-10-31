@@ -7,7 +7,7 @@
     "dev": "bun run --cwd ../.. --env-file=.env --hot apps/backend/src/index.ts",
     "format": "bun fmt",
     "format:check": "bun fmt --check",
-    "lint": "bun lint",
+    "lint": "biome lint .",
     "typecheck": "bun check",
     "test": "bun test --isolate",
     "ci": "bun run typecheck && bun run format:check && bun run lint"

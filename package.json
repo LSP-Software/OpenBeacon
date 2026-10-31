@@ -14,8 +14,8 @@
     "format": "bun fmt",
     "format:check": "bun fmt --check",
     "format:fix": "bun fmt",
-    "lint": "bun lint",
-    "lint:fix": "bun lint --fix",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
     "check": "bun run format:check && bun run lint",
     "check:fix": "bun run format:fix && bun run lint:fix",
     "typecheck": "turbo typecheck",
@@ -23,6 +23,7 @@
     "ci": "bun run typecheck && bun run check && bun run test"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.6.4",
     "husky": "^9.1.7",
     "turbo": "2.9.14"
   }
