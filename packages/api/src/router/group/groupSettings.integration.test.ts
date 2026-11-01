@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
-import { DeleteObjectCommand, ListObjectVersionsCommand } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  ListObjectVersionsCommand,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis } from "@openbeacon/cache/testing";
 import { prisma } from "@openbeacon/database";
@@ -161,6 +165,86 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       } finally {
         send.mockRestore();
         await prisma.group.deleteMany({ where: { id: pendingGroupId } });
+      }
+    });
+
+    test("discards an image when the group is deleted while the upload is in flight", async () => {
+      const uploadGroupId = `${prefix}-upload-group`;
+      await prisma.group.create({
+        data: {
+          id: uploadGroupId,
+          name: "Upload race",
+          groupMembers: { create: { userId: users[0]!, role: "OWNER" } },
+        },
+      });
+      let releaseUpload: () => void = () => {};
+      let notifyStarted: () => void = () => {};
+      const started = new Promise<void>((resolve) => {
+        notifyStarted = resolve;
+      });
+      const blocked = new Promise<void>((resolve) => {
+        releaseUpload = resolve;
+      });
+      const send = spyOn(s3Client, "send").mockImplementation(async (command) => {
+        if (command instanceof PutObjectCommand) {
+          notifyStarted();
+          await blocked;
+        }
+        return { $metadata: {} };
+      });
+      try {
+        await expect(
+          caller(users[2]!).groupSettings.uploadGroupImage({
+            groupId: uploadGroupId,
+            image: "AQID",
+          }),
+        ).rejects.toThrow();
+        expect(send).not.toHaveBeenCalled();
+        const upload = caller(users[0]!).groupSettings.uploadGroupImage({
+          groupId: uploadGroupId,
+          image: "AQID",
+        });
+        await started;
+        await caller(users[0]!).groupLifecycle.delete({ groupId: uploadGroupId });
+        releaseUpload();
+        await expect(upload).rejects.toThrow();
+        const put = send.mock.calls.find(
+          ([command]) => command instanceof PutObjectCommand,
+        )?.[0] as PutObjectCommand | undefined;
+        const deleted = send.mock.calls.find(
+          ([command]) => command instanceof DeleteObjectCommand,
+        )?.[0] as DeleteObjectCommand | undefined;
+        expect(deleted?.input.Key).toBe(put?.input.Key);
+        expect(deleted?.input.Bucket).toBe(env.S3_BUCKET_NAME);
+      } finally {
+        releaseUpload();
+        send.mockRestore();
+        await prisma.group.deleteMany({ where: { id: uploadGroupId } });
+      }
+    });
+
+    test("uploads and records a new image for a group admin", async () => {
+      const uploadGroupId = `${prefix}-upload-success`;
+      await prisma.group.create({
+        data: {
+          id: uploadGroupId,
+          name: "Upload success",
+          groupMembers: { create: { userId: users[0]!, role: "OWNER" } },
+        },
+      });
+      const send = spyOn(s3Client, "send").mockResolvedValue({ $metadata: {} });
+      try {
+        const result = await caller(users[0]!).groupSettings.uploadGroupImage({
+          groupId: uploadGroupId,
+          image: "AQID",
+        });
+        expect(
+          await prisma.group.findUnique({ where: { id: uploadGroupId }, select: { image: true } }),
+        ).toEqual({ image: result.imageUrl });
+        expect(send.mock.calls[0]?.[0]).toBeInstanceOf(PutObjectCommand);
+      } finally {
+        send.mockRestore();
+        await prisma.group.deleteMany({ where: { id: uploadGroupId } });
       }
     });
 

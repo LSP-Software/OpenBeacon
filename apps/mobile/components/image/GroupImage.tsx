@@ -1,6 +1,8 @@
+import { File } from "expo-file-system";
+import { tryCatch } from "@openbeacon/shared";
 import { useMutation } from "@tanstack/react-query";
 import { queryClient, trpc } from "../../lib/api.ts";
-import { uploadImageFromUri } from "../../lib/image-upload.ts";
+import { cleanupTempFile } from "../../lib/image-upload.ts";
 import { EditableImage } from "./EditableImage.tsx";
 
 export const GroupImage = ({
@@ -14,20 +16,22 @@ export const GroupImage = ({
   imageUrl?: string | null;
   size?: "sm" | "md" | "lg";
 }) => {
-  const requestGroupImageUploadMutation = useMutation(
-    trpc.groupSettings.requestGroupImageUpload.mutationOptions(),
-  );
-  const confirmGroupImageUploadMutation = useMutation(
-    trpc.groupSettings.confirmGroupImageUpload.mutationOptions(),
+  const uploadGroupImageMutation = useMutation(
+    trpc.groupSettings.uploadGroupImage.mutationOptions(),
   );
 
   const uploadGroupImage = async (uri: string) => {
-    return uploadImageFromUri({
-      uri,
-      requestImageUpload: (input) =>
-        requestGroupImageUploadMutation.mutateAsync({ groupId, ...input }),
-      confirmImageUpload: () => confirmGroupImageUploadMutation.mutateAsync({ groupId }),
-    });
+    const result = await tryCatch(
+      (async () => {
+        const image = await new File(uri).base64();
+        return uploadGroupImageMutation.mutateAsync({ groupId, image });
+      })(),
+    );
+    cleanupTempFile(uri);
+    if (result.error) {
+      return { error: "Unable to upload image" };
+    }
+    return { data: result.data.imageUrl };
   };
 
   const handleGroupImageUploaded = async (uploadedImageUrl: string) => {
