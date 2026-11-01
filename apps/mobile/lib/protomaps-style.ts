@@ -1,6 +1,10 @@
 import { layers, namedFlavor } from "@protomaps/basemaps";
 
-export const getProtomapsMapStyle = (variant: "light" | "dark", pmtilesUrl: string) => {
+export const getProtomapsMapStyle = (
+  variant: "light" | "dark",
+  pmtilesUrl: string,
+  glyphsUrl: string,
+) => {
   return {
     version: 8,
     sources: {
@@ -12,7 +16,7 @@ export const getProtomapsMapStyle = (variant: "light" | "dark", pmtilesUrl: stri
       },
     },
     layers: layers("protomaps", namedFlavor(variant), { lang: "en" }),
-    glyphs: "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
+    glyphs: glyphsUrl,
     sprite: `https://protomaps.github.io/basemaps-assets/sprites/v4/${variant}`,
   };
 };

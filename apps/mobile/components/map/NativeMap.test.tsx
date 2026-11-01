@@ -113,6 +113,10 @@ mock.module("@tanstack/react-query", () => ({
 
 mock.module("@maplibre/maplibre-react-native", createMapLibreMockModule);
 
+mock.module("expo-file-system", () => ({
+  Paths: { bundle: { uri: "file:///app" } },
+}));
+
 mock.module("expo-router", () => ({
   router: {
     replace: routerReplace,

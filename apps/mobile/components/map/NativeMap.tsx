@@ -7,6 +7,7 @@ import {
   type PointAnnotationRef,
 } from "@maplibre/maplibre-react-native";
 import { useMutation } from "@tanstack/react-query";
+import { Paths } from "expo-file-system";
 import { router, useRootNavigationState } from "expo-router";
 import { LocateFixedIcon, ScanIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -138,7 +139,13 @@ export const NativeMap = ({
       return null;
     }
 
-    return getProtomapsMapStyle(mapTheme, pmtilesUrl);
+    return getProtomapsMapStyle(
+      mapTheme,
+      pmtilesUrl,
+      Platform.OS === "ios"
+        ? `${Paths.bundle.uri}/fonts/{fontstack}/{range}.pbf`
+        : "asset://map-fonts/{fontstack}/{range}.pbf",
+    );
   }, [mapTheme, pmtilesUrl]);
 
   const cameraDefaultSettings = useMemo(() => {
