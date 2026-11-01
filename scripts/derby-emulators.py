@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+import argparse
+import math
+import os
+import shutil
+import secrets
+import signal
+import subprocess
+import tempfile
+import time
+from pathlib import Path
+from urllib.parse import quote, urlparse
+from urllib.request import urlopen
+
+ROOT = Path(__file__).resolve().parent.parent
+ROUTES = [
+    ("stationary", 0, [(52.9225, -1.4746)]),
+    ("walking", 3, [(52.9225, -1.4746), (52.9217, -1.4765), (52.9198, -1.4774), (52.9183, -1.4753), (52.9200, -1.4722), (52.9225, -1.4746)]),
+    ("jogging", 6, [(52.9388, -1.4760), (52.9397, -1.4725), (52.9420, -1.4705), (52.9441, -1.4733), (52.9430, -1.4770), (52.9407, -1.4787), (52.9388, -1.4760)]),
+    ("car", 70, [(52.8915, -1.4370), (52.8820, -1.4180), (52.8730, -1.3970), (52.8638, -1.3760)]),
+]
+
+
+def position(points, mph, elapsed):
+    if len(points) == 1:
+        return points[0]
+    segments = list(zip(points, points[1:]))
+    if points[0] != points[-1]:
+        segments += [(end, start) for start, end in reversed(segments)]
+    lengths = []
+    for (lat1, lon1), (lat2, lon2) in segments:
+        x = math.radians(lon2 - lon1) * math.cos(math.radians((lat1 + lat2) / 2))
+        y = math.radians(lat2 - lat1)
+        lengths.append(math.hypot(x, y) * 6371000)
+    distance = (elapsed * mph * 0.44704) % sum(lengths)
+    for ((lat1, lon1), (lat2, lon2)), length in zip(segments, lengths):
+        if distance <= length:
+            fraction = distance / length
+            return lat1 + (lat2 - lat1) * fraction, lon1 + (lon2 - lon1) * fraction
+        distance -= length
+    return points[0]
+
+
+def select_android_sdk(configured, home):
+    def usable(path):
+        return path and (path / "ndk").is_dir() and any((path / "ndk").iterdir()) and (path / "licenses" / "android-sdk-license").is_file()
+
+    if usable(configured):
+        return configured
+    if usable(home):
+        return home
+    return configured
+
+
+def wait_for_metro(process, timeout=120):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError("Metro exited before it was ready")
+        try:
+            with urlopen("http://127.0.0.1:8081/status", timeout=2) as response:
+                if response.read().strip() == b"packager-status:running":
+                    return
+        except OSError:
+            pass
+        time.sleep(1)
+    raise RuntimeError("Metro did not become ready on port 8081")
+
+
+def app_running(serial):
+    result = subprocess.run(["adb", "-s", serial, "shell", "pidof", "net.openbeacon.app"], capture_output=True, text=True, timeout=10)
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def launch_apps(ports, attempts=3, stable_seconds=15):
+    remaining = set(ports)
+    launch_counts = {port: 0 for port in ports}
+    link = "exp+open-beacon://expo-development-client/?url=" + quote("http://127.0.0.1:8081", safe="")
+    while remaining:
+        for port in list(remaining):
+            serial = f"emulator-{port}"
+            if launch_counts[port] >= attempts:
+                raise RuntimeError(f"OpenBeacon could not stay running on {serial} after {attempts} attempts. Check the emulator's available memory and Android logs.")
+            launch_counts[port] += 1
+            print(f"Launching OpenBeacon on {serial} (attempt {launch_counts[port]}/{attempts})", flush=True)
+            result = subprocess.run(["adb", "-s", serial, "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", link, "net.openbeacon.app"], capture_output=True, text=True, timeout=60)
+            if result.returncode != 0 or "Error" in result.stdout or "Exception" in result.stdout:
+                print(f"Launch failed on {serial}: {result.stderr.strip() or result.stdout.strip()}", flush=True)
+                continue
+            deadline = time.monotonic() + stable_seconds
+            while time.monotonic() < deadline:
+                if not app_running(serial):
+                    print(f"OpenBeacon stopped during startup on {serial}; retrying.", flush=True)
+                    break
+                time.sleep(1)
+            else:
+                remaining.remove(port)
+        for port in ports:
+            if port not in remaining and not app_running(f"emulator-{port}"):
+                print(f"OpenBeacon stopped on emulator-{port}; retrying.", flush=True)
+                remaining.add(port)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Run four Android emulators with Derby GPS simulations.")
+    parser.add_argument("--avd", help="Existing Android Virtual Device name (defaults to the first available)")
+    parser.add_argument("--memory-mb", type=int, default=6144, help="RAM per emulator in MiB (default: 6144)")
+    parser.add_argument("--api-url", default="http://10.0.2.2:3000", help="Existing backend URL reachable from Android; skips local backend startup")
+    parser.add_argument("--external-backend", action="store_true", help="Use an already running backend, including at the default URL")
+    parser.add_argument("--apk", type=Path, help="Use an existing Expo development APK instead of building one")
+    args = parser.parse_args()
+    if args.memory_mb < 1:
+        parser.error("--memory-mb must be a positive integer")
+    url = urlparse(args.api_url)
+    if url.scheme not in ("http", "https") or not url.netloc or url.path not in ("", "/") or url.query or url.fragment:
+        parser.error("--api-url must be an HTTP(S) origin without a path, query or fragment")
+    configured_sdk = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
+    sdk = select_android_sdk(Path(configured_sdk) if configured_sdk else None, Path.home() / "Android/Sdk")
+    if sdk:
+        os.environ["ANDROID_HOME"] = str(sdk)
+        os.environ["ANDROID_SDK_ROOT"] = str(sdk)
+        os.environ["PATH"] = os.pathsep.join([str(sdk / "emulator"), str(sdk / "platform-tools"), os.environ.get("PATH", "")])
+        if configured_sdk and sdk != Path(configured_sdk):
+            print(f"Using Android SDK at {sdk}; {configured_sdk} has no installed NDK or accepted Android SDK licence.", flush=True)
+    java17 = Path("/usr/lib/jvm/java-17-openjdk")
+    if java17.joinpath("bin/java").is_file():
+        current_java = Path(os.environ["JAVA_HOME"]) / "bin/java" if os.environ.get("JAVA_HOME") else shutil.which("java")
+        version = subprocess.run([str(current_java), "-version"], capture_output=True, text=True) if current_java else None
+        if not version or 'version "17.' not in version.stderr:
+            os.environ["JAVA_HOME"] = str(java17)
+            os.environ["PATH"] = os.pathsep.join([str(java17 / "bin"), os.environ.get("PATH", "")])
+            print(f"Using Java 17 at {java17}.", flush=True)
+    for command in ("adb", "emulator", "bun"):
+        if not shutil.which(command):
+            parser.error(f"{command} must be on PATH")
+    avds = subprocess.check_output(["emulator", "-list-avds"], text=True).splitlines()
+    if not avds:
+        parser.error("no AVD found; create an Android Virtual Device in Android Studio first")
+    args.avd = args.avd or avds[0]
+    if args.avd not in avds:
+        parser.error(f"AVD {args.avd!r} not found; available: {', '.join(avds) or 'none'}")
+    existing = subprocess.check_output(["adb", "devices"], text=True)
+    ports = [5554, 5556, 5558, 5560]
+    if any(f"emulator-{port}\t" in existing for port in ports):
+        parser.error("emulator ports 5554–5560 are in use; stop those emulators first")
+    external_backend = args.external_backend or args.api_url != "http://10.0.2.2:3000"
+    if not external_backend and not shutil.which("docker"):
+        parser.error("docker and Docker Compose are required for the local backend")
+    env_file = ROOT / ".env"
+    if not external_backend:
+        if not env_file.exists():
+            template = (ROOT / ".env.example").read_text()
+            env_file.write_text(template.replace("BETTER_AUTH_SECRET=                    # Min 32 chars, generate with: openssl rand -base64 32", f"BETTER_AUTH_SECRET={secrets.token_urlsafe(32)}"))
+            env_file.chmod(0o600)
+            print("Created .env with a generated authentication secret.", flush=True)
+        values = {}
+        for line in env_file.read_text().splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                key, value = line.split("=", 1)
+                values[key.strip()] = value.split(" #", 1)[0].strip().strip("\"'")
+        required = ("BETTER_AUTH_SECRET", "S3_ACCESS_KEY_ID", "S3_ACCESS_KEY", "S3_BUCKET_NAME", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PM_TILES_KEY")
+        missing = [key for key in required if not values.get(key)]
+        if missing:
+            parser.error(f"set these required values in {env_file}: {', '.join(missing)}")
+    children = []
+    emulator_logs = []
+    log_directory = None
+    previous_sigint = signal.getsignal(signal.SIGINT)
+
+    def stop_simulation(signum, frame):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGINT, stop_simulation)
+    try:
+        subprocess.run(["bun", "install", "--frozen-lockfile"], cwd=ROOT, check=True)
+        if not external_backend:
+            subprocess.run(["docker", "compose", "up", "-d", "--wait", "db", "redis"], cwd=ROOT, check=True)
+            subprocess.run(["bun", "run", "db:generate"], cwd=ROOT / "packages/database", check=True)
+            subprocess.run(["bun", "run", "db:migrate:deploy"], cwd=ROOT / "packages/database", check=True)
+            backend_env = os.environ.copy()
+            backend_env["BETTER_AUTH_URL"] = args.api_url.rstrip("/")
+            backend_env["OPENBEACON_API_HOSTNAME"] = "127.0.0.1"
+            children.append(subprocess.Popen(["bun", "run", "--env-file=.env", "--hot", "apps/backend/src/index.ts"], cwd=ROOT, env=backend_env, stdin=subprocess.DEVNULL, start_new_session=True))
+        if args.apk is None:
+            subprocess.run(["bun", "x", "expo", "prebuild", "--platform", "android"], cwd=ROOT / "apps/mobile", check=True)
+            subprocess.run(["./gradlew", "assembleDebug"], cwd=ROOT / "apps/mobile/android", check=True)
+            args.apk = ROOT / "apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk"
+        if not args.apk.is_file():
+            parser.error(f"development build APK not found: {args.apk}")
+        env = os.environ.copy()
+        env["EXPO_PUBLIC_DEV_API_URL"] = args.api_url.rstrip("/")
+        metro = subprocess.Popen(["bun", "x", "expo", "start", "--dev-client", "--port", "8081", "--clear"], cwd=ROOT / "apps/mobile", env=env, stdin=subprocess.DEVNULL, start_new_session=True)
+        children.append(metro)
+        log_directory = Path(tempfile.mkdtemp(prefix="openbeacon-emulators-"))
+        print(f"Emulator logs: {log_directory}", flush=True)
+        for port, (name, _, _) in zip(ports, ROUTES):
+            print(f"Starting {name} on emulator-{port} with {args.memory_mb} MiB RAM", flush=True)
+            log = (log_directory / f"emulator-{port}.log").open("w")
+            emulator_logs.append(log)
+            children.append(subprocess.Popen(["emulator", "-avd", args.avd, "-port", str(port), "-memory", str(args.memory_mb), "-read-only", "-no-snapshot-save"], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True))
+        for port in ports:
+            serial = f"emulator-{port}"
+            subprocess.run(["adb", "-s", serial, "wait-for-device"], check=True, timeout=300)
+            deadline = time.monotonic() + 300
+            while subprocess.run(["adb", "-s", serial, "shell", "getprop", "sys.boot_completed"], capture_output=True, text=True).stdout.strip() != "1":
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f"{serial} did not finish booting")
+                time.sleep(2)
+            subprocess.run(["adb", "-s", serial, "install", "-r", str(args.apk)], check=True)
+            subprocess.run(["adb", "-s", serial, "reverse", "tcp:8081", "tcp:8081"], check=True)
+        started = time.monotonic()
+        for port, (_, _, points) in zip(ports, ROUTES):
+            lat, lon = points[0]
+            subprocess.run(["adb", "-s", f"emulator-{port}", "emu", "geo", "fix", str(lon), str(lat)], check=True, stdout=subprocess.DEVNULL)
+        print("Waiting for Metro to become ready.", flush=True)
+        wait_for_metro(metro)
+        launch_apps(ports)
+        print("Simulating locations every second. Press Ctrl+C to stop.", flush=True)
+        while True:
+            if any(child.poll() is not None for child in children):
+                raise RuntimeError("Metro or an emulator exited unexpectedly")
+            elapsed = time.monotonic() - started
+            for port, (_, mph, points) in zip(ports, ROUTES):
+                lat, lon = position(points, mph, elapsed)
+                subprocess.run(["adb", "-s", f"emulator-{port}", "emu", "geo", "fix", str(lon), str(lat)], check=True, stdout=subprocess.DEVNULL)
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\nStopping simulation.")
+    except RuntimeError as error:
+        print(str(error), flush=True)
+        if log_directory:
+            print(f"Emulator logs: {log_directory}", flush=True)
+        raise SystemExit(1) from None
+    except subprocess.CalledProcessError as error:
+        if "assembleDebug" in error.cmd:
+            print("Android build failed. If the NDK or its licence is missing, install the NDK and accept the SDK licences in Android Studio's SDK Manager, then retry. Check ANDROID_HOME and ANDROID_SDK_ROOT point to that SDK.", flush=True)
+        else:
+            print(f"Command failed: {error.cmd[0]} (exit {error.returncode})", flush=True)
+        raise SystemExit(error.returncode) from None
+    finally:
+        for child in children:
+            try:
+                os.killpg(child.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        for child in children:
+            try:
+                child.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(child.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                child.wait()
+        for log in emulator_logs:
+            log.close()
+        signal.signal(signal.SIGINT, previous_sigint)
+
+
+if __name__ == "__main__":
+    main()
