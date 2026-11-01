@@ -25,7 +25,8 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
   const queryClient = useQueryClient();
   const router = useRouter();
   const removeMember = useMutation(trpc.groupMembership.remove.mutationOptions());
-  const { data: members, isFetching: isFetchingMembers } = useQuery(
+  const updateRole = useMutation(trpc.groupMembership.updateRole.mutationOptions());
+  const { data: members, isPending: isFetchingMembers } = useQuery(
     trpc.groupMembership.members.queryOptions({ groupId }),
   );
   const livePositions = useGroupLivePositions(groupId);
@@ -99,7 +100,49 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
       {memberStatuses.map((member) => (
         <View key={member.id}>
           <MemberCard member={member} />
-          {(member.id === self?.id || canManage) && (
+          {self?.role === "OWNER" &&
+            (["OWNER", "ADMIN", "MEMBER"] as const)
+              .filter((role) => role !== member.role)
+              .map((role) => (
+                <Button
+                  key={role}
+                  variant="outline"
+                  size="sm"
+                  disabled={updateRole.isPending}
+                  onPress={() =>
+                    Alert.alert("Change role?", `Make ${member.user.name} ${role.toLowerCase()}?`, [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Change",
+                        onPress: async () => {
+                          const result = await tryCatch(
+                            updateRole.mutateAsync({ groupId, memberId: member.id, role }),
+                          );
+                          if (result.error) {
+                            Alert.alert("Unable to change role", result.error.message);
+                            return;
+                          }
+                          await Promise.all([
+                            queryClient.invalidateQueries({
+                              queryKey: trpc.groupMembership.members.queryKey({ groupId }),
+                            }),
+                            queryClient.invalidateQueries({
+                              queryKey: trpc.groupMembership.get.queryKey({ groupId }),
+                            }),
+                            queryClient.invalidateQueries({
+                              queryKey: trpc.groupMembership.list.queryKey(),
+                            }),
+                          ]);
+                        },
+                      },
+                    ])
+                  }
+                >
+                  <Text>Make {role.toLowerCase()}</Text>
+                </Button>
+              ))}
+          {(member.id === self?.id ||
+            (canManage && (self?.role === "OWNER" || member.role !== "OWNER"))) && (
             <Button
               variant="outline"
               size="sm"
@@ -144,6 +187,7 @@ const MemberCard = ({ member }: { member: ReturnType<typeof buildMemberLiveStatu
         </View>
         <View className="flex-1 gap-1">
           <Text className="text-foreground text-xl font-bold">{member.user.name}</Text>
+          <Text className="text-muted-foreground">{member.role}</Text>
           <View className="flex-row items-start gap-1">
             <Icon as={MapPinIcon} className="text-secondary mt-1 size-4" />
             <View className="flex-col items-start">

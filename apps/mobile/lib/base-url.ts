@@ -12,7 +12,7 @@ export const getBaseUrl = () => {
    * baseUrl to your production API URL.
    */
 
-  const localhost = process.env["EXPO_PUBLIC_DEV_API_URL"];
+  const localhost = process.env.EXPO_PUBLIC_DEV_API_URL;
 
   if (!localhost) {
     throw new Error("Failed to get localhost. Please point to your production server.");

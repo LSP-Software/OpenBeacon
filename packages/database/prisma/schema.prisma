@@ -79,8 +79,6 @@ model Group {
   id             String          @id @default(uuid(7))
   name           String
   image          String?
-  pendingUploads PendingUpload[]
-
   groupMembers           GroupMember[]
   groupInvites           GroupMemberInvite[]
   groupEpochs            GroupEpoch[]
@@ -98,7 +96,6 @@ model PendingUpload {
   groupId    String?
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  group Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@id([userId, uploadType])
   @@index([groupId])

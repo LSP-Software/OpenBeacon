@@ -44,6 +44,7 @@ let pendingCiphertexts: Array<{
 let captureRunning = false;
 let startCaptureCalls = 0;
 let stopCaptureCalls = 0;
+let failRegistration = false;
 let uploadGroup = async ({ points }: { groupId: string; points: unknown[] }) => ({
   accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
   duplicates: [],
@@ -52,10 +53,10 @@ let uploadGroup = async ({ points }: { groupId: string; points: unknown[] }) => 
 mock.module("react-native", () => createReactNativeTestModule({ platformOS: "android" }));
 
 mock.module("./deviceKeys.ts", () => ({
-  ensureDeviceKeyRegistration: async () => ({
-    deviceId: "device-1",
-    privateKey: deviceKeyPair.privateKey,
-  }),
+  ensureDeviceKeyRegistration: async () => {
+    if (failRegistration) throw new Error("offline");
+    return { deviceId: "device-1", privateKey: deviceKeyPair.privateKey };
+  },
 }));
 
 mock.module("./api.ts", () => ({
@@ -178,6 +179,7 @@ describe("tracking service", () => {
     captureRunning = false;
     startCaptureCalls = 0;
     stopCaptureCalls = 0;
+    failRegistration = false;
     uploadGroup = async ({ points }) => ({
       accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
       duplicates: [],
@@ -240,6 +242,14 @@ describe("tracking service", () => {
     expect(startCaptureCalls).toBe(0);
   });
 
+  test("stops capture without waiting for the server when sharing permission is removed", async () => {
+    captureRunning = true;
+    failRegistration = true;
+
+    await expect(reconcileTrackingKeys({ startCapture: false })).rejects.toThrow("offline");
+    expect(stopCaptureCalls).toBe(1);
+  });
+
   test("flushes each group independently and requeues transient failures", async () => {
     pendingCiphertexts = [
       createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
@@ -259,7 +269,7 @@ describe("tracking service", () => {
       };
     };
 
-    await flushPendingTrackingPoints();
+    await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
 
     expect(markedInFlight).toEqual([[1], [2]]);
     expect(deleted).toEqual([[1]]);

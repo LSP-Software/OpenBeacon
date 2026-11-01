@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "dev": "turbo dev",
+    "emulators": "python3 scripts/derby-emulators.py",
     "prepare": "husky",
     "build": "turbo build",
     "format": "bun fmt",
