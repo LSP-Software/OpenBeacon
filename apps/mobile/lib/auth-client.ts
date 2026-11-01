@@ -6,7 +6,7 @@ import { getServerUrl } from "./server-url.ts";
 export const SESSION_TOKEN_TO_REVOKE_KEY = "sessionTokenToRevokeOnNextLogin";
 
 const getBaseURL = (): string => {
-  const devUrl = process.env["EXPO_PUBLIC_DEV_API_URL"];
+  const devUrl = process.env.EXPO_PUBLIC_DEV_API_URL;
   if (devUrl) return devUrl;
   return getServerUrl() || "https://api.openbeacon.app";
 };
