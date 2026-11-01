@@ -63,7 +63,7 @@ export const uploadImageFromUri = async ({
   } catch (error) {
     console.error(error);
     return {
-      error: `Unable to upload image`,
+      error: "Unable to upload image. Check your connection and try again.",
     };
   } finally {
     cleanupTempFile(uri);
