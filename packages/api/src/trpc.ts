@@ -13,7 +13,7 @@ import type { PrismaClient } from "@openbeacon/database";
 import { initTRPC } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError, z } from "zod";
-import { rateLimitErrorCauseSchema } from "./middlewares/rateLimit.ts";
+import { RateLimitContextError } from "./middlewares/rateLimit.ts";
 
 /**
  * 1. CONTEXT
@@ -49,6 +49,8 @@ export type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 export type TRPCMeta = {
   rateLimit?: {
     cost?: number;
+    namespace?: string;
+    ipLimit?: number;
     limit: number;
     windowMs: number;
   };
@@ -66,13 +68,24 @@ export const createTRPCComponents = () => {
     .create({
       transformer: superjson,
       errorFormatter: ({ shape, error }) => {
-        const rateLimitResult = rateLimitErrorCauseSchema.safeParse(error.cause);
-
+        if (error.cause instanceof RateLimitContextError) {
+          return {
+            ...shape,
+            message: "Unable to process request.",
+            data: { code: shape.data.code, httpStatus: shape.data.httpStatus, zodError: null },
+          };
+        }
+        if (error.code === "TOO_MANY_REQUESTS") {
+          return {
+            ...shape,
+            message: "Too many requests. Please try again later.",
+            data: { code: shape.data.code, httpStatus: shape.data.httpStatus, zodError: null },
+          };
+        }
         return {
           ...shape,
           data: {
             ...shape.data,
-            rateLimit: rateLimitResult.success ? rateLimitResult.data : null,
             zodError:
               error.cause instanceof ZodError
                 ? z.flattenError(error.cause as ZodError<Record<string, unknown>>)

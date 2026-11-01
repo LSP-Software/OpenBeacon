@@ -3,12 +3,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { MapPinIcon, PlusCircleIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, View } from "react-native";
+import { Alert, Pressable, ScrollView, View } from "react-native";
 import { InviteMemberToGroupDialog } from "../../../../components/dialogs/InviteMemberToGroupDialog.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../../components/ui/Avatar.tsx";
 import { Button } from "../../../../components/ui/Button.tsx";
 import { Icon } from "../../../../components/ui/Icon.tsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../../../../components/ui/Dialog.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
 import { useGroupLivePositions } from "../../../../hooks/useGroupLivePositions.ts";
 import { trpc } from "../../../../lib/api.ts";
@@ -21,14 +27,17 @@ import { timeSince } from "../../../../lib/timeSince.ts";
 
 const MembersTab = ({ groupId }: { groupId: string }) => {
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
+  const [successorDialogOpen, setSuccessorDialogOpen] = useState(false);
+  const [successorMemberId, setSuccessorMemberId] = useState<string | null>(null);
   const { data: session } = authClient.useSession();
   const queryClient = useQueryClient();
   const router = useRouter();
   const removeMember = useMutation(trpc.groupMembership.remove.mutationOptions());
   const updateRole = useMutation(trpc.groupMembership.updateRole.mutationOptions());
-  const { data: members, isPending: isFetchingMembers } = useQuery(
-    trpc.groupMembership.members.queryOptions({ groupId }),
-  );
+  const { data: members, isPending: isFetchingMembers } = useQuery({
+    ...trpc.groupMembership.members.queryOptions({ groupId }),
+    refetchInterval: 10_000,
+  });
   const livePositions = useGroupLivePositions(groupId);
   const memberStatuses = buildMemberLiveStatuses({
     members: members ?? [],
@@ -36,17 +45,28 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
   });
   const self = members?.find((member) => member.user.id === session?.user.id);
   const canManage = self?.role === "OWNER" || self?.role === "ADMIN";
-  const onlyOwner =
-    self?.role === "OWNER" && members?.filter((member) => member.role === "OWNER").length === 1;
-  const confirmRemoval = (member: { id: string; user: { id: string; name: string } }) => {
+  const confirmRemoval = (
+    member: { id: string; user: { id: string; name: string } },
+    successor?: string,
+  ) => {
     const isSelf = member.user.id === session?.user.id;
-    if (isSelf && onlyOwner) {
-      Alert.alert("Unable to leave", "The group must have another owner before you can leave.");
+    if (isSelf && member.id === self?.id && self.role === "OWNER" && !successor) {
+      if (members?.some((item) => item.id !== self.id)) {
+        setSuccessorMemberId(null);
+        setSuccessorDialogOpen(true);
+      } else {
+        Alert.alert(
+          "Unable to leave",
+          "You are the only person in this group. Delete the group in Settings instead.",
+        );
+      }
       return;
     }
     Alert.alert(
       isSelf ? "Leave group?" : `Remove ${member.user.name}?`,
-      "Their location history and tracking data for this group will be deleted.",
+      isSelf
+        ? `${successor ? `${members?.find((item) => item.id === successor)?.user.name ?? "The selected member"} will become an owner. ` : ""}You will leave this group, and your location history in this group will be deleted.`
+        : `${member.user.name} will be removed from this group and their location history in this group will be deleted.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -56,7 +76,10 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
             const result = await tryCatch(
               (async () => {
                 const input = await buildRemoveGroupMemberInput({ groupId, memberId: member.id });
-                await removeMember.mutateAsync(input);
+                await removeMember.mutateAsync({
+                  ...input,
+                  ...(successor ? { successorMemberId: successor } : {}),
+                });
                 await queryClient.invalidateQueries({
                   queryKey: trpc.groupMembership.list.queryKey(),
                 });
@@ -93,6 +116,47 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
         setOpen={setAddMemberDialogOpen}
         groupId={groupId}
       />
+      <Dialog open={successorDialogOpen} onOpenChange={setSuccessorDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Choose a new owner</DialogTitle>
+          </DialogHeader>
+          <Text>Select the person who will manage this group after you leave.</Text>
+          <ScrollView style={{ maxHeight: 280 }}>
+            {members
+              ?.filter((member) => member.id !== self?.id)
+              .map((member) => (
+                <Pressable
+                  key={member.id}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: successorMemberId === member.id }}
+                  onPress={() => setSuccessorMemberId(member.id)}
+                  className="flex-row items-center gap-3 rounded-lg p-3"
+                >
+                  <View
+                    className={`size-5 rounded-full border-2 ${successorMemberId === member.id ? "border-primary bg-primary" : "border-border"}`}
+                  />
+                  <Text>{member.user.name}</Text>
+                </Pressable>
+              ))}
+          </ScrollView>
+          <Button
+            disabled={!successorMemberId}
+            onPress={() => {
+              setSuccessorDialogOpen(false);
+              if (self && successorMemberId) confirmRemoval(self, successorMemberId);
+            }}
+          >
+            <Text>Continue</Text>
+          </Button>
+        </DialogContent>
+      </Dialog>
+      {canManage && (
+        <Button size="sm" onPress={() => setAddMemberDialogOpen(true)} className="self-start">
+          <Icon as={PlusCircleIcon} size={20} className="text-white" />
+          <Text>Invite member</Text>
+        </Button>
+      )}
       <View className="flex-row items-center justify-between px-1">
         <Text className="text-lg font-semibold text-foreground">Members</Text>
         <Text className="text-sm text-muted-foreground">{members?.length ?? 0}</Text>
@@ -100,15 +164,22 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
       {memberStatuses.map((member) => (
         <View key={member.id}>
           <MemberCard member={member} />
-          {self?.role === "OWNER" &&
-            (["OWNER", "ADMIN", "MEMBER"] as const)
-              .filter((role) => role !== member.role)
-              .map((role) => (
-                <Button
+          {self?.role === "OWNER" && member.id !== self.id && (
+            <View
+              className="flex-row rounded-2xl bg-secondary p-1 my-2"
+              accessibilityRole="radiogroup"
+              accessibilityLabel={`Role for ${member.user.name}`}
+            >
+              {(["OWNER", "ADMIN", "MEMBER"] as const).map((role) => (
+                <Pressable
                   key={role}
-                  variant="outline"
-                  size="sm"
-                  disabled={updateRole.isPending}
+                  accessibilityRole="radio"
+                  accessibilityState={{
+                    checked: member.role === role,
+                    disabled: updateRole.isPending,
+                  }}
+                  disabled={updateRole.isPending || member.role === role}
+                  className={`flex-1 items-center rounded-xl px-2 py-3 ${member.role === role ? "bg-primary" : ""}`}
                   onPress={() =>
                     Alert.alert("Change role?", `Make ${member.user.name} ${role.toLowerCase()}?`, [
                       { text: "Cancel", style: "cancel" },
@@ -138,9 +209,17 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                     ])
                   }
                 >
-                  <Text>Make {role.toLowerCase()}</Text>
-                </Button>
+                  <Text
+                    className={
+                      member.role === role ? "text-white font-semibold" : "text-foreground"
+                    }
+                  >
+                    {role.charAt(0) + role.slice(1).toLowerCase()}
+                  </Text>
+                </Pressable>
               ))}
+            </View>
+          )}
           {(member.id === self?.id ||
             (canManage && (self?.role === "OWNER" || member.role !== "OWNER"))) && (
             <Button
@@ -154,12 +233,6 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
           )}
         </View>
       ))}
-      {canManage && (
-        <Button size="sm" onPress={() => setAddMemberDialogOpen(true)} className="self-start">
-          <Icon as={PlusCircleIcon} size={20} className="text-white" />
-          <Text>Invite member</Text>
-        </Button>
-      )}
     </View>
   );
 };

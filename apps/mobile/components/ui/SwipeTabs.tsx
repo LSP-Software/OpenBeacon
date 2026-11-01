@@ -294,6 +294,7 @@ export const SwipeTabs = <T extends string>({
         <Animated.ScrollView
           ref={scrollViewRef}
           horizontal
+          nestedScrollEnabled
           pagingEnabled
           bounces={false}
           decelerationRate="fast"

@@ -136,6 +136,28 @@ export const groupMembershipRouter = {
           });
         }
 
+        if (input.successorMemberId) {
+          if (
+            actor.id !== input.memberId ||
+            actor.role !== GroupRole.OWNER ||
+            input.successorMemberId === input.memberId
+          ) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Only a departing owner can select a successor.",
+            });
+          }
+          const successor = await tx.groupMember.findFirst({
+            where: { id: input.successorMemberId, groupId: input.groupId },
+          });
+          if (!successor)
+            throw new TRPCError({ code: "NOT_FOUND", message: "Successor not found." });
+          await tx.groupMember.update({
+            where: { id: successor.id },
+            data: { role: GroupRole.OWNER },
+          });
+        }
+
         await persistGroupEpoch({
           db: tx,
           epoch: input.nextEpoch,

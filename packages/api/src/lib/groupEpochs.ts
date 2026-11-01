@@ -122,6 +122,20 @@ export const getInviteAcceptanceContext = async ({
     throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
   }
 
+  return getGroupJoinContext({ db, groupId: invite.groupId, userId });
+};
+
+export const getGroupJoinContext = async ({
+  db,
+  groupId,
+  userId,
+}: {
+  db:
+    | Pick<PrismaClient, "groupEpoch" | "userDevice">
+    | Pick<Prisma.TransactionClient, "groupEpoch" | "userDevice">;
+  groupId: string;
+  userId: string;
+}) => {
   const latestEpoch = await db.groupEpoch.findFirst({
     orderBy: {
       epochNumber: "desc",
@@ -134,7 +148,7 @@ export const getInviteAcceptanceContext = async ({
       id: true,
     },
     where: {
-      groupId: invite.groupId,
+      groupId: groupId,
     },
   });
 
@@ -157,7 +171,7 @@ export const getInviteAcceptanceContext = async ({
           user: {
             groupMembers: {
               some: {
-                groupId: invite.groupId,
+                groupId: groupId,
               },
             },
           },
@@ -170,7 +184,7 @@ export const getInviteAcceptanceContext = async ({
   });
 
   return {
-    groupId: invite.groupId,
+    groupId: groupId,
     latestEpoch:
       latestEpoch === null
         ? null
