@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { PrismaClient } from "@openbeacon/database";
+import { GroupRole, Prisma, type PrismaClient } from "@openbeacon/database";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import { env } from "../env.ts";
@@ -37,6 +37,15 @@ export const setPendingImageUploadForUser = async ({
   let oldGroupId: string | null = null;
 
   await db.$transaction(async (tx) => {
+    if (groupId) {
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM "Group" WHERE id = ${groupId} FOR UPDATE`);
+      const member = await tx.groupMember.findUnique({
+        where: { userId_groupId: { userId, groupId } },
+      });
+      if (member?.role !== GroupRole.OWNER && member?.role !== GroupRole.ADMIN) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
+      }
+    }
     const lockKey = Math.abs(createHash("sha256").update(userId, "utf8").digest().readInt32BE(0));
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
 
@@ -108,7 +117,7 @@ export const confirmImageUpload = async ({
   bucketName: string;
   imagePath: string;
   pendingFileName: string | null;
-  commitImageUpload: (imageUrl: string) => Promise<void>;
+  commitImageUpload: (imageUrl: string) => Promise<string | null | void>;
   currentImageUrl: string | null;
   noPendingImageUploadMessage: string;
 }): Promise<{ imageUrl: string }> => {
@@ -132,8 +141,8 @@ export const confirmImageUpload = async ({
 
   if (!fileSize || fileSize > env.MAX_IMAGE_FILE_SIZE) {
     await deleteFile(bucketName, imagePath, pendingFileName);
-    await db.pendingUpload.delete({
-      where: { userId_uploadType: { userId, uploadType } },
+    await db.pendingUpload.deleteMany({
+      where: { userId, uploadType, fileName: pendingFileName },
     });
 
     throw new TRPCError({
@@ -144,10 +153,11 @@ export const confirmImageUpload = async ({
 
   const imageUrl = buildImagePublicUrl(bucketName, imagePath, pendingFileName);
 
-  await commitImageUpload(imageUrl);
+  const replacedImageUrl = await commitImageUpload(imageUrl);
+  const imageToDelete = replacedImageUrl === undefined ? currentImageUrl : replacedImageUrl;
 
-  if (currentImageUrl) {
-    const currentImageStorageObject = extractImageStorageObject(currentImageUrl);
+  if (imageToDelete && imageToDelete !== imageUrl) {
+    const currentImageStorageObject = extractImageStorageObject(imageToDelete);
     if (currentImageStorageObject) {
       await tryCatch(
         deleteFile(

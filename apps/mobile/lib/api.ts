@@ -20,7 +20,9 @@ export const trpcClient = createTRPCClient<AppRouter>({
       enabled: (opts) =>
         process.env.NODE_ENV === "development" ||
         (opts.direction === "down" && opts.result instanceof Error),
-      colorMode: "ansi",
+      logger: (opts) => {
+        console.log(`[TRPC] ${opts.direction} ${opts.path}`);
+      },
     }),
     httpBatchLink({
       transformer: superjson,
