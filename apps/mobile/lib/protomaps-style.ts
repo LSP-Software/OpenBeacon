@@ -4,6 +4,7 @@ export const getProtomapsMapStyle = (
   variant: "light" | "dark",
   pmtilesUrl: string,
   glyphsUrl: string,
+  showSymbols = false,
 ) => {
   return {
     version: 8,
@@ -15,7 +16,9 @@ export const getProtomapsMapStyle = (
         url: `pmtiles://${pmtilesUrl}`,
       },
     },
-    layers: layers("protomaps", namedFlavor(variant), { lang: "en" }),
+    layers: layers("protomaps", namedFlavor(variant), { lang: "en" }).filter(
+      (layer) => showSymbols || layer.type !== "symbol",
+    ),
     glyphs: glyphsUrl,
     sprite: `https://protomaps.github.io/basemaps-assets/sprites/v4/${variant}`,
   };

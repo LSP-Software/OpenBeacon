@@ -369,6 +369,15 @@ export const createMapLibreMockModule = () => {
   return {
     Camera,
     MapView,
+    MarkerView: ({
+      children,
+      coordinate,
+      allowOverlap,
+    }: {
+      children?: ReactNode;
+      coordinate: number[];
+      allowOverlap?: boolean;
+    }) => React.createElement("marker-view", { coordinate, allowOverlap }, children),
     PointAnnotation,
   };
 };

@@ -3,13 +3,14 @@ import {
   type CameraRef,
   type CameraStop,
   MapView,
+  MarkerView,
   PointAnnotation,
   type PointAnnotationRef,
 } from "@maplibre/maplibre-react-native";
 import { useMutation } from "@tanstack/react-query";
 import { Paths } from "expo-file-system";
 import { router, useRootNavigationState } from "expo-router";
-import { LocateFixedIcon, ScanIcon } from "lucide-react-native";
+import { LocateFixedIcon, MapPinIcon, ScanIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -39,6 +40,7 @@ import {
   shouldForceRefreshAfterMapLoadFailure,
 } from "../../lib/mapPmtilesLoadFailure.ts";
 import { getProtomapsMapStyle } from "../../lib/protomaps-style.ts";
+import { storage } from "../../lib/storage.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
@@ -59,6 +61,9 @@ export const NativeMap = ({
   const autoForceRefreshAttemptsRef = useRef(0);
   const showRecoverableErrorRef = useRef(false);
   const [showRecoverableError, setShowRecoverableError] = useState(false);
+  const [showSymbols, setShowSymbols] = useState(
+    () => storage.getBoolean("map.showSymbols") ?? false,
+  );
   const applyMapLoadFailureState = (next: {
     autoForceRefreshAttempts: number;
     showRecoverableError: boolean;
@@ -145,8 +150,9 @@ export const NativeMap = ({
       Platform.OS === "ios"
         ? `${Paths.bundle.uri}/fonts/{fontstack}/{range}.pbf`
         : "asset://map-fonts/{fontstack}/{range}.pbf",
+      showSymbols,
     );
-  }, [mapTheme, pmtilesUrl]);
+  }, [mapTheme, pmtilesUrl, showSymbols]);
 
   const cameraDefaultSettings = useMemo(() => {
     void pmtilesUrl;
@@ -159,7 +165,7 @@ export const NativeMap = ({
   const clearSelectionFromReact = () => {
     pendingDeselectClearRef.current = false;
     const previouslySelectedUserId = selectedUserIdRef.current;
-    if (previouslySelectedUserId !== null) {
+    if (Platform.OS !== "android" && previouslySelectedUserId !== null) {
       setAnnotationRemountTokens((tokens) => ({
         ...tokens,
         [previouslySelectedUserId]: (tokens[previouslySelectedUserId] ?? 0) + 1,
@@ -591,28 +597,47 @@ export const NativeMap = ({
           </View>
         </View>
       ) : null}
-      {hasMarkers ? (
-        <View className="absolute right-3 top-14 gap-2">
-          <Pressable
-            accessibilityLabel="Show everyone"
-            accessibilityRole="button"
-            onPress={fitEveryoneInFrame}
-            className="size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
-          >
-            <Icon as={ScanIcon} size={20} className="text-foreground" />
-          </Pressable>
-          {selfMarker ? (
+      <View className="absolute right-3 top-14 gap-2">
+        <Pressable
+          accessibilityLabel="Show map names and symbols"
+          accessibilityRole="switch"
+          accessibilityState={{ checked: showSymbols }}
+          onPress={() => {
+            const next = !showSymbols;
+            storage.set("map.showSymbols", next);
+            setShowSymbols(next);
+          }}
+          className="size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
+        >
+          <Icon
+            as={MapPinIcon}
+            size={20}
+            className={showSymbols ? "text-foreground" : "text-muted"}
+          />
+        </Pressable>
+        {hasMarkers ? (
+          <>
             <Pressable
-              accessibilityLabel="Go to current location"
+              accessibilityLabel="Show everyone"
               accessibilityRole="button"
-              onPress={goToCurrentLocation}
+              onPress={fitEveryoneInFrame}
               className="size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
             >
-              <Icon as={LocateFixedIcon} size={20} className="text-foreground" />
+              <Icon as={ScanIcon} size={20} className="text-foreground" />
             </Pressable>
-          ) : null}
-        </View>
-      ) : null}
+            {selfMarker ? (
+              <Pressable
+                accessibilityLabel="Go to current location"
+                accessibilityRole="button"
+                onPress={goToCurrentLocation}
+                className="size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
+              >
+                <Icon as={LocateFixedIcon} size={20} className="text-foreground" />
+              </Pressable>
+            ) : null}
+          </>
+        ) : null}
+      </View>
       {selectedMarker ? (
         <LiveMapPersonSheet
           key={selectedMarker.userId}
@@ -667,6 +692,27 @@ const LiveMapPointAnnotation = ({
     // Android PointAnnotation bitmaps need an explicit refresh when chrome or heading changes
     annotationRef.current?.refresh();
   }, [headingDegrees, marker.image, marker.initials, marker.ringColor]);
+
+  if (Platform.OS === "android") {
+    return (
+      <MarkerView coordinate={[marker.longitude, marker.latitude]} allowOverlap>
+        <Pressable
+          onPress={onSelected}
+          accessibilityRole="button"
+          accessibilityLabel={marker.name}
+          style={{ alignSelf: "flex-start" }}
+        >
+          <LiveMapMarkerPin
+            headingDegrees={headingDegrees}
+            image={marker.image}
+            initials={marker.initials}
+            name={marker.name}
+            ringColor={marker.ringColor}
+          />
+        </Pressable>
+      </MarkerView>
+    );
+  }
 
   return (
     <PointAnnotation
