@@ -141,8 +141,8 @@ export const confirmImageUpload = async ({
 
   if (!fileSize || fileSize > env.MAX_IMAGE_FILE_SIZE) {
     await deleteFile(bucketName, imagePath, pendingFileName);
-    await db.pendingUpload.delete({
-      where: { userId_uploadType: { userId, uploadType } },
+    await db.pendingUpload.deleteMany({
+      where: { userId, uploadType, fileName: pendingFileName },
     });
 
     throw new TRPCError({
