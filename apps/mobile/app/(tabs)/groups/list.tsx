@@ -21,10 +21,10 @@ import { useSingleFlight } from "../../../lib/useSingleFlight.ts";
 export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
 
-  const { data: groupList, isFetching: isFetchingGroupList } = useQuery(
+  const { data: groupList, isPending: isFetchingGroupList } = useQuery(
     trpc.groupMembership.list.queryOptions(),
   );
-  const { data: groupInvites, isFetching: isFetchingGroupInvites } = useQuery(
+  const { data: groupInvites, isPending: isFetchingGroupInvites } = useQuery(
     trpc.groupInvites.list.queryOptions(),
   );
 

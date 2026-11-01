@@ -9,8 +9,30 @@ import {
   setPendingImageUploadForUser,
 } from "../../lib/image-upload.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";
+import { groupMemberProcedure } from "../../procedures/auth/group.ts";
+import { GroupRole, Prisma } from "@openbeacon/database";
+import { TRPCError } from "@trpc/server";
 
 export const groupSettingsRouter = {
+  rename: groupMemberProcedure
+    .input(z.object({ groupId: z.string().min(1), name: z.string().trim().min(1).max(100) }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
+        );
+        const actor = await tx.groupMember.findUnique({
+          where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
+        });
+        if (actor?.role !== GroupRole.OWNER && actor?.role !== GroupRole.ADMIN) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only owners and admins can rename the group.",
+          });
+        }
+        return tx.group.update({ where: { id: input.groupId }, data: { name: input.name } });
+      });
+    }),
   requestGroupImageUpload: groupAdminProcedure
     .meta({
       rateLimit: {
@@ -82,7 +104,35 @@ export const groupSettingsRouter = {
         currentImageUrl,
         noPendingImageUploadMessage: "No pending group image upload to confirm.",
         commitImageUpload: async (imageUrl) => {
-          await ctx.db.$transaction(async (tx) => {
+          return ctx.db.$transaction(async (tx) => {
+            await tx.$queryRaw(
+              Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
+            );
+            const actor = await tx.groupMember.findUnique({
+              where: { userId_groupId: { userId, groupId: input.groupId } },
+            });
+            if (actor?.role !== GroupRole.OWNER && actor?.role !== GroupRole.ADMIN) {
+              throw new TRPCError({
+                code: "FORBIDDEN",
+                message: "You are not an admin of this group",
+              });
+            }
+            const pending = await tx.pendingUpload.findUnique({
+              where: { userId_uploadType: { userId, uploadType: "groupAvatar" } },
+            });
+            if (
+              pending?.groupId !== input.groupId ||
+              pending.fileName !== pendingUpload?.fileName
+            ) {
+              throw new TRPCError({
+                code: "PRECONDITION_FAILED",
+                message: "The pending upload has changed.",
+              });
+            }
+            const group = await tx.group.findUniqueOrThrow({
+              where: { id: input.groupId },
+              select: { image: true },
+            });
             await tx.group.update({
               where: { id: input.groupId },
               data: { image: imageUrl },
@@ -90,6 +140,7 @@ export const groupSettingsRouter = {
             await tx.pendingUpload.delete({
               where: { userId_uploadType: { userId, uploadType: "groupAvatar" } },
             });
+            return group.image;
           });
         },
       });

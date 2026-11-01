@@ -1,3 +1,4 @@
+import { GroupRole, Prisma } from "@openbeacon/database";
 import { groupEpochBundleSchema, inviteMemberToGroupSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
@@ -141,55 +142,66 @@ export const groupInvitesRouter = {
     })
     .input(inviteMemberToGroupSchema)
     .mutation(async ({ ctx, input }) => {
-      const users = await ctx.db.user.findMany({
-        where: {
-          email: {
-            in: input.invites.map((invite) => invite.email),
-          },
-        },
-        include: {
-          receivedGroupMemberInvites: {
-            where: {
-              groupId: input.groupId,
+      await ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
+        );
+        const actor = await tx.groupMember.findUnique({
+          where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
+        });
+        if (actor?.role !== GroupRole.OWNER && actor?.role !== GroupRole.ADMIN) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
+        }
+        const users = await tx.user.findMany({
+          where: {
+            email: {
+              in: input.invites.map((invite) => invite.email),
             },
           },
-        },
-      });
-
-      const existingMembers = await ctx.db.groupMember.findMany({
-        where: {
-          groupId: input.groupId,
-          userId: {
-            in: users.map((user) => user.id),
+          include: {
+            receivedGroupMemberInvites: {
+              where: {
+                groupId: input.groupId,
+              },
+            },
           },
-        },
-      });
+        });
 
-      const existingMemberIds = new Set(existingMembers.map((member) => member.userId));
-
-      const invitesToCreate = users
-        .map((user) => {
-          if (user.id === ctx.session.user.id) return undefined;
-
-          if (existingMemberIds.has(user.id)) return undefined;
-
-          const invite = input.invites.find((invite) => invite.email === user.email);
-          if (!invite) return undefined;
-
-          if (user.receivedGroupMemberInvites.find((invite) => invite.groupId === input.groupId))
-            return undefined;
-
-          return {
-            inviterId: ctx.session.user.id,
-            recipientId: user.id,
+        const existingMembers = await tx.groupMember.findMany({
+          where: {
             groupId: input.groupId,
-            role: invite.role,
-          };
-        })
-        .filter((invite) => invite !== undefined);
+            userId: {
+              in: users.map((user) => user.id),
+            },
+          },
+        });
 
-      await ctx.db.groupMemberInvite.createMany({
-        data: invitesToCreate,
+        const existingMemberIds = new Set(existingMembers.map((member) => member.userId));
+
+        const invitesToCreate = users
+          .map((user) => {
+            if (user.id === ctx.session.user.id) return undefined;
+
+            if (existingMemberIds.has(user.id)) return undefined;
+
+            const invite = input.invites.find((invite) => invite.email === user.email);
+            if (!invite) return undefined;
+
+            if (user.receivedGroupMemberInvites.find((invite) => invite.groupId === input.groupId))
+              return undefined;
+
+            return {
+              inviterId: ctx.session.user.id,
+              recipientId: user.id,
+              groupId: input.groupId,
+              role: invite.role,
+            };
+          })
+          .filter((invite) => invite !== undefined);
+
+        await tx.groupMemberInvite.createMany({
+          data: invitesToCreate,
+        });
       });
 
       return {

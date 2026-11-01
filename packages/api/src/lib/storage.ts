@@ -61,45 +61,52 @@ export const deleteFile = async (
 ): Promise<void> => {
   const key = buildKey(path, fileName);
 
-  const listResult = await tryCatch(
-    s3Client.send(
+  const objectsToDelete: { Key: string; VersionId: string }[] = [];
+  let keyMarker: string | undefined;
+  let versionIdMarker: string | undefined;
+
+  do {
+    const response = await s3Client.send(
       new ListObjectVersionsCommand({
         Bucket: bucketName,
         Prefix: key,
+        KeyMarker: keyMarker,
+        VersionIdMarker: versionIdMarker,
       }),
-    ),
-  );
-
-  if (listResult.error) {
-    await s3Client.send(new DeleteObjectCommand({ Bucket: bucketName, Key: key }));
-    return;
-  }
-
-  const objectsToDelete: { Key: string; VersionId: string }[] = [];
-
-  for (const version of listResult.data.Versions ?? []) {
-    if (version.Key === key && version.VersionId) {
-      objectsToDelete.push({ Key: key, VersionId: version.VersionId });
+    );
+    for (const version of response.Versions ?? []) {
+      if (version.Key === key && version.VersionId) {
+        objectsToDelete.push({ Key: key, VersionId: version.VersionId });
+      }
     }
-  }
-
-  for (const marker of listResult.data.DeleteMarkers ?? []) {
-    if (marker.Key === key && marker.VersionId) {
-      objectsToDelete.push({ Key: key, VersionId: marker.VersionId });
+    for (const marker of response.DeleteMarkers ?? []) {
+      if (marker.Key === key && marker.VersionId) {
+        objectsToDelete.push({ Key: key, VersionId: marker.VersionId });
+      }
     }
-  }
+    if (response.IsTruncated && !response.NextKeyMarker) {
+      throw new Error("Storage did not return a continuation marker.");
+    }
+    keyMarker = response.IsTruncated ? response.NextKeyMarker : undefined;
+    versionIdMarker = response.IsTruncated ? response.NextVersionIdMarker : undefined;
+  } while (keyMarker);
 
   if (objectsToDelete.length === 0) {
     await s3Client.send(new DeleteObjectCommand({ Bucket: bucketName, Key: key }));
     return;
   }
 
-  await s3Client.send(
-    new DeleteObjectsCommand({
-      Bucket: bucketName,
-      Delete: { Objects: objectsToDelete },
-    }),
-  );
+  for (let index = 0; index < objectsToDelete.length; index += 1000) {
+    const response = await s3Client.send(
+      new DeleteObjectsCommand({
+        Bucket: bucketName,
+        Delete: { Objects: objectsToDelete.slice(index, index + 1000) },
+      }),
+    );
+    if (response.Errors?.length) {
+      throw new Error("Failed to delete all image versions from storage.");
+    }
+  }
 };
 
 export const buildImagePublicUrl = (bucketName: string, path: string, fileName: string): string => {
