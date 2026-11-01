@@ -56,7 +56,7 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
       }}
     >
       <StatusBar style={appTheme === "dark" ? "light" : "dark"} />
-      <View className={`flex-1 ${appTheme === "dark" ? "dark" : ""}`}>{children}</View>
+      <View className={`flex-1 theme ${appTheme === "dark" ? "dark" : ""}`}>{children}</View>
     </ThemeContext.Provider>
   );
 };
