@@ -1,4 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
+import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import {
@@ -9,7 +10,6 @@ import {
   InfoIcon,
   LockIcon,
   MailIcon,
-  MapPinCheckIcon,
   MapPinIcon,
   SunIcon,
   UserCircleIcon,
@@ -30,6 +30,7 @@ import {
 import { Icon } from "../../../components/ui/Icon.tsx";
 import { Separator } from "../../../components/ui/Separator.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
+import { trpc } from "../../../lib/api.ts";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client.ts";
 import {
   getLocationPermissionWarningDescription,
@@ -92,6 +93,8 @@ const categories = [
 
 const AccountScreen = () => {
   const { data: session } = authClient.useSession();
+  const groups = useQuery(trpc.groupMembership.list.queryOptions());
+  const devices = useQuery(trpc.auth.listMyDeviceKeys.queryOptions());
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -140,26 +143,23 @@ const AccountScreen = () => {
             <Text className="text-muted-foreground text-base">{session?.user.email}</Text>
 
             <Separator className="my-4" />
-            {/* TODO: Add devices count */}
             <View className="flex flex-row items-center gap-6">
               <View className="flex flex-col items-center">
-                <Text className="text-foreground font-bold text-xl">24</Text>
+                <Text className="text-foreground font-bold text-xl">
+                  {groups.isError ? "—" : (groups.data?.length ?? "—")}
+                </Text>
                 <Text className="text-muted-foreground text-base font-medium">Groups</Text>
               </View>
 
               <Separator className="my-4" orientation="vertical" />
 
-              {/* TODO: Add devices count */}
               <View className="flex flex-col items-center">
-                <Text className="text-foreground font-bold text-xl">4</Text>
+                <Text className="text-foreground font-bold text-xl">
+                  {devices.isError
+                    ? "—"
+                    : (devices.data?.filter((device) => !device.revokedAt).length ?? "—")}
+                </Text>
                 <Text className="text-muted-foreground text-base font-medium">Devices</Text>
-              </View>
-
-              <Separator className="my-4" orientation="vertical" />
-
-              <View className="flex flex-row justify-end items-center gap-2">
-                <Icon as={MapPinCheckIcon} className="text-primary size-5" />
-                <Text className="text-muted-foreground text-sm">London, UK</Text>
               </View>
             </View>
           </View>
