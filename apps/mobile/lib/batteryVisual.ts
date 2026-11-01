@@ -13,16 +13,19 @@ export const getBatteryVisual = ({
   charging: boolean;
 }) => {
   if (charging) {
-    return { icon: BatteryChargingIcon, colorClass: "text-green-500" };
+    return {
+      icon: BatteryChargingIcon,
+      colorClass: batteryLevel < 20 ? "text-red-700" : "text-foreground",
+    };
   }
 
-  if (batteryLevel <= 25) {
-    return { icon: BatteryLowIcon, colorClass: "text-red-500" };
+  if (batteryLevel < 20) {
+    return { icon: BatteryLowIcon, colorClass: "text-red-700" };
   }
 
   if (batteryLevel <= 60) {
-    return { icon: BatteryMediumIcon, colorClass: "text-orange-500" };
+    return { icon: BatteryMediumIcon, colorClass: "text-foreground" };
   }
 
-  return { icon: BatteryFullIcon, colorClass: "text-green-500" };
+  return { icon: BatteryFullIcon, colorClass: "text-foreground" };
 };

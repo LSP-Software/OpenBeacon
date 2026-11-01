@@ -24,6 +24,7 @@ model User {
   sentGroupMemberInvites     GroupMemberInvite[] @relation("GroupMemberInviteInviter")
   receivedGroupMemberInvites GroupMemberInvite[] @relation("GroupMemberInviteRecipient")
   groupEncryptedPayloads     GroupEncryptedPayload[]
+  groupJoinAlerts             GroupJoinAlert[]
 }
 
 model Session {
@@ -81,6 +82,8 @@ model Group {
   image          String?
   groupMembers           GroupMember[]
   groupInvites           GroupMemberInvite[]
+  sharedInvites          GroupSharedInvite[]
+  joinAlerts             GroupJoinAlert[]
   groupEpochs            GroupEpoch[]
   groupEncryptedPayloads GroupEncryptedPayload[]
 
@@ -116,6 +119,28 @@ model GroupMemberInvite {
   updatedAt DateTime @updatedAt
 
   @@unique([recipientId, groupId])
+}
+
+model GroupSharedInvite {
+  id        String   @id @default(uuid(7))
+  codeHash  String   @unique
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+model GroupJoinAlert {
+  id          String   @id @default(uuid(7))
+  recipientId String
+  recipient   User     @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  memberName  String
+  createdAt   DateTime @default(now())
+
+  @@index([recipientId, createdAt])
 }
 
 model GroupMember {

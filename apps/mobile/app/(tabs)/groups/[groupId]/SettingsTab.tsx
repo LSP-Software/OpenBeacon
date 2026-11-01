@@ -60,6 +60,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
       {role === "OWNER" && (
         <Button
           variant="destructive"
+          className="bg-red-700 dark:bg-red-700"
           disabled={deleteGroup.isPending}
           onPress={() =>
             Alert.alert(
@@ -87,7 +88,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
             )
           }
         >
-          <Text>Delete group</Text>
+          <Text className="text-white">Delete group</Text>
         </Button>
       )}
     </View>

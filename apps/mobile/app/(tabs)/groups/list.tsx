@@ -21,9 +21,10 @@ import { useSingleFlight } from "../../../lib/useSingleFlight.ts";
 export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
 
-  const { data: groupList, isPending: isFetchingGroupList } = useQuery(
-    trpc.groupMembership.list.queryOptions(),
-  );
+  const { data: groupList, isPending: isFetchingGroupList } = useQuery({
+    ...trpc.groupMembership.list.queryOptions(),
+    refetchInterval: 10_000,
+  });
   const { data: groupInvites, isPending: isFetchingGroupInvites } = useQuery(
     trpc.groupInvites.list.queryOptions(),
   );
@@ -47,6 +48,12 @@ export default function GroupsScreen() {
             <PlusIcon color="white" size={16} />
           </Pressable>
         </View>
+        <Link href="/join" asChild>
+          <Button variant="outline" className="mb-4">
+            <Text>Scan QR or enter join code</Text>
+          </Button>
+        </Link>
+        <GroupJoinAlerts />
         <GroupInvitesList groupInvites={groupInvites ?? []} />
         <GroupList
           groupList={groupList ?? []}
@@ -56,6 +63,46 @@ export default function GroupsScreen() {
     </RefreshablePage>
   );
 }
+
+const GroupJoinAlerts = () => {
+  const queryClient = useQueryClient();
+  const alerts = useQuery({
+    ...trpc.groupInvites.joinAlerts.queryOptions(),
+    refetchInterval: 30_000,
+  });
+  const dismiss = useMutation(trpc.groupInvites.dismissJoinAlert.mutationOptions());
+  if (!alerts.data?.length) return null;
+  return (
+    <View className="gap-3 mb-4">
+      <Text className="font-bold text-lg">Group activity</Text>
+      {alerts.data.map((item) => (
+        <Card key={item.id}>
+          <CardHeader>
+            <Text>
+              {item.memberName} joined {item.group.name}
+            </Text>
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={async () => {
+                const result = await tryCatch(dismiss.mutateAsync({ id: item.id }));
+                if (result.error) {
+                  Alert.alert("Unable to dismiss alert", result.error.message);
+                  return;
+                }
+                await queryClient.invalidateQueries({
+                  queryKey: trpc.groupInvites.joinAlerts.queryKey(),
+                });
+              }}
+            >
+              <Text>Dismiss</Text>
+            </Button>
+          </CardHeader>
+        </Card>
+      ))}
+    </View>
+  );
+};
 
 interface GroupInvitesListProps {
   groupInvites: RouterOutputs["groupInvites"]["list"];

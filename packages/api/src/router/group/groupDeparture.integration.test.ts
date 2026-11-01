@@ -115,6 +115,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         recipients: joinContext.recipients,
       });
       await member.groupInvites.accept({ inviteId: invite!.id, nextEpoch: bundle(joined) });
+      const alerts = await owner.groupInvites.joinAlerts();
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]!.memberName).toBe("Member");
+      expect(await member.groupInvites.joinAlerts()).toHaveLength(0);
       const plaintext = { latitude: 51.5, longitude: -0.12 };
       const encrypted = encryptGroupPayload({
         epochId: joined.epoch.epochId,
@@ -233,6 +237,63 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(
         (await owner.groupMembership.members({ groupId })).map((item) => item.user.id),
       ).toEqual([ownerId]);
-    }, 30000);
+      await owner.groupInvites.send({ groupId, invites: [{ email: memberEmail, role: "MEMBER" }] });
+      const finalInvite = (await member.groupInvites.list())[0]!;
+      const finalJoin = await member.groupInvites.acceptanceContext({ inviteId: finalInvite.id });
+      const finalJoined = createNextGroupEpoch({
+        createdByDeviceId: memberDevice,
+        previousEpoch: finalJoin.latestEpoch!,
+        recipients: finalJoin.recipients,
+      });
+      await member.groupInvites.accept({
+        inviteId: finalInvite.id,
+        nextEpoch: bundle(finalJoined),
+      });
+      const finalMembers = await owner.groupMembership.members({ groupId });
+      const successor = finalMembers.find((item) => item.user.id === memberId)!;
+      const finalContext = await owner.groupMembership.removalContext({
+        groupId,
+        memberId: ownerMember.id,
+      });
+      const finalEpoch = createNextGroupEpoch({
+        createdByDeviceId: ownerDevice,
+        previousEpoch: finalContext.latestEpoch!,
+        recipients: finalContext.recipients,
+      });
+      const transfer = {
+        groupId,
+        memberId: ownerMember.id,
+        successorMemberId: successor.id,
+        nextEpoch: bundle(finalEpoch),
+      };
+      await expect(
+        member.groupMembership.remove({
+          ...transfer,
+          memberId: successor.id,
+          successorMemberId: ownerMember.id,
+        }),
+      ).rejects.toThrow("Only a departing owner");
+      await expect(
+        owner.groupMembership.remove({ ...transfer, successorMemberId: "missing" }),
+      ).rejects.toThrow("Successor not found");
+      await expect(
+        owner.groupMembership.remove({
+          ...transfer,
+          nextEpoch: { ...transfer.nextEpoch, epochNumber: 999 },
+        }),
+      ).rejects.toThrow();
+      expect(
+        (await owner.groupMembership.members({ groupId })).find((item) => item.id === successor.id)
+          ?.role,
+      ).toBe("MEMBER");
+      await owner.groupMembership.remove(transfer);
+      expect(
+        (await member.groupMembership.members({ groupId })).find(
+          (item) => item.user.id === memberId,
+        )?.role,
+      ).toBe("OWNER");
+      await member.groupInvites.send({ groupId, invites: [{ email: ownerEmail, role: "MEMBER" }] });
+      expect(await owner.groupInvites.list()).toHaveLength(1);
+    }, 45000);
   },
 );

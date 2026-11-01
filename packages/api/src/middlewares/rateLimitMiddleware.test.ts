@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis } from "@openbeacon/cache/testing";
 import { tryCatch } from "@openbeacon/shared";
 import { type AnyRouter, TRPCError } from "@trpc/server";
+import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { createAuthProcedures } from "../procedures/auth/base.ts";
 import { createTRPCComponents } from "../trpc.ts";
 import { createRateLimitMiddleware } from "./rateLimitMiddleware.ts";
@@ -180,7 +181,7 @@ describe("rateLimitMiddleware", () => {
     await expect(strictCaller.relaxed()).resolves.toBe("relaxed");
   });
 
-  test("uses user ids for protected routes even when the client IP changes and formats rate limit data", async () => {
+  test("uses user ids across IP changes and hides rate limit details from clients", async () => {
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
       now: () => 0,
@@ -211,12 +212,8 @@ describe("rateLimitMiddleware", () => {
     const thrownError = rateLimitResult.error;
     expect(thrownError).not.toBeNull();
     expect(thrownError?.code).toBe("TOO_MANY_REQUESTS");
-    expect(thrownError?.cause).toMatchObject({
-      limit: 60,
-      remaining: 0,
-      retryAfterMs: 1_000,
-      resetAfterMs: 60_000,
-    });
+    expect(thrownError?.message).toBe("Too many requests. Please try again later.");
+    expect(thrownError?.cause).toBeUndefined();
 
     const formattedError = t._config.errorFormatter({
       error: new TRPCError({
@@ -239,16 +236,87 @@ describe("rateLimitMiddleware", () => {
           code: "TOO_MANY_REQUESTS",
           httpStatus: 429,
           path: "protectedRoute",
+          stack: "private-stack-trace",
         },
       },
     });
 
-    expect(formattedError.data.rateLimit).toEqual({
-      limit: 60,
-      remaining: 0,
-      retryAfterMs: 1_000,
-      resetAfterMs: 60_000,
+    const serialized = JSON.stringify(formattedError);
+    expect(formattedError.message).toBe("Too many requests. Please try again later.");
+    expect(serialized).not.toContain("retryAfterMs");
+    expect(serialized).not.toContain("resetAfterMs");
+    expect(serialized).not.toContain("remaining");
+    expect(serialized).not.toContain("protectedRoute");
+    expect(serialized).not.toContain("stack");
+  });
+
+  test("returns a generic HTTP rate-limit response without internal details", async () => {
+    const cache = new TestOpenBeaconCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+    const { createTRPCRouter, protectedProcedure } = createModules();
+    const router = createTRPCRouter({
+      lookup: protectedProcedure
+        .meta({ rateLimit: { limit: 1, ipLimit: 2, windowMs: 60_000 } })
+        .query(() => "ok"),
     });
+    const request = () =>
+      fetchRequestHandler({
+        endpoint: "/trpc",
+        req: new Request("http://localhost/trpc/lookup"),
+        router,
+        createContext: () =>
+          ({
+            cache,
+            db: {} as never,
+            clientIp: "198.51.100.1",
+            session: { user: { id: "user-1" } },
+          }) as never,
+      });
+    expect((await request()).status).toBe(200);
+    const warning = spyOn(console, "warn").mockImplementation(() => {});
+    const response = await request();
+    expect(warning).toHaveBeenCalledWith(
+      "[rateLimitMiddleware] request limited",
+      expect.objectContaining({ path: "lookup", scope: "userId", limit: 1, retryAfterMs: 60_000 }),
+    );
+    warning.mockRestore();
+    expect(response.status).toBe(429);
+    const body = await response.text();
+    expect(body).toContain("Too many requests. Please try again later.");
+    for (const secret of [
+      "retryAfterMs",
+      "resetAfterMs",
+      "remaining",
+      "windowMs",
+      "limit",
+      "lookup",
+      "stack",
+      "198.51.100.1",
+      "user-1",
+    ]) {
+      expect(body).not.toContain(secret);
+    }
+  });
+
+  test("does not expose missing-IP diagnostics in the HTTP response", async () => {
+    const cache = new TestOpenBeaconCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+    const { createTRPCRouter, protectedProcedure } = createModules();
+    const router = createTRPCRouter({
+      lookup: protectedProcedure
+        .meta({ rateLimit: { limit: 1, ipLimit: 2, windowMs: 60_000 } })
+        .query(() => "ok"),
+    });
+    const response = await fetchRequestHandler({
+      endpoint: "/trpc",
+      req: new Request("http://localhost/trpc/lookup"),
+      router,
+      createContext: () =>
+        ({ cache, db: {} as never, session: { user: { id: "user-1" } } }) as never,
+    });
+    expect(response.status).toBe(400);
+    const body = await response.text();
+    expect(body).toContain("Unable to process request.");
+    for (const secret of ["clientIp", "lookup", "stack", "RateLimitContextError"])
+      expect(body).not.toContain(secret);
   });
 
   test("rejects anonymous requests without a client IP", async () => {
@@ -268,7 +336,30 @@ describe("rateLimitMiddleware", () => {
 
     await expect(caller.publicRoute()).rejects.toMatchObject({
       code: "BAD_REQUEST",
-      message: "Client IP is required for anonymous rate-limited requests.",
+      message: "Unable to process request.",
     });
+  });
+  test("shares a budget across join endpoints and limits accounts sharing an IP", async () => {
+    const cache = new TestOpenBeaconCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+    const { createTRPCRouter, protectedProcedure } = createModules();
+    const procedure = protectedProcedure.meta({
+      rateLimit: { namespace: "join", limit: 2, ipLimit: 3, windowMs: 60_000 },
+    });
+    const router = createTRPCRouter({
+      lookup: procedure.mutation(() => true),
+      accept: procedure.mutation(() => true),
+    });
+    const first = createCaller({ cache, clientIp: "198.51.100.1", router, userId: "first" });
+    const second = createCaller({ cache, clientIp: "198.51.100.1", router, userId: "second" });
+    const third = createCaller({ cache, clientIp: "198.51.100.1", router, userId: "third" });
+    await expect(first.lookup()).resolves.toBe(true);
+    await expect(first.accept()).resolves.toBe(true);
+    await expect(first.lookup()).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
+    await expect(second.lookup()).resolves.toBe(true);
+    await expect(third.accept()).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
+    const otherIp = createCaller({ cache, clientIp: "198.51.100.2", router, userId: "fourth" });
+    await expect(otherIp.lookup()).resolves.toBe(true);
+    const missingIp = createCaller({ cache, router, userId: "fifth" });
+    await expect(missingIp.lookup()).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 });

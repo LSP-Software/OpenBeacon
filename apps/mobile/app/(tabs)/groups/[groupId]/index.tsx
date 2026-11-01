@@ -1,11 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
-import {
-  Clock3Icon,
-  MoreVerticalIcon,
-  SlidersHorizontalIcon,
-  UsersIcon,
-} from "lucide-react-native";
+import { Clock3Icon, SlidersHorizontalIcon, UsersIcon } from "lucide-react-native";
 import { useState } from "react";
 import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -13,7 +8,6 @@ import { BackButton } from "../../../../components/headers/BackButton.tsx";
 import { GroupImage } from "../../../../components/image/GroupImage.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { RefreshablePage } from "../../../../components/RefreshablePage.tsx";
-import { Icon } from "../../../../components/ui/Icon.tsx";
 import { SwipeTabs, type SwipeTabsItem } from "../../../../components/ui/SwipeTabs.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
@@ -44,9 +38,10 @@ const GROUP_TABS: readonly SwipeTabsItem<GroupTabValue>[] = [
 const GroupScreen = () => {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [value, setValue] = useState<GroupTabValue>("members");
-  const { data: group, isPending: isFetchingGroup } = useQuery(
-    trpc.groupMembership.get.queryOptions({ groupId }),
-  );
+  const { data: group, isPending: isFetchingGroup } = useQuery({
+    ...trpc.groupMembership.get.queryOptions({ groupId }),
+    refetchInterval: 10_000,
+  });
 
   if (isFetchingGroup) {
     return <LoadingIndicator />;
@@ -58,7 +53,7 @@ const GroupScreen = () => {
 
   return (
     <RefreshablePage>
-      <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background px-4 py-5">
+      <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background px-4 pt-5 pb-32">
         <View className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-5">
           <View className="gap-5">
             <GroupHeader group={group} />
@@ -99,9 +94,6 @@ const GroupHeader = ({
     <View className="gap-4">
       <View className="flex-row items-center justify-between gap-4">
         <BackButton />
-        <View className="size-11 items-center justify-center rounded-full border border-border bg-background">
-          <Icon as={MoreVerticalIcon} className="text-primary size-5" />
-        </View>
       </View>
       <View className="flex-row items-center gap-4">
         <GroupImage

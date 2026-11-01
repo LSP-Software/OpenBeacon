@@ -33,6 +33,18 @@ const deviceKeyContextQueryMock = mock(async () => ({
   userId: "user-a",
 }));
 
+const sharedAcceptanceContextMock = mock(async (_input: { code: string }) => ({
+  groupId: "group-a",
+  latestEpoch: {
+    epochId: "previous",
+    epochNumber: 1,
+    groupId: "group-a",
+    createdByDeviceId: "device-b",
+    createdAt: new Date("2026-03-26T12:00:00.000Z"),
+  },
+  recipients: (await deviceKeyContextQueryMock()).recipients,
+}));
+
 mock.module("./api.ts", () => ({
   queryClient: {
     setQueryData: () => {},
@@ -49,6 +61,7 @@ mock.module("./api.ts", () => ({
     },
   },
   trpcClient: {
+    groupInvites: { sharedAcceptanceContext: { mutate: sharedAcceptanceContextMock } },
     auth: {
       deviceKeyContext: {
         query: deviceKeyContextQueryMock,
@@ -109,5 +122,31 @@ describe("group encryption helpers", () => {
     );
     expect(ensureDeviceKeyRegistrationMock).toHaveBeenCalledTimes(1);
     expect(deviceKeyContextQueryMock).toHaveBeenCalledTimes(1);
+  });
+  test("builds the next shared-invitation epoch for every recipient", async () => {
+    const { buildAcceptSharedInviteInput } = await importGroupEncryptionModule();
+    const code = "A".repeat(32);
+    const result = await buildAcceptSharedInviteInput({ code });
+    expect(sharedAcceptanceContextMock).toHaveBeenCalledWith({ code });
+    expect(result.code).toBe(code);
+    expect(result.nextEpoch.epochNumber).toBe(2);
+    expect(result.nextEpoch.recipientKeys.map((key) => key.recipientDeviceId)).toEqual([
+      "device-a",
+      "device-b",
+    ]);
+    const [first, second] = result.nextEpoch.recipientKeys;
+    expect(
+      unwrapEpochKey({
+        recipientDeviceId: "device-a",
+        recipientPrivateKey: deviceAKeyPair.privateKey,
+        wrappedEpochKey: first!,
+      }).expose(),
+    ).toEqual(
+      unwrapEpochKey({
+        recipientDeviceId: "device-b",
+        recipientPrivateKey: deviceBKeyPair.privateKey,
+        wrappedEpochKey: second!,
+      }).expose(),
+    );
   });
 });

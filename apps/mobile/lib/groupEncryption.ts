@@ -99,6 +99,24 @@ export const buildAcceptInviteInput = async ({
   };
 };
 
+export const buildAcceptSharedInviteInput = async ({
+  code,
+}: {
+  code: string;
+}): Promise<RouterInputs["groupInvites"]["acceptShared"]> => {
+  const deviceRegistration = await ensureDeviceKeyRegistration();
+  const context = await trpcClient.groupInvites.sharedAcceptanceContext.mutate({ code });
+  return {
+    code,
+    nextEpoch: createEpochBundle({
+      currentDeviceId: deviceRegistration.deviceId,
+      groupId: context.groupId,
+      latestEpoch: context.latestEpoch,
+      recipients: context.recipients,
+    }),
+  };
+};
+
 export const buildRemoveGroupMemberInput = async ({
   groupId,
   memberId,

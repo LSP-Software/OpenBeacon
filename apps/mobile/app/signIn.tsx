@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signInSchema } from "@openbeacon/schemas";
 import { useQuery } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { Link, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
@@ -17,6 +17,11 @@ import { authClient } from "../lib/auth-client.ts";
 import { performGoogleAuth } from "../lib/googleAuth.ts";
 
 const SignIn = () => {
+  const { joinCode } = useLocalSearchParams<{ joinCode?: string }>();
+  const finishSignIn = () => {
+    if (joinCode) router.replace({ pathname: "/join", params: { code: joinCode } });
+    else router.replace("/");
+  };
   const [emailLoading, setEmailLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
@@ -52,14 +57,14 @@ const SignIn = () => {
       return;
     }
 
-    router.replace("/");
+    finishSignIn();
   };
 
   const handleGoogleSignIn = async () => {
     await performGoogleAuth({
       setLoading: setGoogleLoading,
       failureTitle: "Google sign in failed",
-      onSuccess: () => router.replace("/"),
+      onSuccess: finishSignIn,
       alert: Alert.alert,
     });
   };
@@ -126,12 +131,14 @@ const SignIn = () => {
             </Button>
           </View>
           <View className="items-center gap-4 pt-2">
-            <Pressable onPress={() => router.push("/signUp")} accessibilityRole="link">
-              <Text className="text-muted">
-                Don't have an account?{" "}
-                <Text className="font-semibold text-primary">Create one</Text>
-              </Text>
-            </Pressable>
+            <Link href={{ pathname: "/signUp", params: { joinCode } }} asChild>
+              <Pressable accessibilityRole="link">
+                <Text className="text-muted">
+                  Don't have an account?{" "}
+                  <Text className="font-semibold text-primary">Create one</Text>
+                </Text>
+              </Pressable>
+            </Link>
             <Pressable
               className="py-1"
               onPress={() => router.push("/serverUrl")}

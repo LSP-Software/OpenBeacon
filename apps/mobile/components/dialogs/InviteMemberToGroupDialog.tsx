@@ -1,12 +1,13 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { inviteMemberToGroupSchema } from "@openbeacon/schemas";
 import { useMutation } from "@tanstack/react-query";
-import { LinkIcon, MailIcon, PlusIcon, Trash2Icon } from "lucide-react-native";
+import { LinkIcon, MailIcon, PlusIcon, QrCodeIcon, Trash2Icon } from "lucide-react-native";
 import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { Pressable, View } from "react-native";
 import type z from "zod";
 import { trpc } from "../../lib/api.ts";
+import { SharedInvite } from "./SharedInvite.tsx";
 import { FormSelectInput } from "../formInputs/FormSelectInput.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/Dialog.tsx";
@@ -40,17 +41,19 @@ export const InviteMemberToGroupDialog = ({
               <Icon as={MailIcon} />
               <Text>Email</Text>
             </TabsTrigger>
-            <TabsTrigger value="Link" className="flex-1">
+            <TabsTrigger value="link" className="flex-1">
               <Icon as={LinkIcon} />
-              <Text>Link</Text>
+              <Text>Link / Code</Text>
+            </TabsTrigger>
+            <TabsTrigger value="qr" className="flex-1">
+              <Icon as={QrCodeIcon} />
+              <Text>QR code</Text>
             </TabsTrigger>
           </TabsList>
           <TabsContent value="email" className="flex flex-col gap-4">
             <InviteMembersInputs groupId={groupId} setOpen={setOpen} />
           </TabsContent>
-          <TabsContent value="Link">
-            <Text>Phone</Text>
-          </TabsContent>
+          {open && <SharedInvite groupId={groupId} open={open} setOpen={setOpen} value={value} />}
         </Tabs>
       </DialogContent>
     </Dialog>

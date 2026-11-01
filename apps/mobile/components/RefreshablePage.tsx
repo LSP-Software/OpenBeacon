@@ -14,6 +14,7 @@ export const RefreshablePage = ({ children }: { children: React.ReactNode }) => 
   return (
     <ScrollView
       className="flex-1 bg-background"
+      nestedScrollEnabled
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       {children}
