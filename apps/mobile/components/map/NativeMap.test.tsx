@@ -58,11 +58,13 @@ let forceRefreshMutationSucceeds = true;
 const setQueryData = mock(() => {});
 const routerReplace = mock(() => {});
 let root: Root | null = null;
+const testPlatform = { OS: "ios" as "ios" | "android" };
 
 mock.module("react-native", () => {
   const reactNative = createReactNativeTestModule({ platformOS: "android" });
   return {
     ...reactNative,
+    Platform: testPlatform,
     Pressable: (props: {
       accessibilityLabel?: string;
       children?: React.ReactNode;
@@ -81,6 +83,7 @@ mock.module("react-native", () => {
 
 mock.module("lucide-react-native", () => ({
   LocateFixedIcon: () => React.createElement("locate-fixed-icon"),
+  MapPinIcon: () => React.createElement("map-pin-icon"),
   ScanIcon: () => React.createElement("scan-icon"),
 }));
 
@@ -169,6 +172,10 @@ mock.module("../../lib/protomaps-style.ts", () => ({
     pmtilesUrl,
     version: 8,
   }),
+}));
+
+mock.module("../../lib/storage.ts", () => ({
+  storage: { getBoolean: () => undefined, set: () => {} },
 }));
 
 mock.module("../../providers/ThemeProvider.tsx", () => ({
@@ -321,6 +328,7 @@ const defaultSignedUrl = {
 
 describe("NativeMap integration harness", () => {
   beforeEach(() => {
+    testPlatform.OS = "ios";
     resetNativeMapHarness();
     currentSignedPmtilesUrlQuery = {
       data: defaultSignedUrl,
@@ -1161,6 +1169,32 @@ describe("NativeMap integration harness", () => {
     emitNativeMapAnnotationSelected("bob");
 
     expect(selections).toEqual(["alice", null, "bob"]);
+  });
+
+  test("Android marker views render and select without bitmap annotations", async () => {
+    testPlatform.OS = "android";
+    const alice = createLiveMapMarkerFixture({ userId: "alice" });
+    const bob = createLiveMapMarkerFixture({ userId: "bob", name: "Bob" });
+    const selectionHistory: Array<string | null> = [];
+    await renderSelectableNativeMap([alice, bob], selectionHistory);
+
+    const pressMarker = async (name: string) => {
+      const marker = root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" && instance.props["accessibilityLabel"] === name,
+      )[0];
+      if (!marker) throw new Error(`Missing marker ${name}`);
+      await act(async () => (marker.props as { onPress: () => void }).onPress());
+    };
+
+    expect(root?.container.queryAll((instance) => instance.type === "marker-view")).toHaveLength(2);
+    expect(getNativeMapMountedAnnotationIds()).toEqual([]);
+    await pressMarker("Alice");
+    await pressMarker("Alice");
+    await pressMarker("Bob");
+    await act(async () => emitNativeMapPress());
+    await pressMarker("Alice");
+    expect(selectionHistory).toEqual(["alice", null, "bob", null, "alice"]);
   });
 
   test("clears selection when Android emits annotation deselect", async () => {

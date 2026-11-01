@@ -21,16 +21,11 @@ describe("groupColor", () => {
     storageValues.clear();
   });
 
-  test("defaults to a stable palette color derived from groupId", async () => {
-    const { GROUP_COLOR_PALETTE, getGroupColor } = await importGroupColorModule();
+  test("defaults to the app brand color for each group", async () => {
+    const { getGroupColor } = await importGroupColorModule();
 
-    const colorA = getGroupColor("group-aaa");
-    const colorB = getGroupColor("group-bbb");
-
-    expect(GROUP_COLOR_PALETTE).toContain(colorA);
-    expect(GROUP_COLOR_PALETTE).toContain(colorB);
-    expect(getGroupColor("group-aaa")).toBe(colorA);
-    expect(colorA).not.toBe(colorB);
+    expect(getGroupColor("group-aaa")).toBe("#FF1464");
+    expect(getGroupColor("group-bbb")).toBe("#FF1464");
   });
 
   test("returns the stored preference when set from the palette", async () => {
@@ -49,16 +44,16 @@ describe("groupColor", () => {
   test("ignores invalid stored values and falls back to the default", async () => {
     storageValues.set("group.color.group-1", "not-a-color");
 
-    const { getDefaultGroupColor, getGroupColor } = await importGroupColorModule();
+    const { getGroupColor } = await importGroupColorModule();
 
-    expect(getGroupColor("group-1")).toBe(getDefaultGroupColor("group-1"));
+    expect(getGroupColor("group-1")).toBe("#FF1464");
   });
 
   test("rejects setting a color outside the palette", async () => {
-    const { getDefaultGroupColor, getGroupColor, setGroupColor } = await importGroupColorModule();
+    const { getGroupColor, setGroupColor } = await importGroupColorModule();
 
     expect(() => setGroupColor("group-1", "#000000" as never)).toThrow();
-    expect(getGroupColor("group-1")).toBe(getDefaultGroupColor("group-1"));
+    expect(getGroupColor("group-1")).toBe("#FF1464");
   });
 
   test("notifies subscribers when a group color is stored", async () => {

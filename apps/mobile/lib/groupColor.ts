@@ -1,6 +1,7 @@
 import { storage } from "./storage.ts";
 
 export const GROUP_COLOR_PALETTE = [
+  "#FF1464",
   "#E85D4C",
   "#2A9D8F",
   "#457B9D",
@@ -18,24 +19,8 @@ const storageKey = (groupId: string) => `group.color.${groupId}`;
 const listeners = new Set<() => void>();
 let revision = 0;
 
-const hashGroupId = (groupId: string) => {
-  let hash = 0;
-  for (let index = 0; index < groupId.length; index += 1) {
-    hash = (hash * 31 + groupId.charCodeAt(index)) >>> 0;
-  }
-  return hash;
-};
-
 const isGroupColor = (value: string | undefined): value is GroupColor => {
   return GROUP_COLOR_PALETTE.some((color) => color === value);
-};
-
-export const getDefaultGroupColor = (groupId: string): GroupColor => {
-  const color = GROUP_COLOR_PALETTE[hashGroupId(groupId) % GROUP_COLOR_PALETTE.length];
-  if (!color) {
-    return GROUP_COLOR_PALETTE[0];
-  }
-  return color;
 };
 
 export const getGroupColor = (groupId: string): GroupColor => {
@@ -43,7 +28,7 @@ export const getGroupColor = (groupId: string): GroupColor => {
   if (isGroupColor(stored)) {
     return stored;
   }
-  return getDefaultGroupColor(groupId);
+  return GROUP_COLOR_PALETTE[0];
 };
 
 export const getGroupColorRevision = () => revision;
