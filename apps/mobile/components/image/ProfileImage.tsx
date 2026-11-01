@@ -7,7 +7,7 @@ import { EditableImage } from "./EditableImage.tsx";
 
 export const ProfileImage = ({ imageUrl }: { imageUrl?: string | null }) => {
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
-  const { data: session } = authClient.useSession();
+  const { data: session, refetch } = authClient.useSession();
   const requestProfileImageUploadMutation = useMutation(
     trpc.account.requestProfileImageUpload.mutationOptions(),
   );
@@ -25,6 +25,7 @@ export const ProfileImage = ({ imageUrl }: { imageUrl?: string | null }) => {
 
   const handleProfileImageUploaded = async (uploadedImageUrl: string) => {
     setUploadedImageUrl(uploadedImageUrl);
+    await refetch();
   };
 
   return (

@@ -18,7 +18,7 @@ import { useState } from "react";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SettingsContainer } from "../../../components/containers/settingsContainer.tsx";
-import { EditableImage } from "../../../components/image/EditableImage.tsx";
+import { ProfileImage } from "../../../components/image/ProfileImage.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
 import {
   Card,
@@ -132,12 +132,7 @@ const AccountScreen = () => {
               </View>
             </View>
             <View className="absolute left-4 -bottom-12 z-10">
-              <EditableImage
-                accessibilityLabel={`${session?.user.name}'s profile picture`}
-                alt="Profile picture"
-                size="md"
-                imageUrl={session?.user?.image ?? null}
-              />
+              <ProfileImage imageUrl={session?.user?.image ?? null} />
             </View>
           </View>
           <View className="flex flex-col px-4 pb-4 pt-14">
