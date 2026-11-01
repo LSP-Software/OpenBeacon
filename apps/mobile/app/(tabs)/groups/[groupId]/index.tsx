@@ -44,7 +44,7 @@ const GROUP_TABS: readonly SwipeTabsItem<GroupTabValue>[] = [
 const GroupScreen = () => {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [value, setValue] = useState<GroupTabValue>("members");
-  const { data: group, isFetching: isFetchingGroup } = useQuery(
+  const { data: group, isPending: isFetchingGroup } = useQuery(
     trpc.groupMembership.get.queryOptions({ groupId }),
   );
 

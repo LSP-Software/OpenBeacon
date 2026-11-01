@@ -24,6 +24,7 @@ sourceSets {
       exclude("**/OpenBeaconTrackingModule.kt")
       exclude("**/TrackingRuntime.kt")
       exclude("**/TrackingCaptureService.kt")
+      exclude("**/TrackingUploadService.kt")
       exclude("**/BatteryReader.kt")
       exclude("**/SecureEpochKeyStore.kt")
       exclude("**/CiphertextQueueEntity.kt")

@@ -101,6 +101,9 @@ export const groupMembershipRouter = {
     .input(removeGroupMemberSchema)
     .mutation(async ({ ctx, input }) => {
       return ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
+        );
         const actors = await tx.$queryRaw<Array<{ id: string; role: GroupRole }>>(Prisma.sql`
           SELECT id, role FROM "GroupMember"
           WHERE "groupId" = ${input.groupId} AND "userId" = ${ctx.session.user.id}
@@ -117,10 +120,20 @@ export const groupMembershipRouter = {
         }
         const member = await tx.groupMember.findFirst({
           where: { groupId: input.groupId, id: input.memberId },
-          select: { userId: true },
+          select: { userId: true, role: true },
         });
         if (!member) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Group member not found" });
+        }
+        if (
+          actor.id !== input.memberId &&
+          actor.role !== GroupRole.OWNER &&
+          member.role === GroupRole.OWNER
+        ) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only owners can remove another owner.",
+          });
         }
 
         await persistGroupEpoch({
@@ -144,6 +157,45 @@ export const groupMembershipRouter = {
         return {
           message: "Group member removed.",
         };
+      });
+    }),
+  updateRole: groupMemberProcedure
+    .input(
+      z.object({
+        groupId: z.string().min(1),
+        memberId: z.string().min(1),
+        role: z.enum(GroupRole),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
+        );
+        const actor = await tx.groupMember.findUnique({
+          where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
+        });
+        if (actor?.role !== GroupRole.OWNER) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only owners can change roles." });
+        }
+        const member = await tx.groupMember.findFirst({
+          where: { id: input.memberId, groupId: input.groupId },
+        });
+        if (!member) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Group member not found" });
+        }
+        if (member.role === GroupRole.OWNER && input.role !== GroupRole.OWNER) {
+          const owners = await tx.groupMember.count({
+            where: { groupId: input.groupId, role: GroupRole.OWNER },
+          });
+          if (owners <= 1) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "The group must have at least one owner.",
+            });
+          }
+        }
+        return tx.groupMember.update({ where: { id: member.id }, data: { role: input.role } });
       });
     }),
 } satisfies TRPCRouterRecord;

@@ -22,6 +22,8 @@ let reconcileCalls: Array<{ startCapture: boolean }> = [];
 let flushCalls = 0;
 let revokeCalls = 0;
 let isReadyForSharing = true;
+let failFlush = false;
+let alerts = 0;
 let root: Root | null = null;
 const trackingService = {
   reconcileTrackingKeys: async (input: { startCapture: boolean }) => {
@@ -30,14 +32,15 @@ const trackingService = {
   },
   flushPendingTrackingPoints: async () => {
     flushCalls += 1;
+    if (failFlush) throw new Error("offline");
   },
   revokeTrackingAccess: async () => {
     revokeCalls += 1;
   },
 };
 
-mock.module("react-native", () =>
-  createReactNativeTestModule({
+mock.module("react-native", () => ({
+  ...createReactNativeTestModule({
     appState: {
       currentState: "active",
       addEventListener: (_event: string, listener: (nextAppState: string) => void) => {
@@ -53,7 +56,12 @@ mock.module("react-native", () =>
     },
     platformOS: "android",
   }),
-);
+  Alert: {
+    alert: () => {
+      alerts += 1;
+    },
+  },
+}));
 
 mock.module("../lib/auth-client.ts", () => ({
   authClient: {
@@ -104,6 +112,8 @@ describe("TrackingProvider", () => {
     flushCalls = 0;
     revokeCalls = 0;
     isReadyForSharing = true;
+    failFlush = false;
+    alerts = 0;
     root = null;
   });
 
@@ -146,6 +156,21 @@ describe("TrackingProvider", () => {
     expect(flushCalls).toBe(2);
   });
 
+  test("reports a failed sync once and reports again after recovery", async () => {
+    failFlush = true;
+    await renderProvider();
+    requestTrackingSync();
+    await flushEffects();
+    expect(alerts).toBe(1);
+    failFlush = false;
+    requestTrackingSync();
+    await flushEffects();
+    failFlush = true;
+    requestTrackingSync();
+    await flushEffects();
+    expect(alerts).toBe(2);
+  });
+
   test("reruns when a group change arrives during an active cycle", async () => {
     await renderProvider();
     let releaseReconcile = () => {};
@@ -174,6 +199,26 @@ describe("TrackingProvider", () => {
     await renderProvider();
 
     expect(reconcileCalls).toEqual([{ startCapture: false }]);
+  });
+
+  test("reconciles when location sharing permission changes", async () => {
+    isReadyForSharing = false;
+    await renderProvider();
+
+    for (const ready of [true, false]) {
+      isReadyForSharing = ready;
+      await act(async () => {
+        root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    }
+
+    expect(reconcileCalls).toEqual([
+      { startCapture: false },
+      { startCapture: true },
+      { startCapture: false },
+    ]);
   });
 
   test("revokes native tracking access on logout", async () => {

@@ -6,6 +6,9 @@ import androidx.room.Query
 
 @Dao
 interface CiphertextQueueDao {
+  @Query("UPDATE ciphertext_queue SET status = 'PENDING' WHERE status = 'IN_FLIGHT' AND lastAttemptAt < :before")
+  fun recoverInterrupted(before: Long)
+
   @Insert
   fun insertAll(entities: List<CiphertextQueueEntity>)
 

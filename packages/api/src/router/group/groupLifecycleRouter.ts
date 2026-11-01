@@ -1,8 +1,11 @@
-import { GroupRole } from "@openbeacon/database";
+import { GroupRole, Prisma } from "@openbeacon/database";
 import { createGroupSchema, groupEpochBundleSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
+import { env } from "../../env.ts";
 import { persistGroupEpoch } from "../../lib/groupEpochs.ts";
+import { buildGroupAvatarPath } from "../../lib/image-upload.ts";
+import { deleteFile, extractImageStorageObject } from "../../lib/storage.ts";
 import { groupOwnerProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
@@ -17,7 +20,54 @@ export const groupLifecycleRouter = {
     })
     .input(z.object({ groupId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.group.delete({ where: { id: input.groupId } });
+      await ctx.db.$transaction(
+        async (tx) => {
+          await tx.$queryRaw(
+            Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
+          );
+          const actor = await tx.groupMember.findUnique({
+            where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
+          });
+          if (actor?.role !== GroupRole.OWNER) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Only owners can delete the group.",
+            });
+          }
+          const group = await tx.group.findUniqueOrThrow({
+            where: { id: input.groupId },
+            select: { image: true },
+          });
+          const pendingUploads = await tx.pendingUpload.findMany({
+            where: { groupId: input.groupId, uploadType: "groupAvatar" },
+            select: { fileName: true },
+          });
+          for (const upload of pendingUploads) {
+            await deleteFile(
+              env.S3_BUCKET_NAME,
+              buildGroupAvatarPath(input.groupId),
+              upload.fileName,
+            );
+          }
+          if (group.image) {
+            const image = extractImageStorageObject(group.image);
+            if (
+              !image ||
+              image.bucketName !== env.S3_BUCKET_NAME ||
+              image.path !== buildGroupAvatarPath(input.groupId) ||
+              !image.fileName
+            ) {
+              throw new TRPCError({
+                code: "INTERNAL_SERVER_ERROR",
+                message: "The group image cannot be removed from storage.",
+              });
+            }
+            await deleteFile(image.bucketName, image.path, image.fileName);
+          }
+          await tx.group.delete({ where: { id: input.groupId } });
+        },
+        { timeout: 15_000 },
+      );
       return { message: "Group deleted successfully" };
     }),
   create: protectedProcedure
