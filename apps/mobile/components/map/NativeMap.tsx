@@ -148,8 +148,9 @@ export const NativeMap = ({
       mapTheme,
       pmtilesUrl,
       Platform.OS === "ios"
-        ? `${Paths.bundle.uri}/fonts/{fontstack}/{range}.pbf`
-        : "asset://map-fonts/{fontstack}/{range}.pbf",
+        ? `${Paths.bundle.uri}/map/fonts/{fontstack}/{range}.pbf`
+        : "asset://map-assets/fonts/{fontstack}/{range}.pbf",
+      Platform.OS === "ios" ? `${Paths.bundle.uri}/map/sprites` : "asset://map-assets/sprites",
       showSymbols,
     );
   }, [mapTheme, pmtilesUrl, showSymbols]);

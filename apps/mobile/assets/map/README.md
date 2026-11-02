@@ -1,5 +1,9 @@
-# Map fonts
+# Map assets
 
-The Noto Sans glyph ranges come from [Protomaps basemaps-assets](https://github.com/protomaps/basemaps-assets) at revision `028c18f713baecad011301ff7a69acc39bcc2ae7`. The font license is in `FONT-LICENSE.txt`.
+The glyph ranges and v4 light and dark sprites come from [Protomaps basemaps-assets](https://github.com/protomaps/basemaps-assets) at revision `028c18f713baecad011301ff7a69acc39bcc2ae7`. The upstream Devanagari font stack's symbolic links are copied as regular files for native packaging. The font and sprite licenses are in `FONT-LICENSE.txt` and `SPRITE-LICENSE.txt`.
 
-The Expo config plugin includes these files in the Android and iOS app bundles. Changes require a new native build.
+The Expo config plugin includes these files in the Android and iOS app bundles. Changes require a new native build. When updating the Protomaps style, update the assets from a compatible pinned revision and run the style tests to check the font stacks and sprite files.
+
+The map asset tests decode the glyph and sprite files, inspect the generated style and check a digest of the reviewed asset set. When intentionally updating assets, review the source revision and licenses, run the tests, and replace the expected digest in `lib/map-assets.test.ts` with the reported actual digest. The tests check style-selected icon names, including values bounded by the style's filters, and fail when they cannot determine a finite set. They also require an explicit review when the installed Protomaps style or MapLibre React Native version changes; after reviewing asset compatibility, update the expected versions in the test. They cannot determine whether characters in independently updated map data are present in the font stacks.
+
+After a native build, run `bun run test:map-assets:package <path-to-apk>` or `bun run test:map-assets:package <path-to-ios-app>` from `apps/mobile` to compare the packaged files with the current source. On Android, pass an `adb` device serial instead of the APK path to check the installed build. This catches stale or missing files but does not replace device rendering tests for both themes, densities, and representative scripts.

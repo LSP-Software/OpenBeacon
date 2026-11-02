@@ -15,6 +15,7 @@
     "typecheck": "bun check",
     "test": "bun test --isolate && bun run test:native-crypto",
     "test:native-crypto": "cd modules/openbeacon-tracking/jvm && ./gradlew test --no-daemon",
+    "test:map-assets:package": "bun scripts/check-map-assets-package.ts",
     "ci": "bun run typecheck && bun run format:check && bun run lint && bun run test"
   },
   "dependencies": {
@@ -76,9 +77,12 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/pngjs": "^6.0.5",
     "@types/react": "~19.2.14",
     "babel-preset-expo": "^55.0.10",
     "expo-dev-client": "~55.0.18",
+    "pbf": "^5.1.2",
+    "pngjs": "^7.0.0",
     "tailwindcss": "^3.4.17",
     "test-renderer": "1.2",
     "typescript": "~5.9.2"
