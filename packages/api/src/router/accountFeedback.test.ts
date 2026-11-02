@@ -19,14 +19,21 @@ describe("feedback", () => {
       session: { user: { id: "user-1", email: "user@example.com" } },
     } as unknown as Parameters<typeof appRouter.createCaller>[0]);
 
-    await caller.account.submitFeedback({ message: "  hello  ", includeEmail: false });
+    await caller.account.submitFeedback({
+      message: "  hello  ",
+      includeEmail: false,
+      androidVersion: " 15 ",
+    });
     await caller.account.submitFeedback({ message: "follow up", includeEmail: true });
     expect(create.mock.calls).toEqual([
-      [{ data: { message: "hello", email: null } }],
-      [{ data: { message: "follow up", email: "user@example.com" } }],
+      [{ data: { message: "hello", email: null, androidVersion: "15" } }],
+      [{ data: { message: "follow up", email: "user@example.com", androidVersion: null } }],
     ]);
     await expect(
       caller.account.submitFeedback({ message: "  ", includeEmail: false }),
+    ).rejects.toThrow();
+    await expect(
+      caller.account.submitFeedback({ message: "hello", includeEmail: false, androidVersion: " " }),
     ).rejects.toThrow();
   });
 });

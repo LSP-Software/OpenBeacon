@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
   DeleteObjectCommand,
   ListObjectVersionsCommand,
@@ -29,7 +29,8 @@ const router = createTRPCRouter({
   groupMembership: groupMembershipRouter,
   groupSettings: groupSettingsRouter,
 });
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+let now = 0;
+const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => now });
 const prefix = `settings-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const users = [0, 1, 2].map((n) => `${prefix}-${n}`);
@@ -44,6 +45,9 @@ const caller = (userId: string) =>
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "group settings with PostgreSQL",
   () => {
+    beforeEach(() => {
+      now += 60_000;
+    });
     beforeAll(async () => {
       await prisma.user.createMany({
         data: users.map((id) => ({ id, name: id, email: `${id}@example.test` })),
