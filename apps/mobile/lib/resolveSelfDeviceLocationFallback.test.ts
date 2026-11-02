@@ -18,6 +18,23 @@ describe("resolveSelfDeviceLocationFallback", () => {
     ).toBeNull();
   });
 
+  test("keeps the self marker after the last membership is removed", () => {
+    expect(
+      resolveSelfDeviceLocationFallback({
+        getGroupColor: () => "#FF1464",
+        groups: [],
+        selfUserId: "alice",
+        selfUser: { image: null, name: "Alice" },
+      }),
+    ).toEqual({
+      image: null,
+      name: "Alice",
+      otherSharedGroupNames: [],
+      ringColor: "#FF1464",
+      sourceGroupId: "",
+    });
+  });
+
   test("uses the first membership for ring color and lists other shared groups", () => {
     expect(
       resolveSelfDeviceLocationFallback({

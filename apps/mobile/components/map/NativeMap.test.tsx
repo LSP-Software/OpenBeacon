@@ -8,6 +8,7 @@ import {
   createLiveMapMarkerFixture,
   createMapLibreMockModule,
   emitNativeMapAndroidMarkerTap,
+  emitRemovedAnnotationDeselected,
   emitNativeMapAnnotationDeselected,
   emitNativeMapAnnotationSelected,
   emitNativeMapDidFailLoadingMap,
@@ -30,6 +31,8 @@ import {
   registerNativeMapShowEveryoneHandler,
   resetNativeMapHarness,
   setNativeMapSelfHeadingDegrees,
+  setNativeMapProjectedPoint,
+  setNativeMapProjectionWait,
 } from "./nativeMapTestHarness.tsx";
 
 (
@@ -66,10 +69,20 @@ mock.module("react-native", () => {
   return {
     ...reactNative,
     Platform: testPlatform,
+    View: ({
+      children,
+      onLayout,
+    }: {
+      children?: React.ReactNode;
+      onLayout?: (event: {
+        nativeEvent: { layout: { width: number; height: number; x: number; y: number } };
+      }) => void;
+    }) => React.createElement("view", { onLayout }, children),
     Pressable: (props: {
       accessibilityLabel?: string;
       children?: React.ReactNode;
       onPress?: () => void;
+      style?: unknown;
     }) => {
       if (props.accessibilityLabel === "Show everyone") {
         registerNativeMapShowEveryoneHandler(props.onPress ?? null);
@@ -77,12 +90,22 @@ mock.module("react-native", () => {
       if (props.accessibilityLabel === "Go to current location") {
         registerNativeMapGoToCurrentLocationHandler(props.onPress ?? null);
       }
-      return reactNative.Pressable(props);
+      return React.createElement(
+        "pressable",
+        {
+          accessibilityLabel: props.accessibilityLabel,
+          onClick: props.onPress,
+          onPress: props.onPress,
+          style: props.style,
+        },
+        props.children,
+      );
     },
   };
 });
 
 mock.module("lucide-react-native", () => ({
+  ArrowUpIcon: () => React.createElement("arrow-up-icon"),
   LocateFixedIcon: () => React.createElement("locate-fixed-icon"),
   MapPinIcon: () => React.createElement("map-pin-icon"),
   ScanIcon: () => React.createElement("scan-icon"),
@@ -370,6 +393,435 @@ describe("NativeMap integration harness", () => {
       });
       root = null;
     }
+  });
+
+  test.each(["ios", "android"] as const)(
+    "renders only one pin per person as the map edge is crossed on %s",
+    async (platform) => {
+      testPlatform.OS = platform;
+      const marker = createLiveMapMarkerFixture({ userId: "alice" });
+      setNativeMapProjectedPoint([-10, 300]);
+      await renderNativeMap({ markers: [marker] });
+      const views =
+        root?.container.queryAll(
+          (instance) =>
+            instance.type === "view" && typeof instance.props["onLayout"] === "function",
+        ) ?? [];
+      await act(async () => {
+        (views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+          nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
+        });
+        (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+          nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      });
+      const edgePins = () =>
+        root?.container.queryAll(
+          (instance) =>
+            instance.type === "pressable" && instance.props["accessibilityLabel"] === "Go to Alice",
+        ) ?? [];
+      const nativePins = () =>
+        platform === "ios"
+          ? getNativeMapMountedAnnotationIds().filter((id) => id === "alice").length
+          : (root?.container.queryAll((instance) => instance.type === "marker-view") ?? []).length;
+      expect(edgePins()).toHaveLength(1);
+      expect(nativePins()).toBe(0);
+      setNativeMapProjectedPoint([200, 300]);
+      await act(async () => {
+        emitNativeMapRegionDidChange({ latitude: 51.5, longitude: -0.12, zoomLevel: 14 });
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      });
+      expect(edgePins()).toHaveLength(0);
+      expect(nativePins()).toBe(1);
+    },
+  );
+
+  test("keeps the selection when a native annotation is replaced by an edge pin", async () => {
+    const selections: Array<string | null> = [];
+    const marker = createLiveMapMarkerFixture({ userId: "alice" });
+    setNativeMapProjectedPoint([-10, 300]);
+    await renderNativeMap({
+      markers: [marker],
+      selectedUserId: "alice",
+      onSelectUserId: (id) => selections.push(id),
+    });
+    const views =
+      root?.container.queryAll(
+        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
+      ) ?? [];
+    await act(async () => {
+      (views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
+      });
+      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    expect(getRenderedOutput()).toContain("Go to Alice");
+    await act(async () => {
+      emitRemovedAnnotationDeselected("alice");
+      await Promise.resolve();
+    });
+    expect(selections).toEqual([]);
+  });
+
+  test("keeps people at the same off-screen position separately tappable", async () => {
+    setNativeMapProjectedPoint([-100, 300]);
+    await renderNativeMap({
+      markers: [
+        createLiveMapMarkerFixture({ userId: "alice", name: "Alice" }),
+        createLiveMapMarkerFixture({ userId: "bob", name: "Bob" }),
+      ],
+    });
+    const views =
+      root?.container.queryAll(
+        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
+      ) ?? [];
+    await act(async () => {
+      (views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
+      });
+      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    const edges =
+      root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" &&
+          ["Go to Alice", "Go to Bob"].includes(String(instance.props["accessibilityLabel"])),
+      ) ?? [];
+    expect(edges).toHaveLength(2);
+    const first = edges[0]?.props["style"] as { left: number; top: number } | undefined;
+    const second = edges[1]?.props["style"] as { left: number; top: number } | undefined;
+    expect(
+      first &&
+        second &&
+        (Math.abs(first.left - second.left) >= 48 || Math.abs(first.top - second.top) >= 48),
+    ).toBe(true);
+  });
+
+  test("keeps edge controls clear of on-screen people", async () => {
+    await renderNativeMap({
+      markers: [
+        createLiveMapMarkerFixture({ userId: "alice", name: "Alice", latitude: 0, longitude: -20 }),
+        createLiveMapMarkerFixture({ userId: "bob", name: "Bob", latitude: 0, longitude: -20 }),
+        createLiveMapMarkerFixture({
+          userId: "carol",
+          name: "Carol",
+          latitude: 0,
+          longitude: -5.9,
+        }),
+      ],
+    });
+    const views =
+      root?.container.queryAll(
+        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
+      ) ?? [];
+    await act(async () => {
+      (views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
+      });
+      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
+      });
+      emitNativeMapRegionIsChanging({
+        latitude: 0,
+        longitude: 0,
+        zoomLevel: 4,
+        visibleBounds: [
+          [10, 10],
+          [-10, -10],
+        ],
+      });
+      await Promise.resolve();
+    });
+    const edges =
+      root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" &&
+          ["Go to Alice", "Go to Bob"].includes(String(instance.props["accessibilityLabel"])),
+      ) ?? [];
+    expect(edges).toHaveLength(2);
+    for (const edge of edges) {
+      const style = edge.props["style"] as { left: number; top: number };
+      expect(Math.hypot(style.left + 24 - 82, style.top + 24 - 300)).toBeGreaterThanOrEqual(48);
+    }
+    expect(getNativeMapMountedAnnotationIds()).toContain("carol");
+  });
+
+  test("keeps edge pins above the open person sheet", async () => {
+    setNativeMapProjectedPoint([200, 570]);
+    await renderNativeMap({
+      markers: [createLiveMapMarkerFixture({ userId: "alice" })],
+      selectedUserId: "alice",
+    });
+    const views =
+      root?.container.queryAll(
+        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
+      ) ?? [];
+    await act(async () => {
+      (views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
+      });
+      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    const edge = root?.container.queryAll(
+      (instance) =>
+        instance.type === "pressable" && instance.props["accessibilityLabel"] === "Go to Alice",
+    )[0];
+    const style = edge?.props["style"] as { top: number } | undefined;
+    expect(style?.top).toBeLessThanOrEqual(326);
+  });
+
+  test("keeps edge pins clear when the control stack changes size", async () => {
+    const marker = createLiveMapMarkerFixture({ userId: "alice" });
+    setNativeMapProjectedPoint([700, 100]);
+    await renderNativeMap({ markers: [marker] });
+    const views =
+      root?.container.queryAll(
+        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
+      ) ?? [];
+    await act(async () => {
+      (views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
+      });
+      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 44, height: 152, x: 344, y: 56 } },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    const getEdge = () =>
+      root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" && instance.props["accessibilityLabel"] === "Go to Alice",
+      )[0];
+    const firstStyle = getEdge()?.props["style"] as { left: number; top: number } | undefined;
+    expect(
+      firstStyle &&
+        (firstStyle.left + 24 <= 316 || firstStyle.top + 24 <= 28 || firstStyle.top + 24 >= 236),
+    ).toBe(true);
+    await act(async () => {
+      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 44, height: 240, x: 344, y: 56 } },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    const nextStyle = getEdge()?.props["style"] as { left: number; top: number } | undefined;
+    expect(
+      nextStyle &&
+        (nextStyle.left + 24 <= 316 || nextStyle.top + 24 <= 28 || nextStyle.top + 24 >= 324),
+    ).toBe(true);
+  });
+
+  test("ignores a native projection started before the map is resized", async () => {
+    const marker = createLiveMapMarkerFixture({ userId: "alice" });
+    setNativeMapProjectedPoint([600, 300]);
+    await renderNativeMap({ markers: [marker] });
+    const views =
+      root?.container.queryAll(
+        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
+      ) ?? [];
+    const layoutMap = views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined;
+    await act(async () => {
+      layoutMap?.({ nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } } });
+      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(getRenderedOutput()).toContain("Go to Alice");
+    let release = () => {};
+    setNativeMapProjectedPoint([200, 300]);
+    setNativeMapProjectionWait(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    await act(async () => {
+      emitNativeMapRegionIsChanging({ latitude: 0, longitude: 0, zoomLevel: 4 });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      layoutMap?.({ nativeEvent: { layout: { width: 600, height: 600, x: 0, y: 0 } } });
+      setNativeMapProjectedPoint([800, 300]);
+      release();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(getRenderedOutput()).toContain("Go to Alice");
+  });
+
+  test("tracks camera motion while an older native projection is pending", async () => {
+    const marker = createLiveMapMarkerFixture({ userId: "alice", latitude: 0, longitude: 20 });
+    setNativeMapProjectedPoint([600, 300]);
+    await renderNativeMap({ markers: [marker] });
+    const views =
+      root?.container.queryAll(
+        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
+      ) ?? [];
+    await act(async () => {
+      (views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
+      });
+      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    const edge = () =>
+      root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" && instance.props["accessibilityLabel"] === "Go to Alice",
+      )[0];
+    expect(edge()?.props["style"]).toMatchObject({ top: 276 });
+    let release = () => {};
+    setNativeMapProjectionWait(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    await act(async () => {
+      emitNativeMapRegionIsChanging({ latitude: 0, longitude: 0, zoomLevel: 4 });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      emitNativeMapRegionIsChanging({
+        latitude: 10,
+        longitude: 0,
+        zoomLevel: 4,
+        visibleBounds: [
+          [10, 20],
+          [-10, 0],
+        ],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect((edge()?.props["style"] as { top: number } | undefined)?.top).toBeGreaterThan(300);
+    await act(async () => {
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    });
+    expect((edge()?.props["style"] as { top: number } | undefined)?.top).toBeGreaterThan(300);
+  });
+
+  test("updates edge pins while camera movement continues", async () => {
+    const marker = createLiveMapMarkerFixture({ userId: "alice" });
+    setNativeMapProjectedPoint([600, 300]);
+    await renderNativeMap({ markers: [marker] });
+    const views =
+      root?.container.queryAll(
+        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
+      ) ?? [];
+    await act(async () => {
+      (views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
+      });
+      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    expect(getRenderedOutput()).toContain("Go to Alice");
+    setNativeMapProjectedPoint([200, 300]);
+    await act(async () => {
+      for (let i = 0; i < 4; i++) {
+        emitNativeMapRegionIsChanging({ latitude: 51.5, longitude: -0.12, zoomLevel: 14 });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    });
+    expect(getRenderedOutput()).not.toContain("Go to Alice");
+  });
+
+  test("hides a tapped edge pin before the map camera reaches its person", async () => {
+    const marker = createLiveMapMarkerFixture({ userId: "alice" });
+    setNativeMapProjectedPoint([600, 300]);
+    await renderNativeMap({ markers: [marker] });
+    const mapContainer = root?.container.queryAll(
+      (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
+    )[0];
+    expect(mapContainer).toBeDefined();
+    await act(async () => {
+      (mapContainer?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
+      });
+      const controls = root?.container.queryAll(
+        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
+      )[1];
+      (controls?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 130));
+    });
+    const edge = root?.container.queryAll(
+      (instance) =>
+        instance.type === "pressable" && instance.props["accessibilityLabel"] === "Go to Alice",
+    )[0];
+    expect(edge).toBeDefined();
+    await act(async () => {
+      (edge?.props["onPress"] as (() => void) | undefined)?.();
+    });
+    expect(getRenderedOutput()).not.toContain("Go to Alice");
+    await act(async () => {
+      emitNativeMapRegionIsChanging({
+        latitude: 51.5,
+        longitude: -0.12,
+        zoomLevel: 14,
+        animated: true,
+        isUserInteraction: false,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(getRenderedOutput()).not.toContain("Go to Alice");
+  });
+
+  test("does not restore a tapped edge pin when an older projection finishes", async () => {
+    const marker = createLiveMapMarkerFixture({ userId: "alice" });
+    setNativeMapProjectedPoint([600, 300]);
+    await renderNativeMap({ markers: [marker] });
+    const views =
+      root?.container.queryAll(
+        (instance) => instance.type === "view" && typeof instance.props["onLayout"] === "function",
+      ) ?? [];
+    await act(async () => {
+      (views[0]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 400, height: 600, x: 0, y: 0 } },
+      });
+      (views[1]?.props["onLayout"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { layout: { width: 44, height: 96, x: 344, y: 56 } },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    let release = () => {};
+    setNativeMapProjectionWait(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    await act(async () => {
+      emitNativeMapRegionIsChanging({
+        latitude: 51.5,
+        longitude: -0.12,
+        zoomLevel: 14,
+        animated: true,
+        isUserInteraction: false,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    const edge = root?.container.queryAll(
+      (instance) =>
+        instance.type === "pressable" && instance.props["accessibilityLabel"] === "Go to Alice",
+    )[0];
+    expect(edge).toBeDefined();
+    await act(async () => {
+      (edge?.props["onPress"] as (() => void) | undefined)?.();
+      release();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(getRenderedOutput()).not.toContain("Go to Alice");
   });
 
   test("redirects home when the signed pmtiles url query is unauthorized", async () => {

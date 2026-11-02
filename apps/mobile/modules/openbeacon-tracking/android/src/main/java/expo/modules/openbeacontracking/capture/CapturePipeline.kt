@@ -11,6 +11,8 @@ class CapturePipeline(
   private val ciphertextQueue: CiphertextQueue,
   private val nowMillis: () -> Long = { System.currentTimeMillis() },
   private val newId: () -> String = { UUID.randomUUID().toString() },
+  private val captureLock: Any = Any(),
+  private val canQueue: (Long) -> Boolean = { true },
 ) {
   fun onFix(
     latitude: Double,
@@ -19,6 +21,7 @@ class CapturePipeline(
     speedMetersPerSecond: Double?,
     batteryLevel: Int,
     batteryCharging: Boolean,
+    captureGeneration: Long = 0L,
   ): Int {
     val keys = epochKeyStore.list()
     if (keys.isEmpty()) {
@@ -65,7 +68,10 @@ class CapturePipeline(
         )
       }
 
-    ciphertextQueue.insertAll(rows)
-    return rows.size
+    return synchronized(captureLock) {
+      if (!canQueue(captureGeneration)) return@synchronized 0
+      ciphertextQueue.insertAll(rows)
+      rows.size
+    }
   }
 }

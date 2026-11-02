@@ -3,6 +3,7 @@ package expo.modules.openbeacontracking.capture
 data class CaptureSamplingDecision(
   val shouldQueue: Boolean,
   val intervalMs: Long,
+  val forceUpload: Boolean,
 )
 
 object CaptureSamplingPolicy {
@@ -20,6 +21,7 @@ object CaptureSamplingPolicy {
     speedMetersPerSecond: Double?,
     distanceFromLastQueuedMeters: Double?,
     timeSinceLastQueuedMs: Long?,
+    forcedRefresh: Boolean = false,
   ): CaptureSamplingDecision {
     val batterySaver = isBatterySaver(battery)
     val moving = isMoving(speedMetersPerSecond)
@@ -33,12 +35,13 @@ object CaptureSamplingPolicy {
 
     return CaptureSamplingDecision(
       shouldQueue =
-        shouldQueue(
+        forcedRefresh || shouldQueue(
           moving = moving,
           distanceFromLastQueuedMeters = distanceFromLastQueuedMeters,
           timeSinceLastQueuedMs = timeSinceLastQueuedMs,
         ),
       intervalMs = intervalMs,
+      forceUpload = forcedRefresh,
     )
   }
 

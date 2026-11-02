@@ -38,6 +38,7 @@ declare class OpenBeaconTrackingModule extends NativeModule {
   revokeEpochKeys(groupIds?: string[] | null): void;
   listProvisionedEpochKeys(): ProvisionedEpochKeyInfo[];
   startCapture(intervalMs?: number | null): Promise<void>;
+  refreshCapture(): Promise<void>;
   stopCapture(): Promise<void>;
   isCaptureRunning(): boolean;
   listPendingCiphertexts(limit?: number | null): Promise<CiphertextQueueItem[]>;

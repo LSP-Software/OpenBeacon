@@ -35,21 +35,14 @@ class TrackingCaptureService : Service() {
   private val capturePipeline by lazy { TrackingRuntime.capturePipeline(this) }
   private val captureScope =
     CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
-  private val captureStateLock = Any()
+  private val captureStateLock = TrackingRuntime.captureLock
 
   private var currentIntervalMs = DEFAULT_INTERVAL_MS
   private var lastQueued: LastQueuedFix? = null
   private var lastUploadRequestMs = 0L
+  private val refreshState = CaptureRefreshState()
 
-  private val locationCallback =
-    object : LocationCallback() {
-      override fun onLocationResult(result: LocationResult) {
-        val location = result.lastLocation ?: return
-        captureScope.launch {
-          enqueueEncryptedFix(location)
-        }
-      }
-    }
+  private var locationCallback: LocationCallback? = null
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -64,8 +57,32 @@ class TrackingCaptureService : Service() {
         stopSelf()
         return START_NOT_STICKY
       }
+      ACTION_REFRESH -> {
+        if (!TrackingRuntime.isCaptureRunning) {
+          stopSelf()
+          return START_NOT_STICKY
+        }
+        val generation = synchronized(captureStateLock) {
+          refreshState.request()
+          TrackingRuntime.captureCommands.current()
+        }
+        try {
+          fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+            .addOnSuccessListener { location ->
+              if (location != null) captureScope.launch { enqueueEncryptedFix(location, generation) }
+            }
+        } catch (error: SecurityException) {
+          Log.e(TAG, "Failed to refresh location.", error)
+        }
+      }
       else -> {
-        startCapture(resolveStartIntervalMs(intent))
+        synchronized(captureStateLock) {
+          if (intent?.action == ACTION_START && !TrackingRuntime.captureCommands.isCurrent(intent.getLongExtra(EXTRA_COMMAND_GENERATION, -1L))) {
+            if (!TrackingRuntime.isCaptureRunning) stopSelf()
+            return START_NOT_STICKY
+          }
+          startCapture(resolveStartIntervalMs(intent))
+        }
       }
     }
 
@@ -128,23 +145,46 @@ class TrackingCaptureService : Service() {
         .setMaxUpdateDelayMillis(intervalMs)
         .build()
 
-    fusedLocationClient.removeLocationUpdates(locationCallback)
-    fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+    locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
+    val generation = TrackingRuntime.captureCommands.current()
+    val callback = object : LocationCallback() {
+      override fun onLocationResult(result: LocationResult) {
+        val location = result.lastLocation ?: return
+        captureScope.launch {
+          enqueueEncryptedFix(location, generation)
+          val nowMs = System.currentTimeMillis()
+          synchronized(captureStateLock) {
+            if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && nowMs - lastUploadRequestMs >= UPLOAD_INTERVAL_MS) {
+              try {
+                startService(Intent(this@TrackingCaptureService, TrackingUploadService::class.java))
+                lastUploadRequestMs = nowMs
+              } catch (error: Exception) {
+                Log.e(TAG, "Failed to start background tracking sync.", error)
+              }
+            }
+          }
+        }
+      }
+    }
+    locationCallback = callback
+    fusedLocationClient.requestLocationUpdates(request, callback, Looper.getMainLooper())
     synchronized(captureStateLock) {
       currentIntervalMs = intervalMs
     }
   }
 
   private fun stopCapture() {
-    fusedLocationClient.removeLocationUpdates(locationCallback)
+    locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
+    locationCallback = null
     synchronized(captureStateLock) {
       TrackingRuntime.isCaptureRunning = false
       lastQueued = null
+      refreshState.clear()
     }
     stopForeground(STOP_FOREGROUND_REMOVE)
   }
 
-  private fun enqueueEncryptedFix(location: Location) {
+  private fun enqueueEncryptedFix(location: Location, generation: Long) {
     val battery = BatteryReader.read(this)
     val speed =
       if (location.hasSpeed()) {
@@ -158,10 +198,11 @@ class TrackingCaptureService : Service() {
         Triple(lastQueued, currentIntervalMs, TrackingRuntime.isCaptureRunning)
       }
 
-    if (!captureRunning) {
+    if (!captureRunning || !TrackingRuntime.captureCommands.isCurrent(generation)) {
       return
     }
 
+    val refreshGeneration = synchronized(captureStateLock) { refreshState.pending() }
     val decision =
       CaptureSamplingPolicy.evaluate(
         battery = battery,
@@ -171,12 +212,15 @@ class TrackingCaptureService : Service() {
             distanceMeters(it.latitude, it.longitude, location.latitude, location.longitude)
           },
         timeSinceLastQueuedMs = queued?.let { nowMs - it.atMs },
+        forcedRefresh = refreshGeneration != null,
       )
 
     val nextIntervalMs = decision.intervalMs.coerceAtLeast(MIN_INTERVAL_MS)
     if (nextIntervalMs != intervalMs) {
       try {
-        requestLocationUpdates(nextIntervalMs)
+        synchronized(captureStateLock) {
+          if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation)) requestLocationUpdates(nextIntervalMs)
+        }
       } catch (error: SecurityException) {
         Log.e(TAG, "Failed to retune location interval.", error)
       }
@@ -194,14 +238,18 @@ class TrackingCaptureService : Service() {
         speedMetersPerSecond = speed,
         batteryLevel = battery.level,
         batteryCharging = battery.charging,
+        captureGeneration = generation,
       )
-      if (queuedCount > 0 && nowMs - lastUploadRequestMs >= UPLOAD_INTERVAL_MS) {
-        val uploadIntent = Intent(this, TrackingUploadService::class.java)
-        startService(uploadIntent)
-        lastUploadRequestMs = nowMs
+      synchronized(captureStateLock) {
+        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && queuedCount > 0 && (decision.forceUpload || nowMs - lastUploadRequestMs >= UPLOAD_INTERVAL_MS)) {
+          val uploadIntent = Intent(this, TrackingUploadService::class.java)
+          startService(uploadIntent)
+          lastUploadRequestMs = nowMs
+        }
       }
       synchronized(captureStateLock) {
-        if (TrackingRuntime.isCaptureRunning) {
+        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && queuedCount > 0) {
+          if (refreshGeneration != null) refreshState.complete(refreshGeneration)
           lastQueued =
             LastQueuedFix(
               latitude = location.latitude,
@@ -270,8 +318,10 @@ class TrackingCaptureService : Service() {
 
   companion object {
     const val ACTION_START = "expo.modules.openbeacontracking.action.START"
+    const val ACTION_REFRESH = "expo.modules.openbeacontracking.action.REFRESH"
     const val ACTION_STOP = "expo.modules.openbeacontracking.action.STOP"
     const val EXTRA_INTERVAL_MS = "intervalMs"
+    const val EXTRA_COMMAND_GENERATION = "captureCommandGeneration"
     const val DEFAULT_INTERVAL_MS = CaptureSamplingPolicy.DEFAULT_INTERVAL_MS
     const val MIN_INTERVAL_MS = 5_000L
     private const val TAG = "TrackingCapture"

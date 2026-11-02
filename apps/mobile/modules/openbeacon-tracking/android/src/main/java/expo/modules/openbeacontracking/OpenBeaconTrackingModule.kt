@@ -50,9 +50,11 @@ class OpenBeaconTrackingModule : Module() {
       }
 
       AsyncFunction("startCapture") { intervalMs: Double? ->
+        val generation = synchronized(TrackingRuntime.captureLock) { TrackingRuntime.captureCommands.start() }
         val intent =
           Intent(requireContext(), TrackingCaptureService::class.java).apply {
             action = TrackingCaptureService.ACTION_START
+            putExtra(TrackingCaptureService.EXTRA_COMMAND_GENERATION, generation)
             if (intervalMs != null) {
               putExtra(TrackingCaptureService.EXTRA_INTERVAL_MS, intervalMs.toLong())
             }
@@ -61,7 +63,20 @@ class OpenBeaconTrackingModule : Module() {
         Unit
       }
 
+      AsyncFunction("refreshCapture") {
+        val intent =
+          Intent(requireContext(), TrackingCaptureService::class.java).apply {
+            action = TrackingCaptureService.ACTION_REFRESH
+          }
+        ContextCompat.startForegroundService(requireContext(), intent)
+        Unit
+      }
+
       AsyncFunction("stopCapture") {
+        synchronized(TrackingRuntime.captureLock) {
+          TrackingRuntime.captureCommands.stop()
+          TrackingRuntime.isCaptureRunning = false
+        }
         val intent = Intent(requireContext(), TrackingCaptureService::class.java)
         requireContext().stopService(intent)
         Unit

@@ -7,11 +7,66 @@ import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import expo.modules.openbeacontracking.queue.InMemoryCiphertextQueue
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class CapturePipelineTest {
+  @Test
+  fun oldFixCannotBeQueuedAfterCaptureStopsAndRestarts() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey(
+      groupId = "group_a", epochId = "epoch_a", epochKey = ByteArray(32),
+      senderDeviceId = "device_1", kind = "trackingPoint",
+    )))
+    val queue = InMemoryCiphertextQueue()
+    val commands = CaptureCommandState()
+    val previousGeneration = commands.start()
+    commands.stop()
+    commands.start()
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, canQueue = { commands.isCurrent(it) })
+    assertEquals(0, pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false, previousGeneration))
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).isEmpty())
+  }
+
+  @Test
+  fun stoppingCaptureDuringEncryptionPreventsQueueingTheFix() {
+    val keyStore = InMemoryEpochKeyStore()
+    keyStore.replaceAll(listOf(ProvisionedEpochKey(
+      groupId = "group_a", epochId = "epoch_a", epochKey = ByteArray(32),
+      senderDeviceId = "device_1", kind = "trackingPoint",
+    )))
+    val queue = InMemoryCiphertextQueue()
+    val lock = Any()
+    val started = CountDownLatch(1)
+    val resume = CountDownLatch(1)
+    var enabled = true
+    var inserted = -1
+    val pipeline = CapturePipeline(
+      epochKeyStore = keyStore,
+      ciphertextQueue = queue,
+      captureLock = lock,
+      canQueue = { enabled },
+      newId = {
+        started.countDown()
+        check(resume.await(5, TimeUnit.SECONDS))
+        java.util.UUID.randomUUID().toString()
+      },
+    )
+    val worker = thread {
+      inserted = pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false)
+    }
+    assertTrue(started.await(5, TimeUnit.SECONDS))
+    synchronized(lock) { enabled = false }
+    resume.countDown()
+    worker.join(5_000)
+    assertEquals(0, inserted)
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).isEmpty())
+  }
+
   @Test
   fun onFixSkipsWhenNoKeysAreProvisioned() {
     val queue = InMemoryCiphertextQueue()
