@@ -188,11 +188,24 @@ export const groupInvitesRouter = {
           Prisma.sql`SELECT id FROM "Group" WHERE id = ${invite.groupId} FOR UPDATE`,
         );
 
+        const currentInvite = await tx.groupMemberInvite.findFirst({
+          where: { id: input.inviteId, recipientId: ctx.session.user.id },
+        });
+        if (!currentInvite) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
+        }
+        const existing = await tx.groupMember.findUnique({
+          where: { userId_groupId: { userId: ctx.session.user.id, groupId: invite.groupId } },
+        });
+        if (existing) {
+          throw new TRPCError({ code: "CONFLICT", message: "You are already a group member" });
+        }
+
         const createdMember = await tx.groupMember.create({
           data: {
-            userId: invite.recipientId,
-            groupId: invite.groupId,
-            role: invite.role,
+            userId: currentInvite.recipientId,
+            groupId: currentInvite.groupId,
+            role: currentInvite.role,
           },
           select: {
             id: true,
@@ -278,8 +291,22 @@ export const groupInvitesRouter = {
     })
     .input(z.object({ inviteId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      await ctx.db.groupMemberInvite.delete({
-        where: { id: input.inviteId, recipientId: ctx.session.user.id },
+      await ctx.db.$transaction(async (tx) => {
+        const invite = await tx.groupMemberInvite.findFirst({
+          where: { id: input.inviteId, recipientId: ctx.session.user.id },
+        });
+        if (!invite) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
+        }
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "Group" WHERE id = ${invite.groupId} FOR UPDATE`,
+        );
+        const deleted = await tx.groupMemberInvite.deleteMany({
+          where: { id: input.inviteId, recipientId: ctx.session.user.id },
+        });
+        if (deleted.count !== 1) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
+        }
       });
 
       return {
