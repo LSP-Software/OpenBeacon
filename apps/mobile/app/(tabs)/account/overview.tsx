@@ -45,17 +45,14 @@ const categories = [
       {
         label: "Manage Profile",
         icon: UserCircleIcon,
-        href: "/account/manage-profile",
       },
       {
         label: "Notifications",
         icon: BellIcon,
-        href: "/account/notifications",
       },
       {
         label: "Password and Security",
         icon: LockIcon,
-        href: "/account/password-and-security",
       },
     ],
   },
@@ -75,7 +72,6 @@ const categories = [
       {
         label: "Help Center",
         icon: HelpCircleIcon,
-        href: "/account/help-center",
       },
       {
         label: "Contact Us",
@@ -85,7 +81,6 @@ const categories = [
       {
         label: "About",
         icon: InfoIcon,
-        href: "/account/about",
       },
     ],
   },
