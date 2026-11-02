@@ -4,6 +4,7 @@ export const getProtomapsMapStyle = (
   variant: "light" | "dark",
   pmtilesUrl: string,
   glyphsUrl: string,
+  spritesUrl: string,
   showSymbols = false,
 ) => {
   return {
@@ -16,10 +17,31 @@ export const getProtomapsMapStyle = (
         url: `pmtiles://${pmtilesUrl}`,
       },
     },
-    layers: layers("protomaps", namedFlavor(variant), { lang: "en" }).filter(
-      (layer) => showSymbols || layer.type !== "symbol",
-    ),
+    layers: layers("protomaps", namedFlavor(variant), { lang: "en" })
+      .filter((layer) => showSymbols || layer.type !== "symbol")
+      .map((layer) => {
+        if (layer.id === "roads_shields" && layer.type === "symbol") {
+          return {
+            ...layer,
+            filter: ["all", layer.filter, [">", ["length", ["get", "shield_text"]], 0]],
+          };
+        }
+        if (layer.id !== "pois" || layer.type !== "symbol") return layer;
+        return {
+          ...layer,
+          layout: {
+            ...layer.layout,
+            "icon-image": [
+              "match",
+              ["get", "kind"],
+              "townhall",
+              "building",
+              layer.layout?.["icon-image"],
+            ],
+          },
+        };
+      }),
     glyphs: glyphsUrl,
-    sprite: `https://protomaps.github.io/basemaps-assets/sprites/v4/${variant}`,
+    sprite: `${spritesUrl}/${variant}`,
   };
 };

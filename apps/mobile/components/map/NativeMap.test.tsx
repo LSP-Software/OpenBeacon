@@ -59,6 +59,7 @@ const setQueryData = mock(() => {});
 const routerReplace = mock(() => {});
 let root: Root | null = null;
 const testPlatform = { OS: "ios" as "ios" | "android" };
+let mapAssetUrls: { glyphs: string; sprites: string } | null = null;
 
 mock.module("react-native", () => {
   const reactNative = createReactNativeTestModule({ platformOS: "android" });
@@ -168,10 +169,15 @@ mock.module("../../lib/api.ts", () => ({
 }));
 
 mock.module("../../lib/protomaps-style.ts", () => ({
-  getProtomapsMapStyle: (_theme: "light" | "dark", pmtilesUrl: string) => ({
-    pmtilesUrl,
-    version: 8,
-  }),
+  getProtomapsMapStyle: (
+    _theme: "light" | "dark",
+    pmtilesUrl: string,
+    glyphs: string,
+    sprites: string,
+  ) => {
+    mapAssetUrls = { glyphs, sprites };
+    return { pmtilesUrl, version: 8 };
+  },
 }));
 
 mock.module("../../lib/storage.ts", () => ({
@@ -329,6 +335,7 @@ const defaultSignedUrl = {
 describe("NativeMap integration harness", () => {
   beforeEach(() => {
     testPlatform.OS = "ios";
+    mapAssetUrls = null;
     resetNativeMapHarness();
     currentSignedPmtilesUrlQuery = {
       data: defaultSignedUrl,
@@ -344,6 +351,15 @@ describe("NativeMap integration harness", () => {
     setQueryData.mockReset();
     routerReplace.mockReset();
     root = null;
+  });
+
+  test.each([
+    ["ios", "file:///app/map/fonts/{fontstack}/{range}.pbf", "file:///app/map/sprites"],
+    ["android", "asset://map-assets/fonts/{fontstack}/{range}.pbf", "asset://map-assets/sprites"],
+  ] as const)("uses packaged map URLs on %s", async (platform, glyphs, sprites) => {
+    testPlatform.OS = platform;
+    await renderNativeMap();
+    expect(mapAssetUrls).toEqual({ glyphs, sprites });
   });
 
   afterEach(async () => {
