@@ -33,19 +33,22 @@ const MapScreen = () => {
       getGroupColor,
       groups: groups ?? [],
       selfUserId,
+      selfUser: session?.user
+        ? { name: session.user.name, image: session.user.image ?? null }
+        : null,
     });
-  }, [groupColorRevision, groups, selfUserId]);
+  }, [groupColorRevision, groups, selfUserId, session?.user]);
 
   const markers = useMemo(() => {
     void groupColorRevision;
-    if (!selfUserId || !groups) {
+    if (!selfUserId) {
       return [];
     }
 
     return applySelfDeviceLocation({
       markers: buildLiveMapMarkers({
         getGroupColor,
-        groups,
+        groups: groups ?? [],
         positions: livePositions,
         selfUserId,
       }),

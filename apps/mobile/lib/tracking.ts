@@ -12,8 +12,11 @@ import { trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 
 let reconcilePromise: Promise<void> | null = null;
+let reconcileOptions: { startCapture: boolean; onlyIfRunning: boolean } | null = null;
+let reconcileVersion = 0;
 let flushPromise: Promise<void> | null = null;
 let revokePromise: Promise<void> | null = null;
+let captureRefreshPending = false;
 
 const loadTrackingModule = async () => {
   if (Platform.OS !== "android") {
@@ -57,16 +60,22 @@ const haveMatchingProvisionedKeys = ({
 
 const reconcileTrackingKeysInternal = async ({
   startCapture,
+  onlyIfRunning = false,
+  isCurrent,
 }: {
   startCapture: boolean;
+  onlyIfRunning?: boolean;
+  isCurrent: () => boolean;
 }): Promise<void> => {
   const trackingModule = await loadTrackingModule();
-  if (!trackingModule) {
+  if (!trackingModule || !isCurrent() || (onlyIfRunning && !trackingModule.isCaptureRunning())) {
     return;
   }
 
-  if (!startCapture && trackingModule.isCaptureRunning()) {
-    await trackingModule.stopCapture();
+  if (!startCapture) {
+    if (trackingModule.isCaptureRunning()) await trackingModule.stopCapture();
+    trackingModule.revokeEpochKeys();
+    return;
   }
 
   const deviceKeyContext = await ensureDeviceKeyRegistration();
@@ -110,9 +119,12 @@ const reconcileTrackingKeysInternal = async ({
     senderDeviceId: deviceKeyContext.deviceId,
   }));
 
+  if (!isCurrent() || (onlyIfRunning && !trackingModule.isCaptureRunning())) return;
+
+  const currentKeys = trackingModule.listProvisionedEpochKeys();
   if (
     !haveMatchingProvisionedKeys({
-      current: trackingModule.listProvisionedEpochKeys(),
+      current: currentKeys,
       desired: desiredKeyMetadata,
     })
   ) {
@@ -134,11 +146,27 @@ const reconcileTrackingKeysInternal = async ({
 
     trackingModule.revokeEpochKeys();
     trackingModule.provisionEpochKeys(keys);
+    if (
+      currentKeys.length > 0 &&
+      desiredKeyMetadata.some(
+        (desired) =>
+          !currentKeys.some(
+            (current) => getProvisionedKeyIdentity(current) === getProvisionedKeyIdentity(desired),
+          ),
+      )
+    ) {
+      captureRefreshPending = true;
+    }
   }
 
   if (startCapture && desiredKeyMetadata.length > 0) {
+    if (!isCurrent() || (onlyIfRunning && !trackingModule.isCaptureRunning())) return;
     if (!trackingModule.isCaptureRunning()) {
       await trackingModule.startCapture();
+      captureRefreshPending = false;
+    } else if (captureRefreshPending) {
+      await trackingModule.refreshCapture();
+      captureRefreshPending = false;
     }
     return;
   }
@@ -150,17 +178,46 @@ const reconcileTrackingKeysInternal = async ({
 
 export const reconcileTrackingKeys = ({
   startCapture,
+  onlyIfRunning = false,
 }: {
   startCapture: boolean;
+  onlyIfRunning?: boolean;
 }): Promise<void> => {
-  if (reconcilePromise) {
+  if (
+    reconcilePromise &&
+    (onlyIfRunning ||
+      (reconcileOptions?.startCapture === startCapture && !reconcileOptions.onlyIfRunning))
+  ) {
     return reconcilePromise;
   }
 
-  reconcilePromise = reconcileTrackingKeysInternal({ startCapture }).finally(() => {
-    reconcilePromise = null;
+  const previous = reconcilePromise;
+  const version = ++reconcileVersion;
+  reconcileOptions = { startCapture, onlyIfRunning };
+  const stopImmediately = !startCapture
+    ? (async () => {
+        const trackingModule = await loadTrackingModule();
+        if (trackingModule) await trackingModule.stopCapture();
+      })()
+    : Promise.resolve();
+  const task = (async () => {
+    await stopImmediately;
+    if (previous) await tryCatch(previous);
+    if (version !== reconcileVersion) return;
+    await reconcileTrackingKeysInternal({
+      startCapture,
+      onlyIfRunning,
+      isCurrent: () => version === reconcileVersion,
+    });
+  })();
+  const wrapped = task.finally(() => {
+    if (reconcilePromise === wrapped) {
+      reconcilePromise = null;
+      reconcileOptions = null;
+    }
   });
-  return reconcilePromise;
+  reconcilePromise = wrapped;
+  return wrapped;
 };
 
 const getRetryDelayMs = (attemptCount: number) =>
@@ -342,7 +399,15 @@ export const flushPendingTrackingPoints = (): Promise<void> => {
   return flushPromise;
 };
 
+export const syncBackgroundTracking = async () => {
+  await tryCatch(reconcileTrackingKeys({ startCapture: true, onlyIfRunning: true }));
+  await flushPendingTrackingPoints();
+};
+
 const revokeTrackingAccessInternal = async (): Promise<void> => {
+  reconcileVersion += 1;
+  reconcileOptions = null;
+  captureRefreshPending = false;
   const trackingModule = await loadTrackingModule();
   if (!trackingModule) {
     return;

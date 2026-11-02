@@ -44,7 +44,12 @@ let pendingCiphertexts: Array<{
 let captureRunning = false;
 let startCaptureCalls = 0;
 let stopCaptureCalls = 0;
+let onStopCapture: (() => void) | null = null;
+let refreshCaptureCalls = 0;
+let failRefreshCapture = false;
 let failRegistration = false;
+let registrationWait: Promise<void> | null = null;
+let onRegistration: (() => void) | null = null;
 let uploadGroup = async ({ points }: { groupId: string; points: unknown[] }) => ({
   accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
   duplicates: [],
@@ -55,6 +60,8 @@ mock.module("react-native", () => createReactNativeTestModule({ platformOS: "and
 mock.module("./deviceKeys.ts", () => ({
   ensureDeviceKeyRegistration: async () => {
     if (failRegistration) throw new Error("offline");
+    onRegistration?.();
+    await registrationWait;
     return { deviceId: "device-1", privateKey: deviceKeyPair.privateKey };
   },
 }));
@@ -118,8 +125,14 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
     startCapture: async () => {
       startCaptureCalls += 1;
     },
+    refreshCapture: async () => {
+      refreshCaptureCalls += 1;
+      if (failRefreshCapture) throw new Error("refresh failed");
+    },
     stopCapture: async () => {
       stopCaptureCalls += 1;
+      captureRunning = false;
+      onStopCapture?.();
     },
     isCaptureRunning: () => captureRunning,
     listPendingCiphertexts: async () => pendingCiphertexts,
@@ -135,8 +148,12 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   },
 }));
 
-const { flushPendingTrackingPoints, reconcileTrackingKeys, revokeTrackingAccess } =
-  await import("./tracking.ts");
+const {
+  flushPendingTrackingPoints,
+  reconcileTrackingKeys,
+  revokeTrackingAccess,
+  syncBackgroundTracking,
+} = await import("./tracking.ts");
 
 const createQueueItem = ({
   clientPointId,
@@ -179,7 +196,12 @@ describe("tracking service", () => {
     captureRunning = false;
     startCaptureCalls = 0;
     stopCaptureCalls = 0;
+    onStopCapture = null;
+    refreshCaptureCalls = 0;
+    failRefreshCapture = false;
     failRegistration = false;
+    registrationWait = null;
+    onRegistration = null;
     uploadGroup = async ({ points }) => ({
       accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
       duplicates: [],
@@ -242,12 +264,118 @@ describe("tracking service", () => {
     expect(startCaptureCalls).toBe(0);
   });
 
+  test("requests a fresh location after installing a new epoch for an existing group", async () => {
+    captureRunning = true;
+    provisionedKeys.push({
+      groupId: "group-1",
+      epochId: "previous-epoch",
+      senderDeviceId: "device-1",
+      kind: "trackingPoint",
+    });
+
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(provisionCalls).toHaveLength(1);
+    expect(refreshCaptureCalls).toBe(1);
+    expect(stopCaptureCalls).toBe(0);
+    expect(startCaptureCalls).toBe(0);
+  });
+
+  test("retries a failed location refresh even after the new keys are installed", async () => {
+    captureRunning = true;
+    failRefreshCapture = true;
+    provisionedKeys.push({
+      groupId: "group-1",
+      epochId: "old",
+      senderDeviceId: "device-1",
+      kind: "trackingPoint",
+    });
+
+    await expect(reconcileTrackingKeys({ startCapture: true })).rejects.toThrow("refresh failed");
+    provisionedKeys.splice(
+      0,
+      provisionedKeys.length,
+      { groupId: "group-1", epochId: "epoch-1", senderDeviceId: "device-1", kind: "trackingPoint" },
+      { groupId: "group-2", epochId: "epoch-2", senderDeviceId: "device-1", kind: "trackingPoint" },
+    );
+    failRefreshCapture = false;
+    await reconcileTrackingKeys({ startCapture: true });
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(refreshCaptureCalls).toBe(2);
+  });
+
   test("stops capture without waiting for the server when sharing permission is removed", async () => {
     captureRunning = true;
     failRegistration = true;
 
-    await expect(reconcileTrackingKeys({ startCapture: false })).rejects.toThrow("offline");
+    await reconcileTrackingKeys({ startCapture: false });
     expect(stopCaptureCalls).toBe(1);
+    expect(revokedGroups).toEqual([undefined]);
+  });
+
+  test("reconciles and refreshes a running background capture before uploading", async () => {
+    captureRunning = true;
+    provisionedKeys.push({
+      groupId: "group-1",
+      epochId: "old",
+      senderDeviceId: "device-1",
+      kind: "trackingPoint",
+    });
+    pendingCiphertexts = [createQueueItem({ id: 1, clientPointId: "point-1", groupId: "group-1" })];
+    await syncBackgroundTracking();
+    expect(refreshCaptureCalls).toBe(1);
+    expect(uploadCalls).toHaveLength(1);
+  });
+
+  test("does not start a stopped capture in the background", async () => {
+    captureRunning = false;
+    await syncBackgroundTracking();
+    expect(provisionCalls).toHaveLength(0);
+    expect(startCaptureCalls).toBe(0);
+  });
+
+  test("does not restore keys or restart capture when sharing stops during background reconciliation", async () => {
+    captureRunning = true;
+    let release = () => {};
+    registrationWait = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      onRegistration = resolve;
+    });
+    const sync = syncBackgroundTracking();
+    await started;
+    captureRunning = false;
+    release();
+    await sync;
+    expect(provisionCalls).toHaveLength(0);
+    expect(startCaptureCalls).toBe(0);
+    expect(refreshCaptureCalls).toBe(0);
+  });
+
+  test("stops sharing immediately when a background reconciliation is in flight", async () => {
+    captureRunning = true;
+    let release = () => {};
+    registrationWait = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      onRegistration = resolve;
+    });
+    const background = syncBackgroundTracking();
+    await started;
+    const stopped = new Promise<void>((resolve) => {
+      onStopCapture = resolve;
+    });
+    const stop = reconcileTrackingKeys({ startCapture: false });
+    await Promise.race([stopped, new Promise((resolve) => setTimeout(resolve, 100))]);
+    expect(stopCaptureCalls).toBe(1);
+    release();
+    await Promise.all([background, stop]);
+    expect(captureRunning).toBe(false);
+    expect(provisionCalls).toHaveLength(0);
+    expect(startCaptureCalls).toBe(0);
   });
 
   test("flushes each group independently and requeues transient failures", async () => {

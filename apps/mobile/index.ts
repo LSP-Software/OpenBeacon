@@ -2,8 +2,8 @@ import "./lib/installCrypto.ts";
 import { AppRegistry } from "react-native";
 
 AppRegistry.registerHeadlessTask("OpenBeaconTrackingUpload", () => async () => {
-  const { flushPendingTrackingPoints } = await import("./lib/tracking.ts");
-  await flushPendingTrackingPoints();
+  const { syncBackgroundTracking } = await import("./lib/tracking.ts");
+  await syncBackgroundTracking();
 });
 
 import "expo-router/entry";

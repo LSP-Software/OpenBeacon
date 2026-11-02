@@ -16,6 +16,7 @@ export const LiveMapPersonSheet = ({
   initials,
   name,
   onDismiss,
+  onHeightChange,
   otherSharedGroupNames,
   timestamp,
 }: {
@@ -24,6 +25,7 @@ export const LiveMapPersonSheet = ({
   initials: string;
   name: string;
   onDismiss: () => void;
+  onHeightChange?: (height: number) => void;
   otherSharedGroupNames: readonly string[];
   timestamp: string;
 }) => {
@@ -102,7 +104,10 @@ export const LiveMapPersonSheet = ({
       }}
       {...panResponder.panHandlers}
     >
-      <View className="rounded-2xl border border-border bg-card px-5 pb-4 pt-3 shadow-md shadow-black/15">
+      <View
+        className="rounded-2xl border border-border bg-card px-5 pb-4 pt-3 shadow-md shadow-black/15"
+        onLayout={(event) => onHeightChange?.(event.nativeEvent.layout.height)}
+      >
         <View className="mb-3 items-center">
           <View className="h-1 w-10 rounded-full bg-border" />
         </View>

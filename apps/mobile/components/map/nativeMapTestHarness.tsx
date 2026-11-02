@@ -25,6 +25,7 @@ const annotationHandlersById = new Map<
   }
 >();
 const mountedAnnotationIds = new Set<string>();
+const removedAnnotationDeselectionHandlers = new Map<string, () => void>();
 let mapViewHandlers: {
   onDidFailLoadingMap?: () => void;
   onDidFinishLoadingStyle?: () => void;
@@ -35,6 +36,7 @@ let mapViewHandlers: {
       animated: boolean;
       isUserInteraction: boolean;
       zoomLevel: number;
+      visibleBounds?: [[number, number], [number, number]];
     };
   }) => void;
   onRegionIsChanging?: (feature: {
@@ -43,6 +45,7 @@ let mapViewHandlers: {
       animated: boolean;
       isUserInteraction: boolean;
       zoomLevel: number;
+      visibleBounds?: [[number, number], [number, number]];
     };
   }) => void;
 } = {};
@@ -56,6 +59,8 @@ let selfHeadingDegrees: number | null = null;
 let showEveryonePressHandler: (() => void) | null = null;
 let goToCurrentLocationPressHandler: (() => void) | null = null;
 let androidActiveAnnotationId: string | null = null;
+let mapProjectedPoint: [number, number] = [200, 300];
+let mapProjectionWait: Promise<void> | null = null;
 
 export const createLiveMapMarkerFixture = (
   overrides: Partial<LiveMapMarker> & Pick<LiveMapMarker, "userId">,
@@ -81,6 +86,7 @@ export const resetNativeMapHarness = () => {
   annotationSelectedProps.clear();
   annotationHandlersById.clear();
   mountedAnnotationIds.clear();
+  removedAnnotationDeselectionHandlers.clear();
   mapViewHandlers = {};
   mapViewMountCount = 0;
   latestMapStyle = null;
@@ -89,6 +95,16 @@ export const resetNativeMapHarness = () => {
   showEveryonePressHandler = null;
   goToCurrentLocationPressHandler = null;
   androidActiveAnnotationId = null;
+  mapProjectedPoint = [200, 300];
+  mapProjectionWait = null;
+};
+
+export const setNativeMapProjectedPoint = (point: [number, number]) => {
+  mapProjectedPoint = point;
+};
+
+export const setNativeMapProjectionWait = (wait: Promise<void> | null) => {
+  mapProjectionWait = wait;
 };
 
 export const getNativeMapCameraCommands = () => [...cameraCommands];
@@ -170,12 +186,14 @@ export const emitNativeMapRegionIsChanging = ({
   latitude,
   longitude,
   zoomLevel,
+  visibleBounds,
 }: {
   animated?: boolean;
   isUserInteraction?: boolean;
   latitude: number;
   longitude: number;
   zoomLevel: number;
+  visibleBounds?: [[number, number], [number, number]];
 }) => {
   mapViewHandlers.onRegionIsChanging?.({
     geometry: {
@@ -185,6 +203,7 @@ export const emitNativeMapRegionIsChanging = ({
       animated,
       isUserInteraction,
       zoomLevel,
+      ...(visibleBounds ? { visibleBounds } : {}),
     },
   });
 };
@@ -203,6 +222,10 @@ export const emitNativeMapAnnotationSelected = (annotationId: string) => {
 
 export const emitNativeMapAnnotationDeselected = (annotationId: string) => {
   annotationHandlersById.get(annotationId)?.onDeselected?.();
+};
+
+export const emitRemovedAnnotationDeselected = (annotationId: string) => {
+  removedAnnotationDeselectionHandlers.get(annotationId)?.();
 };
 
 export const emitNativeMapAndroidMarkerTap = (annotationId: string) => {
@@ -256,53 +279,27 @@ export const createMapLibreMockModule = () => {
   });
   Camera.displayName = "MockMapLibreCamera";
 
-  const MapView = ({
-    children,
-    mapStyle,
-    onDidFailLoadingMap,
-    onDidFinishLoadingStyle,
-    onPress,
-    onRegionDidChange,
-    onRegionIsChanging,
-  }: {
-    children?: ReactNode;
-    mapStyle?: unknown;
-    onDidFailLoadingMap?: () => void;
-    onDidFinishLoadingStyle?: () => void;
-    onPress?: () => void;
-    onRegionDidChange?: (feature: {
-      geometry: { coordinates: [number, number] };
-      properties: {
-        animated: boolean;
-        isUserInteraction: boolean;
-        zoomLevel: number;
-      };
-    }) => void;
-    onRegionIsChanging?: (feature: {
-      geometry: { coordinates: [number, number] };
-      properties: {
-        animated: boolean;
-        isUserInteraction: boolean;
-        zoomLevel: number;
-      };
-    }) => void;
-  }) => {
-    mapViewHandlers = {
-      ...(onDidFailLoadingMap ? { onDidFailLoadingMap } : {}),
-      ...(onDidFinishLoadingStyle ? { onDidFinishLoadingStyle } : {}),
-      ...(onPress ? { onPress } : {}),
-      ...(onRegionDidChange ? { onRegionDidChange } : {}),
-      ...(onRegionIsChanging ? { onRegionIsChanging } : {}),
-    };
-    latestMapStyle = mapStyle ?? null;
-
-    useEffect(() => {
-      mapViewMountCount += 1;
-    }, []);
-
-    return React.createElement(
-      "map-view",
+  const MapView = forwardRef<
+    { getPointInView: () => Promise<[number, number]> },
+    {
+      children?: ReactNode;
+      mapStyle?: unknown;
+      onDidFailLoadingMap?: () => void;
+      onDidFinishLoadingStyle?: () => void;
+      onPress?: () => void;
+      onRegionDidChange?: (feature: {
+        geometry: { coordinates: [number, number] };
+        properties: { animated: boolean; isUserInteraction: boolean; zoomLevel: number };
+      }) => void;
+      onRegionIsChanging?: (feature: {
+        geometry: { coordinates: [number, number] };
+        properties: { animated: boolean; isUserInteraction: boolean; zoomLevel: number };
+      }) => void;
+    }
+  >(
+    (
       {
+        children,
         mapStyle,
         onDidFailLoadingMap,
         onDidFinishLoadingStyle,
@@ -310,9 +307,43 @@ export const createMapLibreMockModule = () => {
         onRegionDidChange,
         onRegionIsChanging,
       },
-      children,
-    );
-  };
+      ref,
+    ) => {
+      useImperativeHandle(ref, () => ({
+        getPointInView: async () => {
+          const point = mapProjectedPoint;
+          await mapProjectionWait;
+          return point;
+        },
+      }));
+      mapViewHandlers = {
+        ...(onDidFailLoadingMap ? { onDidFailLoadingMap } : {}),
+        ...(onDidFinishLoadingStyle ? { onDidFinishLoadingStyle } : {}),
+        ...(onPress ? { onPress } : {}),
+        ...(onRegionDidChange ? { onRegionDidChange } : {}),
+        ...(onRegionIsChanging ? { onRegionIsChanging } : {}),
+      };
+      latestMapStyle = mapStyle ?? null;
+
+      useEffect(() => {
+        mapViewMountCount += 1;
+      }, []);
+
+      return React.createElement(
+        "map-view",
+        {
+          mapStyle,
+          onDidFailLoadingMap,
+          onDidFinishLoadingStyle,
+          onPress,
+          onRegionDidChange,
+          onRegionIsChanging,
+        },
+        children,
+      );
+    },
+  );
+  MapView.displayName = "MockMapLibreMapView";
 
   const PointAnnotation = forwardRef<
     { refresh: () => void },
@@ -351,6 +382,7 @@ export const createMapLibreMockModule = () => {
       });
 
       return () => {
+        if (onDeselected) removedAnnotationDeselectionHandlers.set(id, onDeselected);
         annotationHandlersById.delete(id);
       };
     }, [id, onDeselected, onSelected]);

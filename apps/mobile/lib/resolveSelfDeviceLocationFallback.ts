@@ -2,6 +2,7 @@ export const resolveSelfDeviceLocationFallback = ({
   getGroupColor,
   groups,
   selfUserId,
+  selfUser,
 }: {
   getGroupColor: (groupId: string) => string;
   groups: readonly {
@@ -14,8 +15,9 @@ export const resolveSelfDeviceLocationFallback = ({
     }[];
   }[];
   selfUserId: string;
+  selfUser?: { image: string | null; name: string } | null;
 }) => {
-  if (selfUserId.length === 0 || groups.length === 0) {
+  if (selfUserId.length === 0) {
     return null;
   }
 
@@ -24,7 +26,15 @@ export const resolveSelfDeviceLocationFallback = ({
   );
   const primaryGroup = memberships[0];
   if (!primaryGroup) {
-    return null;
+    return selfUser
+      ? {
+          image: selfUser.image,
+          name: selfUser.name,
+          otherSharedGroupNames: [],
+          ringColor: getGroupColor(""),
+          sourceGroupId: "",
+        }
+      : null;
   }
 
   const selfMember = primaryGroup.members.find((member) => member.userId === selfUserId);

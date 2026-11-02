@@ -7,6 +7,27 @@ import kotlin.test.assertTrue
 
 class CaptureSamplingPolicyTest {
   @Test
+  fun forcedRefreshQueuesAStationaryFixAndRequestsImmediateUpload() {
+    val normal = CaptureSamplingPolicy.evaluate(
+      battery = battery(level = 80),
+      speedMetersPerSecond = 0.0,
+      distanceFromLastQueuedMeters = 0.0,
+      timeSinceLastQueuedMs = 5_000L,
+    )
+    val forced = CaptureSamplingPolicy.evaluate(
+      battery = battery(level = 80),
+      speedMetersPerSecond = 0.0,
+      distanceFromLastQueuedMeters = 0.0,
+      timeSinceLastQueuedMs = 5_000L,
+      forcedRefresh = true,
+    )
+    assertFalse(normal.shouldQueue)
+    assertFalse(normal.forceUpload)
+    assertTrue(forced.shouldQueue)
+    assertTrue(forced.forceUpload)
+  }
+
+  @Test
   fun defaultIntervalWhenIdleAndNotBatterySaver() {
     val decision =
       CaptureSamplingPolicy.evaluate(

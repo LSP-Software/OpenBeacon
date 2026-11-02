@@ -2,6 +2,7 @@ package expo.modules.openbeacontracking
 
 import android.content.Context
 import expo.modules.openbeacontracking.capture.CapturePipeline
+import expo.modules.openbeacontracking.capture.CaptureCommandState
 import expo.modules.openbeacontracking.keys.EpochKeyStore
 import expo.modules.openbeacontracking.keys.SecureEpochKeyStore
 import expo.modules.openbeacontracking.queue.CiphertextQueue
@@ -9,6 +10,8 @@ import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
 import expo.modules.openbeacontracking.queue.RoomCiphertextQueue
 
 object TrackingRuntime {
+  val captureLock = Any()
+  val captureCommands = CaptureCommandState()
   @Volatile
   private var epochKeyStore: EpochKeyStore? = null
 
@@ -46,5 +49,7 @@ object TrackingRuntime {
     CapturePipeline(
       epochKeyStore = epochKeyStore(context),
       ciphertextQueue = ciphertextQueue(context),
+      captureLock = captureLock,
+      canQueue = { generation -> isCaptureRunning && captureCommands.isCurrent(generation) },
     )
 }
