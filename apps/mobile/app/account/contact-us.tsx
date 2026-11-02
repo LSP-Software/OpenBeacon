@@ -1,7 +1,7 @@
 import { tryCatch } from "@openbeacon/shared";
 import { CheckIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, TextInput, View } from "react-native";
+import { Platform, Pressable, ScrollView, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../../components/headers/BackButton.tsx";
 import { Button } from "../../components/ui/Button.tsx";
@@ -20,7 +20,11 @@ const ContactUsScreen = () => {
     setSubmitting(true);
     setStatus(null);
     const result = await tryCatch(
-      trpcClient.account.submitFeedback.mutate({ message, includeEmail }),
+      trpcClient.account.submitFeedback.mutate({
+        message,
+        includeEmail,
+        androidVersion: Platform.OS === "android" ? Platform.constants.Release : undefined,
+      }),
     );
     setSubmitting(false);
     if (result.error) {
@@ -45,6 +49,7 @@ const ContactUsScreen = () => {
         <Text className="text-muted-foreground">
           Your feedback is stored on your configured server and can be read by its administrators.
           Please do not include personal information unless you want to share it.
+          {Platform.OS === "android" && " Your Android version is included with your feedback."}
         </Text>
         <TextInput
           accessibilityLabel="Feedback"
