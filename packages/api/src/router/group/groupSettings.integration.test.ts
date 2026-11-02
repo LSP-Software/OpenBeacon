@@ -66,6 +66,36 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.user.deleteMany({ where: { id: { in: users } } });
       await prisma.$disconnect();
     });
+    test("last member deletion rejects groups with other members and deletes a sole member's group", async () => {
+      const lastMemberGroupId = `${prefix}-last-member`;
+      await prisma.group.create({
+        data: {
+          id: lastMemberGroupId,
+          name: "Last member",
+          groupMembers: {
+            create: [
+              { userId: users[0]!, role: "OWNER" },
+              { userId: users[2]!, role: "MEMBER" },
+            ],
+          },
+        },
+      });
+      await expect(
+        caller(users[0]!).groupLifecycle.delete({
+          groupId: lastMemberGroupId,
+          onlyIfLastMember: true,
+        }),
+      ).rejects.toThrow("The group has other members");
+      expect(await prisma.group.findUnique({ where: { id: lastMemberGroupId } })).not.toBeNull();
+      await prisma.groupMember.deleteMany({
+        where: { groupId: lastMemberGroupId, userId: users[2] },
+      });
+      await caller(users[0]!).groupLifecycle.delete({
+        groupId: lastMemberGroupId,
+        onlyIfLastMember: true,
+      });
+      expect(await prisma.group.findUnique({ where: { id: lastMemberGroupId } })).toBeNull();
+    });
     test("enforces permissions and serializes competing owner demotions", async () => {
       const members = await prisma.groupMember.findMany({ where: { groupId } });
       const first = members.find((member) => member.userId === users[0])!;

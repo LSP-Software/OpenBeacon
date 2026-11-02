@@ -1,7 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
-import { useLocalSearchParams } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
+import { tryCatch } from "@openbeacon/shared";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Clock3Icon, SlidersHorizontalIcon, UsersIcon } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../../../../components/headers/BackButton.tsx";
@@ -37,11 +39,34 @@ const GROUP_TABS: readonly SwipeTabsItem<GroupTabValue>[] = [
 
 const GroupScreen = () => {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const isFocused = useIsFocused();
   const [value, setValue] = useState<GroupTabValue>("members");
-  const { data: group, isPending: isFetchingGroup } = useQuery({
+  const {
+    data: group,
+    error,
+    isPending: isFetchingGroup,
+  } = useQuery({
     ...trpc.groupMembership.get.queryOptions({ groupId }),
     refetchInterval: 10_000,
   });
+
+  useEffect(() => {
+    if (!isFocused || error?.data?.code !== "FORBIDDEN") return;
+    let active = true;
+    void (async () => {
+      const result = await tryCatch(
+        queryClient.fetchQuery({ ...trpc.groupMembership.list.queryOptions(), staleTime: 0 }),
+      );
+      if (active && !result.error && !result.data.some((item) => item.id === groupId)) {
+        router.replace("/(tabs)/groups/list");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [error, groupId, isFocused, queryClient, router]);
 
   if (isFetchingGroup) {
     return <LoadingIndicator />;

@@ -18,7 +18,7 @@ export const groupLifecycleRouter = {
         windowMs: 60_000,
       },
     })
-    .input(z.object({ groupId: z.string() }))
+    .input(z.object({ groupId: z.string(), onlyIfLastMember: z.boolean().optional() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.$transaction(
         async (tx) => {
@@ -32,6 +32,15 @@ export const groupLifecycleRouter = {
             throw new TRPCError({
               code: "FORBIDDEN",
               message: "Only owners can delete the group.",
+            });
+          }
+          if (
+            input.onlyIfLastMember &&
+            (await tx.groupMember.count({ where: { groupId: input.groupId } })) !== 1
+          ) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "The group has other members. Please try leaving again.",
             });
           }
           const group = await tx.group.findUniqueOrThrow({

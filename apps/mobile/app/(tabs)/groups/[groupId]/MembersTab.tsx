@@ -33,6 +33,7 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
   const queryClient = useQueryClient();
   const router = useRouter();
   const removeMember = useMutation(trpc.groupMembership.remove.mutationOptions());
+  const deleteGroup = useMutation(trpc.groupLifecycle.delete.mutationOptions());
   const updateRole = useMutation(trpc.groupMembership.updateRole.mutationOptions());
   const { data: members, isPending: isFetchingMembers } = useQuery({
     ...trpc.groupMembership.members.queryOptions({ groupId }),
@@ -50,22 +51,18 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
     successor?: string,
   ) => {
     const isSelf = member.user.id === session?.user.id;
-    if (isSelf && member.id === self?.id && self.role === "OWNER" && !successor) {
-      if (members?.some((item) => item.id !== self.id)) {
-        setSuccessorMemberId(null);
-        setSuccessorDialogOpen(true);
-      } else {
-        Alert.alert(
-          "Unable to leave",
-          "You are the only person in this group. Delete the group in Settings instead.",
-        );
-      }
+    const isLastMember = isSelf && members?.length === 1;
+    if (isSelf && self?.role === "OWNER" && !successor && !isLastMember) {
+      setSuccessorMemberId(null);
+      setSuccessorDialogOpen(true);
       return;
     }
     Alert.alert(
       isSelf ? "Leave group?" : `Remove ${member.user.name}?`,
       isSelf
-        ? `${successor ? `${members?.find((item) => item.id === successor)?.user.name ?? "The selected member"} will become an owner. ` : ""}You will leave this group, and your location history in this group will be deleted.`
+        ? isLastMember
+          ? "You are the last person in this group. Leaving will permanently delete the group and its tracking data."
+          : `${successor ? `${members?.find((item) => item.id === successor)?.user.name ?? "The selected member"} will become an owner. ` : ""}You will leave this group, and your location history in this group will be deleted.`
         : `${member.user.name} will be removed from this group and their location history in this group will be deleted.`,
       [
         { text: "Cancel", style: "cancel" },
@@ -75,11 +72,15 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
           onPress: async () => {
             const result = await tryCatch(
               (async () => {
-                const input = await buildRemoveGroupMemberInput({ groupId, memberId: member.id });
-                await removeMember.mutateAsync({
-                  ...input,
-                  ...(successor ? { successorMemberId: successor } : {}),
-                });
+                if (isLastMember) {
+                  await deleteGroup.mutateAsync({ groupId, onlyIfLastMember: true });
+                } else {
+                  const input = await buildRemoveGroupMemberInput({ groupId, memberId: member.id });
+                  await removeMember.mutateAsync({
+                    ...input,
+                    ...(successor ? { successorMemberId: successor } : {}),
+                  });
+                }
                 await queryClient.invalidateQueries({
                   queryKey: trpc.groupMembership.list.queryKey(),
                 });
@@ -225,7 +226,7 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
             <Button
               variant="outline"
               size="sm"
-              disabled={removeMember.isPending}
+              disabled={removeMember.isPending || deleteGroup.isPending}
               onPress={() => confirmRemoval(member)}
             >
               <Text>{member.id === self?.id ? "Leave group" : "Remove member"}</Text>
