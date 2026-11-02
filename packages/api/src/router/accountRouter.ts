@@ -1,5 +1,6 @@
 import { requestImageUploadInputSchema } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
+import { z } from "zod";
 import { env } from "../env.ts";
 import {
   buildUserAvatarPath,
@@ -10,6 +11,14 @@ import {
 import { protectedProcedure } from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
+  submitFeedback: protectedProcedure
+    .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
+    .input(z.object({ message: z.string().trim().min(1).max(5000), includeEmail: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.feedback.create({
+        data: { message: input.message, email: input.includeEmail ? ctx.session.user.email : null },
+      });
+    }),
   requestProfileImageUpload: protectedProcedure
     .meta({
       rateLimit: {
