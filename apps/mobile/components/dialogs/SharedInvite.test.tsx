@@ -94,7 +94,7 @@ describe("shared invitation dialog", () => {
     invalidate.mockClear();
     setOpen.mockClear();
   });
-  test("shares one code across link and QR and closes when any invite from this dialog is used", async () => {
+  test("shares one code across link and QR and closes only when the latest invite is used", async () => {
     const root = createRoot();
     await act(async () => {
       root.render(<SharedInvite groupId="group-1" open setOpen={setOpen} value="link" />);
@@ -110,11 +110,17 @@ describe("shared invitation dialog", () => {
       "1".repeat(32),
     );
     await createInvite(root);
-    expect(requestedIds).toEqual(["invite-1", "invite-2"]);
     states = { "invite-1": "used", "invite-2": "active" };
     await act(async () => {
       root.render(<SharedInvite groupId="group-1" open setOpen={setOpen} value="qr" />);
       await Promise.resolve();
+    });
+    expect(setOpen).not.toHaveBeenCalled();
+    expect(requestedIds).toEqual(["invite-2"]);
+    expect(invalidate).not.toHaveBeenCalled();
+    states = { "invite-1": "used", "invite-2": "used" };
+    await act(async () => {
+      root.render(<SharedInvite groupId="group-1" open setOpen={setOpen} value="qr" />);
     });
     expect(setOpen).toHaveBeenCalledWith(false);
     expect(invalidate).toHaveBeenCalledTimes(3);
