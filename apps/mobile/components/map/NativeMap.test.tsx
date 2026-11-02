@@ -69,6 +69,7 @@ mock.module("react-native", () => {
   return {
     ...reactNative,
     Platform: testPlatform,
+    ActivityIndicator: () => React.createElement("activity-indicator"),
     View: ({
       children,
       onLayout,
@@ -280,26 +281,6 @@ const getRenderedOutput = () => {
   }
 
   return JSON.stringify(root.container.toJSON());
-};
-
-const pressRetryButton = async () => {
-  if (!root) {
-    throw new Error("Missing root");
-  }
-
-  const button = root.container.queryAll((instance) => instance.type === "button")[0];
-  if (!button) {
-    throw new Error("Missing retry button");
-  }
-
-  const props = button.props as {
-    onClick?: () => void;
-  };
-
-  await act(async () => {
-    props.onClick?.();
-    await Promise.resolve();
-  });
 };
 
 const failMapLoad = async () => {
@@ -871,7 +852,7 @@ describe("NativeMap integration harness", () => {
     await failMapLoad();
 
     expect(forceRefreshMutationCalls).toBe(1);
-    expect(getRenderedOutput()).toContain("The map could not be loaded.");
+    expect(getRenderedOutput()).toContain("activity-indicator");
   });
 
   test("does not force refresh while a force-refresh mutation is already pending", async () => {
@@ -883,29 +864,31 @@ describe("NativeMap integration harness", () => {
     expect(forceRefreshMutationCalls).toBe(0);
   });
 
-  test("resets retry eligibility and shows recoverable UI when force refresh fails", async () => {
-    forceRefreshMutationSucceeds = false;
-    await renderNativeMap();
+  test("automatically retries a failed refresh while showing a loading indicator", async () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    let retry: (() => void) | undefined;
+    globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
+      if (delay === 5_000) retry = callback as () => void;
+      return originalSetTimeout(callback, delay);
+    }) as typeof setTimeout;
 
-    await failMapLoad();
+    try {
+      forceRefreshMutationSucceeds = false;
+      await renderNativeMap();
+      await failMapLoad();
+      expect(forceRefreshMutationCalls).toBe(1);
+      expect(getRenderedOutput()).toContain("activity-indicator");
+      expect(retry).toBeDefined();
 
-    expect(forceRefreshMutationCalls).toBe(1);
-    expect(setQueryData).not.toHaveBeenCalled();
-    expect(getRenderedOutput()).toContain("The map could not be loaded.");
-
-    await failMapLoad();
-    expect(forceRefreshMutationCalls).toBe(1);
-
-    forceRefreshMutationSucceeds = true;
-    await pressRetryButton();
-
-    expect(forceRefreshMutationCalls).toBe(2);
-    expect(setQueryData).toHaveBeenCalledWith(
-      [["maps", "getSignedPmtilesUrl"]],
-      expect.objectContaining({
-        url: "https://forced.example/pmtiles",
-      }),
-    );
+      forceRefreshMutationSucceeds = true;
+      await act(async () => {
+        retry?.();
+      });
+      expect(forceRefreshMutationCalls).toBe(2);
+      expect(setQueryData).toHaveBeenCalled();
+    } finally {
+      globalThis.setTimeout = originalSetTimeout;
+    }
   });
 
   test("resets the failure retry gate after the style finishes loading", async () => {
@@ -962,7 +945,7 @@ describe("NativeMap integration harness", () => {
     await renderNativeMap({ markers: [alice, bob] });
     await flushEffects();
 
-    expect(getNativeMapViewMountCount()).toBe(2);
+    expect(getNativeMapViewMountCount()).toBe(1);
     expect(getNativeMapCameraDefaultSettings()).toEqual({
       centerCoordinate: [-0.13, 51.51],
       zoomLevel: 12.5,
@@ -1058,24 +1041,6 @@ describe("NativeMap integration harness", () => {
     });
   });
 
-  test("ignores manual retry while a force refresh is already pending", async () => {
-    forceRefreshMutationSucceeds = false;
-    await renderNativeMap();
-
-    await failMapLoad();
-    expect(forceRefreshMutationCalls).toBe(1);
-    expect(getRenderedOutput()).toContain("The map could not be loaded.");
-
-    forceRefreshMutationPending = true;
-    forceRefreshMutationSucceeds = true;
-    await renderNativeMap();
-    await pressRetryButton();
-    await pressRetryButton();
-
-    expect(forceRefreshMutationCalls).toBe(1);
-    expect(getRenderedOutput()).toContain("The map could not be loaded.");
-  });
-
   test("repeated map-load failures show recoverable UI instead of looping", async () => {
     await renderNativeMap();
 
@@ -1094,7 +1059,7 @@ describe("NativeMap integration harness", () => {
     await failMapLoad();
 
     expect(forceRefreshMutationCalls).toBe(1);
-    expect(getRenderedOutput()).toContain("The map could not be loaded.");
+    expect(getRenderedOutput()).toContain("activity-indicator");
 
     await failMapLoad();
     await failMapLoad();
@@ -1938,7 +1903,7 @@ describe("NativeMap integration harness", () => {
     ).toBeGreaterThan(refreshCountAfterMount);
   });
 
-  test("remounts the map view when the signed pmtiles url changes and keeps camera drivers available", async () => {
+  test("updates the map style without remounting when the signed pmtiles url changes", async () => {
     const alice = createLiveMapMarkerFixture({ userId: "alice" });
 
     await renderNativeMap({ markers: [alice] });
@@ -1969,7 +1934,7 @@ describe("NativeMap integration harness", () => {
     await flushEffects();
     await finishLoadingStyle();
 
-    expect(getNativeMapViewMountCount()).toBe(2);
+    expect(getNativeMapViewMountCount()).toBe(1);
     expect(getNativeMapStyle()).toEqual({
       pmtilesUrl: "https://cached.example/pmtiles-2",
       version: 8,

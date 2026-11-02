@@ -118,6 +118,15 @@ export const useNativeMapStyle = () => {
   };
 
   useEffect(() => {
+    if (!showRecoverableError || forceRefreshSignedPmtilesUrlMutation.isPending) {
+      return;
+    }
+
+    const timer = setTimeout(retryMapLoad, 5_000);
+    return () => clearTimeout(timer);
+  }, [showRecoverableError, forceRefreshSignedPmtilesUrlMutation.isPending]);
+
+  useEffect(() => {
     if (!rootNavigationState?.key || signedPmtilesUrlQuery.error?.data?.code !== "UNAUTHORIZED") {
       return;
     }
