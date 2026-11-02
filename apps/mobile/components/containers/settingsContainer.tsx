@@ -4,18 +4,18 @@ import { Pressable, View } from "react-native";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 
-interface SettingsContainerProps {
+export const SettingsContainer = ({
+  categories,
+}: {
   categories: {
     label: string;
     settings: {
       label: string;
       icon: LucideIcon;
-      href: string;
+      href?: string;
     }[];
   }[];
-}
-
-export const SettingsContainer = ({ categories }: SettingsContainerProps) => {
+}) => {
   return (
     <View className="flex flex-col gap-2">
       {categories.map((category) => {
@@ -26,20 +26,33 @@ export const SettingsContainer = ({ categories }: SettingsContainerProps) => {
               {category.settings.map((setting, settingIndex) => {
                 const isLastSetting = settingIndex === category.settings.length - 1;
 
-                return (
+                const content = (
+                  <View
+                    key={setting.label}
+                    className={`flex flex-row items-center justify-between ${
+                      isLastSetting ? "" : "border-b-[0.5px] border-border/30 pb-3"
+                    }`}
+                  >
+                    <View className="flex flex-row items-center gap-3">
+                      <Icon as={setting.icon} className="text-muted-foreground size-6" />
+                      <Text
+                        className={`font-medium ${setting.href ? "text-foreground" : "text-muted-foreground"}`}
+                      >
+                        {setting.label}
+                      </Text>
+                    </View>
+                    <Icon as={ChevronRightIcon} className="text-muted-foreground size-6" />
+                  </View>
+                );
+
+                return setting.href ? (
                   <Link key={setting.label} href={setting.href} asChild>
-                    <Pressable
-                      className={`flex flex-row items-center justify-between ${
-                        isLastSetting ? "" : "border-b-[0.5px] border-border/30 pb-3"
-                      }`}
-                    >
-                      <View className="flex flex-row items-center gap-3">
-                        <Icon as={setting.icon} className="text-muted-foreground size-6" />
-                        <Text className="text-foreground font-medium">{setting.label}</Text>
-                      </View>
-                      <Icon as={ChevronRightIcon} className="text-muted-foreground size-6" />
-                    </Pressable>
+                    <Pressable>{content}</Pressable>
                   </Link>
+                ) : (
+                  <View key={setting.label} accessibilityState={{ disabled: true }}>
+                    {content}
+                  </View>
                 );
               })}
             </View>
