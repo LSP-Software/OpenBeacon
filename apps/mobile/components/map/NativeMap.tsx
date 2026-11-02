@@ -1,8 +1,7 @@
 import { Camera, MapView } from "@maplibre/maplibre-react-native";
 import { ArrowUpIcon, LocateFixedIcon, MapPinIcon, ScanIcon } from "lucide-react-native";
-import { Button, Platform, Pressable, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Text } from "../../components/ui/Text.tsx";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { Icon } from "../ui/Icon.tsx";
 import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
@@ -60,21 +59,13 @@ export const NativeMap = ({
     handleAnnotationDeselected,
     handleAnnotationSelected,
   } = selection;
-  if (map.isLoading && !mapStyle) {
+  if (!mapStyle) {
     return (
-      <View className="flex-1 items-center justify-center bg-background px-6">
-        <Text className="text-center text-base text-muted">Loading map…</Text>
-      </View>
-    );
-  }
-
-  if (!mapStyle || (map.isError && !map.isLoading)) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background px-6">
-        <View className="w-full max-w-80 gap-5">
-          <Text className="text-center text-base text-muted">The map URL could not be loaded.</Text>
-          <Button title="Retry" onPress={map.retryUrl} />
-        </View>
+      <View
+        className="flex-1 items-center justify-center bg-background"
+        accessibilityLabel="Loading map"
+      >
+        <ActivityIndicator />
       </View>
     );
   }
@@ -87,7 +78,6 @@ export const NativeMap = ({
       }}
     >
       <MapView
-        key={pmtilesUrl}
         ref={mapRef}
         style={{ flex: 1 }}
         mapStyle={mapStyle}
@@ -171,12 +161,12 @@ export const NativeMap = ({
           </Pressable>
         );
       })}
-      {map.showRecoverableError ? (
-        <View className="absolute inset-0 items-center justify-center bg-background/90 px-6">
-          <View className="w-full max-w-80 gap-5">
-            <Text className="text-center text-base text-muted">The map could not be loaded.</Text>
-            <Button disabled={map.isRefreshing} title="Retry" onPress={map.retryMapLoad} />
-          </View>
+      {map.showRecoverableError || map.isRefreshing ? (
+        <View
+          className="absolute left-3 top-14 rounded-full bg-card p-3"
+          accessibilityLabel="Loading map"
+        >
+          <ActivityIndicator />
         </View>
       ) : null}
       <View

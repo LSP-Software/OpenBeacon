@@ -6,7 +6,8 @@ import { getPmtilesUrlRefreshDelayMs } from "../lib/pmtilesUrl.ts";
 export const useSignedPmtilesUrl = () => {
   const query = useQuery({
     ...trpc.maps.getSignedPmtilesUrl.queryOptions(),
-    retry: false,
+    retry: (_failureCount, error) => error.data?.code !== "UNAUTHORIZED",
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30_000),
   });
 
   // Schedule the next refresh from refreshAt and refetch only, not the whole query object
