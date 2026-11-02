@@ -236,3 +236,10 @@ enum GroupRole {
   ADMIN
   MEMBER
 }
+
+model Feedback {
+  id        String   @id @default(uuid(7))
+  message   String
+  email     String?
+  createdAt DateTime @default(now())
+}
