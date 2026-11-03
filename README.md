@@ -1,6 +1,6 @@
 # OpenBeacon
 
-OpenBeacon is an open-source, privacy-focused family location app. Self-hosting is supported allowing running the backend on your own hardware; the architecture assumes sensitive data is encrypted so the people running servers are not in a position to read your family’s locations or activity.
+OpenBeacon is an open-source, privacy-focused family location app. Self-hosting is supported allowing running the backend on your own hardware; the architecture assumes sensitive data is encrypted so the people running servers are not in a position to read your family’s locations or activity. Profile and group images are not end-to-end encrypted.
 
 This repo is a Bun monorepo: a React Native (Expo) app under `apps/mobile`, an API server under `apps/backend`, and shared packages (`api`, `database`, `encryption`, `schemas`, and others) at the root.
 
