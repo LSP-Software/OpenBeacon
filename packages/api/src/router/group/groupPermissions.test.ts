@@ -1,0 +1,125 @@
+import { expect, mock, test } from "bun:test";
+import { OpenBeaconCache } from "@openbeacon/cache";
+import { FakeRedis } from "@openbeacon/cache/testing";
+import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
+import { createTRPCRouter } from "../../trpcRuntime.ts";
+import { groupInvitesRouter } from "./groupInvitesRouter.ts";
+import { groupMembershipRouter } from "./groupMembershipRouter.ts";
+
+class TestCache extends OpenBeaconCache {
+  protected override createRedisClient(): FakeRedis {
+    return new FakeRedis();
+  }
+}
+
+const router = createTRPCRouter({
+  groupInvites: groupInvitesRouter,
+  groupMembership: groupMembershipRouter,
+});
+const createCaller = (
+  actorRole: "OWNER" | "ADMIN" | "MEMBER",
+  targetRole: "OWNER" | "ADMIN" | "MEMBER" = "MEMBER",
+) => {
+  const actor = { id: "actor", userId: "actor-user", role: actorRole };
+  const createMany = mock(async () => ({ count: 1 }));
+  const db = {
+    $queryRaw: mock(async () => [actor]),
+    group: { findUnique: mock(async () => ({ id: "group", groupMembers: [actor] })) },
+    groupMember: {
+      findUnique: mock(async () => actor),
+      findFirst: mock(async () => ({ userId: "target-user", role: targetRole })),
+      findMany: mock(async () => []),
+    },
+    user: {
+      findMany: mock(async () => [
+        { id: "target-user", email: "target@example.test", receivedGroupMemberInvites: [] },
+      ]),
+    },
+    groupMemberInvite: { createMany },
+  };
+  return {
+    createMany,
+    caller: router.createCaller({
+      cache: new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
+      clientIp: "127.0.0.1",
+      db: {
+        ...db,
+        $transaction: async (callback: (tx: typeof db) => Promise<unknown>) => callback(db),
+      },
+      session: { user: { id: actor.userId } },
+    } as unknown as Parameters<typeof router.createCaller>[0]),
+  };
+};
+
+const removal = {
+  groupId: "group",
+  memberId: "target",
+  nextEpoch: {
+    createdByDeviceId: "device",
+    epochId: "epoch",
+    epochNumber: 1,
+    recipientKeys: [
+      {
+        algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+        createdAt: new Date(),
+        ephemeralPublicKey: "key",
+        epochId: "epoch",
+        nonce: "nonce",
+        recipientDeviceId: "device",
+        wrappedKey: "key",
+      },
+    ],
+  },
+};
+
+test("admins cannot remove an admin or owner", async () => {
+  for (const role of ["ADMIN", "OWNER"] as const) {
+    await expect(
+      createCaller("ADMIN", role).caller.groupMembership.remove(removal),
+    ).rejects.toThrow("Only owners can remove owners or admins.");
+  }
+});
+
+test("admin invitations reject mixed roles atomically and allow members", async () => {
+  const { caller, createMany } = createCaller("ADMIN");
+  await expect(
+    caller.groupInvites.send({
+      groupId: "group",
+      invites: [
+        { email: "target@example.test", role: "MEMBER" },
+        { email: "other@example.test", role: "ADMIN" },
+      ],
+    }),
+  ).rejects.toThrow("Only owners can invite admins.");
+  expect(createMany).not.toHaveBeenCalled();
+  await caller.groupInvites.send({
+    groupId: "group",
+    invites: [{ email: "target@example.test", role: "MEMBER" }],
+  });
+  expect(createMany).toHaveBeenCalledWith({
+    data: [
+      { inviterId: "actor-user", recipientId: "target-user", groupId: "group", role: "MEMBER" },
+    ],
+  });
+});
+
+test("owners can invite admins and members cannot invite", async () => {
+  const owner = createCaller("OWNER");
+  await owner.caller.groupInvites.send({
+    groupId: "group",
+    invites: [{ email: "target@example.test", role: "ADMIN" }],
+  });
+  expect(owner.createMany).toHaveBeenCalledWith({
+    data: [
+      { inviterId: "actor-user", recipientId: "target-user", groupId: "group", role: "ADMIN" },
+    ],
+  });
+  const member = createCaller("MEMBER");
+  await expect(
+    member.caller.groupInvites.send({
+      groupId: "group",
+      invites: [{ email: "target@example.test", role: "MEMBER" }],
+    }),
+  ).rejects.toThrow();
+  expect(member.createMany).not.toHaveBeenCalled();
+});

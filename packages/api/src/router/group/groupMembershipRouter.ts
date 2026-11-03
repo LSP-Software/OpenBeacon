@@ -128,11 +128,11 @@ export const groupMembershipRouter = {
         if (
           actor.id !== input.memberId &&
           actor.role !== GroupRole.OWNER &&
-          member.role === GroupRole.OWNER
+          member.role !== GroupRole.MEMBER
         ) {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "Only owners can remove another owner.",
+            message: "Only owners can remove owners or admins.",
           });
         }
 

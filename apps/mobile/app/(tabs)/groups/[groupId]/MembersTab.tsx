@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { MapPinIcon, PlusCircleIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, View } from "react-native";
 import { InviteMemberToGroupDialog } from "../../../../components/dialogs/InviteMemberToGroupDialog.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../../components/ui/Avatar.tsx";
@@ -26,6 +26,10 @@ import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
 
 const MembersTab = ({ groupId }: { groupId: string }) => {
+  const [changingRole, setChangingRole] = useState<{
+    memberId: string;
+    role: "OWNER" | "ADMIN" | "MEMBER";
+  } | null>(null);
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const [successorDialogOpen, setSuccessorDialogOpen] = useState(false);
   const [successorMemberId, setSuccessorMemberId] = useState<string | null>(null);
@@ -116,6 +120,7 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
         open={addMemberDialogOpen}
         setOpen={setAddMemberDialogOpen}
         groupId={groupId}
+        canInviteAdmins={self?.role === "OWNER"}
       />
       <Dialog open={successorDialogOpen} onOpenChange={setSuccessorDialogOpen}>
         <DialogContent>
@@ -177,9 +182,9 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                   accessibilityRole="radio"
                   accessibilityState={{
                     checked: member.role === role,
-                    disabled: updateRole.isPending,
+                    disabled: changingRole !== null || member.role === role,
                   }}
-                  disabled={updateRole.isPending || member.role === role}
+                  disabled={changingRole !== null || member.role === role}
                   className={`flex-1 items-center rounded-xl px-2 py-3 ${member.role === role ? "bg-primary" : ""}`}
                   onPress={() =>
                     Alert.alert("Change role?", `Make ${member.user.name} ${role.toLowerCase()}?`, [
@@ -187,10 +192,12 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                       {
                         text: "Change",
                         onPress: async () => {
+                          setChangingRole({ memberId: member.id, role });
                           const result = await tryCatch(
                             updateRole.mutateAsync({ groupId, memberId: member.id, role }),
                           );
                           if (result.error) {
+                            setChangingRole(null);
                             Alert.alert("Unable to change role", result.error.message);
                             return;
                           }
@@ -205,24 +212,29 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                               queryKey: trpc.groupMembership.list.queryKey(),
                             }),
                           ]);
+                          setChangingRole(null);
                         },
                       },
                     ])
                   }
                 >
-                  <Text
-                    className={
-                      member.role === role ? "text-white font-semibold" : "text-foreground"
-                    }
-                  >
-                    {role.charAt(0) + role.slice(1).toLowerCase()}
-                  </Text>
+                  {changingRole?.memberId === member.id && changingRole.role === role ? (
+                    <ActivityIndicator size="small" />
+                  ) : (
+                    <Text
+                      className={
+                        member.role === role ? "text-white font-semibold" : "text-foreground"
+                      }
+                    >
+                      {role.charAt(0) + role.slice(1).toLowerCase()}
+                    </Text>
+                  )}
                 </Pressable>
               ))}
             </View>
           )}
           {(member.id === self?.id ||
-            (canManage && (self?.role === "OWNER" || member.role !== "OWNER"))) && (
+            (canManage && (self?.role === "OWNER" || member.role === "MEMBER"))) && (
             <Button
               variant="outline"
               size="sm"
