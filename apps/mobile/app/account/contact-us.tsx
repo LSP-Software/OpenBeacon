@@ -7,6 +7,7 @@ import { BackButton } from "../../components/headers/BackButton.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Icon } from "../../components/ui/Icon.tsx";
 import { Text } from "../../components/ui/Text.tsx";
+import { appVersion, maplibreVersion } from "../../lib/versions.ts";
 import { trpcClient } from "../../lib/api.ts";
 
 const ContactUsScreen = () => {
@@ -23,6 +24,8 @@ const ContactUsScreen = () => {
       trpcClient.account.submitFeedback.mutate({
         message,
         includeEmail,
+        appVersion,
+        maplibreVersion,
         androidVersion: Platform.OS === "android" ? Platform.constants.Release : undefined,
       }),
     );
@@ -48,8 +51,9 @@ const ContactUsScreen = () => {
       <ScrollView contentContainerClassName="gap-5 px-6 py-6">
         <Text className="text-muted-foreground">
           Your feedback is stored on your configured server and can be read by its administrators.
-          Please do not include personal information unless you want to share it.
-          {Platform.OS === "android" && " Your Android version is included with your feedback."}
+          Please do not include personal information unless you want to share it. Your app, MapLibre
+          React Native, server{Platform.OS === "android" ? ", and Android" : ""} versions are
+          included with your feedback.
         </Text>
         <TextInput
           accessibilityLabel="Feedback"

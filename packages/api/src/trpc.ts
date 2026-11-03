@@ -33,6 +33,7 @@ export const createTRPCContext = async (opts: {
   clientIp?: string;
   db: PrismaClient;
   headers: Headers;
+  serverVersion: string;
 }) => {
   const session = await auth.api.getSession({
     headers: opts.headers,
@@ -42,6 +43,7 @@ export const createTRPCContext = async (opts: {
     cache: opts.cache,
     db: opts.db,
     session,
+    serverVersion: opts.serverVersion,
     ...(opts.clientIp !== undefined ? { clientIp: opts.clientIp } : {}),
   };
 };

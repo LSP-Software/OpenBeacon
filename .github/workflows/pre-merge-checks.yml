@@ -33,3 +33,36 @@ jobs:
 
       - name: Run CI
         run: bun run ci
+
+  feedback-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: openbeacon
+          POSTGRES_USER: openbeacon
+          POSTGRES_PASSWORD: openbeacon
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openbeacon -d openbeacon"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Generate database client and apply migrations
+        run: |
+          bun run --cwd packages/database --env-file=../../.env.ci prisma generate
+          bun run --cwd packages/database --env-file=../../.env.ci prisma migrate deploy
+      - name: Test feedback against PostgreSQL
+        run: OPENBEACON_INTEGRATION=1 bun test --env-file=.env.ci packages/api/src/router/accountFeedback.integration.test.ts apps/backend/src/routes/trpcFeedback.integration.test.ts

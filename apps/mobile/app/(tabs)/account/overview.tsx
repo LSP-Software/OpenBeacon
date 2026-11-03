@@ -81,6 +81,7 @@ const categories = [
       {
         label: "About",
         icon: InfoIcon,
+        href: "/account/about",
       },
     ],
   },
