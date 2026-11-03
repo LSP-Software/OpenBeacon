@@ -98,6 +98,16 @@ describe("device key registration", () => {
     expect(secondUserDevice.deviceId).not.toBe(firstUserDevice.deviceId);
   });
 
+  test("concurrent initialization creates one device identity", async () => {
+    const { getOrCreateDeviceKeyContext } = await importDeviceKeysModule();
+    const contexts = await Promise.all(
+      Array.from({ length: 5 }, () => getOrCreateDeviceKeyContext("user-a")),
+    );
+    expect(new Set(contexts.map((context) => context.deviceId)).size).toBe(1);
+    expect(setItemAsyncMock).toHaveBeenCalledTimes(1);
+    expect(storageValues.get("encryption.device.id.user-a")).toBe(contexts[0]?.deviceId);
+  });
+
   test("replaces a conflicting legacy device context after an account switch", async () => {
     const legacyDeviceKeyPair = createDeviceKeyPair();
 

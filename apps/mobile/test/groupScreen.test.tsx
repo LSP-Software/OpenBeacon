@@ -10,12 +10,15 @@ import { createReactNativeTestModule } from "./reactNativeTestModule.ts";
 let queryResult: { data: unknown; isPending: boolean; error: { data: { code: string } } | null };
 let isFocused = true;
 let groups: { id: string }[] = [];
+let members: { id: string }[] = [];
+let keyAccess: { data: string; isError: boolean }[] = [];
 const replace = mock(() => {});
 const fetchQuery = mock(async () => groups);
 const queryClient = { fetchQuery };
 const router = { replace };
 mock.module("@tanstack/react-query", () => ({
-  useQuery: () => queryResult,
+  useQuery: (options: { kind?: string }) =>
+    options.kind === "members" ? { data: members } : queryResult,
   useQueryClient: () => queryClient,
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => isFocused }));
@@ -34,9 +37,17 @@ mock.module("lucide-react-native", () => ({
 }));
 mock.module("../lib/api.ts", () => ({
   trpc: {
-    groupMembership: { get: { queryOptions: () => ({}) }, list: { queryOptions: () => ({}) } },
+    groupMembership: {
+      get: { queryOptions: () => ({}) },
+      list: { queryOptions: () => ({}) },
+      members: { queryOptions: () => ({ kind: "members" }) },
+    },
   },
 }));
+mock.module("../lib/auth-client.ts", () => ({
+  authClient: { useSession: () => ({ data: null }) },
+}));
+mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useGroupKeyAccess: () => keyAccess }));
 mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
 mock.module("../components/image/GroupImage.tsx", () => ({ GroupImage: () => null }));
 mock.module("../components/LoadingIndicator.tsx", () => ({
@@ -58,6 +69,8 @@ const { default: GroupScreen } = await import("../app/(tabs)/groups/[groupId]/in
 beforeEach(() => {
   isFocused = true;
   groups = [];
+  members = [];
+  keyAccess = [];
   replace.mockClear();
   fetchQuery.mockClear();
   queryResult = {
@@ -65,6 +78,34 @@ beforeEach(() => {
     isPending: false,
     error: null,
   };
+});
+
+test("keeps role-specific guidance visible after an access refresh fails", async () => {
+  keyAccess = [{ data: "missing", isError: true }];
+  members = [{ id: "owner" }, { id: "member" }];
+  queryResult = {
+    ...queryResult,
+    data: { id: "group-1", name: "Family", groupMembers: [{ role: "OWNER" }] },
+  };
+  const root = createRoot();
+  await act(async () => root.render(<GroupScreen />));
+  expect(JSON.stringify(root.container.toJSON())).toContain(
+    "choose another member as the new owner",
+  );
+
+  members = [{ id: "owner" }];
+  await act(async () => root.render(<GroupScreen />));
+  expect(JSON.stringify(root.container.toJSON())).toContain("invite someone to the group");
+
+  queryResult = {
+    ...queryResult,
+    data: { id: "group-1", name: "Family", groupMembers: [{ role: "MEMBER" }] },
+  };
+  await act(async () => root.render(<GroupScreen />));
+  expect(JSON.stringify(root.container.toJSON())).toContain(
+    "ask an owner or admin to invite you again",
+  );
+  await act(async () => root.unmount());
 });
 
 test("does not redirect from an unfocused group screen when its refresh loses access", async () => {
