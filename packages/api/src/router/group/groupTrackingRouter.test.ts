@@ -152,6 +152,25 @@ describe("groupTrackingRouter", () => {
     expect(createMany).not.toHaveBeenCalled();
   });
 
+  test("forbids non-members from reading tracking ciphertext", async () => {
+    const findManyPayloadsMock = mock(async () => []);
+    const queryRawMock = mock(async () => []);
+    const { caller } = await createCaller({
+      findManyPayloadsMock,
+      groupFindUniqueMock: createGroupFindUniqueMock(false),
+      queryRawMock,
+    });
+
+    await expect(caller.groupTracking.poll({ groupId: "group-1" })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    await expect(caller.groupTracking.getLatest({ groupId: "group-1" })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    expect(findManyPayloadsMock).not.toHaveBeenCalled();
+    expect(queryRawMock).not.toHaveBeenCalled();
+  });
+
   test("uploadBatch inserts for members and returns accepted ids", async () => {
     const createManyMock = mock(async () => ({ count: 1 }));
     const findManyPayloadsMock = mock(async () => []);
