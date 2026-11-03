@@ -297,7 +297,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
     });
 
-    test("an admin cannot remove an owner and members cannot invite", async () => {
+    test("admins cannot remove owners or admins or invite admins, and members cannot invite", async () => {
       const permissionGroupId = `${prefix}-permission-group`;
       const group = await prisma.group.create({
         data: {
@@ -306,7 +306,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           groupMembers: {
             create: [
               { userId: users[0]!, role: "OWNER" },
-              { userId: users[1]!, role: "OWNER" },
+              { userId: users[1]!, role: "ADMIN" },
               { userId: users[2]!, role: "ADMIN" },
             ],
           },
@@ -315,28 +315,46 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       const owner = group.groupMembers.find((member) => member.userId === users[0]);
       expect(owner).toBeDefined();
+      const admin = group.groupMembers.find((member) => member.userId === users[1]);
+      expect(admin).toBeDefined();
+      const removal = {
+        groupId: permissionGroupId,
+        memberId: owner!.id,
+        nextEpoch: {
+          createdByDeviceId: "device",
+          epochId: "epoch",
+          epochNumber: 1,
+          recipientKeys: [
+            {
+              algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+              createdAt: new Date(),
+              ephemeralPublicKey: "key",
+              epochId: "epoch",
+              nonce: "nonce",
+              recipientDeviceId: "device",
+              wrappedKey: "key",
+            },
+          ],
+        },
+      };
+      await expect(caller(users[2]!).groupMembership.remove(removal)).rejects.toThrow(
+        "Only owners can remove owners or admins.",
+      );
       await expect(
-        caller(users[2]!).groupMembership.remove({
+        caller(users[2]!).groupMembership.remove({ ...removal, memberId: admin!.id }),
+      ).rejects.toThrow("Only owners can remove owners or admins.");
+      await expect(
+        caller(users[2]!).groupInvites.send({
           groupId: permissionGroupId,
-          memberId: owner!.id,
-          nextEpoch: {
-            createdByDeviceId: "device",
-            epochId: "epoch",
-            epochNumber: 1,
-            recipientKeys: [
-              {
-                algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
-                createdAt: new Date(),
-                ephemeralPublicKey: "key",
-                epochId: "epoch",
-                nonce: "nonce",
-                recipientDeviceId: "device",
-                wrappedKey: "key",
-              },
-            ],
-          },
+          invites: [{ email: "person@example.test", role: "ADMIN" }],
         }),
-      ).rejects.toThrow("Only owners can remove another owner.");
+      ).rejects.toThrow("Only owners can invite admins.");
+      await expect(
+        caller(users[2]!).groupInvites.send({
+          groupId: permissionGroupId,
+          invites: [{ email: "person@example.test", role: "MEMBER" }],
+        }),
+      ).resolves.toBeDefined();
       await prisma.groupMember.update({
         where: { userId_groupId: { userId: users[2]!, groupId: permissionGroupId } },
         data: { role: "MEMBER" },

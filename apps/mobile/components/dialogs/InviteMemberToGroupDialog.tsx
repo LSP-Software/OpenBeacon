@@ -1,10 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { inviteMemberToGroupSchema } from "@openbeacon/schemas";
+import { tryCatch } from "@openbeacon/shared";
 import { useMutation } from "@tanstack/react-query";
 import { LinkIcon, MailIcon, PlusIcon, QrCodeIcon, Trash2Icon } from "lucide-react-native";
 import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
-import { Pressable, View } from "react-native";
+import { Alert, Pressable, View } from "react-native";
 import type z from "zod";
 import { trpc } from "../../lib/api.ts";
 import { SharedInvite } from "./SharedInvite.tsx";
@@ -20,12 +21,14 @@ interface InviteMemberToGroupDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
   groupId: string;
+  canInviteAdmins: boolean;
 }
 
 export const InviteMemberToGroupDialog = ({
   open,
   setOpen,
   groupId,
+  canInviteAdmins,
 }: InviteMemberToGroupDialogProps) => {
   const [value, setValue] = useState("email");
 
@@ -51,7 +54,11 @@ export const InviteMemberToGroupDialog = ({
             </TabsTrigger>
           </TabsList>
           <TabsContent value="email" className="flex flex-col gap-4">
-            <InviteMembersInputs groupId={groupId} setOpen={setOpen} />
+            <InviteMembersInputs
+              groupId={groupId}
+              setOpen={setOpen}
+              canInviteAdmins={canInviteAdmins}
+            />
           </TabsContent>
           {open && <SharedInvite groupId={groupId} open={open} setOpen={setOpen} value={value} />}
         </Tabs>
@@ -61,11 +68,16 @@ export const InviteMemberToGroupDialog = ({
 };
 
 interface InviteMembersInputsProps {
+  canInviteAdmins: boolean;
   groupId: string;
   setOpen: (open: boolean) => void;
 }
 
-export const InviteMembersInputs = ({ groupId, setOpen }: InviteMembersInputsProps) => {
+export const InviteMembersInputs = ({
+  groupId,
+  setOpen,
+  canInviteAdmins,
+}: InviteMembersInputsProps) => {
   const form = useForm<z.infer<typeof inviteMemberToGroupSchema>>({
     resolver: zodResolver(inviteMemberToGroupSchema),
     mode: "onBlur",
@@ -96,15 +108,20 @@ export const InviteMembersInputs = ({ groupId, setOpen }: InviteMembersInputsPro
 
   const inviteMemberMutation = useMutation(trpc.groupInvites.send.mutationOptions());
   const onSubmit = async (data: z.infer<typeof inviteMemberToGroupSchema>) => {
-    await inviteMemberMutation.mutateAsync(data, {
-      onSuccess: () => {
-        form.reset();
-        setOpen(false);
-      },
-      onError: (error) => {
-        console.log(error);
-      },
-    });
+    const result = await tryCatch(
+      inviteMemberMutation.mutateAsync({
+        ...data,
+        invites: canInviteAdmins
+          ? data.invites
+          : data.invites.map((invite) => ({ ...invite, role: "MEMBER" as const })),
+      }),
+    );
+    if (result.error) {
+      Alert.alert("Unable to send invitation", result.error.message);
+      return;
+    }
+    form.reset();
+    setOpen(false);
   };
 
   return (
@@ -127,17 +144,19 @@ export const InviteMembersInputs = ({ groupId, setOpen }: InviteMembersInputsPro
                   textContentType="emailAddress"
                   className="h-12 rounded-xl border border-border bg-input px-4 py-0 text-base text-foreground"
                 />
-                <View>
-                  <FormSelectInput
-                    control={form.control}
-                    name={`invites.${index}.role`}
-                    fieldClassName="w-28"
-                    values={[
-                      { label: "Admin", value: "ADMIN" },
-                      { label: "Member", value: "MEMBER" },
-                    ]}
-                  />
-                </View>
+                {canInviteAdmins && (
+                  <View>
+                    <FormSelectInput
+                      control={form.control}
+                      name={`invites.${index}.role`}
+                      fieldClassName="w-28"
+                      values={[
+                        { label: "Admin", value: "ADMIN" },
+                        { label: "Member", value: "MEMBER" },
+                      ]}
+                    />
+                  </View>
+                )}
                 <Pressable
                   className="h-10 w-10 items-center justify-center"
                   onPress={() => handleRemoveInvite(index)}
@@ -164,10 +183,12 @@ export const InviteMembersInputs = ({ groupId, setOpen }: InviteMembersInputsPro
           <Text className="text-secondary text-sm">
             <Text className="font-semibold">Member:</Text> Can view locations of all family members
           </Text>
-          <Text className="text-secondary text-sm">
-            <Text className="font-semibold">Admin:</Text> Can view locations, invite/remove members
-            and manage group settings
-          </Text>
+          {canInviteAdmins && (
+            <Text className="text-secondary text-sm">
+              <Text className="font-semibold">Admin:</Text> Can view locations, invite and remove
+              members, and manage group settings
+            </Text>
+          )}
         </View>
         <Button
           size="sm"

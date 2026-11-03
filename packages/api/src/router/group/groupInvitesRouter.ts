@@ -332,6 +332,12 @@ export const groupInvitesRouter = {
         if (actor?.role !== GroupRole.OWNER && actor?.role !== GroupRole.ADMIN) {
           throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
         }
+        if (
+          actor.role === GroupRole.ADMIN &&
+          input.invites.some((invite) => invite.role === GroupRole.ADMIN)
+        ) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only owners can invite admins." });
+        }
         const users = await tx.user.findMany({
           where: {
             email: {
