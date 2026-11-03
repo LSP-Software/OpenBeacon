@@ -242,5 +242,8 @@ model Feedback {
   message   String
   email     String?
   androidVersion String?
+  appVersion String?
+  maplibreVersion String?
+  serverVersion String?
   createdAt DateTime @default(now())
 }

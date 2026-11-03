@@ -15,19 +15,45 @@ describe("feedback", () => {
     const caller = appRouter.createCaller({
       cache: new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
       clientIp: "203.0.113.10",
+      serverVersion: "0.1.1",
       db: { feedback: { create } },
       session: { user: { id: "user-1", email: "user@example.com" } },
     } as unknown as Parameters<typeof appRouter.createCaller>[0]);
 
+    expect(await caller.account.version()).toBe("0.1.1");
     await caller.account.submitFeedback({
       message: "  hello  ",
       includeEmail: false,
       androidVersion: " 15 ",
+      appVersion: " 1.2.3 ",
+      maplibreVersion: " 10.4.2 ",
     });
     await caller.account.submitFeedback({ message: "follow up", includeEmail: true });
     expect(create.mock.calls).toEqual([
-      [{ data: { message: "hello", email: null, androidVersion: "15" } }],
-      [{ data: { message: "follow up", email: "user@example.com", androidVersion: null } }],
+      [
+        {
+          data: {
+            message: "hello",
+            email: null,
+            androidVersion: "15",
+            appVersion: "1.2.3",
+            maplibreVersion: "10.4.2",
+            serverVersion: "0.1.1",
+          },
+        },
+      ],
+      [
+        {
+          data: {
+            message: "follow up",
+            email: "user@example.com",
+            androidVersion: null,
+            appVersion: null,
+            maplibreVersion: null,
+            serverVersion: "0.1.1",
+          },
+        },
+      ],
     ]);
     await expect(
       caller.account.submitFeedback({ message: "  ", includeEmail: false }),

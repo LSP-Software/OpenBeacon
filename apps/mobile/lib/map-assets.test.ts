@@ -1,3 +1,4 @@
+import { maplibreVersion } from "./versions.ts";
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
@@ -152,6 +153,7 @@ describe("bundled map assets", () => {
   });
 
   test("uses the renderer and style versions reviewed with these assets", () => {
+    expect(maplibreVersion).toBe("10.4.2");
     for (const [name, reviewedVersion] of [
       ["@maplibre/maplibre-react-native", "10.4.2"],
       ["@protomaps/basemaps", "5.7.2"],

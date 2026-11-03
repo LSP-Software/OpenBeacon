@@ -11,6 +11,7 @@ import {
 import { protectedProcedure } from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
+  version: protectedProcedure.query(({ ctx }) => ctx.serverVersion),
   submitFeedback: protectedProcedure
     .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
     .input(
@@ -18,6 +19,8 @@ export const accountRouter = {
         message: z.string().trim().min(1).max(5000),
         includeEmail: z.boolean(),
         androidVersion: z.string().trim().min(1).max(100).optional(),
+        appVersion: z.string().trim().min(1).max(100).optional(),
+        maplibreVersion: z.string().trim().min(1).max(100).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -26,6 +29,9 @@ export const accountRouter = {
           message: input.message,
           email: input.includeEmail ? ctx.session.user.email : null,
           androidVersion: input.androidVersion ?? null,
+          appVersion: input.appVersion ?? null,
+          maplibreVersion: input.maplibreVersion ?? null,
+          serverVersion: ctx.serverVersion,
         },
       });
     }),
