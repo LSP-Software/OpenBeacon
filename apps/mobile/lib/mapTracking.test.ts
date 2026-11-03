@@ -380,6 +380,27 @@ describe("createMapTrackingSession", () => {
     expect(scheduled.at(-1)?.delayMs).toBe(5_000);
   });
 
+  test("backs off membership failures even when a group is already due", async () => {
+    let fail = false;
+    const { scheduled, session, setNow } = createSession({
+      listGroups: async () => {
+        if (fail) throw new Error("offline");
+        return [{ id: "group-1" }];
+      },
+    });
+    session.setActive(true);
+    await session.tick();
+    setNow(5_000);
+    fail = true;
+    await session.tick();
+    expect(scheduled.at(-1)?.delayMs).toBe(5_000);
+    await session.tick();
+    expect(scheduled.at(-1)?.delayMs).toBe(10_000);
+    fail = false;
+    await session.tick();
+    expect(scheduled.at(-1)?.delayMs).toBe(5_000);
+  });
+
   test("every five minutes while live, getLatest reconcile runs alongside poll", async () => {
     const coldRow = point({
       createdAt: new Date("2026-07-17T12:00:00.000Z"),

@@ -6,6 +6,7 @@ export const applySelfDeviceLocation = ({
   selfDeviceLocation,
   selfFallback,
   selfUserId,
+  lastSentAt,
 }: {
   markers: readonly LiveMapMarker[];
   selfDeviceLocation: SelfDeviceLocation | null;
@@ -17,6 +18,7 @@ export const applySelfDeviceLocation = ({
     sourceGroupId: string;
   } | null;
   selfUserId: string;
+  lastSentAt: string | null;
 }): LiveMapMarker[] => {
   const others =
     selfUserId.length === 0
@@ -40,7 +42,7 @@ export const applySelfDeviceLocation = ({
       otherSharedGroupNames: [...selfFallback.otherSharedGroupNames],
       ringColor: selfFallback.ringColor,
       sourceGroupId: selfFallback.sourceGroupId,
-      timestamp: selfDeviceLocation.timestamp,
+      timestamp: lastSentAt,
       userId: selfUserId,
     },
   ];

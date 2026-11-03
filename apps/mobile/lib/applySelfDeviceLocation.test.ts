@@ -32,6 +32,7 @@ describe("applySelfDeviceLocation", () => {
 
     expect(
       applySelfDeviceLocation({
+        lastSentAt: "2026-07-17T12:00:00.000Z",
         markers: [alice, bob],
         selfDeviceLocation: null,
         selfFallback: {
@@ -46,7 +47,7 @@ describe("applySelfDeviceLocation", () => {
     ).toEqual([bob]);
   });
 
-  test("shows self only from local GPS and omits API battery", () => {
+  test("uses the send timestamp with local GPS and omits API battery", () => {
     const aliceFromApi = marker({
       userId: "alice",
       isSelf: true,
@@ -59,6 +60,7 @@ describe("applySelfDeviceLocation", () => {
 
     expect(
       applySelfDeviceLocation({
+        lastSentAt: "2026-07-17T12:00:00.000Z",
         markers: [aliceFromApi, bob],
         selfDeviceLocation: {
           latitude: 50.8,
@@ -87,7 +89,7 @@ describe("applySelfDeviceLocation", () => {
         otherSharedGroupNames: ["Cousins"],
         ringColor: "#2A9D8F",
         sourceGroupId: "family",
-        timestamp: "2026-07-17T12:01:00.000Z",
+        timestamp: "2026-07-17T12:00:00.000Z",
         userId: "alice",
       },
     ]);
@@ -111,6 +113,7 @@ describe("applySelfDeviceLocation", () => {
     };
 
     const withLocalGps = applySelfDeviceLocation({
+      lastSentAt: null,
       markers: [aliceFromApi, bob],
       selfDeviceLocation: {
         latitude: 50.8,
@@ -125,6 +128,7 @@ describe("applySelfDeviceLocation", () => {
 
     expect(
       applySelfDeviceLocation({
+        lastSentAt: "2026-07-17T12:00:00.000Z",
         markers: [aliceFromApi, bob],
         selfDeviceLocation: null,
         selfFallback,
@@ -146,6 +150,7 @@ describe("applySelfDeviceLocation", () => {
 
     expect(
       applySelfDeviceLocation({
+        lastSentAt: null,
         markers: [bob],
         selfDeviceLocation: {
           latitude: 50.8,
@@ -174,7 +179,7 @@ describe("applySelfDeviceLocation", () => {
         otherSharedGroupNames: [],
         ringColor: "#2A9D8F",
         sourceGroupId: "family",
-        timestamp: "2026-07-17T12:01:00.000Z",
+        timestamp: null,
         userId: "alice",
       },
     ]);
@@ -185,6 +190,7 @@ describe("applySelfDeviceLocation", () => {
 
     expect(
       applySelfDeviceLocation({
+        lastSentAt: "2026-07-17T12:00:00.000Z",
         markers: [bob],
         selfDeviceLocation: {
           latitude: 50.8,
@@ -202,6 +208,7 @@ describe("applySelfDeviceLocation", () => {
 
     expect(
       applySelfDeviceLocation({
+        lastSentAt: "2026-07-17T12:00:00.000Z",
         markers: [bob],
         selfDeviceLocation: {
           latitude: 50.8,

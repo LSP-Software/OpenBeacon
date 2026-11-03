@@ -14,7 +14,7 @@ export type LiveMapMarker = {
   otherSharedGroupNames: string[];
   ringColor: string;
   sourceGroupId: string;
-  timestamp: string;
+  timestamp: string | null;
   userId: string;
 };
 

@@ -10,6 +10,8 @@ import { Platform } from "react-native";
 import type { CiphertextQueueItem } from "../modules/openbeacon-tracking/index.ts";
 import { trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
+import { isDeviceOffline } from "./networkStatus.ts";
+import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
 
 let reconcilePromise: Promise<void> | null = null;
@@ -277,6 +279,7 @@ const uploadClaimedItems = async (
   items: UploadableQueueItem[],
 ): Promise<void> => {
   const ids = items.map(({ id }) => id);
+  const sentAt = new Date().toISOString();
   const uploadResult = await tryCatch(
     trpcClient.groupTracking.uploadBatch.mutate({
       groupId: items[0]?.groupId ?? "",
@@ -310,6 +313,13 @@ const uploadClaimedItems = async (
 
     await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
     throw new Error("Tracking upload failed");
+  }
+
+  if (uploadResult.data.accepted.length > 0 && items[0]) {
+    const { senderDeviceId, groupId } = items[0];
+    await tryCatch(
+      Promise.resolve().then(() => recordTrackingUpload(senderDeviceId, groupId, sentAt)),
+    );
   }
 
   const completedClientPointIds = new Set([
@@ -392,9 +402,6 @@ const flushPendingTrackingPointsInternal = async (): Promise<void> => {
   if (results.some((result) => result.status === "rejected")) {
     throw new Error("Tracking upload failed");
   }
-  if (pending.some((item) => !isReadyForRetry(item, Date.now()) && item.lastError)) {
-    throw new Error("Tracking upload is waiting to retry");
-  }
 };
 
 export const flushPendingTrackingPoints = (): Promise<void> => {
@@ -410,7 +417,10 @@ export const flushPendingTrackingPoints = (): Promise<void> => {
 
 export const syncBackgroundTracking = async () => {
   await tryCatch(reconcileTrackingKeys({ startCapture: true, onlyIfRunning: true }));
-  await flushPendingTrackingPoints();
+  const result = await tryCatch(flushPendingTrackingPoints());
+  if (result.error && !(await isDeviceOffline())) {
+    throw result.error;
+  }
 };
 
 const revokeTrackingAccessInternal = async (): Promise<void> => {

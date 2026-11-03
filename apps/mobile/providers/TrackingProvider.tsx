@@ -4,6 +4,7 @@ import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { Alert, AppState } from "react-native";
 import { authClient } from "../lib/auth-client.ts";
+import { isDeviceOffline } from "../lib/networkStatus.ts";
 import { subscribeToTrackingSync } from "../lib/trackingEvents.ts";
 import { useLocationPermissions } from "./LocationPermissionProvider.tsx";
 
@@ -56,7 +57,11 @@ export const TrackingProvider = ({
           void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
         }
         if (reconcileResult.error || flushResult.error) {
-          if (appStateRef.current === "active" && !failureReportedRef.current) {
+          if (
+            appStateRef.current === "active" &&
+            !failureReportedRef.current &&
+            !(await isDeviceOffline())
+          ) {
             failureReportedRef.current = true;
             Alert.alert(
               "Location sharing needs attention",

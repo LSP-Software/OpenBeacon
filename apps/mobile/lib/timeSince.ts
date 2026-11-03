@@ -1,14 +1,4 @@
-const TIME_UNITS = [
-  { label: "year", seconds: 365 * 24 * 60 * 60 },
-  { label: "month", seconds: Math.floor(30.44 * 24 * 60 * 60) },
-  { label: "day", seconds: 24 * 60 * 60 },
-  { label: "hour", seconds: 60 * 60 },
-  { label: "minute", seconds: 60 },
-] as const;
-
-const pluralize = (value: number, unit: string): string => {
-  return `${value} ${unit}${value === 1 ? "" : "s"} ago`;
-};
+const pluralize = (value: number, unit: string) => `${value} ${unit}${value === 1 ? "" : "s"}`;
 
 const elapsedSecondsSince = (input: Date | string | number, now: number) => {
   const timestamp = new Date(input).getTime();
@@ -24,15 +14,21 @@ export const timeSince = (input: Date | string | number, now: number = Date.now(
   if (elapsedSeconds === null || elapsedSeconds <= 0) {
     return "just now";
   }
-
-  for (const unit of TIME_UNITS) {
-    const value = Math.floor(elapsedSeconds / unit.seconds);
-    if (value >= 1) {
-      return pluralize(value, unit.label);
-    }
+  if (elapsedSeconds < 60) {
+    return `${pluralize(elapsedSeconds, "second")} ago`;
   }
 
-  return pluralize(elapsedSeconds, "second");
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const days = Math.floor(minutes / 1_440);
+  const hours = Math.floor((minutes % 1_440) / 60);
+  const remainingMinutes = minutes % 60;
+  if (days > 0) {
+    return `${pluralize(days, "day")}, ${pluralize(hours, "hour")} and ${pluralize(remainingMinutes, "minute")} ago`;
+  }
+  if (hours > 0) {
+    return `${pluralize(hours, "hour")} and ${pluralize(remainingMinutes, "minute")} ago`;
+  }
+  return `${pluralize(minutes, "minute")} ago`;
 };
 
 export const getTimeSinceRefreshIntervalMs = (
@@ -40,15 +36,9 @@ export const getTimeSinceRefreshIntervalMs = (
   now: number = Date.now(),
 ): number => {
   const elapsedSeconds = elapsedSecondsSince(input, now);
-
-  if (elapsedSeconds === null || elapsedSeconds < 60) {
+  if (elapsedSeconds === null || elapsedSeconds < 0) {
     return 1_000;
   }
-  if (elapsedSeconds < 60 * 60) {
-    return 60_000;
-  }
-  if (elapsedSeconds < 24 * 60 * 60) {
-    return 3_600_000;
-  }
-  return 86_400_000;
+  const interval = elapsedSeconds < 60 ? 1_000 : 60_000;
+  return interval - ((now - new Date(input).getTime()) % interval);
 };

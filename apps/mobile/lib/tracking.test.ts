@@ -41,6 +41,8 @@ let pendingCiphertexts: Array<{
   lastError: string | null;
   status: "PENDING" | "IN_FLIGHT";
 }> = [];
+const recordedUploads: Array<{ deviceId: string; groupId: string; timestamp: string }> = [];
+let networkConnected = true;
 let captureRunning = false;
 let startCaptureCalls = 0;
 let stopCaptureCalls = 0;
@@ -50,10 +52,26 @@ let failRefreshCapture = false;
 let failRegistration = false;
 let registrationWait: Promise<void> | null = null;
 let onRegistration: (() => void) | null = null;
-let uploadGroup = async ({ points }: { groupId: string; points: unknown[] }) => ({
+let uploadGroup = async ({
+  points,
+}: {
+  groupId: string;
+  points: unknown[];
+}): Promise<{ accepted: string[]; duplicates: string[] }> => ({
   accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
   duplicates: [],
 });
+
+mock.module("./trackingUploadTime.ts", () => ({
+  recordTrackingUpload: (deviceId: string, groupId: string, timestamp: string) => {
+    recordedUploads.push({ deviceId, groupId, timestamp });
+  },
+}));
+
+mock.module("expo-network", () => ({
+  addNetworkStateListener: () => ({ remove: () => {} }),
+  getNetworkStateAsync: async () => ({ isConnected: networkConnected }),
+}));
 
 mock.module("react-native", () => createReactNativeTestModule({ platformOS: "android" }));
 
@@ -192,8 +210,10 @@ describe("tracking service", () => {
     deleted.length = 0;
     requeued.length = 0;
     uploadCalls.length = 0;
+    recordedUploads.length = 0;
     pendingCiphertexts = [];
     captureRunning = false;
+    networkConnected = true;
     startCaptureCalls = 0;
     stopCaptureCalls = 0;
     onStopCapture = null;
@@ -376,6 +396,55 @@ describe("tracking service", () => {
     expect(captureRunning).toBe(false);
     expect(provisionCalls).toHaveLength(0);
     expect(startCaptureCalls).toBe(0);
+  });
+
+  test("records the local send time for accepted points only", async () => {
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    const before = Date.now();
+    await flushPendingTrackingPoints();
+    expect(recordedUploads).toHaveLength(1);
+    expect(recordedUploads[0]?.deviceId).toBe("device-1");
+    expect(recordedUploads[0]?.groupId).toBe("group-1");
+    expect(Date.parse(recordedUploads[0]?.timestamp ?? "")).toBeGreaterThanOrEqual(before);
+
+    recordedUploads.length = 0;
+    uploadGroup = async () => ({ accepted: [], duplicates: ["point-1"] });
+    await flushPendingTrackingPoints();
+    expect(recordedUploads).toHaveLength(0);
+  });
+
+  test("background upload does not throw when the device is offline", async () => {
+    networkConnected = false;
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    uploadGroup = async () => {
+      throw new Error("Network request failed");
+    };
+
+    await expect(syncBackgroundTracking()).resolves.toBeUndefined();
+    expect(deleted).toEqual([]);
+    expect(recordedUploads).toEqual([]);
+  });
+
+  test("background upload silently waits for a queued retry", async () => {
+    pendingCiphertexts = [
+      {
+        ...createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+        attemptCount: 8,
+        lastAttemptAt: Date.now(),
+        lastError: "Network request failed",
+      },
+    ];
+    await expect(syncBackgroundTracking()).resolves.toBeUndefined();
+    expect(uploadCalls).toHaveLength(0);
+  });
+
+  test("background upload reports failures while connected", async () => {
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    uploadGroup = async () => {
+      throw new Error("Server unavailable");
+    };
+    await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+    expect(requeued).toHaveLength(1);
   });
 
   test("flushes each group independently and requeues transient failures", async () => {

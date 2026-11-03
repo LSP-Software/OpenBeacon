@@ -17,6 +17,9 @@ const DEVICE_PRIVATE_KEY_KEY = "encryption.device.privateKey";
 
 const getScopedDeviceKey = (key: string, userId: string) => `${key}.${userId}`;
 
+export const getStoredDeviceId = (userId: string) =>
+  storage.getString(getScopedDeviceKey(DEVICE_ID_KEY, userId));
+
 const getScopedDeviceKeyNames = (userId: string) => ({
   deviceIdKey: getScopedDeviceKey(DEVICE_ID_KEY, userId),
   privateKeyKey: getScopedDeviceKey(DEVICE_PRIVATE_KEY_KEY, userId),
