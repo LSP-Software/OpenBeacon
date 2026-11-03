@@ -150,6 +150,7 @@ export const NativeMap = ({
               initials={marker.initials}
               name={marker.name}
               ringColor={marker.ringColor}
+              ringColors={marker.ringColors}
               timestamp={marker.timestamp}
             />
             <View

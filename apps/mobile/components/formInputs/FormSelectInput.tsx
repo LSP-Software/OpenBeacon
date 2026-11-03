@@ -77,7 +77,7 @@ export const FormSelectInput = <
                 });
               }}
             >
-              <SelectTrigger className="h-12 w-full rounded-xl bg-white border border-border">
+              <SelectTrigger className="h-12 w-full rounded-xl bg-input border border-border">
                 <SelectValue placeholder={placeholder} />
               </SelectTrigger>
               <SelectContent>

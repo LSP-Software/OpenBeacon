@@ -1,7 +1,7 @@
 import { ClockIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { AppState, View } from "react-native";
-import Svg, { Defs, Path, RadialGradient, Stop } from "react-native-svg";
+import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Text } from "../ui/Text.tsx";
@@ -37,6 +37,7 @@ export const LiveMapMarkerPin = ({
   name,
   onBitmapContentChange,
   ringColor,
+  ringColors,
   timestamp,
 }: {
   headingDegrees?: number | null;
@@ -45,6 +46,7 @@ export const LiveMapMarkerPin = ({
   name: string;
   onBitmapContentChange?: () => void;
   ringColor: string;
+  ringColors?: string[] | undefined;
   timestamp: string | null;
 }) => {
   const [, setTick] = useState(0);
@@ -132,7 +134,7 @@ export const LiveMapMarkerPin = ({
             height: 44,
             borderRadius: 22,
             borderWidth: 3,
-            borderColor: ringColor,
+            borderColor: ringColors ? "transparent" : ringColor,
             overflow: "hidden",
             backgroundColor: "#FFFFFF",
             alignItems: "center",
@@ -153,6 +155,25 @@ export const LiveMapMarkerPin = ({
             </AvatarFallback>
           </Avatar>
         </View>
+        {ringColors ? (
+          <Svg width={44} height={44} style={{ position: "absolute" }} pointerEvents="none">
+            {ringColors.map((color, index) => (
+              <Circle
+                key={color}
+                cx={22}
+                cy={22}
+                r={20.5}
+                fill="none"
+                stroke={color}
+                strokeWidth={3}
+                strokeDasharray={`${(2 * Math.PI * 20.5) / ringColors.length} ${2 * Math.PI * 20.5}`}
+                strokeDashoffset={(-index * 2 * Math.PI * 20.5) / ringColors.length}
+                rotation={-90}
+                origin="22, 22"
+              />
+            ))}
+          </Svg>
+        ) : null}
         {isStale ? (
           <View
             accessibilityLabel="Location is over 10 minutes old"

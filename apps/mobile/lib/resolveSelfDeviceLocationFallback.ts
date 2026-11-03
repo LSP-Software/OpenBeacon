@@ -42,11 +42,14 @@ export const resolveSelfDeviceLocationFallback = ({
     return null;
   }
 
+  const ringColors = [...new Set(memberships.map((group) => getGroupColor(group.id)))];
+
   return {
     image: selfMember.image,
     name: selfMember.name,
     otherSharedGroupNames: memberships.slice(1).map((group) => group.name),
     ringColor: getGroupColor(primaryGroup.id),
+    ...(ringColors.length > 1 ? { ringColors } : {}),
     sourceGroupId: primaryGroup.id,
   };
 };

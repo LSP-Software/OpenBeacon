@@ -46,7 +46,7 @@ export const LiveMapPointAnnotation = ({
   useEffect(() => {
     // Android PointAnnotation bitmaps need an explicit refresh when chrome or heading changes
     annotationRef.current?.refresh();
-  }, [headingDegrees, marker.image, marker.initials, marker.ringColor]);
+  }, [headingDegrees, marker.image, marker.initials, marker.ringColor, marker.ringColors]);
 
   if (Platform.OS === "android") {
     return (
@@ -63,6 +63,7 @@ export const LiveMapPointAnnotation = ({
             initials={marker.initials}
             name={marker.name}
             ringColor={marker.ringColor}
+            ringColors={marker.ringColors}
             timestamp={marker.timestamp}
           />
         </Pressable>
@@ -85,6 +86,7 @@ export const LiveMapPointAnnotation = ({
         initials={marker.initials}
         name={marker.name}
         ringColor={marker.ringColor}
+        ringColors={marker.ringColors}
         timestamp={marker.timestamp}
         onBitmapContentChange={() => {
           annotationRef.current?.refresh();

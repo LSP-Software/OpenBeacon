@@ -112,6 +112,39 @@ describe("buildLiveMapMarkers", () => {
     expect(markers[0]?.sourceGroupId).toBe("hiking");
   });
 
+  test("uses each distinct shared group color once", () => {
+    const colors = ["red", "red", "red", "red", "red", "red", "red", "blue"];
+    const groups = colors.map((_, index) => ({
+      id: String(index),
+      name: String(index),
+      members: [{ image: null, name: "Alice", userId: "alice" }],
+    }));
+    const markers = buildLiveMapMarkers({
+      getGroupColor: (id) => colors[Number(id)]!,
+      groups,
+      positions: [position({ sourceGroupId: "0", userId: "alice" })],
+      selfUserId: "other",
+    });
+    expect(markers[0]?.ringColors).toEqual(["red", "blue"]);
+  });
+
+  test("uses the current shared group color when the location came from a former group", () => {
+    const markers = buildLiveMapMarkers({
+      getGroupColor: (id) => (id === "current" ? "blue" : "red"),
+      groups: [
+        {
+          id: "current",
+          name: "Current",
+          members: [{ image: null, name: "Alice", userId: "alice" }],
+        },
+      ],
+      positions: [position({ sourceGroupId: "former", userId: "alice" })],
+      selfUserId: "other",
+    });
+    expect(markers[0]?.ringColor).toBe("blue");
+    expect(markers[0]?.ringColors).toBeUndefined();
+  });
+
   test("returns no markers when there are no positions", () => {
     expect(
       buildLiveMapMarkers({

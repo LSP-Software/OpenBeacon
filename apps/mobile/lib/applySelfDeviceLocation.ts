@@ -15,6 +15,7 @@ export const applySelfDeviceLocation = ({
     name: string;
     otherSharedGroupNames: string[];
     ringColor: string;
+    ringColors?: string[];
     sourceGroupId: string;
   } | null;
   selfUserId: string;
@@ -41,6 +42,7 @@ export const applySelfDeviceLocation = ({
       name: selfFallback.name,
       otherSharedGroupNames: [...selfFallback.otherSharedGroupNames],
       ringColor: selfFallback.ringColor,
+      ...(selfFallback.ringColors ? { ringColors: selfFallback.ringColors } : {}),
       sourceGroupId: selfFallback.sourceGroupId,
       timestamp: lastSentAt,
       userId: selfUserId,
