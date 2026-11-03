@@ -97,15 +97,15 @@ const Join = () => {
               onChangeText={setCode}
               autoCapitalize="characters"
               autoCorrect={false}
-              className="rounded-lg border border-border bg-input text-foreground p-4"
+              className="rounded-lg border border-border bg-input text-foreground placeholder:text-secondary dark:placeholder:text-muted-foreground p-4"
               placeholder="Enter join code"
             />
             <Button onPress={join} loading={submission.isPending}>
               <Text>Join group</Text>
             </Button>
             <Link href="/(tabs)/groups/list" asChild>
-              <Button variant="ghost">
-                <Text>Cancel</Text>
+              <Button variant="secondary">
+                <Text className="dark:text-white">Cancel</Text>
               </Button>
             </Link>
           </>

@@ -32,7 +32,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
             onChangeText={setName}
             placeholder={group?.name}
             maxLength={100}
-            className="rounded-lg border border-border bg-input text-foreground p-4"
+            className="rounded-lg border border-border bg-input text-foreground placeholder:text-secondary dark:placeholder:text-muted-foreground p-4"
           />
           <Button
             disabled={!name.trim() || rename.isPending}

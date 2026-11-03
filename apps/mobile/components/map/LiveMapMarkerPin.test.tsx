@@ -8,6 +8,12 @@ import { createRoot, type Root } from "test-renderer";
 let root: Root | null = null;
 let now = Date.parse("2026-07-19T12:00:00.000Z");
 let appStateListener: ((state: string) => void) | null = null;
+let circles: Array<{
+  stroke: string;
+  strokeDasharray: string;
+  strokeDashoffset: number;
+  rotation: number;
+}> = [];
 let timers: Array<{ callback: () => void; delay: number }> = [];
 const originalNow = Date.now;
 const originalSetTimeout = globalThis.setTimeout;
@@ -33,7 +39,16 @@ mock.module("react-native", () => ({
   }) => React.createElement("view", { accessibilityLabel }, children),
 }));
 mock.module("react-native-svg", () => ({
-  default: () => null,
+  default: ({ children }: { children: React.ReactNode }) => children,
+  Circle: (props: {
+    stroke: string;
+    strokeDasharray: string;
+    strokeDashoffset: number;
+    rotation: number;
+  }) => {
+    circles.push(props);
+    return null;
+  },
   Defs: () => null,
   Path: () => null,
   RadialGradient: () => null,
@@ -72,9 +87,43 @@ afterEach(async () => {
   globalThis.setTimeout = originalSetTimeout;
   globalThis.clearTimeout = originalClearTimeout;
   timers = [];
+  circles = [];
 });
 
 describe("LiveMapMarkerPin", () => {
+  test("renders equal segments for two through nine distinct colors", async () => {
+    root = createRoot();
+    for (let count = 2; count <= 9; count++) {
+      circles = [];
+      const colors = Array.from({ length: count }, (_, index) => `color-${index}`);
+      await act(async () => {
+        root?.render(
+          <LiveMapMarkerPin
+            image={null}
+            initials="AB"
+            name="Alice"
+            ringColor={colors[0]!}
+            ringColors={colors}
+            timestamp={null}
+          />,
+        );
+      });
+      expect(circles).toHaveLength(count);
+      for (let index = 0; index < count; index++) {
+        const circle = circles[index]!;
+        const [segment, gap] = circle.strokeDasharray.split(" ").map(Number);
+        expect(circle.stroke).toBe(colors[index]!);
+        expect(segment).toBeCloseTo((2 * Math.PI * 20.5) / count);
+        expect(gap).toBeCloseTo(2 * Math.PI * 20.5);
+        expect(circle.strokeDashoffset).toBeCloseTo((-index * 2 * Math.PI * 20.5) / count);
+        expect(circle.rotation).toBe(-90);
+      }
+    }
+    circles = [];
+    await renderPin(null);
+    expect(circles).toHaveLength(0);
+  });
+
   test("shows a clock after the threshold and clears it when a new point arrives", async () => {
     now = Date.parse("2026-07-19T12:00:00.000Z");
     Date.now = () => now;

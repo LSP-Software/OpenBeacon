@@ -13,6 +13,7 @@ export type LiveMapMarker = {
   name: string;
   otherSharedGroupNames: string[];
   ringColor: string;
+  ringColors?: string[];
   sourceGroupId: string;
   timestamp: string | null;
   userId: string;
@@ -53,6 +54,14 @@ export const buildLiveMapMarkers = ({
       continue;
     }
 
+    const ringColors = [
+      ...new Set(
+        groups
+          .filter((group) => group.members.some((member) => member.userId === livePosition.userId))
+          .map((group) => getGroupColor(group.id)),
+      ),
+    ];
+
     markers.push({
       battery: livePosition.battery,
       image: member.image,
@@ -66,7 +75,9 @@ export const buildLiveMapMarkers = ({
         sourceGroupId: livePosition.sourceGroupId,
         userId: livePosition.userId,
       }),
-      ringColor: getGroupColor(livePosition.sourceGroupId),
+      ringColor:
+        ringColors.length === 1 ? ringColors[0]! : getGroupColor(livePosition.sourceGroupId),
+      ...(ringColors.length > 1 ? { ringColors } : {}),
       sourceGroupId: livePosition.sourceGroupId,
       timestamp: livePosition.timestamp,
       userId: livePosition.userId,

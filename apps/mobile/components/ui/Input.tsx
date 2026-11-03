@@ -79,7 +79,7 @@ function Input<TFieldValues extends FieldValues, TName extends FieldPath<TFieldV
                   `rounded-lg border border-border bg-input text-foreground ${inputFocused && "border-primary"} py-4 px-4`,
                   isPasswordInput && "pr-12",
                   props.editable === false && "opacity-50",
-                  "placeholder:text-secondary",
+                  "placeholder:text-secondary dark:placeholder:text-muted-foreground",
                   className,
                 )}
                 {...props}

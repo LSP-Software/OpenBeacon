@@ -56,6 +56,16 @@ describe("groupColor", () => {
     expect(getGroupColor("group-1")).toBe("#FF1464");
   });
 
+  test("allows every palette color across groups", async () => {
+    const { GROUP_COLOR_PALETTE, getGroupColor, setGroupColor } = await importGroupColorModule();
+    for (const [index, color] of GROUP_COLOR_PALETTE.entries()) {
+      setGroupColor(`group-${index}`, color);
+    }
+    expect(GROUP_COLOR_PALETTE.map((_, index) => getGroupColor(`group-${index}`))).toEqual([
+      ...GROUP_COLOR_PALETTE,
+    ]);
+  });
+
   test("notifies subscribers when a group color is stored", async () => {
     const { GROUP_COLOR_PALETTE, setGroupColor, subscribeToGroupColorChanges } =
       await importGroupColorModule();

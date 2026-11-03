@@ -59,7 +59,7 @@ const ContactUsScreen = () => {
           onChangeText={setMessage}
           placeholder="How can we help?"
           textAlignVertical="top"
-          className="min-h-40 rounded-lg border border-border bg-input p-4 text-foreground"
+          className="min-h-40 rounded-lg border border-border bg-input p-4 text-foreground placeholder:text-secondary dark:placeholder:text-muted-foreground"
         />
         <Pressable
           accessibilityRole="checkbox"

@@ -13,7 +13,9 @@ import { Button } from "../../../components/ui/Button.tsx";
 import { Card, CardDescription, CardHeader, CardTitle } from "../../../components/ui/Card.tsx";
 import { Icon } from "../../../components/ui/Icon.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
+import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
 import { type RouterOutputs, trpc } from "../../../lib/api.ts";
+import { getGroupColor } from "../../../lib/groupColor.ts";
 import { buildAcceptInviteInput } from "../../../lib/groupEncryption.ts";
 import { requestTrackingSync } from "../../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../../lib/useSingleFlight.ts";
@@ -220,6 +222,8 @@ interface GroupListProps {
 }
 
 export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProps) => {
+  useGroupColorRevision();
+
   return (
     <View>
       {!groupList?.length ? (
@@ -272,14 +276,19 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
                 <Card className="w-full">
                   <CardHeader className="flex-row items-center justify-between">
                     <View className="flex-row items-center gap-3">
-                      <Avatar alt={`${group.name}'s image`} className="size-12">
-                        <AvatarImage source={{ uri: group.image ?? "" }} />
-                        <AvatarFallback>
-                          <Text className="font-bold">
-                            {(group.name.charAt(0) + group.name.charAt(1)).toUpperCase()}
-                          </Text>
-                        </AvatarFallback>
-                      </Avatar>
+                      <View
+                        className="rounded-full p-0.5"
+                        style={{ borderWidth: 3, borderColor: getGroupColor(group.id) }}
+                      >
+                        <Avatar alt={`${group.name}'s image`} className="size-12">
+                          <AvatarImage source={{ uri: group.image ?? "" }} />
+                          <AvatarFallback>
+                            <Text className="font-bold">
+                              {(group.name.charAt(0) + group.name.charAt(1)).toUpperCase()}
+                            </Text>
+                          </AvatarFallback>
+                        </Avatar>
+                      </View>
                       <View className="gap-1">
                         <CardTitle>{group.name}</CardTitle>
                         <CardDescription>{group.members.length} members</CardDescription>

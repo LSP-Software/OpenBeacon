@@ -69,6 +69,7 @@ describe("resolveSelfDeviceLocationFallback", () => {
       name: "Alice",
       otherSharedGroupNames: ["Family"],
       ringColor: "#E85D4C",
+      ringColors: ["#E85D4C", "#2A9D8F"],
       sourceGroupId: "cousins",
     });
   });
