@@ -32,6 +32,8 @@ const MapScreen = () => {
   const selfDeviceLocation = useSelfDeviceLocation(selfUserId.length > 0);
   const lastSentAt = useTrackingUploadTime(selfUserId, groups?.map((group) => group.id) ?? []);
   const groupColorRevision = useGroupColorRevision();
+  const groupsMissingKeys =
+    groups?.filter((_, index) => keyAccess[index]?.data === "missing") ?? [];
 
   const selfFallback = useMemo(() => {
     void groupColorRevision;
@@ -94,26 +96,35 @@ const MapScreen = () => {
       <ScrollView
         pointerEvents="box-none"
         className="absolute left-4 right-4"
-        style={{ top: insets.top + 8, maxHeight: "40%" }}
+        style={{ top: insets.top + 8, maxHeight: "65%" }}
       >
-        {groups?.map((group, index) =>
-          keyAccess[index]?.data === "missing" ? (
+        {groupsMissingKeys.length <= 2 &&
+          groupsMissingKeys.map((group) => (
             <View
               key={group.id}
-              className="mb-2 gap-2 rounded-xl border border-destructive bg-card p-4"
+              className="mb-2 gap-2 rounded-xl border border-red-700 dark:border-red-400 bg-card p-4"
             >
-              <Text className="font-semibold text-destructive">
+              <Text className="font-semibold text-red-700 dark:text-red-400">
                 Can’t show locations for {group.name}
               </Text>
               <Text>
-                This device can’t access the group’s encryption key. Location sharing and updates
-                may be unavailable. Open the group for recovery options.
+                This device can’t access the group’s encryption key. Open the group for recovery
+                options.
               </Text>
               <Link href={{ pathname: "/(tabs)/groups/[groupId]", params: { groupId: group.id } }}>
-                <Text className="font-semibold text-primary">Open group</Text>
+                <Text className="font-semibold text-red-500 dark:text-red-300">Open group</Text>
               </Link>
             </View>
-          ) : null,
+          ))}
+        {groupsMissingKeys.length > 2 && (
+          <View className="mb-2 gap-2 rounded-xl border border-red-700 dark:border-red-400 bg-card p-4">
+            <Text className="font-semibold text-red-700 dark:text-red-400">
+              Multiple groups require attention
+            </Text>
+            <Link href="/(tabs)/groups">
+              <Text className="font-semibold text-red-500 dark:text-red-300">Open groups</Text>
+            </Link>
+          </View>
         )}
       </ScrollView>
     </View>

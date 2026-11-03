@@ -50,6 +50,7 @@ let onStopCapture: (() => void) | null = null;
 let refreshCaptureCalls = 0;
 let failRefreshCapture = false;
 let failRegistration = false;
+let brokenGroupKey = false;
 let registrationWait: Promise<void> | null = null;
 let onRegistration: (() => void) | null = null;
 let uploadGroup = async ({
@@ -113,7 +114,10 @@ mock.module("./api.ts", () => ({
               algorithm: DEVICE_KEY_ALGORITHM,
               createdAt: new Date(0),
               deviceId: "device-1",
-              publicKey: deviceKeyPair.publicKey,
+              publicKey:
+                brokenGroupKey && groupId === "group-1"
+                  ? createDeviceKeyPair().publicKey
+                  : deviceKeyPair.publicKey,
               revokedAt: null,
               userId: "user-1",
             },
@@ -220,6 +224,7 @@ describe("tracking service", () => {
     refreshCaptureCalls = 0;
     failRefreshCapture = false;
     failRegistration = false;
+    brokenGroupKey = false;
     registrationWait = null;
     onRegistration = null;
     uploadGroup = async ({ points }) => ({
@@ -253,7 +258,26 @@ describe("tracking service", () => {
     expect(startCaptureCalls).toBe(1);
   });
 
+  test("continues sharing with accessible groups when another group key cannot be decrypted", async () => {
+    brokenGroupKey = true;
+
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(provisionCalls).toHaveLength(1);
+    expect(provisionCalls[0]).toEqual([
+      {
+        groupId: "group-2",
+        epochId: "epoch-2",
+        epochKeyBase64: encodeBase64(epochKey2.expose()),
+        senderDeviceId: "device-1",
+        kind: "trackingPoint",
+      },
+    ]);
+    expect(startCaptureCalls).toBe(1);
+  });
+
   test("does not expose or replace keys when native metadata is already current", async () => {
+    brokenGroupKey = true;
     provisionedKeys.push(
       {
         groupId: "group-1",

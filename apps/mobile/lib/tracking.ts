@@ -123,7 +123,7 @@ const reconcileTrackingKeysInternal = async ({
       }),
     )
   ).filter((epoch) => epoch !== null);
-  const desiredKeyMetadata = wrappedEpochs.map(({ epochId, groupId }) => ({
+  const wrappedKeyMetadata = wrappedEpochs.map(({ epochId, groupId }) => ({
     epochId,
     groupId,
     kind: TRACKING_POINT_KIND,
@@ -133,28 +133,39 @@ const reconcileTrackingKeysInternal = async ({
   if (!isCurrent() || (onlyIfRunning && !trackingModule.isCaptureRunning())) return;
 
   const currentKeys = trackingModule.listProvisionedEpochKeys();
-  if (
-    !haveMatchingProvisionedKeys({
-      current: currentKeys,
-      desired: desiredKeyMetadata,
-    })
-  ) {
-    const keys = wrappedEpochs.map(({ epochId, groupId, wrappedEpochKey }) => {
-      const epochKey = unwrapEpochKey({
-        recipientDeviceId: deviceKeyContext.deviceId,
-        recipientPrivateKey: deviceKeyContext.privateKey,
-        wrappedEpochKey,
-      });
+  let desiredKeyMetadata = wrappedKeyMetadata;
+  if (!haveMatchingProvisionedKeys({ current: currentKeys, desired: wrappedKeyMetadata })) {
+    const keys = (
+      await Promise.all(
+        wrappedEpochs.map(async ({ epochId, groupId, wrappedEpochKey }) => {
+          const result = await tryCatch(
+            Promise.resolve().then(() =>
+              unwrapEpochKey({
+                recipientDeviceId: deviceKeyContext.deviceId,
+                recipientPrivateKey: deviceKeyContext.privateKey,
+                wrappedEpochKey,
+              }),
+            ),
+          );
+          if (result.error) return null;
 
-      return {
-        epochId,
-        epochKeyBase64: encodeBase64(epochKey.expose()),
-        groupId,
-        kind: TRACKING_POINT_KIND,
-        senderDeviceId: deviceKeyContext.deviceId,
-      };
-    });
-
+          return {
+            epochId,
+            epochKeyBase64: encodeBase64(result.data.expose()),
+            groupId,
+            kind: TRACKING_POINT_KIND,
+            senderDeviceId: deviceKeyContext.deviceId,
+          };
+        }),
+      )
+    ).filter((key) => key !== null);
+    desiredKeyMetadata = keys.map(({ epochId, groupId, kind, senderDeviceId }) => ({
+      epochId,
+      groupId,
+      kind,
+      senderDeviceId,
+    }));
+    if (!isCurrent() || (onlyIfRunning && !trackingModule.isCaptureRunning())) return;
     trackingModule.revokeEpochKeys();
     trackingModule.provisionEpochKeys(keys);
     if (
