@@ -4,7 +4,6 @@ import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { Alert, AppState } from "react-native";
 import { authClient } from "../lib/auth-client.ts";
-import { isDeviceOffline } from "../lib/networkStatus.ts";
 import { subscribeToTrackingSync } from "../lib/trackingEvents.ts";
 import { useLocationPermissions } from "./LocationPermissionProvider.tsx";
 
@@ -28,14 +27,30 @@ export const TrackingProvider = ({
   const { permissionState } = useLocationPermissions();
   const activeCycleRef = useRef<Promise<void> | null>(null);
   const appStateRef = useRef(AppState.currentState);
-  const failureReportedRef = useRef(false);
   const completedCycleRef = useRef(0);
+  const permissionAlertShownRef = useRef(false);
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
   const requestedCycleRef = useRef(0);
   const startCaptureRef = useRef(permissionState?.isReadyForSharing ?? false);
   const userId = session?.user.id ?? null;
   const startCapture = permissionState?.isReadyForSharing ?? false;
   startCaptureRef.current = startCapture;
+
+  useEffect(() => {
+    if (!userId || !permissionState) {
+      permissionAlertShownRef.current = false;
+      return;
+    }
+    if (permissionState.isReadyForSharing) {
+      permissionAlertShownRef.current = false;
+    } else if (!permissionAlertShownRef.current) {
+      permissionAlertShownRef.current = true;
+      Alert.alert(
+        "Location sharing needs attention",
+        "Allow precise and background location access in your device settings to share your location.",
+      );
+    }
+  }, [permissionState, userId]);
 
   const runTrackingCycle = useCallback(() => {
     requestedCycleRef.current += 1;
@@ -47,29 +62,14 @@ export const TrackingProvider = ({
     activeCycleRef.current = (async () => {
       while (completedCycleRef.current < requestedCycleRef.current) {
         const cycle = requestedCycleRef.current;
-        const reconcileResult = await tryCatch(
+        await tryCatch(
           service.reconcileTrackingKeys({
             startCapture: startCaptureRef.current,
           }),
         );
-        const flushResult = await tryCatch(service.flushPendingTrackingPoints());
+        await tryCatch(service.flushPendingTrackingPoints());
         if (appStateRef.current === "active") {
           void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
-        }
-        if (reconcileResult.error || flushResult.error) {
-          if (
-            appStateRef.current === "active" &&
-            !failureReportedRef.current &&
-            !(await isDeviceOffline())
-          ) {
-            failureReportedRef.current = true;
-            Alert.alert(
-              "Location sharing needs attention",
-              "OpenBeacon could not update location sharing. Check your connection and location permissions. It will retry automatically.",
-            );
-          }
-        } else {
-          failureReportedRef.current = false;
         }
         completedCycleRef.current = cycle;
       }

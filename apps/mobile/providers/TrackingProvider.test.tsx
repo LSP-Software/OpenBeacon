@@ -23,7 +23,7 @@ let flushCalls = 0;
 let revokeCalls = 0;
 let isReadyForSharing = true;
 let failFlush = false;
-let offline = false;
+let failReconcile = false;
 let alerts = 0;
 let root: Root | null = null;
 const invalidateQueries = mock(async (_input: { queryKey: string[] }) => {});
@@ -32,6 +32,7 @@ const trackingService = {
   reconcileTrackingKeys: async (input: { startCapture: boolean }) => {
     reconcileCalls.push(input);
     await reconcileGate;
+    if (failReconcile) throw new Error("group key error");
   },
   flushPendingTrackingPoints: async () => {
     flushCalls += 1;
@@ -65,8 +66,6 @@ mock.module("react-native", () => ({
     },
   },
 }));
-
-mock.module("../lib/networkStatus.ts", () => ({ isDeviceOffline: async () => offline }));
 
 mock.module("../lib/auth-client.ts", () => ({
   authClient: {
@@ -122,7 +121,7 @@ describe("TrackingProvider", () => {
     revokeCalls = 0;
     isReadyForSharing = true;
     failFlush = false;
-    offline = false;
+    failReconcile = false;
     alerts = 0;
     root = null;
     invalidateQueries.mockClear();
@@ -168,30 +167,13 @@ describe("TrackingProvider", () => {
     expect(flushCalls).toBe(2);
   });
 
-  test("suppresses sync alerts offline and reports a failure after reconnecting", async () => {
-    offline = true;
+  test("does not show a permission alert for tracking sync failures", async () => {
+    failReconcile = true;
     failFlush = true;
     await renderProvider();
-    expect(alerts).toBe(0);
-    offline = false;
-    requestTrackingSync();
-    await flushEffects();
-    expect(alerts).toBe(1);
-  });
 
-  test("reports a failed sync once and reports again after recovery", async () => {
-    failFlush = true;
-    await renderProvider();
-    requestTrackingSync();
-    await flushEffects();
-    expect(alerts).toBe(1);
-    failFlush = false;
-    requestTrackingSync();
-    await flushEffects();
-    failFlush = true;
-    requestTrackingSync();
-    await flushEffects();
-    expect(alerts).toBe(2);
+    expect(alerts).toBe(0);
+    expect(flushCalls).toBe(1);
   });
 
   test("reruns when a group change arrives during an active cycle", async () => {
@@ -222,6 +204,21 @@ describe("TrackingProvider", () => {
     await renderProvider();
 
     expect(reconcileCalls).toEqual([{ startCapture: false }]);
+  });
+
+  test("alerts only once while location permissions are missing and again after recovery", async () => {
+    isReadyForSharing = false;
+    await renderProvider();
+    expect(alerts).toBe(1);
+
+    for (const ready of [false, true, false]) {
+      isReadyForSharing = ready;
+      await act(async () => {
+        root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+        await Promise.resolve();
+      });
+    }
+    expect(alerts).toBe(2);
   });
 
   test("reconciles when location sharing permission changes", async () => {
