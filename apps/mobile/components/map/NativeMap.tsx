@@ -150,6 +150,7 @@ export const NativeMap = ({
               initials={marker.initials}
               name={marker.name}
               ringColor={marker.ringColor}
+              timestamp={marker.timestamp}
             />
             <View
               pointerEvents="none"
@@ -217,6 +218,7 @@ export const NativeMap = ({
           battery={selectedMarker.battery}
           image={selectedMarker.image}
           initials={selectedMarker.initials}
+          isSelf={selectedMarker.isSelf}
           name={selectedMarker.name}
           otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
           timestamp={selectedMarker.timestamp}

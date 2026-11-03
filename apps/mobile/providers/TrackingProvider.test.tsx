@@ -23,6 +23,7 @@ let flushCalls = 0;
 let revokeCalls = 0;
 let isReadyForSharing = true;
 let failFlush = false;
+let offline = false;
 let alerts = 0;
 let root: Root | null = null;
 const invalidateQueries = mock(async (_input: { queryKey: string[] }) => {});
@@ -64,6 +65,8 @@ mock.module("react-native", () => ({
     },
   },
 }));
+
+mock.module("../lib/networkStatus.ts", () => ({ isDeviceOffline: async () => offline }));
 
 mock.module("../lib/auth-client.ts", () => ({
   authClient: {
@@ -119,6 +122,7 @@ describe("TrackingProvider", () => {
     revokeCalls = 0;
     isReadyForSharing = true;
     failFlush = false;
+    offline = false;
     alerts = 0;
     root = null;
     invalidateQueries.mockClear();
@@ -162,6 +166,17 @@ describe("TrackingProvider", () => {
 
     expect(reconcileCalls).toEqual([{ startCapture: true }, { startCapture: true }]);
     expect(flushCalls).toBe(2);
+  });
+
+  test("suppresses sync alerts offline and reports a failure after reconnecting", async () => {
+    offline = true;
+    failFlush = true;
+    await renderProvider();
+    expect(alerts).toBe(0);
+    offline = false;
+    requestTrackingSync();
+    await flushEffects();
+    expect(alerts).toBe(1);
   });
 
   test("reports a failed sync once and reports again after recovery", async () => {

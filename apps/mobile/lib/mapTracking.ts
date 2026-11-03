@@ -62,6 +62,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   let scheduled: { cancel: () => void } | null = null;
   let tickPromise: Promise<void> | null = null;
   let tickPhase: "idle" | "listing" | "groups" = "idle";
+  let membershipBackoffMs = STEADY_INTERVAL_MS;
   const groupStates = new Map<
     string,
     {
@@ -377,10 +378,15 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
 
     if (!groups) {
       tickPhase = "idle";
-      scheduleWake();
+      clearSchedule();
+      scheduled = deps.schedule(() => {
+        void tick({ force: false });
+      }, membershipBackoffMs);
+      membershipBackoffMs = Math.min(membershipBackoffMs * 2, MAX_BACKOFF_MS);
       return;
     }
 
+    membershipBackoffMs = STEADY_INTERVAL_MS;
     tickPhase = "groups";
     const now = deps.now();
 

@@ -9,6 +9,7 @@ import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
 import { useGroupKeyAccess } from "../../../hooks/useGroupKeyAccess.ts";
 import { useMapLivePositions } from "../../../hooks/useMapLivePositions.ts";
 import { useMembershipSnapshot } from "../../../hooks/useMembershipSnapshot.ts";
+import { useTrackingUploadTime } from "../../../hooks/useTrackingUploadTime.ts";
 import { useSelfDeviceLocation } from "../../../hooks/useSelfDeviceLocation.ts";
 import { trpc } from "../../../lib/api.ts";
 import { applySelfDeviceLocation } from "../../../lib/applySelfDeviceLocation.ts";
@@ -29,6 +30,7 @@ const MapScreen = () => {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selfUserId = session?.user.id ?? "";
   const selfDeviceLocation = useSelfDeviceLocation(selfUserId.length > 0);
+  const lastSentAt = useTrackingUploadTime(selfUserId, groups?.map((group) => group.id) ?? []);
   const groupColorRevision = useGroupColorRevision();
 
   const selfFallback = useMemo(() => {
@@ -59,8 +61,17 @@ const MapScreen = () => {
       selfDeviceLocation,
       selfFallback,
       selfUserId,
+      lastSentAt,
     });
-  }, [groupColorRevision, groups, livePositions, selfDeviceLocation, selfFallback, selfUserId]);
+  }, [
+    groupColorRevision,
+    groups,
+    livePositions,
+    selfDeviceLocation,
+    selfFallback,
+    selfUserId,
+    lastSentAt,
+  ]);
 
   useEffect(() => {
     if (selectedUserId && !markers.some((marker) => marker.userId === selectedUserId)) {

@@ -14,6 +14,7 @@ export const LiveMapPersonSheet = ({
   battery,
   image,
   initials,
+  isSelf = false,
   name,
   onDismiss,
   onHeightChange,
@@ -23,11 +24,12 @@ export const LiveMapPersonSheet = ({
   battery: { charging: boolean; level: number } | null;
   image: string | null;
   initials: string;
+  isSelf?: boolean;
   name: string;
   onDismiss: () => void;
   onHeightChange?: (height: number) => void;
   otherSharedGroupNames: readonly string[];
-  timestamp: string;
+  timestamp: string | null;
 }) => {
   const translateY = useRef(new Animated.Value(HIDDEN_OFFSET)).current;
   const dragOriginY = useRef(0);
@@ -120,7 +122,11 @@ export const LiveMapPersonSheet = ({
           </Avatar>
           <View className="min-w-0 flex-1 gap-1">
             <Text className="text-foreground text-xl font-bold">{name}</Text>
-            <Text className="text-muted text-sm">Updated {updatedAge}</Text>
+            <Text className="text-muted text-sm">
+              {updatedAge === null
+                ? "No location sent yet"
+                : `${isSelf ? "Location sent" : "Updated"} ${updatedAge}`}
+            </Text>
           </View>
         </View>
         {battery && batteryVisual ? (

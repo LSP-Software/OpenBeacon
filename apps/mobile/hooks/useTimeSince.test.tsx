@@ -8,7 +8,7 @@ import { useTimeSince } from "./useTimeSince.ts";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 let root: Root | null = null;
-let latestLabel = "";
+let latestLabel: string | null = "";
 let scheduledCallbacks: Array<{ callback: () => void; delay: number }> = [];
 let originalClearTimeout: typeof clearTimeout;
 let originalSetTimeout: typeof setTimeout;

@@ -1,7 +1,11 @@
-import { View } from "react-native";
+import { ClockIcon } from "lucide-react-native";
+import { useEffect, useState } from "react";
+import { AppState, View } from "react-native";
 import Svg, { Defs, Path, RadialGradient, Stop } from "react-native-svg";
+import { locationStaleAt } from "../../lib/locationStaleAt.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Text } from "../ui/Text.tsx";
+import { Icon } from "../ui/Icon.tsx";
 
 const PIN_SIZE = 48;
 const PIN_RADIUS = PIN_SIZE / 2;
@@ -33,6 +37,7 @@ export const LiveMapMarkerPin = ({
   name,
   onBitmapContentChange,
   ringColor,
+  timestamp,
 }: {
   headingDegrees?: number | null;
   image: string | null;
@@ -40,7 +45,30 @@ export const LiveMapMarkerPin = ({
   name: string;
   onBitmapContentChange?: () => void;
   ringColor: string;
+  timestamp: string | null;
 }) => {
+  const [, setTick] = useState(0);
+  const staleAt = timestamp === null ? Number.NaN : locationStaleAt(timestamp);
+  const isStale = Date.now() >= staleAt;
+
+  useEffect(() => {
+    const delay = staleAt - Date.now();
+    const timer =
+      delay > 0 && Number.isFinite(delay)
+        ? setTimeout(() => setTick((tick) => tick + 1), delay)
+        : null;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") setTick((tick) => tick + 1);
+    });
+    return () => {
+      if (timer !== null) clearTimeout(timer);
+      subscription.remove();
+    };
+  }, [staleAt]);
+
+  useEffect(() => {
+    onBitmapContentChange?.();
+  }, [isStale, onBitmapContentChange]);
   const showHeading = headingDegrees !== null;
   const size = showHeading ? OUTER_SIZE : PIN_SIZE;
 
@@ -125,6 +153,14 @@ export const LiveMapMarkerPin = ({
             </AvatarFallback>
           </Avatar>
         </View>
+        {isStale ? (
+          <View
+            accessibilityLabel="Location is over 10 minutes old"
+            className="absolute bottom-0 left-0 size-5 items-center justify-center rounded-full border border-border bg-card"
+          >
+            <Icon as={ClockIcon} size={13} className="text-foreground" />
+          </View>
+        ) : null}
       </View>
     </View>
   );

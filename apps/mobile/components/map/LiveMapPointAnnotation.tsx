@@ -63,6 +63,7 @@ export const LiveMapPointAnnotation = ({
             initials={marker.initials}
             name={marker.name}
             ringColor={marker.ringColor}
+            timestamp={marker.timestamp}
           />
         </Pressable>
       </MarkerView>
@@ -84,6 +85,7 @@ export const LiveMapPointAnnotation = ({
         initials={marker.initials}
         name={marker.name}
         ringColor={marker.ringColor}
+        timestamp={marker.timestamp}
         onBitmapContentChange={() => {
           annotationRef.current?.refresh();
         }}

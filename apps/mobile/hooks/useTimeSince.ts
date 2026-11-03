@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { getTimeSinceRefreshIntervalMs, timeSince } from "../lib/timeSince.ts";
 
-export const useTimeSince = (timestamp: string) => {
+export const useTimeSince = (timestamp: string | null) => {
   const [, setTick] = useState(0);
-  const label = timeSince(timestamp);
+  const label = timestamp === null ? null : timeSince(timestamp);
 
   useEffect(() => {
+    if (timestamp === null) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 

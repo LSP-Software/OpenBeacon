@@ -3,6 +3,7 @@ import "../global.css";
 import { PortalHost } from "@rn-primitives/portal";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
+import { OfflineBanner } from "../components/OfflineBanner.tsx";
 import { queryClient } from "../lib/api.ts";
 import { LocationPermissionProvider } from "../providers/LocationPermissionProvider.tsx";
 import { ThemeProvider } from "../providers/ThemeProvider.tsx";
@@ -20,6 +21,7 @@ const RootLayout = () => {
                   headerShown: false,
                 }}
               />
+              <OfflineBanner />
             </View>
           </TrackingProvider>
         </LocationPermissionProvider>
