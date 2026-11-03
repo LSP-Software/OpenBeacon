@@ -20,7 +20,7 @@
   "dependencies": {
     "@better-auth/expo": "^1.7.14",
     "@hookform/resolvers": "^5.2.2",
-    "@maplibre/maplibre-react-native": "^10.4.2",
+    "@maplibre/maplibre-react-native": "^11.5.1",
     "@openbeacon/api": "workspace:*",
     "@openbeacon/encryption": "workspace:*",
     "@openbeacon/schemas": "workspace:*",

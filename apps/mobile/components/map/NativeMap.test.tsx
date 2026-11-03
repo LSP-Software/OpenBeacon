@@ -12,6 +12,7 @@ import {
   emitNativeMapAnnotationDeselected,
   emitNativeMapAnnotationSelected,
   emitNativeMapDidFailLoadingMap,
+  emitNativeMapLog,
   emitNativeMapDidFinishLoadingStyle,
   emitNativeMapGoToCurrentLocation,
   emitNativeMapPress,
@@ -27,6 +28,7 @@ import {
   getNativeMapSelfHeadingDegrees,
   getNativeMapStyle,
   getNativeMapViewMountCount,
+  getNativeMapUrlTransforms,
   registerNativeMapGoToCurrentLocationHandler,
   registerNativeMapShowEveryoneHandler,
   resetNativeMapHarness,
@@ -58,6 +60,9 @@ let currentSignedPmtilesUrlQuery: {
 let forceRefreshMutationCalls = 0;
 let forceRefreshMutationPending = false;
 let forceRefreshMutationSucceeds = true;
+let deferForceRefresh = false;
+let completeForceRefresh: (() => void) | null = null;
+let forceRefreshUrl = "https://forced.example/pmtiles";
 const setQueryData = mock(() => {});
 const routerReplace = mock(() => {});
 let root: Root | null = null;
@@ -129,11 +134,15 @@ mock.module("@tanstack/react-query", () => ({
         return;
       }
 
-      options.onSuccess?.({
-        expiresAt: "2026-03-31T12:20:00.000Z",
-        refreshAt: "2026-03-31T12:19:00.000Z",
-        url: "https://forced.example/pmtiles",
-      });
+      const resultUrl = forceRefreshUrl;
+      const complete = () =>
+        options.onSuccess?.({
+          expiresAt: "2026-03-31T12:20:00.000Z",
+          refreshAt: "2026-03-31T12:19:00.000Z",
+          url: resultUrl,
+        });
+      if (deferForceRefresh) completeForceRefresh = complete;
+      else complete();
     },
   }),
   useQuery: () => currentSignedPmtilesUrlQuery,
@@ -352,6 +361,9 @@ describe("NativeMap integration harness", () => {
     forceRefreshMutationCalls = 0;
     forceRefreshMutationPending = false;
     forceRefreshMutationSucceeds = true;
+    deferForceRefresh = false;
+    completeForceRefresh = null;
+    forceRefreshUrl = "https://forced.example/pmtiles";
     setQueryData.mockReset();
     routerReplace.mockReset();
     root = null;
@@ -825,6 +837,177 @@ describe("NativeMap integration harness", () => {
     expect(routerReplace).toHaveBeenCalledWith("/");
   });
 
+  test("ignores a force refresh that completes after the map unmounts", async () => {
+    deferForceRefresh = true;
+    await renderNativeMap();
+    await failMapLoad();
+    expect(completeForceRefresh).not.toBeNull();
+    await act(async () => {
+      root?.unmount();
+      root = null;
+    });
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: { ...defaultSignedUrl, url: "https://second.example/map?signature=new" },
+    };
+    await renderNativeMap();
+    const count = getNativeMapUrlTransforms().length;
+    await act(async () => {
+      completeForceRefresh?.();
+    });
+    expect(getNativeMapUrlTransforms()).toHaveLength(count);
+    expect(getNativeMapUrlTransforms().at(-1)?.replace).toBe(
+      "https://second.example/map?signature=new",
+    );
+    expect(setQueryData).not.toHaveBeenCalled();
+  });
+
+  test("keeps the source retry scheduled if the style loads after a PMTiles error", async () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    let retry: (() => void) | undefined;
+    globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
+      if (delay === 5_000) retry = callback as () => void;
+      return originalSetTimeout(callback, delay);
+    }) as typeof setTimeout;
+    try {
+      await renderNativeMap();
+      await act(async () => {
+        emitNativeMapLog({
+          level: "error",
+          tag: "Mbgl",
+          message:
+            "[Style]: Failed to load source protomaps: Error fetching PMTiles header: timeout",
+        });
+      });
+      expect(getRenderedOutput()).toContain("activity-indicator");
+      await finishLoadingStyle();
+      expect(getRenderedOutput()).toContain("activity-indicator");
+      expect(retry).toBeDefined();
+      await act(async () => {
+        retry?.();
+      });
+      expect(forceRefreshMutationCalls).toBe(1);
+      expect(getNativeMapViewMountCount()).toBe(2);
+      await finishLoadingStyle();
+      expect(getRenderedOutput()).not.toContain("activity-indicator");
+    } finally {
+      globalThis.setTimeout = originalSetTimeout;
+    }
+  });
+
+  test("restores selected person padding when retrying the same archive", async () => {
+    const alice = createLiveMapMarkerFixture({ userId: "alice", latitude: 51.5, longitude: -0.12 });
+    forceRefreshUrl = "https://cached.example/pmtiles-1?signature=new";
+    await renderNativeMap({ markers: [alice], selectedUserId: "alice" });
+    await flushEffects();
+    await failMapLoad();
+    await finishLoadingStyle();
+    const initialViewState = root?.container.queryAll((instance) => instance.type === "camera")[0]
+      ?.props["initialViewState"];
+    expect(initialViewState).toEqual(
+      expect.objectContaining({ padding: { top: 56, right: 32, bottom: 220, left: 32 } }),
+    );
+  });
+
+  test("recovers from PMTiles header errors reported through the native logger", async () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    let retry: (() => void) | undefined;
+    globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
+      if (delay === 5_000) retry = callback as () => void;
+      return originalSetTimeout(callback, delay);
+    }) as typeof setTimeout;
+    try {
+      await renderNativeMap();
+      expect(emitNativeMapLog({ level: "error", tag: "Mbgl", message: "unrelated error" })).toBe(
+        false,
+      );
+      await act(async () => {
+        expect(
+          emitNativeMapLog({
+            level: "error",
+            tag: "Mbgl",
+            message:
+              "[Style]: Failed to load source protomaps: Error fetching PMTiles header: timeout",
+          }),
+        ).toBe(true);
+      });
+      expect(retry).toBeDefined();
+      await act(async () => {
+        retry?.();
+      });
+      expect(forceRefreshMutationCalls).toBe(1);
+      expect(getNativeMapViewMountCount()).toBe(2);
+    } finally {
+      globalThis.setTimeout = originalSetTimeout;
+    }
+  });
+
+  test("keeps retrying a PMTiles source failure when the first credential refresh fails", async () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    let retry: (() => void) | undefined;
+    globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
+      if (delay === 5_000) retry = callback as () => void;
+      return originalSetTimeout(callback, delay);
+    }) as typeof setTimeout;
+    try {
+      await renderNativeMap();
+      forceRefreshMutationSucceeds = false;
+      await act(async () => {
+        emitNativeMapLog({
+          level: "error",
+          tag: "Mbgl",
+          message:
+            "[Style]: Failed to load source protomaps: Error fetching PMTiles header: timeout",
+        });
+      });
+      await act(async () => {
+        retry?.();
+      });
+      expect(forceRefreshMutationCalls).toBe(1);
+      expect(getNativeMapViewMountCount()).toBe(1);
+      expect(getRenderedOutput()).toContain("activity-indicator");
+      forceRefreshMutationSucceeds = true;
+      await act(async () => {
+        retry?.();
+      });
+      expect(forceRefreshMutationCalls).toBe(2);
+      expect(getNativeMapViewMountCount()).toBe(2);
+    } finally {
+      globalThis.setTimeout = originalSetTimeout;
+    }
+  });
+
+  test("retries the failed map source after credentials refresh without changing the archive", async () => {
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: { ...defaultSignedUrl, url: "https://cached.example/pmtiles?signature=old" },
+    };
+    forceRefreshUrl = "https://cached.example/pmtiles?signature=new";
+    await renderNativeMap();
+    await flushEffects();
+    expect(getNativeMapViewMountCount()).toBe(1);
+
+    await failMapLoad();
+    await flushEffects();
+
+    expect(forceRefreshMutationCalls).toBe(1);
+    expect(getNativeMapUrlTransforms().at(-1)?.replace).toBe(forceRefreshUrl);
+    expect(getNativeMapViewMountCount()).toBe(2);
+  });
+
+  test("preserves the current camera when retrying a failed map", async () => {
+    await renderNativeMap();
+    await flushEffects();
+    emitNativeMapRegionDidChange({ latitude: 51.51, longitude: -0.13, zoomLevel: 12.5 });
+    await failMapLoad();
+    await flushEffects();
+    expect(getNativeMapViewMountCount()).toBe(2);
+    expect(getNativeMapCameraDefaultSettings()).toEqual({
+      centerCoordinate: [-0.13, 51.51],
+      zoomLevel: 12.5,
+    });
+  });
+
   test("forces one auto refresh per failure episode and does not loop when the url changes", async () => {
     await renderNativeMap();
 
@@ -853,6 +1036,18 @@ describe("NativeMap integration harness", () => {
 
     expect(forceRefreshMutationCalls).toBe(1);
     expect(getRenderedOutput()).toContain("activity-indicator");
+  });
+
+  test("retries a map failure that occurs during a scheduled URL refresh", async () => {
+    currentSignedPmtilesUrlQuery = { ...currentSignedPmtilesUrlQuery, isFetching: true };
+    await renderNativeMap();
+    await failMapLoad();
+    expect(forceRefreshMutationCalls).toBe(0);
+    currentSignedPmtilesUrlQuery = { ...currentSignedPmtilesUrlQuery, isFetching: false };
+    await renderNativeMap();
+    await flushEffects();
+    expect(forceRefreshMutationCalls).toBe(1);
+    expect(getNativeMapViewMountCount()).toBe(2);
   });
 
   test("does not force refresh while a force-refresh mutation is already pending", async () => {
@@ -1335,9 +1530,9 @@ describe("NativeMap integration harness", () => {
     });
 
     expect(getNativeMapCameraCommands().at(-1)).toEqual({
-      type: "setCamera",
+      type: "setStop",
       stop: {
-        animationDuration: 0,
+        duration: 0,
       },
     });
 
@@ -1374,9 +1569,9 @@ describe("NativeMap integration harness", () => {
     });
 
     expect(getNativeMapCameraCommands().at(-1)).toEqual({
-      type: "setCamera",
+      type: "setStop",
       stop: {
-        animationDuration: 0,
+        duration: 0,
       },
     });
 
@@ -1901,6 +2096,36 @@ describe("NativeMap integration harness", () => {
     expect(
       getNativeMapAnnotationRefreshCalls().filter((id) => id === "alice").length,
     ).toBeGreaterThan(refreshCountAfterMount);
+  });
+
+  test("rotates the signed archive URL without replacing the map style", async () => {
+    const firstUrl = "https://tiles.example.com/maps/world.pmtiles?signature=first";
+    const nextUrl = "https://tiles.example.com/maps/world.pmtiles?signature=second";
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: { ...defaultSignedUrl, url: firstUrl },
+    };
+    await renderNativeMap();
+    await flushEffects();
+    const initialStyle = getNativeMapStyle();
+    const firstTransform = getNativeMapUrlTransforms().at(-1)!;
+    expect(
+      new RegExp(firstTransform.find).test("https://tiles.example.com/maps/world.pmtiles"),
+    ).toBe(true);
+    expect(
+      new RegExp(firstTransform.find).test("https://tilesXexample.com/maps/world.pmtiles"),
+    ).toBe(false);
+    expect(firstTransform.replace).toBe(firstUrl);
+
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: { ...defaultSignedUrl, url: nextUrl },
+    };
+    await renderNativeMap();
+    await flushEffects();
+    expect(getNativeMapUrlTransforms().at(-1)?.replace).toBe(nextUrl);
+    expect(getNativeMapStyle()).toEqual(initialStyle);
+    expect(getNativeMapViewMountCount()).toBe(1);
   });
 
   test("updates the map style without remounting when the signed pmtiles url changes", async () => {

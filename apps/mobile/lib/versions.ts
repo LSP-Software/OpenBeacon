@@ -1,4 +1,4 @@
 import appConfig from "../app.json";
 
 export const appVersion = appConfig.expo.version;
-export const maplibreVersion = "10.4.2";
+export const maplibreVersion = "11.5.1";

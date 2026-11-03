@@ -1,3 +1,4 @@
+import { LogManager, TransformRequestManager } from "@maplibre/maplibre-react-native";
 import { useMutation } from "@tanstack/react-query";
 import { Paths } from "expo-file-system";
 import { router, useRootNavigationState } from "expo-router";
@@ -18,8 +19,15 @@ export const useNativeMapStyle = () => {
   const { mapTheme } = useTheme();
   const signedPmtilesUrlQuery = useSignedPmtilesUrl();
   const autoForceRefreshAttemptsRef = useRef(0);
+  const retryAfterUrlFetchRef = useRef(false);
+  const mountedRef = useRef(false);
+  const failedSourceRevisionRef = useRef<number | null>(null);
   const showRecoverableErrorRef = useRef(false);
   const [showRecoverableError, setShowRecoverableError] = useState(false);
+  const [archiveUrl, setArchiveUrl] = useState<string | null>(null);
+  const [mapRevision, setMapRevision] = useState(0);
+  const mapRevisionRef = useRef(mapRevision);
+  mapRevisionRef.current = mapRevision;
   const [showSymbols, setShowSymbols] = useState(
     () => storage.getBoolean("map.showSymbols") ?? false,
   );
@@ -31,12 +39,33 @@ export const useNativeMapStyle = () => {
     showRecoverableErrorRef.current = next.showRecoverableError;
     setShowRecoverableError(next.showRecoverableError);
   };
+  const applySignedUrl = (url: string) => {
+    const unsignedUrl = url.split("?")[0];
+    if (!unsignedUrl) return;
+    const escapedUrl = unsignedUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    TransformRequestManager.addUrlTransform({
+      id: "openbeacon-pmtiles",
+      find: `^${escapedUrl}(?:\\?.*)?$`,
+      replace: url,
+    });
+    setArchiveUrl(unsignedUrl);
+  };
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const forceRefreshSignedPmtilesUrlMutation = useMutation({
     ...trpc.maps.forceRefreshSignedPmtilesUrl.mutationOptions(),
     onSuccess: (signedPmtilesUrl) => {
+      if (!mountedRef.current) return;
+      applySignedUrl(signedPmtilesUrl.url);
       queryClient.setQueryData(trpc.maps.getSignedPmtilesUrl.queryKey(), signedPmtilesUrl);
+      setMapRevision((revision) => revision + 1);
     },
     onError: () => {
+      if (!mountedRef.current) return;
       applyMapLoadFailureState(
         nextMapLoadFailureState({
           autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
@@ -45,23 +74,49 @@ export const useNativeMapStyle = () => {
       );
     },
   });
+  useEffect(() => {
+    LogManager.onLog((log) => {
+      if (
+        log.level !== "error" ||
+        !log.message.includes("Failed to load source protomaps") ||
+        !log.message.includes("PMTiles")
+      )
+        return false;
+
+      failedSourceRevisionRef.current = mapRevisionRef.current;
+      if (!showRecoverableErrorRef.current) {
+        applyMapLoadFailureState(
+          nextMapLoadFailureState({
+            autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
+            event: "force_refresh_failed",
+          }),
+        );
+      }
+      return true;
+    });
+    return () => LogManager.onLog(() => false);
+  }, []);
   const rootNavigationState = useRootNavigationState();
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
+  useEffect(() => {
+    if (pmtilesUrl) applySignedUrl(pmtilesUrl);
+  }, [pmtilesUrl]);
+  useEffect(() => () => TransformRequestManager.removeUrlTransform("openbeacon-pmtiles"), []);
   const mapStyle = useMemo(() => {
-    if (!pmtilesUrl) {
+    if (!archiveUrl) {
       return null;
     }
 
     return getProtomapsMapStyle(
       mapTheme,
-      pmtilesUrl,
+      archiveUrl,
       Platform.OS === "ios"
         ? `${Paths.bundle.uri}/map/fonts/{fontstack}/{range}.pbf`
         : "asset://map-assets/fonts/{fontstack}/{range}.pbf",
       Platform.OS === "ios" ? `${Paths.bundle.uri}/map/sprites` : "asset://map-assets/sprites",
       showSymbols,
     );
-  }, [mapTheme, pmtilesUrl, showSymbols]);
+  }, [mapTheme, archiveUrl, showSymbols]);
 
   const retryMapLoad = () => {
     if (forceRefreshSignedPmtilesUrlMutation.isPending) {
@@ -84,6 +139,10 @@ export const useNativeMapStyle = () => {
   };
 
   const onMapLoadFailure = () => {
+    if (signedPmtilesUrlQuery.isFetching && !forceRefreshSignedPmtilesUrlMutation.isPending) {
+      retryAfterUrlFetchRef.current = true;
+      return;
+    }
     if (
       !shouldForceRefreshAfterMapLoadFailure({
         autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
@@ -118,13 +177,27 @@ export const useNativeMapStyle = () => {
   };
 
   useEffect(() => {
-    if (!showRecoverableError || forceRefreshSignedPmtilesUrlMutation.isPending) {
+    if (signedPmtilesUrlQuery.isFetching || !retryAfterUrlFetchRef.current) return;
+    retryAfterUrlFetchRef.current = false;
+    onMapLoadFailure();
+  }, [signedPmtilesUrlQuery.isFetching]);
+
+  useEffect(() => {
+    if (
+      !showRecoverableError ||
+      forceRefreshSignedPmtilesUrlMutation.isPending ||
+      signedPmtilesUrlQuery.isFetching
+    ) {
       return;
     }
 
     const timer = setTimeout(retryMapLoad, 5_000);
     return () => clearTimeout(timer);
-  }, [showRecoverableError, forceRefreshSignedPmtilesUrlMutation.isPending]);
+  }, [
+    showRecoverableError,
+    forceRefreshSignedPmtilesUrlMutation.isPending,
+    signedPmtilesUrlQuery.isFetching,
+  ]);
 
   useEffect(() => {
     if (!rootNavigationState?.key || signedPmtilesUrlQuery.error?.data?.code !== "UNAUTHORIZED") {
@@ -136,7 +209,8 @@ export const useNativeMapStyle = () => {
 
   return {
     mapStyle,
-    pmtilesUrl,
+    mapRevision,
+    pmtilesUrl: archiveUrl,
     showSymbols,
     showRecoverableError,
     isLoading: signedPmtilesUrlQuery.isLoading,
@@ -147,13 +221,16 @@ export const useNativeMapStyle = () => {
     },
     retryMapLoad,
     onMapLoadFailure,
-    onStyleLoaded: () =>
+    onStyleLoaded: () => {
+      if (failedSourceRevisionRef.current === mapRevision) return;
+      failedSourceRevisionRef.current = null;
       applyMapLoadFailureState(
         nextMapLoadFailureState({
           autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
           event: "style_loaded",
         }),
-      ),
+      );
+    },
     toggleSymbols: () => {
       const next = !showSymbols;
       storage.set("map.showSymbols", next);

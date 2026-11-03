@@ -1,6 +1,6 @@
-import { Camera, MapView } from "@maplibre/maplibre-react-native";
+import { Camera, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
 import { ArrowUpIcon, LocateFixedIcon, MapPinIcon, ScanIcon } from "lucide-react-native";
-import { ActivityIndicator, Platform, Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { Icon } from "../ui/Icon.tsx";
@@ -25,7 +25,11 @@ export const NativeMap = ({
   const map = useNativeMapStyle();
   const { mapStyle, pmtilesUrl, showSymbols } = map;
   const selectedMarker = markers.find((marker) => marker.userId === selectedUserId) ?? null;
-  const edge = useLiveMapEdgeMarkers({ markers, selectedUserId: selectedMarker?.userId ?? null });
+  const edge = useLiveMapEdgeMarkers({
+    markers,
+    mapRevision: map.mapRevision,
+    selectedUserId: selectedMarker?.userId ?? null,
+  });
   const { edgeMarkers, mapRef } = edge;
   const selection = useLiveMapSelection({
     selectedUserId,
@@ -37,6 +41,7 @@ export const NativeMap = ({
   const camera = useLiveMapCamera({
     edge,
     mapStyle,
+    mapRevision: map.mapRevision,
     markers,
     onClearSelection: selection.clearSelectionFromReact,
     onSelectUser: selection.handleAnnotationSelected,
@@ -77,27 +82,41 @@ export const NativeMap = ({
         edge.onMapLayout(event.nativeEvent.layout);
       }}
     >
-      <MapView
+      <MapLibreMap
+        key={map.mapRevision}
         ref={mapRef}
         style={{ flex: 1 }}
-        mapStyle={mapStyle}
-        attributionEnabled={false}
-        logoEnabled={true}
-        pitchEnabled={false}
-        rotateEnabled={false}
-        regionDidChangeDebounceTime={0}
-        surfaceView={Platform.OS === "android"}
+        mapStyle={JSON.stringify(mapStyle)}
+        attribution={false}
+        logo={true}
+        touchPitch={false}
+        touchRotate={false}
+        androidView="surface"
         onPress={clearSelectionFromReact}
         onRegionIsChanging={(feature) => {
-          edge.onRegionChange(feature.properties.visibleBounds ?? null);
-          maybeSuspendFollowFromRegionChange(feature);
+          const { bounds, animated, userInteraction } = feature.nativeEvent;
+          edge.onRegionChange([
+            [bounds[2], bounds[3]],
+            [bounds[0], bounds[1]],
+          ]);
+          maybeSuspendFollowFromRegionChange({
+            properties: { animated, isUserInteraction: userInteraction },
+          });
           edge.update();
         }}
         onRegionDidChange={(feature) => {
-          edge.onRegionChange(feature.properties.visibleBounds ?? null);
-          camera.onRegionDidChange(feature);
+          const { bounds, center, zoom, animated, userInteraction } = feature.nativeEvent;
+          edge.onRegionChange([
+            [bounds[2], bounds[3]],
+            [bounds[0], bounds[1]],
+          ]);
+          camera.onRegionDidChange({
+            geometry: { coordinates: center },
+            properties: { animated, isUserInteraction: userInteraction, zoomLevel: zoom },
+          });
           edge.update();
         }}
+        onDidFinishLoadingMap={edge.onMapReady}
         onDidFailLoadingMap={map.onMapLoadFailure}
         onDidFinishLoadingStyle={() => {
           edge.update();
@@ -106,7 +125,23 @@ export const NativeMap = ({
           camera.onStyleLoaded();
         }}
       >
-        <Camera ref={cameraRef} defaultSettings={cameraDefaultSettings} />
+        <Camera
+          ref={cameraRef}
+          initialViewState={{
+            center: cameraDefaultSettings.centerCoordinate,
+            zoom: cameraDefaultSettings.zoomLevel,
+            ...(selectedMarker
+              ? {
+                  padding: {
+                    top: camera.cameraPadding.paddingTop,
+                    right: camera.cameraPadding.paddingRight,
+                    bottom: camera.cameraPadding.paddingBottom,
+                    left: camera.cameraPadding.paddingLeft,
+                  },
+                }
+              : {}),
+          }}
+        />
         {markers.map((marker) =>
           edgeMarkers.some((edge) => edge.userId === marker.userId) ? null : marker.isSelf ? (
             <SelfLiveMapPointAnnotation
@@ -133,7 +168,7 @@ export const NativeMap = ({
             />
           ),
         )}
-      </MapView>
+      </MapLibreMap>
       {edgeMarkers.map((edge) => {
         const marker = markers.find((item) => item.userId === edge.userId);
         if (!marker) return null;

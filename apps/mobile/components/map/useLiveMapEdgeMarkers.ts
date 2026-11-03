@@ -1,4 +1,4 @@
-import { type MapViewRef } from "@maplibre/maplibre-react-native";
+import { type MapRef } from "@maplibre/maplibre-react-native";
 import { tryCatch } from "@openbeacon/shared";
 import { useEffect, useRef, useState } from "react";
 import type { LayoutRectangle } from "react-native";
@@ -9,12 +9,20 @@ import { spaceMapEdgePoints } from "../../lib/spaceMapEdgePoints.ts";
 
 export const useLiveMapEdgeMarkers = ({
   markers,
+  mapRevision,
   selectedUserId,
 }: {
   markers: readonly LiveMapMarker[];
+  mapRevision: number;
   selectedUserId: string | null;
 }) => {
-  const mapRef = useRef<MapViewRef>(null);
+  const mapRef = useRef<MapRef>(null);
+  const mapReadyRef = useRef(false);
+  const previousMapRevisionRef = useRef(mapRevision);
+  if (previousMapRevisionRef.current !== mapRevision) {
+    previousMapRevisionRef.current = mapRevision;
+    mapReadyRef.current = false;
+  }
   const mapSizeRef = useRef({ width: 0, height: 0 });
   const sheetHeightRef = useRef<number | null>(null);
   const edgeHasSheetRef = useRef(false);
@@ -99,6 +107,7 @@ export const useLiveMapEdgeMarkers = ({
       applyEdgeMarkers(next, occupied);
       return;
     }
+    if (!mapReadyRef.current) return;
     edgeDirtyRef.current = true;
     if (edgeTimerRef.current !== null || edgeInFlightRef.current) return;
     edgeTimerRef.current = setTimeout(() => {
@@ -116,7 +125,7 @@ export const useLiveMapEdgeMarkers = ({
         const result = await tryCatch(
           Promise.all(
             markersRef.current.map(async (marker) => {
-              const point = await map.getPointInView([marker.longitude, marker.latitude]);
+              const point = await map.project([marker.longitude, marker.latitude]);
               const edge = mapEdgePoint({
                 width,
                 height: edgeViewportHeight(),
@@ -203,6 +212,10 @@ export const useLiveMapEdgeMarkers = ({
     release,
     releaseAfter,
     update: updateEdgeMarkers,
+    onMapReady: () => {
+      mapReadyRef.current = true;
+      updateEdgeMarkers();
+    },
     onMapLayout: (layout: LayoutRectangle) => {
       mapSizeRef.current = layout;
       edgeLayoutRevisionRef.current += 1;
