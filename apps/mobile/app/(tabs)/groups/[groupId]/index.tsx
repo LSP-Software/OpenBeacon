@@ -12,7 +12,9 @@ import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { RefreshablePage } from "../../../../components/RefreshablePage.tsx";
 import { SwipeTabs, type SwipeTabsItem } from "../../../../components/ui/SwipeTabs.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
+import { useGroupKeyAccess } from "../../../../hooks/useGroupKeyAccess.ts";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
+import { authClient } from "../../../../lib/auth-client.ts";
 import HistoryTab from "./HistoryTab.tsx";
 import MembersTab from "./MembersTab.tsx";
 import SettingsTab from "./SettingsTab.tsx";
@@ -42,6 +44,9 @@ const GroupScreen = () => {
   const router = useRouter();
   const queryClient = useQueryClient();
   const isFocused = useIsFocused();
+  const { data: session } = authClient.useSession();
+  const [keyAccess] = useGroupKeyAccess([groupId], session?.user.id);
+  const { data: members } = useQuery(trpc.groupMembership.members.queryOptions({ groupId }));
   const [value, setValue] = useState<GroupTabValue>("members");
   const {
     data: group,
@@ -82,6 +87,22 @@ const GroupScreen = () => {
         <View className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-5">
           <View className="gap-5">
             <GroupHeader group={group} />
+            {keyAccess?.data === "missing" && (
+              <View className="gap-2 rounded-xl border border-destructive bg-card p-4">
+                <Text className="font-semibold text-destructive">
+                  This device can’t access this group’s encryption key
+                </Text>
+                <Text>
+                  {group.groupMembers[0]?.role === "OWNER"
+                    ? !members
+                      ? "Open the members tab for recovery options. Older encrypted locations may remain unavailable."
+                      : members.length === 1
+                        ? "To restore access, invite someone to the group. When they join, the group will receive a new encryption key. Older encrypted locations may remain unavailable."
+                        : "To restore access, leave the group and choose another member as the new owner. Ask them to invite you again. Your location history in this group will be deleted, and older encrypted locations may remain unavailable."
+                    : "To restore access, leave the group and ask an owner or admin to invite you again. Your location history in this group will be deleted, and older encrypted locations may remain unavailable."}
+                </Text>
+              </View>
+            )}
             <SwipeTabs
               ariaLabel="Group sections"
               tabs={GROUP_TABS}

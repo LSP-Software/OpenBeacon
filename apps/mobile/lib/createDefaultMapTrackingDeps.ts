@@ -3,8 +3,10 @@ import { trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { createMapTrackingDecryptPoint } from "./mapTrackingDecrypt.ts";
 import type { MapTrackingDeps } from "./mapTrackingTypes.ts";
+import { notifyGroupEpochChange } from "./trackingEvents.ts";
 
 export const createDefaultMapTrackingDeps = (): MapTrackingDeps => {
+  const observedEpochs = new Map<string, string>();
   const decryptPoint = createMapTrackingDecryptPoint({
     ensureDeviceKeys: ensureDeviceKeyRegistration,
     getWrappedEpochKey: async ({ deviceId, epochId, groupId }) => {
@@ -28,12 +30,21 @@ export const createDefaultMapTrackingDeps = (): MapTrackingDeps => {
   return {
     clearEpochKeys: (groupId) => {
       if (groupId) {
+        observedEpochs.delete(groupId);
         decryptPoint.clearGroup(groupId);
         return;
       }
+      observedEpochs.clear();
       decryptPoint.clear();
     },
-    decryptPoint,
+    decryptPoint: async (input) => {
+      const result = await decryptPoint(input);
+      if (result.status === "ok" && observedEpochs.get(input.groupId) !== input.point.epochId) {
+        observedEpochs.set(input.groupId, input.point.epochId);
+        notifyGroupEpochChange(input.groupId);
+      }
+      return result;
+    },
     getLatest: async (groupId) => trpcClient.groupTracking.getLatest.query({ groupId }),
     listGroups: async () => trpcClient.groupMembership.list.query(),
     now: () => Date.now(),

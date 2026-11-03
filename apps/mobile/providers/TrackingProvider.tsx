@@ -1,4 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { Alert, AppState } from "react-native";
@@ -22,6 +23,7 @@ export const TrackingProvider = ({
   service?: typeof trackingService;
 }) => {
   const { data: session, isPending } = authClient.useSession();
+  const queryClient = useQueryClient();
   const { permissionState } = useLocationPermissions();
   const activeCycleRef = useRef<Promise<void> | null>(null);
   const appStateRef = useRef(AppState.currentState);
@@ -50,6 +52,9 @@ export const TrackingProvider = ({
           }),
         );
         const flushResult = await tryCatch(service.flushPendingTrackingPoints());
+        if (appStateRef.current === "active") {
+          void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
+        }
         if (reconcileResult.error || flushResult.error) {
           if (appStateRef.current === "active" && !failureReportedRef.current) {
             failureReportedRef.current = true;
@@ -68,7 +73,7 @@ export const TrackingProvider = ({
     });
 
     return activeCycleRef.current;
-  }, [service]);
+  }, [queryClient, service]);
 
   useEffect(() => {
     if (isPending) {

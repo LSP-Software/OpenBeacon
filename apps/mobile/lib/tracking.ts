@@ -10,6 +10,7 @@ import { Platform } from "react-native";
 import type { CiphertextQueueItem } from "../modules/openbeacon-tracking/index.ts";
 import { trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
+import { notifyGroupEpochChange } from "./trackingEvents.ts";
 
 let reconcilePromise: Promise<void> | null = null;
 let reconcileOptions: { startCapture: boolean; onlyIfRunning: boolean } | null = null;
@@ -17,6 +18,7 @@ let reconcileVersion = 0;
 let flushPromise: Promise<void> | null = null;
 let revokePromise: Promise<void> | null = null;
 let captureRefreshPending = false;
+const observedGroupEpochs = new Map<string, string>();
 
 const loadTrackingModule = async () => {
   if (Platform.OS !== "android") {
@@ -88,6 +90,13 @@ const reconcileTrackingKeysInternal = async ({
       }),
     )
   ).filter((epoch) => epoch !== null);
+  if (isCurrent()) {
+    for (const { groupId, epochId } of epochs) {
+      const previousEpochId = observedGroupEpochs.get(groupId);
+      observedGroupEpochs.set(groupId, epochId);
+      if (previousEpochId && previousEpochId !== epochId) notifyGroupEpochChange(groupId);
+    }
+  }
   const wrappedEpochs = (
     await Promise.all(
       epochs.map(async ({ epochId, groupId }) => {

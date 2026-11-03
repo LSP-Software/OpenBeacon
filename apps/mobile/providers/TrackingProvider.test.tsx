@@ -25,6 +25,8 @@ let isReadyForSharing = true;
 let failFlush = false;
 let alerts = 0;
 let root: Root | null = null;
+const invalidateQueries = mock(async (_input: { queryKey: string[] }) => {});
+const queryClient = { invalidateQueries };
 const trackingService = {
   reconcileTrackingKeys: async (input: { startCapture: boolean }) => {
     reconcileCalls.push(input);
@@ -67,6 +69,10 @@ mock.module("../lib/auth-client.ts", () => ({
   authClient: {
     useSession: () => sessionState,
   },
+}));
+
+mock.module("@tanstack/react-query", () => ({
+  useQueryClient: () => queryClient,
 }));
 
 mock.module("./LocationPermissionProvider.tsx", () => ({
@@ -115,6 +121,7 @@ describe("TrackingProvider", () => {
     failFlush = false;
     alerts = 0;
     root = null;
+    invalidateQueries.mockClear();
   });
 
   afterEach(async () => {
@@ -132,6 +139,7 @@ describe("TrackingProvider", () => {
     expect(reconcileCalls).toEqual([{ startCapture: true }]);
     expect(flushCalls).toBe(1);
     expect(revokeCalls).toBe(0);
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["groupKeyAccess"] });
   });
 
   test("reconciles again when the app resumes", async () => {

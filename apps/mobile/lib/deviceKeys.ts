@@ -158,7 +158,22 @@ const registerDeviceKey = async ({
     publicKey,
   });
 
-export const getOrCreateDeviceKeyContext = async (userId: string) => {
+const deviceKeyContexts = new Map<
+  string,
+  Promise<NonNullable<Awaited<ReturnType<typeof getStoredDeviceKeyContext>>>>
+>();
+
+export const getOrCreateDeviceKeyContext = (userId: string) => {
+  const pending = deviceKeyContexts.get(userId);
+  if (pending) return pending;
+  const task = createDeviceKeyContext(userId).finally(() => {
+    deviceKeyContexts.delete(userId);
+  });
+  deviceKeyContexts.set(userId, task);
+  return task;
+};
+
+const createDeviceKeyContext = async (userId: string) => {
   const existingContext = await getStoredDeviceKeyContext(userId);
 
   if (existingContext) {
