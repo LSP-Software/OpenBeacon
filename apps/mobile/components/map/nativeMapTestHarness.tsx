@@ -1,3 +1,4 @@
+import type { CameraRef } from "@maplibre/maplibre-react-native";
 import React, { forwardRef, type ReactNode, useEffect, useImperativeHandle } from "react";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 
@@ -6,6 +7,7 @@ const cameraCommands: Array<
       type: "setCamera";
       stop: unknown;
     }
+  | { type: "setStop"; stop: Parameters<CameraRef["setStop"]>[0] }
   | {
       type: "fitBounds";
       ne: unknown;
@@ -14,7 +16,21 @@ const cameraCommands: Array<
       duration: unknown;
     }
 > = [];
+let mapLogHandler:
+  | ((log: {
+      level: "error" | "warn" | "info" | "debug" | "verbose";
+      tag: string;
+      message: string;
+    }) => boolean)
+  | null = null;
+export const emitNativeMapLog = (log: {
+  level: "error" | "warn" | "info" | "debug" | "verbose";
+  tag: string;
+  message: string;
+}) => mapLogHandler?.(log) ?? false;
 const annotationRefreshCalls: string[] = [];
+const urlTransforms: Array<{ id: string; find: string; replace: string }> = [];
+export const getNativeMapUrlTransforms = () => urlTransforms;
 const annotationMountCounts = new Map<string, number>();
 const annotationSelectedProps = new Map<string, boolean | undefined>();
 const annotationHandlersById = new Map<
@@ -81,6 +97,8 @@ export const createLiveMapMarkerFixture = (
 
 export const resetNativeMapHarness = () => {
   cameraCommands.length = 0;
+  mapLogHandler = null;
+  urlTransforms.length = 0;
   annotationRefreshCalls.length = 0;
   annotationMountCounts.clear();
   annotationSelectedProps.clear();
@@ -243,18 +261,45 @@ export const emitNativeMapAndroidMarkerTap = (annotationId: string) => {
 };
 
 export const createMapLibreMockModule = () => {
+  const recordStop = (
+    stop: { center: unknown; zoom?: number; padding?: unknown; duration?: number },
+    mode?: string,
+  ) => {
+    const pad = stop.padding as
+      { top: number; right: number; bottom: number; left: number } | undefined;
+    cameraCommands.push({
+      type: "setCamera",
+      stop: {
+        animationDuration: stop.duration ?? 0,
+        ...(mode ? { animationMode: mode } : {}),
+        centerCoordinate: stop.center,
+        ...(stop.zoom !== undefined ? { zoomLevel: stop.zoom } : {}),
+        ...(pad
+          ? {
+              padding: {
+                paddingTop: pad.top,
+                paddingRight: pad.right,
+                paddingBottom: pad.bottom,
+                paddingLeft: pad.left,
+              },
+            }
+          : {}),
+      },
+    });
+  };
   const Camera = forwardRef<
+    Pick<CameraRef, "fitBounds" | "setStop" | "jumpTo" | "easeTo" | "flyTo">,
     {
-      fitBounds: (ne: unknown, sw: unknown, padding: unknown, duration: unknown) => void;
-      setCamera: (stop: unknown) => void;
-    },
-    {
-      defaultSettings?: {
-        centerCoordinate?: [number, number];
-        zoomLevel?: number;
+      initialViewState?: {
+        center?: [number, number];
+        zoom?: number;
+        padding?: { top?: number; right?: number; bottom?: number; left?: number };
       };
     }
-  >(({ defaultSettings }, ref) => {
+  >(({ initialViewState }, ref) => {
+    const defaultSettings = initialViewState
+      ? { centerCoordinate: initialViewState.center, zoomLevel: initialViewState.zoom }
+      : undefined;
     latestCameraDefaultSettings = defaultSettings
       ? {
           ...(defaultSettings.centerCoordinate
@@ -267,33 +312,63 @@ export const createMapLibreMockModule = () => {
       : null;
 
     useImperativeHandle(ref, () => ({
-      fitBounds: (ne: unknown, sw: unknown, padding: unknown, duration: unknown) => {
-        cameraCommands.push({ type: "fitBounds", ne, sw, padding, duration });
+      fitBounds: (bounds, options) => {
+        cameraCommands.push({
+          type: "fitBounds",
+          ne: [bounds[2], bounds[3]],
+          sw: [bounds[0], bounds[1]],
+          padding: options?.padding
+            ? [
+                options.padding.top,
+                options.padding.right,
+                options.padding.bottom,
+                options.padding.left,
+              ]
+            : undefined,
+          duration: options?.duration,
+        });
       },
-      setCamera: (stop: unknown) => {
-        cameraCommands.push({ type: "setCamera", stop });
+      setStop: async (stop) => {
+        cameraCommands.push({ type: "setStop", stop });
       },
+      jumpTo: (stop: { center: unknown; zoom?: number; padding?: unknown; duration?: number }) =>
+        recordStop(stop),
+      easeTo: (stop: { center: unknown; zoom?: number; padding?: unknown; duration?: number }) =>
+        recordStop(stop, "easeTo"),
+      flyTo: (stop: { center: unknown; zoom?: number; padding?: unknown; duration?: number }) =>
+        recordStop(stop, "flyTo"),
     }));
 
-    return React.createElement("camera");
+    return React.createElement("camera", { initialViewState });
   });
   Camera.displayName = "MockMapLibreCamera";
 
   const MapView = forwardRef<
-    { getPointInView: () => Promise<[number, number]> },
+    { project: () => Promise<[number, number]> },
     {
       children?: ReactNode;
       mapStyle?: unknown;
       onDidFailLoadingMap?: () => void;
+      onDidFinishLoadingMap?: () => void;
       onDidFinishLoadingStyle?: () => void;
       onPress?: () => void;
-      onRegionDidChange?: (feature: {
-        geometry: { coordinates: [number, number] };
-        properties: { animated: boolean; isUserInteraction: boolean; zoomLevel: number };
+      onRegionDidChange?: (event: {
+        nativeEvent: {
+          center: [number, number];
+          zoom: number;
+          bounds: [number, number, number, number];
+          animated: boolean;
+          userInteraction: boolean;
+        };
       }) => void;
-      onRegionIsChanging?: (feature: {
-        geometry: { coordinates: [number, number] };
-        properties: { animated: boolean; isUserInteraction: boolean; zoomLevel: number };
+      onRegionIsChanging?: (event: {
+        nativeEvent: {
+          center: [number, number];
+          zoom: number;
+          bounds: [number, number, number, number];
+          animated: boolean;
+          userInteraction: boolean;
+        };
       }) => void;
     }
   >(
@@ -302,6 +377,7 @@ export const createMapLibreMockModule = () => {
         children,
         mapStyle,
         onDidFailLoadingMap,
+        onDidFinishLoadingMap,
         onDidFinishLoadingStyle,
         onPress,
         onRegionDidChange,
@@ -310,7 +386,7 @@ export const createMapLibreMockModule = () => {
       ref,
     ) => {
       useImperativeHandle(ref, () => ({
-        getPointInView: async () => {
+        project: async () => {
           const point = mapProjectedPoint;
           await mapProjectionWait;
           return point;
@@ -320,13 +396,44 @@ export const createMapLibreMockModule = () => {
         ...(onDidFailLoadingMap ? { onDidFailLoadingMap } : {}),
         ...(onDidFinishLoadingStyle ? { onDidFinishLoadingStyle } : {}),
         ...(onPress ? { onPress } : {}),
-        ...(onRegionDidChange ? { onRegionDidChange } : {}),
-        ...(onRegionIsChanging ? { onRegionIsChanging } : {}),
+        ...(onRegionDidChange
+          ? {
+              onRegionDidChange: (feature) => {
+                const b = feature.properties.visibleBounds;
+                onRegionDidChange({
+                  nativeEvent: {
+                    center: feature.geometry.coordinates,
+                    zoom: feature.properties.zoomLevel,
+                    animated: feature.properties.animated,
+                    userInteraction: feature.properties.isUserInteraction,
+                    bounds: b ? [b[1][0], b[1][1], b[0][0], b[0][1]] : [0, 0, 0, 0],
+                  },
+                });
+              },
+            }
+          : {}),
+        ...(onRegionIsChanging
+          ? {
+              onRegionIsChanging: (feature) => {
+                const b = feature.properties.visibleBounds;
+                onRegionIsChanging({
+                  nativeEvent: {
+                    center: feature.geometry.coordinates,
+                    zoom: feature.properties.zoomLevel,
+                    animated: feature.properties.animated,
+                    userInteraction: feature.properties.isUserInteraction,
+                    bounds: b ? [b[1][0], b[1][1], b[0][0], b[0][1]] : [0, 0, 0, 0],
+                  },
+                });
+              },
+            }
+          : {}),
       };
-      latestMapStyle = mapStyle ?? null;
+      latestMapStyle = typeof mapStyle === "string" ? JSON.parse(mapStyle) : (mapStyle ?? null);
 
       useEffect(() => {
         mapViewMountCount += 1;
+        onDidFinishLoadingMap?.();
       }, []);
 
       return React.createElement(
@@ -350,11 +457,11 @@ export const createMapLibreMockModule = () => {
     {
       children?: ReactNode;
       id: string;
-      onDeselected?: () => void;
-      onSelected?: () => void;
+      onDeselect?: () => void;
+      onSelect?: () => void;
       selected?: boolean;
     }
-  >(({ children, id, onDeselected, onSelected, selected }, ref) => {
+  >(({ children, id, onDeselect: onDeselected, onSelect: onSelected, selected }, ref) => {
     useImperativeHandle(ref, () => ({
       refresh: () => {
         annotationRefreshCalls.push(id);
@@ -400,17 +507,22 @@ export const createMapLibreMockModule = () => {
 
   return {
     Camera,
-    MapView,
-    MarkerView: ({
-      children,
-      coordinate,
-      allowOverlap,
-    }: {
-      children?: ReactNode;
-      coordinate: number[];
-      allowOverlap?: boolean;
-    }) => React.createElement("marker-view", { coordinate, allowOverlap }, children),
-    PointAnnotation,
+    Map: MapView,
+    LogManager: {
+      onLog: (callback: NonNullable<typeof mapLogHandler>) => {
+        mapLogHandler = callback;
+      },
+    },
+    TransformRequestManager: {
+      addUrlTransform: (transform: { id: string; find: string; replace: string }) => {
+        urlTransforms.push(transform);
+        return transform.id;
+      },
+      removeUrlTransform: () => {},
+    },
+    Marker: ({ children, lngLat }: { children?: ReactNode; lngLat: number[] }) =>
+      React.createElement("marker-view", { coordinate: lngLat, allowOverlap: true }, children),
+    ViewAnnotation: PointAnnotation,
   };
 };
 

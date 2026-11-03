@@ -28,25 +28,28 @@ export const fitLiveMapMarkers = ({
     return null;
   }
 
-  const paddingConfig = [
-    padding.paddingTop,
-    padding.paddingRight,
-    padding.paddingBottom,
-    padding.paddingLeft,
-  ];
+  const paddingConfig = {
+    top: padding.paddingTop,
+    right: padding.paddingRight,
+    bottom: padding.paddingBottom,
+    left: padding.paddingLeft,
+  };
 
   if (rest.length === 0) {
-    camera.setCamera({
-      animationDuration: ANIMATION_DURATION_MS,
-      centerCoordinate: [firstMarker.longitude, firstMarker.latitude],
-      padding,
-      zoomLevel: 14,
+    camera.easeTo({
+      duration: ANIMATION_DURATION_MS,
+      center: [firstMarker.longitude, firstMarker.latitude],
+      padding: paddingConfig,
+      zoom: 14,
     });
     return ANIMATION_DURATION_MS;
   }
 
   const bounds = computeLiveMapFitBounds(validMarkers);
-  camera.fitBounds(bounds.ne, bounds.sw, paddingConfig, ANIMATION_DURATION_MS);
+  camera.fitBounds([bounds.sw[0], bounds.sw[1], bounds.ne[0], bounds.ne[1]], {
+    padding: paddingConfig,
+    duration: ANIMATION_DURATION_MS,
+  });
   return ANIMATION_DURATION_MS;
 };
 

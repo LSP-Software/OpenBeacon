@@ -1,8 +1,4 @@
-import {
-  MarkerView,
-  PointAnnotation,
-  type PointAnnotationRef,
-} from "@maplibre/maplibre-react-native";
+import { Marker, ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
 import { useEffect, useRef } from "react";
 import { Platform, Pressable } from "react-native";
 import { useSelfDeviceHeading } from "../../hooks/useSelfDeviceHeading.ts";
@@ -41,7 +37,7 @@ export const LiveMapPointAnnotation = ({
   onDeselected: () => void;
   onSelected: () => void;
 }) => {
-  const annotationRef = useRef<PointAnnotationRef>(null);
+  const annotationRef = useRef<ViewAnnotationRef>(null);
 
   useEffect(() => {
     // Android PointAnnotation bitmaps need an explicit refresh when chrome or heading changes
@@ -50,7 +46,7 @@ export const LiveMapPointAnnotation = ({
 
   if (Platform.OS === "android") {
     return (
-      <MarkerView coordinate={[marker.longitude, marker.latitude]} allowOverlap>
+      <Marker lngLat={[marker.longitude, marker.latitude]}>
         <Pressable
           onPress={onSelected}
           accessibilityRole="button"
@@ -67,18 +63,18 @@ export const LiveMapPointAnnotation = ({
             timestamp={marker.timestamp}
           />
         </Pressable>
-      </MarkerView>
+      </Marker>
     );
   }
 
   return (
-    <PointAnnotation
+    <ViewAnnotation
       ref={annotationRef}
       id={marker.userId}
-      coordinate={[marker.longitude, marker.latitude]}
-      anchor={{ x: 0.5, y: 0.5 }}
-      onDeselected={onDeselected}
-      onSelected={onSelected}
+      lngLat={[marker.longitude, marker.latitude]}
+      anchor="center"
+      onDeselect={onDeselected}
+      onSelect={onSelected}
     >
       <LiveMapMarkerPin
         headingDegrees={headingDegrees}
@@ -92,6 +88,6 @@ export const LiveMapPointAnnotation = ({
           annotationRef.current?.refresh();
         }}
       />
-    </PointAnnotation>
+    </ViewAnnotation>
   );
 };

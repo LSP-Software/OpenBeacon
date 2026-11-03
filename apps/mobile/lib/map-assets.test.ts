@@ -153,9 +153,9 @@ describe("bundled map assets", () => {
   });
 
   test("uses the renderer and style versions reviewed with these assets", () => {
-    expect(maplibreVersion).toBe("10.4.2");
+    expect(maplibreVersion).toBe("11.5.1");
     for (const [name, reviewedVersion] of [
-      ["@maplibre/maplibre-react-native", "10.4.2"],
+      ["@maplibre/maplibre-react-native", "11.5.1"],
       ["@protomaps/basemaps", "5.7.2"],
     ] as const) {
       const metadata: { version: string } = JSON.parse(
@@ -315,7 +315,8 @@ describe("bundled map assets", () => {
               "fill-extrusion-pattern",
             ].includes(key)
           ) {
-            for (const name of iconNames(value, layer.filter)) expect(names).toContain(name);
+            for (const name of iconNames(value, "filter" in layer ? layer.filter : undefined))
+              expect(names).toContain(name);
           }
         }
       }

@@ -22,6 +22,7 @@ import type { useNativeMapStyle } from "./useNativeMapStyle.ts";
 export const useLiveMapCamera = ({
   edge,
   mapStyle,
+  mapRevision,
   markers,
   onClearSelection,
   onSelectUser,
@@ -32,6 +33,7 @@ export const useLiveMapCamera = ({
 }: {
   edge: Pick<ReturnType<typeof useLiveMapEdgeMarkers>, "suppress" | "release" | "releaseAfter">;
   mapStyle: ReturnType<typeof useNativeMapStyle>["mapStyle"];
+  mapRevision: number;
   markers: readonly LiveMapMarker[];
   onClearSelection: () => void;
   onSelectUser: (userId: string) => void;
@@ -85,11 +87,12 @@ export const useLiveMapCamera = ({
 
   const cameraDefaultSettings = useMemo(() => {
     void pmtilesUrl;
+    void mapRevision;
     return {
       centerCoordinate: [...preservedCameraRef.current.centerCoordinate] as [number, number],
       zoomLevel: preservedCameraRef.current.zoomLevel,
     };
-  }, [pmtilesUrl]);
+  }, [pmtilesUrl, mapRevision]);
 
   const fitMarkersAndPreserveCamera = ({
     markersToFit,
@@ -279,6 +282,7 @@ export const useLiveMapCamera = ({
   }, [cameraPadding, mapStyle, markers]);
 
   useEffect(() => {
+    if (!mapStyle || !cameraRef.current) return;
     if (
       selectedUserId === null ||
       selectedLatitude === undefined ||
@@ -326,7 +330,7 @@ export const useLiveMapCamera = ({
       longitude: selectedLongitude,
       zoomLevel: stop.zoomLevel ?? preservedCameraRef.current.zoomLevel,
     });
-  }, [cameraPadding, selectedLatitude, selectedLongitude, selectedUserId]);
+  }, [cameraPadding, mapStyle, selectedLatitude, selectedLongitude, selectedUserId]);
   const onRegionDidChange = (feature: {
     geometry: { coordinates: number[] };
     properties: { animated: boolean; isUserInteraction: boolean; zoomLevel: number };
@@ -395,6 +399,7 @@ export const useLiveMapCamera = ({
   return {
     cameraRef,
     cameraDefaultSettings,
+    cameraPadding,
     fitEveryoneInFrame,
     goToCurrentLocation,
     goToEdgeMarker,

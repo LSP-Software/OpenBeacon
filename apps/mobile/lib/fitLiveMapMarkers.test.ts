@@ -28,7 +28,7 @@ const fit = (markers: readonly LiveMapMarker[]) => {
   const setCamera = mock(() => {});
   const fitBounds = mock(() => {});
   const animationDuration = fitLiveMapMarkers({
-    camera: { setCamera, fitBounds } as never,
+    camera: { easeTo: setCamera, fitBounds } as never,
     markers,
     padding,
   });
@@ -47,7 +47,7 @@ describe("fitLiveMapMarkers", () => {
     });
 
     fitLiveMapMarkers({
-      camera: { setCamera, fitBounds } as never,
+      camera: { easeTo: setCamera, fitBounds } as never,
       markers: [],
       padding,
     });
@@ -95,10 +95,10 @@ describe("fitLiveMapMarkers", () => {
     const { fitBounds, setCamera } = fit(markers);
 
     expect(setCamera).toHaveBeenCalledWith({
-      animationDuration: 600,
-      centerCoordinate: expected.centerCoordinate,
-      padding,
-      zoomLevel: expected.zoomLevel,
+      duration: 600,
+      center: expected.centerCoordinate,
+      padding: { top: 56, right: 32, bottom: 48, left: 32 },
+      zoom: expected.zoomLevel,
     });
     expect(fitBounds).not.toHaveBeenCalled();
   });
@@ -135,7 +135,10 @@ describe("fitLiveMapMarkers", () => {
   ])("fits $name with preserved padding", ({ expectedNe, expectedSw, markers }) => {
     const { fitBounds, setCamera } = fit(markers);
 
-    expect(fitBounds).toHaveBeenCalledWith(expectedNe, expectedSw, [56, 32, 48, 32], 600);
+    expect(fitBounds).toHaveBeenCalledWith([...expectedSw, ...expectedNe], {
+      padding: { top: 56, right: 32, bottom: 48, left: 32 },
+      duration: 600,
+    });
     expect(setCamera).not.toHaveBeenCalled();
   });
 
@@ -170,14 +173,10 @@ describe("fitLiveMapMarkers", () => {
     expect(setCamera).not.toHaveBeenCalled();
     expect(fitBounds).toHaveBeenCalledTimes(1);
 
-    const [ne, sw, paddingConfig, duration] = fitBounds.mock.calls[0] as unknown as [
-      [number, number],
-      [number, number],
-      number[],
-      number,
+    const [[west, south, east, north], options] = fitBounds.mock.calls[0] as unknown as [
+      [number, number, number, number],
+      { padding: { top: number; right: number; bottom: number; left: number }; duration: number },
     ];
-    const [east, north] = ne;
-    const [west, south] = sw;
     const lonSpan = east >= west ? east - west : east + 360 - west;
     let lonCenter = west + lonSpan / 2;
     if (lonCenter > 180) {
@@ -187,8 +186,8 @@ describe("fitLiveMapMarkers", () => {
       lonCenter = 180;
     }
 
-    expect(paddingConfig).toEqual([56, 32, 48, 32]);
-    expect(duration).toBe(600);
+    expect(options.padding).toEqual({ top: 56, right: 32, bottom: 48, left: 32 });
+    expect(options.duration).toBe(600);
     expect(north - south).toBeGreaterThanOrEqual(0.02);
     expect(lonSpan).toBeGreaterThan(0.019);
     expect((north + south) / 2).toBeCloseTo(center.latitude, 5);
