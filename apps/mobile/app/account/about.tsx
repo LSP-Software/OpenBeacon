@@ -20,6 +20,9 @@ const AboutScreen = () => {
         </View>
       </SafeAreaView>
       <ScrollView contentContainerClassName="gap-5 px-6 py-6">
+        <Link href="https://openbeacon.net/privacy" className="text-primary">
+          Privacy policy
+        </Link>
         <Text className="text-xl font-semibold">Versions</Text>
         <Text>OpenBeacon: {appVersion}</Text>
         <Text>MapLibre React Native: {maplibreVersion}</Text>
