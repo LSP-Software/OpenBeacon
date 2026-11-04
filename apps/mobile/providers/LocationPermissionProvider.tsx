@@ -24,6 +24,7 @@ import { requestNotificationPermissionsForLaunch } from "../lib/notificationPerm
 
 const LocationPermissionContext = createContext<{
   permissionState: LocationPermissionState | null;
+  isConfiguringLocation: boolean;
   refreshLocationPermissionState: () => Promise<LocationPermissionState | null>;
   openLocationPermissionSettings: () => Promise<void>;
 } | null>(null);
@@ -31,10 +32,11 @@ const LocationPermissionContext = createContext<{
 export const LocationPermissionProvider = ({ children }: { children: React.ReactNode }) => {
   const { data: session, isPending } = authClient.useSession();
   const [permissionState, setPermissionState] = useState<LocationPermissionState | null>(null);
+  const [isLaunchingLocationSetup, setIsLaunchingLocationSetup] = useState(true);
   const [isBackgroundPermissionDialogOpen, setIsBackgroundPermissionDialogOpen] = useState(false);
   const [isRequestingBackgroundPermission, setIsRequestingBackgroundPermission] = useState(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  const isCheckingPermissionsRef = useRef(false);
+  const permissionCheckRef = useRef<Promise<void> | null>(null);
   const shouldOpenBackgroundPermissionDialog = useCallback(
     ({
       flow,
@@ -52,11 +54,15 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
   );
   const syncLocationPermissions = useCallback(
     async (flow: "refresh" | "launchRequest"): Promise<LocationPermissionState | null> => {
-      if (!session || isCheckingPermissionsRef.current) {
-        return null;
+      if (!session) return null;
+      while (permissionCheckRef.current) {
+        if (flow === "refresh") return null;
+        await permissionCheckRef.current;
       }
-
-      isCheckingPermissionsRef.current = true;
+      let finishCheck = () => {};
+      permissionCheckRef.current = new Promise<void>((resolve) => {
+        finishCheck = resolve;
+      });
 
       const permissionResult = await tryCatch(
         flow === "launchRequest"
@@ -64,7 +70,8 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
           : getLocationPermissionState(),
       );
 
-      isCheckingPermissionsRef.current = false;
+      permissionCheckRef.current = null;
+      finishCheck();
 
       if (permissionResult.error) {
         return null;
@@ -90,13 +97,22 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
 
     if (!session) {
       setPermissionState(null);
+      setIsLaunchingLocationSetup(true);
       return;
     }
 
+    setIsLaunchingLocationSetup(true);
+    let cancelled = false;
     void (async () => {
       await tryCatch(requestNotificationPermissionsForLaunch());
+      if (cancelled) return;
       await syncLocationPermissions("launchRequest");
+      if (cancelled) return;
+      setIsLaunchingLocationSetup(false);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [isPending, session, syncLocationPermissions]);
 
   useEffect(() => {
@@ -150,6 +166,10 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
       <LocationPermissionContext.Provider
         value={{
           permissionState,
+          isConfiguringLocation:
+            isLaunchingLocationSetup ||
+            isBackgroundPermissionDialogOpen ||
+            isRequestingBackgroundPermission,
           refreshLocationPermissionState,
           openLocationPermissionSettings,
         }}

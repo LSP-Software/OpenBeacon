@@ -6,17 +6,19 @@ import { createTRPCRouter } from "../trpcRuntime.ts";
 
 export const authRouter = createTRPCRouter({
   providers: publicProcedure.query(() => authCapabilities),
-  deviceKeyContext: protectedProcedure.query(async ({ ctx }) => ({
-    recipients: await listUserRecipientPublicKeys({
-      db: ctx.db,
+  deviceKeyContext: protectedProcedure
+    .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
+    .query(async ({ ctx }) => ({
+      recipients: await listUserRecipientPublicKeys({
+        db: ctx.db,
+        userId: ctx.session.user.id,
+      }),
       userId: ctx.session.user.id,
-    }),
-    userId: ctx.session.user.id,
-  })),
+    })),
   registerDeviceKey: protectedProcedure
     .meta({
       rateLimit: {
-        limit: 10,
+        limit: 120,
         windowMs: 60_000,
       },
     })

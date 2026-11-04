@@ -19,7 +19,7 @@ export const groupTrackingRouter = {
   uploadBatch: groupMemberProcedure
     .meta({
       rateLimit: {
-        limit: 60,
+        limit: 240,
         windowMs: 60_000,
       },
     })
@@ -44,15 +44,19 @@ export const groupTrackingRouter = {
         });
       });
     }),
-  poll: groupMemberProcedure.input(groupTrackingPollSchema).query(async ({ ctx, input }) => {
-    return await pollGroupTrackingPoints({
-      cursor: input.cursor,
-      db: ctx.db,
-      groupId: input.groupId,
-      limit: input.limit ?? DEFAULT_POLL_LIMIT,
-    });
-  }),
+  poll: groupMemberProcedure
+    .meta({ rateLimit: { limit: 480, windowMs: 60_000 } })
+    .input(groupTrackingPollSchema)
+    .query(async ({ ctx, input }) => {
+      return await pollGroupTrackingPoints({
+        cursor: input.cursor,
+        db: ctx.db,
+        groupId: input.groupId,
+        limit: input.limit ?? DEFAULT_POLL_LIMIT,
+      });
+    }),
   getLatest: groupMemberProcedure
+    .meta({ rateLimit: { limit: 480, windowMs: 60_000 } })
     .input(groupTrackingGetLatestSchema)
     .query(async ({ ctx, input }) => {
       return await getLatestGroupTrackingPoints({

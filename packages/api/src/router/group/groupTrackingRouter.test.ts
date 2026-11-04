@@ -34,6 +34,7 @@ const createGroupFindUniqueMock = (isMember: boolean) =>
 
 let originalBetterAuthUrl: string | undefined;
 let originalBetterAuthSecret: string | undefined;
+let originalNodeEnv: string | undefined;
 
 const createCaller = async ({
   createManyMock,
@@ -42,6 +43,7 @@ const createCaller = async ({
   findManyPayloadsMock,
   groupFindUniqueMock,
   queryRawMock,
+  now = () => 0,
 }: {
   createManyMock?: ReturnType<typeof mock>;
   findManyDevicesMock?: ReturnType<typeof mock>;
@@ -49,6 +51,7 @@ const createCaller = async ({
   findManyPayloadsMock?: ReturnType<typeof mock>;
   groupFindUniqueMock: ReturnType<typeof createGroupFindUniqueMock>;
   queryRawMock?: ReturnType<typeof mock>;
+  now?: () => number;
 }) => {
   const [{ createTRPCRouter }, { groupTrackingRouter }] = await Promise.all([
     import("../../trpcRuntime.ts"),
@@ -59,7 +62,7 @@ const createCaller = async ({
   });
   const cache = new TestOpenBeaconCache({
     redisUrl: "redis://localhost:6379",
-    now: () => 0,
+    now,
   });
   const db = {
     $queryRaw:
@@ -101,6 +104,8 @@ const createCaller = async ({
 
 describe("groupTrackingRouter", () => {
   beforeEach(() => {
+    originalNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
     originalBetterAuthUrl = process.env.BETTER_AUTH_URL;
     originalBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
     process.env.BETTER_AUTH_URL = "http://localhost:3000";
@@ -108,6 +113,8 @@ describe("groupTrackingRouter", () => {
   });
 
   afterEach(() => {
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalNodeEnv;
     if (originalBetterAuthUrl === undefined) {
       delete process.env.BETTER_AUTH_URL;
     } else {
@@ -118,6 +125,26 @@ describe("groupTrackingRouter", () => {
       delete process.env.BETTER_AUTH_SECRET;
     } else {
       process.env.BETTER_AUTH_SECRET = originalBetterAuthSecret;
+    }
+  });
+
+  test("supports sustained map refreshes across sixteen groups", async () => {
+    let now = 0;
+    const { caller } = await createCaller({
+      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      now: () => now,
+    });
+
+    for (let tick = 0; tick < 36; tick += 1) {
+      await Promise.all(
+        Array.from({ length: 16 }, (_, index) =>
+          Promise.all([
+            caller.groupTracking.getLatest({ groupId: `group-${index}` }),
+            caller.groupTracking.poll({ groupId: `group-${index}` }),
+          ]),
+        ),
+      );
+      now += 5_000;
     }
   });
 

@@ -38,7 +38,7 @@ export const groupSettingsRouter = {
   requestGroupImageUpload: groupAdminProcedure
     .meta({
       rateLimit: {
-        limit: 10,
+        limit: 32,
         windowMs: 60_000,
       },
     })
@@ -73,7 +73,7 @@ export const groupSettingsRouter = {
       return { presignedUrl };
     }),
   confirmGroupImageUpload: protectedProcedure
-    .meta({ rateLimit: { limit: 20, windowMs: 60_000 } })
+    .meta({ rateLimit: { limit: 32, windowMs: 60_000 } })
     .input(z.object({ groupId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;

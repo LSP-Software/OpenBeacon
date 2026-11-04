@@ -201,8 +201,23 @@ const createDeviceKeyContext = async (userId: string) => {
   };
 };
 
+const deviceRegistrations = new Map<
+  string,
+  Promise<NonNullable<Awaited<ReturnType<typeof getStoredDeviceKeyContext>>>>
+>();
+
 export const ensureDeviceKeyRegistration = async () => {
   const userId = await getCurrentDeviceKeyOwnerId();
+  const pending = deviceRegistrations.get(userId);
+  if (pending) return pending;
+  const task = registerCurrentDeviceKey(userId).finally(() => {
+    deviceRegistrations.delete(userId);
+  });
+  deviceRegistrations.set(userId, task);
+  return task;
+};
+
+const registerCurrentDeviceKey = async (userId: string) => {
   let context = await getOrCreateDeviceKeyContext(userId);
   const registrationResult = await tryCatch(registerDeviceKey(context));
 

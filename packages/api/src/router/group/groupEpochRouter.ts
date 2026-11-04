@@ -3,35 +3,37 @@ import z from "zod";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 
 export const groupEpochRouter = {
-  getLatest: groupMemberProcedure.query(async ({ ctx, input }) => {
-    const latestEpoch = await ctx.db.groupEpoch.findFirst({
-      orderBy: {
-        epochNumber: "desc",
-      },
-      select: {
-        createdAt: true,
-        createdByDeviceId: true,
-        epochNumber: true,
-        groupId: true,
-        id: true,
-      },
-      where: {
-        groupId: input.groupId,
-      },
-    });
+  getLatest: groupMemberProcedure
+    .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
+    .query(async ({ ctx, input }) => {
+      const latestEpoch = await ctx.db.groupEpoch.findFirst({
+        orderBy: {
+          epochNumber: "desc",
+        },
+        select: {
+          createdAt: true,
+          createdByDeviceId: true,
+          epochNumber: true,
+          groupId: true,
+          id: true,
+        },
+        where: {
+          groupId: input.groupId,
+        },
+      });
 
-    if (!latestEpoch) {
-      return null;
-    }
+      if (!latestEpoch) {
+        return null;
+      }
 
-    return {
-      createdAt: latestEpoch.createdAt,
-      createdByDeviceId: latestEpoch.createdByDeviceId,
-      epochId: latestEpoch.id,
-      epochNumber: latestEpoch.epochNumber,
-      groupId: latestEpoch.groupId,
-    };
-  }),
+      return {
+        createdAt: latestEpoch.createdAt,
+        createdByDeviceId: latestEpoch.createdByDeviceId,
+        epochId: latestEpoch.id,
+        epochNumber: latestEpoch.epochNumber,
+        groupId: latestEpoch.groupId,
+      };
+    }),
   listRecipientPublicKeys: groupMemberProcedure.query(async ({ ctx, input }) => {
     return await ctx.db.userDevice.findMany({
       orderBy: {
@@ -58,6 +60,7 @@ export const groupEpochRouter = {
     });
   }),
   getWrappedKey: groupMemberProcedure
+    .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .input(
       z.object({
         deviceId: z.string().min(1),

@@ -158,7 +158,7 @@ export const groupMembershipRouter = {
   remove: groupMemberProcedure
     .meta({
       rateLimit: {
-        limit: 10,
+        limit: 80,
         windowMs: 60_000,
       },
     })
