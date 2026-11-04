@@ -1,3 +1,5 @@
+import "./validateEnv.ts";
+import "./validateServices.ts";
 import { Hono } from "hono";
 import { cache } from "./cache.ts";
 import { db } from "./db.ts";

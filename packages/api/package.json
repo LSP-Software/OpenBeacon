@@ -6,7 +6,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./env.ts": "./src/env.ts"
+    "./env.ts": "./src/env.ts",
+    "./envSchema.ts": "./src/envSchema.ts",
+    "./checkStorage.ts": "./src/checkStorage.ts"
   },
   "scripts": {
     "format": "bun fmt",

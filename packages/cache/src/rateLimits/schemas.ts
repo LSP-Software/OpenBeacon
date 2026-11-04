@@ -54,6 +54,7 @@ export const redisOptionsSchema = z
 
 export const redisUrlSchema = z.url().refine(
   (value) => {
+    if (!URL.canParse(value)) return false;
     const parsed = new URL(value);
     return parsed.protocol === "redis:" || parsed.protocol === "rediss:";
   },
