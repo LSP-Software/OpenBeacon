@@ -1,31 +1,43 @@
+import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { MapPinIcon, PlusCircleIcon } from "lucide-react-native";
 import { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, TextInput, View } from "react-native";
 import { InviteMemberToGroupDialog } from "../../../../components/dialogs/InviteMemberToGroupDialog.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../../components/ui/Avatar.tsx";
 import { Button } from "../../../../components/ui/Button.tsx";
-import { Icon } from "../../../../components/ui/Icon.tsx";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "../../../../components/ui/Dialog.tsx";
+import { Icon } from "../../../../components/ui/Icon.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
 import { useGroupLivePositions } from "../../../../hooks/useGroupLivePositions.ts";
 import { trpc } from "../../../../lib/api.ts";
+import {
+  loadPersonalNicknames,
+  encryptPersonalNickname,
+} from "../../../../lib/personalNicknames.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
 import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
 import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses.ts";
 import { buildRemoveGroupMemberInput } from "../../../../lib/groupEncryption.ts";
-import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
+import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
 
 const MembersTab = ({ groupId }: { groupId: string }) => {
+  const [nicknameMember, setNicknameMember] = useState<{
+    id: string;
+    name: string;
+    nickname: string | null;
+  } | null>(null);
+  const [nickname, setNickname] = useState("");
+  const updateNickname = useMutation(trpc.groupMembership.updateNickname.mutationOptions());
   const [changingRole, setChangingRole] = useState<{
     memberId: string;
     role: "OWNER" | "ADMIN" | "MEMBER";
@@ -43,9 +55,18 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
     ...trpc.groupMembership.members.queryOptions({ groupId }),
     refetchInterval: 10_000,
   });
+  const nicknameQuery = useQuery({
+    queryKey: ["personalNicknames", groupId, session?.user.id],
+    enabled: !!session?.user.id,
+    queryFn: () => loadPersonalNicknames(groupId, session!.user.id),
+  });
+  const nicknames = nicknameQuery.data ?? {};
   const livePositions = useGroupLivePositions(groupId);
   const memberStatuses = buildMemberLiveStatuses({
-    members: members ?? [],
+    members: (members ?? []).map((member) => ({
+      ...member,
+      nickname: nicknames[member.id]?.name ?? null,
+    })),
     positions: livePositions,
   });
   const self = members?.find((member) => member.user.id === session?.user.id);
@@ -77,9 +98,15 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
             const result = await tryCatch(
               (async () => {
                 if (isLastMember) {
-                  await deleteGroup.mutateAsync({ groupId, onlyIfLastMember: true });
+                  await deleteGroup.mutateAsync({
+                    groupId,
+                    onlyIfLastMember: true,
+                  });
                 } else {
-                  const input = await buildRemoveGroupMemberInput({ groupId, memberId: member.id });
+                  const input = await buildRemoveGroupMemberInput({
+                    groupId,
+                    memberId: member.id,
+                  });
                   await removeMember.mutateAsync({
                     ...input,
                     ...(successor ? { successorMemberId: successor } : {}),
@@ -92,7 +119,9 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                   router.replace("/(tabs)/groups/list");
                 } else {
                   await queryClient.invalidateQueries({
-                    queryKey: trpc.groupMembership.members.queryKey({ groupId }),
+                    queryKey: trpc.groupMembership.members.queryKey({
+                      groupId,
+                    }),
                   });
                 }
                 requestTrackingSync();
@@ -122,6 +151,84 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
         groupId={groupId}
         canInviteAdmins={self?.role === "OWNER"}
       />
+      <Dialog
+        open={nicknameMember !== null}
+        onOpenChange={(open) => {
+          if (!open) setNicknameMember(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set nickname for {nicknameMember?.name}</DialogTitle>
+          </DialogHeader>
+          <Text>
+            Only you can see this nickname. It is encrypted with this device’s private key and
+            cannot be read on other devices. Leave it blank to use their profile name.
+          </Text>
+          {nicknameQuery.isError && (
+            <Text>Unable to load nicknames. Try again before making changes.</Text>
+          )}
+          <TextInput
+            accessibilityLabel="Nickname"
+            value={nickname}
+            onChangeText={setNickname}
+            placeholder="Nickname"
+            className="rounded-lg border border-border bg-input text-foreground p-4"
+          />
+          <Button
+            disabled={updateNickname.isPending || nicknameQuery.isPending || nicknameQuery.isError}
+            onPress={async () => {
+              if (!nicknameMember || nicknameQuery.isPending || nicknameQuery.isError) return;
+              const parsed = nickname.trim() ? accountNameSchema.safeParse(nickname) : null;
+              if (!parsed && nicknames[nicknameMember.id]?.name === null) {
+                setNicknameMember(null);
+                return;
+              }
+              if (parsed && !parsed.success) {
+                Alert.alert("Invalid nickname", parsed.error.issues[0]?.message);
+                return;
+              }
+              const result = await tryCatch(
+                (async () => {
+                  if (!session?.user.id) throw new Error("Please sign in again.");
+                  const ciphertext = parsed?.data
+                    ? await encryptPersonalNickname({
+                        groupId,
+                        memberId: nicknameMember.id,
+                        userId: session.user.id,
+                        nickname: parsed.data,
+                      })
+                    : null;
+                  await updateNickname.mutateAsync({
+                    groupId,
+                    memberId: nicknameMember.id,
+                    ciphertext,
+                    expectedCiphertext: nicknames[nicknameMember.id]?.ciphertext ?? null,
+                  });
+                })(),
+              );
+              if (result.error) {
+                await queryClient.invalidateQueries({
+                  queryKey: ["personalNicknames", groupId, session?.user.id],
+                });
+                Alert.alert("Unable to save nickname", result.error.message);
+                return;
+              }
+              await Promise.all([
+                queryClient.invalidateQueries({
+                  queryKey: trpc.groupMembership.members.queryKey({ groupId }),
+                }),
+                queryClient.invalidateQueries({
+                  queryKey: ["personalNicknames", groupId, session?.user.id],
+                }),
+              ]);
+              setNicknameMember(null);
+            }}
+          >
+            <Text>Save nickname</Text>
+          </Button>
+        </DialogContent>
+      </Dialog>
       <Dialog open={successorDialogOpen} onOpenChange={setSuccessorDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -135,7 +242,9 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                 <Pressable
                   key={member.id}
                   accessibilityRole="radio"
-                  accessibilityState={{ checked: successorMemberId === member.id }}
+                  accessibilityState={{
+                    checked: successorMemberId === member.id,
+                  }}
                   onPress={() => setSuccessorMemberId(member.id)}
                   className="flex-row items-center gap-3 rounded-lg p-3"
                 >
@@ -170,6 +279,23 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
       {memberStatuses.map((member) => (
         <View key={member.id}>
           <MemberCard member={member} />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching}
+            onPress={() => {
+              if (nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching)
+                return;
+              setNicknameMember({
+                id: member.id,
+                name: member.user.name,
+                nickname: member.nickname,
+              });
+              setNickname(member.nickname ?? "");
+            }}
+          >
+            <Text>Edit nickname</Text>
+          </Button>
           {self?.role === "OWNER" && member.id !== self.id && (
             <View
               className="flex-row rounded-2xl bg-secondary p-1 my-2"
@@ -194,7 +320,11 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                         onPress: async () => {
                           setChangingRole({ memberId: member.id, role });
                           const result = await tryCatch(
-                            updateRole.mutateAsync({ groupId, memberId: member.id, role }),
+                            updateRole.mutateAsync({
+                              groupId,
+                              memberId: member.id,
+                              role,
+                            }),
                           );
                           if (result.error) {
                             setChangingRole(null);
@@ -206,7 +336,9 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                               queryKey: trpc.groupMembership.members.queryKey({ groupId }),
                             }),
                             queryClient.invalidateQueries({
-                              queryKey: trpc.groupMembership.get.queryKey({ groupId }),
+                              queryKey: trpc.groupMembership.get.queryKey({
+                                groupId,
+                              }),
                             }),
                             queryClient.invalidateQueries({
                               queryKey: trpc.groupMembership.list.queryKey(),
@@ -262,17 +394,17 @@ const MemberCard = ({ member }: { member: ReturnType<typeof buildMemberLiveStatu
     <View className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-4">
       <View className="flex flex-row items-center gap-3">
         <View className="flex-row items-center gap-3">
-          <Avatar alt={member.user.name} className="size-12">
+          <Avatar alt={member.nickname ?? member.user.name} className="size-12">
             <AvatarImage source={{ uri: member.user.image ?? "" }} />
             <AvatarFallback>
-              <Text className="font-bold">
-                {member.user.name.charAt(0) + member.user.name.charAt(1)}
-              </Text>
+              <Text className="font-bold">{(member.nickname ?? member.user.name).slice(0, 2)}</Text>
             </AvatarFallback>
           </Avatar>
         </View>
         <View className="flex-1 gap-1">
-          <Text className="text-foreground text-xl font-bold">{member.user.name}</Text>
+          <Text className="text-foreground text-xl font-bold">
+            {member.nickname ?? member.user.name}
+          </Text>
           <Text className="text-muted-foreground">{member.role}</Text>
           <View className="flex-row items-start gap-1">
             <Icon as={MapPinIcon} className="text-secondary mt-1 size-4" />

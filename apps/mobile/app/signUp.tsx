@@ -39,8 +39,7 @@ const SignUp = () => {
   const isSubmitting = emailLoading || googleLoading;
   const isGoogleEnabled = providers?.google === true && isNativeGoogleSignInConfigured;
 
-  const handleSignUp = async () => {
-    const { name, email, password } = form.getValues();
+  const handleSignUp = async ({ name, email, password }: z.infer<typeof signUpSchema>) => {
     setEmailLoading(true);
 
     const result = await authClient.signUp.email({

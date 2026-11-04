@@ -1,6 +1,8 @@
-import { betterAuth } from "better-auth";
 import { expo } from "@better-auth/expo";
+import { accountNameSchema } from "@openbeacon/schemas";
+import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { APIError } from "better-auth/api";
 import { getAuthCapabilities } from "./capabilities.ts";
 import { db } from "./db.ts";
 import { env } from "./env.ts";
@@ -15,6 +17,31 @@ export const authCapabilities = getAuthCapabilities({
 
 export const auth = betterAuth({
   plugins: [expo()],
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          const result = accountNameSchema.safeParse(user.name);
+          if (!result.success)
+            throw new APIError("BAD_REQUEST", {
+              message: result.error.issues[0]?.message ?? "Invalid name",
+            });
+          return { data: { ...user, name: result.data } };
+        },
+      },
+      update: {
+        before: async (user) => {
+          if (user.name === undefined) return { data: user };
+          const result = accountNameSchema.safeParse(user.name);
+          if (!result.success)
+            throw new APIError("BAD_REQUEST", {
+              message: result.error.issues[0]?.message ?? "Invalid name",
+            });
+          return { data: { ...user, name: result.data } };
+        },
+      },
+    },
+  },
   database: prismaAdapter(db, {
     provider: "postgresql",
   }),

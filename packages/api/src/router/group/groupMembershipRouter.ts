@@ -1,5 +1,5 @@
-import { removeGroupMemberSchema } from "@openbeacon/schemas";
 import { GroupRole, Prisma } from "@openbeacon/database";
+import { removeGroupMemberSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
@@ -65,7 +65,10 @@ export const groupMembershipRouter = {
         ctx.groupMember.role !== GroupRole.OWNER &&
         ctx.groupMember.role !== GroupRole.ADMIN
       ) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "You cannot remove this member." });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You cannot remove this member.",
+        });
       }
       return getGroupRemovalContext({
         db: ctx.db,
@@ -90,6 +93,67 @@ export const groupMembershipRouter = {
           role: true,
         },
       });
+    }),
+  nicknames: groupMemberProcedure.query(async ({ ctx }) =>
+    ctx.db.personalGroupNickname.findMany({
+      where: { ownerId: ctx.groupMember.id },
+      select: { targetId: true, ciphertext: true },
+    }),
+  ),
+  updateNickname: groupMemberProcedure
+    .input(
+      z.object({
+        groupId: z.string().min(1),
+        memberId: z.string().min(1),
+        ciphertext: z.string().min(1).max(50000).nullable(),
+        expectedCiphertext: z.string().min(1).max(50000).nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const member = await ctx.db.groupMember.findFirst({
+        where: { id: input.memberId, groupId: input.groupId },
+        select: { id: true },
+      });
+      if (!member) throw new TRPCError({ code: "NOT_FOUND", message: "Group member not found" });
+      const where = { ownerId: ctx.groupMember.id, targetId: member.id };
+      if (input.expectedCiphertext === null) {
+        if (input.ciphertext === null) {
+          const existing = await ctx.db.personalGroupNickname.findUnique({
+            where: { ownerId_targetId: where },
+            select: { ownerId: true },
+          });
+          if (existing)
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "Nickname changed. Reload and try again.",
+            });
+          return;
+        }
+        const created = await ctx.db.personalGroupNickname.createMany({
+          data: { ...where, ciphertext: input.ciphertext },
+          skipDuplicates: true,
+        });
+        if (created.count === 0)
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Nickname changed. Reload and try again.",
+          });
+        return;
+      }
+      const result =
+        input.ciphertext === null
+          ? await ctx.db.personalGroupNickname.deleteMany({
+              where: { ...where, ciphertext: input.expectedCiphertext },
+            })
+          : await ctx.db.personalGroupNickname.updateMany({
+              where: { ...where, ciphertext: input.expectedCiphertext },
+              data: { ciphertext: input.ciphertext },
+            });
+      if (result.count === 0)
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Nickname changed. Reload and try again.",
+        });
     }),
   remove: groupMemberProcedure
     .meta({
@@ -116,14 +180,20 @@ export const groupMembershipRouter = {
             actor.role !== GroupRole.OWNER &&
             actor.role !== GroupRole.ADMIN)
         ) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "You cannot remove this member." });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You cannot remove this member.",
+          });
         }
         const member = await tx.groupMember.findFirst({
           where: { groupId: input.groupId, id: input.memberId },
           select: { userId: true, role: true },
         });
         if (!member) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Group member not found" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Group member not found",
+          });
         }
         if (
           actor.id !== input.memberId &&
@@ -151,7 +221,10 @@ export const groupMembershipRouter = {
             where: { id: input.successorMemberId, groupId: input.groupId },
           });
           if (!successor)
-            throw new TRPCError({ code: "NOT_FOUND", message: "Successor not found." });
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Successor not found.",
+            });
           await tx.groupMember.update({
             where: { id: successor.id },
             data: { role: GroupRole.OWNER },
@@ -195,16 +268,27 @@ export const groupMembershipRouter = {
           Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
         );
         const actor = await tx.groupMember.findUnique({
-          where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
+          where: {
+            userId_groupId: {
+              userId: ctx.session.user.id,
+              groupId: input.groupId,
+            },
+          },
         });
         if (actor?.role !== GroupRole.OWNER) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Only owners can change roles." });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only owners can change roles.",
+          });
         }
         const member = await tx.groupMember.findFirst({
           where: { id: input.memberId, groupId: input.groupId },
         });
         if (!member) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Group member not found" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Group member not found",
+          });
         }
         if (member.role === GroupRole.OWNER && input.role !== GroupRole.OWNER) {
           const owners = await tx.groupMember.count({
@@ -217,7 +301,10 @@ export const groupMembershipRouter = {
             });
           }
         }
-        return tx.groupMember.update({ where: { id: member.id }, data: { role: input.role } });
+        return tx.groupMember.update({
+          where: { id: member.id },
+          data: { role: input.role },
+        });
       });
     }),
 } satisfies TRPCRouterRecord;

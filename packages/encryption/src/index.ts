@@ -443,3 +443,5 @@ export type {
   TrackingPointV1,
   WrappedEpochKey,
 };
+
+export { decryptPrivateNickname, encryptPrivateNickname } from "./personalNickname.ts";

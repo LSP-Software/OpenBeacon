@@ -45,6 +45,7 @@ const categories = [
       {
         label: "Manage Profile",
         icon: UserCircleIcon,
+        href: "/account/profile",
       },
       {
         label: "Notifications",

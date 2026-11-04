@@ -49,7 +49,11 @@ export const buildLiveMapMarkers = ({
 
   const markers: LiveMapMarker[] = [];
   for (const livePosition of positions) {
-    const member = memberByUserId.get(livePosition.userId);
+    const member =
+      groups
+        .find((group) => group.id === livePosition.sourceGroupId)
+        ?.members.find((item) => item.userId === livePosition.userId) ??
+      memberByUserId.get(livePosition.userId);
     if (!member) {
       continue;
     }

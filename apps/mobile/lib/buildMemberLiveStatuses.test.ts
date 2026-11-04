@@ -41,6 +41,7 @@ describe("buildMemberLiveStatuses", () => {
     expect(statuses).toEqual([
       {
         battery: null,
+        nickname: null,
         id: "membership-alice",
         role: "OWNER",
         timestamp: null,
@@ -48,6 +49,7 @@ describe("buildMemberLiveStatuses", () => {
       },
       {
         battery: { charging: true, level: 42 },
+        nickname: null,
         id: "membership-bob",
         role: "MEMBER",
         timestamp: "2026-07-17T12:05:00.000Z",
@@ -71,6 +73,7 @@ describe("buildMemberLiveStatuses", () => {
     expect(statuses).toEqual([
       {
         battery: null,
+        nickname: null,
         id: "membership-alice",
         role: "OWNER",
         timestamp: null,

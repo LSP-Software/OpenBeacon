@@ -1,4 +1,5 @@
 import { optionalEnvString } from "./env.ts";
+import { accountNameSchema } from "./schemas/account/fields.ts";
 import { signInSchema } from "./schemas/account/signIn.ts";
 import { signUpSchema } from "./schemas/account/signUp.ts";
 import {
@@ -19,11 +20,12 @@ import {
 import { requestImageUploadInputSchema } from "./schemas/image/requestImageUpload.ts";
 
 export {
+  accountNameSchema,
   createGroupSchema,
   groupEpochBundleSchema,
   groupTrackingGetLatestSchema,
-  groupTrackingPollSchema,
   groupTrackingPointSchema,
+  groupTrackingPollSchema,
   groupTrackingUploadBatchSchema,
   inviteMemberToGroupSchema,
   optionalEnvString,
