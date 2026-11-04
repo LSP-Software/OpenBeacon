@@ -1,5 +1,4 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { signUpSchema } from "@openbeacon/schemas";
 import { useQuery } from "@tanstack/react-query";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
@@ -15,6 +14,7 @@ import { trpc } from "../lib/api.ts";
 import { completeAuthenticatedSessionSetup, isNativeGoogleSignInConfigured } from "../lib/auth.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { performGoogleAuth } from "../lib/googleAuth.ts";
+import { signUpFormSchema } from "../lib/signUpSchema.ts";
 
 const SignUp = () => {
   const { joinCode } = useLocalSearchParams<{ joinCode?: string }>();
@@ -25,13 +25,14 @@ const SignUp = () => {
   const [emailLoading, setEmailLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
-  const form = useForm<z.infer<typeof signUpSchema>>({
-    resolver: zodResolver(signUpSchema),
+  const form = useForm<z.infer<typeof signUpFormSchema>>({
+    resolver: zodResolver(signUpFormSchema),
     mode: "onTouched",
     defaultValues: {
       name: "",
       email: "",
       password: "",
+      confirmPassword: "",
     },
     shouldFocusError: true,
   });
@@ -39,7 +40,7 @@ const SignUp = () => {
   const isSubmitting = emailLoading || googleLoading;
   const isGoogleEnabled = providers?.google === true && isNativeGoogleSignInConfigured;
 
-  const handleSignUp = async ({ name, email, password }: z.infer<typeof signUpSchema>) => {
+  const handleSignUp = async ({ name, email, password }: z.infer<typeof signUpFormSchema>) => {
     setEmailLoading(true);
 
     const result = await authClient.signUp.email({
@@ -137,6 +138,16 @@ const SignUp = () => {
               autoCapitalize="none"
               autoComplete="password"
               textContentType="password"
+            />
+            <Input
+              control={form.control}
+              name="confirmPassword"
+              label="Confirm password"
+              placeholder="Confirm password"
+              secureTextEntry
+              autoCapitalize="none"
+              autoComplete="new-password"
+              textContentType="newPassword"
               returnKeyType="done"
               onSubmitEditing={form.handleSubmit(handleSignUp)}
             />
