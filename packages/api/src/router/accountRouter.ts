@@ -1,4 +1,4 @@
-import { requestImageUploadInputSchema } from "@openbeacon/schemas";
+import { accountNameSchema, requestImageUploadInputSchema } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod";
 import { env } from "../env.ts";
@@ -11,6 +11,15 @@ import {
 import { protectedProcedure } from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
+  updateName: protectedProcedure
+    .input(z.object({ name: accountNameSchema }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.user.update({
+        where: { id: ctx.session.user.id },
+        data: { name: input.name },
+        select: { name: true },
+      });
+    }),
   version: protectedProcedure.query(({ ctx }) => ctx.serverVersion),
   submitFeedback: protectedProcedure
     .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
@@ -42,7 +51,11 @@ export const accountRouter = {
         windowMs: 60_000,
       },
     })
-    .input(requestImageUploadInputSchema({ maxImageFileSize: env.MAX_IMAGE_FILE_SIZE }))
+    .input(
+      requestImageUploadInputSchema({
+        maxImageFileSize: env.MAX_IMAGE_FILE_SIZE,
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const imagePath = buildUserAvatarPath(userId);
@@ -103,7 +116,9 @@ export const accountRouter = {
               data: { image: imageUrl },
             });
             await tx.pendingUpload.delete({
-              where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
+              where: {
+                userId_uploadType: { userId, uploadType: "userAvatar" },
+              },
             });
           });
         },

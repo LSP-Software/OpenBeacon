@@ -153,11 +153,23 @@ model GroupMember {
   group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   role GroupRole
+  personalNicknames PersonalGroupNickname[] @relation("NicknameTarget")
+  ownedNicknames PersonalGroupNickname[] @relation("NicknameOwner")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([userId, groupId])
+}
+
+model PersonalGroupNickname {
+  ownerId String
+  owner GroupMember @relation("NicknameOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  targetId String
+  target GroupMember @relation("NicknameTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  ciphertext String
+
+  @@id([ownerId, targetId])
 }
 
 model UserDevice {

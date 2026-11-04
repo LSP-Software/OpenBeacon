@@ -7,6 +7,7 @@ export const buildMemberLiveStatuses = ({
   members: readonly {
     id: string;
     role: string;
+    nickname?: string | null;
     user: {
       id: string;
       image: string | null;
@@ -24,6 +25,7 @@ export const buildMemberLiveStatuses = ({
       battery: live?.battery ?? null,
       id: member.id,
       role: member.role,
+      nickname: member.nickname ?? null,
       timestamp: live?.timestamp ?? null,
       user: member.user,
     };

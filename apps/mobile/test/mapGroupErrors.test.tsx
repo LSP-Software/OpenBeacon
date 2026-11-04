@@ -6,9 +6,12 @@ import { createRoot } from "test-renderer";
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-let groups: { id: string; name: string }[] = [];
+let groups: { id: string; name: string; members: never[] }[] = [];
 let access: { data: string }[] = [];
-mock.module("@tanstack/react-query", () => ({ useQuery: () => ({ data: groups }) }));
+mock.module("@tanstack/react-query", () => ({
+  useQuery: () => ({ data: groups }),
+  useQueries: () => [],
+}));
 mock.module("expo-router", () => ({
   Link: ({ children, href }: { children: React.ReactNode; href: unknown }) =>
     React.createElement("a", { href }, children),
@@ -44,11 +47,16 @@ mock.module("../lib/resolveSelfDeviceLocationFallback.ts", () => ({
 }));
 mock.module("../lib/applySelfDeviceLocation.ts", () => ({ applySelfDeviceLocation: () => [] }));
 mock.module("../lib/buildLiveMapMarkers.ts", () => ({ buildLiveMapMarkers: () => [] }));
+mock.module("../lib/personalNicknames.ts", () => ({ loadPersonalNicknames: async () => ({}) }));
 mock.module("../lib/groupColor.ts", () => ({ getGroupColor: () => "red" }));
 const { default: MapScreen } = await import("../app/(tabs)/map/index.tsx");
 
 test("shows individual group links for up to two missing keys and a groups link above that", async () => {
-  groups = ["One", "Healthy", "Two", "Three"].map((name, index) => ({ id: `${index}`, name }));
+  groups = ["One", "Healthy", "Two", "Three"].map((name, index) => ({
+    id: `${index}`,
+    name,
+    members: [],
+  }));
   const root = createRoot();
   for (const count of [0, 1, 2, 3]) {
     access = [

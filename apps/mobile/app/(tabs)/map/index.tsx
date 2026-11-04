@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
@@ -15,6 +15,7 @@ import { trpc } from "../../../lib/api.ts";
 import { applySelfDeviceLocation } from "../../../lib/applySelfDeviceLocation.ts";
 import { authClient } from "../../../lib/auth-client.ts";
 import { buildLiveMapMarkers } from "../../../lib/buildLiveMapMarkers.ts";
+import { loadPersonalNicknames } from "../../../lib/personalNicknames.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { nextMapMarkerSelection } from "../../../lib/mapMarkerSelection.ts";
 import { resolveSelfDeviceLocationFallback } from "../../../lib/resolveSelfDeviceLocationFallback.ts";
@@ -26,6 +27,20 @@ const MapScreen = () => {
   const { data: session } = authClient.useSession();
   const { data: groupsQueryData } = useQuery(trpc.groupMembership.list.queryOptions());
   const groups = useMembershipSnapshot(groupsQueryData);
+  const nicknameQueries = useQueries({
+    queries: (groups ?? []).map((group) => ({
+      queryKey: ["personalNicknames", group.id, session?.user.id],
+      enabled: !!session?.user.id,
+      queryFn: () => loadPersonalNicknames(group.id, session!.user.id),
+    })),
+  });
+  const groupsWithNicknames = groups?.map((group, index) => ({
+    ...group,
+    members: group.members.map((member) => ({
+      ...member,
+      name: nicknameQueries[index]?.data?.[member.id]?.name ?? member.name,
+    })),
+  }));
   const keyAccess = useGroupKeyAccess(groups?.map((group) => group.id) ?? [], session?.user.id);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selfUserId = session?.user.id ?? "";
@@ -39,13 +54,13 @@ const MapScreen = () => {
     void groupColorRevision;
     return resolveSelfDeviceLocationFallback({
       getGroupColor,
-      groups: groups ?? [],
+      groups: groupsWithNicknames ?? [],
       selfUserId,
       selfUser: session?.user
         ? { name: session.user.name, image: session.user.image ?? null }
         : null,
     });
-  }, [groupColorRevision, groups, selfUserId, session?.user]);
+  }, [groupColorRevision, groupsWithNicknames, selfUserId, session?.user]);
 
   const markers = useMemo(() => {
     void groupColorRevision;
@@ -56,7 +71,7 @@ const MapScreen = () => {
     return applySelfDeviceLocation({
       markers: buildLiveMapMarkers({
         getGroupColor,
-        groups: groups ?? [],
+        groups: groupsWithNicknames ?? [],
         positions: livePositions,
         selfUserId,
       }),
@@ -67,7 +82,7 @@ const MapScreen = () => {
     });
   }, [
     groupColorRevision,
-    groups,
+    groupsWithNicknames,
     livePositions,
     selfDeviceLocation,
     selfFallback,

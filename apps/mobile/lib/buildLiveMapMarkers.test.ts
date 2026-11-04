@@ -247,3 +247,17 @@ describe("buildLiveMapMarkers", () => {
     expect(markers[0]?.name).toBe("Alice Smith");
   });
 });
+
+test("uses the member name from the position's source group", () => {
+  const markers = buildLiveMapMarkers({
+    getGroupColor: () => "red",
+    groups: [
+      { id: "first", name: "First", members: [{ userId: "alice", name: "Alice", image: null }] },
+      { id: "family", name: "Family", members: [{ userId: "alice", name: "Mum", image: null }] },
+    ],
+    positions: [position({ userId: "alice", sourceGroupId: "family" })],
+    selfUserId: "other",
+  });
+  expect(markers[0]?.name).toBe("Mum");
+  expect(markers[0]?.initials).toBe("Mu");
+});
