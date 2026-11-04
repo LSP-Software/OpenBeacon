@@ -1,9 +1,34 @@
 import { describe, expect, test } from "bun:test";
-import { resolveClientIp } from "./clientIp.ts";
+import { authenticateCloudflare, resolveClientIp } from "./clientIp.ts";
 
 const createHeaders = (input: Record<string, string>) => {
   return new Headers(input);
 };
+
+describe("authenticateCloudflare", () => {
+  const secret = "a-secure-test-secret-with-32-characters";
+
+  test("accepts only the shared secret with a valid client IP", () => {
+    expect(
+      authenticateCloudflare({
+        secret,
+        headers: createHeaders({
+          "x-openbeacon-origin-secret": secret,
+          "cf-connecting-ip": "2001:db8::1",
+        }),
+      }),
+    ).toBe(true);
+
+    for (const headers of [
+      { "x-openbeacon-origin-secret": "wrong", "cf-connecting-ip": "198.51.100.1" },
+      { "x-openbeacon-origin-secret": secret, "cf-connecting-ip": "not-an-ip" },
+      { "x-openbeacon-origin-secret": secret },
+      { "cf-connecting-ip": "198.51.100.1" },
+    ]) {
+      expect(authenticateCloudflare({ secret, headers: createHeaders(headers) })).toBe(false);
+    }
+  });
+});
 
 describe("resolveClientIp", () => {
   test("ignores proxy headers when trusted proxy provider is none", () => {

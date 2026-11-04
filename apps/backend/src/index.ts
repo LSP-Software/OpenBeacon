@@ -2,12 +2,14 @@ import { Hono } from "hono";
 import { cache } from "./cache.ts";
 import { db } from "./db.ts";
 import { env } from "./env.ts";
-import { resolveClientIp } from "./helpers/clientIp.ts";
+import { authenticateCloudflare, resolveClientIp } from "./helpers/clientIp.ts";
 import authRouter from "./routes/auth.ts";
 import trpcRouter from "./routes/trpc.ts";
 import type { AppEnv } from "./types/AppEnv.ts";
 
 const app = new Hono<AppEnv>();
+
+app.get("/health", (context) => context.json({ status: "ok" }));
 
 const routes = [authRouter, trpcRouter] as const;
 
@@ -17,6 +19,17 @@ routes.forEach((route) => {
 
 export default {
   fetch(request: Request, server: Bun.Server<unknown>) {
+    if (
+      env.TRUSTED_PROXY_PROVIDER === "cloudflare-authenticated" &&
+      !(request.method === "GET" && new URL(request.url).pathname === "/health") &&
+      !authenticateCloudflare({
+        headers: request.headers,
+        secret: env.CLOUDFLARE_ORIGIN_SECRET ?? "",
+      })
+    ) {
+      return new Response("Forbidden", { status: 403 });
+    }
+
     const clientIp = resolveClientIp({
       headers: request.headers,
       requestIp: server.requestIP(request)?.address ?? null,

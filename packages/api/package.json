@@ -5,7 +5,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./env.ts": "./src/env.ts"
   },
   "scripts": {
     "format": "bun fmt",
