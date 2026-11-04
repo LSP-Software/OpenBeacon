@@ -24,7 +24,7 @@ export const TrackingProvider = ({
 }) => {
   const { data: session, isPending } = authClient.useSession();
   const queryClient = useQueryClient();
-  const { permissionState } = useLocationPermissions();
+  const { permissionState, isConfiguringLocation } = useLocationPermissions();
   const activeCycleRef = useRef<Promise<void> | null>(null);
   const appStateRef = useRef(AppState.currentState);
   const completedCycleRef = useRef(0);
@@ -41,6 +41,9 @@ export const TrackingProvider = ({
       permissionAlertShownRef.current = false;
       return;
     }
+    if (isConfiguringLocation) {
+      return;
+    }
     if (permissionState.isReadyForSharing) {
       permissionAlertShownRef.current = false;
     } else if (!permissionAlertShownRef.current) {
@@ -50,7 +53,7 @@ export const TrackingProvider = ({
         "Allow precise and background location access in your device settings to share your location.",
       );
     }
-  }, [permissionState, userId]);
+  }, [isConfiguringLocation, permissionState, userId]);
 
   const runTrackingCycle = useCallback(() => {
     requestedCycleRef.current += 1;

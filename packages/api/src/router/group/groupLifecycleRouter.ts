@@ -14,7 +14,7 @@ export const groupLifecycleRouter = {
   delete: groupOwnerProcedure
     .meta({
       rateLimit: {
-        limit: 5,
+        limit: 32,
         windowMs: 60_000,
       },
     })
@@ -82,7 +82,7 @@ export const groupLifecycleRouter = {
   create: protectedProcedure
     .meta({
       rateLimit: {
-        limit: 10,
+        limit: 32,
         windowMs: 60_000,
       },
     })

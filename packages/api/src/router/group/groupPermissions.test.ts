@@ -1,4 +1,4 @@
-import { expect, mock, test } from "bun:test";
+import { expect, mock, spyOn, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis } from "@openbeacon/cache/testing";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
@@ -122,4 +122,24 @@ test("owners can invite admins and members cannot invite", async () => {
     }),
   ).rejects.toThrow();
   expect(member.createMany).not.toHaveBeenCalled();
+});
+
+test("charges for submitted invitees without revealing account matches", async () => {
+  const { caller, createMany } = createCaller("OWNER");
+  const batch = (count: number, email: string) => ({
+    groupId: "group",
+    invites: Array.from({ length: count }, () => ({ email, role: "MEMBER" as const })),
+  });
+  const known = await caller.groupInvites.send(batch(50, "target@example.test"));
+  const unknown = await caller.groupInvites.send(batch(14, "unknown@example.test"));
+  expect(unknown).toEqual(known);
+  expect(createMany.mock.calls[0]?.[0].data).toHaveLength(1);
+  expect(createMany.mock.calls[1]?.[0].data).toHaveLength(0);
+  await caller.groupInvites.send(batch(32, "unknown@example.test"));
+  const warning = spyOn(console, "warn").mockImplementation(() => {});
+  await expect(caller.groupInvites.send(batch(1, "target@example.test"))).rejects.toMatchObject({
+    code: "TOO_MANY_REQUESTS",
+  });
+  warning.mockRestore();
+  expect(createMany).toHaveBeenCalledTimes(3);
 });

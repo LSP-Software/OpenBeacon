@@ -339,6 +339,35 @@ describe("rateLimitMiddleware", () => {
       message: "Unable to process request.",
     });
   });
+  test("supports sixteen joins per account and sixty-four people sharing an IP", async () => {
+    const { groupInvitesRouter } = await import("../router/group/groupInvitesRouter.ts");
+    const cache = new TestOpenBeaconCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+    const { createTRPCRouter, protectedProcedure } = createModules();
+    const router = createTRPCRouter({
+      lookup: protectedProcedure
+        .meta(groupInvitesRouter.sharedAcceptanceContext._def.meta)
+        .mutation(() => true),
+      accept: protectedProcedure
+        .meta(groupInvitesRouter.acceptShared._def.meta)
+        .mutation(() => true),
+    });
+    const callers = Array.from({ length: 64 }, (_, index) =>
+      createCaller({ cache, clientIp: "10.0.0.1", router, userId: `user-${index}` }),
+    );
+    for (const caller of callers) {
+      await caller.lookup();
+      await caller.accept();
+    }
+    const firstCaller = callers[0]!;
+    for (let index = 0; index < 16; index += 1) {
+      await firstCaller.lookup();
+      await firstCaller.accept();
+    }
+    const warning = spyOn(console, "warn").mockImplementation(() => {});
+    await expect(callers[1]!.lookup()).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
+    warning.mockRestore();
+  });
+
   test("shares a budget across join endpoints and limits accounts sharing an IP", async () => {
     const cache = new TestOpenBeaconCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
     const { createTRPCRouter, protectedProcedure } = createModules();

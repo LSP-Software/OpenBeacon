@@ -33,7 +33,7 @@ export const groupInvitesRouter = {
       });
     }),
   createShared: groupAdminProcedure
-    .meta({ rateLimit: { limit: 10, windowMs: 60_000 } })
+    .meta({ rateLimit: { limit: 32, windowMs: 60_000 } })
     .input(z.object({ groupId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const code = randomBytes(16).toString("hex").toUpperCase();
@@ -85,7 +85,7 @@ export const groupInvitesRouter = {
     }),
   sharedAcceptanceContext: protectedProcedure
     .meta({
-      rateLimit: { limit: 10, ipLimit: 30, namespace: "groupInvites.redeem", windowMs: 60_000 },
+      rateLimit: { limit: 40, ipLimit: 160, namespace: "groupInvites.redeem", windowMs: 60_000 },
     })
     .input(z.object({ code: z.string().regex(/^[A-Fa-f0-9]{32}$/) }))
     .mutation(async ({ ctx, input }) => {
@@ -107,7 +107,7 @@ export const groupInvitesRouter = {
     }),
   acceptShared: protectedProcedure
     .meta({
-      rateLimit: { limit: 10, ipLimit: 30, namespace: "groupInvites.redeem", windowMs: 60_000 },
+      rateLimit: { limit: 40, ipLimit: 160, namespace: "groupInvites.redeem", windowMs: 60_000 },
     })
     .input(
       z.object({ code: z.string().regex(/^[A-Fa-f0-9]{32}$/), nextEpoch: groupEpochBundleSchema }),
@@ -164,7 +164,7 @@ export const groupInvitesRouter = {
   accept: protectedProcedure
     .meta({
       rateLimit: {
-        limit: 10,
+        limit: 32,
         windowMs: 60_000,
       },
     })
@@ -316,12 +316,22 @@ export const groupInvitesRouter = {
   send: groupAdminProcedure
     .meta({
       rateLimit: {
-        limit: 10,
+        limit: 240,
         windowMs: 60_000,
       },
     })
     .input(inviteMemberToGroupSchema)
     .mutation(async ({ ctx, input }) => {
+      const result = await ctx.cache.rateLimits.consume({
+        namespace: "groupInvites.send.recipients",
+        identifier: { type: "userId", value: ctx.session.user.id },
+        limit: 96,
+        windowMs: 60_000,
+        cost: input.invites.length,
+      });
+      if (!result.allowed) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS" });
+      }
       await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,

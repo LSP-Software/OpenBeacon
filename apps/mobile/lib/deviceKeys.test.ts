@@ -77,7 +77,8 @@ describe("device key registration", () => {
     currentUserId = "user-a";
     secureStoreSetError = null;
     deleteItemAsyncMock.mockClear();
-    registerDeviceKeyMock.mockClear();
+    registerDeviceKeyMock.mockReset();
+    registerDeviceKeyMock.mockImplementation(async () => ({}));
     setItemAsyncMock.mockClear();
   });
 
@@ -96,6 +97,17 @@ describe("device key registration", () => {
     expect(firstUserDeviceAgain.deviceId).toBe(firstUserDevice.deviceId);
     expect(firstUserDeviceAfterSwitch.deviceId).toBe(firstUserDevice.deviceId);
     expect(secondUserDevice.deviceId).not.toBe(firstUserDevice.deviceId);
+  });
+
+  test("leaves registration capacity after ten simultaneous group checks", async () => {
+    registerDeviceKeyMock.mockImplementation(async () => {
+      if (registerDeviceKeyMock.mock.calls.length > 10) throw new Error("Too many requests");
+      return {};
+    });
+    const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
+    await Promise.all(Array.from({ length: 10 }, () => ensureDeviceKeyRegistration()));
+    await expect(ensureDeviceKeyRegistration()).resolves.toBeDefined();
+    expect(registerDeviceKeyMock).toHaveBeenCalledTimes(2);
   });
 
   test("concurrent initialization creates one device identity", async () => {

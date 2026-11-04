@@ -25,6 +25,8 @@ let refreshCalls = 0;
 let backgroundRequestCalls = 0;
 let notificationRequestCalls = 0;
 let permissionRequestOrder: string[] = [];
+let notificationGate: Promise<void> | null = null;
+let refreshGate: Promise<void> | null = null;
 let launchRequestResult: import("../lib/locationPermissions.ts").LocationPermissionState;
 let refreshResult: import("../lib/locationPermissions.ts").LocationPermissionState;
 let backgroundRequestResult: import("../lib/locationPermissions.ts").LocationPermissionState;
@@ -84,6 +86,7 @@ mock.module("../lib/auth-client.ts", () => ({
 mock.module("../lib/locationPermissions.ts", () => ({
   getLocationPermissionState: async () => {
     refreshCalls += 1;
+    await refreshGate;
     return refreshResult;
   },
   openLocationSettings: async () => {},
@@ -102,11 +105,15 @@ mock.module("../lib/notificationPermissions.ts", () => ({
   requestNotificationPermissionsForLaunch: async () => {
     notificationRequestCalls += 1;
     permissionRequestOrder.push("notification");
+    await notificationGate;
     return true;
   },
 }));
 
-const { LocationPermissionProvider }: typeof import("./LocationPermissionProvider.tsx") =
+const {
+  LocationPermissionProvider,
+  useLocationPermissions,
+}: typeof import("./LocationPermissionProvider.tsx") =
   await import("./LocationPermissionProvider.tsx");
 
 const createPermissionState = ({
@@ -137,11 +144,11 @@ const flushEffects = async () => {
   });
 };
 
-const renderProvider = async () => {
+const renderProvider = async (children: React.ReactNode = null) => {
   const root = createRoot();
 
   await act(async () => {
-    root.render(<LocationPermissionProvider>{null}</LocationPermissionProvider>);
+    root.render(<LocationPermissionProvider>{children}</LocationPermissionProvider>);
     await Promise.resolve();
   });
 
@@ -187,6 +194,8 @@ describe("LocationPermissionProvider", () => {
     backgroundRequestCalls = 0;
     notificationRequestCalls = 0;
     permissionRequestOrder = [];
+    notificationGate = null;
+    refreshGate = null;
     launchRequestResult = createPermissionState({});
     refreshResult = createPermissionState({});
     backgroundRequestResult = createPermissionState({
@@ -210,6 +219,42 @@ describe("LocationPermissionProvider", () => {
     expect(notificationRequestCalls).toBe(1);
     expect(permissionRequestOrder).toEqual(["notification", "location"]);
     expect(refreshCalls).toBe(0);
+  });
+
+  test("runs launch setup when the app resumes during the notification prompt", async () => {
+    let finishNotification = () => {};
+    let finishRefresh = () => {};
+    notificationGate = new Promise((resolve) => {
+      finishNotification = resolve;
+    });
+    refreshGate = new Promise((resolve) => {
+      finishRefresh = resolve;
+    });
+    const SetupState = () => {
+      const { isConfiguringLocation } = useLocationPermissions();
+      return <text>{isConfiguringLocation ? "configuring" : "finished"}</text>;
+    };
+    const root = await renderProvider(<SetupState />);
+
+    await act(async () => {
+      appStateListener?.("background");
+      appStateListener?.("active");
+      await Promise.resolve();
+      finishNotification();
+      await Promise.resolve();
+    });
+    expect(refreshCalls).toBe(1);
+    expect(launchRequestCalls).toBe(0);
+    expect(getRenderedOutput(root)).toContain("configuring");
+    await act(async () => {
+      finishRefresh();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(launchRequestCalls).toBe(1);
+    expect(getRenderedOutput(root)).toContain("Allow background location");
+    await act(async () => root.unmount());
   });
 
   test("uses the refresh path when the app resumes", async () => {
