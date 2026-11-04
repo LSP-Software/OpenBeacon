@@ -57,8 +57,8 @@ jobs:
           context: .
           push: true
           tags: |
-            docker.io/samkingdev/openbeacon-backend:${{ github.sha }}
-            ${{ inputs.deploy && 'docker.io/samkingdev/openbeacon-backend:latest-stable' || '' }}
+            docker.io/lspsoftware/openbeacon-backend:${{ github.sha }}
+            ${{ inputs.deploy && 'docker.io/lspsoftware/openbeacon-backend:latest-stable' || '' }}
       - name: Trigger Coolify deployment
         if: inputs.deploy
         env:
