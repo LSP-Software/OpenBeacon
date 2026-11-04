@@ -1,0 +1,86 @@
+name: Deploy backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Trigger the Coolify deployment after publishing
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-backend-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Require main branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo 'Production images must be built from main.' >&2
+          exit 1
+      - uses: actions/checkout@v4
+      - name: Find Coolify application and check for an active deployment
+        id: coolify_application
+        if: inputs.deploy
+        env:
+          COOLIFY_ENDPOINT: ${{ secrets.COOLIFY_ENDPOINT }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+        run: |
+          application=$(curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
+            "${COOLIFY_ENDPOINT%/}/api/v1/applications" | \
+            jq -cer '[.[] | select(.name == "OpenBeacon Backend" and (.deleted_at == null))] | if length == 1 and (.[0].id | type == "number") and (.[0].uuid | type == "string" and length > 0) then .[0] | {id, uuid} else error("Expected exactly one OpenBeacon Backend application") end')
+          application_id=$(jq -er '.id | tostring' <<< "$application")
+          application_uuid=$(jq -er '.uuid' <<< "$application")
+          curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
+            "${COOLIFY_ENDPOINT%/}/api/v1/deployments" | \
+            jq -e --arg app "$application_id" 'if type != "array" then error("Unexpected deployments response") else all(.[]; (.application_id | tostring) != $app or (.status != "queued" and .status != "in_progress")) end' > /dev/null || {
+              echo 'Unable to confirm that no backend deployment is active. Check Coolify before releasing.' >&2
+              exit 1
+            }
+          echo "uuid=${application_uuid}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            docker.io/samkingdev/openbeacon-backend:${{ github.sha }}
+            ${{ inputs.deploy && 'docker.io/samkingdev/openbeacon-backend:latest-stable' || '' }}
+      - name: Trigger Coolify deployment
+        if: inputs.deploy
+        env:
+          COOLIFY_ENDPOINT: ${{ secrets.COOLIFY_ENDPOINT }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          COOLIFY_BACKEND_UUID: ${{ steps.coolify_application.outputs.uuid }}
+        run: |
+          response=$(curl --fail-with-body --silent --show-error --request POST --get \
+            --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
+            --data-urlencode "uuid=${COOLIFY_BACKEND_UUID}" \
+            "${COOLIFY_ENDPOINT%/}/api/v1/deploy")
+          deployment_uuid=$(jq -er --arg app "$COOLIFY_BACKEND_UUID" '.deployments | map(select(.resource_uuid == $app)) | if length == 1 then .[0].deployment_uuid | select(type == "string" and length > 0) else empty end' <<< "$response")
+          for attempt in {1..120}; do
+            status=$(curl --fail-with-body --silent --show-error \
+              --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
+              "${COOLIFY_ENDPOINT%/}/api/v1/deployments/${deployment_uuid}" | jq -er '.status | select(type == "string" and length > 0)')
+            case "$status" in
+              finished) exit 0 ;;
+              failed|canceled*|cancelled*|stopped) echo "Deployment ${deployment_uuid} ended with status ${status}." >&2; exit 1 ;;
+              queued|in_progress) sleep 10 ;;
+              *) echo "Unexpected deployment status: ${status}" >&2; exit 1 ;;
+            esac
+          done
+          echo "Deployment ${deployment_uuid} did not finish in time; check Coolify before releasing again." >&2
+          exit 1
