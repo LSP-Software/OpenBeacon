@@ -46,12 +46,15 @@ Configure
 repository secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `COOLIFY_ENDPOINT`,
 and `COOLIFY_TOKEN`. The deployment finds the Coolify application by its unique
 name, `OpenBeacon Backend`. The Docker Hub account must be able
-to push `lspsoftware/openbeacon-backend`. The workflow always publishes the commit
-SHA. Selecting its deploy option also publishes `latest-stable` and asks Coolify
-to deploy it. For the first deployment, apply the Coolify infrastructure plan,
-populate its environment variables, and dispatch the workflow with the deploy
-option. To test image publishing without changing the production tag, dispatch
-the workflow without that option. To roll back, point
+to push `lspsoftware/openbeacon-backend`. Each build publishes the commit SHA,
+the backend version with a branch suffix, and a moving `branch-` tag. Branch
+names are converted to lowercase Docker tags; non-main branches also receive a
+hash suffix to distinguish similar names. A main build additionally publishes
+the version without a suffix and updates `latest-stable`. Version tags are
+updated if the same version is built again. Selecting the deploy option on main
+also asks Coolify to deploy `latest-stable`. For the first deployment, apply the
+Coolify infrastructure plan, populate its environment variables, and dispatch the
+workflow with the deploy option. To roll back, point
 Coolify at the desired commit SHA and redeploy;
 restore `latest-stable` before the next normal deployment.
 The workflow waits for Coolify to report the deployment result. If polling fails

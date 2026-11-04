@@ -20,12 +20,42 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Require main branch
-        if: github.ref != 'refs/heads/main'
+      - name: Require main branch for deployment
+        if: inputs.deploy && github.ref != 'refs/heads/main'
         run: |
           echo 'Production images must be built from main.' >&2
           exit 1
       - uses: actions/checkout@v4
+      - name: Prepare image tags
+        id: image_tags
+        env:
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          version=$(sed -nE 's/^export const serverVersion = "([0-9]+\.[0-9]+\.[0-9]+)";$/\1/p' apps/backend/src/version.ts)
+          if [ -z "$version" ]; then
+            echo 'Could not read the backend version.' >&2
+            exit 1
+          fi
+          branch=$(printf '%s' "$BRANCH" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^[.-]+//; s/[-.]+$//' | cut -c1-90)
+          if [ -z "$branch" ]; then
+            echo 'Branch name cannot be converted to an image tag.' >&2
+            exit 1
+          fi
+          if [ "$BRANCH" != main ]; then
+            branch="${branch}-$(printf '%s' "$BRANCH" | sha256sum | cut -c1-8)"
+          fi
+          {
+            echo 'tags<<EOF'
+            echo "docker.io/lspsoftware/openbeacon-backend:${SHA}"
+            echo "docker.io/lspsoftware/openbeacon-backend:branch-${branch}"
+            echo "docker.io/lspsoftware/openbeacon-backend:${version}-${branch}"
+            if [ "$BRANCH" = main ]; then
+              echo "docker.io/lspsoftware/openbeacon-backend:${version}"
+              echo 'docker.io/lspsoftware/openbeacon-backend:latest-stable'
+            fi
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
       - name: Find Coolify application and check for an active deployment
         id: coolify_application
         if: inputs.deploy
@@ -36,7 +66,7 @@ jobs:
           application=$(curl --fail-with-body --silent --show-error \
             --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
             "${COOLIFY_ENDPOINT%/}/api/v1/applications" | \
-            jq -cer '[.[] | select(.name == "OpenBeacon Backend" and (.deleted_at == null))] | if length == 1 and (.[0].id | type == "number") and (.[0].uuid | type == "string" and length > 0) then .[0] | {id, uuid} else error("Expected exactly one OpenBeacon Backend application") end')
+            jq -cer 'if type != "array" then error("Expected an application list from Coolify") else [.[] | select(.name == "OpenBeacon Backend" and (.deleted_at == null))] | if length != 1 then error("Expected one active OpenBeacon Backend application; found \(length). Check the Coolify endpoint and token access.") elif (.[0].id | type != "number") then error("Backend application has no numeric id") elif (.[0].uuid | type != "string" or length == 0) then error("Backend application has no UUID") else .[0] | {id, uuid} end end')
           application_id=$(jq -er '.id | tostring' <<< "$application")
           application_uuid=$(jq -er '.uuid' <<< "$application")
           curl --fail-with-body --silent --show-error \
@@ -56,9 +86,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: |
-            docker.io/lspsoftware/openbeacon-backend:${{ github.sha }}
-            ${{ inputs.deploy && 'docker.io/lspsoftware/openbeacon-backend:latest-stable' || '' }}
+          tags: ${{ steps.image_tags.outputs.tags }}
       - name: Trigger Coolify deployment
         if: inputs.deploy
         env:
