@@ -20,7 +20,7 @@ migrations before starting the server. Configure
 existing Redis-compatible service. The database user needs permission to apply
 migrations. Back up an existing database before applying schema changes and
 ensure migrations remain compatible with the previous release during rollout.
-If migration fails, the new container does not start. Rolling back an image does
+Before accepting requests, the backend also checks PostgreSQL and Redis connectivity, lists S3 object versions, and checks that the configured R2 PMTiles object exists. These read-only checks require the corresponding credentials and permissions. If a check or migration fails, the new container does not start. Rolling back an image does
 not reverse migrations.
 
 Set the required environment variables in the root `.env.example`, including
