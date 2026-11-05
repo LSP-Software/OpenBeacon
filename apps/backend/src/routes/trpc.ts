@@ -11,6 +11,17 @@ router.on(["POST", "GET"], "/trpc/*", (c) => {
     endpoint: "/api/trpc",
     req: c.req.raw,
     router: appRouter,
+    onError: ({ error, path }) => {
+      if (error.code === "INTERNAL_SERVER_ERROR") {
+        const location = [error.cause?.stack, error.stack]
+          .filter((stack) => stack !== undefined)
+          .join("\n")
+          .split("\n")
+          .map((line) => line.match(/(?:apps|packages)\/[\w./-]+\.ts:\d+:\d+/)?.[0])
+          .find((line) => line !== undefined);
+        console.error("[trpc] internal server error", { path, location });
+      }
+    },
     createContext: () =>
       createTRPCContext({
         cache: c.env.cache,
