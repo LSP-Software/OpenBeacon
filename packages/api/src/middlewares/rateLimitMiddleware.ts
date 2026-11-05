@@ -1,5 +1,6 @@
+import { logRateLimit } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
-import type { createTRPCComponents, TRPCContext } from "../trpc.ts";
+import type { createTRPCComponents } from "../trpc.ts";
 import { defaultRateLimitMeta, RateLimitContextError, rateLimitMetaSchema } from "./rateLimit.ts";
 
 export const createRateLimitMiddleware = ({
@@ -39,7 +40,11 @@ export const createRateLimitMiddleware = ({
     });
 
     if (!result.allowed) {
-      throwRateLimitError({ path, scope: identifier.type, result });
+      logRateLimit({ path, scope: identifier.type });
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: "Too many requests. Please try again later.",
+      });
     }
 
     if (rateLimit.ipLimit !== undefined && identifier.type === "userId") {
@@ -59,32 +64,13 @@ export const createRateLimitMiddleware = ({
         cost: rateLimit.cost,
       });
       if (!ipResult.allowed) {
-        throwRateLimitError({ path, scope: "ip", result: ipResult });
+        logRateLimit({ path, scope: "ip" });
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many requests. Please try again later.",
+        });
       }
     }
 
     return next();
   });
-
-const throwRateLimitError = ({
-  path,
-  result,
-  scope,
-}: {
-  path: string;
-  result: Awaited<ReturnType<TRPCContext["cache"]["rateLimits"]["consume"]>>;
-  scope: "userId" | "ip";
-}): never => {
-  console.warn("[rateLimitMiddleware] request limited", {
-    path,
-    scope,
-    limit: result.limit,
-    remaining: result.remaining,
-    retryAfterMs: result.retryAfterMs,
-    resetAfterMs: result.resetAfterMs,
-  });
-  throw new TRPCError({
-    code: "TOO_MANY_REQUESTS",
-    message: "Too many requests. Please try again later.",
-  });
-};

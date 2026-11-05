@@ -272,13 +272,7 @@ describe("rateLimitMiddleware", () => {
           }) as never,
       });
     expect((await request()).status).toBe(200);
-    const warning = spyOn(console, "warn").mockImplementation(() => {});
     const response = await request();
-    expect(warning).toHaveBeenCalledWith(
-      "[rateLimitMiddleware] request limited",
-      expect.objectContaining({ path: "lookup", scope: "userId", limit: 1, retryAfterMs: 60_000 }),
-    );
-    warning.mockRestore();
     expect(response.status).toBe(429);
     const body = await response.text();
     expect(body).toContain("Too many requests. Please try again later.");

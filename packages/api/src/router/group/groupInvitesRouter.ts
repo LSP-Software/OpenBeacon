@@ -1,3 +1,4 @@
+import { logRateLimit } from "@openbeacon/shared";
 import { createHash, randomBytes } from "node:crypto";
 import { GroupRole, Prisma } from "@openbeacon/database";
 import { groupEpochBundleSchema, inviteMemberToGroupSchema } from "@openbeacon/schemas";
@@ -330,6 +331,7 @@ export const groupInvitesRouter = {
         cost: input.invites.length,
       });
       if (!result.allowed) {
+        logRateLimit({ path: "groupInvites.send.recipients", scope: "userId" });
         throw new TRPCError({ code: "TOO_MANY_REQUESTS" });
       }
       await ctx.db.$transaction(async (tx) => {

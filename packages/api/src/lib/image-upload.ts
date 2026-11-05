@@ -69,7 +69,8 @@ export const setPendingImageUploadForUser = async ({
 
   if (oldFileName) {
     const oldImagePath = oldGroupId ? buildGroupAvatarPath(oldGroupId) : currentImagePath;
-    await tryCatch(deleteFile(bucketName, oldImagePath, oldFileName));
+    const { error } = await tryCatch(deleteFile(bucketName, oldImagePath, oldFileName));
+    if (error) console.error("[image-upload] failed to delete previous pending image");
   }
 };
 
@@ -94,6 +95,7 @@ export const requestImageUpload = async ({
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
       message: `Failed to generate presigned URL: ${presignError.message}`,
+      cause: presignError,
     });
   }
 
@@ -136,6 +138,7 @@ export const confirmImageUpload = async ({
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
       message: `Upload verification failed: ${verifyError.message ?? "Unknown error."}`,
+      cause: verifyError,
     });
   }
 
@@ -159,13 +162,14 @@ export const confirmImageUpload = async ({
   if (imageToDelete && imageToDelete !== imageUrl) {
     const currentImageStorageObject = extractImageStorageObject(imageToDelete);
     if (currentImageStorageObject) {
-      await tryCatch(
+      const { error } = await tryCatch(
         deleteFile(
           currentImageStorageObject.bucketName,
           currentImageStorageObject.path,
           currentImageStorageObject.fileName,
         ),
       );
+      if (error) console.error("[image-upload] failed to delete replaced image");
     }
   }
 
