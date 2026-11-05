@@ -1,0 +1,17 @@
+{
+  "name": "@openbeacon/scheduled-jobs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --cwd ../.. --env-file=.env --watch apps/scheduled-jobs/src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "bun check",
+    "test": "bun test --isolate",
+    "ci": "bun run typecheck && bun run test"
+  },
+  "dependencies": {
+    "@openbeacon/api": "workspace:*",
+    "@openbeacon/database": "workspace:*",
+    "@openbeacon/shared": "workspace:*"
+  }
+}

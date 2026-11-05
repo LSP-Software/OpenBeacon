@@ -41,6 +41,8 @@ that Cloudflare overwrites a client-supplied secret header, and that different
 clients get separate rate limits. Do not deploy with `none` behind the reverse
 proxy: users would share the proxy's IP rate limit.
 
+The `Deploy backend` GitHub Actions workflow also builds and deploys the separate scheduled job runner. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
+
 The `Deploy backend` GitHub Actions workflow is manually dispatched on `main`.
 Configure
 repository secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `COOLIFY_ENDPOINT`,

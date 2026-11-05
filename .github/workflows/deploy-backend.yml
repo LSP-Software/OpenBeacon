@@ -18,7 +18,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - name: Require main branch for deployment
         if: inputs.deploy && github.ref != 'refs/heads/main'
@@ -30,7 +30,6 @@ jobs:
         id: image_tags
         env:
           BRANCH: ${{ github.ref_name }}
-          SHA: ${{ github.sha }}
         run: |
           version=$(sed -nE 's/^export const serverVersion = "([0-9]+\.[0-9]+\.[0-9]+)";$/\1/p' apps/backend/src/version.ts)
           if [ -z "$version" ]; then
@@ -47,7 +46,6 @@ jobs:
           fi
           {
             echo 'tags<<EOF'
-            echo "docker.io/lspsoftware/openbeacon-backend:${SHA}"
             echo "docker.io/lspsoftware/openbeacon-backend:branch-${branch}"
             echo "docker.io/lspsoftware/openbeacon-backend:${version}-${branch}"
             if [ "$BRANCH" = main ]; then
@@ -76,7 +74,18 @@ jobs:
               echo 'Unable to confirm that no backend deployment is active. Check Coolify before releasing.' >&2
               exit 1
             }
+          runner=$(curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
+            "${COOLIFY_ENDPOINT%/}/api/v1/applications" | \
+            jq -cer 'if type != "array" then error("Expected an application list") else [.[] | select(.name == "OpenBeacon Scheduled Jobs" and (.deleted_at == null))] | if length != 1 then error("Expected one OpenBeacon Scheduled Jobs application") else .[0] | {id, uuid} end end')
+          runner_id=$(jq -er '.id | numbers | tostring' <<< "$runner")
+          runner_uuid=$(jq -er '.uuid | strings | select(length > 0)' <<< "$runner")
+          curl --fail-with-body --silent --show-error \
+            --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
+            "${COOLIFY_ENDPOINT%/}/api/v1/deployments" | \
+            jq -e --arg app "$runner_id" 'if type != "array" then error("Unexpected deployments response") else all(.[]; (.application_id | tostring) != $app or (.status != "queued" and .status != "in_progress")) end' > /dev/null
           echo "uuid=${application_uuid}" >> "$GITHUB_OUTPUT"
+          echo "runner_uuid=${runner_uuid}" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -86,29 +95,52 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ steps.image_tags.outputs.tags }}
+          tags: docker.io/lspsoftware/openbeacon-backend:${{ github.sha }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/scheduled-jobs/Dockerfile
+          push: true
+          tags: docker.io/lspsoftware/openbeacon-scheduled-jobs:${{ github.sha }}
+      - name: Publish release tags
+        env:
+          SHA: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
+          BACKEND_TAGS: ${{ steps.image_tags.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            docker buildx imagetools create --tag "$tag" "docker.io/lspsoftware/openbeacon-backend:${SHA}"
+          done <<< "$BACKEND_TAGS"
+          if [ "$BRANCH" = main ]; then
+            docker buildx imagetools create --tag docker.io/lspsoftware/openbeacon-scheduled-jobs:latest-stable "docker.io/lspsoftware/openbeacon-scheduled-jobs:${SHA}"
+          fi
       - name: Trigger Coolify deployment
         if: inputs.deploy
         env:
           COOLIFY_ENDPOINT: ${{ secrets.COOLIFY_ENDPOINT }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
           COOLIFY_BACKEND_UUID: ${{ steps.coolify_application.outputs.uuid }}
+          COOLIFY_RUNNER_UUID: ${{ steps.coolify_application.outputs.runner_uuid }}
         run: |
+          for resource_uuid in "$COOLIFY_BACKEND_UUID" "$COOLIFY_RUNNER_UUID"; do
           response=$(curl --fail-with-body --silent --show-error --request POST --get \
             --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
-            --data-urlencode "uuid=${COOLIFY_BACKEND_UUID}" \
+            --data-urlencode "uuid=${resource_uuid}" \
             "${COOLIFY_ENDPOINT%/}/api/v1/deploy")
-          deployment_uuid=$(jq -er --arg app "$COOLIFY_BACKEND_UUID" '.deployments | map(select(.resource_uuid == $app)) | if length == 1 then .[0].deployment_uuid | select(type == "string" and length > 0) else empty end' <<< "$response")
+          deployment_uuid=$(jq -er --arg app "$resource_uuid" '.deployments | map(select(.resource_uuid == $app)) | if length == 1 then .[0].deployment_uuid | select(type == "string" and length > 0) else empty end' <<< "$response")
           for attempt in {1..120}; do
             status=$(curl --fail-with-body --silent --show-error \
               --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
               "${COOLIFY_ENDPOINT%/}/api/v1/deployments/${deployment_uuid}" | jq -er '.status | select(type == "string" and length > 0)')
             case "$status" in
-              finished) exit 0 ;;
+              finished) break ;;
               failed|canceled*|cancelled*|stopped) echo "Deployment ${deployment_uuid} ended with status ${status}." >&2; exit 1 ;;
               queued|in_progress) sleep 10 ;;
               *) echo "Unexpected deployment status: ${status}" >&2; exit 1 ;;
             esac
           done
-          echo "Deployment ${deployment_uuid} did not finish in time; check Coolify before releasing again." >&2
-          exit 1
+          if [ "$status" != finished ]; then
+            echo "Deployment ${deployment_uuid} did not finish in time; check Coolify before releasing again." >&2
+            exit 1
+          fi
+          done

@@ -8,7 +8,9 @@
     ".": "./src/index.ts",
     "./env.ts": "./src/env.ts",
     "./envSchema.ts": "./src/envSchema.ts",
-    "./checkStorage.ts": "./src/checkStorage.ts"
+    "./checkStorage.ts": "./src/checkStorage.ts",
+    "./s3client.ts": "./src/s3client.ts",
+    "./r2.ts": "./src/r2.ts"
   },
   "scripts": {
     "format": "bun fmt",
