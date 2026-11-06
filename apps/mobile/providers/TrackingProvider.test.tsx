@@ -28,6 +28,7 @@ let failReconcile = false;
 let alerts = 0;
 let recoveryPrompt: { count: number; deviceIds: string[]; server: string; userId: string } | null =
   null;
+let failRecoveryCheck = false;
 let alertButtons: Array<{ text: string; onPress?: () => void }> = [];
 let recovered: Array<{ deviceIds: string[]; userId: string }> = [];
 let root: Root | null = null;
@@ -48,7 +49,10 @@ const trackingService = {
     revokeCalls += 1;
   },
   resumeTracking: async () => {},
-  getUnassignedTrackingPoints: async () => recoveryPrompt,
+  getUnassignedTrackingPoints: async () => {
+    if (failRecoveryCheck) throw new Error("offline");
+    return recoveryPrompt;
+  },
   recoverUnassignedTrackingPoints: async (input: { deviceIds: string[]; userId: string }) => {
     recovered.push(input);
   },
@@ -137,6 +141,7 @@ describe("TrackingProvider", () => {
     failReconcile = false;
     alerts = 0;
     recoveryPrompt = null;
+    failRecoveryCheck = false;
     alertButtons = [];
     recovered = [];
     root = null;
@@ -177,6 +182,22 @@ describe("TrackingProvider", () => {
     alertButtons[1]?.onPress?.();
     await flushEffects();
     expect(recovered).toEqual([{ deviceIds: ["device-1"], userId: "user-1" }]);
+  });
+
+  test("retries checking for legacy locations after an offline login", async () => {
+    failRecoveryCheck = true;
+    recoveryPrompt = {
+      count: 1,
+      deviceIds: ["device-1"],
+      server: "https://example.test",
+      userId: "user-1",
+    };
+    await renderProvider();
+    expect(alerts).toBe(0);
+    failRecoveryCheck = false;
+    requestTrackingSync();
+    await flushEffects();
+    expect(alerts).toBe(1);
   });
 
   test("reconciles again when the app resumes", async () => {

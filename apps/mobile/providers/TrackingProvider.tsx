@@ -36,6 +36,7 @@ export const TrackingProvider = ({
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
   const requestedCycleRef = useRef(0);
   const forceFlushRef = useRef(false);
+  const recoveryCheckedUserRef = useRef<string | null>(null);
   const startCaptureRef = useRef(permissionState?.isReadyForSharing ?? false);
   const userId = session?.user.id ?? null;
   const startCapture = permissionState?.isReadyForSharing ?? false;
@@ -61,6 +62,47 @@ export const TrackingProvider = ({
             }),
           );
           await tryCatch(service.flushPendingTrackingPoints(forceFlush));
+          const userId = previousUserIdRef.current;
+          if (userId && recoveryCheckedUserRef.current !== userId) {
+            const result = await tryCatch(service.getUnassignedTrackingPoints());
+            if (
+              !result.error &&
+              previousUserIdRef.current === userId &&
+              (!result.data || result.data.userId === userId)
+            ) {
+              recoveryCheckedUserRef.current = userId;
+            }
+            if (
+              result.data &&
+              result.data.userId === userId &&
+              previousUserIdRef.current === userId
+            ) {
+              const { count, deviceIds, server, userId: ownerId } = result.data;
+              Alert.alert(
+                "Recover saved locations?",
+                `${count} saved location ${count === 1 ? "point was" : "points were"} created by an older version of OpenBeacon. Their server was not recorded. Upload them only if they belong to your current account on ${server}.`,
+                [
+                  { text: "Keep on device", style: "cancel" },
+                  {
+                    text: "Upload",
+                    onPress: () => {
+                      void (async () => {
+                        const recovery = await tryCatch(
+                          service.recoverUnassignedTrackingPoints({ deviceIds, userId: ownerId }),
+                        );
+                        if (recovery.error) {
+                          Alert.alert(
+                            "Upload incomplete",
+                            "Some saved locations may still be on this device. Try again after signing in.",
+                          );
+                        }
+                      })();
+                    },
+                  },
+                ],
+              );
+            }
+          }
           if (appStateRef.current === "active") {
             void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
           }
@@ -88,6 +130,7 @@ export const TrackingProvider = ({
         await tryCatch(service.revokeTrackingAccess());
       }
 
+      if (previousUserId !== userId) recoveryCheckedUserRef.current = null;
       previousUserIdRef.current = userId;
 
       if (!userId) {
@@ -101,35 +144,6 @@ export const TrackingProvider = ({
         await service.resumeTracking();
       }
       await runTrackingCycle(previousUserId !== userId);
-      if (previousUserId !== userId) {
-        const result = await tryCatch(service.getUnassignedTrackingPoints());
-        if (result.data && previousUserIdRef.current === userId) {
-          const { count, deviceIds, server, userId: ownerId } = result.data;
-          Alert.alert(
-            "Recover saved locations?",
-            `${count} saved location ${count === 1 ? "point was" : "points were"} created by an older version of OpenBeacon. Their server was not recorded. Upload them only if they belong to your current account on ${server}.`,
-            [
-              { text: "Keep on device", style: "cancel" },
-              {
-                text: "Upload",
-                onPress: () => {
-                  void (async () => {
-                    const recovery = await tryCatch(
-                      service.recoverUnassignedTrackingPoints({ deviceIds, userId: ownerId }),
-                    );
-                    if (recovery.error) {
-                      Alert.alert(
-                        "Upload incomplete",
-                        "Some saved locations may still be on this device. Try again after signing in.",
-                      );
-                    }
-                  })();
-                },
-              },
-            ],
-          );
-        }
-      }
     })();
   }, [isPending, runTrackingCycle, service, startCapture, userId]);
 
