@@ -224,7 +224,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
               onPress={continueToBackgroundPermission}
               loading={isRequestingBackgroundPermission}
             >
-              <Text>Continue</Text>
+              <Text>Open Settings</Text>
             </Button>
           </DialogFooter>
         </DialogContent>
