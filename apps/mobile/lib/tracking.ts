@@ -20,6 +20,7 @@ let reconcilePromise: Promise<void> | null = null;
 let reconcileOptions: { startCapture: boolean; onlyIfRunning: boolean } | null = null;
 let reconcileVersion = 0;
 let flushPromise: Promise<void> | null = null;
+let flushWork: Promise<void> | null = null;
 let flushController: AbortController | null = null;
 let revokePromise: Promise<void> | null = null;
 let captureRefreshPending = false;
@@ -382,10 +383,13 @@ const uploadClaimedItems = async (
     }
     if (getErrorCode(uploadResult.error) === "BAD_REQUEST" && items.length > 1) {
       const midpoint = Math.ceil(items.length / 2);
-      await Promise.all([
+      const results = await Promise.allSettled([
         uploadClaimedItems(trackingModule, items.slice(0, midpoint), signal),
         uploadClaimedItems(trackingModule, items.slice(midpoint), signal),
       ]);
+      if (results.some((result) => result.status === "rejected")) {
+        throw new Error("Tracking upload failed");
+      }
       return;
     }
     await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
@@ -500,11 +504,22 @@ export const flushPendingTrackingPoints = (force = false): Promise<void> => {
 
   const controller = new AbortController();
   flushController = controller;
-  flushPromise = flushPendingTrackingPointsInternal(force, controller.signal).finally(() => {
-    flushPromise = null;
-    if (flushController === controller) flushController = null;
+  const work = flushPendingTrackingPointsInternal(force, controller.signal);
+  flushWork = work;
+  const current = Promise.race([
+    work,
+    new Promise<void>((resolve) =>
+      controller.signal.addEventListener("abort", () => resolve(), { once: true }),
+    ),
+  ]).finally(() => {
+    if (flushPromise === current) {
+      flushPromise = null;
+      flushWork = null;
+      flushController = null;
+    }
   });
-  return flushPromise;
+  flushPromise = current;
+  return current;
 };
 
 export const syncBackgroundTracking = async () => {
@@ -546,12 +561,16 @@ export const prepareTrackingSignOut = async (): Promise<void> => {
   trackingPaused = true;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
+  const previousFlush = flushWork ? tryCatch(flushWork) : null;
   flushController?.abort();
+  flushPromise = null;
+  flushWork = null;
+  flushController = null;
   try {
     await Promise.race([
       (async () => {
         await revokeTrackingAccess();
-        if (flushPromise) await tryCatch(flushPromise);
+        if (previousFlush) await previousFlush;
         if (!controller.signal.aborted) {
           await flushPendingTrackingPointsInternal(true, controller.signal);
         }

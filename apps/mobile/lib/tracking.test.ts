@@ -411,11 +411,109 @@ describe("tracking service", () => {
       await signOut;
       currentUserId = "user-2";
       resolveUpload({ accepted: ["point-1"], duplicates: [] });
-      await expect(existingFlush).rejects.toThrow("Tracking upload failed");
+      await expect(existingFlush).resolves.toBeUndefined();
       for (let index = 0; index < 10; index++) await Promise.resolve();
       expect(uploadCalls).toHaveLength(1);
       expect(deleted).toEqual([]);
       expect(requeued).toEqual([{ ids: [1], error: "UPLOAD_CANCELLED" }]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("a never-settling old flush does not block the next login", async () => {
+    jest.useFakeTimers();
+    try {
+      pendingCiphertexts = [createQueueItem({ clientPointId: "old", groupId: "group-1", id: 1 })];
+      uploadGroup = () => new Promise(() => {});
+      const oldFlush = flushPendingTrackingPoints();
+      for (let index = 0; index < 200 && uploadCalls.length === 0; index++) await Promise.resolve();
+      expect(uploadCalls).toHaveLength(1);
+      const signOut = prepareTrackingSignOut();
+      await expect(oldFlush).resolves.toBeUndefined();
+      jest.advanceTimersByTime(10_000);
+      await signOut;
+      currentUserId = "user-2";
+      pendingCiphertexts = [];
+      resumeTracking();
+      await expect(flushPendingTrackingPoints(true)).resolves.toBeUndefined();
+      expect(requestedOwners.at(-1)).toBe(JSON.stringify(["https://api.example.test", "user-2"]));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("a late old flush cannot clear a newer session's active flush", async () => {
+    jest.useFakeTimers();
+    try {
+      pendingCiphertexts = [createQueueItem({ clientPointId: "old", groupId: "group-1", id: 1 })];
+      let resolveOld: (result: { accepted: string[]; duplicates: string[] }) => void = () => {};
+      uploadGroup = () =>
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        });
+      const oldFlush = flushPendingTrackingPoints();
+      for (let index = 0; index < 200 && uploadCalls.length === 0; index++) await Promise.resolve();
+      const signOut = prepareTrackingSignOut();
+      jest.advanceTimersByTime(10_000);
+      await signOut;
+      currentUserId = "user-2";
+      pendingCiphertexts = [];
+      let releaseOwner = () => {};
+      ownerQueryGate = new Promise((resolve) => {
+        releaseOwner = resolve;
+      });
+      resumeTracking();
+      const newFlush = flushPendingTrackingPoints();
+      resolveOld({ accepted: ["old"], duplicates: [] });
+      await expect(oldFlush).resolves.toBeUndefined();
+      for (let index = 0; index < 100 && requeued.length === 0; index++) await Promise.resolve();
+      expect(flushPendingTrackingPoints()).toBe(newFlush);
+      releaseOwner();
+      await expect(newFlush).resolves.toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("a late unauthorized split cannot revoke the next account", async () => {
+    jest.useFakeTimers();
+    try {
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "invalid", groupId: "group-1", id: 1 }),
+        createQueueItem({ clientPointId: "late", groupId: "group-1", id: 2 }),
+      ];
+      let rejectLate: (error: Error) => void = () => {};
+      uploadGroup = async ({ points }) => {
+        if (
+          points.length > 1 ||
+          (points[0] as { clientPointId: string }).clientPointId === "invalid"
+        ) {
+          throw Object.assign(new Error("invalid"), { data: { code: "BAD_REQUEST" } });
+        }
+        return new Promise((_resolve, reject) => {
+          rejectLate = reject;
+        });
+      };
+      const oldFlush = flushPendingTrackingPoints();
+      for (let index = 0; index < 200 && uploadCalls.length < 3; index++) await Promise.resolve();
+      expect(uploadCalls).toHaveLength(3);
+      const signOut = prepareTrackingSignOut();
+      jest.advanceTimersByTime(10_000);
+      await signOut;
+      currentUserId = "user-2";
+      pendingCiphertexts = [];
+      resumeTracking();
+      await reconcileTrackingKeys({ startCapture: true });
+      const revocations = revokedGroups.length;
+      const stops = stopCaptureCalls;
+      rejectLate(Object.assign(new Error("expired"), { data: { code: "UNAUTHORIZED" } }));
+      await expect(oldFlush).resolves.toBeUndefined();
+      for (let index = 0; index < 100 && !requeued.some(({ ids }) => ids.includes(2)); index++)
+        await Promise.resolve();
+      expect(revokedGroups).toHaveLength(revocations);
+      expect(stopCaptureCalls).toBe(stops);
+      expect(requeued).toContainEqual({ ids: [2], error: "UPLOAD_CANCELLED" });
     } finally {
       jest.useRealTimers();
     }
