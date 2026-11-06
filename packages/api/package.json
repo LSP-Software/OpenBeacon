@@ -9,6 +9,8 @@
     "./env.ts": "./src/env.ts",
     "./envSchema.ts": "./src/envSchema.ts",
     "./checkStorage.ts": "./src/checkStorage.ts",
+    "./account-deletion.ts": "./src/lib/account-deletion.ts",
+    "./storage.ts": "./src/lib/storage.ts",
     "./s3client.ts": "./src/s3client.ts",
     "./r2.ts": "./src/r2.ts"
   },

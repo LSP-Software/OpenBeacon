@@ -330,6 +330,7 @@ describe("group epoch helpers", () => {
 
     await persistGroupEpoch({
       db: {
+        group: { updateMany: async () => ({ count: 1 }) },
         groupEpoch: {
           create,
           findFirst: async () => ({
@@ -454,6 +455,7 @@ describe("group epoch helpers", () => {
     await expect(
       persistGroupEpoch({
         db: {
+          group: { updateMany: async () => ({ count: 1 }) },
           groupEpoch: {
             create: async () => ({}),
             findFirst: async () => ({

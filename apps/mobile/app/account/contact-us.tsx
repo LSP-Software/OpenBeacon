@@ -50,10 +50,10 @@ const ContactUsScreen = () => {
       </SafeAreaView>
       <ScrollView contentContainerClassName="gap-5 px-6 py-6">
         <Text className="text-muted-foreground">
-          Your feedback is stored on your configured server and can be read by its administrators.
-          Please do not include personal information unless you want to share it. Your app, MapLibre
-          React Native, server{Platform.OS === "android" ? ", and Android" : ""} versions are
-          included with your feedback.
+          Your feedback is linked to your account for deletion and can be read by server
+          administrators. Please do not include personal information unless you want to share it.
+          Your app, MapLibre React Native, server{Platform.OS === "android" ? ", and Android" : ""}{" "}
+          versions are included with your feedback.
         </Text>
         <TextInput
           accessibilityLabel="Feedback"

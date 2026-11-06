@@ -23,6 +23,8 @@ ensure migrations remain compatible with the previous release during rollout.
 Before accepting requests, the backend also checks PostgreSQL and Redis connectivity, lists S3 object versions, and checks that the configured R2 PMTiles object exists. These read-only checks require the corresponding credentials and permissions. If a check or migration fails, the new container does not start. Rolling back an image does
 not reverse migrations.
 
+For Google account deletion verification, add `<BETTER_AUTH_URL>/api/auth/google-deletion-callback` as an authorized redirect URI on the Google web OAuth client configured by `GOOGLE_CLIENT_ID`. For the hosted API this is `https://api.openbeacon.net/api/auth/google-deletion-callback`; each self-hosted backend needs its own exact public callback URI registered with its Google client. The Google account chooser may reuse an existing Google browser session and does not guarantee a fresh password prompt.
+
 Set the required environment variables in the root `.env.example`, including
 the R2 variables, in Coolify. Set `BETTER_AUTH_URL` to
 `https://api.openbeacon.net`. Optional variables may be added when needed; leave

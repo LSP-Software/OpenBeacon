@@ -54,14 +54,8 @@ export const getFileSize = async (
   return response.ContentLength ?? null;
 };
 
-export const deleteFile = async (
-  bucketName: string,
-  path: string,
-  fileName: string,
-): Promise<void> => {
-  const key = buildKey(path, fileName);
-
-  const objectsToDelete: { Key: string; VersionId: string }[] = [];
+const deleteImageVersions = async (bucketName: string, key: string, exact: boolean) => {
+  const objects: { Key: string; VersionId: string }[] = [];
   let keyMarker: string | undefined;
   let versionIdMarker: string | undefined;
 
@@ -74,15 +68,12 @@ export const deleteFile = async (
         VersionIdMarker: versionIdMarker,
       }),
     );
-    for (const version of response.Versions ?? []) {
-      if (version.Key === key && version.VersionId) {
-        objectsToDelete.push({ Key: key, VersionId: version.VersionId });
+    for (const object of [...(response.Versions ?? []), ...(response.DeleteMarkers ?? [])]) {
+      if (!object.Key || !object.Key.startsWith(key) || !object.VersionId) {
+        throw new Error("Storage returned an invalid image version.");
       }
-    }
-    for (const marker of response.DeleteMarkers ?? []) {
-      if (marker.Key === key && marker.VersionId) {
-        objectsToDelete.push({ Key: key, VersionId: marker.VersionId });
-      }
+      if (!exact || object.Key === key)
+        objects.push({ Key: object.Key, VersionId: object.VersionId });
     }
     if (response.IsTruncated && !response.NextKeyMarker) {
       throw new Error("Storage did not return a continuation marker.");
@@ -91,23 +82,28 @@ export const deleteFile = async (
     versionIdMarker = response.IsTruncated ? response.NextVersionIdMarker : undefined;
   } while (keyMarker);
 
-  if (objectsToDelete.length === 0) {
+  if (exact && objects.length === 0) {
     await s3Client.send(new DeleteObjectCommand({ Bucket: bucketName, Key: key }));
     return;
   }
 
-  for (let index = 0; index < objectsToDelete.length; index += 1000) {
+  for (let index = 0; index < objects.length; index += 1000) {
     const response = await s3Client.send(
       new DeleteObjectsCommand({
         Bucket: bucketName,
-        Delete: { Objects: objectsToDelete.slice(index, index + 1000) },
+        Delete: { Objects: objects.slice(index, index + 1000) },
       }),
     );
-    if (response.Errors?.length) {
+    if (response.Errors?.length)
       throw new Error("Failed to delete all image versions from storage.");
-    }
   }
 };
+
+export const deleteFile = async (
+  bucketName: string,
+  path: string,
+  fileName: string,
+): Promise<void> => deleteImageVersions(bucketName, buildKey(path, fileName), true);
 
 export const buildImagePublicUrl = (bucketName: string, path: string, fileName: string): string => {
   const key = buildKey(path, fileName);
@@ -140,4 +136,14 @@ export const extractImageStorageObject = (
     path: key.slice(0, lastSlashIndex),
     fileName: key.slice(lastSlashIndex + 1),
   };
+};
+
+export const deleteUserImages = async (bucketName: string, userId: string): Promise<void> => {
+  if (!userId || userId.includes("/")) throw new Error("Invalid user ID.");
+  await deleteImageVersions(bucketName, `user/${userId}/`, false);
+};
+
+export const deleteImageKey = async (bucketName: string, key: string): Promise<void> => {
+  if (!key || key.startsWith("/")) throw new Error("Invalid image key.");
+  await deleteImageVersions(bucketName, key, true);
 };

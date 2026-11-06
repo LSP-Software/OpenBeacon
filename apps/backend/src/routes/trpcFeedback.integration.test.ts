@@ -27,6 +27,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback HTTP en
       user: { id: prefix, email: `${prefix}@example.test` },
     } as never);
     try {
+      await prisma.user.create({
+        data: { id: prefix, name: "Feedback test", email: `${prefix}@example.test` },
+      });
       const version = await app.request("/api/trpc/account.version", {}, bindings);
       expect(version.status).toBe(200);
       expect(await version.json()).toMatchObject({ result: { data: { json: serverVersion } } });
@@ -56,6 +59,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback HTTP en
     } finally {
       session.mockRestore();
       await prisma.feedback.deleteMany({ where: { message: prefix } });
+      await prisma.user.deleteMany({ where: { id: prefix } });
       await prisma.$disconnect();
     }
   });

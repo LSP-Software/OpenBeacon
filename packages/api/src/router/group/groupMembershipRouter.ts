@@ -219,12 +219,19 @@ export const groupMembershipRouter = {
           }
           const successor = await tx.groupMember.findFirst({
             where: { id: input.successorMemberId, groupId: input.groupId },
+            include: { user: { select: { pendingDeletion: true } } },
           });
           if (!successor)
             throw new TRPCError({
               code: "NOT_FOUND",
               message: "Successor not found.",
             });
+          if (successor.user.pendingDeletion && successor.role !== GroupRole.OWNER) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "Cannot change the role of an account pending deletion.",
+            });
+          }
           await tx.groupMember.update({
             where: { id: successor.id },
             data: { role: GroupRole.OWNER },
@@ -283,6 +290,7 @@ export const groupMembershipRouter = {
         }
         const member = await tx.groupMember.findFirst({
           where: { id: input.memberId, groupId: input.groupId },
+          include: { user: { select: { pendingDeletion: true } } },
         });
         if (!member) {
           throw new TRPCError({
@@ -290,11 +298,22 @@ export const groupMembershipRouter = {
             message: "Group member not found",
           });
         }
+        if (member.user.pendingDeletion && member.role !== input.role) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Cannot change the role of an account pending deletion.",
+          });
+        }
         if (member.role === GroupRole.OWNER && input.role !== GroupRole.OWNER) {
           const owners = await tx.groupMember.count({
-            where: { groupId: input.groupId, role: GroupRole.OWNER },
+            where: {
+              groupId: input.groupId,
+              role: GroupRole.OWNER,
+              id: { not: member.id },
+              user: { pendingDeletion: false },
+            },
           });
-          if (owners <= 1) {
+          if (owners === 0) {
             throw new TRPCError({
               code: "BAD_REQUEST",
               message: "The group must have at least one owner.",

@@ -20,7 +20,12 @@ const createCaller = (
   actorRole: "OWNER" | "ADMIN" | "MEMBER",
   targetRole: "OWNER" | "ADMIN" | "MEMBER" = "MEMBER",
 ) => {
-  const actor = { id: "actor", userId: "actor-user", role: actorRole };
+  const actor = {
+    id: "actor",
+    userId: "actor-user",
+    role: actorRole,
+    user: { pendingDeletion: false },
+  };
   const createMany = mock(async () => ({ count: 1 }));
   const db = {
     $queryRaw: mock(async () => [actor]),

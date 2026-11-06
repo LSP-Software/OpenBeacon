@@ -25,9 +25,11 @@ export const removeGroupMemberWithOwnerGuard = async ({
     owner_rows AS (
       SELECT owner.id
       FROM "GroupMember" AS owner
+      JOIN "User" AS owner_user ON owner_user.id = owner."userId"
       WHERE owner."groupId" = ${groupId}
         AND owner.role = ${GroupRole.OWNER}
-      FOR UPDATE
+        AND owner_user."pendingDeletion" = false
+      FOR UPDATE OF owner
     ),
     deleted_member AS (
       DELETE FROM "GroupMember" AS member
@@ -35,7 +37,7 @@ export const removeGroupMemberWithOwnerGuard = async ({
       WHERE member.id = target_member.id
         AND (
           target_member.role <> ${GroupRole.OWNER}
-          OR (SELECT COUNT(*) FROM owner_rows) > 1
+          OR (SELECT COUNT(*) FROM owner_rows WHERE id <> target_member.id) > 0
         )
       RETURNING member.id
     )

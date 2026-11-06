@@ -1,4 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
+import { runAccountDeletion } from "./jobs/accountDeletion.ts";
 import { startScheduler } from "./scheduler.ts";
 import { checkServices, closeServices } from "./services.ts";
 
@@ -9,7 +10,7 @@ if (result.error) {
   process.exit(1);
 }
 
-const stop = startScheduler([]);
+const stop = startScheduler([{ name: "account-deletion", delay: 60_000, run: runAccountDeletion }]);
 console.log("Scheduled job runner started");
 const keepAlive = setInterval(() => {}, 60_000);
 

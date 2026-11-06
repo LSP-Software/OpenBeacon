@@ -123,8 +123,8 @@ const MapScreen = () => {
                 Can’t show locations for {group.name}
               </Text>
               <Text>
-                This device can’t access the group’s encryption key. Open the group for recovery
-                options.
+                This device can’t access the group’s encryption key. Group locations may be
+                unavailable.
               </Text>
               <Link href={{ pathname: "/(tabs)/groups/[groupId]", params: { groupId: group.id } }}>
                 <Text className="font-semibold text-red-500 dark:text-red-300">Open group</Text>

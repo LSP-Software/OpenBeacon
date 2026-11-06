@@ -20,6 +20,7 @@ export const createGroupJoinAlerts = async ({
     data: recipients.map(({ userId: recipientId }) => ({
       groupId,
       recipientId,
+      memberId: userId,
       memberName: member.name,
     })),
   });

@@ -45,12 +45,17 @@ export const groupInvitesRouter = {
         );
         const actor = await tx.groupMember.findUnique({
           where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
+          include: { user: { select: { pendingDeletion: true } } },
         });
-        if (actor?.role !== GroupRole.OWNER && actor?.role !== GroupRole.ADMIN)
+        if (
+          actor?.user.pendingDeletion ||
+          (actor?.role !== GroupRole.OWNER && actor?.role !== GroupRole.ADMIN)
+        )
           throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
         return tx.groupSharedInvite.create({
           data: {
             codeHash: createHash("sha256").update(code).digest("hex"),
+            creatorId: ctx.session.user.id,
             groupId: input.groupId,
             expiresAt,
           },
@@ -116,6 +121,7 @@ export const groupInvitesRouter = {
     .mutation(async ({ ctx, input }) => {
       const codeHash = createHash("sha256").update(input.code.toUpperCase()).digest("hex");
       await ctx.db.$transaction(async (tx) => {
+        await assertAccountCanJoinGroup(tx, ctx.session.user.id);
         const invite = await tx.groupSharedInvite.findUnique({ where: { codeHash } });
         if (!invite)
           throw new TRPCError({ code: "NOT_FOUND", message: "Invite is invalid or expired" });
@@ -177,6 +183,7 @@ export const groupInvitesRouter = {
     )
     .mutation(async ({ ctx, input }) => {
       const member = await ctx.db.$transaction(async (tx) => {
+        await assertAccountCanJoinGroup(tx, ctx.session.user.id);
         const invite = await tx.groupMemberInvite.findFirst({
           where: { id: input.inviteId, recipientId: ctx.session.user.id },
         });
@@ -340,8 +347,12 @@ export const groupInvitesRouter = {
         );
         const actor = await tx.groupMember.findUnique({
           where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
+          include: { user: { select: { pendingDeletion: true } } },
         });
-        if (actor?.role !== GroupRole.OWNER && actor?.role !== GroupRole.ADMIN) {
+        if (
+          actor?.user.pendingDeletion ||
+          (actor?.role !== GroupRole.OWNER && actor?.role !== GroupRole.ADMIN)
+        ) {
           throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
         }
         if (
@@ -445,3 +456,15 @@ export const groupInvitesRouter = {
     }));
   }),
 } satisfies TRPCRouterRecord;
+
+const assertAccountCanJoinGroup = async (tx: Prisma.TransactionClient, userId: string) => {
+  const [user] = await tx.$queryRaw<Array<{ pendingDeletion: boolean }>>(
+    Prisma.sql`SELECT "pendingDeletion" FROM "User" WHERE id = ${userId} FOR UPDATE`,
+  );
+  if (!user || user.pendingDeletion) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "An account pending deletion cannot join a group.",
+    });
+  }
+};

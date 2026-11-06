@@ -46,7 +46,6 @@ const GroupScreen = () => {
   const isFocused = useIsFocused();
   const { data: session } = authClient.useSession();
   const [keyAccess] = useGroupKeyAccess([groupId], session?.user.id);
-  const { data: members } = useQuery(trpc.groupMembership.members.queryOptions({ groupId }));
   const [value, setValue] = useState<GroupTabValue>("members");
   const {
     data: group,
@@ -92,15 +91,7 @@ const GroupScreen = () => {
                 <Text className="font-semibold text-destructive">
                   This device can’t access this group’s encryption key
                 </Text>
-                <Text>
-                  {group.groupMembers[0]?.role === "OWNER"
-                    ? !members
-                      ? "Open the members tab for recovery options. Older encrypted locations may remain unavailable."
-                      : members.length === 1
-                        ? "To restore access, invite someone to the group. When they join, the group will receive a new encryption key. Older encrypted locations may remain unavailable."
-                        : "To restore access, leave the group and choose another member as the new owner. Ask them to invite you again. Your location history in this group will be deleted, and older encrypted locations may remain unavailable."
-                    : "To restore access, leave the group and ask an owner or admin to invite you again. Your location history in this group will be deleted, and older encrypted locations may remain unavailable."}
-                </Text>
+                <Text>Group locations may be unavailable on this device.</Text>
               </View>
             )}
             <SwipeTabs

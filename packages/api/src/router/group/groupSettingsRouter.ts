@@ -49,7 +49,7 @@ export const groupSettingsRouter = {
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const imagePath = buildGroupAvatarPath(input.groupId);
+      const imagePath = buildGroupAvatarPath(userId, input.groupId);
       const fileName = `${crypto.randomUUID()}.webp`;
 
       const { presignedUrl } = await requestImageUpload({
@@ -77,7 +77,7 @@ export const groupSettingsRouter = {
     .input(z.object({ groupId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const imagePath = buildGroupAvatarPath(input.groupId);
+      const imagePath = buildGroupAvatarPath(userId, input.groupId);
       const pending = await ctx.db.pendingUpload.findUnique({
         where: { userId_uploadType: { userId, uploadType: "groupAvatar" } },
       });

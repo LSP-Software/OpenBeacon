@@ -26,6 +26,11 @@ export const groupTrackingRouter = {
     .input(groupTrackingUploadBatchSchema)
     .mutation(async ({ ctx, input }) => {
       return await ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
+        );
+        const group = await tx.group.findUnique({ where: { id: input.groupId } });
+        if (!group) throw new TRPCError({ code: "FORBIDDEN" });
         const members = await tx.$queryRaw<Array<{ id: string; createdAt: Date }>>(Prisma.sql`
           SELECT id, "createdAt" FROM "GroupMember"
           WHERE "groupId" = ${input.groupId} AND "userId" = ${ctx.session.user.id}
