@@ -70,7 +70,7 @@ const getCanRequestBackgroundInApp = ({
     return false;
   }
 
-  if (backgroundPermission.granted) {
+  if (backgroundPermission.granted || !backgroundPermission.canAskAgain) {
     return false;
   }
 

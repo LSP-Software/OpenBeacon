@@ -112,6 +112,16 @@ describe("locationPermissions", () => {
     expect(permissionState.canRequestBackgroundInApp).toBe(true);
   });
 
+  test("does not request background access again after permission is permanently denied", async () => {
+    foregroundPermission = createPermissionResponse({
+      status: "granted",
+      granted: true,
+      android: { accuracy: "fine" },
+    });
+    backgroundPermission = { ...backgroundPermission, canAskAgain: false };
+    expect((await getLocationPermissionState()).canRequestBackgroundInApp).toBe(false);
+  });
+
   test("does not allow in-app background escalation for iOS when scope is whenInUse", async () => {
     foregroundPermission = createPermissionResponse({
       status: "granted",

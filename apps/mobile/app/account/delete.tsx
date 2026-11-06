@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Alert, ScrollView, View } from "react-native";
+import { Alert, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/ui/Button.tsx";
 import { Input } from "../../components/ui/Input.tsx";
@@ -105,18 +105,44 @@ const DeleteAccountScreen = () => {
           Groups where you are the only member will be deleted. Transfer ownership or delete groups
           where you are the only owner before continuing.
         </Text>
-        <Text>Choose when to delete your account:</Text>
-        <Button variant={immediate ? "outline" : "default"} onPress={() => setImmediate(false)}>
-          <Text>After 7 days</Text>
-        </Button>
-        <Text>
-          Sign in within 7 days to cancel deletion. After the grace period your account cannot be
-          recovered.
-        </Text>
-        <Button variant={immediate ? "default" : "outline"} onPress={() => setImmediate(true)}>
-          <Text>Delete immediately</Text>
-        </Button>
-        <Text>Immediate deletion starts right away and cannot be cancelled or reversed.</Text>
+        <Text className="font-semibold">Choose when to delete your account:</Text>
+        <View accessibilityRole="radiogroup" accessibilityLabel="Deletion timing" className="gap-3">
+          {(
+            [
+              {
+                value: false,
+                title: "After 7 days",
+                description:
+                  "Sign in within 7 days to cancel deletion. After the grace period your account cannot be recovered.",
+              },
+              {
+                value: true,
+                title: "Delete immediately",
+                description: "Deletion starts right away and cannot be cancelled or reversed.",
+              },
+            ] as const
+          ).map((option) => (
+            <Pressable
+              key={option.title}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: immediate === option.value }}
+              onPress={() => setImmediate(option.value)}
+              className={`flex-row items-start gap-3 rounded-xl border p-4 ${immediate === option.value ? "border-primary bg-primary/10" : "border-border bg-card"}`}
+            >
+              <View
+                className={`mt-0.5 size-5 items-center justify-center rounded-full border-2 ${immediate === option.value ? "border-primary" : "border-muted-foreground"}`}
+              >
+                {immediate === option.value && (
+                  <View className="size-2.5 rounded-full bg-primary" />
+                )}
+              </View>
+              <View className="flex-1 gap-1">
+                <Text className="font-semibold">{option.title}</Text>
+                <Text className="text-muted-foreground">{option.description}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
         <View className="gap-4">
           {verificationMethods.data?.password && (
             <>

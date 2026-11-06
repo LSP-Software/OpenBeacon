@@ -1,5 +1,7 @@
+import { zodResolver } from "@hookform/resolvers/zod";
+import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import {
@@ -12,11 +14,13 @@ import {
   MailIcon,
   MapPinIcon,
   SunIcon,
-  UserCircleIcon,
+  Trash2Icon,
 } from "lucide-react-native";
 import { useState } from "react";
-import { ScrollView, View } from "react-native";
+import { useForm } from "react-hook-form";
+import { Alert, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { z } from "zod";
 import { SettingsContainer } from "../../../components/containers/settingsContainer.tsx";
 import { ProfileImage } from "../../../components/image/ProfileImage.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
@@ -27,7 +31,14 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../components/ui/Card.tsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../../../components/ui/Dialog.tsx";
 import { Icon } from "../../../components/ui/Icon.tsx";
+import { Input } from "../../../components/ui/Input.tsx";
 import { Separator } from "../../../components/ui/Separator.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { trpc } from "../../../lib/api.ts";
@@ -43,17 +54,17 @@ const categories = [
     label: "Account",
     settings: [
       {
-        label: "Manage Profile",
-        icon: UserCircleIcon,
-        href: "/account/profile",
-      },
-      {
         label: "Notifications",
         icon: BellIcon,
       },
       {
         label: "Password and Security",
         icon: LockIcon,
+      },
+      {
+        label: "Delete account",
+        icon: Trash2Icon,
+        href: "/account/delete",
       },
     ],
   },
@@ -88,12 +99,36 @@ const categories = [
   },
 ];
 
+const schema = z.object({ name: accountNameSchema });
+
 const AccountScreen = () => {
-  const { data: session } = authClient.useSession();
+  const { data: session, refetch } = authClient.useSession();
+  const queryClient = useQueryClient();
+  const updateName = useMutation(trpc.account.updateName.mutationOptions());
+  const [nameOpen, setNameOpen] = useState(false);
+  const form = useForm<z.infer<typeof schema>>({
+    resolver: zodResolver(schema),
+    defaultValues: { name: "" },
+  });
   const groups = useQuery(trpc.groupMembership.list.queryOptions());
   const devices = useQuery(trpc.auth.listMyDeviceKeys.queryOptions());
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const saveName = async ({ name }: z.infer<typeof schema>) => {
+    const result = await tryCatch(updateName.mutateAsync({ name }));
+    if (result.error) {
+      Alert.alert("Unable to update name", result.error.message);
+      return;
+    }
+    await Promise.all([
+      refetch(),
+      queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.groupMembership.members.queryKey() }),
+    ]);
+    setNameOpen(false);
+    Alert.alert("Profile updated", "Your name has been saved.");
+  };
 
   const handleSignOut = async () => {
     if (isSigningOut) return;
@@ -119,6 +154,30 @@ const AccountScreen = () => {
         <Text className="text-foreground text-2xl font-bold">Account</Text>
       </SafeAreaView>
 
+      <Dialog
+        open={nameOpen}
+        onOpenChange={(open) => {
+          setNameOpen(open);
+          if (!open) form.reset({ name: session?.user.name ?? "" });
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change name</DialogTitle>
+          </DialogHeader>
+          <Input
+            control={form.control}
+            name="name"
+            label="Name"
+            autoCapitalize="words"
+            autoComplete="name"
+          />
+          <Button onPress={form.handleSubmit(saveName)} loading={updateName.isPending}>
+            <Text>Save name</Text>
+          </Button>
+        </DialogContent>
+      </Dialog>
+
       <ScrollView
         className="flex-1"
         contentContainerClassName="px-6 gap-4 my-4 pb-32"
@@ -136,8 +195,23 @@ const AccountScreen = () => {
             </View>
           </View>
           <View className="flex flex-col px-4 pb-4 pt-14">
-            <Text className="text-foreground font-semibold text-2xl">{session?.user.name}</Text>
-            <Text className="text-muted-foreground text-base">{session?.user.email}</Text>
+            <View className="flex-row items-start justify-between gap-3">
+              <View className="flex-1 gap-1">
+                <Text className="text-foreground font-semibold text-2xl">{session?.user.name}</Text>
+                <Text className="text-muted-foreground text-base">{session?.user.email}</Text>
+              </View>
+              <Button
+                variant="outline"
+                size="sm"
+                accessibilityLabel="Edit name"
+                onPress={() => {
+                  form.reset({ name: session?.user.name ?? "" });
+                  setNameOpen(true);
+                }}
+              >
+                <Text>Edit name</Text>
+              </Button>
+            </View>
 
             <Separator className="my-4" />
             <View className="flex flex-row items-center gap-6">

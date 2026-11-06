@@ -23,6 +23,7 @@ let sessionState: {
 let launchRequestCalls = 0;
 let refreshCalls = 0;
 let backgroundRequestCalls = 0;
+let settingsCalls = 0;
 let notificationRequestCalls = 0;
 let permissionRequestOrder: string[] = [];
 let notificationGate: Promise<void> | null = null;
@@ -89,7 +90,9 @@ mock.module("../lib/locationPermissions.ts", () => ({
     await refreshGate;
     return refreshResult;
   },
-  openLocationSettings: async () => {},
+  openLocationSettings: async () => {
+    settingsCalls += 1;
+  },
   requestBackgroundLocationPermissions: async () => {
     backgroundRequestCalls += 1;
     return backgroundRequestResult;
@@ -192,6 +195,7 @@ describe("LocationPermissionProvider", () => {
     launchRequestCalls = 0;
     refreshCalls = 0;
     backgroundRequestCalls = 0;
+    settingsCalls = 0;
     notificationRequestCalls = 0;
     permissionRequestOrder = [];
     notificationGate = null;
@@ -307,6 +311,54 @@ describe("LocationPermissionProvider", () => {
     const root = await renderProvider();
 
     expect(getRenderedOutput(root)).not.toContain("Allow background location");
+  });
+
+  test("account warning opens the styled dialog before requesting background access", async () => {
+    const AccountWarning = () => {
+      const { openLocationPermissionSettings } = useLocationPermissions();
+      return (
+        <button type="button" onClick={openLocationPermissionSettings}>
+          Grant access
+        </button>
+      );
+    };
+    const root = await renderProvider(<AccountWarning />);
+    await act(async () => {
+      pressButton(root, 1);
+    });
+    await act(async () => {
+      pressButton(root, 0);
+    });
+    expect(getRenderedOutput(root)).toContain("Allow background location");
+    expect(backgroundRequestCalls).toBe(0);
+    await act(async () => {
+      pressButton(root, 2);
+      await Promise.resolve();
+    });
+    expect(backgroundRequestCalls).toBe(1);
+  });
+
+  test("account warning offers settings when background access cannot be requested again", async () => {
+    launchRequestResult = createPermissionState({ canRequestBackgroundInApp: false });
+    const AccountWarning = () => {
+      const { openLocationPermissionSettings } = useLocationPermissions();
+      return (
+        <button type="button" onClick={openLocationPermissionSettings}>
+          Grant access
+        </button>
+      );
+    };
+    const root = await renderProvider(<AccountWarning />);
+    await act(async () => {
+      pressButton(root, 0);
+    });
+    expect(getRenderedOutput(root)).toContain("update location access in your device settings");
+    await act(async () => {
+      pressButton(root, 2);
+      await Promise.resolve();
+    });
+    expect(settingsCalls).toBe(1);
+    expect(backgroundRequestCalls).toBe(0);
   });
 
   test("requests background access only after the continue button is pressed", async () => {
