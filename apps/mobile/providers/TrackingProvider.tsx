@@ -31,6 +31,8 @@ export const TrackingProvider = ({
   const queryClient = useQueryClient();
   const { permissionState } = useLocationPermissions();
   const activeCycleRef = useRef<Promise<void> | null>(null);
+  const cycleVersionRef = useRef(0);
+  const sessionReadyRef = useRef(false);
   const appStateRef = useRef(AppState.currentState);
   const completedCycleRef = useRef(0);
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
@@ -44,6 +46,7 @@ export const TrackingProvider = ({
 
   const runTrackingCycle = useCallback(
     (force = false) => {
+      if (!sessionReadyRef.current) return Promise.resolve();
       forceFlushRef.current ||= force;
       requestedCycleRef.current += 1;
 
@@ -51,8 +54,12 @@ export const TrackingProvider = ({
         return activeCycleRef.current;
       }
 
-      activeCycleRef.current = (async () => {
-        while (completedCycleRef.current < requestedCycleRef.current) {
+      const version = cycleVersionRef.current;
+      const current = (async () => {
+        while (
+          version === cycleVersionRef.current &&
+          completedCycleRef.current < requestedCycleRef.current
+        ) {
           const cycle = requestedCycleRef.current;
           const forceFlush = forceFlushRef.current;
           forceFlushRef.current = false;
@@ -61,10 +68,13 @@ export const TrackingProvider = ({
               startCapture: startCaptureRef.current,
             }),
           );
+          if (version !== cycleVersionRef.current) return;
           await tryCatch(service.flushPendingTrackingPoints(forceFlush));
+          if (version !== cycleVersionRef.current) return;
           const userId = previousUserIdRef.current;
           if (userId && recoveryCheckedUserRef.current !== userId) {
             const result = await tryCatch(service.getUnassignedTrackingPoints());
+            if (version !== cycleVersionRef.current) return;
             if (
               !result.error &&
               previousUserIdRef.current === userId &&
@@ -109,10 +119,11 @@ export const TrackingProvider = ({
           completedCycleRef.current = cycle;
         }
       })().finally(() => {
-        activeCycleRef.current = null;
+        if (activeCycleRef.current === current) activeCycleRef.current = null;
       });
 
-      return activeCycleRef.current;
+      activeCycleRef.current = current;
+      return current;
     },
     [queryClient, service],
   );
@@ -122,28 +133,30 @@ export const TrackingProvider = ({
       return;
     }
 
+    const previousUserId = previousUserIdRef.current;
+    const changed = previousUserId !== userId;
+    if (changed) {
+      cycleVersionRef.current += 1;
+      sessionReadyRef.current = false;
+      activeCycleRef.current = null;
+      requestedCycleRef.current = 0;
+      completedCycleRef.current = 0;
+      forceFlushRef.current = false;
+      recoveryCheckedUserRef.current = null;
+      previousUserIdRef.current = userId;
+    }
+    const version = cycleVersionRef.current;
     void (async () => {
-      const previousUserId = previousUserIdRef.current;
-
-      if (previousUserId !== undefined && previousUserId !== userId) {
-        await activeCycleRef.current;
+      if (changed && (previousUserId !== undefined || !userId)) {
         await tryCatch(service.revokeTrackingAccess());
       }
-
-      if (previousUserId !== userId) recoveryCheckedUserRef.current = null;
-      previousUserIdRef.current = userId;
-
-      if (!userId) {
-        if (previousUserId === undefined) {
-          await tryCatch(service.revokeTrackingAccess());
-        }
-        return;
-      }
-
-      if (previousUserId !== userId) {
+      if (version !== cycleVersionRef.current || !userId) return;
+      if (changed) {
         await service.resumeTracking();
+        if (version !== cycleVersionRef.current) return;
+        sessionReadyRef.current = true;
       }
-      await runTrackingCycle(previousUserId !== userId);
+      await runTrackingCycle(changed);
     })();
   }, [isPending, runTrackingCycle, service, startCapture, userId]);
 

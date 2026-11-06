@@ -18,6 +18,7 @@ let sessionState: {
 };
 let appStateListener: ((nextAppState: string) => void) | null = null;
 let reconcileGate: Promise<void> | null = null;
+let recoveryGate: Promise<void> | null = null;
 let reconcileCalls: Array<{ startCapture: boolean }> = [];
 let flushCalls = 0;
 let flushModes: boolean[] = [];
@@ -50,6 +51,7 @@ const trackingService = {
   },
   resumeTracking: async () => {},
   getUnassignedTrackingPoints: async () => {
+    await recoveryGate;
     if (failRecoveryCheck) throw new Error("offline");
     return recoveryPrompt;
   },
@@ -133,6 +135,7 @@ describe("TrackingProvider", () => {
     appStateListener = null;
     reconcileCalls = [];
     reconcileGate = null;
+    recoveryGate = null;
     flushCalls = 0;
     flushModes = [];
     revokeCalls = 0;
@@ -316,5 +319,51 @@ describe("TrackingProvider", () => {
 
     expect(revokeCalls).toBe(1);
     expect(reconcileCalls).toEqual([{ startCapture: true }, { startCapture: true }]);
+  });
+
+  test("account switches do not wait for an old reconciliation", async () => {
+    let release = () => {};
+    reconcileGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    await renderProvider();
+    expect(reconcileCalls).toHaveLength(1);
+    reconcileGate = null;
+    sessionState = { data: { user: { id: "user-2" } }, isPending: false };
+    await act(async () => {
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushEffects();
+    expect(revokeCalls).toBe(1);
+    expect(reconcileCalls).toHaveLength(2);
+    expect(flushCalls).toBe(1);
+    release();
+    await flushEffects();
+    expect(flushCalls).toBe(1);
+  });
+
+  test("account switches do not wait for an old recovery check", async () => {
+    let release = () => {};
+    recoveryGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    await renderProvider();
+    expect(flushCalls).toBe(1);
+    recoveryGate = null;
+    sessionState = { data: { user: { id: "user-2" } }, isPending: false };
+    await act(async () => {
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushEffects();
+    expect(revokeCalls).toBe(1);
+    expect(reconcileCalls).toHaveLength(2);
+    expect(flushCalls).toBe(2);
+    release();
+    await flushEffects();
+    expect(flushCalls).toBe(2);
   });
 });

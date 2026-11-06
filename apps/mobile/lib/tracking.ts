@@ -17,6 +17,7 @@ import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
 
 let reconcilePromise: Promise<void> | null = null;
+const cancelReconciliations = new Set<() => void>();
 let reconcileOptions: { startCapture: boolean; onlyIfRunning: boolean } | null = null;
 let reconcileVersion = 0;
 let flushPromise: Promise<void> | null = null;
@@ -92,9 +93,11 @@ const reconcileTrackingKeysInternal = async ({
   if (!trackingModule || !startCapture) {
     if (trackingModule) {
       if (trackingModule.isCaptureRunning()) await trackingModule.stopCapture();
+      if (!isCurrent()) return;
       trackingModule.revokeEpochKeys();
     }
     const groups = await trpcClient.groupMembership.list.query();
+    if (!isCurrent()) return;
     const rotations = await Promise.all(
       groups.map(({ id }) => tryCatch(rotateGroupEpochIfRequired(id))),
     );
@@ -104,15 +107,18 @@ const reconcileTrackingKeysInternal = async ({
   }
 
   const deviceKeyContext = await ensureDeviceKeyRegistration();
+  if (!isCurrent()) return;
   const owner = await getQueueOwner();
   if (!isCurrent() || owner !== JSON.stringify([baseUrl, deviceKeyContext.userId])) return;
   trackingModule.setQueueOwner(owner);
   const groups = await trpcClient.groupMembership.list.query();
+  if (!isCurrent()) return;
   const preserveGroupIds = new Set<string>();
   const epochs = (
     await Promise.all(
       groups.map(async ({ id: groupId }) => {
         const rotation = await tryCatch(rotateGroupEpochIfRequired(groupId));
+        if (!isCurrent()) return null;
         if (getErrorCode(rotation.error) === "UNAUTHORIZED") throw rotation.error;
         const latest = await tryCatch(trpcClient.groupEpoch.getLatest.query({ groupId }));
         if (latest.error) {
@@ -128,6 +134,7 @@ const reconcileTrackingKeysInternal = async ({
       }),
     )
   ).filter((epoch) => epoch !== null);
+  if (!isCurrent()) return;
   if (isCurrent()) {
     for (const { groupId, epochId } of epochs) {
       const previousEpochId = observedGroupEpochs.get(groupId);
@@ -292,7 +299,13 @@ export const reconcileTrackingKeys = ({
       throw result.error;
     }
   })();
-  const wrapped = task.finally(() => {
+  let cancel = () => {};
+  const cancelled = new Promise<void>((resolve) => {
+    cancel = resolve;
+  });
+  cancelReconciliations.add(cancel);
+  const wrapped = Promise.race([task, cancelled]).finally(() => {
+    cancelReconciliations.delete(cancel);
     if (reconcilePromise === wrapped) {
       reconcilePromise = null;
       reconcileOptions = null;
@@ -377,7 +390,7 @@ const uploadClaimedItems = async (
   }
   if (uploadResult.error) {
     if (getErrorCode(uploadResult.error) === "UNAUTHORIZED") {
-      await revokeTrackingAccess();
+      await revokeTrackingAccess({ cancelFlush: false });
       await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
       throw uploadResult.error;
     }
@@ -536,6 +549,9 @@ export const syncBackgroundTracking = async () => {
 const revokeTrackingAccessInternal = async (): Promise<void> => {
   reconcileVersion += 1;
   reconcileOptions = null;
+  for (const cancel of cancelReconciliations) cancel();
+  cancelReconciliations.clear();
+  reconcilePromise = null;
   captureRefreshPending = false;
   const trackingModule = await loadTrackingModule();
   if (!trackingModule) {
@@ -546,7 +562,15 @@ const revokeTrackingAccessInternal = async (): Promise<void> => {
   await trackingModule.stopCapture();
 };
 
-export const revokeTrackingAccess = (): Promise<void> => {
+export const revokeTrackingAccess = ({
+  cancelFlush = true,
+}: { cancelFlush?: boolean } = {}): Promise<void> => {
+  if (cancelFlush) {
+    flushController?.abort();
+    flushPromise = null;
+    flushWork = null;
+    flushController = null;
+  }
   if (revokePromise) {
     return revokePromise;
   }

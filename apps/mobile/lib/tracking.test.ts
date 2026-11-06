@@ -27,6 +27,7 @@ const uploadCalls: Array<{ groupId: string; points: unknown[] }> = [];
 const rotationChecks: string[] = [];
 const requestedOwners: string[] = [];
 let currentUserId = "user-1";
+let ownerContextCalls = 0;
 let ownerQueryGate: Promise<void> | null = null;
 let unassignedCount = 0;
 const assignments: Array<{ deviceId: string; owner: string }> = [];
@@ -107,6 +108,7 @@ mock.module("./api.ts", () => ({
     auth: {
       deviceKeyContext: {
         query: async () => {
+          ownerContextCalls += 1;
           await ownerQueryGate;
           return { userId: currentUserId, recipients: [{ deviceId: "device-1" }] };
         },
@@ -274,6 +276,7 @@ describe("tracking service", () => {
     rotationChecks.length = 0;
     requestedOwners.length = 0;
     currentUserId = "user-1";
+    ownerContextCalls = 0;
     ownerQueryGate = null;
     unassignedCount = 0;
     assignments.length = 0;
@@ -441,6 +444,35 @@ describe("tracking service", () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  test("logout detaches stalled reconciliation and prevents its late work from touching the next account", async () => {
+    let release = () => {};
+    let started = false;
+    registrationWait = new Promise((resolve) => {
+      release = resolve;
+    });
+    onRegistration = () => {
+      started = true;
+    };
+    const previous = reconcileTrackingKeys({ startCapture: true });
+    for (let index = 0; index < 200 && !started; index++) await Promise.resolve();
+    expect(started).toBe(true);
+    await prepareTrackingSignOut();
+    await expect(previous).resolves.toBeUndefined();
+    currentUserId = "user-2";
+    registrationWait = null;
+    onRegistration = null;
+    resumeTracking();
+    await reconcileTrackingKeys({ startCapture: true });
+    const calls = provisionCalls.length;
+    const stops = stopCaptureCalls;
+    const ownerQueries = ownerContextCalls;
+    release();
+    for (let index = 0; index < 100; index++) await Promise.resolve();
+    expect(provisionCalls).toHaveLength(calls);
+    expect(stopCaptureCalls).toBe(stops);
+    expect(ownerContextCalls).toBe(ownerQueries);
   });
 
   test("a late old flush cannot clear a newer session's active flush", async () => {
