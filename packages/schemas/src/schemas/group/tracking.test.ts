@@ -51,6 +51,16 @@ describe("groupTrackingPointSchema", () => {
       }),
     ).toThrow();
   });
+
+  test("rejects oversized and noncanonical nonces", () => {
+    for (const nonce of [
+      `${" ".repeat(1_000_000)}${validNonce}`,
+      `${validNonce}\n`,
+      "!".repeat(32),
+    ]) {
+      expect(groupTrackingPointSchema.safeParse({ ...validPoint, nonce }).success).toBe(false);
+    }
+  });
 });
 
 describe("groupTrackingUploadBatchSchema", () => {

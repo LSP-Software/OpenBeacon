@@ -1,5 +1,6 @@
 import {
   decodeBase64,
+  encodeBase64,
   PAYLOAD_ENCRYPTION_ALGORITHM,
   TRACKING_POINT_KIND,
   XCHACHA20_NONCE_LENGTH,
@@ -10,8 +11,10 @@ const trackingNonceSchema = z
   .string()
   .min(1)
   .refine((nonce) => {
+    if (nonce.length !== 32) return false;
     try {
-      return decodeBase64(nonce).length === XCHACHA20_NONCE_LENGTH;
+      const decoded = decodeBase64(nonce);
+      return decoded.length === XCHACHA20_NONCE_LENGTH && encodeBase64(decoded) === nonce;
     } catch {
       return false;
     }

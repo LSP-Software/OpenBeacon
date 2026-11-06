@@ -188,6 +188,31 @@ describe("groupTrackingRouter", () => {
     expect(createMany).not.toHaveBeenCalled();
   });
 
+  test("rejects oversized nonces before persisting tracking points", async () => {
+    const createManyMock = mock(async () => ({ count: 0 }));
+    const { caller } = await createCaller({
+      createManyMock,
+      groupFindUniqueMock: createGroupFindUniqueMock(true),
+    });
+    await expect(
+      caller.groupTracking.uploadBatch({
+        groupId: "group-1",
+        points: [
+          {
+            algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+            ciphertext: "ciphertext",
+            clientPointId: "point-1",
+            epochId: "epoch-1",
+            kind: TRACKING_POINT_KIND,
+            nonce: `${" ".repeat(1_000_000)}${validNonce}`,
+            senderDeviceId: "device-1",
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(createManyMock).not.toHaveBeenCalled();
+  });
+
   test("forbids non-members from reading tracking ciphertext", async () => {
     const findManyPayloadsMock = mock(async () => []);
     const queryRawMock = mock(async () => []);
