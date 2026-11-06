@@ -6,6 +6,7 @@ import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
+import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -97,6 +98,14 @@ class OpenBeaconTrackingModule : Module() {
 
       Function("isCaptureRunning") {
         TrackingRuntime.isCaptureRunning
+      }
+
+      AsyncFunction("countUnassignedCiphertexts") { senderDeviceId: String ->
+        CiphertextQueueDatabase.getInstance(requireContext()).ciphertextQueueDao().countUnassigned(senderDeviceId)
+      }
+
+      AsyncFunction("assignUnassignedCiphertexts") { senderDeviceId: String, owner: String ->
+        CiphertextQueueDatabase.getInstance(requireContext()).ciphertextQueueDao().assignUnassigned(senderDeviceId, owner)
       }
 
       AsyncFunction("listPendingCiphertexts") { owner: String, limit: Double?, afterId: Double? ->

@@ -2,7 +2,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
-import { AppState } from "react-native";
+import { Alert, AppState } from "react-native";
 import { authClient } from "../lib/auth-client.ts";
 import { subscribeToTrackingSync } from "../lib/trackingEvents.ts";
 import { useLocationPermissions } from "./LocationPermissionProvider.tsx";
@@ -11,6 +11,10 @@ const trackingService = {
   flushPendingTrackingPoints: async (force = false) =>
     (await import("../lib/tracking.ts")).flushPendingTrackingPoints(force),
   resumeTracking: async () => (await import("../lib/tracking.ts")).resumeTracking(),
+  getUnassignedTrackingPoints: async () =>
+    (await import("../lib/tracking.ts")).getUnassignedTrackingPoints(),
+  recoverUnassignedTrackingPoints: async (input: { deviceIds: string[]; userId: string }) =>
+    (await import("../lib/tracking.ts")).recoverUnassignedTrackingPoints(input),
   reconcileTrackingKeys: async (input: { startCapture: boolean }) =>
     (await import("../lib/tracking.ts")).reconcileTrackingKeys(input),
   revokeTrackingAccess: async () => (await import("../lib/tracking.ts")).revokeTrackingAccess(),
@@ -97,6 +101,35 @@ export const TrackingProvider = ({
         await service.resumeTracking();
       }
       await runTrackingCycle(previousUserId !== userId);
+      if (previousUserId !== userId) {
+        const result = await tryCatch(service.getUnassignedTrackingPoints());
+        if (result.data && previousUserIdRef.current === userId) {
+          const { count, deviceIds, server, userId: ownerId } = result.data;
+          Alert.alert(
+            "Recover saved locations?",
+            `${count} saved location ${count === 1 ? "point was" : "points were"} created by an older version of OpenBeacon. Their server was not recorded. Upload them only if they belong to your current account on ${server}.`,
+            [
+              { text: "Keep on device", style: "cancel" },
+              {
+                text: "Upload",
+                onPress: () => {
+                  void (async () => {
+                    const recovery = await tryCatch(
+                      service.recoverUnassignedTrackingPoints({ deviceIds, userId: ownerId }),
+                    );
+                    if (recovery.error) {
+                      Alert.alert(
+                        "Upload incomplete",
+                        "Some saved locations may still be on this device. Try again after signing in.",
+                      );
+                    }
+                  })();
+                },
+              },
+            ],
+          );
+        }
+      }
     })();
   }, [isPending, runTrackingCycle, service, startCapture, userId]);
 

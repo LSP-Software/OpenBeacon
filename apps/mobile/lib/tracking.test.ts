@@ -27,6 +27,8 @@ const uploadCalls: Array<{ groupId: string; points: unknown[] }> = [];
 const rotationChecks: string[] = [];
 const requestedOwners: string[] = [];
 let currentUserId = "user-1";
+let unassignedCount = 0;
+const assignments: Array<{ deviceId: string; owner: string }> = [];
 let pendingCiphertexts: Array<{
   id: number;
   clientPointId: string;
@@ -101,7 +103,11 @@ mock.module("./base-url.ts", () => ({ baseUrl: "https://api.example.test" }));
 
 mock.module("./api.ts", () => ({
   trpcClient: {
-    auth: { deviceKeyContext: { query: async () => ({ userId: currentUserId }) } },
+    auth: {
+      deviceKeyContext: {
+        query: async () => ({ userId: currentUserId, recipients: [{ deviceId: "device-1" }] }),
+      },
+    },
     groupMembership: {
       list: {
         query: async () => [{ id: "group-1" }, { id: "group-2" }],
@@ -164,6 +170,10 @@ mock.module("./api.ts", () => ({
 mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   default: {
     setQueueOwner: () => {},
+    countUnassignedCiphertexts: async () => unassignedCount,
+    assignUnassignedCiphertexts: async (deviceId: string, owner: string) => {
+      assignments.push({ deviceId, owner });
+    },
     provisionEpochKeys: (keys: unknown[], preserveGroupIds: string[] = []) => {
       provisionCalls.push(keys);
       const remaining = provisionedKeys.filter(({ groupId }) => preserveGroupIds.includes(groupId));
@@ -211,8 +221,10 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
 
 const {
   flushPendingTrackingPoints,
+  getUnassignedTrackingPoints,
   prepareTrackingSignOut,
   reconcileTrackingKeys,
+  recoverUnassignedTrackingPoints,
   resumeTracking,
   revokeTrackingAccess,
   syncBackgroundTracking,
@@ -258,6 +270,8 @@ describe("tracking service", () => {
     rotationChecks.length = 0;
     requestedOwners.length = 0;
     currentUserId = "user-1";
+    unassignedCount = 0;
+    assignments.length = 0;
     resumeTracking();
     recordedUploads.length = 0;
     pendingCiphertexts = [];
@@ -303,6 +317,26 @@ describe("tracking service", () => {
     await flushPendingTrackingPoints();
     expect(requestedOwners).toEqual([JSON.stringify(["https://api.example.test", "user-1"])]);
     expect(deleted).toEqual([[1]]);
+  });
+
+  test("only assigns legacy points after confirmation for the same account", async () => {
+    unassignedCount = 2;
+    expect(await getUnassignedTrackingPoints()).toEqual({
+      count: 2,
+      deviceIds: ["device-1"],
+      server: "https://api.example.test",
+      userId: "user-1",
+    });
+    currentUserId = "user-2";
+    await expect(
+      recoverUnassignedTrackingPoints({ deviceIds: ["device-1"], userId: "user-1" }),
+    ).rejects.toThrow("The tracking account has changed.");
+    expect(assignments).toEqual([]);
+    currentUserId = "user-1";
+    await recoverUnassignedTrackingPoints({ deviceIds: ["device-1"], userId: "user-1" });
+    expect(assignments).toEqual([
+      { deviceId: "device-1", owner: JSON.stringify(["https://api.example.test", "user-1"]) },
+    ]);
   });
 
   test("stops capture and retries delayed points before sign out, retaining failures", async () => {

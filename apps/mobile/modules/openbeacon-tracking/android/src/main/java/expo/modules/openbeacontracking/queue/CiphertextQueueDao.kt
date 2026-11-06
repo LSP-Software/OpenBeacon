@@ -6,6 +6,12 @@ import androidx.room.Query
 
 @Dao
 interface CiphertextQueueDao {
+  @Query("SELECT COUNT(*) FROM ciphertext_queue WHERE owner IS NULL AND senderDeviceId = :senderDeviceId")
+  fun countUnassigned(senderDeviceId: String): Int
+
+  @Query("UPDATE ciphertext_queue SET owner = :owner WHERE owner IS NULL AND senderDeviceId = :senderDeviceId")
+  fun assignUnassigned(senderDeviceId: String, owner: String)
+
   @Query("UPDATE ciphertext_queue SET status = 'PENDING' WHERE status = 'IN_FLIGHT' AND lastAttemptAt < :before")
   fun recoverInterrupted(before: Long)
 

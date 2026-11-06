@@ -26,6 +26,10 @@ let isReadyForSharing = true;
 let failFlush = false;
 let failReconcile = false;
 let alerts = 0;
+let recoveryPrompt: { count: number; deviceIds: string[]; server: string; userId: string } | null =
+  null;
+let alertButtons: Array<{ text: string; onPress?: () => void }> = [];
+let recovered: Array<{ deviceIds: string[]; userId: string }> = [];
 let root: Root | null = null;
 const invalidateQueries = mock(async (_input: { queryKey: string[] }) => {});
 const queryClient = { invalidateQueries };
@@ -44,6 +48,10 @@ const trackingService = {
     revokeCalls += 1;
   },
   resumeTracking: async () => {},
+  getUnassignedTrackingPoints: async () => recoveryPrompt,
+  recoverUnassignedTrackingPoints: async (input: { deviceIds: string[]; userId: string }) => {
+    recovered.push(input);
+  },
 };
 
 mock.module("react-native", () => ({
@@ -64,8 +72,9 @@ mock.module("react-native", () => ({
     platformOS: "android",
   }),
   Alert: {
-    alert: () => {
+    alert: (_title: string, _message: string, buttons: typeof alertButtons = []) => {
       alerts += 1;
+      alertButtons = buttons;
     },
   },
 }));
@@ -127,6 +136,9 @@ describe("TrackingProvider", () => {
     failFlush = false;
     failReconcile = false;
     alerts = 0;
+    recoveryPrompt = null;
+    alertButtons = [];
+    recovered = [];
     root = null;
     invalidateQueries.mockClear();
   });
@@ -148,6 +160,23 @@ describe("TrackingProvider", () => {
     expect(flushModes).toEqual([true]);
     expect(revokeCalls).toBe(0);
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["groupKeyAccess"] });
+  });
+
+  test("asks before assigning legacy locations to the current server", async () => {
+    recoveryPrompt = {
+      count: 2,
+      deviceIds: ["device-1"],
+      server: "https://example.test",
+      userId: "user-1",
+    };
+    await renderProvider();
+    await flushEffects();
+    expect(alerts).toBe(1);
+    expect(recovered).toEqual([]);
+    expect(alertButtons.map((button) => button.text)).toEqual(["Keep on device", "Upload"]);
+    alertButtons[1]?.onPress?.();
+    await flushEffects();
+    expect(recovered).toEqual([{ deviceIds: ["device-1"], userId: "user-1" }]);
   });
 
   test("reconciles again when the app resumes", async () => {

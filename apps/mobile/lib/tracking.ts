@@ -526,3 +526,44 @@ export const prepareTrackingSignOut = async (): Promise<void> => {
 export const resumeTracking = () => {
   trackingPaused = false;
 };
+
+export const getUnassignedTrackingPoints = async () => {
+  const trackingModule = await loadTrackingModule();
+  if (!trackingModule) return null;
+  const { userId, recipients } = await trpcClient.auth.deviceKeyContext.query();
+  const counts = await Promise.all(
+    recipients.map(async ({ deviceId }) => ({
+      deviceId,
+      count: await trackingModule.countUnassignedCiphertexts(deviceId),
+    })),
+  );
+  const deviceIds = counts.filter(({ count }) => count > 0).map(({ deviceId }) => deviceId);
+  const count = counts.reduce((total, item) => total + item.count, 0);
+  return count > 0 ? { count, deviceIds, server: baseUrl, userId } : null;
+};
+
+export const recoverUnassignedTrackingPoints = async ({
+  deviceIds,
+  userId,
+}: {
+  deviceIds: string[];
+  userId: string;
+}) => {
+  if (trackingPaused) throw new Error("Tracking is paused.");
+  const trackingModule = await loadTrackingModule();
+  const context = await trpcClient.auth.deviceKeyContext.query();
+  if (
+    !trackingModule ||
+    trackingPaused ||
+    context.userId !== userId ||
+    !deviceIds.every((deviceId) =>
+      context.recipients.some((recipient) => recipient.deviceId === deviceId),
+    )
+  ) {
+    throw new Error("The tracking account has changed.");
+  }
+  for (const deviceId of deviceIds) {
+    await trackingModule.assignUnassignedCiphertexts(deviceId, JSON.stringify([baseUrl, userId]));
+  }
+  await flushPendingTrackingPoints(true);
+};
