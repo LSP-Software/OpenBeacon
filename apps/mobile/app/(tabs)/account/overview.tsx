@@ -265,9 +265,17 @@ const AccountScreen = () => {
 
         <SettingsContainer categories={categories} />
 
-        <Button onPress={handleSignOut} className="mb-28">
-          <Text>Sign out</Text>
-        </Button>
+        <View className="mb-28 gap-3">
+          {isSigningOut && (
+            <Text accessibilityLiveRegion="polite" className="text-muted">
+              Uploading saved locations before signing out. This may take up to 10 seconds; any
+              remaining locations will be saved for your next sign-in.
+            </Text>
+          )}
+          <Button onPress={handleSignOut} disabled={isSigningOut}>
+            <Text>{isSigningOut ? "Signing out…" : "Sign out"}</Text>
+          </Button>
+        </View>
       </ScrollView>
     </View>
   );

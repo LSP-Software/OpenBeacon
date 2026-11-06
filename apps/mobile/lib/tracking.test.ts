@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, jest, mock, test } from "bun:test";
 import {
   createDeviceKeyPair,
   DEVICE_KEY_ALGORITHM,
@@ -27,6 +27,7 @@ const uploadCalls: Array<{ groupId: string; points: unknown[] }> = [];
 const rotationChecks: string[] = [];
 const requestedOwners: string[] = [];
 let currentUserId = "user-1";
+let ownerQueryGate: Promise<void> | null = null;
 let unassignedCount = 0;
 const assignments: Array<{ deviceId: string; owner: string }> = [];
 let pendingCiphertexts: Array<{
@@ -105,7 +106,10 @@ mock.module("./api.ts", () => ({
   trpcClient: {
     auth: {
       deviceKeyContext: {
-        query: async () => ({ userId: currentUserId, recipients: [{ deviceId: "device-1" }] }),
+        query: async () => {
+          await ownerQueryGate;
+          return { userId: currentUserId, recipients: [{ deviceId: "device-1" }] };
+        },
       },
     },
     groupMembership: {
@@ -270,6 +274,7 @@ describe("tracking service", () => {
     rotationChecks.length = 0;
     requestedOwners.length = 0;
     currentUserId = "user-1";
+    ownerQueryGate = null;
     unassignedCount = 0;
     assignments.length = 0;
     resumeTracking();
@@ -360,6 +365,85 @@ describe("tracking service", () => {
     resumeTracking();
     await expect(flushPendingTrackingPoints(true)).rejects.toThrow("Tracking upload failed");
     expect(uploadCalls).toHaveLength(2);
+  });
+
+  test("sign out times out and retains a late upload response", async () => {
+    jest.useFakeTimers();
+    try {
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      let resolveUpload: (result: { accepted: string[]; duplicates: string[] }) => void = () => {};
+      uploadGroup = () =>
+        new Promise((resolve) => {
+          resolveUpload = resolve;
+        });
+      const signOut = prepareTrackingSignOut();
+      for (let index = 0; index < 200 && uploadCalls.length === 0; index++) await Promise.resolve();
+      expect(uploadCalls).toHaveLength(1);
+      jest.advanceTimersByTime(10_000);
+      await signOut;
+      currentUserId = "user-2";
+      resolveUpload({ accepted: ["point-1"], duplicates: [] });
+      for (let index = 0; index < 20 && requeued.length === 0; index++) await Promise.resolve();
+      expect(deleted).toEqual([]);
+      expect(requeued).toEqual([{ ids: [1], error: "UPLOAD_CANCELLED" }]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("sign out times out an existing flush without starting a later session upload", async () => {
+    jest.useFakeTimers();
+    try {
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      let resolveUpload: (result: { accepted: string[]; duplicates: string[] }) => void = () => {};
+      uploadGroup = () =>
+        new Promise((resolve) => {
+          resolveUpload = resolve;
+        });
+      const existingFlush = flushPendingTrackingPoints();
+      for (let index = 0; index < 200 && uploadCalls.length === 0; index++) await Promise.resolve();
+      const signOut = prepareTrackingSignOut();
+      jest.advanceTimersByTime(10_000);
+      await signOut;
+      currentUserId = "user-2";
+      resolveUpload({ accepted: ["point-1"], duplicates: [] });
+      await expect(existingFlush).rejects.toThrow("Tracking upload failed");
+      for (let index = 0; index < 10; index++) await Promise.resolve();
+      expect(uploadCalls).toHaveLength(1);
+      expect(deleted).toEqual([]);
+      expect(requeued).toEqual([{ ids: [1], error: "UPLOAD_CANCELLED" }]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("a late owner lookup cannot upload under the next account", async () => {
+    jest.useFakeTimers();
+    try {
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      let releaseOwner = () => {};
+      ownerQueryGate = new Promise((resolve) => {
+        releaseOwner = resolve;
+      });
+      const signOut = prepareTrackingSignOut();
+      for (let index = 0; index < 100; index++) await Promise.resolve();
+      jest.advanceTimersByTime(10_000);
+      await signOut;
+      currentUserId = "user-2";
+      releaseOwner();
+      for (let index = 0; index < 100; index++) await Promise.resolve();
+      expect(requestedOwners).toEqual([]);
+      expect(uploadCalls).toEqual([]);
+      expect(deleted).toEqual([]);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test("continues past a failed batch when flushing at sign out", async () => {

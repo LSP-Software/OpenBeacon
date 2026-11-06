@@ -20,13 +20,17 @@ let reconcilePromise: Promise<void> | null = null;
 let reconcileOptions: { startCapture: boolean; onlyIfRunning: boolean } | null = null;
 let reconcileVersion = 0;
 let flushPromise: Promise<void> | null = null;
+let flushController: AbortController | null = null;
 let revokePromise: Promise<void> | null = null;
 let captureRefreshPending = false;
 let trackingPaused = false;
 const observedGroupEpochs = new Map<string, string>();
 
-const getQueueOwner = async () => {
-  const { userId } = await trpcClient.auth.deviceKeyContext.query();
+const getQueueOwner = async (signal?: AbortSignal) => {
+  const { userId } = await trpcClient.auth.deviceKeyContext.query(
+    undefined,
+    signal ? { signal } : undefined,
+  );
   return JSON.stringify([baseUrl, userId]);
 };
 
@@ -338,26 +342,38 @@ const isUploadableQueueItem = (item: CiphertextQueueItem): item is UploadableQue
 const uploadClaimedItems = async (
   trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
   items: UploadableQueueItem[],
+  signal: AbortSignal,
 ): Promise<void> => {
   const ids = items.map(({ id }) => id);
+  if (signal.aborted) {
+    await trackingModule.requeueCiphertexts(ids, "UPLOAD_CANCELLED");
+    throw new Error("Tracking upload cancelled");
+  }
   const sentAt = new Date().toISOString();
   const uploadResult = await tryCatch(
-    trpcClient.groupTracking.uploadBatch.mutate({
-      groupId: items[0]?.groupId ?? "",
-      points: items.map(
-        ({ algorithm, ciphertext, clientPointId, epochId, kind, nonce, senderDeviceId }) => ({
-          algorithm,
-          ciphertext,
-          clientPointId,
-          epochId,
-          kind,
-          nonce,
-          senderDeviceId,
-        }),
-      ),
-    }),
+    trpcClient.groupTracking.uploadBatch.mutate(
+      {
+        groupId: items[0]?.groupId ?? "",
+        points: items.map(
+          ({ algorithm, ciphertext, clientPointId, epochId, kind, nonce, senderDeviceId }) => ({
+            algorithm,
+            ciphertext,
+            clientPointId,
+            epochId,
+            kind,
+            nonce,
+            senderDeviceId,
+          }),
+        ),
+      },
+      { signal },
+    ),
   );
 
+  if (signal.aborted) {
+    await trackingModule.requeueCiphertexts(ids, "UPLOAD_CANCELLED");
+    throw new Error("Tracking upload cancelled");
+  }
   if (uploadResult.error) {
     if (getErrorCode(uploadResult.error) === "UNAUTHORIZED") {
       await revokeTrackingAccess();
@@ -367,8 +383,8 @@ const uploadClaimedItems = async (
     if (getErrorCode(uploadResult.error) === "BAD_REQUEST" && items.length > 1) {
       const midpoint = Math.ceil(items.length / 2);
       await Promise.all([
-        uploadClaimedItems(trackingModule, items.slice(0, midpoint)),
-        uploadClaimedItems(trackingModule, items.slice(midpoint)),
+        uploadClaimedItems(trackingModule, items.slice(0, midpoint), signal),
+        uploadClaimedItems(trackingModule, items.slice(midpoint), signal),
       ]);
       return;
     }
@@ -404,6 +420,7 @@ const uploadClaimedItems = async (
 const flushGroup = async (
   trackingModule: Awaited<ReturnType<typeof loadTrackingModule>>,
   items: CiphertextQueueItem[],
+  signal: AbortSignal,
 ) => {
   if (!trackingModule || items.length === 0) {
     return;
@@ -433,7 +450,7 @@ const flushGroup = async (
 
   const results = await Promise.allSettled(
     Array.from(itemsBySender.values()).map((senderItems) =>
-      uploadClaimedItems(trackingModule, senderItems),
+      uploadClaimedItems(trackingModule, senderItems, signal),
     ),
   );
   if (invalidItems.length > 0 || results.some((result) => result.status === "rejected")) {
@@ -441,24 +458,30 @@ const flushGroup = async (
   }
 };
 
-const flushPendingTrackingPointsInternal = async (force = false): Promise<void> => {
+const flushPendingTrackingPointsInternal = async (
+  force: boolean,
+  signal: AbortSignal,
+): Promise<void> => {
   const trackingModule = await loadTrackingModule();
   if (!trackingModule) {
     return;
   }
 
-  const owner = await getQueueOwner();
+  if (signal.aborted) return;
+  const owner = await getQueueOwner(signal);
   let afterId = 0;
   let failed = false;
   while (true) {
+    if (signal.aborted) return;
     const pending = await trackingModule.listPendingCiphertexts(owner, 100, afterId);
+    if (signal.aborted) return;
     const pendingItems = pending.filter((item) => force || isReadyForRetry(item, Date.now()));
     const itemsByGroup = new Map<string, CiphertextQueueItem[]>();
     for (const item of pendingItems) {
       itemsByGroup.set(item.groupId, [...(itemsByGroup.get(item.groupId) ?? []), item]);
     }
     const results = await Promise.allSettled(
-      Array.from(itemsByGroup.values()).map((items) => flushGroup(trackingModule, items)),
+      Array.from(itemsByGroup.values()).map((items) => flushGroup(trackingModule, items, signal)),
     );
     failed ||= results.some((result) => result.status === "rejected");
     if (pending.length < 100) break;
@@ -475,8 +498,11 @@ export const flushPendingTrackingPoints = (force = false): Promise<void> => {
       : flushPromise;
   }
 
-  flushPromise = flushPendingTrackingPointsInternal(force).finally(() => {
+  const controller = new AbortController();
+  flushController = controller;
+  flushPromise = flushPendingTrackingPointsInternal(force, controller.signal).finally(() => {
     flushPromise = null;
+    if (flushController === controller) flushController = null;
   });
   return flushPromise;
 };
@@ -518,9 +544,25 @@ export const revokeTrackingAccess = (): Promise<void> => {
 
 export const prepareTrackingSignOut = async (): Promise<void> => {
   trackingPaused = true;
-  await revokeTrackingAccess();
-  if (flushPromise) await tryCatch(flushPromise);
-  await flushPendingTrackingPointsInternal(true);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  flushController?.abort();
+  try {
+    await Promise.race([
+      (async () => {
+        await revokeTrackingAccess();
+        if (flushPromise) await tryCatch(flushPromise);
+        if (!controller.signal.aborted) {
+          await flushPendingTrackingPointsInternal(true, controller.signal);
+        }
+      })(),
+      new Promise<void>((resolve) =>
+        controller.signal.addEventListener("abort", () => resolve(), { once: true }),
+      ),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 export const resumeTracking = () => {
