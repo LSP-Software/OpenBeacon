@@ -113,7 +113,7 @@ const AccountScreen = () => {
   const groups = useQuery(trpc.groupMembership.list.queryOptions());
   const devices = useQuery(trpc.auth.listMyDeviceKeys.queryOptions());
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
-  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
 
   const saveName = async ({ name }: z.infer<typeof schema>) => {
     const result = await tryCatch(updateName.mutateAsync({ name }));
@@ -131,19 +131,20 @@ const AccountScreen = () => {
   };
 
   const handleSignOut = async () => {
-    if (isSigningOut) return;
-    setIsSigningOut(true);
+    if (signOutPhase) return;
+    setSignOutPhase("uploading");
     const sessionTokenToRevoke = session?.session?.token ?? null;
 
     const tracking = await import("../../../lib/tracking.ts");
     await tryCatch(tracking.prepareTrackingSignOut());
+    setSignOutPhase("signingOut");
     const { error: signOutError } = await authClient.signOut();
 
     if (signOutError && sessionTokenToRevoke) {
       await tryCatch(SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke));
     }
 
-    setIsSigningOut(false);
+    setSignOutPhase(null);
     router.replace("/");
   };
 
@@ -266,14 +267,15 @@ const AccountScreen = () => {
         <SettingsContainer categories={categories} />
 
         <View className="mb-28 gap-3">
-          {isSigningOut && (
+          {signOutPhase && (
             <Text accessibilityLiveRegion="polite" className="text-muted">
-              Uploading saved locations before signing out. This may take up to 10 seconds; any
-              remaining locations will be saved for your next sign-in.
+              {signOutPhase === "uploading"
+                ? "Uploading saved locations before signing out. This may take up to 10 seconds; any remaining locations will be saved for your next sign-in."
+                : "Contacting your server to sign out."}
             </Text>
           )}
-          <Button onPress={handleSignOut} disabled={isSigningOut}>
-            <Text>{isSigningOut ? "Signing out…" : "Sign out"}</Text>
+          <Button onPress={handleSignOut} disabled={!!signOutPhase}>
+            <Text>{signOutPhase ? "Signing out…" : "Sign out"}</Text>
           </Button>
         </View>
       </ScrollView>
