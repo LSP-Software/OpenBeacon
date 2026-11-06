@@ -43,6 +43,15 @@ describe("groupTrackingPointSchema", () => {
     ).toBe(false);
   });
 
+  test("limits client point IDs", () => {
+    expect(
+      groupTrackingPointSchema.safeParse({ ...validPoint, clientPointId: "x".repeat(128) }).success,
+    ).toBe(true);
+    expect(
+      groupTrackingPointSchema.safeParse({ ...validPoint, clientPointId: "x".repeat(129) }).success,
+    ).toBe(false);
+  });
+
   test("rejects invalid nonce length", () => {
     expect(() =>
       groupTrackingPointSchema.parse({

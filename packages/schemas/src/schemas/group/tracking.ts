@@ -23,7 +23,7 @@ const trackingNonceSchema = z
 export const groupTrackingPointSchema = z.object({
   algorithm: z.literal(PAYLOAD_ENCRYPTION_ALGORITHM),
   ciphertext: z.string().min(1).max(4096),
-  clientPointId: z.string().min(1),
+  clientPointId: z.string().min(1).max(128),
   epochId: z.string().min(1),
   kind: z.literal(TRACKING_POINT_KIND),
   nonce: trackingNonceSchema,

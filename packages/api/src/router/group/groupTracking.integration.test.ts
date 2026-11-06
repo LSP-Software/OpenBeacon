@@ -135,11 +135,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     for (const input of [
       { ...point, nonce: `${" ".repeat(1_000_000)}${point.nonce}` },
       { ...point, ciphertext: "x".repeat(4097) },
+      { ...point, clientPointId: "x".repeat(200_000) },
     ]) {
       await expect(
         caller(ownerId).groupTracking.uploadBatch({
           groupId,
-          points: [{ ...input, clientPointId: `${prefix}-oversized` }],
+          points: [input],
         }),
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     }
