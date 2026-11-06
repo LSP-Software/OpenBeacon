@@ -2,7 +2,7 @@ import { storage } from "./storage.ts";
 
 export const GROUP_COLOR_PALETTE = [
   "#FF1464",
-  "#E85D4C",
+  "#C72B55",
   "#2A9D8F",
   "#457B9D",
   "#E9C46A",
