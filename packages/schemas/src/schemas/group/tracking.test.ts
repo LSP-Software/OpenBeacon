@@ -34,6 +34,15 @@ describe("groupTrackingPointSchema", () => {
     ).toThrow();
   });
 
+  test("limits ciphertext size", () => {
+    expect(
+      groupTrackingPointSchema.safeParse({ ...validPoint, ciphertext: "a".repeat(4096) }).success,
+    ).toBe(true);
+    expect(
+      groupTrackingPointSchema.safeParse({ ...validPoint, ciphertext: "a".repeat(4097) }).success,
+    ).toBe(false);
+  });
+
   test("rejects invalid nonce length", () => {
     expect(() =>
       groupTrackingPointSchema.parse({
