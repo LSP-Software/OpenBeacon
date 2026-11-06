@@ -277,28 +277,11 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
         <Text className="text-sm text-muted-foreground">{members?.length ?? 0}</Text>
       </View>
       {memberStatuses.map((member) => (
-        <View key={member.id}>
+        <View key={member.id} className="gap-3 rounded-2xl border border-border bg-card p-4">
           <MemberCard member={member} />
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching}
-            onPress={() => {
-              if (nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching)
-                return;
-              setNicknameMember({
-                id: member.id,
-                name: member.user.name,
-                nickname: member.nickname,
-              });
-              setNickname(member.nickname ?? "");
-            }}
-          >
-            <Text>Edit nickname</Text>
-          </Button>
           {self?.role === "OWNER" && member.id !== self.id && (
             <View
-              className="flex-row rounded-2xl bg-secondary p-1 my-2"
+              className="flex-row rounded-2xl bg-secondary p-1"
               accessibilityRole="radiogroup"
               accessibilityLabel={`Role for ${member.user.name}`}
             >
@@ -365,17 +348,40 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
               ))}
             </View>
           )}
-          {(member.id === self?.id ||
-            (canManage && (self?.role === "OWNER" || member.role === "MEMBER"))) && (
+          <View className="flex-row gap-2">
             <Button
               variant="outline"
               size="sm"
-              disabled={removeMember.isPending || deleteGroup.isPending}
-              onPress={() => confirmRemoval(member)}
+              className="flex-1"
+              disabled={
+                nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching
+              }
+              onPress={() => {
+                if (nicknameQuery.isPending || nicknameQuery.isError || nicknameQuery.isFetching)
+                  return;
+                setNicknameMember({
+                  id: member.id,
+                  name: member.user.name,
+                  nickname: member.nickname,
+                });
+                setNickname(member.nickname ?? "");
+              }}
             >
-              <Text>{member.id === self?.id ? "Leave group" : "Remove member"}</Text>
+              <Text>Edit nickname</Text>
             </Button>
-          )}
+            {(member.id === self?.id ||
+              (canManage && (self?.role === "OWNER" || member.role === "MEMBER"))) && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                disabled={removeMember.isPending || deleteGroup.isPending}
+                onPress={() => confirmRemoval(member)}
+              >
+                <Text>{member.id === self?.id ? "Leave group" : "Remove member"}</Text>
+              </Button>
+            )}
+          </View>
         </View>
       ))}
     </View>
@@ -391,7 +397,7 @@ const MemberCard = ({ member }: { member: ReturnType<typeof buildMemberLiveStatu
     : null;
 
   return (
-    <View className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-4">
+    <View className="py-1">
       <View className="flex flex-row items-center gap-3">
         <View className="flex-row items-center gap-3">
           <Avatar alt={member.nickname ?? member.user.name} className="size-12">
