@@ -143,6 +143,16 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
       return;
     }
 
+    if (
+      !permissionState?.canRequestBackgroundInApp ||
+      permissionState.missing.length !== 1 ||
+      permissionState.missing[0] !== "background"
+    ) {
+      setIsBackgroundPermissionDialogOpen(false);
+      await openLocationSettings();
+      return;
+    }
+
     setIsRequestingBackgroundPermission(true);
 
     const permissionResult = await tryCatch(requestBackgroundLocationPermissions());
@@ -158,16 +168,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
   };
 
   const openLocationPermissionSettings = async (): Promise<void> => {
-    if (
-      permissionState?.canRequestBackgroundInApp &&
-      permissionState.missing.length === 1 &&
-      permissionState.missing[0] === "background"
-    ) {
-      await continueToBackgroundPermission();
-      return;
-    }
-
-    await openLocationSettings();
+    setIsBackgroundPermissionDialogOpen(true);
   };
 
   return (
@@ -194,10 +195,20 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Allow background location</DialogTitle>
+            <DialogTitle>
+              {permissionState?.missing.includes("foreground") ||
+              permissionState?.missing.includes("precise")
+                ? "Allow location access"
+                : "Allow background location"}
+            </DialogTitle>
             <DialogDescription>
-              OpenBeacon needs background location so your family and friends can see where you are
-              even when you are not actively using the app. The app will ask for that access next.
+              OpenBeacon needs precise and background location so your family and friends can see
+              where you are even when you are not actively using the app.{" "}
+              {permissionState?.canRequestBackgroundInApp &&
+              permissionState.missing.length === 1 &&
+              permissionState.missing[0] === "background"
+                ? "The app will ask for that access next."
+                : "You can update location access in your device settings."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
