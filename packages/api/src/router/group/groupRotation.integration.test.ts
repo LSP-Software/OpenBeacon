@@ -102,6 +102,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           },
         }),
       ).rejects.toThrow();
+      await expect(
+        caller.groupEpoch.rotate({
+          groupId,
+          nextEpoch: {
+            ...nextEpoch,
+            recipientKeys: nextEpoch.recipientKeys.map((recipient) => ({
+              ...recipient,
+              ephemeralPublicKey: Buffer.alloc(32).toString("base64"),
+            })),
+          },
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(await prisma.groupEpoch.count({ where: { groupId } })).toBe(1);
       expect(await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).toMatchObject({
         epochRotationRequired: true,
       });

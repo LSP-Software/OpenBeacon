@@ -124,6 +124,15 @@ export const createDeviceKeyPair = (): DeviceKeyPair => {
   };
 };
 
+export const isUsableX25519PublicKey = (publicKey: Uint8Array): boolean => {
+  try {
+    x25519.getSharedSecret(new Uint8Array(32), publicKey);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const serializeRecipientPublicKeyMaterial = ({
   algorithm,
   createdAt,

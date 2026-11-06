@@ -2,6 +2,7 @@ import {
   DEVICE_KEY_ALGORITHM,
   decodeBase64,
   encodeBase64,
+  isUsableX25519PublicKey,
   WRAPPED_EPOCH_KEY_ALGORITHM,
   XCHACHA20_NONCE_LENGTH,
 } from "@openbeacon/encryption";
@@ -12,7 +13,7 @@ const devicePublicKeySchema = z
   .transform((publicKey) => publicKey.trim())
   .refine((publicKey) => {
     try {
-      return decodeBase64(publicKey).length === 32;
+      return isUsableX25519PublicKey(decodeBase64(publicKey));
     } catch {
       return false;
     }

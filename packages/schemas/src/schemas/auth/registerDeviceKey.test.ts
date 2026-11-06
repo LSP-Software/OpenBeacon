@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   createDeviceKeyPair,
+  createInitialGroupEpoch,
   DEVICE_KEY_ALGORITHM,
   encodeBase64,
+  unwrapEpochKey,
   WRAPPED_EPOCH_KEY_ALGORITHM,
 } from "@openbeacon/encryption";
 import {
@@ -48,20 +50,48 @@ describe("registerDeviceKeySchema", () => {
       }),
     ).toThrow("Invalid device public key.");
   });
+
+  test("rejects low-order device public keys", () => {
+    for (const value of [0, 1]) {
+      const bytes = new Uint8Array(32);
+      bytes[0] = value;
+      expect(
+        registerDeviceKeySchema.safeParse({
+          algorithm: DEVICE_KEY_ALGORITHM,
+          deviceId: "device-a",
+          publicKey: encodeBase64(bytes),
+        }).success,
+      ).toBe(false);
+    }
+  });
 });
 
 describe("groupEpochBundleSchema", () => {
   test("validates encoded wrapped key components", () => {
-    const recipientKey = {
-      algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
-      createdAt: new Date(),
-      ephemeralPublicKey: encodeBase64(new Uint8Array(32)),
-      epochId: "epoch-1",
-      nonce: encodeBase64(new Uint8Array(24)),
-      recipientDeviceId: "device-a",
-      wrappedKey: encodeBase64(new Uint8Array(48)),
-    };
+    const device = createDeviceKeyPair();
+    const epoch = createInitialGroupEpoch({
+      createdByDeviceId: "device-a",
+      groupId: "group-a",
+      recipients: [
+        {
+          algorithm: DEVICE_KEY_ALGORITHM,
+          createdAt: new Date(),
+          deviceId: "device-a",
+          publicKey: device.publicKey,
+          revokedAt: null,
+          userId: "user-a",
+        },
+      ],
+    });
+    const recipientKey = epoch.wrappedKeys[0]!;
     expect(wrappedEpochKeySchema.safeParse(recipientKey).success).toBe(true);
+    expect(
+      unwrapEpochKey({
+        recipientDeviceId: "device-a",
+        recipientPrivateKey: device.privateKey,
+        wrappedEpochKey: wrappedEpochKeySchema.parse(recipientKey),
+      }).expose(),
+    ).toEqual(epoch.epochKey.expose());
     for (const field of ["ephemeralPublicKey", "nonce", "wrappedKey"] as const) {
       expect(
         wrappedEpochKeySchema.safeParse({ ...recipientKey, [field]: "invalid!" }).success,
@@ -79,7 +109,7 @@ describe("groupEpochBundleSchema", () => {
     const recipientKey = wrappedEpochKeySchema.parse({
       algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
       createdAt: new Date("2026-03-30T12:00:00.000Z"),
-      ephemeralPublicKey: encodeBase64(new Uint8Array(32)),
+      ephemeralPublicKey: createDeviceKeyPair().publicKey,
       epochId: "epoch-2",
       nonce: encodeBase64(new Uint8Array(24)),
       recipientDeviceId: "device-b",

@@ -8,9 +8,28 @@ import {
   decryptGroupPayload,
   encodeBase64,
   encryptGroupPayload,
+  isUsableX25519PublicKey,
   serializeRecipientPublicKeyMaterial,
   unwrapEpochKey,
 } from "./index.ts";
+
+test("rejects low-order and invalid X25519 public keys", () => {
+  const zero = new Uint8Array(32);
+  const one = new Uint8Array(32);
+  one[0] = 1;
+  const highBitZero = new Uint8Array(32);
+  highBitZero[31] = 128;
+  const fieldValues = [0xec, 0xed, 0xee].map((first) => {
+    const bytes = new Uint8Array(32).fill(255);
+    bytes[0] = first;
+    bytes[31] = 127;
+    return bytes;
+  });
+  for (const publicKey of [zero, one, highBitZero, ...fieldValues, new Uint8Array(31)]) {
+    expect(isUsableX25519PublicKey(publicKey)).toBe(false);
+  }
+  expect(isUsableX25519PublicKey(decodeBase64(createDeviceKeyPair().publicKey))).toBe(true);
+});
 
 const createRecipient = (deviceId: string, userId: string) => {
   const keyPair = createDeviceKeyPair();
