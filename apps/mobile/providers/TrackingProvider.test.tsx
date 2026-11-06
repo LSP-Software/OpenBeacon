@@ -22,7 +22,6 @@ let reconcileCalls: Array<{ startCapture: boolean }> = [];
 let flushCalls = 0;
 let revokeCalls = 0;
 let isReadyForSharing = true;
-let isConfiguringLocation = false;
 let failFlush = false;
 let failReconcile = false;
 let alerts = 0;
@@ -83,7 +82,6 @@ mock.module("./LocationPermissionProvider.tsx", () => ({
     permissionState: {
       isReadyForSharing,
     },
-    isConfiguringLocation,
   }),
 }));
 
@@ -122,7 +120,6 @@ describe("TrackingProvider", () => {
     flushCalls = 0;
     revokeCalls = 0;
     isReadyForSharing = true;
-    isConfiguringLocation = false;
     failFlush = false;
     failReconcile = false;
     alerts = 0;
@@ -207,34 +204,6 @@ describe("TrackingProvider", () => {
     await renderProvider();
 
     expect(reconcileCalls).toEqual([{ startCapture: false }]);
-  });
-
-  test("waits until location setup finishes before alerting about missing permissions", async () => {
-    isReadyForSharing = false;
-    isConfiguringLocation = true;
-    await renderProvider();
-    expect(alerts).toBe(0);
-
-    isConfiguringLocation = false;
-    await act(async () => {
-      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
-    });
-    expect(alerts).toBe(1);
-  });
-
-  test("alerts only once while location permissions are missing and again after recovery", async () => {
-    isReadyForSharing = false;
-    await renderProvider();
-    expect(alerts).toBe(1);
-
-    for (const ready of [false, true, false]) {
-      isReadyForSharing = ready;
-      await act(async () => {
-        root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
-        await Promise.resolve();
-      });
-    }
-    expect(alerts).toBe(2);
   });
 
   test("reconciles when location sharing permission changes", async () => {

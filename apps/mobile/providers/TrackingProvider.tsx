@@ -2,7 +2,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
-import { Alert, AppState } from "react-native";
+import { AppState } from "react-native";
 import { authClient } from "../lib/auth-client.ts";
 import { subscribeToTrackingSync } from "../lib/trackingEvents.ts";
 import { useLocationPermissions } from "./LocationPermissionProvider.tsx";
@@ -24,36 +24,16 @@ export const TrackingProvider = ({
 }) => {
   const { data: session, isPending } = authClient.useSession();
   const queryClient = useQueryClient();
-  const { permissionState, isConfiguringLocation } = useLocationPermissions();
+  const { permissionState } = useLocationPermissions();
   const activeCycleRef = useRef<Promise<void> | null>(null);
   const appStateRef = useRef(AppState.currentState);
   const completedCycleRef = useRef(0);
-  const permissionAlertShownRef = useRef(false);
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
   const requestedCycleRef = useRef(0);
   const startCaptureRef = useRef(permissionState?.isReadyForSharing ?? false);
   const userId = session?.user.id ?? null;
   const startCapture = permissionState?.isReadyForSharing ?? false;
   startCaptureRef.current = startCapture;
-
-  useEffect(() => {
-    if (!userId || !permissionState) {
-      permissionAlertShownRef.current = false;
-      return;
-    }
-    if (isConfiguringLocation) {
-      return;
-    }
-    if (permissionState.isReadyForSharing) {
-      permissionAlertShownRef.current = false;
-    } else if (!permissionAlertShownRef.current) {
-      permissionAlertShownRef.current = true;
-      Alert.alert(
-        "Location sharing needs attention",
-        "Allow precise and background location access in your device settings to share your location.",
-      );
-    }
-  }, [isConfiguringLocation, permissionState, userId]);
 
   const runTrackingCycle = useCallback(() => {
     requestedCycleRef.current += 1;

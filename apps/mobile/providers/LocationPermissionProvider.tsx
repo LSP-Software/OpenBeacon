@@ -187,8 +187,8 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
           <DialogHeader>
             <DialogTitle>Allow background location</DialogTitle>
             <DialogDescription>
-              OpenBeacon needs background location so your family can see where you are even when
-              you are not actively using the app. The app will ask for that access next.
+              OpenBeacon needs background location so your family and friends can see where you are
+              even when you are not actively using the app. The app will ask for that access next.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
