@@ -95,7 +95,7 @@ export const requestImageUpload = async ({
   if (presignError) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
-      message: `Failed to generate presigned URL: ${presignError.message}`,
+      message: "Failed to generate presigned URL.",
       cause: presignError,
     });
   }
@@ -138,7 +138,7 @@ export const confirmImageUpload = async ({
   if (verifyError) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
-      message: `Upload verification failed: ${verifyError.message ?? "Unknown error."}`,
+      message: "Upload verification failed.",
       cause: verifyError,
     });
   }
