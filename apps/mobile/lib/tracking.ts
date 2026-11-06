@@ -9,6 +9,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { Platform } from "react-native";
 import type { CiphertextQueueItem } from "../modules/openbeacon-tracking/index.ts";
 import { trpcClient } from "./api.ts";
+import { baseUrl } from "./base-url.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
@@ -21,7 +22,13 @@ let reconcileVersion = 0;
 let flushPromise: Promise<void> | null = null;
 let revokePromise: Promise<void> | null = null;
 let captureRefreshPending = false;
+let trackingPaused = false;
 const observedGroupEpochs = new Map<string, string>();
+
+const getQueueOwner = async () => {
+  const { userId } = await trpcClient.auth.deviceKeyContext.query();
+  return JSON.stringify([baseUrl, userId]);
+};
 
 const loadTrackingModule = async () => {
   if (Platform.OS !== "android") {
@@ -92,6 +99,9 @@ const reconcileTrackingKeysInternal = async ({
   }
 
   const deviceKeyContext = await ensureDeviceKeyRegistration();
+  const owner = await getQueueOwner();
+  if (!isCurrent() || owner !== JSON.stringify([baseUrl, deviceKeyContext.userId])) return;
+  trackingModule.setQueueOwner(owner);
   const groups = await trpcClient.groupMembership.list.query();
   const preserveGroupIds = new Set<string>();
   const epochs = (
@@ -242,6 +252,7 @@ export const reconcileTrackingKeys = ({
   startCapture: boolean;
   onlyIfRunning?: boolean;
 }): Promise<void> => {
+  if (trackingPaused) return Promise.resolve();
   if (
     reconcilePromise &&
     (onlyIfRunning ||
@@ -316,11 +327,6 @@ const getQueueError = (error: unknown) => {
   return `${code}: ${message}`.slice(0, 160);
 };
 
-const isPermanentUploadError = (error: unknown) => {
-  const code = getErrorCode(error);
-  return code === "BAD_REQUEST" || code === "FORBIDDEN";
-};
-
 type UploadableQueueItem = CiphertextQueueItem & {
   algorithm: typeof PAYLOAD_ENCRYPTION_ALGORITHM;
   kind: typeof TRACKING_POINT_KIND;
@@ -366,11 +372,6 @@ const uploadClaimedItems = async (
       ]);
       return;
     }
-    if (isPermanentUploadError(uploadResult.error)) {
-      await trackingModule.deleteCiphertexts(ids);
-      return;
-    }
-
     await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
     throw new Error("Tracking upload failed");
   }
@@ -411,10 +412,8 @@ const flushGroup = async (
   const invalidItems = items.filter((item) => !isUploadableQueueItem(item));
   const validItems = items.filter(isUploadableQueueItem);
 
-  if (invalidItems.length > 0) {
-    await trackingModule.deleteCiphertexts(invalidItems.map(({ id }) => id));
-  }
   if (validItems.length === 0) {
+    if (invalidItems.length > 0) throw new Error("Unsupported tracking queue item");
     return;
   }
 
@@ -437,39 +436,46 @@ const flushGroup = async (
       uploadClaimedItems(trackingModule, senderItems),
     ),
   );
-  if (results.some((result) => result.status === "rejected")) {
+  if (invalidItems.length > 0 || results.some((result) => result.status === "rejected")) {
     throw new Error("Tracking upload failed");
   }
 };
 
-const flushPendingTrackingPointsInternal = async (): Promise<void> => {
+const flushPendingTrackingPointsInternal = async (force = false): Promise<void> => {
   const trackingModule = await loadTrackingModule();
   if (!trackingModule) {
     return;
   }
 
-  const pending = await trackingModule.listPendingCiphertexts(100);
-  const pendingItems = pending.filter((item) => isReadyForRetry(item, Date.now()));
-  const itemsByGroup = new Map<string, CiphertextQueueItem[]>();
-
-  for (const item of pendingItems) {
-    itemsByGroup.set(item.groupId, [...(itemsByGroup.get(item.groupId) ?? []), item]);
+  const owner = await getQueueOwner();
+  let afterId = 0;
+  let failed = false;
+  while (true) {
+    const pending = await trackingModule.listPendingCiphertexts(owner, 100, afterId);
+    const pendingItems = pending.filter((item) => force || isReadyForRetry(item, Date.now()));
+    const itemsByGroup = new Map<string, CiphertextQueueItem[]>();
+    for (const item of pendingItems) {
+      itemsByGroup.set(item.groupId, [...(itemsByGroup.get(item.groupId) ?? []), item]);
+    }
+    const results = await Promise.allSettled(
+      Array.from(itemsByGroup.values()).map((items) => flushGroup(trackingModule, items)),
+    );
+    failed ||= results.some((result) => result.status === "rejected");
+    if (pending.length < 100) break;
+    afterId = pending[pending.length - 1]?.id ?? afterId;
   }
-
-  const results = await Promise.allSettled(
-    Array.from(itemsByGroup.values()).map((items) => flushGroup(trackingModule, items)),
-  );
-  if (results.some((result) => result.status === "rejected")) {
-    throw new Error("Tracking upload failed");
-  }
+  if (failed) throw new Error("Tracking upload failed");
 };
 
-export const flushPendingTrackingPoints = (): Promise<void> => {
+export const flushPendingTrackingPoints = (force = false): Promise<void> => {
+  if (trackingPaused) return Promise.resolve();
   if (flushPromise) {
-    return flushPromise;
+    return force
+      ? flushPromise.catch(() => {}).then(() => flushPendingTrackingPoints(true))
+      : flushPromise;
   }
 
-  flushPromise = flushPendingTrackingPointsInternal().finally(() => {
+  flushPromise = flushPendingTrackingPointsInternal(force).finally(() => {
     flushPromise = null;
   });
   return flushPromise;
@@ -508,4 +514,15 @@ export const revokeTrackingAccess = (): Promise<void> => {
     revokePromise = null;
   });
   return revokePromise;
+};
+
+export const prepareTrackingSignOut = async (): Promise<void> => {
+  trackingPaused = true;
+  await revokeTrackingAccess();
+  if (flushPromise) await tryCatch(flushPromise);
+  await flushPendingTrackingPointsInternal(true);
+};
+
+export const resumeTracking = () => {
+  trackingPaused = false;
 };

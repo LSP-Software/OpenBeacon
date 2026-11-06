@@ -20,6 +20,7 @@ let appStateListener: ((nextAppState: string) => void) | null = null;
 let reconcileGate: Promise<void> | null = null;
 let reconcileCalls: Array<{ startCapture: boolean }> = [];
 let flushCalls = 0;
+let flushModes: boolean[] = [];
 let revokeCalls = 0;
 let isReadyForSharing = true;
 let failFlush = false;
@@ -34,13 +35,15 @@ const trackingService = {
     await reconcileGate;
     if (failReconcile) throw new Error("group key error");
   },
-  flushPendingTrackingPoints: async () => {
+  flushPendingTrackingPoints: async (force = false) => {
     flushCalls += 1;
+    flushModes.push(force);
     if (failFlush) throw new Error("offline");
   },
   revokeTrackingAccess: async () => {
     revokeCalls += 1;
   },
+  resumeTracking: async () => {},
 };
 
 mock.module("react-native", () => ({
@@ -118,6 +121,7 @@ describe("TrackingProvider", () => {
     reconcileCalls = [];
     reconcileGate = null;
     flushCalls = 0;
+    flushModes = [];
     revokeCalls = 0;
     isReadyForSharing = true;
     failFlush = false;
@@ -141,6 +145,7 @@ describe("TrackingProvider", () => {
 
     expect(reconcileCalls).toEqual([{ startCapture: true }]);
     expect(flushCalls).toBe(1);
+    expect(flushModes).toEqual([true]);
     expect(revokeCalls).toBe(0);
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["groupKeyAccess"] });
   });

@@ -15,10 +15,12 @@ class InMemoryCiphertextQueue : CiphertextQueue {
   override fun listByStatus(
     status: String,
     limit: Int,
+    owner: String?,
+    afterId: Long,
   ): List<CiphertextQueueRow> =
     rows
       .asSequence()
-      .filter { it.status == status }
+      .filter { it.status == status && it.id > afterId && (owner == null || it.owner == owner) }
       .sortedBy { it.id }
       .take(limit.coerceAtLeast(0))
       .toList()

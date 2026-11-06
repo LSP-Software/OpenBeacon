@@ -25,6 +25,8 @@ const deleted: number[][] = [];
 const requeued: Array<{ ids: number[]; error: string | null | undefined }> = [];
 const uploadCalls: Array<{ groupId: string; points: unknown[] }> = [];
 const rotationChecks: string[] = [];
+const requestedOwners: string[] = [];
+let currentUserId = "user-1";
 let pendingCiphertexts: Array<{
   id: number;
   clientPointId: string;
@@ -41,6 +43,7 @@ let pendingCiphertexts: Array<{
   lastAttemptAt: number | null;
   lastError: string | null;
   status: "PENDING" | "IN_FLIGHT";
+  owner?: string;
 }> = [];
 const recordedUploads: Array<{ deviceId: string; groupId: string; timestamp: string }> = [];
 let networkConnected = true;
@@ -90,12 +93,15 @@ mock.module("./deviceKeys.ts", () => ({
     if (failRegistration) throw new Error("offline");
     onRegistration?.();
     await registrationWait;
-    return { deviceId: "device-1", privateKey: deviceKeyPair.privateKey };
+    return { deviceId: "device-1", privateKey: deviceKeyPair.privateKey, userId: currentUserId };
   },
 }));
 
+mock.module("./base-url.ts", () => ({ baseUrl: "https://api.example.test" }));
+
 mock.module("./api.ts", () => ({
   trpcClient: {
+    auth: { deviceKeyContext: { query: async () => ({ userId: currentUserId }) } },
     groupMembership: {
       list: {
         query: async () => [{ id: "group-1" }, { id: "group-2" }],
@@ -157,6 +163,7 @@ mock.module("./api.ts", () => ({
 
 mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   default: {
+    setQueueOwner: () => {},
     provisionEpochKeys: (keys: unknown[], preserveGroupIds: string[] = []) => {
       provisionCalls.push(keys);
       const remaining = provisionedKeys.filter(({ groupId }) => preserveGroupIds.includes(groupId));
@@ -184,7 +191,12 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
       onStopCapture?.();
     },
     isCaptureRunning: () => captureRunning,
-    listPendingCiphertexts: async () => pendingCiphertexts,
+    listPendingCiphertexts: async (owner: string, limit = 100, afterId = 0) => {
+      requestedOwners.push(owner);
+      return pendingCiphertexts
+        .filter((item) => item.id > afterId && (item.owner === undefined || item.owner === owner))
+        .slice(0, limit);
+    },
     markCiphertextsInFlight: async (ids: number[]) => {
       markedInFlight.push(ids);
     },
@@ -199,7 +211,9 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
 
 const {
   flushPendingTrackingPoints,
+  prepareTrackingSignOut,
   reconcileTrackingKeys,
+  resumeTracking,
   revokeTrackingAccess,
   syncBackgroundTracking,
 } = await import("./tracking.ts");
@@ -242,6 +256,9 @@ describe("tracking service", () => {
     requeued.length = 0;
     uploadCalls.length = 0;
     rotationChecks.length = 0;
+    requestedOwners.length = 0;
+    currentUserId = "user-1";
+    resumeTracking();
     recordedUploads.length = 0;
     pendingCiphertexts = [];
     captureRunning = false;
@@ -266,6 +283,69 @@ describe("tracking service", () => {
       accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
       duplicates: [],
     });
+  });
+
+  test("uploads only the current server and account queue", async () => {
+    pendingCiphertexts = [
+      {
+        ...createQueueItem({ clientPointId: "current", groupId: "group-1", id: 1 }),
+        owner: JSON.stringify(["https://api.example.test", "user-1"]),
+      },
+      {
+        ...createQueueItem({ clientPointId: "other-user", groupId: "group-1", id: 2 }),
+        owner: JSON.stringify(["https://api.example.test", "user-2"]),
+      },
+      {
+        ...createQueueItem({ clientPointId: "other-server", groupId: "group-1", id: 3 }),
+        owner: JSON.stringify(["https://other.example.test", "user-1"]),
+      },
+    ];
+    await flushPendingTrackingPoints();
+    expect(requestedOwners).toEqual([JSON.stringify(["https://api.example.test", "user-1"])]);
+    expect(deleted).toEqual([[1]]);
+  });
+
+  test("stops capture and retries delayed points before sign out, retaining failures", async () => {
+    pendingCiphertexts = [
+      {
+        ...createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+        attemptCount: 3,
+        lastAttemptAt: Date.now(),
+      },
+    ];
+    uploadGroup = async () => {
+      throw new Error("offline");
+    };
+    await expect(prepareTrackingSignOut()).rejects.toThrow("Tracking upload failed");
+    expect(stopCaptureCalls).toBe(1);
+    expect(uploadCalls).toHaveLength(1);
+    expect(deleted).toEqual([]);
+    expect(requeued).toHaveLength(1);
+    await flushPendingTrackingPoints();
+    expect(uploadCalls).toHaveLength(1);
+    resumeTracking();
+    await expect(flushPendingTrackingPoints(true)).rejects.toThrow("Tracking upload failed");
+    expect(uploadCalls).toHaveLength(2);
+  });
+
+  test("continues past a failed batch when flushing at sign out", async () => {
+    pendingCiphertexts = Array.from({ length: 101 }, (_, index) =>
+      createQueueItem({
+        clientPointId: `point-${index}`,
+        groupId: index === 0 ? "bad" : "good",
+        id: index + 1,
+      }),
+    );
+    uploadGroup = async ({ groupId, points }) => {
+      if (groupId === "bad") throw new Error("offline");
+      return {
+        accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
+        duplicates: [],
+      };
+    };
+    await expect(prepareTrackingSignOut()).rejects.toThrow("Tracking upload failed");
+    expect(deleted.flat()).toHaveLength(100);
+    expect(requeued).toHaveLength(1);
   });
 
   test("replaces native keys with every current group epoch before starting capture", async () => {
@@ -690,7 +770,7 @@ describe("tracking service", () => {
     expect(requeued).toEqual([{ ids: [1], error: "CONFLICT: Group key rotation is pending." }]);
   });
 
-  test("deletes permanently rejected batches", async () => {
+  test("retains rejected batches", async () => {
     pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
     uploadGroup = async () => {
       throw Object.assign(new Error("Epoch does not belong to this group."), {
@@ -700,10 +780,12 @@ describe("tracking service", () => {
       });
     };
 
-    await flushPendingTrackingPoints();
+    await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
 
-    expect(deleted).toEqual([[1]]);
-    expect(requeued).toEqual([]);
+    expect(deleted).toEqual([]);
+    expect(requeued).toEqual([
+      { ids: [1], error: "BAD_REQUEST: Epoch does not belong to this group." },
+    ]);
   });
 
   test("isolates a permanently invalid point without discarding valid points", async () => {
@@ -730,7 +812,7 @@ describe("tracking service", () => {
       };
     };
 
-    await flushPendingTrackingPoints();
+    await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
 
     expect(uploadCalls.map(({ points }) => points.length)).toEqual([2, 1, 1]);
     expect(
@@ -740,8 +822,10 @@ describe("tracking service", () => {
           (points[0] as { clientPointId: string }).clientPointId === "point-valid",
       ),
     ).toBe(true);
-    expect(deleted.flat().sort()).toEqual([1, 2]);
-    expect(requeued).toEqual([]);
+    expect(deleted.flat()).toEqual([1]);
+    expect(requeued).toEqual([
+      { ids: [2], error: "BAD_REQUEST: Epoch does not belong to this group." },
+    ]);
   });
 
   test("isolates revoked sender devices from valid points in the same group", async () => {
@@ -773,7 +857,7 @@ describe("tracking service", () => {
       };
     };
 
-    await flushPendingTrackingPoints();
+    await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
 
     expect(uploadCalls.map(({ points }) => points.length)).toEqual([1, 1]);
     expect(
@@ -781,8 +865,10 @@ describe("tracking service", () => {
         ({ points }) => (points[0] as { clientPointId: string }).clientPointId === "point-valid",
       ),
     ).toBe(true);
-    expect(deleted.flat().sort()).toEqual([1, 2]);
-    expect(requeued).toEqual([]);
+    expect(deleted.flat()).toEqual([1]);
+    expect(requeued).toEqual([
+      { ids: [2], error: "FORBIDDEN: The active device is not registered." },
+    ]);
   });
 
   test("revokes every native key and stops capture", async () => {

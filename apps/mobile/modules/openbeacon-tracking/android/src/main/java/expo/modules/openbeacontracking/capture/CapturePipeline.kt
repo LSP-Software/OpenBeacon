@@ -13,6 +13,7 @@ class CapturePipeline(
   private val newId: () -> String = { UUID.randomUUID().toString() },
   private val captureLock: Any = Any(),
   private val canQueue: (Long) -> Boolean = { true },
+  private val queueOwner: () -> String? = { null },
 ) {
   fun onFix(
     latitude: Double,
@@ -70,7 +71,8 @@ class CapturePipeline(
 
     return synchronized(captureLock) {
       if (!canQueue(captureGeneration)) return@synchronized 0
-      ciphertextQueue.insertAll(rows)
+      val owner = queueOwner() ?: return@synchronized 0
+      ciphertextQueue.insertAll(rows.map { it.copy(owner = owner) })
       rows.size
     }
   }

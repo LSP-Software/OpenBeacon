@@ -6,6 +6,8 @@ interface CiphertextQueue {
   fun listByStatus(
     status: String,
     limit: Int,
+    owner: String? = null,
+    afterId: Long = 0,
   ): List<CiphertextQueueRow>
 
   fun markInFlight(

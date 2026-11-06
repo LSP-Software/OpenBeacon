@@ -4,7 +4,7 @@ import { createTRPCClient, httpBatchLink, loggerLink } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import superjson from "superjson";
 import { authClient } from "./auth-client.ts";
-import { getBaseUrl } from "./base-url.ts";
+import { baseUrl } from "./base-url.ts";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,7 +26,7 @@ export const trpcClient = createTRPCClient<AppRouter>({
     }),
     httpBatchLink({
       transformer: superjson,
-      url: `${getBaseUrl()}/api/trpc`,
+      url: `${baseUrl}/api/trpc`,
       async headers() {
         const headers = new Map<string, string>();
         headers.set("x-trpc-source", "expo-react");

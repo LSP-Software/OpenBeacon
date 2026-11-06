@@ -51,5 +51,6 @@ object TrackingRuntime {
       ciphertextQueue = ciphertextQueue(context),
       captureLock = captureLock,
       canQueue = { generation -> isCaptureRunning && captureCommands.isCurrent(generation) },
+      queueOwner = { context.getSharedPreferences("openbeacon_tracking_queue", Context.MODE_PRIVATE).getString("owner", null) },
     )
 }

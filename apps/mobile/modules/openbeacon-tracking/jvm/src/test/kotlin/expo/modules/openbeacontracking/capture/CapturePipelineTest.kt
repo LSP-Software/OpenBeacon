@@ -27,7 +27,7 @@ class CapturePipelineTest {
     val previousGeneration = commands.start()
     commands.stop()
     commands.start()
-    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, canQueue = { commands.isCurrent(it) })
+    val pipeline = CapturePipeline(queueOwner = { "test" }, epochKeyStore = keys, ciphertextQueue = queue, canQueue = { commands.isCurrent(it) })
     assertEquals(0, pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false, previousGeneration))
     assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).isEmpty())
   }
@@ -46,6 +46,7 @@ class CapturePipelineTest {
     var enabled = true
     var inserted = -1
     val pipeline = CapturePipeline(
+        queueOwner = { "test" },
       epochKeyStore = keyStore,
       ciphertextQueue = queue,
       captureLock = lock,
@@ -72,6 +73,7 @@ class CapturePipelineTest {
     val queue = InMemoryCiphertextQueue()
     val pipeline =
       CapturePipeline(
+        queueOwner = { "test" },
         epochKeyStore = InMemoryEpochKeyStore(),
         ciphertextQueue = queue,
       )
@@ -118,6 +120,7 @@ class CapturePipelineTest {
     var nextId = 0
     val pipeline =
       CapturePipeline(
+        queueOwner = { "test" },
         epochKeyStore = keyStore,
         ciphertextQueue = queue,
         nowMillis = { 1_721_000_000_000L },
@@ -176,6 +179,29 @@ class CapturePipelineTest {
         )
       assertEquals(expectedPlaintext.toList(), decrypted.toList())
     }
+  }
+
+  @Test
+  fun queueSeparatesOwnersAndLeavesLegacyRowsUnclaimed() {
+    val queue = InMemoryCiphertextQueue()
+    val row = CiphertextQueueRow(
+      clientPointId = "point",
+      captureId = "capture",
+      groupId = "group",
+      epochId = "epoch",
+      senderDeviceId = "device",
+      kind = "trackingPoint",
+      algorithm = GroupPayloadEncrypt.ALGORITHM,
+      nonce = "nonce",
+      ciphertext = "cipher",
+      queuedAt = 1L,
+    )
+    queue.insertAll(listOf(row, row.copy(owner = "server-a/user-a"), row.copy(owner = "server-a/user-b"), row.copy(owner = "server-b/user-a")))
+    val ownerRows = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a")
+    assertEquals(1, ownerRows.size)
+    assertEquals("server-a/user-a", ownerRows.single().owner)
+    assertEquals(0, queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a", ownerRows.single().id).size)
+    assertEquals(4, queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).size)
   }
 
   @Test

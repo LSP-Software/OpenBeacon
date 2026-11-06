@@ -135,6 +135,8 @@ const AccountScreen = () => {
     setIsSigningOut(true);
     const sessionTokenToRevoke = session?.session?.token ?? null;
 
+    const tracking = await import("../../../lib/tracking.ts");
+    await tryCatch(tracking.prepareTrackingSignOut());
     const { error: signOutError } = await authClient.signOut();
 
     if (signOutError && sessionTokenToRevoke) {

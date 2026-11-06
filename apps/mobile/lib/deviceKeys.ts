@@ -203,16 +203,18 @@ const createDeviceKeyContext = async (userId: string) => {
 
 const deviceRegistrations = new Map<
   string,
-  Promise<NonNullable<Awaited<ReturnType<typeof getStoredDeviceKeyContext>>>>
+  Promise<NonNullable<Awaited<ReturnType<typeof getStoredDeviceKeyContext>>> & { userId: string }>
 >();
 
 export const ensureDeviceKeyRegistration = async () => {
   const userId = await getCurrentDeviceKeyOwnerId();
   const pending = deviceRegistrations.get(userId);
   if (pending) return pending;
-  const task = registerCurrentDeviceKey(userId).finally(() => {
-    deviceRegistrations.delete(userId);
-  });
+  const task = registerCurrentDeviceKey(userId)
+    .then((context) => ({ ...context, userId }))
+    .finally(() => {
+      deviceRegistrations.delete(userId);
+    });
   deviceRegistrations.set(userId, task);
   return task;
 };

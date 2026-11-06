@@ -15,7 +15,7 @@ interface CiphertextQueueDao {
   @Query(
     """
     SELECT * FROM ciphertext_queue
-    WHERE status = :status
+    WHERE status = :status AND id > :afterId AND (:owner IS NULL OR owner = :owner)
     ORDER BY id ASC
     LIMIT :limit
     """,
@@ -23,6 +23,8 @@ interface CiphertextQueueDao {
   fun listByStatus(
     status: String,
     limit: Int,
+    owner: String?,
+    afterId: Long,
   ): List<CiphertextQueueEntity>
 
   @Query(

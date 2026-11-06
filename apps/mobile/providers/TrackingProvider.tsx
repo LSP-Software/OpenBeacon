@@ -8,8 +8,9 @@ import { subscribeToTrackingSync } from "../lib/trackingEvents.ts";
 import { useLocationPermissions } from "./LocationPermissionProvider.tsx";
 
 const trackingService = {
-  flushPendingTrackingPoints: async () =>
-    (await import("../lib/tracking.ts")).flushPendingTrackingPoints(),
+  flushPendingTrackingPoints: async (force = false) =>
+    (await import("../lib/tracking.ts")).flushPendingTrackingPoints(force),
+  resumeTracking: async () => (await import("../lib/tracking.ts")).resumeTracking(),
   reconcileTrackingKeys: async (input: { startCapture: boolean }) =>
     (await import("../lib/tracking.ts")).reconcileTrackingKeys(input),
   revokeTrackingAccess: async () => (await import("../lib/tracking.ts")).revokeTrackingAccess(),
@@ -30,38 +31,45 @@ export const TrackingProvider = ({
   const completedCycleRef = useRef(0);
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
   const requestedCycleRef = useRef(0);
+  const forceFlushRef = useRef(false);
   const startCaptureRef = useRef(permissionState?.isReadyForSharing ?? false);
   const userId = session?.user.id ?? null;
   const startCapture = permissionState?.isReadyForSharing ?? false;
   startCaptureRef.current = startCapture;
 
-  const runTrackingCycle = useCallback(() => {
-    requestedCycleRef.current += 1;
+  const runTrackingCycle = useCallback(
+    (force = false) => {
+      forceFlushRef.current ||= force;
+      requestedCycleRef.current += 1;
 
-    if (activeCycleRef.current) {
-      return activeCycleRef.current;
-    }
-
-    activeCycleRef.current = (async () => {
-      while (completedCycleRef.current < requestedCycleRef.current) {
-        const cycle = requestedCycleRef.current;
-        await tryCatch(
-          service.reconcileTrackingKeys({
-            startCapture: startCaptureRef.current,
-          }),
-        );
-        await tryCatch(service.flushPendingTrackingPoints());
-        if (appStateRef.current === "active") {
-          void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
-        }
-        completedCycleRef.current = cycle;
+      if (activeCycleRef.current) {
+        return activeCycleRef.current;
       }
-    })().finally(() => {
-      activeCycleRef.current = null;
-    });
 
-    return activeCycleRef.current;
-  }, [queryClient, service]);
+      activeCycleRef.current = (async () => {
+        while (completedCycleRef.current < requestedCycleRef.current) {
+          const cycle = requestedCycleRef.current;
+          const forceFlush = forceFlushRef.current;
+          forceFlushRef.current = false;
+          await tryCatch(
+            service.reconcileTrackingKeys({
+              startCapture: startCaptureRef.current,
+            }),
+          );
+          await tryCatch(service.flushPendingTrackingPoints(forceFlush));
+          if (appStateRef.current === "active") {
+            void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
+          }
+          completedCycleRef.current = cycle;
+        }
+      })().finally(() => {
+        activeCycleRef.current = null;
+      });
+
+      return activeCycleRef.current;
+    },
+    [queryClient, service],
+  );
 
   useEffect(() => {
     if (isPending) {
@@ -85,7 +93,10 @@ export const TrackingProvider = ({
         return;
       }
 
-      await runTrackingCycle();
+      if (previousUserId !== userId) {
+        await service.resumeTracking();
+      }
+      await runTrackingCycle(previousUserId !== userId);
     })();
   }, [isPending, runTrackingCycle, service, startCapture, userId]);
 
