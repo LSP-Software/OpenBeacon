@@ -6,6 +6,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.os.Bundle
 import androidx.room.Room
 import expo.modules.openbeacontracking.capture.CapturePipeline
+import expo.modules.openbeacontracking.crypto.EncryptedGroupPayload
+import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.keys.InMemoryEpochKeyStore
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import java.util.UUID
@@ -62,7 +64,15 @@ class RoomQueueInstrumentation : Instrumentation() {
       fun capture(pipeline: CapturePipeline, id: Long) = pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false, fixId = id)
       check(capture(pipeline(), 100) == 1)
       val first = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a").last()
-      check(!first.ciphertext.contains("51.5"))
+      val plaintext = GroupPayloadEncrypt.encodeTrackingPointV1Json(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false).toByteArray(Charsets.UTF_8)
+      val ciphertext = GroupPayloadEncrypt.decodeBase64(first.ciphertext)
+      check(!ciphertext.toList().windowed(plaintext.size).contains(plaintext.toList()))
+      val encrypted = EncryptedGroupPayload(
+        algorithm = first.algorithm, ciphertext = first.ciphertext, epochId = first.epochId,
+        groupId = first.groupId, kind = first.kind, nonce = first.nonce, senderDeviceId = first.senderDeviceId,
+      )
+      check(GroupPayloadEncrypt.decryptGroupPayload(ByteArray(32), encrypted).contentEquals(plaintext))
+      check(runCatching { GroupPayloadEncrypt.decryptGroupPayload(ByteArray(32) { 1 }, encrypted) }.isFailure)
       check(capture(pipeline(), 101) == 1)
       check(capture(pipeline(), 100) == 0)
       queue.deleteByIds(listOf(first.id))

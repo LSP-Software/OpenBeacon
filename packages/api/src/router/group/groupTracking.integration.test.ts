@@ -100,8 +100,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     const stored = await prisma.groupEncryptedPayload.findMany({ where: { groupId } });
     expect(stored).toHaveLength(1);
     expect(stored[0]!.ciphertext).toBe(point.ciphertext);
-    expect(JSON.stringify(stored[0])).not.toContain(payload.marker);
-    expect(JSON.stringify(stored[0])).not.toContain(String(payload.latitude));
+    expect(
+      Buffer.from(stored[0]!.ciphertext, "base64").includes(Buffer.from(JSON.stringify(payload))),
+    ).toBe(false);
     const received = await caller(memberId).groupTracking.poll({ groupId });
     expect(received.points).toHaveLength(1);
     expect(received.points[0]!.ciphertext).toBe(stored[0]!.ciphertext);

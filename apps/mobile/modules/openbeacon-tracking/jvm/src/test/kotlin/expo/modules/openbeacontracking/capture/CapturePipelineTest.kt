@@ -191,8 +191,6 @@ class CapturePipelineTest {
     assertEquals(2, pending.map { it.clientPointId }.toSet().size)
     assertTrue(pending.all { it.algorithm == GroupPayloadEncrypt.ALGORITHM })
     assertTrue(pending.all { it.kind == "trackingPoint" })
-    assertTrue(pending.none { it.ciphertext.contains("51.5074") })
-    assertTrue(pending.none { it.nonce.contains("51.5074") })
 
     val expectedPlaintext =
       GroupPayloadEncrypt
@@ -204,6 +202,11 @@ class CapturePipelineTest {
           batteryLevel = 40,
           batteryCharging = true,
         ).toByteArray(StandardCharsets.UTF_8)
+
+    assertTrue(pending.none { row ->
+      GroupPayloadEncrypt.decodeBase64(row.ciphertext).toList()
+        .windowed(expectedPlaintext.size).contains(expectedPlaintext.toList())
+    })
 
     for (row in pending) {
       val decrypted =
