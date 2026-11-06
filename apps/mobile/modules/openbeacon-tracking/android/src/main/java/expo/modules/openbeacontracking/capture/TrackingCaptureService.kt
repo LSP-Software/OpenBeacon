@@ -239,6 +239,7 @@ class TrackingCaptureService : Service() {
         batteryLevel = battery.level,
         batteryCharging = battery.charging,
         captureGeneration = generation,
+        fixId = location.elapsedRealtimeNanos.takeIf { it > 0 },
       )
       synchronized(captureStateLock) {
         if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && queuedCount > 0 && (decision.forceUpload || nowMs - lastUploadRequestMs >= UPLOAD_INTERVAL_MS)) {

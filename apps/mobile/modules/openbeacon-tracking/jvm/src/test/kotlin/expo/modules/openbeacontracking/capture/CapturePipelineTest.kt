@@ -16,6 +16,23 @@ import kotlin.test.assertTrue
 
 class CapturePipelineTest {
   @Test
+  fun repeatedFixIsQueuedOncePerEpoch() {
+    val keys = InMemoryEpochKeyStore()
+    val first = ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")
+    keys.replaceAll(listOf(first))
+    val queue = InMemoryCiphertextQueue()
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "test" })
+    fun capture(id: Long) = pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false, fixId = id)
+
+    assertEquals(1, capture(100))
+    assertEquals(0, capture(100))
+    keys.replaceAll(listOf(first, first.copy(groupId = "group_b", epochId = "epoch_b")))
+    assertEquals(1, capture(100))
+    assertEquals(2, capture(101))
+    assertEquals(listOf("group_a", "group_b", "group_a", "group_b"), queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.groupId })
+  }
+
+  @Test
   fun oldFixCannotBeQueuedAfterCaptureStopsAndRestarts() {
     val keys = InMemoryEpochKeyStore()
     keys.replaceAll(listOf(ProvisionedEpochKey(
