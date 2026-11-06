@@ -1,6 +1,6 @@
 import { GroupRole, Prisma } from "@openbeacon/database";
 import { tryCatch } from "@openbeacon/shared";
-import { requestImageUploadInputSchema } from "@openbeacon/schemas";
+import { createGroupSchema, requestImageUploadInputSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { env } from "../../env.ts";
@@ -16,7 +16,7 @@ import { groupAdminProcedure, groupMemberProcedure } from "../../procedures/auth
 
 export const groupSettingsRouter = {
   rename: groupMemberProcedure
-    .input(z.object({ groupId: z.string().min(1), name: z.string().trim().min(1).max(100) }))
+    .input(createGroupSchema.extend({ groupId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       return ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
