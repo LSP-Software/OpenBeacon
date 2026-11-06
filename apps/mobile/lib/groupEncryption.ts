@@ -28,7 +28,7 @@ const createEpochBundle = ({
     });
 
     return {
-      createdByDeviceId: nextEpoch.epoch.createdByDeviceId,
+      createdByDeviceId: currentDeviceId,
       epochId: nextEpoch.epoch.epochId,
       epochNumber: nextEpoch.epoch.epochNumber,
       recipientKeys: nextEpoch.wrappedKeys,
@@ -42,7 +42,7 @@ const createEpochBundle = ({
   });
 
   return {
-    createdByDeviceId: initialEpoch.epoch.createdByDeviceId,
+    createdByDeviceId: currentDeviceId,
     epochId: initialEpoch.epoch.epochId,
     epochNumber: initialEpoch.epoch.epochNumber,
     recipientKeys: initialEpoch.wrappedKeys,
@@ -67,7 +67,7 @@ export const buildCreateGroupInput = async ({
   return {
     groupId,
     initialEpoch: {
-      createdByDeviceId: initialEpoch.epoch.createdByDeviceId,
+      createdByDeviceId: deviceRegistration.deviceId,
       epochId: initialEpoch.epoch.epochId,
       epochNumber: initialEpoch.epoch.epochNumber,
       recipientKeys: initialEpoch.wrappedKeys,
@@ -140,4 +140,19 @@ export const buildRemoveGroupMemberInput = async ({
       recipients: removalContext.recipients,
     }),
   };
+};
+
+export const rotateGroupEpochIfRequired = async (groupId: string) => {
+  const context = await trpcClient.groupEpoch.rotationContext.query({ groupId });
+  if (!context) return;
+  const device = await ensureDeviceKeyRegistration();
+  await trpcClient.groupEpoch.rotate.mutate({
+    groupId,
+    nextEpoch: createEpochBundle({
+      currentDeviceId: device.deviceId,
+      groupId,
+      latestEpoch: context.latestEpoch,
+      recipients: context.recipients,
+    }),
+  });
 };

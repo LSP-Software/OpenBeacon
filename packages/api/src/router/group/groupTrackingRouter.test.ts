@@ -13,7 +13,10 @@ class TestOpenBeaconCache extends OpenBeaconCache {
 
 const validNonce = Buffer.alloc(24, 1).toString("base64");
 
-const createGroupFindUniqueMock = (isMember: boolean) =>
+const createGroupFindUniqueMock = (
+  isMember: boolean,
+  rotation = { epochRotationRequired: false },
+) =>
   mock(async () =>
     isMember
       ? {
@@ -25,6 +28,7 @@ const createGroupFindUniqueMock = (isMember: boolean) =>
             },
           ],
           id: "group-1",
+          ...rotation,
         }
       : {
           groupMembers: [],
@@ -40,6 +44,7 @@ const createCaller = async ({
   createManyMock,
   findManyDevicesMock,
   findManyEpochsMock,
+  findObsoleteEpochMock,
   findManyPayloadsMock,
   groupFindUniqueMock,
   queryRawMock,
@@ -48,6 +53,7 @@ const createCaller = async ({
   createManyMock?: ReturnType<typeof mock>;
   findManyDevicesMock?: ReturnType<typeof mock>;
   findManyEpochsMock?: ReturnType<typeof mock>;
+  findObsoleteEpochMock?: ReturnType<typeof mock>;
   findManyPayloadsMock?: ReturnType<typeof mock>;
   groupFindUniqueMock: ReturnType<typeof createGroupFindUniqueMock>;
   queryRawMock?: ReturnType<typeof mock>;
@@ -73,7 +79,10 @@ const createCaller = async ({
       createMany: createManyMock ?? mock(async () => ({ count: 0 })),
       findMany: findManyPayloadsMock ?? mock(async () => []),
     },
-    groupEpoch: { findMany: findManyEpochsMock ?? mock(async () => [{ id: "epoch-1" }]) },
+    groupEpoch: {
+      findMany: findManyEpochsMock ?? mock(async () => [{ id: "epoch-1" }]),
+      findFirst: findObsoleteEpochMock ?? mock(async () => null),
+    },
     userDevice: {
       findMany: findManyDevicesMock ?? mock(async () => [{ id: "device-1", userId: "user-1" }]),
     },
@@ -254,6 +263,39 @@ describe("groupTrackingRouter", () => {
       }),
     ).rejects.toThrow("You are not a member of this group");
     expect(createManyMock).not.toHaveBeenCalled();
+  });
+
+  test("accepts old epochs while rotation is pending and after rotation", async () => {
+    const point = {
+      algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+      ciphertext: "ciphertext",
+      clientPointId: "point-1",
+      epochId: "epoch-1",
+      kind: TRACKING_POINT_KIND,
+      nonce: validNonce,
+      senderDeviceId: "device-1",
+    };
+    const createManyMock = mock(async () => ({ count: 1 }));
+    const pending = await createCaller({
+      createManyMock,
+      groupFindUniqueMock: createGroupFindUniqueMock(true, {
+        epochRotationRequired: true,
+      }),
+    });
+    await expect(
+      pending.caller.groupTracking.uploadBatch({ groupId: "group-1", points: [point] }),
+    ).resolves.toBeDefined();
+    const rotated = await createCaller({
+      createManyMock,
+      groupFindUniqueMock: createGroupFindUniqueMock(true, {
+        epochRotationRequired: false,
+      }),
+      findObsoleteEpochMock: mock(async () => ({ id: "epoch-1" })),
+    });
+    await expect(
+      rotated.caller.groupTracking.uploadBatch({ groupId: "group-1", points: [point] }),
+    ).resolves.toBeDefined();
+    expect(createManyMock).toHaveBeenCalled();
   });
 
   test("poll returns points for members", async () => {

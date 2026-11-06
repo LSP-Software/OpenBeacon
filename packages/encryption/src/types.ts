@@ -28,7 +28,7 @@ export type DeviceKeyPair = {
 
 export type GroupEpoch = {
   createdAt: Date;
-  createdByDeviceId: string;
+  createdByDeviceId: string | null;
   epochId: string;
   epochNumber: number;
   groupId: string;

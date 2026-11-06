@@ -27,7 +27,7 @@ type GroupRemovalDb =
   | Pick<Prisma.TransactionClient, "groupEpoch" | "groupMember" | "userDevice">;
 type GroupEpochPersistenceDb = Pick<
   Prisma.TransactionClient,
-  "groupEpoch" | "groupEpochRecipientKey" | "groupMember" | "userDevice"
+  "group" | "groupEpoch" | "groupEpochRecipientKey" | "groupMember" | "userDevice"
 >;
 
 const sortIds = (ids: string[]) => ids.slice().sort((left, right) => left.localeCompare(right));
@@ -413,6 +413,10 @@ export const persistGroupEpoch = async ({
       recipientDeviceId: recipientKey.recipientDeviceId,
       wrappedKey: recipientKey.wrappedKey,
     })),
+  });
+  await db.group.updateMany({
+    where: { id: groupId, epochRotationRequired: true },
+    data: { epochRotationRequired: false },
   });
 };
 

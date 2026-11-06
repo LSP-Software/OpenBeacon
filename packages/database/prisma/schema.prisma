@@ -15,16 +15,26 @@ model User {
   image          String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+  pendingDeletion Boolean        @default(false)
+  deletionCancellationPending Boolean @default(false)
+  deletionRetryAt DateTime?
+  deletionDate   DateTime?
   sessions       Session[]
   accounts       Account[]
   pendingUploads PendingUpload[]
+  googleDeletionChallenges GoogleDeletionChallenge[]
 
   groupMembers               GroupMember[]
   devices                    UserDevice[]
   sentGroupMemberInvites     GroupMemberInvite[] @relation("GroupMemberInviteInviter")
   receivedGroupMemberInvites GroupMemberInvite[] @relation("GroupMemberInviteRecipient")
   groupEncryptedPayloads     GroupEncryptedPayload[]
-  groupJoinAlerts             GroupJoinAlert[]
+  groupJoinAlerts             GroupJoinAlert[] @relation("GroupJoinAlertRecipient")
+  createdGroupJoinAlerts      GroupJoinAlert[] @relation("GroupJoinAlertMember")
+  feedback                   Feedback[]
+  createdSharedInvites       GroupSharedInvite[]
+
+  @@index([pendingDeletion, deletionDate])
 }
 
 model Session {
@@ -37,8 +47,23 @@ model Session {
   userAgent String?
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  googleDeletionChallenges GoogleDeletionChallenge[]
 
   @@index([userId])
+}
+
+model GoogleDeletionChallenge {
+  id String @id
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  nonce String
+  codeVerifier String
+  expiresAt DateTime
+
+  @@index([userId])
+  @@index([sessionId])
 }
 
 model Account {
@@ -80,6 +105,7 @@ model Group {
   id             String          @id @default(uuid(7))
   name           String
   image          String?
+  epochRotationRequired Boolean @default(false)
   groupMembers           GroupMember[]
   groupInvites           GroupMemberInvite[]
   sharedInvites          GroupSharedInvite[]
@@ -122,6 +148,8 @@ model GroupMemberInvite {
 }
 
 model GroupSharedInvite {
+  creatorId String?
+  creator User? @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   id        String   @id @default(uuid(7))
   codeHash  String   @unique
   groupId   String
@@ -134,7 +162,9 @@ model GroupSharedInvite {
 model GroupJoinAlert {
   id          String   @id @default(uuid(7))
   recipientId String
-  recipient   User     @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  recipient   User     @relation("GroupJoinAlertRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  memberId    String?
+  member      User?    @relation("GroupJoinAlertMember", fields: [memberId], references: [id], onDelete: Cascade)
   groupId     String
   group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   memberName  String
@@ -193,8 +223,8 @@ model GroupEpoch {
   groupId                String
   group                  Group                    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   epochNumber            Int
-  createdByDeviceId      String
-  createdByDevice        UserDevice               @relation("GroupEpochCreatedByDevice", fields: [createdByDeviceId], references: [id], onDelete: Restrict)
+  createdByDeviceId      String?
+  createdByDevice        UserDevice?              @relation("GroupEpochCreatedByDevice", fields: [createdByDeviceId], references: [id], onDelete: SetNull)
   createdAt              DateTime                 @default(now())
   recipientKeys          GroupEpochRecipientKey[]
   groupEncryptedPayloads GroupEncryptedPayload[]
@@ -250,6 +280,8 @@ enum GroupRole {
 }
 
 model Feedback {
+  userId    String?
+  user      User? @relation(fields: [userId], references: [id], onDelete: Cascade)
   id        String   @id @default(uuid(7))
   message   String
   email     String?
@@ -258,4 +290,11 @@ model Feedback {
   maplibreVersion String?
   serverVersion String?
   createdAt DateTime @default(now())
+}
+
+model AccountDeletionCleanup {
+  userId String @id
+  createdAt DateTime @default(now())
+  retryAt DateTime?
+  imageKeys String[] @default([])
 }

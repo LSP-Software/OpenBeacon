@@ -12,6 +12,7 @@ import { env } from "../../env.ts";
 import { buildImagePublicUrl } from "../../lib/storage.ts";
 import { s3Client } from "../../s3client.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
+import { removeGroupMemberWithOwnerGuard } from "./assertGroupMemberCanBeRemoved.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
@@ -130,9 +131,127 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await prisma.groupMember.count({ where: { groupId, role: "OWNER" } })).toBe(1);
     });
 
+    test("freezes pending roles and preserves an owner who can manage the group", async () => {
+      const protectedGroup = `${prefix}-pending-owner`;
+      const joinGroup = `${prefix}-pending-join`;
+      const pendingUser = users[1]!;
+      const activeUser = users[0]!;
+      await prisma.group.create({
+        data: {
+          id: protectedGroup,
+          name: "Protected",
+          groupMembers: {
+            create: [
+              { userId: activeUser, role: "OWNER" },
+              { userId: pendingUser, role: "OWNER" },
+            ],
+          },
+        },
+      });
+      await prisma.group.create({
+        data: {
+          id: joinGroup,
+          name: "Join",
+          groupMembers: { create: { userId: activeUser, role: "OWNER" } },
+        },
+      });
+      await prisma.user.update({
+        where: { id: pendingUser },
+        data: { pendingDeletion: true, deletionDate: new Date(Date.now() + 60_000) },
+      });
+      try {
+        const members = await prisma.groupMember.findMany({ where: { groupId: protectedGroup } });
+        const active = members.find((member) => member.userId === activeUser)!;
+        const pending = members.find((member) => member.userId === pendingUser)!;
+        await expect(
+          caller(activeUser).groupMembership.updateRole({
+            groupId: protectedGroup,
+            memberId: pending.id,
+            role: "MEMBER",
+          }),
+        ).rejects.toThrow("pending deletion");
+        await expect(
+          caller(activeUser).groupMembership.updateRole({
+            groupId: protectedGroup,
+            memberId: active.id,
+            role: "MEMBER",
+          }),
+        ).rejects.toThrow("at least one owner");
+        await expect(
+          prisma.$transaction((tx) =>
+            removeGroupMemberWithOwnerGuard({
+              db: tx,
+              groupId: protectedGroup,
+              memberId: active.id,
+            }),
+          ),
+        ).rejects.toThrow("only owner");
+        await prisma.groupMember.update({ where: { id: pending.id }, data: { role: "MEMBER" } });
+        const nextEpoch = {
+          createdByDeviceId: "device",
+          epochId: "epoch",
+          epochNumber: 1,
+          recipientKeys: [
+            {
+              algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+              createdAt: new Date(),
+              ephemeralPublicKey: "key",
+              epochId: "epoch",
+              nonce: "nonce",
+              recipientDeviceId: "device",
+              wrappedKey: "key",
+            },
+          ],
+        };
+        await expect(
+          caller(activeUser).groupMembership.remove({
+            groupId: protectedGroup,
+            memberId: active.id,
+            successorMemberId: pending.id,
+            nextEpoch,
+          }),
+        ).rejects.toThrow("pending deletion");
+        const shared = await caller(activeUser).groupInvites.createShared({ groupId: joinGroup });
+        await expect(
+          caller(pendingUser).groupInvites.acceptShared({ code: shared.code, nextEpoch }),
+        ).rejects.toThrow("pending deletion");
+        const invite = await prisma.groupMemberInvite.create({
+          data: {
+            groupId: joinGroup,
+            inviterId: activeUser,
+            recipientId: pendingUser,
+            role: "MEMBER",
+          },
+        });
+        await expect(
+          caller(pendingUser).groupInvites.accept({ inviteId: invite.id, nextEpoch }),
+        ).rejects.toThrow("pending deletion");
+        expect(
+          await prisma.groupMember.count({ where: { groupId: joinGroup, userId: pendingUser } }),
+        ).toBe(0);
+        await prisma.user.update({
+          where: { id: pendingUser },
+          data: { pendingDeletion: false, deletionDate: null },
+        });
+        await expect(
+          caller(activeUser).groupMembership.updateRole({
+            groupId: protectedGroup,
+            memberId: pending.id,
+            role: "ADMIN",
+          }),
+        ).resolves.toMatchObject({ role: "ADMIN" });
+      } finally {
+        await prisma.user.update({
+          where: { id: pendingUser },
+          data: { pendingDeletion: false, deletionDate: null },
+        });
+        await prisma.group.deleteMany({ where: { id: { in: [protectedGroup, joinGroup] } } });
+      }
+    });
+
     test("only an owner can delete a group image and a storage failure leaves the group", async () => {
       const imageGroupId = `${prefix}-image-group`;
-      const path = `group/${imageGroupId}/uploads/avatar`;
+      const path = `user/${users[0]}/uploads/group/${imageGroupId}/avatar`;
       await prisma.group.create({
         data: {
           id: imageGroupId,
@@ -198,7 +317,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         await caller(users[0]!).groupLifecycle.delete({ groupId: pendingGroupId });
         expect((send.mock.calls[1]?.[0] as DeleteObjectCommand | undefined)?.input).toEqual({
           Bucket: env.S3_BUCKET_NAME,
-          Key: `group/${pendingGroupId}/uploads/avatar/pending.webp`,
+          Key: `user/${users[0]}/uploads/group/${pendingGroupId}/avatar/pending.webp`,
         });
         expect(await prisma.group.findUnique({ where: { id: pendingGroupId } })).toBeNull();
       } finally {
@@ -243,7 +362,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         const deleted = send.mock.calls.find(
           ([command]) => command instanceof DeleteObjectCommand,
         )?.[0] as DeleteObjectCommand | undefined;
-        expect(deleted?.input.Key).toBe(`group/${uploadGroupId}/uploads/avatar/race.webp`);
+        expect(deleted?.input.Key).toBe(
+          `user/${users[0]}/uploads/group/${uploadGroupId}/avatar/race.webp`,
+        );
         expect(
           await prisma.pendingUpload.findUnique({
             where: { userId_uploadType: { userId: users[0]!, uploadType: "groupAvatar" } },

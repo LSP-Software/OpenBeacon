@@ -34,7 +34,7 @@ export type CiphertextQueueItem = {
 };
 
 declare class OpenBeaconTrackingModule extends NativeModule {
-  provisionEpochKeys(keys: ProvisionedEpochKeyInput[]): void;
+  provisionEpochKeys(keys: ProvisionedEpochKeyInput[], preserveGroupIds?: string[]): void;
   revokeEpochKeys(groupIds?: string[] | null): void;
   listProvisionedEpochKeys(): ProvisionedEpochKeyInfo[];
   startCapture(intervalMs?: number | null): Promise<void>;

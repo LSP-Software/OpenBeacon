@@ -34,6 +34,7 @@ describe("feedback", () => {
         {
           data: {
             message: "hello",
+            userId: "user-1",
             email: null,
             androidVersion: "15",
             appVersion: "1.2.3",
@@ -46,6 +47,7 @@ describe("feedback", () => {
         {
           data: {
             message: "follow up",
+            userId: "user-1",
             email: "user@example.com",
             androidVersion: null,
             appVersion: null,

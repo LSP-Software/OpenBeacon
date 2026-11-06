@@ -48,7 +48,7 @@ const caller = (userId: string) =>
     cache,
     db: prisma,
     clientIp: "127.0.0.1",
-    session: { user: { id: userId } },
+    session: { user: { id: userId }, session: { id: `${userId}-session` } },
   } as Parameters<typeof router.createCaller>[0]);
 const owner = caller(ownerId);
 const member = caller(memberId);
@@ -68,6 +68,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           { id: ownerId, name: "Owner", email: ownerEmail },
           { id: memberId, name: "Member", email: memberEmail },
         ],
+      });
+      await prisma.session.createMany({
+        data: [ownerId, memberId].map((userId) => ({
+          id: `${userId}-session`,
+          token: `${userId}-token`,
+          userId,
+          expiresAt: new Date(Date.now() + 60_000),
+        })),
       });
       for (const [userId, deviceId, key] of [
         [ownerId, ownerDevice, ownerKey],
@@ -114,7 +122,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         previousEpoch: joinContext.latestEpoch!,
         recipients: joinContext.recipients,
       });
+      await prisma.group.update({ where: { id: groupId }, data: { epochRotationRequired: true } });
       await member.groupInvites.accept({ inviteId: invite!.id, nextEpoch: bundle(joined) });
+      expect(
+        (await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).epochRotationRequired,
+      ).toBe(false);
       const alerts = await owner.groupInvites.joinAlerts();
       expect(alerts).toHaveLength(1);
       expect(alerts[0]!.memberName).toBe("Member");
@@ -169,7 +181,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         previousEpoch: context.latestEpoch!,
         recipients: context.recipients,
       });
+      await prisma.group.update({ where: { id: groupId }, data: { epochRotationRequired: true } });
       await member.groupMembership.remove({ groupId, memberId: self.id, nextEpoch: bundle(next) });
+      expect(
+        (await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).epochRotationRequired,
+      ).toBe(false);
       expect((await owner.groupTracking.poll({ groupId })).points).toHaveLength(0);
       expect(
         (await owner.groupMembership.members({ groupId })).map((item) => item.user.id),

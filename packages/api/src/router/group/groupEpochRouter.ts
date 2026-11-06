@@ -1,8 +1,37 @@
-import type { TRPCRouterRecord } from "@trpc/server";
+import { Prisma } from "@openbeacon/database";
+import { groupEpochBundleSchema } from "@openbeacon/schemas";
+import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
+import { getGroupJoinContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 
 export const groupEpochRouter = {
+  rotationContext: groupMemberProcedure.query(async ({ ctx, input }) => {
+    if (!ctx.group?.epochRotationRequired) return null;
+    return getGroupJoinContext({ db: ctx.db, groupId: input.groupId, userId: ctx.session.user.id });
+  }),
+  rotate: groupMemberProcedure
+    .input(z.object({ groupId: z.string(), nextEpoch: groupEpochBundleSchema }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
+        );
+        const group = await tx.group.findUnique({ where: { id: input.groupId } });
+        const member = await tx.groupMember.findUnique({
+          where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
+        });
+        if (!group || !member) throw new TRPCError({ code: "FORBIDDEN" });
+        if (!group.epochRotationRequired) return { rotated: false };
+        await persistGroupEpoch({
+          db: tx,
+          epoch: input.nextEpoch,
+          groupId: input.groupId,
+          userId: ctx.session.user.id,
+        });
+        return { rotated: true };
+      });
+    }),
   getLatest: groupMemberProcedure
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .query(async ({ ctx, input }) => {

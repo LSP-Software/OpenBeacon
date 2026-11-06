@@ -10,15 +10,13 @@ import { createReactNativeTestModule } from "./reactNativeTestModule.ts";
 let queryResult: { data: unknown; isPending: boolean; error: { data: { code: string } } | null };
 let isFocused = true;
 let groups: { id: string }[] = [];
-let members: { id: string }[] = [];
 let keyAccess: { data: string; isError: boolean }[] = [];
 const replace = mock(() => {});
 const fetchQuery = mock(async () => groups);
 const queryClient = { fetchQuery };
 const router = { replace };
 mock.module("@tanstack/react-query", () => ({
-  useQuery: (options: { kind?: string }) =>
-    options.kind === "members" ? { data: members } : queryResult,
+  useQuery: () => queryResult,
   useQueryClient: () => queryClient,
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => isFocused }));
@@ -40,7 +38,6 @@ mock.module("../lib/api.ts", () => ({
     groupMembership: {
       get: { queryOptions: () => ({}) },
       list: { queryOptions: () => ({}) },
-      members: { queryOptions: () => ({ kind: "members" }) },
     },
   },
 }));
@@ -69,7 +66,6 @@ const { default: GroupScreen } = await import("../app/(tabs)/groups/[groupId]/in
 beforeEach(() => {
   isFocused = true;
   groups = [];
-  members = [];
   keyAccess = [];
   replace.mockClear();
   fetchQuery.mockClear();
@@ -80,9 +76,8 @@ beforeEach(() => {
   };
 });
 
-test("keeps role-specific guidance visible after an access refresh fails", async () => {
+test("shows key access problems without offering recovery", async () => {
   keyAccess = [{ data: "missing", isError: true }];
-  members = [{ id: "owner" }, { id: "member" }];
   queryResult = {
     ...queryResult,
     data: { id: "group-1", name: "Family", groupMembers: [{ role: "OWNER" }] },
@@ -90,21 +85,15 @@ test("keeps role-specific guidance visible after an access refresh fails", async
   const root = createRoot();
   await act(async () => root.render(<GroupScreen />));
   expect(JSON.stringify(root.container.toJSON())).toContain(
-    "choose another member as the new owner",
+    "Group locations may be unavailable on this device.",
   );
-
-  members = [{ id: "owner" }];
-  await act(async () => root.render(<GroupScreen />));
-  expect(JSON.stringify(root.container.toJSON())).toContain("invite someone to the group");
 
   queryResult = {
     ...queryResult,
     data: { id: "group-1", name: "Family", groupMembers: [{ role: "MEMBER" }] },
   };
   await act(async () => root.render(<GroupScreen />));
-  expect(JSON.stringify(root.container.toJSON())).toContain(
-    "ask an owner or admin to invite you again",
-  );
+  expect(JSON.stringify(root.container.toJSON())).not.toContain("Restore group key");
   await act(async () => root.unmount());
 });
 

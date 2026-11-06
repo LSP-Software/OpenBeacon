@@ -66,3 +66,5 @@ jobs:
           bun run --cwd packages/database --env-file=../../.env.ci prisma migrate deploy
       - name: Test feedback against PostgreSQL
         run: OPENBEACON_INTEGRATION=1 bun test --env-file=.env.ci packages/api/src/router/accountFeedback.integration.test.ts apps/backend/src/routes/trpcFeedback.integration.test.ts
+      - name: Test account deletion against PostgreSQL
+        run: OPENBEACON_INTEGRATION=1 bun test --isolate --env-file=.env.ci packages/api/src/lib/account-deletion.integration.test.ts packages/api/src/lib/account-deletion-cli.integration.test.ts packages/api/src/router/accountDeletionRequest.integration.test.ts packages/api/src/router/googleDeletion.integration.test.ts packages/api/src/router/group/groupRotation.integration.test.ts packages/api/src/router/group/groupDeparture.integration.test.ts packages/api/src/router/group/groupEmailInvites.integration.test.ts packages/api/src/router/group/groupSharedInvites.integration.test.ts packages/api/src/router/group/groupSettings.integration.test.ts

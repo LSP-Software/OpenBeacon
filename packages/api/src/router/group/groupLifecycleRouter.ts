@@ -49,21 +49,23 @@ export const groupLifecycleRouter = {
           });
           const pendingUploads = await tx.pendingUpload.findMany({
             where: { groupId: input.groupId, uploadType: "groupAvatar" },
-            select: { fileName: true },
+            select: { fileName: true, userId: true },
           });
           for (const upload of pendingUploads) {
             await deleteFile(
               env.S3_BUCKET_NAME,
-              buildGroupAvatarPath(input.groupId),
+              buildGroupAvatarPath(upload.userId, input.groupId),
               upload.fileName,
             );
           }
           if (group.image) {
             const image = extractImageStorageObject(group.image);
+            const uploaderId = image?.path.split("/")[1];
             if (
               !image ||
               image.bucketName !== env.S3_BUCKET_NAME ||
-              image.path !== buildGroupAvatarPath(input.groupId) ||
+              (image.path !== `group/${input.groupId}/uploads/avatar` &&
+                (!uploaderId || image.path !== buildGroupAvatarPath(uploaderId, input.groupId))) ||
               !image.fileName
             ) {
               throw new TRPCError({
@@ -94,6 +96,14 @@ export const groupLifecycleRouter = {
     )
     .mutation(async ({ ctx, input }) => {
       const group = await ctx.db.$transaction(async (tx) => {
+        const [user] = await tx.$queryRaw<Array<{ pendingDeletion: boolean }>>(
+          Prisma.sql`SELECT "pendingDeletion" FROM "User" WHERE id = ${ctx.session.user.id} FOR UPDATE`,
+        );
+        const session = await tx.session.findFirst({
+          where: { id: ctx.session.session.id, userId: ctx.session.user.id },
+        });
+        if (!user || user.pendingDeletion || !session)
+          throw new TRPCError({ code: "UNAUTHORIZED" });
         const createdGroup = await tx.group.create({
           data: {
             id: input.groupId,

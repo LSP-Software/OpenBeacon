@@ -31,7 +31,7 @@ const caller = (userId: string) =>
     cache,
     db: prisma,
     clientIp: "127.0.0.1",
-    session: { user: { id: userId } },
+    session: { user: { id: userId }, session: { id: `${userId}-session` } },
   } as Parameters<typeof router.createCaller>[0]);
 const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
   createdByDeviceId: result.epoch.createdByDeviceId,
@@ -47,6 +47,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       for (const [i, userId] of users.entries()) {
         await prisma.user.create({
           data: { id: userId, name: userId, email: `${userId}@example.test` },
+        });
+        await prisma.session.create({
+          data: {
+            id: `${userId}-session`,
+            token: `${userId}-token`,
+            userId,
+            expiresAt: new Date(Date.now() + 60_000),
+          },
         });
         await prisma.userDevice.create({
           data: {
@@ -150,12 +158,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         previousEpoch: context.latestEpoch!,
         recipients: context.recipients,
       });
+      await prisma.group.update({ where: { id: groupId }, data: { epochRotationRequired: true } });
       await expect(
         caller(users[1]!).groupInvites.acceptShared({
           code,
           nextEpoch: { ...bundle(joined), epochNumber: 999 },
         }),
       ).rejects.toThrow();
+      expect(
+        (await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).epochRotationRequired,
+      ).toBe(true);
       expect(
         await caller(users[0]!).groupInvites.sharedStatuses({ groupId, inviteIds: [id] }),
       ).toEqual([{ id, status: "active" }]);
@@ -172,6 +184,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         caller(users[2]!).groupInvites.acceptShared({ code, nextEpoch: bundle(other) }),
       ]);
       expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(
+        (await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).epochRotationRequired,
+      ).toBe(false);
       expect(await prisma.groupMember.count({ where: { groupId } })).toBe(2);
       expect(await prisma.groupEpoch.count({ where: { groupId } })).toBe(2);
       expect(

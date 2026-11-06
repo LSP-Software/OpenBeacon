@@ -31,7 +31,7 @@ const caller = (userId: string) =>
     cache,
     db: prisma,
     clientIp: "127.0.0.1",
-    session: { user: { id: userId } },
+    session: { user: { id: userId }, session: { id: `${userId}-session` } },
   } as Parameters<typeof router.createCaller>[0]);
 const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
   createdByDeviceId: result.epoch.createdByDeviceId,
@@ -47,6 +47,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       for (const userId of users) {
         const key = createDeviceKeyPair();
         await prisma.user.create({ data: { id: userId, name: userId, email: email(userId) } });
+        await prisma.session.create({
+          data: {
+            id: `${userId}-session`,
+            token: `${userId}-token`,
+            userId,
+            expiresAt: new Date(Date.now() + 60_000),
+          },
+        });
         await prisma.userDevice.create({
           data: {
             id: `${userId}-device`,

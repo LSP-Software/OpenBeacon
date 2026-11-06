@@ -105,6 +105,14 @@
         "typescript": "~5.9.2",
       },
     },
+    "apps/scheduled-jobs": {
+      "name": "@openbeacon/scheduled-jobs",
+      "dependencies": {
+        "@openbeacon/api": "workspace:*",
+        "@openbeacon/database": "workspace:*",
+        "@openbeacon/shared": "workspace:*",
+      },
+    },
     "packages/api": {
       "name": "@openbeacon/api",
       "version": "0.0.0",
@@ -648,6 +656,8 @@
     "@openbeacon/encryption": ["@openbeacon/encryption@workspace:packages/encryption"],
 
     "@openbeacon/mobile": ["@openbeacon/mobile@workspace:apps/mobile"],
+
+    "@openbeacon/scheduled-jobs": ["@openbeacon/scheduled-jobs@workspace:apps/scheduled-jobs"],
 
     "@openbeacon/schemas": ["@openbeacon/schemas@workspace:packages/schemas"],
 

@@ -1,12 +1,19 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
+import { Link } from "expo-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Alert, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../../../components/ui/Dialog.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
 import { Input } from "../../../components/ui/Input.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
@@ -18,6 +25,7 @@ const schema = z.object({ name: accountNameSchema });
 const ProfileScreen = () => {
   const { data: session, refetch } = authClient.useSession();
   const queryClient = useQueryClient();
+  const [nameOpen, setNameOpen] = useState(false);
   const updateName = useMutation(trpc.account.updateName.mutationOptions());
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -43,6 +51,7 @@ const ProfileScreen = () => {
         queryKey: trpc.groupMembership.members.queryKey(),
       }),
     ]);
+    setNameOpen(false);
     Alert.alert("Profile updated", "Your name has been saved.");
   };
 
@@ -50,16 +59,38 @@ const ProfileScreen = () => {
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <View className="gap-4 p-6">
         <Text className="text-2xl font-bold">Manage Profile</Text>
-        <Input
-          control={form.control}
-          name="name"
-          label="Name"
-          autoCapitalize="words"
-          autoComplete="name"
-        />
-        <Button onPress={form.handleSubmit(save)} disabled={updateName.isPending}>
-          <Text>Save name</Text>
+        <Text>{session?.user.name}</Text>
+        <Button onPress={() => setNameOpen(true)}>
+          <Text>Change name</Text>
         </Button>
+        <Dialog
+          open={nameOpen}
+          onOpenChange={(open) => {
+            setNameOpen(open);
+            if (!open) form.reset({ name: session?.user.name ?? "" });
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Change name</DialogTitle>
+            </DialogHeader>
+            <Input
+              control={form.control}
+              name="name"
+              label="Name"
+              autoCapitalize="words"
+              autoComplete="name"
+            />
+            <Button onPress={form.handleSubmit(save)} disabled={updateName.isPending}>
+              <Text>Save name</Text>
+            </Button>
+          </DialogContent>
+        </Dialog>
+        <Link href="/account/delete" asChild>
+          <Button variant="outline">
+            <Text>Delete account</Text>
+          </Button>
+        </Link>
       </View>
     </SafeAreaView>
   );

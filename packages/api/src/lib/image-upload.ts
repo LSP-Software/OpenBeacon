@@ -14,7 +14,8 @@ import {
 export type ImageUploadType = "userAvatar" | "groupAvatar";
 
 export const buildUserAvatarPath = (userId: string): string => `user/${userId}/uploads/avatar`;
-export const buildGroupAvatarPath = (groupId: string): string => `group/${groupId}/uploads/avatar`;
+export const buildGroupAvatarPath = (userId: string, groupId: string): string =>
+  `user/${userId}/uploads/group/${groupId}/avatar`;
 
 export const setPendingImageUploadForUser = async ({
   db,
@@ -68,7 +69,7 @@ export const setPendingImageUploadForUser = async ({
   });
 
   if (oldFileName) {
-    const oldImagePath = oldGroupId ? buildGroupAvatarPath(oldGroupId) : currentImagePath;
+    const oldImagePath = oldGroupId ? buildGroupAvatarPath(userId, oldGroupId) : currentImagePath;
     const { error } = await tryCatch(deleteFile(bucketName, oldImagePath, oldFileName));
     if (error) console.error("[image-upload] failed to delete previous pending image");
   }

@@ -14,7 +14,7 @@ class OpenBeaconTrackingModule : Module() {
     ModuleDefinition {
       Name("OpenBeaconTracking")
 
-      Function("provisionEpochKeys") { keys: List<Map<String, Any?>> ->
+      Function("provisionEpochKeys") { keys: List<Map<String, Any?>>, preserveGroupIds: List<String>? ->
         val parsed =
           keys.map { key ->
             val epochKeyBase64 =
@@ -31,7 +31,7 @@ class OpenBeaconTrackingModule : Module() {
             )
           }
 
-        TrackingRuntime.epochKeyStore(requireContext()).replaceAll(parsed)
+        TrackingRuntime.epochKeyStore(requireContext()).replacePreserving(parsed, preserveGroupIds ?: emptyList())
       }
 
       Function("revokeEpochKeys") { groupIds: List<String>? ->

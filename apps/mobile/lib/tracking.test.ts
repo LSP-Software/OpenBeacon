@@ -24,6 +24,7 @@ const markedInFlight: number[][] = [];
 const deleted: number[][] = [];
 const requeued: Array<{ ids: number[]; error: string | null | undefined }> = [];
 const uploadCalls: Array<{ groupId: string; points: unknown[] }> = [];
+const rotationChecks: string[] = [];
 let pendingCiphertexts: Array<{
   id: number;
   clientPointId: string;
@@ -50,6 +51,13 @@ let onStopCapture: (() => void) | null = null;
 let refreshCaptureCalls = 0;
 let failRefreshCapture = false;
 let failRegistration = false;
+let registrationError: Error | null = null;
+let failRotation = false;
+let rotationError: Error | null = null;
+let failedGroup: string | null = null;
+let failedLatestGroup: string | null = null;
+let failedWrappedGroup: string | null = null;
+let missingWrappedGroup: string | null = null;
 let brokenGroupKey = false;
 let registrationWait: Promise<void> | null = null;
 let onRegistration: (() => void) | null = null;
@@ -78,6 +86,7 @@ mock.module("react-native", () => createReactNativeTestModule({ platformOS: "and
 
 mock.module("./deviceKeys.ts", () => ({
   ensureDeviceKeyRegistration: async () => {
+    if (registrationError) throw registrationError;
     if (failRegistration) throw new Error("offline");
     onRegistration?.();
     await registrationWait;
@@ -93,15 +102,25 @@ mock.module("./api.ts", () => ({
       },
     },
     groupEpoch: {
+      rotationContext: {
+        query: async ({ groupId }: { groupId: string }) => {
+          rotationChecks.push(groupId);
+          if (rotationError && groupId === "group-1") throw rotationError;
+          if (failRotation || groupId === failedGroup) throw new Error("Rotation unavailable");
+          return null;
+        },
+      },
       getLatest: {
-        query: async ({ groupId }: { groupId: string }) => ({
-          epochId: groupId === "group-1" ? "epoch-1" : "epoch-2",
-          groupId,
-        }),
+        query: async ({ groupId }: { groupId: string }) => {
+          if (groupId === failedLatestGroup) throw new Error("Latest epoch unavailable");
+          return { epochId: groupId === "group-1" ? "epoch-1" : "epoch-2", groupId };
+        },
       },
       getWrappedKey: {
-        query: async ({ epochId, groupId }: { epochId: string; groupId: string }) =>
-          wrapEpochKeyForRecipient({
+        query: async ({ epochId, groupId }: { epochId: string; groupId: string }) => {
+          if (groupId === failedWrappedGroup) throw new Error("Wrapped key unavailable");
+          if (groupId === missingWrappedGroup) return null;
+          return wrapEpochKeyForRecipient({
             epoch: {
               createdAt: new Date(0),
               createdByDeviceId: "device-1",
@@ -121,7 +140,8 @@ mock.module("./api.ts", () => ({
               revokedAt: null,
               userId: "user-1",
             },
-          }),
+          });
+        },
       },
     },
     groupTracking: {
@@ -137,8 +157,15 @@ mock.module("./api.ts", () => ({
 
 mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   default: {
-    provisionEpochKeys: (keys: unknown[]) => {
+    provisionEpochKeys: (keys: unknown[], preserveGroupIds: string[] = []) => {
       provisionCalls.push(keys);
+      const remaining = provisionedKeys.filter(({ groupId }) => preserveGroupIds.includes(groupId));
+      provisionedKeys.splice(
+        0,
+        provisionedKeys.length,
+        ...remaining,
+        ...(keys as typeof provisionedKeys),
+      );
     },
     revokeEpochKeys: (groupIds?: string[] | null) => {
       revokedGroups.push(groupIds);
@@ -214,6 +241,7 @@ describe("tracking service", () => {
     deleted.length = 0;
     requeued.length = 0;
     uploadCalls.length = 0;
+    rotationChecks.length = 0;
     recordedUploads.length = 0;
     pendingCiphertexts = [];
     captureRunning = false;
@@ -224,6 +252,13 @@ describe("tracking service", () => {
     refreshCaptureCalls = 0;
     failRefreshCapture = false;
     failRegistration = false;
+    registrationError = null;
+    failRotation = false;
+    rotationError = null;
+    failedGroup = null;
+    failedLatestGroup = null;
+    failedWrappedGroup = null;
+    missingWrappedGroup = null;
     brokenGroupKey = false;
     registrationWait = null;
     onRegistration = null;
@@ -236,7 +271,7 @@ describe("tracking service", () => {
   test("replaces native keys with every current group epoch before starting capture", async () => {
     await reconcileTrackingKeys({ startCapture: true });
 
-    expect(revokedGroups).toEqual([undefined]);
+    expect(revokedGroups).toEqual([]);
     expect(provisionCalls).toEqual([
       [
         {
@@ -372,6 +407,91 @@ describe("tracking service", () => {
     expect(uploadCalls).toHaveLength(1);
   });
 
+  test("keeps capture running when rotation checks fail temporarily", async () => {
+    captureRunning = true;
+    failRotation = true;
+    await syncBackgroundTracking();
+    expect(stopCaptureCalls).toBe(0);
+    expect(revokedGroups).toEqual([]);
+    failRotation = false;
+    await syncBackgroundTracking();
+    expect(provisionCalls).toHaveLength(1);
+  });
+
+  test("keeps all groups capturing and retries a failed rotation on the next cycle", async () => {
+    failedGroup = "group-1";
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(provisionedKeys.map(({ groupId }) => groupId)).toEqual(["group-1", "group-2"]);
+    expect(startCaptureCalls).toBe(1);
+    expect(rotationChecks.filter((id) => id === "group-1")).toHaveLength(1);
+    failedGroup = null;
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(rotationChecks.filter((id) => id === "group-1")).toHaveLength(2);
+    expect(stopCaptureCalls).toBe(0);
+  });
+
+  test("preserves an existing key for an unavailable group while updating healthy groups", async () => {
+    captureRunning = true;
+    failedLatestGroup = "group-1";
+    provisionedKeys.push({
+      groupId: "group-1",
+      epochId: "old",
+      senderDeviceId: "device-1",
+      kind: "trackingPoint",
+    });
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(provisionedKeys).toEqual(
+      expect.arrayContaining([
+        { groupId: "group-1", epochId: "old", senderDeviceId: "device-1", kind: "trackingPoint" },
+        expect.objectContaining({ groupId: "group-2", epochId: "epoch-2" }),
+      ]),
+    );
+    expect(stopCaptureCalls).toBe(0);
+    failedLatestGroup = null;
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(provisionedKeys).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ groupId: "group-1", epochId: "epoch-1" }),
+        expect.objectContaining({ groupId: "group-2", epochId: "epoch-2" }),
+      ]),
+    );
+    expect(provisionedKeys.some(({ epochId }) => epochId === "old")).toBe(false);
+  });
+
+  test("retains an existing key after a wrapped-key request fails and replaces it after recovery", async () => {
+    captureRunning = true;
+    failedWrappedGroup = "group-1";
+    provisionedKeys.push({
+      groupId: "group-1",
+      epochId: "old",
+      senderDeviceId: "device-1",
+      kind: "trackingPoint",
+    });
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(provisionedKeys.map(({ epochId }) => epochId)).toEqual(["old", "epoch-2"]);
+    failedWrappedGroup = null;
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(provisionedKeys.map(({ epochId }) => epochId)).toEqual(["epoch-1", "epoch-2"]);
+    expect(stopCaptureCalls).toBe(0);
+  });
+
+  test("keeps the previous key when the new wrapped key is missing", async () => {
+    captureRunning = true;
+    missingWrappedGroup = "group-1";
+    provisionedKeys.push({
+      groupId: "group-1",
+      epochId: "old",
+      senderDeviceId: "device-1",
+      kind: "trackingPoint",
+    });
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(provisionedKeys.map(({ epochId }) => epochId)).toEqual(["old", "epoch-2"]);
+    expect(stopCaptureCalls).toBe(0);
+    missingWrappedGroup = null;
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(provisionedKeys.map(({ epochId }) => epochId)).toEqual(["epoch-1", "epoch-2"]);
+  });
+
   test("does not start a stopped capture in the background", async () => {
     captureRunning = false;
     await syncBackgroundTracking();
@@ -438,6 +558,8 @@ describe("tracking service", () => {
   });
 
   test("background upload does not throw when the device is offline", async () => {
+    captureRunning = true;
+    failRegistration = true;
     networkConnected = false;
     pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
     uploadGroup = async () => {
@@ -447,6 +569,65 @@ describe("tracking service", () => {
     await expect(syncBackgroundTracking()).resolves.toBeUndefined();
     expect(deleted).toEqual([]);
     expect(recordedUploads).toEqual([]);
+    expect(stopCaptureCalls).toBe(0);
+    expect(revokedGroups).toEqual([]);
+  });
+
+  test("stops background capture when registration reports a revoked session", async () => {
+    captureRunning = true;
+    registrationError = Object.assign(new Error("Session revoked"), {
+      data: { code: "UNAUTHORIZED" },
+    });
+    await syncBackgroundTracking();
+    expect(stopCaptureCalls).toBe(1);
+    expect(revokedGroups).toEqual([undefined]);
+    expect(captureRunning).toBe(false);
+    expect(deviceKeyPair.privateKey.expose()).toBeDefined();
+  });
+
+  test("stops capture and retains queued points when upload reports a revoked session", async () => {
+    captureRunning = true;
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    uploadGroup = async () => {
+      throw Object.assign(new Error("Session revoked"), { data: { code: "UNAUTHORIZED" } });
+    };
+    await expect(syncBackgroundTracking()).rejects.toThrow();
+    expect(stopCaptureCalls).toBe(1);
+    expect(revokedGroups).toEqual([undefined]);
+    expect(deleted).toEqual([]);
+    expect(requeued).toHaveLength(1);
+  });
+
+  test("stops capture when a group rotation check reports an unauthorized session", async () => {
+    captureRunning = true;
+    rotationError = Object.assign(new Error("Session revoked"), { data: { code: "UNAUTHORIZED" } });
+    await syncBackgroundTracking();
+    expect(stopCaptureCalls).toBe(1);
+    expect(revokedGroups).toEqual([undefined]);
+    expect(provisionCalls).toEqual([]);
+  });
+
+  test("does not restore keys after an upload revokes an in-flight reconciliation", async () => {
+    captureRunning = true;
+    let release = () => {};
+    registrationWait = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      onRegistration = resolve;
+    });
+    const reconciliation = reconcileTrackingKeys({ startCapture: true });
+    await started;
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    uploadGroup = async () => {
+      throw Object.assign(new Error("Session revoked"), { data: { code: "UNAUTHORIZED" } });
+    };
+    await expect(flushPendingTrackingPoints()).rejects.toThrow();
+    release();
+    await reconciliation;
+    expect(stopCaptureCalls).toBe(1);
+    expect(provisionCalls).toEqual([]);
+    expect(startCaptureCalls).toBe(0);
   });
 
   test("background upload silently waits for a queued retry", async () => {
@@ -495,6 +676,18 @@ describe("tracking service", () => {
     expect(markedInFlight).toEqual([[1], [2]]);
     expect(deleted).toEqual([[1]]);
     expect(requeued).toEqual([{ ids: [2], error: "INTERNAL_SERVER_ERROR: Unavailable" }]);
+  });
+
+  test("retains queued points while a group rotation is pending", async () => {
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    uploadGroup = async () => {
+      throw Object.assign(new Error("Group key rotation is pending."), {
+        data: { code: "CONFLICT" },
+      });
+    };
+    await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
+    expect(deleted).toEqual([]);
+    expect(requeued).toEqual([{ ids: [1], error: "CONFLICT: Group key rotation is pending." }]);
   });
 
   test("deletes permanently rejected batches", async () => {

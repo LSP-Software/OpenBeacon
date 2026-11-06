@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis } from "@openbeacon/cache/testing";
 import { prisma } from "@openbeacon/database";
@@ -20,8 +20,14 @@ const caller = appRouter.createCaller({
 } as Parameters<typeof appRouter.createCaller>[0]);
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback with PostgreSQL", () => {
+  beforeAll(async () => {
+    await prisma.user.create({
+      data: { id: prefix, name: "Feedback", email: `${prefix}@example.test` },
+    });
+  });
   afterAll(async () => {
     await prisma.feedback.deleteMany({ where: { message: { startsWith: prefix } } });
+    await prisma.user.deleteMany({ where: { id: prefix } });
     await prisma.$disconnect();
   });
 

@@ -1,3 +1,13 @@
+import { GroupRole, Prisma } from "@openbeacon/database";
+import { createHash } from "node:crypto";
+import {
+  auth,
+  authCapabilities,
+  createGoogleDeletionAuthorization,
+  verifyGoogleDeletionCode,
+} from "@openbeacon/auth";
+import { tryCatch } from "@openbeacon/shared";
+import { TRPCError } from "@trpc/server";
 import { accountNameSchema, requestImageUploadInputSchema } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod";
@@ -8,9 +18,238 @@ import {
   requestImageUpload,
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
+import { deleteAccountRecords } from "../lib/account-deletion.ts";
 import { protectedProcedure } from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
+  deletionVerificationMethods: protectedProcedure.query(async ({ ctx }) => {
+    const accounts = await ctx.db.account.findMany({
+      where: { userId: ctx.session.user.id },
+      select: { providerId: true, password: true },
+    });
+    return {
+      password: accounts.some(
+        (account) => account.providerId === "credential" && Boolean(account.password),
+      ),
+      google:
+        authCapabilities.google && accounts.some((account) => account.providerId === "google"),
+    };
+  }),
+  beginGoogleDeletionVerification: protectedProcedure
+    .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
+    .mutation(async ({ ctx }) => {
+      if (
+        !authCapabilities.google ||
+        !(await ctx.db.account.findFirst({
+          where: { userId: ctx.session.user.id, providerId: "google" },
+          select: { id: true },
+        }))
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Google sign-in is not available for this account.",
+        });
+      }
+      const authorization = createGoogleDeletionAuthorization();
+      await ctx.db.$transaction(async (tx) => {
+        await tx.googleDeletionChallenge.deleteMany({
+          where: { OR: [{ sessionId: ctx.session.session.id }, { expiresAt: { lt: new Date() } }] },
+        });
+        await tx.googleDeletionChallenge.create({
+          data: {
+            id: createHash("sha256").update(authorization.state).digest("hex"),
+            userId: ctx.session.user.id,
+            sessionId: ctx.session.session.id,
+            nonce: authorization.nonce,
+            codeVerifier: authorization.codeVerifier,
+            expiresAt: new Date(Date.now() + 5 * 60_000),
+          },
+        });
+      });
+      return { url: authorization.url, state: authorization.state };
+    }),
+  requestDeletion: protectedProcedure
+    .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
+    .input(
+      z.union([
+        z.object({ password: z.string().min(1).max(1024), immediate: z.boolean().optional() }),
+        z.object({
+          immediate: z.boolean().optional(),
+          google: z.object({
+            state: z.string().min(1).max(128),
+            code: z.string().min(1).max(4096),
+          }),
+        }),
+      ]),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      let googleSubject: string | null = null;
+      let challengeId: string | null = null;
+      if ("google" in input) {
+        challengeId = createHash("sha256").update(input.google.state).digest("hex");
+        const challenge = await ctx.db.googleDeletionChallenge.findFirst({
+          where: {
+            id: challengeId,
+            userId,
+            sessionId: ctx.session.session.id,
+            expiresAt: { gt: new Date() },
+          },
+        });
+        if (!challenge)
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Google verification expired. Please try again.",
+          });
+        const verification = await tryCatch(
+          verifyGoogleDeletionCode({
+            code: input.google.code,
+            codeVerifier: challenge.codeVerifier,
+            nonce: challenge.nonce,
+          }),
+        );
+        if (verification.error || !verification.data)
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Google verification failed. Please try again.",
+          });
+        googleSubject = verification.data;
+      }
+      const result = await ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
+        const session = await tx.session.findFirst({
+          where: { id: ctx.session.session.id, userId },
+        });
+        if (!session) throw new TRPCError({ code: "UNAUTHORIZED" });
+        if ("password" in input) {
+          const account = await tx.account.findFirst({
+            where: { userId, providerId: "credential" },
+            select: { password: true },
+          });
+          const authContext = await auth.$context;
+          if (
+            !account?.password ||
+            !(await authContext.password.verify({
+              hash: account.password,
+              password: input.password,
+            }))
+          ) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Password is incorrect.",
+            });
+          }
+        } else {
+          const account = await tx.account.findFirst({
+            where: { userId, providerId: "google", accountId: googleSubject ?? "" },
+            select: { id: true },
+          });
+          if (!account || !challengeId)
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "The Google account does not match this account.",
+            });
+          const consumed = await tx.googleDeletionChallenge.deleteMany({
+            where: {
+              id: challengeId,
+              userId,
+              sessionId: ctx.session.session.id,
+              expiresAt: { gt: new Date() },
+            },
+          });
+          if (consumed.count !== 1)
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: "Google verification expired. Please try again.",
+            });
+        }
+        const memberships = await tx.groupMember.findMany({
+          where: { userId },
+          select: { groupId: true },
+        });
+        const groupIds = memberships.map(({ groupId }) => groupId).sort();
+        if (groupIds.length) {
+          await tx.$queryRaw(
+            Prisma.sql`SELECT id FROM "Group" WHERE id IN (${Prisma.join(groupIds)}) ORDER BY id FOR UPDATE`,
+          );
+          const soleOwner = await tx.groupMember.findFirst({
+            where: {
+              userId,
+              role: GroupRole.OWNER,
+              group: {
+                AND: [
+                  { groupMembers: { some: { userId: { not: userId } } } },
+                  {
+                    groupMembers: {
+                      none: {
+                        userId: { not: userId },
+                        role: GroupRole.OWNER,
+                        user: { pendingDeletion: false },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+            select: { id: true },
+          });
+          if (soleOwner)
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "Transfer ownership or delete your groups before deleting your account.",
+            });
+          const soloGroups = await tx.group.findMany({
+            where: { id: { in: groupIds }, groupMembers: { none: { userId: { not: userId } } } },
+            select: { id: true },
+          });
+          const soloGroupIds = soloGroups.map(({ id }) => id);
+          await tx.groupMemberInvite.deleteMany({ where: { groupId: { in: soloGroupIds } } });
+          await tx.groupSharedInvite.deleteMany({ where: { groupId: { in: soloGroupIds } } });
+        }
+        await tx.groupMemberInvite.deleteMany({
+          where: { OR: [{ inviterId: userId }, { recipientId: userId }] },
+        });
+        await tx.groupSharedInvite.deleteMany({ where: { creatorId: userId } });
+        const [clock] = await tx.$queryRaw<Array<{ deletionDate: Date }>>(
+          Prisma.sql`SELECT clock_timestamp() + (${input.immediate ? 0 : 168} * INTERVAL '1 hour') AS "deletionDate"`,
+        );
+        if (!clock) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { deletionDate } = clock;
+        await tx.user.update({
+          where: { id: userId },
+          data: { pendingDeletion: true, deletionDate, deletionRetryAt: null },
+        });
+        await tx.session.deleteMany({ where: { userId } });
+        return { deletionDate };
+      });
+      if (input.immediate) {
+        await tryCatch(
+          deleteAccountRecords({
+            db: ctx.db,
+            userId,
+            imageUrlPrefix: `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`,
+            mode: "scheduled",
+          }),
+        );
+      }
+      return result;
+    }),
+  deletionCancellationNotice: protectedProcedure.query(async ({ ctx }) => {
+    const user = await ctx.db.user.findUniqueOrThrow({
+      where: { id: ctx.session.user.id },
+      select: { deletionCancellationPending: true },
+    });
+    return { cancelled: user.deletionCancellationPending };
+  }),
+  acknowledgeDeletionCancellation: protectedProcedure
+    .input(z.object({ userId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.userId !== ctx.session.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      await ctx.db.user.updateMany({
+        where: { id: ctx.session.user.id, deletionCancellationPending: true },
+        data: { deletionCancellationPending: false },
+      });
+    }),
   updateName: protectedProcedure
     .input(z.object({ name: accountNameSchema }))
     .mutation(async ({ ctx, input }) => {
@@ -36,6 +275,7 @@ export const accountRouter = {
       await ctx.db.feedback.create({
         data: {
           message: input.message,
+          userId: ctx.session.user.id,
           email: input.includeEmail ? ctx.session.user.email : null,
           androidVersion: input.androidVersion ?? null,
           appVersion: input.appVersion ?? null,
