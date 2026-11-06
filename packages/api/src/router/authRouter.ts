@@ -1,5 +1,7 @@
 import { authCapabilities } from "@openbeacon/auth";
 import { registerDeviceKeySchema } from "@openbeacon/schemas";
+import { TRPCError } from "@trpc/server";
+import z from "zod";
 import { listUserRecipientPublicKeys, upsertUserDevice } from "../lib/groupEpochs.ts";
 import { protectedProcedure, publicProcedure } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
@@ -22,14 +24,17 @@ export const authRouter = createTRPCRouter({
         windowMs: 60_000,
       },
     })
-    .input(registerDeviceKeySchema)
-    .mutation(async ({ ctx, input }) =>
-      upsertUserDevice({
+    .input(registerDeviceKeySchema.extend({ expectedUserId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.expectedUserId !== ctx.session.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "The active account has changed." });
+      }
+      return upsertUserDevice({
         db: ctx.db,
         input,
         userId: ctx.session.user.id,
-      }),
-    ),
+      });
+    }),
   listMyDeviceKeys: protectedProcedure.query(async ({ ctx }) =>
     ctx.db.userDevice.findMany({
       orderBy: {

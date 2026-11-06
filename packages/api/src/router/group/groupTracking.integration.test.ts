@@ -11,6 +11,7 @@ import {
 } from "@openbeacon/encryption";
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
+import { authRouter } from "../authRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 
 class TestCache extends OpenBeaconCache {
@@ -29,7 +30,7 @@ const ownerDeviceId = `${prefix}-owner-device`;
 const deviceKey = createDeviceKeyPair();
 const epochKey = generateGroupEpochKey();
 const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
-const router = createTRPCRouter({ groupTracking: groupTrackingRouter });
+const router = createTRPCRouter({ auth: authRouter, groupTracking: groupTrackingRouter });
 const caller = (userId: string) =>
   router.createCaller({
     cache,
@@ -76,6 +77,25 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     await prisma.group.deleteMany({ where: { id: groupId } });
     await prisma.user.deleteMany({ where: { id: { in: [ownerId, memberId, outsiderId] } } });
     await prisma.$disconnect();
+  });
+
+  test("device registration cannot cross an account change", async () => {
+    const otherDeviceId = `${prefix}-registration-race`;
+    const key = createDeviceKeyPair();
+    const input = {
+      algorithm: key.algorithm,
+      deviceId: otherDeviceId,
+      publicKey: key.publicKey,
+      expectedUserId: ownerId,
+    };
+    await expect(caller(memberId).auth.registerDeviceKey(input)).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    expect(await prisma.userDevice.findUnique({ where: { id: otherDeviceId } })).toBeNull();
+    await caller(ownerId).auth.registerDeviceKey(input);
+    expect(
+      (await prisma.userDevice.findUniqueOrThrow({ where: { id: otherDeviceId } })).userId,
+    ).toBe(ownerId);
   });
 
   test("stores opaque ciphertext once, authorizes the sender and rejects oversized input", async () => {

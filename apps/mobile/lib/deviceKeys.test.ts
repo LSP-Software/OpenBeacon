@@ -5,8 +5,10 @@ const secureStoreValues = new Map<string, string>();
 const storageValues = new Map<string, string>();
 let currentUserId = "user-a";
 let secureStoreSetError: Error | null = null;
+let secureStoreReadGate: Promise<void> | null = null;
+let onSecureStoreRead: (() => void) | null = null;
 
-const registerDeviceKeyMock = mock(async () => ({}));
+const registerDeviceKeyMock = mock(async (_input: { expectedUserId: string }) => ({}));
 const deleteItemAsyncMock = mock(async (key: string) => {
   secureStoreValues.delete(key);
 });
@@ -21,7 +23,11 @@ const setItemAsyncMock = mock(async (key: string, value: string) => {
 mock.module("expo-secure-store", () => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: "when-unlocked-this-device-only",
   deleteItemAsync: deleteItemAsyncMock,
-  getItemAsync: async (key: string) => secureStoreValues.get(key) ?? null,
+  getItemAsync: async (key: string) => {
+    onSecureStoreRead?.();
+    await secureStoreReadGate;
+    return secureStoreValues.get(key) ?? null;
+  },
   setItemAsync: setItemAsyncMock,
 }));
 
@@ -76,6 +82,8 @@ describe("device key registration", () => {
     storageValues.clear();
     currentUserId = "user-a";
     secureStoreSetError = null;
+    secureStoreReadGate = null;
+    onSecureStoreRead = null;
     deleteItemAsyncMock.mockClear();
     registerDeviceKeyMock.mockReset();
     registerDeviceKeyMock.mockImplementation(async () => ({}));
@@ -97,6 +105,39 @@ describe("device key registration", () => {
     expect(firstUserDeviceAgain.deviceId).toBe(firstUserDevice.deviceId);
     expect(firstUserDeviceAfterSwitch.deviceId).toBe(firstUserDevice.deviceId);
     expect(secondUserDevice.deviceId).not.toBe(firstUserDevice.deviceId);
+  });
+
+  test("a session change cannot register or delete the original account's key", async () => {
+    const key = createDeviceKeyPair();
+    storageValues.set("encryption.device.id.user-a", "device-a");
+    storageValues.set("encryption.device.publicKey.user-a", key.publicKey);
+    const privateKey = encodeBase64(key.privateKey.expose());
+    secureStoreValues.set("encryption.device.privateKey.user-a", privateKey);
+    let release = () => {};
+    let started = false;
+    secureStoreReadGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    onSecureStoreRead = () => {
+      started = true;
+    };
+    registerDeviceKeyMock.mockImplementation(async ({ expectedUserId }) => {
+      if (expectedUserId !== currentUserId) throw new Error("The active account has changed.");
+      return {};
+    });
+    const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
+    const registration = ensureDeviceKeyRegistration();
+    for (let index = 0; index < 200 && !started; index++) await Promise.resolve();
+    expect(started).toBe(true);
+    currentUserId = "user-b";
+    release();
+    await expect(registration).rejects.toThrow("The active account has changed.");
+    expect(registerDeviceKeyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedUserId: "user-a", deviceId: "device-a" }),
+    );
+    expect(secureStoreValues.get("encryption.device.privateKey.user-a")).toBe(privateKey);
+    expect(storageValues.get("encryption.device.id.user-a")).toBe("device-a");
+    expect(deleteItemAsyncMock).not.toHaveBeenCalled();
   });
 
   test("leaves registration capacity after ten simultaneous group checks", async () => {

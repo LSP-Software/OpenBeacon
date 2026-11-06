@@ -150,15 +150,18 @@ const registerDeviceKey = async ({
   algorithm,
   deviceId,
   publicKey,
+  userId,
 }: {
   algorithm: typeof DEVICE_KEY_ALGORITHM;
   deviceId: string;
   publicKey: string;
+  userId: string;
 }) =>
   trpcClient.auth.registerDeviceKey.mutate({
     algorithm,
     deviceId,
     publicKey,
+    expectedUserId: userId,
   });
 
 const deviceKeyContexts = new Map<
@@ -221,7 +224,7 @@ export const ensureDeviceKeyRegistration = async () => {
 
 const registerCurrentDeviceKey = async (userId: string) => {
   let context = await getOrCreateDeviceKeyContext(userId);
-  const registrationResult = await tryCatch(registerDeviceKey(context));
+  const registrationResult = await tryCatch(registerDeviceKey({ ...context, userId }));
 
   if (!registrationResult.error) {
     return context;
@@ -233,7 +236,7 @@ const registerCurrentDeviceKey = async (userId: string) => {
 
   await clearStoredDeviceKeyContext(getScopedDeviceKeyNames(userId));
   context = await getOrCreateDeviceKeyContext(userId);
-  await registerDeviceKey(context);
+  await registerDeviceKey({ ...context, userId });
 
   return context;
 };
