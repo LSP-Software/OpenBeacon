@@ -138,10 +138,6 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
   const refreshLocationPermissionState = async (): Promise<LocationPermissionState | null> =>
     syncLocationPermissions("refresh");
 
-  const openLocationPermissionSettings = async (): Promise<void> => {
-    await openLocationSettings();
-  };
-
   const continueToBackgroundPermission = async () => {
     if (isRequestingBackgroundPermission) {
       return;
@@ -159,6 +155,19 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
 
     setPermissionState(permissionResult.data);
     setIsBackgroundPermissionDialogOpen(false);
+  };
+
+  const openLocationPermissionSettings = async (): Promise<void> => {
+    if (
+      permissionState?.canRequestBackgroundInApp &&
+      permissionState.missing.length === 1 &&
+      permissionState.missing[0] === "background"
+    ) {
+      await continueToBackgroundPermission();
+      return;
+    }
+
+    await openLocationSettings();
   };
 
   return (

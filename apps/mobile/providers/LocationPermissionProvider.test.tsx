@@ -309,6 +309,26 @@ describe("LocationPermissionProvider", () => {
     expect(getRenderedOutput(root)).not.toContain("Allow background location");
   });
 
+  test("account warning requests background access using the launch flow", async () => {
+    const AccountWarning = () => {
+      const { openLocationPermissionSettings } = useLocationPermissions();
+      return (
+        <button type="button" onClick={openLocationPermissionSettings}>
+          Grant access
+        </button>
+      );
+    };
+    const root = await renderProvider(<AccountWarning />);
+
+    await act(async () => {
+      pressButton(root, 0);
+      await Promise.resolve();
+    });
+
+    expect(backgroundRequestCalls).toBe(1);
+    expect(getRenderedOutput(root)).not.toContain("Allow background location");
+  });
+
   test("requests background access only after the continue button is pressed", async () => {
     const root = await renderProvider();
 
