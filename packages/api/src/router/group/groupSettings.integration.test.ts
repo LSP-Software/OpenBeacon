@@ -9,6 +9,7 @@ import { FakeRedis } from "@openbeacon/cache/testing";
 import { prisma } from "@openbeacon/database";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { env } from "../../env.ts";
+import { buildGroupAvatarPath, setPendingImageUploadForUser } from "../../lib/image-upload.ts";
 import { buildImagePublicUrl } from "../../lib/storage.ts";
 import { s3Client } from "../../s3client.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
@@ -367,13 +368,71 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         );
         expect(
           await prisma.pendingUpload.findUnique({
-            where: { userId_uploadType: { userId: users[0]!, uploadType: "groupAvatar" } },
+            where: {
+              userId_uploadType_groupId: {
+                userId: users[0]!,
+                uploadType: "groupAvatar",
+                groupId: uploadGroupId,
+              },
+            },
           }),
         ).toBeNull();
       } finally {
         send.mockRestore();
         await prisma.group.deleteMany({ where: { id: uploadGroupId } });
         await prisma.pendingUpload.deleteMany({ where: { groupId: uploadGroupId } });
+      }
+    });
+
+    test("keeps pending uploads for different groups separate", async () => {
+      const secondGroupId = `${prefix}-second-upload`;
+      const userId = users[0]!;
+      await prisma.group.create({
+        data: {
+          id: secondGroupId,
+          name: "Second upload",
+          groupMembers: { create: { userId, role: "OWNER" } },
+        },
+      });
+      const send = spyOn(s3Client, "send").mockImplementation(async (command) =>
+        command instanceof HeadObjectCommand
+          ? { $metadata: {}, ContentLength: 3 }
+          : { $metadata: {} },
+      );
+      try {
+        await Promise.all(
+          [groupId, secondGroupId].map((id) =>
+            setPendingImageUploadForUser({
+              db: prisma,
+              userId,
+              uploadType: "groupAvatar",
+              fileName: `${id}.webp`,
+              groupId: id,
+              bucketName: env.S3_BUCKET_NAME,
+              currentImagePath: buildGroupAvatarPath(userId, id),
+            }),
+          ),
+        );
+        expect(
+          await prisma.pendingUpload.count({ where: { userId, uploadType: "groupAvatar" } }),
+        ).toBe(2);
+        for (const id of [groupId, secondGroupId]) {
+          const result = await caller(userId).groupSettings.confirmGroupImageUpload({
+            groupId: id,
+          });
+          expect((await prisma.group.findUniqueOrThrow({ where: { id } })).image).toBe(
+            result.imageUrl,
+          );
+        }
+        expect(
+          await prisma.pendingUpload.count({ where: { userId, uploadType: "groupAvatar" } }),
+        ).toBe(0);
+      } finally {
+        send.mockRestore();
+        await prisma.pendingUpload.deleteMany({
+          where: { groupId: { in: [groupId, secondGroupId] } },
+        });
+        await prisma.group.deleteMany({ where: { id: secondGroupId } });
       }
     });
 
@@ -408,7 +467,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         );
         expect(
           await prisma.pendingUpload.findUnique({
-            where: { userId_uploadType: { userId: users[0]!, uploadType: "groupAvatar" } },
+            where: {
+              userId_uploadType_groupId: {
+                userId: users[0]!,
+                uploadType: "groupAvatar",
+                groupId: uploadGroupId,
+              },
+            },
           }),
         ).toBeNull();
       } finally {

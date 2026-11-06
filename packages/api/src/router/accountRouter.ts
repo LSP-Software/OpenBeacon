@@ -331,7 +331,7 @@ export const accountRouter = {
       const userId = ctx.session.user.id;
 
       const pendingUpload = await ctx.db.pendingUpload.findUnique({
-        where: { userId_uploadType: { userId, uploadType: "userAvatar" } },
+        where: { userId_uploadType_groupId: { userId, uploadType: "userAvatar", groupId: "" } },
         select: { fileName: true },
       });
 
@@ -357,7 +357,7 @@ export const accountRouter = {
             });
             await tx.pendingUpload.delete({
               where: {
-                userId_uploadType: { userId, uploadType: "userAvatar" },
+                userId_uploadType_groupId: { userId, uploadType: "userAvatar", groupId: "" },
               },
             });
           });

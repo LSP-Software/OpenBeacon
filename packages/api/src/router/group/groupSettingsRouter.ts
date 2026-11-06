@@ -79,7 +79,9 @@ export const groupSettingsRouter = {
       const userId = ctx.session.user.id;
       const imagePath = buildGroupAvatarPath(userId, input.groupId);
       const pending = await ctx.db.pendingUpload.findUnique({
-        where: { userId_uploadType: { userId, uploadType: "groupAvatar" } },
+        where: {
+          userId_uploadType_groupId: { userId, uploadType: "groupAvatar", groupId: input.groupId },
+        },
       });
       if (!pending || pending.groupId !== input.groupId) {
         throw new TRPCError({

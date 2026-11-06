@@ -51,7 +51,7 @@ export const setPendingImageUploadForUser = async ({
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
 
     const existing = await tx.pendingUpload.findUnique({
-      where: { userId_uploadType: { userId, uploadType } },
+      where: { userId_uploadType_groupId: { userId, uploadType, groupId: groupId ?? "" } },
       select: { fileName: true, groupId: true },
     });
 
@@ -59,12 +59,12 @@ export const setPendingImageUploadForUser = async ({
       oldFileName = existing.fileName;
       oldGroupId = existing.groupId ?? null;
       await tx.pendingUpload.delete({
-        where: { userId_uploadType: { userId, uploadType } },
+        where: { userId_uploadType_groupId: { userId, uploadType, groupId: groupId ?? "" } },
       });
     }
 
     await tx.pendingUpload.create({
-      data: { userId, uploadType, fileName, groupId: groupId ?? null },
+      data: { userId, uploadType, fileName, groupId: groupId ?? "" },
     });
   });
 
