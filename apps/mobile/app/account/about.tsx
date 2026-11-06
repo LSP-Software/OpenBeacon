@@ -23,6 +23,9 @@ const AboutScreen = () => {
         <Link href="https://openbeacon.net/privacy" className="text-primary">
           Privacy policy
         </Link>
+        <Link href="https://openbeacon.net/terms" className="text-primary">
+          Terms of service
+        </Link>
         <Text className="text-xl font-semibold">Versions</Text>
         <Text>OpenBeacon: {appVersion}</Text>
         <Text>MapLibre React Native: {maplibreVersion}</Text>
