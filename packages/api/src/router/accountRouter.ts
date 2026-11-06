@@ -18,6 +18,7 @@ import {
   requestImageUpload,
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
+import { deleteAccountRecords } from "../lib/account-deletion.ts";
 import { protectedProcedure } from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
@@ -71,8 +72,9 @@ export const accountRouter = {
     .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
     .input(
       z.union([
-        z.object({ password: z.string().min(1).max(1024) }),
+        z.object({ password: z.string().min(1).max(1024), immediate: z.boolean().optional() }),
         z.object({
+          immediate: z.boolean().optional(),
           google: z.object({
             state: z.string().min(1).max(128),
             code: z.string().min(1).max(4096),
@@ -113,7 +115,7 @@ export const accountRouter = {
           });
         googleSubject = verification.data;
       }
-      return ctx.db.$transaction(async (tx) => {
+      const result = await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
         const session = await tx.session.findFirst({
           where: { id: ctx.session.session.id, userId },
@@ -209,7 +211,7 @@ export const accountRouter = {
         });
         await tx.groupSharedInvite.deleteMany({ where: { creatorId: userId } });
         const [clock] = await tx.$queryRaw<Array<{ deletionDate: Date }>>(
-          Prisma.sql`SELECT clock_timestamp() + INTERVAL '168 hours' AS "deletionDate"`,
+          Prisma.sql`SELECT clock_timestamp() + (${input.immediate ? 0 : 168} * INTERVAL '1 hour') AS "deletionDate"`,
         );
         if (!clock) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
         const { deletionDate } = clock;
@@ -220,6 +222,17 @@ export const accountRouter = {
         await tx.session.deleteMany({ where: { userId } });
         return { deletionDate };
       });
+      if (input.immediate) {
+        await tryCatch(
+          deleteAccountRecords({
+            db: ctx.db,
+            userId,
+            imageUrlPrefix: `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`,
+            mode: "scheduled",
+          }),
+        );
+      }
+      return result;
     }),
   deletionCancellationNotice: protectedProcedure.query(async ({ ctx }) => {
     const user = await ctx.db.user.findUniqueOrThrow({

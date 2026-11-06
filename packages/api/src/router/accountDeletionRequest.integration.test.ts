@@ -361,3 +361,39 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     });
   },
 );
+
+test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
+  "immediate deletion verifies credentials and removes the account without a grace period",
+  async () => {
+    const immediateEmail = `immediate-${crypto.randomUUID()}@example.test`;
+    const signup = await auth.api.signUpEmail({
+      body: { email: immediateEmail, password, name: "Immediate deletion" },
+    });
+    const immediateUserId = signup.user.id;
+    try {
+      const session = await prisma.session.findFirstOrThrow({ where: { userId: immediateUserId } });
+      const immediateCaller = appRouter.createCaller({
+        cache,
+        db: prisma,
+        clientIp: "127.0.0.1",
+        session: {
+          user: { id: immediateUserId, email: immediateEmail },
+          session: { id: session.id },
+        },
+      } as Parameters<typeof appRouter.createCaller>[0]);
+      await expect(
+        immediateCaller.account.requestDeletion({ password: "wrong", immediate: true }),
+      ).rejects.toThrow("Password is incorrect");
+      expect(await prisma.user.findUnique({ where: { id: immediateUserId } })).not.toBeNull();
+      await immediateCaller.account.requestDeletion({ password, immediate: true });
+      expect(await prisma.user.findUnique({ where: { id: immediateUserId } })).toBeNull();
+      expect(await prisma.session.count({ where: { userId: immediateUserId } })).toBe(0);
+      expect(
+        await prisma.accountDeletionCleanup.findUnique({ where: { userId: immediateUserId } }),
+      ).not.toBeNull();
+    } finally {
+      await prisma.accountDeletionCleanup.deleteMany({ where: { userId: immediateUserId } });
+      await prisma.user.deleteMany({ where: { id: immediateUserId } });
+    }
+  },
+);
