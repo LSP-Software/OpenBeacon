@@ -385,15 +385,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     });
 
     test("keeps pending uploads for different groups separate", async () => {
-      const secondGroupId = `${prefix}-second-upload`;
+      const groupIds = [`${prefix}-first-upload`, `${prefix}-second-upload`];
       const userId = users[0]!;
-      await prisma.group.create({
-        data: {
-          id: secondGroupId,
-          name: "Second upload",
-          groupMembers: { create: { userId, role: "OWNER" } },
-        },
-      });
+      for (const id of groupIds) {
+        await prisma.group.create({
+          data: {
+            id,
+            name: "Upload test",
+            groupMembers: { create: { userId, role: "OWNER" } },
+          },
+        });
+      }
       const send = spyOn(s3Client, "send").mockImplementation(async (command) =>
         command instanceof HeadObjectCommand
           ? { $metadata: {}, ContentLength: 3 }
@@ -401,7 +403,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       );
       try {
         await Promise.all(
-          [groupId, secondGroupId].map((id) =>
+          groupIds.map((id) =>
             setPendingImageUploadForUser({
               db: prisma,
               userId,
@@ -416,7 +418,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         expect(
           await prisma.pendingUpload.count({ where: { userId, uploadType: "groupAvatar" } }),
         ).toBe(2);
-        for (const id of [groupId, secondGroupId]) {
+        for (const id of groupIds) {
           const result = await caller(userId).groupSettings.confirmGroupImageUpload({
             groupId: id,
           });
@@ -430,9 +432,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       } finally {
         send.mockRestore();
         await prisma.pendingUpload.deleteMany({
-          where: { groupId: { in: [groupId, secondGroupId] } },
+          where: { groupId: { in: groupIds } },
         });
-        await prisma.group.deleteMany({ where: { id: secondGroupId } });
+        await prisma.group.deleteMany({ where: { id: { in: groupIds } } });
       }
     });
 

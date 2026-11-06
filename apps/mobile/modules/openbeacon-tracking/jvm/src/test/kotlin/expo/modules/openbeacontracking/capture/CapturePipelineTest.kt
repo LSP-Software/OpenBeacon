@@ -36,6 +36,9 @@ class CapturePipelineTest {
     assertEquals(1, capture(pipeline(bootId = "boot-2"), 100))
     assertEquals(1, capture(pipeline(owner = "server-b/user-a"), 100))
     assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.clientPointId }.toSet().size == 4)
+    keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32) { 1 }, "device_1", "trackingPoint")))
+    assertEquals(1, capture(pipeline(), 100))
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).last().clientPointId != original.clientPointId)
   }
 
   @Test
