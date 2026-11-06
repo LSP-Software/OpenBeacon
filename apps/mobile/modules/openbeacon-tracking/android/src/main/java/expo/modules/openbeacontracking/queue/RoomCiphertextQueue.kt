@@ -3,9 +3,8 @@ package expo.modules.openbeacontracking.queue
 class RoomCiphertextQueue(
   private val dao: CiphertextQueueDao,
 ) : CiphertextQueue {
-  override fun insertAll(rows: List<CiphertextQueueRow>) {
-    dao.insertAll(rows.map { it.toEntity() })
-  }
+  override fun insertAll(rows: List<CiphertextQueueRow>): Int =
+    dao.insertAll(rows.map { it.toEntity() }).count { it != -1L }
 
   override fun listByStatus(
     status: String,

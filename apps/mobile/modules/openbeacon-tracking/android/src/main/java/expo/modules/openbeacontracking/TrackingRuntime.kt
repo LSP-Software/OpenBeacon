@@ -1,6 +1,7 @@
 package expo.modules.openbeacontracking
 
 import android.content.Context
+import android.provider.Settings
 import expo.modules.openbeacontracking.capture.CapturePipeline
 import expo.modules.openbeacontracking.capture.CaptureCommandState
 import expo.modules.openbeacontracking.keys.EpochKeyStore
@@ -52,5 +53,6 @@ object TrackingRuntime {
       captureLock = captureLock,
       canQueue = { generation -> isCaptureRunning && captureCommands.isCurrent(generation) },
       queueOwner = { context.getSharedPreferences("openbeacon_tracking_queue", Context.MODE_PRIVATE).getString("owner", null) },
+      bootId = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1).takeIf { it >= 0 }?.toString(),
     )
 }

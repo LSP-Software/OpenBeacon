@@ -16,6 +16,29 @@ import kotlin.test.assertTrue
 
 class CapturePipelineTest {
   @Test
+  fun fixIdentityIsStableAcrossRestartsAndOutOfOrderRedelivery() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))
+    val queue = InMemoryCiphertextQueue()
+    fun pipeline(owner: String = "server-a/user-a", bootId: String = "boot-1") =
+      CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { owner }, bootId = bootId)
+    fun capture(pipeline: CapturePipeline, id: Long) =
+      pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false, fixId = id)
+
+    assertEquals(1, capture(pipeline(), 100))
+    val original = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).single()
+    assertEquals(1, capture(pipeline(), 101))
+    assertEquals(0, capture(pipeline(), 100))
+    queue.deleteByIds(listOf(original.id))
+    assertEquals(1, capture(pipeline(), 100))
+    val retried = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).last()
+    assertEquals(original.clientPointId, retried.clientPointId)
+    assertEquals(1, capture(pipeline(bootId = "boot-2"), 100))
+    assertEquals(1, capture(pipeline(owner = "server-b/user-a"), 100))
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.clientPointId }.toSet().size == 4)
+  }
+
+  @Test
   fun repeatedFixIsQueuedOncePerEpoch() {
     val keys = InMemoryEpochKeyStore()
     val first = ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")
@@ -213,7 +236,7 @@ class CapturePipelineTest {
       ciphertext = "cipher",
       queuedAt = 1L,
     )
-    queue.insertAll(listOf(row, row.copy(owner = "server-a/user-a"), row.copy(owner = "server-a/user-b"), row.copy(owner = "server-b/user-a")))
+    queue.insertAll(listOf(row, row.copy(clientPointId = "a", owner = "server-a/user-a"), row.copy(clientPointId = "b", owner = "server-a/user-b"), row.copy(clientPointId = "c", owner = "server-b/user-a")))
     val ownerRows = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a")
     assertEquals(1, ownerRows.size)
     assertEquals("server-a/user-a", ownerRows.single().owner)

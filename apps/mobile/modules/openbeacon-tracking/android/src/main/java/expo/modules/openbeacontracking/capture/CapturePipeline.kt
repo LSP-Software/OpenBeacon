@@ -5,6 +5,8 @@ import expo.modules.openbeacontracking.keys.EpochKeyStore
 import expo.modules.openbeacontracking.queue.CiphertextQueue
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import java.util.UUID
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 class CapturePipeline(
   private val epochKeyStore: EpochKeyStore,
@@ -14,6 +16,7 @@ class CapturePipeline(
   private val captureLock: Any = Any(),
   private val canQueue: (Long) -> Boolean = { true },
   private val queueOwner: () -> String? = { null },
+  private val bootId: String? = null,
 ) {
   private val lastFixByKey = mutableMapOf<List<String>, Long>()
 
@@ -27,6 +30,10 @@ class CapturePipeline(
     captureGeneration: Long = 0L,
     fixId: Long? = null,
   ): Int {
+    val owner = synchronized(captureLock) {
+      if (!canQueue(captureGeneration)) return 0
+      queueOwner()
+    } ?: return 0
     val keys = epochKeyStore.list()
     if (keys.isEmpty()) {
       return 0
@@ -58,7 +65,15 @@ class CapturePipeline(
           )
 
         CiphertextQueueRow(
-          clientPointId = newId(),
+          clientPointId = if (bootId != null && fixId != null) {
+            val mac = Mac.getInstance("HmacSHA256")
+            mac.init(SecretKeySpec(key.epochKey, "HmacSHA256"))
+            val context = listOf("openbeacon.tracking-point-id.v1", owner, key.groupId, key.epochId, key.senderDeviceId, key.kind, bootId, fixId.toString())
+              .joinToString(":") { GroupPayloadEncrypt.encodeBase64(it.toByteArray(Charsets.UTF_8)) }
+            GroupPayloadEncrypt.encodeBase64(mac.doFinal(context.toByteArray(Charsets.UTF_8)))
+          } else {
+            newId()
+          },
           captureId = captureId,
           groupId = encrypted.groupId,
           epochId = encrypted.epochId,
@@ -74,7 +89,7 @@ class CapturePipeline(
 
     return synchronized(captureLock) {
       if (!canQueue(captureGeneration)) return@synchronized 0
-      val owner = queueOwner() ?: return@synchronized 0
+      if (queueOwner() != owner) return@synchronized 0
       val scopedRows = rows.map { it.copy(owner = owner) }
       lastFixByKey.keys.retainAll(scopedRows.map { row ->
         listOf(owner, row.groupId, row.epochId, row.senderDeviceId, row.kind)
@@ -84,13 +99,13 @@ class CapturePipeline(
         fixId == null || lastFixByKey[key] != fixId
       }
       if (newRows.isEmpty()) return@synchronized 0
-      ciphertextQueue.insertAll(newRows)
+      val inserted = ciphertextQueue.insertAll(newRows)
       if (fixId != null) {
         for (row in newRows) {
           lastFixByKey[listOf(owner, row.groupId, row.epochId, row.senderDeviceId, row.kind)] = fixId
         }
       }
-      newRows.size
+      inserted
     }
   }
 }

@@ -5,10 +5,14 @@ class InMemoryCiphertextQueue : CiphertextQueue {
   private var nextId = 1L
 
   @Synchronized
-  override fun insertAll(rows: List<CiphertextQueueRow>) {
+  override fun insertAll(rows: List<CiphertextQueueRow>): Int {
+    var inserted = 0
     for (row in rows) {
+      if (this.rows.any { it.clientPointId == row.clientPointId }) continue
       this.rows.add(row.copy(id = nextId++))
+      inserted += 1
     }
+    return inserted
   }
 
   @Synchronized

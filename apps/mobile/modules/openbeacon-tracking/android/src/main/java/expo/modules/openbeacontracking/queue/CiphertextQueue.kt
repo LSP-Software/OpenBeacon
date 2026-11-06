@@ -1,7 +1,7 @@
 package expo.modules.openbeacontracking.queue
 
 interface CiphertextQueue {
-  fun insertAll(rows: List<CiphertextQueueRow>)
+  fun insertAll(rows: List<CiphertextQueueRow>): Int
 
   fun listByStatus(
     status: String,

@@ -2,6 +2,7 @@ package expo.modules.openbeacontracking.queue
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 
 @Dao
@@ -15,8 +16,8 @@ interface CiphertextQueueDao {
   @Query("UPDATE ciphertext_queue SET status = 'PENDING' WHERE status = 'IN_FLIGHT' AND lastAttemptAt < :before")
   fun recoverInterrupted(before: Long)
 
-  @Insert
-  fun insertAll(entities: List<CiphertextQueueEntity>)
+  @Insert(onConflict = OnConflictStrategy.IGNORE)
+  fun insertAll(entities: List<CiphertextQueueEntity>): List<Long>
 
   @Query(
     """
