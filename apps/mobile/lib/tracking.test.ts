@@ -92,6 +92,7 @@ mock.module("expo-network", () => ({
 mock.module("react-native", () => createReactNativeTestModule({ platformOS: "android" }));
 
 mock.module("./deviceKeys.ts", () => ({
+  cancelDeviceKeyRegistrations: () => {},
   ensureDeviceKeyRegistration: async () => {
     if (registrationError) throw registrationError;
     if (failRegistration) throw new Error("offline");

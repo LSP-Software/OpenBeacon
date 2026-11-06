@@ -10,7 +10,7 @@ import { Platform } from "react-native";
 import type { CiphertextQueueItem } from "../modules/openbeacon-tracking/index.ts";
 import { trpcClient } from "./api.ts";
 import { baseUrl } from "./base-url.ts";
-import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
+import { cancelDeviceKeyRegistrations, ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
@@ -565,6 +565,7 @@ const revokeTrackingAccessInternal = async (): Promise<void> => {
 export const revokeTrackingAccess = ({
   cancelFlush = true,
 }: { cancelFlush?: boolean } = {}): Promise<void> => {
+  cancelDeviceKeyRegistrations();
   if (cancelFlush) {
     flushController?.abort();
     flushPromise = null;
