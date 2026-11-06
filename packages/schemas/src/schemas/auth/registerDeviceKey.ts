@@ -1,7 +1,9 @@
 import {
   DEVICE_KEY_ALGORITHM,
   decodeBase64,
+  encodeBase64,
   WRAPPED_EPOCH_KEY_ALGORITHM,
+  XCHACHA20_NONCE_LENGTH,
 } from "@openbeacon/encryption";
 import z from "zod";
 
@@ -22,14 +24,25 @@ export const registerDeviceKeySchema = z.object({
   publicKey: devicePublicKeySchema,
 });
 
+const encodedBytes = (length: number) =>
+  z.string().refine((value) => {
+    try {
+      if (value.length !== Math.ceil(length / 3) * 4) return false;
+      const bytes = decodeBase64(value);
+      return bytes.length === length && encodeBase64(bytes) === value;
+    } catch {
+      return false;
+    }
+  }, "Invalid encoded key material.");
+
 export const wrappedEpochKeySchema = z.object({
   algorithm: z.literal(WRAPPED_EPOCH_KEY_ALGORITHM),
   createdAt: z.date(),
-  ephemeralPublicKey: z.string().min(1),
+  ephemeralPublicKey: encodedBytes(32),
   epochId: z.string().min(1),
-  nonce: z.string().min(1),
+  nonce: encodedBytes(XCHACHA20_NONCE_LENGTH),
   recipientDeviceId: z.string().min(1),
-  wrappedKey: z.string().min(1),
+  wrappedKey: encodedBytes(48),
 });
 
 export const groupEpochBundleSchema = z

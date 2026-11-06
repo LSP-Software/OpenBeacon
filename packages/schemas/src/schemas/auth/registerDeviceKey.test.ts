@@ -51,15 +51,39 @@ describe("registerDeviceKeySchema", () => {
 });
 
 describe("groupEpochBundleSchema", () => {
+  test("validates encoded wrapped key components", () => {
+    const recipientKey = {
+      algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+      createdAt: new Date(),
+      ephemeralPublicKey: encodeBase64(new Uint8Array(32)),
+      epochId: "epoch-1",
+      nonce: encodeBase64(new Uint8Array(24)),
+      recipientDeviceId: "device-a",
+      wrappedKey: encodeBase64(new Uint8Array(48)),
+    };
+    expect(wrappedEpochKeySchema.safeParse(recipientKey).success).toBe(true);
+    for (const field of ["ephemeralPublicKey", "nonce", "wrappedKey"] as const) {
+      expect(
+        wrappedEpochKeySchema.safeParse({ ...recipientKey, [field]: "invalid!" }).success,
+      ).toBe(false);
+      expect(
+        wrappedEpochKeySchema.safeParse({
+          ...recipientKey,
+          [field]: encodeBase64(new Uint8Array(1)),
+        }).success,
+      ).toBe(false);
+    }
+  });
+
   test("rejects recipient keys whose epochId does not match the bundle epochId", () => {
     const recipientKey = wrappedEpochKeySchema.parse({
       algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
       createdAt: new Date("2026-03-30T12:00:00.000Z"),
-      ephemeralPublicKey: "ephemeral-public-key",
+      ephemeralPublicKey: encodeBase64(new Uint8Array(32)),
       epochId: "epoch-2",
-      nonce: "nonce",
+      nonce: encodeBase64(new Uint8Array(24)),
       recipientDeviceId: "device-b",
-      wrappedKey: "wrapped-key",
+      wrappedKey: encodeBase64(new Uint8Array(48)),
     });
 
     const result = groupEpochBundleSchema.safeParse({
