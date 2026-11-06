@@ -115,6 +115,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         }),
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
       expect(await prisma.groupEpoch.count({ where: { groupId } })).toBe(1);
+      const oversizedEpochId = "e".repeat(200_000);
+      await expect(
+        caller.groupEpoch.rotate({
+          groupId,
+          nextEpoch: {
+            ...nextEpoch,
+            epochId: oversizedEpochId,
+            recipientKeys: nextEpoch.recipientKeys.map((recipient) => ({
+              ...recipient,
+              epochId: oversizedEpochId,
+            })),
+          },
+        }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(await prisma.groupEpoch.count({ where: { groupId } })).toBe(1);
       expect(await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).toMatchObject({
         epochRotationRequired: true,
       });

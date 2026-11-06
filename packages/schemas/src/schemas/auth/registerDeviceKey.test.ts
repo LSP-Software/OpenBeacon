@@ -16,7 +16,7 @@ import {
 describe("registerDeviceKeySchema", () => {
   test("accepts a valid X25519 public key and trims surrounding whitespace", () => {
     const deviceKeyPair = createDeviceKeyPair();
-    const publicKey = ` ${deviceKeyPair.publicKey.slice(0, 8)}\n${deviceKeyPair.publicKey.slice(8)} `;
+    const publicKey = ` ${deviceKeyPair.publicKey} `;
 
     expect(
       registerDeviceKeySchema.parse({
@@ -63,6 +63,32 @@ describe("registerDeviceKeySchema", () => {
         }).success,
       ).toBe(false);
     }
+  });
+
+  test("rejects internal whitespace and oversized device keys", () => {
+    const key = createDeviceKeyPair().publicKey;
+    for (const publicKey of [
+      `${key.slice(0, 4)}\n${key.slice(4)}`,
+      `${key.slice(0, 4)}${" ".repeat(1_000_000)}${key.slice(4)}`,
+    ]) {
+      expect(
+        registerDeviceKeySchema.safeParse({
+          algorithm: DEVICE_KEY_ALGORITHM,
+          deviceId: "device-a",
+          publicKey,
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  test("limits device identifiers", () => {
+    const input = { algorithm: DEVICE_KEY_ALGORITHM, publicKey: createDeviceKeyPair().publicKey };
+    expect(registerDeviceKeySchema.safeParse({ ...input, deviceId: "d".repeat(128) }).success).toBe(
+      true,
+    );
+    expect(registerDeviceKeySchema.safeParse({ ...input, deviceId: "d".repeat(129) }).success).toBe(
+      false,
+    );
   });
 });
 
@@ -134,5 +160,29 @@ describe("groupEpochBundleSchema", () => {
         path: ["recipientKeys", 0, "epochId"],
       }),
     );
+  });
+
+  test("rejects oversized epoch identifiers in both the bundle and recipient key", () => {
+    const recipientKey = {
+      algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+      createdAt: new Date(),
+      ephemeralPublicKey: createDeviceKeyPair().publicKey,
+      epochId: "e".repeat(129),
+      nonce: encodeBase64(new Uint8Array(24)),
+      recipientDeviceId: "device-a",
+      wrappedKey: encodeBase64(new Uint8Array(48)),
+    };
+    expect(
+      wrappedEpochKeySchema.safeParse({ ...recipientKey, epochId: "e".repeat(128) }).success,
+    ).toBe(true);
+    expect(wrappedEpochKeySchema.safeParse(recipientKey).success).toBe(false);
+    expect(
+      groupEpochBundleSchema.safeParse({
+        createdByDeviceId: "device-a",
+        epochId: recipientKey.epochId,
+        epochNumber: 1,
+        recipientKeys: [recipientKey],
+      }).success,
+    ).toBe(false);
   });
 });

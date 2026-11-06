@@ -24,10 +24,10 @@ export const groupTrackingPointSchema = z.object({
   algorithm: z.literal(PAYLOAD_ENCRYPTION_ALGORITHM),
   ciphertext: z.string().min(1).max(4096),
   clientPointId: z.string().min(1).max(128),
-  epochId: z.string().min(1),
+  epochId: z.string().min(1).max(128),
   kind: z.literal(TRACKING_POINT_KIND),
   nonce: trackingNonceSchema,
-  senderDeviceId: z.string().min(1),
+  senderDeviceId: z.string().min(1).max(128),
 });
 
 export const groupTrackingUploadBatchSchema = z.object({

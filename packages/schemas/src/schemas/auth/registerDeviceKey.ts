@@ -12,8 +12,10 @@ const devicePublicKeySchema = z
   .string()
   .transform((publicKey) => publicKey.trim())
   .refine((publicKey) => {
+    if (publicKey.length !== 44) return false;
     try {
-      return isUsableX25519PublicKey(decodeBase64(publicKey));
+      const decoded = decodeBase64(publicKey);
+      return encodeBase64(decoded) === publicKey && isUsableX25519PublicKey(decoded);
     } catch {
       return false;
     }
@@ -21,7 +23,7 @@ const devicePublicKeySchema = z
 
 export const registerDeviceKeySchema = z.object({
   algorithm: z.literal(DEVICE_KEY_ALGORITHM),
-  deviceId: z.string().min(1),
+  deviceId: z.string().min(1).max(128),
   publicKey: devicePublicKeySchema,
 });
 
@@ -40,16 +42,16 @@ export const wrappedEpochKeySchema = z.object({
   algorithm: z.literal(WRAPPED_EPOCH_KEY_ALGORITHM),
   createdAt: z.date(),
   ephemeralPublicKey: encodedBytes(32),
-  epochId: z.string().min(1),
+  epochId: z.string().min(1).max(128),
   nonce: encodedBytes(XCHACHA20_NONCE_LENGTH),
-  recipientDeviceId: z.string().min(1),
+  recipientDeviceId: z.string().min(1).max(128),
   wrappedKey: encodedBytes(48),
 });
 
 export const groupEpochBundleSchema = z
   .object({
-    createdByDeviceId: z.string().min(1),
-    epochId: z.string().min(1),
+    createdByDeviceId: z.string().min(1).max(128),
+    epochId: z.string().min(1).max(128),
     epochNumber: z.number().int().positive(),
     recipientKeys: z.array(wrappedEpochKeySchema).min(1),
   })

@@ -92,6 +92,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       code: "FORBIDDEN",
     });
     expect(await prisma.userDevice.findUnique({ where: { id: otherDeviceId } })).toBeNull();
+    await expect(
+      caller(ownerId).auth.registerDeviceKey({
+        ...input,
+        publicKey: `${key.publicKey.slice(0, 4)}${" ".repeat(1_000_000)}${key.publicKey.slice(4)}`,
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(await prisma.userDevice.findUnique({ where: { id: otherDeviceId } })).toBeNull();
     await caller(ownerId).auth.registerDeviceKey(input);
     expect(
       (await prisma.userDevice.findUniqueOrThrow({ where: { id: otherDeviceId } })).userId,
