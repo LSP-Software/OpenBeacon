@@ -5,6 +5,8 @@ import {
   DEVICE_KEY_ALGORITHM,
   encodeBase64,
   generateGroupEpochKey,
+  unwrapHistoryEpochKey,
+  type WrappedHistoryEpochKey,
   wrapEpochKeyForHistoryKey,
   wrapEpochKeyForRecipient,
 } from "@openbeacon/encryption";
@@ -76,6 +78,10 @@ let failedWrappedGroup: string | null = null;
 let missingWrappedGroup: string | null = null;
 let brokenGroupKey = false;
 let historyOnlyGroup: string | null = null;
+let backfillErrors = new Map<string, Error>();
+let missingHistoryWraps = new Map<string, string[]>();
+const backfillQueries: string[] = [];
+const historyWrapUploads: Array<{ groupId: string; wraps: WrappedHistoryEpochKey[] }> = [];
 let registrationWait: Promise<void> | null = null;
 let onRegistration: (() => void) | null = null;
 let uploadGroup = async ({
@@ -137,6 +143,52 @@ mock.module("./api.ts", () => ({
       },
     },
     groupEpoch: {
+      listHistoryBackfill: {
+        query: async ({ groupId }: { groupId: string }) => {
+          backfillQueries.push(groupId);
+          const backfillError = backfillErrors.get(groupId);
+          if (backfillError) throw backfillError;
+          return {
+            epochs: (missingHistoryWraps.get(groupId) ?? []).map((epochId, index) => ({
+              deviceWrap: wrapEpochKeyForRecipient({
+                epoch: {
+                  createdAt: new Date(0),
+                  createdByDeviceId: "device-0",
+                  epochId,
+                  epochNumber: index + 1,
+                  groupId,
+                },
+                epochKey: epochId === "epoch-1" ? epochKey1 : epochKey2,
+                recipient: {
+                  algorithm: DEVICE_KEY_ALGORITHM,
+                  createdAt: new Date(0),
+                  deviceId: "device-1",
+                  publicKey: deviceKeyPair.publicKey,
+                  revokedAt: null,
+                  userId: "user-1",
+                },
+                senderPrivateKey: deviceKeyPair.privateKey,
+              }),
+              epochId,
+              epochNumber: index + 1,
+            })),
+            historyKey: {
+              id: "019a0000-0000-7000-8000-000000000001",
+              publicKey: historyKeyPair.publicKey,
+              userId: "user-1",
+              version: 1,
+            },
+            nextCursor: null,
+          };
+        },
+      },
+      addHistoryWraps: {
+        mutate: async (input: { groupId: string; wraps: WrappedHistoryEpochKey[] }) => {
+          historyWrapUploads.push(input);
+          missingHistoryWraps.delete(input.groupId);
+          return { added: input.wraps.length };
+        },
+      },
       rotationContext: {
         query: async ({ groupId }: { groupId: string }) => {
           rotationChecks.push(groupId);
@@ -339,6 +391,10 @@ describe("tracking service", () => {
     missingWrappedGroup = null;
     brokenGroupKey = false;
     historyOnlyGroup = null;
+    backfillErrors = new Map();
+    missingHistoryWraps = new Map();
+    backfillQueries.length = 0;
+    historyWrapUploads.length = 0;
     registrationWait = null;
     onRegistration = null;
     uploadGroup = async ({ points }) => ({
@@ -684,6 +740,75 @@ describe("tracking service", () => {
         },
       ],
     ]);
+  });
+
+  test("backfills an epoch an old client created without a history wrap on the next reconcile", async () => {
+    missingHistoryWraps.set("group-1", ["epoch-1"]);
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(historyWrapUploads).toHaveLength(1);
+    const [upload] = historyWrapUploads;
+    expect(upload?.groupId).toBe("group-1");
+    const [wrap] = upload?.wraps ?? [];
+    if (!wrap) throw new Error("Missing history wrap");
+    expect(
+      encodeBase64(
+        unwrapHistoryEpochKey({
+          epochId: "epoch-1",
+          historyKeyVersion: 1,
+          historyPrivateKey: historyKeyPair.privateKey,
+          userId: "user-1",
+          wrappedEpochKey: wrap,
+        }).expose(),
+      ),
+    ).toBe(encodeBase64(epochKey1.expose()));
+
+    backfillQueries.length = 0;
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
+    expect(historyWrapUploads).toHaveLength(1);
+  });
+
+  test("backfills when capture is off", async () => {
+    missingHistoryWraps.set("group-2", ["epoch-2"]);
+    await reconcileTrackingKeys({ startCapture: false });
+
+    expect(historyWrapUploads.map(({ groupId }) => groupId)).toEqual(["group-2"]);
+    expect(provisionCalls).toEqual([]);
+  });
+
+  test("keeps sharing every group when backfill fails for one", async () => {
+    backfillErrors.set("group-1", new Error("Backfill unavailable"));
+    missingHistoryWraps.set("group-2", ["epoch-2"]);
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(provisionedKeys.map(({ groupId }) => groupId).sort()).toEqual(["group-1", "group-2"]);
+    expect(startCaptureCalls).toBe(1);
+    expect(historyWrapUploads.map(({ groupId }) => groupId)).toEqual(["group-2"]);
+  });
+
+  test("stops capture when backfill reports an unauthorized session", async () => {
+    captureRunning = true;
+    backfillErrors.set(
+      "group-1",
+      Object.assign(new Error("Session revoked"), { data: { code: "UNAUTHORIZED" } }),
+    );
+    await syncBackgroundTracking();
+
+    expect(stopCaptureCalls).toBe(1);
+    expect(revokedGroups).toEqual([undefined]);
+    expect(provisionCalls).toEqual([]);
+  });
+
+  test("stops capture when backfill reports an unauthorized session while capture is off", async () => {
+    backfillErrors.set(
+      "group-2",
+      Object.assign(new Error("Session revoked"), { data: { code: "UNAUTHORIZED" } }),
+    );
+    await reconcileTrackingKeys({ startCapture: false });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(revokedGroups).toHaveLength(2);
   });
 
   test("continues sharing with accessible groups when another group key cannot be decrypted", async () => {

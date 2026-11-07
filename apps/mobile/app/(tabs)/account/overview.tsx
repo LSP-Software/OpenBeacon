@@ -3,7 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import {
   AlertCircleIcon,
@@ -11,6 +11,7 @@ import {
   CameraIcon,
   HelpCircleIcon,
   InfoIcon,
+  KeyRoundIcon,
   LockIcon,
   MailIcon,
   MapPinIcon,
@@ -48,6 +49,7 @@ import {
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
 } from "../../../lib/locationPermissions.ts";
+import { storage } from "../../../lib/storage.ts";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
 
 const categories = [
@@ -62,6 +64,11 @@ const categories = [
         label: "Password and Security",
         icon: LockIcon,
         href: "/account/password",
+      },
+      {
+        label: "Recovery phrase",
+        icon: KeyRoundIcon,
+        href: "/account/recovery",
       },
       {
         label: "Delete account",
@@ -116,6 +123,14 @@ const AccountScreen = () => {
   const devices = useQuery(trpc.auth.listMyDeviceKeys.queryOptions());
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
+  const recoveryStatus = useQuery(trpc.accountRecovery.status.queryOptions());
+  const recoveryPromptKey = `recovery.promptDismissed.${session?.user.id}`;
+  const [recoveryPromptDismissed, setRecoveryPromptDismissed] = useState(false);
+  const showRecoveryPrompt =
+    !!session?.user.id &&
+    recoveryStatus.data?.recoveryKey === null &&
+    !recoveryPromptDismissed &&
+    storage.getBoolean(recoveryPromptKey) !== true;
 
   const saveName = async ({ name }: z.infer<typeof schema>) => {
     const result = await tryCatch(updateName.mutateAsync({ name }));
@@ -261,6 +276,41 @@ const AccountScreen = () => {
               <Button size="sm" onPress={openLocationPermissionSettings}>
                 <Icon as={MapPinIcon} className="size-5 text-white" />
                 <Text>Grant Location Permissions</Text>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {showRecoveryPrompt && (
+          <Card>
+            <CardHeader className="flex flex-row items-start gap-2">
+              <Icon as={KeyRoundIcon} className="text-primary size-6" />
+              <View className="flex-1">
+                <CardTitle>
+                  <Text>Protect your location history</Text>
+                </CardTitle>
+                <CardDescription>
+                  <Text className="text-muted-foreground">
+                    Create a recovery phrase so you can read your history on a new phone.
+                  </Text>
+                </CardDescription>
+              </View>
+            </CardHeader>
+            <CardContent className="flex flex-row gap-3">
+              <Link href="/account/recovery-setup" asChild>
+                <Button size="sm">
+                  <Text>Create phrase</Text>
+                </Button>
+              </Link>
+              <Button
+                size="sm"
+                variant="outline"
+                onPress={() => {
+                  storage.set(recoveryPromptKey, true);
+                  setRecoveryPromptDismissed(true);
+                }}
+              >
+                <Text>Dismiss</Text>
               </Button>
             </CardContent>
           </Card>

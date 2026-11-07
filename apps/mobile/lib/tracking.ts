@@ -12,6 +12,7 @@ import { cancelDeviceKeyRegistrations, ensureDeviceKeyRegistration } from "./dev
 import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
+import { backfillHistoryWraps } from "./recovery.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
 
@@ -97,10 +98,16 @@ const reconcileTrackingKeysInternal = async ({
     }
     const groups = await trpcClient.groupMembership.list.query();
     if (!isCurrent()) return;
-    const rotations = await Promise.all(
-      groups.map(({ id }) => tryCatch(rotateGroupEpochIfRequired(id))),
+    const device = await tryCatch(ensureDeviceKeyRegistration());
+    if (getErrorCode(device.error) === "UNAUTHORIZED") throw device.error;
+    const results = await Promise.all(
+      groups.map(async ({ id: groupId }) => {
+        const rotation = await tryCatch(rotateGroupEpochIfRequired(groupId));
+        if (!device.data || !isCurrent()) return [rotation];
+        return [rotation, await tryCatch(backfillHistoryWraps({ device: device.data, groupId }))];
+      }),
     );
-    const unauthorized = rotations.find(({ error }) => getErrorCode(error) === "UNAUTHORIZED");
+    const unauthorized = results.flat().find(({ error }) => getErrorCode(error) === "UNAUTHORIZED");
     if (unauthorized?.error) throw unauthorized.error;
     return;
   }
@@ -119,7 +126,12 @@ const reconcileTrackingKeysInternal = async ({
         const rotation = await tryCatch(rotateGroupEpochIfRequired(groupId));
         if (!isCurrent()) return null;
         if (getErrorCode(rotation.error) === "UNAUTHORIZED") throw rotation.error;
-        const latest = await tryCatch(trpcClient.groupEpoch.getLatest.query({ groupId }));
+        const [latest, backfill] = await Promise.all([
+          tryCatch(trpcClient.groupEpoch.getLatest.query({ groupId })),
+          tryCatch(backfillHistoryWraps({ device: deviceKeyContext, groupId })),
+        ]);
+        if (!isCurrent()) return null;
+        if (getErrorCode(backfill.error) === "UNAUTHORIZED") throw backfill.error;
         if (latest.error) {
           if (getErrorCode(latest.error) === "UNAUTHORIZED") throw latest.error;
           preserveGroupIds.add(groupId);
