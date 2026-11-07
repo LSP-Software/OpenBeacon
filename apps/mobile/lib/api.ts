@@ -6,13 +6,7 @@ import superjson from "superjson";
 import { authClient } from "./auth-client.ts";
 import { baseUrl, getFeedbackUrl } from "./base-url.ts";
 
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // ...
-    },
-  },
-});
+export const queryClient = new QueryClient();
 
 export const trpcClient = createTRPCClient<AppRouter>({
   links: [
@@ -53,9 +47,6 @@ export const feedbackClient = createTRPCClient<AppRouter>({
   ],
 });
 
-/**
- * A set of typesafe hooks for consuming your API.
- */
 export const trpc = createTRPCOptionsProxy<AppRouter>({
   client: trpcClient,
   queryClient,
