@@ -10,7 +10,7 @@ Keep user-uploaded objects below `user/<userId>/` and ensure direct-upload URLs 
 
 Do not delete a group epoch merely because its creator is deleted: remaining group members may still need it. Flag affected groups for rotation and continue to accept old-epoch uploads from remaining members, including while rotation is pending, for offline continuity. A former member who retained an old key may be able to read those uploads. A successful join, departure, or deferred rotation clears the pending flag through the same epoch persistence path. Remaining devices retry pending rotations automatically. Test multiple members rotating at once, offline queues, and a device with unavailable keys.
 
-Review deployment-specific logs, caches, backups and external processors separately; database deletion does not erase copies retained by other people. Database constraints require new feedback, join alerts and shared invitations to have an account reference.
+Review deployment-specific logs, caches, backups and external processors separately; database deletion does not erase copies retained by other people. Database constraints require new join alerts and shared invitations to have an account reference. Feedback is sent anonymously to the hosted API, including by self-hosted users, so it has no account reference; account deletion removes feedback carrying the account email.
 
 ## Operations
 
