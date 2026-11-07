@@ -70,6 +70,7 @@ describe("production environment validation", () => {
       { S3_ENDPOINT: "invalid" },
       { S3_REGION: "" },
       { MAX_IMAGE_FILE_SIZE: "0" },
+      { SELF_HOSTED: "maybe" },
     ]) {
       const result = Bun.spawnSync({
         cmd: [process.execPath, `${import.meta.dir}/validateEnv.ts`],

@@ -12,9 +12,10 @@ class TestCache extends OpenBeaconCache {
 }
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback HTTP endpoint", () => {
-  test("uses the backend release version in responses and stored feedback", async () => {
+  test("a default self-hosted backend reports its version and rejects feedback", async () => {
     const { auth } = await import("@openbeacon/auth");
     const { prisma } = await import("@openbeacon/database");
+    const { env } = await import("../env.ts");
     const { default: trpc } = await import("./trpc.ts");
     const prefix = `http-feedback-${crypto.randomUUID()}`;
     const app = new Hono<AppEnv>().basePath("/api").route("/", trpc);
@@ -27,39 +28,24 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback HTTP en
       user: { id: prefix, email: `${prefix}@example.test` },
     } as never);
     try {
-      await prisma.user.create({
-        data: { id: prefix, name: "Feedback test", email: `${prefix}@example.test` },
-      });
+      expect(env.SELF_HOSTED).toBe(true);
       const version = await app.request("/api/trpc/account.version", {}, bindings);
       expect(version.status).toBe(200);
       expect(await version.json()).toMatchObject({ result: { data: { json: serverVersion } } });
+      session.mockResolvedValue(null as never);
       const response = await app.request(
-        "/api/trpc/account.submitFeedback",
+        "/api/trpc/feedback.submit",
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            json: {
-              message: prefix,
-              includeEmail: false,
-              appVersion: "1.0.0",
-              maplibreVersion: "10.4.2",
-            },
-          }),
+          body: JSON.stringify({ json: { message: prefix } }),
         },
         bindings,
       );
-      expect(response.status).toBe(200);
-      expect(await prisma.feedback.findFirst({ where: { message: prefix } })).toMatchObject({
-        email: null,
-        appVersion: "1.0.0",
-        maplibreVersion: "10.4.2",
-        serverVersion,
-      });
+      expect(response.status).toBe(404);
+      expect(await prisma.feedback.findFirst({ where: { message: prefix } })).toBeNull();
     } finally {
       session.mockRestore();
-      await prisma.feedback.deleteMany({ where: { message: prefix } });
-      await prisma.user.deleteMany({ where: { id: prefix } });
       await prisma.$disconnect();
     }
   });

@@ -19,6 +19,7 @@
     "R2_SECRET_ACCESS_KEY",
     "R2_BUCKET",
     "R2_PM_TILES_KEY",
+    "SELF_HOSTED",
     "JAVA_HOME"
   ],
   "tasks": {

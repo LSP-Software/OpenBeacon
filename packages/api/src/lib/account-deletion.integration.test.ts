@@ -74,8 +74,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.groupJoinAlert.create({
         data: { groupId, recipientId: remainingUser, memberId: deletedUser, memberName: "Deleted" },
       });
-      await prisma.feedback.create({
-        data: { userId: deletedUser, message: `${prefix}-feedback`, email: null },
+      await prisma.feedback.createMany({
+        data: [
+          { userId: deletedUser, message: `${prefix}-feedback`, email: null },
+          { message: `${prefix}-feedback-anonymous`, email: `${deletedUser}@example.test` },
+          { message: `${prefix}-feedback-other`, email: `${remainingUser}@example.test` },
+        ],
       });
       await prisma.groupEpoch.create({
         data: { id: epochId, groupId, epochNumber: 1, createdByDeviceId: deletedDevice },
@@ -109,22 +113,22 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     });
 
     afterAll(async () => {
+      await prisma.feedback.deleteMany({
+        where: { message: { startsWith: `${prefix}-feedback` } },
+      });
       await prisma.group.deleteMany({ where: { id: groupId } });
       await prisma.user.deleteMany({ where: { id: { in: [deletedUser, remainingUser] } } });
       await prisma.accountDeletionCleanup.deleteMany({ where: { userId: deletedUser } });
       await prisma.$disconnect();
     });
 
-    test("new alerts, feedback, and shared invitations require an account reference", async () => {
+    test("new alerts and shared invitations require an account reference", async () => {
       await expect(
         Promise.resolve(
           prisma.groupJoinAlert.create({
             data: { groupId, recipientId: remainingUser, memberName: "Missing" },
           }),
         ),
-      ).rejects.toThrow();
-      await expect(
-        Promise.resolve(prisma.feedback.create({ data: { message: "Missing user" } })),
       ).rejects.toThrow();
       await expect(
         Promise.resolve(
@@ -165,7 +169,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         await prisma.personalGroupNickname.findMany({ where: { owner: { groupId } } }),
       ).toMatchObject([{ ciphertext: "remaining" }]);
       expect(await prisma.groupJoinAlert.count({ where: { groupId } })).toBe(0);
-      expect(await prisma.feedback.count({ where: { message: `${prefix}-feedback` } })).toBe(0);
+      expect(
+        await prisma.feedback.findMany({
+          where: { message: { startsWith: `${prefix}-feedback` } },
+          select: { message: true },
+        }),
+      ).toEqual([{ message: `${prefix}-feedback-other` }]);
       expect(await prisma.groupEpoch.findUniqueOrThrow({ where: { id: epochId } })).toMatchObject({
         createdByDeviceId: null,
       });

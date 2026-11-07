@@ -6,7 +6,7 @@ describe("API authentication", () => {
     const caller = appRouter.createCaller({ session: null } as Parameters<
       typeof appRouter.createCaller
     >[0]);
-    const publicProcedures = new Set(["auth.providers"]);
+    const publicProcedures = new Set(["auth.providers", "feedback.submit"]);
     const procedures = Object.keys(appRouter._def.procedures);
     expect(procedures).toContain("auth.providers");
     for (const path of procedures.filter((name) => !publicProcedures.has(name))) {

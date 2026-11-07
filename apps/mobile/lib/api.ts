@@ -4,7 +4,7 @@ import { createTRPCClient, httpBatchLink, loggerLink } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import superjson from "superjson";
 import { authClient } from "./auth-client.ts";
-import { baseUrl } from "./base-url.ts";
+import { baseUrl, getFeedbackUrl } from "./base-url.ts";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +37,18 @@ export const trpcClient = createTRPCClient<AppRouter>({
         }
         return headers;
       },
+    }),
+  ],
+});
+
+export const feedbackClient = createTRPCClient<AppRouter>({
+  links: [
+    httpBatchLink({
+      transformer: superjson,
+      url: `${getFeedbackUrl()}/api/trpc`,
+      headers: () => ({ "x-trpc-source": "expo-react" }),
+      fetch: (url, options) =>
+        fetch(url, { ...options, signal: options?.signal ?? null, credentials: "omit" }),
     }),
   ],
 });
