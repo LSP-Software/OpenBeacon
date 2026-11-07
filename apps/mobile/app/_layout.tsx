@@ -8,6 +8,7 @@ import { OfflineBanner } from "../components/OfflineBanner.tsx";
 import { queryClient } from "../lib/api.ts";
 import { DeletionCancellationNotice } from "../providers/DeletionCancellationNotice.tsx";
 import { LocationPermissionProvider } from "../providers/LocationPermissionProvider.tsx";
+import { SessionDataCleanup } from "../providers/SessionDataCleanup.tsx";
 import { ThemeProvider } from "../providers/ThemeProvider.tsx";
 import { TrackingProvider } from "../providers/TrackingProvider.tsx";
 
@@ -17,6 +18,7 @@ const RootLayout = () => {
       <ThemeProvider>
         <LocationPermissionProvider>
           <TrackingProvider>
+            <SessionDataCleanup />
             <DeletionCancellationNotice />
             <View className="flex-1 bg-background">
               <Stack
