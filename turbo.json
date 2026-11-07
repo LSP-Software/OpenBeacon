@@ -40,6 +40,7 @@
       "outputs": []
     },
     "test": {
+      "dependsOn": ["^db:generate"],
       "outputs": []
     },
     "typecheck": {
@@ -47,6 +48,7 @@
       "outputs": []
     },
     "db:generate": {
+      "dependsOn": ["^db:generate"],
       "outputs": ["generated/**"]
     }
   }
