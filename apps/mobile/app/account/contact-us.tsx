@@ -1,4 +1,6 @@
 import { tryCatch } from "@openbeacon/shared";
+import { useQuery } from "@tanstack/react-query";
+import { TRPCClientError } from "@trpc/client";
 import { CheckIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Platform, Pressable, ScrollView, TextInput, View } from "react-native";
@@ -8,30 +10,40 @@ import { Button } from "../../components/ui/Button.tsx";
 import { Icon } from "../../components/ui/Icon.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { appVersion, maplibreVersion } from "../../lib/versions.ts";
-import { trpcClient } from "../../lib/api.ts";
+import { feedbackClient, trpc } from "../../lib/api.ts";
+import { authClient } from "../../lib/auth-client.ts";
+import { hasCustomServerUrl } from "../../lib/server-url.ts";
 
 const ContactUsScreen = () => {
   const [message, setMessage] = useState("");
   const [includeEmail, setIncludeEmail] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [status, setStatus] = useState<"success" | "error" | null>(null);
+  const [status, setStatus] = useState<"success" | "error" | "rateLimited" | null>(null);
+  const { data: session } = authClient.useSession();
+  const server = useQuery(trpc.account.version.queryOptions());
+  const selfHosted = hasCustomServerUrl();
 
   const submit = async () => {
     if (!message.trim() || submitting) return;
     setSubmitting(true);
     setStatus(null);
     const result = await tryCatch(
-      trpcClient.account.submitFeedback.mutate({
+      feedbackClient.feedback.submit.mutate({
         message,
-        includeEmail,
+        email: includeEmail ? session?.user.email : undefined,
         appVersion,
         maplibreVersion,
+        serverVersion: server.data,
         androidVersion: Platform.OS === "android" ? Platform.constants.Release : undefined,
       }),
     );
     setSubmitting(false);
     if (result.error) {
-      setStatus("error");
+      setStatus(
+        result.error instanceof TRPCClientError && result.error.data?.code === "TOO_MANY_REQUESTS"
+          ? "rateLimited"
+          : "error",
+      );
       return;
     }
     setMessage("");
@@ -49,12 +61,22 @@ const ContactUsScreen = () => {
         </View>
       </SafeAreaView>
       <ScrollView contentContainerClassName="gap-5 px-6 py-6">
-        <Text className="text-muted-foreground">
-          Your feedback is linked to your account for deletion and can be read by server
-          administrators. Please do not include personal information unless you want to share it.
-          Your app, MapLibre React Native, server{Platform.OS === "android" ? ", and Android" : ""}{" "}
-          versions are included with your feedback.
+        <Text className="font-semibold text-foreground">
+          Feedback goes directly to the OpenBeacon team at api.openbeacon.net
+          {selfHosted ? ", not to the operator of your self-hosted server." : "."}
         </Text>
+        <Text className="text-muted-foreground">
+          Feedback is not linked to your account. Please do not include personal information unless
+          you want to share it. Your app, MapLibre React Native, server
+          {Platform.OS === "android" ? ", and Android" : ""} versions are included with your
+          feedback.
+        </Text>
+        {selfHosted && (
+          <Text className="text-muted-foreground">
+            Deleting your account on your self-hosted server does not remove feedback you have sent
+            to OpenBeacon.
+          </Text>
+        )}
         <TextInput
           accessibilityLabel="Feedback"
           multiline
@@ -74,13 +96,21 @@ const ContactUsScreen = () => {
           <View className="size-6 items-center justify-center rounded border border-border">
             {includeEmail && <Icon as={CheckIcon} className="size-4 text-foreground" />}
           </View>
-          <Text className="flex-1">Include my account email for follow-up</Text>
+          <Text className="flex-1">
+            Include my account email so the OpenBeacon team can follow up
+          </Text>
         </Pressable>
         <Button onPress={submit} disabled={!message.trim() || submitting}>
           <Text>{submitting ? "Sending…" : "Send feedback"}</Text>
         </Button>
-        {status === "success" && <Text>Feedback sent. Thank you.</Text>}
+        {status === "success" && <Text>Feedback sent to OpenBeacon. Thank you.</Text>}
         {status === "error" && <Text>Could not send feedback. Please try again.</Text>}
+        {status === "rateLimited" && (
+          <Text>
+            Thanks for all your feedback! We've received a lot from you recently, so please wait a
+            little while before sending more.
+          </Text>
+        )}
       </ScrollView>
     </View>
   );

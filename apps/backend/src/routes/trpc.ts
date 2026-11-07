@@ -30,6 +30,7 @@ router.on(["POST", "GET"], "/trpc/*", (c) => {
         headers: c.req.raw.headers,
         serverVersion,
         serverName: env.SERVER_NAME,
+        selfHosted: env.SELF_HOSTED,
         ...(c.env.clientIp != null ? { clientIp: c.env.clientIp } : {}),
       }),
   });

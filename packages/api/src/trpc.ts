@@ -35,6 +35,7 @@ export const createTRPCContext = async (opts: {
   headers: Headers;
   serverVersion: string;
   serverName: string;
+  selfHosted: boolean;
 }) => {
   const session = await auth.api.getSession({
     headers: opts.headers,
@@ -46,6 +47,7 @@ export const createTRPCContext = async (opts: {
     session,
     serverVersion: opts.serverVersion,
     serverName: opts.serverName,
+    selfHosted: opts.selfHosted,
     ...(opts.clientIp !== undefined ? { clientIp: opts.clientIp } : {}),
   };
 };

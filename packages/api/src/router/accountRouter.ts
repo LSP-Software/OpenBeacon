@@ -261,30 +261,6 @@ export const accountRouter = {
     }),
   version: protectedProcedure.query(({ ctx }) => ctx.serverVersion),
   serverName: protectedProcedure.query(({ ctx }) => ctx.serverName),
-  submitFeedback: protectedProcedure
-    .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
-    .input(
-      z.object({
-        message: z.string().trim().min(1).max(5000),
-        includeEmail: z.boolean(),
-        androidVersion: z.string().trim().min(1).max(100).optional(),
-        appVersion: z.string().trim().min(1).max(100).optional(),
-        maplibreVersion: z.string().trim().min(1).max(100).optional(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      await ctx.db.feedback.create({
-        data: {
-          message: input.message,
-          userId: ctx.session.user.id,
-          email: input.includeEmail ? ctx.session.user.email : null,
-          androidVersion: input.androidVersion ?? null,
-          appVersion: input.appVersion ?? null,
-          maplibreVersion: input.maplibreVersion ?? null,
-          serverVersion: ctx.serverVersion,
-        },
-      });
-    }),
   requestProfileImageUpload: protectedProcedure
     .meta({
       rateLimit: {
