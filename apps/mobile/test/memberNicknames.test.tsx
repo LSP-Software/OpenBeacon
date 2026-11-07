@@ -1,6 +1,7 @@
 import { expect, mock, test } from "bun:test";
 import React, { act, type ReactNode } from "react";
 import { createRoot } from "test-renderer";
+import type { submitEpochChange } from "../lib/groupEncryption.ts";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -96,13 +97,8 @@ mock.module("../lib/personalNicknames.ts", () => ({
 }));
 mock.module("../lib/groupEncryption.ts", () => ({
   buildRemoveGroupMemberInput: async () => ({}),
-  submitEpochChange: async <Input, Output>({
-    build,
-    submit,
-  }: {
-    build: () => Promise<Input>;
-    submit: (input: Input) => Promise<Output>;
-  }) => submit(await build()),
+  submitEpochChange: (async ({ build, submit }) =>
+    submit(await build())) satisfies typeof submitEpochChange,
 }));
 mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("../lib/batteryVisual.ts", () => ({ getBatteryVisual: () => null }));
