@@ -1,6 +1,7 @@
 import { appRouter, createTRPCContext } from "@openbeacon/api";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { Hono } from "hono";
+import { env } from "../env.ts";
 import type { AppEnv } from "../types/AppEnv.ts";
 import { serverVersion } from "../version.ts";
 
@@ -28,6 +29,7 @@ router.on(["POST", "GET"], "/trpc/*", (c) => {
         db: c.env.db,
         headers: c.req.raw.headers,
         serverVersion,
+        serverName: env.SERVER_NAME,
         ...(c.env.clientIp != null ? { clientIp: c.env.clientIp } : {}),
       }),
   });

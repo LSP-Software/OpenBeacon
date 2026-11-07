@@ -9,6 +9,7 @@ import { appVersion, maplibreVersion } from "../../lib/versions.ts";
 
 const AboutScreen = () => {
   const server = useQuery(trpc.account.version.queryOptions());
+  const serverName = useQuery(trpc.account.serverName.queryOptions());
 
   return (
     <View className="flex-1 bg-background">
@@ -26,6 +27,9 @@ const AboutScreen = () => {
         <Link href="https://openbeacon.net/terms" className="text-primary">
           Terms of service
         </Link>
+        <Text>
+          Server: {serverName.data ?? (serverName.isPending ? "Loading…" : "Unavailable")}
+        </Text>
         <Text className="text-xl font-semibold">Versions</Text>
         <Text>OpenBeacon: {appVersion}</Text>
         <Text>MapLibre React Native: {maplibreVersion}</Text>
