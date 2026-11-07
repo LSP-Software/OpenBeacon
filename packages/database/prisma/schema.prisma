@@ -225,6 +225,7 @@ model GroupEpoch {
   epochNumber            Int
   createdByDeviceId      String?
   createdByDevice        UserDevice?              @relation("GroupEpochCreatedByDevice", fields: [createdByDeviceId], references: [id], onDelete: SetNull)
+  senderPublicKey        String
   createdAt              DateTime                 @default(now())
   recipientKeys          GroupEpochRecipientKey[]
   groupEncryptedPayloads GroupEncryptedPayload[]
@@ -266,7 +267,6 @@ model GroupEpochRecipientKey {
   recipientDevice    UserDevice @relation("GroupEpochRecipientDevice", fields: [recipientDeviceId], references: [id], onDelete: Restrict)
   wrappedKey         String
   ephemeralPublicKey String
-  nonce              String
   algorithm          String
   createdAt          DateTime   @default(now())
 

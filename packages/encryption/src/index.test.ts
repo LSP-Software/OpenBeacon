@@ -89,7 +89,7 @@ describe("group epoch encryption", () => {
   test("encrypts and decrypts a payload", () => {
     const { keyPair, recipient } = createRecipient("device-a", "user-a");
     const { epoch, wrappedKeys } = createInitialGroupEpoch({
-      createdByDeviceId: recipient.deviceId,
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
       groupId: "group-1",
       recipients: [recipient],
     });
@@ -130,7 +130,7 @@ describe("group epoch encryption", () => {
     const alice = createRecipient("device-a", "user-a");
     const bob = createRecipient("device-b", "user-b");
     const { wrappedKeys } = createInitialGroupEpoch({
-      createdByDeviceId: alice.recipient.deviceId,
+      creator: { deviceId: alice.recipient.deviceId, privateKey: alice.keyPair.privateKey },
       groupId: "group-1",
       recipients: [alice.recipient, bob.recipient],
     });
@@ -156,7 +156,7 @@ describe("group epoch encryption", () => {
     const bob = createRecipient("device-b", "user-b");
     const charlie = createRecipient("device-c", "user-c");
     const initialEpoch = createInitialGroupEpoch({
-      createdByDeviceId: alice.recipient.deviceId,
+      creator: { deviceId: alice.recipient.deviceId, privateKey: alice.keyPair.privateKey },
       groupId: "group-1",
       recipients: [alice.recipient, bob.recipient],
     });
@@ -174,7 +174,7 @@ describe("group epoch encryption", () => {
       senderDeviceId: alice.recipient.deviceId,
     });
     const nextEpoch = createNextGroupEpoch({
-      createdByDeviceId: alice.recipient.deviceId,
+      creator: { deviceId: alice.recipient.deviceId, privateKey: alice.keyPair.privateKey },
       previousEpoch: initialEpoch.epoch,
       recipients: [alice.recipient, bob.recipient, charlie.recipient],
     });
@@ -206,12 +206,12 @@ describe("group epoch encryption", () => {
     const alice = createRecipient("device-a", "user-a");
     const bob = createRecipient("device-b", "user-b");
     const initialEpoch = createInitialGroupEpoch({
-      createdByDeviceId: alice.recipient.deviceId,
+      creator: { deviceId: alice.recipient.deviceId, privateKey: alice.keyPair.privateKey },
       groupId: "group-1",
       recipients: [alice.recipient, bob.recipient],
     });
     const nextEpoch = createNextGroupEpoch({
-      createdByDeviceId: alice.recipient.deviceId,
+      creator: { deviceId: alice.recipient.deviceId, privateKey: alice.keyPair.privateKey },
       previousEpoch: initialEpoch.epoch,
       recipients: [alice.recipient],
     });
@@ -226,7 +226,7 @@ describe("group epoch encryption", () => {
     const bob = createRecipient("device-b", "user-b");
     const charlie = createRecipient("device-c", "user-c");
     const initialEpoch = createInitialGroupEpoch({
-      createdByDeviceId: alice.recipient.deviceId,
+      creator: { deviceId: alice.recipient.deviceId, privateKey: alice.keyPair.privateKey },
       groupId: "group-1",
       recipients: [alice.recipient, bob.recipient],
     });
@@ -242,12 +242,12 @@ describe("group epoch encryption", () => {
     const alice = createRecipient("device-a", "user-a");
     const bob = createRecipient("device-b", "user-b");
     const initialEpoch = createInitialGroupEpoch({
-      createdByDeviceId: alice.recipient.deviceId,
+      creator: { deviceId: alice.recipient.deviceId, privateKey: alice.keyPair.privateKey },
       groupId: "group-1",
       recipients: [alice.recipient, bob.recipient],
     });
     const nextEpoch = createNextGroupEpoch({
-      createdByDeviceId: alice.recipient.deviceId,
+      creator: { deviceId: alice.recipient.deviceId, privateKey: alice.keyPair.privateKey },
       previousEpoch: initialEpoch.epoch,
       recipients: [alice.recipient],
     });
@@ -262,7 +262,7 @@ describe("group epoch encryption", () => {
   test("rejects tampered ciphertext", () => {
     const { keyPair, recipient } = createRecipient("device-a", "user-a");
     const { epoch, wrappedKeys } = createInitialGroupEpoch({
-      createdByDeviceId: recipient.deviceId,
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
       groupId: "group-1",
       recipients: [recipient],
     });
@@ -300,7 +300,7 @@ describe("group epoch encryption", () => {
   test("rejects metadata mismatches", () => {
     const { keyPair, recipient } = createRecipient("device-a", "user-a");
     const { epoch, wrappedKeys } = createInitialGroupEpoch({
-      createdByDeviceId: recipient.deviceId,
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
       groupId: "group-1",
       recipients: [recipient],
     });
@@ -336,7 +336,7 @@ describe("group epoch encryption", () => {
     const alice = createRecipient("device-a", "user-a");
     const bob = createRecipient("device-b", "user-b");
     const { wrappedKeys } = createInitialGroupEpoch({
-      createdByDeviceId: alice.recipient.deviceId,
+      creator: { deviceId: alice.recipient.deviceId, privateKey: alice.keyPair.privateKey },
       groupId: "group-1",
       recipients: [alice.recipient],
     });
@@ -350,10 +350,62 @@ describe("group epoch encryption", () => {
     ).toThrow();
   });
 
+  test("records the creator's public key on each wrapped key", () => {
+    const alice = createRecipient("device-a", "user-a");
+    const bob = createRecipient("device-b", "user-b");
+    const { wrappedKeys } = createInitialGroupEpoch({
+      creator: { deviceId: alice.recipient.deviceId, privateKey: alice.keyPair.privateKey },
+      groupId: "group-1",
+      recipients: [alice.recipient, bob.recipient],
+    });
+
+    expect(wrappedKeys.map((wrappedKey) => wrappedKey.senderPublicKey)).toEqual([
+      alice.keyPair.publicKey,
+      alice.keyPair.publicKey,
+    ]);
+  });
+
+  test("rejects wrapped keys that were not created by the claimed creator", () => {
+    const alice = createRecipient("device-a", "user-a");
+    const bob = createRecipient("device-b", "user-b");
+    const mallory = createRecipient("device-m", "user-m");
+    const forged = createInitialGroupEpoch({
+      creator: { deviceId: mallory.recipient.deviceId, privateKey: mallory.keyPair.privateKey },
+      groupId: "group-1",
+      recipients: [bob.recipient],
+    });
+
+    expect(() =>
+      unwrapEpochKey({
+        recipientDeviceId: bob.recipient.deviceId,
+        recipientPrivateKey: bob.keyPair.privateKey,
+        wrappedEpochKey: { ...forged.wrappedKeys[0], senderPublicKey: alice.keyPair.publicKey },
+      }),
+    ).toThrow();
+  });
+
+  test("rejects wrapped keys moved to another epoch or recipient", () => {
+    const alice = createRecipient("device-a", "user-a");
+    const { wrappedKeys } = createInitialGroupEpoch({
+      creator: { deviceId: alice.recipient.deviceId, privateKey: alice.keyPair.privateKey },
+      groupId: "group-1",
+      recipients: [alice.recipient],
+    });
+    const unwrap = (wrappedEpochKey: (typeof wrappedKeys)[number]) =>
+      unwrapEpochKey({
+        recipientDeviceId: wrappedEpochKey.recipientDeviceId,
+        recipientPrivateKey: alice.keyPair.privateKey,
+        wrappedEpochKey,
+      });
+
+    expect(() => unwrap({ ...wrappedKeys[0], epochId: "epoch_other" })).toThrow();
+    expect(() => unwrap({ ...wrappedKeys[0], recipientDeviceId: "device-other" })).toThrow();
+  });
+
   test("redacts sensitive wrappers when serialized", () => {
     const deviceKeyPair = createDeviceKeyPair();
     const { epochKey } = createInitialGroupEpoch({
-      createdByDeviceId: "device-a",
+      creator: { deviceId: "device-a", privateKey: deviceKeyPair.privateKey },
       groupId: "group-1",
       recipients: [
         serializeRecipientPublicKeyMaterial({

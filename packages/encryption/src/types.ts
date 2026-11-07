@@ -34,13 +34,18 @@ export type GroupEpoch = {
   groupId: string;
 };
 
+export type EpochCreator = {
+  deviceId: string;
+  privateKey: DevicePrivateKeyMaterial;
+};
+
 export type WrappedEpochKey = {
   algorithm: typeof WRAPPED_EPOCH_KEY_ALGORITHM;
   createdAt: Date;
   ephemeralPublicKey: string;
   epochId: string;
-  nonce: string;
   recipientDeviceId: string;
+  senderPublicKey: string;
   wrappedKey: string;
 };
 

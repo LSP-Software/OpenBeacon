@@ -303,6 +303,7 @@ describe("group epoch helpers", () => {
     }));
     const findFirstDevice = mock(async () => ({
       id: "device-a",
+      publicKey: "public-a",
     }));
     const devices = [
       {
@@ -365,8 +366,8 @@ describe("group epoch helpers", () => {
             createdAt: wrappedKeyCreatedAt,
             ephemeralPublicKey: ephemeralA,
             epochId: "epoch-2",
-            nonce: "nonce-a",
             recipientDeviceId: "device-a",
+            senderPublicKey: "public-a",
             wrappedKey: "wrapped-a",
           },
           {
@@ -374,8 +375,8 @@ describe("group epoch helpers", () => {
             createdAt: wrappedKeyCreatedAt,
             ephemeralPublicKey: ephemeralB,
             epochId: "epoch-2",
-            nonce: "nonce-b",
             recipientDeviceId: "device-b",
+            senderPublicKey: "public-a",
             wrappedKey: "wrapped-b",
           },
         ],
@@ -396,6 +397,7 @@ describe("group epoch helpers", () => {
     expect(findFirstDevice).toHaveBeenCalledWith({
       select: {
         id: true,
+        publicKey: true,
       },
       where: {
         id: "device-a",
@@ -429,6 +431,7 @@ describe("group epoch helpers", () => {
     expect(create).toHaveBeenCalledWith({
       data: {
         createdByDeviceId: "device-a",
+        senderPublicKey: "public-a",
         epochNumber: 2,
         groupId: "group-1",
         id: "epoch-2",
@@ -441,7 +444,6 @@ describe("group epoch helpers", () => {
           createdAt: wrappedKeyCreatedAt,
           ephemeralPublicKey: ephemeralA,
           groupEpochId: "epoch-2",
-          nonce: "nonce-a",
           recipientDeviceId: "device-a",
           wrappedKey: "wrapped-a",
         },
@@ -450,7 +452,6 @@ describe("group epoch helpers", () => {
           createdAt: wrappedKeyCreatedAt,
           ephemeralPublicKey: ephemeralB,
           groupEpochId: "epoch-2",
-          nonce: "nonce-b",
           recipientDeviceId: "device-b",
           wrappedKey: "wrapped-b",
         },
@@ -480,6 +481,7 @@ describe("group epoch helpers", () => {
           userDevice: {
             findFirst: async () => ({
               id: "device-a",
+              publicKey: "public-a",
             }),
             findMany: async () => [
               {
@@ -503,8 +505,8 @@ describe("group epoch helpers", () => {
               createdAt: new Date("2026-03-26T12:00:00.000Z"),
               ephemeralPublicKey: ephemeralA,
               epochId: "epoch-2",
-              nonce: "nonce-a",
               recipientDeviceId: "device-a",
+              senderPublicKey: "public-a",
               wrappedKey: "wrapped-a",
             },
             {
@@ -512,8 +514,8 @@ describe("group epoch helpers", () => {
               createdAt: new Date("2026-03-26T12:00:00.000Z"),
               ephemeralPublicKey: ephemeralB,
               epochId: "epoch-2",
-              nonce: "nonce-b",
               recipientDeviceId: "device-b",
+              senderPublicKey: "public-a",
               wrappedKey: "wrapped-b",
             },
           ],
@@ -522,5 +524,57 @@ describe("group epoch helpers", () => {
         userId: "user-a",
       }),
     ).rejects.toThrow("Epoch recipient set does not match the active group devices.");
+  });
+
+  test("rejects wrapped keys sent by a key other than the active device's registered key", async () => {
+    const create = mock(async () => ({}));
+
+    await expect(
+      persistGroupEpoch({
+        db: {
+          group: { updateMany: async () => ({ count: 1 }) },
+          groupEpoch: {
+            create,
+            findFirst: async () => ({
+              epochNumber: 1,
+            }),
+          },
+          groupEpochRecipientKey: {
+            createMany: async () => ({}),
+          },
+          groupMember: {
+            findFirst: async () => ({
+              id: "member-a",
+            }),
+          },
+          userDevice: {
+            findFirst: async () => ({
+              id: "device-a",
+              publicKey: "public-a",
+            }),
+            findMany: async () => [],
+          },
+        },
+        epoch: {
+          createdByDeviceId: "device-a",
+          epochId: "epoch-2",
+          epochNumber: 2,
+          recipientKeys: [
+            {
+              algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+              createdAt: new Date("2026-03-26T12:00:00.000Z"),
+              ephemeralPublicKey: ephemeralA,
+              epochId: "epoch-2",
+              recipientDeviceId: "device-a",
+              senderPublicKey: "public-attacker",
+              wrappedKey: "wrapped-a",
+            },
+          ],
+        },
+        groupId: "group-1",
+        userId: "user-a",
+      }),
+    ).rejects.toThrow("Wrapped epoch keys must be created by the active device.");
+    expect(create).not.toHaveBeenCalled();
   });
 });

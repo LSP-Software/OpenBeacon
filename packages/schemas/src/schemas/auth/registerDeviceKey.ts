@@ -4,7 +4,6 @@ import {
   encodeBase64,
   isUsableX25519PublicKey,
   WRAPPED_EPOCH_KEY_ALGORITHM,
-  XCHACHA20_NONCE_LENGTH,
 } from "@openbeacon/encryption";
 import z from "zod";
 
@@ -43,8 +42,8 @@ export const wrappedEpochKeySchema = z.object({
   createdAt: z.date(),
   ephemeralPublicKey: encodedBytes(32),
   epochId: z.string().min(1).max(128),
-  nonce: encodedBytes(XCHACHA20_NONCE_LENGTH),
   recipientDeviceId: z.string().min(1).max(128),
+  senderPublicKey: encodedBytes(32),
   wrappedKey: encodedBytes(48),
 });
 

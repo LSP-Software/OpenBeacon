@@ -318,6 +318,7 @@ export const persistGroupEpoch = async ({
   const actingDevice = await db.userDevice.findFirst({
     select: {
       id: true,
+      publicKey: true,
     },
     where: {
       id: epoch.createdByDeviceId,
@@ -364,6 +365,13 @@ export const persistGroupEpoch = async ({
         message: "Wrapped epoch keys must target the same epoch.",
       });
     }
+
+    if (recipientKey.senderPublicKey !== actingDevice.publicKey) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Wrapped epoch keys must be created by the active device.",
+      });
+    }
   }
 
   const activeDevices = await db.userDevice.findMany({
@@ -408,6 +416,7 @@ export const persistGroupEpoch = async ({
   await db.groupEpoch.create({
     data: {
       createdByDeviceId: epoch.createdByDeviceId,
+      senderPublicKey: actingDevice.publicKey,
       epochNumber: epoch.epochNumber,
       groupId,
       id: epoch.epochId,
@@ -420,7 +429,6 @@ export const persistGroupEpoch = async ({
       createdAt: recipientKey.createdAt,
       ephemeralPublicKey: recipientKey.ephemeralPublicKey,
       groupEpochId: epoch.epochId,
-      nonce: recipientKey.nonce,
       recipientDeviceId: recipientKey.recipientDeviceId,
       wrappedKey: recipientKey.wrappedKey,
     })),

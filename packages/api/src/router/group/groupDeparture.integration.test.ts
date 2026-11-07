@@ -101,7 +101,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("leave deletes tracking, rotates keys, prevents old uploads after rejoining and protects the last owner", async () => {
       const devices = await prisma.userDevice.findMany({ where: { id: ownerDevice } });
       const initial = createInitialGroupEpoch({
-        createdByDeviceId: ownerDevice,
+        creator: { deviceId: ownerDevice, privateKey: ownerKey.privateKey },
         groupId,
         recipients: devices.map((device) => ({
           algorithm: "X25519",
@@ -118,7 +118,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(invite).toBeDefined();
       const joinContext = await member.groupInvites.acceptanceContext({ inviteId: invite!.id });
       const joined = createNextGroupEpoch({
-        createdByDeviceId: memberDevice,
+        creator: { deviceId: memberDevice, privateKey: memberKey.privateKey },
         previousEpoch: joinContext.latestEpoch!,
         recipients: joinContext.recipients,
       });
@@ -177,7 +177,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).rejects.toThrow();
       const context = await member.groupMembership.removalContext({ groupId, memberId: self.id });
       const next = createNextGroupEpoch({
-        createdByDeviceId: memberDevice,
+        creator: { deviceId: memberDevice, privateKey: memberKey.privateKey },
         previousEpoch: context.latestEpoch!,
         recipients: context.recipients,
       });
@@ -197,7 +197,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const reinvite = (await member.groupInvites.list())[0]!;
       const rejoin = await member.groupInvites.acceptanceContext({ inviteId: reinvite.id });
       const rejoined = createNextGroupEpoch({
-        createdByDeviceId: memberDevice,
+        creator: { deviceId: memberDevice, privateKey: memberKey.privateKey },
         previousEpoch: rejoin.latestEpoch!,
         recipients: rejoin.recipients,
       });
@@ -210,7 +210,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         memberId: ownerMember.id,
       });
       const ownerNext = createNextGroupEpoch({
-        createdByDeviceId: ownerDevice,
+        creator: { deviceId: ownerDevice, privateKey: ownerKey.privateKey },
         previousEpoch: ownerContext.latestEpoch!,
         recipients: ownerContext.recipients,
       });
@@ -231,7 +231,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         memberId: rejoinedMember.id,
       });
       const removalEpoch = createNextGroupEpoch({
-        createdByDeviceId: ownerDevice,
+        creator: { deviceId: ownerDevice, privateKey: ownerKey.privateKey },
         previousEpoch: removal.latestEpoch!,
         recipients: removal.recipients,
       });
@@ -257,7 +257,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const finalInvite = (await member.groupInvites.list())[0]!;
       const finalJoin = await member.groupInvites.acceptanceContext({ inviteId: finalInvite.id });
       const finalJoined = createNextGroupEpoch({
-        createdByDeviceId: memberDevice,
+        creator: { deviceId: memberDevice, privateKey: memberKey.privateKey },
         previousEpoch: finalJoin.latestEpoch!,
         recipients: finalJoin.recipients,
       });
@@ -272,7 +272,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         memberId: ownerMember.id,
       });
       const finalEpoch = createNextGroupEpoch({
-        createdByDeviceId: ownerDevice,
+        creator: { deviceId: ownerDevice, privateKey: ownerKey.privateKey },
         previousEpoch: finalContext.latestEpoch!,
         recipients: finalContext.recipients,
       });

@@ -164,6 +164,7 @@ mock.module("./api.ts", () => ({
               revokedAt: null,
               userId: "user-1",
             },
+            senderPrivateKey: deviceKeyPair.privateKey,
           });
         },
       },

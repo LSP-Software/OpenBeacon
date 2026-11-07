@@ -103,8 +103,12 @@ export const groupEpochRouter = {
           algorithm: true,
           createdAt: true,
           ephemeralPublicKey: true,
+          groupEpoch: {
+            select: {
+              senderPublicKey: true,
+            },
+          },
           groupEpochId: true,
-          nonce: true,
           recipientDeviceId: true,
           wrappedKey: true,
         },
@@ -124,11 +128,12 @@ export const groupEpochRouter = {
         return null;
       }
 
-      const { groupEpochId, ...wrappedEpochKey } = wrappedKey;
+      const { groupEpoch, groupEpochId, ...wrappedEpochKey } = wrappedKey;
 
       return {
         ...wrappedEpochKey,
         epochId: groupEpochId,
+        senderPublicKey: groupEpoch.senderPublicKey,
       };
     }),
 } satisfies TRPCRouterRecord;

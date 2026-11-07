@@ -7,7 +7,7 @@ describe("group key access", () => {
     const keyPair = createDeviceKeyPair();
     const otherKeyPair = createDeviceKeyPair();
     const bundle = createInitialGroupEpoch({
-      createdByDeviceId: "device",
+      creator: { deviceId: "device", privateKey: keyPair.privateKey },
       groupId: "group",
       recipients: [
         {

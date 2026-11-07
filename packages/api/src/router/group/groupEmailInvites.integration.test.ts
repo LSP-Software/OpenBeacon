@@ -25,6 +25,7 @@ const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }
 const prefix = `email-invite-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const users = [0, 1, 2, 3].map((i) => `${prefix}-${i}`);
+const keys = users.map(() => createDeviceKeyPair());
 const email = (userId: string) => `${userId}@example.test`;
 const caller = (userId: string) =>
   router.createCaller({
@@ -44,8 +45,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "email group invitations with PostgreSQL",
   () => {
     beforeAll(async () => {
-      for (const userId of users) {
-        const key = createDeviceKeyPair();
+      for (const [i, userId] of users.entries()) {
         await prisma.user.create({ data: { id: userId, name: userId, email: email(userId) } });
         await prisma.session.create({
           data: {
@@ -59,8 +59,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           data: {
             id: `${userId}-device`,
             userId,
-            publicKey: key.publicKey,
-            publicKeyAlgorithm: key.algorithm,
+            publicKey: keys[i]!.publicKey,
+            publicKeyAlgorithm: keys[i]!.algorithm,
           },
         });
       }
@@ -68,7 +68,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         where: { id: `${users[0]}-device` },
       });
       const initial = createInitialGroupEpoch({
-        createdByDeviceId: device.id,
+        creator: { deviceId: device.id, privateKey: keys[0]!.privateKey },
         groupId,
         recipients: [
           {
@@ -127,14 +127,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       const firstEpoch = bundle(
         createNextGroupEpoch({
-          createdByDeviceId: `${users[1]}-device`,
+          creator: { deviceId: `${users[1]}-device`, privateKey: keys[1]!.privateKey },
           previousEpoch: firstContext.latestEpoch!,
           recipients: firstContext.recipients,
         }),
       );
       const secondEpoch = bundle(
         createNextGroupEpoch({
-          createdByDeviceId: `${users[2]}-device`,
+          creator: { deviceId: `${users[2]}-device`, privateKey: keys[2]!.privateKey },
           previousEpoch: secondContext.latestEpoch!,
           recipients: secondContext.recipients,
         }),
@@ -179,7 +179,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       const retryEpoch = bundle(
         createNextGroupEpoch({
-          createdByDeviceId: `${users[loserIndex]}-device`,
+          creator: {
+            deviceId: `${users[loserIndex]}-device`,
+            privateKey: keys[loserIndex]!.privateKey,
+          },
           previousEpoch: retry.latestEpoch!,
           recipients: retry.recipients,
         }),
@@ -229,7 +232,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       const racingEpoch = bundle(
         createNextGroupEpoch({
-          createdByDeviceId: `${users[3]}-device`,
+          creator: { deviceId: `${users[3]}-device`, privateKey: keys[3]!.privateKey },
           previousEpoch: racingContext.latestEpoch!,
           recipients: racingContext.recipients,
         }),

@@ -57,7 +57,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         },
       });
       await prisma.groupEpoch.create({
-        data: { id: `${prefix}-epoch`, groupId, epochNumber: 1, createdByDeviceId: deviceId },
+        data: {
+          id: `${prefix}-epoch`,
+          groupId,
+          epochNumber: 1,
+          createdByDeviceId: deviceId,
+          senderPublicKey: key.publicKey,
+        },
       });
     });
 
@@ -80,7 +86,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const context = await caller.groupEpoch.rotationContext({ groupId });
       if (!context?.latestEpoch) throw new Error("Missing rotation context");
       const next = createNextGroupEpoch({
-        createdByDeviceId: deviceId,
+        creator: { deviceId, privateKey: key.privateKey },
         previousEpoch: context.latestEpoch,
         recipients: context.recipients,
       });
@@ -179,7 +185,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       const initial = createInitialGroupEpoch({
         groupId: survivingGroup,
-        createdByDeviceId: departingDevice,
+        creator: { deviceId: departingDevice, privateKey: departingKey.privateKey },
         recipients: devices.map((device) => ({
           algorithm: "X25519",
           createdAt: device.createdAt,
@@ -195,20 +201,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           groupId: survivingGroup,
           epochNumber: 1,
           createdByDeviceId: departingDevice,
+          senderPublicKey: departingKey.publicKey,
           recipientKeys: {
             create: initial.wrappedKeys.map(
-              ({
+              ({ recipientDeviceId, wrappedKey, ephemeralPublicKey, algorithm, createdAt }) => ({
                 recipientDeviceId,
                 wrappedKey,
                 ephemeralPublicKey,
-                nonce,
-                algorithm,
-                createdAt,
-              }) => ({
-                recipientDeviceId,
-                wrappedKey,
-                ephemeralPublicKey,
-                nonce,
                 algorithm,
                 createdAt,
               }),
@@ -252,7 +251,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         const context = await caller.groupEpoch.rotationContext({ groupId: survivingGroup });
         if (!context?.latestEpoch) throw new Error("Missing rotation context");
         const next = createNextGroupEpoch({
-          createdByDeviceId: deviceId,
+          creator: { deviceId, privateKey: key.privateKey },
           previousEpoch: context.latestEpoch,
           recipients: context.recipients,
         });
