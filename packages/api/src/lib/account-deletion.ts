@@ -93,7 +93,6 @@ export const deleteAccountRecords = async ({
     });
     await tx.groupEncryptedPayload.deleteMany({ where: { senderUserId: userId } });
     await tx.groupEpochRecipientKey.deleteMany({ where: { recipientDevice: { userId } } });
-    await tx.verification.deleteMany({ where: { identifier: user.email } });
     await tx.feedback.deleteMany({
       where: { email: { equals: user.email, mode: "insensitive" } },
     });
