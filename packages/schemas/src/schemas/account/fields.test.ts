@@ -19,7 +19,14 @@ describe("emailSchema", () => {
   });
 
   test("rejects blank and malformed emails", () => {
-    for (const email of ["", "   ", "alice", "alice@", "alice @example.com"]) {
+    for (const email of [
+      "",
+      "   ",
+      "alice",
+      "alice@",
+      "alice @example.com",
+      `${"a".repeat(309)}@example.com`,
+    ]) {
       expect(emailSchema.safeParse(email).success).toBe(false);
     }
   });

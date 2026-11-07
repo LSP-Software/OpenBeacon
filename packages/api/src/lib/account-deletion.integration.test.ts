@@ -78,6 +78,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: [
           { userId: deletedUser, message: `${prefix}-feedback`, email: null },
           { message: `${prefix}-feedback-anonymous`, email: `${deletedUser}@example.test` },
+          {
+            message: `${prefix}-feedback-mixed-case`,
+            email: `${deletedUser.toUpperCase()}@Example.Test`,
+          },
           { message: `${prefix}-feedback-other`, email: `${remainingUser}@example.test` },
         ],
       });
