@@ -41,6 +41,13 @@ export const subscribeToGroupColorChanges = (listener: () => void) => {
   };
 };
 
+const notifyListeners = () => {
+  revision += 1;
+  for (const listener of listeners) {
+    listener();
+  }
+};
+
 export const setGroupColor = (groupId: string, color: GroupColor) => {
   if (!isGroupColor(color)) {
     throw new Error("Group color must be chosen from the palette");
@@ -54,11 +61,4 @@ export const clearGroupColors = () => {
     if (key.startsWith(STORAGE_PREFIX)) storage.remove(key);
   }
   notifyListeners();
-};
-
-const notifyListeners = () => {
-  revision += 1;
-  for (const listener of listeners) {
-    listener();
-  }
 };
