@@ -67,4 +67,38 @@ jobs:
       - name: Test feedback against PostgreSQL
         run: OPENBEACON_INTEGRATION=1 bun test --env-file=.env.ci packages/api/src/router/accountFeedback.integration.test.ts apps/backend/src/routes/trpcFeedback.integration.test.ts
       - name: Test account deletion against PostgreSQL
-        run: OPENBEACON_INTEGRATION=1 bun test --isolate --env-file=.env.ci packages/api/src/lib/account-deletion.integration.test.ts packages/api/src/lib/account-deletion-cli.integration.test.ts packages/api/src/router/accountDeletionRequest.integration.test.ts packages/api/src/router/googleDeletion.integration.test.ts packages/api/src/router/group/groupRotation.integration.test.ts packages/api/src/router/group/groupDeparture.integration.test.ts packages/api/src/router/group/groupEmailInvites.integration.test.ts packages/api/src/router/group/groupSharedInvites.integration.test.ts packages/api/src/router/group/groupSettings.integration.test.ts
+        run: OPENBEACON_INTEGRATION=1 bun test --isolate --env-file=.env.ci packages/api/src/lib/account-deletion.integration.test.ts packages/api/src/lib/account-deletion-cli.integration.test.ts packages/api/src/router/accountDeletionRequest.integration.test.ts packages/api/src/router/googleDeletion.integration.test.ts packages/api/src/router/group/groupRotation.integration.test.ts packages/api/src/router/group/groupDeparture.integration.test.ts packages/api/src/router/group/groupEmailInvites.integration.test.ts packages/api/src/router/group/groupSharedInvites.integration.test.ts packages/api/src/router/group/groupSettings.integration.test.ts packages/api/src/router/group/groupTracking.integration.test.ts
+
+  tracking-room-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Generate Android project
+        working-directory: apps/mobile
+        run: bunx expo prebuild --platform android --no-install
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test tracking queue with Room
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: ANDROID_SERIAL=emulator-5554 bun run --cwd apps/mobile test:room

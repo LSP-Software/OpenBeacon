@@ -15,6 +15,7 @@ import androidx.room.PrimaryKey
 )
 data class CiphertextQueueEntity(
   @PrimaryKey(autoGenerate = true) val id: Long = 0,
+  @ColumnInfo(name = "owner") val owner: String?,
   @ColumnInfo(name = "clientPointId") val clientPointId: String,
   @ColumnInfo(name = "captureId") val captureId: String,
   @ColumnInfo(name = "groupId") val groupId: String,

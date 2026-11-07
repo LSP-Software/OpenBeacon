@@ -18,13 +18,20 @@ let sessionState: {
 };
 let appStateListener: ((nextAppState: string) => void) | null = null;
 let reconcileGate: Promise<void> | null = null;
+let recoveryGate: Promise<void> | null = null;
 let reconcileCalls: Array<{ startCapture: boolean }> = [];
 let flushCalls = 0;
+let flushModes: boolean[] = [];
 let revokeCalls = 0;
 let isReadyForSharing = true;
 let failFlush = false;
 let failReconcile = false;
 let alerts = 0;
+let recoveryPrompt: { count: number; deviceIds: string[]; server: string; userId: string } | null =
+  null;
+let failRecoveryCheck = false;
+let alertButtons: Array<{ text: string; onPress?: () => void }> = [];
+let recovered: Array<{ deviceIds: string[]; userId: string }> = [];
 let root: Root | null = null;
 const invalidateQueries = mock(async (_input: { queryKey: string[] }) => {});
 const queryClient = { invalidateQueries };
@@ -34,12 +41,22 @@ const trackingService = {
     await reconcileGate;
     if (failReconcile) throw new Error("group key error");
   },
-  flushPendingTrackingPoints: async () => {
+  flushPendingTrackingPoints: async (force = false) => {
     flushCalls += 1;
+    flushModes.push(force);
     if (failFlush) throw new Error("offline");
   },
   revokeTrackingAccess: async () => {
     revokeCalls += 1;
+  },
+  resumeTracking: async () => {},
+  getUnassignedTrackingPoints: async () => {
+    await recoveryGate;
+    if (failRecoveryCheck) throw new Error("offline");
+    return recoveryPrompt;
+  },
+  recoverUnassignedTrackingPoints: async (input: { deviceIds: string[]; userId: string }) => {
+    recovered.push(input);
   },
 };
 
@@ -61,8 +78,9 @@ mock.module("react-native", () => ({
     platformOS: "android",
   }),
   Alert: {
-    alert: () => {
+    alert: (_title: string, _message: string, buttons: typeof alertButtons = []) => {
       alerts += 1;
+      alertButtons = buttons;
     },
   },
 }));
@@ -117,12 +135,18 @@ describe("TrackingProvider", () => {
     appStateListener = null;
     reconcileCalls = [];
     reconcileGate = null;
+    recoveryGate = null;
     flushCalls = 0;
+    flushModes = [];
     revokeCalls = 0;
     isReadyForSharing = true;
     failFlush = false;
     failReconcile = false;
     alerts = 0;
+    recoveryPrompt = null;
+    failRecoveryCheck = false;
+    alertButtons = [];
+    recovered = [];
     root = null;
     invalidateQueries.mockClear();
   });
@@ -141,8 +165,42 @@ describe("TrackingProvider", () => {
 
     expect(reconcileCalls).toEqual([{ startCapture: true }]);
     expect(flushCalls).toBe(1);
+    expect(flushModes).toEqual([true]);
     expect(revokeCalls).toBe(0);
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["groupKeyAccess"] });
+  });
+
+  test("asks before assigning legacy locations to the current server", async () => {
+    recoveryPrompt = {
+      count: 2,
+      deviceIds: ["device-1"],
+      server: "https://example.test",
+      userId: "user-1",
+    };
+    await renderProvider();
+    await flushEffects();
+    expect(alerts).toBe(1);
+    expect(recovered).toEqual([]);
+    expect(alertButtons.map((button) => button.text)).toEqual(["Keep on device", "Upload"]);
+    alertButtons[1]?.onPress?.();
+    await flushEffects();
+    expect(recovered).toEqual([{ deviceIds: ["device-1"], userId: "user-1" }]);
+  });
+
+  test("retries checking for legacy locations after an offline login", async () => {
+    failRecoveryCheck = true;
+    recoveryPrompt = {
+      count: 1,
+      deviceIds: ["device-1"],
+      server: "https://example.test",
+      userId: "user-1",
+    };
+    await renderProvider();
+    expect(alerts).toBe(0);
+    failRecoveryCheck = false;
+    requestTrackingSync();
+    await flushEffects();
+    expect(alerts).toBe(1);
   });
 
   test("reconciles again when the app resumes", async () => {
@@ -261,5 +319,51 @@ describe("TrackingProvider", () => {
 
     expect(revokeCalls).toBe(1);
     expect(reconcileCalls).toEqual([{ startCapture: true }, { startCapture: true }]);
+  });
+
+  test("account switches do not wait for an old reconciliation", async () => {
+    let release = () => {};
+    reconcileGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    await renderProvider();
+    expect(reconcileCalls).toHaveLength(1);
+    reconcileGate = null;
+    sessionState = { data: { user: { id: "user-2" } }, isPending: false };
+    await act(async () => {
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushEffects();
+    expect(revokeCalls).toBe(1);
+    expect(reconcileCalls).toHaveLength(2);
+    expect(flushCalls).toBe(1);
+    release();
+    await flushEffects();
+    expect(flushCalls).toBe(1);
+  });
+
+  test("account switches do not wait for an old recovery check", async () => {
+    let release = () => {};
+    recoveryGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    await renderProvider();
+    expect(flushCalls).toBe(1);
+    recoveryGate = null;
+    sessionState = { data: { user: { id: "user-2" } }, isPending: false };
+    await act(async () => {
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushEffects();
+    expect(revokeCalls).toBe(1);
+    expect(reconcileCalls).toHaveLength(2);
+    expect(flushCalls).toBe(2);
+    release();
+    await flushEffects();
+    expect(flushCalls).toBe(2);
   });
 });

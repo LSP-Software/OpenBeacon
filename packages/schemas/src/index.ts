@@ -7,7 +7,7 @@ import {
   registerDeviceKeySchema,
   wrappedEpochKeySchema,
 } from "./schemas/auth/registerDeviceKey.ts";
-import { createGroupSchema } from "./schemas/group/create.ts";
+import { createGroupSchema, newGroupIdSchema } from "./schemas/group/create.ts";
 import { inviteMemberToGroupSchema } from "./schemas/group/inviteMember.ts";
 import { removeGroupMemberSchema } from "./schemas/group/removeMember.ts";
 import {
@@ -22,6 +22,7 @@ import { requestImageUploadInputSchema } from "./schemas/image/requestImageUploa
 export {
   accountNameSchema,
   createGroupSchema,
+  newGroupIdSchema,
   groupEpochBundleSchema,
   groupTrackingGetLatestSchema,
   groupTrackingPointSchema,

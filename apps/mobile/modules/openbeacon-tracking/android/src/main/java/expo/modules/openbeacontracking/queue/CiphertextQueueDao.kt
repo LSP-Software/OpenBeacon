@@ -2,20 +2,27 @@ package expo.modules.openbeacontracking.queue
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 
 @Dao
 interface CiphertextQueueDao {
+  @Query("SELECT COUNT(*) FROM ciphertext_queue WHERE owner IS NULL AND senderDeviceId = :senderDeviceId")
+  fun countUnassigned(senderDeviceId: String): Int
+
+  @Query("UPDATE ciphertext_queue SET owner = :owner WHERE owner IS NULL AND senderDeviceId = :senderDeviceId")
+  fun assignUnassigned(senderDeviceId: String, owner: String)
+
   @Query("UPDATE ciphertext_queue SET status = 'PENDING' WHERE status = 'IN_FLIGHT' AND lastAttemptAt < :before")
   fun recoverInterrupted(before: Long)
 
-  @Insert
-  fun insertAll(entities: List<CiphertextQueueEntity>)
+  @Insert(onConflict = OnConflictStrategy.IGNORE)
+  fun insertAll(entities: List<CiphertextQueueEntity>): List<Long>
 
   @Query(
     """
     SELECT * FROM ciphertext_queue
-    WHERE status = :status
+    WHERE status = :status AND id > :afterId AND (:owner IS NULL OR owner = :owner)
     ORDER BY id ASC
     LIMIT :limit
     """,
@@ -23,6 +30,8 @@ interface CiphertextQueueDao {
   fun listByStatus(
     status: String,
     limit: Int,
+    owner: String?,
+    afterId: Long,
   ): List<CiphertextQueueEntity>
 
   @Query(

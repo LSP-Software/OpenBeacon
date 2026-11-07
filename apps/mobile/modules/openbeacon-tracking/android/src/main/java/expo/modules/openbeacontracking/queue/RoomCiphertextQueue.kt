@@ -3,16 +3,17 @@ package expo.modules.openbeacontracking.queue
 class RoomCiphertextQueue(
   private val dao: CiphertextQueueDao,
 ) : CiphertextQueue {
-  override fun insertAll(rows: List<CiphertextQueueRow>) {
-    dao.insertAll(rows.map { it.toEntity() })
-  }
+  override fun insertAll(rows: List<CiphertextQueueRow>): Int =
+    dao.insertAll(rows.map { it.toEntity() }).count { it != -1L }
 
   override fun listByStatus(
     status: String,
     limit: Int,
+    owner: String?,
+    afterId: Long,
   ): List<CiphertextQueueRow> {
     dao.recoverInterrupted(System.currentTimeMillis() - 120_000L)
-    return dao.listByStatus(status, limit.coerceAtLeast(0)).map { it.toRow() }
+    return dao.listByStatus(status, limit.coerceAtLeast(0), owner, afterId).map { it.toRow() }
   }
 
   override fun markInFlight(
@@ -47,6 +48,7 @@ class RoomCiphertextQueue(
 private fun CiphertextQueueRow.toEntity(): CiphertextQueueEntity =
   CiphertextQueueEntity(
     id = id,
+    owner = owner,
     clientPointId = clientPointId,
     captureId = captureId,
     groupId = groupId,
@@ -66,6 +68,7 @@ private fun CiphertextQueueRow.toEntity(): CiphertextQueueEntity =
 private fun CiphertextQueueEntity.toRow(): CiphertextQueueRow =
   CiphertextQueueRow(
     id = id,
+    owner = owner,
     clientPointId = clientPointId,
     captureId = captureId,
     groupId = groupId,

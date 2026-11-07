@@ -2,14 +2,19 @@ import { tryCatch } from "@openbeacon/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
-import { AppState } from "react-native";
+import { Alert, AppState } from "react-native";
 import { authClient } from "../lib/auth-client.ts";
 import { subscribeToTrackingSync } from "../lib/trackingEvents.ts";
 import { useLocationPermissions } from "./LocationPermissionProvider.tsx";
 
 const trackingService = {
-  flushPendingTrackingPoints: async () =>
-    (await import("../lib/tracking.ts")).flushPendingTrackingPoints(),
+  flushPendingTrackingPoints: async (force = false) =>
+    (await import("../lib/tracking.ts")).flushPendingTrackingPoints(force),
+  resumeTracking: async () => (await import("../lib/tracking.ts")).resumeTracking(),
+  getUnassignedTrackingPoints: async () =>
+    (await import("../lib/tracking.ts")).getUnassignedTrackingPoints(),
+  recoverUnassignedTrackingPoints: async (input: { deviceIds: string[]; userId: string }) =>
+    (await import("../lib/tracking.ts")).recoverUnassignedTrackingPoints(input),
   reconcileTrackingKeys: async (input: { startCapture: boolean }) =>
     (await import("../lib/tracking.ts")).reconcileTrackingKeys(input),
   revokeTrackingAccess: async () => (await import("../lib/tracking.ts")).revokeTrackingAccess(),
@@ -26,66 +31,132 @@ export const TrackingProvider = ({
   const queryClient = useQueryClient();
   const { permissionState } = useLocationPermissions();
   const activeCycleRef = useRef<Promise<void> | null>(null);
+  const cycleVersionRef = useRef(0);
+  const sessionReadyRef = useRef(false);
   const appStateRef = useRef(AppState.currentState);
   const completedCycleRef = useRef(0);
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
   const requestedCycleRef = useRef(0);
+  const forceFlushRef = useRef(false);
+  const recoveryCheckedUserRef = useRef<string | null>(null);
   const startCaptureRef = useRef(permissionState?.isReadyForSharing ?? false);
   const userId = session?.user.id ?? null;
   const startCapture = permissionState?.isReadyForSharing ?? false;
   startCaptureRef.current = startCapture;
 
-  const runTrackingCycle = useCallback(() => {
-    requestedCycleRef.current += 1;
+  const runTrackingCycle = useCallback(
+    (force = false) => {
+      if (!sessionReadyRef.current) return Promise.resolve();
+      forceFlushRef.current ||= force;
+      requestedCycleRef.current += 1;
 
-    if (activeCycleRef.current) {
-      return activeCycleRef.current;
-    }
-
-    activeCycleRef.current = (async () => {
-      while (completedCycleRef.current < requestedCycleRef.current) {
-        const cycle = requestedCycleRef.current;
-        await tryCatch(
-          service.reconcileTrackingKeys({
-            startCapture: startCaptureRef.current,
-          }),
-        );
-        await tryCatch(service.flushPendingTrackingPoints());
-        if (appStateRef.current === "active") {
-          void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
-        }
-        completedCycleRef.current = cycle;
+      if (activeCycleRef.current) {
+        return activeCycleRef.current;
       }
-    })().finally(() => {
-      activeCycleRef.current = null;
-    });
 
-    return activeCycleRef.current;
-  }, [queryClient, service]);
+      const version = cycleVersionRef.current;
+      const current = (async () => {
+        while (
+          version === cycleVersionRef.current &&
+          completedCycleRef.current < requestedCycleRef.current
+        ) {
+          const cycle = requestedCycleRef.current;
+          const forceFlush = forceFlushRef.current;
+          forceFlushRef.current = false;
+          await tryCatch(
+            service.reconcileTrackingKeys({
+              startCapture: startCaptureRef.current,
+            }),
+          );
+          if (version !== cycleVersionRef.current) return;
+          await tryCatch(service.flushPendingTrackingPoints(forceFlush));
+          if (version !== cycleVersionRef.current) return;
+          const userId = previousUserIdRef.current;
+          if (userId && recoveryCheckedUserRef.current !== userId) {
+            const result = await tryCatch(service.getUnassignedTrackingPoints());
+            if (version !== cycleVersionRef.current) return;
+            if (
+              !result.error &&
+              previousUserIdRef.current === userId &&
+              (!result.data || result.data.userId === userId)
+            ) {
+              recoveryCheckedUserRef.current = userId;
+            }
+            if (
+              result.data &&
+              result.data.userId === userId &&
+              previousUserIdRef.current === userId
+            ) {
+              const { count, deviceIds, server, userId: ownerId } = result.data;
+              Alert.alert(
+                "Recover saved locations?",
+                `${count} saved location ${count === 1 ? "point was" : "points were"} created by an older version of OpenBeacon. Their server was not recorded. Upload them only if they belong to your current account on ${server}.`,
+                [
+                  { text: "Keep on device", style: "cancel" },
+                  {
+                    text: "Upload",
+                    onPress: () => {
+                      void (async () => {
+                        const recovery = await tryCatch(
+                          service.recoverUnassignedTrackingPoints({ deviceIds, userId: ownerId }),
+                        );
+                        if (recovery.error) {
+                          Alert.alert(
+                            "Upload incomplete",
+                            "Some saved locations may still be on this device. Try again after signing in.",
+                          );
+                        }
+                      })();
+                    },
+                  },
+                ],
+              );
+            }
+          }
+          if (appStateRef.current === "active") {
+            void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
+          }
+          completedCycleRef.current = cycle;
+        }
+      })().finally(() => {
+        if (activeCycleRef.current === current) activeCycleRef.current = null;
+      });
+
+      activeCycleRef.current = current;
+      return current;
+    },
+    [queryClient, service],
+  );
 
   useEffect(() => {
     if (isPending) {
       return;
     }
 
+    const previousUserId = previousUserIdRef.current;
+    const changed = previousUserId !== userId;
+    if (changed) {
+      cycleVersionRef.current += 1;
+      sessionReadyRef.current = false;
+      activeCycleRef.current = null;
+      requestedCycleRef.current = 0;
+      completedCycleRef.current = 0;
+      forceFlushRef.current = false;
+      recoveryCheckedUserRef.current = null;
+      previousUserIdRef.current = userId;
+    }
+    const version = cycleVersionRef.current;
     void (async () => {
-      const previousUserId = previousUserIdRef.current;
-
-      if (previousUserId !== undefined && previousUserId !== userId) {
-        await activeCycleRef.current;
+      if (changed && (previousUserId !== undefined || !userId)) {
         await tryCatch(service.revokeTrackingAccess());
       }
-
-      previousUserIdRef.current = userId;
-
-      if (!userId) {
-        if (previousUserId === undefined) {
-          await tryCatch(service.revokeTrackingAccess());
-        }
-        return;
+      if (version !== cycleVersionRef.current || !userId) return;
+      if (changed) {
+        await service.resumeTracking();
+        if (version !== cycleVersionRef.current) return;
+        sessionReadyRef.current = true;
       }
-
-      await runTrackingCycle();
+      await runTrackingCycle(changed);
     })();
   }, [isPending, runTrackingCycle, service, startCapture, userId]);
 

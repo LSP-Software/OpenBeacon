@@ -5,20 +5,26 @@ class InMemoryCiphertextQueue : CiphertextQueue {
   private var nextId = 1L
 
   @Synchronized
-  override fun insertAll(rows: List<CiphertextQueueRow>) {
+  override fun insertAll(rows: List<CiphertextQueueRow>): Int {
+    var inserted = 0
     for (row in rows) {
+      if (this.rows.any { it.clientPointId == row.clientPointId }) continue
       this.rows.add(row.copy(id = nextId++))
+      inserted += 1
     }
+    return inserted
   }
 
   @Synchronized
   override fun listByStatus(
     status: String,
     limit: Int,
+    owner: String?,
+    afterId: Long,
   ): List<CiphertextQueueRow> =
     rows
       .asSequence()
-      .filter { it.status == status }
+      .filter { it.status == status && it.id > afterId && (owner == null || it.owner == owner) }
       .sortedBy { it.id }
       .take(limit.coerceAtLeast(0))
       .toList()

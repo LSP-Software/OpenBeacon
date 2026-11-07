@@ -1,5 +1,5 @@
 import { GroupRole, Prisma } from "@openbeacon/database";
-import { createGroupSchema, groupEpochBundleSchema } from "@openbeacon/schemas";
+import { createGroupSchema, groupEpochBundleSchema, newGroupIdSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { env } from "../../env.ts";
@@ -90,7 +90,7 @@ export const groupLifecycleRouter = {
     })
     .input(
       createGroupSchema.extend({
-        groupId: z.string().min(1),
+        groupId: newGroupIdSchema,
         initialEpoch: groupEpochBundleSchema,
       }),
     )

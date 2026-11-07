@@ -14,6 +14,7 @@
     "typecheck": "bun check",
     "test": "bun test --isolate && bun run test:native-crypto",
     "test:native-crypto": "cd modules/openbeacon-tracking/jvm && ./gradlew test --no-daemon",
+    "test:room": "bash ../../scripts/test-tracking-room.sh",
     "test:map-assets:package": "bun scripts/check-map-assets-package.ts",
     "ci": "bun run typecheck && bun run format:check && bun run lint && bun run test"
   },

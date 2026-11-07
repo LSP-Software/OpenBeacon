@@ -1,7 +1,14 @@
 import { describe, expect, mock, test } from "bun:test";
 import { Prisma } from "@openbeacon/database";
-import { DEVICE_KEY_ALGORITHM, WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
+import {
+  createDeviceKeyPair,
+  DEVICE_KEY_ALGORITHM,
+  WRAPPED_EPOCH_KEY_ALGORITHM,
+} from "@openbeacon/encryption";
 import { getInviteAcceptanceContext, persistGroupEpoch, upsertUserDevice } from "./groupEpochs.ts";
+
+const ephemeralA = createDeviceKeyPair().publicKey;
+const ephemeralB = createDeviceKeyPair().publicKey;
 
 describe("group epoch helpers", () => {
   test("registers a device without persisting a private key", async () => {
@@ -356,7 +363,7 @@ describe("group epoch helpers", () => {
           {
             algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
             createdAt: wrappedKeyCreatedAt,
-            ephemeralPublicKey: "ephemeral-a",
+            ephemeralPublicKey: ephemeralA,
             epochId: "epoch-2",
             nonce: "nonce-a",
             recipientDeviceId: "device-a",
@@ -365,7 +372,7 @@ describe("group epoch helpers", () => {
           {
             algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
             createdAt: wrappedKeyCreatedAt,
-            ephemeralPublicKey: "ephemeral-b",
+            ephemeralPublicKey: ephemeralB,
             epochId: "epoch-2",
             nonce: "nonce-b",
             recipientDeviceId: "device-b",
@@ -432,7 +439,7 @@ describe("group epoch helpers", () => {
         {
           algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
           createdAt: wrappedKeyCreatedAt,
-          ephemeralPublicKey: "ephemeral-a",
+          ephemeralPublicKey: ephemeralA,
           groupEpochId: "epoch-2",
           nonce: "nonce-a",
           recipientDeviceId: "device-a",
@@ -441,7 +448,7 @@ describe("group epoch helpers", () => {
         {
           algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
           createdAt: wrappedKeyCreatedAt,
-          ephemeralPublicKey: "ephemeral-b",
+          ephemeralPublicKey: ephemeralB,
           groupEpochId: "epoch-2",
           nonce: "nonce-b",
           recipientDeviceId: "device-b",
@@ -494,7 +501,7 @@ describe("group epoch helpers", () => {
             {
               algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
               createdAt: new Date("2026-03-26T12:00:00.000Z"),
-              ephemeralPublicKey: "ephemeral-a",
+              ephemeralPublicKey: ephemeralA,
               epochId: "epoch-2",
               nonce: "nonce-a",
               recipientDeviceId: "device-a",
@@ -503,7 +510,7 @@ describe("group epoch helpers", () => {
             {
               algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
               createdAt: new Date("2026-03-26T12:00:00.000Z"),
-              ephemeralPublicKey: "ephemeral-b",
+              ephemeralPublicKey: ephemeralB,
               epochId: "epoch-2",
               nonce: "nonce-b",
               recipientDeviceId: "device-b",

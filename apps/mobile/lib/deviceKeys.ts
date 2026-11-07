@@ -142,23 +142,22 @@ const getCurrentDeviceKeyOwnerId = async () => {
   return deviceKeyContext.userId;
 };
 
-const isDeviceOwnedByAnotherUserError = (error: unknown) =>
-  error instanceof Error &&
-  error.message.includes("This device is already registered to another user.");
-
 const registerDeviceKey = async ({
   algorithm,
   deviceId,
   publicKey,
+  userId,
 }: {
   algorithm: typeof DEVICE_KEY_ALGORITHM;
   deviceId: string;
   publicKey: string;
+  userId: string;
 }) =>
   trpcClient.auth.registerDeviceKey.mutate({
     algorithm,
     deviceId,
     publicKey,
+    expectedUserId: userId,
   });
 
 const deviceKeyContexts = new Map<
@@ -203,35 +202,49 @@ const createDeviceKeyContext = async (userId: string) => {
 
 const deviceRegistrations = new Map<
   string,
-  Promise<NonNullable<Awaited<ReturnType<typeof getStoredDeviceKeyContext>>>>
+  Promise<NonNullable<Awaited<ReturnType<typeof getStoredDeviceKeyContext>>> & { userId: string }>
 >();
+let deviceRegistrationGeneration = 0;
+
+export const cancelDeviceKeyRegistrations = () => {
+  deviceRegistrationGeneration += 1;
+  deviceRegistrations.clear();
+};
 
 export const ensureDeviceKeyRegistration = async () => {
+  const generation = deviceRegistrationGeneration;
   const userId = await getCurrentDeviceKeyOwnerId();
+  if (generation !== deviceRegistrationGeneration)
+    throw new Error("Device registration cancelled.");
   const pending = deviceRegistrations.get(userId);
   if (pending) return pending;
-  const task = registerCurrentDeviceKey(userId).finally(() => {
-    deviceRegistrations.delete(userId);
-  });
+  const task = registerCurrentDeviceKey(userId, generation)
+    .then((context) => ({ ...context, userId }))
+    .finally(() => {
+      if (deviceRegistrations.get(userId) === task) deviceRegistrations.delete(userId);
+    });
   deviceRegistrations.set(userId, task);
   return task;
 };
 
-const registerCurrentDeviceKey = async (userId: string) => {
-  let context = await getOrCreateDeviceKeyContext(userId);
-  const registrationResult = await tryCatch(registerDeviceKey(context));
-
-  if (!registrationResult.error) {
-    return context;
-  }
-
-  if (!isDeviceOwnedByAnotherUserError(registrationResult.error)) {
-    throw registrationResult.error;
-  }
-
-  await clearStoredDeviceKeyContext(getScopedDeviceKeyNames(userId));
-  context = await getOrCreateDeviceKeyContext(userId);
-  await registerDeviceKey(context);
+const registerCurrentDeviceKey = async (userId: string, generation: number) => {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const result = await tryCatch(
+    Promise.race([
+      getOrCreateDeviceKeyContext(userId),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("Device key storage is unavailable.")), 10_000);
+      }),
+    ]),
+  );
+  clearTimeout(timeout);
+  if (result.error) throw result.error;
+  const context = result.data;
+  if (generation !== deviceRegistrationGeneration)
+    throw new Error("Device registration cancelled.");
+  await registerDeviceKey({ ...context, userId });
+  if (generation !== deviceRegistrationGeneration)
+    throw new Error("Device registration cancelled.");
 
   return context;
 };

@@ -1,6 +1,8 @@
 import { Prisma, type PrismaClient } from "@openbeacon/database";
 import {
   DEVICE_KEY_ALGORITHM,
+  decodeBase64,
+  isUsableX25519PublicKey,
   type RecipientPublicKeyMaterial,
   serializeRecipientPublicKeyMaterial,
   WRAPPED_EPOCH_KEY_ALGORITHM,
@@ -393,6 +395,15 @@ export const persistGroupEpoch = async ({
     actual: epoch.recipientKeys.map((recipientKey) => recipientKey.recipientDeviceId),
     expected: activeDevices.map((device) => device.id),
   });
+
+  for (const recipientKey of epoch.recipientKeys) {
+    if (!isUsableX25519PublicKey(decodeBase64(recipientKey.ephemeralPublicKey))) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Invalid wrapped epoch key public key.",
+      });
+    }
+  }
 
   await db.groupEpoch.create({
     data: {

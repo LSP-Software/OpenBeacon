@@ -46,4 +46,5 @@ export default {
   },
   port: env.OPENBEACON_API_PORT,
   hostname: env.OPENBEACON_API_HOSTNAME,
+  maxRequestBodySize: 8 * 1024 * 1024,
 };

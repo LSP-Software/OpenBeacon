@@ -16,6 +16,49 @@ import kotlin.test.assertTrue
 
 class CapturePipelineTest {
   @Test
+  fun fixIdentityIsStableAcrossRestartsAndOutOfOrderRedelivery() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))
+    val queue = InMemoryCiphertextQueue()
+    fun pipeline(owner: String = "server-a/user-a", bootId: String = "boot-1") =
+      CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { owner }, bootId = bootId)
+    fun capture(pipeline: CapturePipeline, id: Long) =
+      pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false, fixId = id)
+
+    assertEquals(1, capture(pipeline(), 100))
+    val original = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).single()
+    assertEquals(1, capture(pipeline(), 101))
+    assertEquals(0, capture(pipeline(), 100))
+    queue.deleteByIds(listOf(original.id))
+    assertEquals(1, capture(pipeline(), 100))
+    val retried = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).last()
+    assertEquals(original.clientPointId, retried.clientPointId)
+    assertEquals(1, capture(pipeline(bootId = "boot-2"), 100))
+    assertEquals(1, capture(pipeline(owner = "server-b/user-a"), 100))
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.clientPointId }.toSet().size == 4)
+    keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32) { 1 }, "device_1", "trackingPoint")))
+    assertEquals(1, capture(pipeline(), 100))
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).last().clientPointId != original.clientPointId)
+  }
+
+  @Test
+  fun repeatedFixIsQueuedOncePerEpoch() {
+    val keys = InMemoryEpochKeyStore()
+    val first = ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")
+    keys.replaceAll(listOf(first))
+    val queue = InMemoryCiphertextQueue()
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "test" })
+    fun capture(id: Long) = pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false, fixId = id)
+
+    assertEquals(1, capture(100))
+    assertEquals(0, capture(100))
+    keys.replaceAll(listOf(first, first.copy(groupId = "group_b", epochId = "epoch_b")))
+    assertEquals(1, capture(100))
+    assertEquals(2, capture(101))
+    assertEquals(listOf("group_a", "group_b", "group_a", "group_b"), queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.groupId })
+  }
+
+  @Test
   fun oldFixCannotBeQueuedAfterCaptureStopsAndRestarts() {
     val keys = InMemoryEpochKeyStore()
     keys.replaceAll(listOf(ProvisionedEpochKey(
@@ -27,7 +70,7 @@ class CapturePipelineTest {
     val previousGeneration = commands.start()
     commands.stop()
     commands.start()
-    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, canQueue = { commands.isCurrent(it) })
+    val pipeline = CapturePipeline(queueOwner = { "test" }, epochKeyStore = keys, ciphertextQueue = queue, canQueue = { commands.isCurrent(it) })
     assertEquals(0, pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false, previousGeneration))
     assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).isEmpty())
   }
@@ -46,6 +89,7 @@ class CapturePipelineTest {
     var enabled = true
     var inserted = -1
     val pipeline = CapturePipeline(
+        queueOwner = { "test" },
       epochKeyStore = keyStore,
       ciphertextQueue = queue,
       captureLock = lock,
@@ -72,6 +116,7 @@ class CapturePipelineTest {
     val queue = InMemoryCiphertextQueue()
     val pipeline =
       CapturePipeline(
+        queueOwner = { "test" },
         epochKeyStore = InMemoryEpochKeyStore(),
         ciphertextQueue = queue,
       )
@@ -118,6 +163,7 @@ class CapturePipelineTest {
     var nextId = 0
     val pipeline =
       CapturePipeline(
+        queueOwner = { "test" },
         epochKeyStore = keyStore,
         ciphertextQueue = queue,
         nowMillis = { 1_721_000_000_000L },
@@ -145,8 +191,6 @@ class CapturePipelineTest {
     assertEquals(2, pending.map { it.clientPointId }.toSet().size)
     assertTrue(pending.all { it.algorithm == GroupPayloadEncrypt.ALGORITHM })
     assertTrue(pending.all { it.kind == "trackingPoint" })
-    assertTrue(pending.none { it.ciphertext.contains("51.5074") })
-    assertTrue(pending.none { it.nonce.contains("51.5074") })
 
     val expectedPlaintext =
       GroupPayloadEncrypt
@@ -158,6 +202,11 @@ class CapturePipelineTest {
           batteryLevel = 40,
           batteryCharging = true,
         ).toByteArray(StandardCharsets.UTF_8)
+
+    assertTrue(pending.none { row ->
+      GroupPayloadEncrypt.decodeBase64(row.ciphertext).toList()
+        .windowed(expectedPlaintext.size).contains(expectedPlaintext.toList())
+    })
 
     for (row in pending) {
       val decrypted =
@@ -176,6 +225,29 @@ class CapturePipelineTest {
         )
       assertEquals(expectedPlaintext.toList(), decrypted.toList())
     }
+  }
+
+  @Test
+  fun queueSeparatesOwnersAndLeavesLegacyRowsUnclaimed() {
+    val queue = InMemoryCiphertextQueue()
+    val row = CiphertextQueueRow(
+      clientPointId = "point",
+      captureId = "capture",
+      groupId = "group",
+      epochId = "epoch",
+      senderDeviceId = "device",
+      kind = "trackingPoint",
+      algorithm = GroupPayloadEncrypt.ALGORITHM,
+      nonce = "nonce",
+      ciphertext = "cipher",
+      queuedAt = 1L,
+    )
+    queue.insertAll(listOf(row, row.copy(clientPointId = "a", owner = "server-a/user-a"), row.copy(clientPointId = "b", owner = "server-a/user-b"), row.copy(clientPointId = "c", owner = "server-b/user-a")))
+    val ownerRows = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a")
+    assertEquals(1, ownerRows.size)
+    assertEquals("server-a/user-a", ownerRows.single().owner)
+    assertEquals(0, queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a", ownerRows.single().id).size)
+    assertEquals(4, queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).size)
   }
 
   @Test

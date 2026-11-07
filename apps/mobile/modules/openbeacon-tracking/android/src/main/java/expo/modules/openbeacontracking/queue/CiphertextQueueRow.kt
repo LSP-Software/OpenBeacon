@@ -2,6 +2,7 @@ package expo.modules.openbeacontracking.queue
 
 data class CiphertextQueueRow(
   val id: Long = 0,
+  val owner: String? = null,
   val clientPointId: String,
   val captureId: String,
   val groupId: String,

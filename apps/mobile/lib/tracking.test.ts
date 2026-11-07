@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, jest, mock, test } from "bun:test";
 import {
   createDeviceKeyPair,
   DEVICE_KEY_ALGORITHM,
@@ -25,6 +25,12 @@ const deleted: number[][] = [];
 const requeued: Array<{ ids: number[]; error: string | null | undefined }> = [];
 const uploadCalls: Array<{ groupId: string; points: unknown[] }> = [];
 const rotationChecks: string[] = [];
+const requestedOwners: string[] = [];
+let currentUserId = "user-1";
+let ownerContextCalls = 0;
+let ownerQueryGate: Promise<void> | null = null;
+let unassignedCount = 0;
+const assignments: Array<{ deviceId: string; owner: string }> = [];
 let pendingCiphertexts: Array<{
   id: number;
   clientPointId: string;
@@ -41,6 +47,7 @@ let pendingCiphertexts: Array<{
   lastAttemptAt: number | null;
   lastError: string | null;
   status: "PENDING" | "IN_FLIGHT";
+  owner?: string;
 }> = [];
 const recordedUploads: Array<{ deviceId: string; groupId: string; timestamp: string }> = [];
 let networkConnected = true;
@@ -85,17 +92,29 @@ mock.module("expo-network", () => ({
 mock.module("react-native", () => createReactNativeTestModule({ platformOS: "android" }));
 
 mock.module("./deviceKeys.ts", () => ({
+  cancelDeviceKeyRegistrations: () => {},
   ensureDeviceKeyRegistration: async () => {
     if (registrationError) throw registrationError;
     if (failRegistration) throw new Error("offline");
     onRegistration?.();
     await registrationWait;
-    return { deviceId: "device-1", privateKey: deviceKeyPair.privateKey };
+    return { deviceId: "device-1", privateKey: deviceKeyPair.privateKey, userId: currentUserId };
   },
 }));
 
+mock.module("./base-url.ts", () => ({ baseUrl: "https://api.example.test" }));
+
 mock.module("./api.ts", () => ({
   trpcClient: {
+    auth: {
+      deviceKeyContext: {
+        query: async () => {
+          ownerContextCalls += 1;
+          await ownerQueryGate;
+          return { userId: currentUserId, recipients: [{ deviceId: "device-1" }] };
+        },
+      },
+    },
     groupMembership: {
       list: {
         query: async () => [{ id: "group-1" }, { id: "group-2" }],
@@ -157,6 +176,11 @@ mock.module("./api.ts", () => ({
 
 mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   default: {
+    setQueueOwner: () => {},
+    countUnassignedCiphertexts: async () => unassignedCount,
+    assignUnassignedCiphertexts: async (deviceId: string, owner: string) => {
+      assignments.push({ deviceId, owner });
+    },
     provisionEpochKeys: (keys: unknown[], preserveGroupIds: string[] = []) => {
       provisionCalls.push(keys);
       const remaining = provisionedKeys.filter(({ groupId }) => preserveGroupIds.includes(groupId));
@@ -184,7 +208,12 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
       onStopCapture?.();
     },
     isCaptureRunning: () => captureRunning,
-    listPendingCiphertexts: async () => pendingCiphertexts,
+    listPendingCiphertexts: async (owner: string, limit = 100, afterId = 0) => {
+      requestedOwners.push(owner);
+      return pendingCiphertexts
+        .filter((item) => item.id > afterId && (item.owner === undefined || item.owner === owner))
+        .slice(0, limit);
+    },
     markCiphertextsInFlight: async (ids: number[]) => {
       markedInFlight.push(ids);
     },
@@ -199,7 +228,11 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
 
 const {
   flushPendingTrackingPoints,
+  getUnassignedTrackingPoints,
+  prepareTrackingSignOut,
   reconcileTrackingKeys,
+  recoverUnassignedTrackingPoints,
+  resumeTracking,
   revokeTrackingAccess,
   syncBackgroundTracking,
 } = await import("./tracking.ts");
@@ -242,6 +275,13 @@ describe("tracking service", () => {
     requeued.length = 0;
     uploadCalls.length = 0;
     rotationChecks.length = 0;
+    requestedOwners.length = 0;
+    currentUserId = "user-1";
+    ownerContextCalls = 0;
+    ownerQueryGate = null;
+    unassignedCount = 0;
+    assignments.length = 0;
+    resumeTracking();
     recordedUploads.length = 0;
     pendingCiphertexts = [];
     captureRunning = false;
@@ -266,6 +306,295 @@ describe("tracking service", () => {
       accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
       duplicates: [],
     });
+  });
+
+  test("uploads only the current server and account queue", async () => {
+    pendingCiphertexts = [
+      {
+        ...createQueueItem({ clientPointId: "current", groupId: "group-1", id: 1 }),
+        owner: JSON.stringify(["https://api.example.test", "user-1"]),
+      },
+      {
+        ...createQueueItem({ clientPointId: "other-user", groupId: "group-1", id: 2 }),
+        owner: JSON.stringify(["https://api.example.test", "user-2"]),
+      },
+      {
+        ...createQueueItem({ clientPointId: "other-server", groupId: "group-1", id: 3 }),
+        owner: JSON.stringify(["https://other.example.test", "user-1"]),
+      },
+    ];
+    await flushPendingTrackingPoints();
+    expect(requestedOwners).toEqual([JSON.stringify(["https://api.example.test", "user-1"])]);
+    expect(deleted).toEqual([[1]]);
+  });
+
+  test("only assigns legacy points after confirmation for the same account", async () => {
+    unassignedCount = 2;
+    expect(await getUnassignedTrackingPoints()).toEqual({
+      count: 2,
+      deviceIds: ["device-1"],
+      server: "https://api.example.test",
+      userId: "user-1",
+    });
+    currentUserId = "user-2";
+    await expect(
+      recoverUnassignedTrackingPoints({ deviceIds: ["device-1"], userId: "user-1" }),
+    ).rejects.toThrow("The tracking account has changed.");
+    expect(assignments).toEqual([]);
+    currentUserId = "user-1";
+    await recoverUnassignedTrackingPoints({ deviceIds: ["device-1"], userId: "user-1" });
+    expect(assignments).toEqual([
+      { deviceId: "device-1", owner: JSON.stringify(["https://api.example.test", "user-1"]) },
+    ]);
+  });
+
+  test("stops capture and retries delayed points before sign out, retaining failures", async () => {
+    pendingCiphertexts = [
+      {
+        ...createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+        attemptCount: 3,
+        lastAttemptAt: Date.now(),
+      },
+    ];
+    uploadGroup = async () => {
+      throw new Error("offline");
+    };
+    await expect(prepareTrackingSignOut()).rejects.toThrow("Tracking upload failed");
+    expect(stopCaptureCalls).toBe(1);
+    expect(uploadCalls).toHaveLength(1);
+    expect(deleted).toEqual([]);
+    expect(requeued).toHaveLength(1);
+    await flushPendingTrackingPoints();
+    expect(uploadCalls).toHaveLength(1);
+    resumeTracking();
+    await expect(flushPendingTrackingPoints(true)).rejects.toThrow("Tracking upload failed");
+    expect(uploadCalls).toHaveLength(2);
+  });
+
+  test("sign out times out and retains a late upload response", async () => {
+    jest.useFakeTimers();
+    try {
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      let resolveUpload: (result: { accepted: string[]; duplicates: string[] }) => void = () => {};
+      uploadGroup = () =>
+        new Promise((resolve) => {
+          resolveUpload = resolve;
+        });
+      const signOut = prepareTrackingSignOut();
+      for (let index = 0; index < 200 && uploadCalls.length === 0; index++) await Promise.resolve();
+      expect(uploadCalls).toHaveLength(1);
+      jest.advanceTimersByTime(10_000);
+      await signOut;
+      currentUserId = "user-2";
+      resolveUpload({ accepted: ["point-1"], duplicates: [] });
+      for (let index = 0; index < 20 && requeued.length === 0; index++) await Promise.resolve();
+      expect(deleted).toEqual([]);
+      expect(requeued).toEqual([{ ids: [1], error: "UPLOAD_CANCELLED" }]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("sign out times out an existing flush without starting a later session upload", async () => {
+    jest.useFakeTimers();
+    try {
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      let resolveUpload: (result: { accepted: string[]; duplicates: string[] }) => void = () => {};
+      uploadGroup = () =>
+        new Promise((resolve) => {
+          resolveUpload = resolve;
+        });
+      const existingFlush = flushPendingTrackingPoints();
+      for (let index = 0; index < 200 && uploadCalls.length === 0; index++) await Promise.resolve();
+      const signOut = prepareTrackingSignOut();
+      jest.advanceTimersByTime(10_000);
+      await signOut;
+      currentUserId = "user-2";
+      resolveUpload({ accepted: ["point-1"], duplicates: [] });
+      await expect(existingFlush).resolves.toBeUndefined();
+      for (let index = 0; index < 10; index++) await Promise.resolve();
+      expect(uploadCalls).toHaveLength(1);
+      expect(deleted).toEqual([]);
+      expect(requeued).toEqual([{ ids: [1], error: "UPLOAD_CANCELLED" }]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("a never-settling old flush does not block the next login", async () => {
+    jest.useFakeTimers();
+    try {
+      pendingCiphertexts = [createQueueItem({ clientPointId: "old", groupId: "group-1", id: 1 })];
+      uploadGroup = () => new Promise(() => {});
+      const oldFlush = flushPendingTrackingPoints();
+      for (let index = 0; index < 200 && uploadCalls.length === 0; index++) await Promise.resolve();
+      expect(uploadCalls).toHaveLength(1);
+      const signOut = prepareTrackingSignOut();
+      await expect(oldFlush).resolves.toBeUndefined();
+      jest.advanceTimersByTime(10_000);
+      await signOut;
+      currentUserId = "user-2";
+      pendingCiphertexts = [];
+      resumeTracking();
+      await expect(flushPendingTrackingPoints(true)).resolves.toBeUndefined();
+      expect(requestedOwners.at(-1)).toBe(JSON.stringify(["https://api.example.test", "user-2"]));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("logout detaches stalled reconciliation and prevents its late work from touching the next account", async () => {
+    let release = () => {};
+    let started = false;
+    registrationWait = new Promise((resolve) => {
+      release = resolve;
+    });
+    onRegistration = () => {
+      started = true;
+    };
+    const previous = reconcileTrackingKeys({ startCapture: true });
+    for (let index = 0; index < 200 && !started; index++) await Promise.resolve();
+    expect(started).toBe(true);
+    await prepareTrackingSignOut();
+    await expect(previous).resolves.toBeUndefined();
+    currentUserId = "user-2";
+    registrationWait = null;
+    onRegistration = null;
+    resumeTracking();
+    await reconcileTrackingKeys({ startCapture: true });
+    const calls = provisionCalls.length;
+    const stops = stopCaptureCalls;
+    const ownerQueries = ownerContextCalls;
+    release();
+    for (let index = 0; index < 100; index++) await Promise.resolve();
+    expect(provisionCalls).toHaveLength(calls);
+    expect(stopCaptureCalls).toBe(stops);
+    expect(ownerContextCalls).toBe(ownerQueries);
+  });
+
+  test("a late old flush cannot clear a newer session's active flush", async () => {
+    jest.useFakeTimers();
+    try {
+      pendingCiphertexts = [createQueueItem({ clientPointId: "old", groupId: "group-1", id: 1 })];
+      let resolveOld: (result: { accepted: string[]; duplicates: string[] }) => void = () => {};
+      uploadGroup = () =>
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        });
+      const oldFlush = flushPendingTrackingPoints();
+      for (let index = 0; index < 200 && uploadCalls.length === 0; index++) await Promise.resolve();
+      const signOut = prepareTrackingSignOut();
+      jest.advanceTimersByTime(10_000);
+      await signOut;
+      currentUserId = "user-2";
+      pendingCiphertexts = [];
+      let releaseOwner = () => {};
+      ownerQueryGate = new Promise((resolve) => {
+        releaseOwner = resolve;
+      });
+      resumeTracking();
+      const newFlush = flushPendingTrackingPoints();
+      resolveOld({ accepted: ["old"], duplicates: [] });
+      await expect(oldFlush).resolves.toBeUndefined();
+      for (let index = 0; index < 100 && requeued.length === 0; index++) await Promise.resolve();
+      expect(flushPendingTrackingPoints()).toBe(newFlush);
+      releaseOwner();
+      await expect(newFlush).resolves.toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("a late unauthorized split cannot revoke the next account", async () => {
+    jest.useFakeTimers();
+    try {
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "invalid", groupId: "group-1", id: 1 }),
+        createQueueItem({ clientPointId: "late", groupId: "group-1", id: 2 }),
+      ];
+      let rejectLate: (error: Error) => void = () => {};
+      uploadGroup = async ({ points }) => {
+        if (
+          points.length > 1 ||
+          (points[0] as { clientPointId: string }).clientPointId === "invalid"
+        ) {
+          throw Object.assign(new Error("invalid"), { data: { code: "BAD_REQUEST" } });
+        }
+        return new Promise((_resolve, reject) => {
+          rejectLate = reject;
+        });
+      };
+      const oldFlush = flushPendingTrackingPoints();
+      for (let index = 0; index < 200 && uploadCalls.length < 3; index++) await Promise.resolve();
+      expect(uploadCalls).toHaveLength(3);
+      const signOut = prepareTrackingSignOut();
+      jest.advanceTimersByTime(10_000);
+      await signOut;
+      currentUserId = "user-2";
+      pendingCiphertexts = [];
+      resumeTracking();
+      await reconcileTrackingKeys({ startCapture: true });
+      const revocations = revokedGroups.length;
+      const stops = stopCaptureCalls;
+      rejectLate(Object.assign(new Error("expired"), { data: { code: "UNAUTHORIZED" } }));
+      await expect(oldFlush).resolves.toBeUndefined();
+      for (let index = 0; index < 100 && !requeued.some(({ ids }) => ids.includes(2)); index++)
+        await Promise.resolve();
+      expect(revokedGroups).toHaveLength(revocations);
+      expect(stopCaptureCalls).toBe(stops);
+      expect(requeued).toContainEqual({ ids: [2], error: "UPLOAD_CANCELLED" });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("a late owner lookup cannot upload under the next account", async () => {
+    jest.useFakeTimers();
+    try {
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      let releaseOwner = () => {};
+      ownerQueryGate = new Promise((resolve) => {
+        releaseOwner = resolve;
+      });
+      const signOut = prepareTrackingSignOut();
+      for (let index = 0; index < 100; index++) await Promise.resolve();
+      jest.advanceTimersByTime(10_000);
+      await signOut;
+      currentUserId = "user-2";
+      releaseOwner();
+      for (let index = 0; index < 100; index++) await Promise.resolve();
+      expect(requestedOwners).toEqual([]);
+      expect(uploadCalls).toEqual([]);
+      expect(deleted).toEqual([]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("continues past a failed batch when flushing at sign out", async () => {
+    pendingCiphertexts = Array.from({ length: 101 }, (_, index) =>
+      createQueueItem({
+        clientPointId: `point-${index}`,
+        groupId: index === 0 ? "bad" : "good",
+        id: index + 1,
+      }),
+    );
+    uploadGroup = async ({ groupId, points }) => {
+      if (groupId === "bad") throw new Error("offline");
+      return {
+        accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
+        duplicates: [],
+      };
+    };
+    await expect(prepareTrackingSignOut()).rejects.toThrow("Tracking upload failed");
+    expect(deleted.flat()).toHaveLength(100);
+    expect(requeued).toHaveLength(1);
   });
 
   test("replaces native keys with every current group epoch before starting capture", async () => {
@@ -690,7 +1019,7 @@ describe("tracking service", () => {
     expect(requeued).toEqual([{ ids: [1], error: "CONFLICT: Group key rotation is pending." }]);
   });
 
-  test("deletes permanently rejected batches", async () => {
+  test("retains rejected batches", async () => {
     pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
     uploadGroup = async () => {
       throw Object.assign(new Error("Epoch does not belong to this group."), {
@@ -700,10 +1029,12 @@ describe("tracking service", () => {
       });
     };
 
-    await flushPendingTrackingPoints();
+    await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
 
-    expect(deleted).toEqual([[1]]);
-    expect(requeued).toEqual([]);
+    expect(deleted).toEqual([]);
+    expect(requeued).toEqual([
+      { ids: [1], error: "BAD_REQUEST: Epoch does not belong to this group." },
+    ]);
   });
 
   test("isolates a permanently invalid point without discarding valid points", async () => {
@@ -730,7 +1061,7 @@ describe("tracking service", () => {
       };
     };
 
-    await flushPendingTrackingPoints();
+    await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
 
     expect(uploadCalls.map(({ points }) => points.length)).toEqual([2, 1, 1]);
     expect(
@@ -740,8 +1071,10 @@ describe("tracking service", () => {
           (points[0] as { clientPointId: string }).clientPointId === "point-valid",
       ),
     ).toBe(true);
-    expect(deleted.flat().sort()).toEqual([1, 2]);
-    expect(requeued).toEqual([]);
+    expect(deleted.flat()).toEqual([1]);
+    expect(requeued).toEqual([
+      { ids: [2], error: "BAD_REQUEST: Epoch does not belong to this group." },
+    ]);
   });
 
   test("isolates revoked sender devices from valid points in the same group", async () => {
@@ -773,7 +1106,7 @@ describe("tracking service", () => {
       };
     };
 
-    await flushPendingTrackingPoints();
+    await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
 
     expect(uploadCalls.map(({ points }) => points.length)).toEqual([1, 1]);
     expect(
@@ -781,8 +1114,10 @@ describe("tracking service", () => {
         ({ points }) => (points[0] as { clientPointId: string }).clientPointId === "point-valid",
       ),
     ).toBe(true);
-    expect(deleted.flat().sort()).toEqual([1, 2]);
-    expect(requeued).toEqual([]);
+    expect(deleted.flat()).toEqual([1]);
+    expect(requeued).toEqual([
+      { ids: [2], error: "FORBIDDEN: The active device is not registered." },
+    ]);
   });
 
   test("revokes every native key and stops capture", async () => {

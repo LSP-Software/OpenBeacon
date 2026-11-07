@@ -34,6 +34,24 @@ describe("groupTrackingPointSchema", () => {
     ).toThrow();
   });
 
+  test("limits ciphertext size", () => {
+    expect(
+      groupTrackingPointSchema.safeParse({ ...validPoint, ciphertext: "a".repeat(4096) }).success,
+    ).toBe(true);
+    expect(
+      groupTrackingPointSchema.safeParse({ ...validPoint, ciphertext: "a".repeat(4097) }).success,
+    ).toBe(false);
+  });
+
+  test("limits client point IDs", () => {
+    expect(
+      groupTrackingPointSchema.safeParse({ ...validPoint, clientPointId: "x".repeat(128) }).success,
+    ).toBe(true);
+    expect(
+      groupTrackingPointSchema.safeParse({ ...validPoint, clientPointId: "x".repeat(129) }).success,
+    ).toBe(false);
+  });
+
   test("rejects invalid nonce length", () => {
     expect(() =>
       groupTrackingPointSchema.parse({
@@ -41,6 +59,16 @@ describe("groupTrackingPointSchema", () => {
         nonce: Buffer.alloc(12, 1).toString("base64"),
       }),
     ).toThrow();
+  });
+
+  test("rejects oversized and noncanonical nonces", () => {
+    for (const nonce of [
+      `${" ".repeat(1_000_000)}${validNonce}`,
+      `${validNonce}\n`,
+      "!".repeat(32),
+    ]) {
+      expect(groupTrackingPointSchema.safeParse({ ...validPoint, nonce }).success).toBe(false);
+    }
   });
 });
 

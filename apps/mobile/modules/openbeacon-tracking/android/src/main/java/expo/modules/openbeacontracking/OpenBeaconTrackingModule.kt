@@ -6,6 +6,7 @@ import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
+import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -13,6 +14,19 @@ class OpenBeaconTrackingModule : Module() {
   override fun definition() =
     ModuleDefinition {
       Name("OpenBeaconTracking")
+
+      Function("setQueueOwner") { owner: String ->
+        synchronized(TrackingRuntime.captureLock) {
+          val preferences = requireContext().getSharedPreferences("openbeacon_tracking_queue", android.content.Context.MODE_PRIVATE)
+          if (preferences.getString("owner", null) != owner) {
+            TrackingRuntime.captureCommands.stop()
+            TrackingRuntime.isCaptureRunning = false
+            requireContext().stopService(Intent(requireContext(), TrackingCaptureService::class.java))
+            TrackingRuntime.epochKeyStore(requireContext()).revoke(null)
+            check(preferences.edit().putString("owner", owner).commit())
+          }
+        }
+      }
 
       Function("provisionEpochKeys") { keys: List<Map<String, Any?>>, preserveGroupIds: List<String>? ->
         val parsed =
@@ -86,11 +100,19 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.isCaptureRunning
       }
 
-      AsyncFunction("listPendingCiphertexts") { limit: Double? ->
+      AsyncFunction("countUnassignedCiphertexts") { senderDeviceId: String ->
+        CiphertextQueueDatabase.getInstance(requireContext()).ciphertextQueueDao().countUnassigned(senderDeviceId)
+      }
+
+      AsyncFunction("assignUnassignedCiphertexts") { senderDeviceId: String, owner: String ->
+        CiphertextQueueDatabase.getInstance(requireContext()).ciphertextQueueDao().assignUnassigned(senderDeviceId, owner)
+      }
+
+      AsyncFunction("listPendingCiphertexts") { owner: String, limit: Double?, afterId: Double? ->
         val resolvedLimit = (limit ?: DEFAULT_PENDING_LIMIT.toDouble()).toInt().coerceAtLeast(1)
         TrackingRuntime
           .ciphertextQueue(requireContext())
-          .listByStatus(CiphertextQueueRow.STATUS_PENDING, resolvedLimit)
+          .listByStatus(CiphertextQueueRow.STATUS_PENDING, resolvedLimit, owner, (afterId ?: 0.0).toLong())
           .map { it.toMap() }
       }
 

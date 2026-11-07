@@ -1,11 +1,13 @@
 package expo.modules.openbeacontracking.queue
 
 interface CiphertextQueue {
-  fun insertAll(rows: List<CiphertextQueueRow>)
+  fun insertAll(rows: List<CiphertextQueueRow>): Int
 
   fun listByStatus(
     status: String,
     limit: Int,
+    owner: String? = null,
+    afterId: Long = 0,
   ): List<CiphertextQueueRow>
 
   fun markInFlight(

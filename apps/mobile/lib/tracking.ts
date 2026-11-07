@@ -9,19 +9,32 @@ import { tryCatch } from "@openbeacon/shared";
 import { Platform } from "react-native";
 import type { CiphertextQueueItem } from "../modules/openbeacon-tracking/index.ts";
 import { trpcClient } from "./api.ts";
-import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
+import { baseUrl } from "./base-url.ts";
+import { cancelDeviceKeyRegistrations, ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
 
 let reconcilePromise: Promise<void> | null = null;
+const cancelReconciliations = new Set<() => void>();
 let reconcileOptions: { startCapture: boolean; onlyIfRunning: boolean } | null = null;
 let reconcileVersion = 0;
 let flushPromise: Promise<void> | null = null;
+let flushWork: Promise<void> | null = null;
+let flushController: AbortController | null = null;
 let revokePromise: Promise<void> | null = null;
 let captureRefreshPending = false;
+let trackingPaused = false;
 const observedGroupEpochs = new Map<string, string>();
+
+const getQueueOwner = async (signal?: AbortSignal) => {
+  const { userId } = await trpcClient.auth.deviceKeyContext.query(
+    undefined,
+    signal ? { signal } : undefined,
+  );
+  return JSON.stringify([baseUrl, userId]);
+};
 
 const loadTrackingModule = async () => {
   if (Platform.OS !== "android") {
@@ -80,9 +93,11 @@ const reconcileTrackingKeysInternal = async ({
   if (!trackingModule || !startCapture) {
     if (trackingModule) {
       if (trackingModule.isCaptureRunning()) await trackingModule.stopCapture();
+      if (!isCurrent()) return;
       trackingModule.revokeEpochKeys();
     }
     const groups = await trpcClient.groupMembership.list.query();
+    if (!isCurrent()) return;
     const rotations = await Promise.all(
       groups.map(({ id }) => tryCatch(rotateGroupEpochIfRequired(id))),
     );
@@ -92,12 +107,18 @@ const reconcileTrackingKeysInternal = async ({
   }
 
   const deviceKeyContext = await ensureDeviceKeyRegistration();
+  if (!isCurrent()) return;
+  const owner = await getQueueOwner();
+  if (!isCurrent() || owner !== JSON.stringify([baseUrl, deviceKeyContext.userId])) return;
+  trackingModule.setQueueOwner(owner);
   const groups = await trpcClient.groupMembership.list.query();
+  if (!isCurrent()) return;
   const preserveGroupIds = new Set<string>();
   const epochs = (
     await Promise.all(
       groups.map(async ({ id: groupId }) => {
         const rotation = await tryCatch(rotateGroupEpochIfRequired(groupId));
+        if (!isCurrent()) return null;
         if (getErrorCode(rotation.error) === "UNAUTHORIZED") throw rotation.error;
         const latest = await tryCatch(trpcClient.groupEpoch.getLatest.query({ groupId }));
         if (latest.error) {
@@ -113,6 +134,7 @@ const reconcileTrackingKeysInternal = async ({
       }),
     )
   ).filter((epoch) => epoch !== null);
+  if (!isCurrent()) return;
   if (isCurrent()) {
     for (const { groupId, epochId } of epochs) {
       const previousEpochId = observedGroupEpochs.get(groupId);
@@ -242,6 +264,7 @@ export const reconcileTrackingKeys = ({
   startCapture: boolean;
   onlyIfRunning?: boolean;
 }): Promise<void> => {
+  if (trackingPaused) return Promise.resolve();
   if (
     reconcilePromise &&
     (onlyIfRunning ||
@@ -276,7 +299,13 @@ export const reconcileTrackingKeys = ({
       throw result.error;
     }
   })();
-  const wrapped = task.finally(() => {
+  let cancel = () => {};
+  const cancelled = new Promise<void>((resolve) => {
+    cancel = resolve;
+  });
+  cancelReconciliations.add(cancel);
+  const wrapped = Promise.race([task, cancelled]).finally(() => {
+    cancelReconciliations.delete(cancel);
     if (reconcilePromise === wrapped) {
       reconcilePromise = null;
       reconcileOptions = null;
@@ -316,11 +345,6 @@ const getQueueError = (error: unknown) => {
   return `${code}: ${message}`.slice(0, 160);
 };
 
-const isPermanentUploadError = (error: unknown) => {
-  const code = getErrorCode(error);
-  return code === "BAD_REQUEST" || code === "FORBIDDEN";
-};
-
 type UploadableQueueItem = CiphertextQueueItem & {
   algorithm: typeof PAYLOAD_ENCRYPTION_ALGORITHM;
   kind: typeof TRACKING_POINT_KIND;
@@ -332,45 +356,55 @@ const isUploadableQueueItem = (item: CiphertextQueueItem): item is UploadableQue
 const uploadClaimedItems = async (
   trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
   items: UploadableQueueItem[],
+  signal: AbortSignal,
 ): Promise<void> => {
   const ids = items.map(({ id }) => id);
+  if (signal.aborted) {
+    await trackingModule.requeueCiphertexts(ids, "UPLOAD_CANCELLED");
+    throw new Error("Tracking upload cancelled");
+  }
   const sentAt = new Date().toISOString();
   const uploadResult = await tryCatch(
-    trpcClient.groupTracking.uploadBatch.mutate({
-      groupId: items[0]?.groupId ?? "",
-      points: items.map(
-        ({ algorithm, ciphertext, clientPointId, epochId, kind, nonce, senderDeviceId }) => ({
-          algorithm,
-          ciphertext,
-          clientPointId,
-          epochId,
-          kind,
-          nonce,
-          senderDeviceId,
-        }),
-      ),
-    }),
+    trpcClient.groupTracking.uploadBatch.mutate(
+      {
+        groupId: items[0]?.groupId ?? "",
+        points: items.map(
+          ({ algorithm, ciphertext, clientPointId, epochId, kind, nonce, senderDeviceId }) => ({
+            algorithm,
+            ciphertext,
+            clientPointId,
+            epochId,
+            kind,
+            nonce,
+            senderDeviceId,
+          }),
+        ),
+      },
+      { signal },
+    ),
   );
 
+  if (signal.aborted) {
+    await trackingModule.requeueCiphertexts(ids, "UPLOAD_CANCELLED");
+    throw new Error("Tracking upload cancelled");
+  }
   if (uploadResult.error) {
     if (getErrorCode(uploadResult.error) === "UNAUTHORIZED") {
-      await revokeTrackingAccess();
+      await revokeTrackingAccess({ cancelFlush: false });
       await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
       throw uploadResult.error;
     }
     if (getErrorCode(uploadResult.error) === "BAD_REQUEST" && items.length > 1) {
       const midpoint = Math.ceil(items.length / 2);
-      await Promise.all([
-        uploadClaimedItems(trackingModule, items.slice(0, midpoint)),
-        uploadClaimedItems(trackingModule, items.slice(midpoint)),
+      const results = await Promise.allSettled([
+        uploadClaimedItems(trackingModule, items.slice(0, midpoint), signal),
+        uploadClaimedItems(trackingModule, items.slice(midpoint), signal),
       ]);
+      if (results.some((result) => result.status === "rejected")) {
+        throw new Error("Tracking upload failed");
+      }
       return;
     }
-    if (isPermanentUploadError(uploadResult.error)) {
-      await trackingModule.deleteCiphertexts(ids);
-      return;
-    }
-
     await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
     throw new Error("Tracking upload failed");
   }
@@ -403,6 +437,7 @@ const uploadClaimedItems = async (
 const flushGroup = async (
   trackingModule: Awaited<ReturnType<typeof loadTrackingModule>>,
   items: CiphertextQueueItem[],
+  signal: AbortSignal,
 ) => {
   if (!trackingModule || items.length === 0) {
     return;
@@ -411,10 +446,8 @@ const flushGroup = async (
   const invalidItems = items.filter((item) => !isUploadableQueueItem(item));
   const validItems = items.filter(isUploadableQueueItem);
 
-  if (invalidItems.length > 0) {
-    await trackingModule.deleteCiphertexts(invalidItems.map(({ id }) => id));
-  }
   if (validItems.length === 0) {
+    if (invalidItems.length > 0) throw new Error("Unsupported tracking queue item");
     return;
   }
 
@@ -434,45 +467,72 @@ const flushGroup = async (
 
   const results = await Promise.allSettled(
     Array.from(itemsBySender.values()).map((senderItems) =>
-      uploadClaimedItems(trackingModule, senderItems),
+      uploadClaimedItems(trackingModule, senderItems, signal),
     ),
   );
-  if (results.some((result) => result.status === "rejected")) {
+  if (invalidItems.length > 0 || results.some((result) => result.status === "rejected")) {
     throw new Error("Tracking upload failed");
   }
 };
 
-const flushPendingTrackingPointsInternal = async (): Promise<void> => {
+const flushPendingTrackingPointsInternal = async (
+  force: boolean,
+  signal: AbortSignal,
+): Promise<void> => {
   const trackingModule = await loadTrackingModule();
   if (!trackingModule) {
     return;
   }
 
-  const pending = await trackingModule.listPendingCiphertexts(100);
-  const pendingItems = pending.filter((item) => isReadyForRetry(item, Date.now()));
-  const itemsByGroup = new Map<string, CiphertextQueueItem[]>();
-
-  for (const item of pendingItems) {
-    itemsByGroup.set(item.groupId, [...(itemsByGroup.get(item.groupId) ?? []), item]);
+  if (signal.aborted) return;
+  const owner = await getQueueOwner(signal);
+  let afterId = 0;
+  let failed = false;
+  while (true) {
+    if (signal.aborted) return;
+    const pending = await trackingModule.listPendingCiphertexts(owner, 100, afterId);
+    if (signal.aborted) return;
+    const pendingItems = pending.filter((item) => force || isReadyForRetry(item, Date.now()));
+    const itemsByGroup = new Map<string, CiphertextQueueItem[]>();
+    for (const item of pendingItems) {
+      itemsByGroup.set(item.groupId, [...(itemsByGroup.get(item.groupId) ?? []), item]);
+    }
+    const results = await Promise.allSettled(
+      Array.from(itemsByGroup.values()).map((items) => flushGroup(trackingModule, items, signal)),
+    );
+    failed ||= results.some((result) => result.status === "rejected");
+    if (pending.length < 100) break;
+    afterId = pending[pending.length - 1]?.id ?? afterId;
   }
-
-  const results = await Promise.allSettled(
-    Array.from(itemsByGroup.values()).map((items) => flushGroup(trackingModule, items)),
-  );
-  if (results.some((result) => result.status === "rejected")) {
-    throw new Error("Tracking upload failed");
-  }
+  if (failed) throw new Error("Tracking upload failed");
 };
 
-export const flushPendingTrackingPoints = (): Promise<void> => {
+export const flushPendingTrackingPoints = (force = false): Promise<void> => {
+  if (trackingPaused) return Promise.resolve();
   if (flushPromise) {
-    return flushPromise;
+    return force
+      ? flushPromise.catch(() => {}).then(() => flushPendingTrackingPoints(true))
+      : flushPromise;
   }
 
-  flushPromise = flushPendingTrackingPointsInternal().finally(() => {
-    flushPromise = null;
+  const controller = new AbortController();
+  flushController = controller;
+  const work = flushPendingTrackingPointsInternal(force, controller.signal);
+  flushWork = work;
+  const current = Promise.race([
+    work,
+    new Promise<void>((resolve) =>
+      controller.signal.addEventListener("abort", () => resolve(), { once: true }),
+    ),
+  ]).finally(() => {
+    if (flushPromise === current) {
+      flushPromise = null;
+      flushWork = null;
+      flushController = null;
+    }
   });
-  return flushPromise;
+  flushPromise = current;
+  return current;
 };
 
 export const syncBackgroundTracking = async () => {
@@ -489,6 +549,9 @@ export const syncBackgroundTracking = async () => {
 const revokeTrackingAccessInternal = async (): Promise<void> => {
   reconcileVersion += 1;
   reconcileOptions = null;
+  for (const cancel of cancelReconciliations) cancel();
+  cancelReconciliations.clear();
+  reconcilePromise = null;
   captureRefreshPending = false;
   const trackingModule = await loadTrackingModule();
   if (!trackingModule) {
@@ -499,7 +562,16 @@ const revokeTrackingAccessInternal = async (): Promise<void> => {
   await trackingModule.stopCapture();
 };
 
-export const revokeTrackingAccess = (): Promise<void> => {
+export const revokeTrackingAccess = ({
+  cancelFlush = true,
+}: { cancelFlush?: boolean } = {}): Promise<void> => {
+  cancelDeviceKeyRegistrations();
+  if (cancelFlush) {
+    flushController?.abort();
+    flushPromise = null;
+    flushWork = null;
+    flushController = null;
+  }
   if (revokePromise) {
     return revokePromise;
   }
@@ -508,4 +580,76 @@ export const revokeTrackingAccess = (): Promise<void> => {
     revokePromise = null;
   });
   return revokePromise;
+};
+
+export const prepareTrackingSignOut = async (): Promise<void> => {
+  trackingPaused = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  const previousFlush = flushWork ? tryCatch(flushWork) : null;
+  flushController?.abort();
+  flushPromise = null;
+  flushWork = null;
+  flushController = null;
+  try {
+    await Promise.race([
+      (async () => {
+        await revokeTrackingAccess();
+        if (previousFlush) await previousFlush;
+        if (!controller.signal.aborted) {
+          await flushPendingTrackingPointsInternal(true, controller.signal);
+        }
+      })(),
+      new Promise<void>((resolve) =>
+        controller.signal.addEventListener("abort", () => resolve(), { once: true }),
+      ),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+export const resumeTracking = () => {
+  trackingPaused = false;
+};
+
+export const getUnassignedTrackingPoints = async () => {
+  const trackingModule = await loadTrackingModule();
+  if (!trackingModule) return null;
+  const { userId, recipients } = await trpcClient.auth.deviceKeyContext.query();
+  const counts = await Promise.all(
+    recipients.map(async ({ deviceId }) => ({
+      deviceId,
+      count: await trackingModule.countUnassignedCiphertexts(deviceId),
+    })),
+  );
+  const deviceIds = counts.filter(({ count }) => count > 0).map(({ deviceId }) => deviceId);
+  const count = counts.reduce((total, item) => total + item.count, 0);
+  return count > 0 ? { count, deviceIds, server: baseUrl, userId } : null;
+};
+
+export const recoverUnassignedTrackingPoints = async ({
+  deviceIds,
+  userId,
+}: {
+  deviceIds: string[];
+  userId: string;
+}) => {
+  if (trackingPaused) throw new Error("Tracking is paused.");
+  const trackingModule = await loadTrackingModule();
+  const context = await trpcClient.auth.deviceKeyContext.query();
+  if (
+    !trackingModule ||
+    trackingPaused ||
+    context.userId !== userId ||
+    !deviceIds.every((deviceId) =>
+      context.recipients.some((recipient) => recipient.deviceId === deviceId),
+    )
+  ) {
+    throw new Error("The tracking account has changed.");
+  }
+  for (const deviceId of deviceIds) {
+    await trackingModule.assignUnassignedCiphertexts(deviceId, JSON.stringify([baseUrl, userId]));
+  }
+  await flushPendingTrackingPoints(true);
 };

@@ -122,11 +122,11 @@ model PendingUpload {
   uploadType ImageUploadType
   fileName   String
   createdAt  DateTime        @default(now())
-  groupId    String?
+  groupId    String          @default("")
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([userId, uploadType])
+  @@id([userId, uploadType, groupId])
   @@index([groupId])
 }
 

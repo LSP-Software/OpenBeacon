@@ -51,7 +51,7 @@ export const setPendingImageUploadForUser = async ({
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
 
     const existing = await tx.pendingUpload.findUnique({
-      where: { userId_uploadType: { userId, uploadType } },
+      where: { userId_uploadType_groupId: { userId, uploadType, groupId: groupId ?? "" } },
       select: { fileName: true, groupId: true },
     });
 
@@ -59,12 +59,12 @@ export const setPendingImageUploadForUser = async ({
       oldFileName = existing.fileName;
       oldGroupId = existing.groupId ?? null;
       await tx.pendingUpload.delete({
-        where: { userId_uploadType: { userId, uploadType } },
+        where: { userId_uploadType_groupId: { userId, uploadType, groupId: groupId ?? "" } },
       });
     }
 
     await tx.pendingUpload.create({
-      data: { userId, uploadType, fileName, groupId: groupId ?? null },
+      data: { userId, uploadType, fileName, groupId: groupId ?? "" },
     });
   });
 
@@ -95,7 +95,7 @@ export const requestImageUpload = async ({
   if (presignError) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
-      message: `Failed to generate presigned URL: ${presignError.message}`,
+      message: "Failed to generate presigned URL.",
       cause: presignError,
     });
   }
@@ -138,7 +138,7 @@ export const confirmImageUpload = async ({
   if (verifyError) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
-      message: `Upload verification failed: ${verifyError.message ?? "Unknown error."}`,
+      message: "Upload verification failed.",
       cause: verifyError,
     });
   }

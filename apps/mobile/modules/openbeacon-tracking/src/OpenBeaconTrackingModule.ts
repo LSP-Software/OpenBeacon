@@ -34,6 +34,7 @@ export type CiphertextQueueItem = {
 };
 
 declare class OpenBeaconTrackingModule extends NativeModule {
+  setQueueOwner(owner: string): void;
   provisionEpochKeys(keys: ProvisionedEpochKeyInput[], preserveGroupIds?: string[]): void;
   revokeEpochKeys(groupIds?: string[] | null): void;
   listProvisionedEpochKeys(): ProvisionedEpochKeyInfo[];
@@ -41,7 +42,13 @@ declare class OpenBeaconTrackingModule extends NativeModule {
   refreshCapture(): Promise<void>;
   stopCapture(): Promise<void>;
   isCaptureRunning(): boolean;
-  listPendingCiphertexts(limit?: number | null): Promise<CiphertextQueueItem[]>;
+  countUnassignedCiphertexts(senderDeviceId: string): Promise<number>;
+  assignUnassignedCiphertexts(senderDeviceId: string, owner: string): Promise<void>;
+  listPendingCiphertexts(
+    owner: string,
+    limit?: number | null,
+    afterId?: number | null,
+  ): Promise<CiphertextQueueItem[]>;
   markCiphertextsInFlight(ids: number[]): Promise<void>;
   deleteCiphertexts(ids: number[]): Promise<void>;
   requeueCiphertexts(ids: number[], error?: string | null): Promise<void>;
