@@ -21,7 +21,7 @@ The limit is enforced in `RoomCiphertextQueue.insertAll`, in the same transactio
 
 ## Measured capacity
 
-The `RoomQueueInstrumentation` test (`bun run test:room` in `apps/mobile`) captures 12,000 fixes for two groups at the production limit and reports actual usage. On an x86_64 emulator it retained 16,813 group-points (about 561 bytes each) using 10,149,784 bytes on disk. That's about 1.9 days of continuous movement at one point every 10 seconds for one group, or half that with two groups.
+The `RoomQueueInstrumentation` test (`bun run test:room`; local `bun run ci` runs it automatically when the tracking module changes, GitHub does not) captures 12,000 fixes for two groups at the production limit and reports actual usage. On an x86_64 emulator it retained 16,813 group-points (about 561 bytes each) using 10,149,784 bytes on disk. That's about 1.9 days of continuous movement at one point every 10 seconds for one group, or half that with two groups.
 
 ## Limitations
 
