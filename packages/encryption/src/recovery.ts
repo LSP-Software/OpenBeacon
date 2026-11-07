@@ -5,6 +5,7 @@ import { generateMnemonic, mnemonicToEntropy, validateMnemonic } from "@scure/bi
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { decodeBase64, encodeBase64 } from "./base64.ts";
 import {
+  GROUP_EPOCH_DOMAIN_CONTEXT,
   GROUP_EPOCH_KEY_LENGTH,
   HISTORY_ESCROW_ALGORITHM,
   RECOVERY_KEY_DERIVATION_VERSION,
@@ -30,7 +31,7 @@ const getEscrowInfo = (userId: string, version: number) =>
 const getHistoryWrapInfo = (epochId: string, userId: string, historyKeyVersion: number) =>
   textEncoder.encode(
     JSON.stringify({
-      context: "openbeacon.group-epoch.v1",
+      context: GROUP_EPOCH_DOMAIN_CONTEXT,
       epochId,
       historyKeyVersion,
       purpose: "epoch-key-history-wrap",
@@ -83,13 +84,11 @@ export const getHistoryPublicKey = (privateKey: HistoryPrivateKeyMaterial) =>
   encodeBase64(x25519.getPublicKey(privateKey.expose()));
 
 export const sealHistoryKeyEscrow = ({
-  ephemeralPrivateKey,
   historyPrivateKey,
   recoveryPublicKey,
   userId,
   version,
 }: {
-  ephemeralPrivateKey?: Uint8Array;
   historyPrivateKey: HistoryPrivateKeyMaterial;
   recoveryPublicKey: string;
   userId: string;
@@ -100,7 +99,6 @@ export const sealHistoryKeyEscrow = ({
     info: getEscrowInfo(userId, version),
     plaintext: historyPrivateKey.expose(),
     recipientPublicKey: decodeBase64(recoveryPublicKey),
-    ...(ephemeralPrivateKey === undefined ? {} : { ephemeralPrivateKey }),
   });
 
   return {
@@ -144,13 +142,11 @@ export const openHistoryKeyEscrow = ({
 };
 
 export const wrapEpochKeyForHistoryKey = ({
-  ephemeralPrivateKey,
   epochId,
   epochKey,
   historyKey,
   senderPrivateKey,
 }: {
-  ephemeralPrivateKey?: Uint8Array;
   epochId: string;
   epochKey: EpochKeyMaterial;
   historyKey: HistoryPublicKey;
@@ -163,7 +159,6 @@ export const wrapEpochKeyForHistoryKey = ({
     plaintext: epochKey.expose(),
     recipientPublicKey: decodeBase64(historyKey.publicKey),
     senderPrivateKey: senderPrivateKeyBytes,
-    ...(ephemeralPrivateKey === undefined ? {} : { ephemeralPrivateKey }),
   });
 
   return {

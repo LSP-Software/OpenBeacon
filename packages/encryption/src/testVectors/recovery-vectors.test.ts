@@ -6,7 +6,7 @@ import { x25519 } from "@noble/curves/ed25519.js";
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { openAuth, openBase } from "../hpke.ts";
+import { openAuth, openBase, sealAuth, sealBase } from "../hpke.ts";
 import {
   DevicePrivateKeyMaterial,
   decodeBase64,
@@ -87,31 +87,58 @@ describe("recovery v1 vectors", () => {
     expect(keyPair.derivationVersion).toBe(1);
   });
 
-  test("seals the pinned escrow with the documented info", () => {
-    const sealed = sealHistoryKeyEscrow({
+  test("the escrow is HPKE base mode with the documented info", () => {
+    const sealed = sealBase({
+      aad: new Uint8Array(),
       ephemeralPrivateKey: hexToBytes(escrow.ephemeralPrivateKeyHex),
-      historyPrivateKey: new HistoryPrivateKeyMaterial(hexToBytes(escrow.historyPrivateKeyHex)),
+      info: textEncoder.encode(escrow.infoJson),
+      plaintext: hexToBytes(escrow.historyPrivateKeyHex),
+      recipientPublicKey: decodeBase64(recoveryKey.publicKeyBase64),
+    });
+
+    expect(encodeBase64(sealed.enc)).toBe(escrow.encBase64);
+    expect(encodeBase64(sealed.ciphertext)).toBe(escrow.ciphertextBase64);
+    expect(encodeBase64(x25519.getPublicKey(hexToBytes(escrow.historyPrivateKeyHex)))).toBe(
+      escrow.historyPublicKeyBase64,
+    );
+  });
+
+  test("seals an escrow the restore path opens", () => {
+    const historyPrivateKey = new HistoryPrivateKeyMaterial(
+      hexToBytes(escrow.historyPrivateKeyHex),
+    );
+    const historyKey = {
+      publicKey: escrow.historyPublicKeyBase64,
+      userId: escrow.userId,
+      version: escrow.version,
+    };
+    const sealed = sealHistoryKeyEscrow({
+      historyPrivateKey,
       recoveryPublicKey: recoveryKey.publicKeyBase64,
       userId: escrow.userId,
       version: escrow.version,
     });
 
-    expect(sealed).toEqual({
-      algorithm: HISTORY_ESCROW_ALGORITHM,
-      ciphertext: escrow.ciphertextBase64,
-      enc: escrow.encBase64,
-    });
+    expect(sealed.algorithm).toBe(HISTORY_ESCROW_ALGORITHM);
     expect(
       bytesToHex(
         openBase({
           aad: new Uint8Array(),
-          ciphertext: decodeBase64(escrow.ciphertextBase64),
-          enc: decodeBase64(escrow.encBase64),
+          ciphertext: decodeBase64(sealed.ciphertext),
+          enc: decodeBase64(sealed.enc),
           info: textEncoder.encode(escrow.infoJson),
           recipientPrivateKey: hexToBytes(recoveryKey.privateKeyHex),
         }),
       ),
     ).toBe(escrow.historyPrivateKeyHex);
+    expect(
+      openHistoryKeyEscrow({
+        escrow: sealed,
+        historyKey,
+        recoveryPrivateKey: deriveRecoveryKeyPair(parseRecoveryPhrase(recoveryKey.phrase))
+          .privateKey,
+      }).expose(),
+    ).toEqual(historyPrivateKey.expose());
   });
 
   test("restores the pinned history key from the phrase and escrow", () => {
@@ -132,9 +159,22 @@ describe("recovery v1 vectors", () => {
     expect(bytesToHex(restored.expose())).toBe(escrow.historyPrivateKeyHex);
   });
 
-  test("wraps the pinned history wrap with the documented info", () => {
-    const wrapped = wrapEpochKeyForHistoryKey({
+  test("the history wrap is HPKE auth mode with the documented info", () => {
+    const sealed = sealAuth({
+      aad: new Uint8Array(),
       ephemeralPrivateKey: hexToBytes(historyWrap.ephemeralPrivateKeyHex),
+      info: textEncoder.encode(historyWrap.infoJson),
+      plaintext: hexToBytes(historyWrap.epochKeyHex),
+      recipientPublicKey: decodeBase64(escrow.historyPublicKeyBase64),
+      senderPrivateKey: hexToBytes(historyWrap.senderPrivateKeyHex),
+    });
+
+    expect(encodeBase64(sealed.enc)).toBe(historyWrap.encBase64);
+    expect(encodeBase64(sealed.ciphertext)).toBe(historyWrap.wrappedKeyBase64);
+  });
+
+  test("wraps with the documented info and metadata", () => {
+    const wrapped = wrapEpochKeyForHistoryKey({
       epochId: historyWrap.epochId,
       epochKey: new EpochKeyMaterial(hexToBytes(historyWrap.epochKeyHex)),
       historyKey: {
@@ -145,21 +185,19 @@ describe("recovery v1 vectors", () => {
       senderPrivateKey: new DevicePrivateKeyMaterial(hexToBytes(historyWrap.senderPrivateKeyHex)),
     });
 
-    expect(wrapped).toEqual({
+    expect(wrapped).toMatchObject({
       algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
-      ephemeralPublicKey: historyWrap.encBase64,
       epochId: historyWrap.epochId,
       historyKeyVersion: historyWrap.historyKeyVersion,
       senderPublicKey: historyWrap.senderPublicKeyBase64,
       userId: historyWrap.userId,
-      wrappedKey: historyWrap.wrappedKeyBase64,
     });
     expect(
       bytesToHex(
         openAuth({
           aad: new Uint8Array(),
-          ciphertext: decodeBase64(historyWrap.wrappedKeyBase64),
-          enc: decodeBase64(historyWrap.encBase64),
+          ciphertext: decodeBase64(wrapped.wrappedKey),
+          enc: decodeBase64(wrapped.ephemeralPublicKey),
           info: textEncoder.encode(historyWrap.infoJson),
           recipientPrivateKey: hexToBytes(escrow.historyPrivateKeyHex),
           senderPublicKey: decodeBase64(historyWrap.senderPublicKeyBase64),

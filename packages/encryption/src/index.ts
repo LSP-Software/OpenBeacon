@@ -4,6 +4,7 @@ import { x25519 } from "@noble/curves/ed25519.js";
 import { decodeBase64, encodeBase64 } from "./base64.ts";
 import {
   DEVICE_KEY_ALGORITHM,
+  GROUP_EPOCH_DOMAIN_CONTEXT,
   GROUP_EPOCH_KEY_LENGTH,
   HISTORY_ESCROW_ALGORITHM,
   PAYLOAD_ENCRYPTION_ALGORITHM,
@@ -45,7 +46,6 @@ import type {
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
-const DOMAIN_CONTEXT = "openbeacon.group-epoch.v1";
 
 const createOpaqueId = (prefix: string) => {
   const bytes = randomBytes(16);
@@ -63,7 +63,7 @@ const ensureEpochKeyLength = (bytes: Uint8Array) => {
 
 const getWrapInfo = (epochId: string, recipientDeviceId: string) =>
   encodeMetadata({
-    context: DOMAIN_CONTEXT,
+    context: GROUP_EPOCH_DOMAIN_CONTEXT,
     epochId,
     purpose: "epoch-key-wrap",
     recipientDeviceId,
@@ -76,7 +76,7 @@ const getPayloadAssociatedData = (
   senderDeviceId: string,
 ) =>
   encodeMetadata({
-    context: DOMAIN_CONTEXT,
+    context: GROUP_EPOCH_DOMAIN_CONTEXT,
     epochId,
     groupId,
     kind,
