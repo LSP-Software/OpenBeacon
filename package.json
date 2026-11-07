@@ -2,7 +2,7 @@
   "name": "openbeacon",
   "license": "SEE LICENSE IN LICENSE.md",
   "private": true,
-  "packageManager": "bun@1.4.4-canary.20261028.1",
+  "packageManager": "bun@1.4.4",
   "workspaces": [
     "apps/*",
     "packages/*"
