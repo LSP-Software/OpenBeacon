@@ -10,7 +10,13 @@ import { createReactNativeTestModule } from "./reactNativeTestModule.ts";
 let queryResult: { data: unknown; isPending: boolean; error: { data: { code: string } } | null };
 let isFocused = true;
 let groups: { id: string }[] = [];
-let keyAccess: { data: string; isError: boolean }[] = [];
+let keyAccess: {
+  data: {
+    current: "available" | "missing" | "unavailable";
+    history: "complete" | { partialFrom: Date };
+  };
+  isError: boolean;
+}[] = [];
 const replace = mock(() => {});
 const fetchQuery = mock(async () => groups);
 const queryClient = { fetchQuery };
@@ -77,7 +83,7 @@ beforeEach(() => {
 });
 
 test("shows key access problems without offering recovery", async () => {
-  keyAccess = [{ data: "missing", isError: true }];
+  keyAccess = [{ data: { current: "missing", history: "complete" }, isError: true }];
   queryResult = {
     ...queryResult,
     data: { id: "group-1", name: "Family", groupMembers: [{ role: "OWNER" }] },
@@ -85,8 +91,9 @@ test("shows key access problems without offering recovery", async () => {
   const root = createRoot();
   await act(async () => root.render(<GroupScreen />));
   expect(JSON.stringify(root.container.toJSON())).toContain(
-    "Group locations may be unavailable on this device.",
+    "Current group locations may be unavailable on this device.",
   );
+  expect(JSON.stringify(root.container.toJSON())).not.toContain("location history");
 
   queryResult = {
     ...queryResult,
@@ -94,6 +101,22 @@ test("shows key access problems without offering recovery", async () => {
   };
   await act(async () => root.render(<GroupScreen />));
   expect(JSON.stringify(root.container.toJSON())).not.toContain("Restore group key");
+  await act(async () => root.unmount());
+});
+
+test("reports partial history separately from current access", async () => {
+  keyAccess = [
+    {
+      data: { current: "available", history: { partialFrom: new Date("2026-10-03T12:00:00Z") } },
+      isError: false,
+    },
+  ];
+  const root = createRoot();
+  await act(async () => root.render(<GroupScreen />));
+  const rendered = JSON.stringify(root.container.toJSON());
+  expect(rendered).toContain("Some location history isn’t available on this device");
+  expect(rendered).toContain("2026");
+  expect(rendered).not.toContain("current encryption key");
   await act(async () => root.unmount());
 });
 

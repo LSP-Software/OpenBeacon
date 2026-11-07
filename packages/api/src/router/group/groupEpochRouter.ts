@@ -189,6 +189,79 @@ export const groupEpochRouter = {
         })),
       };
     }),
+  listEpochKeyWraps: groupMemberProcedure
+    .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
+    .input(
+      z.object({
+        cursor: z.number().int().positive().nullish(),
+        deviceId: z.string().min(1),
+        groupId: z.string().min(1),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const pageSize = 100;
+      const epochs = await ctx.db.groupEpoch.findMany({
+        orderBy: { epochNumber: "desc" },
+        select: {
+          createdAt: true,
+          epochNumber: true,
+          historyWraps: {
+            orderBy: { historyKey: { version: "asc" } },
+            select: {
+              algorithm: true,
+              createdAt: true,
+              ephemeralPublicKey: true,
+              historyKey: { select: { version: true } },
+              senderPublicKey: true,
+              wrappedKey: true,
+            },
+            where: { historyKey: { userId } },
+          },
+          id: true,
+          recipientKeys: {
+            select: {
+              algorithm: true,
+              createdAt: true,
+              ephemeralPublicKey: true,
+              recipientDeviceId: true,
+              wrappedKey: true,
+            },
+            where: { recipientDeviceId: input.deviceId, recipientDevice: { userId } },
+          },
+          senderPublicKey: true,
+        },
+        take: pageSize + 1,
+        where: {
+          epochNumber: {
+            gte: ctx.groupMember.joinedEpochNumber,
+            ...(input.cursor ? { lt: input.cursor } : {}),
+          },
+          groupId: input.groupId,
+        },
+      });
+      const page = epochs.slice(0, pageSize);
+      return {
+        epochs: page.map(
+          ({ createdAt, epochNumber, historyWraps, id, recipientKeys, senderPublicKey }) => {
+            const deviceWrap = recipientKeys[0];
+            return {
+              createdAt,
+              deviceWrap: deviceWrap ? { ...deviceWrap, epochId: id, senderPublicKey } : null,
+              epochId: id,
+              epochNumber,
+              historyWraps: historyWraps.map(({ historyKey, ...wrap }) => ({
+                ...wrap,
+                epochId: id,
+                historyKeyVersion: historyKey.version,
+                userId,
+              })),
+            };
+          },
+        ),
+        nextCursor: epochs.length > pageSize ? (page.at(-1)?.epochNumber ?? null) : null,
+      };
+    }),
   listHistoryBackfill: groupMemberProcedure
     .input(
       z.object({

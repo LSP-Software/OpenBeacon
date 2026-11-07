@@ -30,20 +30,34 @@ let rotated = false;
 let offline = false;
 const register = mock(async () => {
   registered = true;
-  return { deviceId: "device", privateKey: keyPair.privateKey };
+  return { deviceId: "device", privateKey: keyPair.privateKey, userId: "user" };
 });
 
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("react-native", () => createReactNativeTestModule());
 mock.module("../lib/deviceKeys.ts", () => ({ ensureDeviceKeyRegistration: register }));
+mock.module("../lib/historyKeys.ts", () => ({
+  getStoredHistoryKey: async () => null,
+  storeHistoryKey: async () => {},
+}));
 mock.module("../lib/api.ts", () => ({
   trpcClient: {
     groupEpoch: {
-      getLatest: { query: async () => ({ epochId: epoch.epoch.epochId }) },
-      getWrappedKey: {
+      listEpochKeyWraps: {
         query: async () => {
           if (offline) throw new Error("offline");
-          return registered && rotated ? epoch.wrappedKeys[0] : null;
+          return {
+            epochs: [
+              {
+                createdAt: new Date(0),
+                deviceWrap: registered && rotated ? epoch.wrappedKeys[0] : null,
+                epochId: epoch.epoch.epochId,
+                epochNumber: 1,
+                historyWraps: [],
+              },
+            ],
+            nextCursor: null,
+          };
         },
       },
     },
@@ -72,13 +86,19 @@ test("registers the device and refreshes missing access after rotation", async (
     await queryClient.refetchQueries({ queryKey });
   });
   expect(register).toHaveBeenCalled();
-  expect(queryClient.getQueryData<string>(queryKey)).toBe("missing");
+  expect(queryClient.getQueryData<unknown>(queryKey)).toEqual({
+    current: "missing",
+    history: "complete",
+  });
 
   offline = true;
   await act(async () => {
     await queryClient.refetchQueries({ queryKey });
   });
-  expect(queryClient.getQueryData<string>(queryKey)).toBe("missing");
+  expect(queryClient.getQueryData<unknown>(queryKey)).toEqual({
+    current: "missing",
+    history: "complete",
+  });
   expect(queryClient.getQueryState(queryKey)?.status).toBe("error");
 
   offline = false;
@@ -87,7 +107,10 @@ test("registers the device and refreshes missing access after rotation", async (
     notifyGroupEpochChange("group");
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
-  expect(queryClient.getQueryData<string>(queryKey)).toBe("available");
+  expect(queryClient.getQueryData<unknown>(queryKey)).toEqual({
+    current: "available",
+    history: "complete",
+  });
   await act(async () => root.unmount());
   queryClient.clear();
 });

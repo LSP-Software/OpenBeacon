@@ -3,7 +3,11 @@ import { subscribeToGroupEpochChanges } from "./trackingEvents.ts";
 
 let status: "ok" | "undecryptable" = "undecryptable";
 mock.module("./api.ts", () => ({ trpcClient: {} }));
-mock.module("./deviceKeys.ts", () => ({ ensureDeviceKeyRegistration: async () => ({}) }));
+mock.module("./epochKeys.ts", () => ({
+  createHistoryKeyReader: () => async () => null,
+  resolveEpochKey: async () => null,
+  unwrapEpochKeyFromWraps: async () => null,
+}));
 mock.module("./mapTrackingDecrypt.ts", () => ({
   createMapTrackingDecryptPoint: () =>
     Object.assign(async () => ({ status }), { clear: () => {}, clearGroup: () => {} }),

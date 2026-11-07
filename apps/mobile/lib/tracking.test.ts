@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, jest, mock, test } from "bun:test";
 import {
   createDeviceKeyPair,
+  createHistoryKeyPair,
   DEVICE_KEY_ALGORITHM,
   encodeBase64,
   generateGroupEpochKey,
+  wrapEpochKeyForHistoryKey,
   wrapEpochKeyForRecipient,
 } from "@openbeacon/encryption";
 import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 const deviceKeyPair = createDeviceKeyPair();
+const historyKeyPair = createHistoryKeyPair();
 const epochKey1 = generateGroupEpochKey();
 const epochKey2 = generateGroupEpochKey();
 
@@ -72,6 +75,7 @@ let failedLatestGroup: string | null = null;
 let failedWrappedGroup: string | null = null;
 let missingWrappedGroup: string | null = null;
 let brokenGroupKey = false;
+let historyOnlyGroup: string | null = null;
 let registrationWait: Promise<void> | null = null;
 let onRegistration: (() => void) | null = null;
 let uploadGroup = async ({
@@ -108,6 +112,12 @@ mock.module("./deviceKeys.ts", () => ({
   },
 }));
 
+mock.module("./historyKeys.ts", () => ({
+  getStoredHistoryKey: async ({ userId, version }: { userId: string; version: number }) =>
+    userId === "user-1" && version === 1 ? historyKeyPair.privateKey : null,
+  storeHistoryKey: async () => {},
+}));
+
 mock.module("./base-url.ts", () => ({ baseUrl: "https://api.example.test" }));
 
 mock.module("./api.ts", () => ({
@@ -141,11 +151,20 @@ mock.module("./api.ts", () => ({
           return { epochId: groupId === "group-1" ? "epoch-1" : "epoch-2", groupId };
         },
       },
-      getWrappedKey: {
+      getEpochKeyWraps: {
         query: async ({ epochId, groupId }: { epochId: string; groupId: string }) => {
           if (groupId === failedWrappedGroup) throw new Error("Wrapped key unavailable");
-          if (groupId === missingWrappedGroup) return null;
-          return wrapEpochKeyForRecipient({
+          if (groupId === missingWrappedGroup) return { deviceWrap: null, historyWraps: [] };
+          if (groupId === historyOnlyGroup) {
+            const historyWrap = wrapEpochKeyForHistoryKey({
+              epochId,
+              epochKey: epochId === "epoch-1" ? epochKey1 : epochKey2,
+              historyKey: { publicKey: historyKeyPair.publicKey, userId: "user-1", version: 1 },
+              senderPrivateKey: deviceKeyPair.privateKey,
+            });
+            return { deviceWrap: null, historyWraps: [{ ...historyWrap, createdAt: new Date(0) }] };
+          }
+          const deviceWrap = wrapEpochKeyForRecipient({
             epoch: {
               createdAt: new Date(0),
               createdByDeviceId: "device-1",
@@ -167,6 +186,7 @@ mock.module("./api.ts", () => ({
             },
             senderPrivateKey: deviceKeyPair.privateKey,
           });
+          return { deviceWrap, historyWraps: [] };
         },
       },
     },
@@ -318,6 +338,7 @@ describe("tracking service", () => {
     failedWrappedGroup = null;
     missingWrappedGroup = null;
     brokenGroupKey = false;
+    historyOnlyGroup = null;
     registrationWait = null;
     onRegistration = null;
     uploadGroup = async ({ points }) => ({
@@ -638,6 +659,31 @@ describe("tracking service", () => {
       ],
     ]);
     expect(startCaptureCalls).toBe(1);
+  });
+
+  test("provisions a group's current epoch from a history wrap when there's no device wrap", async () => {
+    historyOnlyGroup = "group-1";
+
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(provisionCalls).toEqual([
+      [
+        {
+          groupId: "group-1",
+          epochId: "epoch-1",
+          epochKeyBase64: encodeBase64(epochKey1.expose()),
+          senderDeviceId: "device-1",
+          kind: "trackingPoint",
+        },
+        {
+          groupId: "group-2",
+          epochId: "epoch-2",
+          epochKeyBase64: encodeBase64(epochKey2.expose()),
+          senderDeviceId: "device-1",
+          kind: "trackingPoint",
+        },
+      ],
+    ]);
   });
 
   test("continues sharing with accessible groups when another group key cannot be decrypted", async () => {

@@ -2,8 +2,6 @@ import {
   encodeBase64,
   PAYLOAD_ENCRYPTION_ALGORITHM,
   TRACKING_POINT_KIND,
-  unwrapEpochKey,
-  WRAPPED_EPOCH_KEY_ALGORITHM,
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { Platform } from "react-native";
@@ -11,6 +9,7 @@ import type { CiphertextQueueItem } from "../modules/openbeacon-tracking/index.t
 import { trpcClient } from "./api.ts";
 import { baseUrl } from "./base-url.ts";
 import { cancelDeviceKeyRegistrations, ensureDeviceKeyRegistration } from "./deviceKeys.ts";
+import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
@@ -142,40 +141,27 @@ const reconcileTrackingKeysInternal = async ({
       if (previousEpochId && previousEpochId !== epochId) notifyGroupEpochChange(groupId);
     }
   }
-  const wrappedEpochs = (
+  const resolvedEpochs = (
     await Promise.all(
       epochs.map(async ({ epochId, groupId }) => {
         const result = await tryCatch(
-          trpcClient.groupEpoch.getWrappedKey.query({
-            deviceId: deviceKeyContext.deviceId,
-            epochId,
-            groupId,
-          }),
+          resolveEpochKey({ device: deviceKeyContext, epochId, groupId }),
         );
         if (result.error) {
           if (getErrorCode(result.error) === "UNAUTHORIZED") throw result.error;
           preserveGroupIds.add(groupId);
           return null;
         }
-        const wrappedEpochKey = result.data;
-
-        if (!wrappedEpochKey || wrappedEpochKey.algorithm !== WRAPPED_EPOCH_KEY_ALGORITHM) {
+        if (!result.data) {
           preserveGroupIds.add(groupId);
           return null;
         }
 
-        return {
-          epochId,
-          groupId,
-          wrappedEpochKey: {
-            ...wrappedEpochKey,
-            algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
-          },
-        };
+        return { epochId, epochKey: result.data, groupId };
       }),
     )
   ).filter((epoch) => epoch !== null);
-  const wrappedKeyMetadata = wrappedEpochs.map(({ epochId, groupId }) => ({
+  const resolvedKeyMetadata = resolvedEpochs.map(({ epochId, groupId }) => ({
     epochId,
     groupId,
     kind: TRACKING_POINT_KIND,
@@ -186,45 +172,15 @@ const reconcileTrackingKeysInternal = async ({
 
   const currentKeys = [...trackingModule.listProvisionedEpochKeys()];
   const preservedKeys = currentKeys.filter(({ groupId }) => preserveGroupIds.has(groupId));
-  let desiredKeyMetadata = [...wrappedKeyMetadata, ...preservedKeys];
+  const desiredKeyMetadata = [...resolvedKeyMetadata, ...preservedKeys];
   if (!haveMatchingProvisionedKeys({ current: currentKeys, desired: desiredKeyMetadata })) {
-    const keys = (
-      await Promise.all(
-        wrappedEpochs.map(async ({ epochId, groupId, wrappedEpochKey }) => {
-          const result = await tryCatch(
-            Promise.resolve().then(() =>
-              unwrapEpochKey({
-                recipientDeviceId: deviceKeyContext.deviceId,
-                recipientPrivateKey: deviceKeyContext.privateKey,
-                wrappedEpochKey,
-              }),
-            ),
-          );
-          if (result.error) {
-            preserveGroupIds.add(groupId);
-            return null;
-          }
-
-          return {
-            epochId,
-            epochKeyBase64: encodeBase64(result.data.expose()),
-            groupId,
-            kind: TRACKING_POINT_KIND,
-            senderDeviceId: deviceKeyContext.deviceId,
-          };
-        }),
-      )
-    ).filter((key) => key !== null);
-    const retainedKeys = currentKeys.filter(({ groupId }) => preserveGroupIds.has(groupId));
-    desiredKeyMetadata = [
-      ...retainedKeys,
-      ...keys.map(({ epochId, groupId, kind, senderDeviceId }) => ({
-        epochId,
-        groupId,
-        kind,
-        senderDeviceId,
-      })),
-    ];
+    const keys = resolvedEpochs.map(({ epochId, epochKey, groupId }) => ({
+      epochId,
+      epochKeyBase64: encodeBase64(epochKey.expose()),
+      groupId,
+      kind: TRACKING_POINT_KIND,
+      senderDeviceId: deviceKeyContext.deviceId,
+    }));
     if (!isCurrent() || (onlyIfRunning && !trackingModule.isCaptureRunning())) return;
     trackingModule.provisionEpochKeys(keys, [...preserveGroupIds]);
     if (

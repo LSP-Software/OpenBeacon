@@ -1,44 +1,28 @@
-import {
-  type DevicePrivateKeyMaterial,
-  unwrapEpochKey,
-  WRAPPED_EPOCH_KEY_ALGORITHM,
-  type WrappedEpochKey,
-} from "@openbeacon/encryption";
-import { tryCatch } from "@openbeacon/shared";
-
-export const checkGroupKeyAccess = async ({
-  groupId,
-  ensureDeviceKeys,
-  getLatestEpoch,
-  getWrappedKey,
+export const checkGroupKeyAccess = async <Epoch extends { createdAt: Date }>({
+  canResolve,
+  listEpochs,
 }: {
-  groupId: string;
-  ensureDeviceKeys: () => Promise<{ deviceId: string; privateKey: DevicePrivateKeyMaterial }>;
-  getLatestEpoch: (groupId: string) => Promise<{ epochId: string } | null>;
-  getWrappedKey: (input: {
-    groupId: string;
-    epochId: string;
-    deviceId: string;
-  }) => Promise<WrappedEpochKey | null>;
-}) => {
-  const [device, epoch] = await Promise.all([ensureDeviceKeys(), getLatestEpoch(groupId)]);
-  if (!epoch) return "unavailable" as const;
-
-  const wrapped = await getWrappedKey({
-    groupId,
-    epochId: epoch.epochId,
-    deviceId: device.deviceId,
-  });
-  if (!wrapped || wrapped.algorithm !== WRAPPED_EPOCH_KEY_ALGORITHM) return "missing" as const;
-
-  const result = await tryCatch(
-    Promise.resolve().then(() =>
-      unwrapEpochKey({
-        recipientDeviceId: device.deviceId,
-        recipientPrivateKey: device.privateKey,
-        wrappedEpochKey: wrapped,
-      }),
-    ),
-  );
-  return result.error ? ("missing" as const) : ("available" as const);
+  canResolve: (epoch: Epoch) => Promise<boolean>;
+  listEpochs: (cursor: number | null) => Promise<{ epochs: Epoch[]; nextCursor: number | null }>;
+}): Promise<{
+  current: "available" | "missing" | "unavailable";
+  history: "complete" | { partialFrom: Date };
+}> => {
+  let current: "available" | "missing" | "unavailable" = "unavailable";
+  let readableFrom: Date | null = null;
+  let cursor: number | null = null;
+  do {
+    const page = await listEpochs(cursor);
+    for (const epoch of page.epochs) {
+      const resolvable = await canResolve(epoch);
+      if (current === "unavailable") {
+        current = resolvable ? "available" : "missing";
+      } else if (!resolvable && readableFrom) {
+        return { current, history: { partialFrom: readableFrom } };
+      }
+      readableFrom = epoch.createdAt;
+    }
+    cursor = page.nextCursor;
+  } while (cursor !== null);
+  return { current, history: "complete" };
 };

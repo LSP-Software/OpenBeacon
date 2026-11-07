@@ -86,12 +86,26 @@ const GroupScreen = () => {
         <View className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-5">
           <View className="gap-5">
             <GroupHeader group={group} />
-            {keyAccess?.data === "missing" && (
+            {keyAccess?.data?.current === "missing" && (
               <View className="gap-2 rounded-xl border border-destructive bg-card p-4">
                 <Text className="font-semibold text-destructive">
-                  This device can’t access this group’s encryption key
+                  This device can’t access this group’s current encryption key
                 </Text>
-                <Text>Group locations may be unavailable on this device.</Text>
+                <Text>Current group locations may be unavailable on this device.</Text>
+              </View>
+            )}
+            {keyAccess?.data && keyAccess.data.history !== "complete" && (
+              <View className="gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4">
+                <Text className="font-semibold text-amber-700 dark:text-amber-400">
+                  Some location history isn’t available on this device
+                </Text>
+                <Text>
+                  History from before{" "}
+                  {keyAccess.data.history.partialFrom.toLocaleDateString(undefined, {
+                    dateStyle: "medium",
+                  })}{" "}
+                  can’t be read on this device.
+                </Text>
               </View>
             )}
             <SwipeTabs

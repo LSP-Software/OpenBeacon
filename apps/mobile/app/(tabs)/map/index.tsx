@@ -62,7 +62,7 @@ const MapScreen = () => {
   });
   const groupColorRevision = useGroupColorRevision();
   const groupsMissingKeys =
-    groups?.filter((_, index) => keyAccess[index]?.data === "missing") ?? [];
+    groups?.filter((_, index) => keyAccess[index]?.data?.current === "missing") ?? [];
 
   const selfFallback = useMemo(() => {
     void groupColorRevision;
