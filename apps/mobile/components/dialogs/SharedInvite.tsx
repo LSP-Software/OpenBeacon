@@ -1,7 +1,8 @@
+import { Alert } from "../../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Alert, Share, View } from "react-native";
+import { Share, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { trpc } from "../../lib/api.ts";
 import { Button } from "../ui/Button.tsx";

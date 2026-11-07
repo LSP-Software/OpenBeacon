@@ -19,8 +19,8 @@ const acknowledge = mock(async (_input: { userId: string }) => {
 const alert = mock((_title: string, _message: string, buttons: { onPress: () => void }[]) => {
   button = buttons[0]?.onPress;
 });
+mock.module("../lib/alert.ts", () => ({ Alert: { alert } }));
 mock.module("react-native", () => ({
-  Alert: { alert },
   AppState: {
     addEventListener: (_event: string, callback: (state: string) => void) => {
       listener = callback;

@@ -77,6 +77,9 @@ mock.module("react-native", () => ({
     },
     platformOS: "android",
   }),
+}));
+
+mock.module("../lib/alert.ts", () => ({
   Alert: {
     alert: (_title: string, _message: string, buttons: typeof alertButtons = []) => {
       alerts += 1;

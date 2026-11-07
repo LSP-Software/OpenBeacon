@@ -1,8 +1,9 @@
+import { Alert } from "../../../../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Alert, TextInput, View } from "react-native";
+import { TextInput, View } from "react-native";
 import { GroupMapColorPicker } from "../../../../components/map/GroupMapColorPicker.tsx";
 import { Button } from "../../../../components/ui/Button.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";

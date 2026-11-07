@@ -1,6 +1,7 @@
+import { Alert } from "../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { useEffect } from "react";
-import { Alert, AppState } from "react-native";
+import { AppState } from "react-native";
 import { trpcClient } from "../lib/api.ts";
 import { authClient } from "../lib/auth-client.ts";
 

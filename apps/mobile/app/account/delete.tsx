@@ -1,10 +1,11 @@
+import { Alert } from "../../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Alert, Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/ui/Button.tsx";
 import { Input } from "../../components/ui/Input.tsx";

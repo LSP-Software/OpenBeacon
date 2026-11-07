@@ -47,11 +47,13 @@ const DialogOverlay = ({
 const DialogContent = ({
   className,
   portalHost,
+  showClose = true,
   children,
   ...props
 }: DialogPrimitive.ContentProps &
   React.RefAttributes<DialogPrimitive.ContentRef> & {
     portalHost?: string;
+    showClose?: boolean;
   }) => {
   const portalProps = portalHost ? { hostName: portalHost } : {};
 
@@ -66,13 +68,15 @@ const DialogContent = ({
           {...props}
         >
           {children}
-          <DialogPrimitive.Close
-            className="absolute right-4 top-4 rounded opacity-70 active:opacity-100"
-            hitSlop={12}
-          >
-            <Icon as={X} className="text-accent-foreground size-4 shrink-0" />
-            <Text className="sr-only">Close</Text>
-          </DialogPrimitive.Close>
+          {showClose && (
+            <DialogPrimitive.Close
+              className="absolute right-4 top-4 rounded opacity-70 active:opacity-100"
+              hitSlop={12}
+            >
+              <Icon as={X} className="text-accent-foreground size-4 shrink-0" />
+              <Text className="sr-only">Close</Text>
+            </DialogPrimitive.Close>
+          )}
         </DialogPrimitive.Content>
       </DialogOverlay>
     </DialogPortal>

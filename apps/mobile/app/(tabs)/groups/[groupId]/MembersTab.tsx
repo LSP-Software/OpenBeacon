@@ -1,10 +1,11 @@
+import { Alert } from "../../../../lib/alert.ts";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { MapPinIcon, PlusCircleIcon } from "lucide-react-native";
 import { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from "react-native";
 import { InviteMemberToGroupDialog } from "../../../../components/dialogs/InviteMemberToGroupDialog.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../../components/ui/Avatar.tsx";

@@ -1,8 +1,9 @@
+import { Alert } from "../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
-import { Alert, AppState } from "react-native";
+import { AppState } from "react-native";
 import { authClient } from "../lib/auth-client.ts";
 import { subscribeToTrackingSync } from "../lib/trackingEvents.ts";
 import { useLocationPermissions } from "./LocationPermissionProvider.tsx";
