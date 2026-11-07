@@ -32,6 +32,28 @@ Evidence includes `packages/database/prisma/schema.prisma`, `packages/api/src/ro
 - Member removal creates a new epoch for remaining active devices. Tracking upload currently checks that an epoch belongs to the group, not that it is the latest epoch, so old-epoch uploads are accepted from an active member device. The wrapped-key read checks device ownership but does not check `revokedAt`. Validate transactional behavior, concurrent changes, offline queues and deletion separately. Revocation cannot remove keys or data already retained by a former member.
 - Local session-change cleanup removes native provisioned epoch keys and stops capture; it does not revoke the registered device or erase its private key. Reconciliation can restore a previously provisioned key if the same device still has a wrapped key and group membership.
 
+## When a session ends on the phone
+
+A session ends when the user signs out, deletes their account, or the server revokes the session. Account deletion revokes every session.
+
+The app notices a server revocation when it returns to the foreground, reconnects, or the API rejects a request as `UNAUTHORIZED`. A background upload rejected as `UNAUTHORIZED` stops capture and removes epoch keys without the app being opened.
+
+When the session ends, or another account signs in, the app:
+
+- Clears the query cache. Decrypted locations, nicknames, group colours, member lists and other account data are only held there, in memory.
+- Removes group colours and last-upload times from MMKV.
+- Removes provisioned epoch keys from native storage and stops capture. The removal is written synchronously.
+- Clears the auth client's cached session.
+
+If the app starts signed out, it runs the cleanup again, in case it was closed before cleanup finished. The cleanup is in `apps/mobile/providers/SessionDataCleanup.tsx` and `apps/mobile/lib/tracking.ts`.
+
+Some data is kept on purpose:
+
+- Queued tracking points stay in the offline queue as ciphertext only (OPE-63). They are scoped to the account and server, and only upload when that account signs in again. In-app sign-out tries to upload them for up to 10 seconds first. The phone no longer holds the epoch keys needed to read them. After account deletion they stay until the 10 MiB limit evicts them, oldest first.
+- The device private key, device ID and public key stay, so the same account can sign in again (see `docs/development/account-deletion.md`).
+- The server URL, theme and map preferences stay. They are not account data.
+- Profile and group images may stay in the React Native image cache. These images are not encrypted on the server either.
+
 ## Proposed contract, pending decisions and independent review
 
 1. Tracking plaintext and unwrapped group keys must never be sent to the API or object storage. Disclose server-visible metadata and plaintext fields accurately.

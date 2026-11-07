@@ -28,12 +28,12 @@ class SecureEpochKeyStore(
   @Synchronized
   override fun revoke(groupIds: List<String>?) {
     if (groupIds == null || groupIds.isEmpty()) {
-      preferences.edit().remove(KEYS_JSON).apply()
+      check(preferences.edit().remove(KEYS_JSON).commit())
       return
     }
 
     val remaining = list().filterNot { it.groupId in groupIds.toSet() }
-    preferences.edit().putString(KEYS_JSON, encrypt(encodeKeys(remaining))).apply()
+    check(preferences.edit().putString(KEYS_JSON, encrypt(encodeKeys(remaining))).commit())
   }
 
   @Synchronized

@@ -62,6 +62,7 @@ let stopCaptureCalls = 0;
 let onStopCapture: (() => void) | null = null;
 let refreshCaptureCalls = 0;
 let failRefreshCapture = false;
+let failRevokeEpochKeys = false;
 let failRegistration = false;
 let registrationError: Error | null = null;
 let failRotation = false;
@@ -199,6 +200,7 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
     },
     revokeEpochKeys: (groupIds?: string[] | null) => {
       revokedGroups.push(groupIds);
+      if (failRevokeEpochKeys) throw new Error("revoke failed");
     },
     listProvisionedEpochKeys: () => provisionedKeys,
     startCapture: async () => {
@@ -306,6 +308,7 @@ describe("tracking service", () => {
     onStopCapture = null;
     refreshCaptureCalls = 0;
     failRefreshCapture = false;
+    failRevokeEpochKeys = false;
     failRegistration = false;
     registrationError = null;
     failRotation = false;
@@ -1196,6 +1199,14 @@ describe("tracking service", () => {
     await revokeTrackingAccess();
 
     expect(revokedGroups).toEqual([undefined]);
+    expect(stopCaptureCalls).toBe(1);
+  });
+
+  test("stops capture when native key removal fails", async () => {
+    failRevokeEpochKeys = true;
+
+    await expect(revokeTrackingAccess()).rejects.toThrow("revoke failed");
+
     expect(stopCaptureCalls).toBe(1);
   });
 });

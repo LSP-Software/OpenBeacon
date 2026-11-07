@@ -14,7 +14,8 @@ export const GROUP_COLOR_PALETTE = [
 
 export type GroupColor = (typeof GROUP_COLOR_PALETTE)[number];
 
-const storageKey = (groupId: string) => `group.color.${groupId}`;
+const STORAGE_PREFIX = "group.color.";
+const storageKey = (groupId: string) => `${STORAGE_PREFIX}${groupId}`;
 
 const listeners = new Set<() => void>();
 let revision = 0;
@@ -40,13 +41,24 @@ export const subscribeToGroupColorChanges = (listener: () => void) => {
   };
 };
 
+const notifyListeners = () => {
+  revision += 1;
+  for (const listener of listeners) {
+    listener();
+  }
+};
+
 export const setGroupColor = (groupId: string, color: GroupColor) => {
   if (!isGroupColor(color)) {
     throw new Error("Group color must be chosen from the palette");
   }
   storage.set(storageKey(groupId), color);
-  revision += 1;
-  for (const listener of listeners) {
-    listener();
+  notifyListeners();
+};
+
+export const clearGroupColors = () => {
+  for (const key of storage.getAllKeys()) {
+    if (key.startsWith(STORAGE_PREFIX)) storage.remove(key);
   }
+  notifyListeners();
 };

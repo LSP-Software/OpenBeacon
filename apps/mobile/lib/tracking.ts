@@ -559,8 +559,11 @@ const revokeTrackingAccessInternal = async (): Promise<void> => {
     return;
   }
 
-  trackingModule.revokeEpochKeys();
-  await trackingModule.stopCapture();
+  try {
+    trackingModule.revokeEpochKeys();
+  } finally {
+    await trackingModule.stopCapture();
+  }
 };
 
 export const revokeTrackingAccess = ({
