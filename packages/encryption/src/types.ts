@@ -1,5 +1,6 @@
 import type {
   DEVICE_KEY_ALGORITHM,
+  HISTORY_ESCROW_ALGORITHM,
   PAYLOAD_ENCRYPTION_ALGORITHM,
   WRAPPED_EPOCH_KEY_ALGORITHM,
 } from "./constants.ts";
@@ -72,3 +73,25 @@ export type DecryptedGroupPayload = {
 };
 
 export type PersonalDataPurpose = "nickname" | "group-color";
+
+export type HistoryPublicKey = {
+  publicKey: string;
+  userId: string;
+  version: number;
+};
+
+export type HistoryKeyEscrow = {
+  algorithm: typeof HISTORY_ESCROW_ALGORITHM;
+  ciphertext: string;
+  enc: string;
+};
+
+export type WrappedHistoryEpochKey = {
+  algorithm: typeof WRAPPED_EPOCH_KEY_ALGORITHM;
+  ephemeralPublicKey: string;
+  epochId: string;
+  historyKeyVersion: number;
+  senderPublicKey: string;
+  userId: string;
+  wrappedKey: string;
+};
