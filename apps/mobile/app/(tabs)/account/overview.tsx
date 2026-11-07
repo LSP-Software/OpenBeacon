@@ -61,6 +61,7 @@ const categories = [
       {
         label: "Password and Security",
         icon: LockIcon,
+        href: "/account/password",
       },
       {
         label: "Delete account",
