@@ -107,6 +107,12 @@ const ContactUsScreen = () => {
             Include my account email so the OpenBeacon team can follow up
           </Text>
         </Pressable>
+        {includeEmail && !session && (
+          <Text className="text-sm text-muted-foreground">
+            Your account email isn't available yet. Sign in again, or untick this option to send
+            without it.
+          </Text>
+        )}
         <Button onPress={submit} disabled={!canSubmit}>
           <Text>{submitting ? "Sending…" : "Send feedback"}</Text>
         </Button>

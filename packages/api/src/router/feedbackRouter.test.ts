@@ -14,13 +14,15 @@ const createCaller = ({
   create,
   session,
   selfHosted = false,
+  cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
 }: {
   create: ReturnType<typeof mock>;
   session: { user: { id: string; email: string } } | null;
   selfHosted?: boolean;
+  cache?: TestCache;
 }) =>
   appRouter.createCaller({
-    cache: new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
+    cache,
     clientIp: "203.0.113.10",
     serverVersion: "9.9.9",
     serverName: "Hosted",
@@ -130,6 +132,26 @@ describe("feedback", () => {
     }
 
     await expect(caller.feedback.submit({ message: "one too many" })).rejects.toMatchObject({
+      code: "TOO_MANY_REQUESTS",
+    });
+    expect(create).toHaveBeenCalledTimes(3);
+  });
+
+  test("shares the IP limit between requests with and without a session", async () => {
+    const create = mock(async () => ({}));
+    const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+    const signedIn = createCaller({
+      create,
+      session: { user: { id: "user-1", email: "user@example.com" } },
+      cache,
+    });
+    const anonymous = createCaller({ create, session: null, cache });
+
+    await signedIn.feedback.submit({ message: "one" });
+    await signedIn.feedback.submit({ message: "two" });
+    await anonymous.feedback.submit({ message: "three" });
+
+    await expect(anonymous.feedback.submit({ message: "four" })).rejects.toMatchObject({
       code: "TOO_MANY_REQUESTS",
     });
     expect(create).toHaveBeenCalledTimes(3);

@@ -5,7 +5,7 @@ import { publicProcedure } from "../procedures/auth/runtime.ts";
 
 export const feedbackRouter = {
   submit: publicProcedure
-    .meta({ rateLimit: { limit: 3, windowMs: 600_000 } })
+    .meta({ rateLimit: { limit: 3, ipLimit: 3, windowMs: 600_000 } })
     .input(submitFeedbackSchema)
     .mutation(async ({ ctx, input }) => {
       if (ctx.selfHosted) throw new TRPCError({ code: "NOT_FOUND" });
