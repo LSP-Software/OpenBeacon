@@ -7,7 +7,7 @@ export const inviteMemberToGroupSchema = z.object({
   invites: z
     .array(
       z.object({
-        email: emailSchema.toLowerCase(),
+        email: emailSchema,
         role: z.enum([GroupRole.ADMIN, GroupRole.MEMBER], {
           message: "Invalid role",
         }),

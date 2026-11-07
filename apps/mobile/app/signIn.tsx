@@ -40,11 +40,10 @@ const SignIn = () => {
   const isSubmitting = emailLoading || googleLoading;
   const isGoogleEnabled = providers?.google === true && isNativeGoogleSignInConfigured;
 
-  const handleLogin = async () => {
+  const handleLogin = async ({ email, password }: z.infer<typeof signInSchema>) => {
     setEmailLoading(true);
-    const { email, password } = form.getValues();
 
-    const result = await authClient.signIn.email({ email: email, password });
+    const result = await authClient.signIn.email({ email, password });
     if (result.error) {
       Alert.alert("Sign in failed", result.error.message);
       setEmailLoading(false);
