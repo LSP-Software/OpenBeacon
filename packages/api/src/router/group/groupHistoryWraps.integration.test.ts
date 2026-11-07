@@ -211,7 +211,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         const recoveryKey = deriveRecoveryKeyPair(phrase);
         const historyKey = createHistoryKeyPair();
         item.historyKey = {
-          id: `${item.userId}-history-1`,
+          id: crypto.randomUUID(),
           privateKey: historyKey.privateKey,
           publicKey: historyKey.publicKey,
         };
@@ -404,6 +404,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         "BAD_REQUEST",
       );
       await expect(
+        caller(other.userId).groupEpoch.addHistoryWraps({
+          deviceId: other.deviceId,
+          groupId,
+          historyKeyId: other.historyKey.id,
+          privateKey: encodeBase64(other.historyKey.privateKey.expose()),
+          wraps: [valid],
+        } as never),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      await expect(
         addWraps(owner, [wrapFor({ account: owner, epochId, epochKey })], { groupId: soloGroupId }),
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
@@ -462,7 +471,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const epochId = epochs.third.epoch.epochId;
       const epochKey = epochs.third.epochKey;
       const nextHistoryKey = createHistoryKeyPair();
-      const nextHistoryKeyId = `${other.userId}-history-2`;
+      const nextHistoryKeyId = crypto.randomUUID();
       await prisma.accountHistoryKey.create({
         data: {
           algorithm: "X25519",

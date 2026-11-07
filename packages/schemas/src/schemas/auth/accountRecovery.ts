@@ -31,7 +31,7 @@ const recoveryKeySchema = z.strictObject({
 const newHistoryKeySchema = z.strictObject({
   algorithm: z.literal(X25519_KEY_ALGORITHM),
   escrow: z.strictObject(historyKeyEscrowFields),
-  id: z.string().min(1).max(128),
+  id: z.uuid(),
   publicKey: x25519PublicKeySchema,
   version: historyKeyVersionSchema,
 });
@@ -65,9 +65,9 @@ const wrappedHistoryEpochKeySchema = z.strictObject({
   wrappedKey: encodedBytes(48),
 });
 
-export const addHistoryWrapsSchema = z.object({
+export const addHistoryWrapsSchema = z.strictObject({
   deviceId: z.string().min(1).max(128),
   groupId: z.string().min(1),
-  historyKeyId: z.string().min(1).max(128),
+  historyKeyId: z.uuid(),
   wraps: z.array(wrappedHistoryEpochKeySchema).min(1).max(50),
 });

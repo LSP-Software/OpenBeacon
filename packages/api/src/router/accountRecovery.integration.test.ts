@@ -78,7 +78,7 @@ const newHistoryKey = ({
         userId,
         version,
       }),
-      id: `${userId}-history-${version}-${crypto.randomUUID()}`,
+      id: crypto.randomUUID(),
       publicKey: historyKey.publicKey,
       version,
     },
@@ -244,6 +244,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           },
         },
         { ...input, phrase: phrase.words().join(" ") },
+        { ...input, historyKey: { ...input.historyKey, id: privateHistoryKey } },
         {
           ...input,
           historyKey: { ...input.historyKey, publicKey: encodeBase64(new Uint8Array(32)) },

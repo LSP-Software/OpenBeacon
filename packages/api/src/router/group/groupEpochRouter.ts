@@ -295,13 +295,13 @@ export const groupEpochRouter = {
         if (!currentHistoryKey || currentHistoryKey.id !== input.historyKeyId) {
           throw new TRPCError({
             code: "CONFLICT",
-            message: "History wraps must use your current history key.",
+            message: "That history key is no longer your current history key.",
           });
         }
         if (input.wraps.some((wrap) => wrap.historyKeyVersion !== currentHistoryKey.version)) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "History wraps must use your current history key.",
+            message: "History wraps must match the history key version.",
           });
         }
         const device = await tx.userDevice.findFirst({
