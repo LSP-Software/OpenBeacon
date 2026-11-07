@@ -25,6 +25,7 @@ import type {
   GroupEpoch,
   GroupEpochCreationResult,
   GroupPayloadKind,
+  PersonalDataPurpose,
   RecipientPublicKeyMaterial,
   WrappedEpochKey,
 } from "./types.ts";
@@ -434,9 +435,10 @@ export type {
   GroupEpoch,
   GroupEpochCreationResult,
   GroupPayloadKind,
+  PersonalDataPurpose,
   RecipientPublicKeyMaterial,
   TrackingPointV1,
   WrappedEpochKey,
 };
 
-export { decryptPrivateNickname, encryptPrivateNickname } from "./personalNickname.ts";
+export { openPersonalData, sealPersonalData } from "./personalData.ts";

@@ -1,17 +1,8 @@
-import { decryptPrivateNickname, encryptPrivateNickname } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
-import { z } from "zod";
 import { trpcClient } from "./api.ts";
-import { getOrCreateDeviceKeyContext, getStoredDeviceKeyContext } from "./deviceKeys.ts";
+import { openForSelf, sealForSelf } from "./personalData.ts";
 
-const envelopeSchema = z.object({
-  version: z.literal(1),
-  deviceId: z.string(),
-  nonce: z.string(),
-  ciphertext: z.string(),
-});
-
-export const encryptPersonalNickname = async ({
+export const encryptPersonalNickname = ({
   groupId,
   memberId,
   userId,
@@ -21,21 +12,15 @@ export const encryptPersonalNickname = async ({
   memberId: string;
   userId: string;
   nickname: string;
-}) => {
-  const device = await getOrCreateDeviceKeyContext(userId);
-  return JSON.stringify({
-    ...encryptPrivateNickname({
-      privateKey: device.privateKey,
-      groupId,
-      memberId,
-      userId,
-      nickname,
-    }),
-    deviceId: device.deviceId,
+}) =>
+  sealForSelf({
+    userId,
+    purpose: "nickname",
+    binding: [userId, groupId, memberId],
+    plaintext: nickname,
   });
-};
 
-export const decryptPersonalNickname = async ({
+export const decryptPersonalNickname = ({
   groupId,
   memberId,
   userId,
@@ -45,20 +30,13 @@ export const decryptPersonalNickname = async ({
   memberId: string;
   userId: string;
   ciphertext: string;
-}) => {
-  const device = await getStoredDeviceKeyContext(userId);
-  if (!device) return null;
-  const envelope = envelopeSchema.parse(JSON.parse(ciphertext));
-  if (envelope.deviceId !== device.deviceId) return null;
-  return decryptPrivateNickname({
-    privateKey: device.privateKey,
-    groupId,
-    memberId,
+}) =>
+  openForSelf({
     userId,
-    nonce: envelope.nonce,
-    ciphertext: envelope.ciphertext,
+    purpose: "nickname",
+    binding: [userId, groupId, memberId],
+    sealed: ciphertext,
   });
-};
 
 export const loadPersonalNicknames = async (groupId: string, userId: string) => {
   const records = await trpcClient.groupMembership.nicknames.query({ groupId });

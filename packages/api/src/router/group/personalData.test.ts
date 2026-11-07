@@ -91,3 +91,36 @@ test("nicknames are scoped to the caller's membership and targets in the same gr
     skipDuplicates: true,
   });
 });
+
+test("group colors are scoped to the caller's own memberships", async () => {
+  const findMany = mock(async () => [{ ciphertext: "opaque", owner: { groupId: "group" } }]);
+  const upsert = mock(async () => ({}));
+  const router = createTRPCRouter({ groupMembership: groupMembershipRouter });
+  const caller = router.createCaller({
+    cache: new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
+    clientIp: "127.0.0.1",
+    session: { user: { id: "user" } },
+    db: {
+      group: {
+        findUnique: async () => ({
+          id: "group",
+          groupMembers: [{ id: "owner", userId: "user", role: "MEMBER" }],
+        }),
+      },
+      personalGroupColor: { findMany, upsert },
+    },
+  } as unknown as Parameters<typeof router.createCaller>[0]);
+  expect(await caller.groupMembership.colors()).toEqual([
+    { groupId: "group", ciphertext: "opaque" },
+  ]);
+  expect(findMany).toHaveBeenCalledWith({
+    where: { owner: { userId: "user" } },
+    select: { ciphertext: true, owner: { select: { groupId: true } } },
+  });
+  await caller.groupMembership.updateColor({ groupId: "group", ciphertext: "next" });
+  expect(upsert).toHaveBeenCalledWith({
+    where: { ownerId: "owner" },
+    create: { ownerId: "owner", ciphertext: "next" },
+    update: { ciphertext: "next" },
+  });
+});

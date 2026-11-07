@@ -7,6 +7,8 @@ import { concatBytes } from "@noble/hashes/utils.js";
 const textEncoder = new TextEncoder();
 const HPKE_VERSION_LABEL = textEncoder.encode("HPKE-v1");
 const KEM_ID = 0x0020;
+const BASE_MODE = 0x00;
+const AUTH_MODE = 0x02;
 
 const i2osp = (value: number, length: number) => {
   const bytes = new Uint8Array(length);
@@ -50,10 +52,15 @@ const deriveKemSharedSecret = (dh: Uint8Array, kemContext: Uint8Array) =>
     32,
   );
 
-const createAuthModeCipher = (sharedSecret: Uint8Array, info: Uint8Array, aad: Uint8Array) => {
+const createCipher = (
+  mode: typeof BASE_MODE | typeof AUTH_MODE,
+  sharedSecret: Uint8Array,
+  info: Uint8Array,
+  aad: Uint8Array,
+) => {
   const empty = new Uint8Array();
   const keyScheduleContext = concatBytes(
-    i2osp(0x02, 1),
+    i2osp(mode, 1),
     labeledExtract(HPKE_SUITE_ID, empty, "psk_id_hash", empty),
     labeledExtract(HPKE_SUITE_ID, empty, "info_hash", info),
   );
@@ -91,7 +98,7 @@ export const sealAuth = ({
   );
 
   return {
-    ciphertext: createAuthModeCipher(sharedSecret, info, aad).encrypt(plaintext),
+    ciphertext: createCipher(AUTH_MODE, sharedSecret, info, aad).encrypt(plaintext),
     enc,
   };
 };
@@ -119,5 +126,51 @@ export const openAuth = ({
     concatBytes(enc, x25519.getPublicKey(recipientPrivateKey), senderPublicKey),
   );
 
-  return createAuthModeCipher(sharedSecret, info, aad).decrypt(ciphertext);
+  return createCipher(AUTH_MODE, sharedSecret, info, aad).decrypt(ciphertext);
+};
+
+export const sealBase = ({
+  aad,
+  ephemeralPrivateKey = x25519.utils.randomSecretKey(),
+  info,
+  plaintext,
+  recipientPublicKey,
+}: {
+  aad: Uint8Array;
+  ephemeralPrivateKey?: Uint8Array;
+  info: Uint8Array;
+  plaintext: Uint8Array;
+  recipientPublicKey: Uint8Array;
+}) => {
+  const enc = x25519.getPublicKey(ephemeralPrivateKey);
+  const sharedSecret = deriveKemSharedSecret(
+    x25519.getSharedSecret(ephemeralPrivateKey, recipientPublicKey),
+    concatBytes(enc, recipientPublicKey),
+  );
+
+  return {
+    ciphertext: createCipher(BASE_MODE, sharedSecret, info, aad).encrypt(plaintext),
+    enc,
+  };
+};
+
+export const openBase = ({
+  aad,
+  ciphertext,
+  enc,
+  info,
+  recipientPrivateKey,
+}: {
+  aad: Uint8Array;
+  ciphertext: Uint8Array;
+  enc: Uint8Array;
+  info: Uint8Array;
+  recipientPrivateKey: Uint8Array;
+}) => {
+  const sharedSecret = deriveKemSharedSecret(
+    x25519.getSharedSecret(recipientPrivateKey, enc),
+    concatBytes(enc, x25519.getPublicKey(recipientPrivateKey)),
+  );
+
+  return createCipher(BASE_MODE, sharedSecret, info, aad).decrypt(ciphertext);
 };

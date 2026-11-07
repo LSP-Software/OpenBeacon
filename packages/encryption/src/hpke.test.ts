@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { x25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { openAuth, sealAuth } from "./hpke.ts";
+import { openAuth, openBase, sealAuth, sealBase } from "./hpke.ts";
 
 const rfc9180AuthVector = {
   aad: hexToBytes("436f756e742d30"),
@@ -22,6 +22,25 @@ const rfc9180AuthVector = {
   ),
   senderPrivateKey: hexToBytes("2def0cb58ffcf83d1062dd085c8aceca7f4c0c3fd05912d847b61f3e54121f05"),
   senderPublicKey: hexToBytes("f0f4f9e96c54aeed3f323de8534fffd7e0577e4ce269896716bcb95643c8712b"),
+};
+
+const rfc9180BaseVector = {
+  aad: hexToBytes("436f756e742d30"),
+  ciphertext: hexToBytes(
+    "1c5250d8034ec2b784ba2cfd69dbdb8af406cfe3ff938e131f0def8c8b60b4db21993c62ce81883d2dd1b51a28",
+  ),
+  enc: hexToBytes("1afa08d3dec047a643885163f1180476fa7ddb54c6a8029ea33f95796bf2ac4a"),
+  ephemeralPrivateKey: hexToBytes(
+    "f4ec9b33b792c372c1d2c2063507b684ef925b8c75a42dbcbf57d63ccd381600",
+  ),
+  info: hexToBytes("4f6465206f6e2061204772656369616e2055726e"),
+  plaintext: hexToBytes("4265617574792069732074727574682c20747275746820626561757479"),
+  recipientPrivateKey: hexToBytes(
+    "8057991eef8f1f1af18f4a9491d16a1ce333f695d4db8e38da75975c4478e0fb",
+  ),
+  recipientPublicKey: hexToBytes(
+    "4310ee97d88cc1f088a5576c77ab0cf5c3ac797f3d95139c6c84b5429c59662a",
+  ),
 };
 
 const createKeyPair = () => {
@@ -129,5 +148,39 @@ describe("HPKE auth mode", () => {
         senderPublicKey: sender.publicKey,
       }),
     ).toThrow();
+  });
+});
+
+describe("HPKE base mode", () => {
+  test("matches the RFC 9180 DHKEM(X25519)/HKDF-SHA256/ChaCha20Poly1305 base vector", () => {
+    const sealed = sealBase(rfc9180BaseVector);
+
+    expect(bytesToHex(sealed.enc)).toBe(bytesToHex(rfc9180BaseVector.enc));
+    expect(bytesToHex(sealed.ciphertext)).toBe(bytesToHex(rfc9180BaseVector.ciphertext));
+    expect(bytesToHex(openBase(rfc9180BaseVector))).toBe(bytesToHex(rfc9180BaseVector.plaintext));
+  });
+
+  test("rejects the wrong recipient key, a changed ephemeral key, info or aad", () => {
+    const recipient = createKeyPair();
+    const sealed = sealBase({
+      aad: new Uint8Array([1]),
+      info: new Uint8Array([2]),
+      plaintext: new Uint8Array([3, 4, 5]),
+      recipientPublicKey: recipient.publicKey,
+    });
+    const valid = {
+      aad: new Uint8Array([1]),
+      ciphertext: sealed.ciphertext,
+      enc: sealed.enc,
+      info: new Uint8Array([2]),
+      recipientPrivateKey: recipient.privateKey,
+    };
+
+    expect(openBase(valid)).toEqual(new Uint8Array([3, 4, 5]));
+    expect(() => openBase({ ...valid, recipientPrivateKey: createKeyPair().privateKey })).toThrow();
+    expect(() => openBase({ ...valid, enc: createKeyPair().publicKey })).toThrow();
+    expect(() => openBase({ ...valid, enc: new Uint8Array(32) })).toThrow();
+    expect(() => openBase({ ...valid, info: new Uint8Array([9]) })).toThrow();
+    expect(() => openBase({ ...valid, aad: new Uint8Array([9]) })).toThrow();
   });
 });
