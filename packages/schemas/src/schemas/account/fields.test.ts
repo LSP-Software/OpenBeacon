@@ -25,7 +25,7 @@ describe("emailSchema", () => {
       "alice",
       "alice@",
       "alice @example.com",
-      `${"a".repeat(309)}@example.com`,
+      `${"a".repeat(321 - "@example.com".length)}@example.com`,
     ]) {
       expect(emailSchema.safeParse(email).success).toBe(false);
     }
