@@ -1,9 +1,10 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeMap } from "../../../components/map/NativeMap.tsx";
+import { Button } from "../../../components/ui/Button.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
 import { useGroupKeyAccess } from "../../../hooks/useGroupKeyAccess.ts";
@@ -20,6 +21,7 @@ import { getGroupColor } from "../../../lib/groupColor.ts";
 import { nextMapMarkerSelection } from "../../../lib/mapMarkerSelection.ts";
 import { resolveSelfDeviceLocationFallback } from "../../../lib/resolveSelfDeviceLocationFallback.ts";
 import { TAB_BAR_CONTENT_HEIGHT } from "../../../lib/tabBarLayout.ts";
+import { dismissTrackingQueueEviction, getTrackingQueueEviction } from "../../../lib/tracking.ts";
 
 const MapScreen = () => {
   const insets = useSafeAreaInsets();
@@ -46,6 +48,18 @@ const MapScreen = () => {
   const selfUserId = session?.user.id ?? "";
   const selfDeviceLocation = useSelfDeviceLocation(selfUserId.length > 0);
   const lastSentAt = useTrackingUploadTime(selfUserId, groups?.map((group) => group.id) ?? []);
+  const queryClient = useQueryClient();
+  const evictionQueryKey = ["trackingQueueEviction", selfUserId];
+  const { data: queueEviction } = useQuery({
+    queryKey: evictionQueryKey,
+    enabled: selfUserId.length > 0,
+    refetchInterval: 60_000,
+    queryFn: () => getTrackingQueueEviction(selfUserId),
+  });
+  const dismissQueueEviction = useMutation({
+    mutationFn: dismissTrackingQueueEviction,
+    onSettled: () => queryClient.invalidateQueries({ queryKey: evictionQueryKey }),
+  });
   const groupColorRevision = useGroupColorRevision();
   const groupsMissingKeys =
     groups?.filter((_, index) => keyAccess[index]?.data === "missing") ?? [];
@@ -113,6 +127,36 @@ const MapScreen = () => {
         className="absolute left-4 right-4"
         style={{ top: insets.top + 8, maxHeight: "65%" }}
       >
+        {queueEviction && (
+          <View className="mb-2 gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4">
+            <Text className="font-semibold text-amber-700 dark:text-amber-400">
+              Some location history was removed
+            </Text>
+            <Text>
+              This phone was offline long enough to fill its 10 MB upload queue. To keep sharing
+              your latest location, history queued between{" "}
+              {new Date(queueEviction.oldestQueuedAt).toLocaleString(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}{" "}
+              and{" "}
+              {new Date(queueEviction.newestQueuedAt).toLocaleString(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}{" "}
+              was deleted before it could be uploaded.
+            </Text>
+            <Button
+              size="sm"
+              variant="outline"
+              className="self-start"
+              loading={dismissQueueEviction.isPending}
+              onPress={() => dismissQueueEviction.mutate(queueEviction)}
+            >
+              <Text>Dismiss</Text>
+            </Button>
+          </View>
+        )}
         {groupsMissingKeys.length <= 2 &&
           groupsMissingKeys.map((group) => (
             <View

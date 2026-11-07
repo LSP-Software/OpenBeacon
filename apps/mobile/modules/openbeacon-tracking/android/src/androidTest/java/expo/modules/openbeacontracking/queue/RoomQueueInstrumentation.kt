@@ -22,7 +22,9 @@ class RoomQueueInstrumentation : Instrumentation() {
     try {
       verifyOwnershipAndDeduplication()
       verifyMigration()
-      finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "Room queue privacy tests passed\n") })
+      verifyEviction()
+      val measurement = measureProductionStorage()
+      finish(Activity.RESULT_OK, Bundle().apply { putString("stream", "Room queue privacy tests passed\n$measurement\n") })
     } catch (error: Throwable) {
       finish(Activity.RESULT_CANCELED, Bundle().apply { putString("stream", "Room queue privacy tests failed: ${error.stackTraceToString()}\n") })
     }
@@ -33,7 +35,7 @@ class RoomQueueInstrumentation : Instrumentation() {
       .allowMainThreadQueries().build()
     try {
       val dao = database.ciphertextQueueDao()
-      val queue = RoomCiphertextQueue(dao)
+      val queue = RoomCiphertextQueue(database)
       val row = CiphertextQueueRow(
         clientPointId = "legacy", captureId = "capture", groupId = "group", epochId = "epoch",
         senderDeviceId = "device", kind = "trackingPoint", algorithm = "algorithm", nonce = "nonce",
@@ -99,7 +101,7 @@ class RoomQueueInstrumentation : Instrumentation() {
       old.close()
     }
     val database = Room.databaseBuilder(targetContext, CiphertextQueueDatabase::class.java, name)
-      .allowMainThreadQueries().addMigrations(CiphertextQueueDatabase.MIGRATION_1_2).build()
+      .allowMainThreadQueries().addMigrations(CiphertextQueueDatabase.MIGRATION_1_2, CiphertextQueueDatabase.MIGRATION_2_3).build()
     try {
       val dao = database.ciphertextQueueDao()
       check(dao.countUnassigned("device") == 1)
@@ -107,6 +109,101 @@ class RoomQueueInstrumentation : Instrumentation() {
       dao.assignUnassigned("device", "server-a/user-a")
       check(dao.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a", 0).single().ciphertext == "ciphertext")
       check(dao.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-b", 0).isEmpty())
+      check(dao.getEviction("server-a/user-a") == null)
+    } finally {
+      database.close()
+      targetContext.deleteDatabase(name)
+    }
+  }
+
+  private fun queueRow(owner: String, groupId: String, queuedAt: Long) = CiphertextQueueRow(
+    owner = owner, clientPointId = UUID.randomUUID().toString(), captureId = "capture-$queuedAt", groupId = groupId,
+    epochId = "epoch", senderDeviceId = "device", kind = "trackingPoint", algorithm = "algorithm",
+    nonce = "n".repeat(32), ciphertext = "c".repeat(1_000), queuedAt = queuedAt,
+  )
+
+  private fun verifyEviction() {
+    val database = Room.inMemoryDatabaseBuilder(targetContext, CiphertextQueueDatabase::class.java)
+      .allowMainThreadQueries().build()
+    try {
+      val limit = 256L * 1024
+      val queue = RoomCiphertextQueue(database, maxDatabaseBytes = limit)
+      val dao = database.ciphertextQueueDao()
+      check(queue.insertAll(listOf(queueRow("server-a/user-b", "group-1", 1))) == 1)
+      check(queue.insertAll(listOf(queueRow("server-a/user-a", "group-1", 2), queueRow("server-a/user-a", "group-2", 2))) == 2)
+      val inFlight = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a")
+      check(queue.markInFlight(inFlight.map { it.id }, System.currentTimeMillis()) == inFlight.map { it.id })
+      var queuedAt = 3L
+      while (dao.getEviction("server-a/user-a") == null) {
+        check(queue.insertAll(listOf(queueRow("server-a/user-a", "group-1", queuedAt), queueRow("server-a/user-a", "group-2", queuedAt))) == 2)
+        check(database.usedBytes() <= limit)
+        queuedAt += 1
+        check(queuedAt < 10_000)
+      }
+      for (index in 0 until 100) {
+        queue.insertAll(listOf(queueRow("server-a/user-a", "group-1", queuedAt), queueRow("server-a/user-a", "group-2", queuedAt)))
+        check(database.usedBytes() <= limit)
+        queuedAt += 1
+      }
+
+      val pending = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10_000, "server-a/user-a")
+      val oldestRetained = pending.first().queuedAt
+      check(pending.last().queuedAt == queuedAt - 1)
+      check(pending.map { it.queuedAt }.toSet() == (oldestRetained until queuedAt).toSet())
+      check(pending.groupBy { it.groupId }.keys == setOf("group-1", "group-2"))
+      check(queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10, "server-a/user-a").map { it.id } == inFlight.map { it.id })
+      check(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-b").isEmpty())
+
+      val otherOwner = dao.getEviction("server-a/user-b") ?: error("Other owner's eviction was not recorded")
+      check(otherOwner.pointCount == 1 && otherOwner.oldestQueuedAt == 1L && otherOwner.newestQueuedAt == 1L)
+      val eviction = dao.getEviction("server-a/user-a") ?: error("Eviction was not recorded")
+      check(eviction.oldestQueuedAt == 3L)
+      check(eviction.newestQueuedAt <= oldestRetained)
+      check(eviction.pointCount + pending.size == ((queuedAt - 3) * 2).toInt())
+
+      val evictedId = pending.first().id - 1
+      check(queue.markInFlight(listOf(evictedId, pending.first().id), System.currentTimeMillis()) == listOf(pending.first().id))
+
+      while (dao.getEviction("server-a/user-a")?.revision == eviction.revision) {
+        queue.insertAll(listOf(queueRow("server-a/user-a", "group-1", queuedAt), queueRow("server-a/user-a", "group-2", queuedAt)))
+        queuedAt += 1
+      }
+      check(queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10, "server-a/user-a").any { it.id == pending.first().id })
+      val newer = dao.getEviction("server-a/user-a") ?: error("Eviction disappeared")
+      check(newer.revision > eviction.revision && newer.pointCount > eviction.pointCount)
+      queue.acknowledgeEviction("server-a/user-a", eviction.revision)
+      check(dao.getEviction("server-a/user-a") == newer)
+      queue.acknowledgeEviction("server-a/user-a", newer.revision)
+      check(dao.getEviction("server-a/user-a") == null)
+      check(dao.getEviction("server-a/user-b") == otherOwner)
+    } finally {
+      database.close()
+    }
+  }
+
+  private fun measureProductionStorage(): String {
+    val name = "openbeacon-size-${UUID.randomUUID()}.db"
+    val database = Room.databaseBuilder(targetContext, CiphertextQueueDatabase::class.java, name)
+      .allowMainThreadQueries().addCallback(CiphertextQueueDatabase.BOUND_WAL).build()
+    try {
+      val queue = RoomCiphertextQueue(database)
+      val keys = InMemoryEpochKeyStore()
+      keys.replaceAll(listOf(
+        ProvisionedEpochKey("group-1", "epoch", ByteArray(32), "device", "trackingPoint"),
+        ProvisionedEpochKey("group-2", "epoch", ByteArray(32) { 1 }, "device", "trackingPoint"),
+      ))
+      val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "server-a/user-a" }, bootId = "boot")
+      for (fixId in 1L..12_000L) {
+        check(pipeline.onFix(51.5 + fixId / 1e6, -0.1, "2026-07-13T18:45:00.000Z", 1.5, 80, false, fixId = fixId) == 2)
+      }
+      val files = listOf("", "-wal", "-shm").map { suffix -> targetContext.getDatabasePath(name + suffix) }
+      val diskBytes = files.sumOf { it.length() }
+      val retained = database.ciphertextQueueDao().count()
+      val eviction = database.ciphertextQueueDao().getEviction("server-a/user-a") ?: error("Expected evictions at production limit")
+      check(database.usedBytes() <= CiphertextQueueDatabase.MAX_DATABASE_BYTES)
+      check(diskBytes <= CiphertextQueueDatabase.MAX_TOTAL_BYTES + 64 * 1024)
+      return "Production queue limit: $retained group-points retained, ${eviction.pointCount} evicted, " +
+        "${database.usedBytes()} live database bytes, $diskBytes bytes on disk (${files.joinToString { "${it.name.substringAfter(name).ifEmpty { "db" }}=${it.length()}" }})"
     } finally {
       database.close()
       targetContext.deleteDatabase(name)

@@ -1,4 +1,5 @@
 export {
+  type CiphertextQueueEviction,
   type CiphertextQueueItem,
   default,
   type ProvisionedEpochKeyInfo,

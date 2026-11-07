@@ -8,9 +8,32 @@ import { createRoot } from "test-renderer";
 
 let groups: { id: string; name: string; members: never[] }[] = [];
 let access: { data: string }[] = [];
+let queueEviction: {
+  owner: string;
+  pointCount: number;
+  oldestQueuedAt: number;
+  newestQueuedAt: number;
+  revision: number;
+} | null = null;
+const dismissedEvictions: unknown[] = [];
 mock.module("@tanstack/react-query", () => ({
-  useQuery: () => ({ data: groups }),
+  useQuery: ({ queryKey }: { queryKey?: unknown[] }) => ({
+    data: queryKey?.[0] === "trackingQueueEviction" ? queueEviction : groups,
+  }),
   useQueries: () => [],
+  useQueryClient: () => ({ invalidateQueries: async () => {} }),
+  useMutation: () => ({
+    isPending: false,
+    mutate: (variables: unknown) => dismissedEvictions.push(variables),
+  }),
+}));
+mock.module("../lib/tracking.ts", () => ({
+  dismissTrackingQueueEviction: async () => {},
+  getTrackingQueueEviction: async () => queueEviction,
+}));
+mock.module("../components/ui/Button.tsx", () => ({
+  Button: ({ children, onPress }: { children: React.ReactNode; onPress: () => void }) =>
+    React.createElement("pressable", { onPress }, children),
 }));
 mock.module("expo-router", () => ({
   Link: ({ children, href }: { children: React.ReactNode; href: unknown }) =>
@@ -76,5 +99,32 @@ test("shows individual group links for up to two missing keys and a groups link 
     }
     if (count === 3) expect(rendered).toContain("/(tabs)/groups");
   }
+  await act(async () => root.unmount());
+});
+
+test("shows removed offline history until the user dismisses it", async () => {
+  groups = [];
+  access = [];
+  queueEviction = null;
+  const root = createRoot();
+  await act(async () => root.render(<MapScreen />));
+  expect(JSON.stringify(root.container.toJSON())).not.toContain("location history was removed");
+
+  queueEviction = {
+    owner: "owner",
+    pointCount: 12,
+    oldestQueuedAt: Date.UTC(2026, 10, 3, 14),
+    newestQueuedAt: Date.UTC(2026, 10, 4, 9),
+    revision: 5,
+  };
+  await act(async () => root.render(<MapScreen />));
+  const rendered = JSON.stringify(root.container.toJSON());
+  expect(rendered).toContain("Some location history was removed");
+  expect(rendered).toContain("2026");
+
+  const [dismiss] = root.container.queryAll((item) => item.type === "pressable");
+  if (!dismiss) throw new Error("Dismiss button not found");
+  await act(async () => (dismiss.props as { onPress: () => void }).onPress());
+  expect(dismissedEvictions).toEqual([queueEviction]);
   await act(async () => root.unmount());
 });

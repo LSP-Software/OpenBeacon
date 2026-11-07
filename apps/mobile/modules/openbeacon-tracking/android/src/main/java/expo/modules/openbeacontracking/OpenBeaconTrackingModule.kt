@@ -120,6 +120,22 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime
           .ciphertextQueue(requireContext())
           .markInFlight(ids.map { it.toLong() }, System.currentTimeMillis())
+          .map { it.toDouble() }
+      }
+
+      AsyncFunction("getCiphertextEviction") { owner: String ->
+        TrackingRuntime.ciphertextQueue(requireContext()).getEviction(owner)?.let { eviction ->
+          mapOf(
+            "pointCount" to eviction.pointCount.toDouble(),
+            "oldestQueuedAt" to eviction.oldestQueuedAt.toDouble(),
+            "newestQueuedAt" to eviction.newestQueuedAt.toDouble(),
+            "revision" to eviction.revision.toDouble(),
+          )
+        }
+      }
+
+      AsyncFunction("acknowledgeCiphertextEviction") { owner: String, revision: Double ->
+        TrackingRuntime.ciphertextQueue(requireContext()).acknowledgeEviction(owner, revision.toLong())
       }
 
       AsyncFunction("deleteCiphertexts") { ids: List<Double> ->

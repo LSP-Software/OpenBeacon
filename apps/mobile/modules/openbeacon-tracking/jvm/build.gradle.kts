@@ -29,6 +29,7 @@ sourceSets {
       exclude("**/SecureEpochKeyStore.kt")
       exclude("**/CiphertextQueueEntity.kt")
       exclude("**/CiphertextQueueDao.kt")
+      exclude("**/CiphertextQueueEvictionEntity.kt")
       exclude("**/CiphertextQueueDatabase.kt")
       exclude("**/RoomCiphertextQueue.kt")
     }
