@@ -3,18 +3,19 @@ import {
   HISTORY_ESCROW_ALGORITHM,
   isUsableX25519PublicKey,
   RECOVERY_KEY_DERIVATION_VERSION,
-  WRAPPED_EPOCH_KEY_ALGORITHM,
   X25519_KEY_ALGORITHM,
 } from "@openbeacon/encryption";
 import z from "zod";
-import { encodedBytes } from "./registerDeviceKey.ts";
+import {
+  encodedBytes,
+  historyKeyVersionSchema,
+  wrappedHistoryEpochKeySchema,
+} from "./registerDeviceKey.ts";
 
 const x25519PublicKeySchema = encodedBytes(32).refine(
   (publicKey) => isUsableX25519PublicKey(decodeBase64(publicKey)),
   "Invalid public key.",
 );
-
-const historyKeyVersionSchema = z.number().int().positive();
 
 const historyKeyEscrowFields = {
   algorithm: z.literal(HISTORY_ESCROW_ALGORITHM),
@@ -53,16 +54,6 @@ export const resetAccountRecoverySchema = z.strictObject({
   confirmReset: z.literal(true),
   historyKey: newHistoryKeySchema,
   recoveryKey: recoveryKeySchema,
-});
-
-const wrappedHistoryEpochKeySchema = z.strictObject({
-  algorithm: z.literal(WRAPPED_EPOCH_KEY_ALGORITHM),
-  ephemeralPublicKey: encodedBytes(32),
-  epochId: z.string().min(1).max(128),
-  historyKeyVersion: historyKeyVersionSchema,
-  senderPublicKey: encodedBytes(32),
-  userId: z.string().min(1).max(128),
-  wrappedKey: encodedBytes(48),
 });
 
 export const addHistoryWrapsSchema = z.strictObject({

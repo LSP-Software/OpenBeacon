@@ -235,8 +235,17 @@ describe("group epoch helpers", () => {
       groupId: "group-1",
     }));
 
+    const findHistoryKeys = mock(async () => [
+      { id: "history-a-1", publicKey: "history-public-a-1", userId: "user-a", version: 1 },
+      { id: "history-a-2", publicKey: "history-public-a-2", userId: "user-a", version: 2 },
+      { id: "history-b-1", publicKey: "history-public-b-1", userId: "user-b", version: 1 },
+    ]);
+
     const result = await getInviteAcceptanceContext({
       db: {
+        accountHistoryKey: {
+          findMany: findHistoryKeys,
+        },
         groupEpoch: {
           findFirst: async () => ({
             createdAt: new Date("2026-03-26T12:00:00.000Z"),
@@ -300,6 +309,27 @@ describe("group epoch helpers", () => {
     expect(result.recipients.map((recipient) => recipient.deviceId)).toEqual([
       "device-a",
       "device-b",
+    ]);
+    expect(findHistoryKeys).toHaveBeenCalledWith({
+      orderBy: [{ userId: "asc" }, { version: "asc" }],
+      select: { id: true, publicKey: true, userId: true, version: true },
+      where: {
+        OR: [{ user: { groupMembers: { some: { groupId: "group-1" } } } }, { userId: "user-b" }],
+      },
+    });
+    expect(result.historyRecipients).toEqual([
+      {
+        historyKeyId: "history-a-2",
+        publicKey: "history-public-a-2",
+        userId: "user-a",
+        version: 2,
+      },
+      {
+        historyKeyId: "history-b-1",
+        publicKey: "history-public-b-1",
+        userId: "user-b",
+        version: 1,
+      },
     ]);
   });
 

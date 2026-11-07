@@ -17,7 +17,7 @@ import { Text } from "../../../components/ui/Text.tsx";
 import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
 import { type RouterOutputs, trpc } from "../../../lib/api.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
-import { buildAcceptInviteInput } from "../../../lib/groupEncryption.ts";
+import { buildAcceptInviteInput, submitEpochChange } from "../../../lib/groupEncryption.ts";
 import { requestTrackingSync } from "../../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../../lib/useSingleFlight.ts";
 
@@ -123,8 +123,10 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
     await acceptInviteSubmission.run(inviteId, async () => {
       const result = await tryCatch(
         (async () => {
-          const acceptInviteInput = await buildAcceptInviteInput({ inviteId });
-          const data = await acceptInviteMutation.mutateAsync(acceptInviteInput);
+          const data = await submitEpochChange({
+            build: () => buildAcceptInviteInput({ inviteId }),
+            submit: acceptInviteMutation.mutateAsync,
+          });
 
           queryClient.setQueryData(trpc.groupInvites.list.queryKey(), (previous) => {
             if (!previous) {

@@ -94,7 +94,16 @@ mock.module("../lib/personalNicknames.ts", () => ({
   loadPersonalNicknames: async () => records,
   encryptPersonalNickname: async () => "new-ciphertext",
 }));
-mock.module("../lib/groupEncryption.ts", () => ({ buildRemoveGroupMemberInput: async () => ({}) }));
+mock.module("../lib/groupEncryption.ts", () => ({
+  buildRemoveGroupMemberInput: async () => ({}),
+  submitEpochChange: async <Input, Output>({
+    build,
+    submit,
+  }: {
+    build: () => Promise<Input>;
+    submit: (input: Input) => Promise<Output>;
+  }) => submit(await build()),
+}));
 mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("../lib/batteryVisual.ts", () => ({ getBatteryVisual: () => null }));
 const { default: MembersTab } = await import("../app/(tabs)/groups/[groupId]/MembersTab.tsx");

@@ -27,7 +27,7 @@ import {
 import { authClient } from "../../../../lib/auth-client.ts";
 import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
 import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses.ts";
-import { buildRemoveGroupMemberInput } from "../../../../lib/groupEncryption.ts";
+import { buildRemoveGroupMemberInput, submitEpochChange } from "../../../../lib/groupEncryption.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
 import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
 
@@ -104,13 +104,13 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                     onlyIfLastMember: true,
                   });
                 } else {
-                  const input = await buildRemoveGroupMemberInput({
-                    groupId,
-                    memberId: member.id,
-                  });
-                  await removeMember.mutateAsync({
-                    ...input,
-                    ...(successor ? { successorMemberId: successor } : {}),
+                  await submitEpochChange({
+                    build: () => buildRemoveGroupMemberInput({ groupId, memberId: member.id }),
+                    submit: (input) =>
+                      removeMember.mutateAsync({
+                        ...input,
+                        ...(successor ? { successorMemberId: successor } : {}),
+                      }),
                   });
                 }
                 await queryClient.invalidateQueries({

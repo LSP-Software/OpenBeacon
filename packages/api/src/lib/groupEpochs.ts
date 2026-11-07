@@ -7,7 +7,9 @@ import {
   serializeRecipientPublicKeyMaterial,
   WRAPPED_EPOCH_KEY_ALGORITHM,
   type WrappedEpochKey,
+  type WrappedHistoryEpochKey,
 } from "@openbeacon/encryption";
+import { HISTORY_RECIPIENT_MISMATCH_MESSAGE } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 
@@ -22,14 +24,26 @@ type DeviceRecord = {
 
 type UserDeviceDb = Pick<PrismaClient, "userDevice"> | Pick<Prisma.TransactionClient, "userDevice">;
 type InviteAcceptanceDb =
-  | Pick<PrismaClient, "groupEpoch" | "groupMemberInvite" | "userDevice">
-  | Pick<Prisma.TransactionClient, "groupEpoch" | "groupMemberInvite" | "userDevice">;
+  | Pick<PrismaClient, "accountHistoryKey" | "groupEpoch" | "groupMemberInvite" | "userDevice">
+  | Pick<
+      Prisma.TransactionClient,
+      "accountHistoryKey" | "groupEpoch" | "groupMemberInvite" | "userDevice"
+    >;
 type GroupRemovalDb =
-  | Pick<PrismaClient, "groupEpoch" | "groupMember" | "userDevice">
-  | Pick<Prisma.TransactionClient, "groupEpoch" | "groupMember" | "userDevice">;
+  | Pick<PrismaClient, "accountHistoryKey" | "groupEpoch" | "groupMember" | "userDevice">
+  | Pick<
+      Prisma.TransactionClient,
+      "accountHistoryKey" | "groupEpoch" | "groupMember" | "userDevice"
+    >;
 type GroupEpochPersistenceDb = Pick<
   Prisma.TransactionClient,
-  "group" | "groupEpoch" | "groupEpochRecipientKey" | "groupMember" | "userDevice"
+  | "$queryRaw"
+  | "group"
+  | "groupEpoch"
+  | "groupEpochHistoryWrap"
+  | "groupEpochRecipientKey"
+  | "groupMember"
+  | "userDevice"
 >;
 
 const sortIds = (ids: string[]) => ids.slice().sort((left, right) => left.localeCompare(right));
@@ -37,28 +51,55 @@ const sortIds = (ids: string[]) => ids.slice().sort((left, right) => left.locale
 const assertExactRecipientSet = ({
   actual,
   expected,
+  message = "Epoch recipient set does not match the active group devices.",
 }: {
   actual: string[];
   expected: string[];
+  message?: string;
 }) => {
   const sortedActual = sortIds(actual);
   const sortedExpected = sortIds(expected);
 
-  if (sortedActual.length !== sortedExpected.length) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "Epoch recipient set does not match the active group devices.",
-    });
+  if (
+    sortedActual.length !== sortedExpected.length ||
+    sortedActual.some((id, index) => id !== sortedExpected[index])
+  ) {
+    throw new TRPCError({ code: "BAD_REQUEST", message });
   }
+};
 
-  for (let index = 0; index < sortedActual.length; index += 1) {
-    if (sortedActual[index] !== sortedExpected[index]) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Epoch recipient set does not match the active group devices.",
-      });
+const keepCurrentHistoryKeys = <HistoryKey extends { userId: string; version: number }>(
+  historyKeys: HistoryKey[],
+) => {
+  const current = new Map<string, HistoryKey>();
+  for (const historyKey of historyKeys) {
+    const existing = current.get(historyKey.userId);
+    if (!existing || existing.version < historyKey.version) {
+      current.set(historyKey.userId, historyKey);
     }
   }
+  return [...current.values()];
+};
+
+export const listHistoryRecipients = async ({
+  db,
+  where,
+}: {
+  db: Pick<PrismaClient, "accountHistoryKey"> | Pick<Prisma.TransactionClient, "accountHistoryKey">;
+  where: Prisma.AccountHistoryKeyWhereInput;
+}) => {
+  const historyKeys = await db.accountHistoryKey.findMany({
+    orderBy: [{ userId: "asc" }, { version: "asc" }],
+    select: { id: true, publicKey: true, userId: true, version: true },
+    where,
+  });
+
+  return keepCurrentHistoryKeys(historyKeys).map(({ id, publicKey, userId, version }) => ({
+    historyKeyId: id,
+    publicKey,
+    userId,
+    version,
+  }));
 };
 
 const mapRecipientPublicKeys = (devices: DeviceRecord[]) =>
@@ -133,8 +174,8 @@ export const getGroupJoinContext = async ({
   userId,
 }: {
   db:
-    | Pick<PrismaClient, "groupEpoch" | "userDevice">
-    | Pick<Prisma.TransactionClient, "groupEpoch" | "userDevice">;
+    | Pick<PrismaClient, "accountHistoryKey" | "groupEpoch" | "userDevice">
+    | Pick<Prisma.TransactionClient, "accountHistoryKey" | "groupEpoch" | "userDevice">;
   groupId: string;
   userId: string;
 }) => {
@@ -197,6 +238,10 @@ export const getGroupJoinContext = async ({
             epochNumber: latestEpoch.epochNumber,
             groupId: latestEpoch.groupId,
           },
+    historyRecipients: await listHistoryRecipients({
+      db,
+      where: { OR: [{ user: { groupMembers: { some: { groupId } } } }, { userId }] },
+    }),
     recipients: mapRecipientPublicKeys(devices),
   };
 };
@@ -278,6 +323,13 @@ export const getGroupRemovalContext = async ({
             epochNumber: latestEpoch.epochNumber,
             groupId: latestEpoch.groupId,
           },
+    historyRecipients: await listHistoryRecipients({
+      db,
+      where: {
+        user: { groupMembers: { some: { groupId } } },
+        userId: { not: member.userId },
+      },
+    }),
     recipients: mapRecipientPublicKeys(devices),
     removedUserId: member.userId,
   };
@@ -295,6 +347,7 @@ export const persistGroupEpoch = async ({
     createdByDeviceId: string;
     epochId: string;
     epochNumber: number;
+    historyKeys?: WrappedHistoryEpochKey[] | undefined;
     recipientKeys: WrappedEpochKey[];
   };
   excludedUserId?: string;
@@ -351,22 +404,23 @@ export const persistGroupEpoch = async ({
     });
   }
 
-  for (const recipientKey of epoch.recipientKeys) {
-    if (recipientKey.algorithm !== WRAPPED_EPOCH_KEY_ALGORITHM) {
+  const wrappedKeys = [...epoch.recipientKeys, ...(epoch.historyKeys ?? [])];
+  for (const wrappedKey of wrappedKeys) {
+    if (wrappedKey.algorithm !== WRAPPED_EPOCH_KEY_ALGORITHM) {
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "Unsupported wrapped epoch key algorithm.",
       });
     }
 
-    if (recipientKey.epochId !== epoch.epochId) {
+    if (wrappedKey.epochId !== epoch.epochId) {
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "Wrapped epoch keys must target the same epoch.",
       });
     }
 
-    if (recipientKey.senderPublicKey !== actingDevice.publicKey) {
+    if (wrappedKey.senderPublicKey !== actingDevice.publicKey) {
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "Wrapped epoch keys must be created by the active device.",
@@ -404,13 +458,53 @@ export const persistGroupEpoch = async ({
     expected: activeDevices.map((device) => device.id),
   });
 
-  for (const recipientKey of epoch.recipientKeys) {
-    if (!isUsableX25519PublicKey(decodeBase64(recipientKey.ephemeralPublicKey))) {
+  for (const wrappedKey of wrappedKeys) {
+    if (!isUsableX25519PublicKey(decodeBase64(wrappedKey.ephemeralPublicKey))) {
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "Invalid wrapped epoch key public key.",
       });
     }
+  }
+
+  let historyWraps: Prisma.GroupEpochHistoryWrapCreateManyInput[] = [];
+  if (epoch.historyKeys) {
+    const currentHistoryKeys = keepCurrentHistoryKeys(
+      await db.$queryRaw<Array<{ id: string; userId: string; version: number }>>(
+        Prisma.sql`SELECT k.id, k."userId", k.version FROM "AccountHistoryKey" k
+          JOIN "GroupMember" m ON m."userId" = k."userId" AND m."groupId" = ${groupId}
+          ${excludedUserId ? Prisma.sql`WHERE k."userId" <> ${excludedUserId}` : Prisma.empty}
+          FOR SHARE OF k`,
+      ),
+    );
+
+    assertExactRecipientSet({
+      actual: epoch.historyKeys.map(({ historyKeyVersion, userId: recipientUserId }) =>
+        JSON.stringify([recipientUserId, historyKeyVersion]),
+      ),
+      expected: currentHistoryKeys.map(({ userId: recipientUserId, version }) =>
+        JSON.stringify([recipientUserId, version]),
+      ),
+      message: HISTORY_RECIPIENT_MISMATCH_MESSAGE,
+    });
+
+    const historyWrapsByUser = new Map(epoch.historyKeys.map((wrap) => [wrap.userId, wrap]));
+    historyWraps = currentHistoryKeys.flatMap(({ id, userId: keyUserId }) => {
+      const wrap = historyWrapsByUser.get(keyUserId);
+      return wrap
+        ? [
+            {
+              algorithm: wrap.algorithm,
+              ephemeralPublicKey: wrap.ephemeralPublicKey,
+              groupEpochId: epoch.epochId,
+              historyKeyId: id,
+              senderDeviceId: actingDevice.id,
+              senderPublicKey: wrap.senderPublicKey,
+              wrappedKey: wrap.wrappedKey,
+            },
+          ]
+        : [];
+    });
   }
 
   await db.groupEpoch.create({
@@ -433,6 +527,9 @@ export const persistGroupEpoch = async ({
       wrappedKey: recipientKey.wrappedKey,
     })),
   });
+  if (historyWraps.length > 0) {
+    await db.groupEpochHistoryWrap.createMany({ data: historyWraps });
+  }
   await db.group.updateMany({
     where: { id: groupId, epochRotationRequired: true },
     data: { epochRotationRequired: false },

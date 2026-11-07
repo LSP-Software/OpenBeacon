@@ -11,6 +11,7 @@ import {
 } from "./schemas/auth/accountRecovery.ts";
 import {
   groupEpochBundleSchema,
+  HISTORY_RECIPIENT_MISMATCH_MESSAGE,
   registerDeviceKeySchema,
   wrappedEpochKeySchema,
 } from "./schemas/auth/registerDeviceKey.ts";
@@ -37,6 +38,7 @@ export {
   changeRecoveryPhraseSchema,
   createGroupSchema,
   FEEDBACK_MESSAGE_MAX_LENGTH,
+  HISTORY_RECIPIENT_MISMATCH_MESSAGE,
   newGroupIdSchema,
   groupEpochBundleSchema,
   groupTrackingGetLatestSchema,
