@@ -20,11 +20,12 @@ const ContactUsScreen = () => {
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<"success" | "error" | "rateLimited" | null>(null);
   const { data: session } = authClient.useSession();
-  const server = useQuery(trpc.account.version.queryOptions());
+  const serverVersion = useQuery(trpc.account.version.queryOptions());
   const selfHosted = hasCustomServerUrl();
+  const canSubmit = message.trim() !== "" && !submitting && (!includeEmail || !!session);
 
   const submit = async () => {
-    if (!message.trim() || submitting) return;
+    if (!canSubmit) return;
     setSubmitting(true);
     setStatus(null);
     const result = await tryCatch(
@@ -33,7 +34,7 @@ const ContactUsScreen = () => {
         email: includeEmail ? session?.user.email : undefined,
         appVersion,
         maplibreVersion,
-        serverVersion: server.data,
+        serverVersion: serverVersion.data,
         androidVersion: Platform.OS === "android" ? Platform.constants.Release : undefined,
       }),
     );
@@ -100,7 +101,7 @@ const ContactUsScreen = () => {
             Include my account email so the OpenBeacon team can follow up
           </Text>
         </Pressable>
-        <Button onPress={submit} disabled={!message.trim() || submitting}>
+        <Button onPress={submit} disabled={!canSubmit}>
           <Text>{submitting ? "Sending…" : "Send feedback"}</Text>
         </Button>
         {status === "success" && <Text>Feedback sent to OpenBeacon. Thank you.</Text>}

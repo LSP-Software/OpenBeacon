@@ -47,6 +47,8 @@ export const feedbackClient = createTRPCClient<AppRouter>({
       transformer: superjson,
       url: `${getFeedbackUrl()}/api/trpc`,
       headers: () => ({ "x-trpc-source": "expo-react" }),
+      fetch: (url, options) =>
+        fetch(url, { ...options, signal: options?.signal ?? null, credentials: "omit" }),
     }),
   ],
 });
