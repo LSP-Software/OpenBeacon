@@ -1,12 +1,13 @@
 import { GroupRole } from "@openbeacon/database/enums";
 import z from "zod";
+import { emailSchema } from "../account/fields.ts";
 
 export const inviteMemberToGroupSchema = z.object({
   groupId: z.string({ message: "Invalid group ID" }),
   invites: z
     .array(
       z.object({
-        email: z.email({ message: "Invalid email address" }),
+        email: emailSchema.toLowerCase(),
         role: z.enum([GroupRole.ADMIN, GroupRole.MEMBER], {
           message: "Invalid role",
         }),
