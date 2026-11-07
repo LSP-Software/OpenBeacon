@@ -444,7 +444,7 @@ export const upsertUserDevice = async ({
   input,
   userId,
 }: {
-  db: UserDeviceDb;
+  db: Pick<PrismaClient, "$transaction" | "userDevice">;
   input: {
     algorithm: string;
     deviceId: string;
@@ -497,13 +497,20 @@ export const upsertUserDevice = async ({
   }
 
   const createResult = await tryCatch(
-    db.userDevice.create({
-      data: {
-        id: input.deviceId,
-        publicKey: input.publicKey,
-        publicKeyAlgorithm: input.algorithm,
-        userId,
-      },
+    db.$transaction(async (tx) => {
+      const device = await tx.userDevice.create({
+        data: {
+          id: input.deviceId,
+          publicKey: input.publicKey,
+          publicKeyAlgorithm: input.algorithm,
+          userId,
+        },
+      });
+      await tx.group.updateMany({
+        data: { epochRotationRequired: true },
+        where: { groupMembers: { some: { userId } } },
+      });
+      return device;
     }),
   );
 

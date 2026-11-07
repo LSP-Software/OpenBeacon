@@ -26,7 +26,7 @@ export const registerDeviceKeySchema = z.object({
   publicKey: devicePublicKeySchema,
 });
 
-const encodedBytes = (length: number) =>
+export const encodedBytes = (length: number) =>
   z.string().refine((value) => {
     try {
       if (value.length !== Math.ceil(length / 3) * 4) return false;

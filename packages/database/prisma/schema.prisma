@@ -33,6 +33,8 @@ model User {
   createdGroupJoinAlerts      GroupJoinAlert[] @relation("GroupJoinAlertMember")
   feedback                   Feedback[]
   createdSharedInvites       GroupSharedInvite[]
+  recoveryKey                RecoveryKey?
+  historyKeys                AccountHistoryKey[]
 
   @@index([pendingDeletion, deletionDate])
 }
@@ -183,6 +185,7 @@ model GroupMember {
   group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   role GroupRole
+  joinedEpochNumber Int
   personalNicknames PersonalGroupNickname[] @relation("NicknameTarget")
   ownedNicknames PersonalGroupNickname[] @relation("NicknameOwner")
   personalColor PersonalGroupColor?
@@ -221,6 +224,7 @@ model UserDevice {
   createdGroupEpochs     GroupEpoch[]             @relation("GroupEpochCreatedByDevice")
   recipientEpochKeys     GroupEpochRecipientKey[] @relation("GroupEpochRecipientDevice")
   groupEncryptedPayloads GroupEncryptedPayload[]  @relation("GroupEncryptedPayloadSenderDevice")
+  sentHistoryWraps       GroupEpochHistoryWrap[]
 
   @@index([userId])
 }
@@ -235,6 +239,7 @@ model GroupEpoch {
   senderPublicKey        String
   createdAt              DateTime                 @default(now())
   recipientKeys          GroupEpochRecipientKey[]
+  historyWraps           GroupEpochHistoryWrap[]
   groupEncryptedPayloads GroupEncryptedPayload[]
 
   @@unique([groupId, epochNumber])
@@ -278,6 +283,51 @@ model GroupEpochRecipientKey {
   createdAt          DateTime   @default(now())
 
   @@unique([groupEpochId, recipientDeviceId])
+}
+
+model RecoveryKey {
+  userId            String   @id
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publicKey         String
+  algorithm         String
+  derivationVersion Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model AccountHistoryKey {
+  id               String                  @id
+  userId           String
+  user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version          Int
+  publicKey        String
+  algorithm        String
+  escrowEnc        String
+  escrowCiphertext String
+  escrowAlgorithm  String
+  createdAt        DateTime                @default(now())
+  historyWraps     GroupEpochHistoryWrap[]
+
+  @@unique([userId, version])
+}
+
+model GroupEpochHistoryWrap {
+  id                 String            @id @default(uuid(7))
+  groupEpochId       String
+  groupEpoch         GroupEpoch        @relation(fields: [groupEpochId], references: [id], onDelete: Cascade)
+  historyKeyId       String
+  historyKey         AccountHistoryKey @relation(fields: [historyKeyId], references: [id], onDelete: Cascade)
+  senderDeviceId     String?
+  senderDevice       UserDevice?       @relation(fields: [senderDeviceId], references: [id], onDelete: SetNull)
+  senderPublicKey    String
+  wrappedKey         String
+  ephemeralPublicKey String
+  algorithm          String
+  createdAt          DateTime          @default(now())
+
+  @@unique([groupEpochId, historyKeyId])
+  @@index([historyKeyId])
+  @@index([senderDeviceId])
 }
 
 enum GroupRole {

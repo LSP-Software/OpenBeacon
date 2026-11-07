@@ -53,8 +53,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           name: "Group",
           groupMembers: {
             create: [
-              { userId, role: "OWNER" },
-              { userId: otherUser, role: "MEMBER" },
+              { userId, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: otherUser, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
         },
@@ -78,7 +78,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         caller("revoked-session").account.requestDeletion({ password }),
       ).rejects.toThrow();
       const soloGroup = await prisma.group.create({
-        data: { name: "Solo", groupMembers: { create: { userId, role: "OWNER" } } },
+        data: {
+          name: "Solo",
+          groupMembers: { create: { userId, role: "OWNER", joinedEpochNumber: 1 } },
+        },
       });
       const inviteeId = `${userId}-invitee`;
       await prisma.user.create({
@@ -227,8 +230,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           name: "Owners",
           groupMembers: {
             create: [
-              { userId: first.user.id, role: "OWNER" },
-              { userId: second.user.id, role: "OWNER" },
+              { userId: first.user.id, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: second.user.id, role: "OWNER", joinedEpochNumber: 1 },
             ],
           },
         },

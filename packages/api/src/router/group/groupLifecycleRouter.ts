@@ -112,6 +112,7 @@ export const groupLifecycleRouter = {
               create: {
                 userId: ctx.session.user.id,
                 role: GroupRole.OWNER,
+                joinedEpochNumber: input.initialEpoch.epochNumber,
               },
             },
           },

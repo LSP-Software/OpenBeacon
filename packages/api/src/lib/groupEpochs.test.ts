@@ -22,13 +22,16 @@ describe("group epoch helpers", () => {
       userId: data.userId as string,
     }));
 
+    const updateMany = mock(async () => ({ count: 1 }));
+
     const result = await upsertUserDevice({
       db: {
+        $transaction: async (run: (tx: object) => Promise<unknown>) =>
+          run({ group: { updateMany }, userDevice: { create } }),
         userDevice: {
-          create,
           findUnique: async () => null,
         },
-      },
+      } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
       input: {
         algorithm: DEVICE_KEY_ALGORITHM,
         deviceId: "device-a",
@@ -39,6 +42,10 @@ describe("group epoch helpers", () => {
 
     expect(result.publicKey).toBe("public-key");
     expect("privateKey" in result).toBe(false);
+    expect(updateMany).toHaveBeenCalledWith({
+      data: { epochRotationRequired: true },
+      where: { groupMembers: { some: { userId: "user-a" } } },
+    });
   });
 
   test("updates an existing device for the same user without replacing key material", async () => {
@@ -120,12 +127,13 @@ describe("group epoch helpers", () => {
 
     const result = await upsertUserDevice({
       db: {
+        $transaction: async (run: (tx: object) => Promise<unknown>) =>
+          run({ userDevice: { create } }),
         userDevice: {
-          create,
           findUnique,
           update,
         },
-      },
+      } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
       input: {
         algorithm: DEVICE_KEY_ALGORITHM,
         deviceId: "device-a",

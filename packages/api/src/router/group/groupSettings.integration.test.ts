@@ -62,6 +62,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             create: users.map((userId, index) => ({
               userId,
               role: index < 2 ? "OWNER" : "MEMBER",
+              joinedEpochNumber: 1,
             })),
           },
         },
@@ -80,8 +81,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           name: "Last member",
           groupMembers: {
             create: [
-              { userId: users[0]!, role: "OWNER" },
-              { userId: users[2]!, role: "MEMBER" },
+              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: users[2]!, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
         },
@@ -143,8 +144,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           name: "Protected",
           groupMembers: {
             create: [
-              { userId: activeUser, role: "OWNER" },
-              { userId: pendingUser, role: "OWNER" },
+              { userId: activeUser, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: pendingUser, role: "OWNER", joinedEpochNumber: 1 },
             ],
           },
         },
@@ -153,7 +154,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: joinGroup,
           name: "Join",
-          groupMembers: { create: { userId: activeUser, role: "OWNER" } },
+          groupMembers: { create: { userId: activeUser, role: "OWNER", joinedEpochNumber: 1 } },
         },
       });
       await prisma.user.update({
@@ -260,8 +261,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           image: buildImagePublicUrl(env.S3_BUCKET_NAME, path, "avatar.webp"),
           groupMembers: {
             create: [
-              { userId: users[0]!, role: "OWNER" },
-              { userId: users[2]!, role: "MEMBER" },
+              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: users[2]!, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
         },
@@ -302,7 +303,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: pendingGroupId,
           name: "Pending image",
-          groupMembers: { create: { userId: users[0]!, role: "OWNER" } },
+          groupMembers: { create: { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 } },
         },
       });
       await prisma.pendingUpload.create({
@@ -334,7 +335,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: uploadGroupId,
           name: "Upload race",
-          groupMembers: { create: { userId: users[0]!, role: "OWNER" } },
+          groupMembers: { create: { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 } },
         },
       });
       await prisma.pendingUpload.create({
@@ -392,7 +393,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           data: {
             id,
             name: "Upload test",
-            groupMembers: { create: { userId, role: "OWNER" } },
+            groupMembers: { create: { userId, role: "OWNER", joinedEpochNumber: 1 } },
           },
         });
       }
@@ -444,7 +445,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: uploadGroupId,
           name: "Upload success",
-          groupMembers: { create: { userId: users[0]!, role: "OWNER" } },
+          groupMembers: { create: { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 } },
         },
       });
       await prisma.pendingUpload.create({
@@ -493,9 +494,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           name: "Permissions",
           groupMembers: {
             create: [
-              { userId: users[0]!, role: "OWNER" },
-              { userId: users[1]!, role: "ADMIN" },
-              { userId: users[2]!, role: "ADMIN" },
+              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: users[1]!, role: "ADMIN", joinedEpochNumber: 1 },
+              { userId: users[2]!, role: "ADMIN", joinedEpochNumber: 1 },
             ],
           },
         },

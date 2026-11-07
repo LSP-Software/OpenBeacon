@@ -53,7 +53,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           id: groupId,
           name: "Group",
           epochRotationRequired: true,
-          groupMembers: { create: { userId, role: "OWNER" } },
+          groupMembers: { create: { userId, role: "OWNER", joinedEpochNumber: 1 } },
         },
       });
       await prisma.groupEpoch.create({
@@ -174,8 +174,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           name: "Family",
           groupMembers: {
             create: [
-              { userId, role: "OWNER" },
-              { userId: departing, role: "MEMBER" },
+              { userId, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: departing, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
         },

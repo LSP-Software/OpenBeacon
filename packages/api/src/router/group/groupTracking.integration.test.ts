@@ -62,8 +62,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
         name: "Tracking test",
         groupMembers: {
           create: [
-            { userId: ownerId, role: "OWNER" },
-            { userId: memberId, role: "MEMBER" },
+            { userId: ownerId, role: "OWNER", joinedEpochNumber: 1 },
+            { userId: memberId, role: "MEMBER", joinedEpochNumber: 1 },
           ],
         },
       },

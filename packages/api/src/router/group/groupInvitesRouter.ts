@@ -140,7 +140,12 @@ export const groupInvitesRouter = {
         if (existing)
           throw new TRPCError({ code: "CONFLICT", message: "You are already a group member" });
         await tx.groupMember.create({
-          data: { groupId: invite.groupId, userId: ctx.session.user.id, role: GroupRole.MEMBER },
+          data: {
+            groupId: invite.groupId,
+            joinedEpochNumber: input.nextEpoch.epochNumber,
+            role: GroupRole.MEMBER,
+            userId: ctx.session.user.id,
+          },
         });
         await tx.groupMemberInvite.deleteMany({
           where: { groupId: invite.groupId, recipientId: ctx.session.user.id },
@@ -214,6 +219,7 @@ export const groupInvitesRouter = {
             userId: currentInvite.recipientId,
             groupId: currentInvite.groupId,
             role: currentInvite.role,
+            joinedEpochNumber: input.nextEpoch.epochNumber,
           },
           select: {
             id: true,
