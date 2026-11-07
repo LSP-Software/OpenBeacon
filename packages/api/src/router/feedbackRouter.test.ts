@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis } from "@openbeacon/cache/testing";
+import { FEEDBACK_MESSAGE_MAX_LENGTH } from "@openbeacon/schemas";
 import { appRouter } from "../root.ts";
 
 class TestCache extends OpenBeaconCache {
@@ -100,6 +101,9 @@ describe("feedback", () => {
     const caller = createCaller({ create, session: null });
 
     await expect(caller.feedback.submit({ message: "  " })).rejects.toThrow();
+    await expect(
+      caller.feedback.submit({ message: "a".repeat(FEEDBACK_MESSAGE_MAX_LENGTH + 1) }),
+    ).rejects.toThrow();
     await expect(caller.feedback.submit({ message: "hi", androidVersion: " " })).rejects.toThrow();
     await expect(
       caller.feedback.submit({ message: "hi", email: "not-an-email" }),

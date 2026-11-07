@@ -1,3 +1,4 @@
+import { FEEDBACK_MESSAGE_MAX_LENGTH } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
@@ -75,19 +76,24 @@ const ContactUsScreen = () => {
         {selfHosted && (
           <Text className="text-muted-foreground">
             Deleting your account on your self-hosted server does not remove feedback you have sent
-            to OpenBeacon.
+            to OpenBeacon. To have it removed, contact us using this form with the same email.
           </Text>
         )}
-        <TextInput
-          accessibilityLabel="Feedback"
-          multiline
-          maxLength={5000}
-          value={message}
-          onChangeText={setMessage}
-          placeholder="How can we help?"
-          textAlignVertical="top"
-          className="min-h-40 rounded-lg border border-border bg-input p-4 text-foreground placeholder:text-secondary dark:placeholder:text-muted-foreground"
-        />
+        <View className="gap-2">
+          <TextInput
+            accessibilityLabel="Feedback"
+            multiline
+            maxLength={FEEDBACK_MESSAGE_MAX_LENGTH}
+            value={message}
+            onChangeText={setMessage}
+            placeholder="How can we help?"
+            textAlignVertical="top"
+            className="min-h-40 rounded-lg border border-border bg-input p-4 text-foreground placeholder:text-secondary dark:placeholder:text-muted-foreground"
+          />
+          <Text className="self-end text-sm text-muted-foreground">
+            {message.length}/{FEEDBACK_MESSAGE_MAX_LENGTH}
+          </Text>
+        </View>
         <Pressable
           accessibilityRole="checkbox"
           accessibilityState={{ checked: includeEmail }}

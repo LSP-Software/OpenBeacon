@@ -8,6 +8,10 @@ import {
   registerDeviceKeySchema,
   wrappedEpochKeySchema,
 } from "./schemas/auth/registerDeviceKey.ts";
+import {
+  FEEDBACK_MESSAGE_MAX_LENGTH,
+  submitFeedbackSchema,
+} from "./schemas/feedback/submitFeedback.ts";
 import { createGroupSchema, newGroupIdSchema } from "./schemas/group/create.ts";
 import { inviteMemberToGroupSchema } from "./schemas/group/inviteMember.ts";
 import { removeGroupMemberSchema } from "./schemas/group/removeMember.ts";
@@ -24,6 +28,7 @@ export {
   accountNameSchema,
   changePasswordSchema,
   createGroupSchema,
+  FEEDBACK_MESSAGE_MAX_LENGTH,
   newGroupIdSchema,
   groupEpochBundleSchema,
   groupTrackingGetLatestSchema,
@@ -37,6 +42,7 @@ export {
   requestImageUploadInputSchema,
   signInSchema,
   signUpSchema,
+  submitFeedbackSchema,
   TRACKING_POINT_KIND,
   wrappedEpochKeySchema,
 };
