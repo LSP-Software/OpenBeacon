@@ -10,7 +10,33 @@ import { type RouterOutputs, trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
 
-type EpochKeyDevice = { deviceId: string; privateKey: DevicePrivateKeyMaterial; userId: string };
+export type EpochKeyDevice = {
+  deviceId: string;
+  privateKey: DevicePrivateKeyMaterial;
+  userId: string;
+};
+
+export const unwrapDeviceWrap = async ({
+  device,
+  deviceWrap,
+  epochId,
+}: {
+  device: EpochKeyDevice;
+  deviceWrap: RouterOutputs["groupEpoch"]["getEpochKeyWraps"]["deviceWrap"];
+  epochId: string;
+}) => {
+  if (deviceWrap?.algorithm !== WRAPPED_EPOCH_KEY_ALGORITHM) return null;
+  const result = await tryCatch(
+    Promise.resolve().then(() =>
+      unwrapEpochKey({
+        recipientDeviceId: device.deviceId,
+        recipientPrivateKey: device.privateKey,
+        wrappedEpochKey: { ...deviceWrap, algorithm: WRAPPED_EPOCH_KEY_ALGORITHM, epochId },
+      }),
+    ),
+  );
+  return result.error ? null : result.data;
+};
 
 export const unwrapEpochKeyFromWraps = async ({
   device,
@@ -23,18 +49,8 @@ export const unwrapEpochKeyFromWraps = async ({
   getHistoryKey: (version: number) => Promise<HistoryPrivateKeyMaterial | null>;
   wraps: Pick<RouterOutputs["groupEpoch"]["getEpochKeyWraps"], "deviceWrap" | "historyWraps">;
 }) => {
-  if (deviceWrap?.algorithm === WRAPPED_EPOCH_KEY_ALGORITHM) {
-    const result = await tryCatch(
-      Promise.resolve().then(() =>
-        unwrapEpochKey({
-          recipientDeviceId: device.deviceId,
-          recipientPrivateKey: device.privateKey,
-          wrappedEpochKey: { ...deviceWrap, algorithm: WRAPPED_EPOCH_KEY_ALGORITHM, epochId },
-        }),
-      ),
-    );
-    if (!result.error) return result.data;
-  }
+  const deviceEpochKey = await unwrapDeviceWrap({ device, deviceWrap, epochId });
+  if (deviceEpochKey) return deviceEpochKey;
 
   for (const wrap of historyWraps) {
     if (wrap.algorithm !== WRAPPED_EPOCH_KEY_ALGORITHM) continue;

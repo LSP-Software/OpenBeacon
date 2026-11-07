@@ -1,19 +1,17 @@
 import {
   createHistoryKeyPair,
-  type DevicePrivateKeyMaterial,
   deriveRecoveryKeyPair,
   getHistoryPublicKey,
   RECOVERY_KEY_DERIVATION_VERSION,
   type RecoveryPhrase,
   sealHistoryKeyEscrow,
-  unwrapEpochKey,
-  WRAPPED_EPOCH_KEY_ALGORITHM,
   wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
 import { trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
+import { type EpochKeyDevice, unwrapDeviceWrap } from "./epochKeys.ts";
 import { getStoredHistoryKey, storeHistoryKey } from "./historyKeys.ts";
 
 export const pickConfirmationIndexes = () => {
@@ -77,7 +75,7 @@ export const backfillHistoryWraps = async ({
   device,
   groupId,
 }: {
-  device: { deviceId: string; privateKey: DevicePrivateKeyMaterial; userId: string };
+  device: EpochKeyDevice;
   groupId: string;
 }) => {
   let cursor: number | null = null;
@@ -96,21 +94,12 @@ export const backfillHistoryWraps = async ({
     }
     const wraps = [];
     for (const { deviceWrap, epochId } of page.epochs) {
-      if (deviceWrap.algorithm !== WRAPPED_EPOCH_KEY_ALGORITHM) continue;
-      const epochKey = await tryCatch(
-        Promise.resolve().then(() =>
-          unwrapEpochKey({
-            recipientDeviceId: device.deviceId,
-            recipientPrivateKey: device.privateKey,
-            wrappedEpochKey: { ...deviceWrap, algorithm: WRAPPED_EPOCH_KEY_ALGORITHM, epochId },
-          }),
-        ),
-      );
-      if (epochKey.error) continue;
+      const epochKey = await unwrapDeviceWrap({ device, deviceWrap, epochId });
+      if (!epochKey) continue;
       wraps.push(
         wrapEpochKeyForHistoryKey({
           epochId,
-          epochKey: epochKey.data,
+          epochKey,
           historyKey,
           senderPrivateKey: device.privateKey,
         }),

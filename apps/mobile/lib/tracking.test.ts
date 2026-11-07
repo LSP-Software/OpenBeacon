@@ -81,6 +81,7 @@ let historyOnlyGroup: string | null = null;
 let backfillErrors = new Map<string, Error>();
 let missingHistoryWraps = new Map<string, string[]>();
 const backfillQueries: string[] = [];
+const captureStateSeenByBackfill: Array<{ provisions: number; starts: number }> = [];
 const historyWrapUploads: Array<{ groupId: string; wraps: WrappedHistoryEpochKey[] }> = [];
 let registrationWait: Promise<void> | null = null;
 let onRegistration: (() => void) | null = null;
@@ -146,6 +147,10 @@ mock.module("./api.ts", () => ({
       listHistoryBackfill: {
         query: async ({ groupId }: { groupId: string }) => {
           backfillQueries.push(groupId);
+          captureStateSeenByBackfill.push({
+            provisions: provisionCalls.length,
+            starts: startCaptureCalls,
+          });
           const backfillError = backfillErrors.get(groupId);
           if (backfillError) throw backfillError;
           return {
@@ -394,6 +399,7 @@ describe("tracking service", () => {
     backfillErrors = new Map();
     missingHistoryWraps = new Map();
     backfillQueries.length = 0;
+    captureStateSeenByBackfill.length = 0;
     historyWrapUploads.length = 0;
     registrationWait = null;
     onRegistration = null;
@@ -787,17 +793,28 @@ describe("tracking service", () => {
     expect(historyWrapUploads.map(({ groupId }) => groupId)).toEqual(["group-2"]);
   });
 
-  test("stops capture when backfill reports an unauthorized session", async () => {
+  test("revokes keys and stops capture when backfill reports an unauthorized session", async () => {
     captureRunning = true;
     backfillErrors.set(
       "group-1",
       Object.assign(new Error("Session revoked"), { data: { code: "UNAUTHORIZED" } }),
     );
     await syncBackgroundTracking();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(stopCaptureCalls).toBe(1);
-    expect(revokedGroups).toEqual([undefined]);
-    expect(provisionCalls).toEqual([]);
+    expect(provisionCalls).toHaveLength(1);
+    expect(revokedGroups).toHaveLength(1);
+    expect(captureRunning).toBe(false);
+  });
+
+  test("provisions keys and starts capture before backfilling", async () => {
+    missingHistoryWraps.set("group-1", ["epoch-1"]);
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(captureStateSeenByBackfill).toEqual([
+      { provisions: 1, starts: 1 },
+      { provisions: 1, starts: 1 },
+    ]);
   });
 
   test("stops capture when backfill reports an unauthorized session while capture is off", async () => {

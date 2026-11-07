@@ -65,6 +65,7 @@ const RecoveryPhraseSetupScreen = () => {
     setUserId(device.userId);
     void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });
     void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", device.userId] });
+    void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
     setStep("protecting");
     const groups = await tryCatch(trpcClient.groupMembership.list.query());
     const groupIds = groups.data?.map(({ id }) => id) ?? [];
@@ -109,7 +110,7 @@ const RecoveryPhraseSetupScreen = () => {
               <View className="flex-row flex-wrap gap-2">
                 {phrase.words().map((word, index) => (
                   <View
-                    key={`${index}-${word}`}
+                    key={index}
                     className="w-[48%] flex-row gap-2 rounded-lg border border-border bg-card px-3 py-2"
                   >
                     <Text className="text-muted-foreground w-6">{index + 1}</Text>

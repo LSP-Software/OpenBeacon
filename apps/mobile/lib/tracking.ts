@@ -126,12 +126,7 @@ const reconcileTrackingKeysInternal = async ({
         const rotation = await tryCatch(rotateGroupEpochIfRequired(groupId));
         if (!isCurrent()) return null;
         if (getErrorCode(rotation.error) === "UNAUTHORIZED") throw rotation.error;
-        const [latest, backfill] = await Promise.all([
-          tryCatch(trpcClient.groupEpoch.getLatest.query({ groupId })),
-          tryCatch(backfillHistoryWraps({ device: deviceKeyContext, groupId })),
-        ]);
-        if (!isCurrent()) return null;
-        if (getErrorCode(backfill.error) === "UNAUTHORIZED") throw backfill.error;
+        const latest = await tryCatch(trpcClient.groupEpoch.getLatest.query({ groupId }));
         if (latest.error) {
           if (getErrorCode(latest.error) === "UNAUTHORIZED") throw latest.error;
           preserveGroupIds.add(groupId);
@@ -217,12 +212,18 @@ const reconcileTrackingKeysInternal = async ({
       await trackingModule.refreshCapture();
       captureRefreshPending = false;
     }
-    return;
-  }
-
-  if (trackingModule.isCaptureRunning()) {
+  } else if (trackingModule.isCaptureRunning()) {
     await trackingModule.stopCapture();
   }
+
+  if (!isCurrent()) return;
+  const backfills = await Promise.all(
+    groups.map(({ id: groupId }) =>
+      tryCatch(backfillHistoryWraps({ device: deviceKeyContext, groupId })),
+    ),
+  );
+  const unauthorized = backfills.find(({ error }) => getErrorCode(error) === "UNAUTHORIZED");
+  if (unauthorized?.error) throw unauthorized.error;
 };
 
 export const reconcileTrackingKeys = ({
