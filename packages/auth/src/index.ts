@@ -93,7 +93,6 @@ export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
   emailAndPassword: {
-    // TODO: Should only support magic links
     enabled: true,
   },
   socialProviders:
@@ -108,12 +107,7 @@ export const auth = betterAuth({
       : undefined,
   trustedOrigins: [
     "openbeacon://",
-    ...(process.env["NODE_ENV"] === "development"
-      ? [
-          "exp://", // Trust all Expo URLs (prefix matching)
-          "exp://**", // Trust all Expo URLs (wildcard matching)
-        ]
-      : []),
+    ...(process.env["NODE_ENV"] === "development" ? ["exp://", "exp://**"] : []),
   ],
 });
 

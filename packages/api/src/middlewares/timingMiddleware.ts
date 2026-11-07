@@ -1,11 +1,5 @@
 import type { createTRPCComponents } from "../trpc.ts";
 
-/**
- * Middleware for timing procedure execution and adding an articifial delay in development.
- *
- * You can remove this if you don't like it, but it can help catch unwanted waterfalls by simulating
- * network latency that would occur in production but not in local development.
- */
 export const createTimingMiddleware = ({
   t,
 }: {
