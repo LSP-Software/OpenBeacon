@@ -1,3 +1,4 @@
+import { Alert } from "../../../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
@@ -18,7 +19,7 @@ import {
 } from "lucide-react-native";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Alert, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
 import { SettingsContainer } from "../../../components/containers/settingsContainer.tsx";

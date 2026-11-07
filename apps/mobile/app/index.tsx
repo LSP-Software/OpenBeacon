@@ -1,5 +1,5 @@
-import { router, useRootNavigationState } from "expo-router";
-import { useEffect, useRef } from "react";
+import { router, useFocusEffect, useRootNavigationState } from "expo-router";
+import { useCallback, useEffect, useRef } from "react";
 import { Animated, Dimensions, Easing, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BeaconIcon } from "../components/BeaconIcon.tsx";
@@ -64,13 +64,15 @@ export default function HomeScreen() {
   const colors = useColors();
   const rootNavigationState = useRootNavigationState();
 
-  useEffect(() => {
-    if (!rootNavigationState?.key || isPending || !session) {
-      return;
-    }
+  useFocusEffect(
+    useCallback(() => {
+      if (!rootNavigationState?.key || isPending || !session) {
+        return;
+      }
 
-    router.replace("/(tabs)/map");
-  }, [rootNavigationState?.key, session, isPending]);
+      router.replace("/(tabs)/map");
+    }, [rootNavigationState?.key, session, isPending]),
+  );
 
   if (isPending || session) {
     return <LoadingScreen colors={colors} />;

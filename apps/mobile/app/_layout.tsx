@@ -3,6 +3,7 @@ import "../global.css";
 import { PortalHost } from "@rn-primitives/portal";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
+import { AlertHost } from "../components/ui/Alert.tsx";
 import { OfflineBanner } from "../components/OfflineBanner.tsx";
 import { queryClient } from "../lib/api.ts";
 import { DeletionCancellationNotice } from "../providers/DeletionCancellationNotice.tsx";
@@ -27,6 +28,7 @@ const RootLayout = () => {
             </View>
           </TrackingProvider>
         </LocationPermissionProvider>
+        <AlertHost />
         <PortalHost />
       </ThemeProvider>
     </QueryClientProvider>

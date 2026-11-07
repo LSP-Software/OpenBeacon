@@ -1,9 +1,10 @@
+import { Alert } from "../../../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { ChevronRightIcon, PlusIcon, ShieldIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CreateGroupDialog } from "../../../components/dialogs/CreateGroupDialog.tsx";
 import { LoadingIndicator } from "../../../components/LoadingIndicator.tsx";

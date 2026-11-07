@@ -1,3 +1,4 @@
+import { Alert } from "../../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { inviteMemberToGroupSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
@@ -5,7 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { LinkIcon, MailIcon, PlusIcon, QrCodeIcon, Trash2Icon } from "lucide-react-native";
 import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
-import { Alert, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import type z from "zod";
 import { trpc } from "../../lib/api.ts";
 import { SharedInvite } from "./SharedInvite.tsx";

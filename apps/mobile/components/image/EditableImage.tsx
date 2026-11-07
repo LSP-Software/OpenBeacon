@@ -1,9 +1,10 @@
+import { Alert } from "../../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { PencilIcon, UserIcon } from "lucide-react-native";
 import { useState } from "react";
-import { ActivityIndicator, Alert, Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { cn } from "../../lib/cn.ts";
 import type { ImageUploadResult } from "../../lib/image-upload.ts";
 import { cleanupTempFile } from "../../lib/image-upload.ts";

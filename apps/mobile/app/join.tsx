@@ -1,8 +1,9 @@
+import { Alert } from "../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { Alert, TextInput, View } from "react-native";
+import { TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
