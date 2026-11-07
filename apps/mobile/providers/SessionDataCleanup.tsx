@@ -12,7 +12,10 @@ export const SessionDataCleanup = () => {
   const lastSessionCheckRef = useRef(0);
   const userId = session?.user.id ?? null;
   const userIdRef = useRef(userId);
-  userIdRef.current = userId;
+
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
 
   useEffect(() => {
     if (isPending) return;
