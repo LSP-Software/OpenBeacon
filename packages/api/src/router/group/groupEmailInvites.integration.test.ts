@@ -101,7 +101,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const outsider = caller(users[3]!);
       const invites = [
         { email: email(users[1]!), role: "ADMIN" as const },
-        { email: email(users[2]!), role: "MEMBER" as const },
+        { email: ` ${email(users[2]!).toUpperCase()} `, role: "MEMBER" as const },
         { email: email(users[1]!), role: "MEMBER" as const },
         { email: email(users[0]!), role: "MEMBER" as const },
         { email: `${prefix}-unknown@example.test`, role: "MEMBER" as const },

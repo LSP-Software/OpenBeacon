@@ -1,6 +1,10 @@
 import z from "zod";
 
-export const emailSchema = z.email({ error: "Invalid email address" }).trim();
+export const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.email({ error: "Invalid email address" }).max(320));
 export const passwordSchema = z
   .string()
   .min(8, { message: "Password must be at least 8 characters long" });
