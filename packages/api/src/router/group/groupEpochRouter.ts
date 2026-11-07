@@ -6,6 +6,53 @@ import z from "zod";
 import { getGroupJoinContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 
+const selectEpochKeyWraps = ({ deviceId, userId }: { deviceId: string; userId: string }) =>
+  ({
+    historyWraps: {
+      orderBy: { historyKey: { version: "asc" } },
+      select: {
+        algorithm: true,
+        createdAt: true,
+        ephemeralPublicKey: true,
+        historyKey: { select: { version: true } },
+        senderPublicKey: true,
+        wrappedKey: true,
+      },
+      where: { historyKey: { userId } },
+    },
+    id: true,
+    recipientKeys: {
+      select: {
+        algorithm: true,
+        createdAt: true,
+        ephemeralPublicKey: true,
+        recipientDeviceId: true,
+        wrappedKey: true,
+      },
+      where: { recipientDeviceId: deviceId, recipientDevice: { userId } },
+    },
+    senderPublicKey: true,
+  }) satisfies Prisma.GroupEpochSelect;
+
+const toEpochKeyWraps = ({
+  epoch: { historyWraps, id, recipientKeys, senderPublicKey },
+  userId,
+}: {
+  epoch: Prisma.GroupEpochGetPayload<{ select: ReturnType<typeof selectEpochKeyWraps> }>;
+  userId: string;
+}) => {
+  const deviceWrap = recipientKeys[0];
+  return {
+    deviceWrap: deviceWrap ? { ...deviceWrap, epochId: id, senderPublicKey } : null,
+    historyWraps: historyWraps.map(({ historyKey, ...wrap }) => ({
+      ...wrap,
+      epochId: id,
+      historyKeyVersion: historyKey.version,
+      userId,
+    })),
+  };
+};
+
 export const groupEpochRouter = {
   rotationContext: groupMemberProcedure.query(async ({ ctx, input }) => {
     if (!ctx.group?.epochRotationRequired) return null;
@@ -149,45 +196,10 @@ export const groupEpochRouter = {
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const epoch = await ctx.db.groupEpoch.findFirst({
-        select: {
-          historyWraps: {
-            orderBy: { historyKey: { version: "asc" } },
-            select: {
-              algorithm: true,
-              createdAt: true,
-              ephemeralPublicKey: true,
-              historyKey: { select: { version: true } },
-              senderPublicKey: true,
-              wrappedKey: true,
-            },
-            where: { historyKey: { userId } },
-          },
-          recipientKeys: {
-            select: {
-              algorithm: true,
-              createdAt: true,
-              ephemeralPublicKey: true,
-              recipientDeviceId: true,
-              wrappedKey: true,
-            },
-            where: { recipientDeviceId: input.deviceId, recipientDevice: { userId } },
-          },
-          senderPublicKey: true,
-        },
+        select: selectEpochKeyWraps({ deviceId: input.deviceId, userId }),
         where: { groupId: input.groupId, id: input.epochId },
       });
-      const deviceWrap = epoch?.recipientKeys[0];
-      return {
-        deviceWrap: deviceWrap
-          ? { ...deviceWrap, epochId: input.epochId, senderPublicKey: epoch.senderPublicKey }
-          : null,
-        historyWraps: (epoch?.historyWraps ?? []).map(({ historyKey, ...wrap }) => ({
-          ...wrap,
-          epochId: input.epochId,
-          historyKeyVersion: historyKey.version,
-          userId,
-        })),
-      };
+      return epoch ? toEpochKeyWraps({ epoch, userId }) : { deviceWrap: null, historyWraps: [] };
     }),
   listEpochKeyWraps: groupMemberProcedure
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
@@ -204,32 +216,9 @@ export const groupEpochRouter = {
       const epochs = await ctx.db.groupEpoch.findMany({
         orderBy: { epochNumber: "desc" },
         select: {
+          ...selectEpochKeyWraps({ deviceId: input.deviceId, userId }),
           createdAt: true,
           epochNumber: true,
-          historyWraps: {
-            orderBy: { historyKey: { version: "asc" } },
-            select: {
-              algorithm: true,
-              createdAt: true,
-              ephemeralPublicKey: true,
-              historyKey: { select: { version: true } },
-              senderPublicKey: true,
-              wrappedKey: true,
-            },
-            where: { historyKey: { userId } },
-          },
-          id: true,
-          recipientKeys: {
-            select: {
-              algorithm: true,
-              createdAt: true,
-              ephemeralPublicKey: true,
-              recipientDeviceId: true,
-              wrappedKey: true,
-            },
-            where: { recipientDeviceId: input.deviceId, recipientDevice: { userId } },
-          },
-          senderPublicKey: true,
         },
         take: pageSize + 1,
         where: {
@@ -242,23 +231,12 @@ export const groupEpochRouter = {
       });
       const page = epochs.slice(0, pageSize);
       return {
-        epochs: page.map(
-          ({ createdAt, epochNumber, historyWraps, id, recipientKeys, senderPublicKey }) => {
-            const deviceWrap = recipientKeys[0];
-            return {
-              createdAt,
-              deviceWrap: deviceWrap ? { ...deviceWrap, epochId: id, senderPublicKey } : null,
-              epochId: id,
-              epochNumber,
-              historyWraps: historyWraps.map(({ historyKey, ...wrap }) => ({
-                ...wrap,
-                epochId: id,
-                historyKeyVersion: historyKey.version,
-                userId,
-              })),
-            };
-          },
-        ),
+        epochs: page.map((epoch) => ({
+          ...toEpochKeyWraps({ epoch, userId }),
+          createdAt: epoch.createdAt,
+          epochId: epoch.id,
+          epochNumber: epoch.epochNumber,
+        })),
         nextCursor: epochs.length > pageSize ? (page.at(-1)?.epochNumber ?? null) : null,
       };
     }),

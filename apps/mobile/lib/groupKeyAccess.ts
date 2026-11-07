@@ -4,10 +4,7 @@ export const checkGroupKeyAccess = async <Epoch extends { createdAt: Date }>({
 }: {
   canResolve: (epoch: Epoch) => Promise<boolean>;
   listEpochs: (cursor: number | null) => Promise<{ epochs: Epoch[]; nextCursor: number | null }>;
-}): Promise<{
-  current: "available" | "missing" | "unavailable";
-  history: "complete" | { partialFrom: Date };
-}> => {
+}) => {
   let current: "available" | "missing" | "unavailable" = "unavailable";
   let readableFrom: Date | null = null;
   let cursor: number | null = null;
@@ -24,5 +21,5 @@ export const checkGroupKeyAccess = async <Epoch extends { createdAt: Date }>({
     }
     cursor = page.nextCursor;
   } while (cursor !== null);
-  return { current, history: "complete" };
+  return { current, history: "complete" as const };
 };
