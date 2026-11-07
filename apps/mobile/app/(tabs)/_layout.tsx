@@ -1,10 +1,13 @@
+import { useQuery } from "@tanstack/react-query";
 import { Redirect, Tabs } from "expo-router";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { TabBar } from "../../components/TabBar.tsx";
 import { authClient } from "../../lib/auth-client.ts";
+import { groupColorSyncQueryOptions } from "../../lib/groupColorSync.ts";
 
 export default function TabsLayout() {
   const { data: session, isPending } = authClient.useSession();
+  useQuery(groupColorSyncQueryOptions(session?.user.id));
 
   if (isPending) {
     return <LoadingIndicator />;

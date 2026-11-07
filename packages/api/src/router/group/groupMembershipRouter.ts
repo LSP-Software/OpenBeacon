@@ -155,6 +155,22 @@ export const groupMembershipRouter = {
           message: "Nickname changed. Reload and try again.",
         });
     }),
+  colors: protectedProcedure.query(async ({ ctx }) => {
+    const colors = await ctx.db.personalGroupColor.findMany({
+      where: { owner: { userId: ctx.session.user.id } },
+      select: { ciphertext: true, owner: { select: { groupId: true } } },
+    });
+    return colors.map((color) => ({ groupId: color.owner.groupId, ciphertext: color.ciphertext }));
+  }),
+  updateColor: groupMemberProcedure
+    .input(z.object({ groupId: z.string().min(1), ciphertext: z.string().min(1).max(50000) }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.personalGroupColor.upsert({
+        where: { ownerId: ctx.groupMember.id },
+        create: { ownerId: ctx.groupMember.id, ciphertext: input.ciphertext },
+        update: { ciphertext: input.ciphertext },
+      });
+    }),
   remove: groupMemberProcedure
     .meta({
       rateLimit: {

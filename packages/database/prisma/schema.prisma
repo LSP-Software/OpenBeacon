@@ -185,6 +185,7 @@ model GroupMember {
   role GroupRole
   personalNicknames PersonalGroupNickname[] @relation("NicknameTarget")
   ownedNicknames PersonalGroupNickname[] @relation("NicknameOwner")
+  personalColor PersonalGroupColor?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -200,6 +201,12 @@ model PersonalGroupNickname {
   ciphertext String
 
   @@id([ownerId, targetId])
+}
+
+model PersonalGroupColor {
+  ownerId String @id
+  owner GroupMember @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ciphertext String
 }
 
 model UserDevice {

@@ -70,3 +70,5 @@ export type DecryptedGroupPayload = {
   bytes: SensitivePayloadBytes;
   metadata: Pick<EncryptedPayload, "epochId" | "groupId" | "kind" | "senderDeviceId">;
 };
+
+export type PersonalDataPurpose = "nickname" | "group-color";

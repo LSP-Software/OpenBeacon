@@ -19,7 +19,7 @@ const storageKey = (groupId: string) => `group.color.${groupId}`;
 const listeners = new Set<() => void>();
 let revision = 0;
 
-const isGroupColor = (value: string | undefined): value is GroupColor => {
+export const isGroupColor = (value: string | undefined): value is GroupColor => {
   return GROUP_COLOR_PALETTE.some((color) => color === value);
 };
 
