@@ -42,7 +42,7 @@ describe("createMapTrackingDecryptPoint", () => {
   test("decrypts a tracking point using a fetched epoch key", async () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     const { epoch, epochKey, wrappedKeys } = createInitialGroupEpoch({
-      createdByDeviceId: recipient.deviceId,
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
       groupId: "group-1",
       recipients: [recipient],
     });
@@ -184,8 +184,8 @@ describe("createMapTrackingDecryptPoint", () => {
         createdAt: new Date(0),
         ephemeralPublicKey: "not-a-valid-key",
         epochId: "epoch-1",
-        nonce: "nonce",
         recipientDeviceId: recipient.deviceId,
+        senderPublicKey: keyPair.publicKey,
         wrappedKey: "not-a-valid-wrapped-key",
       }),
     });
@@ -201,7 +201,7 @@ describe("createMapTrackingDecryptPoint", () => {
   test("keeps a cached epoch key when only the point payload is corrupt", async () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     const { epoch, epochKey, wrappedKeys } = createInitialGroupEpoch({
-      createdByDeviceId: recipient.deviceId,
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
       groupId: "group-1",
       recipients: [recipient],
     });
@@ -273,7 +273,7 @@ describe("createMapTrackingDecryptPoint", () => {
   test("concurrent decrypts for the same group and epoch share one wrapped-key fetch", async () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     const { epoch, epochKey, wrappedKeys } = createInitialGroupEpoch({
-      createdByDeviceId: recipient.deviceId,
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
       groupId: "group-1",
       recipients: [recipient],
     });
@@ -379,7 +379,7 @@ describe("createMapTrackingDecryptPoint", () => {
   test("transient wrapped-key failures are not negative-cached and can retry", async () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     const { epoch, epochKey, wrappedKeys } = createInitialGroupEpoch({
-      createdByDeviceId: recipient.deviceId,
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
       groupId: "group-1",
       recipients: [recipient],
     });
@@ -454,7 +454,7 @@ describe("createMapTrackingDecryptPoint", () => {
   test("discovers a later-provisioned key after the negative-cache window without remounting", async () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     const { epoch, epochKey, wrappedKeys } = createInitialGroupEpoch({
-      createdByDeviceId: recipient.deviceId,
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
       groupId: "group-1",
       recipients: [recipient],
     });
@@ -551,7 +551,7 @@ describe("createMapTrackingDecryptPoint", () => {
   test("does not collide cache entries across group and epoch identifiers", async () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     const first = createInitialGroupEpoch({
-      createdByDeviceId: recipient.deviceId,
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
       groupId: "a:b",
       recipients: [recipient],
     });
@@ -619,7 +619,7 @@ describe("createMapTrackingDecryptPoint", () => {
   test("clear removes cached and missing keys so the next decrypt refetches", async () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     const { epoch, epochKey, wrappedKeys } = createInitialGroupEpoch({
-      createdByDeviceId: recipient.deviceId,
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
       groupId: "group-1",
       recipients: [recipient],
     });
@@ -694,12 +694,12 @@ describe("createMapTrackingDecryptPoint", () => {
   test("clearGroup only clears cache entries for that group", async () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     const groupOne = createInitialGroupEpoch({
-      createdByDeviceId: recipient.deviceId,
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
       groupId: "group-1",
       recipients: [recipient],
     });
     const groupTwo = createInitialGroupEpoch({
-      createdByDeviceId: recipient.deviceId,
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
       groupId: "group-2",
       recipients: [recipient],
     });
@@ -819,7 +819,7 @@ describe("createMapTrackingDecryptPoint", () => {
   test("clear during an in-flight fetch does not leave a cached epoch key", async () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     const { epoch, epochKey, wrappedKeys } = createInitialGroupEpoch({
-      createdByDeviceId: recipient.deviceId,
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
       groupId: "group-1",
       recipients: [recipient],
     });

@@ -12,7 +12,7 @@ import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 const keyPair = createDeviceKeyPair();
 const epoch = createInitialGroupEpoch({
-  createdByDeviceId: "device",
+  creator: { deviceId: "device", privateKey: keyPair.privateKey },
   groupId: "group",
   recipients: [
     {

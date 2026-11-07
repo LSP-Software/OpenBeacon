@@ -1,8 +1,6 @@
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
 import { randomBytes } from "@noble/ciphers/utils.js";
 import { x25519 } from "@noble/curves/ed25519.js";
-import { hkdf } from "@noble/hashes/hkdf.js";
-import { sha256 } from "@noble/hashes/sha2.js";
 import { decodeBase64, encodeBase64 } from "./base64.ts";
 import {
   DEVICE_KEY_ALGORITHM,
@@ -11,6 +9,7 @@ import {
   WRAPPED_EPOCH_KEY_ALGORITHM,
   XCHACHA20_NONCE_LENGTH,
 } from "./constants.ts";
+import { openAuth, sealAuth } from "./hpke.ts";
 import { DevicePrivateKeyMaterial, EpochKeyMaterial, SensitivePayloadBytes } from "./sensitive.ts";
 import type { TrackingPointV1 } from "./trackingPoint.ts";
 import {
@@ -22,6 +21,7 @@ import type {
   DecryptedGroupPayload,
   DeviceKeyPair,
   EncryptedPayload,
+  EpochCreator,
   GroupEpoch,
   GroupEpochCreationResult,
   GroupPayloadKind,
@@ -47,7 +47,7 @@ const ensureEpochKeyLength = (bytes: Uint8Array) => {
   }
 };
 
-const getWrapAssociatedData = (epochId: string, recipientDeviceId: string) =>
+const getWrapInfo = (epochId: string, recipientDeviceId: string) =>
   encodeMetadata({
     context: DOMAIN_CONTEXT,
     epochId,
@@ -69,24 +69,6 @@ const getPayloadAssociatedData = (
     purpose: "payload",
     senderDeviceId,
   });
-
-const deriveEpochKeyEncryptionKey = (
-  sharedSecret: Uint8Array,
-  epochId: string,
-  recipientDeviceId: string,
-) =>
-  hkdf(
-    sha256,
-    sharedSecret,
-    undefined,
-    encodeMetadata({
-      context: DOMAIN_CONTEXT,
-      epochId,
-      purpose: "epoch-key-kek",
-      recipientDeviceId,
-    }),
-    GROUP_EPOCH_KEY_LENGTH,
-  );
 
 const assertMetadataMatch = (
   encryptedPayload: EncryptedPayload,
@@ -170,36 +152,30 @@ export const wrapEpochKeyForRecipient = ({
   epoch,
   epochKey,
   recipient,
+  senderPrivateKey,
 }: {
   epoch: GroupEpoch;
   epochKey: EpochKeyMaterial;
   recipient: RecipientPublicKeyMaterial;
+  senderPrivateKey: DevicePrivateKeyMaterial;
 }): WrappedEpochKey => {
-  const ephemeralKeyPair = x25519.keygen();
-  const sharedSecret = x25519.getSharedSecret(
-    ephemeralKeyPair.secretKey,
-    decodeBase64(recipient.publicKey),
-  );
-  const keyEncryptionKey = deriveEpochKeyEncryptionKey(
-    sharedSecret,
-    epoch.epochId,
-    recipient.deviceId,
-  );
-  const nonce = randomBytes(XCHACHA20_NONCE_LENGTH);
-  const cipher = xchacha20poly1305(
-    keyEncryptionKey,
-    nonce,
-    getWrapAssociatedData(epoch.epochId, recipient.deviceId),
-  );
+  const senderPrivateKeyBytes = senderPrivateKey.expose();
+  const sealed = sealAuth({
+    aad: new Uint8Array(),
+    info: getWrapInfo(epoch.epochId, recipient.deviceId),
+    plaintext: epochKey.expose(),
+    recipientPublicKey: decodeBase64(recipient.publicKey),
+    senderPrivateKey: senderPrivateKeyBytes,
+  });
 
   return {
     algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
     createdAt: new Date(),
-    ephemeralPublicKey: encodeBase64(ephemeralKeyPair.publicKey),
+    ephemeralPublicKey: encodeBase64(sealed.enc),
     epochId: epoch.epochId,
-    nonce: encodeBase64(nonce),
     recipientDeviceId: recipient.deviceId,
-    wrappedKey: encodeBase64(cipher.encrypt(epochKey.expose())),
+    senderPublicKey: encodeBase64(x25519.getPublicKey(senderPrivateKeyBytes)),
+    wrappedKey: encodeBase64(sealed.ciphertext),
   };
 };
 
@@ -207,15 +183,17 @@ export const wrapEpochKeyForRecipients = ({
   epoch,
   epochKey,
   recipients,
+  senderPrivateKey,
 }: {
   epoch: GroupEpoch;
   epochKey: EpochKeyMaterial;
   recipients: RecipientPublicKeyMaterial[];
+  senderPrivateKey: DevicePrivateKeyMaterial;
 }) =>
   recipients
     .slice()
     .sort((left, right) => left.deviceId.localeCompare(right.deviceId))
-    .map((recipient) => wrapEpochKeyForRecipient({ epoch, epochKey, recipient }));
+    .map((recipient) => wrapEpochKeyForRecipient({ epoch, epochKey, recipient, senderPrivateKey }));
 
 export const unwrapEpochKey = ({
   recipientDeviceId,
@@ -226,25 +204,22 @@ export const unwrapEpochKey = ({
   recipientPrivateKey: DevicePrivateKeyMaterial;
   wrappedEpochKey: WrappedEpochKey;
 }) => {
+  if (wrappedEpochKey.algorithm !== WRAPPED_EPOCH_KEY_ALGORITHM) {
+    throw new Error("Unsupported wrapped epoch key algorithm.");
+  }
+
   if (wrappedEpochKey.recipientDeviceId !== recipientDeviceId) {
     throw new Error("Wrapped epoch key recipient mismatch.");
   }
 
-  const sharedSecret = x25519.getSharedSecret(
-    recipientPrivateKey.expose(),
-    decodeBase64(wrappedEpochKey.ephemeralPublicKey),
-  );
-  const keyEncryptionKey = deriveEpochKeyEncryptionKey(
-    sharedSecret,
-    wrappedEpochKey.epochId,
-    wrappedEpochKey.recipientDeviceId,
-  );
-  const cipher = xchacha20poly1305(
-    keyEncryptionKey,
-    decodeBase64(wrappedEpochKey.nonce),
-    getWrapAssociatedData(wrappedEpochKey.epochId, wrappedEpochKey.recipientDeviceId),
-  );
-  const epochKeyBytes = cipher.decrypt(decodeBase64(wrappedEpochKey.wrappedKey));
+  const epochKeyBytes = openAuth({
+    aad: new Uint8Array(),
+    ciphertext: decodeBase64(wrappedEpochKey.wrappedKey),
+    enc: decodeBase64(wrappedEpochKey.ephemeralPublicKey),
+    info: getWrapInfo(wrappedEpochKey.epochId, wrappedEpochKey.recipientDeviceId),
+    recipientPrivateKey: recipientPrivateKey.expose(),
+    senderPublicKey: decodeBase64(wrappedEpochKey.senderPublicKey),
+  });
 
   ensureEpochKeyLength(epochKeyBytes);
 
@@ -376,17 +351,17 @@ export const decodeUtf8Payload = (payload: SensitivePayloadBytes) =>
   textDecoder.decode(payload.expose());
 
 export const createInitialGroupEpoch = ({
-  createdByDeviceId,
+  creator,
   groupId,
   recipients,
 }: {
-  createdByDeviceId: string;
+  creator: EpochCreator;
   groupId: string;
   recipients: RecipientPublicKeyMaterial[];
 }): GroupEpochCreationResult => {
   const epoch = {
     createdAt: new Date(),
-    createdByDeviceId,
+    createdByDeviceId: creator.deviceId,
     epochId: createOpaqueId("epoch"),
     epochNumber: 1,
     groupId,
@@ -396,22 +371,27 @@ export const createInitialGroupEpoch = ({
   return {
     epoch,
     epochKey,
-    wrappedKeys: wrapEpochKeyForRecipients({ epoch, epochKey, recipients }),
+    wrappedKeys: wrapEpochKeyForRecipients({
+      epoch,
+      epochKey,
+      recipients,
+      senderPrivateKey: creator.privateKey,
+    }),
   };
 };
 
 export const createNextGroupEpoch = ({
-  createdByDeviceId,
+  creator,
   previousEpoch,
   recipients,
 }: {
-  createdByDeviceId: string;
+  creator: EpochCreator;
   previousEpoch: GroupEpoch;
   recipients: RecipientPublicKeyMaterial[];
 }): GroupEpochCreationResult => {
   const epoch = {
     createdAt: new Date(),
-    createdByDeviceId,
+    createdByDeviceId: creator.deviceId,
     epochId: createOpaqueId("epoch"),
     epochNumber: previousEpoch.epochNumber + 1,
     groupId: previousEpoch.groupId,
@@ -421,7 +401,12 @@ export const createNextGroupEpoch = ({
   return {
     epoch,
     epochKey,
-    wrappedKeys: wrapEpochKeyForRecipients({ epoch, epochKey, recipients }),
+    wrappedKeys: wrapEpochKeyForRecipients({
+      epoch,
+      epochKey,
+      recipients,
+      senderPrivateKey: creator.privateKey,
+    }),
   };
 };
 
@@ -445,6 +430,7 @@ export type {
   DecryptedGroupPayload,
   DeviceKeyPair,
   EncryptedPayload,
+  EpochCreator,
   GroupEpoch,
   GroupEpochCreationResult,
   GroupPayloadKind,

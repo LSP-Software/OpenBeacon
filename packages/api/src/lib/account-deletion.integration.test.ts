@@ -86,7 +86,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         ],
       });
       await prisma.groupEpoch.create({
-        data: { id: epochId, groupId, epochNumber: 1, createdByDeviceId: deletedDevice },
+        data: {
+          id: epochId,
+          groupId,
+          epochNumber: 1,
+          createdByDeviceId: deletedDevice,
+          senderPublicKey: "a",
+        },
       });
       await prisma.groupEncryptedPayload.createMany({
         data: [

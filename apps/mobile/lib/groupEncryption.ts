@@ -2,6 +2,7 @@ import type { RouterInputs } from "@openbeacon/api";
 import {
   createInitialGroupEpoch,
   createNextGroupEpoch,
+  type EpochCreator,
   type GroupEpoch,
   type RecipientPublicKeyMaterial,
 } from "@openbeacon/encryption";
@@ -10,25 +11,25 @@ import { createSecureId } from "./createSecureId.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 
 const createEpochBundle = ({
-  currentDeviceId,
+  creator,
   groupId,
   latestEpoch,
   recipients,
 }: {
-  currentDeviceId: string;
+  creator: EpochCreator;
   groupId: string;
   latestEpoch: GroupEpoch | null;
   recipients: RecipientPublicKeyMaterial[];
 }) => {
   if (latestEpoch) {
     const nextEpoch = createNextGroupEpoch({
-      createdByDeviceId: currentDeviceId,
+      creator,
       previousEpoch: latestEpoch,
       recipients,
     });
 
     return {
-      createdByDeviceId: currentDeviceId,
+      createdByDeviceId: creator.deviceId,
       epochId: nextEpoch.epoch.epochId,
       epochNumber: nextEpoch.epoch.epochNumber,
       recipientKeys: nextEpoch.wrappedKeys,
@@ -36,13 +37,13 @@ const createEpochBundle = ({
   }
 
   const initialEpoch = createInitialGroupEpoch({
-    createdByDeviceId: currentDeviceId,
+    creator,
     groupId,
     recipients,
   });
 
   return {
-    createdByDeviceId: currentDeviceId,
+    createdByDeviceId: creator.deviceId,
     epochId: initialEpoch.epoch.epochId,
     epochNumber: initialEpoch.epoch.epochNumber,
     recipientKeys: initialEpoch.wrappedKeys,
@@ -59,7 +60,7 @@ export const buildCreateGroupInput = async ({
 
   const groupId = createSecureId("group");
   const initialEpoch = createInitialGroupEpoch({
-    createdByDeviceId: deviceRegistration.deviceId,
+    creator: deviceRegistration,
     groupId,
     recipients: deviceKeyContext.recipients,
   });
@@ -87,7 +88,7 @@ export const buildAcceptInviteInput = async ({
   });
 
   const nextEpoch = createEpochBundle({
-    currentDeviceId: deviceRegistration.deviceId,
+    creator: deviceRegistration,
     groupId: acceptanceContext.groupId,
     latestEpoch: acceptanceContext.latestEpoch,
     recipients: acceptanceContext.recipients,
@@ -109,7 +110,7 @@ export const buildAcceptSharedInviteInput = async ({
   return {
     code,
     nextEpoch: createEpochBundle({
-      currentDeviceId: deviceRegistration.deviceId,
+      creator: deviceRegistration,
       groupId: context.groupId,
       latestEpoch: context.latestEpoch,
       recipients: context.recipients,
@@ -134,7 +135,7 @@ export const buildRemoveGroupMemberInput = async ({
     groupId,
     memberId,
     nextEpoch: createEpochBundle({
-      currentDeviceId: deviceRegistration.deviceId,
+      creator: deviceRegistration,
       groupId,
       latestEpoch: removalContext.latestEpoch,
       recipients: removalContext.recipients,
@@ -149,7 +150,7 @@ export const rotateGroupEpochIfRequired = async (groupId: string) => {
   await trpcClient.groupEpoch.rotate.mutate({
     groupId,
     nextEpoch: createEpochBundle({
-      currentDeviceId: device.deviceId,
+      creator: device,
       groupId,
       latestEpoch: context.latestEpoch,
       recipients: context.recipients,

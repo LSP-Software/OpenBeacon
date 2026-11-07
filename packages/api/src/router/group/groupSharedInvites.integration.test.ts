@@ -69,7 +69,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         where: { id: `${users[0]}-device` },
       });
       const initial = createInitialGroupEpoch({
-        createdByDeviceId: device.id,
+        creator: { deviceId: device.id, privateKey: keys[0]!.privateKey },
         groupId,
         recipients: [
           {
@@ -116,7 +116,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         code: created.code.toLowerCase(),
       });
       const next = createNextGroupEpoch({
-        createdByDeviceId: `${users[1]}-device`,
+        creator: { deviceId: `${users[1]}-device`, privateKey: keys[1]!.privateKey },
         previousEpoch: context.latestEpoch!,
         recipients: context.recipients,
       });
@@ -154,7 +154,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const replacement = await caller(users[0]!).groupInvites.createShared({ groupId });
       const context = await caller(users[1]!).groupInvites.sharedAcceptanceContext({ code });
       const joined = createNextGroupEpoch({
-        createdByDeviceId: `${users[1]}-device`,
+        creator: { deviceId: `${users[1]}-device`, privateKey: keys[1]!.privateKey },
         previousEpoch: context.latestEpoch!,
         recipients: context.recipients,
       });
@@ -175,7 +175,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await prisma.groupMemberInvite.count({ where: { groupId } })).toBe(2);
       const otherContext = await caller(users[2]!).groupInvites.sharedAcceptanceContext({ code });
       const other = createNextGroupEpoch({
-        createdByDeviceId: `${users[2]}-device`,
+        creator: { deviceId: `${users[2]}-device`, privateKey: keys[2]!.privateKey },
         previousEpoch: otherContext.latestEpoch!,
         recipients: otherContext.recipients,
       });

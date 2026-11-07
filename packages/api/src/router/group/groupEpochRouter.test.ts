@@ -22,8 +22,12 @@ type WrappedKeyFindFirstArgs = {
     algorithm: true;
     createdAt: true;
     ephemeralPublicKey: true;
+    groupEpoch: {
+      select: {
+        senderPublicKey: true;
+      };
+    };
     groupEpochId: true;
-    nonce: true;
     recipientDeviceId: true;
     wrappedKey: true;
   };
@@ -43,8 +47,10 @@ type WrappedKeyRecord = {
   algorithm: typeof WRAPPED_EPOCH_KEY_ALGORITHM;
   createdAt: Date;
   ephemeralPublicKey: string;
+  groupEpoch: {
+    senderPublicKey: string;
+  };
   groupEpochId: string;
-  nonce: string;
   recipientDeviceId: string;
   wrappedKey: string;
 };
@@ -191,8 +197,12 @@ describe("groupEpochRouter", () => {
         algorithm: true,
         createdAt: true,
         ephemeralPublicKey: true,
+        groupEpoch: {
+          select: {
+            senderPublicKey: true,
+          },
+        },
         groupEpochId: true,
-        nonce: true,
         recipientDeviceId: true,
         wrappedKey: true,
       },
@@ -209,7 +219,7 @@ describe("groupEpochRouter", () => {
     });
   });
 
-  test("getWrappedKey returns epochId in the wrapped key shape", async () => {
+  test("getWrappedKey returns epochId and the epoch creator's public key as senderPublicKey", async () => {
     const wrappedKeyCreatedAt = new Date("2026-03-26T12:00:00.000Z");
     const { caller, wrappedKeyFindFirstMock } = await createCaller({
       groupFindUniqueMock: createGroupFindUniqueMock(true),
@@ -217,8 +227,10 @@ describe("groupEpochRouter", () => {
         algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
         createdAt: wrappedKeyCreatedAt,
         ephemeralPublicKey: "ephemeral-public-key",
+        groupEpoch: {
+          senderPublicKey: "creator-public-key",
+        },
         groupEpochId: "epoch-1",
-        nonce: "nonce-1",
         recipientDeviceId: "device-1",
         wrappedKey: "wrapped-key-1",
       }),
@@ -235,8 +247,12 @@ describe("groupEpochRouter", () => {
         algorithm: true,
         createdAt: true,
         ephemeralPublicKey: true,
+        groupEpoch: {
+          select: {
+            senderPublicKey: true,
+          },
+        },
         groupEpochId: true,
-        nonce: true,
         recipientDeviceId: true,
         wrappedKey: true,
       },
@@ -256,8 +272,8 @@ describe("groupEpochRouter", () => {
       createdAt: wrappedKeyCreatedAt,
       ephemeralPublicKey: "ephemeral-public-key",
       epochId: "epoch-1",
-      nonce: "nonce-1",
       recipientDeviceId: "device-1",
+      senderPublicKey: "creator-public-key",
       wrappedKey: "wrapped-key-1",
     });
   });

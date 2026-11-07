@@ -69,7 +69,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       },
     });
     await prisma.groupEpoch.create({
-      data: { id: epochId, groupId, epochNumber: 1, createdByDeviceId: ownerDeviceId },
+      data: {
+        id: epochId,
+        groupId,
+        epochNumber: 1,
+        createdByDeviceId: ownerDeviceId,
+        senderPublicKey: deviceKey.publicKey,
+      },
     });
   });
 

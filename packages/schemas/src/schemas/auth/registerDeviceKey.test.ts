@@ -96,7 +96,7 @@ describe("groupEpochBundleSchema", () => {
   test("validates encoded wrapped key components", () => {
     const device = createDeviceKeyPair();
     const epoch = createInitialGroupEpoch({
-      createdByDeviceId: "device-a",
+      creator: { deviceId: "device-a", privateKey: device.privateKey },
       groupId: "group-a",
       recipients: [
         {
@@ -118,7 +118,7 @@ describe("groupEpochBundleSchema", () => {
         wrappedEpochKey: wrappedEpochKeySchema.parse(recipientKey),
       }).expose(),
     ).toEqual(epoch.epochKey.expose());
-    for (const field of ["ephemeralPublicKey", "nonce", "wrappedKey"] as const) {
+    for (const field of ["ephemeralPublicKey", "senderPublicKey", "wrappedKey"] as const) {
       expect(
         wrappedEpochKeySchema.safeParse({ ...recipientKey, [field]: "invalid!" }).success,
       ).toBe(false);
@@ -137,8 +137,8 @@ describe("groupEpochBundleSchema", () => {
       createdAt: new Date("2026-03-30T12:00:00.000Z"),
       ephemeralPublicKey: createDeviceKeyPair().publicKey,
       epochId: "epoch-2",
-      nonce: encodeBase64(new Uint8Array(24)),
       recipientDeviceId: "device-b",
+      senderPublicKey: createDeviceKeyPair().publicKey,
       wrappedKey: encodeBase64(new Uint8Array(48)),
     });
 
@@ -168,8 +168,8 @@ describe("groupEpochBundleSchema", () => {
       createdAt: new Date(),
       ephemeralPublicKey: createDeviceKeyPair().publicKey,
       epochId: "e".repeat(129),
-      nonce: encodeBase64(new Uint8Array(24)),
       recipientDeviceId: "device-a",
+      senderPublicKey: createDeviceKeyPair().publicKey,
       wrappedKey: encodeBase64(new Uint8Array(48)),
     };
     expect(
