@@ -5,13 +5,14 @@ import { cache } from "./cache.ts";
 import { db } from "./db.ts";
 import { env } from "./env.ts";
 import { authenticateCloudflare, resolveClientIp } from "./helpers/clientIp.ts";
+import healthRouter from "./routes/health.ts";
 import authRouter from "./routes/auth.ts";
 import trpcRouter from "./routes/trpc.ts";
 import type { AppEnv } from "./types/AppEnv.ts";
 
 const app = new Hono<AppEnv>();
 
-app.get("/health", (context) => context.json({ status: "ok" }));
+app.route("/", healthRouter);
 
 const routes = [authRouter, trpcRouter] as const;
 

@@ -17,6 +17,7 @@ export const envSchema = {
       },
     ),
   REDIS_URL: redisUrlSchema,
+  SERVER_NAME: z.string().trim().min(1).default("OpenBeacon"),
   OPENBEACON_API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   OPENBEACON_API_HOSTNAME: z.ipv4().default("0.0.0.0"),
   TRUSTED_PROXY_PROVIDER: z

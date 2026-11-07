@@ -12,6 +12,8 @@ bun run dev
 
 open http://localhost:3000
 
+Set `SERVER_NAME` in the root `.env` to the public name shown in the health check and app. It defaults to `OpenBeacon`. `GET /health` returns the status, backend version, and server name.
+
 ## Production deployment
 
 The backend image validates runtime configuration and then runs Prisma

@@ -260,6 +260,7 @@ export const accountRouter = {
       });
     }),
   version: protectedProcedure.query(({ ctx }) => ctx.serverVersion),
+  serverName: protectedProcedure.query(({ ctx }) => ctx.serverName),
   submitFeedback: protectedProcedure
     .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
     .input(

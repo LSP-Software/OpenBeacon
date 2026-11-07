@@ -16,11 +16,13 @@ describe("feedback", () => {
       cache: new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
       clientIp: "203.0.113.10",
       serverVersion: "0.1.1",
+      serverName: "Family server",
       db: { feedback: { create } },
       session: { user: { id: "user-1", email: "user@example.com" } },
     } as unknown as Parameters<typeof appRouter.createCaller>[0]);
 
     expect(await caller.account.version()).toBe("0.1.1");
+    expect(await caller.account.serverName()).toBe("Family server");
     await caller.account.submitFeedback({
       message: "  hello  ",
       includeEmail: false,
