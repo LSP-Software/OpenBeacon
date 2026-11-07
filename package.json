@@ -21,7 +21,8 @@
     "check:fix": "bun run format:fix && bun run lint:fix",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
-    "ci": "bun run typecheck && bun run check && bun run test"
+    "test:room": "bash scripts/test-tracking-room.sh",
+    "ci": "bun run typecheck && bun run check && bun run test && bash scripts/test-tracking-room.sh --if-changed"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.4",

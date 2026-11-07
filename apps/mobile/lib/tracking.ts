@@ -456,9 +456,10 @@ const flushGroup = async (
   if (markResult.error) {
     throw markResult.error;
   }
+  const claimedIds = new Set(markResult.data);
 
   const itemsBySender = new Map<string, UploadableQueueItem[]>();
-  for (const item of validItems) {
+  for (const item of validItems.filter(({ id }) => claimedIds.has(id))) {
     itemsBySender.set(item.senderDeviceId, [
       ...(itemsBySender.get(item.senderDeviceId) ?? []),
       item,
@@ -652,4 +653,24 @@ export const recoverUnassignedTrackingPoints = async ({
     await trackingModule.assignUnassignedCiphertexts(deviceId, JSON.stringify([baseUrl, userId]));
   }
   await flushPendingTrackingPoints(true);
+};
+
+export const getTrackingQueueEviction = async (userId: string) => {
+  const trackingModule = await loadTrackingModule();
+  if (!trackingModule) return null;
+  const owner = JSON.stringify([baseUrl, userId]);
+  const eviction = await trackingModule.getCiphertextEviction(owner);
+  return eviction ? { ...eviction, owner } : null;
+};
+
+export const dismissTrackingQueueEviction = async ({
+  owner,
+  revision,
+}: {
+  owner: string;
+  revision: number;
+}) => {
+  const trackingModule = await loadTrackingModule();
+  if (!trackingModule) return;
+  await trackingModule.acknowledgeCiphertextEviction(owner, revision);
 };

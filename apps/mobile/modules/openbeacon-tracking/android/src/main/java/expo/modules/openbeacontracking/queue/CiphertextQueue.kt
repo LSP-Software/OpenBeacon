@@ -13,7 +13,7 @@ interface CiphertextQueue {
   fun markInFlight(
     ids: List<Long>,
     attemptedAt: Long,
-  )
+  ): List<Long>
 
   fun deleteByIds(ids: List<Long>)
 

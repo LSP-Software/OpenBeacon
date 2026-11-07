@@ -33,8 +33,9 @@ class InMemoryCiphertextQueue : CiphertextQueue {
   override fun markInFlight(
     ids: List<Long>,
     attemptedAt: Long,
-  ) {
+  ): List<Long> {
     val idSet = ids.toSet()
+    val claimed = mutableListOf<Long>()
     for (index in rows.indices) {
       val row = rows[index]
       if (row.id in idSet && row.status == CiphertextQueueRow.STATUS_PENDING) {
@@ -44,8 +45,10 @@ class InMemoryCiphertextQueue : CiphertextQueue {
             attemptCount = row.attemptCount + 1,
             lastAttemptAt = attemptedAt,
           )
+        claimed.add(row.id)
       }
     }
+    return claimed
   }
 
   @Synchronized

@@ -6,7 +6,6 @@ import expo.modules.openbeacontracking.capture.CapturePipeline
 import expo.modules.openbeacontracking.capture.CaptureCommandState
 import expo.modules.openbeacontracking.keys.EpochKeyStore
 import expo.modules.openbeacontracking.keys.SecureEpochKeyStore
-import expo.modules.openbeacontracking.queue.CiphertextQueue
 import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
 import expo.modules.openbeacontracking.queue.RoomCiphertextQueue
 
@@ -17,7 +16,7 @@ object TrackingRuntime {
   private var epochKeyStore: EpochKeyStore? = null
 
   @Volatile
-  private var ciphertextQueue: CiphertextQueue? = null
+  private var ciphertextQueue: RoomCiphertextQueue? = null
 
   @Volatile
   var isCaptureRunning: Boolean = false
@@ -33,16 +32,14 @@ object TrackingRuntime {
     }
   }
 
-  fun ciphertextQueue(context: Context): CiphertextQueue {
+  fun ciphertextQueue(context: Context): RoomCiphertextQueue {
     ciphertextQueue?.let {
       return it
     }
 
     return synchronized(this) {
       ciphertextQueue
-        ?: RoomCiphertextQueue(
-          CiphertextQueueDatabase.getInstance(context.applicationContext).ciphertextQueueDao(),
-        ).also { ciphertextQueue = it }
+        ?: RoomCiphertextQueue(CiphertextQueueDatabase.getInstance(context.applicationContext)).also { ciphertextQueue = it }
     }
   }
 

@@ -50,8 +50,35 @@ interface CiphertextQueueDao {
     inFlightStatus: String = CiphertextQueueRow.STATUS_IN_FLIGHT,
   )
 
+  @Query("SELECT id FROM ciphertext_queue WHERE id IN (:ids) AND status = :pendingStatus")
+  fun listPendingIds(
+    ids: List<Long>,
+    pendingStatus: String = CiphertextQueueRow.STATUS_PENDING,
+  ): List<Long>
+
   @Query("DELETE FROM ciphertext_queue WHERE id IN (:ids)")
   fun deleteByIds(ids: List<Long>)
+
+  @Query("SELECT COUNT(*) FROM ciphertext_queue")
+  fun count(): Int
+
+  @Query("SELECT * FROM ciphertext_queue WHERE status = :pendingStatus ORDER BY id ASC LIMIT :limit")
+  fun listOldestPending(
+    limit: Int,
+    pendingStatus: String = CiphertextQueueRow.STATUS_PENDING,
+  ): List<CiphertextQueueEntity>
+
+  @Query("SELECT * FROM ciphertext_queue_eviction WHERE owner = :owner")
+  fun getEviction(owner: String): CiphertextQueueEvictionEntity?
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  fun saveEviction(eviction: CiphertextQueueEvictionEntity)
+
+  @Query("DELETE FROM ciphertext_queue_eviction WHERE owner = :owner AND revision = :revision")
+  fun acknowledgeEviction(
+    owner: String,
+    revision: Long,
+  )
 
   @Query(
     """

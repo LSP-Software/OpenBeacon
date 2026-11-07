@@ -33,6 +33,13 @@ export type CiphertextQueueItem = {
   status: "PENDING" | "IN_FLIGHT";
 };
 
+export type CiphertextQueueEviction = {
+  pointCount: number;
+  oldestQueuedAt: number;
+  newestQueuedAt: number;
+  revision: number;
+};
+
 declare class OpenBeaconTrackingModule extends NativeModule {
   setQueueOwner(owner: string): void;
   provisionEpochKeys(keys: ProvisionedEpochKeyInput[], preserveGroupIds?: string[]): void;
@@ -49,7 +56,9 @@ declare class OpenBeaconTrackingModule extends NativeModule {
     limit?: number | null,
     afterId?: number | null,
   ): Promise<CiphertextQueueItem[]>;
-  markCiphertextsInFlight(ids: number[]): Promise<void>;
+  markCiphertextsInFlight(ids: number[]): Promise<number[]>;
+  getCiphertextEviction(owner: string): Promise<CiphertextQueueEviction | null>;
+  acknowledgeCiphertextEviction(owner: string, revision: number): Promise<void>;
   deleteCiphertexts(ids: number[]): Promise<void>;
   requeueCiphertexts(ids: number[], error?: string | null): Promise<void>;
 }

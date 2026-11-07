@@ -21,6 +21,11 @@ const provisionedKeys: Array<{
 const provisionCalls: unknown[][] = [];
 const revokedGroups: Array<string[] | null | undefined> = [];
 const markedInFlight: number[][] = [];
+const evictedBeforeClaim = new Set<number>();
+const queueEvictions = new Map<
+  string,
+  { pointCount: number; oldestQueuedAt: number; newestQueuedAt: number; revision: number }
+>();
 const deleted: number[][] = [];
 const requeued: Array<{ ids: number[]; error: string | null | undefined }> = [];
 const uploadCalls: Array<{ groupId: string; points: unknown[] }> = [];
@@ -216,6 +221,11 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
     },
     markCiphertextsInFlight: async (ids: number[]) => {
       markedInFlight.push(ids);
+      return ids.filter((id) => !evictedBeforeClaim.has(id));
+    },
+    getCiphertextEviction: async (owner: string) => queueEvictions.get(owner) ?? null,
+    acknowledgeCiphertextEviction: async (owner: string, revision: number) => {
+      if (queueEvictions.get(owner)?.revision === revision) queueEvictions.delete(owner);
     },
     deleteCiphertexts: async (ids: number[]) => {
       deleted.push(ids);
@@ -227,7 +237,9 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
 }));
 
 const {
+  dismissTrackingQueueEviction,
   flushPendingTrackingPoints,
+  getTrackingQueueEviction,
   getUnassignedTrackingPoints,
   prepareTrackingSignOut,
   reconcileTrackingKeys,
@@ -271,6 +283,8 @@ describe("tracking service", () => {
     provisionCalls.length = 0;
     revokedGroups.length = 0;
     markedInFlight.length = 0;
+    evictedBeforeClaim.clear();
+    queueEvictions.clear();
     deleted.length = 0;
     requeued.length = 0;
     uploadCalls.length = 0;
@@ -1005,6 +1019,63 @@ describe("tracking service", () => {
     expect(markedInFlight).toEqual([[1], [2]]);
     expect(deleted).toEqual([[1]]);
     expect(requeued).toEqual([{ ids: [2], error: "INTERNAL_SERVER_ERROR: Unavailable" }]);
+  });
+
+  test("does not upload points evicted between listing and claiming them", async () => {
+    pendingCiphertexts = [
+      createQueueItem({ clientPointId: "evicted", groupId: "group-1", id: 1 }),
+      createQueueItem({ clientPointId: "kept", groupId: "group-1", id: 2 }),
+    ];
+    evictedBeforeClaim.add(1);
+
+    await flushPendingTrackingPoints();
+
+    expect(uploadCalls.flatMap(({ points }) => points)).toEqual([
+      expect.objectContaining({ clientPointId: "kept" }),
+    ]);
+    expect(deleted).toEqual([[2]]);
+    expect(requeued).toEqual([]);
+  });
+
+  test("reports evicted history only for the signed-in account on this server", async () => {
+    const owner = JSON.stringify(["https://api.example.test", "user-1"]);
+    queueEvictions.set(owner, {
+      pointCount: 3,
+      oldestQueuedAt: 1_000,
+      newestQueuedAt: 2_000,
+      revision: 7,
+    });
+    queueEvictions.set(JSON.stringify(["https://api.example.test", "user-2"]), {
+      pointCount: 1,
+      oldestQueuedAt: 5_000,
+      newestQueuedAt: 5_000,
+      revision: 1,
+    });
+
+    expect(await getTrackingQueueEviction("user-1")).toEqual({
+      owner,
+      pointCount: 3,
+      oldestQueuedAt: 1_000,
+      newestQueuedAt: 2_000,
+      revision: 7,
+    });
+    expect(await getTrackingQueueEviction("user-3")).toBeNull();
+  });
+
+  test("dismissing stale eviction history keeps newer evictions visible", async () => {
+    const owner = JSON.stringify(["https://api.example.test", "user-1"]);
+    queueEvictions.set(owner, {
+      pointCount: 3,
+      oldestQueuedAt: 1_000,
+      newestQueuedAt: 3_000,
+      revision: 8,
+    });
+
+    await dismissTrackingQueueEviction({ owner, revision: 7 });
+    expect(await getTrackingQueueEviction("user-1")).toMatchObject({ revision: 8 });
+
+    await dismissTrackingQueueEviction({ owner, revision: 8 });
+    expect(await getTrackingQueueEviction("user-1")).toBeNull();
   });
 
   test("retains queued points while a group rotation is pending", async () => {
