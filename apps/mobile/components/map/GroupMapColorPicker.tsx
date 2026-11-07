@@ -21,14 +21,11 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
 
   return (
     <View className="gap-3 rounded-lg border border-border bg-card p-4">
-      <View className="flex-row items-center justify-between gap-3">
-        <View className="flex-1 gap-1">
-          <Text className="text-foreground font-medium">Map marker color</Text>
-          <Text className="text-muted-foreground text-sm">
-            Used for this group's ring on the live map. Only you see this color.
-          </Text>
-        </View>
-        {(sync.isFetching || save.isPending) && <ActivityIndicator className="text-primary" />}
+      <View className="gap-1">
+        <Text className="text-foreground font-medium">Map marker color</Text>
+        <Text className="text-muted-foreground text-sm">
+          Used for this group's ring on the live map. Only you see this color.
+        </Text>
       </View>
       {sync.isError ? (
         <View className="gap-2">
@@ -38,30 +35,41 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
           </Button>
         </View>
       ) : (
-        <View className="flex-row flex-wrap gap-3" style={{ opacity: locked ? 0.5 : 1 }}>
-          {GROUP_COLOR_PALETTE.map((color) => {
-            const selected = selectedColor === color;
+        <View>
+          <View className="flex-row flex-wrap gap-3" style={{ opacity: locked ? 0.5 : 1 }}>
+            {GROUP_COLOR_PALETTE.map((color) => {
+              const selected = selectedColor === color;
 
-            return (
-              <Pressable
-                key={color}
-                accessibilityRole="button"
-                accessibilityState={{ selected, disabled: locked }}
-                disabled={locked}
-                onPress={() => {
-                  if (userId) save.mutate({ userId, groupId, color });
-                }}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  backgroundColor: color,
-                  borderWidth: selected ? 3 : 1,
-                  borderColor: selected ? "#1A1025" : "#FFFFFF",
-                }}
-              />
-            );
-          })}
+              return (
+                <Pressable
+                  key={color}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected, disabled: locked }}
+                  disabled={locked}
+                  onPress={() => {
+                    if (userId) save.mutate({ userId, groupId, color });
+                  }}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: color,
+                    borderWidth: selected ? 3 : 1,
+                    borderColor: selected ? "#1A1025" : "#FFFFFF",
+                  }}
+                >
+                  {save.isPending && selected && <ActivityIndicator size="small" color="#FFFFFF" />}
+                </Pressable>
+              );
+            })}
+          </View>
+          {sync.isFetching && (
+            <View pointerEvents="none" className="absolute inset-0 items-center justify-center">
+              <ActivityIndicator className="text-primary" />
+            </View>
+          )}
         </View>
       )}
     </View>
