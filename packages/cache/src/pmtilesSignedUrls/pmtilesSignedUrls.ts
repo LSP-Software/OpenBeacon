@@ -5,8 +5,16 @@ import {
   setPmtilesSignedUrlInputSchema,
 } from "./schemas.ts";
 
-const buildPmtilesSignedUrlKey = ({ keyPrefix, userId }: { keyPrefix: string; userId: string }) => {
-  return `${keyPrefix}:pmtilesSignedUrl:user:${userId}`;
+const buildPmtilesSignedUrlKey = ({
+  archiveKey,
+  keyPrefix,
+  userId,
+}: {
+  archiveKey: string;
+  keyPrefix: string;
+  userId: string;
+}) => {
+  return `${keyPrefix}:pmtilesSignedUrl:user:${userId}:archive:${archiveKey}`;
 };
 
 export const createPmtilesSignedUrls = ({
@@ -22,6 +30,7 @@ export const createPmtilesSignedUrls = ({
     get: async (input: Parameters<typeof pmtilesSignedUrlInputSchema.parse>[0]) => {
       const parsedInput = pmtilesSignedUrlInputSchema.parse(input);
       const key = buildPmtilesSignedUrlKey({
+        archiveKey: parsedInput.archiveKey,
         keyPrefix,
         userId: parsedInput.userId,
       });
@@ -55,11 +64,11 @@ export const createPmtilesSignedUrls = ({
 
       await redis.send("SET", [
         buildPmtilesSignedUrlKey({
+          archiveKey: parsedInput.archiveKey,
           keyPrefix,
           userId: parsedInput.userId,
         }),
         JSON.stringify({
-          archiveKey: parsedInput.archiveKey,
           expiresAt: parsedInput.expiresAt,
           url: parsedInput.url,
         }),
@@ -72,6 +81,7 @@ export const createPmtilesSignedUrls = ({
 
       return redis.del(
         buildPmtilesSignedUrlKey({
+          archiveKey: parsedInput.archiveKey,
           keyPrefix,
           userId: parsedInput.userId,
         }),

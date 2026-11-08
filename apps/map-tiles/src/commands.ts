@@ -124,7 +124,15 @@ export const prune = async ({ client, dryRun, env }: Context) => {
     return;
   }
 
-  const prunable = getPrunableArchives({ manifest: manifest.manifest, now: Date.now() });
+  const prunable = getPrunableArchives({ manifest: manifest.manifest, now: Date.now() }).filter(
+    (archive) => {
+      if (archive.key !== env.R2_PM_TILES_KEY) {
+        return true;
+      }
+      console.log(`Keeping ${archive.key} because R2_PM_TILES_KEY still points to it`);
+      return false;
+    },
+  );
 
   if (prunable.length === 0) {
     console.log("No archives are ready to delete");
@@ -352,7 +360,19 @@ export const publish = async (context: Context, date: string | undefined) => {
     uploadedInfo.schemaVersion !== sourceInfo.schemaVersion ||
     !Buffer.from(uploadedInfo.headBytes).equals(Buffer.from(sourceInfo.headBytes))
   ) {
-    throw new Error(`${key} in R2 does not match the Protomaps build; it was not published`);
+    const current = await readManifest({ bucket: env.R2_BUCKET, client });
+    const referenced =
+      current?.manifest.current.key === key ||
+      current?.manifest.previous.some((archive) => archive.key === key);
+
+    if (referenced) {
+      throw new Error(`${key} in R2 does not match the Protomaps build and is in the manifest`);
+    }
+
+    await client.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key: key }));
+    throw new Error(
+      `${key} in R2 did not match the Protomaps build, so it was deleted and not published. Rerun to upload it again.`,
+    );
   }
 
   const manifest = await readManifest({ bucket: env.R2_BUCKET, client });

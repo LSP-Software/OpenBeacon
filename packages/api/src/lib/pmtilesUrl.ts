@@ -54,7 +54,7 @@ const createAndCacheSignedPmtilesUrlForUser = async ({
   const signedPmtilesUrl = await signer(archiveKey);
 
   await cache.pmtilesSignedUrls.set({
-    archiveKey: signedPmtilesUrl.archiveKey,
+    archiveKey,
     expiresAt: signedPmtilesUrl.expiresAt,
     url: signedPmtilesUrl.url,
     userId,
@@ -81,14 +81,14 @@ export const getSignedPmtilesUrlForUser = async ({
 }) => {
   const resolve = resolvePmtilesArchiveKeyOverride ?? resolvePmtilesArchiveKey;
   const archiveKey = await resolve(requestedArchiveKey);
-  const cachedSignedPmtilesUrl = await cache.pmtilesSignedUrls.get({ userId });
+  const cachedSignedPmtilesUrl = await cache.pmtilesSignedUrls.get({ archiveKey, userId });
 
   if (
-    cachedSignedPmtilesUrl?.archiveKey === archiveKey &&
+    cachedSignedPmtilesUrl &&
     canReusePmtilesSignedUrl({ expiresAt: cachedSignedPmtilesUrl.expiresAt, now: now() })
   ) {
     return {
-      ...buildPmtilesUrlPayload(cachedSignedPmtilesUrl),
+      ...buildPmtilesUrlPayload({ ...cachedSignedPmtilesUrl, archiveKey }),
       source: "cached" as const,
     };
   }

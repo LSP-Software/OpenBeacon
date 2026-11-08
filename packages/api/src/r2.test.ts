@@ -29,6 +29,27 @@ describe("createManifestCache", () => {
     expect(read).toHaveBeenCalledTimes(2);
   });
 
+  test("shares one read between concurrent requests", async () => {
+    let resolveRead: (manifest: MapTilesManifest) => void = () => {};
+    const read = mock(
+      () =>
+        new Promise<MapTilesManifest>((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+    const getManifest = createManifestCache({ now: () => 0, read });
+
+    const requests = [getManifest(), getManifest(), getManifest()];
+    resolveRead(manifest("planet-a.pmtiles"));
+
+    expect((await Promise.all(requests)).map((result) => result?.current.key)).toEqual([
+      "planet-a.pmtiles",
+      "planet-a.pmtiles",
+      "planet-a.pmtiles",
+    ]);
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
   test("caches a missing manifest", async () => {
     const read = mock(async () => null);
     const getManifest = createManifestCache({ now: () => 0, read });

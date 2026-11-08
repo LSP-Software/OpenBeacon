@@ -24,7 +24,13 @@ describe("parseEnv", () => {
     expect(() => parseEnv({ ...required, MAP_TILES_MAX_MBPS: "fast" })).toThrow();
   });
 
-  test("defaults the state directory", () => {
+  test("defaults the state directory when it is unset or blank", () => {
     expect(parseEnv(required).MAP_TILES_STATE_DIR).toBe(".map-tiles");
+    expect(parseEnv({ ...required, MAP_TILES_STATE_DIR: "" }).MAP_TILES_STATE_DIR).toBe(
+      ".map-tiles",
+    );
+    expect(parseEnv({ ...required, MAP_TILES_STATE_DIR: "/state" }).MAP_TILES_STATE_DIR).toBe(
+      "/state",
+    );
   });
 });

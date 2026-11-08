@@ -111,10 +111,45 @@ describe("rollbackArchive", () => {
 
     expect(next.current).toEqual(archive("planet-old.pmtiles"));
     expect(next.previous).toEqual([
-      { ...archive("planet-new.pmtiles"), servedUntil: new Date(now).toISOString() },
+      {
+        ...archive("planet-new.pmtiles"),
+        servedUntil: new Date(now).toISOString(),
+        withdrawnAt: new Date(now).toISOString(),
+      },
     ]);
     expect(resolveArchiveKey({ manifest: next, now, requestedKey: "planet-new.pmtiles" })).toBe(
       "planet-old.pmtiles",
+    );
+  });
+
+  test("rolling back twice skips the withdrawn archive and goes further back", () => {
+    const published = publishArchive({
+      archive: archive("c"),
+      manifest: publishArchive({
+        archive: archive("b"),
+        manifest: { current: archive("a"), previous: [] },
+        now: publishedAt,
+      }),
+      now: publishedAt,
+    });
+    const once = rollbackArchive({ manifest: published, now: publishedAt + 1 });
+    const twice = rollbackArchive({ manifest: once, now: publishedAt + 2 });
+
+    expect(once.current.key).toBe("b");
+    expect(twice.current.key).toBe("a");
+    expect(twice.previous.map((previous) => [previous.key, Boolean(previous.withdrawnAt)])).toEqual(
+      [
+        ["b", true],
+        ["c", true],
+      ],
+    );
+  });
+
+  test("fails when only withdrawn archives remain", () => {
+    const once = rollbackArchive({ manifest: manifestWithPrevious(publishedAt), now: publishedAt });
+
+    expect(() => rollbackArchive({ manifest: once, now: publishedAt })).toThrow(
+      "no previous archive",
     );
   });
 
@@ -160,10 +195,19 @@ describe("getPrunableArchives", () => {
 });
 
 describe("mapTilesManifestSchema", () => {
-  test("rejects manifests with unknown fields", () => {
-    expect(
-      mapTilesManifestSchema.safeParse({ current: archive("a"), previous: [], extra: true })
-        .success,
-    ).toBe(false);
+  test("keeps fields written by newer tools so older readers neither fail nor drop them", () => {
+    const parsed = mapTilesManifestSchema.parse({
+      current: { ...archive("a"), md5: "abc" },
+      previous: [],
+      writtenBy: "newer-cli",
+    });
+
+    expect(parsed).toMatchObject({ current: { md5: "abc" }, writtenBy: "newer-cli" });
+  });
+
+  test("rejects manifests missing required fields", () => {
+    expect(mapTilesManifestSchema.safeParse({ current: { key: "a" }, previous: [] }).success).toBe(
+      false,
+    );
   });
 });

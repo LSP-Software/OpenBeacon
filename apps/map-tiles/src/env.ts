@@ -1,15 +1,16 @@
 import { z } from "zod";
 
+const blankAsUndefined = (value: unknown) =>
+  typeof value === "string" && value.trim() === "" ? undefined : value;
+
 const envSchema = z.object({
   R2_ACCOUNT_ID: z.string().min(1),
   R2_ACCESS_KEY_ID: z.string().min(1),
   R2_SECRET_ACCESS_KEY: z.string().min(1),
   R2_BUCKET: z.string().min(1),
-  MAP_TILES_MAX_MBPS: z.preprocess(
-    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-    z.coerce.number().positive().optional(),
-  ),
-  MAP_TILES_STATE_DIR: z.string().trim().min(1).default(".map-tiles"),
+  R2_PM_TILES_KEY: z.preprocess(blankAsUndefined, z.string().optional()),
+  MAP_TILES_MAX_MBPS: z.preprocess(blankAsUndefined, z.coerce.number().positive().optional()),
+  MAP_TILES_STATE_DIR: z.preprocess(blankAsUndefined, z.string().trim().default(".map-tiles")),
 });
 
 export const parseEnv = (source: Record<string, string | undefined>) => {

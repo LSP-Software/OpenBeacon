@@ -11,16 +11,18 @@ const archiveSchema = z
     schemaVersion: z.string().min(1),
     publishedAt: z.iso.datetime(),
   })
-  .strict();
+  .loose();
 
-const previousArchiveSchema = archiveSchema.extend({ servedUntil: z.iso.datetime() }).strict();
+const previousArchiveSchema = archiveSchema
+  .extend({ servedUntil: z.iso.datetime(), withdrawnAt: z.iso.datetime().optional() })
+  .loose();
 
 export const mapTilesManifestSchema = z
   .object({
     current: archiveSchema,
     previous: z.array(previousArchiveSchema),
   })
-  .strict();
+  .loose();
 
 export type MapTilesArchive = z.infer<typeof archiveSchema>;
 export type MapTilesManifest = z.infer<typeof mapTilesManifestSchema>;
@@ -85,17 +87,21 @@ export const rollbackArchive = ({
   manifest: MapTilesManifest;
   now: number;
 }): MapTilesManifest => {
-  const [target, ...rest] = manifest.previous;
+  const target = manifest.previous.find((archive) => !archive.withdrawnAt);
 
   if (!target) {
     throw new Error("There is no previous archive to roll back to");
   }
 
-  const { servedUntil: _servedUntil, ...current } = target;
+  const { servedUntil: _servedUntil, withdrawnAt: _withdrawnAt, ...current } = target;
+  const withdrawnAt = new Date(now).toISOString();
 
   return {
     current,
-    previous: [{ ...manifest.current, servedUntil: new Date(now).toISOString() }, ...rest],
+    previous: [
+      { ...manifest.current, servedUntil: withdrawnAt, withdrawnAt },
+      ...manifest.previous.filter((archive) => archive !== target),
+    ],
   };
 };
 

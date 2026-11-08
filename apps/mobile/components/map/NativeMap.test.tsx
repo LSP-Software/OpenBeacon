@@ -29,6 +29,7 @@ import {
   getNativeMapRemovedStyleLayerIds,
   getNativeMapStyle,
   getNativeMapViewMountCount,
+  getNativeMapUrlTransformEvents,
   getNativeMapUrlTransforms,
   registerNativeMapGoToCurrentLocationHandler,
   registerNativeMapShowEveryoneHandler,
@@ -44,6 +45,7 @@ import {
 
 let currentSignedPmtilesUrlQuery: {
   data?: {
+    archiveKey?: string;
     expiresAt: string;
     refreshAt: string;
     url: string;
@@ -2173,6 +2175,31 @@ describe("NativeMap integration harness", () => {
     expect(getNativeMapUrlTransforms().at(-1)?.replace).toBe(nextUrl);
     expect(getNativeMapStyle()).toEqual(initialStyle);
     expect(getNativeMapViewMountCount()).toBe(1);
+  });
+
+  test("remounts on a new archive and keeps signing the old archive until the old map unmounts", async () => {
+    const oldUrl = "https://tiles.example.com/planet-old.pmtiles";
+    const newUrl = "https://tiles.example.com/planet-new.pmtiles";
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: { ...defaultSignedUrl, archiveKey: "planet-old.pmtiles", url: `${oldUrl}?sig=1` },
+    };
+    await renderNativeMap();
+    await flushEffects();
+
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: { ...defaultSignedUrl, archiveKey: "planet-new.pmtiles", url: `${newUrl}?sig=2` },
+    };
+    await renderNativeMap();
+    await flushEffects();
+
+    expect(getNativeMapViewMountCount()).toBe(2);
+    expect(getNativeMapUrlTransformEvents()).toEqual([
+      `add:openbeacon-pmtiles:${oldUrl}`,
+      `add:openbeacon-pmtiles:${newUrl}`,
+      `remove:openbeacon-pmtiles:${oldUrl}:liveMaps=0`,
+    ]);
   });
 
   test("updates the map style without remounting when the signed pmtiles url changes", async () => {

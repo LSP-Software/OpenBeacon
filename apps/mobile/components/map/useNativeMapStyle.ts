@@ -48,7 +48,7 @@ export const useNativeMapStyle = () => {
     if (!unsignedUrl) return;
     const escapedUrl = unsignedUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     TransformRequestManager.addUrlTransform({
-      id: "openbeacon-pmtiles",
+      id: `openbeacon-pmtiles:${unsignedUrl}`,
       find: `^${escapedUrl}(?:\\?.*)?$`,
       replace: url,
     });
@@ -114,7 +114,10 @@ export const useNativeMapStyle = () => {
     applySignedUrl(pmtilesUrl);
     if (archiveChanged) setMapRevision((revision) => revision + 1);
   }, [pmtilesUrl]);
-  useEffect(() => () => TransformRequestManager.removeUrlTransform("openbeacon-pmtiles"), []);
+  useEffect(() => {
+    if (!archiveUrl) return;
+    return () => TransformRequestManager.removeUrlTransform(`openbeacon-pmtiles:${archiveUrl}`);
+  }, [archiveUrl]);
   const mapStyle = useMemo(() => {
     if (!archiveUrl) {
       return null;

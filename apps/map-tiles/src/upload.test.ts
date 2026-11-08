@@ -223,6 +223,15 @@ describe("uploadArchive", () => {
     expect(r2.calls.slice(0, 2)).toEqual(["list:missing", "create"]);
   });
 
+  test("refuses to guess when the saved state is corrupt", async () => {
+    await mkdir(dirname(statePath()), { recursive: true });
+    await writeFile(statePath(), "{ not json");
+    const r2 = createFakeR2();
+
+    await expect(run(r2)).rejects.toThrow("delete it to start the upload again");
+    expect(r2.calls).toEqual([]);
+  });
+
   test("retries a failed part and keeps the progress total correct", async () => {
     const r2 = createFakeR2({ failUploads: new Map([[2, 2]]) });
     const events: number[] = [];

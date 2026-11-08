@@ -39,15 +39,14 @@ const pmtilesUrlTestEnvKeys = [
 ] as const;
 
 const createCache = ({
-  cachedSignedPmtilesUrl = null,
+  cachedSignedPmtilesUrls = {},
 }: {
-  cachedSignedPmtilesUrl?: {
-    archiveKey: string;
-    expiresAt: string;
-    url: string;
-  } | null;
+  cachedSignedPmtilesUrls?: Record<string, { expiresAt: string; url: string }>;
 } = {}) => {
-  const get = mock(async () => cachedSignedPmtilesUrl);
+  const get = mock(
+    async ({ archiveKey }: { archiveKey: string; userId: string }) =>
+      cachedSignedPmtilesUrls[archiveKey] ?? null,
+  );
   const set = mock(async () => undefined);
   const pmtilesSignedUrls = {
     get,
@@ -92,10 +91,11 @@ describe("pmtilesUrl", () => {
     const now = new Date("2026-03-31T12:00:00.000Z");
     const expiresAt = new Date(now.getTime() + 60_001).toISOString();
     const { cache, get, set } = createCache({
-      cachedSignedPmtilesUrl: {
-        archiveKey: "planet-old.pmtiles",
-        expiresAt,
-        url: "https://cached.example/pmtiles",
+      cachedSignedPmtilesUrls: {
+        "planet-old.pmtiles": {
+          expiresAt,
+          url: "https://cached.example/pmtiles",
+        },
       },
     });
     const createSignedUrl = mock(async (_archiveKey: string) => {
@@ -113,7 +113,7 @@ describe("pmtilesUrl", () => {
     });
 
     expect(resolve).toHaveBeenCalledWith("planet-old.pmtiles");
-    expect(get).toHaveBeenCalledWith({ userId: "user-1" });
+    expect(get).toHaveBeenCalledWith({ archiveKey: "planet-old.pmtiles", userId: "user-1" });
     expect(set).not.toHaveBeenCalled();
     expect(result).toEqual({
       archiveKey: "planet-old.pmtiles",
@@ -128,10 +128,11 @@ describe("pmtilesUrl", () => {
     const { getSignedPmtilesUrlForUser } = await importPmtilesUrl();
     const now = new Date("2026-03-31T12:00:00.000Z");
     const { cache, set } = createCache({
-      cachedSignedPmtilesUrl: {
-        archiveKey: "planet-old.pmtiles",
-        expiresAt: new Date(now.getTime() + 300_000).toISOString(),
-        url: "https://cached.example/old",
+      cachedSignedPmtilesUrls: {
+        "planet-old.pmtiles": {
+          expiresAt: new Date(now.getTime() + 300_000).toISOString(),
+          url: "https://cached.example/old",
+        },
       },
     });
     const createSignedUrl = createSigner("https://signed.example/new", "2026-03-31T12:10:00.000Z");
@@ -190,10 +191,11 @@ describe("pmtilesUrl", () => {
     const { getSignedPmtilesUrlForUser } = await importPmtilesUrl();
     const now = new Date("2026-03-31T12:00:00.000Z");
     const { cache, set } = createCache({
-      cachedSignedPmtilesUrl: {
-        archiveKey: "current",
-        expiresAt: new Date(now.getTime() + 60_000).toISOString(),
-        url: "https://cached.example/pmtiles",
+      cachedSignedPmtilesUrls: {
+        current: {
+          expiresAt: new Date(now.getTime() + 60_000).toISOString(),
+          url: "https://cached.example/pmtiles",
+        },
       },
     });
     const createSignedUrl = createSigner(

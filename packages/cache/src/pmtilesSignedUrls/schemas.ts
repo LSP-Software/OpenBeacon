@@ -2,13 +2,13 @@ import { z } from "zod";
 
 export const pmtilesSignedUrlInputSchema = z
   .object({
+    archiveKey: z.string().min(1),
     userId: z.string().min(1),
   })
   .strict();
 
 export const setPmtilesSignedUrlInputSchema = pmtilesSignedUrlInputSchema
   .extend({
-    archiveKey: z.string().min(1),
     expiresAt: z.iso.datetime(),
     url: z.url(),
   })
@@ -16,7 +16,6 @@ export const setPmtilesSignedUrlInputSchema = pmtilesSignedUrlInputSchema
 
 export const pmtilesSignedUrlValueSchema = z
   .object({
-    archiveKey: z.string().min(1),
     expiresAt: z.iso.datetime(),
     url: z.url(),
   })

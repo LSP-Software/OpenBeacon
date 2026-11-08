@@ -61,14 +61,30 @@ export const getUploadStatePath = ({
 }) => join(stateDir, bucket, `${key}.json`);
 
 const readUploadState = async (path: string) => {
-  const result = await tryCatch(readFile(path, "utf8"));
+  const result = await tryCatch<string, NodeJS.ErrnoException>(readFile(path, "utf8"));
 
   if (result.error) {
-    return null;
+    if (result.error.code === "ENOENT") {
+      return null;
+    }
+    throw new Error(`Could not read upload state ${path}: ${result.error.message}`);
   }
 
-  const parsed = uploadStateSchema.safeParse(JSON.parse(result.data));
-  return parsed.success ? parsed.data : null;
+  let json: unknown;
+
+  try {
+    json = JSON.parse(result.data);
+  } catch {
+    throw new Error(`Upload state ${path} is not valid JSON; delete it to start the upload again`);
+  }
+
+  const parsed = uploadStateSchema.safeParse(json);
+
+  if (!parsed.success) {
+    throw new Error(`Upload state ${path} is not valid; delete it to start the upload again`);
+  }
+
+  return parsed.data;
 };
 
 const writeUploadState = async (path: string, state: UploadState) => {

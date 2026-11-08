@@ -24,12 +24,9 @@ export const createManifestCache = ({
   read: () => Promise<MapTilesManifest | null>;
 }) => {
   let cached: { expiresAt: number; manifest: MapTilesManifest | null } | null = null;
+  let pending: Promise<MapTilesManifest | null> | null = null;
 
-  return async () => {
-    if (cached && now() < cached.expiresAt) {
-      return cached.manifest;
-    }
-
+  const refresh = async () => {
     const result = await tryCatch(read());
 
     if (result.error) {
@@ -43,6 +40,17 @@ export const createManifestCache = ({
 
     cached = { expiresAt: now() + MAP_TILES_MANIFEST_CACHE_MS, manifest: result.data };
     return result.data;
+  };
+
+  return async () => {
+    if (cached && now() < cached.expiresAt) {
+      return cached.manifest;
+    }
+
+    pending ??= refresh().finally(() => {
+      pending = null;
+    });
+    return pending;
   };
 };
 
