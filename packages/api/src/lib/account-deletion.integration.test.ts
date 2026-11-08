@@ -63,6 +63,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           { ownerId: remainingMember.id, targetId: remainingMember.id, ciphertext: "remaining" },
         ],
       });
+      await prisma.personalGroupColor.createMany({
+        data: [
+          { ownerId: deletedMember.id, ciphertext: "owned-by-deleted" },
+          { ownerId: remainingMember.id, ciphertext: "remaining" },
+        ],
+      });
       await prisma.groupSharedInvite.create({
         data: {
           groupId,
@@ -214,6 +220,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await prisma.groupSharedInvite.count({ where: { groupId } })).toBe(0);
       expect(
         await prisma.personalGroupNickname.findMany({ where: { owner: { groupId } } }),
+      ).toMatchObject([{ ciphertext: "remaining" }]);
+      expect(
+        await prisma.personalGroupColor.findMany({ where: { owner: { groupId } } }),
       ).toMatchObject([{ ciphertext: "remaining" }]);
       expect(await prisma.groupJoinAlert.count({ where: { groupId } })).toBe(0);
       expect(

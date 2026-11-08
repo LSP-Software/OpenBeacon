@@ -18,7 +18,7 @@ Recovery and history rows are removed with the `User` row (`packages/database/pr
 - Every `AccountHistoryKey` version is deleted, and with it the Recovery escrow, which is stored on the same row.
 - Every `GroupEpochHistoryWrap` addressed to the account's History keys is deleted, through the cascade from `AccountHistoryKey`.
 - `GroupEpochHistoryWrap` rows that the account's devices sent to other members stay, because those members need them to read old epochs. Deleting the device sets `senderDeviceId` to null. `senderPublicKey` is kept, because opening the wrap needs it.
-- Personal nicknames and colours are deleted with the account's `GroupMember` rows: the nicknames it set, the nicknames other members set for it, and its group colours. Other members' nicknames for each other stay. The test asserts the nicknames; colours rely on the `PersonalGroupColor` cascade in the schema.
+- Personal nicknames and colours are deleted with the account's `GroupMember` rows: the nicknames it set, the nicknames other members set for it, and its group colours. Other members' nicknames for each other stay. The test asserts both the nicknames and the colours.
 
 History private keys also stay in SecureStore on the user's phones after deletion, for the same reason as device private keys. With the escrows and History wraps deleted, a retained History key only unlocks a History wrap copied before deletion, such as from a backup. That's the same limit as a retained device key.
 
