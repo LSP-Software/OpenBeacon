@@ -50,6 +50,11 @@ const RecoveryPhraseSetupScreen = () => {
       return;
     }
     if (result.data.status === "conflict") {
+      void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });
+      Alert.alert(
+        "Recovery phrase already set up",
+        "A recovery phrase was already set up on another phone. The words you just wrote down won’t work and can be thrown away. Enter the phrase from the other phone instead.",
+      );
       router.replace("/account/recovery-restore");
       return;
     }
