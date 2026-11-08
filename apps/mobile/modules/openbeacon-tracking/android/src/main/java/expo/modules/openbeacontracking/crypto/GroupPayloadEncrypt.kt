@@ -2,7 +2,6 @@ package expo.modules.openbeacontracking.crypto
 
 import com.google.crypto.tink.aead.internal.InsecureNonceXChaCha20Poly1305
 import java.security.SecureRandom
-import java.util.Base64
 
 object GroupPayloadEncrypt {
   const val ALGORITHM = "XChaCha20-Poly1305"
@@ -84,9 +83,9 @@ object GroupPayloadEncrypt {
     """{"context":${jsonString(DOMAIN_CONTEXT)},"epochId":${jsonString(epochId)},"groupId":${jsonString(groupId)},"kind":${jsonString(kind)},"purpose":${jsonString(PURPOSE)},"senderDeviceId":${jsonString(senderDeviceId)}}"""
       .toByteArray(Charsets.UTF_8)
 
-  fun encodeBase64(bytes: ByteArray): String = Base64.getEncoder().encodeToString(bytes)
+  fun encodeBase64(bytes: ByteArray): String = Base64Codec.encode(bytes)
 
-  fun decodeBase64(value: String): ByteArray = Base64.getDecoder().decode(value)
+  fun decodeBase64(value: String): ByteArray = Base64Codec.decode(value)
 
   private fun jsonString(value: String): String {
     val escaped =
