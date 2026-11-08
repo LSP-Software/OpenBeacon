@@ -3,6 +3,7 @@ import { Link } from "expo-router";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../../components/headers/BackButton.tsx";
+import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { RecoveryCoverage } from "../../components/RecoveryCoverage.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
@@ -36,7 +37,15 @@ const RecoveryScreen = () => {
         contentContainerClassName="gap-6 px-6 py-6 pb-32"
         showsVerticalScrollIndicator={false}
       >
-        {status.isError && <Text>Unable to load your recovery settings. Please try again.</Text>}
+        {(status.isLoading || heldVersions.isLoading) && <LoadingIndicator />}
+        {status.isError && (
+          <View className="gap-4">
+            <Text>Unable to load your recovery settings. Please try again.</Text>
+            <Button variant="outline" onPress={() => status.refetch()}>
+              <Text>Try again</Text>
+            </Button>
+          </View>
+        )}
         {status.data && !status.data.recoveryKey && (
           <View className="gap-4">
             <Text className="text-foreground text-3xl font-bold">Protect your history</Text>
@@ -111,7 +120,12 @@ const RecoveryScreen = () => {
           </View>
         )}
         {heldVersions.isError && (
-          <Text>Unable to read this phone’s recovery keys. Unlock your phone and try again.</Text>
+          <View className="gap-4">
+            <Text>Unable to read this phone’s recovery keys. Unlock your phone and try again.</Text>
+            <Button variant="outline" onPress={() => heldVersions.refetch()}>
+              <Text>Try again</Text>
+            </Button>
+          </View>
         )}
       </ScrollView>
     </View>

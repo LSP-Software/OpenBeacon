@@ -9,6 +9,7 @@ import { Alert } from "../lib/alert.ts";
 import { trpc } from "../lib/api.ts";
 import { isNativeGoogleSignInConfigured, signInWithGoogle } from "../lib/auth.ts";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
+import { LoadingIndicator } from "./LoadingIndicator.tsx";
 import { Button } from "./ui/Button.tsx";
 import { Input } from "./ui/Input.tsx";
 import { Text } from "./ui/Text.tsx";
@@ -78,8 +79,8 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
     <View className="gap-4">
       <Text className="text-foreground text-3xl font-bold">Confirm it’s you</Text>
       <Text className="text-muted-foreground text-base leading-6">
-        Sign in again to continue. This stops anyone who picks up your unlocked phone from changing
-        your recovery phrase.
+        Sign in again to continue. This stops anyone who picks up your unlocked phone from setting
+        up or changing your recovery phrase.
       </Text>
       {methods.data?.password && (
         <>
@@ -105,7 +106,15 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
           <Text>Continue with Google</Text>
         </Button>
       )}
-      {methods.isError && <Text>Unable to load sign-in methods. Please try again.</Text>}
+      {methods.isLoading && <LoadingIndicator />}
+      {methods.isError && (
+        <View className="gap-4">
+          <Text>Unable to load sign-in methods. Please try again.</Text>
+          <Button variant="outline" onPress={() => methods.refetch()}>
+            <Text>Try again</Text>
+          </Button>
+        </View>
+      )}
       {methods.data && !methods.data.password && !google && (
         <Text>No sign-in method is available on this phone. Please contact support.</Text>
       )}
