@@ -154,7 +154,10 @@ const RecoveryRestoreScreen = () => {
                   <Button variant="outline" onPress={skip} disabled={step === "restoring"}>
                     <Text>Skip for now</Text>
                   </Button>
-                  <Link href="/account/recovery-reset" asChild>
+                  <Link
+                    href={{ pathname: "/account/recovery-reset", params: { afterSignIn: "true" } }}
+                    asChild
+                  >
                     <Button variant="ghost" disabled={step === "restoring"}>
                       <Text>I’ve lost my phrase</Text>
                     </Button>

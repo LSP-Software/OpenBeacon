@@ -2,7 +2,7 @@ import { Alert } from "../../lib/alert.ts";
 import type { RecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
@@ -21,6 +21,7 @@ import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 
 const RecoveryPhraseResetScreen = () => {
+  const { afterSignIn } = useLocalSearchParams<{ afterSignIn?: string }>();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<
     "warn" | "verify" | "phrase" | "saving" | "protecting" | "unsaved" | "done"
@@ -169,7 +170,15 @@ const RecoveryPhraseResetScreen = () => {
                 Your new phrase is set up, but this phone couldn’t save its key. Restore with the
                 phrase you just wrote down.
               </Text>
-              <Button onPress={() => router.replace("/account/recovery-restore")}>
+              <Button
+                onPress={() =>
+                  router.replace(
+                    afterSignIn
+                      ? { pathname: "/account/recovery-restore", params: { afterSignIn: "true" } }
+                      : "/account/recovery-restore",
+                  )
+                }
+              >
                 <Text>Restore with recovery phrase</Text>
               </Button>
             </View>
@@ -185,7 +194,7 @@ const RecoveryPhraseResetScreen = () => {
                 </Text>
               )}
               <RecoveryCoverage userId={userId} />
-              <Button onPress={() => router.back()}>
+              <Button onPress={() => (afterSignIn ? router.replace("/") : router.back())}>
                 <Text>Done</Text>
               </Button>
             </View>
