@@ -59,7 +59,7 @@ describe("resolveClientIp", () => {
     ).toBe("198.51.100.1");
   });
 
-  test("uses the first x-forwarded-for hop for trusted proxies", () => {
+  test("uses the proxy-appended last x-forwarded-for hop so clients cannot spoof it", () => {
     expect(
       resolveClientIp({
         headers: createHeaders({
@@ -69,10 +69,31 @@ describe("resolveClientIp", () => {
         requestIp: "203.0.113.10",
         trustedProxyProvider: "trusted-proxy",
       }),
-    ).toBe("198.51.100.2");
+    ).toBe("198.51.100.3");
+
+    expect(
+      resolveClientIp({
+        headers: createHeaders({ "x-forwarded-for": "198.51.100.3" }),
+        requestIp: "203.0.113.10",
+        trustedProxyProvider: "trusted-proxy",
+      }),
+    ).toBe("198.51.100.3");
   });
 
-  test("cloudflare falls back to x-forwarded-for then x-real-ip when cf-connecting-ip is absent", () => {
+  test("trusted-proxy ignores an empty last x-forwarded-for hop", () => {
+    expect(
+      resolveClientIp({
+        headers: createHeaders({
+          "x-forwarded-for": "198.51.100.2, ",
+          "x-real-ip": "198.51.100.4",
+        }),
+        requestIp: "203.0.113.10",
+        trustedProxyProvider: "trusted-proxy",
+      }),
+    ).toBe("198.51.100.4");
+  });
+
+  test("cloudflare ignores spoofable forwarding headers when cf-connecting-ip is absent", () => {
     expect(
       resolveClientIp({
         headers: createHeaders({
@@ -82,17 +103,7 @@ describe("resolveClientIp", () => {
         requestIp: "203.0.113.10",
         trustedProxyProvider: "cloudflare",
       }),
-    ).toBe("198.51.100.2");
-
-    expect(
-      resolveClientIp({
-        headers: createHeaders({
-          "x-real-ip": "198.51.100.4",
-        }),
-        requestIp: "203.0.113.10",
-        trustedProxyProvider: "cloudflare",
-      }),
-    ).toBe("198.51.100.4");
+    ).toBe("203.0.113.10");
   });
 
   test("trusted-proxy falls back to x-real-ip when x-forwarded-for is absent", () => {
