@@ -8,6 +8,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
+import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { BackButton } from "../../components/headers/BackButton.tsx";
 import { NewRecoveryPhrase } from "../../components/NewRecoveryPhrase.tsx";
 import { RecoveryCoverage } from "../../components/RecoveryCoverage.tsx";
@@ -135,6 +136,7 @@ const RecoveryPhraseResetScreen = () => {
             </View>
           )}
 
+          {step === "verify" && gate.decision === null && <LoadingIndicator />}
           {step === "verify" && gate.decision === "confirm" && (
             <ConfirmIdentity
               onConfirmed={() => {

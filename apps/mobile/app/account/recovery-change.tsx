@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
+import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { BackButton } from "../../components/headers/BackButton.tsx";
 import { NewRecoveryPhrase } from "../../components/NewRecoveryPhrase.tsx";
 import { Button } from "../../components/ui/Button.tsx";
@@ -74,6 +75,7 @@ const RecoveryPhraseChangeScreen = () => {
             </Text>
           )}
 
+          {step === "verify" && gate.decision === null && <LoadingIndicator />}
           {step === "verify" && gate.decision === "confirm" && (
             <ConfirmIdentity
               onConfirmed={() => {
