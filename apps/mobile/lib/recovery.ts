@@ -165,8 +165,15 @@ export const restoreFromRecoveryPhrase = async (phrase: RecoveryPhrase) => {
     ),
   );
   if (opened.error) throw new Error(RECOVERY_DATA_MISMATCH_MESSAGE);
-  for (const { privateKey, version } of opened.data) {
-    await storeHistoryKey({ privateKey, userId: device.userId, version });
+  const stored = await tryCatch(
+    Promise.all(
+      opened.data.map(({ privateKey, version }) =>
+        storeHistoryKey({ privateKey, userId: device.userId, version }),
+      ),
+    ),
+  );
+  if (stored.error) {
+    throw new Error("Unable to save your keys on this phone. Unlock your phone and try again.");
   }
   return { userId: device.userId, versions };
 };

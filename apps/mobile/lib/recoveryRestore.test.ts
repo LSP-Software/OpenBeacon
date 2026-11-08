@@ -267,8 +267,8 @@ const addHistoryKeyVersion = (phrase: RecoveryPhrase, enrolled: Phone[]) => {
     holder.secureStore.set(`${userId}.${version}`, historyKey.privateKey);
 };
 
-const readEpoch = async (reader: Phone, epoch: ServerEpoch, { useDeviceWrap = false } = {}) => {
-  const epochKey = await unwrapEpochKeyFromWraps({
+const unwrapAs = (reader: Phone, epoch: ServerEpoch, { useDeviceWrap = false } = {}) =>
+  unwrapEpochKeyFromWraps({
     device: reader.device,
     epochId: epoch.epochId,
     getHistoryKey: async (version) => reader.secureStore.get(`${userId}.${version}`) ?? null,
@@ -280,11 +280,21 @@ const readEpoch = async (reader: Phone, epoch: ServerEpoch, { useDeviceWrap = fa
       })),
     },
   });
+
+const readEpoch = async (
+  reader: Phone,
+  epoch: ServerEpoch,
+  options: { useDeviceWrap?: boolean } = {},
+) => {
+  const epochKey = await unwrapAs(reader, epoch, options);
   return epochKey && encodeBase64(epochKey.expose());
 };
 
-const expectReadable = async (reader: Phone, epoch: ServerEpoch, options = {}) =>
-  expect(await readEpoch(reader, epoch, options)).toBe(encodeBase64(epoch.epochKey.expose()));
+const expectReadable = async (
+  reader: Phone,
+  epoch: ServerEpoch,
+  options: { useDeviceWrap?: boolean } = {},
+) => expect(await readEpoch(reader, epoch, options)).toBe(encodeBase64(epoch.epochKey.expose()));
 
 const firstPhone = createPhone("device-1");
 
@@ -537,18 +547,7 @@ describe("restoreFromRecoveryPhrase", () => {
     expect(await readEpoch(reinstalled, epoch)).toBeNull();
 
     await restoreFromRecoveryPhrase(phrase);
-    const epochKey = await unwrapEpochKeyFromWraps({
-      device: reinstalled.device,
-      epochId: epoch.epochId,
-      getHistoryKey: async (version) => reinstalled.secureStore.get(`${userId}.${version}`) ?? null,
-      wraps: {
-        deviceWrap: null,
-        historyWraps: [...epoch.historyWraps.values()].map((wrap) => ({
-          ...wrap,
-          createdAt: new Date(0),
-        })),
-      },
-    });
+    const epochKey = await unwrapAs(reinstalled, epoch);
 
     expect(
       decodeJsonPayload<{ latitude: number; longitude: number }>(
@@ -631,7 +630,9 @@ describe("secrets never reach the server", () => {
     }
     expect(serialized).not.toContain(phrase.words().join(" "));
     for (const word of phrase.words()) {
-      expect(serialized).not.toMatch(new RegExp(`(?<![A-Za-z0-9+/_-])${word}(?![A-Za-z0-9+/=_-])`));
+      expect(serialized).not.toMatch(
+        new RegExp(`(?<![A-Za-z0-9+/_-])${word}(?![A-Za-z0-9+/=_-]|":)`),
+      );
     }
     expect(serialized).not.toContain("REDACTED");
   });

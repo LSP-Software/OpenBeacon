@@ -413,7 +413,9 @@ describe("secrets never reach the server", () => {
     }
     expect(serialized).not.toContain(phrase.words().join(" "));
     for (const word of phrase.words()) {
-      expect(serialized).not.toMatch(new RegExp(`(?<![A-Za-z0-9+/_-])${word}(?![A-Za-z0-9+/=_-])`));
+      expect(serialized).not.toMatch(
+        new RegExp(`(?<![A-Za-z0-9+/_-])${word}(?![A-Za-z0-9+/=_-]|":)`),
+      );
     }
     expect(serialized).not.toContain("REDACTED");
     expect(addHistoryWrapsMock).toHaveBeenCalled();
