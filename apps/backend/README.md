@@ -47,6 +47,15 @@ that Cloudflare overwrites a client-supplied secret header, and that different
 clients get separate rate limits. Do not deploy with `none` behind the reverse
 proxy: users would share the proxy's IP rate limit.
 
+Self-hosted backends behind a single reverse proxy such as Traefik, Caddy or
+nginx can use `trusted-proxy`. The backend uses the last `X-Forwarded-For` entry,
+so the proxy must append the connecting address to that header (nginx:
+`$proxy_add_x_forwarded_for`) and the backend port must not be reachable except
+through the proxy. `cloudflare` trusts `CF-Connecting-IP` without verifying the
+request came from Cloudflare, so only use it when the origin is reachable solely
+through Cloudflare, for example via Cloudflare Tunnel or a firewall that only
+allows Cloudflare's IP ranges. Otherwise use `cloudflare-authenticated`.
+
 The `Deploy backend` GitHub Actions workflow also builds and deploys the separate scheduled job runner. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
 
 The `Deploy backend` GitHub Actions workflow is manually dispatched on `main`.
