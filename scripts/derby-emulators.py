@@ -20,7 +20,7 @@ ROUTES = [
     ("jogging", 6, [(52.9388, -1.4760), (52.9397, -1.4725), (52.9420, -1.4705), (52.9441, -1.4733), (52.9430, -1.4770), (52.9407, -1.4787), (52.9388, -1.4760)]),
     ("car", 70, [(52.8915, -1.4370), (52.8820, -1.4180), (52.8730, -1.3970), (52.8638, -1.3760)]),
 ]
-ANDROID_VERSIONS = {24: "7.0", 26: "8.0", 28: "9", 29: "10", 30: "11", 31: "12", 33: "13", 34: "14", 35: "15", 36: "16"}
+ANDROID_VERSIONS = {24: ("7.0", 3072), 26: ("8.0", 3072), 28: ("9", 4096), 29: ("10", 4096), 30: ("11", 4096), 31: ("12", 6144), 33: ("13", 6144), 34: ("14", 8192), 35: ("15", 8192), 36: ("16", 8192)}
 
 
 def position(points, mph, elapsed):
@@ -54,27 +54,32 @@ def select_android_sdk(configured, home):
     return configured
 
 
-def version_devices(api_levels):
-    return [(f"OpenBeacon_API_{api}", f"Android {ANDROID_VERSIONS[api]} (API {api}) {ROUTES[index % len(ROUTES)][0]}", ROUTES[index % len(ROUTES)]) for index, api in enumerate(api_levels)]
+def version_devices(api_levels, memory_mb):
+    return [(f"OpenBeacon_API_{api}", f"Android {ANDROID_VERSIONS[api][0]} (API {api}) {ROUTES[index % len(ROUTES)][0]}", memory_mb or ANDROID_VERSIONS[api][1], ROUTES[index % len(ROUTES)]) for index, api in enumerate(api_levels)]
 
 
 def create_version_avds(sdk, api_levels, abi):
     tools = sdk / "cmdline-tools" / "latest" / "bin"
     if not (tools / "sdkmanager").is_file() or not (tools / "avdmanager").is_file():
         raise RuntimeError("Install Android SDK Command-line Tools (latest) from Android Studio's SDK Manager to create an emulator for each Android version.")
-    existing = subprocess.check_output(["emulator", "-list-avds"], text=True).splitlines()
     avd_home = Path(os.environ.get("ANDROID_AVD_HOME") or Path.home() / ".android" / "avd")
+    avd_settings = "disk.dataPartition.size=6G\nhw.keyboard=yes\n"
     for api in api_levels:
         name = f"OpenBeacon_API_{api}"
         package = f"system-images;android-{api};google_apis;{abi}"
-        if not (sdk / "system-images" / f"android-{api}" / "google_apis" / abi).is_dir():
+        image = sdk / "system-images" / f"android-{api}" / "google_apis" / abi
+        if not all((image / file).is_file() for file in ("package.xml", "system.img", "userdata.img")):
+            if image.exists():
+                print(f"Removing incomplete {package}", flush=True)
+                shutil.rmtree(image)
             print(f"Installing {package}", flush=True)
             subprocess.run([str(tools / "sdkmanager"), "--install", package], check=True)
-        if name not in existing:
+        config = avd_home / f"{name}.avd" / "config.ini"
+        if not config.is_file() or not config.read_text().endswith(avd_settings):
             print(f"Creating AVD {name}", flush=True)
-            subprocess.run([str(tools / "avdmanager"), "create", "avd", "--name", name, "--package", package, "--device", "pixel_6"], input="no\n", text=True, check=True)
-            with (avd_home / f"{name}.avd" / "config.ini").open("a") as config:
-                config.write("disk.dataPartition.size=6G\nhw.keyboard=yes\n")
+            subprocess.run([str(tools / "avdmanager"), "create", "avd", "--force", "--name", name, "--package", package, "--device", "pixel_6"], input="no\n", text=True, check=True)
+            with config.open("a") as file:
+                file.write(avd_settings)
 
 
 def wait_for_metro(process, timeout=120):
@@ -131,7 +136,7 @@ def main():
     devices_group = parser.add_mutually_exclusive_group()
     devices_group.add_argument("--avd", help="Existing Android Virtual Device name for four route emulators (defaults to the first available)")
     devices_group.add_argument("--android-versions", nargs="*", type=int, choices=list(ANDROID_VERSIONS), metavar="API", help=f"Run one emulator per supported Android version, creating missing AVDs (API levels, default: {' '.join(map(str, ANDROID_VERSIONS))})")
-    parser.add_argument("--memory-mb", type=int, help="RAM per emulator in MiB (default: 6144, or 2048 with --android-versions)")
+    parser.add_argument("--memory-mb", type=int, help="RAM per emulator in MiB (default: 6144, or typical for each version with --android-versions)")
     parser.add_argument("--api-url", default="http://10.0.2.2:3000", help="Existing backend URL reachable from Android; skips local backend startup")
     parser.add_argument("--external-backend", action="store_true", help="Use an already running backend, including at the default URL")
     parser.add_argument("--apk", type=Path, help="Use an existing Expo development APK instead of building one")
@@ -139,7 +144,6 @@ def main():
     if args.memory_mb is not None and args.memory_mb < 1:
         parser.error("--memory-mb must be a positive integer")
     api_levels = None if args.android_versions is None else sorted(set(args.android_versions or ANDROID_VERSIONS))
-    args.memory_mb = args.memory_mb or (6144 if api_levels is None else 2048)
     url = urlparse(args.api_url)
     if url.scheme not in ("http", "https") or not url.netloc or url.path not in ("", "/") or url.query or url.fragment:
         parser.error("--api-url must be an HTTP(S) origin without a path, query or fragment")
@@ -169,11 +173,11 @@ def main():
         args.avd = args.avd or avds[0]
         if args.avd not in avds:
             parser.error(f"AVD {args.avd!r} not found; available: {', '.join(avds) or 'none'}")
-        devices = [(args.avd, route[0], route) for route in ROUTES]
+        devices = [(args.avd, route[0], args.memory_mb or 6144, route) for route in ROUTES]
     else:
         if not sdk:
             parser.error("set ANDROID_HOME to your Android SDK to create an emulator for each Android version")
-        devices = version_devices(api_levels)
+        devices = version_devices(api_levels, args.memory_mb)
     existing = subprocess.check_output(["adb", "devices"], text=True)
     ports = [5554 + 2 * index for index in range(len(devices))]
     if any(f"emulator-{port}\t" in existing for port in ports):
@@ -231,11 +235,11 @@ def main():
         children.append(metro)
         log_directory = Path(tempfile.mkdtemp(prefix="openbeacon-emulators-"))
         print(f"Emulator logs: {log_directory}", flush=True)
-        for port, (avd, label, _) in zip(ports, devices):
-            print(f"Starting {label} on emulator-{port} with {args.memory_mb} MiB RAM", flush=True)
+        for port, (avd, label, memory_mb, _) in zip(ports, devices):
+            print(f"Starting {label} on emulator-{port} with {memory_mb} MiB RAM", flush=True)
             log = (log_directory / f"emulator-{port}.log").open("w")
             emulator_logs.append(log)
-            children.append(subprocess.Popen(["emulator", "-avd", avd, "-port", str(port), "-memory", str(args.memory_mb), "-read-only", "-no-snapshot-save", "-gpu", "host"], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True))
+            children.append(subprocess.Popen(["emulator", "-avd", avd, "-port", str(port), "-memory", str(memory_mb), "-read-only", "-no-snapshot-save", "-gpu", "host"], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True))
         for port in ports:
             serial = f"emulator-{port}"
             subprocess.run(["adb", "-s", serial, "wait-for-device"], check=True, timeout=300)
@@ -247,7 +251,7 @@ def main():
             subprocess.run(["adb", "-s", serial, "install", "-r", str(args.apk)], check=True)
             subprocess.run(["adb", "-s", serial, "reverse", "tcp:8081", "tcp:8081"], check=True)
         started = time.monotonic()
-        for port, (_, _, (_, _, points)) in zip(ports, devices):
+        for port, (_, _, _, (_, _, points)) in zip(ports, devices):
             lat, lon = points[0]
             subprocess.run(["adb", "-s", f"emulator-{port}", "emu", "geo", "fix", str(lon), str(lat)], check=True, stdout=subprocess.DEVNULL)
         print("Waiting for Metro to become ready.", flush=True)
@@ -258,7 +262,7 @@ def main():
             if any(child.poll() is not None for child in children):
                 raise RuntimeError("Metro or an emulator exited unexpectedly")
             elapsed = time.monotonic() - started
-            for port, (_, _, (_, mph, points)) in zip(ports, devices):
+            for port, (_, _, _, (_, mph, points)) in zip(ports, devices):
                 lat, lon = position(points, mph, elapsed)
                 subprocess.run(["adb", "-s", f"emulator-{port}", "emu", "geo", "fix", str(lon), str(lat)], check=True, stdout=subprocess.DEVNULL)
             time.sleep(1)
