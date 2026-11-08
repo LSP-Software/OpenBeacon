@@ -7,6 +7,7 @@ import {
   DEVICE_KEY_ALGORITHM,
   DevicePrivateKeyMaterial,
   deriveRecoveryKeyPair,
+  diagnoseRecoveryPhraseInput,
   generateGroupEpochKey,
   generateRecoveryPhrase,
   getHistoryPublicKey,
@@ -330,5 +331,53 @@ describe("history wrap", () => {
         wrappedEpochKey: deviceWrap,
       }),
     ).toThrow();
+  });
+});
+
+describe("diagnoseRecoveryPhraseInput", () => {
+  test("reports no problem for a valid phrase in any casing or spacing", () => {
+    expect(
+      diagnoseRecoveryPhraseInput(`  ${phrase.toUpperCase().replaceAll(" ", "\n ")} `),
+    ).toEqual({
+      problem: null,
+    });
+  });
+
+  test("reports the word count when it isn't 12", () => {
+    expect(diagnoseRecoveryPhraseInput("")).toEqual({ count: 0, problem: "wrong-word-count" });
+    expect(diagnoseRecoveryPhraseInput("legal winner thank")).toEqual({
+      count: 3,
+      problem: "wrong-word-count",
+    });
+    expect(diagnoseRecoveryPhraseInput(`${phrase} legal`)).toEqual({
+      count: 13,
+      problem: "wrong-word-count",
+    });
+  });
+
+  test("reports the 1-based positions of words outside the word list", () => {
+    const words = phrase.split(" ");
+    words[3] = "yeer";
+    words[8] = "legall";
+    expect(diagnoseRecoveryPhraseInput(words.join(" "))).toEqual({
+      positions: [4, 9],
+      problem: "unknown-words",
+    });
+  });
+
+  test("reports a checksum failure when every word is valid", () => {
+    const words = phrase.split(" ");
+    words[11] = "legal";
+    expect(diagnoseRecoveryPhraseInput(words.join(" "))).toEqual({ problem: "invalid-checksum" });
+  });
+
+  test("agrees with parseRecoveryPhrase about what is valid", () => {
+    const words = phrase.split(" ");
+    words[11] = "legal";
+    const invalid = words.join(" ");
+    expect(() => parseRecoveryPhrase(invalid)).toThrow();
+    expect(diagnoseRecoveryPhraseInput(invalid).problem).not.toBeNull();
+    expect(() => parseRecoveryPhrase(phrase)).not.toThrow();
+    expect(diagnoseRecoveryPhraseInput(phrase).problem).toBeNull();
   });
 });

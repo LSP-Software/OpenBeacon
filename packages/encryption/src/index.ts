@@ -472,6 +472,7 @@ export {
 export {
   createHistoryKeyPair,
   deriveRecoveryKeyPair,
+  diagnoseRecoveryPhraseInput,
   generateRecoveryPhrase,
   getHistoryPublicKey,
   openHistoryKeyEscrow,

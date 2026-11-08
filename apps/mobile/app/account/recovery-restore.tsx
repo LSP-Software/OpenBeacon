@@ -1,5 +1,5 @@
 import { Alert } from "../../lib/alert.ts";
-import { parseRecoveryPhrase } from "@openbeacon/encryption";
+import { diagnoseRecoveryPhraseInput, parseRecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
@@ -44,10 +44,26 @@ const RecoveryRestoreScreen = () => {
   const restore = async ({ phrase: input }: { phrase: string }) => {
     const parsed = await tryCatch(Promise.resolve().then(() => parseRecoveryPhrase(input)));
     if (parsed.error) {
-      Alert.alert(
-        "That isn’t a recovery phrase",
-        "Check that you’ve entered all 12 words, in order, with spaces between them.",
-      );
+      const diagnosis = diagnoseRecoveryPhraseInput(input);
+      if (diagnosis.problem === "wrong-word-count") {
+        Alert.alert(
+          "That isn’t a recovery phrase",
+          `You’ve entered ${diagnosis.count} ${diagnosis.count === 1 ? "word" : "words"}. A recovery phrase has 12.`,
+        );
+      } else if (diagnosis.problem === "unknown-words") {
+        const { positions } = diagnosis;
+        Alert.alert(
+          "That isn’t a recovery phrase",
+          positions.length === 1
+            ? `Word ${positions[0]} isn’t in the recovery word list. Check its spelling.`
+            : `Words ${positions.slice(0, -1).join(", ")} and ${positions.at(-1)} aren’t in the recovery word list. Check their spelling.`,
+        );
+      } else {
+        Alert.alert(
+          "That isn’t a recovery phrase",
+          "The words are all valid, but they don’t make a recovery phrase. Check they’re in the right order.",
+        );
+      }
       return;
     }
     setStep("restoring");

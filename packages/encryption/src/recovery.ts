@@ -42,14 +42,35 @@ const getHistoryWrapInfo = (epochId: string, userId: string, historyKeyVersion: 
 export const generateRecoveryPhrase = () =>
   new RecoveryPhrase(textEncoder.encode(generateMnemonic(wordlist, 128)));
 
+const normalizeRecoveryPhraseInput = (input: string) =>
+  input.normalize("NFKD").toLowerCase().trim().split(/\s+/).join(" ");
+
 export const parseRecoveryPhrase = (input: string) => {
-  const normalized = input.normalize("NFKD").toLowerCase().trim().split(/\s+/).join(" ");
+  const normalized = normalizeRecoveryPhraseInput(input);
 
   if (normalized.split(" ").length !== 12 || !validateMnemonic(normalized, wordlist)) {
     throw new Error("Invalid recovery phrase.");
   }
 
   return new RecoveryPhrase(textEncoder.encode(normalized));
+};
+
+export const diagnoseRecoveryPhraseInput = (input: string) => {
+  const normalized = normalizeRecoveryPhraseInput(input);
+  const words = normalized === "" ? [] : normalized.split(" ");
+  if (words.length !== 12) return { count: words.length, problem: "wrong-word-count" as const };
+  const unknownWordPositions = words.flatMap((word, index) =>
+    wordlist.includes(word) ? [] : [index + 1],
+  );
+  if (unknownWordPositions.length > 0) {
+    return { positions: unknownWordPositions, problem: "unknown-words" as const };
+  }
+  try {
+    parseRecoveryPhrase(input);
+  } catch {
+    return { problem: "invalid-checksum" as const };
+  }
+  return { problem: null };
 };
 
 export const deriveRecoveryKeyPair = (phrase: RecoveryPhrase) => {
