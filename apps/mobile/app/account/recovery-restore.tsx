@@ -2,7 +2,7 @@ import { Alert } from "../../lib/alert.ts";
 import { diagnoseRecoveryPhraseInput, parseRecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { router, useLocalSearchParams } from "expo-router";
+import { Link, router, useLocalSearchParams } from "expo-router";
 import {
   allowScreenCaptureAsync,
   disableAppSwitcherProtectionAsync,
@@ -150,6 +150,11 @@ const RecoveryRestoreScreen = () => {
                   <Button variant="outline" onPress={skip} disabled={step === "restoring"}>
                     <Text>Skip for now</Text>
                   </Button>
+                  <Link href="/account/recovery-reset" asChild>
+                    <Button variant="ghost" disabled={step === "restoring"}>
+                      <Text>I’ve lost my phrase</Text>
+                    </Button>
+                  </Link>
                   <Text className="text-muted-foreground text-sm leading-5">
                     If you skip, this phone shares your live location once another member’s phone
                     updates your groups’ keys, which happens automatically. You can restore later
@@ -164,7 +169,7 @@ const RecoveryRestoreScreen = () => {
             <View className="gap-4">
               <Text className="text-foreground text-3xl font-bold">Your history is restored</Text>
               <Text className="text-muted-foreground text-base leading-6">
-                This phone can now read your groups’ location history.
+                This phone can now read the history your recovery phrase protects.
               </Text>
               <RecoveryCoverage userId={userId} />
               <Button onPress={() => (afterSignIn ? router.replace("/") : router.back())}>
