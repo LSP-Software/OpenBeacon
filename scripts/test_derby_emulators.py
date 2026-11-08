@@ -1,6 +1,7 @@
 import importlib.util
 import signal
 import unittest
+from contextlib import contextmanager
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -41,6 +42,85 @@ class AndroidSdkTest(unittest.TestCase):
             (home / "licenses" / "android-sdk-license").touch()
             self.assertEqual(simulation.select_android_sdk(configured, home), home)
             self.assertEqual(simulation.select_android_sdk(home, configured), home)
+
+
+class AndroidVersionsTest(unittest.TestCase):
+    def test_each_version_gets_its_own_avd_and_routes_repeat(self):
+        devices = simulation.version_devices([24, 26, 28, 29, 30], None)
+        self.assertEqual([avd for avd, _, _, _ in devices], ["OpenBeacon_API_24", "OpenBeacon_API_26", "OpenBeacon_API_28", "OpenBeacon_API_29", "OpenBeacon_API_30"])
+        self.assertEqual([route[0] for _, _, _, route in devices], ["stationary", "walking", "jogging", "car", "stationary"])
+        self.assertEqual(devices[0][1], "Android 7.0 (API 24) stationary")
+
+    def test_newer_versions_get_more_memory_unless_overridden(self):
+        memory = [memory_mb for _, _, memory_mb, _ in simulation.version_devices(list(simulation.ANDROID_VERSIONS), None)]
+        self.assertEqual(memory, sorted(memory))
+        self.assertLess(memory[0], memory[-1])
+        self.assertEqual({memory_mb for _, _, memory_mb, _ in simulation.version_devices([24, 36], 2048)}, {2048})
+
+    def test_versions_cover_minimum_to_target_sdk(self):
+        self.assertEqual(min(simulation.ANDROID_VERSIONS), 24)
+        self.assertEqual(max(simulation.ANDROID_VERSIONS), 36)
+
+    def test_installs_and_creates_only_missing_versions(self):
+        with self.android_sdk() as (sdk, tools, avd_home):
+            self.install_image(sdk, 24)
+            self.create_avd(avd_home, 24)
+            (avd_home / "OpenBeacon_API_30.avd").mkdir()
+            commands = self.create_version_avds(sdk, avd_home, [24, 30])
+            self.assertEqual(commands, [
+                [str(tools / "sdkmanager"), "--install", "system-images;android-30;google_apis;x86_64"],
+                [str(tools / "avdmanager"), "create", "avd", "--force", "--name", "OpenBeacon_API_30", "--package", "system-images;android-30;google_apis;x86_64", "--device", "pixel_6"],
+            ])
+            self.assertTrue((avd_home / "OpenBeacon_API_30.avd" / "config.ini").read_text().endswith("disk.dataPartition.size=6G\nhw.keyboard=yes\n"))
+
+    def test_reinstalls_interrupted_image_download(self):
+        with self.android_sdk() as (sdk, tools, avd_home):
+            image = sdk / "system-images" / "android-30" / "google_apis" / "x86_64"
+            image.mkdir(parents=True)
+            (image / "package.xml").touch()
+            (image / "system.img").touch()
+            self.create_avd(avd_home, 30)
+            commands = self.create_version_avds(sdk, avd_home, [30])
+            self.assertFalse(image.exists())
+            self.assertEqual(commands, [[str(tools / "sdkmanager"), "--install", "system-images;android-30;google_apis;x86_64"]])
+
+    def test_recreates_avd_left_by_failed_creation(self):
+        with self.android_sdk() as (sdk, tools, avd_home):
+            self.install_image(sdk, 30)
+            (avd_home / "OpenBeacon_API_30.avd").mkdir(parents=True)
+            (avd_home / "OpenBeacon_API_30.avd" / "config.ini").write_text("hw.keyboard=no\n")
+            commands = self.create_version_avds(sdk, avd_home, [30])
+            self.assertEqual(commands, [[str(tools / "avdmanager"), "create", "avd", "--force", "--name", "OpenBeacon_API_30", "--package", "system-images;android-30;google_apis;x86_64", "--device", "pixel_6"]])
+
+    @contextmanager
+    def android_sdk(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tools = root / "sdk" / "cmdline-tools" / "latest" / "bin"
+            tools.mkdir(parents=True)
+            (tools / "sdkmanager").touch()
+            (tools / "avdmanager").touch()
+            (root / "avd").mkdir()
+            yield root / "sdk", tools, root / "avd"
+
+    def install_image(self, sdk, api):
+        image = sdk / "system-images" / f"android-{api}" / "google_apis" / "x86_64"
+        image.mkdir(parents=True)
+        for file in ("package.xml", "system.img", "userdata.img"):
+            (image / file).touch()
+
+    def create_avd(self, avd_home, api):
+        (avd_home / f"OpenBeacon_API_{api}.avd").mkdir()
+        (avd_home / f"OpenBeacon_API_{api}.avd" / "config.ini").write_text("hw.keyboard=no\ndisk.dataPartition.size=6G\nhw.keyboard=yes\n")
+
+    def create_version_avds(self, sdk, avd_home, api_levels):
+        with patch.dict(simulation.os.environ, {"ANDROID_AVD_HOME": str(avd_home)}), patch.object(simulation.subprocess, "run") as run, patch("builtins.print"):
+            simulation.create_version_avds(sdk, api_levels, "x86_64")
+        return [call.args[0] for call in run.call_args_list]
+
+    def test_requires_command_line_tools(self):
+        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(RuntimeError, "Command-line Tools"):
+            simulation.create_version_avds(Path(directory), [24], "x86_64")
 
 
 class LaunchTest(unittest.TestCase):
