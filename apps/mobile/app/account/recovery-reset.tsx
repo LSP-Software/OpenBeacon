@@ -38,7 +38,10 @@ const RecoveryPhraseResetScreen = () => {
     }
     if (result.data.status === "reauthenticate") {
       setStep("verify");
-      Alert.alert("Sign in again", "Nothing was reset. Confirm it’s you to continue.");
+      Alert.alert(
+        "Sign in again",
+        "Nothing was reset. Confirm it’s you, then write down the new phrase you’re shown.",
+      );
       return;
     }
     const { device } = result.data;

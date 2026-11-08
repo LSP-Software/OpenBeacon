@@ -28,7 +28,10 @@ const RecoveryPhraseChangeScreen = () => {
     }
     if (result.data.status === "reauthenticate") {
       setStep("verify");
-      Alert.alert("Sign in again", "Your phrase wasn’t changed. Confirm it’s you to continue.");
+      Alert.alert(
+        "Sign in again",
+        "Your phrase wasn’t changed. Confirm it’s you, then write down the new phrase you’re shown.",
+      );
       return;
     }
     void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });

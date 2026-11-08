@@ -1,13 +1,14 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { View } from "react-native";
 import { Alert } from "../lib/alert.ts";
 import { trpc } from "../lib/api.ts";
 import { isNativeGoogleSignInConfigured, signInWithGoogle } from "../lib/auth.ts";
-import { authClient } from "../lib/auth-client.ts";
+import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
 import { Button } from "./ui/Button.tsx";
 import { Input } from "./ui/Input.tsx";
 import { Text } from "./ui/Text.tsx";
@@ -19,51 +20,59 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
   const form = useForm<{ password: string }>({ defaultValues: { password: "" } });
   const google = methods.data?.google === true && isNativeGoogleSignInConfigured;
 
-  const finish = async (previous: { token: string; userId: string }) => {
+  const confirm = async (
+    signIn: () => Promise<{
+      cancelled?: boolean;
+      error?: { message?: string | undefined } | null | undefined;
+    }>,
+  ) => {
+    if (!session) return;
+    const previous = { token: session.session.token, userId: session.user.id };
+    setPending(true);
+    const result = await tryCatch(signIn());
+    if (result.data?.cancelled) {
+      setPending(false);
+      return;
+    }
+    const failure = result.error ?? result.data.error;
+    if (failure) {
+      setPending(false);
+      Alert.alert("Unable to confirm it’s you", failure.message || "Please try again.");
+      return;
+    }
     const current = await tryCatch(authClient.getSession());
     const currentSession = current.data?.data;
-    if (!currentSession || currentSession.session.token === previous.token) return;
+    if (!currentSession || currentSession.session.token === previous.token) {
+      setPending(false);
+      Alert.alert("Unable to confirm it’s you", "Please try again.");
+      return;
+    }
     if (currentSession.user.id !== previous.userId) {
+      await tryCatch(SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, previous.token));
       await tryCatch(authClient.signOut());
       router.replace("/");
       Alert.alert(
         "Signed in to a different account",
-        "That Google account isn’t the one you were signed in with, so you’ve been signed out.",
+        "That Google account isn’t the one you were signed in with, so you’ve been signed out. Sign in again with your own account.",
       );
       return;
     }
     await tryCatch(authClient.revokeSession({ token: previous.token }));
+    setPending(false);
     onConfirmed();
   };
 
-  const confirmWithPassword = async ({ password }: { password: string }) => {
-    if (!session) return;
-    const previous = { token: session.session.token, userId: session.user.id };
-    setPending(true);
-    const result = await authClient.signIn.email({ email: session.user.email, password });
+  const confirmWithPassword = ({ password }: { password: string }) => {
+    const email = session?.user.email ?? "";
     form.reset();
-    if (result.error) {
-      setPending(false);
-      Alert.alert("Unable to confirm it’s you", result.error.message ?? "Please try again.");
-      return;
-    }
-    await finish(previous);
-    setPending(false);
+    return confirm(() => authClient.signIn.email({ email, password }));
   };
 
-  const confirmWithGoogle = async () => {
-    if (!session) return;
-    const previous = { token: session.session.token, userId: session.user.id };
-    setPending(true);
-    const result = await signInWithGoogle();
-    if (result.error) {
-      setPending(false);
-      Alert.alert("Unable to confirm it’s you", result.error.message ?? "Please try again.");
-      return;
-    }
-    await finish(previous);
-    setPending(false);
-  };
+  const confirmWithGoogle = () =>
+    confirm(async () => {
+      const result = await signInWithGoogle();
+      return "error" in result || "data" in result ? result : { cancelled: true };
+    });
 
   return (
     <View className="gap-4">
