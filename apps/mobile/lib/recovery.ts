@@ -111,7 +111,8 @@ export const backfillHistoryWraps = async ({
     if (!page.historyKey || page.epochs.length === 0) return wrapped;
     const historyKey = { ...page.historyKey, userId: device.userId };
     const storedHistoryKey = await getStoredHistoryKey(historyKey);
-    if (storedHistoryKey && getHistoryPublicKey(storedHistoryKey) !== historyKey.publicKey) {
+    if (!storedHistoryKey) return wrapped;
+    if (getHistoryPublicKey(storedHistoryKey) !== historyKey.publicKey) {
       throw new Error("The server's history key doesn't match this device.");
     }
     const wraps = [];

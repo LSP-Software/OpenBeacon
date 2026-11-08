@@ -49,7 +49,7 @@ A device that holds the account's current History key.
 _Avoid_: Trusted device, approved device, verified device, primary device
 
 **Backfill**:
-An Enrolled device adding History wraps for Epochs it can already read through its Device wraps.
+An Enrolled device adding History wraps, to the current History key it holds, for Epochs it can already read through its Device wraps.
 _Avoid_: Sync, migration, re-wrap
 
 **Restore**:

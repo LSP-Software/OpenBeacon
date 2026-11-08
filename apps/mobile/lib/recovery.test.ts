@@ -351,6 +351,27 @@ describe("backfillHistoryWraps", () => {
     expect(addHistoryWrapsMock).not.toHaveBeenCalled();
   });
 
+  test("uploads nothing and doesn't fail when the current history key was set up elsewhere", async () => {
+    epochs = [createServerEpoch(1), createServerEpoch(2)];
+    const otherKeys = createHistoryKeyPair();
+    serverHistoryKey = { id: "history-key-elsewhere", publicKey: otherKeys.publicKey, version: 1 };
+
+    expect(await backfillHistoryWraps({ device, groupId: "group-1" })).toBe(0);
+    expect(addHistoryWrapsMock).not.toHaveBeenCalled();
+    expect(epochs.every((epoch) => epoch.historyWraps.size === 0)).toBe(true);
+  });
+
+  test("uploads nothing when this phone only holds an older version than the current one", async () => {
+    epochs = [createServerEpoch(1)];
+    await setUpRecoveryPhrase(generateRecoveryPhrase());
+    const resetElsewhere = createHistoryKeyPair();
+    serverHistoryKey = { id: "history-key-v2", publicKey: resetElsewhere.publicKey, version: 2 };
+
+    expect(await backfillHistoryWraps({ device, groupId: "group-1" })).toBe(0);
+    expect(addHistoryWrapsMock).not.toHaveBeenCalled();
+    expect(epochs[0]?.historyWraps.size).toBe(0);
+  });
+
   test("binds wraps to this device's user even if the server names another", async () => {
     epochs = [createServerEpoch(1)];
     await setUpRecoveryPhrase(generateRecoveryPhrase());
