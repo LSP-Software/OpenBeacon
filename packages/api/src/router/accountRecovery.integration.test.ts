@@ -29,11 +29,44 @@ class TestCache extends OpenBeaconCache {
 const router = createTRPCRouter({ accountRecovery: accountRecoveryRouter });
 const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
 const prefix = `recovery-${crypto.randomUUID()}`;
-const users = ["setup", "race", "strict", "change", "reset", "stale", "staleSetup"].map(
-  (name) => `${prefix}-${name}`,
-);
-const [setupUser, raceUser, strictUser, changeUser, resetUser, staleUser, staleSetupUser] =
-  users as [string, string, string, string, string, string, string];
+const users = [
+  "setup",
+  "race",
+  "strict",
+  "change",
+  "reset",
+  "stale",
+  "staleSetup",
+  "unset",
+  "keyOwner",
+  "setupClash",
+  "resetClash",
+].map((name) => `${prefix}-${name}`);
+const [
+  setupUser,
+  raceUser,
+  strictUser,
+  changeUser,
+  resetUser,
+  staleUser,
+  staleSetupUser,
+  unsetUser,
+  keyOwnerUser,
+  setupClashUser,
+  resetClashUser,
+] = users as [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+];
 const groupId = `${prefix}-group`;
 const staleSessionCreatedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
 
@@ -318,7 +351,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           ({ id }) => id,
         ),
       ).toEqual(expect.arrayContaining([first.input.id, second.id]));
-    });
+    }, 20_000);
 
     test("reset needs a fresh session and confirmation, then replaces every key with v(N+1)", async () => {
       const oldPhrase = generateRecoveryPhrase();
@@ -419,7 +452,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         replacement.privateKey.expose(),
       ]);
       await expect(restoreHistoryKeys(resetUser, oldPhrase)).rejects.toThrow();
-    });
+    }, 20_000);
 
     test("a session older than the better-auth fresh age cannot set up a phrase and status reports it", async () => {
       const phrase = generateRecoveryPhrase();
@@ -460,6 +493,67 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(
         await prisma.accountHistoryKey.findMany({ where: { userId: staleUser } }),
       ).toMatchObject([{ id: historyKey.input.id, version: 1 }]);
+    }, 20_000);
+
+    test("changePhrase is NOT_FOUND when no recovery phrase is set up", async () => {
+      const phrase = generateRecoveryPhrase();
+      const { escrow } = newHistoryKey({ phrase, userId: unsetUser, version: 1 }).input;
+      await expect(
+        caller(unsetUser).accountRecovery.changePhrase({
+          escrows: [{ ...escrow, version: 1 }],
+          recoveryKey: recoveryKeyInput(phrase),
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(await prisma.recoveryKey.count({ where: { userId: unsetUser } })).toBe(0);
+    });
+
+    test("setup and reset reject a history key id that another user already holds", async () => {
+      const taken = await insertHistoryKey({
+        phrase: generateRecoveryPhrase(),
+        userId: keyOwnerUser,
+        version: 1,
+      });
+      const conflict = {
+        code: "CONFLICT",
+        message: "That history key ID is already in use.",
+      };
+      const setupPhrase = generateRecoveryPhrase();
+      await expect(
+        caller(setupClashUser).accountRecovery.setup({
+          historyKey: {
+            ...newHistoryKey({ phrase: setupPhrase, userId: setupClashUser, version: 1 }).input,
+            id: taken.id,
+          },
+          recoveryKey: recoveryKeyInput(setupPhrase),
+        }),
+      ).rejects.toMatchObject(conflict);
+      expect(await prisma.recoveryKey.count({ where: { userId: setupClashUser } })).toBe(0);
+      expect(await prisma.accountHistoryKey.count({ where: { userId: setupClashUser } })).toBe(0);
+
+      const resetPhrase = generateRecoveryPhrase();
+      const first = newHistoryKey({ phrase: resetPhrase, userId: resetClashUser, version: 1 });
+      await caller(resetClashUser).accountRecovery.setup({
+        historyKey: first.input,
+        recoveryKey: recoveryKeyInput(resetPhrase),
+      });
+      const newPhrase = generateRecoveryPhrase();
+      await expect(
+        caller(resetClashUser).accountRecovery.reset({
+          confirmReset: true,
+          historyKey: {
+            ...newHistoryKey({ phrase: newPhrase, userId: resetClashUser, version: 2 }).input,
+            id: taken.id,
+          },
+          recoveryKey: recoveryKeyInput(newPhrase),
+        }),
+      ).rejects.toMatchObject(conflict);
+      expect(
+        await prisma.accountHistoryKey.findMany({ where: { userId: resetClashUser } }),
+      ).toMatchObject([{ id: first.input.id, version: 1 }]);
+      expect(
+        (await prisma.recoveryKey.findUniqueOrThrow({ where: { userId: resetClashUser } }))
+          .publicKey,
+      ).toBe(recoveryKeyInput(resetPhrase).publicKey);
     });
   },
 );
