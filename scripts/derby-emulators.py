@@ -198,7 +198,7 @@ def main():
             print(f"Starting {name} on emulator-{port} with {args.memory_mb} MiB RAM", flush=True)
             log = (log_directory / f"emulator-{port}.log").open("w")
             emulator_logs.append(log)
-            children.append(subprocess.Popen(["emulator", "-avd", args.avd, "-port", str(port), "-memory", str(args.memory_mb), "-read-only", "-no-snapshot-save"], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True))
+            children.append(subprocess.Popen(["emulator", "-avd", args.avd, "-port", str(port), "-memory", str(args.memory_mb), "-read-only", "-no-snapshot-save", "-gpu", "host"], stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True))
         for port in ports:
             serial = f"emulator-{port}"
             subprocess.run(["adb", "-s", serial, "wait-for-device"], check=True, timeout=300)
