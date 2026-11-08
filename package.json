@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "turbo dev",
     "emulators": "python3 scripts/derby-emulators.py",
+    "emulators:versions": "python3 scripts/derby-emulators.py --android-versions",
     "prepare": "husky",
     "build": "turbo build",
     "format": "bun fmt",

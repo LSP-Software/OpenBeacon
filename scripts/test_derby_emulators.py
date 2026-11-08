@@ -43,6 +43,41 @@ class AndroidSdkTest(unittest.TestCase):
             self.assertEqual(simulation.select_android_sdk(home, configured), home)
 
 
+class AndroidVersionsTest(unittest.TestCase):
+    def test_each_version_gets_its_own_avd_and_routes_repeat(self):
+        devices = simulation.version_devices([24, 26, 28, 29, 30])
+        self.assertEqual([avd for avd, _, _ in devices], ["OpenBeacon_API_24", "OpenBeacon_API_26", "OpenBeacon_API_28", "OpenBeacon_API_29", "OpenBeacon_API_30"])
+        self.assertEqual([route[0] for _, _, route in devices], ["stationary", "walking", "jogging", "car", "stationary"])
+        self.assertEqual(devices[0][1], "Android 7.0 (API 24) stationary")
+
+    def test_versions_cover_minimum_to_target_sdk(self):
+        self.assertEqual(min(simulation.ANDROID_VERSIONS), 24)
+        self.assertEqual(max(simulation.ANDROID_VERSIONS), 36)
+
+    def test_installs_and_creates_only_missing_versions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sdk = root / "sdk"
+            tools = sdk / "cmdline-tools" / "latest" / "bin"
+            tools.mkdir(parents=True)
+            (tools / "sdkmanager").touch()
+            (tools / "avdmanager").touch()
+            (sdk / "system-images" / "android-24" / "google_apis" / "x86_64").mkdir(parents=True)
+            (root / "avd" / "OpenBeacon_API_30.avd").mkdir(parents=True)
+            with patch.dict(simulation.os.environ, {"ANDROID_AVD_HOME": str(root / "avd")}), patch.object(simulation.subprocess, "check_output", return_value="OpenBeacon_API_24\n"), patch.object(simulation.subprocess, "run") as run, patch("builtins.print"):
+                simulation.create_version_avds(sdk, [24, 30], "x86_64")
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertEqual(commands, [
+                [str(tools / "sdkmanager"), "--install", "system-images;android-30;google_apis;x86_64"],
+                [str(tools / "avdmanager"), "create", "avd", "--name", "OpenBeacon_API_30", "--package", "system-images;android-30;google_apis;x86_64", "--device", "pixel_6"],
+            ])
+            self.assertIn("disk.dataPartition.size=6G", (root / "avd" / "OpenBeacon_API_30.avd" / "config.ini").read_text())
+
+    def test_requires_command_line_tools(self):
+        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(RuntimeError, "Command-line Tools"):
+            simulation.create_version_avds(Path(directory), [24], "x86_64")
+
+
 class LaunchTest(unittest.TestCase):
     @patch.object(simulation, "app_running", side_effect=[False, True])
     @patch.object(simulation.subprocess, "run")
