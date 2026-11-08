@@ -136,54 +136,6 @@ export const groupEpochRouter = {
       },
     });
   }),
-  getWrappedKey: groupMemberProcedure
-    .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
-    .input(
-      z.object({
-        deviceId: z.string().min(1),
-        epochId: z.string().min(1),
-        groupId: z.string().min(1),
-      }),
-    )
-    .query(async ({ ctx, input }) => {
-      const wrappedKey = await ctx.db.groupEpochRecipientKey.findFirst({
-        select: {
-          algorithm: true,
-          createdAt: true,
-          ephemeralPublicKey: true,
-          groupEpoch: {
-            select: {
-              senderPublicKey: true,
-            },
-          },
-          groupEpochId: true,
-          recipientDeviceId: true,
-          wrappedKey: true,
-        },
-        where: {
-          groupEpochId: input.epochId,
-          groupEpoch: {
-            groupId: input.groupId,
-          },
-          recipientDeviceId: input.deviceId,
-          recipientDevice: {
-            userId: ctx.session.user.id,
-          },
-        },
-      });
-
-      if (!wrappedKey) {
-        return null;
-      }
-
-      const { groupEpoch, groupEpochId, ...wrappedEpochKey } = wrappedKey;
-
-      return {
-        ...wrappedEpochKey,
-        epochId: groupEpochId,
-        senderPublicKey: groupEpoch.senderPublicKey,
-      };
-    }),
   getEpochKeyWraps: groupMemberProcedure
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .input(
