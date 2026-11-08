@@ -3,7 +3,7 @@ import type { RecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
@@ -20,6 +20,12 @@ const RecoveryPhraseChangeScreen = () => {
   const [step, setStep] = useState<"verify" | "phrase" | "saving" | "done">("verify");
   const gate = useIdentityGate();
 
+  useEffect(() => {
+    if (step === "verify" && gate.decision === "ready") {
+      setStep("phrase");
+    }
+  }, [step, gate.decision]);
+
   const change = async (phrase: RecoveryPhrase) => {
     setStep("saving");
     const result = await tryCatch(changeRecoveryPhrase(phrase));
@@ -29,7 +35,7 @@ const RecoveryPhraseChangeScreen = () => {
       return;
     }
     if (result.data.status === "reauthenticate") {
-      await gate.refresh();
+      await gate.recheck();
       setStep("verify");
       Alert.alert(
         "Sign in again",
@@ -68,7 +74,7 @@ const RecoveryPhraseChangeScreen = () => {
             </Text>
           )}
 
-          {step === "verify" && !gate.loading && gate.needsConfirmation && (
+          {step === "verify" && gate.decision === "confirm" && (
             <ConfirmIdentity
               onConfirmed={() => {
                 void gate.refresh();
@@ -77,9 +83,7 @@ const RecoveryPhraseChangeScreen = () => {
             />
           )}
 
-          {(step === "phrase" ||
-            step === "saving" ||
-            (step === "verify" && !gate.loading && !gate.needsConfirmation)) && (
+          {(step === "phrase" || step === "saving") && (
             <NewRecoveryPhrase
               onConfirm={change}
               submitLabel="Change phrase"

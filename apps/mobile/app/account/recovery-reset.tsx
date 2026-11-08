@@ -3,7 +3,7 @@ import type { RecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -25,7 +25,13 @@ const RecoveryPhraseResetScreen = () => {
   const [step, setStep] = useState<
     "warn" | "verify" | "phrase" | "saving" | "protecting" | "unsaved" | "done"
   >("warn");
-  const gate = useIdentityGate();
+  const gate = useIdentityGate({ enabled: step === "verify" });
+
+  useEffect(() => {
+    if (step === "verify" && gate.decision === "ready") {
+      setStep("phrase");
+    }
+  }, [step, gate.decision]);
   const [progress, setProgress] = useState({ done: 0, failed: 0, total: 0 });
   const [userId, setUserId] = useState<string>();
   const form = useForm<{ confirmation: string }>({ defaultValues: { confirmation: "" } });
@@ -40,7 +46,7 @@ const RecoveryPhraseResetScreen = () => {
       return;
     }
     if (result.data.status === "reauthenticate") {
-      await gate.refresh();
+      await gate.recheck();
       setStep("verify");
       Alert.alert(
         "Sign in again",
@@ -128,7 +134,7 @@ const RecoveryPhraseResetScreen = () => {
             </View>
           )}
 
-          {step === "verify" && !gate.loading && gate.needsConfirmation && (
+          {step === "verify" && gate.decision === "confirm" && (
             <ConfirmIdentity
               onConfirmed={() => {
                 void gate.refresh();
@@ -137,9 +143,7 @@ const RecoveryPhraseResetScreen = () => {
             />
           )}
 
-          {(step === "phrase" ||
-            step === "saving" ||
-            (step === "verify" && !gate.loading && !gate.needsConfirmation)) && (
+          {(step === "phrase" || step === "saving") && (
             <NewRecoveryPhrase
               onConfirm={reset}
               submitLabel="Reset phrase"

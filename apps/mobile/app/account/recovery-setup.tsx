@@ -3,7 +3,7 @@ import type { RecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
@@ -23,6 +23,12 @@ const RecoveryPhraseSetupScreen = () => {
     "verify" | "phrase" | "saving" | "protecting" | "unsaved" | "done"
   >("verify");
   const gate = useIdentityGate();
+
+  useEffect(() => {
+    if (step === "verify" && gate.decision === "ready") {
+      setStep("phrase");
+    }
+  }, [step, gate.decision]);
   const [progress, setProgress] = useState({ done: 0, failed: 0, total: 0 });
   const [userId, setUserId] = useState<string>();
 
@@ -35,7 +41,7 @@ const RecoveryPhraseSetupScreen = () => {
       return;
     }
     if (result.data.status === "reauthenticate") {
-      await gate.refresh();
+      await gate.recheck();
       setStep("verify");
       Alert.alert(
         "Sign in again",
@@ -84,7 +90,7 @@ const RecoveryPhraseSetupScreen = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {step === "verify" && !gate.loading && gate.needsConfirmation && (
+          {step === "verify" && gate.decision === "confirm" && (
             <ConfirmIdentity
               onConfirmed={() => {
                 void gate.refresh();
@@ -93,9 +99,7 @@ const RecoveryPhraseSetupScreen = () => {
             />
           )}
 
-          {(step === "phrase" ||
-            step === "saving" ||
-            (step === "verify" && !gate.loading && !gate.needsConfirmation)) && (
+          {(step === "phrase" || step === "saving") && (
             <NewRecoveryPhrase
               onConfirm={setUp}
               submitLabel="Confirm"
