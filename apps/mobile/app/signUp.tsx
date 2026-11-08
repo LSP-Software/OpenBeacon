@@ -15,15 +15,13 @@ import { Text } from "../components/ui/Text.tsx";
 import { trpc } from "../lib/api.ts";
 import { completeAuthenticatedSessionSetup, isNativeGoogleSignInConfigured } from "../lib/auth.ts";
 import { authClient } from "../lib/auth-client.ts";
+import { finishAuthentication } from "../lib/finishAuthentication.ts";
 import { performGoogleAuth } from "../lib/googleAuth.ts";
 import { signUpFormSchema } from "../lib/signUpSchema.ts";
 
 const SignUp = () => {
   const { joinCode } = useLocalSearchParams<{ joinCode?: string }>();
-  const finishSignUp = () => {
-    if (joinCode) router.replace({ pathname: "/join", params: { code: joinCode } });
-    else router.replace("/");
-  };
+  const finishSignUp = () => finishAuthentication({ joinCode });
   const [emailLoading, setEmailLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
@@ -64,7 +62,7 @@ const SignUp = () => {
       return;
     }
 
-    finishSignUp();
+    await finishSignUp();
   };
 
   const handleGoogleSignUp = async () => {

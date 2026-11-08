@@ -21,7 +21,10 @@ import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 
 const RecoveryRestoreScreen = () => {
-  const { afterSignIn } = useLocalSearchParams<{ afterSignIn?: string }>();
+  const { afterSignIn, missingVersion } = useLocalSearchParams<{
+    afterSignIn?: string;
+    missingVersion?: string;
+  }>();
   const { data: session } = authClient.useSession();
   const queryClient = useQueryClient();
   const status = useQuery(trpc.accountRecovery.status.queryOptions());
@@ -66,7 +69,9 @@ const RecoveryRestoreScreen = () => {
   };
 
   const skip = () => {
-    const version = status.data?.currentHistoryKey?.version;
+    const version = missingVersion
+      ? Number(missingVersion)
+      : status.data?.currentHistoryKey?.version;
     if (session?.user.id && version) {
       storage.set(`recovery.restoreSkipped.${session.user.id}`, version);
     }
