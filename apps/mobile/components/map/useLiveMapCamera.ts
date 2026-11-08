@@ -213,16 +213,10 @@ export const useLiveMapCamera = ({
     });
   };
 
-  const fitEdgeGroup = ({
-    chipIds,
-    userIds,
-  }: {
-    chipIds: readonly string[];
-    userIds: readonly string[];
-  }) => {
+  const fitEdgeGroup = (userIds: readonly string[]) => {
     const markersToFit = markersRef.current.filter((item) => userIds.includes(item.userId));
     if (markersToFit.length === 0) return;
-    edge.suppress(chipIds);
+    edge.suppress(userIds);
     edge.releaseAfter(600);
     clearLiveMapInitialFitTimer(initialFitTimerRef);
     initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {

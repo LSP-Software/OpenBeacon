@@ -1,7 +1,7 @@
 import { Camera, Layer, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
 import { LocateFixedIcon, MapPinIcon, ScanIcon } from "lucide-react-native";
-import { useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, type GestureResponderEvent, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import {
@@ -41,16 +41,28 @@ export const NativeMap = ({
       pins.groups.map((group) => ({
         latitude: group.latitude,
         longitude: group.longitude,
+        memberUserIds: group.members.map((member) => member.userId),
         userId: group.id,
       })),
     [pins.groups],
   );
-  const ignoreMapPressUntilRef = useRef(0);
+  const lastMarkerPressRef = useRef<{ atMs: number; x: number; y: number } | null>(null);
   const [stackSheetUserIds, setStackSheetUserIds] = useState<readonly string[] | null>(null);
   const stackSheetMembers = (stackSheetUserIds ?? []).flatMap((userId) =>
     markers.filter((marker) => marker.userId === userId),
   );
   const isStackSheetOpen = stackSheetMembers.length > 1;
+  useEffect(() => {
+    if (stackSheetUserIds === null) return;
+    const stillTogether =
+      selectedUserId === null &&
+      pins.groups.some((group) =>
+        stackSheetUserIds.every((userId) =>
+          group.members.some((member) => member.userId === userId),
+        ),
+      );
+    if (!stillTogether) setStackSheetUserIds(null);
+  }, [pins.groups, selectedUserId, stackSheetUserIds]);
   const edge = useLiveMapEdgeMarkers({
     markers: edgeSubjects,
     mapRevision: map.mapRevision,
@@ -75,7 +87,10 @@ export const NativeMap = ({
     mapStyle,
     mapRevision: map.mapRevision,
     markers,
-    onClearSelection: selection.clearSelectionFromReact,
+    onClearSelection: () => {
+      setStackSheetUserIds(null);
+      selection.clearSelectionFromReact();
+    },
     onSelectUser: selection.handleAnnotationSelected,
     pmtilesUrl,
     selectedMarker,
@@ -108,8 +123,17 @@ export const NativeMap = ({
 
   const edgeGroupIds = new Set(edgeMarkers.flatMap((chip) => chip.memberIds));
 
-  const pressStack = (group: LiveMapPinGroup) => {
-    ignoreMapPressUntilRef.current = Date.now() + 500;
+  const rememberMarkerPress = (event?: GestureResponderEvent) => {
+    if (!event) return;
+    lastMarkerPressRef.current = {
+      atMs: Date.now(),
+      x: event.nativeEvent.pageX,
+      y: event.nativeEvent.pageY,
+    };
+  };
+
+  const pressStack = (group: LiveMapPinGroup, event?: GestureResponderEvent) => {
+    rememberMarkerPress(event);
     setStackSheetUserIds(null);
     const zoomLevel = liveMapStackExpansionZoom({ group, zoom: pins.getZoom() });
     if (zoomLevel === null) {
@@ -130,7 +154,7 @@ export const NativeMap = ({
       goToEdgeMarker(onlyUserId);
       return;
     }
-    fitEdgeGroup({ chipIds: chip.memberIds, userIds });
+    fitEdgeGroup(userIds);
   };
 
   const renderPerson = (
@@ -143,8 +167,8 @@ export const NativeMap = ({
       onDeselected: () => {
         handleAnnotationDeselected(marker.userId);
       },
-      onSelected: () => {
-        if (Platform.OS === "android") ignoreMapPressUntilRef.current = Date.now() + 500;
+      onSelected: (event?: GestureResponderEvent) => {
+        rememberMarkerPress(event);
         setStackSheetUserIds(null);
         handleAnnotationSelected(marker.userId);
       },
@@ -185,9 +209,18 @@ export const NativeMap = ({
         touchPitch={false}
         touchRotate={false}
         androidView="surface"
-        onPress={() => {
-          // MapLibre on Android reports a pin or stack tap to the map ~300ms later, which would close the sheet it opened
-          if (Date.now() < ignoreMapPressUntilRef.current) return;
+        onPress={(event) => {
+          const lastMarkerPress = lastMarkerPressRef.current;
+          lastMarkerPressRef.current = null;
+          const [x, y] = event.nativeEvent.point;
+          // MapLibre on Android also reports a marker tap to the map ~300ms later, which would close the sheet it opened
+          if (
+            lastMarkerPress &&
+            Date.now() - lastMarkerPress.atMs < 1500 &&
+            Math.hypot(x - lastMarkerPress.x, y - lastMarkerPress.y) < 24
+          ) {
+            return;
+          }
           setStackSheetUserIds(null);
           clearSelectionFromReact();
         }}
@@ -250,25 +283,27 @@ export const NativeMap = ({
             layout={{ visibility: getSymbolVisibility(showSymbols) }}
           />
         ))}
-        {pins.gathering.map(({ gatherTo, marker }) => renderPerson(marker, { gatherTo }))}
-        {pins.groups.map((group) => {
-          if (edgeGroupIds.has(group.id)) return null;
-          const [onlyMember] = group.members;
-          if (group.members.length === 1 && onlyMember) {
-            return renderPerson(onlyMember, { arrival: pins.arrivals.get(group.id) });
-          }
-          return (
-            <LiveMapStackAnnotation
-              key={group.id}
-              arrival={pins.arrivals.get(group.id)}
-              group={group}
-              members={displayOrder(group.members)}
-              onPress={() => {
-                pressStack(group);
-              }}
-            />
-          );
-        })}
+        {[
+          ...pins.gathering.map(({ gatherTo, marker }) => renderPerson(marker, { gatherTo })),
+          ...pins.groups.map((group) => {
+            if (edgeGroupIds.has(group.id)) return null;
+            const [onlyMember] = group.members;
+            if (group.members.length === 1 && onlyMember) {
+              return renderPerson(onlyMember, { arrival: pins.arrivals.get(group.id) });
+            }
+            return (
+              <LiveMapStackAnnotation
+                key={group.id}
+                arrival={pins.arrivals.get(group.id)}
+                group={group}
+                members={displayOrder(group.members)}
+                onPress={(event) => {
+                  pressStack(group, event);
+                }}
+              />
+            );
+          }),
+        ]}
       </MapLibreMap>
       {edgeMarkers.map((chip) => (
         <LiveMapEdgeChip

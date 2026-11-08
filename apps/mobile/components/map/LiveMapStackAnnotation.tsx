@@ -1,6 +1,6 @@
 import { Marker, ViewAnnotation } from "@maplibre/maplibre-react-native";
 import { useState } from "react";
-import { Platform, Pressable } from "react-native";
+import { type GestureResponderEvent, Platform, Pressable, View } from "react-native";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import type { LiveMapPinGroup, LiveMapPinOffset } from "../../lib/liveMapPinGroups.ts";
 import { LiveMapPinMotion } from "./LiveMapPinMotion.tsx";
@@ -15,13 +15,15 @@ export const LiveMapStackAnnotation = ({
   arrival: LiveMapPinOffset | undefined;
   group: LiveMapPinGroup;
   members: readonly LiveMapMarker[];
-  onPress: () => void;
+  onPress: (event?: GestureResponderEvent) => void;
 }) => {
   const [selectionRevision, setSelectionRevision] = useState(0);
   const pin = (
-    <LiveMapPinMotion arrival={arrival}>
-      <LiveMapStackPin members={members} />
-    </LiveMapPinMotion>
+    <View collapsable={false} style={{ paddingHorizontal: 6, paddingVertical: 4 }}>
+      <LiveMapPinMotion arrival={arrival}>
+        <LiveMapStackPin members={members} />
+      </LiveMapPinMotion>
+    </View>
   );
 
   if (Platform.OS === "android") {

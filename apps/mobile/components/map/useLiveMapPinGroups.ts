@@ -9,13 +9,19 @@ import {
 } from "../../lib/liveMapPinGroups.ts";
 import { INITIAL_MAP_CAMERA } from "../../lib/mapPmtilesCameraState.ts";
 
-export const LIVE_MAP_PIN_GATHER_MS = 280;
+const LIVE_MAP_PIN_GATHER_MS = 280;
 
 export const useLiveMapPinGroups = (markers: readonly LiveMapMarker[]) => {
   const zoomRef = useRef(INITIAL_MAP_CAMERA.zoomLevel);
+  const evaluatedZoomRef = useRef(INITIAL_MAP_CAMERA.zoomLevel);
+  const computedRef = useRef<{
+    groups: LiveMapPinGroup[];
+    markers: readonly LiveMapMarker[];
+    zoom: number;
+  } | null>(null);
   const [revision, setRevision] = useState(0);
   const viewRef = useRef<{
-    arrivals: ReadonlyMap<string, LiveMapPinOffset>;
+    arrivals: Map<string, LiveMapPinOffset>;
     gathering: Array<{ gatherTo: LiveMapPinOffset; marker: LiveMapMarker; untilMs: number }>;
     groups: LiveMapPinGroup[];
   }>({ arrivals: new Map(), gathering: [], groups: [] });
@@ -24,7 +30,11 @@ export const useLiveMapPinGroups = (markers: readonly LiveMapMarker[]) => {
     void revision;
     const previous = viewRef.current;
     const zoom = zoomRef.current;
-    const groups = groupLiveMapPins({ markers, zoom, previous: previous.groups });
+    const computed = computedRef.current;
+    const groups =
+      computed?.markers === markers && computed.zoom === zoom
+        ? computed.groups
+        : groupLiveMapPins({ markers, zoom, previous: previous.groups });
     const transition = liveMapPinTransition({ next: groups, previous: previous.groups, zoom });
     const stackedUserIds = new Set(
       groups.flatMap((group) =>
@@ -50,6 +60,10 @@ export const useLiveMapPinGroups = (markers: readonly LiveMapMarker[]) => {
   }, [markers, revision]);
 
   useEffect(() => {
+    view.arrivals.clear();
+  }, [view]);
+
+  useEffect(() => {
     if (view.gathering.length === 0) return;
     const timer = setTimeout(
       () => setRevision((current) => current + 1),
@@ -62,10 +76,12 @@ export const useLiveMapPinGroups = (markers: readonly LiveMapMarker[]) => {
     ...view,
     getZoom: () => zoomRef.current,
     onZoomChange: (zoom: number) => {
-      if (zoom === zoomRef.current) return;
       zoomRef.current = zoom;
+      if (Math.abs(zoom - evaluatedZoomRef.current) < 0.05) return;
+      evaluatedZoomRef.current = zoom;
       const groups = groupLiveMapPins({ markers, zoom, previous: viewRef.current.groups });
       if (!hasSameLiveMapPinGroups(groups, viewRef.current.groups)) {
+        computedRef.current = { groups, markers, zoom };
         setRevision((current) => current + 1);
       }
     },

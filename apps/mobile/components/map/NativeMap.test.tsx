@@ -1879,13 +1879,49 @@ describe("NativeMap integration harness", () => {
         instance.type === "pressable" &&
         instance.props["accessibilityLabel"] === "2 people: Alice, Bob",
     )[0];
-    await act(async () => (stack?.props["onPress"] as (() => void) | undefined)?.());
-    await act(async () => emitNativeMapPress());
+    await act(async () =>
+      (stack?.props["onPress"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { pageX: 100, pageY: 200 },
+      }),
+    );
+    await act(async () => emitNativeMapPress([100, 200]));
 
     expect(
       root?.container.queryAll((instance) => instance.type === "live-map-stack-sheet")[0]?.props,
     ).toMatchObject({ count: 2 });
     expect(selectionHistory).toEqual([null]);
+  });
+
+  test("closes a stack sheet for good when another action takes over", async () => {
+    testPlatform.OS = "android";
+    await renderSelectableNativeMap(
+      [
+        createLiveMapMarkerFixture({ userId: "alice", name: "Alice", isSelf: true }),
+        createLiveMapMarkerFixture({ userId: "bob", name: "Bob" }),
+      ],
+      [],
+    );
+    const stackSheets = () =>
+      root?.container.queryAll((instance) => instance.type === "live-map-stack-sheet") ?? [];
+    const stack = root?.container.queryAll(
+      (instance) =>
+        instance.type === "pressable" &&
+        String(instance.props["accessibilityLabel"]).startsWith("2 people"),
+    )[0];
+    await act(async () =>
+      (stack?.props["onPress"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { pageX: 100, pageY: 200 },
+      }),
+    );
+    expect(stackSheets()).toHaveLength(1);
+
+    await act(async () => emitNativeMapGoToCurrentLocation());
+    await flushEffects();
+    expect(stackSheets()).toHaveLength(0);
+
+    await act(async () => emitNativeMapPress([300, 400]));
+    await flushEffects();
+    expect(stackSheets()).toHaveLength(0);
   });
 
   test("Android marker views render and select without bitmap annotations", async () => {
@@ -1906,7 +1942,11 @@ describe("NativeMap integration harness", () => {
           instance.type === "pressable" && instance.props["accessibilityLabel"] === name,
       )[0];
       if (!marker) throw new Error(`Missing marker ${name}`);
-      await act(async () => (marker.props as { onPress: () => void }).onPress());
+      await act(async () =>
+        (marker.props as { onPress: (event: unknown) => void }).onPress({
+          nativeEvent: { pageX: 100, pageY: 200 },
+        }),
+      );
     };
 
     expect(root?.container.queryAll((instance) => instance.type === "marker-view")).toHaveLength(2);
@@ -1914,13 +1954,10 @@ describe("NativeMap integration harness", () => {
     await pressMarker("Alice");
     await pressMarker("Alice");
     await pressMarker("Bob");
-    await act(async () => emitNativeMapPress());
+    await act(async () => emitNativeMapPress([100, 200]));
     expect(selectionHistory).toEqual(["alice", null, "bob"]);
 
-    const originalNow = Date.now;
-    Date.now = () => originalNow() + 1_000;
-    await act(async () => emitNativeMapPress());
-    Date.now = originalNow;
+    await act(async () => emitNativeMapPress([300, 400]));
     await pressMarker("Alice");
     expect(selectionHistory).toEqual(["alice", null, "bob", null, "alice"]);
   });

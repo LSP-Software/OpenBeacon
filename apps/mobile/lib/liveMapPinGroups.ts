@@ -1,10 +1,7 @@
 import type { LiveMapMarker } from "./buildLiveMapMarkers.ts";
+import { mergeClosestPairs } from "./mergeClosestPairs.ts";
 
-const MERGE_DISTANCE = 54;
-const STAY_MERGED_DISTANCE = 64;
-const WORLD_SIZE_AT_ZOOM_ZERO = 512;
 const SPLIT_SEARCH_STEP = 0.25;
-const SPLIT_ZOOM_MARGIN = 0.5;
 const MAX_SPLIT_ZOOM = 17;
 
 export type LiveMapPinGroup = {
@@ -25,7 +22,7 @@ const worldPoint = (latitude: number, longitude: number) => {
   };
 };
 
-const pixelsPerWorld = (zoom: number) => WORLD_SIZE_AT_ZOOM_ZERO * 2 ** zoom;
+const pixelsPerWorld = (zoom: number) => 512 * 2 ** zoom;
 
 const groupId = (members: readonly LiveMapMarker[]) => {
   const userIds = members.map((member) => member.userId).sort();
@@ -45,46 +42,32 @@ export const groupLiveMapPins = ({
     previous.flatMap((group) => group.members.map((member) => [member.userId, group.id] as const)),
   );
   const scale = pixelsPerWorld(zoom);
-  const clusters = markers.map((marker) => {
-    const previousGroupId = previousGroupIdByUserId.get(marker.userId);
-    return {
-      members: [marker],
-      previousGroupIds: new Set(previousGroupId === undefined ? [] : [previousGroupId]),
-      world: worldPoint(marker.latitude, marker.longitude),
-    };
+  const clusters = mergeClosestPairs({
+    clusters: markers.map((marker) => {
+      const previousGroupId = previousGroupIdByUserId.get(marker.userId);
+      return {
+        members: [marker],
+        previousGroupIds: new Set(previousGroupId === undefined ? [] : [previousGroupId]),
+        world: worldPoint(marker.latitude, marker.longitude),
+      };
+    }),
+    distanceBetween: (a, b) => Math.hypot(a.world.x - b.world.x, a.world.y - b.world.y) * scale,
+    mergeDistanceFor: (a, b) =>
+      [...a.previousGroupIds].some((id) => id.startsWith("stack:") && b.previousGroupIds.has(id))
+        ? 64
+        : 54,
+    merge: (a, b) => {
+      const total = a.members.length + b.members.length;
+      return {
+        members: [...a.members, ...b.members],
+        previousGroupIds: new Set([...a.previousGroupIds, ...b.previousGroupIds]),
+        world: {
+          x: (a.world.x * a.members.length + b.world.x * b.members.length) / total,
+          y: (a.world.y * a.members.length + b.world.y * b.members.length) / total,
+        },
+      };
+    },
   });
-
-  while (clusters.length > 1) {
-    let closest: { first: number; second: number; distance: number } | null = null;
-    for (let first = 0; first < clusters.length; first += 1) {
-      for (let second = first + 1; second < clusters.length; second += 1) {
-        const a = clusters[first]!;
-        const b = clusters[second]!;
-        const distance = Math.hypot(a.world.x - b.world.x, a.world.y - b.world.y) * scale;
-        const wasTogether = [...a.previousGroupIds].some(
-          (id) => id.startsWith("stack:") && b.previousGroupIds.has(id),
-        );
-        if (
-          distance < (wasTogether ? STAY_MERGED_DISTANCE : MERGE_DISTANCE) &&
-          (!closest || distance < closest.distance)
-        ) {
-          closest = { first, second, distance };
-        }
-      }
-    }
-    if (!closest) break;
-
-    const a = clusters[closest.first]!;
-    const b = clusters[closest.second]!;
-    const total = a.members.length + b.members.length;
-    a.world = {
-      x: (a.world.x * a.members.length + b.world.x * b.members.length) / total,
-      y: (a.world.y * a.members.length + b.world.y * b.members.length) / total,
-    };
-    a.members = [...a.members, ...b.members];
-    a.previousGroupIds = new Set([...a.previousGroupIds, ...b.previousGroupIds]);
-    clusters.splice(closest.second, 1);
-  }
 
   return clusters.map(({ members }) => ({
     id: groupId(members),
@@ -126,7 +109,7 @@ export const liveMapStackExpansionZoom = ({
     if (
       groupLiveMapPins({ markers: group.members, zoom: candidate, previous: [group] }).length > 1
     ) {
-      return Math.min(MAX_SPLIT_ZOOM, candidate + SPLIT_ZOOM_MARGIN);
+      return Math.min(MAX_SPLIT_ZOOM, candidate + 0.5);
     }
   }
   return null;

@@ -7,13 +7,20 @@ import { mapViewportPoint } from "../../lib/mapViewportPoint.ts";
 import { mergeMapEdgePoints } from "../../lib/mergeMapEdgePoints.ts";
 import { spaceMapEdgePoints } from "../../lib/spaceMapEdgePoints.ts";
 
+type MapEdgeCandidate = { angle: number; userId: string; x: number; y: number };
+
 export const useLiveMapEdgeMarkers = ({
   markers,
   mapRevision,
   sheetKey,
   topInset,
 }: {
-  markers: readonly { latitude: number; longitude: number; userId: string }[];
+  markers: readonly {
+    latitude: number;
+    longitude: number;
+    memberUserIds: readonly string[];
+    userId: string;
+  }[];
   mapRevision: number;
   sheetKey: string | null;
   topInset: number;
@@ -40,15 +47,18 @@ export const useLiveMapEdgeMarkers = ({
   const edgeInFlightRef = useRef(false);
   const edgeDirtyRef = useRef(false);
   const edgeControlsRef = useRef<LayoutRectangle | null>(null);
-  const edgeSuppressedIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const edgeSuppressedUserIdsRef = useRef<ReadonlySet<string>>(new Set());
   const edgeSuppressionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [edgeMarkers, setEdgeMarkers] = useState<
-    Array<{ angle: number; memberIds: string[]; userId: string; x: number; y: number }>
-  >([]);
+  const [edgeMarkers, setEdgeMarkers] = useState<Array<MapEdgeCandidate & { memberIds: string[] }>>(
+    [],
+  );
   const edgeMarkersRef = useRef(edgeMarkers);
   edgeMarkersRef.current = edgeMarkers;
   const markersRef = useRef(markers);
   markersRef.current = markers;
+
+  const isSuppressed = (memberUserIds: readonly string[]) =>
+    memberUserIds.some((userId) => edgeSuppressedUserIdsRef.current.has(userId));
 
   const edgeViewportHeight = () =>
     Math.max(
@@ -59,7 +69,7 @@ export const useLiveMapEdgeMarkers = ({
     );
 
   const applyEdgeMarkers = (
-    projected: Array<{ angle: number; userId: string; x: number; y: number }>,
+    projected: MapEdgeCandidate[],
     occupied: readonly { x: number; y: number }[],
   ) => {
     const top = topInsetRef.current;
@@ -106,7 +116,7 @@ export const useLiveMapEdgeMarkers = ({
     const { width, height } = mapSizeRef.current;
     if (bounds && controls && mapViewportPoint({ bounds, coordinate: [0, 0], width, height })) {
       edgeDirtyRef.current = false;
-      const next: Array<{ angle: number; userId: string; x: number; y: number }> = [];
+      const next: MapEdgeCandidate[] = [];
       const occupied: Array<{ x: number; y: number }> = [];
       for (const marker of markersRef.current) {
         const point = mapViewportPoint({
@@ -117,7 +127,7 @@ export const useLiveMapEdgeMarkers = ({
         });
         if (!point) continue;
         const edge = edgePointBelowStatusBar(point, width);
-        if (edge && !edgeSuppressedIdsRef.current.has(marker.userId)) {
+        if (edge && !isSuppressed(marker.memberUserIds)) {
           next.push({ userId: marker.userId, ...edge });
         } else {
           occupied.push({ x: point[0], y: point[1] });
@@ -146,7 +156,7 @@ export const useLiveMapEdgeMarkers = ({
             markersRef.current.map(async (marker) => {
               const point = await map.project([marker.longitude, marker.latitude]);
               const edge = edgePointBelowStatusBar(point, width);
-              return { userId: marker.userId, point, edge };
+              return { memberUserIds: marker.memberUserIds, userId: marker.userId, point, edge };
             }),
           ),
         );
@@ -160,10 +170,10 @@ export const useLiveMapEdgeMarkers = ({
         ) {
           edgeDirtyRef.current = true;
         } else if (!result.error) {
-          const next: Array<{ angle: number; userId: string; x: number; y: number }> = [];
+          const next: MapEdgeCandidate[] = [];
           const occupied: Array<{ x: number; y: number }> = [];
           for (const marker of result.data) {
-            if (marker.edge && !edgeSuppressedIdsRef.current.has(marker.userId)) {
+            if (marker.edge && !isSuppressed(marker.memberUserIds)) {
               next.push({ userId: marker.userId, ...marker.edge });
             } else {
               occupied.push({ x: marker.point[0], y: marker.point[1] });
@@ -176,16 +186,21 @@ export const useLiveMapEdgeMarkers = ({
     }, 16);
   };
 
-  const suppress = (ids: readonly string[]) => {
-    edgeSuppressedIdsRef.current = new Set(ids);
+  const suppress = (userIds: readonly string[]) => {
+    edgeSuppressedUserIdsRef.current = new Set(userIds);
     edgeSelectionRevisionRef.current += 1;
     if (edgeSuppressionTimerRef.current !== null) clearTimeout(edgeSuppressionTimerRef.current);
-    setEdgeMarkers((current) => current.filter((edge) => !ids.includes(edge.userId)));
+    const suppressedSubjectIds = markersRef.current
+      .filter((marker) => isSuppressed(marker.memberUserIds))
+      .map((marker) => marker.userId);
+    setEdgeMarkers((current) =>
+      current.filter((edge) => !edge.memberIds.some((id) => suppressedSubjectIds.includes(id))),
+    );
   };
 
   const release = () => {
-    if (edgeSuppressedIdsRef.current.size === 0) return;
-    edgeSuppressedIdsRef.current = new Set();
+    if (edgeSuppressedUserIdsRef.current.size === 0) return;
+    edgeSuppressedUserIdsRef.current = new Set();
     edgeSelectionRevisionRef.current += 1;
     if (edgeSuppressionTimerRef.current !== null) clearTimeout(edgeSuppressionTimerRef.current);
     edgeSuppressionTimerRef.current = null;
