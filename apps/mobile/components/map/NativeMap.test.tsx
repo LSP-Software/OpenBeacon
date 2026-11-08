@@ -26,6 +26,7 @@ import {
   getNativeMapCameraDefaultSettings,
   getNativeMapMountedAnnotationIds,
   getNativeMapSelfHeadingDegrees,
+  getNativeMapRemovedStyleLayerIds,
   getNativeMapStyle,
   getNativeMapViewMountCount,
   getNativeMapUrlTransforms,
@@ -209,8 +210,19 @@ mock.module("../../lib/protomaps-style.ts", () => ({
     sprites: string,
   ) => {
     mapAssetUrls = { glyphs, sprites };
-    return { pmtilesUrl, version: 8 };
+    return {
+      pmtilesUrl,
+      version: 8,
+      layers: [
+        { id: "earth", type: "fill" },
+        { id: "roads_labels_major", type: "symbol" },
+        { id: "pois", type: "symbol" },
+      ],
+    };
   },
+  getSymbolLayerIds: (style: { layers: { id: string; type: string }[] }) =>
+    style.layers.filter((layer) => layer.type === "symbol").map((layer) => layer.id),
+  getSymbolVisibility: (showSymbols: boolean) => (showSymbols ? "visible" : "none"),
 }));
 
 mock.module("../../lib/storage.ts", () => ({
@@ -376,6 +388,41 @@ describe("NativeMap integration harness", () => {
     testPlatform.OS = platform;
     await renderNativeMap();
     expect(mapAssetUrls).toEqual({ glyphs, sprites });
+  });
+
+  test("toggles map symbols in place without replacing the style", async () => {
+    await renderNativeMap();
+    const mapStyleProp = () =>
+      root?.container.queryAll((instance) => instance.type === "map-view")[0]?.props["mapStyle"];
+    const styleLayers = () =>
+      (root?.container.queryAll((instance) => instance.type === "style-layer") ?? []).map(
+        (instance) => [instance.props["id"], instance.props["layout"]],
+      );
+    const toggle = () =>
+      root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" &&
+          instance.props["accessibilityLabel"] === "Show map names and symbols",
+      )[0]?.props["onPress"] as () => void;
+    const initialStyle = mapStyleProp();
+
+    expect(styleLayers()).toEqual([
+      ["roads_labels_major", { visibility: "visible" }],
+      ["pois", { visibility: "visible" }],
+    ]);
+
+    await act(async () => {
+      toggle()();
+      await Promise.resolve();
+    });
+
+    expect(styleLayers()).toEqual([
+      ["roads_labels_major", { visibility: "none" }],
+      ["pois", { visibility: "none" }],
+    ]);
+    expect(mapStyleProp()).toBe(initialStyle);
+    expect(getNativeMapViewMountCount()).toBe(1);
+    expect(getNativeMapRemovedStyleLayerIds()).toEqual([]);
   });
 
   afterEach(async () => {
@@ -2135,7 +2182,7 @@ describe("NativeMap integration harness", () => {
     await flushEffects();
 
     expect(getNativeMapViewMountCount()).toBe(1);
-    expect(getNativeMapStyle()).toEqual({
+    expect(getNativeMapStyle()).toMatchObject({
       pmtilesUrl: "https://cached.example/pmtiles-1",
       version: 8,
     });
@@ -2160,7 +2207,7 @@ describe("NativeMap integration harness", () => {
     await finishLoadingStyle();
 
     expect(getNativeMapViewMountCount()).toBe(1);
-    expect(getNativeMapStyle()).toEqual({
+    expect(getNativeMapStyle()).toMatchObject({
       pmtilesUrl: "https://cached.example/pmtiles-2",
       version: 8,
     });

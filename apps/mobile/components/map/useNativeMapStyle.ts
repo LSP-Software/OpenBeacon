@@ -11,7 +11,7 @@ import {
   nextMapLoadFailureState,
   shouldForceRefreshAfterMapLoadFailure,
 } from "../../lib/mapPmtilesLoadFailure.ts";
-import { getProtomapsMapStyle } from "../../lib/protomaps-style.ts";
+import { getProtomapsMapStyle, getSymbolLayerIds } from "../../lib/protomaps-style.ts";
 import { storage } from "../../lib/storage.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
 
@@ -29,8 +29,10 @@ export const useNativeMapStyle = () => {
   const mapRevisionRef = useRef(mapRevision);
   mapRevisionRef.current = mapRevision;
   const [showSymbols, setShowSymbols] = useState(
-    () => storage.getBoolean("map.showSymbols") ?? false,
+    () => storage.getBoolean("map.showSymbols") ?? true,
   );
+  const showSymbolsRef = useRef(showSymbols);
+  showSymbolsRef.current = showSymbols;
   const applyMapLoadFailureState = (next: {
     autoForceRefreshAttempts: number;
     showRecoverableError: boolean;
@@ -114,9 +116,10 @@ export const useNativeMapStyle = () => {
         ? `${Paths.bundle.uri}/map/fonts/{fontstack}/{range}.pbf`
         : "asset://map-assets/fonts/{fontstack}/{range}.pbf",
       Platform.OS === "ios" ? `${Paths.bundle.uri}/map/sprites` : "asset://map-assets/sprites",
-      showSymbols,
+      showSymbolsRef.current,
     );
-  }, [mapTheme, archiveUrl, showSymbols]);
+  }, [mapTheme, archiveUrl]);
+  const symbolLayerIds = useMemo(() => (mapStyle ? getSymbolLayerIds(mapStyle) : []), [mapStyle]);
 
   const retryMapLoad = () => {
     if (forceRefreshSignedPmtilesUrlMutation.isPending) {
@@ -212,6 +215,7 @@ export const useNativeMapStyle = () => {
     mapRevision,
     pmtilesUrl: archiveUrl,
     showSymbols,
+    symbolLayerIds,
     showRecoverableError,
     isLoading: signedPmtilesUrlQuery.isLoading,
     isError: signedPmtilesUrlQuery.isError,

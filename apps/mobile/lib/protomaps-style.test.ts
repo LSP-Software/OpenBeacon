@@ -1,20 +1,57 @@
 import { describe, expect, test } from "bun:test";
-import { getProtomapsMapStyle } from "./protomaps-style.ts";
+import { getProtomapsMapStyle, getSymbolLayerIds } from "./protomaps-style.ts";
 
 describe("getProtomapsMapStyle", () => {
-  test("hides symbols by default and includes them when enabled", () => {
-    const hidden = getProtomapsMapStyle("light", "https://example.com/map", "fonts", "sprites");
-    const visible = getProtomapsMapStyle(
-      "light",
-      "https://example.com/map",
-      "fonts",
-      "sprites",
-      true,
-    );
+  test.each(["light", "dark"] as const)(
+    "keeps every %s symbol layer and only changes its visibility",
+    (theme) => {
+      const hidden = getProtomapsMapStyle(theme, "tiles", "fonts", "sprites", false);
+      const visible = getProtomapsMapStyle(theme, "tiles", "fonts", "sprites", true);
 
-    expect(hidden.layers.some((layer) => layer.type === "symbol")).toBe(false);
-    expect(visible.layers.some((layer) => layer.type === "symbol")).toBe(true);
-    expect(hidden.layers).toEqual(visible.layers.filter((layer) => layer.type !== "symbol"));
+      const symbols = hidden.layers.filter((layer) => layer.type === "symbol");
+
+      expect(symbols.length).toBeGreaterThan(0);
+      expect(symbols.every((layer) => layer.layout?.visibility === "none")).toBe(true);
+      expect<unknown>(
+        hidden.layers.map((layer) =>
+          layer.type === "symbol"
+            ? { ...layer, layout: { ...layer.layout, visibility: "visible" } }
+            : layer,
+        ),
+      ).toEqual(visible.layers);
+    },
+  );
+
+  test("derives the toggled layers from the style's symbol layers", () => {
+    const style = getProtomapsMapStyle("light", "tiles", "fonts", "sprites", true);
+    const ids = getSymbolLayerIds(style);
+
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "address_label",
+        "roads_labels_major",
+        "roads_shields",
+        "roads_oneway",
+        "pois",
+        "places_locality",
+        "water_label_ocean",
+      ]),
+    );
+    expect(ids.length).toBe(style.layers.filter((layer) => layer.type === "symbol").length);
+    expect(
+      style.layers.filter((layer) => !ids.includes(layer.id)).every((l) => l.type !== "symbol"),
+    ).toBe(true);
+  });
+
+  test("keeps the shield filter and POI icon overrides on hidden layers", () => {
+    const style = getProtomapsMapStyle("light", "tiles", "fonts", "sprites", false);
+    const shields = style.layers.find((layer) => layer.id === "roads_shields");
+    const pois = style.layers.find((layer) => layer.id === "pois");
+
+    expect(JSON.stringify(shields?.type === "symbol" && shields.filter)).toContain("shield_text");
+    expect(pois?.type === "symbol" && pois.layout?.["icon-image"]).toEqual(
+      expect.arrayContaining(["match", "townhall", "building"]),
+    );
   });
 
   test.each(["light", "dark"] as const)("uses supplied glyph and sprite URLs for %s", (theme) => {
