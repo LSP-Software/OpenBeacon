@@ -20,11 +20,19 @@ let current: {
 };
 const nicknameQuery = mock(async () => [] as { targetId: string; ciphertext: string }[]);
 mock.module("./api.ts", () => ({
-  trpcClient: { groupMembership: { nicknames: { query: nicknameQuery } } },
+  trpcClient: {
+    accountRecovery: { status: { query: async () => ({ currentHistoryKey: null }) } },
+    groupMembership: { nicknames: { query: nicknameQuery } },
+  },
 }));
 mock.module("./deviceKeys.ts", () => ({
+  ensureDeviceKeyRegistration: async () => current,
   getOrCreateDeviceKeyContext: async () => current,
   getStoredDeviceKeyContext: async () => current,
+}));
+mock.module("./historyKeys.ts", () => ({
+  getStoredHistoryKey: async () => null,
+  storeHistoryKey: async () => {},
 }));
 const { encryptPersonalNickname, decryptPersonalNickname, loadPersonalNicknames } =
   await import("./personalNicknames.ts");

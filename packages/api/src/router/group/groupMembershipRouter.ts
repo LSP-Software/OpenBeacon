@@ -163,8 +163,26 @@ export const groupMembershipRouter = {
     return colors.map((color) => ({ groupId: color.owner.groupId, ciphertext: color.ciphertext }));
   }),
   updateColor: groupMemberProcedure
-    .input(z.object({ groupId: z.string().min(1), ciphertext: z.string().min(1).max(50000) }))
+    .input(
+      z.object({
+        groupId: z.string().min(1),
+        ciphertext: z.string().min(1).max(50000),
+        expectedCiphertext: z.string().min(1).max(50000).optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
+      if (input.expectedCiphertext !== undefined) {
+        const result = await ctx.db.personalGroupColor.updateMany({
+          where: { ownerId: ctx.groupMember.id, ciphertext: input.expectedCiphertext },
+          data: { ciphertext: input.ciphertext },
+        });
+        if (result.count === 0)
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Group color changed. Reload and try again.",
+          });
+        return;
+      }
       await ctx.db.personalGroupColor.upsert({
         where: { ownerId: ctx.groupMember.id },
         create: { ownerId: ctx.groupMember.id, ciphertext: input.ciphertext },

@@ -17,6 +17,7 @@ import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 import { backfillEveryGroup, resetRecoveryPhrase } from "../../lib/recovery.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
+import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 
 const RecoveryPhraseResetScreen = () => {
   const queryClient = useQueryClient();
@@ -56,6 +57,8 @@ const RecoveryPhraseResetScreen = () => {
     setStep("protecting");
     await backfillEveryGroup({ device, onProgress: setProgress });
     await queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
+    await resealPersonalData(device.userId);
+    await queryClient.invalidateQueries({ queryKey: ["personalNicknames"] });
     requestTrackingSync();
     setStep("done");
   };

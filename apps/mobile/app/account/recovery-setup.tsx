@@ -13,6 +13,7 @@ import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 import { backfillEveryGroup, setUpRecoveryPhrase } from "../../lib/recovery.ts";
+import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 
 const RecoveryPhraseSetupScreen = () => {
   const queryClient = useQueryClient();
@@ -40,6 +41,8 @@ const RecoveryPhraseSetupScreen = () => {
     setStep("protecting");
     await backfillEveryGroup({ device, onProgress: setProgress });
     await queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
+    await resealPersonalData(device.userId);
+    await queryClient.invalidateQueries({ queryKey: ["personalNicknames"] });
     setStep("done");
   };
 

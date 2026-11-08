@@ -18,6 +18,7 @@ import { authClient } from "../../lib/auth-client.ts";
 import { restoreFromRecoveryPhrase } from "../../lib/recovery.ts";
 import { storage } from "../../lib/storage.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
+import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 
 const RecoveryRestoreScreen = () => {
   const { afterSignIn } = useLocalSearchParams<{ afterSignIn?: string }>();
@@ -59,6 +60,9 @@ const RecoveryRestoreScreen = () => {
     void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", result.data.userId] });
     void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", result.data.userId] });
     requestTrackingSync();
+    void resealPersonalData(result.data.userId).then(() =>
+      queryClient.invalidateQueries({ queryKey: ["personalNicknames"] }),
+    );
     setStep("done");
   };
 

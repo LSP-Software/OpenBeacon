@@ -464,6 +464,7 @@ export type {
 };
 
 export {
+  getPersonalDataHistoryKeyVersion,
   openPersonalData,
   sealPersonalData,
   sealPersonalDataForHistoryKey,

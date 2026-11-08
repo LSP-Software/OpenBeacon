@@ -75,6 +75,11 @@ export const sealPersonalDataForHistoryKey = ({
   } satisfies z.infer<typeof envelopeSchema>);
 };
 
+export const getPersonalDataHistoryKeyVersion = (sealed: string) => {
+  const envelope = envelopeSchema.parse(JSON.parse(sealed));
+  return envelope.version === 3 ? envelope.historyKeyVersion : null;
+};
+
 export const openPersonalData = ({
   privateKey,
   historyPrivateKeys = new Map(),
@@ -82,7 +87,7 @@ export const openPersonalData = ({
   binding,
   sealed,
 }: {
-  privateKey: DevicePrivateKeyMaterial;
+  privateKey?: DevicePrivateKeyMaterial;
   historyPrivateKeys?: ReadonlyMap<number, HistoryPrivateKeyMaterial>;
   purpose: PersonalDataPurpose;
   binding: string[];
@@ -93,6 +98,7 @@ export const openPersonalData = ({
     envelope.version === 2
       ? {
           info: getInfo(["openbeacon.personal-data.v2"], purpose, binding),
+          missing: "Missing device key for personal data.",
           recipientPrivateKey: privateKey,
         }
       : {
@@ -101,12 +107,11 @@ export const openPersonalData = ({
             purpose,
             binding,
           ),
+          missing: "Missing history key for personal data.",
           recipientPrivateKey: historyPrivateKeys.get(envelope.historyKeyVersion),
         };
 
-  if (opening.recipientPrivateKey === undefined) {
-    throw new Error("Missing history key for personal data.");
-  }
+  if (opening.recipientPrivateKey === undefined) throw new Error(opening.missing);
 
   return new TextDecoder().decode(
     openBase({

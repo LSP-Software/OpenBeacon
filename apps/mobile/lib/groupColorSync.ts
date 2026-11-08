@@ -1,7 +1,7 @@
 import { tryCatch } from "@openbeacon/shared";
 import { trpcClient } from "./api.ts";
 import { type GroupColor, isGroupColor, setGroupColor } from "./groupColor.ts";
-import { openForSelf, sealForSelf } from "./personalData.ts";
+import { createPersonalDataOpener, resealForSelf, sealForSelf } from "./personalData.ts";
 
 export const groupColorSyncQueryOptions = (userId: string | undefined) => ({
   queryKey: ["personalGroupColors", userId],
@@ -42,18 +42,30 @@ export const saveGroupColor = async ({
   setGroupColor(groupId, color);
 };
 
-const syncGroupColors = async (userId: string) => {
+export const syncGroupColors = async (userId: string) => {
   const records = await trpcClient.groupMembership.colors.query();
+  const open = createPersonalDataOpener(userId);
+  const colors = [];
   for (const record of records) {
+    const binding = [userId, record.groupId];
     const result = await tryCatch(
-      openForSelf({
-        userId,
-        purpose: "group-color",
-        binding: [userId, record.groupId],
-        sealed: record.ciphertext,
-      }),
+      open({ purpose: "group-color", binding, sealed: record.ciphertext }),
     );
-    if (result.data && isGroupColor(result.data)) setGroupColor(record.groupId, result.data);
+    if (!result.data || !isGroupColor(result.data)) continue;
+    setGroupColor(record.groupId, result.data);
+    colors.push({
+      purpose: "group-color" as const,
+      binding,
+      sealed: record.ciphertext,
+      plaintext: result.data,
+      upload: (ciphertext: string) =>
+        trpcClient.groupMembership.updateColor.mutate({
+          groupId: record.groupId,
+          ciphertext,
+          expectedCiphertext: record.ciphertext,
+        }),
+    });
   }
+  await tryCatch(resealForSelf({ userId, records: colors }));
   return null;
 };

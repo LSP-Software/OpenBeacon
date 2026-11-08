@@ -7,6 +7,7 @@ import {
   decodeBase64,
 } from "./index.ts";
 import {
+  getPersonalDataHistoryKeyVersion,
   openPersonalData,
   sealPersonalData,
   sealPersonalDataForHistoryKey,
@@ -119,6 +120,31 @@ describe("personal data sealed to a history key", () => {
         sealed,
       }),
     ).toBe("#ff8800");
+  });
+
+  test("opens without a device key and reports the history key version", () => {
+    const { history, sealed } = seal();
+    const deviceSealed = sealPersonalData({
+      privateKey: createDeviceKeyPair().privateKey,
+      purpose: "group-color",
+      binding,
+      plaintext: "#ff8800",
+    });
+
+    expect(getPersonalDataHistoryKeyVersion(sealed)).toBe(2);
+    expect(getPersonalDataHistoryKeyVersion(deviceSealed)).toBeNull();
+    expect(() => getPersonalDataHistoryKeyVersion("{}")).toThrow();
+    expect(
+      openPersonalData({
+        historyPrivateKeys: new Map([[2, history.privateKey]]),
+        purpose: "group-color",
+        binding,
+        sealed,
+      }),
+    ).toBe("#ff8800");
+    expect(() =>
+      openPersonalData({ purpose: "group-color", binding, sealed: deviceSealed }),
+    ).toThrow("Missing device key for personal data.");
   });
 
   test("still opens device sealed records alongside history keys", () => {
