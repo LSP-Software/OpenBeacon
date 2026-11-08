@@ -7,14 +7,12 @@ import {
   preventScreenCaptureAsync,
 } from "expo-screen-capture";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
 import { View } from "react-native";
 import { Alert } from "../lib/alert.ts";
 import { confirmsRecoveryPhrase, pickConfirmationIndexes } from "../lib/recovery.ts";
 import { useSingleFlight } from "../lib/useSingleFlight.ts";
 import { RecoveryPhraseGrid } from "./RecoveryPhraseGrid.tsx";
 import { Button } from "./ui/Button.tsx";
-import { Input } from "./ui/Input.tsx";
 import { Text } from "./ui/Text.tsx";
 
 export const NewRecoveryPhrase = ({
@@ -30,7 +28,7 @@ export const NewRecoveryPhrase = ({
   const [confirmationIndexes] = useState(pickConfirmationIndexes);
   const [step, setStep] = useState<"show" | "confirm">("show");
   const submission = useSingleFlight<"confirm">();
-  const form = useForm<{ words: string[] }>({ defaultValues: { words: ["", "", ""] } });
+  const [words, setWords] = useState(["", "", ""]);
 
   useEffect(() => {
     void tryCatch(preventScreenCaptureAsync("new-recovery-phrase"));
@@ -41,7 +39,7 @@ export const NewRecoveryPhrase = ({
     };
   }, []);
 
-  const confirm = async ({ words }: { words: string[] }) => {
+  const confirm = async () => {
     const answers = confirmationIndexes.map((index, position) => ({
       index,
       word: words[position] ?? "",
@@ -56,7 +54,7 @@ export const NewRecoveryPhrase = ({
         Alert.alert("Something went wrong", result.error.message);
         return;
       }
-      form.reset();
+      setWords(["", "", ""]);
     });
   };
 
@@ -82,21 +80,14 @@ export const NewRecoveryPhrase = ({
       <Text className="text-muted-foreground text-base leading-6">
         Enter these words from your written phrase.
       </Text>
-      {confirmationIndexes.map((index, position) => (
-        <Input
-          key={index}
-          control={form.control}
-          name={`words.${position}`}
-          label={`Word ${index + 1}`}
-          autoCapitalize="none"
-          autoCorrect={false}
-          spellCheck={false}
-          importantForAutofill="no"
-          textContentType="none"
-          contextMenuHidden
-        />
-      ))}
-      <Button onPress={form.handleSubmit(confirm)} disabled={submission.isPending}>
+      <RecoveryPhraseGrid
+        words={words}
+        positions={confirmationIndexes.map((index) => index + 1)}
+        onChangeWords={setWords}
+        onSubmit={confirm}
+        editable={!submission.isPending}
+      />
+      <Button onPress={confirm} disabled={submission.isPending}>
         <Text>{submission.isPending ? submittingLabel : submitLabel}</Text>
       </Button>
       <Button variant="outline" onPress={() => setStep("show")} disabled={submission.isPending}>
