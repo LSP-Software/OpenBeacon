@@ -89,7 +89,10 @@ export const setUpRecoveryPhrase = async (phrase: RecoveryPhrase) => {
   const result = await tryCatch(trpcClient.accountRecovery.setup.mutate(input));
   if (hasTrpcCode(result.error, "CONFLICT")) return { status: "conflict" as const };
   if (result.error) throw result.error;
-  await storeHistoryKey({ privateKey: historyPrivateKey, userId: device.userId, version });
+  const stored = await tryCatch(
+    storeHistoryKey({ privateKey: historyPrivateKey, userId: device.userId, version }),
+  );
+  if (stored.error) return { device, status: "unsaved" as const };
   return { device, status: "created" as const };
 };
 

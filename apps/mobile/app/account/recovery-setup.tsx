@@ -17,7 +17,9 @@ import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 
 const RecoveryPhraseSetupScreen = () => {
   const queryClient = useQueryClient();
-  const [step, setStep] = useState<"phrase" | "saving" | "protecting" | "done">("phrase");
+  const [step, setStep] = useState<"phrase" | "saving" | "protecting" | "unsaved" | "done">(
+    "phrase",
+  );
   const [progress, setProgress] = useState({ done: 0, failed: 0, total: 0 });
   const [userId, setUserId] = useState<string>();
 
@@ -34,10 +36,14 @@ const RecoveryPhraseSetupScreen = () => {
       return;
     }
     const { device } = result.data;
-    setUserId(device.userId);
     void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });
     void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", device.userId] });
     void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
+    if (result.data.status === "unsaved") {
+      setStep("unsaved");
+      return;
+    }
+    setUserId(device.userId);
     setStep("protecting");
     await backfillEveryGroup({ device, onProgress: setProgress });
     await queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
@@ -82,6 +88,19 @@ const RecoveryPhraseSetupScreen = () => {
                   ? "Checking your groups…"
                   : `Protected ${progress.done} of ${progress.total} groups.`}
               </Text>
+            </View>
+          )}
+
+          {step === "unsaved" && (
+            <View className="gap-4">
+              <Text className="text-foreground text-3xl font-bold">Restore your phrase</Text>
+              <Text className="text-muted-foreground text-base leading-6">
+                Your phrase is set up, but this phone couldn’t save its key. Restore with the phrase
+                you just wrote down.
+              </Text>
+              <Button onPress={() => router.replace("/account/recovery-restore")}>
+                <Text>Restore with recovery phrase</Text>
+              </Button>
             </View>
           )}
 

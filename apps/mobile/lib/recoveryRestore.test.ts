@@ -563,7 +563,7 @@ describe("restoreFromRecoveryPhrase", () => {
   test("a phone whose setup stored no key restores v1 after the retry conflicts", async () => {
     const phrase = generateRecoveryPhrase();
     failNextStore = true;
-    await expect(setUpRecoveryPhrase(phrase)).rejects.toThrow("SecureStore unavailable");
+    expect((await setUpRecoveryPhrase(phrase)).status).toBe("unsaved");
     expect(await setUpRecoveryPhrase(phrase)).toEqual({ status: "conflict" });
     const epoch = createEpoch({ epochNumber: 1, groupId: "group-a", holders: [firstPhone] });
     expect(await findMissingHistoryKey()).toEqual({ userId, version: 1 });

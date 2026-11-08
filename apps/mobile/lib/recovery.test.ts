@@ -35,6 +35,7 @@ type ServerEpoch = {
 let epochs: ServerEpoch[] = [];
 let serverHistoryKey: { id: string; publicKey: string; version: number } | null = null;
 let setupError: Error | null = null;
+let failNextStore = false;
 let failAddHistoryWrapsCall: number | null = null;
 let serverClaimedUserId = device.userId;
 let addHistoryWrapsCalls = 0;
@@ -128,6 +129,7 @@ mock.module("./historyKeys.ts", () => ({
     userId: string;
     version: number;
   }) => {
+    if (failNextStore) throw new Error("SecureStore unavailable");
     storedHistoryKeys.set(`${userId}.${version}`, privateKey);
   },
 }));
@@ -197,6 +199,7 @@ beforeEach(() => {
   epochs = [];
   serverHistoryKey = null;
   setupError = null;
+  failNextStore = false;
   failAddHistoryWrapsCall = null;
   serverClaimedUserId = device.userId;
   addHistoryWrapsCalls = 0;
@@ -251,6 +254,17 @@ describe("setUpRecoveryPhrase", () => {
     const result = await setUpRecoveryPhrase(generateRecoveryPhrase());
 
     expect(result).toEqual({ status: "conflict" });
+    expect(storedHistoryKeys.size).toBe(0);
+  });
+
+  test("a phone that can't save the key reports unsaved after the server setup succeeded", async () => {
+    failNextStore = true;
+
+    const result = await setUpRecoveryPhrase(generateRecoveryPhrase());
+
+    expect(result.status).toBe("unsaved");
+    expect(setupMock).toHaveBeenCalledTimes(1);
+    expect(serverHistoryKey?.version).toBe(1);
     expect(storedHistoryKeys.size).toBe(0);
   });
 
