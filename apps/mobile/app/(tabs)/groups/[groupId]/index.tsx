@@ -58,7 +58,7 @@ const GroupScreen = () => {
   const currentHistoryKeyVersion = recoveryStatus.data?.currentHistoryKey?.version ?? 0;
   const heldHistoryKeyVersions = useHeldHistoryKeyVersions(
     session?.user.id,
-    recoveryStatus.data?.currentHistoryKey?.version,
+    recoveryStatus.data?.currentHistoryKey ?? undefined,
   );
   const {
     data: group,

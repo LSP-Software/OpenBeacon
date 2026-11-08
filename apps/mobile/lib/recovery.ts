@@ -15,6 +15,7 @@ import { TRPCClientError } from "@trpc/client";
 import type z from "zod";
 import { trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
+import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { type EpochKeyDevice, unwrapDeviceWrap } from "./epochKeys.ts";
 import { getStoredHistoryKey, storeHistoryKey } from "./historyKeys.ts";
 
@@ -146,24 +147,17 @@ export const backfillHistoryWraps = async ({
   return wrapped;
 };
 
-export const holdsCurrentHistoryKey = async (userId: string) => {
-  const status = await trpcClient.accountRecovery.status.query();
-  if (!status.recoveryKey || !status.currentHistoryKey) return false;
-  const { publicKey, version } = status.currentHistoryKey;
-  const stored = await getStoredHistoryKey({ userId, version });
-  return stored !== null && getHistoryPublicKey(stored) === publicKey;
-};
-
 export const PHRASE_MISMATCH_MESSAGE = "That phrase doesn't match this account.";
 export const RECOVERY_DATA_MISMATCH_MESSAGE =
   "Your account's recovery data doesn't match your phrase, so nothing was restored.";
 
 export const findMissingHistoryKey = async () => {
-  const status = await trpcClient.accountRecovery.status.query();
-  if (!status.recoveryKey || !status.currentHistoryKey) return null;
   const { userId } = await ensureDeviceKeyRegistration();
-  const { version } = status.currentHistoryKey;
-  return (await getStoredHistoryKey({ userId, version })) ? null : { userId, version };
+  const current = await getCurrentHistoryKeyState(userId);
+  if (current.status === "missing" || current.status === "mismatch") {
+    return { userId, version: current.version };
+  }
+  return null;
 };
 
 export const restoreFromRecoveryPhrase = async (phrase: RecoveryPhrase) => {

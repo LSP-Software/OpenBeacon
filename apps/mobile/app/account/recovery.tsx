@@ -16,7 +16,10 @@ const RecoveryScreen = () => {
   const userId = session?.user.id;
   const status = useQuery(trpc.accountRecovery.status.queryOptions());
   const currentVersion = status.data?.currentHistoryKey?.version;
-  const heldVersions = useHeldHistoryKeyVersions(userId, currentVersion);
+  const heldVersions = useHeldHistoryKeyVersions(
+    userId,
+    status.data?.currentHistoryKey ?? undefined,
+  );
   const holdsCurrent = currentVersion !== undefined && heldVersions.data?.includes(currentVersion);
   const holdsEveryVersion = status.data?.historyKeyVersions.every((version) =>
     heldVersions.data?.includes(version),

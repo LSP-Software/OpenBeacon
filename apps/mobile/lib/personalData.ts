@@ -1,5 +1,4 @@
 import {
-  getHistoryPublicKey,
   getPersonalDataHistoryKeyVersion,
   openPersonalData,
   type PersonalDataPurpose,
@@ -7,25 +6,14 @@ import {
   sealPersonalDataForHistoryKey,
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
-import { trpcClient } from "./api.ts";
+import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { getOrCreateDeviceKeyContext, getStoredDeviceKeyContext } from "./deviceKeys.ts";
 import { createHistoryKeyReader } from "./epochKeys.ts";
-import { getStoredHistoryKey } from "./historyKeys.ts";
 
 export const PERSONAL_DATA_LOCKED_MESSAGE =
   "Restore your recovery phrase on this phone to change nicknames and colors.";
 export const PERSONAL_DATA_KEY_MISMATCH_MESSAGE =
   "The server's history key doesn't match this phone, so nothing was saved.";
-
-const getCurrentHistoryKey = async (userId: string) => {
-  const { currentHistoryKey } = await trpcClient.accountRecovery.status.query();
-  if (!currentHistoryKey) return { status: "none" as const };
-  const { publicKey, version } = currentHistoryKey;
-  const stored = await getStoredHistoryKey({ userId, version });
-  if (!stored) return { status: "locked" as const };
-  if (getHistoryPublicKey(stored) !== publicKey) return { status: "mismatch" as const };
-  return { historyKey: { publicKey, version }, status: "ready" as const };
-};
 
 export const sealForSelf = async ({
   userId,
@@ -38,10 +26,10 @@ export const sealForSelf = async ({
   binding: string[];
   plaintext: string;
 }) => {
-  const current = await getCurrentHistoryKey(userId);
-  if (current.status === "locked") throw new Error(PERSONAL_DATA_LOCKED_MESSAGE);
+  const current = await getCurrentHistoryKeyState(userId);
+  if (current.status === "missing") throw new Error(PERSONAL_DATA_LOCKED_MESSAGE);
   if (current.status === "mismatch") throw new Error(PERSONAL_DATA_KEY_MISMATCH_MESSAGE);
-  if (current.status === "ready") {
+  if (current.status === "held") {
     return sealPersonalDataForHistoryKey({
       historyKey: current.historyKey,
       purpose,
@@ -97,8 +85,8 @@ export const resealForSelf = async ({
   }[];
 }) => {
   if (records.length === 0) return 0;
-  const current = await getCurrentHistoryKey(userId);
-  if (current.status !== "ready") return 0;
+  const current = await getCurrentHistoryKeyState(userId);
+  if (current.status !== "held") return 0;
   let resealed = 0;
   for (const { purpose, binding, sealed, plaintext, upload } of records) {
     if (getPersonalDataHistoryKeyVersion(sealed) === current.historyKey.version) continue;

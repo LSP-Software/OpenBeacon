@@ -8,11 +8,12 @@ import { Platform } from "react-native";
 import type { CiphertextQueueItem } from "../modules/openbeacon-tracking/index.ts";
 import { trpcClient } from "./api.ts";
 import { baseUrl } from "./base-url.ts";
+import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { cancelDeviceKeyRegistrations, ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
-import { backfillHistoryWraps, holdsCurrentHistoryKey } from "./recovery.ts";
+import { backfillHistoryWraps } from "./recovery.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
 
@@ -77,9 +78,9 @@ const haveMatchingProvisionedKeys = ({
   desired.map(getProvisionedKeyIdentity).sort().join("|");
 
 const canBackfillHistory = async (userId: string) => {
-  const holdsKey = await tryCatch(holdsCurrentHistoryKey(userId));
-  if (getErrorCode(holdsKey.error) === "UNAUTHORIZED") throw holdsKey.error;
-  return holdsKey.data === true;
+  const current = await tryCatch(getCurrentHistoryKeyState(userId));
+  if (getErrorCode(current.error) === "UNAUTHORIZED") throw current.error;
+  return current.data?.status === "held";
 };
 
 const reconcileTrackingKeysInternal = async ({

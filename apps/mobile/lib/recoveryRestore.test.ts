@@ -620,6 +620,16 @@ describe("findMissingHistoryKey", () => {
 
     expect(await findMissingHistoryKey()).toBeNull();
   });
+
+  test("reports a stored key that doesn't match the account's current key until restore replaces it", async () => {
+    const phrase = await setUpOnFirstPhone();
+    firstPhone.secureStore.set(`${userId}.1`, createHistoryKeyPair().privateKey);
+    expect(await findMissingHistoryKey()).toEqual({ userId, version: 1 });
+
+    await restoreFromRecoveryPhrase(phrase);
+
+    expect(await findMissingHistoryKey()).toBeNull();
+  });
 });
 
 describe("secrets never reach the server", () => {
