@@ -2,6 +2,8 @@ import {
   createHistoryKeyPair,
   deriveRecoveryKeyPair,
   getHistoryPublicKey,
+  HISTORY_ESCROW_ALGORITHM,
+  openHistoryKeyEscrow,
   RECOVERY_KEY_DERIVATION_VERSION,
   type RecoveryPhrase,
   sealHistoryKeyEscrow,
@@ -117,4 +119,54 @@ export const backfillHistoryWraps = async ({
     cursor = page.nextCursor;
   } while (cursor !== null);
   return wrapped;
+};
+
+export const PHRASE_MISMATCH_MESSAGE = "That phrase doesn't match this account.";
+export const RECOVERY_DATA_MISMATCH_MESSAGE =
+  "Your account's recovery data doesn't match your phrase, so nothing was restored.";
+
+export const findMissingHistoryKey = async () => {
+  const status = await trpcClient.accountRecovery.status.query();
+  if (!status.recoveryKey || !status.currentHistoryKey) return null;
+  const { userId } = await ensureDeviceKeyRegistration();
+  const { version } = status.currentHistoryKey;
+  return (await getStoredHistoryKey({ userId, version })) ? null : { userId, version };
+};
+
+export const restoreFromRecoveryPhrase = async (phrase: RecoveryPhrase) => {
+  const device = await ensureDeviceKeyRegistration();
+  const status = await trpcClient.accountRecovery.status.query();
+  const recoveryKey = deriveRecoveryKeyPair(phrase);
+  if (
+    status.recoveryKey?.algorithm !== recoveryKey.algorithm ||
+    status.recoveryKey.derivationVersion !== recoveryKey.derivationVersion ||
+    status.recoveryKey.publicKey !== recoveryKey.publicKey
+  ) {
+    throw new Error(PHRASE_MISMATCH_MESSAGE);
+  }
+  const escrows = await trpcClient.accountRecovery.escrows.query();
+  const versions = escrows.map(({ version }) => version).sort((a, b) => a - b);
+  if (
+    versions.join() !== [...status.historyKeyVersions].sort((a, b) => a - b).join() ||
+    escrows.some(({ escrow }) => escrow.algorithm !== HISTORY_ESCROW_ALGORITHM)
+  ) {
+    throw new Error(RECOVERY_DATA_MISMATCH_MESSAGE);
+  }
+  const opened = await tryCatch(
+    Promise.resolve().then(() =>
+      escrows.map(({ escrow, publicKey, version }) => ({
+        privateKey: openHistoryKeyEscrow({
+          escrow: { ...escrow, algorithm: HISTORY_ESCROW_ALGORITHM },
+          historyKey: { publicKey, userId: device.userId, version },
+          recoveryPrivateKey: recoveryKey.privateKey,
+        }),
+        version,
+      })),
+    ),
+  );
+  if (opened.error) throw new Error(RECOVERY_DATA_MISMATCH_MESSAGE);
+  for (const { privateKey, version } of opened.data) {
+    await storeHistoryKey({ privateKey, userId: device.userId, version });
+  }
+  return { userId: device.userId, versions };
 };

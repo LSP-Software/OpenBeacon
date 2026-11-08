@@ -43,6 +43,7 @@ import { Icon } from "../../../components/ui/Icon.tsx";
 import { Input } from "../../../components/ui/Input.tsx";
 import { Separator } from "../../../components/ui/Separator.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
+import { useHistoryKeyHeld } from "../../../hooks/useHistoryKeyHeld.ts";
 import { trpc } from "../../../lib/api.ts";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client.ts";
 import {
@@ -131,6 +132,18 @@ const AccountScreen = () => {
     recoveryStatus.data?.recoveryKey === null &&
     !recoveryPromptDismissed &&
     storage.getBoolean(recoveryPromptKey) !== true;
+  const historyKeyHeld = useHistoryKeyHeld(
+    session?.user.id,
+    recoveryStatus.data?.currentHistoryKey?.version,
+  );
+  const restoreBannerKey = `recovery.restoreBannerDismissed.${session?.user.id}`;
+  const [restoreBannerDismissed, setRestoreBannerDismissed] = useState(false);
+  const showRestoreBanner =
+    !!session?.user.id &&
+    !!recoveryStatus.data?.recoveryKey &&
+    historyKeyHeld.data === false &&
+    !restoreBannerDismissed &&
+    storage.getBoolean(restoreBannerKey) !== true;
 
   const saveName = async ({ name }: z.infer<typeof schema>) => {
     const result = await tryCatch(updateName.mutateAsync({ name }));
@@ -308,6 +321,41 @@ const AccountScreen = () => {
                 onPress={() => {
                   storage.set(recoveryPromptKey, true);
                   setRecoveryPromptDismissed(true);
+                }}
+              >
+                <Text>Dismiss</Text>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {showRestoreBanner && (
+          <Card>
+            <CardHeader className="flex flex-row items-start gap-2">
+              <Icon as={KeyRoundIcon} className="text-primary size-6" />
+              <View className="flex-1">
+                <CardTitle>
+                  <Text>Restore your history</Text>
+                </CardTitle>
+                <CardDescription>
+                  <Text className="text-muted-foreground">
+                    Enter your recovery phrase to read your location history on this phone.
+                  </Text>
+                </CardDescription>
+              </View>
+            </CardHeader>
+            <CardContent className="flex flex-row gap-3">
+              <Link href="/account/recovery" asChild>
+                <Button size="sm">
+                  <Text>Restore</Text>
+                </Button>
+              </Link>
+              <Button
+                size="sm"
+                variant="outline"
+                onPress={() => {
+                  storage.set(restoreBannerKey, true);
+                  setRestoreBannerDismissed(true);
                 }}
               >
                 <Text>Dismiss</Text>

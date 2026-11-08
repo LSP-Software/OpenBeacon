@@ -6,23 +6,15 @@ import { BackButton } from "../../components/headers/BackButton.tsx";
 import { RecoveryCoverage } from "../../components/RecoveryCoverage.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
+import { useHistoryKeyHeld } from "../../hooks/useHistoryKeyHeld.ts";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
-import { getStoredHistoryKey } from "../../lib/historyKeys.ts";
 
 const RecoveryScreen = () => {
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
   const status = useQuery(trpc.accountRecovery.status.queryOptions());
-  const currentVersion = status.data?.currentHistoryKey?.version;
-  const historyKeyHeld = useQuery({
-    queryKey: ["historyKeyHeld", userId, currentVersion],
-    enabled: Boolean(userId && currentVersion),
-    queryFn: async () => {
-      if (!userId || !currentVersion) return false;
-      return (await getStoredHistoryKey({ userId, version: currentVersion })) !== null;
-    },
-  });
+  const historyKeyHeld = useHistoryKeyHeld(userId, status.data?.currentHistoryKey?.version);
 
   return (
     <View className="flex-1 bg-background">

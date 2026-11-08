@@ -1,6 +1,7 @@
 import { Alert } from "../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signInSchema } from "@openbeacon/schemas";
+import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
@@ -17,12 +18,25 @@ import { trpc } from "../lib/api.ts";
 import { completeAuthenticatedSessionSetup, isNativeGoogleSignInConfigured } from "../lib/auth.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { performGoogleAuth } from "../lib/googleAuth.ts";
+import { findMissingHistoryKey } from "../lib/recovery.ts";
+import { storage } from "../lib/storage.ts";
 
 const SignIn = () => {
   const { joinCode } = useLocalSearchParams<{ joinCode?: string }>();
-  const finishSignIn = () => {
-    if (joinCode) router.replace({ pathname: "/join", params: { code: joinCode } });
-    else router.replace("/");
+  const finishSignIn = async () => {
+    if (joinCode) {
+      router.replace({ pathname: "/join", params: { code: joinCode } });
+      return;
+    }
+    const missing = await tryCatch(findMissingHistoryKey());
+    if (
+      missing.data &&
+      storage.getBoolean(`recovery.restoreSkipped.${missing.data.userId}`) !== true
+    ) {
+      router.replace({ pathname: "/account/recovery-restore", params: { afterSignIn: "true" } });
+      return;
+    }
+    router.replace("/");
   };
   const [emailLoading, setEmailLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -58,7 +72,7 @@ const SignIn = () => {
       return;
     }
 
-    finishSignIn();
+    await finishSignIn();
   };
 
   const handleGoogleSignIn = async () => {
