@@ -146,6 +146,14 @@ export const backfillHistoryWraps = async ({
   return wrapped;
 };
 
+export const holdsCurrentHistoryKey = async (userId: string) => {
+  const status = await trpcClient.accountRecovery.status.query();
+  if (!status.recoveryKey || !status.currentHistoryKey) return false;
+  const { publicKey, version } = status.currentHistoryKey;
+  const stored = await getStoredHistoryKey({ userId, version });
+  return stored !== null && getHistoryPublicKey(stored) === publicKey;
+};
+
 export const PHRASE_MISMATCH_MESSAGE = "That phrase doesn't match this account.";
 export const RECOVERY_DATA_MISMATCH_MESSAGE =
   "Your account's recovery data doesn't match your phrase, so nothing was restored.";

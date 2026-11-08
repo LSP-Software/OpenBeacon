@@ -12,7 +12,7 @@ import { cancelDeviceKeyRegistrations, ensureDeviceKeyRegistration } from "./dev
 import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
-import { backfillHistoryWraps } from "./recovery.ts";
+import { backfillHistoryWraps, holdsCurrentHistoryKey } from "./recovery.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
 
@@ -76,6 +76,12 @@ const haveMatchingProvisionedKeys = ({
   current.map(getProvisionedKeyIdentity).sort().join("|") ===
   desired.map(getProvisionedKeyIdentity).sort().join("|");
 
+const canBackfillHistory = async (userId: string) => {
+  const holdsKey = await tryCatch(holdsCurrentHistoryKey(userId));
+  if (getErrorCode(holdsKey.error) === "UNAUTHORIZED") throw holdsKey.error;
+  return holdsKey.data === true;
+};
+
 const reconcileTrackingKeysInternal = async ({
   startCapture,
   onlyIfRunning = false,
@@ -100,10 +106,12 @@ const reconcileTrackingKeysInternal = async ({
     if (!isCurrent()) return;
     const device = await tryCatch(ensureDeviceKeyRegistration());
     if (getErrorCode(device.error) === "UNAUTHORIZED") throw device.error;
+    const canBackfill = device.data ? await canBackfillHistory(device.data.userId) : false;
+    if (!isCurrent()) return;
     const results = await Promise.all(
       groups.map(async ({ id: groupId }) => {
         const rotation = await tryCatch(rotateGroupEpochIfRequired(groupId));
-        if (!device.data || !isCurrent()) return [rotation];
+        if (!device.data || !canBackfill || !isCurrent()) return [rotation];
         return [rotation, await tryCatch(backfillHistoryWraps({ device: device.data, groupId }))];
       }),
     );
@@ -217,6 +225,7 @@ const reconcileTrackingKeysInternal = async ({
   }
 
   if (!isCurrent()) return;
+  if (!(await canBackfillHistory(deviceKeyContext.userId)) || !isCurrent()) return;
   const backfills = await Promise.all(
     groups.map(({ id: groupId }) =>
       tryCatch(backfillHistoryWraps({ device: deviceKeyContext, groupId })),

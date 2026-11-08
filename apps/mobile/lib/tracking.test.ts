@@ -78,6 +78,11 @@ let failedWrappedGroup: string | null = null;
 let missingWrappedGroup: string | null = null;
 let brokenGroupKey = false;
 let historyOnlyGroup: string | null = null;
+let recoveryStatus: {
+  currentHistoryKey: { publicKey: string; version: number } | null;
+  recoveryKey: object | null;
+} | null = null;
+let recoveryStatusError: Error | null = null;
 let backfillErrors = new Map<string, Error>();
 let missingHistoryWraps = new Map<string, string[]>();
 const backfillQueries: string[] = [];
@@ -135,6 +140,19 @@ mock.module("./api.ts", () => ({
           ownerContextCalls += 1;
           await ownerQueryGate;
           return { userId: currentUserId, recipients: [{ deviceId: "device-1" }] };
+        },
+      },
+    },
+    accountRecovery: {
+      status: {
+        query: async () => {
+          if (recoveryStatusError) throw recoveryStatusError;
+          return (
+            recoveryStatus ?? {
+              currentHistoryKey: { publicKey: historyKeyPair.publicKey, version: 1 },
+              recoveryKey: {},
+            }
+          );
         },
       },
     },
@@ -396,6 +414,8 @@ describe("tracking service", () => {
     missingWrappedGroup = null;
     brokenGroupKey = false;
     historyOnlyGroup = null;
+    recoveryStatus = null;
+    recoveryStatusError = null;
     backfillErrors = new Map();
     missingHistoryWraps = new Map();
     backfillQueries.length = 0;
@@ -773,6 +793,62 @@ describe("tracking service", () => {
     await reconcileTrackingKeys({ startCapture: true });
     expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
     expect(historyWrapUploads).toHaveLength(1);
+  });
+
+  test("skips every backfill call when the account has no recovery phrase", async () => {
+    recoveryStatus = { currentHistoryKey: null, recoveryKey: null };
+    await reconcileTrackingKeys({ startCapture: true });
+    await reconcileTrackingKeys({ startCapture: false });
+
+    expect(backfillQueries).toEqual([]);
+    expect(startCaptureCalls).toBe(1);
+  });
+
+  test("skips every backfill call when this phone doesn't hold the current history key", async () => {
+    recoveryStatus = {
+      currentHistoryKey: { publicKey: historyKeyPair.publicKey, version: 2 },
+      recoveryKey: {},
+    };
+    await reconcileTrackingKeys({ startCapture: true });
+    await reconcileTrackingKeys({ startCapture: false });
+
+    expect(backfillQueries).toEqual([]);
+  });
+
+  test("skips backfill when the stored key doesn't match the server's public key", async () => {
+    recoveryStatus = {
+      currentHistoryKey: { publicKey: createHistoryKeyPair().publicKey, version: 1 },
+      recoveryKey: {},
+    };
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(backfillQueries).toEqual([]);
+  });
+
+  test("backfills every group when this phone holds the current history key", async () => {
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
+  });
+
+  test("keeps sharing without backfilling when the recovery status can't be loaded", async () => {
+    recoveryStatusError = new Error("offline");
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(startCaptureCalls).toBe(1);
+    expect(backfillQueries).toEqual([]);
+  });
+
+  test("stops capture when the recovery status reports an unauthorized session", async () => {
+    captureRunning = true;
+    recoveryStatusError = Object.assign(new Error("Session revoked"), {
+      data: { code: "UNAUTHORIZED" },
+    });
+    await syncBackgroundTracking();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(revokedGroups).toHaveLength(1);
+    expect(captureRunning).toBe(false);
   });
 
   test("backfills when capture is off", async () => {
