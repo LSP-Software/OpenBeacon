@@ -42,7 +42,7 @@ const RecoveryScreen = () => {
             <Text className="text-foreground text-3xl font-bold">Protect your history</Text>
             <Text className="text-muted-foreground text-base leading-6">
               A recovery phrase is 12 words that let you read your encrypted location history on a
-              new phone. Only you have it: OpenBeacon can’t see it or reset it for you.
+              new phone. Only you have it. OpenBeacon never sees it and can’t give it back to you.
             </Text>
             <Text className="text-muted-foreground text-base leading-6">
               Without a phrase, losing every phone you’re signed in on means losing your location

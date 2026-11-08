@@ -52,8 +52,8 @@ export const NewRecoveryPhrase = ({
       <View className="gap-4">
         <Text className="text-foreground text-3xl font-bold">Write these words down</Text>
         <Text className="text-muted-foreground text-base leading-6">
-          Write them on paper, in order, and keep it somewhere safe. Anyone with these words and
-          your password can read your location history.
+          Write them on paper, in order, and keep it somewhere safe. Anyone with these words who can
+          sign in to your account can read your location history.
         </Text>
         <View className="flex-row flex-wrap gap-2">
           {phrase.words().map((word, index) => (
