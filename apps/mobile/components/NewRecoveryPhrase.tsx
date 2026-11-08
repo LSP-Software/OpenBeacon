@@ -1,6 +1,11 @@
 import { generateRecoveryPhrase, type RecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
-import { allowScreenCaptureAsync, preventScreenCaptureAsync } from "expo-screen-capture";
+import {
+  allowScreenCaptureAsync,
+  disableAppSwitcherProtectionAsync,
+  enableAppSwitcherProtectionAsync,
+  preventScreenCaptureAsync,
+} from "expo-screen-capture";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { View } from "react-native";
@@ -28,8 +33,10 @@ export const NewRecoveryPhrase = ({
 
   useEffect(() => {
     void tryCatch(preventScreenCaptureAsync("new-recovery-phrase"));
+    void tryCatch(enableAppSwitcherProtectionAsync());
     return () => {
       void tryCatch(allowScreenCaptureAsync("new-recovery-phrase"));
+      void tryCatch(disableAppSwitcherProtectionAsync());
     };
   }, []);
 

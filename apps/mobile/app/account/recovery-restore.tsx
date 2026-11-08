@@ -3,7 +3,12 @@ import { diagnoseRecoveryPhraseInput, parseRecoveryPhrase } from "@openbeacon/en
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { allowScreenCaptureAsync, preventScreenCaptureAsync } from "expo-screen-capture";
+import {
+  allowScreenCaptureAsync,
+  disableAppSwitcherProtectionAsync,
+  enableAppSwitcherProtectionAsync,
+  preventScreenCaptureAsync,
+} from "expo-screen-capture";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
@@ -36,8 +41,10 @@ const RecoveryRestoreScreen = () => {
   useEffect(() => {
     if (!entering) return;
     void tryCatch(preventScreenCaptureAsync("recovery-restore"));
+    void tryCatch(enableAppSwitcherProtectionAsync());
     return () => {
       void tryCatch(allowScreenCaptureAsync("recovery-restore"));
+      void tryCatch(disableAppSwitcherProtectionAsync());
     };
   }, [entering]);
 
