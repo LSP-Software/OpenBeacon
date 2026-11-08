@@ -10,13 +10,12 @@ import {
   preventScreenCaptureAsync,
 } from "expo-screen-capture";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../../components/headers/BackButton.tsx";
+import { RecoveryPhraseGrid } from "../../components/RecoveryPhraseGrid.tsx";
 import { RecoveryCoverage } from "../../components/RecoveryCoverage.tsx";
 import { Button } from "../../components/ui/Button.tsx";
-import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
@@ -24,6 +23,8 @@ import { restoreFromRecoveryPhrase } from "../../lib/recovery.ts";
 import { storage } from "../../lib/storage.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
+
+const emptyWords = () => Array.from({ length: 12 }, () => "");
 
 const RecoveryRestoreScreen = () => {
   const { afterSignIn, missingVersion } = useLocalSearchParams<{
@@ -35,7 +36,8 @@ const RecoveryRestoreScreen = () => {
   const status = useQuery(trpc.accountRecovery.status.queryOptions());
   const [step, setStep] = useState<"enter" | "restoring" | "done">("enter");
   const [userId, setUserId] = useState<string>();
-  const form = useForm<{ phrase: string }>({ defaultValues: { phrase: "" } });
+  const [words, setWords] = useState(emptyWords);
+  const [problem, setProblem] = useState<{ message: string; invalidIndexes: number[] }>();
 
   const entering = step !== "done";
   useEffect(() => {
@@ -48,28 +50,31 @@ const RecoveryRestoreScreen = () => {
     };
   }, [entering]);
 
-  const restore = async ({ phrase: input }: { phrase: string }) => {
+  const restore = async () => {
+    setProblem(undefined);
+    if (words.some((word) => word === "")) {
+      setProblem({ message: "Enter all 12 words.", invalidIndexes: [] });
+      return;
+    }
+    const input = words.join(" ");
     const parsed = await tryCatch(Promise.resolve().then(() => parseRecoveryPhrase(input)));
     if (parsed.error) {
       const diagnosis = diagnoseRecoveryPhraseInput(input);
-      if (diagnosis.problem === "wrong-word-count") {
-        Alert.alert(
-          "That isn’t a recovery phrase",
-          `You’ve entered ${diagnosis.count} ${diagnosis.count === 1 ? "word" : "words"}. A recovery phrase has 12.`,
-        );
-      } else if (diagnosis.problem === "unknown-words") {
+      if (diagnosis.problem === "unknown-words") {
         const { positions } = diagnosis;
-        Alert.alert(
-          "That isn’t a recovery phrase",
-          positions.length === 1
-            ? `Word ${positions[0]} isn’t in the recovery word list. Check its spelling.`
-            : `Words ${positions.slice(0, -1).join(", ")} and ${positions.at(-1)} aren’t in the recovery word list. Check their spelling.`,
-        );
+        setProblem({
+          message:
+            positions.length === 1
+              ? `Word ${positions[0]} isn’t in the recovery word list. Check its spelling.`
+              : `Words ${positions.slice(0, -1).join(", ")} and ${positions.at(-1)} aren’t in the recovery word list. Check their spelling.`,
+          invalidIndexes: positions.map((position) => position - 1),
+        });
       } else {
-        Alert.alert(
-          "That isn’t a recovery phrase",
-          "The words are all valid, but they don’t make a recovery phrase. Check they’re in the right order.",
-        );
+        setProblem({
+          message:
+            "The words are all valid, but they don’t make a recovery phrase. Check they’re in the right order.",
+          invalidIndexes: [],
+        });
       }
       return;
     }
@@ -80,7 +85,7 @@ const RecoveryRestoreScreen = () => {
       Alert.alert("Unable to restore", result.error.message);
       return;
     }
-    form.reset({ phrase: "" });
+    setWords(emptyWords());
     setUserId(result.data.userId);
     void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });
     void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", result.data.userId] });
@@ -128,21 +133,20 @@ const RecoveryRestoreScreen = () => {
                 Your account has a recovery phrase. Enter its 12 words to read your groups’ location
                 history on this phone.
               </Text>
-              <Input
-                control={form.control}
-                name="phrase"
-                label="Recovery phrase"
-                placeholder="12 words, separated by spaces"
-                multiline
-                autoCapitalize="none"
-                autoCorrect={false}
-                spellCheck={false}
-                importantForAutofill="no"
-                textContentType="none"
-                contextMenuHidden
+              <RecoveryPhraseGrid
+                words={words}
+                onChangeWords={(next) => {
+                  setWords(next);
+                  setProblem(undefined);
+                }}
+                onSubmit={restore}
+                invalidIndexes={problem?.invalidIndexes}
                 editable={step === "enter"}
               />
-              <Button onPress={form.handleSubmit(restore)} disabled={step === "restoring"}>
+              {problem && (
+                <Text className="text-destructive text-sm leading-5">{problem.message}</Text>
+              )}
+              <Button onPress={restore} disabled={step === "restoring"}>
                 <Text>{step === "restoring" ? "Restoring…" : "Restore"}</Text>
               </Button>
               {afterSignIn && (

@@ -12,6 +12,7 @@ import { View } from "react-native";
 import { Alert } from "../lib/alert.ts";
 import { confirmsRecoveryPhrase, pickConfirmationIndexes } from "../lib/recovery.ts";
 import { useSingleFlight } from "../lib/useSingleFlight.ts";
+import { RecoveryPhraseGrid } from "./RecoveryPhraseGrid.tsx";
 import { Button } from "./ui/Button.tsx";
 import { Input } from "./ui/Input.tsx";
 import { Text } from "./ui/Text.tsx";
@@ -67,19 +68,7 @@ export const NewRecoveryPhrase = ({
           Write them on paper, in order, and keep it somewhere safe. Anyone with these words who can
           sign in to your account can read your location history.
         </Text>
-        <View className="flex-row flex-wrap gap-2">
-          {phrase.words().map((word, index) => (
-            <View
-              key={index}
-              className="w-[48%] flex-row gap-2 rounded-lg border border-border bg-card px-3 py-2"
-            >
-              <Text className="text-muted-foreground w-6">{index + 1}</Text>
-              <Text selectable={false} className="font-semibold">
-                {word}
-              </Text>
-            </View>
-          ))}
-        </View>
+        <RecoveryPhraseGrid words={phrase.words()} />
         <Button onPress={() => setStep("confirm")}>
           <Text>I’ve written it down</Text>
         </Button>
