@@ -1,7 +1,7 @@
 import { Camera, Layer, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
 import { LocateFixedIcon, MapPinIcon, ScanIcon } from "lucide-react-native";
 import { useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import {
@@ -144,6 +144,7 @@ export const NativeMap = ({
         handleAnnotationDeselected(marker.userId);
       },
       onSelected: () => {
+        if (Platform.OS === "android") ignoreMapPressUntilRef.current = Date.now() + 500;
         setStackSheetUserIds(null);
         handleAnnotationSelected(marker.userId);
       },
@@ -185,7 +186,7 @@ export const NativeMap = ({
         touchRotate={false}
         androidView="surface"
         onPress={() => {
-          // MapLibre reports the same tap to the map ~300ms after a stack press, which would close its sheet
+          // MapLibre on Android reports a pin or stack tap to the map ~300ms later, which would close the sheet it opened
           if (Date.now() < ignoreMapPressUntilRef.current) return;
           setStackSheetUserIds(null);
           clearSelectionFromReact();

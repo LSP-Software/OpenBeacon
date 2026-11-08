@@ -1915,6 +1915,12 @@ describe("NativeMap integration harness", () => {
     await pressMarker("Alice");
     await pressMarker("Bob");
     await act(async () => emitNativeMapPress());
+    expect(selectionHistory).toEqual(["alice", null, "bob"]);
+
+    const originalNow = Date.now;
+    Date.now = () => originalNow() + 1_000;
+    await act(async () => emitNativeMapPress());
+    Date.now = originalNow;
     await pressMarker("Alice");
     expect(selectionHistory).toEqual(["alice", null, "bob", null, "alice"]);
   });
