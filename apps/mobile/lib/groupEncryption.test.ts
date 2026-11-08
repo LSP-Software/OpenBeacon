@@ -120,12 +120,12 @@ const unwrapHistoryWrap = ({
   userId,
   version = 1,
 }: {
-  historyKeys: WrappedHistoryEpochKey[] | undefined;
+  historyKeys: WrappedHistoryEpochKey[];
   historyPrivateKey: HistoryPrivateKeyMaterial;
   userId: string;
   version?: number;
 }) => {
-  const wrap = historyKeys?.find((historyKey) => historyKey.userId === userId);
+  const wrap = historyKeys.find((historyKey) => historyKey.userId === userId);
   if (!wrap) throw new Error("Missing history wrap");
   return unwrapHistoryEpochKey({
     epochId: wrap.epochId,
@@ -144,7 +144,7 @@ const unwrapDeviceAWrap = (recipientKeys: WrappedEpochKey[]) =>
   }).expose();
 
 type RotateInput = {
-  nextEpoch: { historyKeys?: WrappedHistoryEpochKey[]; recipientKeys: WrappedEpochKey[] };
+  nextEpoch: { historyKeys: WrappedHistoryEpochKey[]; recipientKeys: WrappedEpochKey[] };
 };
 
 const importGroupEncryptionModule = async () =>
@@ -279,7 +279,7 @@ describe("group encryption helpers", () => {
     const { buildCreateGroupInput } = await importGroupEncryptionModule();
     const result = await buildCreateGroupInput({ name: "Family" });
     expect(result.initialEpoch.historyKeys).toHaveLength(1);
-    expect(result.initialEpoch.historyKeys?.[0]).toMatchObject({
+    expect(result.initialEpoch.historyKeys[0]).toMatchObject({
       epochId: result.initialEpoch.epochId,
       historyKeyVersion: 1,
       senderPublicKey: deviceAKeyPair.publicKey,
@@ -296,7 +296,7 @@ describe("group encryption helpers", () => {
   test("wraps a joined epoch to every history recipient in the context", async () => {
     const { buildAcceptSharedInviteInput } = await importGroupEncryptionModule();
     const { nextEpoch } = await buildAcceptSharedInviteInput({ code: "A".repeat(32) });
-    expect(nextEpoch.historyKeys?.map(({ userId }) => userId)).toEqual(["user-a", "user-b"]);
+    expect(nextEpoch.historyKeys.map(({ userId }) => userId)).toEqual(["user-a", "user-b"]);
     const epochKey = unwrapDeviceAWrap(nextEpoch.recipientKeys);
     expect(
       unwrapHistoryWrap({
@@ -329,8 +329,8 @@ describe("group encryption helpers", () => {
     expect(rotateMock).toHaveBeenCalledTimes(2);
     const first = rotateMock.mock.calls[0]?.[0] as RotateInput;
     const retry = rotateMock.mock.calls[1]?.[0] as RotateInput;
-    expect(first.nextEpoch.historyKeys?.map((key) => key.historyKeyVersion)).toEqual([1, 1]);
-    expect(retry.nextEpoch.historyKeys?.map((key) => key.historyKeyVersion)).toEqual([1, 2]);
+    expect(first.nextEpoch.historyKeys.map((key) => key.historyKeyVersion)).toEqual([1, 1]);
+    expect(retry.nextEpoch.historyKeys.map((key) => key.historyKeyVersion)).toEqual([1, 2]);
     expect(
       unwrapHistoryWrap({
         historyKeys: retry.nextEpoch.historyKeys,

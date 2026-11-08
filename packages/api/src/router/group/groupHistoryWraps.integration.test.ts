@@ -13,6 +13,7 @@ import {
   encodeBase64,
   generateRecoveryPhrase,
   type HistoryPrivateKeyMaterial,
+  type HistoryPublicKey,
   sealHistoryKeyEscrow,
   unwrapEpochKey,
   unwrapHistoryEpochKey,
@@ -80,10 +81,26 @@ const caller = (userId: string) =>
     },
   } as Parameters<typeof router.createCaller>[0]);
 
-const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
+const bundle = ({
+  creator,
+  historyRecipients,
+  result,
+}: {
+  creator: Account;
+  historyRecipients: HistoryPublicKey[];
+  result: ReturnType<typeof createInitialGroupEpoch>;
+}) => ({
   createdByDeviceId: result.epoch.createdByDeviceId,
   epochId: result.epoch.epochId,
   epochNumber: result.epoch.epochNumber,
+  historyKeys: historyRecipients.map((historyKey) =>
+    wrapEpochKeyForHistoryKey({
+      epochId: result.epoch.epochId,
+      epochKey: result.epochKey,
+      historyKey,
+      senderPrivateKey: creator.key.privateKey,
+    }),
+  ),
   recipientKeys: result.wrappedKeys,
 });
 
@@ -103,9 +120,10 @@ const createGroup = async (id: string, creator: Account) => {
       },
     ],
   });
+  const { historyRecipients } = await caller(creator.userId).auth.deviceKeyContext();
   await caller(creator.userId).groupLifecycle.create({
     groupId: id,
-    initialEpoch: bundle(initial),
+    initialEpoch: bundle({ creator: creator, historyRecipients, result: initial }),
     name: "Family",
   });
   return initial;
@@ -127,7 +145,14 @@ const join = async (id: string, joiner: Account) => {
     previousEpoch: context.latestEpoch!,
     recipients: context.recipients,
   });
-  await caller(joiner.userId).groupInvites.accept({ inviteId: invite.id, nextEpoch: bundle(next) });
+  await caller(joiner.userId).groupInvites.accept({
+    inviteId: invite.id,
+    nextEpoch: bundle({
+      creator: joiner,
+      historyRecipients: context.historyRecipients,
+      result: next,
+    }),
+  });
   return next;
 };
 
@@ -208,6 +233,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             userId: item.userId,
           },
         });
+      }
+      epochs.first = await createGroup(groupId, owner);
+      epochs.second = await join(groupId, member);
+      epochs.third = await join(groupId, other);
+      await createGroup(otherGroupId, owner);
+      epochs.other = await join(otherGroupId, member);
+      await createGroup(soloGroupId, owner);
+      for (const item of accounts) {
         const phrase = generateRecoveryPhrase();
         const recoveryKey = deriveRecoveryKeyPair(phrase);
         const historyKey = createHistoryKeyPair();
@@ -236,12 +269,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           },
         });
       }
-      epochs.first = await createGroup(groupId, owner);
-      epochs.second = await join(groupId, member);
-      epochs.third = await join(groupId, other);
-      await createGroup(otherGroupId, owner);
-      epochs.other = await join(otherGroupId, member);
-      await createGroup(soloGroupId, owner);
     });
 
     afterAll(async () => {
@@ -554,8 +581,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         previousEpoch: rotationContext!.latestEpoch!,
         recipients: rotationContext!.recipients,
       });
-      await caller(owner.userId).groupEpoch.rotate({ groupId, nextEpoch: bundle(rotated) });
-      expect(await backfillEpochNumbers(member)).toEqual([4]);
+      await caller(owner.userId).groupEpoch.rotate({
+        groupId,
+        nextEpoch: bundle({
+          creator: owner,
+          historyRecipients: rotationContext!.historyRecipients,
+          result: rotated,
+        }),
+      });
+      expect(await backfillEpochNumbers(member)).toEqual([]);
       const ownerWrapsBefore = await prisma.groupEpochHistoryWrap.count({
         where: { historyKeyId: owner.historyKey.id },
       });
@@ -577,7 +611,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const removal = caller(member.userId).groupMembership.remove({
         groupId,
         memberId: memberRow.id,
-        nextEpoch: bundle(departure),
+        nextEpoch: bundle({
+          creator: member,
+          historyRecipients: removalContext.historyRecipients,
+          result: departure,
+        }),
       });
       await lock.waitForWaiters(1);
       const backfill = addWraps(member, [
@@ -604,7 +642,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toBe(1);
       expect(
         await prisma.groupEpochHistoryWrap.count({ where: { historyKeyId: owner.historyKey.id } }),
-      ).toBe(ownerWrapsBefore);
+      ).toBe(ownerWrapsBefore + 1);
     });
 
     test("registering a new device flags the user's groups for rotation but re-registering doesn't", async () => {
@@ -718,7 +756,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await caller(member.userId).groupMembership.remove({
         groupId: rejoinGroupId,
         memberId: memberRow.id,
-        nextEpoch: bundle(departure),
+        nextEpoch: bundle({
+          creator: member,
+          historyRecipients: removalContext.historyRecipients,
+          result: departure,
+        }),
       });
       const rejoined = await join(rejoinGroupId, member);
 
@@ -750,9 +792,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(listed.epochs.map(({ epochNumber }) => epochNumber)).toEqual([
         rejoined.epoch.epochNumber,
       ]);
-      expect(await backfillEpochNumbers(member, rejoinGroupId)).toEqual([
-        rejoined.epoch.epochNumber,
-      ]);
+      expect(await backfillEpochNumbers(member, rejoinGroupId)).toEqual([]);
       await expect(
         addWraps(
           member,
@@ -778,7 +818,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           ],
           { groupId: rejoinGroupId },
         ),
-      ).toEqual({ added: 1 });
+      ).toEqual({ added: 0 });
     });
 
     test("listHistoryBackfill rejects another member's device and a revoked device", async () => {

@@ -347,7 +347,7 @@ export const persistGroupEpoch = async ({
     createdByDeviceId: string;
     epochId: string;
     epochNumber: number;
-    historyKeys?: WrappedHistoryEpochKey[] | undefined;
+    historyKeys: WrappedHistoryEpochKey[];
     recipientKeys: WrappedEpochKey[];
   };
   excludedUserId?: string;
@@ -404,7 +404,7 @@ export const persistGroupEpoch = async ({
     });
   }
 
-  const wrappedKeys = [...epoch.recipientKeys, ...(epoch.historyKeys ?? [])];
+  const wrappedKeys = [...epoch.recipientKeys, ...epoch.historyKeys];
   for (const wrappedKey of wrappedKeys) {
     if (wrappedKey.algorithm !== WRAPPED_EPOCH_KEY_ALGORITHM) {
       throw new TRPCError({
@@ -467,45 +467,42 @@ export const persistGroupEpoch = async ({
     }
   }
 
-  let historyWraps: Prisma.GroupEpochHistoryWrapCreateManyInput[] = [];
-  if (epoch.historyKeys) {
-    const currentHistoryKeys = keepCurrentHistoryKeys(
-      await db.$queryRaw<Array<{ id: string; userId: string; version: number }>>(
-        Prisma.sql`SELECT k.id, k."userId", k.version FROM "AccountHistoryKey" k
-          JOIN "GroupMember" m ON m."userId" = k."userId" AND m."groupId" = ${groupId}
-          ${excludedUserId ? Prisma.sql`WHERE k."userId" <> ${excludedUserId}` : Prisma.empty}
-          FOR SHARE OF k`,
-      ),
-    );
+  const currentHistoryKeys = keepCurrentHistoryKeys(
+    await db.$queryRaw<Array<{ id: string; userId: string; version: number }>>(
+      Prisma.sql`SELECT k.id, k."userId", k.version FROM "AccountHistoryKey" k
+        JOIN "GroupMember" m ON m."userId" = k."userId" AND m."groupId" = ${groupId}
+        ${excludedUserId ? Prisma.sql`WHERE k."userId" <> ${excludedUserId}` : Prisma.empty}
+        FOR SHARE OF k`,
+    ),
+  );
 
-    assertExactRecipientSet({
-      actual: epoch.historyKeys.map(({ historyKeyVersion, userId: recipientUserId }) =>
-        JSON.stringify([recipientUserId, historyKeyVersion]),
-      ),
-      expected: currentHistoryKeys.map(({ userId: recipientUserId, version }) =>
-        JSON.stringify([recipientUserId, version]),
-      ),
-      message: HISTORY_RECIPIENT_MISMATCH_MESSAGE,
-    });
+  assertExactRecipientSet({
+    actual: epoch.historyKeys.map(({ historyKeyVersion, userId: recipientUserId }) =>
+      JSON.stringify([recipientUserId, historyKeyVersion]),
+    ),
+    expected: currentHistoryKeys.map(({ userId: recipientUserId, version }) =>
+      JSON.stringify([recipientUserId, version]),
+    ),
+    message: HISTORY_RECIPIENT_MISMATCH_MESSAGE,
+  });
 
-    const historyWrapsByUser = new Map(epoch.historyKeys.map((wrap) => [wrap.userId, wrap]));
-    historyWraps = currentHistoryKeys.flatMap(({ id, userId: keyUserId }) => {
-      const wrap = historyWrapsByUser.get(keyUserId);
-      return wrap
-        ? [
-            {
-              algorithm: wrap.algorithm,
-              ephemeralPublicKey: wrap.ephemeralPublicKey,
-              groupEpochId: epoch.epochId,
-              historyKeyId: id,
-              senderDeviceId: actingDevice.id,
-              senderPublicKey: wrap.senderPublicKey,
-              wrappedKey: wrap.wrappedKey,
-            },
-          ]
-        : [];
-    });
-  }
+  const historyWrapsByUser = new Map(epoch.historyKeys.map((wrap) => [wrap.userId, wrap]));
+  const historyWraps = currentHistoryKeys.flatMap(({ id, userId: keyUserId }) => {
+    const wrap = historyWrapsByUser.get(keyUserId);
+    return wrap
+      ? [
+          {
+            algorithm: wrap.algorithm,
+            ephemeralPublicKey: wrap.ephemeralPublicKey,
+            groupEpochId: epoch.epochId,
+            historyKeyId: id,
+            senderDeviceId: actingDevice.id,
+            senderPublicKey: wrap.senderPublicKey,
+            wrappedKey: wrap.wrappedKey,
+          },
+        ]
+      : [];
+  });
 
   await db.groupEpoch.create({
     data: {

@@ -10,6 +10,7 @@ import {
   deriveRecoveryKeyPair,
   generateRecoveryPhrase,
   type HistoryPrivateKeyMaterial,
+  type HistoryPublicKey,
   sealHistoryKeyEscrow,
   unwrapEpochKey,
   unwrapHistoryEpochKey,
@@ -17,6 +18,7 @@ import {
 } from "@openbeacon/encryption";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { accountRecoveryRouter } from "../accountRecoveryRouter.ts";
+import { authRouter } from "../authRouter.ts";
 import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
@@ -31,6 +33,7 @@ class TestCache extends OpenBeaconCache {
 
 const router = createTRPCRouter({
   accountRecovery: accountRecoveryRouter,
+  auth: authRouter,
   groupEpoch: groupEpochRouter,
   groupInvites: groupInvitesRouter,
   groupLifecycle: groupLifecycleRouter,
@@ -69,10 +72,26 @@ const caller = (userId: string) =>
     },
   } as Parameters<typeof router.createCaller>[0]);
 
-const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
+const bundle = ({
+  creator,
+  historyRecipients,
+  result,
+}: {
+  creator: Account;
+  historyRecipients: HistoryPublicKey[];
+  result: ReturnType<typeof createInitialGroupEpoch>;
+}) => ({
   createdByDeviceId: result.epoch.createdByDeviceId,
   epochId: result.epoch.epochId,
   epochNumber: result.epoch.epochNumber,
+  historyKeys: historyRecipients.map((historyKey) =>
+    wrapEpochKeyForHistoryKey({
+      epochId: result.epoch.epochId,
+      epochKey: result.epochKey,
+      historyKey,
+      senderPrivateKey: creator.key.privateKey,
+    }),
+  ),
   recipientKeys: result.wrappedKeys,
 });
 
@@ -92,9 +111,10 @@ const createGroup = async (id: string) => {
       },
     ],
   });
+  const { historyRecipients } = await caller(owner.userId).auth.deviceKeyContext();
   await caller(owner.userId).groupLifecycle.create({
     groupId: id,
-    initialEpoch: bundle(initial),
+    initialEpoch: bundle({ creator: owner, historyRecipients, result: initial }),
     name: "Family",
   });
   return initial;
@@ -116,7 +136,14 @@ const join = async (id: string, joiner: Account) => {
     previousEpoch: context.latestEpoch!,
     recipients: context.recipients,
   });
-  await caller(joiner.userId).groupInvites.accept({ inviteId: invite.id, nextEpoch: bundle(next) });
+  await caller(joiner.userId).groupInvites.accept({
+    inviteId: invite.id,
+    nextEpoch: bundle({
+      creator: joiner,
+      historyRecipients: context.historyRecipients,
+      result: next,
+    }),
+  });
   return next;
 };
 
@@ -183,6 +210,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             userId: item.userId,
           },
         });
+      }
+      epochs.first = await createGroup(groupId);
+      epochs.second = await join(groupId, member);
+      for (const item of accounts) {
         const recoveryKey = deriveRecoveryKeyPair(generateRecoveryPhrase());
         const historyKey = createHistoryKeyPair();
         item.historyKey = {
@@ -210,8 +241,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           },
         });
       }
-      epochs.first = await createGroup(groupId);
-      epochs.second = await join(groupId, member);
       await addHistoryWrap(owner, epochs.first);
       await addHistoryWrap(owner, epochs.second);
       await addHistoryWrap(member, epochs.second);

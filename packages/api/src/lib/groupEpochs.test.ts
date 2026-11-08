@@ -376,6 +376,7 @@ describe("group epoch helpers", () => {
 
     await persistGroupEpoch({
       db: {
+        $queryRaw: async () => [],
         group: { updateMany: async () => ({ count: 1 }) },
         groupEpoch: {
           create,
@@ -398,6 +399,7 @@ describe("group epoch helpers", () => {
         createdByDeviceId: "device-a",
         epochId: "epoch-2",
         epochNumber: 2,
+        historyKeys: [],
         recipientKeys: [
           {
             algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
@@ -537,6 +539,7 @@ describe("group epoch helpers", () => {
           createdByDeviceId: "device-a",
           epochId: "epoch-2",
           epochNumber: 2,
+          historyKeys: [],
           recipientKeys: [
             {
               algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
@@ -597,6 +600,7 @@ describe("group epoch helpers", () => {
           createdByDeviceId: "device-a",
           epochId: "epoch-2",
           epochNumber: 2,
+          historyKeys: [],
           recipientKeys: [
             {
               algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,

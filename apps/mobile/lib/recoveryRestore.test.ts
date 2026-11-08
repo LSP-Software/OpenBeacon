@@ -323,7 +323,7 @@ beforeEach(() => {
 
 describe("restoreFromRecoveryPhrase", () => {
   test("a fresh phone in several groups stores every version and reads past and current epochs through history wraps", async () => {
-    const legacyEpochs = [
+    const preSetupEpochs = [
       createEpoch({ epochNumber: 1, groupId: "group-a", holders: [firstPhone] }),
       createEpoch({ epochNumber: 1, groupId: "group-b", holders: [firstPhone] }),
     ];
@@ -361,7 +361,7 @@ describe("restoreFromRecoveryPhrase", () => {
         ),
       );
     }
-    for (const epoch of [...legacyEpochs, ...v1Epochs, ...currentEpochs]) {
+    for (const epoch of [...preSetupEpochs, ...v1Epochs, ...currentEpochs]) {
       expect(epoch.deviceWraps.has(newPhone.device.deviceId)).toBe(false);
       await expectReadable(newPhone, epoch);
     }

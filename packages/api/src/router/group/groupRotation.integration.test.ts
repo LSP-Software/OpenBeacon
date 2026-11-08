@@ -94,6 +94,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         createdByDeviceId: deviceId,
         epochId: next.epoch.epochId,
         epochNumber: next.epoch.epochNumber,
+        historyKeys: [],
         recipientKeys: next.wrappedKeys,
       };
       await expect(
@@ -261,6 +262,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             createdByDeviceId: deviceId,
             epochId: next.epoch.epochId,
             epochNumber: next.epoch.epochNumber,
+            historyKeys: [],
             recipientKeys: next.wrappedKeys,
           },
         });

@@ -67,7 +67,7 @@ export const groupEpochBundleSchema = z
     createdByDeviceId: z.string().min(1).max(128),
     epochId: z.string().min(1).max(128),
     epochNumber: z.number().int().positive(),
-    historyKeys: z.array(wrappedHistoryEpochKeySchema).optional(),
+    historyKeys: z.array(wrappedHistoryEpochKeySchema),
     recipientKeys: z.array(wrappedEpochKeySchema).min(1),
   })
   .superRefine(({ epochId, recipientKeys }, ctx) => {

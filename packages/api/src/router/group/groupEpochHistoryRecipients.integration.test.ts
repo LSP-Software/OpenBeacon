@@ -16,7 +16,6 @@ import {
   type HistoryPublicKey,
   type RecipientPublicKeyMaterial,
   sealHistoryKeyEscrow,
-  unwrapEpochKey,
   unwrapHistoryEpochKey,
   wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
@@ -135,7 +134,7 @@ const buildBundle = ({
   recipients,
 }: {
   creator: Account;
-  historyRecipients: HistoryPublicKey[] | null;
+  historyRecipients: HistoryPublicKey[];
   previousEpoch: GroupEpoch | null;
   recipients: RecipientPublicKeyMaterial[];
 }) => {
@@ -154,8 +153,8 @@ const buildBundle = ({
       createdByDeviceId: creator.deviceId,
       epochId: result.epoch.epochId,
       epochNumber: result.epoch.epochNumber,
+      historyKeys: historyRecipients.map((key) => wrapTo(key)),
       recipientKeys: result.wrappedKeys,
-      ...(historyRecipients ? { historyKeys: historyRecipients.map((key) => wrapTo(key)) } : {}),
     },
     epochId: result.epoch.epochId,
     epochKey: result.epochKey,
@@ -344,7 +343,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           code,
           nextEpoch: {
             ...next.bundle,
-            historyKeys: next.bundle.historyKeys!.map((wrap) =>
+            historyKeys: next.bundle.historyKeys.map((wrap) =>
               wrap.userId === sharer.userId ? earlierEpochWrap : wrap,
             ),
           },
@@ -356,7 +355,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           code,
           nextEpoch: {
             ...next.bundle,
-            historyKeys: [...next.bundle.historyKeys!, earlierEpochWrap],
+            historyKeys: [...next.bundle.historyKeys, earlierEpochWrap],
           },
         }),
         "Wrapped epoch keys must target the same epoch.",
@@ -397,7 +396,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       member.history = { id: nextKeyId, privateKey: nextKey.privateKey, version: 2 };
 
       const rotation = await buildRotation(owner);
-      const wraps = rotation.bundle.historyKeys!;
+      const wraps = rotation.bundle.historyKeys;
       const recipientFor = (target: Account) =>
         rotation.context.historyRecipients.find(({ userId }) => userId === target.userId)!;
       expect(recipientFor(member)).toMatchObject({ historyKeyId: nextKeyId, version: 2 });
@@ -518,54 +517,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expectReadable([member], rotation.epochId, rotation.epochKey);
     });
 
-    test("an old-client epoch without history keys is accepted and then backfilled by every member", async () => {
-      await flagRotation();
-      const context = (await caller(owner.userId).groupEpoch.rotationContext({ groupId }))!;
-      const oldClient = buildBundle({
-        creator: owner,
-        historyRecipients: null,
-        previousEpoch: context.latestEpoch,
-        recipients: context.recipients,
-      });
-      expect("historyKeys" in oldClient.bundle).toBe(false);
-      await expect(rotate(owner, oldClient.bundle)).resolves.toEqual({ rotated: true });
-      expect(await historyWrapOwners(oldClient.epochId)).toEqual([]);
-
-      for (const reader of [owner, member, late, sharer]) {
-        const page = await caller(reader.userId).groupEpoch.listHistoryBackfill({
-          deviceId: reader.deviceId,
-          groupId,
-        });
-        const pending = page.epochs.find(({ epochId }) => epochId === oldClient.epochId)!;
-        expect(pending).toBeDefined();
-        await caller(reader.userId).groupEpoch.addHistoryWraps({
-          deviceId: reader.deviceId,
-          groupId,
-          historyKeyId: reader.history!.id,
-          wraps: [
-            wrapEpochKeyForHistoryKey({
-              epochId: oldClient.epochId,
-              epochKey: unwrapEpochKey({
-                recipientDeviceId: reader.deviceId,
-                recipientPrivateKey: reader.key.privateKey,
-                wrappedEpochKey: pending.deviceWrap,
-              }),
-              historyKey: {
-                publicKey: page.historyKey!.publicKey,
-                userId: reader.userId,
-                version: reader.history!.version,
-              },
-              senderPrivateKey: reader.key.privateKey,
-            }),
-          ],
-        });
-      }
-      expect(await historyWrapOwners(oldClient.epochId)).toEqual(
-        expectedOwners(owner, member, late, sharer),
-      );
-      await expectReadable([owner, member, late, sharer], oldClient.epochId, oldClient.epochKey);
-    });
-
     test("removal wraps the next epoch to everyone except the removed member", async () => {
       const sharerMember = await prisma.groupMember.findUniqueOrThrow({
         where: { userId_groupId: { groupId, userId: sharer.userId } },
@@ -590,7 +541,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           memberId: sharerMember.id,
           nextEpoch: {
             ...removal.bundle,
-            historyKeys: [...removal.bundle.historyKeys!, removal.wrapTo(sharerKey)],
+            historyKeys: [...removal.bundle.historyKeys, removal.wrapTo(sharerKey)],
           },
         }),
         HISTORY_RECIPIENT_MISMATCH_MESSAGE,

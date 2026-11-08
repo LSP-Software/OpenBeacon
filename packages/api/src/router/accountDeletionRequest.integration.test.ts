@@ -118,6 +118,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         createdByDeviceId: "device",
         epochId: "epoch",
         epochNumber: 1,
+        historyKeys: [],
         recipientKeys: [
           {
             algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
@@ -303,6 +304,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             createdByDeviceId: "device",
             epochId: "epoch",
             epochNumber: 1,
+            historyKeys: [],
             recipientKeys: [
               {
                 algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,

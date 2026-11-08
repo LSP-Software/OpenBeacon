@@ -771,7 +771,7 @@ describe("tracking service", () => {
     ]);
   });
 
-  test("backfills an epoch an old client created without a history wrap on the next reconcile", async () => {
+  test("backfills an epoch created before the history key existed on the next reconcile", async () => {
     missingHistoryWraps.set("group-1", ["epoch-1"]);
     await reconcileTrackingKeys({ startCapture: true });
 
