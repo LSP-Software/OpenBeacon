@@ -48,6 +48,8 @@ export const useGroupKeyAccess = (groupIds: string[], userId: string | undefined
               device.deviceId,
               groupId,
               epoch.epochId,
+              epoch.deviceWrap !== null,
+              epoch.historyWraps.map(({ historyKeyVersion }) => historyKeyVersion),
             ]);
             if (resolvableEpochs.has(cacheKey)) return true;
             const epochKey = await unwrapEpochKeyFromWraps({

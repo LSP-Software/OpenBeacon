@@ -31,7 +31,8 @@ const SignIn = () => {
     const missing = await tryCatch(findMissingHistoryKey());
     if (
       missing.data &&
-      storage.getBoolean(`recovery.restoreSkipped.${missing.data.userId}`) !== true
+      (storage.getNumber(`recovery.restoreSkipped.${missing.data.userId}`) ?? 0) <
+        missing.data.version
     ) {
       router.replace({ pathname: "/account/recovery-restore", params: { afterSignIn: "true" } });
       return;

@@ -43,7 +43,7 @@ import { Icon } from "../../../components/ui/Icon.tsx";
 import { Input } from "../../../components/ui/Input.tsx";
 import { Separator } from "../../../components/ui/Separator.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
-import { useHistoryKeyHeld } from "../../../hooks/useHistoryKeyHeld.ts";
+import { useHeldHistoryKeyVersions } from "../../../hooks/useHeldHistoryKeyVersions.ts";
 import { trpc } from "../../../lib/api.ts";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client.ts";
 import {
@@ -132,7 +132,8 @@ const AccountScreen = () => {
     recoveryStatus.data?.recoveryKey === null &&
     !recoveryPromptDismissed &&
     storage.getBoolean(recoveryPromptKey) !== true;
-  const historyKeyHeld = useHistoryKeyHeld(
+  const currentHistoryKeyVersion = recoveryStatus.data?.currentHistoryKey?.version ?? 0;
+  const heldHistoryKeyVersions = useHeldHistoryKeyVersions(
     session?.user.id,
     recoveryStatus.data?.currentHistoryKey?.version,
   );
@@ -141,9 +142,10 @@ const AccountScreen = () => {
   const showRestoreBanner =
     !!session?.user.id &&
     !!recoveryStatus.data?.recoveryKey &&
-    historyKeyHeld.data === false &&
+    !!heldHistoryKeyVersions.data &&
+    !heldHistoryKeyVersions.data.includes(currentHistoryKeyVersion) &&
     !restoreBannerDismissed &&
-    storage.getBoolean(restoreBannerKey) !== true;
+    (storage.getNumber(restoreBannerKey) ?? 0) < currentHistoryKeyVersion;
 
   const saveName = async ({ name }: z.infer<typeof schema>) => {
     const result = await tryCatch(updateName.mutateAsync({ name }));
@@ -339,7 +341,9 @@ const AccountScreen = () => {
                 </CardTitle>
                 <CardDescription>
                   <Text className="text-muted-foreground">
-                    Enter your recovery phrase to read your location history on this phone.
+                    {heldHistoryKeyVersions.data?.length
+                      ? "Your recovery phrase was reset on another phone. Enter the new phrase to keep reading new history here."
+                      : "Enter your recovery phrase to read your location history on this phone."}
                   </Text>
                 </CardDescription>
               </View>
@@ -354,7 +358,7 @@ const AccountScreen = () => {
                 size="sm"
                 variant="outline"
                 onPress={() => {
-                  storage.set(restoreBannerKey, true);
+                  storage.set(restoreBannerKey, currentHistoryKeyVersion);
                   setRestoreBannerDismissed(true);
                 }}
               >

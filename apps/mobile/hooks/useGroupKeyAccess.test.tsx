@@ -1,5 +1,10 @@
 import { expect, mock, test } from "bun:test";
-import { createDeviceKeyPair, createInitialGroupEpoch } from "@openbeacon/encryption";
+import {
+  createDeviceKeyPair,
+  createHistoryKeyPair,
+  createInitialGroupEpoch,
+  wrapEpochKeyForHistoryKey,
+} from "@openbeacon/encryption";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "test-renderer";
@@ -25,6 +30,18 @@ const epoch = createInitialGroupEpoch({
     },
   ],
 });
+const historyKey = createHistoryKeyPair();
+const historyWrap = {
+  ...wrapEpochKeyForHistoryKey({
+    epochId: epoch.epoch.epochId,
+    epochKey: epoch.epochKey,
+    historyKey: { publicKey: historyKey.publicKey, userId: "user", version: 1 },
+    senderPrivateKey: keyPair.privateKey,
+  }),
+  createdAt: new Date(0),
+};
+let historyWrapOnly = false;
+let historyWrapDeleted = false;
 let registered = false;
 let rotated = false;
 let offline = false;
@@ -37,7 +54,8 @@ mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("react-native", () => createReactNativeTestModule());
 mock.module("../lib/deviceKeys.ts", () => ({ ensureDeviceKeyRegistration: register }));
 mock.module("../lib/historyKeys.ts", () => ({
-  getStoredHistoryKey: async () => null,
+  getStoredHistoryKey: async ({ version }: { version: number }) =>
+    historyWrapOnly && version === 1 ? historyKey.privateKey : null,
   storeHistoryKey: async () => {},
 }));
 mock.module("../lib/api.ts", () => ({
@@ -50,10 +68,10 @@ mock.module("../lib/api.ts", () => ({
             epochs: [
               {
                 createdAt: new Date(0),
-                deviceWrap: registered && rotated ? epoch.wrappedKeys[0] : null,
+                deviceWrap: registered && rotated && !historyWrapOnly ? epoch.wrappedKeys[0] : null,
                 epochId: epoch.epoch.epochId,
                 epochNumber: 1,
-                historyWraps: [],
+                historyWraps: historyWrapOnly && !historyWrapDeleted ? [historyWrap] : [],
               },
             ],
             nextCursor: null,
@@ -109,6 +127,42 @@ test("registers the device and refreshes missing access after rotation", async (
   });
   expect(queryClient.getQueryData<unknown>(queryKey)).toEqual({
     current: "available",
+    history: "complete",
+  });
+  await act(async () => root.unmount());
+  queryClient.clear();
+});
+
+test("rechecks an epoch once the history wrap that resolved it is deleted by a reset", async () => {
+  historyWrapOnly = true;
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const Harness = () => {
+    useGroupKeyAccess(["group"], "user");
+    return null;
+  };
+  const root = createRoot();
+  await act(async () => {
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+  });
+  const queryKey = ["groupKeyAccess", "user", "group"];
+  await act(async () => {
+    await queryClient.refetchQueries({ queryKey });
+  });
+  expect(queryClient.getQueryData<unknown>(queryKey)).toEqual({
+    current: "available",
+    history: "complete",
+  });
+
+  historyWrapDeleted = true;
+  await act(async () => {
+    await queryClient.refetchQueries({ queryKey });
+  });
+  expect(queryClient.getQueryData<unknown>(queryKey)).toEqual({
+    current: "missing",
     history: "complete",
   });
   await act(async () => root.unmount());

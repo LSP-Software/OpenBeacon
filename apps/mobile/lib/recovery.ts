@@ -9,8 +9,10 @@ import {
   sealHistoryKeyEscrow,
   wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
+import type { setupAccountRecoverySchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
+import type z from "zod";
 import { trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { type EpochKeyDevice, unwrapDeviceWrap } from "./epochKeys.ts";
@@ -40,36 +42,54 @@ export const confirmsRecoveryPhrase = ({
   );
 };
 
-export const setUpRecoveryPhrase = async (phrase: RecoveryPhrase) => {
-  const device = await ensureDeviceKeyRegistration();
+const hasTrpcCode = (error: unknown, code: string) =>
+  error instanceof TRPCClientError && error.data?.code === code;
+
+const createRecoveryKeys = ({
+  phrase,
+  userId,
+  version,
+}: {
+  phrase: RecoveryPhrase;
+  userId: string;
+  version: number;
+}) => {
   const recoveryKey = deriveRecoveryKeyPair(phrase);
   const historyKey = createHistoryKeyPair();
-  const version = 1;
-  const result = await tryCatch(
-    trpcClient.accountRecovery.setup.mutate({
-      historyKey: {
-        algorithm: historyKey.algorithm,
-        escrow: sealHistoryKeyEscrow({
-          historyPrivateKey: historyKey.privateKey,
-          recoveryPublicKey: recoveryKey.publicKey,
-          userId: device.userId,
-          version,
-        }),
-        id: globalThis.crypto.randomUUID(),
-        publicKey: historyKey.publicKey,
+  const input: z.infer<typeof setupAccountRecoverySchema> = {
+    historyKey: {
+      algorithm: historyKey.algorithm,
+      escrow: sealHistoryKeyEscrow({
+        historyPrivateKey: historyKey.privateKey,
+        recoveryPublicKey: recoveryKey.publicKey,
+        userId,
         version,
-      },
-      recoveryKey: {
-        algorithm: recoveryKey.algorithm,
-        derivationVersion: RECOVERY_KEY_DERIVATION_VERSION,
-        publicKey: recoveryKey.publicKey,
-      },
-    }),
-  );
-  if (result.error instanceof TRPCClientError && result.error.data?.code === "CONFLICT")
-    return { status: "conflict" as const };
+      }),
+      id: globalThis.crypto.randomUUID(),
+      publicKey: historyKey.publicKey,
+      version,
+    },
+    recoveryKey: {
+      algorithm: recoveryKey.algorithm,
+      derivationVersion: RECOVERY_KEY_DERIVATION_VERSION,
+      publicKey: recoveryKey.publicKey,
+    },
+  };
+  return { historyPrivateKey: historyKey.privateKey, input };
+};
+
+export const setUpRecoveryPhrase = async (phrase: RecoveryPhrase) => {
+  const device = await ensureDeviceKeyRegistration();
+  const version = 1;
+  const { historyPrivateKey, input } = createRecoveryKeys({
+    phrase,
+    userId: device.userId,
+    version,
+  });
+  const result = await tryCatch(trpcClient.accountRecovery.setup.mutate(input));
+  if (hasTrpcCode(result.error, "CONFLICT")) return { status: "conflict" as const };
   if (result.error) throw result.error;
-  await storeHistoryKey({ privateKey: historyKey.privateKey, userId: device.userId, version });
+  await storeHistoryKey({ privateKey: historyPrivateKey, userId: device.userId, version });
   return { device, status: "created" as const };
 };
 
@@ -176,4 +196,96 @@ export const restoreFromRecoveryPhrase = async (phrase: RecoveryPhrase) => {
     throw new Error("Unable to save your keys on this phone. Unlock your phone and try again.");
   }
   return { userId: device.userId, versions };
+};
+
+export const MISSING_HISTORY_KEYS_MESSAGE =
+  "This phone doesn't hold every history key for your account. Restore with your current phrase first.";
+export const HISTORY_KEYS_MISMATCH_MESSAGE =
+  "This phone's history keys don't match your account, so your phrase wasn't changed.";
+export const RECOVERY_CHANGED_MESSAGE =
+  "Your recovery phrase changed on another phone, so nothing was changed here. Go back and try again.";
+
+export const changeRecoveryPhrase = async (phrase: RecoveryPhrase) => {
+  const device = await ensureDeviceKeyRegistration();
+  const currentEscrows = await trpcClient.accountRecovery.escrows.query();
+  if (currentEscrows.length === 0) throw new Error(RECOVERY_CHANGED_MESSAGE);
+  const recoveryKey = deriveRecoveryKeyPair(phrase);
+  const escrows = [];
+  for (const { publicKey, version } of currentEscrows) {
+    const historyPrivateKey = await getStoredHistoryKey({ userId: device.userId, version });
+    if (!historyPrivateKey) throw new Error(MISSING_HISTORY_KEYS_MESSAGE);
+    if (getHistoryPublicKey(historyPrivateKey) !== publicKey) {
+      throw new Error(HISTORY_KEYS_MISMATCH_MESSAGE);
+    }
+    escrows.push({
+      ...sealHistoryKeyEscrow({
+        historyPrivateKey,
+        recoveryPublicKey: recoveryKey.publicKey,
+        userId: device.userId,
+        version,
+      }),
+      version,
+    });
+  }
+  const result = await tryCatch(
+    trpcClient.accountRecovery.changePhrase.mutate({
+      escrows,
+      recoveryKey: {
+        algorithm: recoveryKey.algorithm,
+        derivationVersion: RECOVERY_KEY_DERIVATION_VERSION,
+        publicKey: recoveryKey.publicKey,
+      },
+    }),
+  );
+  if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };
+  if (hasTrpcCode(result.error, "CONFLICT") || hasTrpcCode(result.error, "NOT_FOUND")) {
+    throw new Error(RECOVERY_CHANGED_MESSAGE);
+  }
+  if (result.error) throw result.error;
+  return { status: "changed" as const, versions: result.data.historyKeyVersions };
+};
+
+export const resetRecoveryPhrase = async (phrase: RecoveryPhrase) => {
+  const device = await ensureDeviceKeyRegistration();
+  const status = await trpcClient.accountRecovery.status.query();
+  if (!status.recoveryKey) throw new Error(RECOVERY_CHANGED_MESSAGE);
+  const version = (status.currentHistoryKey?.version ?? 0) + 1;
+  const { historyPrivateKey, input } = createRecoveryKeys({
+    phrase,
+    userId: device.userId,
+    version,
+  });
+  const result = await tryCatch(
+    trpcClient.accountRecovery.reset.mutate({ ...input, confirmReset: true }),
+  );
+  if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };
+  if (hasTrpcCode(result.error, "CONFLICT") || hasTrpcCode(result.error, "NOT_FOUND")) {
+    throw new Error(RECOVERY_CHANGED_MESSAGE);
+  }
+  if (result.error) throw result.error;
+  const stored = await tryCatch(
+    storeHistoryKey({ privateKey: historyPrivateKey, userId: device.userId, version }),
+  );
+  if (stored.error) return { device, status: "unsaved" as const };
+  return { device, status: "reset" as const, version };
+};
+
+export const backfillEveryGroup = async ({
+  device,
+  onProgress,
+}: {
+  device: EpochKeyDevice;
+  onProgress: (progress: { done: number; failed: number; total: number }) => void;
+}) => {
+  const groups = await tryCatch(trpcClient.groupMembership.list.query());
+  const groupIds = groups.data?.map(({ id }) => id) ?? [];
+  const progress = { done: 0, failed: groups.error ? 1 : 0, total: groupIds.length };
+  onProgress({ ...progress });
+  for (const groupId of groupIds) {
+    const backfill = await tryCatch(backfillHistoryWraps({ device, groupId }));
+    progress.done += 1;
+    if (backfill.error) progress.failed += 1;
+    onProgress({ ...progress });
+  }
+  return progress;
 };

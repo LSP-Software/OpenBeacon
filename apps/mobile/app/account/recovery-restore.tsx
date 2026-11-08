@@ -1,7 +1,7 @@
 import { Alert } from "../../lib/alert.ts";
 import { parseRecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { allowScreenCaptureAsync, preventScreenCaptureAsync } from "expo-screen-capture";
 import { useEffect, useState } from "react";
@@ -23,6 +23,7 @@ const RecoveryRestoreScreen = () => {
   const { afterSignIn } = useLocalSearchParams<{ afterSignIn?: string }>();
   const { data: session } = authClient.useSession();
   const queryClient = useQueryClient();
+  const status = useQuery(trpc.accountRecovery.status.queryOptions());
   const [step, setStep] = useState<"enter" | "restoring" | "done">("enter");
   const [userId, setUserId] = useState<string>();
   const form = useForm<{ phrase: string }>({ defaultValues: { phrase: "" } });
@@ -62,7 +63,10 @@ const RecoveryRestoreScreen = () => {
   };
 
   const skip = () => {
-    if (session?.user.id) storage.set(`recovery.restoreSkipped.${session.user.id}`, true);
+    const version = status.data?.currentHistoryKey?.version;
+    if (session?.user.id && version) {
+      storage.set(`recovery.restoreSkipped.${session.user.id}`, version);
+    }
     router.replace("/");
   };
 

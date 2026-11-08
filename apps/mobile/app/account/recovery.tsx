@@ -6,7 +6,7 @@ import { BackButton } from "../../components/headers/BackButton.tsx";
 import { RecoveryCoverage } from "../../components/RecoveryCoverage.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
-import { useHistoryKeyHeld } from "../../hooks/useHistoryKeyHeld.ts";
+import { useHeldHistoryKeyVersions } from "../../hooks/useHeldHistoryKeyVersions.ts";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 
@@ -14,7 +14,12 @@ const RecoveryScreen = () => {
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
   const status = useQuery(trpc.accountRecovery.status.queryOptions());
-  const historyKeyHeld = useHistoryKeyHeld(userId, status.data?.currentHistoryKey?.version);
+  const currentVersion = status.data?.currentHistoryKey?.version;
+  const heldVersions = useHeldHistoryKeyVersions(userId, currentVersion);
+  const holdsCurrent = currentVersion !== undefined && heldVersions.data?.includes(currentVersion);
+  const holdsEveryVersion = status.data?.historyKeyVersions.every((version) =>
+    heldVersions.data?.includes(version),
+  );
 
   return (
     <View className="flex-1 bg-background">
@@ -50,7 +55,7 @@ const RecoveryScreen = () => {
             </Link>
           </View>
         )}
-        {status.data?.recoveryKey && historyKeyHeld.data === true && (
+        {status.data?.recoveryKey && heldVersions.data && holdsCurrent && (
           <View className="gap-4">
             <Text className="text-foreground text-3xl font-bold">Your phrase is set up</Text>
             <Text className="text-muted-foreground text-base leading-6">
@@ -58,23 +63,54 @@ const RecoveryScreen = () => {
               phone.
             </Text>
             <RecoveryCoverage userId={userId} />
+            {holdsEveryVersion ? (
+              <View className="gap-2">
+                <Link href="/account/recovery-change" asChild>
+                  <Button variant="outline">
+                    <Text>Change recovery phrase</Text>
+                  </Button>
+                </Link>
+                <Text className="text-muted-foreground text-sm leading-5">
+                  If you’ve lost your phrase or think someone else has seen it, create a new one.
+                  Your old phrase will stop working.
+                </Text>
+              </View>
+            ) : (
+              <View className="gap-2">
+                <Text className="text-muted-foreground text-sm leading-5">
+                  To change your phrase, this phone needs all of your account’s history keys.
+                  Restore with your current phrase first.
+                </Text>
+                <Link href="/account/recovery-restore" asChild>
+                  <Button variant="outline">
+                    <Text>Restore with recovery phrase</Text>
+                  </Button>
+                </Link>
+              </View>
+            )}
           </View>
         )}
-        {status.data?.recoveryKey && historyKeyHeld.data === false && (
+        {status.data?.recoveryKey && heldVersions.data && !holdsCurrent && (
           <View className="gap-4">
             <Text className="text-foreground text-3xl font-bold">Restore your history</Text>
             <Text className="text-muted-foreground text-base leading-6">
-              Your account already has a recovery phrase, set up on another phone. Enter it on this
-              phone to read your history here.
+              {heldVersions.data.length > 0
+                ? "Your recovery phrase was reset on another phone. Enter the new phrase to keep reading new history here."
+                : "Your account already has a recovery phrase, set up on another phone. Enter it on this phone to read your history here."}
             </Text>
             <Link href="/account/recovery-restore" asChild>
               <Button>
                 <Text>Restore with recovery phrase</Text>
               </Button>
             </Link>
+            <Link href="/account/recovery-reset" asChild>
+              <Button variant="ghost">
+                <Text>I’ve lost my phrase</Text>
+              </Button>
+            </Link>
           </View>
         )}
-        {historyKeyHeld.isError && (
+        {heldVersions.isError && (
           <Text>Unable to read this phone’s recovery keys. Unlock your phone and try again.</Text>
         )}
       </ScrollView>
