@@ -13,3 +13,11 @@ export const getPmtilesUrlRefreshDelayMs = ({
 
   return Math.max(refreshAtTimestamp - now(), 0);
 };
+
+export const hasPmtilesArchiveChanged = ({
+  appliedArchiveKey,
+  archiveKey,
+}: {
+  appliedArchiveKey: string | null;
+  archiveKey: string | null;
+}) => appliedArchiveKey !== null && archiveKey !== null && appliedArchiveKey !== archiveKey;

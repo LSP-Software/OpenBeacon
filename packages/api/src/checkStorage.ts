@@ -1,6 +1,6 @@
 import { HeadObjectCommand, ListObjectVersionsCommand } from "@aws-sdk/client-s3";
 import { env } from "./env.ts";
-import { r2Client } from "./r2.ts";
+import { r2Client, resolvePmtilesArchiveKey } from "./r2.ts";
 import { s3Client } from "./s3client.ts";
 
 export const checkS3 = async () => {
@@ -10,7 +10,11 @@ export const checkS3 = async () => {
 };
 
 export const checkR2 = async () => {
-  await r2Client.send(new HeadObjectCommand({ Bucket: env.R2_BUCKET, Key: env.R2_PM_TILES_KEY }), {
-    abortSignal: AbortSignal.timeout(10000),
-  });
+  await r2Client.send(
+    new HeadObjectCommand({
+      Bucket: env.R2_BUCKET,
+      Key: await resolvePmtilesArchiveKey(undefined),
+    }),
+    { abortSignal: AbortSignal.timeout(10000) },
+  );
 };

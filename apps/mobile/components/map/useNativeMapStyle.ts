@@ -11,6 +11,7 @@ import {
   nextMapLoadFailureState,
   shouldForceRefreshAfterMapLoadFailure,
 } from "../../lib/mapPmtilesLoadFailure.ts";
+import { hasPmtilesArchiveChanged } from "../../lib/pmtilesUrl.ts";
 import { getProtomapsMapStyle, getSymbolLayerIds } from "../../lib/protomaps-style.ts";
 import { storage } from "../../lib/storage.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
@@ -22,6 +23,7 @@ export const useNativeMapStyle = () => {
   const retryAfterUrlFetchRef = useRef(false);
   const mountedRef = useRef(false);
   const failedSourceRevisionRef = useRef<number | null>(null);
+  const appliedArchiveKeyRef = useRef<string | null>(null);
   const showRecoverableErrorRef = useRef(false);
   const [showRecoverableError, setShowRecoverableError] = useState(false);
   const [archiveUrl, setArchiveUrl] = useState<string | null>(null);
@@ -62,6 +64,7 @@ export const useNativeMapStyle = () => {
     ...trpc.maps.forceRefreshSignedPmtilesUrl.mutationOptions(),
     onSuccess: (signedPmtilesUrl) => {
       if (!mountedRef.current) return;
+      appliedArchiveKeyRef.current = signedPmtilesUrl.archiveKey ?? null;
       applySignedUrl(signedPmtilesUrl.url);
       queryClient.setQueryData(trpc.maps.getSignedPmtilesUrl.queryKey(), signedPmtilesUrl);
       setMapRevision((revision) => revision + 1);
@@ -100,8 +103,16 @@ export const useNativeMapStyle = () => {
   }, []);
   const rootNavigationState = useRootNavigationState();
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
+  const pmtilesArchiveKey = signedPmtilesUrlQuery.data?.archiveKey ?? null;
   useEffect(() => {
-    if (pmtilesUrl) applySignedUrl(pmtilesUrl);
+    if (!pmtilesUrl) return;
+    const archiveChanged = hasPmtilesArchiveChanged({
+      appliedArchiveKey: appliedArchiveKeyRef.current,
+      archiveKey: pmtilesArchiveKey,
+    });
+    appliedArchiveKeyRef.current = pmtilesArchiveKey;
+    applySignedUrl(pmtilesUrl);
+    if (archiveChanged) setMapRevision((revision) => revision + 1);
   }, [pmtilesUrl]);
   useEffect(() => () => TransformRequestManager.removeUrlTransform("openbeacon-pmtiles"), []);
   const mapStyle = useMemo(() => {

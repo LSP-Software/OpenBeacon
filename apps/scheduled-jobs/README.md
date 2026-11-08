@@ -4,7 +4,7 @@ The scheduled job runner is a separate Bun process and Docker image released alo
 
 The runner requires `DATABASE_URL`, `S3_ACCESS_KEY_ID`, `S3_ACCESS_KEY`, `S3_BUCKET_NAME`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, and `R2_PM_TILES_KEY`. `S3_ENDPOINT` and `S3_REGION` are optional and use the same defaults as the backend. See the root `.env.example`. Configure these values separately for the runner in Coolify; the backend and runner must use the same database, S3 bucket, and `S3_CDN_URL`, as well as the same R2 bucket. Do not put credentials in Git.
 
-On startup the runner checks PostgreSQL with `SELECT 1`, lists S3 object versions, and checks that the R2 PMTiles object exists. Its credentials also need permission to delete image objects, versions and delete markers. It exits if configuration or connectivity checks fail. Clients are closed on shutdown. The Docker image generates the Prisma client but does not apply migrations.
+On startup the runner checks PostgreSQL with `SELECT 1`, lists S3 object versions, and checks that the current R2 PMTiles archive exists (from the map tiles manifest, or `R2_PM_TILES_KEY` when there is no manifest). Its credentials also need permission to delete image objects, versions and delete markers. It exits if configuration or connectivity checks fail. Clients are closed on shutdown. The Docker image generates the Prisma client but does not apply migrations.
 
 ## Adding a job
 

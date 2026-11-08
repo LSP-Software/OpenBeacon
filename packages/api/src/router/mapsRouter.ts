@@ -1,5 +1,5 @@
 import type { TRPCRouterRecord } from "@trpc/server";
-import { env } from "../env.ts";
+import { z } from "zod";
 import {
   forceRefreshSignedPmtilesUrlForUser,
   getSignedPmtilesUrlForUser,
@@ -14,17 +14,20 @@ export const mapsRouter = {
         windowMs: 60_000,
       },
     })
-    .query(async ({ ctx }) => {
+    .input(z.object({ archiveKey: z.string().min(1).max(1024).optional() }).optional())
+    .query(async ({ ctx, input }) => {
       const signedUrl = await getSignedPmtilesUrlForUser({
         cache: ctx.cache,
+        requestedArchiveKey: input?.archiveKey,
         userId: ctx.session.user.id,
       });
 
       console.info(
-        `[maps.getSignedPmtilesUrl] userId=${ctx.session.user.id} key=${env.R2_PM_TILES_KEY} expiresAt=${signedUrl.expiresAt} source=${signedUrl.source}`,
+        `[maps.getSignedPmtilesUrl] userId=${ctx.session.user.id} key=${signedUrl.archiveKey} expiresAt=${signedUrl.expiresAt} source=${signedUrl.source}`,
       );
 
       return {
+        archiveKey: signedUrl.archiveKey,
         expiresAt: signedUrl.expiresAt,
         refreshAt: signedUrl.refreshAt,
         url: signedUrl.url,
@@ -44,10 +47,11 @@ export const mapsRouter = {
       });
 
       console.info(
-        `[maps.forceRefreshSignedPmtilesUrl] userId=${ctx.session.user.id} key=${env.R2_PM_TILES_KEY} expiresAt=${signedUrl.expiresAt} source=${signedUrl.source}`,
+        `[maps.forceRefreshSignedPmtilesUrl] userId=${ctx.session.user.id} key=${signedUrl.archiveKey} expiresAt=${signedUrl.expiresAt} source=${signedUrl.source}`,
       );
 
       return {
+        archiveKey: signedUrl.archiveKey,
         expiresAt: signedUrl.expiresAt,
         refreshAt: signedUrl.refreshAt,
         url: signedUrl.url,

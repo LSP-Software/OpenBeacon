@@ -59,6 +59,7 @@ export const createPmtilesSignedUrls = ({
           userId: parsedInput.userId,
         }),
         JSON.stringify({
+          archiveKey: parsedInput.archiveKey,
           expiresAt: parsedInput.expiresAt,
           url: parsedInput.url,
         }),

@@ -14,13 +14,21 @@ let currentQuery: {
   };
   refetch: () => Promise<void>;
 };
+let lastQueryOptions: { queryFn?: (context: { signal: AbortSignal }) => Promise<unknown> } = {};
+let cachedArchiveKey: string | undefined;
+const getSignedPmtilesUrlQuery = mock(
+  async (_input: { archiveKey: string | undefined }, _options: { signal: AbortSignal }) => ({}),
+);
 let lastTimeoutCallback: (() => void) | null = null;
 let lastTimeoutDelay: number | null = null;
 let originalClearTimeout: typeof clearTimeout;
 let originalSetTimeout: typeof setTimeout;
 
 mock.module("@tanstack/react-query", () => ({
-  useQuery: () => currentQuery,
+  useQuery: (options: { queryFn?: (context: { signal: AbortSignal }) => Promise<unknown> }) => {
+    lastQueryOptions = options;
+    return currentQuery;
+  },
   useMutation: () => ({
     isPending: false,
     mutate: () => {},
@@ -29,12 +37,20 @@ mock.module("@tanstack/react-query", () => ({
 
 mock.module("../lib/api.ts", () => ({
   queryClient: {
+    getQueryData: () => (cachedArchiveKey ? { archiveKey: cachedArchiveKey } : undefined),
     setQueryData: () => {},
   },
   trpc: {
     maps: {
       getSignedPmtilesUrl: {
-        queryOptions: () => ({}),
+        queryOptions: () => ({ queryKey: ["maps", "getSignedPmtilesUrl"] }),
+      },
+    },
+  },
+  trpcClient: {
+    maps: {
+      getSignedPmtilesUrl: {
+        query: getSignedPmtilesUrlQuery,
       },
     },
   },
@@ -129,5 +145,21 @@ describe("useSignedPmtilesUrl", () => {
     } finally {
       Date.now = originalNow;
     }
+  });
+
+  test("requests the archive the map already uses so refreshes never switch archives", async () => {
+    currentQuery = { refetch: mock(async () => {}) };
+    await renderHookHarness();
+
+    const { signal } = new AbortController();
+    cachedArchiveKey = undefined;
+    await lastQueryOptions.queryFn?.({ signal });
+    cachedArchiveKey = "planet-20261107.pmtiles";
+    await lastQueryOptions.queryFn?.({ signal });
+
+    expect(getSignedPmtilesUrlQuery.mock.calls).toEqual([
+      [{ archiveKey: undefined }, { signal }],
+      [{ archiveKey: "planet-20261107.pmtiles" }, { signal }],
+    ]);
   });
 });

@@ -1,11 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { trpc } from "../lib/api.ts";
+import { queryClient, trpc, trpcClient } from "../lib/api.ts";
 import { getPmtilesUrlRefreshDelayMs } from "../lib/pmtilesUrl.ts";
 
 export const useSignedPmtilesUrl = () => {
+  const queryOptions = trpc.maps.getSignedPmtilesUrl.queryOptions();
   const query = useQuery({
-    ...trpc.maps.getSignedPmtilesUrl.queryOptions(),
+    ...queryOptions,
+    queryFn: ({ signal }) =>
+      trpcClient.maps.getSignedPmtilesUrl.query(
+        { archiveKey: queryClient.getQueryData(queryOptions.queryKey)?.archiveKey },
+        { signal },
+      ),
     retry: (_failureCount, error) => error.data?.code !== "UNAUTHORIZED",
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30_000),
   });
