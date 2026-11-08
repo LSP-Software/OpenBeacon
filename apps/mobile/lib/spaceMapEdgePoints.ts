@@ -1,6 +1,6 @@
 import { MAP_CONTROL_CLEARANCE, MAP_EDGE_INSET } from "./mapEdgePoint.ts";
 
-export const spaceMapEdgePoints = ({
+export const spaceMapEdgePoints = <TPoint extends { userId: string; x: number; y: number }>({
   controls,
   height,
   occupied = [],
@@ -11,11 +11,11 @@ export const spaceMapEdgePoints = ({
   controls: { x: number; y: number; width: number; height: number } | null;
   height: number;
   occupied?: readonly { x: number; y: number }[];
-  points: readonly { userId: string; x: number; y: number; angle: number }[];
+  points: readonly TPoint[];
   previous?: readonly { userId: string; x: number; y: number }[];
   width: number;
 }) => {
-  const placed: Array<{ userId: string; x: number; y: number; angle: number }> = [];
+  const placed: TPoint[] = [];
   for (const point of points) {
     const obstacles = [...occupied, ...placed];
     const prior = previous.find((item) => item.userId === point.userId);

@@ -6,6 +6,7 @@
       "!!**/dist",
       "!!**/build",
       "!!**/node_modules",
+      "!!**/.claude",
       "!**/generated",
       "!**/.cxx",
       "!apps/mobile/global.css"

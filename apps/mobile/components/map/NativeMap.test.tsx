@@ -76,6 +76,16 @@ mock.module("react-native", () => {
     ...reactNative,
     Platform: testPlatform,
     ActivityIndicator: () => React.createElement("activity-indicator"),
+    Animated: {
+      View: ({ children }: { children?: React.ReactNode }) =>
+        React.createElement("animated-view", null, children),
+      Value: class {
+        setValue() {}
+      },
+      parallel: () => ({ start: () => {} }),
+      spring: () => ({ start: () => {} }),
+      timing: () => ({ start: () => {} }),
+    },
     View: ({
       children,
       onLayout,
@@ -238,6 +248,16 @@ mock.module("../../providers/ThemeProvider.tsx", () => ({
 mock.module("./LiveMapPersonSheet.tsx", () => ({
   LiveMapPersonSheet: ({ name }: { name: string }) =>
     React.createElement("live-map-person-sheet", { name }),
+}));
+
+mock.module("./LiveMapStackSheet.tsx", () => ({
+  LiveMapStackSheet: ({ members }: { members: readonly LiveMapMarker[] }) =>
+    React.createElement("live-map-stack-sheet", { count: members.length }),
+}));
+
+mock.module("./LiveMapStackPin.tsx", () => ({
+  LiveMapStackPin: ({ members }: { members: readonly LiveMapMarker[] }) =>
+    React.createElement("live-map-stack-pin", { count: members.length }),
 }));
 
 mock.module("./LiveMapMarkerPin.tsx", () => ({
@@ -507,7 +527,7 @@ describe("NativeMap integration harness", () => {
     expect(selections).toEqual([]);
   });
 
-  test("keeps people at the same off-screen position separately tappable", async () => {
+  test("merges people at the same off-screen position into one chip", async () => {
     setNativeMapProjectedPoint([-100, 300]);
     await renderNativeMap({
       markers: [
@@ -528,20 +548,14 @@ describe("NativeMap integration harness", () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
-    const edges =
+    const chips =
       root?.container.queryAll(
         (instance) =>
           instance.type === "pressable" &&
-          ["Go to Alice", "Go to Bob"].includes(String(instance.props["accessibilityLabel"])),
+          String(instance.props["accessibilityLabel"]).includes("off screen"),
       ) ?? [];
-    expect(edges).toHaveLength(2);
-    const first = edges[0]?.props["style"] as { left: number; top: number } | undefined;
-    const second = edges[1]?.props["style"] as { left: number; top: number } | undefined;
-    expect(
-      first &&
-        second &&
-        (Math.abs(first.left - second.left) >= 48 || Math.abs(first.top - second.top) >= 48),
-    ).toBe(true);
+    expect(chips).toHaveLength(1);
+    expect(chips[0]?.props["accessibilityLabel"]).toBe("Show 2 people off screen");
   });
 
   test("keeps edge controls clear of on-screen people", async () => {
@@ -583,9 +597,9 @@ describe("NativeMap integration harness", () => {
       root?.container.queryAll(
         (instance) =>
           instance.type === "pressable" &&
-          ["Go to Alice", "Go to Bob"].includes(String(instance.props["accessibilityLabel"])),
+          instance.props["accessibilityLabel"] === "Show 2 people off screen",
       ) ?? [];
-    expect(edges).toHaveLength(2);
+    expect(edges).toHaveLength(1);
     for (const edge of edges) {
       const style = edge.props["style"] as { left: number; top: number };
       expect(Math.hypot(style.left + 24 - 82, style.top + 24 - 300)).toBeGreaterThanOrEqual(48);
@@ -1826,6 +1840,8 @@ describe("NativeMap integration harness", () => {
     const alice = createLiveMapMarkerFixture({ userId: "alice" });
     const bob = createLiveMapMarkerFixture({
       initials: "BO",
+      latitude: 40,
+      longitude: 20,
       name: "Bob",
       userId: "bob",
     });
@@ -1846,10 +1862,77 @@ describe("NativeMap integration harness", () => {
     expect(selections).toEqual(["alice", null, "bob"]);
   });
 
+  test("shows a single stack for people in the same place and lists them when tapped", async () => {
+    testPlatform.OS = "android";
+    const selectionHistory: Array<string | null> = [];
+    await renderSelectableNativeMap(
+      [
+        createLiveMapMarkerFixture({ userId: "alice", name: "Alice" }),
+        createLiveMapMarkerFixture({ userId: "bob", name: "Bob" }),
+      ],
+      selectionHistory,
+    );
+
+    expect(root?.container.queryAll((instance) => instance.type === "marker-view")).toHaveLength(1);
+    const stack = root?.container.queryAll(
+      (instance) =>
+        instance.type === "pressable" &&
+        instance.props["accessibilityLabel"] === "2 people: Alice, Bob",
+    )[0];
+    await act(async () =>
+      (stack?.props["onPress"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { pageX: 100, pageY: 200 },
+      }),
+    );
+    await act(async () => emitNativeMapPress([100, 200]));
+
+    expect(
+      root?.container.queryAll((instance) => instance.type === "live-map-stack-sheet")[0]?.props,
+    ).toMatchObject({ count: 2 });
+    expect(selectionHistory).toEqual([null]);
+  });
+
+  test("closes a stack sheet for good when another action takes over", async () => {
+    testPlatform.OS = "android";
+    await renderSelectableNativeMap(
+      [
+        createLiveMapMarkerFixture({ userId: "alice", name: "Alice", isSelf: true }),
+        createLiveMapMarkerFixture({ userId: "bob", name: "Bob" }),
+      ],
+      [],
+    );
+    const stackSheets = () =>
+      root?.container.queryAll((instance) => instance.type === "live-map-stack-sheet") ?? [];
+    const stack = root?.container.queryAll(
+      (instance) =>
+        instance.type === "pressable" &&
+        String(instance.props["accessibilityLabel"]).startsWith("2 people"),
+    )[0];
+    await act(async () =>
+      (stack?.props["onPress"] as ((event: unknown) => void) | undefined)?.({
+        nativeEvent: { pageX: 100, pageY: 200 },
+      }),
+    );
+    expect(stackSheets()).toHaveLength(1);
+
+    await act(async () => emitNativeMapGoToCurrentLocation());
+    await flushEffects();
+    expect(stackSheets()).toHaveLength(0);
+
+    await act(async () => emitNativeMapPress([300, 400]));
+    await flushEffects();
+    expect(stackSheets()).toHaveLength(0);
+  });
+
   test("Android marker views render and select without bitmap annotations", async () => {
     testPlatform.OS = "android";
     const alice = createLiveMapMarkerFixture({ userId: "alice" });
-    const bob = createLiveMapMarkerFixture({ userId: "bob", name: "Bob" });
+    const bob = createLiveMapMarkerFixture({
+      latitude: 40,
+      longitude: 20,
+      userId: "bob",
+      name: "Bob",
+    });
     const selectionHistory: Array<string | null> = [];
     await renderSelectableNativeMap([alice, bob], selectionHistory);
 
@@ -1859,7 +1942,11 @@ describe("NativeMap integration harness", () => {
           instance.type === "pressable" && instance.props["accessibilityLabel"] === name,
       )[0];
       if (!marker) throw new Error(`Missing marker ${name}`);
-      await act(async () => (marker.props as { onPress: () => void }).onPress());
+      await act(async () =>
+        (marker.props as { onPress: (event: unknown) => void }).onPress({
+          nativeEvent: { pageX: 100, pageY: 200 },
+        }),
+      );
     };
 
     expect(root?.container.queryAll((instance) => instance.type === "marker-view")).toHaveLength(2);
@@ -1867,7 +1954,10 @@ describe("NativeMap integration harness", () => {
     await pressMarker("Alice");
     await pressMarker("Alice");
     await pressMarker("Bob");
-    await act(async () => emitNativeMapPress());
+    await act(async () => emitNativeMapPress([100, 200]));
+    expect(selectionHistory).toEqual(["alice", null, "bob"]);
+
+    await act(async () => emitNativeMapPress([300, 400]));
     await pressMarker("Alice");
     expect(selectionHistory).toEqual(["alice", null, "bob", null, "alice"]);
   });
@@ -1894,6 +1984,8 @@ describe("NativeMap integration harness", () => {
     const alice = createLiveMapMarkerFixture({ userId: "alice" });
     const bob = createLiveMapMarkerFixture({
       initials: "BO",
+      latitude: 40,
+      longitude: 20,
       name: "Bob",
       userId: "bob",
     });
