@@ -29,17 +29,11 @@ class TestCache extends OpenBeaconCache {
 const router = createTRPCRouter({ accountRecovery: accountRecoveryRouter });
 const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
 const prefix = `recovery-${crypto.randomUUID()}`;
-const users = ["setup", "race", "strict", "change", "reset", "stale"].map(
+const users = ["setup", "race", "strict", "change", "reset", "stale", "staleSetup"].map(
   (name) => `${prefix}-${name}`,
 );
-const [setupUser, raceUser, strictUser, changeUser, resetUser, staleUser] = users as [
-  string,
-  string,
-  string,
-  string,
-  string,
-  string,
-];
+const [setupUser, raceUser, strictUser, changeUser, resetUser, staleUser, staleSetupUser] =
+  users as [string, string, string, string, string, string, string];
 const groupId = `${prefix}-group`;
 const staleSessionCreatedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
 
@@ -149,6 +143,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         currentHistoryKey: null,
         historyKeyVersions: [],
         recoveryKey: null,
+        sessionFresh: true,
       });
       await account.accountRecovery.setup({
         historyKey: historyKey.input,
@@ -167,6 +162,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           derivationVersion: 1,
           publicKey: recoveryKey.publicKey,
         },
+        sessionFresh: true,
       });
       expect(await restoreHistoryKeys(setupUser, phrase)).toEqual([historyKey.privateKey.expose()]);
       expect(() =>
@@ -361,11 +357,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           name: "Group",
           groupMembers: { create: { userId: resetUser, role: "OWNER", joinedEpochNumber: 1 } },
           groupEpochs: {
-            create: {
-              id: epoch.epoch.epochId,
-              epochNumber: 1,
-              senderPublicKey: device.publicKey,
-            },
+            create: { id: epoch.epoch.epochId, epochNumber: 1, senderPublicKey: device.publicKey },
           },
         },
       });
@@ -429,10 +421,27 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(restoreHistoryKeys(resetUser, oldPhrase)).rejects.toThrow();
     });
 
+    test("a session older than the better-auth fresh age cannot set up a phrase and status reports it", async () => {
+      const phrase = generateRecoveryPhrase();
+      const stale = caller(staleSetupUser, staleSessionCreatedAt);
+      await expect(
+        stale.accountRecovery.setup({
+          historyKey: newHistoryKey({ phrase, userId: staleSetupUser, version: 1 }).input,
+          recoveryKey: recoveryKeyInput(phrase),
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN", message: "Sign in again to continue." });
+      expect(await stale.accountRecovery.status()).toMatchObject({
+        recoveryKey: null,
+        sessionFresh: false,
+      });
+      expect(await prisma.recoveryKey.count({ where: { userId: staleSetupUser } })).toBe(0);
+      expect(await prisma.accountHistoryKey.count({ where: { userId: staleSetupUser } })).toBe(0);
+    });
+
     test("a session older than the better-auth fresh age cannot change or reset the phrase", async () => {
       const phrase = generateRecoveryPhrase();
       const historyKey = newHistoryKey({ phrase, userId: staleUser, version: 1 });
-      await caller(staleUser, staleSessionCreatedAt).accountRecovery.setup({
+      await caller(staleUser).accountRecovery.setup({
         historyKey: historyKey.input,
         recoveryKey: recoveryKeyInput(phrase),
       });

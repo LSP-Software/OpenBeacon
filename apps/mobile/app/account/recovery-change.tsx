@@ -11,12 +11,14 @@ import { BackButton } from "../../components/headers/BackButton.tsx";
 import { NewRecoveryPhrase } from "../../components/NewRecoveryPhrase.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
+import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
 import { changeRecoveryPhrase } from "../../lib/recovery.ts";
 
 const RecoveryPhraseChangeScreen = () => {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<"verify" | "phrase" | "saving" | "done">("verify");
+  const gate = useIdentityGate();
 
   const change = async (phrase: RecoveryPhrase) => {
     setStep("saving");
@@ -27,6 +29,7 @@ const RecoveryPhraseChangeScreen = () => {
       return;
     }
     if (result.data.status === "reauthenticate") {
+      await gate.refresh();
       setStep("verify");
       Alert.alert(
         "Sign in again",
@@ -58,17 +61,25 @@ const RecoveryPhraseChangeScreen = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {step === "verify" && (
-            <View className="gap-6">
-              <Text className="text-muted-foreground text-base leading-6">
-                You’ll get a new 12-word phrase to write down. Your old phrase stops working as soon
-                as the new one is saved. Your groups and location history aren’t affected.
-              </Text>
-              <ConfirmIdentity onConfirmed={() => setStep("phrase")} />
-            </View>
+          {step !== "done" && (
+            <Text className="text-muted-foreground text-base leading-6">
+              You’ll get a new 12-word phrase to write down. Your old phrase stops working as soon
+              as the new one is saved. Your groups and location history aren’t affected.
+            </Text>
           )}
 
-          {(step === "phrase" || step === "saving") && (
+          {step === "verify" && !gate.loading && gate.needsConfirmation && (
+            <ConfirmIdentity
+              onConfirmed={() => {
+                void gate.refresh();
+                setStep("phrase");
+              }}
+            />
+          )}
+
+          {(step === "phrase" ||
+            step === "saving" ||
+            (step === "verify" && !gate.loading && !gate.needsConfirmation)) && (
             <NewRecoveryPhrase
               onConfirm={change}
               submitLabel="Change phrase"

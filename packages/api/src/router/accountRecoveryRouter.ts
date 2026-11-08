@@ -11,10 +11,14 @@ import type z from "zod";
 import { protectedProcedure } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 
-const freshSessionProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+const isSessionFresh = async (sessionCreatedAt: Date) => {
   const { sessionConfig } = await auth.$context;
-  const sessionAge = Date.now() - new Date(ctx.session.session.createdAt).getTime();
-  if (sessionConfig.freshAge !== 0 && sessionAge >= sessionConfig.freshAge * 1000) {
+  const sessionAge = Date.now() - new Date(sessionCreatedAt).getTime();
+  return sessionConfig.freshAge === 0 || sessionAge < sessionConfig.freshAge * 1000;
+};
+
+const freshSessionProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  if (!(await isSessionFresh(ctx.session.session.createdAt))) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Sign in again to continue." });
   }
   return next();
@@ -54,7 +58,7 @@ const createHistoryKey = async (
 export const accountRecoveryRouter = createTRPCRouter({
   status: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
-    const [recoveryKey, historyKeys] = await Promise.all([
+    const [recoveryKey, historyKeys, sessionFresh] = await Promise.all([
       ctx.db.recoveryKey.findUnique({
         select: { algorithm: true, derivationVersion: true, publicKey: true },
         where: { userId },
@@ -64,11 +68,13 @@ export const accountRecoveryRouter = createTRPCRouter({
         select: { id: true, publicKey: true, version: true },
         where: { userId },
       }),
+      isSessionFresh(ctx.session.session.createdAt),
     ]);
     return {
       currentHistoryKey: historyKeys.at(-1) ?? null,
       historyKeyVersions: historyKeys.map(({ version }) => version),
       recoveryKey,
+      sessionFresh,
     };
   }),
   escrows: protectedProcedure.query(async ({ ctx }) => {
@@ -88,21 +94,26 @@ export const accountRecoveryRouter = createTRPCRouter({
       version: historyKey.version,
     }));
   }),
-  setup: protectedProcedure.input(setupAccountRecoverySchema).mutation(async ({ ctx, input }) => {
-    const userId = ctx.session.user.id;
-    if (input.historyKey.version !== 1) {
-      throw new TRPCError({ code: "BAD_REQUEST", message: "The first history key must be v1." });
-    }
-    await ctx.db.$transaction(async (tx) => {
-      await lockUser(tx, userId);
-      if (await tx.recoveryKey.findUnique({ where: { userId } })) {
-        throw new TRPCError({ code: "CONFLICT", message: "A recovery phrase is already set up." });
+  setup: freshSessionProcedure
+    .input(setupAccountRecoverySchema)
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      if (input.historyKey.version !== 1) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "The first history key must be v1." });
       }
-      await tx.recoveryKey.create({ data: { ...input.recoveryKey, userId } });
-      await createHistoryKey(tx, userId, input.historyKey);
-    });
-    return { historyKeyVersion: input.historyKey.version };
-  }),
+      await ctx.db.$transaction(async (tx) => {
+        await lockUser(tx, userId);
+        if (await tx.recoveryKey.findUnique({ where: { userId } })) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "A recovery phrase is already set up.",
+          });
+        }
+        await tx.recoveryKey.create({ data: { ...input.recoveryKey, userId } });
+        await createHistoryKey(tx, userId, input.historyKey);
+      });
+      return { historyKeyVersion: input.historyKey.version };
+    }),
   changePhrase: freshSessionProcedure
     .input(changeRecoveryPhraseSchema)
     .mutation(async ({ ctx, input }) => {

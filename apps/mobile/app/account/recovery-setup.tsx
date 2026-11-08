@@ -6,20 +6,23 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
 import { BackButton } from "../../components/headers/BackButton.tsx";
 import { NewRecoveryPhrase } from "../../components/NewRecoveryPhrase.tsx";
 import { RecoveryCoverage } from "../../components/RecoveryCoverage.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
+import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
 import { backfillEveryGroup, setUpRecoveryPhrase } from "../../lib/recovery.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 
 const RecoveryPhraseSetupScreen = () => {
   const queryClient = useQueryClient();
-  const [step, setStep] = useState<"phrase" | "saving" | "protecting" | "unsaved" | "done">(
-    "phrase",
-  );
+  const [step, setStep] = useState<
+    "verify" | "phrase" | "saving" | "protecting" | "unsaved" | "done"
+  >("verify");
+  const gate = useIdentityGate();
   const [progress, setProgress] = useState({ done: 0, failed: 0, total: 0 });
   const [userId, setUserId] = useState<string>();
 
@@ -29,6 +32,15 @@ const RecoveryPhraseSetupScreen = () => {
     if (result.error) {
       setStep("phrase");
       Alert.alert("Unable to set up recovery phrase", result.error.message);
+      return;
+    }
+    if (result.data.status === "reauthenticate") {
+      await gate.refresh();
+      setStep("verify");
+      Alert.alert(
+        "Sign in again",
+        "Your phrase wasn’t set up. Confirm it’s you, then write down the new phrase you’re shown.",
+      );
       return;
     }
     if (result.data.status === "conflict") {
@@ -72,7 +84,18 @@ const RecoveryPhraseSetupScreen = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {(step === "phrase" || step === "saving") && (
+          {step === "verify" && !gate.loading && gate.needsConfirmation && (
+            <ConfirmIdentity
+              onConfirmed={() => {
+                void gate.refresh();
+                setStep("phrase");
+              }}
+            />
+          )}
+
+          {(step === "phrase" ||
+            step === "saving" ||
+            (step === "verify" && !gate.loading && !gate.needsConfirmation)) && (
             <NewRecoveryPhrase
               onConfirm={setUp}
               submitLabel="Confirm"

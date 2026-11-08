@@ -14,6 +14,7 @@ import { RecoveryCoverage } from "../../components/RecoveryCoverage.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
+import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
 import { backfillEveryGroup, resetRecoveryPhrase } from "../../lib/recovery.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
@@ -24,6 +25,7 @@ const RecoveryPhraseResetScreen = () => {
   const [step, setStep] = useState<
     "warn" | "verify" | "phrase" | "saving" | "protecting" | "unsaved" | "done"
   >("warn");
+  const gate = useIdentityGate();
   const [progress, setProgress] = useState({ done: 0, failed: 0, total: 0 });
   const [userId, setUserId] = useState<string>();
   const form = useForm<{ confirmation: string }>({ defaultValues: { confirmation: "" } });
@@ -38,6 +40,7 @@ const RecoveryPhraseResetScreen = () => {
       return;
     }
     if (result.data.status === "reauthenticate") {
+      await gate.refresh();
       setStep("verify");
       Alert.alert(
         "Sign in again",
@@ -125,9 +128,18 @@ const RecoveryPhraseResetScreen = () => {
             </View>
           )}
 
-          {step === "verify" && <ConfirmIdentity onConfirmed={() => setStep("phrase")} />}
+          {step === "verify" && !gate.loading && gate.needsConfirmation && (
+            <ConfirmIdentity
+              onConfirmed={() => {
+                void gate.refresh();
+                setStep("phrase");
+              }}
+            />
+          )}
 
-          {(step === "phrase" || step === "saving") && (
+          {(step === "phrase" ||
+            step === "saving" ||
+            (step === "verify" && !gate.loading && !gate.needsConfirmation)) && (
             <NewRecoveryPhrase
               onConfirm={reset}
               submitLabel="Reset phrase"

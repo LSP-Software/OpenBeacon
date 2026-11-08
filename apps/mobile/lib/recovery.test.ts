@@ -257,6 +257,17 @@ describe("setUpRecoveryPhrase", () => {
     expect(storedHistoryKeys.size).toBe(0);
   });
 
+  test("FORBIDDEN asks for a fresh sign-in and stores nothing", async () => {
+    setupError = TRPCClientError.from({
+      error: { code: -32003, data: { code: "FORBIDDEN" }, message: "Sign in again to continue." },
+    });
+
+    const result = await setUpRecoveryPhrase(generateRecoveryPhrase());
+
+    expect(result).toEqual({ status: "reauthenticate" });
+    expect(storedHistoryKeys.size).toBe(0);
+  });
+
   test("a phone that can't save the key reports unsaved after the server setup succeeded", async () => {
     failNextStore = true;
 

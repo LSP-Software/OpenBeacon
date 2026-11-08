@@ -87,6 +87,7 @@ export const setUpRecoveryPhrase = async (phrase: RecoveryPhrase) => {
     version,
   });
   const result = await tryCatch(trpcClient.accountRecovery.setup.mutate(input));
+  if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };
   if (hasTrpcCode(result.error, "CONFLICT")) return { status: "conflict" as const };
   if (result.error) throw result.error;
   const stored = await tryCatch(
