@@ -45,6 +45,7 @@ let historyWrapDeleted = false;
 let registered = false;
 let rotated = false;
 let offline = false;
+const requestedLimits: (number | undefined)[] = [];
 const register = mock(async () => {
   registered = true;
   return { deviceId: "device", privateKey: keyPair.privateKey, userId: "user" };
@@ -62,7 +63,8 @@ mock.module("../lib/api.ts", () => ({
   trpcClient: {
     groupEpoch: {
       listEpochKeyWraps: {
-        query: async () => {
+        query: async (input: { limit?: number }) => {
+          requestedLimits.push(input.limit);
           if (offline) throw new Error("offline");
           return {
             epochs: [
@@ -82,13 +84,15 @@ mock.module("../lib/api.ts", () => ({
   },
 }));
 
-const { useGroupKeyAccess }: typeof import("./useGroupKeyAccess.ts") =
-  await import("./useGroupKeyAccess.ts");
+const {
+  useCurrentGroupKeyAccess,
+  useGroupKeyHistoryAccess,
+}: typeof import("./useGroupKeyAccess.ts") = await import("./useGroupKeyAccess.ts");
 
 test("registers the device and refreshes missing access after rotation", async () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Harness = () => {
-    useGroupKeyAccess(["group"], "user");
+    useGroupKeyHistoryAccess(["group"], "user");
     return null;
   };
   const root = createRoot();
@@ -99,7 +103,7 @@ test("registers the device and refreshes missing access after rotation", async (
       </QueryClientProvider>,
     );
   });
-  const queryKey = ["groupKeyAccess", "user", "group"];
+  const queryKey = ["groupKeyAccess", "user", "group", "history"];
   await act(async () => {
     await queryClient.refetchQueries({ queryKey });
   });
@@ -137,7 +141,7 @@ test("rechecks an epoch once the history wrap that resolved it is deleted by a r
   historyWrapOnly = true;
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Harness = () => {
-    useGroupKeyAccess(["group"], "user");
+    useGroupKeyHistoryAccess(["group"], "user");
     return null;
   };
   const root = createRoot();
@@ -148,7 +152,7 @@ test("rechecks an epoch once the history wrap that resolved it is deleted by a r
       </QueryClientProvider>,
     );
   });
-  const queryKey = ["groupKeyAccess", "user", "group"];
+  const queryKey = ["groupKeyAccess", "user", "group", "history"];
   await act(async () => {
     await queryClient.refetchQueries({ queryKey });
   });
@@ -165,6 +169,35 @@ test("rechecks an epoch once the history wrap that resolved it is deleted by a r
     current: "missing",
     history: "complete",
   });
+  await act(async () => root.unmount());
+  queryClient.clear();
+});
+
+test("checks only the latest epoch when the scope is current", async () => {
+  historyWrapOnly = false;
+  historyWrapDeleted = false;
+  offline = false;
+  rotated = true;
+  requestedLimits.length = 0;
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const Harness = () => {
+    useCurrentGroupKeyAccess(["group"], "user");
+    return null;
+  };
+  const root = createRoot();
+  await act(async () => {
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+  });
+  const queryKey = ["groupKeyAccess", "user", "group", "current"];
+  await act(async () => {
+    await queryClient.refetchQueries({ queryKey });
+  });
+  expect(queryClient.getQueryData<unknown>(queryKey)).toEqual({ current: "available" });
+  expect(new Set(requestedLimits)).toEqual(new Set([1]));
   await act(async () => root.unmount());
   queryClient.clear();
 });

@@ -16,7 +16,8 @@ mock.module("./historyKeys.ts", () => ({
 }));
 
 const { unwrapEpochKeyFromWraps } = await import("./epochKeys.ts");
-const { checkGroupKeyAccess, checkHistoryRecovery } = await import("./groupKeyAccess.ts");
+const { checkCurrentKeyAccess, checkGroupKeyAccess, checkHistoryRecovery } =
+  await import("./groupKeyAccess.ts");
 
 const deviceKeyPair = createDeviceKeyPair();
 const historyKeyPair = createHistoryKeyPair();
@@ -182,6 +183,48 @@ describe("group key access", () => {
         },
       }),
     ).rejects.toThrow("offline");
+  });
+});
+
+describe("current key access", () => {
+  const checkCurrent = async (accessByEpoch: Array<"device" | "history" | "none">) => {
+    const newestFirst = accessByEpoch
+      .map((access, index) => createEpoch(index + 1, access))
+      .reverse();
+    const listLatestEpoch = mock(async () => ({ epochs: newestFirst.slice(0, 1) }));
+    const resolved: string[] = [];
+    const result = await checkCurrentKeyAccess({
+      canResolve: async (epoch) => {
+        resolved.push(epoch.epochId);
+        return (
+          (await unwrapEpochKeyFromWraps({
+            device,
+            epochId: epoch.epochId,
+            getHistoryKey: async (version) => (version === 1 ? historyKeyPair.privateKey : null),
+            wraps: epoch,
+          })) !== null
+        );
+      },
+      listLatestEpoch,
+    });
+    return { listLatestEpoch, resolved, result };
+  };
+
+  test("reports nothing to read when the group has no epochs", async () => {
+    expect((await checkCurrent([])).result).toEqual({ current: "unavailable" });
+  });
+
+  test("only looks at the latest epoch even when older ones are unreadable", async () => {
+    const available = await checkCurrent(["none", "none", "device"]);
+    expect(available.result).toEqual({ current: "available" });
+    expect(available.resolved).toEqual(["epoch-3"]);
+    expect(available.listLatestEpoch).toHaveBeenCalledTimes(1);
+  });
+
+  test("reports missing when the latest epoch can't be read", async () => {
+    expect((await checkCurrent(["device", "device", "none"])).result).toEqual({
+      current: "missing",
+    });
   });
 });
 

@@ -7,7 +7,7 @@ import { NativeMap } from "../../../components/map/NativeMap.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
-import { useGroupKeyAccess } from "../../../hooks/useGroupKeyAccess.ts";
+import { useCurrentGroupKeyAccess } from "../../../hooks/useGroupKeyAccess.ts";
 import { useMapLivePositions } from "../../../hooks/useMapLivePositions.ts";
 import { useMembershipSnapshot } from "../../../hooks/useMembershipSnapshot.ts";
 import { useTrackingUploadTime } from "../../../hooks/useTrackingUploadTime.ts";
@@ -43,7 +43,10 @@ const MapScreen = () => {
       name: nicknameQueries[index]?.data?.[member.id]?.name ?? member.name,
     })),
   }));
-  const keyAccess = useGroupKeyAccess(groups?.map((group) => group.id) ?? [], session?.user.id);
+  const keyAccess = useCurrentGroupKeyAccess(
+    groups?.map((group) => group.id) ?? [],
+    session?.user.id,
+  );
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selfUserId = session?.user.id ?? "";
   const selfDeviceLocation = useSelfDeviceLocation(selfUserId.length > 0);

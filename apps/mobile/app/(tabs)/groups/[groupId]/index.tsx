@@ -13,7 +13,7 @@ import { RefreshablePage } from "../../../../components/RefreshablePage.tsx";
 import { Button } from "../../../../components/ui/Button.tsx";
 import { SwipeTabs, type SwipeTabsItem } from "../../../../components/ui/SwipeTabs.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
-import { useGroupKeyAccess } from "../../../../hooks/useGroupKeyAccess.ts";
+import { useGroupKeyHistoryAccess } from "../../../../hooks/useGroupKeyAccess.ts";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
 import { storage } from "../../../../lib/storage.ts";
@@ -47,7 +47,7 @@ const GroupScreen = () => {
   const queryClient = useQueryClient();
   const isFocused = useIsFocused();
   const { data: session } = authClient.useSession();
-  const [keyAccess] = useGroupKeyAccess([groupId], session?.user.id);
+  const [keyAccess] = useGroupKeyHistoryAccess([groupId], session?.user.id);
   const [value, setValue] = useState<GroupTabValue>("members");
   const historyWarningKey = `recovery.historyWarningDismissed.${session?.user.id}.${groupId}`;
   const [historyWarningDismissed, setHistoryWarningDismissed] = useState(false);

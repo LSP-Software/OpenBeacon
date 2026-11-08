@@ -143,7 +143,10 @@ const addHistoryWrap = async (
   });
 };
 
-const list = (reader: Account, input: { cursor?: number; deviceId?: string; groupId?: string }) =>
+const list = (
+  reader: Account,
+  input: { cursor?: number; deviceId?: string; groupId?: string; limit?: number },
+) =>
   caller(reader.userId).groupEpoch.listEpochKeyWraps({
     deviceId: reader.deviceId,
     groupId,
@@ -287,6 +290,25 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(second.epochs.map(({ epochNumber }) => epochNumber)).toEqual([3, 2, 1]);
       expect(second.nextCursor).toBeNull();
       expect(second.epochs.at(-1)!.deviceWrap).not.toBeNull();
+    });
+
+    test("uses the limit as the page size and keeps the cursor at the last returned epoch", async () => {
+      const latest = await list(owner, { groupId: pagedGroupId, limit: 1 });
+      expect(latest.epochs.map(({ epochNumber }) => epochNumber)).toEqual([103]);
+      expect(latest.nextCursor).toBe(103);
+
+      const next = await list(owner, { cursor: 103, groupId: pagedGroupId, limit: 2 });
+      expect(next.epochs.map(({ epochNumber }) => epochNumber)).toEqual([102, 101]);
+      expect(next.nextCursor).toBe(101);
+
+      const whole = await list(owner, { limit: 5 });
+      expect(whole.epochs.map(({ epochNumber }) => epochNumber)).toEqual([2, 1]);
+      expect(whole.nextCursor).toBeNull();
+    });
+
+    test("rejects limits outside 1 to 100", async () => {
+      await expect(list(owner, { limit: 0 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      await expect(list(owner, { limit: 101 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     });
   },
 );

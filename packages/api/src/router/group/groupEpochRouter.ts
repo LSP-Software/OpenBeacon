@@ -208,11 +208,12 @@ export const groupEpochRouter = {
         cursor: z.number().int().positive().nullish(),
         deviceId: z.string().min(1),
         groupId: z.string().min(1),
+        limit: z.number().int().min(1).max(100).default(100),
       }),
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const pageSize = 100;
+      const pageSize = input.limit;
       const epochs = await ctx.db.groupEpoch.findMany({
         orderBy: { epochNumber: "desc" },
         select: {

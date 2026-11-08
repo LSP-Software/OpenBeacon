@@ -59,7 +59,7 @@ mock.module("../components/ui/Text.tsx", () => ({
     React.createElement("text", null, children),
 }));
 mock.module("../hooks/useGroupColorRevision.ts", () => ({ useGroupColorRevision: () => 0 }));
-mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useGroupKeyAccess: () => access }));
+mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useCurrentGroupKeyAccess: () => access }));
 mock.module("../hooks/useMapLivePositions.ts", () => ({ useMapLivePositions: () => [] }));
 mock.module("../hooks/useMembershipSnapshot.ts", () => ({ useMembershipSnapshot: () => groups }));
 mock.module("../hooks/useTrackingUploadTime.ts", () => ({ useTrackingUploadTime: () => null }));

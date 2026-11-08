@@ -52,7 +52,7 @@ mock.module("../lib/api.ts", () => ({
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: { user: { id: sessionUserId } } }) },
 }));
-mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useGroupKeyAccess: () => keyAccess }));
+mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useGroupKeyHistoryAccess: () => keyAccess }));
 mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
 mock.module("../components/image/GroupImage.tsx", () => ({ GroupImage: () => null }));
 mock.module("../components/LoadingIndicator.tsx", () => ({

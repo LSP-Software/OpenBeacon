@@ -24,6 +24,18 @@ export const checkGroupKeyAccess = async <Epoch extends { createdAt: Date }>({
   return { current, history: "complete" as const };
 };
 
+export const checkCurrentKeyAccess = async <Epoch>({
+  canResolve,
+  listLatestEpoch,
+}: {
+  canResolve: (epoch: Epoch) => Promise<boolean>;
+  listLatestEpoch: () => Promise<{ epochs: Epoch[] }>;
+}) => {
+  const [latest] = (await listLatestEpoch()).epochs;
+  if (!latest) return { current: "unavailable" as const };
+  return { current: (await canResolve(latest)) ? ("available" as const) : ("missing" as const) };
+};
+
 export const checkHistoryRecovery = async <
   Epoch extends { createdAt: Date; historyWraps: { historyKeyVersion: number }[] },
 >({
