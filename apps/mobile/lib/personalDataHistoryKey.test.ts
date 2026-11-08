@@ -4,15 +4,15 @@ import {
   createHistoryKeyPair,
   DEVICE_KEY_ALGORITHM,
   deriveRecoveryKeyPair,
-  encodeBase64,
   generateRecoveryPhrase,
   getPersonalDataHistoryKeyVersion,
   type HistoryKeyEscrow,
-  HistoryPrivateKeyMaterial,
+  type HistoryPrivateKeyMaterial,
   type RecoveryPhrase,
   sealHistoryKeyEscrow,
   sealPersonalDataForHistoryKey,
 } from "@openbeacon/encryption";
+import { expectNoSecretsIn } from "../test/secretLeaks.testUtil.ts";
 import { resetAccountRecoverySchema, setupAccountRecoverySchema } from "@openbeacon/schemas";
 import { TRPCClientError } from "@trpc/client";
 
@@ -588,18 +588,6 @@ describe("secrets", () => {
       freshPhone.device.privateKey.expose(),
       deriveRecoveryKeyPair(phrase).privateKey.expose(),
     ];
-    for (const secret of secrets) {
-      expect(serialized).not.toContain(encodeBase64(secret));
-      expect(serialized).not.toContain(Buffer.from(secret).toString("base64url"));
-      expect(serialized).not.toContain(Buffer.from(secret).toString("hex"));
-      expect(serialized).not.toContain(JSON.stringify(Array.from(secret)).slice(1, -1));
-    }
-    expect(serialized).not.toContain(phrase.words().join(" "));
-    for (const word of phrase.words()) {
-      expect(serialized).not.toMatch(
-        new RegExp(`(?<![A-Za-z0-9+/_-]|":)${word}(?![A-Za-z0-9+/=_-]|":)`),
-      );
-    }
-    expect(serialized).not.toContain("REDACTED");
+    expectNoSecretsIn(serialized, { secrets, phrases: [phrase] });
   });
 });
