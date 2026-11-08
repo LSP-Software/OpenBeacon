@@ -258,13 +258,13 @@ const writes = () => updateColorMock.mock.calls.length + updateNicknameMock.mock
 let setupPhone: Phone;
 
 beforeEach(() => {
-  setupPhone = createPhone("setup-phone");
+  setupPhone = createPhone("handset-a");
   phone = setupPhone;
   recoveryKey = null;
   historyKeys = [];
   colors = new Map();
   nicknames = new Map();
-  groupIds = ["family", "friends"];
+  groupIds = ["household", "friends"];
   publishedKeyOverride = null;
   beforeWrite = null;
   failWrite = null;
@@ -274,10 +274,10 @@ beforeEach(() => {
 });
 
 const writeV2Records = async () => {
-  await saveGroupColor({ userId, groupId: "family", color: GROUP_COLOR_PALETTE[3] });
+  await saveGroupColor({ userId, groupId: "household", color: GROUP_COLOR_PALETTE[3] });
   await saveGroupColor({ userId, groupId: "friends", color: GROUP_COLOR_PALETTE[5] });
-  await saveNickname("family", "gran", "Grandma");
-  await saveNickname("family", "dad", "Papa Bear");
+  await saveNickname("household", "gran", "Grandma");
+  await saveNickname("household", "papa", "Papa Bear");
   await saveNickname("friends", "sam", "Sammy");
   expect(versionsOnServer()).toStrictEqual([null, null, null, null, null]);
 };
@@ -288,24 +288,24 @@ describe("sealing", () => {
     addHistoryKeyVersion(phrase, [setupPhone]);
     addHistoryKeyVersion(phrase, [setupPhone]);
 
-    await saveGroupColor({ userId, groupId: "family", color: GROUP_COLOR_PALETTE[2] });
-    await saveNickname("family", "gran", "Grandma");
+    await saveGroupColor({ userId, groupId: "household", color: GROUP_COLOR_PALETTE[2] });
+    await saveNickname("household", "gran", "Grandma");
 
     expect(versionsOnServer()).toStrictEqual([2, 2]);
     expect(updateColorMock.mock.calls[0]?.[0].expectedCiphertext).toBeUndefined();
-    const otherPhone = createPhone("other-phone");
+    const otherPhone = createPhone("handset-b");
     otherPhone.secureStore = new Map(setupPhone.secureStore);
-    expect(await readAs(otherPhone, "family")).toStrictEqual({ gran: "Grandma" });
+    expect(await readAs(otherPhone, "household")).toStrictEqual({ gran: "Grandma" });
   });
 
   test("an account without a phrase keeps sealing to the device key", async () => {
-    await saveNickname("family", "gran", "Grandma");
-    await saveGroupColor({ userId, groupId: "family", color: GROUP_COLOR_PALETTE[2] });
+    await saveNickname("household", "gran", "Grandma");
+    await saveGroupColor({ userId, groupId: "household", color: GROUP_COLOR_PALETTE[2] });
 
     expect(versionsOnServer()).toStrictEqual([null, null]);
-    expect(await readAs(setupPhone, "family")).toStrictEqual({ gran: "Grandma" });
+    expect(await readAs(setupPhone, "household")).toStrictEqual({ gran: "Grandma" });
     const reinstalled = createPhone("reinstalled");
-    expect(await readAs(reinstalled, "family")).toStrictEqual({ gran: null });
+    expect(await readAs(reinstalled, "household")).toStrictEqual({ gran: null });
   });
 
   test("a phone without the current history key refuses to seal on an account with a phrase", async () => {
@@ -315,13 +315,13 @@ describe("sealing", () => {
     addHistoryKeyVersion(phrase, [enrolled]);
 
     await expect(
-      saveGroupColor({ userId, groupId: "family", color: GROUP_COLOR_PALETTE[2] }),
+      saveGroupColor({ userId, groupId: "household", color: GROUP_COLOR_PALETTE[2] }),
     ).rejects.toThrow(PERSONAL_DATA_LOCKED_MESSAGE);
-    await expect(saveNickname("family", "gran", "Grandma")).rejects.toThrow(
+    await expect(saveNickname("household", "gran", "Grandma")).rejects.toThrow(
       PERSONAL_DATA_LOCKED_MESSAGE,
     );
     expect(writes()).toBe(0);
-    expect(getGroupColor("family")).toBe(GROUP_COLOR_PALETTE[0]);
+    expect(getGroupColor("household")).toBe(GROUP_COLOR_PALETTE[0]);
   });
 
   test("a published key that doesn't match the stored key is never sealed to", async () => {
@@ -337,7 +337,7 @@ describe("sealing", () => {
       sealForSelf({ userId, purpose: "nickname", binding: [userId], plaintext: "Gran" }),
     ).rejects.toThrow(PERSONAL_DATA_KEY_MISMATCH_MESSAGE);
     await expect(
-      saveGroupColor({ userId, groupId: "family", color: GROUP_COLOR_PALETTE[2] }),
+      saveGroupColor({ userId, groupId: "household", color: GROUP_COLOR_PALETTE[2] }),
     ).rejects.toThrow(PERSONAL_DATA_KEY_MISMATCH_MESSAGE);
     expect(writes()).toBe(0);
   });
@@ -345,55 +345,55 @@ describe("sealing", () => {
 
 describe("opening", () => {
   test("a record sealed under v1 still opens after v2 exists, alongside v2 and device records", async () => {
-    await saveNickname("family", "dad", "Papa Bear");
+    await saveNickname("household", "papa", "Papa Bear");
     const phrase = generateRecoveryPhrase();
     addHistoryKeyVersion(phrase, [setupPhone]);
-    await saveNickname("family", "gran", "Grandma");
+    await saveNickname("household", "gran", "Grandma");
     addHistoryKeyVersion(phrase, [setupPhone]);
-    await saveNickname("family", "mum", "Mama");
+    await saveNickname("household", "mum", "Mama");
     failWrite = () => true;
 
-    expect(await readAs(setupPhone, "family")).toStrictEqual({
-      dad: "Papa Bear",
+    expect(await readAs(setupPhone, "household")).toStrictEqual({
+      papa: "Papa Bear",
       gran: "Grandma",
       mum: "Mama",
     });
     expect(
-      [...(nicknames.get("family")?.values() ?? [])].map(getPersonalDataHistoryKeyVersion),
+      [...(nicknames.get("household")?.values() ?? [])].map(getPersonalDataHistoryKeyVersion),
     ).toStrictEqual([null, 1, 2]);
   });
 
   test("a version this phone doesn't hold is unreadable without breaking the rest", async () => {
     const phrase = generateRecoveryPhrase();
     const enrolled = createPhone("enrolled");
-    await saveNickname("family", "dad", "Papa Bear");
+    await saveNickname("household", "papa", "Papa Bear");
     addHistoryKeyVersion(phrase, [setupPhone, enrolled]);
     addHistoryKeyVersion(phrase, [enrolled]);
     phone = enrolled;
-    await saveNickname("family", "gran", "Grandma");
-    await saveGroupColor({ userId, groupId: "family", color: GROUP_COLOR_PALETTE[4] });
+    await saveNickname("household", "gran", "Grandma");
+    await saveGroupColor({ userId, groupId: "household", color: GROUP_COLOR_PALETTE[4] });
     colors.set("broken", "not an envelope");
-    nicknames.get("family")?.set("broken", '{"version":9}');
+    nicknames.get("household")?.set("broken", '{"version":9}');
 
-    expect(await readAs(setupPhone, "family")).toStrictEqual({
+    expect(await readAs(setupPhone, "household")).toStrictEqual({
       broken: null,
-      dad: "Papa Bear",
+      papa: "Papa Bear",
       gran: null,
     });
     await syncGroupColors(userId);
-    expect(getGroupColor("family")).toBe(GROUP_COLOR_PALETTE[0]);
+    expect(getGroupColor("household")).toBe(GROUP_COLOR_PALETTE[0]);
   });
 
   test("a relabelled history key version doesn't open", async () => {
     const phrase = generateRecoveryPhrase();
     addHistoryKeyVersion(phrase, [setupPhone]);
-    await saveNickname("family", "gran", "Grandma");
+    await saveNickname("household", "gran", "Grandma");
     addHistoryKeyVersion(phrase, [setupPhone]);
-    const family = nicknames.get("family") as Map<string, string>;
-    const relabelled = { ...JSON.parse(family.get("gran") as string), historyKeyVersion: 2 };
-    family.set("gran", JSON.stringify(relabelled));
+    const household = nicknames.get("household") as Map<string, string>;
+    const relabelled = { ...JSON.parse(household.get("gran") as string), historyKeyVersion: 2 };
+    household.set("gran", JSON.stringify(relabelled));
 
-    expect(await readAs(setupPhone, "family")).toStrictEqual({ gran: null });
+    expect(await readAs(setupPhone, "household")).toStrictEqual({ gran: null });
     expect(writes()).toBe(1);
   });
 });
@@ -411,10 +411,10 @@ describe("migration", () => {
     for (const [input] of updateColorMock.mock.calls.slice(2)) {
       expect(input.expectedCiphertext).toBeDefined();
     }
-    const secondPhone = createPhone("second-phone");
+    const secondPhone = createPhone("handset-d");
     secondPhone.secureStore = new Map(setupPhone.secureStore);
-    expect(await readAs(secondPhone, "family")).toStrictEqual({
-      dad: "Papa Bear",
+    expect(await readAs(secondPhone, "household")).toStrictEqual({
+      papa: "Papa Bear",
       gran: "Grandma",
     });
     await syncGroupColors(userId);
@@ -430,7 +430,7 @@ describe("migration", () => {
     await writeV2Records();
     addHistoryKeyVersion(generateRecoveryPhrase(), [setupPhone]);
     failWrite = (input) =>
-      input.memberId === "gran" || (input.groupId === "family" && input.memberId === undefined);
+      input.memberId === "gran" || (input.groupId === "household" && input.memberId === undefined);
 
     await resealPersonalData(userId);
     expect(versionsOnServer()).toStrictEqual([null, 1, null, 1, 1]);
@@ -444,13 +444,13 @@ describe("migration", () => {
 
   test("records this phone can't open are left alone", async () => {
     await writeV2Records();
-    const otherPhone = createPhone("other-phone");
+    const otherPhone = createPhone("handset-b");
     addHistoryKeyVersion(generateRecoveryPhrase(), [otherPhone]);
     const snapshot = JSON.stringify([[...colors], [...nicknames].map(([id, g]) => [id, [...g]])]);
     phone = otherPhone;
 
     await resealPersonalData(userId);
-    expect(await readAs(otherPhone, "family")).toStrictEqual({ dad: null, gran: null });
+    expect(await readAs(otherPhone, "household")).toStrictEqual({ papa: null, gran: null });
 
     expect(writes()).toBe(5);
     expect(JSON.stringify([[...colors], [...nicknames].map(([id, g]) => [id, [...g]])])).toBe(
@@ -464,47 +464,50 @@ describe("migration", () => {
     const newerColor = await sealForSelf({
       userId,
       purpose: "group-color",
-      binding: [userId, "family"],
+      binding: [userId, "household"],
       plaintext: GROUP_COLOR_PALETTE[8],
     });
     const newerNickname = await encryptPersonalNickname({
-      groupId: "family",
+      groupId: "household",
       memberId: "gran",
       userId,
       nickname: "Nana",
     });
     beforeWrite = (input) => {
-      if (input.groupId !== "family") return;
-      if (input.memberId === undefined) colors.set("family", newerColor);
-      if (input.memberId === "gran") nicknames.get("family")?.set("gran", newerNickname);
+      if (input.groupId !== "household") return;
+      if (input.memberId === undefined) colors.set("household", newerColor);
+      if (input.memberId === "gran") nicknames.get("household")?.set("gran", newerNickname);
     };
 
     await resealPersonalData(userId);
 
     beforeWrite = null;
-    expect(colors.get("family")).toBe(newerColor);
-    expect(nicknames.get("family")?.get("gran")).toBe(newerNickname);
+    expect(colors.get("household")).toBe(newerColor);
+    expect(nicknames.get("household")?.get("gran")).toBe(newerNickname);
     await syncGroupColors(userId);
-    expect(getGroupColor("family")).toBe(GROUP_COLOR_PALETTE[8]);
-    expect(await readAs(setupPhone, "family")).toStrictEqual({ dad: "Papa Bear", gran: "Nana" });
+    expect(getGroupColor("household")).toBe(GROUP_COLOR_PALETTE[8]);
+    expect(await readAs(setupPhone, "household")).toStrictEqual({
+      papa: "Papa Bear",
+      gran: "Nana",
+    });
   });
 
   test("loading nicknames returns the re-sealed ciphertext so edits don't conflict", async () => {
-    await saveNickname("family", "gran", "Grandma");
+    await saveNickname("household", "gran", "Grandma");
     addHistoryKeyVersion(generateRecoveryPhrase(), [setupPhone]);
 
-    const loaded = await loadPersonalNicknames("family", userId);
+    const loaded = await loadPersonalNicknames("household", userId);
 
-    expect(loaded["gran"]?.ciphertext).toBe(nicknames.get("family")?.get("gran") as string);
+    expect(loaded["gran"]?.ciphertext).toBe(nicknames.get("household")?.get("gran") as string);
     expect(getPersonalDataHistoryKeyVersion(loaded["gran"]?.ciphertext ?? "")).toBe(1);
-    await saveNickname("family", "gran", "Nana");
-    expect(await readAs(setupPhone, "family")).toStrictEqual({ gran: "Nana" });
+    await saveNickname("household", "gran", "Nana");
+    expect(await readAs(setupPhone, "household")).toStrictEqual({ gran: "Nana" });
   });
 
   test("after a reset, a phone holding the old key moves old-version records to the new one", async () => {
     addHistoryKeyVersion(generateRecoveryPhrase(), [setupPhone]);
-    await saveNickname("family", "gran", "Grandma");
-    await saveGroupColor({ userId, groupId: "family", color: GROUP_COLOR_PALETTE[6] });
+    await saveNickname("household", "gran", "Grandma");
+    await saveGroupColor({ userId, groupId: "household", color: GROUP_COLOR_PALETTE[6] });
     colors.set(
       "friends",
       sealPersonalDataForHistoryKey({
@@ -522,12 +525,12 @@ describe("migration", () => {
     expect(versionsOnServer()).toStrictEqual([2, 1, 2]);
     expect(colors.get("friends")).toBe(unreadable as string);
 
-    const freshPhone = createPhone("fresh-phone");
+    const freshPhone = createPhone("handset-c");
     phone = freshPhone;
     await restoreFromRecoveryPhrase(newPhrase);
-    expect(await readAs(freshPhone, "family")).toStrictEqual({ gran: "Grandma" });
+    expect(await readAs(freshPhone, "household")).toStrictEqual({ gran: "Grandma" });
     await syncGroupColors(userId);
-    expect(getGroupColor("family")).toBe(GROUP_COLOR_PALETTE[6]);
+    expect(getGroupColor("household")).toBe(GROUP_COLOR_PALETTE[6]);
     expect(getGroupColor("friends")).toBe(GROUP_COLOR_PALETTE[0]);
   });
 });
@@ -540,18 +543,18 @@ describe("end to end", () => {
     expect(setup.status).toBe("created");
     await resealPersonalData(userId);
 
-    const freshPhone = createPhone("fresh-phone");
+    const freshPhone = createPhone("handset-c");
     phone = freshPhone;
-    expect(await readAs(freshPhone, "family")).toStrictEqual({ dad: null, gran: null });
+    expect(await readAs(freshPhone, "household")).toStrictEqual({ papa: null, gran: null });
     await restoreFromRecoveryPhrase(phrase);
     await resealPersonalData(userId);
 
-    expect(await readAs(freshPhone, "family")).toStrictEqual({
-      dad: "Papa Bear",
+    expect(await readAs(freshPhone, "household")).toStrictEqual({
+      papa: "Papa Bear",
       gran: "Grandma",
     });
     expect(await readAs(freshPhone, "friends")).toStrictEqual({ sam: "Sammy" });
-    expect(getGroupColor("family")).toBe(GROUP_COLOR_PALETTE[3]);
+    expect(getGroupColor("household")).toBe(GROUP_COLOR_PALETTE[3]);
     expect(getGroupColor("friends")).toBe(GROUP_COLOR_PALETTE[5]);
   });
 });
@@ -563,8 +566,8 @@ describe("secrets", () => {
     await setUpRecoveryPhrase(phrase);
     await resealPersonalData(userId);
     await saveNickname("friends", "alex", "Captain Alex");
-    await saveGroupColor({ userId, groupId: "family", color: GROUP_COLOR_PALETTE[7] });
-    const freshPhone = createPhone("fresh-phone");
+    await saveGroupColor({ userId, groupId: "household", color: GROUP_COLOR_PALETTE[7] });
+    const freshPhone = createPhone("handset-c");
     phone = freshPhone;
     await restoreFromRecoveryPhrase(phrase);
     await resealPersonalData(userId);
