@@ -212,9 +212,9 @@ export const restoreFromRecoveryPhrase = async (phrase: RecoveryPhrase) => {
 };
 
 export const MISSING_HISTORY_KEYS_MESSAGE =
-  "This phone doesn't hold every history key for your account. Restore with your current phrase first.";
+  "This phone needs your current recovery phrase first. Restore it, then try again.";
 export const HISTORY_KEYS_MISMATCH_MESSAGE =
-  "This phone's history keys don't match your account, so your phrase wasn't changed.";
+  "This phone's saved keys don't match your account, so your phrase wasn't changed. Restore your current recovery phrase, then try again.";
 export const RECOVERY_CHANGED_MESSAGE =
   "Your recovery phrase changed on another phone, so nothing was changed here. Go back and try again.";
 

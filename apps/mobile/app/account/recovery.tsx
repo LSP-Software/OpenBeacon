@@ -87,8 +87,8 @@ const RecoveryScreen = () => {
             ) : (
               <View className="gap-2">
                 <Text className="text-muted-foreground text-sm leading-5">
-                  To change your phrase, this phone needs all of your account’s history keys.
-                  Restore with your current phrase first.
+                  To change your phrase, this phone first needs your current recovery phrase.
+                  Restore it, then try again.
                 </Text>
                 <Link href="/account/recovery-restore" asChild>
                   <Button variant="outline">
