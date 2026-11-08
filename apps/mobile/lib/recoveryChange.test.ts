@@ -295,7 +295,7 @@ const addHistoryKeyVersion = (phrase: RecoveryPhrase, enrolled: Phone[]) => {
   historyKeys.push({
     escrow: sealHistoryKeyEscrow({
       historyPrivateKey: historyKey.privateKey,
-      recoveryPublicKey: deriveRecoveryKeyPair(phrase).publicKey,
+      recoveryPrivateKey: deriveRecoveryKeyPair(phrase).privateKey,
       userId,
       version,
     }),

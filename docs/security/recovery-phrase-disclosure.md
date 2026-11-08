@@ -58,4 +58,4 @@ Other members' phones can also see whether you have a recovery phrase, because t
 
 - We don't send an email when your phrase is changed or reset yet. This is planned for Beta 2.
 - If someone steals a phone that can read your history, it can keep reading new history until we add a way to remove a phone from your account.
-- Your phone trusts the server to give it the right keys for other people's phones and for your history. A server that was deliberately changed to swap those keys could receive new history. We plan to add key verification so phones don't have to trust the server for this. The app does check the recovery data it receives when you restore.
+- Your phone trusts the server to give it the right keys for other people's phones and for your history. A server that was deliberately changed to swap those keys could receive new history. We plan to add key verification so phones don't have to trust the server for this. When you restore, the app only accepts recovery data that was made with your phrase.

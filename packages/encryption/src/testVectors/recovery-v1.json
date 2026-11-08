@@ -12,12 +12,12 @@
   "escrow": {
     "userId": "user_vector_1",
     "version": 1,
-    "infoJson": "[\"openbeacon.history-escrow.v1\",\"user_vector_1\",1]",
+    "infoJson": "[\"openbeacon.history-escrow.v2\",\"user_vector_1\",1]",
     "historyPrivateKeyHex": "a8abababababababababababababababababababababababababababababab6b",
     "historyPublicKeyBase64": "43EthRoOXXm4McXjSrIrQaGYFx3iCbi4+sojoRxiSFk=",
     "ephemeralPrivateKeyHex": "6062626262626262626262626262626262626262626262626262626262626262",
     "encBase64": "Sk+MzeGY1m6ZtMAUQYoyI84lbJiQCuSmgR/RD364TCw=",
-    "ciphertextBase64": "wWUR/09tLcaLuw0/fQ6gA2y65Ew+BD9S5YJhm1cu6M70pevue/1Qn7L52Fvvv8V6"
+    "ciphertextBase64": "p0m9OJNmMhWtO9/24ntApKcu7VqZxEOEWuKy1i9dm/RuonM5HV5wdVk0WHf3G4kV"
   },
   "historyWrap": {
     "epochId": "epoch_vector_1",

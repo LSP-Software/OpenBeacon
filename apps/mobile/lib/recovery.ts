@@ -61,7 +61,7 @@ const createRecoveryKeys = ({
       algorithm: historyKey.algorithm,
       escrow: sealHistoryKeyEscrow({
         historyPrivateKey: historyKey.privateKey,
-        recoveryPublicKey: recoveryKey.publicKey,
+        recoveryPrivateKey: recoveryKey.privateKey,
         userId,
         version,
       }),
@@ -233,7 +233,7 @@ export const changeRecoveryPhrase = async (phrase: RecoveryPhrase) => {
     escrows.push({
       ...sealHistoryKeyEscrow({
         historyPrivateKey,
-        recoveryPublicKey: recoveryKey.publicKey,
+        recoveryPrivateKey: recoveryKey.privateKey,
         userId: device.userId,
         version,
       }),

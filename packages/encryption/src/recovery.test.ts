@@ -1,16 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { generateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
+import { sealAuth, sealBase } from "./hpke.ts";
 import {
   createDeviceKeyPair,
   createHistoryKeyPair,
   DEVICE_KEY_ALGORITHM,
   DevicePrivateKeyMaterial,
+  decodeBase64,
   deriveRecoveryKeyPair,
   diagnoseRecoveryPhraseInput,
+  encodeBase64,
   generateGroupEpochKey,
   generateRecoveryPhrase,
   getHistoryPublicKey,
+  HISTORY_ESCROW_ALGORITHM,
   HistoryPrivateKeyMaterial,
   openHistoryKeyEscrow,
   parseRecoveryPhrase,
@@ -31,7 +35,7 @@ const createEnrolledAccount = () => {
   const history = createHistoryKeyPair();
   const escrow = sealHistoryKeyEscrow({
     historyPrivateKey: history.privateKey,
-    recoveryPublicKey: recovery.publicKey,
+    recoveryPrivateKey: recovery.privateKey,
     userId,
     version: 1,
   });
@@ -123,7 +127,7 @@ describe("recovery escrow", () => {
     const history = createHistoryKeyPair();
     const escrow = sealHistoryKeyEscrow({
       historyPrivateKey: history.privateKey,
-      recoveryPublicKey: recovery.publicKey,
+      recoveryPrivateKey: recovery.privateKey,
       userId,
       version: 1,
     });
@@ -171,7 +175,7 @@ describe("recovery escrow", () => {
     const { history, recovery } = createEnrolledAccount();
     const swappedEscrow = sealHistoryKeyEscrow({
       historyPrivateKey: createHistoryKeyPair().privateKey,
-      recoveryPublicKey: recovery.publicKey,
+      recoveryPrivateKey: recovery.privateKey,
       userId,
       version: 1,
     });
@@ -185,11 +189,39 @@ describe("recovery escrow", () => {
     ).toThrow("Recovery data doesn't match.");
   });
 
+  test("rejects an escrow forged by someone who only knows the recovery public key", () => {
+    const { recovery } = createEnrolledAccount();
+    const forged = createHistoryKeyPair();
+    const historyKey = { publicKey: forged.publicKey, userId, version: 1 };
+    const sealInput = {
+      aad: new Uint8Array(),
+      info: new TextEncoder().encode(JSON.stringify(["openbeacon.history-escrow.v2", userId, 1])),
+      plaintext: forged.privateKey.expose(),
+      recipientPublicKey: decodeBase64(recovery.publicKey),
+    };
+    const toEscrow = ({ ciphertext, enc }: { ciphertext: Uint8Array; enc: Uint8Array }) => ({
+      algorithm: HISTORY_ESCROW_ALGORITHM,
+      ciphertext: encodeBase64(ciphertext),
+      enc: encodeBase64(enc),
+    });
+
+    for (const escrow of [
+      toEscrow(sealBase(sealInput)),
+      toEscrow(
+        sealAuth({ ...sealInput, senderPrivateKey: createHistoryKeyPair().privateKey.expose() }),
+      ),
+    ]) {
+      expect(() =>
+        openHistoryKeyEscrow({ escrow, historyKey, recoveryPrivateKey: recovery.privateKey }),
+      ).toThrow();
+    }
+  });
+
   test("rejects an escrow that doesn't hold a private key", () => {
     const { history, recovery } = createEnrolledAccount();
     const truncatedEscrow = sealHistoryKeyEscrow({
       historyPrivateKey: new HistoryPrivateKeyMaterial(history.privateKey.expose().slice(1)),
-      recoveryPublicKey: recovery.publicKey,
+      recoveryPrivateKey: recovery.privateKey,
       userId,
       version: 1,
     });

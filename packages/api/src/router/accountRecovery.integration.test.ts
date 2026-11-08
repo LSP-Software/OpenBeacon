@@ -101,7 +101,7 @@ const newHistoryKey = ({
       algorithm: historyKey.algorithm,
       escrow: sealHistoryKeyEscrow({
         historyPrivateKey: historyKey.privateKey,
-        recoveryPublicKey: deriveRecoveryKeyPair(phrase).publicKey,
+        recoveryPrivateKey: deriveRecoveryKeyPair(phrase).privateKey,
         userId,
         version,
       }),
@@ -303,7 +303,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const escrowFor = (privateKey: HistoryPrivateKeyMaterial, version: number) => ({
         ...sealHistoryKeyEscrow({
           historyPrivateKey: privateKey,
-          recoveryPublicKey: newRecoveryKey.publicKey,
+          recoveryPrivateKey: deriveRecoveryKeyPair(newPhrase).privateKey,
           userId: changeUser,
           version,
         }),

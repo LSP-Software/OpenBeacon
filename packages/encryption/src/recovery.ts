@@ -12,7 +12,7 @@ import {
   WRAPPED_EPOCH_KEY_ALGORITHM,
   X25519_KEY_ALGORITHM,
 } from "./constants.ts";
-import { openAuth, openBase, sealAuth, sealBase } from "./hpke.ts";
+import { openAuth, sealAuth } from "./hpke.ts";
 import {
   type DevicePrivateKeyMaterial,
   EpochKeyMaterial,
@@ -26,7 +26,7 @@ const textEncoder = new TextEncoder();
 const X25519_PRIVATE_KEY_LENGTH = 32;
 
 const getEscrowInfo = (userId: string, version: number) =>
-  textEncoder.encode(JSON.stringify(["openbeacon.history-escrow.v1", userId, version]));
+  textEncoder.encode(JSON.stringify(["openbeacon.history-escrow.v2", userId, version]));
 
 const getHistoryWrapInfo = (epochId: string, userId: string, historyKeyVersion: number) =>
   textEncoder.encode(
@@ -106,20 +106,22 @@ export const getHistoryPublicKey = (privateKey: HistoryPrivateKeyMaterial) =>
 
 export const sealHistoryKeyEscrow = ({
   historyPrivateKey,
-  recoveryPublicKey,
+  recoveryPrivateKey,
   userId,
   version,
 }: {
   historyPrivateKey: HistoryPrivateKeyMaterial;
-  recoveryPublicKey: string;
+  recoveryPrivateKey: RecoveryPrivateKeyMaterial;
   userId: string;
   version: number;
 }): HistoryKeyEscrow => {
-  const sealed = sealBase({
+  const recoveryPrivateKeyBytes = recoveryPrivateKey.expose();
+  const sealed = sealAuth({
     aad: new Uint8Array(),
     info: getEscrowInfo(userId, version),
     plaintext: historyPrivateKey.expose(),
-    recipientPublicKey: decodeBase64(recoveryPublicKey),
+    recipientPublicKey: x25519.getPublicKey(recoveryPrivateKeyBytes),
+    senderPrivateKey: recoveryPrivateKeyBytes,
   });
 
   return {
@@ -142,13 +144,15 @@ export const openHistoryKeyEscrow = ({
     throw new Error("Unsupported history key escrow algorithm.");
   }
 
+  const recoveryPrivateKeyBytes = recoveryPrivateKey.expose();
   const privateKey = new HistoryPrivateKeyMaterial(
-    openBase({
+    openAuth({
       aad: new Uint8Array(),
       ciphertext: decodeBase64(escrow.ciphertext),
       enc: decodeBase64(escrow.enc),
       info: getEscrowInfo(historyKey.userId, historyKey.version),
-      recipientPrivateKey: recoveryPrivateKey.expose(),
+      recipientPrivateKey: recoveryPrivateKeyBytes,
+      senderPublicKey: x25519.getPublicKey(recoveryPrivateKeyBytes),
     }),
   );
 

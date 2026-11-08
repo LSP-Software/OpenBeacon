@@ -41,7 +41,7 @@ A random key pair per account that protects History wraps and personal data. An 
 _Avoid_: Account key, account private key, recovery key, archive key
 
 **Recovery escrow**:
-One History key version's private key encrypted to the Recovery key and stored on the server.
+One History key version's private key encrypted to and authenticated by the Recovery key, and stored on the server.
 _Avoid_: Backup, key backup, escrowed key, recovery blob
 
 **Enrolled device**:

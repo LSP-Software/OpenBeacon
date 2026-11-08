@@ -255,7 +255,7 @@ const addHistoryKeyVersion = (phrase: RecoveryPhrase, enrolled: Phone[]) => {
   historyKeys.push({
     escrow: sealHistoryKeyEscrow({
       historyPrivateKey: historyKey.privateKey,
-      recoveryPublicKey: deriveRecoveryKeyPair(phrase).publicKey,
+      recoveryPrivateKey: deriveRecoveryKeyPair(phrase).privateKey,
       userId,
       version,
     }),
@@ -403,7 +403,10 @@ describe("restoreFromRecoveryPhrase", () => {
     expect(await restoreFromRecoveryPhrase(phrase)).toEqual({ userId, versions: [1] });
   });
 
-  const escrowAttacks: [string, (rows: ServerHistoryKey[]) => ServerHistoryKey[]][] = [
+  const escrowAttacks: [
+    string,
+    (rows: ServerHistoryKey[], phrase: RecoveryPhrase) => ServerHistoryKey[],
+  ][] = [
     [
       "a tampered ciphertext on the older version",
       (rows) =>
@@ -452,7 +455,7 @@ describe("restoreFromRecoveryPhrase", () => {
     ],
     [
       "an escrow sealed for another user",
-      (rows) =>
+      (rows, phrase) =>
         rows.map((row) =>
           row.version === 1
             ? {
@@ -461,7 +464,7 @@ describe("restoreFromRecoveryPhrase", () => {
                   historyPrivateKey: firstPhone.secureStore.get(
                     `${userId}.1`,
                   ) as HistoryPrivateKeyMaterial,
-                  recoveryPublicKey: recoveryKey?.publicKey as string,
+                  recoveryPrivateKey: deriveRecoveryKeyPair(phrase).privateKey,
                   userId: "user-2",
                   version: 1,
                 }),
@@ -490,7 +493,7 @@ describe("restoreFromRecoveryPhrase", () => {
     test(`rejects ${name} and stores nothing`, async () => {
       const phrase = await setUpOnFirstPhone();
       addHistoryKeyVersion(phrase, [firstPhone]);
-      escrowsOverride = attack;
+      escrowsOverride = (rows) => attack(rows, phrase);
       phone = createPhone("device-2");
 
       await expect(restoreFromRecoveryPhrase(phrase)).rejects.toThrow(
@@ -499,6 +502,32 @@ describe("restoreFromRecoveryPhrase", () => {
       expect(phone.secureStore.size).toBe(0);
     });
   }
+
+  test("rejects consistent escrows the server forged for its own history keys and stores nothing", async () => {
+    const phrase = await setUpOnFirstPhone();
+    addHistoryKeyVersion(phrase, [firstPhone]);
+    const serverKey = new RecoveryPrivateKeyMaterial(
+      globalThis.crypto.getRandomValues(new Uint8Array(32)),
+    );
+    escrowsOverride = (rows) =>
+      rows.map((row) => {
+        const forged = createHistoryKeyPair();
+        return {
+          ...row,
+          escrow: sealHistoryKeyEscrow({
+            historyPrivateKey: forged.privateKey,
+            recoveryPrivateKey: serverKey,
+            userId,
+            version: row.version,
+          }),
+          publicKey: forged.publicKey,
+        };
+      });
+    phone = createPhone("device-2");
+
+    await expect(restoreFromRecoveryPhrase(phrase)).rejects.toThrow(RECOVERY_DATA_MISMATCH_MESSAGE);
+    expect(phone.secureStore.size).toBe(0);
+  });
 
   test("a second phone restores while the first stays enrolled, and a later epoch is readable on both", async () => {
     const phrase = await setUpOnFirstPhone();

@@ -94,7 +94,7 @@ const newHistoryKey = (target: Account, version: number) => {
         algorithm: historyKey.algorithm,
         escrow: sealHistoryKeyEscrow({
           historyPrivateKey: historyKey.privateKey,
-          recoveryPublicKey: recoveryKey.publicKey,
+          recoveryPrivateKey: recoveryKey.privateKey,
           userId: target.userId,
           version,
         }),
@@ -378,7 +378,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const nextKeyId = crypto.randomUUID();
       const escrow = sealHistoryKeyEscrow({
         historyPrivateKey: nextKey.privateKey,
-        recoveryPublicKey: deriveRecoveryKeyPair(generateRecoveryPhrase()).publicKey,
+        recoveryPrivateKey: deriveRecoveryKeyPair(generateRecoveryPhrase()).privateKey,
         userId: member.userId,
         version: 2,
       });

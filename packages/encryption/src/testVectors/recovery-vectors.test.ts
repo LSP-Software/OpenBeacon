@@ -6,7 +6,7 @@ import { x25519 } from "@noble/curves/ed25519.js";
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { openAuth, openBase, sealAuth, sealBase } from "../hpke.ts";
+import { openAuth, sealAuth } from "../hpke.ts";
 import {
   DevicePrivateKeyMaterial,
   decodeBase64,
@@ -87,13 +87,14 @@ describe("recovery v1 vectors", () => {
     expect(keyPair.derivationVersion).toBe(1);
   });
 
-  test("the escrow is HPKE base mode with the documented info", () => {
-    const sealed = sealBase({
+  test("the escrow is HPKE auth mode from the recovery key to itself with the documented info", () => {
+    const sealed = sealAuth({
       aad: new Uint8Array(),
       ephemeralPrivateKey: hexToBytes(escrow.ephemeralPrivateKeyHex),
       info: textEncoder.encode(escrow.infoJson),
       plaintext: hexToBytes(escrow.historyPrivateKeyHex),
       recipientPublicKey: decodeBase64(recoveryKey.publicKeyBase64),
+      senderPrivateKey: hexToBytes(recoveryKey.privateKeyHex),
     });
 
     expect(encodeBase64(sealed.enc)).toBe(escrow.encBase64);
@@ -112,9 +113,12 @@ describe("recovery v1 vectors", () => {
       userId: escrow.userId,
       version: escrow.version,
     };
+    const recoveryPrivateKey = deriveRecoveryKeyPair(
+      parseRecoveryPhrase(recoveryKey.phrase),
+    ).privateKey;
     const sealed = sealHistoryKeyEscrow({
       historyPrivateKey,
-      recoveryPublicKey: recoveryKey.publicKeyBase64,
+      recoveryPrivateKey,
       userId: escrow.userId,
       version: escrow.version,
     });
@@ -122,22 +126,18 @@ describe("recovery v1 vectors", () => {
     expect(sealed.algorithm).toBe(HISTORY_ESCROW_ALGORITHM);
     expect(
       bytesToHex(
-        openBase({
+        openAuth({
           aad: new Uint8Array(),
           ciphertext: decodeBase64(sealed.ciphertext),
           enc: decodeBase64(sealed.enc),
           info: textEncoder.encode(escrow.infoJson),
           recipientPrivateKey: hexToBytes(recoveryKey.privateKeyHex),
+          senderPublicKey: decodeBase64(recoveryKey.publicKeyBase64),
         }),
       ),
     ).toBe(escrow.historyPrivateKeyHex);
     expect(
-      openHistoryKeyEscrow({
-        escrow: sealed,
-        historyKey,
-        recoveryPrivateKey: deriveRecoveryKeyPair(parseRecoveryPhrase(recoveryKey.phrase))
-          .privateKey,
-      }).expose(),
+      openHistoryKeyEscrow({ escrow: sealed, historyKey, recoveryPrivateKey }).expose(),
     ).toEqual(historyPrivateKey.expose());
   });
 

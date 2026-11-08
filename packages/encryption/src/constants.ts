@@ -6,5 +6,5 @@ export const WRAPPED_EPOCH_KEY_ALGORITHM = "HPKE-Auth-X25519-HKDF-SHA256-ChaCha2
 export const GROUP_EPOCH_DOMAIN_CONTEXT = "openbeacon.group-epoch.v1";
 export const GROUP_EPOCH_KEY_LENGTH = 32;
 export const XCHACHA20_NONCE_LENGTH = 24;
-export const HISTORY_ESCROW_ALGORITHM = "HPKE-Base-X25519-HKDF-SHA256-ChaCha20Poly1305" as const;
+export const HISTORY_ESCROW_ALGORITHM = "HPKE-Auth-X25519-HKDF-SHA256-ChaCha20Poly1305" as const;
 export const RECOVERY_KEY_DERIVATION_VERSION = 1;
