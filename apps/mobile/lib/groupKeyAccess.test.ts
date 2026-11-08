@@ -16,7 +16,7 @@ mock.module("./historyKeys.ts", () => ({
 }));
 
 const { unwrapEpochKeyFromWraps } = await import("./epochKeys.ts");
-const { checkGroupKeyAccess } = await import("./groupKeyAccess.ts");
+const { checkGroupKeyAccess, checkHistoryRecovery } = await import("./groupKeyAccess.ts");
 
 const deviceKeyPair = createDeviceKeyPair();
 const historyKeyPair = createHistoryKeyPair();
@@ -182,5 +182,62 @@ describe("group key access", () => {
         },
       }),
     ).rejects.toThrow("offline");
+  });
+});
+
+describe("history recovery", () => {
+  const recover = async (versionsByEpoch: number[][], pageSize = versionsByEpoch.length) => {
+    const newestFirst = versionsByEpoch
+      .map((versions, index) => ({
+        createdAt: createdAt(index + 1),
+        epochNumber: index + 1,
+        historyWraps: versions.map((historyKeyVersion) => ({ historyKeyVersion })),
+      }))
+      .reverse();
+    const listEpochs = mock(async (cursor: number | null) => {
+      const remaining = newestFirst.filter(
+        ({ epochNumber }) => cursor === null || epochNumber < cursor,
+      );
+      const page = remaining.slice(0, pageSize);
+      return {
+        epochs: page,
+        nextCursor: remaining.length > pageSize ? (page.at(-1)?.epochNumber ?? null) : null,
+      };
+    });
+    const result = await checkHistoryRecovery({ historyKeyVersion: 2, listEpochs });
+    return { listEpochs, result };
+  };
+
+  test("treats a group with no epochs as fully protected", async () => {
+    expect((await recover([])).result).toEqual({ status: "complete" });
+  });
+
+  test("reports complete when every epoch has a wrap for the current version", async () => {
+    expect((await recover([[2], [1, 2], [2]])).result).toEqual({ status: "complete" });
+  });
+
+  test("does not count wraps for an older history key version", async () => {
+    expect((await recover([[1], [1], [1]])).result).toEqual({ status: "none" });
+  });
+
+  test("reports none when the newest epoch has no wrap for the current version", async () => {
+    expect((await recover([[2], [2], []])).result).toEqual({ status: "none" });
+  });
+
+  test("reports protection from the oldest epoch in the newest unbroken run", async () => {
+    expect((await recover([[2], [], [2], [2]])).result).toEqual({
+      protectedFrom: createdAt(3),
+      status: "partial",
+    });
+  });
+
+  test("pages until the first unprotected epoch", async () => {
+    const complete = await recover([[2], [2], [2], [2], [2]], 2);
+    expect(complete.result).toEqual({ status: "complete" });
+    expect(complete.listEpochs.mock.calls).toEqual([[null], [4], [2]]);
+
+    const partial = await recover([[2], [], [2], [2], [2]], 2);
+    expect(partial.result).toEqual({ protectedFrom: createdAt(3), status: "partial" });
+    expect(partial.listEpochs.mock.calls).toEqual([[null], [4]]);
   });
 });

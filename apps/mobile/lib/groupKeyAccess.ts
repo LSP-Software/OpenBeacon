@@ -23,3 +23,29 @@ export const checkGroupKeyAccess = async <Epoch extends { createdAt: Date }>({
   } while (cursor !== null);
   return { current, history: "complete" as const };
 };
+
+export const checkHistoryRecovery = async <
+  Epoch extends { createdAt: Date; historyWraps: { historyKeyVersion: number }[] },
+>({
+  historyKeyVersion,
+  listEpochs,
+}: {
+  historyKeyVersion: number;
+  listEpochs: (cursor: number | null) => Promise<{ epochs: Epoch[]; nextCursor: number | null }>;
+}) => {
+  let protectedFrom: Date | null = null;
+  let cursor: number | null = null;
+  do {
+    const page = await listEpochs(cursor);
+    for (const epoch of page.epochs) {
+      if (!epoch.historyWraps.some((wrap) => wrap.historyKeyVersion === historyKeyVersion)) {
+        return protectedFrom
+          ? { protectedFrom, status: "partial" as const }
+          : { status: "none" as const };
+      }
+      protectedFrom = epoch.createdAt;
+    }
+    cursor = page.nextCursor;
+  } while (cursor !== null);
+  return { status: "complete" as const };
+};
