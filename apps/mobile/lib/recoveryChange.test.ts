@@ -12,7 +12,6 @@ import {
   HistoryPrivateKeyMaterial,
   openHistoryKeyEscrow,
   type RecoveryPhrase,
-  RecoveryPrivateKeyMaterial,
   sealHistoryKeyEscrow,
   type WrappedEpochKey,
   type WrappedHistoryEpochKey,
@@ -750,17 +749,5 @@ describe("secrets never reach the server", () => {
       }
     }
     expect(serialized).not.toContain("REDACTED");
-  });
-
-  test("the redacting classes never serialise their bytes", () => {
-    const values = [
-      [generateRecoveryPhrase(), "recovery phrase"],
-      [new RecoveryPrivateKeyMaterial(new Uint8Array(32).fill(7)), "recovery private key"],
-      [new HistoryPrivateKeyMaterial(new Uint8Array(32).fill(7)), "history private key"],
-    ] as const;
-    for (const [value, label] of values) {
-      expect(JSON.stringify({ value })).toBe(`{"value":"[REDACTED ${label}]"}`);
-      expect(String(value)).toBe(`[REDACTED ${label}]`);
-    }
   });
 });

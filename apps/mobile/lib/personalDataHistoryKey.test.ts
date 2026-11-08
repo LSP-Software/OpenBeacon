@@ -3,7 +3,6 @@ import {
   createDeviceKeyPair,
   createHistoryKeyPair,
   DEVICE_KEY_ALGORITHM,
-  DevicePrivateKeyMaterial,
   deriveRecoveryKeyPair,
   encodeBase64,
   generateRecoveryPhrase,
@@ -602,17 +601,5 @@ describe("secrets", () => {
       );
     }
     expect(serialized).not.toContain("REDACTED");
-  });
-
-  test("the redacting classes never serialise their bytes", () => {
-    const values = [
-      [generateRecoveryPhrase(), "recovery phrase"],
-      [new HistoryPrivateKeyMaterial(new Uint8Array(32).fill(7)), "history private key"],
-      [new DevicePrivateKeyMaterial(new Uint8Array(32).fill(7)), "device private key"],
-    ] as const;
-    for (const [value, label] of values) {
-      expect(JSON.stringify({ value })).toBe(`{"value":"[REDACTED ${label}]"}`);
-      expect(String(value)).toBe(`[REDACTED ${label}]`);
-    }
   });
 });

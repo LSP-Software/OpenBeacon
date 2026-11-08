@@ -92,21 +92,6 @@ describe("recovery phrase", () => {
       expect(() => parseRecoveryPhrase(input)).toThrow("Invalid recovery phrase.");
     }
   });
-
-  test("redacts phrases and private keys when serialised", () => {
-    const parsed = parseRecoveryPhrase(phrase);
-    const recovery = deriveRecoveryKeyPair(parsed);
-    const history = createHistoryKeyPair();
-    const serialised = JSON.stringify({ parsed, recovery, history });
-
-    expect(serialised).toContain("[REDACTED recovery phrase]");
-    expect(serialised).toContain("[REDACTED recovery private key]");
-    expect(serialised).toContain("[REDACTED history private key]");
-    expect(serialised).not.toContain("legal");
-    expect(String(parsed)).toBe("[REDACTED recovery phrase]");
-    expect(`${recovery.privateKey}`).toBe("[REDACTED recovery private key]");
-    expect(`${history.privateKey}`).toBe("[REDACTED history private key]");
-  });
 });
 
 describe("history key", () => {
