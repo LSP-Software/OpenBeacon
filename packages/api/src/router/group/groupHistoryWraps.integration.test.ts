@@ -49,6 +49,7 @@ const prefix = `history-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const otherGroupId = `${prefix}-other-group`;
 const soloGroupId = `${prefix}-solo-group`;
+const rejoinGroupId = `${prefix}-rejoin-group`;
 
 type Account = {
   deviceId: string;
@@ -245,7 +246,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     afterAll(async () => {
       await prisma.group.deleteMany({
-        where: { id: { in: [groupId, otherGroupId, soloGroupId] } },
+        where: { id: { in: [groupId, otherGroupId, soloGroupId, rejoinGroupId] } },
       });
       await prisma.user.deleteMany({ where: { id: { in: accounts.map(({ userId }) => userId) } } });
       await prisma.$disconnect();
@@ -644,6 +645,167 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         [otherGroupId]: true,
         [soloGroupId]: false,
       });
+    });
+
+    test("getEpochKeyWraps returns nothing for epochs before the caller joined", async () => {
+      const secondEpochId = epochs.second.epoch.epochId;
+      const emptyRead = { deviceWrap: null, historyWraps: [] };
+      const readAs = (wrapper: Account) =>
+        caller(wrapper.userId).groupEpoch.getEpochKeyWraps({
+          deviceId: wrapper.deviceId,
+          epochId: secondEpochId,
+          groupId,
+        });
+      expect(await readAs(other)).toEqual(emptyRead);
+
+      const leftoverDeviceWrap = await prisma.groupEpochRecipientKey.create({
+        data: {
+          algorithm: epochs.second.wrappedKeys[0]!.algorithm,
+          ephemeralPublicKey: epochs.second.wrappedKeys[0]!.ephemeralPublicKey,
+          groupEpochId: secondEpochId,
+          recipientDeviceId: other.deviceId,
+          wrappedKey: epochs.second.wrappedKeys[0]!.wrappedKey,
+        },
+      });
+      const leftoverHistoryWrap = await prisma.groupEpochHistoryWrap.create({
+        data: {
+          algorithm: epochs.second.wrappedKeys[0]!.algorithm,
+          ephemeralPublicKey: epochs.second.wrappedKeys[0]!.ephemeralPublicKey,
+          groupEpochId: secondEpochId,
+          historyKeyId: other.historyKey.id,
+          senderDeviceId: other.deviceId,
+          senderPublicKey: other.key.publicKey,
+          wrappedKey: epochs.second.wrappedKeys[0]!.wrappedKey,
+        },
+      });
+      try {
+        expect(await readAs(other)).toEqual(emptyRead);
+        const listed = await caller(other.userId).groupEpoch.listEpochKeyWraps({
+          deviceId: other.deviceId,
+          groupId,
+        });
+        expect(listed.epochs.map(({ epochNumber }) => epochNumber)).not.toContain(2);
+      } finally {
+        await prisma.groupEpochHistoryWrap.delete({
+          where: { id: leftoverHistoryWrap.id },
+        });
+        await prisma.groupEpochRecipientKey.delete({
+          where: { id: leftoverDeviceWrap.id },
+        });
+      }
+    });
+
+    test("a member who leaves and rejoins can't read or back up epochs from the earlier membership", async () => {
+      await createGroup(rejoinGroupId, owner);
+      const firstMembership = await join(rejoinGroupId, member);
+      const memberRow = await prisma.groupMember.findUniqueOrThrow({
+        where: {
+          userId_groupId: { groupId: rejoinGroupId, userId: member.userId },
+        },
+      });
+      const removalContext = await caller(member.userId).groupMembership.removalContext({
+        groupId: rejoinGroupId,
+        memberId: memberRow.id,
+      });
+      const departure = createNextGroupEpoch({
+        creator: {
+          deviceId: member.deviceId,
+          privateKey: member.key.privateKey,
+        },
+        previousEpoch: removalContext.latestEpoch!,
+        recipients: removalContext.recipients,
+      });
+      await caller(member.userId).groupMembership.remove({
+        groupId: rejoinGroupId,
+        memberId: memberRow.id,
+        nextEpoch: bundle(departure),
+      });
+      const rejoined = await join(rejoinGroupId, member);
+
+      const readEpoch = (epochId: string) =>
+        caller(member.userId).groupEpoch.getEpochKeyWraps({
+          deviceId: member.deviceId,
+          epochId,
+          groupId: rejoinGroupId,
+        });
+      expect(
+        await prisma.groupEpochRecipientKey.count({
+          where: {
+            groupEpochId: firstMembership.epoch.epochId,
+            recipientDeviceId: member.deviceId,
+          },
+        }),
+      ).toBe(1);
+      expect(await readEpoch(firstMembership.epoch.epochId)).toEqual({
+        deviceWrap: null,
+        historyWraps: [],
+      });
+      expect(await readEpoch(rejoined.epoch.epochId)).toMatchObject({
+        deviceWrap: { epochId: rejoined.epoch.epochId },
+      });
+      const listed = await caller(member.userId).groupEpoch.listEpochKeyWraps({
+        deviceId: member.deviceId,
+        groupId: rejoinGroupId,
+      });
+      expect(listed.epochs.map(({ epochNumber }) => epochNumber)).toEqual([
+        rejoined.epoch.epochNumber,
+      ]);
+      expect(await backfillEpochNumbers(member, rejoinGroupId)).toEqual([
+        rejoined.epoch.epochNumber,
+      ]);
+      await expect(
+        addWraps(
+          member,
+          [
+            wrapFor({
+              account: member,
+              epochId: firstMembership.epoch.epochId,
+              epochKey: firstMembership.epochKey,
+            }),
+          ],
+          { groupId: rejoinGroupId },
+        ),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(
+        await addWraps(
+          member,
+          [
+            wrapFor({
+              account: member,
+              epochId: rejoined.epoch.epochId,
+              epochKey: rejoined.epochKey,
+            }),
+          ],
+          { groupId: rejoinGroupId },
+        ),
+      ).toEqual({ added: 1 });
+    });
+
+    test("listHistoryBackfill rejects another member's device and a revoked device", async () => {
+      const backfillWith = (deviceId: string) =>
+        caller(other.userId).groupEpoch.listHistoryBackfill({
+          deviceId,
+          groupId,
+        });
+      await expect(backfillWith(owner.deviceId)).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+
+      await prisma.userDevice.update({
+        data: { revokedAt: new Date() },
+        where: { id: other.deviceId },
+      });
+      try {
+        await expect(backfillWith(other.deviceId)).rejects.toMatchObject({
+          code: "FORBIDDEN",
+        });
+      } finally {
+        await prisma.userDevice.update({
+          data: { revokedAt: null },
+          where: { id: other.deviceId },
+        });
+      }
+      await expect(backfillWith(other.deviceId)).resolves.toHaveProperty("epochs");
     });
   },
 );

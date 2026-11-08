@@ -197,7 +197,11 @@ export const groupEpochRouter = {
       const userId = ctx.session.user.id;
       const epoch = await ctx.db.groupEpoch.findFirst({
         select: selectEpochKeyWraps({ deviceId: input.deviceId, userId }),
-        where: { groupId: input.groupId, id: input.epochId },
+        where: {
+          epochNumber: { gte: ctx.groupMember.joinedEpochNumber },
+          groupId: input.groupId,
+          id: input.epochId,
+        },
       });
       return epoch ? toEpochKeyWraps({ epoch, userId }) : { deviceWrap: null, historyWraps: [] };
     }),
