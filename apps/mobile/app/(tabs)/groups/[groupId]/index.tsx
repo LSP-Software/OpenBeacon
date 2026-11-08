@@ -1,7 +1,7 @@
 import { useIsFocused } from "@react-navigation/native";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { Clock3Icon, SlidersHorizontalIcon, UsersIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
@@ -14,6 +14,7 @@ import { Button } from "../../../../components/ui/Button.tsx";
 import { SwipeTabs, type SwipeTabsItem } from "../../../../components/ui/SwipeTabs.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
 import { useGroupKeyHistoryAccess } from "../../../../hooks/useGroupKeyAccess.ts";
+import { useHeldHistoryKeyVersions } from "../../../../hooks/useHeldHistoryKeyVersions.ts";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
 import { storage } from "../../../../lib/storage.ts";
@@ -49,8 +50,16 @@ const GroupScreen = () => {
   const { data: session } = authClient.useSession();
   const [keyAccess] = useGroupKeyHistoryAccess([groupId], session?.user.id);
   const [value, setValue] = useState<GroupTabValue>("members");
-  const historyWarningKey = `recovery.historyWarningDismissed.${session?.user.id}.${groupId}`;
-  const [historyWarningDismissed, setHistoryWarningDismissed] = useState(false);
+  const historyWarningKey = `recovery.historyWarningDismissedFrom.${session?.user.id}.${groupId}`;
+  const [historyWarningDismissedFrom, setHistoryWarningDismissedFrom] = useState<number | null>(
+    null,
+  );
+  const recoveryStatus = useQuery(trpc.accountRecovery.status.queryOptions());
+  const currentHistoryKeyVersion = recoveryStatus.data?.currentHistoryKey?.version ?? 0;
+  const heldHistoryKeyVersions = useHeldHistoryKeyVersions(
+    session?.user.id,
+    recoveryStatus.data?.currentHistoryKey?.version,
+  );
   const {
     data: group,
     error,
@@ -59,13 +68,29 @@ const GroupScreen = () => {
     ...trpc.groupMembership.get.queryOptions({ groupId }),
     refetchInterval: 10_000,
   });
+  const historyPartialFrom =
+    keyAccess?.data && keyAccess.data.history !== "complete"
+      ? keyAccess.data.history.partialFrom
+      : null;
+  const dismissedHistoryFrom =
+    historyWarningDismissedFrom ?? storage.getNumber(historyWarningKey) ?? null;
+  const showHistoryWarning =
+    historyPartialFrom !== null &&
+    (dismissedHistoryFrom === null || historyPartialFrom.getTime() < dismissedHistoryFrom);
+  const canRestoreRecoveryPhrase =
+    !!recoveryStatus.data?.recoveryKey &&
+    !!heldHistoryKeyVersions.data &&
+    !heldHistoryKeyVersions.data.includes(currentHistoryKeyVersion);
 
   useEffect(() => {
     if (!isFocused || error?.data?.code !== "FORBIDDEN") return;
     let active = true;
     void (async () => {
       const result = await tryCatch(
-        queryClient.fetchQuery({ ...trpc.groupMembership.list.queryOptions(), staleTime: 0 }),
+        queryClient.fetchQuery({
+          ...trpc.groupMembership.list.queryOptions(),
+          staleTime: 0,
+        }),
       );
       if (active && !result.error && !result.data.some((item) => item.id === groupId)) {
         router.replace("/(tabs)/groups/list");
@@ -93,39 +118,44 @@ const GroupScreen = () => {
             {keyAccess?.data?.current === "missing" && (
               <View className="gap-2 rounded-xl border border-destructive bg-card p-4">
                 <Text className="font-semibold text-destructive">
-                  This device can’t access this group’s current encryption key
+                  This phone can’t access this group’s current encryption key
                 </Text>
-                <Text>Current group locations may be unavailable on this device.</Text>
+                <Text>Current group locations may be unavailable on this phone.</Text>
               </View>
             )}
-            {keyAccess?.data &&
-              keyAccess.data.history !== "complete" &&
-              !historyWarningDismissed &&
-              storage.getBoolean(historyWarningKey) !== true && (
-                <View className="gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4">
-                  <Text className="font-semibold text-amber-700 dark:text-amber-400">
-                    Some location history isn’t available on this device
-                  </Text>
-                  <Text>
-                    History from before{" "}
-                    {keyAccess.data.history.partialFrom.toLocaleDateString(undefined, {
-                      dateStyle: "medium",
-                    })}{" "}
-                    can’t be read on this device.
-                  </Text>
+            {historyPartialFrom !== null && showHistoryWarning && (
+              <View className="gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4">
+                <Text className="font-semibold text-amber-700 dark:text-amber-400">
+                  Some location history isn’t available on this phone
+                </Text>
+                <Text>
+                  History from before{" "}
+                  {historyPartialFrom.toLocaleDateString(undefined, {
+                    dateStyle: "medium",
+                  })}{" "}
+                  can’t be read on this phone.
+                </Text>
+                <View className="flex-row flex-wrap gap-3">
+                  {canRestoreRecoveryPhrase && (
+                    <Link href="/account/recovery-restore" asChild>
+                      <Button size="sm">
+                        <Text>Restore recovery phrase</Text>
+                      </Button>
+                    </Link>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"
-                    className="self-start"
                     onPress={() => {
-                      storage.set(historyWarningKey, true);
-                      setHistoryWarningDismissed(true);
+                      storage.set(historyWarningKey, historyPartialFrom.getTime());
+                      setHistoryWarningDismissedFrom(historyPartialFrom.getTime());
                     }}
                   >
                     <Text>Dismiss</Text>
                   </Button>
                 </View>
-              )}
+              </View>
+            )}
             <SwipeTabs
               ariaLabel="Group sections"
               tabs={GROUP_TABS}
