@@ -28,7 +28,7 @@ Your other phones keep working as before.
 
 ## If you don't set up a phrase
 
-If you lose every phone you're signed in on, or reset them or delete the app from them, your encrypted location history, nicknames and colours are gone for good. Resetting your password doesn't bring them back. A new phone still shares your live location once another member's phone updates your groups' keys, which happens automatically.
+If you lose every phone you're signed in on, or reset them or delete the app from them, your encrypted location history, nicknames and colours are gone for good. Resetting your password doesn't bring them back. Live location still works on a new phone. Your groups' encryption keys are updated automatically when you sign in.
 
 ## If you lose your phrase
 

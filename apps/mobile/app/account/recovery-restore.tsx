@@ -163,9 +163,8 @@ const RecoveryRestoreScreen = () => {
                     </Button>
                   </Link>
                   <Text className="text-muted-foreground text-sm leading-5">
-                    If you skip, this phone shares your live location once another member’s phone
-                    updates your groups’ keys, which happens automatically. You can restore later
-                    from Account › Recovery phrase.
+                    If you skip, live location still works on this phone, but older history won’t
+                    show here. You can restore later from Account › Recovery phrase.
                   </Text>
                 </View>
               )}
