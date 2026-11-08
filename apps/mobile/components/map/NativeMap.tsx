@@ -1,8 +1,9 @@
-import { Camera, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
+import { Camera, Layer, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
 import { ArrowUpIcon, LocateFixedIcon, MapPinIcon, ScanIcon } from "lucide-react-native";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
+import { getSymbolVisibility } from "../../lib/protomaps-style.ts";
 import { Icon } from "../ui/Icon.tsx";
 import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
 import { LiveMapPointAnnotation, SelfLiveMapPointAnnotation } from "./LiveMapPointAnnotation.tsx";
@@ -142,6 +143,14 @@ export const NativeMap = ({
               : {}),
           }}
         />
+        {map.symbolLayerIds.map((id) => (
+          <Layer
+            key={id}
+            id={id}
+            type="symbol"
+            layout={{ visibility: getSymbolVisibility(showSymbols) }}
+          />
+        ))}
         {markers.map((marker) =>
           edgeMarkers.some((edge) => edge.userId === marker.userId) ? null : marker.isSelf ? (
             <SelfLiveMapPointAnnotation

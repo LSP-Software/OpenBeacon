@@ -77,6 +77,7 @@ let goToCurrentLocationPressHandler: (() => void) | null = null;
 let androidActiveAnnotationId: string | null = null;
 let mapProjectedPoint: [number, number] = [200, 300];
 let mapProjectionWait: Promise<void> | null = null;
+const removedStyleLayerIds: string[] = [];
 
 export const createLiveMapMarkerFixture = (
   overrides: Partial<LiveMapMarker> & Pick<LiveMapMarker, "userId">,
@@ -115,6 +116,7 @@ export const resetNativeMapHarness = () => {
   androidActiveAnnotationId = null;
   mapProjectedPoint = [200, 300];
   mapProjectionWait = null;
+  removedStyleLayerIds.length = 0;
 };
 
 export const setNativeMapProjectedPoint = (point: [number, number]) => {
@@ -140,6 +142,8 @@ export const getNativeMapMountedAnnotationIds = () => [...mountedAnnotationIds];
 export const getNativeMapViewMountCount = () => mapViewMountCount;
 
 export const getNativeMapStyle = () => latestMapStyle;
+
+export const getNativeMapRemovedStyleLayerIds = () => [...removedStyleLayerIds];
 
 export const getNativeMapCameraDefaultSettings = () => latestCameraDefaultSettings;
 
@@ -523,6 +527,15 @@ export const createMapLibreMockModule = () => {
     Marker: ({ children, lngLat }: { children?: ReactNode; lngLat: number[] }) =>
       React.createElement("marker-view", { coordinate: lngLat, allowOverlap: true }, children),
     ViewAnnotation: PointAnnotation,
+    Layer: ({ id, layout }: { id: string; layout?: unknown }) => {
+      useEffect(
+        () => () => {
+          removedStyleLayerIds.push(id);
+        },
+        [id],
+      );
+      return React.createElement("style-layer", { id, layout });
+    },
   };
 };
 
