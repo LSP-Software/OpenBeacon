@@ -101,7 +101,7 @@ const RecoveryRestoreScreen = () => {
       ? Number(missingVersion)
       : status.data?.currentHistoryKey?.version;
     if (session?.user.id && version) {
-      storage.set(`recovery.restoreSkipped.${session.user.id}`, version);
+      storage.set(`recovery.restoreDeclined.${session.user.id}`, version);
     }
     router.replace("/");
   };

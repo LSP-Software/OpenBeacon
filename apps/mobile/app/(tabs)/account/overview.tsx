@@ -137,7 +137,7 @@ const AccountScreen = () => {
     session?.user.id,
     recoveryStatus.data?.currentHistoryKey ?? undefined,
   );
-  const restoreBannerKey = `recovery.restoreBannerDismissed.${session?.user.id}`;
+  const restoreBannerKey = `recovery.restoreDeclined.${session?.user.id}`;
   const [restoreBannerDismissed, setRestoreBannerDismissed] = useState(false);
   const showRestoreBanner =
     !!session?.user.id &&

@@ -11,7 +11,7 @@ export const finishAuthentication = async ({ joinCode }: { joinCode: string | un
   const missing = await tryCatch(findMissingHistoryKey());
   if (
     missing.data &&
-    (storage.getNumber(`recovery.restoreSkipped.${missing.data.userId}`) ?? 0) <
+    (storage.getNumber(`recovery.restoreDeclined.${missing.data.userId}`) ?? 0) <
       missing.data.version
   ) {
     router.replace({

@@ -56,40 +56,40 @@ describe("finishing authentication", () => {
     expect(replacements).toEqual(["/"]);
   });
 
-  test("a missing history key with no recorded skip goes to the restore screen", async () => {
+  test("a missing history key with no recorded decline goes to the restore screen", async () => {
     missingHistoryKey = { userId: "user-1", version: 2 };
     await finishAuthentication({ joinCode: undefined });
 
     expect(replacements).toEqual([restoreTarget(2)]);
   });
 
-  test("a skip recorded for the same version goes home", async () => {
+  test("a decline recorded for the same version goes home", async () => {
     missingHistoryKey = { userId: "user-1", version: 2 };
-    storageValues.set("recovery.restoreSkipped.user-1", 2);
+    storageValues.set("recovery.restoreDeclined.user-1", 2);
     await finishAuthentication({ joinCode: undefined });
 
     expect(replacements).toEqual(["/"]);
   });
 
-  test("a skip recorded for a higher version goes home", async () => {
+  test("a decline recorded for a higher version goes home", async () => {
     missingHistoryKey = { userId: "user-1", version: 2 };
-    storageValues.set("recovery.restoreSkipped.user-1", 3);
+    storageValues.set("recovery.restoreDeclined.user-1", 3);
     await finishAuthentication({ joinCode: undefined });
 
     expect(replacements).toEqual(["/"]);
   });
 
-  test("a newer missing version than the skipped one prompts again", async () => {
+  test("a newer missing version than the declined one prompts again", async () => {
     missingHistoryKey = { userId: "user-1", version: 3 };
-    storageValues.set("recovery.restoreSkipped.user-1", 2);
+    storageValues.set("recovery.restoreDeclined.user-1", 2);
     await finishAuthentication({ joinCode: undefined });
 
     expect(replacements).toEqual([restoreTarget(3)]);
   });
 
-  test("another account's skip doesn't suppress the prompt", async () => {
+  test("another account's decline doesn't suppress the prompt", async () => {
     missingHistoryKey = { userId: "user-1", version: 1 };
-    storageValues.set("recovery.restoreSkipped.user-2", 1);
+    storageValues.set("recovery.restoreDeclined.user-2", 1);
     await finishAuthentication({ joinCode: undefined });
 
     expect(replacements).toEqual([restoreTarget(1)]);
