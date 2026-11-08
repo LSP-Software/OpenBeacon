@@ -60,9 +60,8 @@ const RecoveryRestoreScreen = () => {
     void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", result.data.userId] });
     void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", result.data.userId] });
     requestTrackingSync();
-    void resealPersonalData(result.data.userId).then(() =>
-      queryClient.invalidateQueries({ queryKey: ["personalNicknames"] }),
-    );
+    await resealPersonalData(result.data.userId);
+    await queryClient.invalidateQueries({ queryKey: ["personalNicknames"] });
     setStep("done");
   };
 

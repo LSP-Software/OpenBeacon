@@ -1,11 +1,6 @@
 import { tryCatch } from "@openbeacon/shared";
 import { trpcClient } from "./api.ts";
-import {
-  createPersonalDataOpener,
-  openForSelf,
-  resealForSelf,
-  sealForSelf,
-} from "./personalData.ts";
+import { createPersonalDataOpener, resealForSelf, sealForSelf } from "./personalData.ts";
 
 export const encryptPersonalNickname = ({
   groupId,
@@ -36,8 +31,7 @@ export const decryptPersonalNickname = ({
   userId: string;
   ciphertext: string;
 }) =>
-  openForSelf({
-    userId,
+  createPersonalDataOpener(userId)({
     purpose: "nickname",
     binding: [userId, groupId, memberId],
     sealed: ciphertext,

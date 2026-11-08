@@ -83,16 +83,6 @@ export const createPersonalDataOpener = (userId: string) => {
   };
 };
 
-export const openForSelf = ({
-  userId,
-  ...input
-}: {
-  userId: string;
-  purpose: PersonalDataPurpose;
-  binding: string[];
-  sealed: string;
-}) => createPersonalDataOpener(userId)(input);
-
 export const resealForSelf = async ({
   userId,
   records,

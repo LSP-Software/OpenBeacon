@@ -45,7 +45,7 @@ export const saveGroupColor = async ({
 export const syncGroupColors = async (userId: string) => {
   const records = await trpcClient.groupMembership.colors.query();
   const open = createPersonalDataOpener(userId);
-  const colors = [];
+  const colors: Parameters<typeof resealForSelf>[0]["records"] = [];
   for (const record of records) {
     const binding = [userId, record.groupId];
     const result = await tryCatch(
@@ -54,7 +54,7 @@ export const syncGroupColors = async (userId: string) => {
     if (!result.data || !isGroupColor(result.data)) continue;
     setGroupColor(record.groupId, result.data);
     colors.push({
-      purpose: "group-color" as const,
+      purpose: "group-color",
       binding,
       sealed: record.ciphertext,
       plaintext: result.data,
