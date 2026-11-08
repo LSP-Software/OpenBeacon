@@ -27,6 +27,7 @@ sourceSets {
       exclude("**/TrackingUploadService.kt")
       exclude("**/BatteryReader.kt")
       exclude("**/SecureEpochKeyStore.kt")
+      exclude("**/Base64Codec.kt")
       exclude("**/CiphertextQueueEntity.kt")
       exclude("**/CiphertextQueueDao.kt")
       exclude("**/CiphertextQueueEvictionEntity.kt")
