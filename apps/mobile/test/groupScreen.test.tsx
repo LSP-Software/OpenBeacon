@@ -9,6 +9,8 @@ import { createReactNativeTestModule } from "./reactNativeTestModule.ts";
 
 let queryResult: { data: unknown; isPending: boolean; error: { data: { code: string } } | null };
 let isFocused = true;
+let sessionUserId = "user-1";
+const storedFlags = new Map<string, boolean>();
 let groups: { id: string }[] = [];
 let keyAccess: {
   data: {
@@ -48,7 +50,7 @@ mock.module("../lib/api.ts", () => ({
   },
 }));
 mock.module("../lib/auth-client.ts", () => ({
-  authClient: { useSession: () => ({ data: null }) },
+  authClient: { useSession: () => ({ data: { user: { id: sessionUserId } } }) },
 }));
 mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useGroupKeyAccess: () => keyAccess }));
 mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
@@ -58,6 +60,16 @@ mock.module("../components/LoadingIndicator.tsx", () => ({
 }));
 mock.module("../components/RefreshablePage.tsx", () => ({
   RefreshablePage: ({ children }: { children: React.ReactNode }) => children,
+}));
+mock.module("../lib/storage.ts", () => ({
+  storage: {
+    getBoolean: (key: string) => storedFlags.get(key),
+    set: (key: string, value: boolean) => storedFlags.set(key, value),
+  },
+}));
+mock.module("../components/ui/Button.tsx", () => ({
+  Button: ({ children, onPress }: { children: React.ReactNode; onPress: () => void }) =>
+    React.createElement("pressable", { onPress }, children),
 }));
 mock.module("../components/ui/SwipeTabs.tsx", () => ({ SwipeTabs: () => null }));
 mock.module("../components/ui/Text.tsx", () => ({
@@ -71,6 +83,8 @@ const { default: GroupScreen } = await import("../app/(tabs)/groups/[groupId]/in
 
 beforeEach(() => {
   isFocused = true;
+  sessionUserId = "user-1";
+  storedFlags.clear();
   groups = [];
   keyAccess = [];
   replace.mockClear();
@@ -118,6 +132,35 @@ test("reports partial history separately from current access", async () => {
   expect(rendered).toContain("2026");
   expect(rendered).not.toContain("current encryption key");
   await act(async () => root.unmount());
+});
+
+test("dismissing the partial history warning hides it for that user and group only", async () => {
+  keyAccess = [
+    {
+      data: { current: "available", history: { partialFrom: new Date("2026-10-03T12:00:00Z") } },
+      isError: false,
+    },
+  ];
+  const warning = "Some location history isn’t available on this device";
+  const root = createRoot();
+  await act(async () => root.render(<GroupScreen />));
+  const [dismiss] = root.container.queryAll((item) => item.type === "pressable");
+  if (!dismiss) throw new Error("Dismiss button not found");
+  await act(async () => (dismiss.props as { onPress: () => void }).onPress());
+  expect(JSON.stringify(root.container.toJSON())).not.toContain(warning);
+  expect(storedFlags.get("recovery.historyWarningDismissed.user-1.group-1")).toBe(true);
+  await act(async () => root.unmount());
+
+  const remounted = createRoot();
+  await act(async () => remounted.render(<GroupScreen />));
+  expect(JSON.stringify(remounted.container.toJSON())).not.toContain(warning);
+  await act(async () => remounted.unmount());
+
+  sessionUserId = "user-2";
+  const otherUser = createRoot();
+  await act(async () => otherUser.render(<GroupScreen />));
+  expect(JSON.stringify(otherUser.container.toJSON())).toContain(warning);
+  await act(async () => otherUser.unmount());
 });
 
 test("does not redirect from an unfocused group screen when its refresh loses access", async () => {

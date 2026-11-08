@@ -10,11 +10,13 @@ import { BackButton } from "../../../../components/headers/BackButton.tsx";
 import { GroupImage } from "../../../../components/image/GroupImage.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { RefreshablePage } from "../../../../components/RefreshablePage.tsx";
+import { Button } from "../../../../components/ui/Button.tsx";
 import { SwipeTabs, type SwipeTabsItem } from "../../../../components/ui/SwipeTabs.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
 import { useGroupKeyAccess } from "../../../../hooks/useGroupKeyAccess.ts";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
+import { storage } from "../../../../lib/storage.ts";
 import HistoryTab from "./HistoryTab.tsx";
 import MembersTab from "./MembersTab.tsx";
 import SettingsTab from "./SettingsTab.tsx";
@@ -47,6 +49,8 @@ const GroupScreen = () => {
   const { data: session } = authClient.useSession();
   const [keyAccess] = useGroupKeyAccess([groupId], session?.user.id);
   const [value, setValue] = useState<GroupTabValue>("members");
+  const historyWarningKey = `recovery.historyWarningDismissed.${session?.user.id}.${groupId}`;
+  const [historyWarningDismissed, setHistoryWarningDismissed] = useState(false);
   const {
     data: group,
     error,
@@ -94,20 +98,34 @@ const GroupScreen = () => {
                 <Text>Current group locations may be unavailable on this device.</Text>
               </View>
             )}
-            {keyAccess?.data && keyAccess.data.history !== "complete" && (
-              <View className="gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4">
-                <Text className="font-semibold text-amber-700 dark:text-amber-400">
-                  Some location history isn’t available on this device
-                </Text>
-                <Text>
-                  History from before{" "}
-                  {keyAccess.data.history.partialFrom.toLocaleDateString(undefined, {
-                    dateStyle: "medium",
-                  })}{" "}
-                  can’t be read on this device.
-                </Text>
-              </View>
-            )}
+            {keyAccess?.data &&
+              keyAccess.data.history !== "complete" &&
+              !historyWarningDismissed &&
+              storage.getBoolean(historyWarningKey) !== true && (
+                <View className="gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4">
+                  <Text className="font-semibold text-amber-700 dark:text-amber-400">
+                    Some location history isn’t available on this device
+                  </Text>
+                  <Text>
+                    History from before{" "}
+                    {keyAccess.data.history.partialFrom.toLocaleDateString(undefined, {
+                      dateStyle: "medium",
+                    })}{" "}
+                    can’t be read on this device.
+                  </Text>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="self-start"
+                    onPress={() => {
+                      storage.set(historyWarningKey, true);
+                      setHistoryWarningDismissed(true);
+                    }}
+                  >
+                    <Text>Dismiss</Text>
+                  </Button>
+                </View>
+              )}
             <SwipeTabs
               ariaLabel="Group sections"
               tabs={GROUP_TABS}
