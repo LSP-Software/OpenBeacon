@@ -28,6 +28,7 @@ let revokePromise: Promise<void> | null = null;
 let captureRefreshPending = false;
 let trackingPaused = false;
 const observedGroupEpochs = new Map<string, string>();
+const lastCleanBackfills = new Map<string, number>();
 
 const getQueueOwner = async (signal?: AbortSignal) => {
   const { userId } = await trpcClient.auth.deviceKeyContext.query(
@@ -77,10 +78,28 @@ const haveMatchingProvisionedKeys = ({
   current.map(getProvisionedKeyIdentity).sort().join("|") ===
   desired.map(getProvisionedKeyIdentity).sort().join("|");
 
-const canBackfillHistory = async (userId: string) => {
+const checkHistoryBackfill = async (userId: string) => {
+  const lastCleanBackfill = lastCleanBackfills.get(userId);
+  if (lastCleanBackfill !== undefined && Date.now() - lastCleanBackfill < 10 * 60 * 1000) {
+    return null;
+  }
   const current = await tryCatch(getCurrentHistoryKeyState(userId));
   if (getErrorCode(current.error) === "UNAUTHORIZED") throw current.error;
-  return current.data?.status === "held";
+  return { canBackfill: current.data?.status === "held", completed: !current.error };
+};
+
+const recordCleanBackfill = ({
+  backfills,
+  check,
+  userId,
+}: {
+  backfills: { error: unknown }[];
+  check: { completed: boolean } | null;
+  userId: string;
+}) => {
+  if (check?.completed && backfills.every(({ error }) => !error)) {
+    lastCleanBackfills.set(userId, Date.now());
+  }
 };
 
 const reconcileTrackingKeysInternal = async ({
@@ -107,17 +126,24 @@ const reconcileTrackingKeysInternal = async ({
     if (!isCurrent()) return;
     const device = await tryCatch(ensureDeviceKeyRegistration());
     if (getErrorCode(device.error) === "UNAUTHORIZED") throw device.error;
-    const canBackfill = device.data ? await canBackfillHistory(device.data.userId) : false;
+    const backfillCheck = device.data ? await checkHistoryBackfill(device.data.userId) : null;
     if (!isCurrent()) return;
     const results = await Promise.all(
       groups.map(async ({ id: groupId }) => {
         const rotation = await tryCatch(rotateGroupEpochIfRequired(groupId));
-        if (!device.data || !canBackfill || !isCurrent()) return [rotation];
+        if (!device.data || !backfillCheck?.canBackfill || !isCurrent()) return [rotation];
         return [rotation, await tryCatch(backfillHistoryWraps({ device: device.data, groupId }))];
       }),
     );
     const unauthorized = results.flat().find(({ error }) => getErrorCode(error) === "UNAUTHORIZED");
     if (unauthorized?.error) throw unauthorized.error;
+    if (device.data && isCurrent()) {
+      recordCleanBackfill({
+        backfills: results.flatMap((result) => result.slice(1)),
+        check: backfillCheck,
+        userId: device.data.userId,
+      });
+    }
     return;
   }
 
@@ -226,14 +252,18 @@ const reconcileTrackingKeysInternal = async ({
   }
 
   if (!isCurrent()) return;
-  if (!(await canBackfillHistory(deviceKeyContext.userId)) || !isCurrent()) return;
-  const backfills = await Promise.all(
-    groups.map(({ id: groupId }) =>
-      tryCatch(backfillHistoryWraps({ device: deviceKeyContext, groupId })),
-    ),
-  );
+  const backfillCheck = await checkHistoryBackfill(deviceKeyContext.userId);
+  if (!backfillCheck || !isCurrent()) return;
+  const backfills = backfillCheck.canBackfill
+    ? await Promise.all(
+        groups.map(({ id: groupId }) =>
+          tryCatch(backfillHistoryWraps({ device: deviceKeyContext, groupId })),
+        ),
+      )
+    : [];
   const unauthorized = backfills.find(({ error }) => getErrorCode(error) === "UNAUTHORIZED");
   if (unauthorized?.error) throw unauthorized.error;
+  recordCleanBackfill({ backfills, check: backfillCheck, userId: deviceKeyContext.userId });
 };
 
 export const reconcileTrackingKeys = ({
@@ -594,6 +624,7 @@ export const prepareTrackingSignOut = async (): Promise<void> => {
 
 export const resumeTracking = () => {
   trackingPaused = false;
+  lastCleanBackfills.clear();
 };
 
 export const getUnassignedTrackingPoints = async () => {

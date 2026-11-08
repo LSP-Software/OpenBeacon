@@ -83,6 +83,7 @@ let recoveryStatus: {
   recoveryKey: object | null;
 } | null = null;
 let recoveryStatusError: Error | null = null;
+let recoveryStatusCalls = 0;
 let backfillErrors = new Map<string, Error>();
 let missingHistoryWraps = new Map<string, string[]>();
 const backfillQueries: string[] = [];
@@ -146,6 +147,7 @@ mock.module("./api.ts", () => ({
     accountRecovery: {
       status: {
         query: async () => {
+          recoveryStatusCalls += 1;
           if (recoveryStatusError) throw recoveryStatusError;
           return (
             recoveryStatus ?? {
@@ -416,6 +418,7 @@ describe("tracking service", () => {
     historyOnlyGroup = null;
     recoveryStatus = null;
     recoveryStatusError = null;
+    recoveryStatusCalls = 0;
     backfillErrors = new Map();
     missingHistoryWraps = new Map();
     backfillQueries.length = 0;
@@ -789,10 +792,57 @@ describe("tracking service", () => {
       ),
     ).toBe(encodeBase64(epochKey1.expose()));
 
-    backfillQueries.length = 0;
-    await reconcileTrackingKeys({ startCapture: true });
     expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
-    expect(historyWrapUploads).toHaveLength(1);
+  });
+
+  test("checks and sweeps for backfill at most once every ten minutes per user", async () => {
+    jest.useFakeTimers();
+    try {
+      await reconcileTrackingKeys({ startCapture: true });
+      await reconcileTrackingKeys({ startCapture: false });
+
+      expect(recoveryStatusCalls).toBe(1);
+      expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
+
+      jest.advanceTimersByTime(10 * 60 * 1000);
+      await reconcileTrackingKeys({ startCapture: false });
+
+      expect(recoveryStatusCalls).toBe(2);
+      expect(backfillQueries).toHaveLength(4);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("doesn't recheck a phone that lacks the current history key until the interval passes", async () => {
+    recoveryStatus = {
+      currentHistoryKey: { publicKey: historyKeyPair.publicKey, version: 2 },
+      recoveryKey: {},
+    };
+    await reconcileTrackingKeys({ startCapture: true });
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(recoveryStatusCalls).toBe(1);
+  });
+
+  test("a failed backfill leaves the next reconcile free to retry", async () => {
+    backfillErrors.set("group-1", new Error("Backfill unavailable"));
+    await reconcileTrackingKeys({ startCapture: true });
+    backfillErrors.clear();
+    backfillQueries.length = 0;
+    await reconcileTrackingKeys({ startCapture: false });
+
+    expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
+  });
+
+  test("an unreachable recovery status leaves the next reconcile free to retry", async () => {
+    recoveryStatusError = new Error("offline");
+    await reconcileTrackingKeys({ startCapture: true });
+    recoveryStatusError = null;
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(recoveryStatusCalls).toBe(2);
+    expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
   });
 
   test("skips every backfill call when the account has no recovery phrase", async () => {
