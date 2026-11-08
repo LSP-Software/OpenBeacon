@@ -349,7 +349,7 @@ const AccountScreen = () => {
               </View>
             </CardHeader>
             <CardContent className="flex flex-row gap-3">
-              <Link href="/account/recovery" asChild>
+              <Link href="/account/recovery-restore" asChild>
                 <Button size="sm">
                   <Text>Restore</Text>
                 </Button>
