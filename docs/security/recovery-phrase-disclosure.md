@@ -35,7 +35,7 @@ If you lose every phone you're signed in on, or reset them or delete the app fro
 - **You still have a phone that can read your history:** create a new phrase on that phone in Account › Recovery phrase. Your old phrase stops working. Your history isn't affected.
 - **You don't:** you can reset your phrase. Your old phrase stops working, and history from before the reset can't be recovered, except what your phones can still read with their own keys. Other phones will need the new phrase.
 
-Changing or resetting your phrase asks you to sign in again first. Resetting also asks you to type `RESET`.
+Setting up, changing or resetting your phrase asks you to sign in again first, unless you signed in recently. Resetting also asks you to type `RESET`.
 
 ## Keep it safe
 
