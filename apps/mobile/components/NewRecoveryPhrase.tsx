@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { View } from "react-native";
 import { Alert } from "../lib/alert.ts";
 import { confirmsRecoveryPhrase, pickConfirmationIndexes } from "../lib/recovery.ts";
+import { useSingleFlight } from "../lib/useSingleFlight.ts";
 import { Button } from "./ui/Button.tsx";
 import { Input } from "./ui/Input.tsx";
 import { Text } from "./ui/Text.tsx";
@@ -22,7 +23,7 @@ export const NewRecoveryPhrase = ({
   const [phrase] = useState(generateRecoveryPhrase);
   const [confirmationIndexes] = useState(pickConfirmationIndexes);
   const [step, setStep] = useState<"show" | "confirm">("show");
-  const [submitting, setSubmitting] = useState(false);
+  const submission = useSingleFlight<"confirm">();
   const form = useForm<{ words: string[] }>({ defaultValues: { words: ["", "", ""] } });
 
   useEffect(() => {
@@ -41,10 +42,14 @@ export const NewRecoveryPhrase = ({
       Alert.alert("Those words don’t match", "Check your written phrase and try again.");
       return;
     }
-    setSubmitting(true);
-    await onConfirm(phrase);
-    form.reset();
-    setSubmitting(false);
+    await submission.run("confirm", async () => {
+      const result = await tryCatch(onConfirm(phrase));
+      if (result.error) {
+        Alert.alert("Something went wrong", result.error.message);
+        return;
+      }
+      form.reset();
+    });
   };
 
   if (step === "show") {
@@ -95,10 +100,10 @@ export const NewRecoveryPhrase = ({
           contextMenuHidden
         />
       ))}
-      <Button onPress={form.handleSubmit(confirm)} disabled={submitting}>
-        <Text>{submitting ? submittingLabel : submitLabel}</Text>
+      <Button onPress={form.handleSubmit(confirm)} disabled={submission.isPending}>
+        <Text>{submission.isPending ? submittingLabel : submitLabel}</Text>
       </Button>
-      <Button variant="outline" onPress={() => setStep("show")} disabled={submitting}>
+      <Button variant="outline" onPress={() => setStep("show")} disabled={submission.isPending}>
         <Text>Show words again</Text>
       </Button>
     </View>
