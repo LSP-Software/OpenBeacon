@@ -12,6 +12,16 @@ Do not delete a group epoch merely because its creator is deleted: remaining gro
 
 Device private keys stay in SecureStore on the user's devices after deletion. Deletion revokes every session, so the backend cannot reach signed-out devices to erase them. A retained key gives no further access: deletion removes the device's wrapped epoch keys and device record, and remaining members rotate the group epoch. Combined with a wrapped epoch key copied before deletion, such as from a backup, the key can unlock that old epoch. That exposes data in the copy and anything remaining members upload under the old epoch afterwards, which is the same limit that applies to any former member who kept an old key. The Beta 1 threat model already trusts the backend to protect those copies, and rotation stops new uploads using the old epoch once remaining devices move on. Local decrypted data and provisioned epoch keys are the greater risk, and the app clears them when the session ends (see "When a session ends on the phone" in `docs/security/beta-1-privacy-draft.md`). Android removes SecureStore entries on uninstall; iOS Keychain entries survive uninstall, so revisit this before shipping iOS.
 
+Recovery and history rows are removed with the `User` row (`packages/database/prisma/schema.prisma`; asserted in `packages/api/src/lib/account-deletion.integration.test.ts`):
+
+- `RecoveryKey` is deleted.
+- Every `AccountHistoryKey` version is deleted, and with it the Recovery escrow, which is stored on the same row.
+- Every `GroupEpochHistoryWrap` addressed to the account's History keys is deleted, through the cascade from `AccountHistoryKey`.
+- `GroupEpochHistoryWrap` rows that the account's devices sent to other members stay, because those members need them to read old epochs. Deleting the device sets `senderDeviceId` to null. `senderPublicKey` is kept, because opening the wrap needs it.
+- Personal nicknames and colours are deleted with the account's `GroupMember` rows: the nicknames it set, the nicknames other members set for it, and its group colours. Other members' nicknames for each other stay. The test asserts the nicknames; colours rely on the `PersonalGroupColor` cascade in the schema.
+
+History private keys also stay in SecureStore on the user's phones after deletion, for the same reason as device private keys. With the escrows and History wraps deleted, a retained History key only unlocks a History wrap copied before deletion, such as from a backup. That's the same limit as a retained device key.
+
 Review deployment-specific logs, caches, backups and external processors separately; database deletion does not erase copies retained by other people. Database constraints require new join alerts and shared invitations to have an account reference. Feedback is sent anonymously to the hosted API, including by self-hosted users, so it has no account reference. Deleting a hosted account removes feedback carrying the account email. Deleting a self-hosted account does not remove feedback held by the hosted API; those users must ask through the in-app Contact Us form. Feedback sent without an email cannot be attributed, so it cannot be removed on request.
 
 ## Operations
