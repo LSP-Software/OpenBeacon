@@ -5,9 +5,9 @@ const smtpVerify = mock(async () => true);
 const resendSend = mock(async (_message: unknown) => ({ data: { id: "id" }, error: null }));
 let domainsResult: unknown = { data: { data: [] }, error: null };
 
-mock.module("nodemailer", () => ({
-  default: { createTransport: () => ({ sendMail, verify: smtpVerify }) },
-}));
+const createTransport = mock((_options: unknown) => ({ sendMail, verify: smtpVerify }));
+
+mock.module("nodemailer", () => ({ default: { createTransport } }));
 mock.module("resend", () => ({
   Resend: class {
     emails = { send: resendSend };
@@ -34,7 +34,29 @@ describe("SMTP transport", () => {
     host: "smtp.example.com",
     port: 587,
     secure: false,
+    requireTls: true,
     auth: null,
+  });
+
+  test("refuses to send unless STARTTLS succeeds", () => {
+    expect(createTransport).toHaveBeenLastCalledWith(
+      expect.objectContaining({ port: 587, secure: false, requireTLS: true }),
+    );
+  });
+
+  test("allows a plaintext relay when requireTls is off", () => {
+    createEmailTransport({
+      transport: "smtp",
+      fromAddress: "noreply@example.com",
+      host: "relay.local",
+      port: 25,
+      secure: false,
+      requireTls: false,
+      auth: null,
+    });
+    expect(createTransport).toHaveBeenLastCalledWith(
+      expect.objectContaining({ host: "relay.local", requireTLS: false }),
+    );
   });
 
   test("sends HTML, text and the logo as an inline cid attachment", async () => {

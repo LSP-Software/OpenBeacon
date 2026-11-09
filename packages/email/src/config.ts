@@ -13,6 +13,7 @@ export const emailEnvSchema = {
   SMTP_USER: optionalEnvString,
   SMTP_PASSWORD: optionalEnvString,
   SMTP_SECURE: z.preprocess(emptyToUndefined, z.stringbool().optional()),
+  SMTP_REQUIRE_TLS: z.preprocess(emptyToUndefined, z.stringbool().optional()),
   EMAIL_FROM: optionalEnvString,
   EMAIL_CONSOLE: z.preprocess(emptyToUndefined, z.stringbool().default(false)),
   SERVER_NAME: serverNameSchema,
@@ -21,9 +22,13 @@ export const emailEnvSchema = {
 export const resolveEmailConfig = (
   env: z.output<z.ZodObject<typeof emailEnvSchema>> & { NODE_ENV: string | undefined },
 ): EmailConfig => {
-  const hasSmtpSettings = [env.SMTP_PORT, env.SMTP_USER, env.SMTP_PASSWORD, env.SMTP_SECURE].some(
-    (value) => value !== undefined,
-  );
+  const hasSmtpSettings = [
+    env.SMTP_PORT,
+    env.SMTP_USER,
+    env.SMTP_PASSWORD,
+    env.SMTP_SECURE,
+    env.SMTP_REQUIRE_TLS,
+  ].some((value) => value !== undefined);
   if (env.RESEND_API_KEY && env.SMTP_HOST) {
     throw new Error("Set either RESEND_API_KEY or SMTP_HOST, not both");
   }
@@ -63,6 +68,7 @@ export const resolveEmailConfig = (
     host: env.SMTP_HOST,
     port: env.SMTP_PORT ?? (secure ? 465 : 587),
     secure,
+    requireTls: !secure && (env.SMTP_REQUIRE_TLS ?? true),
     auth:
       env.SMTP_USER && env.SMTP_PASSWORD ? { user: env.SMTP_USER, pass: env.SMTP_PASSWORD } : null,
   };

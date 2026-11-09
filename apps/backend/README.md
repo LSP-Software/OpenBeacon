@@ -87,7 +87,7 @@ With email on, the backend sends codes for sign-up, email verification, password
 To switch email on, configure one provider and a sender address in the root `.env`:
 
 - Resend: verify your sending domain in Resend, then set `RESEND_API_KEY`. A sending-only key works. In the domain's settings in Resend, turn off open tracking and click tracking. The hosted API uses Resend.
-- SMTP: set `SMTP_HOST`, plus `SMTP_USER` and `SMTP_PASSWORD` if your server needs a login. `SMTP_PORT` defaults to `587` with STARTTLS. Set `SMTP_SECURE=true` or `SMTP_PORT=465` for implicit TLS.
+- SMTP: set `SMTP_HOST`, plus `SMTP_USER` and `SMTP_PASSWORD` if your server needs a login. `SMTP_PORT` defaults to `587`, where the backend requires STARTTLS and refuses to log in or send if the server doesn't offer it. Set `SMTP_SECURE=true` or `SMTP_PORT=465` for implicit TLS. For a local relay that only speaks plaintext, set `SMTP_REQUIRE_TLS=false`; credentials and emails then cross the network unencrypted.
 
 Set `EMAIL_FROM` to the sender address, for example `noreply@example.com`. Emails always come from `OpenBeacon <EMAIL_FROM>`. A small "Sent from <SERVER_NAME>" line in the footer shows which server sent it. Setting both Resend and SMTP stops the backend from starting.
 

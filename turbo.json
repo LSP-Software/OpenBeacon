@@ -25,6 +25,7 @@
     "SMTP_HOST",
     "SMTP_PORT",
     "SMTP_SECURE",
+    "SMTP_REQUIRE_TLS",
     "SMTP_USER",
     "SMTP_PASSWORD",
     "EMAIL_FROM",

@@ -19,6 +19,7 @@ export type EmailConfig =
       host: string;
       port: number;
       secure: boolean;
+      requireTls: boolean;
       auth: { user: string; pass: string } | null;
     };
 

@@ -35,8 +35,23 @@ describe("resolveEmailConfig", () => {
       host: "smtp.example.com",
       port: 587,
       secure: false,
+      requireTls: true,
       auth: { user: "user", pass: "password" },
     });
+  });
+
+  test("lets SMTP_REQUIRE_TLS=false allow a plaintext relay", () => {
+    const base = { SMTP_HOST: "relay.local", EMAIL_FROM: "noreply@example.com" };
+    expect(resolve({ ...base, SMTP_REQUIRE_TLS: "false" })).toMatchObject({
+      secure: false,
+      requireTls: false,
+    });
+    expect(resolve({ ...base, SMTP_REQUIRE_TLS: "true" })).toMatchObject({ requireTls: true });
+    expect(resolve({ ...base, SMTP_REQUIRE_TLS: "false", SMTP_PORT: "465" })).toMatchObject({
+      secure: true,
+      requireTls: false,
+    });
+    expect(() => resolve({ SMTP_REQUIRE_TLS: "false" })).toThrow("SMTP settings need SMTP_HOST");
   });
 
   test("uses implicit TLS for SMTP on port 465 or when SMTP_SECURE is set", () => {
@@ -46,6 +61,7 @@ describe("resolveEmailConfig", () => {
     expect(resolve({ ...base, SMTP_PORT: "2525" })).toMatchObject({
       port: 2525,
       secure: false,
+      requireTls: true,
       auth: null,
     });
   });
