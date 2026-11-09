@@ -6,7 +6,9 @@ import {
   encodeBase64,
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
+import * as Device from "expo-device";
 import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 import { trpcClient } from "./api.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { storage } from "./storage.ts";
@@ -158,6 +160,8 @@ const registerDeviceKey = async ({
     deviceId,
     publicKey,
     expectedUserId: userId,
+    platform: Platform.OS === "android" || Platform.OS === "ios" ? Platform.OS : undefined,
+    model: Device.modelName ?? undefined,
   });
 
 const deviceKeyContexts = new Map<

@@ -35,7 +35,7 @@ If you lose every phone you're signed in on, or reset them or delete the app fro
 - **You still have a phone that can read your history:** create a new phrase on that phone in Account › Recovery phrase. Your old phrase stops working. Your history isn't affected.
 - **You don't:** you can reset your phrase. Your old phrase stops working, and history from before the reset can't be recovered, except what your phones can still read with their own keys. Other phones will need the new phrase.
 
-Setting up, changing or resetting your phrase asks you to sign in again first, unless you signed in recently. Resetting also asks you to type `RESET`.
+Setting up, changing or resetting your phrase asks you to sign in again first, unless you signed in recently. Resetting also asks you to type `RESET`. If your server sends email, resetting also asks for a code we email you, and we email you after your phrase is changed or reset.
 
 ## Keep it safe
 
@@ -54,8 +54,10 @@ The server never receives your phrase or the keys that unlock your history. It c
 
 Other members' phones can also see whether you have a recovery phrase, because they protect new group keys for you when they create them.
 
+If your server sends email, its email provider sees when you ask for a reset code and when your phrase is changed or reset, from the emails we send you. Emails never contain your phrase.
+
 ## Current limits
 
-- We don't send an email when your phrase is changed or reset yet. This is planned for Beta 2.
+- We don't send an email when you set up a phrase for the first time.
 - If someone steals a phone that can read your history, it can keep reading new history until we add a way to remove a phone from your account.
 - Your phone trusts the server to give it the right keys for other people's phones and for your history. A server that was deliberately changed to swap those keys could receive new history. We plan to add key verification so phones don't have to trust the server for this. When you restore, the app only accepts recovery data that was made with your phrase.

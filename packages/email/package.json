@@ -1,0 +1,37 @@
+{
+  "name": "@openbeacon/email",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./config.ts": "./src/config.ts"
+  },
+  "scripts": {
+    "format": "bun fmt",
+    "format:check": "bun fmt --check",
+    "lint": "biome lint .",
+    "typecheck": "bun check",
+    "test": "bun test --isolate"
+  },
+  "dependencies": {
+    "@openbeacon/cache": "workspace:*",
+    "@openbeacon/schemas": "workspace:*",
+    "@openbeacon/shared": "workspace:*",
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.2.0",
+    "@t3-oss/env-core": "^0.13.11",
+    "nodemailer": "^10.4.0",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "resend": "^6.37.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/nodemailer": "^8.0.2",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

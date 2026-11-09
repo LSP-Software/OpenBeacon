@@ -36,14 +36,21 @@ const PasswordScreen = () => {
     newPassword,
   }: z.infer<typeof changePasswordFormSchema>) => {
     setSaving(true);
-    const result = await authClient.changePassword({ currentPassword, newPassword });
+    const result = await authClient.changePassword({
+      currentPassword,
+      newPassword,
+      revokeOtherSessions: true,
+    });
     setSaving(false);
     if (result.error) {
       Alert.alert("Unable to change password", result.error.message);
       return;
     }
     form.reset();
-    Alert.alert("Password changed", "Use your new password next time you sign in.");
+    Alert.alert(
+      "Password changed",
+      "Your other devices have been signed out. Use your new password next time you sign in.",
+    );
     router.back();
   };
 

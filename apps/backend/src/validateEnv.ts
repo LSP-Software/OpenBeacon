@@ -1,7 +1,8 @@
 import { envSchema as apiEnvSchema } from "@openbeacon/api/envSchema.ts";
+import { emailEnvSchema, findEmailSettingsError } from "@openbeacon/email/config.ts";
 import { envSchema as backendEnvSchema } from "./envSchema.ts";
 
-const schemas = { ...backendEnvSchema, ...apiEnvSchema };
+const schemas = { ...backendEnvSchema, ...apiEnvSchema, ...emailEnvSchema };
 let valid = true;
 
 console.log("Environment configuration:");
@@ -34,6 +35,12 @@ if (
   console.error(
     "  GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET: both are required for Google sign-in",
   );
+}
+
+const emailError = findEmailSettingsError();
+if (emailError) {
+  valid = false;
+  console.error(`  Email: ${emailError}`);
 }
 
 if (!valid) {

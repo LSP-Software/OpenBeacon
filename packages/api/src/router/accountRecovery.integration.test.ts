@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { createEmailCodes, type EmailCodes } from "@openbeacon/auth";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis } from "@openbeacon/cache/testing";
 import { prisma } from "@openbeacon/database";
@@ -41,6 +42,13 @@ const users = [
   "keyOwner",
   "setupClash",
   "resetClash",
+  "emailReset",
+  "emailOther",
+  "emailConflict",
+  "emailRequest",
+  "emailOff",
+  "emailKeyOwner",
+  "emailExpired",
 ].map((name) => `${prefix}-${name}`);
 const [
   setupUser,
@@ -54,7 +62,21 @@ const [
   keyOwnerUser,
   setupClashUser,
   resetClashUser,
+  emailResetUser,
+  emailOtherUser,
+  emailConflictUser,
+  emailRequestUser,
+  emailOffUser,
+  emailKeyOwnerUser,
+  emailExpiredUser,
 ] = users as [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
   string,
   string,
   string,
@@ -70,11 +92,25 @@ const [
 const groupId = `${prefix}-group`;
 const staleSessionCreatedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
 
-const caller = (userId: string, sessionCreatedAt = new Date()) =>
+const sent: { to: string; purpose: string; code: string; userId?: string }[] = [];
+const emailCodes = createEmailCodes({
+  db: prisma,
+  secret: "integration-email-code-secret-000000000000",
+  rateLimits: new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }).rateLimits,
+  limitRequestsPerIp: false,
+  sendCodeEmail: async (email) => {
+    sent.push(email);
+  },
+  sendAccountExistsEmail: async () => {},
+  sendGoogleSignInEmail: async () => {},
+});
+
+const caller = (userId: string, sessionCreatedAt = new Date(), codes: EmailCodes | null = null) =>
   router.createCaller({
     cache,
     db: prisma,
-    clientIp: "127.0.0.1",
+    emailCodes: codes,
+    clientIp: `ip-${userId}`,
     session: {
       user: { id: userId },
       session: { id: `${userId}-session`, createdAt: sessionCreatedAt },
@@ -149,6 +185,45 @@ const insertHistoryKey = async ({
   return { id: input.id, privateKey, publicKey: input.publicKey };
 };
 
+const setUpRecovery = async (userId: string) => {
+  const phrase = generateRecoveryPhrase();
+  const historyKey = newHistoryKey({ phrase, userId, version: 1 });
+  await caller(userId).accountRecovery.setup({
+    historyKey: historyKey.input,
+    recoveryKey: recoveryKeyInput(phrase),
+  });
+  return historyKey;
+};
+
+const resetInputFor = (userId: string, version: number) => {
+  const phrase = generateRecoveryPhrase();
+  return {
+    confirmReset: true as const,
+    historyKey: newHistoryKey({ phrase, userId, version }).input,
+    recoveryKey: recoveryKeyInput(phrase),
+  };
+};
+
+const requestCode = async (userId: string) => {
+  await caller(userId, new Date(), emailCodes).accountRecovery.requestResetCode();
+  return sent.findLast((email) => email.userId === userId)!.code;
+};
+
+const historyKeyIds = async (userId: string) =>
+  (await prisma.accountHistoryKey.findMany({ where: { userId } })).map(({ id }) => id);
+
+const verifiedResetToken = async (userId: string) => {
+  const code = await requestCode(userId);
+  return (await caller(userId, new Date(), emailCodes).accountRecovery.verifyResetCode({ code }))
+    .resetToken;
+};
+
+const invalidCode = { code: "BAD_REQUEST", message: "The code is wrong or has expired." };
+const invalidToken = {
+  code: "PRECONDITION_FAILED",
+  message: "Your email confirmation has expired. Confirm a new code.",
+};
+
 const exposeAll = (keys: HistoryPrivateKeyMaterial[]) => keys.map((key) => key.expose());
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
@@ -163,6 +238,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     afterAll(async () => {
       await prisma.group.deleteMany({ where: { id: groupId } });
       await prisma.user.deleteMany({ where: { id: { in: users } } });
+      await prisma.verification.deleteMany({
+        where: {
+          OR: [
+            { identifier: { in: users.map((id) => `email-code:recovery-reset:${id}`) } },
+            { value: { in: users } },
+          ],
+        },
+      });
       await prisma.$disconnect();
     });
 
@@ -554,6 +637,155 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         (await prisma.recoveryKey.findUniqueOrThrow({ where: { userId: resetClashUser } }))
           .publicKey,
       ).toBe(recoveryKeyInput(resetPhrase).publicKey);
+    });
+
+    test("verifyResetCode only accepts this user's latest code, once, and gives a reset token", async () => {
+      const account = caller(emailResetUser, new Date(), emailCodes);
+      const code = await requestCode(emailResetUser);
+      const otherCode = await requestCode(emailOtherUser);
+
+      await expect(
+        account.accountRecovery.verifyResetCode({ code: code === "000000" ? "000001" : "000000" }),
+      ).rejects.toMatchObject(invalidCode);
+      if (otherCode !== code) {
+        await expect(
+          account.accountRecovery.verifyResetCode({ code: otherCode }),
+        ).rejects.toMatchObject(invalidCode);
+      }
+      await expect(
+        caller(emailResetUser, staleSessionCreatedAt, emailCodes).accountRecovery.verifyResetCode({
+          code,
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(await account.accountRecovery.verifyResetCode({ code })).toEqual({
+        resetToken: expect.any(String),
+      });
+      await expect(account.accountRecovery.verifyResetCode({ code })).rejects.toMatchObject(
+        invalidCode,
+      );
+    });
+
+    test("with email on, reset needs this user's reset token and the token works once", async () => {
+      const original = await setUpRecovery(emailResetUser);
+      await setUpRecovery(emailOtherUser);
+      const account = caller(emailResetUser, new Date(), emailCodes);
+      const resetToken = await verifiedResetToken(emailResetUser);
+      const otherToken = await verifiedResetToken(emailOtherUser);
+      const input = resetInputFor(emailResetUser, 2);
+
+      await expect(account.accountRecovery.reset(input)).rejects.toMatchObject({
+        code: "PRECONDITION_FAILED",
+        message: "Confirm the code we emailed you.",
+      });
+      for (const wrongToken of [otherToken, "not-a-token"]) {
+        await expect(
+          account.accountRecovery.reset({ ...input, resetToken: wrongToken }),
+        ).rejects.toMatchObject(invalidToken);
+      }
+      expect(await historyKeyIds(emailResetUser)).toEqual([original.input.id]);
+
+      await account.accountRecovery.reset({ ...input, resetToken });
+      expect(await historyKeyIds(emailResetUser)).toEqual([input.historyKey.id]);
+      await expect(
+        account.accountRecovery.reset({ ...resetInputFor(emailResetUser, 3), resetToken }),
+      ).rejects.toMatchObject(invalidToken);
+      expect(await historyKeyIds(emailResetUser)).toEqual([input.historyKey.id]);
+
+      const otherInput = resetInputFor(emailOtherUser, 2);
+      await caller(emailOtherUser, new Date(), emailCodes).accountRecovery.reset({
+        ...otherInput,
+        resetToken: otherToken,
+      });
+      expect(await historyKeyIds(emailOtherUser)).toEqual([otherInput.historyKey.id]);
+    }, 20_000);
+
+    test("a reset that fails after the token is checked keeps the token for the retry", async () => {
+      const original = await setUpRecovery(emailConflictUser);
+      const taken = await insertHistoryKey({
+        phrase: generateRecoveryPhrase(),
+        userId: emailKeyOwnerUser,
+        version: 1,
+      });
+      const account = caller(emailConflictUser, new Date(), emailCodes);
+      const resetToken = await verifiedResetToken(emailConflictUser);
+
+      await expect(
+        account.accountRecovery.reset({ ...resetInputFor(emailConflictUser, 3), resetToken }),
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+      await expect(
+        account.accountRecovery.reset({
+          ...resetInputFor(emailConflictUser, 2),
+          historyKey: { ...resetInputFor(emailConflictUser, 2).historyKey, id: taken.id },
+          resetToken,
+        }),
+      ).rejects.toMatchObject({
+        code: "CONFLICT",
+        message: "That history key ID is already in use.",
+      });
+      expect(await historyKeyIds(emailConflictUser)).toEqual([original.input.id]);
+
+      const input = resetInputFor(emailConflictUser, 2);
+      await account.accountRecovery.reset({ ...input, resetToken });
+      expect(await historyKeyIds(emailConflictUser)).toEqual([input.historyKey.id]);
+    }, 20_000);
+
+    test("an expired reset token can't reset the phrase", async () => {
+      const original = await setUpRecovery(emailExpiredUser);
+      const resetToken = await verifiedResetToken(emailExpiredUser);
+      await prisma.verification.updateMany({
+        where: { value: emailExpiredUser },
+        data: { expiresAt: new Date(Date.now() - 1000) },
+      });
+      await expect(
+        caller(emailExpiredUser, new Date(), emailCodes).accountRecovery.reset({
+          ...resetInputFor(emailExpiredUser, 2),
+          resetToken,
+        }),
+      ).rejects.toMatchObject(invalidToken);
+      expect(await historyKeyIds(emailExpiredUser)).toEqual([original.input.id]);
+    });
+    test("requestResetCode needs a fresh session, emails only the account's own address and is rate-limited", async () => {
+      await expect(
+        caller(
+          emailRequestUser,
+          staleSessionCreatedAt,
+          emailCodes,
+        ).accountRecovery.requestResetCode(),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(sent.filter((email) => email.userId === emailRequestUser)).toEqual([]);
+
+      const account = caller(emailRequestUser, new Date(), emailCodes);
+      for (let request = 0; request < 3; request += 1) {
+        expect(await account.accountRecovery.requestResetCode()).toEqual({
+          email: `${emailRequestUser}@example.test`,
+        });
+      }
+      await expect(account.accountRecovery.requestResetCode()).rejects.toMatchObject({
+        code: "TOO_MANY_REQUESTS",
+      });
+      expect(sent.filter((email) => email.userId === emailRequestUser)).toEqual(
+        Array.from({ length: 3 }, () => ({
+          code: expect.stringMatching(/^\d{6}$/),
+          purpose: "recovery-reset",
+          to: `${emailRequestUser}@example.test`,
+          userId: emailRequestUser,
+        })),
+      );
+    });
+
+    test("with email off, there is no code to request or verify and reset works without one", async () => {
+      await setUpRecovery(emailOffUser);
+      const account = caller(emailOffUser);
+      await expect(account.accountRecovery.requestResetCode()).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+      await expect(
+        account.accountRecovery.verifyResetCode({ code: "123456" }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      const input = resetInputFor(emailOffUser, 2);
+      await account.accountRecovery.reset(input);
+      expect(await historyKeyIds(emailOffUser)).toEqual([input.historyKey.id]);
     });
   },
 );

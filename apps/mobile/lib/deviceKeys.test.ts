@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, jest, mock, test } from "bun:test";
 import { createDeviceKeyPair, encodeBase64 } from "@openbeacon/encryption";
+import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 const secureStoreValues = new Map<string, string>();
 const storageValues = new Map<string, string>();
@@ -25,6 +26,10 @@ const setItemAsyncMock = mock(async (key: string, value: string) => {
   await secureStoreWriteGate;
   secureStoreValues.set(key, value);
 });
+
+mock.module("react-native", () => createReactNativeTestModule({ platformOS: "android" }));
+
+mock.module("expo-device", () => ({ modelName: "Pixel 8" }));
 
 mock.module("expo-secure-store", () => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: "when-unlocked-this-device-only",
@@ -144,7 +149,12 @@ describe("device key registration", () => {
     release();
     await expect(registration).rejects.toThrow("The active account has changed.");
     expect(registerDeviceKeyMock).toHaveBeenCalledWith(
-      expect.objectContaining({ expectedUserId: "user-a", deviceId: "device-a" }),
+      expect.objectContaining({
+        expectedUserId: "user-a",
+        deviceId: "device-a",
+        platform: "android",
+        model: "Pixel 8",
+      }),
     );
     expect(secureStoreValues.get("encryption.device.privateKey.user-a")).toBe(privateKey);
     expect(storageValues.get("encryption.device.id.user-a")).toBe("device-a");

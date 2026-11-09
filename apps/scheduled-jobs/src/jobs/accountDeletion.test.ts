@@ -19,6 +19,8 @@ const removeImages = mock(async (_bucket: string, userId: string) => {
 });
 const removeImageKey = mock(async (_bucket: string, _key: string) => {});
 const logError = mock(() => {});
+const securityAlerts = { send: mock(() => {}), sendTo: mock(() => {}) };
+const waitForSecurityAlerts = mock(async () => {});
 
 mock.module("@openbeacon/api/account-deletion.ts", () => ({ deleteAccountRecords: removeAccount }));
 mock.module("@openbeacon/api/env.ts", () => ({
@@ -39,7 +41,9 @@ mock.module("../services.ts", () => ({
         updateMany: retryCleanup,
       },
     },
+    securityAlerts,
   },
+  waitForSecurityAlerts,
 }));
 const { runAccountDeletion } = await import("./accountDeletion.ts");
 const originalError = console.error;
@@ -59,6 +63,7 @@ beforeEach(() => {
   removeImages.mockClear();
   removeImageKey.mockClear();
   logError.mockClear();
+  waitForSecurityAlerts.mockClear();
   console.error = logError;
 });
 
@@ -69,6 +74,28 @@ test("cleans up recorded group image keys before removing the cleanup record", a
   await runAccountDeletion();
   expect(removeImageKey).toHaveBeenCalledWith("bucket", "user/other/image");
   expect(removeCleanup).toHaveBeenCalledWith({ where: { userId: "clean" } });
+});
+
+test("passes the runner's security alerts so deleted accounts get an alert", async () => {
+  await runAccountDeletion();
+  expect(removeAccount.mock.calls[0]?.[0]).toMatchObject({ securityAlerts });
+});
+
+test("waits for pending security alerts after the run's deletions and cleanup", async () => {
+  let finishAlerts = () => {};
+  waitForSecurityAlerts.mockImplementationOnce(
+    () => new Promise<void>((resolve) => (finishAlerts = resolve)),
+  );
+  let finished = false;
+  const run = runAccountDeletion().then(() => (finished = true));
+  await Bun.sleep(0);
+  expect(removeAccount).toHaveBeenCalledTimes(2);
+  expect(removeCleanup).toHaveBeenCalledTimes(1);
+  expect(waitForSecurityAlerts).toHaveBeenCalledTimes(1);
+  expect(finished).toBe(false);
+  finishAlerts();
+  await run;
+  expect(finished).toBe(true);
 });
 
 test("continues after an account failure and retains failed image cleanup for retry", async () => {

@@ -1,4 +1,4 @@
-import { auth } from "@openbeacon/auth";
+import { auth, clientIpHeader } from "@openbeacon/auth";
 import { logRateLimit } from "@openbeacon/shared";
 import { Hono } from "hono";
 import type { AppEnv } from "../types/AppEnv.ts";
@@ -17,7 +17,10 @@ router.get("/auth/google-deletion-callback", (c) => {
 });
 
 router.on(["POST", "GET"], "/auth/*", async (c) => {
-  const response = await auth.handler(c.req.raw);
+  const headers = new Headers(c.req.raw.headers);
+  // Bun's new Request(request, { headers }) keeps a header that the new Headers leaves out, so always overwrite it.
+  headers.set(clientIpHeader, c.env?.clientIp ?? "");
+  const response = await auth.handler(new Request(c.req.raw, { headers }));
   if (response.status === 429) logRateLimit({ path: "auth", scope: "auth" });
   return response;
 });

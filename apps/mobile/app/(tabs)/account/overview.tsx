@@ -61,6 +61,8 @@ const categories = [
       {
         label: "Notifications",
         icon: BellIcon,
+        href: "/account/notifications",
+        requiresEmail: true,
       },
       {
         label: "Password and Security",
@@ -122,6 +124,7 @@ const AccountScreen = () => {
     defaultValues: { name: "" },
   });
   const groups = useQuery(trpc.groupMembership.list.queryOptions());
+  const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
   const devices = useQuery(trpc.auth.listMyDeviceKeys.queryOptions());
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
@@ -373,7 +376,16 @@ const AccountScreen = () => {
           </Card>
         )}
 
-        <SettingsContainer categories={categories} />
+        <SettingsContainer
+          categories={categories.map((category) => ({
+            ...category,
+            settings: category.settings.map((setting) =>
+              "requiresEmail" in setting && !providers?.email
+                ? { label: setting.label, icon: setting.icon }
+                : setting,
+            ),
+          }))}
+        />
 
         <View className="mb-28 gap-3">
           {signOutPhase && (

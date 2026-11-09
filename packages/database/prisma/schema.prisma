@@ -19,6 +19,9 @@ model User {
   deletionCancellationPending Boolean @default(false)
   deletionRetryAt DateTime?
   deletionDate   DateTime?
+  timezone       String?
+  alertNewDevice Boolean         @default(true)
+  alertDeletionScheduled Boolean @default(true)
   sessions       Session[]
   accounts       Account[]
   pendingUploads PendingUpload[]
@@ -91,6 +94,7 @@ model Verification {
   id         String   @id
   identifier String
   value      String
+  attempts   Int      @default(0)
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @default(now()) @updatedAt
@@ -218,6 +222,8 @@ model UserDevice {
   user                   User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   publicKey              String
   publicKeyAlgorithm     String
+  platform               String?
+  model                  String?
   createdAt              DateTime                 @default(now())
   lastSeenAt             DateTime                 @default(now())
   revokedAt              DateTime?

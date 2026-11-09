@@ -1,4 +1,5 @@
 import { checkR2, checkS3 } from "@openbeacon/api/checkStorage.ts";
+import { checkEmail, emailEnabled } from "@openbeacon/email";
 import { RedisClient } from "bun";
 import { checkServices } from "./checkServices.ts";
 import { db } from "./db.ts";
@@ -16,4 +17,5 @@ await checkServices({
   },
   S3: checkS3,
   R2: checkR2,
+  ...(emailEnabled ? { Email: checkEmail } : {}),
 });

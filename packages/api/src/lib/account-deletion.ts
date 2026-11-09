@@ -1,3 +1,4 @@
+import { findAlertRecipient, type SecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
 import { GroupRole, Prisma, type PrismaClient } from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
 
@@ -6,21 +7,23 @@ export const deleteAccountRecords = async ({
   userId,
   imageUrlPrefix,
   mode,
+  securityAlerts,
 }: {
   db: PrismaClient;
   userId: string;
   imageUrlPrefix: string;
   mode: "scheduled" | "immediate";
-}) =>
-  db.$transaction(async (tx) => {
+  securityAlerts: SecurityAlerts | null;
+}) => {
+  const recipient = await db.$transaction(async (tx) => {
     await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
-    const user = await tx.user.findUnique({ where: { id: userId } });
-    if (!user) return false;
+    const user = await findAlertRecipient(tx, userId);
+    if (!user) return null;
     if (mode === "scheduled") {
       const [status] = await tx.$queryRaw<Array<{ due: boolean }>>(
         Prisma.sql`SELECT "pendingDeletion" AND "deletionDate" IS NOT NULL AND "deletionDate" <= (clock_timestamp() AT TIME ZONE 'UTC') AS due FROM "User" WHERE id = ${userId}`,
       );
-      if (!status?.due) return false;
+      if (!status?.due) return null;
     }
 
     const memberships = await tx.groupMember.findMany({
@@ -97,5 +100,9 @@ export const deleteAccountRecords = async ({
       where: { email: { equals: user.email, mode: "insensitive" } },
     });
     await tx.user.delete({ where: { id: userId } });
-    return true;
+    return user;
   });
+  if (!recipient) return false;
+  securityAlerts?.sendTo(recipient, { type: "account-deleted" });
+  return true;
+};

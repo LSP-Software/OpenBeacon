@@ -1,5 +1,5 @@
 import { redisUrlSchema } from "@openbeacon/cache";
-import { optionalEnvString } from "@openbeacon/schemas";
+import { optionalEnvString, serverNameSchema } from "@openbeacon/schemas";
 import { z } from "zod";
 
 export const envSchema = {
@@ -17,10 +17,14 @@ export const envSchema = {
       },
     ),
   REDIS_URL: redisUrlSchema,
-  SERVER_NAME: z.string().trim().min(1).default("OpenBeacon"),
+  SERVER_NAME: serverNameSchema,
   SELF_HOSTED: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z.stringbool().default(true),
+  ),
+  EMAIL_CODE_IP_LIMIT: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.stringbool().default(false),
   ),
   OPENBEACON_API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   OPENBEACON_API_HOSTNAME: z.ipv4().default("0.0.0.0"),

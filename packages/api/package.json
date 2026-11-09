@@ -27,6 +27,7 @@
     "@openbeacon/auth": "workspace:*",
     "@openbeacon/cache": "workspace:*",
     "@openbeacon/database": "workspace:*",
+    "@openbeacon/email": "workspace:*",
     "@openbeacon/encryption": "workspace:*",
     "@openbeacon/map-tiles": "workspace:*",
     "@openbeacon/schemas": "workspace:*",

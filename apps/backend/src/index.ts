@@ -1,5 +1,6 @@
 import "./validateEnv.ts";
 import "./validateServices.ts";
+import { securityAlerts } from "@openbeacon/auth";
 import { Hono } from "hono";
 import { cache } from "./cache.ts";
 import { db } from "./db.ts";
@@ -9,6 +10,11 @@ import healthRouter from "./routes/health.ts";
 import authRouter from "./routes/auth.ts";
 import trpcRouter from "./routes/trpc.ts";
 import type { AppEnv } from "./types/AppEnv.ts";
+
+if (securityAlerts) {
+  securityAlerts.schedulePendingAlertsTurnedOff();
+  setInterval(securityAlerts.schedulePendingAlertsTurnedOff, 60_000);
+}
 
 const app = new Hono<AppEnv>();
 

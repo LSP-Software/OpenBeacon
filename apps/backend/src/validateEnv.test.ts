@@ -53,6 +53,14 @@ describe("production environment validation", () => {
     expect(result.exitCode).toBe(0);
   });
 
+  test("accepts an SMTP email provider", () => {
+    const result = Bun.spawnSync({
+      cmd: [process.execPath, `${import.meta.dir}/validateEnv.ts`],
+      env: { ...env, SMTP_HOST: "smtp.example.com", EMAIL_FROM: "noreply@example.com" },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
   test("rejects invalid proxy and storage configuration", () => {
     for (const invalid of [
       { TRUSTED_PROXY_PROVIDER: "" },
@@ -71,6 +79,10 @@ describe("production environment validation", () => {
       { S3_REGION: "" },
       { MAX_IMAGE_FILE_SIZE: "0" },
       { SELF_HOSTED: "maybe" },
+      { RESEND_API_KEY: "re_key", SMTP_HOST: "smtp.example.com", EMAIL_FROM: "a@example.com" },
+      { RESEND_API_KEY: "re_key" },
+      { EMAIL_FROM: "noreply@example.com" },
+      { EMAIL_CONSOLE: "true", NODE_ENV: "production" },
     ]) {
       const result = Bun.spawnSync({
         cmd: [process.execPath, `${import.meta.dir}/validateEnv.ts`],
@@ -79,6 +91,24 @@ describe("production environment validation", () => {
       expect(result.exitCode).not.toBe(0);
       expect(result.stderr.toString()).toContain("Environment configuration validation failed");
       expect(result.stdout.toString()).toContain("R2_PM_TILES_KEY: valid");
+    }
+  });
+
+  test("stops the backend with a clear line when the email settings are invalid", () => {
+    for (const [invalid, message] of [
+      [{ EMAIL_CONSOLE: "true", NODE_ENV: "production" }, "EMAIL_CONSOLE is only allowed"],
+      [{ EMAIL_FROM: "noreply@example.com" }, "EMAIL_FROM needs RESEND_API_KEY or SMTP_HOST"],
+    ] as const) {
+      const result = Bun.spawnSync({
+        cmd: [process.execPath, `${import.meta.dir}/index.ts`],
+        env: { ...env, ...invalid },
+      });
+      const stderr = result.stderr.toString();
+      expect(result.exitCode).not.toBe(0);
+      expect(stderr).toContain(`  Email: ${message}`);
+      expect(stderr).toContain("Environment configuration validation failed");
+      expect(stderr).not.toContain("at resolveEmailConfig");
+      expect(stderr).not.toContain("at loadEmailSettings");
     }
   });
 });

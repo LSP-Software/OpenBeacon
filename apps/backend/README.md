@@ -22,7 +22,7 @@ migrations before starting the server. Configure
 existing Redis-compatible service. The database user needs permission to apply
 migrations. Back up an existing database before applying schema changes and
 ensure migrations remain compatible with the previous release during rollout.
-Before accepting requests, the backend also checks PostgreSQL and Redis connectivity, lists S3 object versions, and checks that the current R2 PMTiles archive exists (from the map tiles manifest, or `R2_PM_TILES_KEY` when there is no manifest). See `apps/map-tiles/README.md` for publishing new map data. These read-only checks require the corresponding credentials and permissions. If a check or migration fails, the new container does not start. Rolling back an image does
+Before accepting requests, the backend also checks PostgreSQL and Redis connectivity, lists S3 object versions, checks that the current R2 PMTiles archive exists (from the map tiles manifest, or `R2_PM_TILES_KEY` when there is no manifest), and checks the email provider when one is configured. See `apps/map-tiles/README.md` for publishing new map data. These read-only checks require the corresponding credentials and permissions. If a check or migration fails, the new container does not start. Rolling back an image does
 not reverse migrations.
 
 For Google account deletion verification, add `<BETTER_AUTH_URL>/api/auth/google-deletion-callback` as an authorized redirect URI on the Google web OAuth client configured by `GOOGLE_CLIENT_ID`. For the hosted API this is `https://api.openbeacon.net/api/auth/google-deletion-callback`; each self-hosted backend needs its own exact public callback URI registered with its Google client. The Google account chooser may reuse an existing Google browser session and does not guarantee a fresh password prompt.
@@ -56,7 +56,7 @@ request came from Cloudflare, so only use it when the origin is reachable solely
 through Cloudflare, for example via Cloudflare Tunnel or a firewall that only
 allows Cloudflare's IP ranges. Otherwise use `cloudflare-authenticated`.
 
-The `Deploy backend` GitHub Actions workflow also builds and deploys the separate scheduled job runner. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
+The `Deploy backend` GitHub Actions workflow also builds and deploys the separate scheduled job runner. Every installation needs the runner: besides account deletion, it deletes expired email codes and verification tokens every hour. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
 
 The `Deploy backend` GitHub Actions workflow is manually dispatched on `main`.
 Configure
@@ -77,3 +77,36 @@ restore `latest-stable` before the next normal deployment.
 The workflow waits for Coolify to report the deployment result. If polling fails
 or times out, check the deployment in Coolify before retrying. Avoid starting
 other deployments manually while a workflow release is in progress.
+
+## Email
+
+Email is optional. Without it the backend starts normally, sends nothing, and reports `email: false` from `auth.providers`. The app then hides the sign-up code, Forgot password, the recovery reset code and Account → Notifications → Email alerts. Users can't reset a forgotten password, and a recovery phrase reset needs only a fresh sign-in and typing `RESET`.
+
+With email on, the backend sends codes for sign-up, email verification, password reset and recovery phrase reset, an "already have an account" email when someone signs up with a registered address, a "sign in with Google" email when someone asks to reset the password of an account that only uses Google, and security alerts. The alerts are always on for a password or recovery phrase change or reset, for email alerts being turned off, and for account deletion. Users can turn off the new device and deletion scheduled alerts in Account → Notifications → Email alerts.
+
+To switch email on, configure one provider and a sender address in the root `.env`:
+
+- Resend: verify your sending domain in Resend, then set `RESEND_API_KEY`. A sending-only key works. In the domain's settings in Resend, turn off open tracking and click tracking; with a full-access key the backend won't start while either is on. The hosted API uses Resend.
+- SMTP: set `SMTP_HOST`, plus `SMTP_USER` and `SMTP_PASSWORD` if your server needs a login. `SMTP_PORT` defaults to `587`, where the backend requires STARTTLS and refuses to log in or send if the server doesn't offer it. Set `SMTP_SECURE=true` or `SMTP_PORT=465` for implicit TLS. For a local relay that only speaks plaintext, set `SMTP_REQUIRE_TLS=false`; credentials and emails then cross the network unencrypted.
+
+Set `EMAIL_FROM` to the sender address, for example `noreply@example.com`. Emails always come from `OpenBeacon <EMAIL_FROM>`. A small "Sent from <SERVER_NAME>" line in the footer shows which server sent it. Setting both Resend and SMTP stops the backend from starting.
+
+Emails are branded HTML with a plain-text part. The logo is attached to the email and shown inline, so nothing loads from the internet: there are no remote images, tracking pixels or click tracking.
+
+At startup the backend checks the email settings without sending anything. For SMTP it connects and logs in. For Resend it checks the API key and, when the key has full access, that the `EMAIL_FROM` domain is verified in Resend with open tracking and click tracking off. A sending-only key passes the key check, but the domain and its tracking settings can't be checked with it, so check them yourself in Resend. A failed check stops the backend from starting.
+
+Each address can request 3 codes of each kind every 15 minutes. `EMAIL_CODE_IP_LIMIT=true` also limits each IP address to 20 code requests an hour across all addresses, which slows down someone sending codes to many addresses from one machine. It is off by default because it can block users who share an IP address, such as phones behind carrier NAT or a household on one connection.
+
+Each account can trigger at most 20 emails an hour. Over that cap, the new device, deletion scheduled, "already have an account" and "sign in with Google" emails are dropped. Codes and the always-on alerts are still sent. The backend never logs email addresses, and only the development console mode below prints codes.
+
+For local development, set `EMAIL_CONSOLE=true` instead of a provider to print the plain-text part of each email, including codes, to the backend log. It is refused unless `NODE_ENV` is `development` or `test`; `bun run dev` sets `NODE_ENV=development`.
+
+Give the scheduled job runner the same email settings and `REDIS_URL`, so it can send the account deleted email at the end of the grace period. See [the runner guide](../scheduled-jobs/README.md).
+
+### Switching email on later
+
+Accounts created while email is off aren't verified. Once you switch email on, signing in with a password to one of those accounts sends a code to its address, and the owner enters it to finish signing in. Google sign-in isn't affected.
+
+### What the email provider sees
+
+Your email provider sees each recipient's address and every email in full: which kind it is, when it was sent, and the code or alert text. Emails never contain locations, IP addresses or recovery material. Anyone who can read an account's email can reset its password, unless it only signs in with Google. See [the privacy draft](../../docs/security/beta-1-privacy-draft.md#email).

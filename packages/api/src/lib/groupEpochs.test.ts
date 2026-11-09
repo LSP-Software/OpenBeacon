@@ -27,11 +27,16 @@ describe("group epoch helpers", () => {
     const result = await upsertUserDevice({
       db: {
         $transaction: async (run: (tx: object) => Promise<unknown>) =>
-          run({ group: { updateMany }, userDevice: { create } }),
+          run({
+            $queryRaw: async () => [],
+            group: { updateMany },
+            userDevice: { count: async () => 1, create },
+          }),
         userDevice: {
           findUnique: async () => null,
         },
       } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
+      securityAlerts: null,
       input: {
         algorithm: DEVICE_KEY_ALGORITHM,
         deviceId: "device-a",
@@ -70,6 +75,7 @@ describe("group epoch helpers", () => {
           update,
         },
       },
+      securityAlerts: null,
       input: {
         algorithm: DEVICE_KEY_ALGORITHM,
         deviceId: "device-a",
@@ -128,12 +134,13 @@ describe("group epoch helpers", () => {
     const result = await upsertUserDevice({
       db: {
         $transaction: async (run: (tx: object) => Promise<unknown>) =>
-          run({ userDevice: { create } }),
+          run({ $queryRaw: async () => [], userDevice: { create } }),
         userDevice: {
           findUnique,
           update,
         },
       } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
+      securityAlerts: null,
       input: {
         algorithm: DEVICE_KEY_ALGORITHM,
         deviceId: "device-a",
@@ -173,6 +180,7 @@ describe("group epoch helpers", () => {
           deviceId: "device-a",
           publicKey: "public-key-next",
         },
+        securityAlerts: null,
         userId: "user-a",
       }),
     ).rejects.toThrow("This device ID is already registered with different key material.");
@@ -195,6 +203,7 @@ describe("group epoch helpers", () => {
           deviceId: "device-a",
           publicKey: "public-key",
         },
+        securityAlerts: null,
         userId: "user-a",
       }),
     ).rejects.toThrow("This device is already registered to another user.");

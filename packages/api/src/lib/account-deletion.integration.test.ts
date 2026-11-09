@@ -1,5 +1,7 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { createSecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
 import { prisma } from "@openbeacon/database";
+import type { SecurityAlert } from "@openbeacon/email";
 import { deleteAccountRecords } from "./account-deletion.ts";
 
 const prefix = `account-deletion-${crypto.randomUUID()}`;
@@ -9,10 +11,30 @@ const groupId = `${prefix}-group`;
 const deletedDevice = `${prefix}-device-deleted`;
 const remainingDevice = `${prefix}-device-remaining`;
 const epochId = `${prefix}-epoch`;
+const sent: { to: string; alert: SecurityAlert; hasPassword: boolean }[] = [];
+let sendFailure: Error | null = null;
+const tasks: Promise<unknown>[] = [];
+const securityAlerts = createSecurityAlerts({
+  db: prisma,
+  sendSecurityAlertEmail: async ({ to, alert, hasPassword }) => {
+    if (sendFailure) throw sendFailure;
+    sent.push({ to, alert, hasPassword });
+  },
+  runInBackground: (task) => tasks.push(task),
+});
+const sentAlerts = async () => {
+  await Promise.all(tasks.splice(0));
+  return sent.splice(0);
+};
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "account deletion epoch references with PostgreSQL",
   () => {
+    beforeEach(async () => {
+      await sentAlerts();
+      sendFailure = null;
+    });
+
     beforeAll(async () => {
       await prisma.user.createMany({
         data: [
@@ -202,14 +224,23 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         userId: deletedUser,
         mode: "immediate" as const,
         imageUrlPrefix: "https://cdn.example/bucket",
+        securityAlerts,
       };
       await expect(deleteAccountRecords(input)).rejects.toThrow("Transfer ownership");
       expect(await prisma.user.findUnique({ where: { id: deletedUser } })).not.toBeNull();
+      expect(await sentAlerts()).toEqual([]);
       await prisma.groupMember.update({
         where: { userId_groupId: { userId: remainingUser, groupId } },
         data: { role: "OWNER" },
       });
       await expect(deleteAccountRecords(input)).resolves.toBe(true);
+      expect(await sentAlerts()).toEqual([
+        {
+          to: `${deletedUser}@example.test`,
+          alert: { type: "account-deleted" },
+          hasPassword: false,
+        },
+      ]);
       expect(await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).toMatchObject({
         epochRotationRequired: true,
         image: null,
@@ -260,15 +291,20 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           userId: id,
           imageUrlPrefix: "https://cdn.example/bucket",
           mode: "scheduled" as const,
+          securityAlerts,
         };
         expect(await deleteAccountRecords(input)).toBe(false);
         expect(await prisma.user.findUnique({ where: { id } })).not.toBeNull();
+        expect(await sentAlerts()).toEqual([]);
         expect(
           await prisma.accountDeletionCleanup.findUnique({ where: { userId: id } }),
         ).toBeNull();
         await prisma.$executeRaw`UPDATE "User" SET "deletionDate" = (clock_timestamp() AT TIME ZONE 'UTC') - interval '1 second' WHERE id = ${id}`;
         expect(await deleteAccountRecords(input)).toBe(true);
         expect(await deleteAccountRecords(input)).toBe(false);
+        expect(await sentAlerts()).toEqual([
+          { to: `${id}@example.test`, alert: { type: "account-deleted" }, hasPassword: false },
+        ]);
         const cleanup = await prisma.accountDeletionCleanup.findUniqueOrThrow({
           where: { userId: id },
         });
@@ -303,6 +339,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             userId: id,
             mode: "immediate",
             imageUrlPrefix: "https://cdn.example/bucket",
+            securityAlerts: null,
           }),
         ).toBe(true);
         expect(await prisma.group.findUnique({ where: { id: soloGroup } })).toBeNull();
@@ -350,6 +387,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
               userId: id,
               mode: "immediate",
               imageUrlPrefix: "https://cdn.example/bucket",
+              securityAlerts: null,
             }),
           ),
         );
@@ -364,6 +402,36 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         await prisma.accountDeletionCleanup.deleteMany({
           where: { userId: { in: [first, second] } },
         });
+      }
+    });
+
+    test("a failed account deleted alert doesn't fail the deletion", async () => {
+      const id = `${prefix}-send-failure`;
+      await prisma.user.create({
+        data: {
+          id,
+          name: "Send failure",
+          email: `${id}@example.test`,
+          pendingDeletion: true,
+          deletionDate: new Date(Date.now() - 60_000),
+        },
+      });
+      sendFailure = new Error("SMTP is down");
+      try {
+        expect(
+          await deleteAccountRecords({
+            db: prisma,
+            userId: id,
+            mode: "scheduled",
+            imageUrlPrefix: "https://cdn.example/bucket",
+            securityAlerts,
+          }),
+        ).toBe(true);
+        expect(await sentAlerts()).toEqual([]);
+        expect(await prisma.user.findUnique({ where: { id } })).toBeNull();
+      } finally {
+        await prisma.user.deleteMany({ where: { id } });
+        await prisma.accountDeletionCleanup.deleteMany({ where: { userId: id } });
       }
     });
   },

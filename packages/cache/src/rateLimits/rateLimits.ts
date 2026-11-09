@@ -1,5 +1,6 @@
 import type { RedisLike } from "../cache/redis.ts";
 import {
+  type RateLimitIdentifier,
   rateLimitConsumeInputSchema,
   rateLimitPeekInputSchema,
   rateLimitResetInputSchema,
@@ -68,10 +69,7 @@ const buildRateLimitKey = ({
   keyPrefix,
   namespace,
 }: {
-  identifier: {
-    type: "ip" | "userId";
-    value: string;
-  };
+  identifier: RateLimitIdentifier;
   keyPrefix: string;
   namespace: string;
 }) => {
@@ -105,10 +103,7 @@ const executeRateLimitScript = async ({
   windowMs,
   cost,
 }: {
-  identifier: {
-    type: "ip" | "userId";
-    value: string;
-  };
+  identifier: RateLimitIdentifier;
   keyPrefix: string;
   limit: number;
   namespace: string;
