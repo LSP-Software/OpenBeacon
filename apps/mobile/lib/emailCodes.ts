@@ -20,12 +20,27 @@ export const emailCodes = {
 
 export const invalidCodeMessage = "The code is wrong or has expired. Check it, or send a new code.";
 
+type CodeRejections = { total: number; codes: number; currentCodeRejected: boolean };
+
+export const noCodeRejections: CodeRejections = { total: 0, codes: 0, currentCodeRejected: false };
+
+export const recordCodeRejection = (rejections: CodeRejections): CodeRejections => ({
+  total: rejections.total + 1,
+  codes: rejections.currentCodeRejected ? rejections.codes : rejections.codes + 1,
+  currentCodeRejected: true,
+});
+
+export const recordNewCode = (rejections: CodeRejections): CodeRejections => ({
+  ...rejections,
+  currentCodeRejected: false,
+});
+
 export const codeEntryErrorMessage = (
   error: string,
-  invalidCodeCount: number,
+  rejections: CodeRejections,
   repeatedInvalidCodeHint: string,
 ) =>
-  error === invalidCodeMessage && invalidCodeCount > 1
+  error === invalidCodeMessage && (rejections.codes > 1 || rejections.total > 5)
     ? `${error} ${repeatedInvalidCodeHint}`
     : error;
 

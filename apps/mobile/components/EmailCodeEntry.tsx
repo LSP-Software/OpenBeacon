@@ -4,7 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Pressable, View } from "react-native";
 import type { z } from "zod";
-import { codeEntryErrorMessage, invalidCodeMessage } from "../lib/emailCodes.ts";
+import {
+  codeEntryErrorMessage,
+  invalidCodeMessage,
+  noCodeRejections,
+  recordCodeRejection,
+  recordNewCode,
+} from "../lib/emailCodes.ts";
 import { Button } from "./ui/Button.tsx";
 import { Input } from "./ui/Input.tsx";
 import { Text } from "./ui/Text.tsx";
@@ -45,7 +51,7 @@ export const EmailCodeEntry = ({
   const [resendMessage, setResendMessage] = useState<string | null>(notice ?? null);
   const [resendAvailableAt, setResendAvailableAt] = useState(() => Date.now() + resendCooldownMs);
   const [now, setNow] = useState(() => Date.now());
-  const invalidCodeCount = useRef(0);
+  const codeRejections = useRef(noCodeRejections);
 
   useEffect(() => {
     if (now >= resendAvailableAt) return;
@@ -61,24 +67,28 @@ export const EmailCodeEntry = ({
     const error = await onSubmit(code);
     setSubmitting(false);
     if (!error) return;
-    if (error === invalidCodeMessage) invalidCodeCount.current += 1;
+    if (error === invalidCodeMessage) {
+      codeRejections.current = recordCodeRejection(codeRejections.current);
+    }
     form.setError("code", {
-      message: codeEntryErrorMessage(error, invalidCodeCount.current, repeatedInvalidCodeHint),
+      message: codeEntryErrorMessage(error, codeRejections.current, repeatedInvalidCodeHint),
     });
   };
 
   const resend = async () => {
+    form.clearErrors("code");
     setResending(true);
     const error = await onResend();
     setResending(false);
+    setResendAvailableAt(Date.now() + resendCooldownMs);
+    setNow(Date.now());
     if (error) {
       setResendMessage(error);
       return;
     }
+    codeRejections.current = recordNewCode(codeRejections.current);
     setResendMessage(resentMessage);
     form.reset();
-    setResendAvailableAt(Date.now() + resendCooldownMs);
-    setNow(Date.now());
   };
 
   return (

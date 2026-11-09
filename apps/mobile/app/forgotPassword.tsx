@@ -1,6 +1,7 @@
 import { Alert } from "../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signInSchema } from "@openbeacon/schemas";
+import { useQuery } from "@tanstack/react-query";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -13,7 +14,8 @@ import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx
 import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Text } from "../components/ui/Text.tsx";
-import { completeAuthenticatedSessionSetup } from "../lib/auth.ts";
+import { trpc } from "../lib/api.ts";
+import { completeAuthenticatedSessionSetup, isNativeGoogleSignInConfigured } from "../lib/auth.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { emailCodeErrorMessage, emailCodes } from "../lib/emailCodes.ts";
 import { finishAuthentication } from "../lib/finishAuthentication.ts";
@@ -33,6 +35,8 @@ const ForgotPassword = () => {
     | { name: "password"; email: string; resetToken: string }
   >({ name: "email" });
   const [loading, setLoading] = useState(false);
+  const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
+  const isGoogleEnabled = providers?.google === true && isNativeGoogleSignInConfigured;
   const form = useForm<z.infer<typeof resetFormSchema>>({
     resolver: zodResolver(resetFormSchema),
     mode: "onTouched",
@@ -144,7 +148,10 @@ const ForgotPassword = () => {
                       <>
                         If <Text className="font-semibold">{step.email}</Text> has an OpenBeacon
                         account with a password, we've sent it a 6-digit code. It expires in 10
-                        minutes. If you sign in with Google, use Continue with Google instead.
+                        minutes.
+                        {isGoogleEnabled
+                          ? " If you sign in with Google, use Continue with Google instead."
+                          : null}
                       </>
                     }
                     submitLabel="Continue"
