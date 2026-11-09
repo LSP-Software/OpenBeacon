@@ -34,6 +34,25 @@ jobs:
       - name: Run CI
         run: bun run ci
 
+  version-bump:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - name: Check client and server versions were bumped
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: bun scripts/check-version-bump.ts "origin/$BASE_REF"
+
   postgres-integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
