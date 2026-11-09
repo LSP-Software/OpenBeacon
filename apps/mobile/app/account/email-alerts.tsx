@@ -1,6 +1,6 @@
 import { emailAlertSettingsSchema } from "@openbeacon/schemas";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ScrollView, Switch, View } from "react-native";
+import { Platform, ScrollView, Switch, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { z } from "zod";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
@@ -113,6 +113,12 @@ const EmailAlertsScreen = () => {
                       value={settings.data[setting]}
                       disabled={updateSettings.isPending}
                       trackColor={{ true: colors.primary }}
+                      // Android's SwitchCompat tints the on thumb with the AppCompat accent (teal) unless thumbColor is set.
+                      thumbColor={
+                        Platform.OS === "android" && settings.data[setting]
+                          ? colors.primary
+                          : undefined
+                      }
                       onValueChange={(value) =>
                         updateSettings.mutate({ ...settings.data, [setting]: value })
                       }
