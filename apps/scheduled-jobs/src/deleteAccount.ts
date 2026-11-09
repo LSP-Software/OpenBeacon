@@ -19,6 +19,7 @@ const result = await tryCatch(
       userId: user.id,
       mode: "immediate",
       imageUrlPrefix: `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`,
+      securityAlerts: null,
     });
     if (!deleted) throw new Error("Account not found.");
   })(),

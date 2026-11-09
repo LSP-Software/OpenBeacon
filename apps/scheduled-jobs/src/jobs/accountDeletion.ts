@@ -23,6 +23,7 @@ export const runAccountDeletion = async () => {
         userId: user.id,
         imageUrlPrefix: `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`,
         mode: "scheduled",
+        securityAlerts: services.securityAlerts,
       }),
     );
     if (result.error) {

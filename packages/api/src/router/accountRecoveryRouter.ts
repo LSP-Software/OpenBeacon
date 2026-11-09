@@ -159,6 +159,7 @@ export const accountRecoveryRouter = createTRPCRouter({
           });
         }
       });
+      ctx.securityAlerts?.send(userId, { type: "recovery-phrase-changed" });
       return { historyKeyVersions: input.escrows.map(({ version }) => version) };
     }),
   requestResetCode: emailCodeProcedure.mutation(async ({ ctx }) => {
@@ -241,6 +242,7 @@ export const accountRecoveryRouter = createTRPCRouter({
         await tx.recoveryKey.create({ data: { ...input.recoveryKey, userId } });
         await createHistoryKey(tx, userId, input.historyKey);
       });
+      ctx.securityAlerts?.send(userId, { type: "recovery-phrase-reset" });
       return { historyKeyVersion: input.historyKey.version };
     }),
 });

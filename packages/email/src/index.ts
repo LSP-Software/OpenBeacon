@@ -4,6 +4,7 @@ import { renderAccountExistsEmail } from "./accountExistsEmail.tsx";
 import { renderCodeEmail } from "./codeEmail.tsx";
 import { loadEmailSettings } from "./config.ts";
 import { renderEmailLayout } from "./layout.tsx";
+import { createSendSecurityAlertEmail } from "./securityAlertEmail.tsx";
 import { createSendEmail } from "./sender.ts";
 import { createEmailTransport } from "./transport.ts";
 import type { EmailCodePurpose } from "./types.ts";
@@ -21,7 +22,14 @@ export const checkEmail = async () => {
   throw result.error;
 };
 
-export type { EmailCodePurpose, EmailMessage } from "./types.ts";
+export {
+  type EmailCodePurpose,
+  type EmailMessage,
+  isOptionalSecurityAlert,
+  type OptionalSecurityAlert,
+  optionalSecurityAlerts,
+  type SecurityAlert,
+} from "./types.ts";
 
 export const renderEmail = (email: Omit<Parameters<typeof renderEmailLayout>[0], "serverName">) =>
   renderEmailLayout({ ...email, serverName });
@@ -70,3 +78,5 @@ export const sendAccountExistsEmail = async ({
     userId,
     optional: true,
   });
+
+export const sendSecurityAlertEmail = createSendSecurityAlertEmail({ sendEmail, serverName });

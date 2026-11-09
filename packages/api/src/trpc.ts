@@ -1,4 +1,4 @@
-import { auth, emailCodes } from "@openbeacon/auth";
+import { auth, emailCodes, securityAlerts } from "@openbeacon/auth";
 import type { OpenBeaconCache } from "@openbeacon/cache";
 import type { PrismaClient } from "@openbeacon/database";
 import { initTRPC } from "@trpc/server";
@@ -23,6 +23,7 @@ export const createTRPCContext = async (opts: {
     cache: opts.cache,
     db: opts.db,
     emailCodes,
+    securityAlerts,
     session,
     serverVersion: opts.serverVersion,
     serverName: opts.serverName,

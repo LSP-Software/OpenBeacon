@@ -3,19 +3,22 @@ import { Prisma } from "@openbeacon/database";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { APIError, createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware, isAPIError } from "better-auth/api";
 import { db } from "./db.ts";
 import { type EmailCodes, normalizeEmail } from "./emailCode.ts";
 import { emailCodePlugin } from "./emailCodePlugin.ts";
 import { env } from "./env.ts";
+import type { SecurityAlerts } from "./securityAlerts.ts";
 
 export const clientIpHeader = "x-openbeacon-client-ip";
 
 export const createAuth = ({
   emailCodes,
+  securityAlerts,
   runInBackground,
 }: {
   emailCodes: EmailCodes | null;
+  securityAlerts: SecurityAlerts | null;
   runInBackground?: (task: Promise<unknown>) => void;
 }) =>
   betterAuth({
@@ -43,6 +46,12 @@ export const createAuth = ({
               value: normalizeEmail(email),
             }));
           if (!verified) throw invalidSignUpToken();
+        }
+      }),
+      after: createAuthMiddleware(async (ctx) => {
+        const userId = ctx.context.session?.user.id;
+        if (ctx.path === "/change-password" && userId && !isAPIError(ctx.context.returned)) {
+          securityAlerts?.send(userId, { type: "password-changed" });
         }
       }),
     },
@@ -155,6 +164,9 @@ export const createAuth = ({
       enabled: true,
       requireEmailVerification: emailCodes !== null,
       revokeSessionsOnPasswordReset: true,
+      onPasswordReset: async ({ user }) => {
+        securityAlerts?.send(user.id, { type: "password-reset" });
+      },
     },
     socialProviders:
       env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET

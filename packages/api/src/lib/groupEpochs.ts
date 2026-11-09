@@ -1,3 +1,4 @@
+import type { SecurityAlerts } from "@openbeacon/auth";
 import { Prisma, type PrismaClient } from "@openbeacon/database";
 import {
   DEVICE_KEY_ALGORITHM,
@@ -9,9 +10,10 @@ import {
   type WrappedEpochKey,
   type WrappedHistoryEpochKey,
 } from "@openbeacon/encryption";
-import { HISTORY_RECIPIENT_MISMATCH_MESSAGE } from "@openbeacon/schemas";
+import { type devicePlatformSchema, HISTORY_RECIPIENT_MISMATCH_MESSAGE } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
+import type { z } from "zod";
 
 type DeviceRecord = {
   createdAt: Date;
@@ -536,6 +538,7 @@ export const persistGroupEpoch = async ({
 export const upsertUserDevice = async ({
   db,
   input,
+  securityAlerts,
   userId,
 }: {
   db: Pick<PrismaClient, "$transaction" | "userDevice">;
@@ -543,7 +546,10 @@ export const upsertUserDevice = async ({
     algorithm: string;
     deviceId: string;
     publicKey: string;
+    platform?: z.infer<typeof devicePlatformSchema> | undefined;
+    model?: string | undefined;
   };
+  securityAlerts: SecurityAlerts | null;
   userId: string;
 }) => {
   if (input.algorithm !== DEVICE_KEY_ALGORITHM) {
@@ -592,9 +598,12 @@ export const upsertUserDevice = async ({
 
   const createResult = await tryCatch(
     db.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`);
       const device = await tx.userDevice.create({
         data: {
           id: input.deviceId,
+          model: input.model ?? null,
+          platform: input.platform ?? null,
           publicKey: input.publicKey,
           publicKeyAlgorithm: input.algorithm,
           userId,
@@ -604,12 +613,18 @@ export const upsertUserDevice = async ({
         data: { epochRotationRequired: true },
         where: { groupMembers: { some: { userId } } },
       });
-      return device;
+      return { device, firstDevice: (await tx.userDevice.count({ where: { userId } })) === 1 };
     }),
   );
 
   if (!createResult.error) {
-    return createResult.data;
+    if (!createResult.data.firstDevice) {
+      securityAlerts?.send(userId, {
+        type: "new-device",
+        device: { model: input.model ?? null, platform: input.platform ?? null },
+      });
+    }
+    return createResult.data.device;
   }
 
   const error = createResult.error;

@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@openbeacon/api": "workspace:*",
+    "@openbeacon/auth": "workspace:*",
     "@openbeacon/database": "workspace:*",
+    "@openbeacon/email": "workspace:*",
     "@openbeacon/shared": "workspace:*"
   }
 }

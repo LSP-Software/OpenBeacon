@@ -20,10 +20,21 @@ const devicePublicKeySchema = z
     }
   }, "Invalid device public key.");
 
+export const devicePlatformSchema = z.enum(["android", "ios"]);
+
 export const registerDeviceKeySchema = z.object({
   algorithm: z.literal(DEVICE_KEY_ALGORITHM),
   deviceId: z.string().min(1).max(128),
   publicKey: devicePublicKeySchema,
+  platform: devicePlatformSchema.optional(),
+  model: z
+    .string()
+    .max(256)
+    .optional()
+    .transform((model) => {
+      const trimmed = model?.trim();
+      return trimmed && /^[\p{L}\p{N} ()+_-]{1,40}$/u.test(trimmed) ? trimmed : undefined;
+    }),
 });
 
 export const encodedBytes = (length: number) =>

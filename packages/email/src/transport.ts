@@ -46,6 +46,7 @@ export const createEmailTransport = (
     secure: config.secure,
     connectionTimeout: 8000,
     greetingTimeout: 8000,
+    socketTimeout: 30000,
     ...(config.auth ? { auth: config.auth } : {}),
   });
   return {

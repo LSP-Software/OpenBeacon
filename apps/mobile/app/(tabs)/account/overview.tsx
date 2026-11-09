@@ -15,6 +15,7 @@ import {
   LockIcon,
   MailIcon,
   MapPinIcon,
+  ShieldAlertIcon,
   SunIcon,
   Trash2Icon,
 } from "lucide-react-native";
@@ -66,6 +67,12 @@ const categories = [
         label: "Password and Security",
         icon: LockIcon,
         href: "/account/password",
+      },
+      {
+        label: "Email alerts",
+        icon: ShieldAlertIcon,
+        href: "/account/email-alerts",
+        requiresEmail: true,
       },
       {
         label: "Recovery phrase",
@@ -122,6 +129,7 @@ const AccountScreen = () => {
     defaultValues: { name: "" },
   });
   const groups = useQuery(trpc.groupMembership.list.queryOptions());
+  const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
   const devices = useQuery(trpc.auth.listMyDeviceKeys.queryOptions());
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
@@ -373,7 +381,14 @@ const AccountScreen = () => {
           </Card>
         )}
 
-        <SettingsContainer categories={categories} />
+        <SettingsContainer
+          categories={categories.map((category) => ({
+            ...category,
+            settings: category.settings.filter(
+              (setting) => !("requiresEmail" in setting) || providers?.email,
+            ),
+          }))}
+        />
 
         <View className="mb-28 gap-3">
           {signOutPhase && (

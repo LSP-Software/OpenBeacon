@@ -29,10 +29,12 @@ export const renderEmailLayout = async ({
   serverName,
   preview,
   children,
+  footerNote,
 }: {
   serverName: string;
   preview: string;
   children: ReactNode;
+  footerNote?: string;
 }): Promise<Pick<EmailMessage, "html" | "text" | "attachments">> => {
   if (!preview.trim()) throw new Error("Email preview text is required");
   const fontFamily =
@@ -89,6 +91,18 @@ export const renderEmailLayout = async ({
           <Section
             style={{ borderTop: `1px solid ${emailColors.border}`, padding: "16px 24px 32px" }}
           >
+            {footerNote && (
+              <Text
+                style={{
+                  color: emailColors.muted,
+                  fontSize: "13px",
+                  lineHeight: "20px",
+                  margin: "0 0 8px",
+                }}
+              >
+                {footerNote}
+              </Text>
+            )}
             <Text
               style={{ color: emailColors.muted, fontSize: "13px", lineHeight: "20px", margin: 0 }}
             >

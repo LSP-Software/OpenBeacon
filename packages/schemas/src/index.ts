@@ -1,5 +1,6 @@
 import { optionalEnvString, serverNameSchema } from "./env.ts";
 import { changePasswordSchema } from "./schemas/account/changePassword.ts";
+import { emailAlertSettingsSchema, timezoneSchema } from "./schemas/account/emailAlerts.ts";
 import { emailCodeSchema } from "./schemas/account/emailCode.ts";
 import { accountNameSchema } from "./schemas/account/fields.ts";
 import { signInSchema } from "./schemas/account/signIn.ts";
@@ -11,6 +12,7 @@ import {
   setupAccountRecoverySchema,
 } from "./schemas/auth/accountRecovery.ts";
 import {
+  devicePlatformSchema,
   groupEpochBundleSchema,
   HISTORY_RECIPIENT_MISMATCH_MESSAGE,
   registerDeviceKeySchema,
@@ -33,6 +35,9 @@ import {
 import { requestImageUploadInputSchema } from "./schemas/image/requestImageUpload.ts";
 
 export {
+  devicePlatformSchema,
+  emailAlertSettingsSchema,
+  timezoneSchema,
   accountNameSchema,
   addHistoryWrapsSchema,
   changePasswordSchema,

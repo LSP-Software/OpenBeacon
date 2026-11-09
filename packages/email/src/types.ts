@@ -1,3 +1,6 @@
+import type { devicePlatformSchema } from "@openbeacon/schemas";
+import type { z } from "zod";
+
 export type EmailMessage = {
   to: string;
   subject: string;
@@ -26,3 +29,30 @@ export type EmailTransport = {
 
 export type EmailCodePurpose =
   "sign-up" | "email-verification" | "password-reset" | "recovery-reset";
+
+export const optionalSecurityAlerts = {
+  "new-device": "alertNewDevice",
+  "deletion-scheduled": "alertDeletionScheduled",
+} as const;
+
+export type OptionalSecurityAlert = keyof typeof optionalSecurityAlerts;
+
+export type SecurityAlert =
+  | {
+      type:
+        | "password-changed"
+        | "password-reset"
+        | "recovery-phrase-changed"
+        | "recovery-phrase-reset"
+        | "account-deleted";
+    }
+  | {
+      type: "new-device";
+      device: { model: string | null; platform: z.infer<typeof devicePlatformSchema> | null };
+    }
+  | { type: "deletion-scheduled"; deletionDate: Date }
+  | { type: "alerts-turned-off"; alerts: OptionalSecurityAlert[] };
+
+export const isOptionalSecurityAlert = (
+  type: SecurityAlert["type"],
+): type is OptionalSecurityAlert => type in optionalSecurityAlerts;

@@ -19,6 +19,7 @@ const removeImages = mock(async (_bucket: string, userId: string) => {
 });
 const removeImageKey = mock(async (_bucket: string, _key: string) => {});
 const logError = mock(() => {});
+const securityAlerts = { send: mock(() => {}), sendTo: mock(() => {}) };
 
 mock.module("@openbeacon/api/account-deletion.ts", () => ({ deleteAccountRecords: removeAccount }));
 mock.module("@openbeacon/api/env.ts", () => ({
@@ -39,6 +40,7 @@ mock.module("../services.ts", () => ({
         updateMany: retryCleanup,
       },
     },
+    securityAlerts,
   },
 }));
 const { runAccountDeletion } = await import("./accountDeletion.ts");
@@ -69,6 +71,11 @@ test("cleans up recorded group image keys before removing the cleanup record", a
   await runAccountDeletion();
   expect(removeImageKey).toHaveBeenCalledWith("bucket", "user/other/image");
   expect(removeCleanup).toHaveBeenCalledWith({ where: { userId: "clean" } });
+});
+
+test("passes the runner's security alerts so deleted accounts get an alert", async () => {
+  await runAccountDeletion();
+  expect(removeAccount.mock.calls[0]?.[0]).toMatchObject({ securityAlerts });
 });
 
 test("continues after an account failure and retains failed image cleanup for retry", async () => {

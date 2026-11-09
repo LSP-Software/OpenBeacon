@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis } from "@openbeacon/cache/testing";
 import { prisma } from "@openbeacon/database";
-import type { EmailCodePurpose } from "@openbeacon/email";
+import type { EmailCodePurpose, SecurityAlert } from "@openbeacon/email";
 import { z } from "zod";
 import { clientIpHeader, createAuth } from "./createAuth.ts";
 import {
@@ -13,6 +13,7 @@ import {
   emailCodeRequestLimits,
   emailCodeTokens,
 } from "./emailCode.ts";
+import { createSecurityAlerts } from "./securityAlerts.ts";
 
 class TestCache extends OpenBeaconCache {
   protected override createRedisClient(): FakeRedis {
@@ -27,6 +28,8 @@ let sendFailure: Error | null = null;
 const sent: { to: string; purpose: EmailCodePurpose; code: string; userId?: string }[] = [];
 const accountExistsSent: { to: string; userId: string; hasPassword: boolean }[] = [];
 const tasks: Promise<unknown>[] = [];
+const alerts: { to: string; userId: string; alert: SecurityAlert }[] = [];
+let alertFailure: Error | null = null;
 
 const codes = createEmailCodes({
   db: prisma,
@@ -41,8 +44,24 @@ const codes = createEmailCodes({
   },
   now: () => new Date(clockMs),
 });
-const auth = createAuth({ emailCodes: codes, runInBackground: (task) => tasks.push(task) });
-const emailOff = createAuth({ emailCodes: null, runInBackground: (task) => tasks.push(task) });
+const securityAlerts = createSecurityAlerts({
+  db: prisma,
+  sendSecurityAlertEmail: async ({ to, userId, alert }) => {
+    if (alertFailure) throw alertFailure;
+    alerts.push({ to, userId, alert });
+  },
+  runInBackground: (task) => tasks.push(task),
+});
+const auth = createAuth({
+  emailCodes: codes,
+  securityAlerts,
+  runInBackground: (task) => tasks.push(task),
+});
+const emailOff = createAuth({
+  emailCodes: null,
+  securityAlerts: null,
+  runInBackground: (task) => tasks.push(task),
+});
 
 let ipCounter = 0;
 const nextIp = () => {
@@ -153,6 +172,8 @@ beforeEach(() => {
   sendFailure = null;
   sent.length = 0;
   accountExistsSent.length = 0;
+  alerts.length = 0;
+  alertFailure = null;
 });
 
 afterAll(async () => {
@@ -880,5 +901,68 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("unverified accou
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ user: { emailVerified: false } });
+  });
+});
+
+describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts", () => {
+  const signIn = async (email: string) => {
+    const response = await auth.handler(
+      new Request("http://localhost:3000/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json", [clientIpHeader]: nextIp() },
+        body: JSON.stringify({ email, password }),
+      }),
+    );
+    return response.headers.get("set-cookie")?.split(";")[0] ?? "";
+  };
+
+  const changePassword = async (cookie: string, currentPassword: string) => {
+    const response = await auth.handler(
+      new Request("http://localhost:3000/api/auth/change-password", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie, [clientIpHeader]: nextIp() },
+        body: JSON.stringify({ currentPassword, newPassword: "a brand new passphrase" }),
+      }),
+    );
+    await Promise.all(tasks.splice(0));
+    return response.status;
+  };
+
+  test("a reset sends one alert, even with every optional alert turned off", async () => {
+    const { email, userId } = await createPasswordAccount("reset-alert");
+    await prisma.user.update({
+      where: { id: userId },
+      data: { alertNewDevice: false, alertDeletionScheduled: false },
+    });
+
+    expect((await resetPassword(await resetTokenFor(email), "a brand new passphrase")).status).toBe(
+      200,
+    );
+    expect(alerts).toEqual([{ to: email, userId, alert: { type: "password-reset" } }]);
+  });
+
+  test("a password change sends one alert", async () => {
+    const { email, userId } = await createPasswordAccount("change-alert");
+
+    expect(await changePassword(await signIn(email), password)).toBe(200);
+    expect(alerts).toEqual([{ to: email, userId, alert: { type: "password-changed" } }]);
+  });
+
+  test("a failed password change sends no alert", async () => {
+    const { email } = await createPasswordAccount("change-alert-wrong");
+
+    expect(await changePassword(await signIn(email), "not the password")).toBe(400);
+    expect(alerts).toEqual([]);
+  });
+
+  test("a failed alert doesn't fail the change or the reset", async () => {
+    const { email } = await createPasswordAccount("alert-failure");
+    alertFailure = new Error("SMTP is down");
+
+    expect(await changePassword(await signIn(email), password)).toBe(200);
+    expect((await resetPassword(await resetTokenFor(email), "another new passphrase")).status).toBe(
+      200,
+    );
+    expect(await signsInWith(email, "another new passphrase")).toBe(true);
   });
 });
