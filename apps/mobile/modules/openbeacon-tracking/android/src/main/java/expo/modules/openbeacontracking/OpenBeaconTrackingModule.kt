@@ -21,6 +21,7 @@ class OpenBeaconTrackingModule : Module() {
           if (preferences.getString("owner", null) != owner) {
             TrackingRuntime.captureCommands.stop()
             TrackingRuntime.isCaptureRunning = false
+            TrackingRuntime.setCaptureEnabled(requireContext(), false)
             requireContext().stopService(Intent(requireContext(), TrackingCaptureService::class.java))
             TrackingRuntime.epochKeyStore(requireContext()).revoke(null)
             check(preferences.edit().putString("owner", owner).commit())
@@ -49,6 +50,9 @@ class OpenBeaconTrackingModule : Module() {
       }
 
       Function("revokeEpochKeys") { groupIds: List<String>? ->
+        if (groupIds.isNullOrEmpty()) {
+          synchronized(TrackingRuntime.captureLock) { TrackingRuntime.setCaptureEnabled(requireContext(), false) }
+        }
         TrackingRuntime.epochKeyStore(requireContext()).revoke(groupIds)
       }
 
@@ -64,7 +68,11 @@ class OpenBeaconTrackingModule : Module() {
       }
 
       AsyncFunction("startCapture") { intervalMs: Double? ->
-        val generation = synchronized(TrackingRuntime.captureLock) { TrackingRuntime.captureCommands.start() }
+        val generation =
+          synchronized(TrackingRuntime.captureLock) {
+            TrackingRuntime.setCaptureEnabled(requireContext(), true)
+            TrackingRuntime.captureCommands.start()
+          }
         val intent =
           Intent(requireContext(), TrackingCaptureService::class.java).apply {
             action = TrackingCaptureService.ACTION_START
@@ -90,6 +98,7 @@ class OpenBeaconTrackingModule : Module() {
         synchronized(TrackingRuntime.captureLock) {
           TrackingRuntime.captureCommands.stop()
           TrackingRuntime.isCaptureRunning = false
+          TrackingRuntime.setCaptureEnabled(requireContext(), false)
         }
         val intent = Intent(requireContext(), TrackingCaptureService::class.java)
         requireContext().stopService(intent)

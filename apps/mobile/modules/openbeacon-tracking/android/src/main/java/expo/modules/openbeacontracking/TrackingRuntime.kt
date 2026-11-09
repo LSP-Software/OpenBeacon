@@ -49,7 +49,20 @@ object TrackingRuntime {
       ciphertextQueue = ciphertextQueue(context),
       captureLock = captureLock,
       canQueue = { generation -> isCaptureRunning && captureCommands.isCurrent(generation) },
-      queueOwner = { context.getSharedPreferences("openbeacon_tracking_queue", Context.MODE_PRIVATE).getString("owner", null) },
+      queueOwner = { queueOwner(context) },
       bootId = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1).takeIf { it >= 0 }?.toString(),
     )
+
+  fun queueOwner(context: Context): String? =
+    context.getSharedPreferences("openbeacon_tracking_queue", Context.MODE_PRIVATE).getString("owner", null)
+
+  fun isCaptureEnabled(context: Context): Boolean =
+    context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).getBoolean("enabled", false)
+
+  fun setCaptureEnabled(
+    context: Context,
+    enabled: Boolean,
+  ) {
+    check(context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).edit().putBoolean("enabled", enabled).commit())
+  }
 }
