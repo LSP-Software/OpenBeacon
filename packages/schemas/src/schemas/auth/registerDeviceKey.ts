@@ -26,7 +26,7 @@ export const registerDeviceKeySchema = z.object({
   publicKey: devicePublicKeySchema,
 });
 
-const encodedBytes = (length: number) =>
+export const encodedBytes = (length: number) =>
   z.string().refine((value) => {
     try {
       if (value.length !== Math.ceil(length / 3) * 4) return false;
@@ -47,11 +47,27 @@ export const wrappedEpochKeySchema = z.object({
   wrappedKey: encodedBytes(48),
 });
 
+export const historyKeyVersionSchema = z.number().int().positive();
+
+export const wrappedHistoryEpochKeySchema = z.strictObject({
+  algorithm: z.literal(WRAPPED_EPOCH_KEY_ALGORITHM),
+  ephemeralPublicKey: encodedBytes(32),
+  epochId: z.string().min(1).max(128),
+  historyKeyVersion: historyKeyVersionSchema,
+  senderPublicKey: encodedBytes(32),
+  userId: z.string().min(1).max(128),
+  wrappedKey: encodedBytes(48),
+});
+
+export const HISTORY_RECIPIENT_MISMATCH_MESSAGE =
+  "Epoch history recipients do not match the members' current history keys.";
+
 export const groupEpochBundleSchema = z
   .object({
     createdByDeviceId: z.string().min(1).max(128),
     epochId: z.string().min(1).max(128),
     epochNumber: z.number().int().positive(),
+    historyKeys: z.array(wrappedHistoryEpochKeySchema),
     recipientKeys: z.array(wrappedEpochKeySchema).min(1),
   })
   .superRefine(({ epochId, recipientKeys }, ctx) => {

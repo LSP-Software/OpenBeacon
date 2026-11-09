@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "turbo dev",
     "emulators": "python3 scripts/derby-emulators.py",
+    "emulators:versions": "python3 scripts/derby-emulators.py --android-versions",
     "prepare": "husky",
     "build": "turbo build",
     "format": "bun fmt",
@@ -22,7 +23,7 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:room": "bash scripts/test-tracking-room.sh",
-    "ci": "bun run typecheck && bun run check && bun run test && bash scripts/test-tracking-room.sh --if-changed",
+    "ci": "bun run typecheck && bun run check && bun run test && bash scripts/test-tracking-room.sh --if-changed && bun scripts/warn-skipped-integration-tests.ts",
     "map-tiles": "bun apps/map-tiles/src/index.ts"
   },
   "devDependencies": {

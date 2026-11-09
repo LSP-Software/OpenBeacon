@@ -2,7 +2,11 @@ import { authCapabilities } from "@openbeacon/auth";
 import { registerDeviceKeySchema } from "@openbeacon/schemas";
 import { TRPCError } from "@trpc/server";
 import z from "zod";
-import { listUserRecipientPublicKeys, upsertUserDevice } from "../lib/groupEpochs.ts";
+import {
+  listHistoryRecipients,
+  listUserRecipientPublicKeys,
+  upsertUserDevice,
+} from "../lib/groupEpochs.ts";
 import { protectedProcedure, publicProcedure } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 
@@ -11,6 +15,10 @@ export const authRouter = createTRPCRouter({
   deviceKeyContext: protectedProcedure
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .query(async ({ ctx }) => ({
+      historyRecipients: await listHistoryRecipients({
+        db: ctx.db,
+        where: { userId: ctx.session.user.id },
+      }),
       recipients: await listUserRecipientPublicKeys({
         db: ctx.db,
         userId: ctx.session.user.id,

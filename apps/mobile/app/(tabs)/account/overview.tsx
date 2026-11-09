@@ -3,7 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import {
   AlertCircleIcon,
@@ -11,6 +11,7 @@ import {
   CameraIcon,
   HelpCircleIcon,
   InfoIcon,
+  KeyRoundIcon,
   LockIcon,
   MailIcon,
   MapPinIcon,
@@ -42,12 +43,15 @@ import { Icon } from "../../../components/ui/Icon.tsx";
 import { Input } from "../../../components/ui/Input.tsx";
 import { Separator } from "../../../components/ui/Separator.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
+import { useHeldHistoryKeyVersions } from "../../../hooks/useHeldHistoryKeyVersions.ts";
 import { trpc } from "../../../lib/api.ts";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client.ts";
 import {
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
 } from "../../../lib/locationPermissions.ts";
+import { dismissRestoreCard, isRestoreCardDismissed } from "../../../lib/restoreReminders.ts";
+import { storage } from "../../../lib/storage.ts";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
 
 const categories = [
@@ -62,6 +66,11 @@ const categories = [
         label: "Password and Security",
         icon: LockIcon,
         href: "/account/password",
+      },
+      {
+        label: "Recovery phrase",
+        icon: KeyRoundIcon,
+        href: "/account/recovery",
       },
       {
         label: "Delete account",
@@ -116,6 +125,27 @@ const AccountScreen = () => {
   const devices = useQuery(trpc.auth.listMyDeviceKeys.queryOptions());
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
+  const recoveryStatus = useQuery(trpc.accountRecovery.status.queryOptions());
+  const recoveryPromptKey = `recovery.promptDismissed.${session?.user.id}`;
+  const [recoveryPromptDismissed, setRecoveryPromptDismissed] = useState(false);
+  const showRecoveryPrompt =
+    !!session?.user.id &&
+    recoveryStatus.data?.recoveryKey === null &&
+    !recoveryPromptDismissed &&
+    storage.getBoolean(recoveryPromptKey) !== true;
+  const currentHistoryKeyVersion = recoveryStatus.data?.currentHistoryKey?.version ?? 0;
+  const heldHistoryKeyVersions = useHeldHistoryKeyVersions(
+    session?.user.id,
+    recoveryStatus.data?.currentHistoryKey ?? undefined,
+  );
+  const [restoreBannerDismissed, setRestoreBannerDismissed] = useState(false);
+  const showRestoreBanner =
+    !!session?.user.id &&
+    !!recoveryStatus.data?.recoveryKey &&
+    !!heldHistoryKeyVersions.data &&
+    !heldHistoryKeyVersions.data.includes(currentHistoryKeyVersion) &&
+    !restoreBannerDismissed &&
+    !isRestoreCardDismissed({ userId: session.user.id, version: currentHistoryKeyVersion });
 
   const saveName = async ({ name }: z.infer<typeof schema>) => {
     const result = await tryCatch(updateName.mutateAsync({ name }));
@@ -261,6 +291,83 @@ const AccountScreen = () => {
               <Button size="sm" onPress={openLocationPermissionSettings}>
                 <Icon as={MapPinIcon} className="size-5 text-white" />
                 <Text>Grant Location Permissions</Text>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {showRecoveryPrompt && (
+          <Card>
+            <CardHeader className="flex flex-row items-start gap-2">
+              <Icon as={KeyRoundIcon} className="text-primary size-6" />
+              <View className="flex-1">
+                <CardTitle>
+                  <Text>Protect your location history</Text>
+                </CardTitle>
+                <CardDescription>
+                  <Text className="text-muted-foreground">
+                    Create a recovery phrase so you can read your history on a new phone.
+                  </Text>
+                </CardDescription>
+              </View>
+            </CardHeader>
+            <CardContent className="flex flex-row gap-3">
+              <Link href="/account/recovery-setup" asChild>
+                <Button size="sm">
+                  <Text>Create phrase</Text>
+                </Button>
+              </Link>
+              <Button
+                size="sm"
+                variant="outline"
+                onPress={() => {
+                  storage.set(recoveryPromptKey, true);
+                  setRecoveryPromptDismissed(true);
+                }}
+              >
+                <Text>Dismiss</Text>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {showRestoreBanner && (
+          <Card>
+            <CardHeader className="flex flex-row items-start gap-2">
+              <Icon as={KeyRoundIcon} className="text-primary size-6" />
+              <View className="flex-1">
+                <CardTitle>
+                  <Text>Restore your history</Text>
+                </CardTitle>
+                <CardDescription>
+                  <Text className="text-muted-foreground">
+                    {heldHistoryKeyVersions.data?.length
+                      ? "Your recovery phrase was reset on another phone. Enter the new phrase to keep reading new history here."
+                      : "Enter your recovery phrase to read your location history on this phone."}
+                  </Text>
+                </CardDescription>
+              </View>
+            </CardHeader>
+            <CardContent className="flex flex-row gap-3">
+              <Link href="/account/recovery-restore" asChild>
+                <Button size="sm">
+                  <Text>Restore</Text>
+                </Button>
+              </Link>
+              <Button
+                size="sm"
+                variant="outline"
+                onPress={() => {
+                  if (session?.user.id) {
+                    dismissRestoreCard({
+                      userId: session.user.id,
+                      version: currentHistoryKeyVersion,
+                    });
+                  }
+                  setRestoreBannerDismissed(true);
+                }}
+              >
+                <Text>Dismiss</Text>
               </Button>
             </CardContent>
           </Card>

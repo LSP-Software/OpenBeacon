@@ -56,6 +56,7 @@ const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
   createdByDeviceId: result.epoch.createdByDeviceId,
   epochId: result.epoch.epochId,
   epochNumber: result.epoch.epochNumber,
+  historyKeys: [],
   recipientKeys: result.wrappedKeys,
 });
 
@@ -147,7 +148,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await member.groupTracking.uploadBatch({ groupId, points: [point] });
       const polled = (await owner.groupTracking.poll({ groupId })).points;
       expect(polled).toHaveLength(1);
-      const wrapped = await owner.groupEpoch.getWrappedKey({
+      const { deviceWrap: wrapped } = await owner.groupEpoch.getEpochKeyWraps({
         groupId,
         deviceId: ownerDevice,
         epochId: joined.epoch.epochId,

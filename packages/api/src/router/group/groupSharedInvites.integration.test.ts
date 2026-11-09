@@ -37,6 +37,7 @@ const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
   createdByDeviceId: result.epoch.createdByDeviceId,
   epochId: result.epoch.epochId,
   epochNumber: result.epoch.epochNumber,
+  historyKeys: [],
   recipientKeys: result.wrappedKeys,
 });
 
@@ -189,6 +190,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toBe(false);
       expect(await prisma.groupMember.count({ where: { groupId } })).toBe(2);
       expect(await prisma.groupEpoch.count({ where: { groupId } })).toBe(2);
+      expect(
+        await prisma.groupMember.findMany({
+          where: { groupId, userId: { not: users[0]! } },
+          select: { joinedEpochNumber: true },
+        }),
+      ).toEqual([{ joinedEpochNumber: 2 }]);
       expect(
         await caller(users[0]!).groupInvites.sharedStatuses({ groupId, inviteIds: [id] }),
       ).toEqual([{ id, status: "used" }]);

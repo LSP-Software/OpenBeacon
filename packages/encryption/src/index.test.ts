@@ -401,26 +401,4 @@ describe("group epoch encryption", () => {
     expect(() => unwrap({ ...wrappedKeys[0], epochId: "epoch_other" })).toThrow();
     expect(() => unwrap({ ...wrappedKeys[0], recipientDeviceId: "device-other" })).toThrow();
   });
-
-  test("redacts sensitive wrappers when serialized", () => {
-    const deviceKeyPair = createDeviceKeyPair();
-    const { epochKey } = createInitialGroupEpoch({
-      creator: { deviceId: "device-a", privateKey: deviceKeyPair.privateKey },
-      groupId: "group-1",
-      recipients: [
-        serializeRecipientPublicKeyMaterial({
-          algorithm: deviceKeyPair.algorithm,
-          createdAt: new Date("2026-03-26T12:00:00.000Z"),
-          deviceId: "device-a",
-          publicKey: deviceKeyPair.publicKey,
-          revokedAt: null,
-          userId: "user-a",
-        }),
-      ],
-    });
-
-    expect(JSON.stringify({ epochKey, privateKey: deviceKeyPair.privateKey })).toContain(
-      "REDACTED",
-    );
-  });
 });

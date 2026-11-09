@@ -186,10 +186,54 @@ export const useLiveMapCamera = ({
     });
   };
 
+  const zoomIntoStack = ({
+    latitude,
+    longitude,
+    zoomLevel,
+  }: {
+    latitude: number;
+    longitude: number;
+    zoomLevel: number;
+  }) => {
+    clearLiveMapInitialFitTimer(initialFitTimerRef);
+    initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
+      type: "user_camera_control",
+    }).state;
+    trackedUserIdRef.current = null;
+    trackedCoordinateRef.current = null;
+    followSuspendedRef.current = false;
+    onClearSelection();
+    suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, 600);
+    setCamera({
+      animationDuration: 600,
+      animationMode: "easeTo",
+      centerCoordinate: [longitude, latitude],
+      padding: fitEveryonePadding,
+      zoomLevel,
+    });
+  };
+
+  const fitEdgeGroup = (userIds: readonly string[]) => {
+    const markersToFit = markersRef.current.filter((item) => userIds.includes(item.userId));
+    if (markersToFit.length === 0) return;
+    edge.suppress(userIds);
+    edge.releaseAfter(600);
+    clearLiveMapInitialFitTimer(initialFitTimerRef);
+    initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
+      type: "user_camera_control",
+    }).state;
+    trackedUserIdRef.current = null;
+    trackedCoordinateRef.current = null;
+    followSuspendedRef.current = false;
+    onClearSelection();
+    suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, 600);
+    fitMarkersAndPreserveCamera({ markersToFit, padding: fitEveryonePadding });
+  };
+
   const goToEdgeMarker = (userId: string) => {
     const marker = markersRef.current.find((item) => item.userId === userId);
     if (!marker) return;
-    edge.suppress(userId);
+    edge.suppress([userId]);
     if (selectedUserIdRef.current !== userId) onSelectUser(userId);
     clearLiveMapInitialFitTimer(initialFitTimerRef);
     initialFitStateRef.current = reduceLiveMapInitialFit(initialFitStateRef.current, {
@@ -403,6 +447,8 @@ export const useLiveMapCamera = ({
     fitEveryoneInFrame,
     goToCurrentLocation,
     goToEdgeMarker,
+    fitEdgeGroup,
+    zoomIntoStack,
     maybeSuspendFollowFromRegionChange,
     onRegionDidChange,
     onStyleLoaded,

@@ -4,11 +4,11 @@ import { Platform } from "react-native";
 export const useLiveMapSelection = ({
   selectedUserId,
   onSelectUserId,
-  isEdgeMarker,
+  isMarkerReplaced,
 }: {
   selectedUserId: string | null;
   onSelectUserId: ((userId: string | null) => void) | undefined;
-  isEdgeMarker: (userId: string) => boolean;
+  isMarkerReplaced: (userId: string) => boolean;
 }) => {
   const selectedUserIdRef = useRef(selectedUserId);
   selectedUserIdRef.current = selectedUserId;
@@ -29,14 +29,14 @@ export const useLiveMapSelection = ({
     onSelectUserId?.(null);
   };
   const handleAnnotationDeselected = (userId: string) => {
-    if (isEdgeMarker(userId)) return;
+    if (isMarkerReplaced(userId)) return;
     pendingDeselectClearRef.current = true;
     queueMicrotask(() => {
       if (!pendingDeselectClearRef.current) {
         return;
       }
       pendingDeselectClearRef.current = false;
-      if (!isEdgeMarker(userId)) onSelectUserId?.(null);
+      if (!isMarkerReplaced(userId)) onSelectUserId?.(null);
     });
   };
   const handleAnnotationSelected = (userId: string) => {

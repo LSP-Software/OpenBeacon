@@ -1,8 +1,9 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ActivityIndicator, Alert, Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { useGroupColorRevision } from "../../hooks/useGroupColorRevision.ts";
+import { Alert } from "../../lib/alert.ts";
 import { authClient } from "../../lib/auth-client.ts";
-import { GROUP_COLOR_PALETTE, getGroupColor } from "../../lib/groupColor.ts";
+import { GROUP_COLOR_NAMES, GROUP_COLOR_PALETTE, getGroupColor } from "../../lib/groupColor.ts";
 import { groupColorSyncQueryOptions, saveGroupColor } from "../../lib/groupColorSync.ts";
 import { Button } from "../ui/Button.tsx";
 import { Text } from "../ui/Text.tsx";
@@ -16,7 +17,7 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
     mutationFn: saveGroupColor,
     onError: (error) => Alert.alert("Unable to save color", error.message),
   });
-  const locked = !userId || !sync.isSuccess || save.isPending;
+  const locked = !userId || !sync.isSuccess || sync.isFetching || save.isPending;
   const selectedColor = save.isPending ? save.variables.color : getGroupColor(groupId);
 
   return (
@@ -44,6 +45,7 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
                 <Pressable
                   key={color}
                   accessibilityRole="button"
+                  accessibilityLabel={GROUP_COLOR_NAMES[color]}
                   accessibilityState={{ selected, disabled: locked }}
                   disabled={locked}
                   onPress={() => {

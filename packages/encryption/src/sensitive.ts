@@ -37,3 +37,25 @@ export class DevicePrivateKeyMaterial extends SensitiveBytes {
     super(bytes, "device private key");
   }
 }
+
+export class RecoveryPhrase extends SensitiveBytes {
+  constructor(bytes: Uint8Array) {
+    super(bytes, "recovery phrase");
+  }
+
+  words() {
+    return new TextDecoder().decode(this.expose()).split(" ");
+  }
+}
+
+export class RecoveryPrivateKeyMaterial extends SensitiveBytes {
+  constructor(bytes: Uint8Array) {
+    super(bytes, "recovery private key");
+  }
+}
+
+export class HistoryPrivateKeyMaterial extends SensitiveBytes {
+  constructor(bytes: Uint8Array) {
+    super(bytes, "history private key");
+  }
+}

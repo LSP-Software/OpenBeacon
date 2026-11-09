@@ -1,9 +1,57 @@
 import { Prisma } from "@openbeacon/database";
-import { groupEpochBundleSchema } from "@openbeacon/schemas";
+import { decodeBase64, isUsableX25519PublicKey } from "@openbeacon/encryption";
+import { addHistoryWrapsSchema, groupEpochBundleSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { getGroupJoinContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
+
+const selectEpochKeyWraps = ({ deviceId, userId }: { deviceId: string; userId: string }) =>
+  ({
+    historyWraps: {
+      orderBy: { historyKey: { version: "asc" } },
+      select: {
+        algorithm: true,
+        createdAt: true,
+        ephemeralPublicKey: true,
+        historyKey: { select: { version: true } },
+        senderPublicKey: true,
+        wrappedKey: true,
+      },
+      where: { historyKey: { userId } },
+    },
+    id: true,
+    recipientKeys: {
+      select: {
+        algorithm: true,
+        createdAt: true,
+        ephemeralPublicKey: true,
+        recipientDeviceId: true,
+        wrappedKey: true,
+      },
+      where: { recipientDeviceId: deviceId, recipientDevice: { userId } },
+    },
+    senderPublicKey: true,
+  }) satisfies Prisma.GroupEpochSelect;
+
+const toEpochKeyWraps = ({
+  epoch: { historyWraps, id, recipientKeys, senderPublicKey },
+  userId,
+}: {
+  epoch: Prisma.GroupEpochGetPayload<{ select: ReturnType<typeof selectEpochKeyWraps> }>;
+  userId: string;
+}) => {
+  const deviceWrap = recipientKeys[0];
+  return {
+    deviceWrap: deviceWrap ? { ...deviceWrap, epochId: id, senderPublicKey } : null,
+    historyWraps: historyWraps.map(({ historyKey, ...wrap }) => ({
+      ...wrap,
+      epochId: id,
+      historyKeyVersion: historyKey.version,
+      userId,
+    })),
+  };
+};
 
 export const groupEpochRouter = {
   rotationContext: groupMemberProcedure.query(async ({ ctx, input }) => {
@@ -88,7 +136,7 @@ export const groupEpochRouter = {
       },
     });
   }),
-  getWrappedKey: groupMemberProcedure
+  getEpochKeyWraps: groupMemberProcedure
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .input(
       z.object({
@@ -98,42 +146,215 @@ export const groupEpochRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
-      const wrappedKey = await ctx.db.groupEpochRecipientKey.findFirst({
-        select: {
-          algorithm: true,
-          createdAt: true,
-          ephemeralPublicKey: true,
-          groupEpoch: {
-            select: {
-              senderPublicKey: true,
-            },
-          },
-          groupEpochId: true,
-          recipientDeviceId: true,
-          wrappedKey: true,
-        },
+      const userId = ctx.session.user.id;
+      const epoch = await ctx.db.groupEpoch.findFirst({
+        select: selectEpochKeyWraps({ deviceId: input.deviceId, userId }),
         where: {
-          groupEpochId: input.epochId,
-          groupEpoch: {
-            groupId: input.groupId,
-          },
-          recipientDeviceId: input.deviceId,
-          recipientDevice: {
-            userId: ctx.session.user.id,
-          },
+          epochNumber: { gte: ctx.groupMember.joinedEpochNumber },
+          groupId: input.groupId,
+          id: input.epochId,
         },
       });
-
-      if (!wrappedKey) {
-        return null;
-      }
-
-      const { groupEpoch, groupEpochId, ...wrappedEpochKey } = wrappedKey;
-
+      return epoch ? toEpochKeyWraps({ epoch, userId }) : { deviceWrap: null, historyWraps: [] };
+    }),
+  listEpochKeyWraps: groupMemberProcedure
+    .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
+    .input(
+      z.object({
+        cursor: z.number().int().positive().nullish(),
+        deviceId: z.string().min(1),
+        groupId: z.string().min(1),
+        limit: z.number().int().min(1).max(100).default(100),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const pageSize = input.limit;
+      const epochs = await ctx.db.groupEpoch.findMany({
+        orderBy: { epochNumber: "desc" },
+        select: {
+          ...selectEpochKeyWraps({ deviceId: input.deviceId, userId }),
+          createdAt: true,
+          epochNumber: true,
+        },
+        take: pageSize + 1,
+        where: {
+          epochNumber: {
+            gte: ctx.groupMember.joinedEpochNumber,
+            ...(input.cursor ? { lt: input.cursor } : {}),
+          },
+          groupId: input.groupId,
+        },
+      });
+      const page = epochs.slice(0, pageSize);
       return {
-        ...wrappedEpochKey,
-        epochId: groupEpochId,
-        senderPublicKey: groupEpoch.senderPublicKey,
+        epochs: page.map((epoch) => ({
+          ...toEpochKeyWraps({ epoch, userId }),
+          createdAt: epoch.createdAt,
+          epochId: epoch.id,
+          epochNumber: epoch.epochNumber,
+        })),
+        nextCursor: epochs.length > pageSize ? (page.at(-1)?.epochNumber ?? null) : null,
       };
+    }),
+  listHistoryBackfill: groupMemberProcedure
+    .input(
+      z.object({
+        cursor: z.number().int().nonnegative().nullish(),
+        deviceId: z.string().min(1),
+        groupId: z.string().min(1),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const device = await ctx.db.userDevice.findFirst({
+        where: { id: input.deviceId, revokedAt: null, userId },
+      });
+      if (!device) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "The active device is not registered." });
+      }
+      const historyKey = await ctx.db.accountHistoryKey.findFirst({
+        orderBy: { version: "desc" },
+        select: { id: true, publicKey: true, version: true },
+        where: { userId },
+      });
+      if (!historyKey) return { epochs: [], historyKey: null, nextCursor: null };
+      const pageSize = 50;
+      const epochs = await ctx.db.groupEpoch.findMany({
+        orderBy: { epochNumber: "asc" },
+        select: {
+          epochNumber: true,
+          id: true,
+          recipientKeys: {
+            select: {
+              algorithm: true,
+              createdAt: true,
+              ephemeralPublicKey: true,
+              recipientDeviceId: true,
+              wrappedKey: true,
+            },
+            where: { recipientDeviceId: input.deviceId },
+          },
+          senderPublicKey: true,
+        },
+        take: pageSize + 1,
+        where: {
+          epochNumber: {
+            gt: input.cursor ?? 0,
+            gte: ctx.groupMember.joinedEpochNumber,
+          },
+          groupId: input.groupId,
+          historyWraps: { none: { historyKeyId: historyKey.id } },
+          recipientKeys: { some: { recipientDeviceId: input.deviceId } },
+        },
+      });
+      const page = epochs.slice(0, pageSize);
+      return {
+        epochs: page.flatMap(({ epochNumber, id, recipientKeys, senderPublicKey }) =>
+          recipientKeys.map((recipientKey) => ({
+            deviceWrap: { ...recipientKey, epochId: id, senderPublicKey },
+            epochId: id,
+            epochNumber,
+          })),
+        ),
+        historyKey: { ...historyKey, userId },
+        nextCursor: epochs.length > pageSize ? (page.at(-1)?.epochNumber ?? null) : null,
+      };
+    }),
+  addHistoryWraps: groupMemberProcedure
+    .input(addHistoryWrapsSchema)
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const epochIds = new Set(input.wraps.map(({ epochId }) => epochId));
+      if (epochIds.size !== input.wraps.length) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Each epoch can only be wrapped once.",
+        });
+      }
+      for (const wrap of input.wraps) {
+        if (wrap.userId !== userId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "History wraps must target your own history key.",
+          });
+        }
+        if (!isUsableX25519PublicKey(decodeBase64(wrap.ephemeralPublicKey))) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid wrapped epoch key public key.",
+          });
+        }
+      }
+      return ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
+        );
+        const member = await tx.groupMember.findUnique({
+          select: { joinedEpochNumber: true },
+          where: { userId_groupId: { groupId: input.groupId, userId } },
+        });
+        if (!member) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You are not a member of this group" });
+        }
+        const [currentHistoryKey] = await tx.$queryRaw<Array<{ id: string; version: number }>>(
+          Prisma.sql`SELECT id, version FROM "AccountHistoryKey" WHERE "userId" = ${userId} ORDER BY version DESC LIMIT 1 FOR SHARE`,
+        );
+        if (!currentHistoryKey || currentHistoryKey.id !== input.historyKeyId) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "That history key is no longer your current history key.",
+          });
+        }
+        if (input.wraps.some((wrap) => wrap.historyKeyVersion !== currentHistoryKey.version)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "History wraps must match the history key version.",
+          });
+        }
+        const device = await tx.userDevice.findFirst({
+          select: { publicKey: true },
+          where: { id: input.deviceId, revokedAt: null, userId },
+        });
+        if (!device) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "The active device is not registered.",
+          });
+        }
+        if (input.wraps.some((wrap) => wrap.senderPublicKey !== device.publicKey)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "History wraps must be created by the active device.",
+          });
+        }
+        const entitledEpochs = await tx.groupEpoch.count({
+          where: {
+            epochNumber: { gte: member.joinedEpochNumber },
+            groupId: input.groupId,
+            id: { in: [...epochIds] },
+            recipientKeys: { some: { recipientDevice: { revokedAt: null, userId } } },
+          },
+        });
+        if (entitledEpochs !== epochIds.size) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You can only add history wraps for epochs you have access to.",
+          });
+        }
+        const created = await tx.groupEpochHistoryWrap.createMany({
+          data: input.wraps.map((wrap) => ({
+            algorithm: wrap.algorithm,
+            ephemeralPublicKey: wrap.ephemeralPublicKey,
+            groupEpochId: wrap.epochId,
+            historyKeyId: currentHistoryKey.id,
+            senderDeviceId: input.deviceId,
+            senderPublicKey: wrap.senderPublicKey,
+            wrappedKey: wrap.wrappedKey,
+          })),
+          skipDuplicates: true,
+        });
+        return { added: created.count };
+      });
     }),
 } satisfies TRPCRouterRecord;

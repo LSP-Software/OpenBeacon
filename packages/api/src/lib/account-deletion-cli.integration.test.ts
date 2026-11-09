@@ -36,8 +36,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           name: "Owner group",
           groupMembers: {
             create: [
-              { userId, role: "OWNER" },
-              { userId: memberId, role: "MEMBER" },
+              { userId, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: memberId, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
         },

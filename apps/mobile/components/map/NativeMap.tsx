@@ -1,15 +1,24 @@
 import { Camera, Layer, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
-import { ArrowUpIcon, LocateFixedIcon, MapPinIcon, ScanIcon } from "lucide-react-native";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { LocateFixedIcon, MapPinIcon, ScanIcon } from "lucide-react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, type GestureResponderEvent, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
+import {
+  type LiveMapPinGroup,
+  type LiveMapPinOffset,
+  liveMapStackExpansionZoom,
+} from "../../lib/liveMapPinGroups.ts";
 import { getSymbolVisibility } from "../../lib/protomaps-style.ts";
 import { Icon } from "../ui/Icon.tsx";
-import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
+import { LiveMapEdgeChip } from "./LiveMapEdgeChip.tsx";
 import { LiveMapPointAnnotation, SelfLiveMapPointAnnotation } from "./LiveMapPointAnnotation.tsx";
 import { LiveMapPersonSheet } from "./LiveMapPersonSheet.tsx";
+import { LiveMapStackAnnotation } from "./LiveMapStackAnnotation.tsx";
+import { LiveMapStackSheet } from "./LiveMapStackSheet.tsx";
 import { useLiveMapEdgeMarkers } from "./useLiveMapEdgeMarkers.ts";
 import { useLiveMapCamera } from "./useLiveMapCamera.ts";
+import { useLiveMapPinGroups } from "./useLiveMapPinGroups.ts";
 import { useLiveMapSelection } from "./useLiveMapSelection.ts";
 import { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
@@ -26,16 +35,50 @@ export const NativeMap = ({
   const map = useNativeMapStyle();
   const { mapStyle, pmtilesUrl, showSymbols } = map;
   const selectedMarker = markers.find((marker) => marker.userId === selectedUserId) ?? null;
+  const pins = useLiveMapPinGroups(markers);
+  const edgeSubjects = useMemo(
+    () =>
+      pins.groups.map((group) => ({
+        latitude: group.latitude,
+        longitude: group.longitude,
+        memberUserIds: group.members.map((member) => member.userId),
+        userId: group.id,
+      })),
+    [pins.groups],
+  );
+  const lastMarkerPressRef = useRef<{ atMs: number; x: number; y: number } | null>(null);
+  const [stackSheetUserIds, setStackSheetUserIds] = useState<readonly string[] | null>(null);
+  const stackSheetMembers = (stackSheetUserIds ?? []).flatMap((userId) =>
+    markers.filter((marker) => marker.userId === userId),
+  );
+  const isStackSheetOpen = stackSheetMembers.length > 1;
+  useEffect(() => {
+    if (stackSheetUserIds === null) return;
+    const stillTogether =
+      selectedUserId === null &&
+      pins.groups.some((group) =>
+        stackSheetUserIds.every((userId) =>
+          group.members.some((member) => member.userId === userId),
+        ),
+      );
+    if (!stillTogether) setStackSheetUserIds(null);
+  }, [pins.groups, selectedUserId, stackSheetUserIds]);
   const edge = useLiveMapEdgeMarkers({
-    markers,
+    markers: edgeSubjects,
     mapRevision: map.mapRevision,
-    selectedUserId: selectedMarker?.userId ?? null,
+    sheetKey: selectedMarker?.userId ?? (isStackSheetOpen ? "stack" : null),
+    topInset: insets.top,
   });
   const { edgeMarkers, mapRef } = edge;
   const selection = useLiveMapSelection({
     selectedUserId,
     onSelectUserId,
-    isEdgeMarker: edge.isEdgeMarker,
+    isMarkerReplaced: (userId) => {
+      const group = pins.groups.find((item) =>
+        item.members.some((member) => member.userId === userId),
+      );
+      return group !== undefined && (group.members.length > 1 || edge.isEdgeMarker(group.id));
+    },
   });
   const selfMarker = markers.find((marker) => marker.isSelf) ?? null;
   const hasMarkers = markers.length > 0;
@@ -44,7 +87,10 @@ export const NativeMap = ({
     mapStyle,
     mapRevision: map.mapRevision,
     markers,
-    onClearSelection: selection.clearSelectionFromReact,
+    onClearSelection: () => {
+      setStackSheetUserIds(null);
+      selection.clearSelectionFromReact();
+    },
     onSelectUser: selection.handleAnnotationSelected,
     pmtilesUrl,
     selectedMarker,
@@ -54,10 +100,12 @@ export const NativeMap = ({
   const {
     cameraRef,
     cameraDefaultSettings,
+    fitEdgeGroup,
     fitEveryoneInFrame,
     goToCurrentLocation,
     goToEdgeMarker,
     maybeSuspendFollowFromRegionChange,
+    zoomIntoStack,
   } = camera;
   const {
     annotationRemountTokens,
@@ -65,6 +113,74 @@ export const NativeMap = ({
     handleAnnotationDeselected,
     handleAnnotationSelected,
   } = selection;
+  const displayOrder = (members: readonly LiveMapMarker[]) =>
+    [...members].sort(
+      (first, second) =>
+        Number(second.userId === selectedUserId) - Number(first.userId === selectedUserId) ||
+        Number(first.isSelf) - Number(second.isSelf) ||
+        first.name.localeCompare(second.name),
+    );
+
+  const edgeGroupIds = new Set(edgeMarkers.flatMap((chip) => chip.memberIds));
+
+  const rememberMarkerPress = (event?: GestureResponderEvent) => {
+    if (!event) return;
+    lastMarkerPressRef.current = {
+      atMs: Date.now(),
+      x: event.nativeEvent.pageX,
+      y: event.nativeEvent.pageY,
+    };
+  };
+
+  const pressStack = (group: LiveMapPinGroup, event?: GestureResponderEvent) => {
+    rememberMarkerPress(event);
+    setStackSheetUserIds(null);
+    const zoomLevel = liveMapStackExpansionZoom({ group, zoom: pins.getZoom() });
+    if (zoomLevel === null) {
+      clearSelectionFromReact();
+      setStackSheetUserIds(group.members.map((member) => member.userId));
+      return;
+    }
+    zoomIntoStack({ latitude: group.latitude, longitude: group.longitude, zoomLevel });
+  };
+
+  const pressEdgeChip = (chip: (typeof edgeMarkers)[number]) => {
+    setStackSheetUserIds(null);
+    const userIds = pins.groups
+      .filter((group) => chip.memberIds.includes(group.id))
+      .flatMap((group) => group.members.map((member) => member.userId));
+    const [onlyUserId] = userIds;
+    if (userIds.length === 1 && onlyUserId !== undefined) {
+      goToEdgeMarker(onlyUserId);
+      return;
+    }
+    fitEdgeGroup(userIds);
+  };
+
+  const renderPerson = (
+    marker: LiveMapMarker,
+    motion: { arrival?: LiveMapPinOffset | undefined; gatherTo?: LiveMapPinOffset | undefined },
+  ) => {
+    const annotationProps = {
+      ...motion,
+      marker,
+      onDeselected: () => {
+        handleAnnotationDeselected(marker.userId);
+      },
+      onSelected: (event?: GestureResponderEvent) => {
+        rememberMarkerPress(event);
+        setStackSheetUserIds(null);
+        handleAnnotationSelected(marker.userId);
+      },
+    };
+    const key = `${marker.userId}:${annotationRemountTokens[marker.userId] ?? 0}`;
+    return marker.isSelf ? (
+      <SelfLiveMapPointAnnotation key={key} {...annotationProps} />
+    ) : (
+      <LiveMapPointAnnotation key={key} headingDegrees={null} {...annotationProps} />
+    );
+  };
+
   if (!mapStyle) {
     return (
       <View
@@ -93,9 +209,24 @@ export const NativeMap = ({
         touchPitch={false}
         touchRotate={false}
         androidView="surface"
-        onPress={clearSelectionFromReact}
+        onPress={(event) => {
+          const lastMarkerPress = lastMarkerPressRef.current;
+          lastMarkerPressRef.current = null;
+          const [x, y] = event.nativeEvent.point;
+          // MapLibre on Android also reports a marker tap to the map ~300ms later, which would close the sheet it opened
+          if (
+            lastMarkerPress &&
+            Date.now() - lastMarkerPress.atMs < 1500 &&
+            Math.hypot(x - lastMarkerPress.x, y - lastMarkerPress.y) < 24
+          ) {
+            return;
+          }
+          setStackSheetUserIds(null);
+          clearSelectionFromReact();
+        }}
         onRegionIsChanging={(feature) => {
-          const { bounds, animated, userInteraction } = feature.nativeEvent;
+          const { bounds, animated, userInteraction, zoom } = feature.nativeEvent;
+          pins.onZoomChange(zoom);
           edge.onRegionChange([
             [bounds[2], bounds[3]],
             [bounds[0], bounds[1]],
@@ -107,6 +238,7 @@ export const NativeMap = ({
         }}
         onRegionDidChange={(feature) => {
           const { bounds, center, zoom, animated, userInteraction } = feature.nativeEvent;
+          pins.onZoomChange(zoom);
           edge.onRegionChange([
             [bounds[2], bounds[3]],
             [bounds[0], bounds[1]],
@@ -151,62 +283,44 @@ export const NativeMap = ({
             layout={{ visibility: getSymbolVisibility(showSymbols) }}
           />
         ))}
-        {markers.map((marker) =>
-          edgeMarkers.some((edge) => edge.userId === marker.userId) ? null : marker.isSelf ? (
-            <SelfLiveMapPointAnnotation
-              key={`${marker.userId}:${annotationRemountTokens[marker.userId] ?? 0}`}
-              marker={marker}
-              onDeselected={() => {
-                handleAnnotationDeselected(marker.userId);
-              }}
-              onSelected={() => {
-                handleAnnotationSelected(marker.userId);
-              }}
-            />
-          ) : (
-            <LiveMapPointAnnotation
-              key={`${marker.userId}:${annotationRemountTokens[marker.userId] ?? 0}`}
-              headingDegrees={null}
-              marker={marker}
-              onDeselected={() => {
-                handleAnnotationDeselected(marker.userId);
-              }}
-              onSelected={() => {
-                handleAnnotationSelected(marker.userId);
-              }}
-            />
-          ),
-        )}
+        {[
+          ...pins.gathering.map(({ gatherTo, marker }) => renderPerson(marker, { gatherTo })),
+          ...pins.groups.map((group) => {
+            if (edgeGroupIds.has(group.id)) return null;
+            const [onlyMember] = group.members;
+            if (group.members.length === 1 && onlyMember) {
+              return renderPerson(onlyMember, { arrival: pins.arrivals.get(group.id) });
+            }
+            return (
+              <LiveMapStackAnnotation
+                key={group.id}
+                arrival={pins.arrivals.get(group.id)}
+                group={group}
+                members={displayOrder(group.members)}
+                onPress={(event) => {
+                  pressStack(group, event);
+                }}
+              />
+            );
+          }),
+        ]}
       </MapLibreMap>
-      {edgeMarkers.map((edge) => {
-        const marker = markers.find((item) => item.userId === edge.userId);
-        if (!marker) return null;
-        return (
-          <Pressable
-            key={edge.userId}
-            accessibilityRole="button"
-            accessibilityLabel={`Go to ${marker.name}`}
-            onPress={() => goToEdgeMarker(marker.userId)}
-            style={{ position: "absolute", left: edge.x - 24, top: edge.y - 24 }}
-          >
-            <LiveMapMarkerPin
-              image={marker.image}
-              initials={marker.initials}
-              name={marker.name}
-              ringColor={marker.ringColor}
-              ringColors={marker.ringColors}
-              timestamp={marker.timestamp}
-            />
-            <View
-              pointerEvents="none"
-              className="absolute bottom-0 right-0 size-5 items-center justify-center rounded-full border border-border bg-card"
-              style={{ transform: [{ rotate: `${edge.angle}deg` }] }}
-            >
-              <Icon as={ArrowUpIcon} size={13} className="text-foreground" />
-            </View>
-          </Pressable>
-        );
-      })}
+      {edgeMarkers.map((chip) => (
+        <LiveMapEdgeChip
+          key={chip.userId}
+          angle={chip.angle}
+          members={displayOrder(
+            pins.groups
+              .filter((group) => chip.memberIds.includes(group.id))
+              .flatMap((group) => group.members),
+          )}
+          onPress={() => {
+            pressEdgeChip(chip);
+          }}
+          x={chip.x}
+          y={chip.y}
+        />
+      ))}
       {map.showRecoverableError || map.isRefreshing ? (
         <View
           className="absolute left-3 top-14 rounded-full bg-card p-3"
@@ -271,6 +385,20 @@ export const NativeMap = ({
             edge.onSheetHeightChange(height);
           }}
           onDismiss={clearSelectionFromReact}
+        />
+      ) : isStackSheetOpen ? (
+        <LiveMapStackSheet
+          members={displayOrder(stackSheetMembers)}
+          onDismiss={() => {
+            setStackSheetUserIds(null);
+          }}
+          onHeightChange={(height) => {
+            edge.onSheetHeightChange(height);
+          }}
+          onSelectUser={(userId) => {
+            setStackSheetUserIds(null);
+            handleAnnotationSelected(userId);
+          }}
         />
       ) : null}
     </View>

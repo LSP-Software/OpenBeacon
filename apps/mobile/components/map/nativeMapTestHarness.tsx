@@ -47,7 +47,7 @@ const removedAnnotationDeselectionHandlers = new Map<string, () => void>();
 let mapViewHandlers: {
   onDidFailLoadingMap?: () => void;
   onDidFinishLoadingStyle?: () => void;
-  onPress?: () => void;
+  onPress?: (event: { nativeEvent: { point: [number, number] } }) => void;
   onRegionDidChange?: (feature: {
     geometry: { coordinates: [number, number] };
     properties: {
@@ -158,8 +158,8 @@ export const setNativeMapSelfHeadingDegrees = (headingDegrees: number | null) =>
 
 export const getNativeMapSelfHeadingDegrees = () => selfHeadingDegrees;
 
-export const emitNativeMapPress = () => {
-  mapViewHandlers.onPress?.();
+export const emitNativeMapPress = (point: [number, number] = [0, 0]) => {
+  mapViewHandlers.onPress?.({ nativeEvent: { point } });
 };
 
 export const emitNativeMapDidFailLoadingMap = () => {
@@ -360,7 +360,7 @@ export const createMapLibreMockModule = () => {
       onDidFailLoadingMap?: () => void;
       onDidFinishLoadingMap?: () => void;
       onDidFinishLoadingStyle?: () => void;
-      onPress?: () => void;
+      onPress?: (event: { nativeEvent: { point: [number, number] } }) => void;
       onRegionDidChange?: (event: {
         nativeEvent: {
           center: [number, number];

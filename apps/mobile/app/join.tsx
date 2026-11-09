@@ -9,7 +9,7 @@ import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { queryClient, trpcClient } from "../lib/api.ts";
 import { authClient } from "../lib/auth-client.ts";
-import { buildAcceptSharedInviteInput } from "../lib/groupEncryption.ts";
+import { buildAcceptSharedInviteInput, submitEpochChange } from "../lib/groupEncryption.ts";
 import { requestTrackingSync } from "../lib/trackingEvents.ts";
 import { useSingleFlight } from "../lib/useSingleFlight.ts";
 
@@ -35,8 +35,10 @@ const Join = () => {
     await submission.run(normalized, async () => {
       const result = await tryCatch(
         (async () => {
-          const input = await buildAcceptSharedInviteInput({ code: normalized });
-          await trpcClient.groupInvites.acceptShared.mutate(input);
+          await submitEpochChange({
+            build: () => buildAcceptSharedInviteInput({ code: normalized }),
+            submit: (input) => trpcClient.groupInvites.acceptShared.mutate(input),
+          });
         })(),
       );
       if (result.error) {

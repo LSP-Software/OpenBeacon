@@ -6,6 +6,7 @@
       "!!**/dist",
       "!!**/build",
       "!!**/node_modules",
+      "!!**/.claude",
       "!**/generated",
       "!**/.cxx",
       "!apps/mobile/global.css"
@@ -29,5 +30,37 @@
         "noArrayIndexKey": "warn"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["apps/mobile/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "react-native": {
+                    "importNames": ["Alert"],
+                    "message": "Use Alert from apps/mobile/lib/alert.ts so dialogs match the app's styling."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/mobile/lib/alert.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": "off"
+          }
+        }
+      }
+    }
+  ]
 }

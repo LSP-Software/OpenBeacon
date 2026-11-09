@@ -1,6 +1,6 @@
 import { tryCatch } from "@openbeacon/shared";
 import { trpcClient } from "./api.ts";
-import { openForSelf, sealForSelf } from "./personalData.ts";
+import { createPersonalDataOpener, resealForSelf, sealForSelf } from "./personalData.ts";
 
 export const encryptPersonalNickname = ({
   groupId,
@@ -31,8 +31,7 @@ export const decryptPersonalNickname = ({
   userId: string;
   ciphertext: string;
 }) =>
-  openForSelf({
-    userId,
+  createPersonalDataOpener(userId)({
     purpose: "nickname",
     binding: [userId, groupId, memberId],
     sealed: ciphertext,
@@ -40,21 +39,44 @@ export const decryptPersonalNickname = ({
 
 export const loadPersonalNicknames = async (groupId: string, userId: string) => {
   const records = await trpcClient.groupMembership.nicknames.query({ groupId });
-  const entries = await Promise.all(
+  const open = createPersonalDataOpener(userId);
+  const nicknames = await Promise.all(
     records.map(async (record) => {
-      const result = await tryCatch(
-        decryptPersonalNickname({
-          groupId,
-          memberId: record.targetId,
-          userId,
-          ciphertext: record.ciphertext,
+      const opened = await tryCatch(
+        open({
+          purpose: "nickname",
+          binding: [userId, groupId, record.targetId],
+          sealed: record.ciphertext,
         }),
       );
-      return [
-        record.targetId,
-        { name: result.data ?? null, ciphertext: record.ciphertext },
-      ] as const;
+      return { ...record, name: opened.data ?? null };
     }),
   );
-  return Object.fromEntries(entries) as Record<string, { name: string | null; ciphertext: string }>;
+  await tryCatch(
+    resealForSelf({
+      userId,
+      records: nicknames.flatMap((nickname) =>
+        nickname.name === null
+          ? []
+          : {
+              purpose: "nickname" as const,
+              binding: [userId, groupId, nickname.targetId],
+              sealed: nickname.ciphertext,
+              plaintext: nickname.name,
+              upload: async (ciphertext: string) => {
+                await trpcClient.groupMembership.updateNickname.mutate({
+                  groupId,
+                  memberId: nickname.targetId,
+                  ciphertext,
+                  expectedCiphertext: nickname.ciphertext,
+                });
+                nickname.ciphertext = ciphertext;
+              },
+            },
+      ),
+    }),
+  );
+  return Object.fromEntries(
+    nicknames.map(({ targetId, name, ciphertext }) => [targetId, { name, ciphertext }]),
+  ) as Record<string, { name: string | null; ciphertext: string }>;
 };

@@ -1,5 +1,10 @@
 import { expect, mock, test } from "bun:test";
-import { createDeviceKeyPair, createInitialGroupEpoch } from "@openbeacon/encryption";
+import {
+  createDeviceKeyPair,
+  createHistoryKeyPair,
+  createInitialGroupEpoch,
+  wrapEpochKeyForHistoryKey,
+} from "@openbeacon/encryption";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { createRoot } from "test-renderer";
@@ -25,38 +30,69 @@ const epoch = createInitialGroupEpoch({
     },
   ],
 });
+const historyKey = createHistoryKeyPair();
+const historyWrap = {
+  ...wrapEpochKeyForHistoryKey({
+    epochId: epoch.epoch.epochId,
+    epochKey: epoch.epochKey,
+    historyKey: { publicKey: historyKey.publicKey, userId: "user", version: 1 },
+    senderPrivateKey: keyPair.privateKey,
+  }),
+  createdAt: new Date(0),
+};
+let historyWrapOnly = false;
+let historyWrapDeleted = false;
 let registered = false;
 let rotated = false;
 let offline = false;
+const requestedLimits: (number | undefined)[] = [];
 const register = mock(async () => {
   registered = true;
-  return { deviceId: "device", privateKey: keyPair.privateKey };
+  return { deviceId: "device", privateKey: keyPair.privateKey, userId: "user" };
 });
 
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("react-native", () => createReactNativeTestModule());
 mock.module("../lib/deviceKeys.ts", () => ({ ensureDeviceKeyRegistration: register }));
+mock.module("../lib/historyKeys.ts", () => ({
+  getStoredHistoryKey: async ({ version }: { version: number }) =>
+    historyWrapOnly && version === 1 ? historyKey.privateKey : null,
+  storeHistoryKey: async () => {},
+}));
 mock.module("../lib/api.ts", () => ({
   trpcClient: {
     groupEpoch: {
-      getLatest: { query: async () => ({ epochId: epoch.epoch.epochId }) },
-      getWrappedKey: {
-        query: async () => {
+      listEpochKeyWraps: {
+        query: async (input: { limit?: number }) => {
+          requestedLimits.push(input.limit);
           if (offline) throw new Error("offline");
-          return registered && rotated ? epoch.wrappedKeys[0] : null;
+          return {
+            epochs: [
+              {
+                createdAt: new Date(0),
+                deviceWrap: registered && rotated && !historyWrapOnly ? epoch.wrappedKeys[0] : null,
+                epochId: epoch.epoch.epochId,
+                epochNumber: 1,
+                historyWraps: historyWrapOnly && !historyWrapDeleted ? [historyWrap] : [],
+              },
+            ],
+            nextCursor: null,
+          };
         },
       },
     },
   },
 }));
 
-const { useGroupKeyAccess }: typeof import("./useGroupKeyAccess.ts") =
-  await import("./useGroupKeyAccess.ts");
+const {
+  useCurrentGroupKeyAccess,
+  useGroupKeyHistoryAccess,
+}: typeof import("./useGroupKeyAccess.ts") = await import("./useGroupKeyAccess.ts");
 
 test("registers the device and refreshes missing access after rotation", async () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Harness = () => {
-    useGroupKeyAccess(["group"], "user");
+    useGroupKeyHistoryAccess(["group"], "user");
     return null;
   };
   const root = createRoot();
@@ -67,18 +103,24 @@ test("registers the device and refreshes missing access after rotation", async (
       </QueryClientProvider>,
     );
   });
-  const queryKey = ["groupKeyAccess", "user", "group"];
+  const queryKey = ["groupKeyAccess", "user", "group", "history"];
   await act(async () => {
     await queryClient.refetchQueries({ queryKey });
   });
   expect(register).toHaveBeenCalled();
-  expect(queryClient.getQueryData<string>(queryKey)).toBe("missing");
+  expect(queryClient.getQueryData<unknown>(queryKey)).toEqual({
+    current: "missing",
+    history: "complete",
+  });
 
   offline = true;
   await act(async () => {
     await queryClient.refetchQueries({ queryKey });
   });
-  expect(queryClient.getQueryData<string>(queryKey)).toBe("missing");
+  expect(queryClient.getQueryData<unknown>(queryKey)).toEqual({
+    current: "missing",
+    history: "complete",
+  });
   expect(queryClient.getQueryState(queryKey)?.status).toBe("error");
 
   offline = false;
@@ -87,7 +129,75 @@ test("registers the device and refreshes missing access after rotation", async (
     notifyGroupEpochChange("group");
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
-  expect(queryClient.getQueryData<string>(queryKey)).toBe("available");
+  expect(queryClient.getQueryData<unknown>(queryKey)).toEqual({
+    current: "available",
+    history: "complete",
+  });
+  await act(async () => root.unmount());
+  queryClient.clear();
+});
+
+test("rechecks an epoch once the history wrap that resolved it is deleted by a reset", async () => {
+  historyWrapOnly = true;
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const Harness = () => {
+    useGroupKeyHistoryAccess(["group"], "user");
+    return null;
+  };
+  const root = createRoot();
+  await act(async () => {
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+  });
+  const queryKey = ["groupKeyAccess", "user", "group", "history"];
+  await act(async () => {
+    await queryClient.refetchQueries({ queryKey });
+  });
+  expect(queryClient.getQueryData<unknown>(queryKey)).toEqual({
+    current: "available",
+    history: "complete",
+  });
+
+  historyWrapDeleted = true;
+  await act(async () => {
+    await queryClient.refetchQueries({ queryKey });
+  });
+  expect(queryClient.getQueryData<unknown>(queryKey)).toEqual({
+    current: "missing",
+    history: "complete",
+  });
+  await act(async () => root.unmount());
+  queryClient.clear();
+});
+
+test("checks only the latest epoch when the scope is current", async () => {
+  historyWrapOnly = false;
+  historyWrapDeleted = false;
+  offline = false;
+  rotated = true;
+  requestedLimits.length = 0;
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const Harness = () => {
+    useCurrentGroupKeyAccess(["group"], "user");
+    return null;
+  };
+  const root = createRoot();
+  await act(async () => {
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+  });
+  const queryKey = ["groupKeyAccess", "user", "group", "current"];
+  await act(async () => {
+    await queryClient.refetchQueries({ queryKey });
+  });
+  expect(queryClient.getQueryData<unknown>(queryKey)).toEqual({ current: "available" });
+  expect(new Set(requestedLimits)).toEqual(new Set([1]));
   await act(async () => root.unmount());
   queryClient.clear();
 });

@@ -63,6 +63,7 @@ const removal = {
     createdByDeviceId: "device",
     epochId: "epoch",
     epochNumber: 1,
+    historyKeys: [],
     recipientKeys: [
       {
         algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
