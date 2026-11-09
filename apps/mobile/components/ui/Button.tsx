@@ -37,7 +37,7 @@ const buttonTextVariants = cva("text-white text-base font-semibold rounded-lg", 
       destructive: "text-destructive-foreground",
       outline: "text-primary",
       secondary: "text-secondary-foreground",
-      ghost: "group-active:text-accent-foreground",
+      ghost: "text-foreground group-active:text-accent-foreground",
       link: "text-primary group-active:underline",
     },
     size: {
