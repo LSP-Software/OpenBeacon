@@ -12,8 +12,6 @@ import { trpc } from "../../lib/api.ts";
 import { cn } from "../../lib/cn.ts";
 import { useColors } from "../../lib/theme.ts";
 
-type EmailAlertSetting = keyof z.infer<typeof emailAlertSettingsSchema>;
-
 const alerts = [
   {
     label: "Password changed or reset",
@@ -36,7 +34,7 @@ const alerts = [
 ] satisfies {
   label: string;
   description: string;
-  setting?: EmailAlertSetting;
+  setting?: keyof z.infer<typeof emailAlertSettingsSchema>;
 }[];
 
 const EmailAlertsScreen = () => {
