@@ -590,15 +590,14 @@ describe("restoreFromRecoveryPhrase", () => {
     ).toEqual({ latitude: 51.5, longitude: -0.12 });
   });
 
-  test("a phone whose setup stored no key restores v1 after the retry conflicts", async () => {
+  test("a phone whose setup stored no key restores v1 when setup is retried with the same phrase", async () => {
     const phrase = generateRecoveryPhrase();
     failNextStore = true;
     expect((await setUpRecoveryPhrase(phrase)).status).toBe("unsaved");
-    expect(await setUpRecoveryPhrase(phrase)).toEqual({ status: "conflict" });
     const epoch = createEpoch({ epochNumber: 1, groupId: "group-a", holders: [firstPhone] });
     expect(await findMissingHistoryKey()).toEqual({ userId, version: 1 });
 
-    expect(await restoreFromRecoveryPhrase(phrase)).toEqual({ userId, versions: [1] });
+    expect((await setUpRecoveryPhrase(phrase)).status).toBe("created");
 
     expect(await findMissingHistoryKey()).toBeNull();
     await expectReadable(firstPhone, epoch);

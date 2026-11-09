@@ -89,7 +89,14 @@ export const setUpRecoveryPhrase = async (phrase: RecoveryPhrase) => {
   });
   const result = await tryCatch(trpcClient.accountRecovery.setup.mutate(input));
   if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };
-  if (hasTrpcCode(result.error, "CONFLICT")) return { status: "conflict" as const };
+  if (hasTrpcCode(result.error, "CONFLICT")) {
+    const status = await trpcClient.accountRecovery.status.query();
+    if (status.recoveryKey?.publicKey !== input.recoveryKey.publicKey) {
+      return { status: "conflict" as const };
+    }
+    await restoreFromRecoveryPhrase(phrase);
+    return { device, status: "created" as const };
+  }
   if (result.error) throw result.error;
   const stored = await tryCatch(
     storeHistoryKey({ privateKey: historyPrivateKey, userId: device.userId, version }),
