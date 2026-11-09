@@ -9,6 +9,7 @@ import type { CiphertextQueueItem } from "../modules/openbeacon-tracking/index.t
 import { trpcClient } from "./api.ts";
 import { baseUrl } from "./base-url.ts";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
+import { getStoredHistoryKey } from "./historyKeys.ts";
 import { cancelDeviceKeyRegistrations, ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
@@ -28,7 +29,7 @@ let revokePromise: Promise<void> | null = null;
 let captureRefreshPending = false;
 let trackingPaused = false;
 const observedGroupEpochs = new Map<string, string>();
-const lastCleanBackfills = new Map<string, number>();
+const lastCleanBackfills = new Map<string, { at: number; missingVersion: number | null }>();
 
 const getQueueOwner = async (signal?: AbortSignal) => {
   const { userId } = await trpcClient.auth.deviceKeyContext.query(
@@ -80,12 +81,21 @@ const haveMatchingProvisionedKeys = ({
 
 const checkHistoryBackfill = async (userId: string) => {
   const lastCleanBackfill = lastCleanBackfills.get(userId);
-  if (lastCleanBackfill !== undefined && Date.now() - lastCleanBackfill < 10 * 60 * 1000) {
+  if (
+    lastCleanBackfill !== undefined &&
+    Date.now() - lastCleanBackfill.at < 10 * 60 * 1000 &&
+    (lastCleanBackfill.missingVersion === null ||
+      !(await getStoredHistoryKey({ userId, version: lastCleanBackfill.missingVersion })))
+  ) {
     return null;
   }
   const current = await tryCatch(getCurrentHistoryKeyState(userId));
   if (getErrorCode(current.error) === "UNAUTHORIZED") throw current.error;
-  return { canBackfill: current.data?.status === "held", completed: !current.error };
+  return {
+    canBackfill: current.data?.status === "held",
+    completed: !current.error,
+    missingVersion: current.data?.status === "missing" ? current.data.version : null,
+  };
 };
 
 const recordCleanBackfill = ({
@@ -94,11 +104,11 @@ const recordCleanBackfill = ({
   userId,
 }: {
   backfills: { error: unknown }[];
-  check: { completed: boolean } | null;
+  check: { completed: boolean; missingVersion: number | null } | null;
   userId: string;
 }) => {
   if (check?.completed && backfills.every(({ error }) => !error)) {
-    lastCleanBackfills.set(userId, Date.now());
+    lastCleanBackfills.set(userId, { at: Date.now(), missingVersion: check.missingVersion });
   }
 };
 

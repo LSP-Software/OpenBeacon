@@ -84,6 +84,7 @@ let recoveryStatus: {
 } | null = null;
 let recoveryStatusError: Error | null = null;
 let recoveryStatusCalls = 0;
+const storedHistoryKeyVersions = new Set([1]);
 let backfillErrors = new Map<string, Error>();
 let missingHistoryWraps = new Map<string, string[]>();
 const backfillQueries: string[] = [];
@@ -127,7 +128,7 @@ mock.module("./deviceKeys.ts", () => ({
 
 mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async ({ userId, version }: { userId: string; version: number }) =>
-    userId === "user-1" && version === 1 ? historyKeyPair.privateKey : null,
+    userId === "user-1" && storedHistoryKeyVersions.has(version) ? historyKeyPair.privateKey : null,
   storeHistoryKey: async () => {},
 }));
 
@@ -391,6 +392,8 @@ describe("tracking service", () => {
     rotationChecks.length = 0;
     requestedOwners.length = 0;
     currentUserId = "user-1";
+    storedHistoryKeyVersions.clear();
+    storedHistoryKeyVersions.add(1);
     ownerContextCalls = 0;
     ownerQueryGate = null;
     unassignedCount = 0;
@@ -831,25 +834,34 @@ describe("tracking service", () => {
     expect(recoveryStatusCalls).toBe(1);
   });
 
-  test.failing(
-    "OPE-233: a reconcile before this phone holds the history key doesn't delay the backfill after a restore",
-    async () => {
-      recoveryStatus = {
-        currentHistoryKey: { publicKey: historyKeyPair.publicKey, version: 2 },
-        recoveryKey: {},
-      };
-      await reconcileTrackingKeys({ startCapture: false });
-      expect(backfillQueries).toEqual([]);
+  test("a reconcile before this phone holds the history key doesn't delay the backfill after a restore", async () => {
+    recoveryStatus = {
+      currentHistoryKey: { publicKey: historyKeyPair.publicKey, version: 2 },
+      recoveryKey: {},
+    };
+    await reconcileTrackingKeys({ startCapture: false });
+    expect(backfillQueries).toEqual([]);
 
-      recoveryStatus = {
-        currentHistoryKey: { publicKey: historyKeyPair.publicKey, version: 1 },
-        recoveryKey: {},
-      };
-      await reconcileTrackingKeys({ startCapture: false });
+    storedHistoryKeyVersions.add(2);
+    await reconcileTrackingKeys({ startCapture: false });
 
-      expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
-    },
-  );
+    expect(recoveryStatusCalls).toBe(2);
+    expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
+  });
+
+  test("a restore between reconciles with capture running backfills straight away", async () => {
+    recoveryStatus = {
+      currentHistoryKey: { publicKey: historyKeyPair.publicKey, version: 2 },
+      recoveryKey: {},
+    };
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(backfillQueries).toEqual([]);
+
+    storedHistoryKeyVersions.add(2);
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
+  });
 
   test("a failed backfill leaves the next reconcile free to retry", async () => {
     backfillErrors.set("group-1", new Error("Backfill unavailable"));
