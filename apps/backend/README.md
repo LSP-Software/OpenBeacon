@@ -56,7 +56,7 @@ request came from Cloudflare, so only use it when the origin is reachable solely
 through Cloudflare, for example via Cloudflare Tunnel or a firewall that only
 allows Cloudflare's IP ranges. Otherwise use `cloudflare-authenticated`.
 
-The `Deploy backend` GitHub Actions workflow also builds and deploys the separate scheduled job runner. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
+The `Deploy backend` GitHub Actions workflow also builds and deploys the separate scheduled job runner. Every installation needs the runner: besides account deletion, it deletes expired email codes and verification tokens every hour. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
 
 The `Deploy backend` GitHub Actions workflow is manually dispatched on `main`.
 Configure

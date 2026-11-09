@@ -2,6 +2,7 @@ import { deleteAccountRecords } from "@openbeacon/api/account-deletion.ts";
 import { env } from "@openbeacon/api/env.ts";
 import { deleteImageKey, deleteUserImages } from "@openbeacon/api/storage.ts";
 import { tryCatch } from "@openbeacon/shared";
+import { getDatabaseTime } from "../databaseTime.ts";
 import { services, waitForSecurityAlerts } from "../services.ts";
 
 export const runAccountDeletion = async () => {
@@ -60,12 +61,4 @@ export const runAccountDeletion = async () => {
     await services.db.accountDeletionCleanup.deleteMany({ where: { userId: item.userId } });
   }
   await waitForSecurityAlerts();
-};
-
-const getDatabaseTime = async () => {
-  const [clock] = await services.db.$queryRaw<
-    Array<{ now: Date }>
-  >`SELECT clock_timestamp() AS now`;
-  if (!clock) throw new Error("Unable to read database time.");
-  return clock.now;
 };
