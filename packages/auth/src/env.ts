@@ -8,6 +8,10 @@ export const env = createEnv({
     BETTER_AUTH_SECRET: z.string().min(32),
     GOOGLE_CLIENT_ID: optionalEnvString,
     GOOGLE_CLIENT_SECRET: optionalEnvString,
+    EMAIL_CODE_IP_LIMIT: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.stringbool().default(false),
+    ),
   },
   runtimeEnv: process.env,
 });

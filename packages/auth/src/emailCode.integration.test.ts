@@ -38,6 +38,7 @@ const codes = createEmailCodes({
   db: prisma,
   secret: "integration-email-code-secret-000000000000",
   rateLimits: new TestCache({ redisUrl: "redis://localhost:6379", now: () => clockMs }).rateLimits,
+  limitRequestsPerIp: true,
   sendCodeEmail: async (email) => {
     if (sendFailure) throw sendFailure;
     await sendGate;
@@ -428,6 +429,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
           throw new Error("Redis is down");
         },
       },
+      limitRequestsPerIp: false,
       sendCodeEmail: async () => {},
       sendAccountExistsEmail: async () => {},
       sendGoogleSignInEmail: async () => {},
@@ -545,7 +547,35 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email code rate 
     expect(await codes.allowRequest({ purpose: "recovery-reset", email, ip: nextIp() })).toBe(true);
   });
 
-  test("an IP can request 20 codes per hour across addresses", async () => {
+  test("with the IP limit off, one IP can request codes for any number of addresses", async () => {
+    const unlimitedCodes = createEmailCodes({
+      db: prisma,
+      secret: "integration-email-code-secret-000000000000",
+      rateLimits: new TestCache({ redisUrl: "redis://localhost:6379", now: () => clockMs })
+        .rateLimits,
+      limitRequestsPerIp: false,
+      sendCodeEmail: async () => {},
+      sendAccountExistsEmail: async () => {},
+      sendGoogleSignInEmail: async () => {},
+      now: () => new Date(clockMs),
+    });
+    const ip = nextIp();
+    const purposes = ["sign-up", "password-reset", "email-verification", "recovery-reset"] as const;
+    const results = [];
+    for (let index = 0; index < emailCodeRequestLimits.perIp.limit + 5; index++) {
+      results.push(
+        await unlimitedCodes.allowRequest({
+          purpose: purposes[index % purposes.length] ?? "sign-up",
+          email: nextAddress("ip-limit-off"),
+          ip,
+        }),
+      );
+    }
+    expect(results).toHaveLength(25);
+    expect(results.every(Boolean)).toBe(true);
+  });
+
+  test("with the IP limit on, an IP can request 20 codes per hour across addresses", async () => {
     const ip = nextIp();
     const allowed = emailCodeRequestLimits.perIp.limit;
     for (let index = 0; index < allowed; index++) {

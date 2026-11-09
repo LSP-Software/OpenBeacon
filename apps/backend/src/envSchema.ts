@@ -22,6 +22,10 @@ export const envSchema = {
     (value) => (value === "" ? undefined : value),
     z.stringbool().default(true),
   ),
+  EMAIL_CODE_IP_LIMIT: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.stringbool().default(false),
+  ),
   OPENBEACON_API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   OPENBEACON_API_HOSTNAME: z.ipv4().default("0.0.0.0"),
   TRUSTED_PROXY_PROVIDER: z

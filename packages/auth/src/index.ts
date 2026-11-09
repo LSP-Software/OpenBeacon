@@ -31,6 +31,7 @@ export const emailCodes = emailEnabled
       rateLimits: new OpenBeaconCache({
         redisUrl: redisUrlSchema.parse(process.env["REDIS_URL"]),
       }).rateLimits,
+      limitRequestsPerIp: env.EMAIL_CODE_IP_LIMIT,
       sendCodeEmail,
       sendAccountExistsEmail,
       sendGoogleSignInEmail,

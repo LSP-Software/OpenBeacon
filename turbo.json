@@ -30,6 +30,7 @@
     "SMTP_PASSWORD",
     "EMAIL_FROM",
     "EMAIL_CONSOLE",
+    "EMAIL_CODE_IP_LIMIT",
     "JAVA_HOME"
   ],
   "tasks": {

@@ -44,6 +44,7 @@ export const createEmailCodes = ({
   db,
   secret,
   rateLimits,
+  limitRequestsPerIp,
   sendCodeEmail,
   sendAccountExistsEmail,
   sendGoogleSignInEmail,
@@ -52,6 +53,7 @@ export const createEmailCodes = ({
   db: PrismaClient;
   secret: string;
   rateLimits: Pick<OpenBeaconCache["rateLimits"], "consume" | "peek">;
+  limitRequestsPerIp: boolean;
   sendCodeEmail: (email: Parameters<typeof sendCode>[0]) => Promise<unknown>;
   sendAccountExistsEmail: (email: Parameters<typeof sendAccountExists>[0]) => Promise<unknown>;
   sendGoogleSignInEmail: (email: Parameters<typeof sendGoogleSignIn>[0]) => Promise<unknown>;
@@ -79,12 +81,14 @@ export const createEmailCodes = ({
       email: string;
       ip: string | null;
     }) => {
-      const ipResult = await rateLimits.consume({
-        namespace: "emailCode.request",
-        identifier: { type: "ip", value: ip ?? "unknown" },
-        ...emailCodeRequestLimits.perIp,
-      });
-      if (!ipResult.allowed) return false;
+      if (limitRequestsPerIp) {
+        const ipResult = await rateLimits.consume({
+          namespace: "emailCode.request",
+          identifier: { type: "ip", value: ip ?? "unknown" },
+          ...emailCodeRequestLimits.perIp,
+        });
+        if (!ipResult.allowed) return false;
+      }
       const addressResult = await rateLimits.consume({
         namespace: `emailCode.request.${purpose}`,
         identifier: {
