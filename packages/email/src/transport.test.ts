@@ -4,6 +4,11 @@ const sendMail = mock(async (_message: unknown) => ({}));
 const smtpVerify = mock(async () => true);
 const resendSend = mock(async (_message: unknown) => ({ data: { id: "id" }, error: null }));
 let domainsResult: unknown = { data: { data: [] }, error: null };
+let domainResult: unknown = {
+  data: { open_tracking: false, click_tracking: false },
+  error: null,
+};
+const getDomain = mock(async (_id: string) => domainResult);
 
 const createTransport = mock((_options: unknown) => ({ sendMail, verify: smtpVerify }));
 
@@ -11,7 +16,7 @@ mock.module("nodemailer", () => ({ default: { createTransport } }));
 mock.module("resend", () => ({
   Resend: class {
     emails = { send: resendSend };
-    domains = { list: async () => domainsResult };
+    domains = { list: async () => domainsResult, get: getDomain };
   },
 }));
 
@@ -110,8 +115,8 @@ describe("Resend transport", () => {
     domainsResult = {
       data: {
         data: [
-          { name: "example.com", status: "pending" },
-          { name: "other.com", status: "verified" },
+          { id: "pending", name: "example.com", status: "pending" },
+          { id: "other", name: "other.com", status: "verified" },
         ],
       },
       error: null,
@@ -119,7 +124,33 @@ describe("Resend transport", () => {
     await expect(transport.verify()).rejects.toThrow(
       "The EMAIL_FROM domain is not verified in Resend",
     );
-    domainsResult = { data: { data: [{ name: "Example.com", status: "verified" }] }, error: null };
+    domainsResult = {
+      data: { data: [{ id: "example", name: "Example.com", status: "verified" }] },
+      error: null,
+    };
+    await transport.verify();
+    expect(getDomain).toHaveBeenLastCalledWith("example");
+  });
+
+  test("requires open and click tracking to be off for the sender domain", async () => {
+    domainsResult = {
+      data: { data: [{ id: "example", name: "example.com", status: "verified" }] },
+      error: null,
+    };
+    for (const tracking of [
+      { open_tracking: true, click_tracking: false },
+      { open_tracking: false, click_tracking: true },
+    ]) {
+      domainResult = { data: tracking, error: null };
+      await expect(transport.verify()).rejects.toThrow(
+        "Turn off open tracking and click tracking for the EMAIL_FROM domain in Resend",
+      );
+    }
+    domainResult = { data: null, error: { name: "not_found" } };
+    await expect(transport.verify()).rejects.toThrow(
+      "Resend could not read the EMAIL_FROM domain: not_found",
+    );
+    domainResult = { data: { open_tracking: false, click_tracking: false }, error: null };
     await transport.verify();
   });
 });

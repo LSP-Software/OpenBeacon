@@ -30,11 +30,20 @@ export const createEmailTransport = (
         if (result.error?.name === "restricted_api_key") return;
         if (result.error) throw new Error(`Resend rejected the API key: ${result.error.name}`);
         const domain = config.fromAddress.split("@")[1]?.toLowerCase();
-        const verified = result.data.data.some(
+        const verified = result.data.data.find(
           (entry) => entry.name.toLowerCase() === domain && entry.status === "verified",
         );
         if (!verified) {
           throw new Error("The EMAIL_FROM domain is not verified in Resend");
+        }
+        const details = await resend.domains.get(verified.id);
+        if (details.error) {
+          throw new Error(`Resend could not read the EMAIL_FROM domain: ${details.error.name}`);
+        }
+        if (details.data.open_tracking || details.data.click_tracking) {
+          throw new Error(
+            "Turn off open tracking and click tracking for the EMAIL_FROM domain in Resend",
+          );
         }
       },
     };
