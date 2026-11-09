@@ -22,7 +22,10 @@ import { finishAuthentication } from "../lib/finishAuthentication.ts";
 import { performGoogleAuth } from "../lib/googleAuth.ts";
 
 const SignIn = () => {
-  const { joinCode } = useLocalSearchParams<{ joinCode?: string }>();
+  const { joinCode, email: emailParam } = useLocalSearchParams<{
+    joinCode?: string;
+    email?: string;
+  }>();
   const finishSignIn = () => finishAuthentication({ joinCode });
   const [emailLoading, setEmailLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -33,7 +36,7 @@ const SignIn = () => {
     resolver: zodResolver(signInSchema),
     mode: "onTouched",
     defaultValues: {
-      email: "",
+      email: emailParam ?? "",
       password: "",
     },
     shouldFocusError: true,

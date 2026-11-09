@@ -92,19 +92,16 @@ const SignUp = () => {
       return;
     }
 
-    if (!result.data.token) {
-      const signInResult = await authClient.signIn.email({ email, password });
-      if (signInResult.error) {
-        Alert.alert("Sign in failed", signInResult.error.message);
-        setEmailLoading(false);
-        return;
-      }
-    }
-
-    const sessionSetupResult = await completeAuthenticatedSessionSetup();
-    if (sessionSetupResult.error) {
-      Alert.alert("Unable to finish account setup", sessionSetupResult.error.message);
+    const signInResult = result.data.token
+      ? null
+      : await authClient.signIn.email({ email, password });
+    const sessionSetupResult = signInResult?.error
+      ? null
+      : await completeAuthenticatedSessionSetup();
+    if (signInResult?.error || sessionSetupResult?.error) {
       setEmailLoading(false);
+      Alert.alert("Account created", "Your account has been created. Sign in to continue.");
+      router.replace({ pathname: "/signIn", params: { joinCode, email } });
       return;
     }
 
