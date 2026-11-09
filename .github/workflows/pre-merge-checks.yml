@@ -64,6 +64,13 @@ jobs:
         run: |
           bun run --cwd packages/database --env-file=../../.env.ci prisma generate
           bun run --cwd packages/database --env-file=../../.env.ci prisma migrate deploy
+      - name: Check the Prisma schema matches the migrations
+        env:
+          PGPASSWORD: openbeacon
+          SHADOW_DATABASE_URL: postgresql://openbeacon:openbeacon@localhost:5432/openbeacon_shadow
+        run: |
+          psql -h localhost -U openbeacon -d openbeacon -c 'CREATE DATABASE openbeacon_shadow'
+          bunx prisma migrate diff --config packages/database/prisma.config.ts --from-migrations packages/database/prisma/migrations --to-schema packages/database/prisma/schema.prisma --exit-code
       - name: Run every integration test file against PostgreSQL
         run: |
           mapfile -t files < <(find . -name '*.integration.test.ts' -not -path '*/node_modules/*' | sort)
