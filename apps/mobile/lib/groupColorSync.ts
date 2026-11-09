@@ -6,7 +6,6 @@ import { createPersonalDataOpener, resealForSelf, sealForSelf } from "./personal
 export const groupColorSyncQueryOptions = (userId: string | undefined) => ({
   queryKey: ["personalGroupColors", userId],
   enabled: !!userId,
-  staleTime: Number.POSITIVE_INFINITY,
   queryFn: () => (userId ? syncGroupColors(userId) : null),
 });
 
@@ -42,10 +41,11 @@ export const saveGroupColor = async ({
   setGroupColor(groupId, color);
 };
 
-export const syncGroupColors = async (userId: string) => {
+export const syncGroupColors = async (userId: string, reseal = true) => {
   const records = await trpcClient.groupMembership.colors.query();
   const open = createPersonalDataOpener(userId);
   const colors: Parameters<typeof resealForSelf>[0]["records"] = [];
+  let resealRejected = false;
   for (const record of records) {
     const binding = [userId, record.groupId];
     const result = await tryCatch(
@@ -58,14 +58,23 @@ export const syncGroupColors = async (userId: string) => {
       binding,
       sealed: record.ciphertext,
       plaintext: result.data,
-      upload: (ciphertext: string) =>
-        trpcClient.groupMembership.updateColor.mutate({
-          groupId: record.groupId,
-          ciphertext,
-          expectedCiphertext: record.ciphertext,
-        }),
+      upload: async (ciphertext: string) => {
+        const uploaded = await tryCatch(
+          trpcClient.groupMembership.updateColor.mutate({
+            groupId: record.groupId,
+            ciphertext,
+            expectedCiphertext: record.ciphertext,
+          }),
+        );
+        if (uploaded.error) {
+          resealRejected = true;
+          throw uploaded.error;
+        }
+      },
     });
   }
+  if (!reseal) return null;
   await tryCatch(resealForSelf({ userId, records: colors }));
+  if (resealRejected) await tryCatch(syncGroupColors(userId, false));
   return null;
 };

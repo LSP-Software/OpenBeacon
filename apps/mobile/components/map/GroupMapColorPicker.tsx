@@ -17,7 +17,7 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
     mutationFn: saveGroupColor,
     onError: (error) => Alert.alert("Unable to save color", error.message),
   });
-  const locked = !userId || !sync.isSuccess || save.isPending;
+  const locked = !userId || !sync.isSuccess || sync.isFetching || save.isPending;
   const selectedColor = save.isPending ? save.variables.color : getGroupColor(groupId);
 
   return (
