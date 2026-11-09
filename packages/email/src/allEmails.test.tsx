@@ -76,4 +76,21 @@ describe("every email", () => {
       expect(email.subject).not.toMatch(/\d{6}/);
     }
   });
+
+  test("escapes the device model and server name", async () => {
+    const email = await renderSecurityAlertEmail({
+      alert: {
+        type: "new-device",
+        device: { model: '<img src="https://evil.test/p.png">', platform: "ios" },
+      },
+      at: new Date("2026-07-09T13:32:00Z"),
+      timezone: null,
+      hasPassword: true,
+      serverName: "<b>Family</b> & Co",
+    });
+    expect(email.html).not.toContain('evil.test/p.png">');
+    expect(email.html).not.toContain("<b>Family</b>");
+    expect(email.html).toContain("&lt;img src=&quot;https://evil.test/p.png&quot;&gt;");
+    expect(email.html).toContain("&lt;b&gt;Family&lt;/b&gt; &amp; Co");
+  });
 });
