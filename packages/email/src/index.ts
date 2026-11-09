@@ -1,9 +1,11 @@
 import { OpenBeaconCache, redisUrlSchema } from "@openbeacon/cache";
 import { tryCatch } from "@openbeacon/shared";
+import { renderCodeEmail } from "./codeEmail.tsx";
 import { loadEmailSettings } from "./config.ts";
 import { renderEmailLayout } from "./layout.tsx";
 import { createSendEmail } from "./sender.ts";
 import { createEmailTransport } from "./transport.ts";
+import type { EmailCodePurpose } from "./types.ts";
 
 const { serverName, config } = loadEmailSettings();
 const transport = config.transport === "none" ? null : createEmailTransport(config);
@@ -18,7 +20,7 @@ export const checkEmail = async () => {
   throw result.error;
 };
 
-export type { EmailMessage } from "./types.ts";
+export type { EmailCodePurpose, EmailMessage } from "./types.ts";
 
 export const renderEmail = (email: Omit<Parameters<typeof renderEmailLayout>[0], "serverName">) =>
   renderEmailLayout({ ...email, serverName });
@@ -33,3 +35,21 @@ export const sendEmail = createSendEmail(
       }
     : null,
 );
+
+export const sendCodeEmail = async ({
+  to,
+  purpose,
+  code,
+  userId,
+}: {
+  to: string;
+  purpose: EmailCodePurpose;
+  code: string;
+  userId?: string;
+}) =>
+  sendEmail({
+    to,
+    ...(await renderCodeEmail({ purpose, code, serverName })),
+    ...(userId ? { userId } : {}),
+    optional: false,
+  });
