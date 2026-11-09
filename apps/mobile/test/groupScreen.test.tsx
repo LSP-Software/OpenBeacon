@@ -9,8 +9,16 @@ import { createReactNativeTestModule } from "./reactNativeTestModule.ts";
 
 let queryResult: { data: unknown; isPending: boolean; error: { data: { code: string } } | null };
 let isFocused = true;
+let sessionUserId = "user-1";
+const storedValues = new Map<string, number>();
 let groups: { id: string }[] = [];
-let keyAccess: { data: string; isError: boolean }[] = [];
+let keyAccess: {
+  data: {
+    current: "available" | "missing" | "unavailable";
+    history: "complete" | { partialFrom: Date };
+  };
+  isError: boolean;
+}[] = [];
 const replace = mock(() => {});
 const fetchQuery = mock(async () => groups);
 const queryClient = { fetchQuery };
@@ -21,6 +29,7 @@ mock.module("@tanstack/react-query", () => ({
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => isFocused }));
 mock.module("expo-router", () => ({
+  Link: ({ children }: { children: React.ReactNode }) => children,
   useLocalSearchParams: () => ({ groupId: "group-1" }),
   useRouter: () => router,
 }));
@@ -39,12 +48,18 @@ mock.module("../lib/api.ts", () => ({
       get: { queryOptions: () => ({}) },
       list: { queryOptions: () => ({}) },
     },
+    accountRecovery: {
+      status: { queryOptions: () => ({}) },
+    },
   },
 }));
-mock.module("../lib/auth-client.ts", () => ({
-  authClient: { useSession: () => ({ data: null }) },
+mock.module("../hooks/useHeldHistoryKeyVersions.ts", () => ({
+  useHeldHistoryKeyVersions: () => ({ data: undefined }),
 }));
-mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useGroupKeyAccess: () => keyAccess }));
+mock.module("../lib/auth-client.ts", () => ({
+  authClient: { useSession: () => ({ data: { user: { id: sessionUserId } } }) },
+}));
+mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useGroupKeyHistoryAccess: () => keyAccess }));
 mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
 mock.module("../components/image/GroupImage.tsx", () => ({ GroupImage: () => null }));
 mock.module("../components/LoadingIndicator.tsx", () => ({
@@ -52,6 +67,16 @@ mock.module("../components/LoadingIndicator.tsx", () => ({
 }));
 mock.module("../components/RefreshablePage.tsx", () => ({
   RefreshablePage: ({ children }: { children: React.ReactNode }) => children,
+}));
+mock.module("../lib/storage.ts", () => ({
+  storage: {
+    getNumber: (key: string) => storedValues.get(key),
+    set: (key: string, value: number) => storedValues.set(key, value),
+  },
+}));
+mock.module("../components/ui/Button.tsx", () => ({
+  Button: ({ children, onPress }: { children: React.ReactNode; onPress: () => void }) =>
+    React.createElement("pressable", { onPress }, children),
 }));
 mock.module("../components/ui/SwipeTabs.tsx", () => ({ SwipeTabs: () => null }));
 mock.module("../components/ui/Text.tsx", () => ({
@@ -65,6 +90,8 @@ const { default: GroupScreen } = await import("../app/(tabs)/groups/[groupId]/in
 
 beforeEach(() => {
   isFocused = true;
+  sessionUserId = "user-1";
+  storedValues.clear();
   groups = [];
   keyAccess = [];
   replace.mockClear();
@@ -77,7 +104,7 @@ beforeEach(() => {
 });
 
 test("shows key access problems without offering recovery", async () => {
-  keyAccess = [{ data: "missing", isError: true }];
+  keyAccess = [{ data: { current: "missing", history: "complete" }, isError: true }];
   queryResult = {
     ...queryResult,
     data: { id: "group-1", name: "Family", groupMembers: [{ role: "OWNER" }] },
@@ -85,8 +112,9 @@ test("shows key access problems without offering recovery", async () => {
   const root = createRoot();
   await act(async () => root.render(<GroupScreen />));
   expect(JSON.stringify(root.container.toJSON())).toContain(
-    "Group locations may be unavailable on this device.",
+    "Current group locations may be unavailable on this phone.",
   );
+  expect(JSON.stringify(root.container.toJSON())).not.toContain("location history");
 
   queryResult = {
     ...queryResult,
@@ -94,6 +122,72 @@ test("shows key access problems without offering recovery", async () => {
   };
   await act(async () => root.render(<GroupScreen />));
   expect(JSON.stringify(root.container.toJSON())).not.toContain("Restore group key");
+  await act(async () => root.unmount());
+});
+
+test("reports partial history separately from current access", async () => {
+  keyAccess = [
+    {
+      data: { current: "available", history: { partialFrom: new Date("2026-10-03T12:00:00Z") } },
+      isError: false,
+    },
+  ];
+  const root = createRoot();
+  await act(async () => root.render(<GroupScreen />));
+  const rendered = JSON.stringify(root.container.toJSON());
+  expect(rendered).toContain("Some location history isn’t available on this phone");
+  expect(rendered).toContain("2026");
+  expect(rendered).not.toContain("current encryption key");
+  await act(async () => root.unmount());
+});
+
+test("dismissing the partial history warning hides it for that user and group only", async () => {
+  keyAccess = [
+    {
+      data: { current: "available", history: { partialFrom: new Date("2026-10-03T12:00:00Z") } },
+      isError: false,
+    },
+  ];
+  const warning = "Some location history isn’t available on this phone";
+  const root = createRoot();
+  await act(async () => root.render(<GroupScreen />));
+  const [dismiss] = root.container.queryAll((item) => item.type === "pressable");
+  if (!dismiss) throw new Error("Dismiss button not found");
+  await act(async () => (dismiss.props as { onPress: () => void }).onPress());
+  expect(JSON.stringify(root.container.toJSON())).not.toContain(warning);
+  expect(storedValues.get("recovery.historyWarningDismissedFrom.user-1.group-1")).toBe(
+    new Date("2026-10-03T12:00:00Z").getTime(),
+  );
+  await act(async () => root.unmount());
+
+  const remounted = createRoot();
+  await act(async () => remounted.render(<GroupScreen />));
+  expect(JSON.stringify(remounted.container.toJSON())).not.toContain(warning);
+  await act(async () => remounted.unmount());
+
+  sessionUserId = "user-2";
+  const otherUser = createRoot();
+  await act(async () => otherUser.render(<GroupScreen />));
+  expect(JSON.stringify(otherUser.container.toJSON())).toContain(warning);
+  await act(async () => otherUser.unmount());
+});
+
+test("shows the partial history warning again when more history becomes unreadable", async () => {
+  storedValues.set(
+    "recovery.historyWarningDismissedFrom.user-1.group-1",
+    new Date("2026-10-03T12:00:00Z").getTime(),
+  );
+  keyAccess = [
+    {
+      data: { current: "available", history: { partialFrom: new Date("2026-09-01T12:00:00Z") } },
+      isError: false,
+    },
+  ];
+  const root = createRoot();
+  await act(async () => root.render(<GroupScreen />));
+  expect(JSON.stringify(root.container.toJSON())).toContain(
+    "Some location history isn’t available on this phone",
+  );
   await act(async () => root.unmount());
 });
 

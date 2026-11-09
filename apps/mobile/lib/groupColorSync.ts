@@ -1,12 +1,11 @@
 import { tryCatch } from "@openbeacon/shared";
 import { trpcClient } from "./api.ts";
 import { type GroupColor, isGroupColor, setGroupColor } from "./groupColor.ts";
-import { openForSelf, sealForSelf } from "./personalData.ts";
+import { createPersonalDataOpener, resealForSelf, sealForSelf } from "./personalData.ts";
 
 export const groupColorSyncQueryOptions = (userId: string | undefined) => ({
   queryKey: ["personalGroupColors", userId],
   enabled: !!userId,
-  staleTime: Number.POSITIVE_INFINITY,
   queryFn: () => (userId ? syncGroupColors(userId) : null),
 });
 
@@ -42,18 +41,40 @@ export const saveGroupColor = async ({
   setGroupColor(groupId, color);
 };
 
-const syncGroupColors = async (userId: string) => {
+export const syncGroupColors = async (userId: string, reseal = true) => {
   const records = await trpcClient.groupMembership.colors.query();
+  const open = createPersonalDataOpener(userId);
+  const colors: Parameters<typeof resealForSelf>[0]["records"] = [];
+  let resealRejected = false;
   for (const record of records) {
+    const binding = [userId, record.groupId];
     const result = await tryCatch(
-      openForSelf({
-        userId,
-        purpose: "group-color",
-        binding: [userId, record.groupId],
-        sealed: record.ciphertext,
-      }),
+      open({ purpose: "group-color", binding, sealed: record.ciphertext }),
     );
-    if (result.data && isGroupColor(result.data)) setGroupColor(record.groupId, result.data);
+    if (!result.data || !isGroupColor(result.data)) continue;
+    setGroupColor(record.groupId, result.data);
+    colors.push({
+      purpose: "group-color",
+      binding,
+      sealed: record.ciphertext,
+      plaintext: result.data,
+      upload: async (ciphertext: string) => {
+        const uploaded = await tryCatch(
+          trpcClient.groupMembership.updateColor.mutate({
+            groupId: record.groupId,
+            ciphertext,
+            expectedCiphertext: record.ciphertext,
+          }),
+        );
+        if (uploaded.error) {
+          resealRejected = true;
+          throw uploaded.error;
+        }
+      },
+    });
   }
+  if (!reseal) return null;
+  await tryCatch(resealForSelf({ userId, records: colors }));
+  if (resealRejected) await tryCatch(syncGroupColors(userId, false));
   return null;
 };

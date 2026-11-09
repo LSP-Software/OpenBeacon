@@ -17,42 +17,34 @@ type GroupFindUniqueArgs = {
   };
 };
 
-type WrappedKeyFindFirstArgs = {
-  select: {
-    algorithm: true;
-    createdAt: true;
-    ephemeralPublicKey: true;
-    groupEpoch: {
-      select: {
-        senderPublicKey: true;
-      };
-    };
-    groupEpochId: true;
-    recipientDeviceId: true;
-    wrappedKey: true;
-  };
+type EpochFindFirstArgs = {
   where: {
-    groupEpoch: {
-      groupId: string;
+    epochNumber: {
+      gte: number;
     };
-    groupEpochId: string;
-    recipientDevice: {
-      userId: string;
-    };
-    recipientDeviceId: string;
+    groupId: string;
+    id: string;
   };
 };
 
-type WrappedKeyRecord = {
-  algorithm: typeof WRAPPED_EPOCH_KEY_ALGORITHM;
-  createdAt: Date;
-  ephemeralPublicKey: string;
-  groupEpoch: {
+type EpochRecord = {
+  historyWraps: Array<{
+    algorithm: typeof WRAPPED_EPOCH_KEY_ALGORITHM;
+    createdAt: Date;
+    ephemeralPublicKey: string;
+    historyKey: { version: number };
     senderPublicKey: string;
-  };
-  groupEpochId: string;
-  recipientDeviceId: string;
-  wrappedKey: string;
+    wrappedKey: string;
+  }>;
+  id: string;
+  recipientKeys: Array<{
+    algorithm: typeof WRAPPED_EPOCH_KEY_ALGORITHM;
+    createdAt: Date;
+    ephemeralPublicKey: string;
+    recipientDeviceId: string;
+    wrappedKey: string;
+  }>;
+  senderPublicKey: string;
 };
 
 class TestOpenBeaconCache extends OpenBeaconCache {
@@ -68,6 +60,7 @@ const createGroupFindUniqueMock = (isMember: boolean) =>
           groupMembers: [
             {
               id: "group-member-1",
+              joinedEpochNumber: 3,
               role: "OWNER",
               userId: "user-1",
             },
@@ -80,18 +73,18 @@ const createGroupFindUniqueMock = (isMember: boolean) =>
         },
   );
 
-const createWrappedKeyFindFirstMock = (result: WrappedKeyRecord | null) =>
-  mock(async (_args: WrappedKeyFindFirstArgs) => result);
+const createEpochFindFirstMock = (result: EpochRecord | null) =>
+  mock(async (_args: EpochFindFirstArgs) => result);
 
 let originalBetterAuthUrl: string | undefined;
 let originalBetterAuthSecret: string | undefined;
 
 const createCaller = async ({
   groupFindUniqueMock,
-  wrappedKeyFindFirstMock,
+  epochFindFirstMock,
 }: {
   groupFindUniqueMock: ReturnType<typeof createGroupFindUniqueMock>;
-  wrappedKeyFindFirstMock: ReturnType<typeof createWrappedKeyFindFirstMock>;
+  epochFindFirstMock: ReturnType<typeof createEpochFindFirstMock>;
 }) => {
   const [{ createTRPCRouter }, { groupEpochRouter }] = await Promise.all([
     import("../../trpcRuntime.ts"),
@@ -111,8 +104,8 @@ const createCaller = async ({
       group: {
         findUnique: groupFindUniqueMock,
       },
-      groupEpochRecipientKey: {
-        findFirst: wrappedKeyFindFirstMock,
+      groupEpoch: {
+        findFirst: epochFindFirstMock,
       },
     },
     session: {
@@ -125,7 +118,7 @@ const createCaller = async ({
   return {
     caller: router.createCaller(context as Parameters<typeof router.createCaller>[0]),
     groupFindUniqueMock,
-    wrappedKeyFindFirstMock,
+    epochFindFirstMock,
   };
 };
 
@@ -152,13 +145,13 @@ describe("groupEpochRouter", () => {
   });
 
   test("forbids access for non-members", async () => {
-    const { caller, groupFindUniqueMock, wrappedKeyFindFirstMock } = await createCaller({
+    const { caller, groupFindUniqueMock, epochFindFirstMock } = await createCaller({
       groupFindUniqueMock: createGroupFindUniqueMock(false),
-      wrappedKeyFindFirstMock: createWrappedKeyFindFirstMock(null),
+      epochFindFirstMock: createEpochFindFirstMock(null),
     });
 
     await expect(
-      caller.groupEpoch.getWrappedKey({
+      caller.groupEpoch.getEpochKeyWraps({
         deviceId: "device-1",
         epochId: "epoch-1",
         groupId: "group-1",
@@ -176,105 +169,86 @@ describe("groupEpochRouter", () => {
         id: "group-1",
       },
     });
-    expect(wrappedKeyFindFirstMock).not.toHaveBeenCalled();
+    expect(epochFindFirstMock).not.toHaveBeenCalled();
   });
 
-  test("returns null when the caller is a member without a wrapped key", async () => {
-    const { caller, wrappedKeyFindFirstMock } = await createCaller({
+  test("returns no wraps when the epoch is missing or before the member joined", async () => {
+    const { caller, epochFindFirstMock } = await createCaller({
       groupFindUniqueMock: createGroupFindUniqueMock(true),
-      wrappedKeyFindFirstMock: createWrappedKeyFindFirstMock(null),
+      epochFindFirstMock: createEpochFindFirstMock(null),
     });
 
     await expect(
-      caller.groupEpoch.getWrappedKey({
+      caller.groupEpoch.getEpochKeyWraps({
         deviceId: "device-1",
         epochId: "epoch-1",
         groupId: "group-1",
       }),
-    ).resolves.toBeNull();
-    expect(wrappedKeyFindFirstMock).toHaveBeenCalledWith({
-      select: {
-        algorithm: true,
-        createdAt: true,
-        ephemeralPublicKey: true,
-        groupEpoch: {
-          select: {
-            senderPublicKey: true,
-          },
-        },
-        groupEpochId: true,
-        recipientDeviceId: true,
-        wrappedKey: true,
-      },
-      where: {
-        groupEpoch: {
-          groupId: "group-1",
-        },
-        groupEpochId: "epoch-1",
-        recipientDevice: {
-          userId: "user-1",
-        },
-        recipientDeviceId: "device-1",
-      },
+    ).resolves.toEqual({ deviceWrap: null, historyWraps: [] });
+    expect(epochFindFirstMock.mock.calls[0]?.[0].where).toEqual({
+      epochNumber: { gte: 3 },
+      groupId: "group-1",
+      id: "epoch-1",
     });
   });
 
-  test("getWrappedKey returns epochId and the epoch creator's public key as senderPublicKey", async () => {
-    const wrappedKeyCreatedAt = new Date("2026-03-26T12:00:00.000Z");
-    const { caller, wrappedKeyFindFirstMock } = await createCaller({
+  test("returns epochId and the epoch creator's public key as the device wrap's senderPublicKey", async () => {
+    const createdAt = new Date("2026-03-26T12:00:00.000Z");
+    const { caller } = await createCaller({
       groupFindUniqueMock: createGroupFindUniqueMock(true),
-      wrappedKeyFindFirstMock: createWrappedKeyFindFirstMock({
-        algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
-        createdAt: wrappedKeyCreatedAt,
-        ephemeralPublicKey: "ephemeral-public-key",
-        groupEpoch: {
-          senderPublicKey: "creator-public-key",
-        },
-        groupEpochId: "epoch-1",
-        recipientDeviceId: "device-1",
-        wrappedKey: "wrapped-key-1",
+      epochFindFirstMock: createEpochFindFirstMock({
+        historyWraps: [
+          {
+            algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+            createdAt,
+            ephemeralPublicKey: "history-ephemeral-public-key",
+            historyKey: { version: 2 },
+            senderPublicKey: "device-public-key",
+            wrappedKey: "history-wrapped-key",
+          },
+        ],
+        id: "epoch-1",
+        recipientKeys: [
+          {
+            algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+            createdAt,
+            ephemeralPublicKey: "ephemeral-public-key",
+            recipientDeviceId: "device-1",
+            wrappedKey: "wrapped-key-1",
+          },
+        ],
+        senderPublicKey: "creator-public-key",
       }),
     });
 
-    const result = await caller.groupEpoch.getWrappedKey({
+    const result = await caller.groupEpoch.getEpochKeyWraps({
       deviceId: "device-1",
       epochId: "epoch-1",
       groupId: "group-1",
     });
 
-    expect(wrappedKeyFindFirstMock).toHaveBeenCalledWith({
-      select: {
-        algorithm: true,
-        createdAt: true,
-        ephemeralPublicKey: true,
-        groupEpoch: {
-          select: {
-            senderPublicKey: true,
-          },
-        },
-        groupEpochId: true,
-        recipientDeviceId: true,
-        wrappedKey: true,
-      },
-      where: {
-        groupEpoch: {
-          groupId: "group-1",
-        },
-        groupEpochId: "epoch-1",
-        recipientDevice: {
-          userId: "user-1",
-        },
-        recipientDeviceId: "device-1",
-      },
-    });
     expect(result).toEqual({
-      algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
-      createdAt: wrappedKeyCreatedAt,
-      ephemeralPublicKey: "ephemeral-public-key",
-      epochId: "epoch-1",
-      recipientDeviceId: "device-1",
-      senderPublicKey: "creator-public-key",
-      wrappedKey: "wrapped-key-1",
+      deviceWrap: {
+        algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+        createdAt,
+        ephemeralPublicKey: "ephemeral-public-key",
+        epochId: "epoch-1",
+        recipientDeviceId: "device-1",
+        senderPublicKey: "creator-public-key",
+        wrappedKey: "wrapped-key-1",
+      },
+      historyWraps: [
+        {
+          algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+          createdAt,
+          ephemeralPublicKey: "history-ephemeral-public-key",
+          epochId: "epoch-1",
+          historyKeyVersion: 2,
+          senderPublicKey: "device-public-key",
+          userId: "user-1",
+          wrappedKey: "history-wrapped-key",
+        },
+      ],
     });
   });
 });

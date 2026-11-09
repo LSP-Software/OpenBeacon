@@ -3,11 +3,15 @@ import {
   createDeviceKeyPair,
   createInitialGroupEpoch,
   DEVICE_KEY_ALGORITHM,
+  type DevicePrivateKeyMaterial,
   encodeTrackingPointV1,
   encryptGroupPayload,
   TRACKING_POINT_KIND,
+  unwrapEpochKey,
   WRAPPED_EPOCH_KEY_ALGORITHM,
+  type WrappedEpochKey,
 } from "@openbeacon/encryption";
+import { tryCatch } from "@openbeacon/shared";
 import { createMapTrackingDecryptPoint, MISSING_EPOCH_KEY_RETRY_MS } from "./mapTrackingDecrypt.ts";
 
 const createRecipient = (deviceId: string, userId: string) => {
@@ -24,6 +28,32 @@ const createRecipient = (deviceId: string, userId: string) => {
     },
   };
 };
+
+const resolveFromDeviceWrap =
+  ({
+    device,
+    getWrappedEpochKey,
+  }: {
+    device: { deviceId: string; privateKey: DevicePrivateKeyMaterial };
+    getWrappedEpochKey: (input: {
+      epochId: string;
+      groupId: string;
+    }) => Promise<WrappedEpochKey | null>;
+  }) =>
+  async (input: { epochId: string; groupId: string }) => {
+    const wrappedEpochKey = await getWrappedEpochKey(input);
+    if (!wrappedEpochKey) return null;
+    const result = await tryCatch(
+      Promise.resolve().then(() =>
+        unwrapEpochKey({
+          recipientDeviceId: device.deviceId,
+          recipientPrivateKey: device.privateKey,
+          wrappedEpochKey,
+        }),
+      ),
+    );
+    return result.error ? null : result.data;
+  };
 
 const undecryptablePoint = ({ epochId, id }: { epochId: string; id: string }) => ({
   algorithm: "XChaCha20-Poly1305" as const,
@@ -63,14 +93,13 @@ describe("createMapTrackingDecryptPoint", () => {
     });
     const wrappedKeyFetches: string[] = [];
     const decryptPoint = createMapTrackingDecryptPoint({
-      ensureDeviceKeys: async () => ({
-        deviceId: recipient.deviceId,
-        privateKey: keyPair.privateKey,
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async ({ epochId }) => {
+          wrappedKeyFetches.push(epochId);
+          return wrappedKeys[0] ?? null;
+        },
       }),
-      getWrappedEpochKey: async ({ epochId }) => {
-        wrappedKeyFetches.push(epochId);
-        return wrappedKeys[0] ?? null;
-      },
     });
 
     const result = await decryptPoint({
@@ -126,11 +155,10 @@ describe("createMapTrackingDecryptPoint", () => {
   test("returns undecryptable when the wrapped epoch key is missing", async () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     const decryptPoint = createMapTrackingDecryptPoint({
-      ensureDeviceKeys: async () => ({
-        deviceId: recipient.deviceId,
-        privateKey: keyPair.privateKey,
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async () => null,
       }),
-      getWrappedEpochKey: async () => null,
     });
 
     await expect(
@@ -144,13 +172,12 @@ describe("createMapTrackingDecryptPoint", () => {
   test("ignores non-trackingPoint kinds", async () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     const decryptPoint = createMapTrackingDecryptPoint({
-      ensureDeviceKeys: async () => ({
-        deviceId: recipient.deviceId,
-        privateKey: keyPair.privateKey,
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async () => {
+          throw new Error("should not fetch");
+        },
       }),
-      getWrappedEpochKey: async () => {
-        throw new Error("should not fetch");
-      },
     });
 
     await expect(
@@ -175,18 +202,17 @@ describe("createMapTrackingDecryptPoint", () => {
   test("treats malformed wrapped keys as undecryptable", async () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     const decryptPoint = createMapTrackingDecryptPoint({
-      ensureDeviceKeys: async () => ({
-        deviceId: recipient.deviceId,
-        privateKey: keyPair.privateKey,
-      }),
-      getWrappedEpochKey: async () => ({
-        algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
-        createdAt: new Date(0),
-        ephemeralPublicKey: "not-a-valid-key",
-        epochId: "epoch-1",
-        recipientDeviceId: recipient.deviceId,
-        senderPublicKey: keyPair.publicKey,
-        wrappedKey: "not-a-valid-wrapped-key",
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async () => ({
+          algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+          createdAt: new Date(0),
+          ephemeralPublicKey: "not-a-valid-key",
+          epochId: "epoch-1",
+          recipientDeviceId: recipient.deviceId,
+          senderPublicKey: keyPair.publicKey,
+          wrappedKey: "not-a-valid-wrapped-key",
+        }),
       }),
     });
 
@@ -222,14 +248,13 @@ describe("createMapTrackingDecryptPoint", () => {
     });
     let wrappedKeyFetches = 0;
     const decryptPoint = createMapTrackingDecryptPoint({
-      ensureDeviceKeys: async () => ({
-        deviceId: recipient.deviceId,
-        privateKey: keyPair.privateKey,
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async () => {
+          wrappedKeyFetches += 1;
+          return wrappedKeys[0] ?? null;
+        },
       }),
-      getWrappedEpochKey: async () => {
-        wrappedKeyFetches += 1;
-        return wrappedKeys[0] ?? null;
-      },
     });
 
     await expect(
@@ -298,14 +323,13 @@ describe("createMapTrackingDecryptPoint", () => {
       releaseFetch = resolve;
     });
     const decryptPoint = createMapTrackingDecryptPoint({
-      ensureDeviceKeys: async () => ({
-        deviceId: recipient.deviceId,
-        privateKey: keyPair.privateKey,
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async () => {
+          wrappedKeyFetches += 1;
+          return fetchGate;
+        },
       }),
-      getWrappedEpochKey: async () => {
-        wrappedKeyFetches += 1;
-        return fetchGate;
-      },
     });
 
     const first = decryptPoint({
@@ -352,14 +376,13 @@ describe("createMapTrackingDecryptPoint", () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     let wrappedKeyFetches = 0;
     const decryptPoint = createMapTrackingDecryptPoint({
-      ensureDeviceKeys: async () => ({
-        deviceId: recipient.deviceId,
-        privateKey: keyPair.privateKey,
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async () => {
+          wrappedKeyFetches += 1;
+          return null;
+        },
       }),
-      getWrappedEpochKey: async () => {
-        wrappedKeyFetches += 1;
-        return null;
-      },
     });
 
     const results = [];
@@ -400,17 +423,16 @@ describe("createMapTrackingDecryptPoint", () => {
     });
     let wrappedKeyFetches = 0;
     const decryptPoint = createMapTrackingDecryptPoint({
-      ensureDeviceKeys: async () => ({
-        deviceId: recipient.deviceId,
-        privateKey: keyPair.privateKey,
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async () => {
+          wrappedKeyFetches += 1;
+          if (wrappedKeyFetches === 1) {
+            throw new Error("network down");
+          }
+          return wrappedKeys[0] ?? null;
+        },
       }),
-      getWrappedEpochKey: async () => {
-        wrappedKeyFetches += 1;
-        if (wrappedKeyFetches === 1) {
-          throw new Error("network down");
-        }
-        return wrappedKeys[0] ?? null;
-      },
     });
 
     await expect(
@@ -477,14 +499,13 @@ describe("createMapTrackingDecryptPoint", () => {
     let wrappedKeyFetches = 0;
     let available = false;
     const decryptPoint = createMapTrackingDecryptPoint({
-      ensureDeviceKeys: async () => ({
-        deviceId: recipient.deviceId,
-        privateKey: keyPair.privateKey,
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async () => {
+          wrappedKeyFetches += 1;
+          return available ? (wrappedKeys[0] ?? null) : null;
+        },
       }),
-      getWrappedEpochKey: async () => {
-        wrappedKeyFetches += 1;
-        return available ? (wrappedKeys[0] ?? null) : null;
-      },
       now: () => now,
     });
 
@@ -573,17 +594,16 @@ describe("createMapTrackingDecryptPoint", () => {
 
     const wrappedByRequest: Array<{ epochId: string; groupId: string }> = [];
     const decryptPoint = createMapTrackingDecryptPoint({
-      ensureDeviceKeys: async () => ({
-        deviceId: recipient.deviceId,
-        privateKey: keyPair.privateKey,
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async ({ epochId, groupId }) => {
+          wrappedByRequest.push({ epochId, groupId });
+          if (groupId === "a:b") {
+            return first.wrappedKeys[0] ?? null;
+          }
+          return null;
+        },
       }),
-      getWrappedEpochKey: async ({ epochId, groupId }) => {
-        wrappedByRequest.push({ epochId, groupId });
-        if (groupId === "a:b") {
-          return first.wrappedKeys[0] ?? null;
-        }
-        return null;
-      },
     });
 
     const firstResult = await decryptPoint({
@@ -640,14 +660,13 @@ describe("createMapTrackingDecryptPoint", () => {
     });
     let wrappedKeyFetches = 0;
     const decryptPoint = createMapTrackingDecryptPoint({
-      ensureDeviceKeys: async () => ({
-        deviceId: recipient.deviceId,
-        privateKey: keyPair.privateKey,
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async () => {
+          wrappedKeyFetches += 1;
+          return wrappedKeys[0] ?? null;
+        },
       }),
-      getWrappedEpochKey: async () => {
-        wrappedKeyFetches += 1;
-        return wrappedKeys[0] ?? null;
-      },
     });
 
     await expect(
@@ -735,17 +754,16 @@ describe("createMapTrackingDecryptPoint", () => {
     });
     const wrappedKeyFetches: string[] = [];
     const decryptPoint = createMapTrackingDecryptPoint({
-      ensureDeviceKeys: async () => ({
-        deviceId: recipient.deviceId,
-        privateKey: keyPair.privateKey,
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async ({ groupId }) => {
+          wrappedKeyFetches.push(groupId);
+          if (groupId === "group-1") {
+            return groupOne.wrappedKeys[0] ?? null;
+          }
+          return groupTwo.wrappedKeys[0] ?? null;
+        },
       }),
-      getWrappedEpochKey: async ({ groupId }) => {
-        wrappedKeyFetches.push(groupId);
-        if (groupId === "group-1") {
-          return groupOne.wrappedKeys[0] ?? null;
-        }
-        return groupTwo.wrappedKeys[0] ?? null;
-      },
     });
 
     await decryptPoint({
@@ -844,14 +862,13 @@ describe("createMapTrackingDecryptPoint", () => {
       releaseFetch = resolve;
     });
     const decryptPoint = createMapTrackingDecryptPoint({
-      ensureDeviceKeys: async () => ({
-        deviceId: recipient.deviceId,
-        privateKey: keyPair.privateKey,
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async () => {
+          wrappedKeyFetches += 1;
+          return fetchGate;
+        },
       }),
-      getWrappedEpochKey: async () => {
-        wrappedKeyFetches += 1;
-        return fetchGate;
-      },
     });
 
     const pending = decryptPoint({

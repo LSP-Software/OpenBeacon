@@ -22,13 +22,16 @@ describe("group epoch helpers", () => {
       userId: data.userId as string,
     }));
 
+    const updateMany = mock(async () => ({ count: 1 }));
+
     const result = await upsertUserDevice({
       db: {
+        $transaction: async (run: (tx: object) => Promise<unknown>) =>
+          run({ group: { updateMany }, userDevice: { create } }),
         userDevice: {
-          create,
           findUnique: async () => null,
         },
-      },
+      } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
       input: {
         algorithm: DEVICE_KEY_ALGORITHM,
         deviceId: "device-a",
@@ -39,6 +42,10 @@ describe("group epoch helpers", () => {
 
     expect(result.publicKey).toBe("public-key");
     expect("privateKey" in result).toBe(false);
+    expect(updateMany).toHaveBeenCalledWith({
+      data: { epochRotationRequired: true },
+      where: { groupMembers: { some: { userId: "user-a" } } },
+    });
   });
 
   test("updates an existing device for the same user without replacing key material", async () => {
@@ -120,12 +127,13 @@ describe("group epoch helpers", () => {
 
     const result = await upsertUserDevice({
       db: {
+        $transaction: async (run: (tx: object) => Promise<unknown>) =>
+          run({ userDevice: { create } }),
         userDevice: {
-          create,
           findUnique,
           update,
         },
-      },
+      } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
       input: {
         algorithm: DEVICE_KEY_ALGORITHM,
         deviceId: "device-a",
@@ -227,8 +235,17 @@ describe("group epoch helpers", () => {
       groupId: "group-1",
     }));
 
+    const findHistoryKeys = mock(async () => [
+      { id: "history-a-1", publicKey: "history-public-a-1", userId: "user-a", version: 1 },
+      { id: "history-a-2", publicKey: "history-public-a-2", userId: "user-a", version: 2 },
+      { id: "history-b-1", publicKey: "history-public-b-1", userId: "user-b", version: 1 },
+    ]);
+
     const result = await getInviteAcceptanceContext({
       db: {
+        accountHistoryKey: {
+          findMany: findHistoryKeys,
+        },
         groupEpoch: {
           findFirst: async () => ({
             createdAt: new Date("2026-03-26T12:00:00.000Z"),
@@ -293,6 +310,27 @@ describe("group epoch helpers", () => {
       "device-a",
       "device-b",
     ]);
+    expect(findHistoryKeys).toHaveBeenCalledWith({
+      orderBy: [{ userId: "asc" }, { version: "asc" }],
+      select: { id: true, publicKey: true, userId: true, version: true },
+      where: {
+        OR: [{ user: { groupMembers: { some: { groupId: "group-1" } } } }, { userId: "user-b" }],
+      },
+    });
+    expect(result.historyRecipients).toEqual([
+      {
+        historyKeyId: "history-a-2",
+        publicKey: "history-public-a-2",
+        userId: "user-a",
+        version: 2,
+      },
+      {
+        historyKeyId: "history-b-1",
+        publicKey: "history-public-b-1",
+        userId: "user-b",
+        version: 1,
+      },
+    ]);
   });
 
   test("persists the next epoch for the current device set", async () => {
@@ -338,6 +376,7 @@ describe("group epoch helpers", () => {
 
     await persistGroupEpoch({
       db: {
+        $queryRaw: async () => [],
         group: { updateMany: async () => ({ count: 1 }) },
         groupEpoch: {
           create,
@@ -360,6 +399,7 @@ describe("group epoch helpers", () => {
         createdByDeviceId: "device-a",
         epochId: "epoch-2",
         epochNumber: 2,
+        historyKeys: [],
         recipientKeys: [
           {
             algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
@@ -499,6 +539,7 @@ describe("group epoch helpers", () => {
           createdByDeviceId: "device-a",
           epochId: "epoch-2",
           epochNumber: 2,
+          historyKeys: [],
           recipientKeys: [
             {
               algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
@@ -559,6 +600,7 @@ describe("group epoch helpers", () => {
           createdByDeviceId: "device-a",
           epochId: "epoch-2",
           epochNumber: 2,
+          historyKeys: [],
           recipientKeys: [
             {
               algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,

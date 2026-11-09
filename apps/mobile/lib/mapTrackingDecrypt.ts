@@ -1,14 +1,10 @@
 import {
-  type DevicePrivateKeyMaterial,
   decodeJsonPayload,
   decryptGroupPayload,
   type EpochKeyMaterial,
   PAYLOAD_ENCRYPTION_ALGORITHM,
   TRACKING_POINT_KIND,
-  unwrapEpochKey,
   validateTrackingPointV1,
-  WRAPPED_EPOCH_KEY_ALGORITHM,
-  type WrappedEpochKey,
 } from "@openbeacon/encryption";
 import type { LiveMapEntry } from "./liveMapReducer.ts";
 import type { MapTrackingEncryptedPoint } from "./mapTrackingTypes.ts";
@@ -16,20 +12,14 @@ import type { MapTrackingEncryptedPoint } from "./mapTrackingTypes.ts";
 export const MISSING_EPOCH_KEY_RETRY_MS = 60_000;
 
 export const createMapTrackingDecryptPoint = ({
-  ensureDeviceKeys,
-  getWrappedEpochKey,
   now = () => Date.now(),
+  resolveEpochKey,
 }: {
-  ensureDeviceKeys: () => Promise<{
-    deviceId: string;
-    privateKey: DevicePrivateKeyMaterial;
-  }>;
-  getWrappedEpochKey: (input: {
-    deviceId: string;
+  now?: () => number;
+  resolveEpochKey: (input: {
     epochId: string;
     groupId: string;
-  }) => Promise<WrappedEpochKey | null>;
-  now?: () => number;
+  }) => Promise<EpochKeyMaterial | null>;
 }) => {
   const epochKeys = new Map<string, EpochKeyMaterial>();
   const missingUntilByKey = new Map<string, number>();
@@ -58,42 +48,16 @@ export const createMapTrackingDecryptPoint = ({
     }
 
     const loadPromise: Promise<EpochKeyMaterial | null> = (async () => {
-      const deviceKeys = await ensureDeviceKeys();
-      const wrappedEpochKey = await getWrappedEpochKey({
-        deviceId: deviceKeys.deviceId,
-        epochId,
-        groupId,
-      });
-
+      const epochKey = await resolveEpochKey({ epochId, groupId });
       const stillInFlight = () => inflightByKey.get(cacheKey) === loadPromise;
-
-      if (!wrappedEpochKey || wrappedEpochKey.algorithm !== WRAPPED_EPOCH_KEY_ALGORITHM) {
-        if (stillInFlight()) {
-          missingUntilByKey.set(cacheKey, now() + MISSING_EPOCH_KEY_RETRY_MS);
-        }
-        return null;
+      if (!stillInFlight()) return epochKey;
+      if (epochKey) {
+        missingUntilByKey.delete(cacheKey);
+        epochKeys.set(cacheKey, epochKey);
+      } else {
+        missingUntilByKey.set(cacheKey, now() + MISSING_EPOCH_KEY_RETRY_MS);
       }
-
-      try {
-        const epochKey = unwrapEpochKey({
-          recipientDeviceId: deviceKeys.deviceId,
-          recipientPrivateKey: deviceKeys.privateKey,
-          wrappedEpochKey: {
-            ...wrappedEpochKey,
-            algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
-          },
-        });
-        if (stillInFlight()) {
-          missingUntilByKey.delete(cacheKey);
-          epochKeys.set(cacheKey, epochKey);
-        }
-        return epochKey;
-      } catch {
-        if (stillInFlight()) {
-          missingUntilByKey.set(cacheKey, now() + MISSING_EPOCH_KEY_RETRY_MS);
-        }
-        return null;
-      }
+      return epochKey;
     })();
 
     inflightByKey.set(cacheKey, loadPromise);

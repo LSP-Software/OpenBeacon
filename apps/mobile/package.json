@@ -57,6 +57,7 @@
     "expo-location": "^55.1.4",
     "expo-network": "^55.0.9",
     "expo-router": "~55.0.7",
+    "expo-screen-capture": "^55.0.18",
     "expo-secure-store": "^55.0.9",
     "expo-status-bar": "~55.0.4",
     "expo-web-browser": "^55.0.10",

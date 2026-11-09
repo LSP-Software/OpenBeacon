@@ -7,7 +7,12 @@ import { createRoot } from "test-renderer";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 let groups: { id: string; name: string; members: never[] }[] = [];
-let access: { data: string }[] = [];
+let access: {
+  data: {
+    current: "available" | "missing" | "unavailable";
+    history: "complete" | { partialFrom: Date };
+  };
+}[] = [];
 let queueEviction: {
   owner: string;
   pointCount: number;
@@ -54,7 +59,7 @@ mock.module("../components/ui/Text.tsx", () => ({
     React.createElement("text", null, children),
 }));
 mock.module("../hooks/useGroupColorRevision.ts", () => ({ useGroupColorRevision: () => 0 }));
-mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useGroupKeyAccess: () => access }));
+mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useCurrentGroupKeyAccess: () => access }));
 mock.module("../hooks/useMapLivePositions.ts", () => ({ useMapLivePositions: () => [] }));
 mock.module("../hooks/useMembershipSnapshot.ts", () => ({ useMembershipSnapshot: () => groups }));
 mock.module("../hooks/useTrackingUploadTime.ts", () => ({ useTrackingUploadTime: () => null }));
@@ -82,11 +87,12 @@ test("shows individual group links for up to two missing keys and a groups link 
   }));
   const root = createRoot();
   for (const count of [0, 1, 2, 3]) {
+    const partial = { partialFrom: new Date(0) };
     access = [
-      { data: count > 0 ? "missing" : "available" },
-      { data: "available" },
-      { data: count > 1 ? "missing" : "available" },
-      { data: count > 2 ? "missing" : "available" },
+      { data: { current: count > 0 ? "missing" : "available", history: "complete" } },
+      { data: { current: "available", history: partial } },
+      { data: { current: count > 1 ? "missing" : "available", history: partial } },
+      { data: { current: count > 2 ? "missing" : "available", history: "complete" } },
     ];
     await act(async () => root.render(<MapScreen />));
     const rendered = JSON.stringify(root.container.toJSON());

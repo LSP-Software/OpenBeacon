@@ -16,14 +16,12 @@ import { Text } from "../components/ui/Text.tsx";
 import { trpc } from "../lib/api.ts";
 import { completeAuthenticatedSessionSetup, isNativeGoogleSignInConfigured } from "../lib/auth.ts";
 import { authClient } from "../lib/auth-client.ts";
+import { finishAuthentication } from "../lib/finishAuthentication.ts";
 import { performGoogleAuth } from "../lib/googleAuth.ts";
 
 const SignIn = () => {
   const { joinCode } = useLocalSearchParams<{ joinCode?: string }>();
-  const finishSignIn = () => {
-    if (joinCode) router.replace({ pathname: "/join", params: { code: joinCode } });
-    else router.replace("/");
-  };
+  const finishSignIn = () => finishAuthentication({ joinCode });
   const [emailLoading, setEmailLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
@@ -58,7 +56,7 @@ const SignIn = () => {
       return;
     }
 
-    finishSignIn();
+    await finishSignIn();
   };
 
   const handleGoogleSignIn = async () => {
@@ -130,7 +128,7 @@ const SignIn = () => {
                 <Pressable accessibilityRole="link">
                   <Text className="text-muted">
                     Don't have an account?{" "}
-                    <Text className="font-semibold text-primary">Create one</Text>
+                    <Text className="font-semibold text-primary-text">Create one</Text>
                   </Text>
                 </Pressable>
               </Link>

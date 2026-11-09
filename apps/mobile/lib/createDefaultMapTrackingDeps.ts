@@ -1,31 +1,12 @@
-import { WRAPPED_EPOCH_KEY_ALGORITHM, type WrappedEpochKey } from "@openbeacon/encryption";
 import { trpcClient } from "./api.ts";
-import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
+import { resolveEpochKey } from "./epochKeys.ts";
 import { createMapTrackingDecryptPoint } from "./mapTrackingDecrypt.ts";
 import type { MapTrackingDeps } from "./mapTrackingTypes.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
 
 export const createDefaultMapTrackingDeps = (): MapTrackingDeps => {
   const observedEpochs = new Map<string, string>();
-  const decryptPoint = createMapTrackingDecryptPoint({
-    ensureDeviceKeys: ensureDeviceKeyRegistration,
-    getWrappedEpochKey: async ({ deviceId, epochId, groupId }) => {
-      const wrappedEpochKey = await trpcClient.groupEpoch.getWrappedKey.query({
-        deviceId,
-        epochId,
-        groupId,
-      });
-
-      if (!wrappedEpochKey || wrappedEpochKey.algorithm !== WRAPPED_EPOCH_KEY_ALGORITHM) {
-        return null;
-      }
-
-      return {
-        ...wrappedEpochKey,
-        algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
-      } satisfies WrappedEpochKey;
-    },
-  });
+  const decryptPoint = createMapTrackingDecryptPoint({ resolveEpochKey });
 
   return {
     clearEpochKeys: (groupId) => {

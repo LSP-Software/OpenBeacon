@@ -25,11 +25,17 @@ mock.module("./storage.ts", () => ({
   },
 }));
 mock.module("./deviceKeys.ts", () => ({
+  ensureDeviceKeyRegistration: async () => device,
   getOrCreateDeviceKeyContext: async () => device,
   getStoredDeviceKeyContext: async () => device,
 }));
+mock.module("./historyKeys.ts", () => ({
+  getStoredHistoryKey: async () => null,
+  storeHistoryKey: async () => {},
+}));
 mock.module("./api.ts", () => ({
   trpcClient: {
+    accountRecovery: { status: { query: async () => ({ currentHistoryKey: null }) } },
     groupMembership: {
       updateColor: { mutate: updateColor },
       colors: { query: async () => uploaded },

@@ -7,6 +7,7 @@ const withOpenBeaconTracking = (config) =>
     "android.permission.FOREGROUND_SERVICE",
     "android.permission.FOREGROUND_SERVICE_LOCATION",
     "android.permission.POST_NOTIFICATIONS",
+    "android.permission.RECEIVE_BOOT_COMPLETED",
   ]);
 
 module.exports = createRunOncePlugin(withOpenBeaconTracking, PACKAGE_NAME, "0.0.0");

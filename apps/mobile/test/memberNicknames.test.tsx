@@ -1,6 +1,7 @@
 import { expect, mock, test } from "bun:test";
 import React, { act, type ReactNode } from "react";
 import { createRoot } from "test-renderer";
+import type { submitEpochChange } from "../lib/groupEncryption.ts";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -94,7 +95,11 @@ mock.module("../lib/personalNicknames.ts", () => ({
   loadPersonalNicknames: async () => records,
   encryptPersonalNickname: async () => "new-ciphertext",
 }));
-mock.module("../lib/groupEncryption.ts", () => ({ buildRemoveGroupMemberInput: async () => ({}) }));
+mock.module("../lib/groupEncryption.ts", () => ({
+  buildRemoveGroupMemberInput: async () => ({}),
+  submitEpochChange: (async ({ build, submit }) =>
+    submit(await build())) satisfies typeof submitEpochChange,
+}));
 mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("../lib/batteryVisual.ts", () => ({ getBatteryVisual: () => null }));
 const { default: MembersTab } = await import("../app/(tabs)/groups/[groupId]/MembersTab.tsx");

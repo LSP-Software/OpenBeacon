@@ -38,8 +38,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           image: `https://cdn.example/bucket/user/${deletedUser}/uploads/group/${groupId}/avatar/a`,
           groupMembers: {
             create: [
-              { userId: deletedUser, role: "OWNER" },
-              { userId: remainingUser, role: "MEMBER" },
+              { userId: deletedUser, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: remainingUser, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
         },
@@ -61,6 +61,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             ciphertext: "targets-deleted",
           },
           { ownerId: remainingMember.id, targetId: remainingMember.id, ciphertext: "remaining" },
+        ],
+      });
+      await prisma.personalGroupColor.createMany({
+        data: [
+          { ownerId: deletedMember.id, ciphertext: "owned-by-deleted" },
+          { ownerId: remainingMember.id, ciphertext: "remaining" },
         ],
       });
       await prisma.groupSharedInvite.create({
@@ -93,6 +99,43 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           createdByDeviceId: deletedDevice,
           senderPublicKey: "a",
         },
+      });
+      await prisma.recoveryKey.create({
+        data: { userId: deletedUser, publicKey: "r", algorithm: "X25519", derivationVersion: 1 },
+      });
+      await prisma.accountHistoryKey.createMany({
+        data: [deletedUser, remainingUser].map((userId) => ({
+          id: `${userId}-history`,
+          userId,
+          version: 1,
+          publicKey: "h",
+          algorithm: "X25519",
+          escrowEnc: "e",
+          escrowCiphertext: "c",
+          escrowAlgorithm: "a",
+        })),
+      });
+      await prisma.groupEpochHistoryWrap.createMany({
+        data: [
+          {
+            groupEpochId: epochId,
+            historyKeyId: `${deletedUser}-history`,
+            senderDeviceId: remainingDevice,
+            senderPublicKey: "b",
+            wrappedKey: "w",
+            ephemeralPublicKey: "e",
+            algorithm: "a",
+          },
+          {
+            groupEpochId: epochId,
+            historyKeyId: `${remainingUser}-history`,
+            senderDeviceId: deletedDevice,
+            senderPublicKey: "a",
+            wrappedKey: "w",
+            ephemeralPublicKey: "e",
+            algorithm: "a",
+          },
+        ],
       });
       await prisma.groupEncryptedPayload.createMany({
         data: [
@@ -178,6 +221,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(
         await prisma.personalGroupNickname.findMany({ where: { owner: { groupId } } }),
       ).toMatchObject([{ ciphertext: "remaining" }]);
+      expect(
+        await prisma.personalGroupColor.findMany({ where: { owner: { groupId } } }),
+      ).toMatchObject([{ ciphertext: "remaining" }]);
       expect(await prisma.groupJoinAlert.count({ where: { groupId } })).toBe(0);
       expect(
         await prisma.feedback.findMany({
@@ -190,6 +236,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       expect(await prisma.groupEncryptedPayload.findMany({ where: { groupId } })).toMatchObject([
         { senderUserId: remainingUser, senderDeviceId: remainingDevice },
+      ]);
+      expect(await prisma.recoveryKey.count({ where: { userId: deletedUser } })).toBe(0);
+      expect(await prisma.accountHistoryKey.count({ where: { userId: deletedUser } })).toBe(0);
+      expect(
+        await prisma.groupEpochHistoryWrap.findMany({
+          where: { groupEpochId: epochId },
+          select: { historyKeyId: true, senderDeviceId: true, senderPublicKey: true },
+        }),
+      ).toEqual([
+        { historyKeyId: `${remainingUser}-history`, senderDeviceId: null, senderPublicKey: "a" },
       ]);
     });
     test("scheduled deletion uses the database deadline and is idempotent", async () => {
@@ -237,7 +293,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           id: soloGroup,
           name: "Solo group",
           image: `https://cdn.example/bucket/${imageKey}`,
-          groupMembers: { create: { userId: id, role: "OWNER" } },
+          groupMembers: { create: { userId: id, role: "OWNER", joinedEpochNumber: 1 } },
         },
       });
       try {
@@ -279,9 +335,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           name: "Owners",
           groupMembers: {
             create: [
-              { userId: first, role: "OWNER" },
-              { userId: second, role: "OWNER" },
-              { userId: member, role: "MEMBER" },
+              { userId: first, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: second, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: member, role: "MEMBER", joinedEpochNumber: 1 },
             ],
           },
         },

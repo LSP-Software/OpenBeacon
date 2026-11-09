@@ -95,6 +95,7 @@ test("nicknames are scoped to the caller's membership and targets in the same gr
 test("group colors are scoped to the caller's own memberships", async () => {
   const findMany = mock(async () => [{ ciphertext: "opaque", owner: { groupId: "group" } }]);
   const upsert = mock(async () => ({}));
+  const updateMany = mock(async () => ({ count: 1 }));
   const router = createTRPCRouter({ groupMembership: groupMembershipRouter });
   const caller = router.createCaller({
     cache: new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
@@ -107,7 +108,7 @@ test("group colors are scoped to the caller's own memberships", async () => {
           groupMembers: [{ id: "owner", userId: "user", role: "MEMBER" }],
         }),
       },
-      personalGroupColor: { findMany, upsert },
+      personalGroupColor: { findMany, upsert, updateMany },
     },
   } as unknown as Parameters<typeof router.createCaller>[0]);
   expect(await caller.groupMembership.colors()).toEqual([
@@ -123,4 +124,22 @@ test("group colors are scoped to the caller's own memberships", async () => {
     create: { ownerId: "owner", ciphertext: "next" },
     update: { ciphertext: "next" },
   });
+  await caller.groupMembership.updateColor({
+    groupId: "group",
+    ciphertext: "resealed",
+    expectedCiphertext: "next",
+  });
+  expect(updateMany).toHaveBeenCalledWith({
+    where: { ownerId: "owner", ciphertext: "next" },
+    data: { ciphertext: "resealed" },
+  });
+  expect(upsert).toHaveBeenCalledTimes(1);
+  updateMany.mockImplementationOnce(async () => ({ count: 0 }));
+  await expect(
+    caller.groupMembership.updateColor({
+      groupId: "group",
+      ciphertext: "resealed",
+      expectedCiphertext: "stale",
+    }),
+  ).rejects.toThrow("Group color changed");
 });

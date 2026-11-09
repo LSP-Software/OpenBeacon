@@ -4,8 +4,13 @@ import {
   createNextGroupEpoch,
   type EpochCreator,
   type GroupEpoch,
+  type HistoryPublicKey,
   type RecipientPublicKeyMaterial,
+  wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
+import { HISTORY_RECIPIENT_MISMATCH_MESSAGE } from "@openbeacon/schemas";
+import { tryCatch } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 import { trpcClient } from "./api.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
@@ -13,41 +18,52 @@ import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 const createEpochBundle = ({
   creator,
   groupId,
+  historyRecipients,
   latestEpoch,
   recipients,
 }: {
   creator: EpochCreator;
   groupId: string;
+  historyRecipients: HistoryPublicKey[];
   latestEpoch: GroupEpoch | null;
   recipients: RecipientPublicKeyMaterial[];
 }) => {
-  if (latestEpoch) {
-    const nextEpoch = createNextGroupEpoch({
-      creator,
-      previousEpoch: latestEpoch,
-      recipients,
-    });
-
-    return {
-      createdByDeviceId: creator.deviceId,
-      epochId: nextEpoch.epoch.epochId,
-      epochNumber: nextEpoch.epoch.epochNumber,
-      recipientKeys: nextEpoch.wrappedKeys,
-    };
-  }
-
-  const initialEpoch = createInitialGroupEpoch({
-    creator,
-    groupId,
-    recipients,
-  });
+  const { epoch, epochKey, wrappedKeys } = latestEpoch
+    ? createNextGroupEpoch({ creator, previousEpoch: latestEpoch, recipients })
+    : createInitialGroupEpoch({ creator, groupId, recipients });
 
   return {
     createdByDeviceId: creator.deviceId,
-    epochId: initialEpoch.epoch.epochId,
-    epochNumber: initialEpoch.epoch.epochNumber,
-    recipientKeys: initialEpoch.wrappedKeys,
+    epochId: epoch.epochId,
+    epochNumber: epoch.epochNumber,
+    historyKeys: historyRecipients.map((historyKey) =>
+      wrapEpochKeyForHistoryKey({
+        epochId: epoch.epochId,
+        epochKey,
+        historyKey,
+        senderPrivateKey: creator.privateKey,
+      }),
+    ),
+    recipientKeys: wrappedKeys,
   };
+};
+
+export const submitEpochChange = async <Input, Output>({
+  build,
+  submit,
+}: {
+  build: () => Promise<Input>;
+  submit: (input: Input) => Promise<Output>;
+}) => {
+  const result = await tryCatch(submit(await build()));
+  if (!result.error) return result.data;
+  if (
+    !(result.error instanceof TRPCClientError) ||
+    result.error.message !== HISTORY_RECIPIENT_MISMATCH_MESSAGE
+  ) {
+    throw result.error;
+  }
+  return submit(await build());
 };
 
 export const buildCreateGroupInput = async ({
@@ -59,20 +75,16 @@ export const buildCreateGroupInput = async ({
   const deviceKeyContext = await trpcClient.auth.deviceKeyContext.query();
 
   const groupId = createSecureId("group");
-  const initialEpoch = createInitialGroupEpoch({
-    creator: deviceRegistration,
-    groupId,
-    recipients: deviceKeyContext.recipients,
-  });
 
   return {
     groupId,
-    initialEpoch: {
-      createdByDeviceId: deviceRegistration.deviceId,
-      epochId: initialEpoch.epoch.epochId,
-      epochNumber: initialEpoch.epoch.epochNumber,
-      recipientKeys: initialEpoch.wrappedKeys,
-    },
+    initialEpoch: createEpochBundle({
+      creator: deviceRegistration,
+      groupId,
+      historyRecipients: deviceKeyContext.historyRecipients,
+      latestEpoch: null,
+      recipients: deviceKeyContext.recipients,
+    }),
     name,
   };
 };
@@ -90,6 +102,7 @@ export const buildAcceptInviteInput = async ({
   const nextEpoch = createEpochBundle({
     creator: deviceRegistration,
     groupId: acceptanceContext.groupId,
+    historyRecipients: acceptanceContext.historyRecipients,
     latestEpoch: acceptanceContext.latestEpoch,
     recipients: acceptanceContext.recipients,
   });
@@ -112,6 +125,7 @@ export const buildAcceptSharedInviteInput = async ({
     nextEpoch: createEpochBundle({
       creator: deviceRegistration,
       groupId: context.groupId,
+      historyRecipients: context.historyRecipients,
       latestEpoch: context.latestEpoch,
       recipients: context.recipients,
     }),
@@ -137,6 +151,7 @@ export const buildRemoveGroupMemberInput = async ({
     nextEpoch: createEpochBundle({
       creator: deviceRegistration,
       groupId,
+      historyRecipients: removalContext.historyRecipients,
       latestEpoch: removalContext.latestEpoch,
       recipients: removalContext.recipients,
     }),
@@ -144,16 +159,24 @@ export const buildRemoveGroupMemberInput = async ({
 };
 
 export const rotateGroupEpochIfRequired = async (groupId: string) => {
-  const context = await trpcClient.groupEpoch.rotationContext.query({ groupId });
-  if (!context) return;
-  const device = await ensureDeviceKeyRegistration();
-  await trpcClient.groupEpoch.rotate.mutate({
-    groupId,
-    nextEpoch: createEpochBundle({
-      creator: device,
-      groupId,
-      latestEpoch: context.latestEpoch,
-      recipients: context.recipients,
-    }),
+  await submitEpochChange({
+    build: async () => {
+      const context = await trpcClient.groupEpoch.rotationContext.query({ groupId });
+      if (!context) return null;
+      const device = await ensureDeviceKeyRegistration();
+      return {
+        groupId,
+        nextEpoch: createEpochBundle({
+          creator: device,
+          groupId,
+          historyRecipients: context.historyRecipients,
+          latestEpoch: context.latestEpoch,
+          recipients: context.recipients,
+        }),
+      };
+    },
+    submit: async (input) => {
+      if (input) await trpcClient.groupEpoch.rotate.mutate(input);
+    },
   });
 };

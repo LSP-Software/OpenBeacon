@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form";
 import { View } from "react-native";
 import type z from "zod";
 import { trpc } from "../../lib/api.ts";
-import { buildCreateGroupInput } from "../../lib/groupEncryption.ts";
+import { buildCreateGroupInput, submitEpochChange } from "../../lib/groupEncryption.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 import { Button } from "../ui/Button.tsx";
@@ -46,8 +46,10 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
     await createGroupSubmission.run("create-group", async () => {
       const result = await tryCatch(
         (async () => {
-          const createGroupInput = await buildCreateGroupInput({ name: data.name });
-          const createdGroup = await createGroupMutation.mutateAsync(createGroupInput);
+          const createdGroup = await submitEpochChange({
+            build: () => buildCreateGroupInput({ name: data.name }),
+            submit: createGroupMutation.mutateAsync,
+          });
 
           queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
             if (!previous) {

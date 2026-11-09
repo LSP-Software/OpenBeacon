@@ -4,13 +4,24 @@ import { x25519 } from "@noble/curves/ed25519.js";
 import { decodeBase64, encodeBase64 } from "./base64.ts";
 import {
   DEVICE_KEY_ALGORITHM,
+  GROUP_EPOCH_DOMAIN_CONTEXT,
   GROUP_EPOCH_KEY_LENGTH,
+  HISTORY_ESCROW_ALGORITHM,
   PAYLOAD_ENCRYPTION_ALGORITHM,
+  RECOVERY_KEY_DERIVATION_VERSION,
   WRAPPED_EPOCH_KEY_ALGORITHM,
+  X25519_KEY_ALGORITHM,
   XCHACHA20_NONCE_LENGTH,
 } from "./constants.ts";
 import { openAuth, sealAuth } from "./hpke.ts";
-import { DevicePrivateKeyMaterial, EpochKeyMaterial, SensitivePayloadBytes } from "./sensitive.ts";
+import {
+  DevicePrivateKeyMaterial,
+  EpochKeyMaterial,
+  HistoryPrivateKeyMaterial,
+  RecoveryPhrase,
+  RecoveryPrivateKeyMaterial,
+  SensitivePayloadBytes,
+} from "./sensitive.ts";
 import type { TrackingPointV1 } from "./trackingPoint.ts";
 import {
   encodeTrackingPointV1,
@@ -25,14 +36,16 @@ import type {
   GroupEpoch,
   GroupEpochCreationResult,
   GroupPayloadKind,
+  HistoryKeyEscrow,
+  HistoryPublicKey,
   PersonalDataPurpose,
   RecipientPublicKeyMaterial,
   WrappedEpochKey,
+  WrappedHistoryEpochKey,
 } from "./types.ts";
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
-const DOMAIN_CONTEXT = "openbeacon.group-epoch.v1";
 
 const createOpaqueId = (prefix: string) => {
   const bytes = randomBytes(16);
@@ -50,7 +63,7 @@ const ensureEpochKeyLength = (bytes: Uint8Array) => {
 
 const getWrapInfo = (epochId: string, recipientDeviceId: string) =>
   encodeMetadata({
-    context: DOMAIN_CONTEXT,
+    context: GROUP_EPOCH_DOMAIN_CONTEXT,
     epochId,
     purpose: "epoch-key-wrap",
     recipientDeviceId,
@@ -63,7 +76,7 @@ const getPayloadAssociatedData = (
   senderDeviceId: string,
 ) =>
   encodeMetadata({
-    context: DOMAIN_CONTEXT,
+    context: GROUP_EPOCH_DOMAIN_CONTEXT,
     epochId,
     groupId,
     kind,
@@ -420,11 +433,17 @@ export {
   encodeBase64,
   encodeTrackingPointV1,
   EpochKeyMaterial,
+  HISTORY_ESCROW_ALGORITHM,
+  HistoryPrivateKeyMaterial,
   PAYLOAD_ENCRYPTION_ALGORITHM,
+  RECOVERY_KEY_DERIVATION_VERSION,
+  RecoveryPhrase,
+  RecoveryPrivateKeyMaterial,
   SensitivePayloadBytes,
   TRACKING_POINT_KIND,
   validateTrackingPointV1,
   WRAPPED_EPOCH_KEY_ALGORITHM,
+  X25519_KEY_ALGORITHM,
   XCHACHA20_NONCE_LENGTH,
 };
 export type {
@@ -435,10 +454,30 @@ export type {
   GroupEpoch,
   GroupEpochCreationResult,
   GroupPayloadKind,
+  HistoryKeyEscrow,
+  HistoryPublicKey,
   PersonalDataPurpose,
   RecipientPublicKeyMaterial,
   TrackingPointV1,
   WrappedEpochKey,
+  WrappedHistoryEpochKey,
 };
 
-export { openPersonalData, sealPersonalData } from "./personalData.ts";
+export {
+  getPersonalDataHistoryKeyVersion,
+  openPersonalData,
+  sealPersonalData,
+  sealPersonalDataForHistoryKey,
+} from "./personalData.ts";
+export {
+  createHistoryKeyPair,
+  deriveRecoveryKeyPair,
+  diagnoseRecoveryPhraseInput,
+  generateRecoveryPhrase,
+  getHistoryPublicKey,
+  openHistoryKeyEscrow,
+  parseRecoveryPhrase,
+  sealHistoryKeyEscrow,
+  unwrapHistoryEpochKey,
+  wrapEpochKeyForHistoryKey,
+} from "./recovery.ts";

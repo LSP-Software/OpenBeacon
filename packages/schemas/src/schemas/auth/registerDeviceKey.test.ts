@@ -146,6 +146,7 @@ describe("groupEpochBundleSchema", () => {
       createdByDeviceId: "device-a",
       epochId: "epoch-1",
       epochNumber: 1,
+      historyKeys: [],
       recipientKeys: [recipientKey],
     });
 
@@ -160,6 +161,27 @@ describe("groupEpochBundleSchema", () => {
         path: ["recipientKeys", 0, "epochId"],
       }),
     );
+  });
+
+  test("requires historyKeys on every bundle", () => {
+    const recipientKey = wrappedEpochKeySchema.parse({
+      algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+      createdAt: new Date("2026-03-30T12:00:00.000Z"),
+      ephemeralPublicKey: createDeviceKeyPair().publicKey,
+      epochId: "epoch-1",
+      recipientDeviceId: "device-a",
+      senderPublicKey: createDeviceKeyPair().publicKey,
+      wrappedKey: encodeBase64(new Uint8Array(48)),
+    });
+    const bundle = {
+      createdByDeviceId: "device-a",
+      epochId: "epoch-1",
+      epochNumber: 1,
+      recipientKeys: [recipientKey],
+    };
+
+    expect(groupEpochBundleSchema.safeParse(bundle).success).toBe(false);
+    expect(groupEpochBundleSchema.safeParse({ ...bundle, historyKeys: [] }).success).toBe(true);
   });
 
   test("rejects oversized epoch identifiers in both the bundle and recipient key", () => {
@@ -181,6 +203,7 @@ describe("groupEpochBundleSchema", () => {
         createdByDeviceId: "device-a",
         epochId: recipientKey.epochId,
         epochNumber: 1,
+        historyKeys: [],
         recipientKeys: [recipientKey],
       }).success,
     ).toBe(false);

@@ -38,6 +38,7 @@ const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
   createdByDeviceId: result.epoch.createdByDeviceId,
   epochId: result.epoch.epochId,
   epochNumber: result.epoch.epochNumber,
+  historyKeys: [],
   recipientKeys: result.wrappedKeys,
 });
 
