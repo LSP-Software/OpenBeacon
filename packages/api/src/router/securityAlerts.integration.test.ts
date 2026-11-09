@@ -392,8 +392,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     expect(await sentAlerts()).toEqual([]);
   });
 
-  test("deleting an account immediately sends one alert to its address", async () => {
+  test("deleting an account immediately sends one alert to its address, even with optional alerts off", async () => {
     const account = await createAccount();
+    await turnOffOptionalAlerts(account.userId);
 
     await account.caller.account.requestDeletion({ password, immediate: true });
 
