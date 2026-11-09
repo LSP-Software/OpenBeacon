@@ -65,7 +65,15 @@ export const createEmailCodes = ({
   });
 
   return {
-    allowRequest: async ({ email, ip }: { email: string; ip: string | null }) => {
+    allowRequest: async ({
+      purpose,
+      email,
+      ip,
+    }: {
+      purpose: EmailCodePurpose;
+      email: string;
+      ip: string | null;
+    }) => {
       const ipResult = await rateLimits.consume({
         namespace: "emailCode.request",
         identifier: { type: "ip", value: ip ?? "unknown" },
@@ -73,7 +81,7 @@ export const createEmailCodes = ({
       });
       if (!ipResult.allowed) return false;
       const addressResult = await rateLimits.consume({
-        namespace: "emailCode.request",
+        namespace: `emailCode.request.${purpose}`,
         identifier: {
           type: "email",
           value: createHash("sha256").update(normalizeEmail(email)).digest("hex"),

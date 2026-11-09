@@ -370,6 +370,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email code rate 
     expect(sent).toHaveLength(allowed + 1);
   });
 
+  test("each purpose has its own allowance for an address", async () => {
+    const { email } = await createPasswordAccount("purpose-limit");
+    for (let index = 0; index < emailCodeRequestLimits.perAddress.limit; index++) {
+      expect((await requestSignUpCode(email)).status).toBe(200);
+    }
+    expect((await requestSignUpCode(email)).status).toBe(429);
+    for (let index = 0; index < emailCodeRequestLimits.perAddress.limit; index++) {
+      expect((await requestResetCode(email)).status).toBe(200);
+    }
+    expect((await requestResetCode(email)).status).toBe(429);
+    expect(await codes.allowRequest({ purpose: "recovery-reset", email, ip: nextIp() })).toBe(true);
+  });
+
   test("an IP can request 20 codes per hour across addresses", async () => {
     const ip = nextIp();
     const allowed = emailCodeRequestLimits.perIp.limit;
@@ -451,7 +464,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password reset c
       console.error = originalError;
     });
     expect(failed).toEqual(unknown);
-    expect(errors).toEqual([["[email-code] could not send a password reset code"]]);
+    expect(errors).toEqual([["[email-code] could not send a password-reset email"]]);
   });
 
   test("the right code gives a reset token that resets the password once", async () => {

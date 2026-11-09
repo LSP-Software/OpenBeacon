@@ -1,3 +1,4 @@
+import type { EmailCodePurpose } from "@openbeacon/email";
 import { tryCatch } from "@openbeacon/shared";
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthEndpoint, getIP } from "better-auth/api";
@@ -16,7 +17,7 @@ export const emailCodePlugin = (codes: EmailCodes | null) =>
           await sendInBackground({
             codes,
             ctx,
-            description: "a sign-up code",
+            purpose: "sign-up",
             send: async (email) => {
               const user = await ctx.context.internalAdapter.findUserByEmail(email, {
                 includeAccounts: true,
@@ -63,7 +64,7 @@ export const emailCodePlugin = (codes: EmailCodes | null) =>
           await sendInBackground({
             codes,
             ctx,
-            description: "an email verification code",
+            purpose: "email-verification",
             send: async (email) => {
               const user = await ctx.context.internalAdapter.findUserByEmail(email, {
                 includeAccounts: true,
@@ -118,7 +119,7 @@ export const emailCodePlugin = (codes: EmailCodes | null) =>
           await sendInBackground({
             codes,
             ctx,
-            description: "a password reset code",
+            purpose: "password-reset",
             send: async (email) => {
               const user = await ctx.context.internalAdapter.findUserByEmail(email, {
                 includeAccounts: true,
@@ -164,7 +165,7 @@ export const emailCodePlugin = (codes: EmailCodes | null) =>
 const sendInBackground = async ({
   codes,
   ctx,
-  description,
+  purpose,
   send,
 }: {
   codes: EmailCodes;
@@ -177,12 +178,13 @@ const sendInBackground = async ({
       runInBackground: (task: Promise<unknown>) => void;
     };
   };
-  description: string;
+  purpose: EmailCodePurpose;
   send: (email: string) => Promise<void>;
 }) => {
   const email = normalizeEmail(ctx.body.email);
   const source = ctx.request ?? ctx.headers;
   const allowed = await codes.allowRequest({
+    purpose,
     email,
     ip: source ? getIP(source, ctx.context.options) : null,
   });
@@ -193,7 +195,7 @@ const sendInBackground = async ({
   }
   ctx.context.runInBackground(
     tryCatch(send(email)).then((result) => {
-      if (result.error) console.error(`[email-code] could not send ${description}`);
+      if (result.error) console.error(`[email-code] could not send a ${purpose} email`);
     }),
   );
 };

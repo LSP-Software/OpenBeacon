@@ -167,7 +167,13 @@ export const accountRecoveryRouter = createTRPCRouter({
       select: { email: true, id: true },
       where: { id: ctx.session.user.id },
     });
-    if (!(await ctx.emailCodes.allowRequest({ email: user.email, ip: ctx.clientIp ?? null }))) {
+    if (
+      !(await ctx.emailCodes.allowRequest({
+        purpose: "recovery-reset",
+        email: user.email,
+        ip: ctx.clientIp ?? null,
+      }))
+    ) {
       throw new TRPCError({
         code: "TOO_MANY_REQUESTS",
         message: "Too many requests. Please try again later.",
