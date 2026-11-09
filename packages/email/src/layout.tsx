@@ -4,6 +4,7 @@ import {
   Column,
   Container,
   Head,
+  Heading,
   Html,
   Img,
   Preview,
@@ -15,28 +16,58 @@ import { render } from "@react-email/render";
 import type { ReactNode } from "react";
 import type { EmailMessage } from "./types.ts";
 
-const emailColors = {
+export const emailColors = {
   brand: "#ff1463",
   header: "#0a0911",
   text: "#1a1523",
   muted: "#6b6478",
   faint: "#8f889b",
   border: "#e8e4ef",
+  panel: "#f6f4f9",
 };
 
 const logo = readFileSync(new URL("./assets/logo.png", import.meta.url));
 
+export const EmailDetails = ({ rows }: { rows: { label: string; value: string }[] }) => (
+  <Section
+    style={{
+      backgroundColor: emailColors.panel,
+      borderRadius: "8px",
+      padding: "16px 20px",
+      margin: "0 0 24px",
+    }}
+  >
+    {rows.map(({ label, value }, index) => (
+      <Text
+        key={label}
+        style={{ fontSize: "15px", lineHeight: "22px", margin: index === 0 ? 0 : "12px 0 0" }}
+      >
+        <span style={{ color: emailColors.muted, fontSize: "13px", fontWeight: 600 }}>{label}</span>
+        <br />
+        {value}
+      </Text>
+    ))}
+  </Section>
+);
+
+export const EmailSubheading = ({ children }: { children: string }) => (
+  <Text style={{ fontWeight: 700, margin: "0 0 4px" }}>{children}</Text>
+);
+
 export const renderEmailLayout = async ({
   serverName,
+  title,
   preview,
   children,
   footerNote,
 }: {
   serverName: string;
+  title: string;
   preview: string;
   children: ReactNode;
   footerNote?: string;
 }): Promise<Pick<EmailMessage, "html" | "text" | "attachments">> => {
+  if (!title.trim()) throw new Error("Email title is required");
   if (!preview.trim()) throw new Error("Email preview text is required");
   const fontFamily =
     "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
@@ -87,6 +118,18 @@ export const renderEmailLayout = async ({
               padding: "32px 24px",
             }}
           >
+            <Heading
+              as="h1"
+              style={{
+                fontSize: "24px",
+                fontWeight: 700,
+                letterSpacing: "-0.3px",
+                lineHeight: "32px",
+                margin: "0 0 16px",
+              }}
+            >
+              {title}
+            </Heading>
             {children}
           </Section>
           <Section
@@ -124,7 +167,13 @@ export const renderEmailLayout = async ({
       </Body>
     </Html>
   );
-  const [html, text] = await Promise.all([render(email), render(email, { plainText: true })]);
+  const [html, text] = await Promise.all([
+    render(email),
+    render(email, {
+      plainText: true,
+      htmlToTextOptions: { selectors: [{ selector: "h1", options: { uppercase: false } }] },
+    }),
+  ]);
   return {
     html,
     text,

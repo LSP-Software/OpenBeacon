@@ -1,5 +1,5 @@
 import { Text } from "@react-email/components";
-import { renderEmailLayout } from "./layout.tsx";
+import { EmailDetails, EmailSubheading, renderEmailLayout } from "./layout.tsx";
 import type { EmailMessage, OptionalSecurityAlert } from "./types.ts";
 
 export const renderAlertsTurnedOffEmail = async ({
@@ -23,19 +23,24 @@ export const renderAlertsTurnedOffEmail = async ({
   );
   const several = labels.length > 1;
   const happened = several
-    ? `These email alerts were turned off on ${happenedAt}:`
-    : `This email alert was turned off on ${happenedAt}:`;
+    ? "These email alerts were turned off:"
+    : "This email alert was turned off:";
   const rendered = await renderEmailLayout({
     serverName,
+    title: "Email alerts turned off",
     preview: `${happened} ${labels.join(", ")}.`,
     children: (
       <>
         <Text style={{ margin: "0 0 8px" }}>{happened}</Text>
         <ul style={{ margin: "0 0 16px", paddingLeft: "24px" }}>
           {labels.map((label) => (
-            <li key={label}>{label}</li>
+            <li key={label} style={{ margin: "0 0 4px" }}>
+              {label}
+            </li>
           ))}
         </ul>
+        <EmailDetails rows={[{ label: "Turned off at", value: happenedAt }]} />
+        <EmailSubheading>If this wasn't you</EmailSubheading>
         <Text style={{ margin: 0 }}>
           {`${signedInAdvice} Then turn ${several ? "these alerts" : "this alert"} back on in Account → Notifications → Email alerts.`}
         </Text>

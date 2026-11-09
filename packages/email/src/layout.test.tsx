@@ -5,6 +5,7 @@ import { renderEmailLayout } from "./layout.tsx";
 const render = () =>
   renderEmailLayout({
     serverName: "Family Server",
+    title: "Your sign-up code",
     preview: "Your OpenBeacon sign-up code",
     children: <Text>Your code is 123456.</Text>,
   });
@@ -22,9 +23,30 @@ describe("renderEmailLayout", () => {
     expect(html).toContain("Family Server");
   });
 
+  test("puts the title above the body", async () => {
+    const { text } = await render();
+    expect(text.indexOf("Your sign-up code")).toBeLessThan(text.indexOf("Your code is 123456."));
+  });
+
+  test("requires a title so the email is clear at a glance", async () => {
+    await expect(
+      renderEmailLayout({
+        serverName: "Family Server",
+        title: " ",
+        preview: "Preview",
+        children: <Text>Body</Text>,
+      }),
+    ).rejects.toThrow("Email title is required");
+  });
+
   test("requires preview text so mail apps don't preview the body", async () => {
     await expect(
-      renderEmailLayout({ serverName: "Family Server", preview: " ", children: <Text>Body</Text> }),
+      renderEmailLayout({
+        serverName: "Family Server",
+        title: "Title",
+        preview: " ",
+        children: <Text>Body</Text>,
+      }),
     ).rejects.toThrow("Email preview text is required");
   });
 

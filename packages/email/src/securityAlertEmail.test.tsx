@@ -62,12 +62,19 @@ describe("formatAlertTime", () => {
 });
 
 describe("renderSecurityAlertEmail", () => {
-  test("every alert says when it happened and what to do if it wasn't you", async () => {
+  test("every alert has a title and says when it happened", async () => {
     for (const alert of [...alwaysOn, ...optional]) {
       const email = await render(alert);
-      expect(email.text).toContain("Thursday, 9 July 2026 at 14:32 BST (13:32 UTC)");
-      expect(email.text).toMatch(/If (this wasn't you|you didn't ask for this)/);
+      expect(email.html).toMatch(/<h1[^>]*>[^<]+<\/h1>/);
+      expect(email.text).toMatch(/ at\nThursday, 9 July 2026 at 14:32 BST \(13:32 UTC\)\n/);
       expect(email.text).not.toMatch(/contact|support/i);
+    }
+  });
+
+  test("every alert except account deleted says what to do if it wasn't you", async () => {
+    for (const alert of [...alwaysOn, ...optional]) {
+      const email = await render(alert);
+      expect(email.text.includes("If this wasn't you\n\n")).toBe(alert.type !== "account-deleted");
     }
   });
 
@@ -95,7 +102,8 @@ describe("renderSecurityAlertEmail", () => {
       device: { model: "Pixel 8", platform: "android" },
     });
     expect(email.subject).toBe("A new device was added to your OpenBeacon account");
-    expect(email.text).toContain("Pixel 8 (Android).");
+    expect(email.text).toContain("New device added\n\nA new device was added");
+    expect(email.text).toContain("Device\nPixel 8 (Android)\n");
   });
 
   test("a new device alert still reads well without the model or platform", async () => {
@@ -103,9 +111,11 @@ describe("renderSecurityAlertEmail", () => {
       type: "new-device",
       device: { model: null, platform: "ios" },
     });
-    expect(platformOnly.text).toContain(": an iOS device.");
+    expect(platformOnly.text).toContain("Device\niOS device\n");
     const unknown = await render({ type: "new-device", device: { model: null, platform: null } });
-    expect(unknown.text).toContain(": a device.");
+    expect(unknown.text).toContain("A new device was added to your OpenBeacon account.\n");
+    expect(unknown.text).not.toContain("Device\n");
+    expect(unknown.text).not.toContain("a device");
   });
 
   test("a deletion alert gives the deletion date and says signing in cancels it", async () => {
@@ -114,7 +124,7 @@ describe("renderSecurityAlertEmail", () => {
       deletionDate: new Date("2026-07-16T13:32:00Z"),
     });
     expect(email.text).toContain(
-      "It will be deleted on Thursday, 16 July 2026 at 14:32 BST (13:32 UTC).",
+      "Requested at\nThursday, 9 July 2026 at 14:32 BST (13:32 UTC)\n\nScheduled for\nThursday, 16 July 2026 at 14:32 BST (13:32 UTC)\n",
     );
     expect(email.text).toContain("Signing in to the app before then cancels the deletion.");
   });
@@ -122,7 +132,7 @@ describe("renderSecurityAlertEmail", () => {
   test("recovery phrase alerts point to the button the phone will show", async () => {
     const changed = await render({ type: "recovery-phrase-changed" });
     expect(changed.text).toContain(
-      "If this wasn't you, someone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device. Then open Account → Recovery phrase and tap Change recovery phrase.",
+      "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device. Then open Account → Recovery phrase and tap Change recovery phrase.",
     );
     const reset = await render({ type: "recovery-phrase-reset" });
     expect(reset.text).toContain(
@@ -130,19 +140,16 @@ describe("renderSecurityAlertEmail", () => {
     );
   });
 
-  test("an account deletion alert says it can't be undone", async () => {
-    const email = await render({ type: "account-deleted" });
-    expect(email.subject).toBe("Your OpenBeacon account was deleted");
-    expect(email.text).toContain(
-      "Your OpenBeacon account and its data were deleted from this server on Thursday, 9 July 2026 at 14:32 BST (13:32 UTC).",
-    );
-    expect(email.text).toContain(
-      "If you didn't ask for this, someone else could sign in to your account. Deleted accounts can't be restored. If you used your OpenBeacon password anywhere else, change it there.",
-    );
-    const google = await render({ type: "account-deleted" }, { hasPassword: false });
-    expect(google.text).toContain(
-      "If you didn't ask for this, someone else could sign in to your account. Deleted accounts can't be restored. Secure your Google account, because someone may have used it to sign in.",
-    );
+  test("an account deletion alert only says the account and its data are gone", async () => {
+    for (const hasPassword of [true, false]) {
+      const email = await render({ type: "account-deleted" }, { hasPassword });
+      expect(email.subject).toBe("Your OpenBeacon account was deleted");
+      expect(email.text).toContain(
+        "Account deleted\n\nYour OpenBeacon account and its data were deleted.\n\nDeleted at\nThursday, 9 July 2026 at 14:32 BST (13:32 UTC)\n",
+      );
+      expect(email.text).not.toContain("this server");
+      expect(email.text).not.toMatch(/didn't ask|wasn't you|Google|password/);
+    }
   });
 
   test("accounts without a password are told to secure Google instead", async () => {
@@ -165,11 +172,11 @@ describe("renderSecurityAlertEmail", () => {
     const device = { model: "Pixel 8", platform: "android" } as const;
     const withPassword = await render({ type: "new-device", device });
     expect(withPassword.text).toContain(
-      "If this wasn't you, someone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device.",
+      "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device.",
     );
     const google = await render({ type: "new-device", device }, { hasPassword: false });
     expect(google.text).toContain(
-      "If this wasn't you, someone else is signed in to your account. Secure your Google account, because someone may have used it to sign in.",
+      "If this wasn't you\n\nSomeone else is signed in to your account. Secure your Google account, because someone may have used it to sign in.",
     );
   });
 
@@ -179,7 +186,7 @@ describe("renderSecurityAlertEmail", () => {
       { hasPassword: false },
     );
     expect(google.text).toContain(
-      "If this wasn't you, sign in to the app now to cancel it. Secure your Google account, because someone may have used it to sign in.",
+      "If this wasn't you\n\nSign in to the app now to cancel it. Secure your Google account, because someone may have used it to sign in.",
     );
   });
 });

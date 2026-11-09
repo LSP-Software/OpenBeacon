@@ -13,26 +13,26 @@ const render = (alerts: OptionalSecurityAlert[], hasPassword = true) =>
   });
 
 describe("renderAlertsTurnedOffEmail", () => {
-  test("one alert is named on its own line with when it was turned off", async () => {
+  test("one alert uses the same list with a single bullet", async () => {
     const email = await render(["deletion-scheduled"]);
     expect(email.subject).toBe("Email alerts were turned off on your OpenBeacon account");
     expect(email.canTurnOff).toBe(false);
     expect(email.text).toContain(
-      "This email alert was turned off on Thursday, 9 July 2026 at 14:32 BST (13:32 UTC):\n\n * Account deletion scheduled\n",
+      "Email alerts turned off\n\nThis email alert was turned off:\n\n * Account deletion scheduled\n\nTurned off at\nThursday, 9 July 2026 at 14:32 BST (13:32 UTC)\n",
     );
     expect(email.text).not.toContain("New device added");
-    expect(email.html).toContain("<li>Account deletion scheduled</li>");
+    expect(email.html.match(/<li\b/g)).toHaveLength(1);
     expect(email.text).toContain(
-      "If this wasn't you, someone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device. Then turn this alert back on in Account → Notifications → Email alerts.",
+      "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device. Then turn this alert back on in Account → Notifications → Email alerts.",
     );
   });
 
   test("several alerts are listed one per line", async () => {
     const email = await render(["new-device", "deletion-scheduled"]);
     expect(email.text).toContain(
-      "These email alerts were turned off on Thursday, 9 July 2026 at 14:32 BST (13:32 UTC):\n\n * New device added\n * Account deletion scheduled\n",
+      "These email alerts were turned off:\n\n * New device added\n * Account deletion scheduled\n",
     );
-    expect(email.html).toContain("<li>New device added</li><li>Account deletion scheduled</li>");
+    expect(email.html.match(/<li\b/g)).toHaveLength(2);
     expect(email.text).toContain(
       "Then turn these alerts back on in Account → Notifications → Email alerts.",
     );
@@ -41,7 +41,7 @@ describe("renderAlertsTurnedOffEmail", () => {
   test("accounts without a password are told to secure Google instead", async () => {
     const email = await render(["new-device"], false);
     expect(email.text).toContain(
-      "If this wasn't you, someone else is signed in to your account. Secure your Google account, because someone may have used it to sign in.",
+      "If this wasn't you\n\nSomeone else is signed in to your account. Secure your Google account, because someone may have used it to sign in.",
     );
     expect(email.text).not.toContain("change your password");
   });

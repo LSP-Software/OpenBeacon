@@ -11,6 +11,7 @@ export const renderAccountExistsEmail = async ({
 }): Promise<Omit<EmailMessage, "to">> => {
   const rendered = await renderEmailLayout({
     serverName,
+    title: "Account already exists",
     preview: "Someone tried to create an account with this email address.",
     children: (
       <>

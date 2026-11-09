@@ -18,7 +18,7 @@ describe("renderCodeEmail", () => {
     });
     expect(email.subject).not.toContain("042917");
     expect(email.text).toContain("042917");
-    expect(email.html).toContain("042917");
+    expect(email.html).toMatch(/042<span style="padding-left:16px">917<\/span>/);
     const preview = email.html.match(/<div[^>]*display:none[^>]*>([^<]*)/)?.[1] ?? "";
     expect(preview).toContain("Use this code in the app");
     expect(preview).not.toContain("042917");

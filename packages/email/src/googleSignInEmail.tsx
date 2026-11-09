@@ -9,6 +9,7 @@ export const renderGoogleSignInEmail = async ({
 }): Promise<Omit<EmailMessage, "to">> => {
   const rendered = await renderEmailLayout({
     serverName,
+    title: "Sign in with Google",
     preview: "Someone asked to reset the password for your OpenBeacon account.",
     children: (
       <>

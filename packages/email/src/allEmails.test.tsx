@@ -86,6 +86,14 @@ describe("every email", () => {
     ]);
   });
 
+  test("starts with a short title", async () => {
+    for (const email of await renderEveryEmail()) {
+      const title = email.html.match(/<h1[^>]*>([^<]+)<\/h1>/)?.[1] ?? "";
+      expect(title.split(" ").length).toBeGreaterThanOrEqual(2);
+      expect(title.split(" ").length).toBeLessThanOrEqual(4);
+    }
+  });
+
   test("never puts a code in the subject", async () => {
     for (const email of await renderEveryEmail()) {
       expect(email.subject).not.toMatch(/\d{6}/);

@@ -1,7 +1,7 @@
 import { timezoneSchema } from "@openbeacon/schemas";
 import { Text } from "@react-email/components";
 import { renderAlertsTurnedOffEmail } from "./alertsTurnedOffEmail.tsx";
-import { renderEmailLayout } from "./layout.tsx";
+import { EmailDetails, EmailSubheading, renderEmailLayout } from "./layout.tsx";
 import type { createSendEmail } from "./sender.ts";
 import { type EmailMessage, isOptionalSecurityAlert, type SecurityAlert } from "./types.ts";
 
@@ -14,39 +14,53 @@ const secureAccountAdvice = (hasPassword: boolean) =>
     : secureGoogleAdvice;
 
 const signedInAdvice = (hasPassword: boolean) =>
-  `If this wasn't you, someone else is signed in to your account. ${secureAccountAdvice(hasPassword)}`;
+  `Someone else is signed in to your account. ${secureAccountAdvice(hasPassword)}`;
 
 const alertCopy = (
   alert: Exclude<SecurityAlert, { type: "alerts-turned-off" }>,
   happenedAt: string,
   formatTime: (date: Date) => string,
   hasPassword: boolean,
-): { subject: string; happened: string; ifNotYou: string } => {
+): {
+  subject: string;
+  title: string;
+  happened: string;
+  details: { label: string; value: string }[];
+  ifNotYou: string | null;
+} => {
   switch (alert.type) {
     case "password-changed":
       return {
         subject: "Your OpenBeacon password was changed",
-        happened: `Your OpenBeacon password was changed on ${happenedAt}.`,
+        title: "Password changed",
+        happened: "Your OpenBeacon password was changed.",
+        details: [{ label: "Changed at", value: happenedAt }],
         ifNotYou:
-          "If this wasn't you, use \"Forgot password\" on the app's sign-in screen to choose a new password. That signs you out on every other device.",
+          'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs you out on every other device.',
       };
     case "password-reset":
       return {
         subject: "Your OpenBeacon password was reset",
-        happened: `Your OpenBeacon password was reset on ${happenedAt}, and every device was signed out.`,
+        title: "Password reset",
+        happened: "Your OpenBeacon password was reset, and every device was signed out.",
+        details: [{ label: "Reset at", value: happenedAt }],
         ifNotYou:
-          "If this wasn't you, someone may be able to read your email. Secure your email account, then use \"Forgot password\" on the app's sign-in screen to choose a new password.",
+          'Someone may be able to read your email. Secure your email account, then use "Forgot password" on the app\'s sign-in screen to choose a new password.',
       };
     case "recovery-phrase-changed":
       return {
         subject: "Your OpenBeacon recovery phrase was changed",
-        happened: `Your OpenBeacon recovery phrase was changed on ${happenedAt}. Your old phrase no longer works.`,
+        title: "Recovery phrase changed",
+        happened: "Your OpenBeacon recovery phrase was changed. Your old phrase no longer works.",
+        details: [{ label: "Changed at", value: happenedAt }],
         ifNotYou: `${signedInAdvice(hasPassword)} Then open Account → Recovery phrase and tap Change recovery phrase.`,
       };
     case "recovery-phrase-reset":
       return {
         subject: "Your OpenBeacon recovery phrase was reset",
-        happened: `Your OpenBeacon recovery phrase was reset on ${happenedAt}. Your old phrase no longer works.`,
+        title: "Recovery phrase reset",
+        happened: "Your OpenBeacon recovery phrase was reset. Your old phrase no longer works.",
+        details: [{ label: "Reset at", value: happenedAt }],
         ifNotYou: `${signedInAdvice(hasPassword)} Then open Account → Recovery phrase and tap "I’ve lost my phrase" to set a new one.`,
       };
     case "new-device": {
@@ -55,28 +69,37 @@ const alertCopy = (
       const device =
         alert.device.model && platform
           ? `${alert.device.model} (${platform})`
-          : (alert.device.model ?? (platform ? `an ${platform} device` : "a device"));
+          : (alert.device.model ?? (platform ? `${platform} device` : null));
       return {
         subject: "A new device was added to your OpenBeacon account",
-        happened: `A new device was added to your OpenBeacon account on ${happenedAt}: ${device}.`,
+        title: "New device added",
+        happened: "A new device was added to your OpenBeacon account.",
+        details: [
+          ...(device ? [{ label: "Device", value: device }] : []),
+          { label: "Added at", value: happenedAt },
+        ],
         ifNotYou: signedInAdvice(hasPassword),
       };
     }
     case "deletion-scheduled":
       return {
         subject: "Your OpenBeacon account is scheduled for deletion",
-        happened: `Your OpenBeacon account was scheduled for deletion on ${happenedAt}. It will be deleted on ${formatTime(alert.deletionDate)}. Signing in to the app before then cancels the deletion.`,
-        ifNotYou: `If this wasn't you, sign in to the app now to cancel it. ${secureAccountAdvice(hasPassword)}`,
+        title: "Account deletion scheduled",
+        happened:
+          "Your OpenBeacon account is scheduled for deletion. Signing in to the app before then cancels the deletion.",
+        details: [
+          { label: "Requested at", value: happenedAt },
+          { label: "Scheduled for", value: formatTime(alert.deletionDate) },
+        ],
+        ifNotYou: `Sign in to the app now to cancel it. ${secureAccountAdvice(hasPassword)}`,
       };
     case "account-deleted":
       return {
         subject: "Your OpenBeacon account was deleted",
-        happened: `Your OpenBeacon account and its data were deleted from this server on ${happenedAt}.`,
-        ifNotYou: `If you didn't ask for this, someone else could sign in to your account. Deleted accounts can't be restored. ${
-          hasPassword
-            ? "If you used your OpenBeacon password anywhere else, change it there."
-            : secureGoogleAdvice
-        }`,
+        title: "Account deleted",
+        happened: "Your OpenBeacon account and its data were deleted.",
+        details: [{ label: "Deleted at", value: happenedAt }],
+        ifNotYou: null,
       };
   }
 };
@@ -104,15 +127,27 @@ export const renderSecurityAlertEmail = async ({
     });
     return { ...email, canTurnOff: false };
   }
-  const { subject, happened, ifNotYou } = alertCopy(alert, formatTime(at), formatTime, hasPassword);
+  const { subject, title, happened, details, ifNotYou } = alertCopy(
+    alert,
+    formatTime(at),
+    formatTime,
+    hasPassword,
+  );
   const canTurnOff = isOptionalSecurityAlert(alert.type);
   const rendered = await renderEmailLayout({
     serverName,
+    title,
     preview: happened,
     children: (
       <>
         <Text style={{ margin: "0 0 16px" }}>{happened}</Text>
-        <Text style={{ margin: 0 }}>{ifNotYou}</Text>
+        <EmailDetails rows={details} />
+        {ifNotYou && (
+          <>
+            <EmailSubheading>If this wasn't you</EmailSubheading>
+            <Text style={{ margin: 0 }}>{ifNotYou}</Text>
+          </>
+        )}
       </>
     ),
     ...(canTurnOff
