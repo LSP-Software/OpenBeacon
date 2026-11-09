@@ -172,7 +172,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     ]);
   });
 
-  test("a failed recovery phrase change sends no alert", async () => {
+  test("a failed recovery phrase change or reset sends no alert", async () => {
     const account = await createAccount();
     const phrase = generateRecoveryPhrase();
 
@@ -182,6 +182,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
         recoveryKey: recoveryKeyInput(phrase),
       }),
     ).rejects.toThrow("No recovery phrase is set up.");
+    await expect(
+      account.caller.accountRecovery.reset({
+        confirmReset: true,
+        historyKey: { ...historyKeyInput(phrase, account.userId), version: 2 },
+        recoveryKey: recoveryKeyInput(phrase),
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(await sentAlerts()).toEqual([]);
   });
 
