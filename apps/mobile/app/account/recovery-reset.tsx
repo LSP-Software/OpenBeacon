@@ -17,10 +17,10 @@ import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
+import { protectHistory } from "../../lib/protectHistory.ts";
 import { isResetConfirmed } from "../../lib/isResetConfirmed.ts";
-import { backfillEveryGroup, resetRecoveryPhrase } from "../../lib/recovery.ts";
+import { resetRecoveryPhrase } from "../../lib/recovery.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
-import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 
 const RecoveryPhraseResetScreen = () => {
   const { afterSignIn } = useLocalSearchParams<{ afterSignIn?: string }>();
@@ -67,10 +67,9 @@ const RecoveryPhraseResetScreen = () => {
     }
     setUserId(device.userId);
     setStep("protecting");
-    await backfillEveryGroup({ device, onProgress: setProgress });
-    await queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
-    await resealPersonalData(device.userId);
-    await queryClient.invalidateQueries({ queryKey: ["personalNicknames"] });
+    await protectHistory({ device, onProgress: setProgress });
+    void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
+    void queryClient.invalidateQueries({ queryKey: ["personalNicknames"] });
     requestTrackingSync();
     setStep("done");
   };
@@ -190,6 +189,9 @@ const RecoveryPhraseResetScreen = () => {
           {step === "done" && (
             <View className="gap-4">
               <Text className="text-foreground text-3xl font-bold">Your phrase is reset</Text>
+              <Text className="text-muted-foreground text-base leading-6">
+                Use it to get your location history back if you lose or replace your phone.
+              </Text>
               {progress.failed > 0 && (
                 <Text className="text-muted-foreground text-base leading-6">
                   Some history couldn’t be protected yet. OpenBeacon will keep trying in the

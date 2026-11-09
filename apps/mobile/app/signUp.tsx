@@ -155,7 +155,7 @@ const SignUp = () => {
                 <Pressable accessibilityRole="link">
                   <Text className="text-muted">
                     Already have an account?{" "}
-                    <Text className="font-semibold text-primary">Sign in</Text>
+                    <Text className="font-semibold text-primary-text">Sign in</Text>
                   </Text>
                 </Pressable>
               </Link>

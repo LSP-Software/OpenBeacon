@@ -1,17 +1,22 @@
 import { storage } from "./storage.ts";
 
-const restoreDeclinedKey = (userId: string) => `recovery.restoreDeclined.${userId}`;
+const promptSkippedKey = (userId: string) => `recovery.restoreDeclined.${userId}`;
+const cardDismissedKey = (userId: string) => `recovery.restoreCardDismissed.${userId}`;
 
-const isDeclinedFor = ({ userId, version }: Reminder) =>
-  (storage.getNumber(restoreDeclinedKey(userId)) ?? 0) >= version;
+const isHiddenFor = (key: string, version: number) => (storage.getNumber(key) ?? 0) >= version;
 
-const declineFor = ({ userId, version }: Reminder) => {
-  storage.set(restoreDeclinedKey(userId), version);
+export const skipRestorePrompt = ({ userId, version }: Reminder) => {
+  storage.set(promptSkippedKey(userId), version);
 };
 
-export const skipRestorePrompt = declineFor;
-export const isRestorePromptSkipped = isDeclinedFor;
-export const dismissRestoreCard = declineFor;
-export const isRestoreCardDismissed = isDeclinedFor;
+export const isRestorePromptSkipped = ({ userId, version }: Reminder) =>
+  isHiddenFor(promptSkippedKey(userId), version);
+
+export const dismissRestoreCard = ({ userId, version }: Reminder) => {
+  storage.set(cardDismissedKey(userId), version);
+};
+
+export const isRestoreCardDismissed = ({ userId, version }: Reminder) =>
+  isHiddenFor(cardDismissedKey(userId), version);
 
 type Reminder = { userId: string; version: number };

@@ -34,7 +34,7 @@ jobs:
       - name: Run CI
         run: bun run ci
 
-  feedback-integration:
+  postgres-integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -64,9 +64,19 @@ jobs:
         run: |
           bun run --cwd packages/database --env-file=../../.env.ci prisma generate
           bun run --cwd packages/database --env-file=../../.env.ci prisma migrate deploy
-      - name: Test feedback against PostgreSQL
-        run: OPENBEACON_INTEGRATION=1 bun test --isolate --env-file=.env.ci packages/api/src/router/feedbackRouter.integration.test.ts apps/backend/src/routes/trpcFeedback.integration.test.ts
-      - name: Test migrations against PostgreSQL
-        run: OPENBEACON_INTEGRATION=1 bun test --isolate --env-file=.env.ci packages/database/src/joinedEpochNumberBackfill.integration.test.ts
-      - name: Test account deletion against PostgreSQL
-        run: OPENBEACON_INTEGRATION=1 bun test --isolate --env-file=.env.ci packages/api/src/lib/account-deletion.integration.test.ts packages/api/src/lib/account-deletion-cli.integration.test.ts packages/api/src/router/accountDeletionRequest.integration.test.ts packages/api/src/router/googleDeletion.integration.test.ts packages/api/src/router/group/groupRotation.integration.test.ts packages/api/src/router/group/groupDeparture.integration.test.ts packages/api/src/router/group/groupEmailInvites.integration.test.ts packages/api/src/router/group/groupSharedInvites.integration.test.ts packages/api/src/router/group/groupSettings.integration.test.ts packages/api/src/router/group/groupTracking.integration.test.ts packages/api/src/router/accountRecovery.integration.test.ts packages/api/src/router/group/groupHistoryWraps.integration.test.ts packages/api/src/router/group/groupEpochHistoryRecipients.integration.test.ts packages/api/src/router/group/groupEpochKeyWraps.integration.test.ts packages/api/src/router/group/personalData.integration.test.ts
+      - name: Check the Prisma schema matches the migrations
+        env:
+          PGPASSWORD: openbeacon
+          SHADOW_DATABASE_URL: postgresql://openbeacon:openbeacon@localhost:5432/openbeacon_shadow
+        run: |
+          psql -h localhost -U openbeacon -d openbeacon -c 'CREATE DATABASE openbeacon_shadow'
+          bunx prisma migrate diff --config packages/database/prisma.config.ts --from-migrations packages/database/prisma/migrations --to-schema packages/database/prisma/schema.prisma --exit-code
+      - name: Run every integration test file against PostgreSQL
+        run: |
+          mapfile -t files < <(find . -name '*.integration.test.ts' -not -path '*/node_modules/*' | sort)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No integration test files found"
+            exit 1
+          fi
+          printf '%s\n' "${files[@]}"
+          OPENBEACON_INTEGRATION=1 bun test --isolate --env-file=.env.ci "${files[@]}"

@@ -297,35 +297,32 @@ describe("setUpRecoveryPhrase", () => {
     expect(storedHistoryKeys.size).toBe(0);
   });
 
-  test.failing(
-    "OPE-237: a CONFLICT after this phone's setup response was lost finishes with the same phrase",
-    async () => {
-      const phrase = generateRecoveryPhrase();
-      loseSetupResponse = true;
-      await expect(setUpRecoveryPhrase(phrase)).rejects.toThrow("Network request failed");
-      loseSetupResponse = false;
-      expect(storedHistoryKeys.size).toBe(0);
+  test("a CONFLICT after this phone's setup response was lost finishes with the same phrase", async () => {
+    const phrase = generateRecoveryPhrase();
+    loseSetupResponse = true;
+    await expect(setUpRecoveryPhrase(phrase)).rejects.toThrow("Network request failed");
+    loseSetupResponse = false;
+    expect(storedHistoryKeys.size).toBe(0);
 
-      const result = await setUpRecoveryPhrase(phrase);
+    const result = await setUpRecoveryPhrase(phrase);
 
-      expect(result.status).not.toBe("conflict");
-      const committed = setupAccountRecoverySchema.parse(setupMock.mock.calls[0]?.[0]);
-      const opened = openHistoryKeyEscrow({
-        escrow: committed.historyKey.escrow,
-        historyKey: {
-          publicKey: committed.historyKey.publicKey,
-          userId: device.userId,
-          version: 1,
-        },
-        recoveryPrivateKey: deriveRecoveryKeyPair(phrase).privateKey,
-      });
-      const stored = storedHistoryKeys.get(`${device.userId}.1`);
-      expect(stored).toBeDefined();
-      expect(encodeBase64((stored as HistoryPrivateKeyMaterial).expose())).toBe(
-        encodeBase64(opened.expose()),
-      );
-    },
-  );
+    expect(result.status).not.toBe("conflict");
+    const committed = setupAccountRecoverySchema.parse(setupMock.mock.calls[0]?.[0]);
+    const opened = openHistoryKeyEscrow({
+      escrow: committed.historyKey.escrow,
+      historyKey: {
+        publicKey: committed.historyKey.publicKey,
+        userId: device.userId,
+        version: 1,
+      },
+      recoveryPrivateKey: deriveRecoveryKeyPair(phrase).privateKey,
+    });
+    const stored = storedHistoryKeys.get(`${device.userId}.1`);
+    expect(stored).toBeDefined();
+    expect(encodeBase64((stored as HistoryPrivateKeyMaterial).expose())).toBe(
+      encodeBase64(opened.expose()),
+    );
+  });
 
   test("FORBIDDEN asks for a fresh sign-in and stores nothing", async () => {
     setupError = TRPCClientError.from({

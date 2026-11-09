@@ -483,7 +483,6 @@ describe("migration", () => {
     beforeWrite = null;
     expect(colors.get("household")).toBe(newerColor);
     expect(nicknames.get("household")?.get("gran")).toBe(newerNickname);
-    await syncGroupColors(userId);
     expect(getGroupColor("household")).toBe(GROUP_COLOR_PALETTE[8]);
     expect(await readAs(setupPhone, "household")).toStrictEqual({
       papa: "Papa Bear",

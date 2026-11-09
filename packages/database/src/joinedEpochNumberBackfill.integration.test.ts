@@ -137,11 +137,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(joinedEpochNumbers.get("empty-frank")).toBe(1);
     });
 
-    test.failing(
-      "OPE-230: a member removed and re-invited before the upgrade starts at their current membership",
-      () => {
-        expect(joinedEpochNumbers.get("rejoin-bob")).toBe(4);
-      },
-    );
+    test("a member removed and re-invited before the upgrade starts at their current membership", () => {
+      expect(joinedEpochNumbers.get("rejoin-bob")).toBe(4);
+    });
   },
 );

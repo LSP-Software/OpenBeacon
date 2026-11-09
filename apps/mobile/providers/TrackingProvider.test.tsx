@@ -303,24 +303,37 @@ describe("TrackingProvider", () => {
     expect(revokeCalls).toBe(1);
   });
 
-  test.failing(
-    "OPE-231: signing in after being signed out doesn't revoke tracking access",
-    async () => {
-      sessionState = { data: null, isPending: false };
-      await renderProvider();
-      const revokesWhileSignedOut = revokeCalls;
-      sessionState = { data: { user: { id: "user-1" } }, isPending: false };
+  test("OPE-231: signing in after being signed out doesn't revoke tracking access", async () => {
+    sessionState = { data: null, isPending: false };
+    await renderProvider();
+    const revokesWhileSignedOut = revokeCalls;
+    sessionState = { data: { user: { id: "user-1" } }, isPending: false };
 
+    await act(async () => {
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(revokeCalls).toBe(revokesWhileSignedOut);
+    expect(reconcileCalls).toEqual([{ startCapture: true }]);
+  });
+
+  test("signing in after a logout only revokes the previous account once", async () => {
+    await renderProvider();
+    for (const data of [null, { user: { id: "user-2" } }]) {
+      sessionState = { data, isPending: false };
       await act(async () => {
         root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
         await Promise.resolve();
         await Promise.resolve();
       });
+    }
+    await flushEffects();
 
-      expect(revokeCalls).toBe(revokesWhileSignedOut);
-      expect(reconcileCalls).toEqual([{ startCapture: true }]);
-    },
-  );
+    expect(revokeCalls).toBe(1);
+    expect(reconcileCalls).toEqual([{ startCapture: true }, { startCapture: true }]);
+  });
 
   test("revokes the previous account before reconciling an account switch", async () => {
     await renderProvider();

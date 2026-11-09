@@ -98,7 +98,7 @@ export const RecoveryPhraseGrid = ({
         accessibilityLabel={revealed ? "Hide words" : "Show words"}
         onPress={() => setRevealed((current) => !current)}
       >
-        <Icon as={revealed ? EyeOffIcon : EyeIcon} className="text-muted-foreground" size={18} />
+        <Icon as={revealed ? EyeOffIcon : EyeIcon} size={18} />
         <Text>{revealed ? "Hide words" : "Show words"}</Text>
       </Button>
     </View>

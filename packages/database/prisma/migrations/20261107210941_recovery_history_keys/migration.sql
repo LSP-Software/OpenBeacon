@@ -8,7 +8,9 @@ SET "joinedEpochNumber" = COALESCE(
     FROM "GroupEpoch" AS epoch
     JOIN "GroupEpochRecipientKey" AS recipient ON recipient."groupEpochId" = epoch.id
     JOIN "UserDevice" AS device ON device.id = recipient."recipientDeviceId"
-    WHERE epoch."groupId" = member."groupId" AND device."userId" = member."userId"
+    WHERE epoch."groupId" = member."groupId"
+      AND device."userId" = member."userId"
+      AND epoch."createdAt" >= member."createdAt"
   ),
   (SELECT MAX(epoch."epochNumber") FROM "GroupEpoch" AS epoch WHERE epoch."groupId" = member."groupId"),
   1
