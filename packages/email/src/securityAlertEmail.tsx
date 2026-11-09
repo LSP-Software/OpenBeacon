@@ -10,10 +10,12 @@ const alertCopy = (
   formatTime: (date: Date) => string,
   hasPassword: boolean,
 ): { subject: string; happened: string; ifNotYou: string } => {
+  const secureGoogleAdvice =
+    "Secure your Google account, because someone may have used it to sign in.";
   const secureAccountAdvice = hasPassword
-    ? "change your password in Account → Password and Security. That signs you out on every other device."
-    : "secure your Google account, because someone may have used it to sign in.";
-  const signedInAdvice = `If this wasn't you, someone else is signed in to your account. In the OpenBeacon app, ${secureAccountAdvice}`;
+    ? "In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device."
+    : secureGoogleAdvice;
+  const signedInAdvice = `If this wasn't you, someone else is signed in to your account. ${secureAccountAdvice}`;
   switch (alert.type) {
     case "password-changed":
       return {
@@ -51,14 +53,14 @@ const alertCopy = (
       return {
         subject: "A new device was added to your OpenBeacon account",
         happened: `A new device was added to your OpenBeacon account on ${happenedAt}: ${device}.`,
-        ifNotYou: `If this wasn't you, ${secureAccountAdvice}`,
+        ifNotYou: signedInAdvice,
       };
     }
     case "deletion-scheduled":
       return {
         subject: "Your OpenBeacon account is scheduled for deletion",
         happened: `Your OpenBeacon account was scheduled for deletion on ${happenedAt}. It will be deleted on ${formatTime(alert.deletionDate)}. Signing in to the app before then cancels the deletion.`,
-        ifNotYou: `If this wasn't you, sign in to the app now to cancel it. Then ${secureAccountAdvice}`,
+        ifNotYou: `If this wasn't you, sign in to the app now to cancel it. ${secureAccountAdvice}`,
       };
     case "alerts-turned-off": {
       const labels = alert.alerts.map(
@@ -81,7 +83,7 @@ const alertCopy = (
         ifNotYou: `If you didn't ask for this, someone else could sign in to your account. Deleted accounts can't be restored. ${
           hasPassword
             ? "If you used your OpenBeacon password anywhere else, change it there."
-            : "Secure your Google account, because someone may have used it to sign in."
+            : secureGoogleAdvice
         }`,
       };
   }

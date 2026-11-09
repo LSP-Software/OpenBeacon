@@ -167,10 +167,33 @@ describe("renderSecurityAlertEmail", () => {
     ]) {
       const email = await render(alert, { hasPassword: false });
       expect(email.text).toContain(
-        "secure your Google account, because someone may have used it to sign in.",
+        "Secure your Google account, because someone may have used it to sign in.",
       );
       expect(email.text).not.toContain("change your password");
+      expect(email.text).not.toContain("In the OpenBeacon app, secure");
     }
+  });
+
+  test("a new device alert tells the owner what to do if someone else signed in", async () => {
+    const device = { model: "Pixel 8", platform: "android" } as const;
+    const withPassword = await render({ type: "new-device", device });
+    expect(withPassword.text).toContain(
+      "If this wasn't you, someone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device.",
+    );
+    const google = await render({ type: "new-device", device }, { hasPassword: false });
+    expect(google.text).toContain(
+      "If this wasn't you, someone else is signed in to your account. Secure your Google account, because someone may have used it to sign in.",
+    );
+  });
+
+  test("a deletion alert tells the owner to cancel it, then secure the account", async () => {
+    const google = await render(
+      { type: "deletion-scheduled", deletionDate: at },
+      { hasPassword: false },
+    );
+    expect(google.text).toContain(
+      "If this wasn't you, sign in to the app now to cancel it. Secure your Google account, because someone may have used it to sign in.",
+    );
   });
 });
 
