@@ -37,7 +37,7 @@ export const renderAlertsTurnedOffEmail = async ({
           ))}
         </ul>
         <Text style={{ margin: 0 }}>
-          {`${signedInAdvice} Then turn ${several ? "these alerts" : "this alert"} back on in Account → Email alerts.`}
+          {`${signedInAdvice} Then turn ${several ? "these alerts" : "this alert"} back on in Account → Notifications → Email alerts.`}
         </Text>
       </>
     ),

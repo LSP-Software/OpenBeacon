@@ -23,7 +23,7 @@ describe("renderAlertsTurnedOffEmail", () => {
     expect(email.text).not.toContain("New device added");
     expect(email.html).toContain("<li>Account deletion scheduled</li>");
     expect(email.text).toContain(
-      "If this wasn't you, someone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device. Then turn this alert back on in Account → Email alerts.",
+      "If this wasn't you, someone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device. Then turn this alert back on in Account → Notifications → Email alerts.",
     );
   });
 
@@ -33,7 +33,9 @@ describe("renderAlertsTurnedOffEmail", () => {
       "These email alerts were turned off on Thursday, 9 July 2026 at 14:32 BST (13:32 UTC):\n\n * New device added\n * Account deletion scheduled\n",
     );
     expect(email.html).toContain("<li>New device added</li><li>Account deletion scheduled</li>");
-    expect(email.text).toContain("Then turn these alerts back on in Account → Email alerts.");
+    expect(email.text).toContain(
+      "Then turn these alerts back on in Account → Notifications → Email alerts.",
+    );
   });
 
   test("accounts without a password are told to secure Google instead", async () => {

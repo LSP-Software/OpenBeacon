@@ -116,7 +116,10 @@ export const renderSecurityAlertEmail = async ({
       </>
     ),
     ...(canTurnOff
-      ? { footerNote: "You can turn off this alert in the app under Account → Email alerts." }
+      ? {
+          footerNote:
+            "To choose which emails you get, open the OpenBeacon app and go to Account → Notifications → Email alerts.",
+        }
       : {}),
   });
   return { subject, ...rendered, canTurnOff };

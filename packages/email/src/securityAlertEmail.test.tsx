@@ -71,18 +71,21 @@ describe("renderSecurityAlertEmail", () => {
     }
   });
 
-  test("only optional alerts say where to turn them off", async () => {
+  test("only optional alerts say where to choose which emails you get", async () => {
+    const settingsLine =
+      "To choose which emails you get, open the OpenBeacon app and go to Account → Notifications → Email alerts.";
     for (const alert of alwaysOn) {
       const email = await render(alert);
       expect(email.canTurnOff).toBe(false);
-      expect(email.text).not.toContain("You can turn off this alert");
+      expect(email.text).not.toContain("To choose which emails you get");
+      expect(email.html).not.toContain("To choose which emails you get");
     }
     for (const alert of optional) {
       const email = await render(alert);
       expect(email.canTurnOff).toBe(true);
-      expect(email.text).toContain(
-        "You can turn off this alert in the app under Account → Email alerts.",
-      );
+      expect(email.text).toContain(settingsLine);
+      expect(email.html).toContain(settingsLine);
+      expect(email.text).not.toContain("You can turn off this alert");
     }
   });
 

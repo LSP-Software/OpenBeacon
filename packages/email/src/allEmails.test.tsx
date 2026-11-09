@@ -72,6 +72,20 @@ describe("every email", () => {
     }
   });
 
+  test("only the alerts a user can turn off say where to choose which emails they get", async () => {
+    const subjects = (await renderEveryEmail())
+      .filter(({ text, html }) => {
+        const inText = text.includes("To choose which emails you get");
+        expect(html.includes("To choose which emails you get")).toBe(inText);
+        return inText;
+      })
+      .map(({ subject }) => subject);
+    expect([...new Set(subjects)].toSorted()).toEqual([
+      "A new device was added to your OpenBeacon account",
+      "Your OpenBeacon account is scheduled for deletion",
+    ]);
+  });
+
   test("never puts a code in the subject", async () => {
     for (const email of await renderEveryEmail()) {
       expect(email.subject).not.toMatch(/\d{6}/);
