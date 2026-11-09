@@ -43,12 +43,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: package.json
       - name: Check client and server versions were bumped
-        run: bun scripts/check-version-bump.ts "origin/${{ github.base_ref }}"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: bun scripts/check-version-bump.ts "origin/$BASE_REF"
 
   postgres-integration:
     runs-on: ubuntu-latest

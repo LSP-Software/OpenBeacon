@@ -7,17 +7,7 @@ const clientPaths = [
   "packages/schemas/",
   "packages/shared/",
 ];
-const serverPaths = [
-  "apps/backend/",
-  "apps/scheduled-jobs/",
-  "packages/api/",
-  "packages/auth/",
-  "packages/cache/",
-  "packages/database/",
-  "packages/encryption/",
-  "packages/schemas/",
-  "packages/shared/",
-];
+const serverPaths = ["apps/backend/", "apps/scheduled-jobs/", "packages/"];
 
 type Versions = {
   client: { version: string; buildNumber: number; versionCode: number };
@@ -109,7 +99,10 @@ export const findMissingVersionBumps = ({
   }
 
   if (
-    shipped.some((file) => serverPaths.some((path) => file.startsWith(path))) &&
+    shipped.some(
+      (file) =>
+        serverPaths.some((path) => file.startsWith(path)) && !file.startsWith("packages/tsconfig/"),
+    ) &&
     !isSemverGreater(head.server, base.server)
   ) {
     problems.push(

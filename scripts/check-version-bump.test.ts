@@ -48,6 +48,19 @@ describe("findMissingVersionBumps", () => {
     ]);
   });
 
+  test("treats new packages as server code but ignores the shared tsconfig", () => {
+    expect(
+      findMissingVersionBumps({
+        changedFiles: ["packages/notifications/src/index.ts"],
+        base,
+        head: base,
+      }),
+    ).toHaveLength(1);
+    expect(
+      findMissingVersionBumps({ changedFiles: ["packages/tsconfig/base.json"], base, head: base }),
+    ).toEqual([]);
+  });
+
   test("requires both versions when a shared package changes", () => {
     expect(
       findMissingVersionBumps({
