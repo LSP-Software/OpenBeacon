@@ -43,6 +43,18 @@ describe("formatAlertTime", () => {
     );
   });
 
+  test("shows the time once when the timezone is UTC under another name", () => {
+    for (const timezone of ["UTC", "Etc/UTC", "Etc/Zulu"]) {
+      expect(formatAlertTime(at, timezone)).toBe("Thursday, 9 July 2026 at 13:32 UTC");
+    }
+    for (const timezone of ["GMT", "Etc/GMT", "Africa/Abidjan"]) {
+      expect(formatAlertTime(at, timezone)).toBe("Thursday, 9 July 2026 at 13:32 GMT");
+    }
+    expect(formatAlertTime(new Date("2026-01-09T13:32:00Z"), "Europe/London")).toBe(
+      "Friday, 9 January 2026 at 13:32 GMT",
+    );
+  });
+
   test("falls back to UTC alone without a valid timezone", () => {
     expect(formatAlertTime(at, null)).toBe("Thursday, 9 July 2026 at 13:32 UTC");
     expect(formatAlertTime(at, "Mars/Olympus")).toBe("Thursday, 9 July 2026 at 13:32 UTC");

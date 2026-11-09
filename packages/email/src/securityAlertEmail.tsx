@@ -150,7 +150,12 @@ export const formatAlertTime = (date: Date, timezone: string | null) => {
       timeZoneName: "short",
     }).format(date);
   const local = format(zone, true);
-  if (zone === "UTC") return local;
+  if (
+    date.toLocaleString("en-GB", { timeZone: zone }) ===
+    date.toLocaleString("en-GB", { timeZone: "UTC" })
+  ) {
+    return local;
+  }
   const sameDay =
     date.toLocaleDateString("en-GB", { timeZone: zone }) ===
     date.toLocaleDateString("en-GB", { timeZone: "UTC" });
