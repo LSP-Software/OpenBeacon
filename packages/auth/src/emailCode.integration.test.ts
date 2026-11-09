@@ -351,6 +351,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
     expect(await codes.check({ purpose: "sign-up", subject, code })).toEqual({ valid: true });
   });
 
+  test("a token for one purpose can't be checked or spent as another", async () => {
+    const value = `${prefix}-token-purpose`;
+    const purposes = Object.keys(emailCodeTokens) as (keyof typeof emailCodeTokens)[];
+    for (const purpose of purposes) {
+      const token = await codes.issueToken({ purpose, value });
+      for (const other of purposes.filter((candidate) => candidate !== purpose)) {
+        expect(await codes.hasToken({ purpose: other, token, value })).toBe(false);
+        expect(await codes.consumeToken({ purpose: other, token, value })).toBe(false);
+      }
+      expect(await codes.consumeToken({ purpose, token, value })).toBe(true);
+    }
+  });
+
   test("codes are stored as a keyed hash, not the code or its plain SHA-256", async () => {
     const subject = nextAddress("hashed");
     const code = await issueCode("sign-up", subject);
