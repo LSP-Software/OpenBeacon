@@ -25,6 +25,7 @@ const prefix = `email-code-${crypto.randomUUID()}`;
 const password = "correct horse battery";
 let clockMs = Date.now();
 let sendFailure: Error | null = null;
+let sendGate: Promise<void> | null = null;
 const sent: { to: string; purpose: EmailCodePurpose; code: string; userId?: string }[] = [];
 const accountExistsSent: { to: string; userId: string; hasPassword: boolean }[] = [];
 const googleSignInSent: { to: string; userId: string }[] = [];
@@ -38,12 +39,15 @@ const codes = createEmailCodes({
   rateLimits: new TestCache({ redisUrl: "redis://localhost:6379", now: () => clockMs }).rateLimits,
   sendCodeEmail: async (email) => {
     if (sendFailure) throw sendFailure;
+    await sendGate;
     sent.push(email);
   },
   sendAccountExistsEmail: async (email) => {
+    await sendGate;
     accountExistsSent.push(email);
   },
   sendGoogleSignInEmail: async (email) => {
+    await sendGate;
     googleSignInSent.push(email);
   },
   now: () => new Date(clockMs),
@@ -174,6 +178,7 @@ const codeRows = (purpose: EmailCodePurpose, subject: string) =>
 beforeEach(() => {
   clockMs = Date.now();
   sendFailure = null;
+  sendGate = null;
   sent.length = 0;
   accountExistsSent.length = 0;
   googleSignInSent.length = 0;
@@ -457,6 +462,46 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password reset c
     expect(sent).toEqual([]);
     expect(accountExistsSent).toEqual([]);
     expect(await codeRows("password-reset", google.email)).toEqual([]);
+  });
+
+  test("every request endpoint answers before any email is sent", async () => {
+    const passwordAccount = await createPasswordAccount("background-password");
+    const googleAccount = await createGoogleOnlyAccount("background-google");
+    const unverified = await createUnverifiedAccount("background-unverified");
+    const { promise, resolve } = Promise.withResolvers<void>();
+    sendGate = promise;
+    const requests = [
+      { path: "/email-code/request-sign-up-code", body: { email: nextAddress("background-new") } },
+      { path: "/email-code/request-sign-up-code", body: { email: passwordAccount.email } },
+      { path: "/email-code/request-password-reset", body: { email: passwordAccount.email } },
+      { path: "/email-code/request-password-reset", body: { email: googleAccount.email } },
+      {
+        path: "/email-code/request-email-verification",
+        body: { email: unverified.email, password },
+      },
+    ];
+
+    for (const { path, body } of requests) {
+      const response = await auth.handler(
+        new Request(`http://localhost:3000/api/auth${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", [clientIpHeader]: nextIp() },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(response.status).toBe(200);
+    }
+    expect([...sent, ...accountExistsSent, ...googleSignInSent]).toEqual([]);
+
+    resolve();
+    await Promise.all(tasks.splice(0));
+    expect(sent.map(({ purpose }) => purpose)).toEqual([
+      "sign-up",
+      "password-reset",
+      "email-verification",
+    ]);
+    expect(accountExistsSent).toHaveLength(1);
+    expect(googleSignInSent).toHaveLength(1);
   });
 
   test("password accounts and unknown addresses get no Google sign-in email", async () => {
