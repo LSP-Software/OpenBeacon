@@ -106,7 +106,7 @@ const ForgotPassword = () => {
                 {step.name === "email"
                   ? "We'll email you a code to reset it"
                   : step.name === "code"
-                    ? "Enter the code we emailed you"
+                    ? "Enter the code from your email"
                     : "Choose a new password"}
               </Text>
             </View>
@@ -139,6 +139,13 @@ const ForgotPassword = () => {
                   <EmailCodeEntry
                     email={step.email}
                     notice={step.notice}
+                    description={
+                      <>
+                        If <Text className="font-semibold">{step.email}</Text> has an OpenBeacon
+                        account with a password, we've sent it a 6-digit code. It expires in 10
+                        minutes. If you sign in with Google, use Continue with Google instead.
+                      </>
+                    }
                     submitLabel="Continue"
                     onSubmit={async (code) => {
                       const result = await emailCodes.verifyPasswordResetCode(step.email, code);

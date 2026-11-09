@@ -16,8 +16,15 @@ export const EmailCodeEntry = ({
   onSubmit,
   onResend,
   notice,
+  description = (
+    <>
+      We sent a 6-digit code to <Text className="font-semibold">{email}</Text>. It expires in 10
+      minutes. If it hasn't arrived, check your spam folder.
+    </>
+  ),
 }: {
   email: string;
+  description?: React.ReactNode;
   submitLabel: string;
   onSubmit: (code: string) => Promise<string | undefined>;
   onResend: () => Promise<string | undefined>;
@@ -62,10 +69,7 @@ export const EmailCodeEntry = ({
 
   return (
     <View className="gap-4">
-      <Text className="text-muted">
-        We sent a 6-digit code to <Text className="font-semibold">{email}</Text>. It expires in 10
-        minutes. If it hasn't arrived, check your spam folder.
-      </Text>
+      <Text className="text-muted">{description}</Text>
       <Input
         control={form.control}
         name="code"
