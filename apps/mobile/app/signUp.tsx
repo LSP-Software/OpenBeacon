@@ -151,7 +151,9 @@ const SignUp = () => {
       autoCapitalize="none"
       autoComplete="email"
       textContentType="emailAddress"
-      {...(verifiesEmail ? { returnKeyType: "done", onSubmitEditing: handleEmailContinue } : {})}
+      {...(verifiesEmail
+        ? { returnKeyType: "done", onSubmitEditing: isSubmitting ? undefined : handleEmailContinue }
+        : {})}
     />
   );
 
@@ -252,7 +254,7 @@ const SignUp = () => {
                     autoComplete="new-password"
                     textContentType="newPassword"
                     returnKeyType="done"
-                    onSubmitEditing={form.handleSubmit(handleSignUp)}
+                    onSubmitEditing={isSubmitting ? undefined : form.handleSubmit(handleSignUp)}
                   />
                   <Button onPress={form.handleSubmit(handleSignUp)} disabled={isSubmitting}>
                     <Text>{emailLoading ? "Creating account…" : "Create Account"}</Text>

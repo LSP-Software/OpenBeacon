@@ -128,7 +128,7 @@ const ForgotPassword = () => {
                     autoComplete="email"
                     textContentType="emailAddress"
                     returnKeyType="done"
-                    onSubmitEditing={sendCode}
+                    onSubmitEditing={loading ? undefined : sendCode}
                   />
                   <Button onPress={sendCode} disabled={loading}>
                     <Text>{loading ? "Sending code…" : "Send code"}</Text>
@@ -198,7 +198,7 @@ const ForgotPassword = () => {
                     autoComplete="new-password"
                     textContentType="newPassword"
                     returnKeyType="done"
-                    onSubmitEditing={form.handleSubmit(resetPassword)}
+                    onSubmitEditing={loading ? undefined : form.handleSubmit(resetPassword)}
                   />
                   <Button onPress={form.handleSubmit(resetPassword)} disabled={loading}>
                     <Text>{loading ? "Resetting password…" : "Reset password"}</Text>

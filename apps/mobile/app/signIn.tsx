@@ -176,7 +176,7 @@ const SignIn = () => {
                   autoComplete="password"
                   textContentType="password"
                   returnKeyType="done"
-                  onSubmitEditing={form.handleSubmit(handleLogin)}
+                  onSubmitEditing={isSubmitting ? undefined : form.handleSubmit(handleLogin)}
                 />
                 {providers?.email ? (
                   <Link

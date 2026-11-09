@@ -81,7 +81,7 @@ export const EmailCodeEntry = ({
         maxLength={6}
         autoFocus
         returnKeyType="done"
-        onSubmitEditing={form.handleSubmit(submit)}
+        onSubmitEditing={submitting ? undefined : form.handleSubmit(submit)}
       />
       <Button onPress={form.handleSubmit(submit)} loading={submitting}>
         <Text>{submitLabel}</Text>
