@@ -15,11 +15,13 @@ export const EmailCodeEntry = ({
   submitLabel,
   onSubmit,
   onResend,
+  notice,
 }: {
   email: string;
   submitLabel: string;
   onSubmit: (code: string) => Promise<string | undefined>;
   onResend: () => Promise<string | undefined>;
+  notice?: string | undefined;
 }) => {
   const form = useForm<z.infer<typeof emailCodeSchema>>({
     resolver: zodResolver(emailCodeSchema),
@@ -28,7 +30,7 @@ export const EmailCodeEntry = ({
   });
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
-  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [resendMessage, setResendMessage] = useState<string | null>(notice ?? null);
   const [resendAvailableAt, setResendAvailableAt] = useState(() => Date.now() + resendCooldownMs);
   const [now, setNow] = useState(() => Date.now());
 

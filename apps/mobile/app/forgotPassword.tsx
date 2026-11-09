@@ -29,7 +29,7 @@ const ForgotPassword = () => {
   const params = useLocalSearchParams<{ joinCode?: string; email?: string }>();
   const [step, setStep] = useState<
     | { name: "email" }
-    | { name: "code"; email: string }
+    | { name: "code"; email: string; notice: string | undefined }
     | { name: "password"; email: string; resetToken: string }
   >({ name: "email" });
   const [loading, setLoading] = useState(false);
@@ -46,11 +46,15 @@ const ForgotPassword = () => {
     setLoading(true);
     const result = await emailCodes.requestPasswordReset(email);
     setLoading(false);
-    if (result.error) {
+    if (result.error && result.error.status !== 429) {
       Alert.alert("Couldn't send a code", emailCodeErrorMessage(result.error));
       return;
     }
-    setStep({ name: "code", email });
+    setStep({
+      name: "code",
+      email,
+      notice: result.error ? emailCodeErrorMessage(result.error) : undefined,
+    });
   };
 
   const resetPassword = async ({ password }: z.infer<typeof resetFormSchema>) => {
@@ -134,6 +138,7 @@ const ForgotPassword = () => {
                 <>
                   <EmailCodeEntry
                     email={step.email}
+                    notice={step.notice}
                     submitLabel="Continue"
                     onSubmit={async (code) => {
                       const result = await emailCodes.verifyPasswordResetCode(step.email, code);

@@ -34,7 +34,7 @@ const SignUp = () => {
   } = useQuery(trpc.auth.providers.queryOptions());
   const [step, setStep] = useState<
     | { name: "email" }
-    | { name: "code"; email: string }
+    | { name: "code"; email: string; notice: string | undefined }
     | { name: "details"; email: string; signUpToken: string }
   >({ name: "email" });
   const form = useForm<z.infer<typeof signUpFormSchema>>({
@@ -60,11 +60,15 @@ const SignUp = () => {
     setEmailLoading(true);
     const result = await emailCodes.requestSignUpCode(email);
     setEmailLoading(false);
-    if (result.error) {
+    if (result.error && result.error.status !== 429) {
       Alert.alert("Couldn't send a code", emailCodeErrorMessage(result.error));
       return;
     }
-    setStep({ name: "code", email });
+    setStep({
+      name: "code",
+      email,
+      notice: result.error ? emailCodeErrorMessage(result.error) : undefined,
+    });
   };
 
   const handleSignUp = async ({ name, email, password }: z.infer<typeof signUpFormSchema>) => {
@@ -176,6 +180,7 @@ const SignUp = () => {
                 <>
                   <EmailCodeEntry
                     email={step.email}
+                    notice={step.notice}
                     submitLabel="Continue"
                     onSubmit={async (code) => {
                       const result = await emailCodes.verifySignUpCode(step.email, code);

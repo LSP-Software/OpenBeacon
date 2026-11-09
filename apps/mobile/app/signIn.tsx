@@ -30,7 +30,9 @@ const SignIn = () => {
   const [emailLoading, setEmailLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
-  const [unverified, setUnverified] = useState<z.infer<typeof signInSchema> | null>(null);
+  const [unverified, setUnverified] = useState<
+    (z.infer<typeof signInSchema> & { notice: string | undefined }) | null
+  >(null);
 
   const form = useForm<z.infer<typeof signInSchema>>({
     resolver: zodResolver(signInSchema),
@@ -53,11 +55,15 @@ const SignIn = () => {
     if (result.error?.code === "EMAIL_NOT_VERIFIED") {
       const requested = await emailCodes.requestEmailVerification(email, password);
       setEmailLoading(false);
-      if (requested.error) {
+      if (requested.error && requested.error.status !== 429) {
         Alert.alert("Couldn't send a code", emailCodeErrorMessage(requested.error));
         return;
       }
-      setUnverified({ email, password });
+      setUnverified({
+        email,
+        password,
+        notice: requested.error ? emailCodeErrorMessage(requested.error) : undefined,
+      });
       return;
     }
     if (result.error) {
@@ -105,6 +111,7 @@ const SignIn = () => {
               <View className="gap-4" {...formProps}>
                 <EmailCodeEntry
                   email={unverified.email}
+                  notice={unverified.notice}
                   submitLabel="Verify and sign in"
                   onSubmit={async (code) => {
                     const result = await emailCodes.verifyEmail(unverified.email, code);
