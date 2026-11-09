@@ -80,11 +80,13 @@ other deployments manually while a workflow release is in progress.
 
 ## Email
 
-Email is optional. Without it the backend starts normally, sends nothing, and reports `email: false` from `auth.providers` so the app can hide features that need it.
+Email is optional. Without it the backend starts normally, sends nothing, and reports `email: false` from `auth.providers`. The app then hides the sign-up code, Forgot password, the recovery reset code and Account → Email alerts. Users can't reset a forgotten password, and a recovery phrase reset needs only a fresh sign-in and typing `RESET`.
+
+With email on, the backend sends codes for sign-up, email verification, password reset and recovery phrase reset, an "already have an account" email when someone signs up with a registered address, and security alerts. The alerts are always on for a password or recovery phrase change or reset, for email alerts being turned off, and for account deletion. Users can turn off the new device and deletion scheduled alerts in Account → Email alerts.
 
 To switch email on, configure one provider and a sender address in the root `.env`:
 
-- Resend: set `RESEND_API_KEY`. The hosted API uses Resend.
+- Resend: verify your sending domain in Resend, then set `RESEND_API_KEY`. A sending-only key works. In the domain's settings in Resend, turn off open tracking and click tracking. The hosted API uses Resend.
 - SMTP: set `SMTP_HOST`, plus `SMTP_USER` and `SMTP_PASSWORD` if your server needs a login. `SMTP_PORT` defaults to `587` with STARTTLS. Set `SMTP_SECURE=true` or `SMTP_PORT=465` for implicit TLS.
 
 Set `EMAIL_FROM` to the sender address, for example `noreply@example.com`. Emails always come from `OpenBeacon <EMAIL_FROM>`. A small "Sent from <SERVER_NAME>" line in the footer shows which server sent it. Setting both Resend and SMTP stops the backend from starting.
@@ -93,6 +95,16 @@ Emails are branded HTML with a plain-text part. The logo is attached to the emai
 
 At startup the backend checks the email settings without sending anything. For SMTP it connects and logs in. For Resend it checks the API key and, when the key has full access, that the `EMAIL_FROM` domain is verified in Resend. A sending-only key passes the key check, but the domain can't be checked with it. A failed check stops the backend from starting.
 
-Each account can trigger at most 20 emails an hour. Optional alerts over that cap are dropped. Security emails are always sent. The backend never logs email addresses, and only the development console mode below prints codes.
+Each account can trigger at most 20 emails an hour. Over that cap, the new device, deletion scheduled and "already have an account" emails are dropped. Codes and the always-on alerts are still sent. The backend never logs email addresses, and only the development console mode below prints codes.
 
 For local development, set `EMAIL_CONSOLE=true` instead of a provider to print the plain-text part of each email, including codes, to the backend log. It is refused unless `NODE_ENV` is `development` or `test`; `bun run dev` sets `NODE_ENV=development`.
+
+Give the scheduled job runner the same email settings and `REDIS_URL`, so it can send the account deleted email at the end of the grace period. See [the runner guide](../scheduled-jobs/README.md).
+
+### Switching email on later
+
+Accounts created while email is off aren't verified. Once you switch email on, signing in with a password to one of those accounts sends a code to its address, and the owner enters it to finish signing in. Google sign-in isn't affected.
+
+### What the email provider sees
+
+Your email provider sees each recipient's address and every email in full: which kind it is, when it was sent, and the code or alert text. Emails never contain locations, IP addresses or recovery material. Anyone who can read an account's email can reset its password, unless it only signs in with Google. See [the privacy draft](../../docs/security/beta-1-privacy-draft.md#email).
