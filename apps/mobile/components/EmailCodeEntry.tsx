@@ -61,7 +61,11 @@ export const EmailCodeEntry = ({
     setResending(true);
     const error = await onResend();
     setResending(false);
-    setResendMessage(error ?? "We've sent a new code. Earlier codes no longer work.");
+    if (error) {
+      setResendMessage(error);
+      return;
+    }
+    setResendMessage("We've sent a new code. Earlier codes no longer work.");
     form.reset();
     setResendAvailableAt(Date.now() + resendCooldownMs);
     setNow(Date.now());
