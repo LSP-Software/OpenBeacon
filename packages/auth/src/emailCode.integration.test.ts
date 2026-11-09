@@ -201,6 +201,7 @@ beforeEach(() => {
 });
 
 afterAll(async () => {
+  if (process.env["OPENBEACON_INTEGRATION"] !== "1") return;
   await prisma.verification.deleteMany({ where: { identifier: { contains: prefix } } });
   await prisma.user.deleteMany({ where: { email: { startsWith: prefix } } });
   await prisma.$disconnect();
