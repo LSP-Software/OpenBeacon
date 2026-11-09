@@ -158,6 +158,7 @@
         "pg": "^8.20.0",
       },
       "devDependencies": {
+        "@types/bun": "^1.4.4",
         "@types/node": "^25.0.10",
         "prisma": "^7.4.2",
       },
@@ -2184,6 +2185,8 @@
 
     "@mrleebo/prisma-ast/lilconfig": ["lilconfig@2.1.0", "", {}, "sha512-utWOt/GHzuUxnLKxB6dk81RoOeoNeHgbrXiuGk4yyF5qlRz+iIVWu56E2fqGHFrXz0QNUhLB/8nKqvRH66JKGQ=="],
 
+    "@openbeacon/database/@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
+
     "@openbeacon/encryption/zod": ["zod@4.6.7", "", {}, "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="],
 
     "@prisma/dev/hono": ["hono@4.11.4", "", {}, "sha512-U7tt8JsyrxSRKspfhtLET79pU8K+tInj5QZXs1jSugO1Vq5dFj3kmZsRldo29mTBfcjDRVRXrEZ6LS63Cog9ZA=="],
@@ -2383,6 +2386,8 @@
     "@expo/metro/metro-source-map/ob1": ["ob1@0.83.3", "", { "dependencies": { "flow-enums-runtime": "^0.0.6" } }, "sha512-egUxXCDwoWG06NGCS5s5AdcpnumHKJlfd3HH06P3m9TEMwwScfcY35wpQxbm9oHof+dM/lVH9Rfyu1elTVelSA=="],
 
     "@istanbuljs/load-nyc-config/js-yaml/argparse": ["argparse@1.0.10", "", { "dependencies": { "sprintf-js": "~1.0.2" } }, "sha512-o5Roy6tNG4SL/FOkCAN6RzjiakZS25RLYFrcMttJqbdd8BWrnA+fGz57iN5Pb06pvBGvl5gQ0B48dJlslXvoTg=="],
+
+    "@openbeacon/database/@types/bun/bun-types": ["bun-types@1.4.4", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-yjrJh5oGX7mMPKGd19YXyIjmEuj4G4zNC30bs7PM9Az7NQ3ndF3j6hbeRdvJTRQEhJ/FYQwW0a2moweEi2hMxQ=="],
 
     "@react-native/babel-preset/babel-plugin-syntax-hermes-parser/hermes-parser": ["hermes-parser@0.32.0", "", { "dependencies": { "hermes-estree": "0.32.0" } }, "sha512-g4nBOWFpuiTqjR3LZdRxKUkij9iyveWeuks7INEsMX741f3r9xxrOe8TeQfUxtda0eXmiIFiMQzoeSQEno33Hw=="],
 

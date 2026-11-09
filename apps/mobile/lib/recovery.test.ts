@@ -34,6 +34,8 @@ type ServerEpoch = {
 let epochs: ServerEpoch[] = [];
 let serverHistoryKey: { id: string; publicKey: string; version: number } | null = null;
 let setupError: Error | null = null;
+let loseSetupResponse = false;
+let committedSetup: ReturnType<typeof setupAccountRecoverySchema.parse> | null = null;
 let failNextStore = false;
 let failAddHistoryWrapsCall: number | null = null;
 let serverClaimedUserId = device.userId;
@@ -44,12 +46,15 @@ const storedHistoryKeys = new Map<string, HistoryPrivateKeyMaterial>();
 const setupMock = mock(async (input: unknown) => {
   serverInputs.push(input);
   if (setupError) throw setupError;
+  if (committedSetup) throw conflictError();
   const parsed = setupAccountRecoverySchema.parse(input);
+  committedSetup = parsed;
   serverHistoryKey = {
     id: parsed.historyKey.id,
     publicKey: parsed.historyKey.publicKey,
     version: parsed.historyKey.version,
   };
+  if (loseSetupResponse) throw new Error("Network request failed");
   return { historyKeyVersion: parsed.historyKey.version };
 });
 
@@ -100,7 +105,31 @@ const addHistoryWrapsMock = mock(
 
 mock.module("./api.ts", () => ({
   trpcClient: {
-    accountRecovery: { setup: { mutate: setupMock } },
+    accountRecovery: {
+      escrows: {
+        query: async () =>
+          committedSetup
+            ? [
+                {
+                  escrow: committedSetup.historyKey.escrow,
+                  id: committedSetup.historyKey.id,
+                  publicKey: committedSetup.historyKey.publicKey,
+                  userId: device.userId,
+                  version: committedSetup.historyKey.version,
+                },
+              ]
+            : [],
+      },
+      setup: { mutate: setupMock },
+      status: {
+        query: async () => ({
+          currentHistoryKey: serverHistoryKey,
+          historyKeyVersions: serverHistoryKey ? [serverHistoryKey.version] : [],
+          recoveryKey: committedSetup?.recoveryKey ?? null,
+          sessionFresh: true,
+        }),
+      },
+    },
     groupEpoch: {
       addHistoryWraps: { mutate: addHistoryWrapsMock },
       listHistoryBackfill: { query: listHistoryBackfillMock },
@@ -198,6 +227,8 @@ beforeEach(() => {
   epochs = [];
   serverHistoryKey = null;
   setupError = null;
+  loseSetupResponse = false;
+  committedSetup = null;
   failNextStore = false;
   failAddHistoryWrapsCall = null;
   serverClaimedUserId = device.userId;
@@ -255,6 +286,46 @@ describe("setUpRecoveryPhrase", () => {
     expect(result).toEqual({ status: "conflict" });
     expect(storedHistoryKeys.size).toBe(0);
   });
+
+  test("a CONFLICT for a phrase set up on another phone reports conflict and stores nothing", async () => {
+    await setUpRecoveryPhrase(generateRecoveryPhrase());
+    storedHistoryKeys.clear();
+
+    const result = await setUpRecoveryPhrase(generateRecoveryPhrase());
+
+    expect(result).toEqual({ status: "conflict" });
+    expect(storedHistoryKeys.size).toBe(0);
+  });
+
+  test.failing(
+    "OPE-237: a CONFLICT after this phone's setup response was lost finishes with the same phrase",
+    async () => {
+      const phrase = generateRecoveryPhrase();
+      loseSetupResponse = true;
+      await expect(setUpRecoveryPhrase(phrase)).rejects.toThrow("Network request failed");
+      loseSetupResponse = false;
+      expect(storedHistoryKeys.size).toBe(0);
+
+      const result = await setUpRecoveryPhrase(phrase);
+
+      expect(result.status).not.toBe("conflict");
+      const committed = setupAccountRecoverySchema.parse(setupMock.mock.calls[0]?.[0]);
+      const opened = openHistoryKeyEscrow({
+        escrow: committed.historyKey.escrow,
+        historyKey: {
+          publicKey: committed.historyKey.publicKey,
+          userId: device.userId,
+          version: 1,
+        },
+        recoveryPrivateKey: deriveRecoveryKeyPair(phrase).privateKey,
+      });
+      const stored = storedHistoryKeys.get(`${device.userId}.1`);
+      expect(stored).toBeDefined();
+      expect(encodeBase64((stored as HistoryPrivateKeyMaterial).expose())).toBe(
+        encodeBase64(opened.expose()),
+      );
+    },
+  );
 
   test("FORBIDDEN asks for a fresh sign-in and stores nothing", async () => {
     setupError = TRPCClientError.from({

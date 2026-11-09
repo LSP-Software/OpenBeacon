@@ -20,7 +20,7 @@ import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { restoreFromRecoveryPhrase } from "../../lib/recovery.ts";
-import { storage } from "../../lib/storage.ts";
+import { skipRestorePrompt } from "../../lib/restoreReminders.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 
@@ -101,7 +101,7 @@ const RecoveryRestoreScreen = () => {
       ? Number(missingVersion)
       : status.data?.currentHistoryKey?.version;
     if (session?.user.id && version) {
-      storage.set(`recovery.restoreDeclined.${session.user.id}`, version);
+      skipRestorePrompt({ userId: session.user.id, version });
     }
     router.replace("/");
   };

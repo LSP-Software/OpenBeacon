@@ -303,6 +303,25 @@ describe("TrackingProvider", () => {
     expect(revokeCalls).toBe(1);
   });
 
+  test.failing(
+    "OPE-231: signing in after being signed out doesn't revoke tracking access",
+    async () => {
+      sessionState = { data: null, isPending: false };
+      await renderProvider();
+      const revokesWhileSignedOut = revokeCalls;
+      sessionState = { data: { user: { id: "user-1" } }, isPending: false };
+
+      await act(async () => {
+        root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(revokeCalls).toBe(revokesWhileSignedOut);
+      expect(reconcileCalls).toEqual([{ startCapture: true }]);
+    },
+  );
+
   test("revokes the previous account before reconciling an account switch", async () => {
     await renderProvider();
     sessionState = {

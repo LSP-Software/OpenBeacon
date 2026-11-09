@@ -17,6 +17,7 @@ import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
+import { isResetConfirmed } from "../../lib/isResetConfirmed.ts";
 import { backfillEveryGroup, resetRecoveryPhrase } from "../../lib/recovery.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
@@ -126,7 +127,7 @@ const RecoveryPhraseResetScreen = () => {
               <Button
                 variant="destructive"
                 onPress={() => setStep("verify")}
-                disabled={confirmation.trim() !== "RESET"}
+                disabled={!isResetConfirmed(confirmation)}
               >
                 <Text>Continue</Text>
               </Button>

@@ -50,6 +50,7 @@ import {
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
 } from "../../../lib/locationPermissions.ts";
+import { dismissRestoreCard, isRestoreCardDismissed } from "../../../lib/restoreReminders.ts";
 import { storage } from "../../../lib/storage.ts";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
 
@@ -137,7 +138,6 @@ const AccountScreen = () => {
     session?.user.id,
     recoveryStatus.data?.currentHistoryKey ?? undefined,
   );
-  const restoreBannerKey = `recovery.restoreDeclined.${session?.user.id}`;
   const [restoreBannerDismissed, setRestoreBannerDismissed] = useState(false);
   const showRestoreBanner =
     !!session?.user.id &&
@@ -145,7 +145,7 @@ const AccountScreen = () => {
     !!heldHistoryKeyVersions.data &&
     !heldHistoryKeyVersions.data.includes(currentHistoryKeyVersion) &&
     !restoreBannerDismissed &&
-    (storage.getNumber(restoreBannerKey) ?? 0) < currentHistoryKeyVersion;
+    !isRestoreCardDismissed({ userId: session.user.id, version: currentHistoryKeyVersion });
 
   const saveName = async ({ name }: z.infer<typeof schema>) => {
     const result = await tryCatch(updateName.mutateAsync({ name }));
@@ -358,7 +358,12 @@ const AccountScreen = () => {
                 size="sm"
                 variant="outline"
                 onPress={() => {
-                  storage.set(restoreBannerKey, currentHistoryKeyVersion);
+                  if (session?.user.id) {
+                    dismissRestoreCard({
+                      userId: session.user.id,
+                      version: currentHistoryKeyVersion,
+                    });
+                  }
                   setRestoreBannerDismissed(true);
                 }}
               >

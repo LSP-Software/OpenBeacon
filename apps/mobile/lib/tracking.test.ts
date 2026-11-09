@@ -804,7 +804,13 @@ describe("tracking service", () => {
       expect(recoveryStatusCalls).toBe(1);
       expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
 
-      jest.advanceTimersByTime(10 * 60 * 1000);
+      jest.advanceTimersByTime(10 * 60 * 1000 - 1);
+      await reconcileTrackingKeys({ startCapture: false });
+
+      expect(recoveryStatusCalls).toBe(1);
+      expect(backfillQueries).toHaveLength(2);
+
+      jest.advanceTimersByTime(1);
       await reconcileTrackingKeys({ startCapture: false });
 
       expect(recoveryStatusCalls).toBe(2);
@@ -824,6 +830,26 @@ describe("tracking service", () => {
 
     expect(recoveryStatusCalls).toBe(1);
   });
+
+  test.failing(
+    "OPE-233: a reconcile before this phone holds the history key doesn't delay the backfill after a restore",
+    async () => {
+      recoveryStatus = {
+        currentHistoryKey: { publicKey: historyKeyPair.publicKey, version: 2 },
+        recoveryKey: {},
+      };
+      await reconcileTrackingKeys({ startCapture: false });
+      expect(backfillQueries).toEqual([]);
+
+      recoveryStatus = {
+        currentHistoryKey: { publicKey: historyKeyPair.publicKey, version: 1 },
+        recoveryKey: {},
+      };
+      await reconcileTrackingKeys({ startCapture: false });
+
+      expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
+    },
+  );
 
   test("a failed backfill leaves the next reconcile free to retry", async () => {
     backfillErrors.set("group-1", new Error("Backfill unavailable"));
