@@ -2,6 +2,7 @@ import { auth } from "@openbeacon/auth";
 import { Prisma } from "@openbeacon/database";
 import {
   changeRecoveryPhraseSchema,
+  emailCodeSchema,
   resetAccountRecoverySchema,
   setupAccountRecoverySchema,
 } from "@openbeacon/schemas";
@@ -22,6 +23,13 @@ const freshSessionProcedure = protectedProcedure.use(async ({ ctx, next }) => {
     throw new TRPCError({ code: "FORBIDDEN", message: "Sign in again to continue." });
   }
   return next();
+});
+
+const emailCodeProcedure = freshSessionProcedure.use(({ ctx, next }) => {
+  if (!ctx.emailCodes) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Email isn't set up on this server." });
+  }
+  return next({ ctx: { emailCodes: ctx.emailCodes } });
 });
 
 const lockUser = (tx: Prisma.TransactionClient, userId: string) =>
@@ -153,10 +161,50 @@ export const accountRecoveryRouter = createTRPCRouter({
       });
       return { historyKeyVersions: input.escrows.map(({ version }) => version) };
     }),
+  requestResetCode: emailCodeProcedure.mutation(async ({ ctx }) => {
+    const user = await ctx.db.user.findUniqueOrThrow({
+      select: { email: true, id: true },
+      where: { id: ctx.session.user.id },
+    });
+    if (!(await ctx.emailCodes.allowRequest({ email: user.email, ip: ctx.clientIp ?? null }))) {
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: "Too many requests. Please try again later.",
+      });
+    }
+    await ctx.emailCodes.send({
+      purpose: "recovery-reset",
+      subject: user.id,
+      to: user.email,
+      userId: user.id,
+    });
+    return { email: user.email };
+  }),
+  verifyResetCode: emailCodeProcedure.input(emailCodeSchema).mutation(async ({ ctx, input }) => {
+    const userId = ctx.session.user.id;
+    const result = await ctx.emailCodes.check({
+      code: input.code,
+      purpose: "recovery-reset",
+      subject: userId,
+    });
+    if (!result.valid) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "The code is wrong or has expired." });
+    }
+    return {
+      resetToken: await ctx.emailCodes.issueToken({ purpose: "recovery-reset", value: userId }),
+    };
+  }),
   reset: freshSessionProcedure
     .input(resetAccountRecoverySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { emailCodes } = ctx;
+      if (emailCodes && !input.resetToken) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Confirm the code we emailed you.",
+        });
+      }
       await ctx.db.$transaction(async (tx) => {
         await lockUser(tx, userId);
         if (!(await tx.recoveryKey.findUnique({ where: { userId } }))) {
@@ -171,6 +219,21 @@ export const accountRecoveryRouter = createTRPCRouter({
           throw new TRPCError({
             code: "CONFLICT",
             message: "The history key version has changed. Fetch the status and try again.",
+          });
+        }
+        if (
+          emailCodes &&
+          input.resetToken &&
+          !(await emailCodes.consumeToken({
+            purpose: "recovery-reset",
+            token: input.resetToken,
+            value: userId,
+            tx,
+          }))
+        ) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Your email confirmation has expired. Confirm a new code.",
           });
         }
         await tx.accountHistoryKey.deleteMany({ where: { userId } });

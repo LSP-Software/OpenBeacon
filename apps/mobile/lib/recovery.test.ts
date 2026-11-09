@@ -16,7 +16,7 @@ import {
   wrapEpochKeyForRecipient,
 } from "@openbeacon/encryption";
 import { expectNoSecretsIn } from "../test/secretLeaks.testUtil.ts";
-import { setupAccountRecoverySchema } from "@openbeacon/schemas";
+import { resetAccountRecoverySchema, setupAccountRecoverySchema } from "@openbeacon/schemas";
 import { TRPCClientError } from "@trpc/client";
 
 const deviceKeyPair = createDeviceKeyPair();
@@ -36,6 +36,8 @@ let serverHistoryKey: { id: string; publicKey: string; version: number } | null 
 let setupError: Error | null = null;
 let loseSetupResponse = false;
 let committedSetup: ReturnType<typeof setupAccountRecoverySchema.parse> | null = null;
+let loseResetResponse = false;
+const validResetTokens = new Set<string>();
 let failNextStore = false;
 let failAddHistoryWrapsCall: number | null = null;
 let serverClaimedUserId = device.userId;
@@ -55,6 +57,27 @@ const setupMock = mock(async (input: unknown) => {
     version: parsed.historyKey.version,
   };
   if (loseSetupResponse) throw new Error("Network request failed");
+  return { historyKeyVersion: parsed.historyKey.version };
+});
+
+const resetMock = mock(async (input: unknown) => {
+  const parsed = resetAccountRecoverySchema.parse(input);
+  if (!parsed.resetToken || !validResetTokens.delete(parsed.resetToken)) {
+    throw TRPCClientError.from({
+      error: {
+        code: -32012,
+        data: { code: "PRECONDITION_FAILED" },
+        message: "Your email confirmation has expired. Confirm a new code.",
+      },
+    });
+  }
+  committedSetup = { historyKey: parsed.historyKey, recoveryKey: parsed.recoveryKey };
+  serverHistoryKey = {
+    id: parsed.historyKey.id,
+    publicKey: parsed.historyKey.publicKey,
+    version: parsed.historyKey.version,
+  };
+  if (loseResetResponse) throw new Error("Network request failed");
   return { historyKeyVersion: parsed.historyKey.version };
 });
 
@@ -120,6 +143,7 @@ mock.module("./api.ts", () => ({
               ]
             : [],
       },
+      reset: { mutate: resetMock },
       setup: { mutate: setupMock },
       status: {
         query: async () => ({
@@ -166,6 +190,7 @@ const {
   backfillHistoryWraps,
   confirmsRecoveryPhrase,
   pickConfirmationIndexes,
+  resetRecoveryPhrase,
   setUpRecoveryPhrase,
 } = await import("./recovery.ts");
 const { unwrapEpochKeyFromWraps } = await import("./epochKeys.ts");
@@ -229,6 +254,9 @@ beforeEach(() => {
   setupError = null;
   loseSetupResponse = false;
   committedSetup = null;
+  loseResetResponse = false;
+  validResetTokens.clear();
+  resetMock.mockClear();
   failNextStore = false;
   failAddHistoryWrapsCall = null;
   serverClaimedUserId = device.userId;
@@ -351,6 +379,50 @@ describe("setUpRecoveryPhrase", () => {
 
     await expect(setUpRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow("Network error");
     expect(storedHistoryKeys.size).toBe(0);
+  });
+});
+
+describe("resetRecoveryPhrase", () => {
+  test("a retry after the reset response was lost finishes with the phrase that was set", async () => {
+    await setUpRecoveryPhrase(generateRecoveryPhrase());
+    const phrase = generateRecoveryPhrase();
+    validResetTokens.add("reset-token");
+    loseResetResponse = true;
+    await expect(resetRecoveryPhrase(phrase, "reset-token")).rejects.toThrow(
+      "Network request failed",
+    );
+    loseResetResponse = false;
+
+    const result = await resetRecoveryPhrase(phrase, "reset-token");
+
+    expect(result.status).toBe("reset");
+    expect(resetMock).toHaveBeenCalledTimes(1);
+    const committed = resetAccountRecoverySchema.parse(resetMock.mock.calls[0]?.[0]);
+    const opened = openHistoryKeyEscrow({
+      escrow: committed.historyKey.escrow,
+      historyKey: {
+        publicKey: committed.historyKey.publicKey,
+        userId: device.userId,
+        version: 2,
+      },
+      recoveryPrivateKey: deriveRecoveryKeyPair(phrase).privateKey,
+    });
+    const stored = storedHistoryKeys.get(`${device.userId}.2`);
+    expect(stored).toBeDefined();
+    expect(encodeBase64((stored as HistoryPrivateKeyMaterial).expose())).toBe(
+      encodeBase64(opened.expose()),
+    );
+  });
+
+  test("a spent or expired confirmation asks for a new code and changes nothing", async () => {
+    const original = generateRecoveryPhrase();
+    await setUpRecoveryPhrase(original);
+
+    const result = await resetRecoveryPhrase(generateRecoveryPhrase(), "spent-token");
+
+    expect(result).toEqual({ status: "confirmationExpired" });
+    expect(committedSetup?.recoveryKey.publicKey).toBe(deriveRecoveryKeyPair(original).publicKey);
+    expect(storedHistoryKeys.has(`${device.userId}.2`)).toBe(false);
   });
 });
 

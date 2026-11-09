@@ -7,6 +7,7 @@ import { createEmailCodes } from "./emailCode.ts";
 import { env } from "./env.ts";
 
 export { clientIpHeader } from "./createAuth.ts";
+export { createEmailCodes, type EmailCodes } from "./emailCode.ts";
 export { createGoogleDeletionAuthorization, verifyGoogleDeletionCode } from "./googleDeletion.ts";
 
 export const authCapabilities = getAuthCapabilities({

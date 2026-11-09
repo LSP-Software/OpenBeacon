@@ -54,6 +54,7 @@ export const resetAccountRecoverySchema = z.strictObject({
   confirmReset: z.literal(true),
   historyKey: newHistoryKeySchema,
   recoveryKey: recoveryKeySchema,
+  resetToken: z.string().min(1).max(128).optional(),
 });
 
 export const addHistoryWrapsSchema = z.strictObject({

@@ -1,13 +1,14 @@
 import { Alert } from "../../lib/alert.ts";
 import type { RecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
+import { EmailCodeEntry } from "../../components/EmailCodeEntry.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { BackButton } from "../../components/headers/BackButton.tsx";
 import { NewRecoveryPhrase } from "../../components/NewRecoveryPhrase.tsx";
@@ -19,20 +20,82 @@ import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
 import { protectHistory } from "../../lib/protectHistory.ts";
 import { isResetConfirmed } from "../../lib/isResetConfirmed.ts";
-import { resetRecoveryPhrase } from "../../lib/recovery.ts";
+import {
+  requestRecoveryResetCode,
+  resetRecoveryPhrase,
+  verifyRecoveryResetCode,
+} from "../../lib/recovery.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 
 const RecoveryPhraseResetScreen = () => {
   const { afterSignIn } = useLocalSearchParams<{ afterSignIn?: string }>();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<
-    "warn" | "verify" | "phrase" | "saving" | "protecting" | "unsaved" | "done"
+    "warn" | "verify" | "code" | "phrase" | "saving" | "protecting" | "unsaved" | "done"
   >("warn");
+  const {
+    data: providers,
+    isPending: providersPending,
+    refetch: refetchProviders,
+  } = useQuery(trpc.auth.providers.queryOptions());
+  const [codeEmail, setCodeEmail] = useState<string>();
+  const [resetToken, setResetToken] = useState<string>();
   const gate = useIdentityGate({ enabled: step === "verify" });
+
+  const reauthenticate = async () => {
+    await gate.recheck();
+    setStep("verify");
+    Alert.alert("Sign in again", "Nothing was reset. Confirm it’s you to carry on.");
+  };
+
+  const sendCode = async () => {
+    const result = await tryCatch(requestRecoveryResetCode());
+    if (result.error) return result.error.message;
+    if (result.data.status === "reauthenticate") {
+      await reauthenticate();
+      return undefined;
+    }
+    setCodeEmail(result.data.email);
+    return undefined;
+  };
+
+  const startCodeStep = async () => {
+    setCodeEmail(undefined);
+    setResetToken(undefined);
+    setStep("code");
+    const error = await sendCode();
+    if (!error) return true;
+    setStep("warn");
+    Alert.alert("Unable to send a code", error);
+    return false;
+  };
+
+  const continueAfterIdentity = async () => {
+    if (!providers?.email || resetToken) {
+      setStep("phrase");
+      return;
+    }
+    await startCodeStep();
+  };
+
+  const verifyCode = async (code: string) => {
+    const result = await tryCatch(verifyRecoveryResetCode(code));
+    if (result.error) return result.error.message;
+    if (result.data.status === "invalidCode") {
+      return "The code is wrong or has expired. Check it, or send a new code.";
+    }
+    if (result.data.status === "reauthenticate") {
+      await reauthenticate();
+      return undefined;
+    }
+    setResetToken(result.data.resetToken);
+    setStep("phrase");
+    return undefined;
+  };
 
   useEffect(() => {
     if (step === "verify" && gate.decision === "ready") {
-      setStep("phrase");
+      void continueAfterIdentity();
     }
   }, [step, gate.decision]);
   const [progress, setProgress] = useState({ done: 0, failed: 0, total: 0 });
@@ -42,19 +105,23 @@ const RecoveryPhraseResetScreen = () => {
 
   const reset = async (phrase: RecoveryPhrase) => {
     setStep("saving");
-    const result = await tryCatch(resetRecoveryPhrase(phrase));
+    const result = await tryCatch(resetRecoveryPhrase(phrase, resetToken));
     if (result.error) {
       setStep("phrase");
       Alert.alert("Unable to reset recovery phrase", result.error.message);
       return;
     }
     if (result.data.status === "reauthenticate") {
-      await gate.recheck();
-      setStep("verify");
-      Alert.alert(
-        "Sign in again",
-        "Nothing was reset. Confirm it’s you, then write down the new phrase you’re shown.",
-      );
+      await reauthenticate();
+      return;
+    }
+    if (result.data.status === "confirmationExpired") {
+      if (await startCodeStep()) {
+        Alert.alert(
+          "Confirm your email again",
+          "Nothing was reset because your email confirmation expired. Enter the new code we’ve sent, then write down the new phrase you’re shown.",
+        );
+      }
       return;
     }
     const { device } = result.data;
@@ -115,6 +182,11 @@ const RecoveryPhraseResetScreen = () => {
               <Text className="text-muted-foreground text-base leading-6">
                 Your groups and live location sharing aren’t affected.
               </Text>
+              {providers?.email && (
+                <Text className="text-muted-foreground text-base leading-6">
+                  To make sure it’s you, we’ll email you a code before you get your new phrase.
+                </Text>
+              )}
               <Input
                 control={form.control}
                 name="confirmation"
@@ -125,8 +197,18 @@ const RecoveryPhraseResetScreen = () => {
               />
               <Button
                 variant="destructive"
-                onPress={() => setStep("verify")}
-                disabled={!isResetConfirmed(confirmation)}
+                onPress={() => {
+                  if (providers) {
+                    setStep("verify");
+                    return;
+                  }
+                  void refetchProviders();
+                  Alert.alert(
+                    "Unable to continue",
+                    "We couldn’t reach your server. Check your connection and try again.",
+                  );
+                }}
+                disabled={!isResetConfirmed(confirmation) || providersPending}
               >
                 <Text>Continue</Text>
               </Button>
@@ -141,9 +223,22 @@ const RecoveryPhraseResetScreen = () => {
             <ConfirmIdentity
               onConfirmed={() => {
                 void gate.refresh();
-                setStep("phrase");
+                void continueAfterIdentity();
               }}
             />
+          )}
+
+          {step === "code" && !codeEmail && <LoadingIndicator />}
+          {step === "code" && codeEmail && (
+            <View className="gap-4">
+              <Text className="text-foreground text-3xl font-bold">Check your email</Text>
+              <EmailCodeEntry
+                email={codeEmail}
+                submitLabel="Continue"
+                onSubmit={verifyCode}
+                onResend={sendCode}
+              />
+            </View>
           )}
 
           {(step === "phrase" || step === "saving") && (

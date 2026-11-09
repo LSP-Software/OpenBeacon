@@ -5,7 +5,7 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { db } from "./db.ts";
-import type { EmailCodes } from "./emailCode.ts";
+import { type EmailCodes, normalizeEmail } from "./emailCode.ts";
 import { emailCodePlugin } from "./emailCodePlugin.ts";
 import { env } from "./env.ts";
 
@@ -37,7 +37,11 @@ export const createAuth = ({
           const verified =
             typeof email === "string" &&
             typeof signUpToken === "string" &&
-            (await emailCodes.hasSignUpToken({ token: signUpToken, email }));
+            (await emailCodes.hasToken({
+              purpose: "sign-up",
+              token: signUpToken,
+              value: normalizeEmail(email),
+            }));
           if (!verified) throw invalidSignUpToken();
         }
       }),
@@ -117,7 +121,11 @@ export const createAuth = ({
             const signUpToken: unknown = context.body?.signUpToken;
             const consumed =
               typeof signUpToken === "string" &&
-              (await emailCodes.consumeSignUpToken({ token: signUpToken, email: user.email }));
+              (await emailCodes.consumeToken({
+                purpose: "sign-up",
+                token: signUpToken,
+                value: normalizeEmail(user.email),
+              }));
             if (!consumed) throw invalidSignUpToken();
             return { data: { ...user, name: result.data, emailVerified: true } };
           },

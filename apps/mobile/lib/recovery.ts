@@ -259,7 +259,22 @@ export const changeRecoveryPhrase = async (phrase: RecoveryPhrase) => {
   return { status: "changed" as const, versions: result.data.historyKeyVersions };
 };
 
-export const resetRecoveryPhrase = async (phrase: RecoveryPhrase) => {
+export const requestRecoveryResetCode = async () => {
+  const result = await tryCatch(trpcClient.accountRecovery.requestResetCode.mutate());
+  if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };
+  if (result.error) throw result.error;
+  return { email: result.data.email, status: "sent" as const };
+};
+
+export const verifyRecoveryResetCode = async (code: string) => {
+  const result = await tryCatch(trpcClient.accountRecovery.verifyResetCode.mutate({ code }));
+  if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };
+  if (hasTrpcCode(result.error, "BAD_REQUEST")) return { status: "invalidCode" as const };
+  if (result.error) throw result.error;
+  return { resetToken: result.data.resetToken, status: "verified" as const };
+};
+
+export const resetRecoveryPhrase = async (phrase: RecoveryPhrase, resetToken?: string) => {
   const device = await ensureDeviceKeyRegistration();
   const status = await trpcClient.accountRecovery.status.query();
   if (!status.recoveryKey) throw new Error(RECOVERY_CHANGED_MESSAGE);
@@ -269,10 +284,22 @@ export const resetRecoveryPhrase = async (phrase: RecoveryPhrase) => {
     userId: device.userId,
     version,
   });
+  if (status.recoveryKey.publicKey === input.recoveryKey.publicKey) {
+    const restored = await tryCatch(restoreFromRecoveryPhrase(phrase));
+    if (restored.error) return { device, status: "unsaved" as const };
+    return { device, status: "reset" as const, version: version - 1 };
+  }
   const result = await tryCatch(
-    trpcClient.accountRecovery.reset.mutate({ ...input, confirmReset: true }),
+    trpcClient.accountRecovery.reset.mutate({
+      ...input,
+      confirmReset: true,
+      ...(resetToken ? { resetToken } : {}),
+    }),
   );
   if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };
+  if (hasTrpcCode(result.error, "PRECONDITION_FAILED")) {
+    return { status: "confirmationExpired" as const };
+  }
   if (hasTrpcCode(result.error, "CONFLICT") || hasTrpcCode(result.error, "NOT_FOUND")) {
     throw new Error(RECOVERY_CHANGED_MESSAGE);
   }

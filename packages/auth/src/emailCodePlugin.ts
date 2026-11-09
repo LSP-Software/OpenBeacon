@@ -1,11 +1,8 @@
-import { randomBytes } from "node:crypto";
 import { tryCatch } from "@openbeacon/shared";
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthEndpoint, getIP } from "better-auth/api";
 import { z } from "zod";
 import { type EmailCodes, normalizeEmail } from "./emailCode.ts";
-
-export const resetTokenLifetimeMs = 5 * 60 * 1000;
 
 export const emailCodePlugin = (codes: EmailCodes | null) =>
   ({
@@ -50,7 +47,9 @@ export const emailCodePlugin = (codes: EmailCodes | null) =>
             code: ctx.body.code,
           });
           if (!result.valid) throw invalidCode();
-          return ctx.json({ signUpToken: await codes.issueSignUpToken(email) });
+          return ctx.json({
+            signUpToken: await codes.issueToken({ purpose: "sign-up", value: email }),
+          });
         },
       ),
       requestEmailVerification: createAuthEndpoint(
@@ -154,13 +153,9 @@ export const emailCodePlugin = (codes: EmailCodes | null) =>
             : null;
           if (!hasPassword(user)) throw invalidCode();
           await ctx.context.internalAdapter.updateUser(user.user.id, { emailVerified: true });
-          const resetToken = randomBytes(32).toString("base64url");
-          await ctx.context.internalAdapter.createVerificationValue({
-            identifier: `reset-password:${resetToken}`,
-            value: user.user.id,
-            expiresAt: new Date(Date.now() + resetTokenLifetimeMs),
+          return ctx.json({
+            resetToken: await codes.issueToken({ purpose: "password-reset", value: user.user.id }),
           });
-          return ctx.json({ resetToken });
         },
       ),
     },

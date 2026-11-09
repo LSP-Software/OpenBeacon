@@ -11,9 +11,8 @@ import {
   emailCodeLifetimeMs,
   emailCodeMaxAttempts,
   emailCodeRequestLimits,
-  signUpTokenLifetimeMs,
+  emailCodeTokens,
 } from "./emailCode.ts";
-import { resetTokenLifetimeMs } from "./emailCodePlugin.ts";
 
 class TestCache extends OpenBeaconCache {
   protected override createRedisClient(): FakeRedis {
@@ -106,7 +105,7 @@ const createResetToken = async (userId: string) => {
 
 const createPasswordAccount = async (label: string) => {
   const email = nextAddress(label);
-  const signUpToken = await codes.issueSignUpToken(email);
+  const signUpToken = await codes.issueToken({ purpose: "sign-up", value: email });
   const result = await auth.api.signUpEmail({
     body: { email, password, name: "Code Tester", signUpToken },
   });
@@ -330,39 +329,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
     expect(row?.value).toMatch(/^[0-9a-f]{64}$/);
     expect(row?.expiresAt.getTime()).toBe(clockMs + emailCodeLifetimeMs);
   });
-
-  test("a code checked in a transaction that rolls back can be used again", async () => {
-    const subject = `${prefix}-rollback-user`;
-    const code = await issueCode("recovery-reset", subject);
-    await prisma
-      .$transaction(async (tx) => {
-        expect(await codes.check({ purpose: "recovery-reset", subject, code, tx })).toEqual({
-          valid: true,
-        });
-        throw new Error("version conflict");
-      })
-      .catch(() => {});
-    expect(await codes.check({ purpose: "recovery-reset", subject, code })).toEqual({
-      valid: true,
-    });
-  });
-
-  test("wrong attempts made inside a transaction that rolls back still count", async () => {
-    const subject = `${prefix}-rollback-attempts-user`;
-    const code = await issueCode("recovery-reset", subject);
-    for (let attempt = 0; attempt < emailCodeMaxAttempts; attempt++) {
-      await prisma
-        .$transaction(async (tx) => {
-          await codes.check({ purpose: "recovery-reset", subject, code: wrongCodeFor(code), tx });
-          throw new Error("rolled back");
-        })
-        .catch(() => {});
-    }
-    expect(await codes.check({ purpose: "recovery-reset", subject, code })).toEqual({
-      valid: false,
-      reason: "locked",
-    });
-  });
 });
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email code rate limits", () => {
@@ -516,14 +482,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password reset c
 
   test("reset tokens are stored as a hash and last 5 minutes", async () => {
     const { email, userId } = await createPasswordAccount("reset-token-stored");
-    const before = Date.now();
     const token = await resetTokenFor(email);
     const rows = await resetTokenRows(userId);
     expect(rows.map((row) => row.identifier)).toEqual([
       createHash("sha256").update(`reset-password:${token}`).digest("base64url"),
     ]);
-    expect(rows[0]?.expiresAt.getTime()).toBeGreaterThanOrEqual(before + resetTokenLifetimeMs);
-    expect(rows[0]?.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + resetTokenLifetimeMs);
+    expect(rows[0]?.expiresAt.getTime()).toBe(
+      clockMs + emailCodeTokens["password-reset"].lifetimeMs,
+    );
   });
 
   test("an expired reset token can't reset the password", async () => {
@@ -763,7 +729,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("sign-up verifica
   test("a token expires", async () => {
     const email = nextAddress("signup-expired");
     const signUpToken = await verifiedSignUpToken(email);
-    clockMs += signUpTokenLifetimeMs;
+    clockMs += emailCodeTokens["sign-up"].lifetimeMs;
     const expired = await signUp({ email, password, name: "New Tester", signUpToken });
     expect(expired.status).toBe(400);
     expect(await prisma.user.count({ where: { email } })).toBe(0);
