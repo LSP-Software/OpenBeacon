@@ -139,6 +139,7 @@ const ForgotPassword = () => {
                   <EmailCodeEntry
                     email={step.email}
                     notice={step.notice}
+                    resentMessage="If this address has an account with a password, we've sent it a new code. Earlier codes no longer work."
                     description={
                       <>
                         If <Text className="font-semibold">{step.email}</Text> has an OpenBeacon

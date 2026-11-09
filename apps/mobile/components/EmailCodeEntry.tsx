@@ -16,6 +16,7 @@ export const EmailCodeEntry = ({
   onSubmit,
   onResend,
   notice,
+  resentMessage = "We've sent a new code. Earlier codes no longer work.",
   description = (
     <>
       We sent a 6-digit code to <Text className="font-semibold">{email}</Text>. It expires in 10
@@ -29,6 +30,7 @@ export const EmailCodeEntry = ({
   onSubmit: (code: string) => Promise<string | undefined>;
   onResend: () => Promise<string | undefined>;
   notice?: string | undefined;
+  resentMessage?: string;
 }) => {
   const form = useForm<z.infer<typeof emailCodeSchema>>({
     resolver: zodResolver(emailCodeSchema),
@@ -65,7 +67,7 @@ export const EmailCodeEntry = ({
       setResendMessage(error);
       return;
     }
-    setResendMessage("We've sent a new code. Earlier codes no longer work.");
+    setResendMessage(resentMessage);
     form.reset();
     setResendAvailableAt(Date.now() + resendCooldownMs);
     setNow(Date.now());
