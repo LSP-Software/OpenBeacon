@@ -12,6 +12,7 @@ import {
   emailCodeMaxAttempts,
   emailCodeRequestLimits,
   emailCodeTokens,
+  emailCodeWrongGuessLimit,
 } from "./emailCode.ts";
 import { createSecurityAlerts } from "./securityAlerts.ts";
 
@@ -171,6 +172,17 @@ const issueCode = async (purpose: EmailCodePurpose, subject: string) => {
 };
 
 const wrongCodeFor = (code: string) => ((Number(code) + 1) % 1_000_000).toString().padStart(6, "0");
+
+const spendWrongGuesses = async (purpose: EmailCodePurpose, subject: string, count: number) => {
+  let code = "";
+  for (let guess = 0; guess < count; guess++) {
+    if (guess % emailCodeMaxAttempts === 0) code = await issueCode(purpose, subject);
+    expect(await codes.check({ purpose, subject, code: wrongCodeFor(code) })).toEqual({
+      valid: false,
+      reason: "invalid",
+    });
+  }
+};
 
 const codeRows = (purpose: EmailCodePurpose, subject: string) =>
   prisma.verification.findMany({ where: { identifier: `email-code:${purpose}:${subject}` } });
@@ -332,6 +344,86 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
     expect(await codes.check({ purpose: "sign-up", subject, code: second })).toEqual({
       valid: true,
     });
+  });
+
+  test("wrong guesses across several codes are capped for the day", async () => {
+    const subject = nextAddress("capped");
+    await spendWrongGuesses("password-reset", subject, emailCodeWrongGuessLimit.limit);
+    const code = await issueCode("password-reset", subject);
+    expect(await codes.check({ purpose: "password-reset", subject, code })).toEqual({
+      valid: false,
+      reason: "locked",
+    });
+    const [row] = await codeRows("password-reset", subject);
+    expect(row?.attempts).toBe(0);
+  });
+
+  test("the cap lifts once the day has passed", async () => {
+    const subject = nextAddress("capped-reset");
+    await spendWrongGuesses("password-reset", subject, emailCodeWrongGuessLimit.limit);
+    clockMs += emailCodeWrongGuessLimit.windowMs;
+    const code = await issueCode("password-reset", subject);
+    expect(await codes.check({ purpose: "password-reset", subject, code })).toEqual({
+      valid: true,
+    });
+  });
+
+  test("right codes don't use up the wrong guess allowance", async () => {
+    const subject = nextAddress("capped-right");
+    await spendWrongGuesses("sign-up", subject, emailCodeWrongGuessLimit.limit - 1);
+    for (let round = 0; round < emailCodeWrongGuessLimit.limit; round++) {
+      const code = await issueCode("sign-up", subject);
+      expect(await codes.check({ purpose: "sign-up", subject, code })).toEqual({ valid: true });
+    }
+    await spendWrongGuesses("sign-up", subject, 1);
+    const code = await issueCode("sign-up", subject);
+    expect(await codes.check({ purpose: "sign-up", subject, code })).toEqual({
+      valid: false,
+      reason: "locked",
+    });
+  });
+
+  test("parallel guesses can't get past the daily cap", async () => {
+    const subject = nextAddress("capped-parallel");
+    await spendWrongGuesses("sign-up", subject, emailCodeWrongGuessLimit.limit - 1);
+    const code = await issueCode("sign-up", subject);
+    const results = await Promise.all(
+      Array.from({ length: emailCodeMaxAttempts }, (_, index) =>
+        codes.check({
+          purpose: "sign-up",
+          subject,
+          code: ((Number(code) + index + 1) % 1_000_000).toString().padStart(6, "0"),
+        }),
+      ),
+    );
+    expect(
+      results.filter((result) => result.valid === false && result.reason === "invalid"),
+    ).toHaveLength(1);
+  });
+
+  test("the cap only applies to its own purpose and subject", async () => {
+    const email = nextAddress("capped-scope");
+    const userId = `${prefix}-capped-scope-user`;
+    await spendWrongGuesses("password-reset", email, emailCodeWrongGuessLimit.limit);
+    await spendWrongGuesses("recovery-reset", userId, emailCodeWrongGuessLimit.limit);
+    const signUpCode = await issueCode("sign-up", email);
+    expect(await codes.check({ purpose: "sign-up", subject: email, code: signUpCode })).toEqual({
+      valid: true,
+    });
+    const other = nextAddress("capped-scope-other");
+    const otherCode = await issueCode("password-reset", other);
+    expect(
+      await codes.check({ purpose: "password-reset", subject: other, code: otherCode }),
+    ).toEqual({ valid: true });
+    const otherUserId = `${prefix}-capped-scope-other-user`;
+    const recoveryCode = await issueCode("recovery-reset", otherUserId);
+    expect(
+      await codes.check({ purpose: "recovery-reset", subject: otherUserId, code: recoveryCode }),
+    ).toEqual({ valid: true });
+    const cappedRecoveryCode = await issueCode("recovery-reset", userId);
+    expect(
+      await codes.check({ purpose: "recovery-reset", subject: userId, code: cappedRecoveryCode }),
+    ).toEqual({ valid: false, reason: "locked" });
   });
 
   test("parallel requests leave exactly one code", async () => {
@@ -575,6 +667,23 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password reset c
     expect(JSON.parse(failures[0]?.body ?? "{}")).toMatchObject({ code: "INVALID_CODE" });
     expect(await resetTokenRows(userId)).toEqual([]);
     expect(await resetTokenRows(google.userId)).toEqual([]);
+  });
+
+  test("a capped check gives the same error as a wrong code", async () => {
+    const { email, userId } = await createPasswordAccount("reset-capped");
+    const failures: Awaited<ReturnType<typeof verifyResetCode>>[] = [];
+    for (let round = 0; round < emailCodeWrongGuessLimit.limit / emailCodeMaxAttempts; round++) {
+      await requestResetCode(email);
+      const code = sent.at(-1)?.code ?? "";
+      for (let guess = 0; guess < emailCodeMaxAttempts; guess++) {
+        failures.push(await verifyResetCode(email, wrongCodeFor(code)));
+      }
+    }
+    await requestResetCode(email);
+    const capped = await verifyResetCode(email, sent.at(-1)?.code ?? "");
+    expect(capped.status).toBe(400);
+    expect(new Set([...failures, capped].map((failure) => failure.body)).size).toBe(1);
+    expect(await resetTokenRows(userId)).toEqual([]);
   });
 
   test("an expired code gives no reset token", async () => {

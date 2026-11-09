@@ -30,6 +30,7 @@ export const emailCodeRequestLimits = {
   perAddress: { limit: 3, windowMs: 15 * 60 * 1000 },
   perIp: { limit: 20, windowMs: 60 * 60 * 1000 },
 };
+export const emailCodeWrongGuessLimit = { limit: 10, windowMs: 24 * 60 * 60 * 1000 };
 
 type CodeTarget = { purpose: EmailCodePurpose; subject: string };
 type TokenTarget = {
@@ -49,7 +50,7 @@ export const createEmailCodes = ({
 }: {
   db: PrismaClient;
   secret: string;
-  rateLimits: Pick<OpenBeaconCache["rateLimits"], "consume">;
+  rateLimits: Pick<OpenBeaconCache["rateLimits"], "consume" | "peek">;
   sendCodeEmail: (email: Parameters<typeof sendCode>[0]) => Promise<unknown>;
   sendAccountExistsEmail: (email: Parameters<typeof sendAccountExists>[0]) => Promise<unknown>;
   sendGoogleSignInEmail: (email: Parameters<typeof sendGoogleSignIn>[0]) => Promise<unknown>;
@@ -57,6 +58,15 @@ export const createEmailCodes = ({
 }) => {
   const identifierFor = ({ purpose, subject }: CodeTarget) =>
     `email-code:${purpose}:${purpose === "recovery-reset" ? subject : normalizeEmail(subject)}`;
+
+  const wrongGuessLimitFor = ({ purpose, subject }: CodeTarget) => ({
+    namespace: `emailCode.check.${purpose}`,
+    identifier:
+      purpose === "recovery-reset"
+        ? { type: "userId" as const, value: subject }
+        : { type: "email" as const, value: hashEmail(subject) },
+    ...emailCodeWrongGuessLimit,
+  });
 
   const hash = (identifier: string, code: string) =>
     createHmac("sha256", secret).update(`${identifier}:${code}`).digest();
@@ -87,7 +97,7 @@ export const createEmailCodes = ({
         namespace: `emailCode.request.${purpose}`,
         identifier: {
           type: "email",
-          value: createHash("sha256").update(normalizeEmail(email)).digest("hex"),
+          value: hashEmail(email),
         },
         ...emailCodeRequestLimits.perAddress,
       });
@@ -121,33 +131,42 @@ export const createEmailCodes = ({
 
     sendGoogleSignIn: sendGoogleSignInEmail,
 
-    check: async ({
-      purpose,
-      subject,
-      code,
-    }: CodeTarget & { code: string }): Promise<
-      { valid: true } | { valid: false; reason: "invalid" | "expired" | "locked" }
-    > => {
+    check: async ({ purpose, subject, code }: CodeTarget & { code: string }) => {
       const identifier = identifierFor({ purpose, subject });
-      const row = await db.verification.findFirst({
-        where: { identifier },
-        orderBy: { createdAt: "desc" },
-      });
-      if (!row || !/^\d{6}$/.test(code)) return { valid: false, reason: "invalid" };
-      if (row.expiresAt <= now()) {
-        await db.verification.deleteMany({ where: { id: row.id } });
-        return { valid: false, reason: "expired" };
-      }
-      const attempt = await db.verification.updateMany({
-        where: { id: row.id, attempts: { lt: emailCodeMaxAttempts } },
-        data: { attempts: { increment: 1 } },
-      });
-      if (attempt.count === 0) return { valid: false, reason: "locked" };
-      if (!timingSafeEqual(Buffer.from(row.value, "hex"), hash(identifier, code))) {
-        return { valid: false, reason: "invalid" };
-      }
-      const consumed = await db.verification.deleteMany({ where: { id: row.id } });
-      return consumed.count === 1 ? { valid: true } : { valid: false, reason: "invalid" };
+      if (!/^\d{6}$/.test(code)) return { valid: false, reason: "invalid" };
+      return db.$transaction(
+        async (
+          tx,
+        ): Promise<
+          { valid: true } | { valid: false; reason: "invalid" | "expired" | "locked" }
+        > => {
+          await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${identifier}))`);
+          const row = await tx.verification.findFirst({
+            where: { identifier },
+            orderBy: { createdAt: "desc" },
+          });
+          if (!row) return { valid: false, reason: "invalid" };
+          if (row.expiresAt <= now()) {
+            await tx.verification.deleteMany({ where: { id: row.id } });
+            return { valid: false, reason: "expired" };
+          }
+          const wrongGuessLimit = wrongGuessLimitFor({ purpose, subject });
+          if ((await rateLimits.peek(wrongGuessLimit)).remaining < 1) {
+            return { valid: false, reason: "locked" };
+          }
+          const attempt = await tx.verification.updateMany({
+            where: { id: row.id, attempts: { lt: emailCodeMaxAttempts } },
+            data: { attempts: { increment: 1 } },
+          });
+          if (attempt.count === 0) return { valid: false, reason: "locked" };
+          if (!timingSafeEqual(Buffer.from(row.value, "hex"), hash(identifier, code))) {
+            await rateLimits.consume(wrongGuessLimit);
+            return { valid: false, reason: "invalid" };
+          }
+          const consumed = await tx.verification.deleteMany({ where: { id: row.id } });
+          return consumed.count === 1 ? { valid: true } : { valid: false, reason: "invalid" };
+        },
+      );
     },
 
     issueToken: async ({ purpose, value }: Omit<TokenTarget, "token">) => {
@@ -172,6 +191,9 @@ export const createEmailCodes = ({
 };
 
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+const hashEmail = (email: string) =>
+  createHash("sha256").update(normalizeEmail(email)).digest("hex");
 
 const tokenIdentifier = (purpose: TokenTarget["purpose"], token: string) =>
   createHash("sha256").update(`${emailCodeTokens[purpose].prefix}:${token}`).digest("base64url");
