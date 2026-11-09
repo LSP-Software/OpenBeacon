@@ -24,4 +24,5 @@ export type EmailTransport = {
   verify: () => Promise<void>;
 };
 
-export type EmailCodePurpose = "sign-up" | "password-reset" | "recovery-reset";
+export type EmailCodePurpose =
+  "sign-up" | "email-verification" | "password-reset" | "recovery-reset";

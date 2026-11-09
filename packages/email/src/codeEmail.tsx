@@ -8,6 +8,11 @@ const content = {
     action: "finish creating your OpenBeacon account",
     ignore: "If you didn't try to create an account, you can ignore this email.",
   },
+  "email-verification": {
+    subject: "Your OpenBeacon email verification code",
+    action: "verify your email address and finish signing in",
+    ignore: "If you didn't try to sign in, you can ignore this email.",
+  },
   "password-reset": {
     subject: "Your OpenBeacon password reset code",
     action: "reset your OpenBeacon password",

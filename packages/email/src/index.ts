@@ -1,5 +1,6 @@
 import { OpenBeaconCache, redisUrlSchema } from "@openbeacon/cache";
 import { tryCatch } from "@openbeacon/shared";
+import { renderAccountExistsEmail } from "./accountExistsEmail.tsx";
 import { renderCodeEmail } from "./codeEmail.tsx";
 import { loadEmailSettings } from "./config.ts";
 import { renderEmailLayout } from "./layout.tsx";
@@ -52,4 +53,20 @@ export const sendCodeEmail = async ({
     ...(await renderCodeEmail({ purpose, code, serverName })),
     ...(userId ? { userId } : {}),
     optional: false,
+  });
+
+export const sendAccountExistsEmail = async ({
+  to,
+  userId,
+  hasPassword,
+}: {
+  to: string;
+  userId: string;
+  hasPassword: boolean;
+}) =>
+  sendEmail({
+    to,
+    ...(await renderAccountExistsEmail({ hasPassword, serverName })),
+    userId,
+    optional: true,
   });

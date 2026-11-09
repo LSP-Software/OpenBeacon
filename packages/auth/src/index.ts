@@ -1,5 +1,5 @@
 import { OpenBeaconCache, redisUrlSchema } from "@openbeacon/cache";
-import { emailEnabled, sendCodeEmail } from "@openbeacon/email";
+import { emailEnabled, sendAccountExistsEmail, sendCodeEmail } from "@openbeacon/email";
 import { getAuthCapabilities } from "./capabilities.ts";
 import { createAuth } from "./createAuth.ts";
 import { db } from "./db.ts";
@@ -23,6 +23,7 @@ export const emailCodes = emailEnabled
         redisUrl: redisUrlSchema.parse(process.env["REDIS_URL"]),
       }).rateLimits,
       sendCodeEmail,
+      sendAccountExistsEmail,
     })
   : null;
 

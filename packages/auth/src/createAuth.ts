@@ -32,6 +32,14 @@ export const createAuth = ({
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         if (ctx.path === "/reset-password/:token") throw new APIError("NOT_FOUND");
+        if (ctx.path === "/sign-up/email" && emailCodes) {
+          const { email, signUpToken } = ctx.body ?? {};
+          const verified =
+            typeof email === "string" &&
+            typeof signUpToken === "string" &&
+            (await emailCodes.hasSignUpToken({ token: signUpToken, email }));
+          if (!verified) throw invalidSignUpToken();
+        }
       }),
     },
     advanced: {
@@ -97,13 +105,21 @@ export const createAuth = ({
       },
       user: {
         create: {
-          before: async (user) => {
+          before: async (user, context) => {
             const result = accountNameSchema.safeParse(user.name);
             if (!result.success)
               throw new APIError("BAD_REQUEST", {
                 message: result.error.issues[0]?.message ?? "Invalid name",
               });
-            return { data: { ...user, name: result.data } };
+            if (context?.path !== "/sign-up/email" || !emailCodes) {
+              return { data: { ...user, name: result.data } };
+            }
+            const signUpToken: unknown = context.body?.signUpToken;
+            const consumed =
+              typeof signUpToken === "string" &&
+              (await emailCodes.consumeSignUpToken({ token: signUpToken, email: user.email }));
+            if (!consumed) throw invalidSignUpToken();
+            return { data: { ...user, name: result.data, emailVerified: true } };
           },
         },
         update: {
@@ -126,6 +142,7 @@ export const createAuth = ({
     baseURL: env.BETTER_AUTH_URL,
     emailAndPassword: {
       enabled: true,
+      requireEmailVerification: emailCodes !== null,
     },
     socialProviders:
       env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
@@ -141,4 +158,10 @@ export const createAuth = ({
       "openbeacon://",
       ...(process.env["NODE_ENV"] === "development" ? ["exp://", "exp://**"] : []),
     ],
+  });
+
+const invalidSignUpToken = () =>
+  new APIError("BAD_REQUEST", {
+    message: "Verify your email address before creating an account",
+    code: "INVALID_SIGN_UP_TOKEN",
   });

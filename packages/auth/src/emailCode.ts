@@ -1,28 +1,43 @@
-import { createHash, createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  randomInt,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import type { OpenBeaconCache } from "@openbeacon/cache";
 import { Prisma, type PrismaClient } from "@openbeacon/database";
-import type { EmailCodePurpose, sendCodeEmail as sendEmail } from "@openbeacon/email";
+import type {
+  EmailCodePurpose,
+  sendAccountExistsEmail as sendAccountExists,
+  sendCodeEmail as sendCode,
+} from "@openbeacon/email";
 
 export const emailCodeLifetimeMs = 10 * 60 * 1000;
 export const emailCodeMaxAttempts = 5;
+export const signUpTokenLifetimeMs = 30 * 60 * 1000;
 export const emailCodeRequestLimits = {
   perAddress: { limit: 3, windowMs: 15 * 60 * 1000 },
   perIp: { limit: 20, windowMs: 60 * 60 * 1000 },
 };
 
 type CodeTarget = { purpose: EmailCodePurpose; subject: string };
+type SignUpToken = { token: string; email: string };
 
 export const createEmailCodes = ({
   db,
   secret,
   rateLimits,
   sendCodeEmail,
+  sendAccountExistsEmail,
   now = () => new Date(),
 }: {
   db: PrismaClient;
   secret: string;
   rateLimits: Pick<OpenBeaconCache["rateLimits"], "consume">;
-  sendCodeEmail: (email: Parameters<typeof sendEmail>[0]) => Promise<unknown>;
+  sendCodeEmail: (email: Parameters<typeof sendCode>[0]) => Promise<unknown>;
+  sendAccountExistsEmail: (email: Parameters<typeof sendAccountExists>[0]) => Promise<unknown>;
   now?: () => Date;
 }) => {
   const identifierFor = ({ purpose, subject }: CodeTarget) =>
@@ -30,6 +45,12 @@ export const createEmailCodes = ({
 
   const hash = (identifier: string, code: string) =>
     createHmac("sha256", secret).update(`${identifier}:${code}`).digest();
+
+  const signUpTokenWhere = ({ token, email }: SignUpToken) => ({
+    identifier: signUpTokenIdentifier(token),
+    value: normalizeEmail(email),
+    expiresAt: { gt: now() },
+  });
 
   return {
     allowRequest: async ({ email, ip }: { email: string; ip: string | null }) => {
@@ -73,6 +94,8 @@ export const createEmailCodes = ({
       await sendCodeEmail({ to, purpose, code, ...(userId ? { userId } : {}) });
     },
 
+    sendAccountExists: sendAccountExistsEmail,
+
     check: async ({
       purpose,
       subject,
@@ -104,9 +127,31 @@ export const createEmailCodes = ({
       });
       return consumed.count === 1 ? { valid: true } : { valid: false, reason: "invalid" };
     },
+
+    issueSignUpToken: async (email: string) => {
+      const token = randomBytes(32).toString("base64url");
+      await db.verification.create({
+        data: {
+          id: randomUUID(),
+          identifier: signUpTokenIdentifier(token),
+          value: normalizeEmail(email),
+          expiresAt: new Date(now().getTime() + signUpTokenLifetimeMs),
+        },
+      });
+      return token;
+    },
+
+    hasSignUpToken: async (signUpToken: SignUpToken) =>
+      (await db.verification.count({ where: signUpTokenWhere(signUpToken) })) === 1,
+
+    consumeSignUpToken: async (signUpToken: SignUpToken) =>
+      (await db.verification.deleteMany({ where: signUpTokenWhere(signUpToken) })).count === 1,
   };
 };
 
-const normalizeEmail = (email: string) => email.trim().toLowerCase();
+export const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+const signUpTokenIdentifier = (token: string) =>
+  `sign-up-token:${createHash("sha256").update(token).digest("hex")}`;
 
 export type EmailCodes = ReturnType<typeof createEmailCodes>;

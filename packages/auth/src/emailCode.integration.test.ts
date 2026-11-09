@@ -4,12 +4,14 @@ import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis } from "@openbeacon/cache/testing";
 import { prisma } from "@openbeacon/database";
 import type { EmailCodePurpose } from "@openbeacon/email";
+import { z } from "zod";
 import { clientIpHeader, createAuth } from "./createAuth.ts";
 import {
   createEmailCodes,
   emailCodeLifetimeMs,
   emailCodeMaxAttempts,
   emailCodeRequestLimits,
+  signUpTokenLifetimeMs,
 } from "./emailCode.ts";
 
 class TestCache extends OpenBeaconCache {
@@ -23,6 +25,7 @@ const password = "correct horse battery";
 let clockMs = Date.now();
 let sendFailure: Error | null = null;
 const sent: { to: string; purpose: EmailCodePurpose; code: string; userId?: string }[] = [];
+const accountExistsSent: { to: string; userId: string; hasPassword: boolean }[] = [];
 const tasks: Promise<unknown>[] = [];
 
 const codes = createEmailCodes({
@@ -33,9 +36,13 @@ const codes = createEmailCodes({
     if (sendFailure) throw sendFailure;
     sent.push(email);
   },
+  sendAccountExistsEmail: async (email) => {
+    accountExistsSent.push(email);
+  },
   now: () => new Date(clockMs),
 });
 const auth = createAuth({ emailCodes: codes, runInBackground: (task) => tasks.push(task) });
+const emailOff = createAuth({ emailCodes: null, runInBackground: (task) => tasks.push(task) });
 
 let ipCounter = 0;
 const nextIp = () => {
@@ -72,7 +79,10 @@ const resetWithCode = (body: { email: string; code: string; newPassword: string 
 
 const createPasswordAccount = async (label: string) => {
   const email = nextAddress(label);
-  const result = await auth.api.signUpEmail({ body: { email, password, name: "Code Tester" } });
+  const signUpToken = await codes.issueSignUpToken(email);
+  const result = await auth.api.signUpEmail({
+    body: { email, password, name: "Code Tester", signUpToken },
+  });
   return { email, userId: result.user.id };
 };
 
@@ -116,6 +126,7 @@ beforeEach(() => {
   clockMs = Date.now();
   sendFailure = null;
   sent.length = 0;
+  accountExistsSent.length = 0;
 });
 
 afterAll(async () => {
@@ -532,18 +543,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password reset c
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email routes", () => {
   test("code endpoints return 404 when email is off", async () => {
     const { email } = await createPasswordAccount("email-off");
-    const off = createAuth({ emailCodes: null, runInBackground: (task) => tasks.push(task) });
-    const requested = await request(
-      "/email-code/request-password-reset",
-      { body: { email }, ip: nextIp() },
-      off.handler,
+    const routes: { path: string; body: Record<string, string> }[] = [
+      { path: "/email-code/request-sign-up-code", body: { email } },
+      { path: "/email-code/verify-sign-up-code", body: { email, code: "000000" } },
+      { path: "/email-code/request-email-verification", body: { email, password } },
+      { path: "/email-code/verify-email", body: { email, code: "000000" } },
+      { path: "/email-code/request-password-reset", body: { email } },
+      {
+        path: "/email-code/reset-password",
+        body: { email, code: "000000", newPassword: "a brand new passphrase" },
+      },
+    ];
+    const responses = await Promise.all(
+      routes.map(({ path, body }) => request(path, { body, ip: nextIp() }, emailOff.handler)),
     );
-    const reset = await request(
-      "/email-code/reset-password",
-      { body: { email, code: "000000", newPassword: "a brand new passphrase" }, ip: nextIp() },
-      off.handler,
-    );
-    expect([requested.status, reset.status]).toEqual([404, 404]);
+    expect(responses.map((response) => response.status)).toEqual([404, 404, 404, 404, 404, 404]);
   });
 
   test("better-auth routes that could send email are switched off", async () => {
@@ -577,5 +591,254 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email routes", (
       404, 404, 404, 404, 404, 404, 404, 404,
     ]);
     expect(await signsInWith(email, password)).toBe(true);
+  });
+});
+
+const requestSignUpCode = (email: string, ip = nextIp()) =>
+  request("/email-code/request-sign-up-code", { body: { email }, ip });
+
+const signUp = (
+  body: { email: string; password: string; name: string; signUpToken?: string },
+  handler = auth.handler,
+) => request("/sign-up/email", { body, ip: nextIp() }, handler);
+
+const verifiedSignUpToken = async (email: string) => {
+  await requestSignUpCode(email);
+  const code = sent.findLast((message) => message.to === email)?.code ?? "";
+  const verified = await request("/email-code/verify-sign-up-code", {
+    body: { email, code },
+    ip: nextIp(),
+  });
+  expect(verified.status).toBe(200);
+  const { signUpToken } = z.object({ signUpToken: z.string() }).parse(JSON.parse(verified.body));
+  return signUpToken;
+};
+
+const createUnverifiedAccount = async (label: string) => {
+  const email = nextAddress(label);
+  const response = await emailOff.handler(
+    new Request("http://localhost:3000/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "content-type": "application/json", [clientIpHeader]: nextIp() },
+      body: JSON.stringify({ email, password, name: "Unverified Tester" }),
+    }),
+  );
+  expect(response.status).toBe(200);
+  return { email, cookie: response.headers.get("set-cookie")?.split(";")[0] ?? "" };
+};
+
+describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("sign-up verification", () => {
+  test("a verified address can sign up and the account starts verified", async () => {
+    const email = nextAddress("signup-ok");
+    const response = await requestSignUpCode(email.toUpperCase());
+    expect(response).toEqual({ status: 200, body: JSON.stringify({ success: true }) });
+    expect(sent).toEqual([{ to: email, purpose: "sign-up", code: expect.any(String) }]);
+    const signUpToken = await verifiedSignUpToken(email);
+    const created = await signUp({ email, password, name: "New Tester", signUpToken });
+    expect(created.status).toBe(200);
+    const user = await prisma.user.findUnique({ where: { email } });
+    expect(user?.emailVerified).toBe(true);
+    expect(await signsInWith(email, password)).toBe(true);
+  });
+
+  test("sign-up without a token is rejected the same way for new and existing addresses", async () => {
+    const existing = await createPasswordAccount("signup-no-token-existing");
+    const email = nextAddress("signup-no-token");
+    const fresh = await signUp({ email, password, name: "New Tester" });
+    const taken = await signUp({ email: existing.email, password, name: "New Tester" });
+    expect(fresh.status).toBe(400);
+    expect(JSON.parse(fresh.body)).toMatchObject({ code: "INVALID_SIGN_UP_TOKEN" });
+    expect(taken).toEqual(fresh);
+    expect(await prisma.user.count({ where: { email } })).toBe(0);
+  });
+
+  test("a token for another address is rejected and stays usable for its own", async () => {
+    const owner = nextAddress("signup-owner");
+    const other = nextAddress("signup-other");
+    const signUpToken = await verifiedSignUpToken(owner);
+    const stolen = await signUp({ email: other, password, name: "New Tester", signUpToken });
+    expect(stolen.status).toBe(400);
+    expect(JSON.parse(stolen.body)).toMatchObject({ code: "INVALID_SIGN_UP_TOKEN" });
+    expect(await prisma.user.count({ where: { email: other } })).toBe(0);
+    expect((await signUp({ email: owner, password, name: "New Tester", signUpToken })).status).toBe(
+      200,
+    );
+  });
+
+  test("a token works once", async () => {
+    const email = nextAddress("signup-reuse");
+    const signUpToken = await verifiedSignUpToken(email);
+    expect((await signUp({ email, password, name: "New Tester", signUpToken })).status).toBe(200);
+    await prisma.user.deleteMany({ where: { email } });
+    const reused = await signUp({ email, password, name: "New Tester", signUpToken });
+    expect(reused.status).toBe(400);
+    expect(JSON.parse(reused.body)).toMatchObject({ code: "INVALID_SIGN_UP_TOKEN" });
+    expect(await prisma.user.count({ where: { email } })).toBe(0);
+  });
+
+  test("parallel sign-ups with one token create one account", async () => {
+    const email = nextAddress("signup-parallel");
+    const signUpToken = await verifiedSignUpToken(email);
+    const results = await Promise.all(
+      Array.from({ length: 3 }, () => signUp({ email, password, name: "New Tester", signUpToken })),
+    );
+    expect(results.filter((result) => result.status === 200)).toHaveLength(1);
+    expect(await prisma.user.count({ where: { email } })).toBe(1);
+  });
+
+  test("a token expires", async () => {
+    const email = nextAddress("signup-expired");
+    const signUpToken = await verifiedSignUpToken(email);
+    clockMs += signUpTokenLifetimeMs;
+    const expired = await signUp({ email, password, name: "New Tester", signUpToken });
+    expect(expired.status).toBe(400);
+    expect(await prisma.user.count({ where: { email } })).toBe(0);
+  });
+
+  test("a password that's too short doesn't use up the token", async () => {
+    const email = nextAddress("signup-short");
+    const signUpToken = await verifiedSignUpToken(email);
+    const short = await signUp({ email, password: "short", name: "New Tester", signUpToken });
+    expect(short.status).toBe(400);
+    expect((await signUp({ email, password, name: "New Tester", signUpToken })).status).toBe(200);
+  });
+
+  test("a wrong sign-up code gives no token", async () => {
+    const email = nextAddress("signup-wrong-code");
+    await requestSignUpCode(email);
+    const code = sent[0]?.code ?? "";
+    const wrong = await request("/email-code/verify-sign-up-code", {
+      body: { email, code: wrongCodeFor(code) },
+      ip: nextIp(),
+    });
+    const unknown = await request("/email-code/verify-sign-up-code", {
+      body: { email: nextAddress("signup-wrong-unknown"), code },
+      ip: nextIp(),
+    });
+    expect(wrong.status).toBe(400);
+    expect(JSON.parse(wrong.body)).toMatchObject({ code: "INVALID_CODE" });
+    expect(unknown).toEqual(wrong);
+  });
+
+  test("an existing account gets an 'already have an account' email instead of a code", async () => {
+    const passwordAccount = await createPasswordAccount("exists-password");
+    const googleAccount = await createGoogleOnlyAccount("exists-google");
+    const fresh = await requestSignUpCode(nextAddress("exists-new"));
+    const withPassword = await requestSignUpCode(passwordAccount.email.toUpperCase());
+    const withGoogle = await requestSignUpCode(googleAccount.email);
+    expect(withPassword).toEqual(fresh);
+    expect(withGoogle).toEqual(fresh);
+    expect(sent).toHaveLength(1);
+    expect(accountExistsSent).toEqual([
+      { to: passwordAccount.email, userId: passwordAccount.userId, hasPassword: true },
+      { to: googleAccount.email, userId: googleAccount.userId, hasPassword: false },
+    ]);
+    const tryCode = await request("/email-code/verify-sign-up-code", {
+      body: { email: passwordAccount.email, code: sent[0]?.code ?? "" },
+      ip: nextIp(),
+    });
+    expect(tryCode.status).toBe(400);
+  });
+
+  test("existing and new addresses are rate limited the same way", async () => {
+    const { email } = await createPasswordAccount("signup-limit-known");
+    const unknown = nextAddress("signup-limit-unknown");
+    const known = [];
+    const missing = [];
+    for (let index = 0; index <= emailCodeRequestLimits.perAddress.limit; index++) {
+      known.push(await requestSignUpCode(email));
+      missing.push(await requestSignUpCode(unknown));
+    }
+    expect(missing).toEqual(known);
+    expect(known.map((response) => response.status)).toEqual([200, 200, 200, 429]);
+  });
+
+  test("with email off, sign-up works without a token and signs in straight away", async () => {
+    const email = nextAddress("signup-email-off");
+    const created = await signUp({ email, password, name: "New Tester" }, emailOff.handler);
+    expect(created.status).toBe(200);
+    expect(JSON.parse(created.body)).toMatchObject({ token: expect.any(String) });
+    const user = await prisma.user.findUnique({ where: { email } });
+    expect(user?.emailVerified).toBe(false);
+    const signedIn = await request(
+      "/sign-in/email",
+      { body: { email, password }, ip: nextIp() },
+      emailOff.handler,
+    );
+    expect(signedIn.status).toBe(200);
+  });
+});
+
+describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("unverified accounts", () => {
+  test("verify with a code at their next sign-in", async () => {
+    const { email } = await createUnverifiedAccount("unverified-sign-in");
+    const blocked = await request("/sign-in/email", { body: { email, password }, ip: nextIp() });
+    expect(blocked.status).toBe(403);
+    expect(JSON.parse(blocked.body)).toMatchObject({ code: "EMAIL_NOT_VERIFIED" });
+
+    const requested = await request("/email-code/request-email-verification", {
+      body: { email, password },
+      ip: nextIp(),
+    });
+    expect(requested).toEqual({ status: 200, body: JSON.stringify({ success: true }) });
+    expect(sent).toEqual([
+      {
+        to: email,
+        purpose: "email-verification",
+        code: expect.any(String),
+        userId: expect.any(String),
+      },
+    ]);
+    const code = sent[0]?.code ?? "";
+    const wrong = await request("/email-code/verify-email", {
+      body: { email, code: wrongCodeFor(code) },
+      ip: nextIp(),
+    });
+    expect(JSON.parse(wrong.body)).toMatchObject({ code: "INVALID_CODE" });
+    const verified = await request("/email-code/verify-email", {
+      body: { email, code },
+      ip: nextIp(),
+    });
+    expect(verified.status).toBe(200);
+    expect(await signsInWith(email, password)).toBe(true);
+  });
+
+  test("a wrong password gets the usual error, not the verification one", async () => {
+    const { email } = await createUnverifiedAccount("unverified-wrong-password");
+    const result = await request("/sign-in/email", {
+      body: { email, password: "not the password" },
+      ip: nextIp(),
+    });
+    expect(result.status).toBe(401);
+  });
+
+  test("only an unverified account with the right password gets a verification code", async () => {
+    const unverified = await createUnverifiedAccount("verify-only-unverified");
+    const attempts = [
+      { email: unverified.email, password },
+      { email: unverified.email, password: "not the password" },
+      { email: unverified.email.toUpperCase(), password: "x".repeat(200) },
+      { email: (await createPasswordAccount("verify-only-verified")).email, password },
+      { email: (await createGoogleOnlyAccount("verify-only-google")).email, password },
+      { email: nextAddress("verify-only-unknown"), password },
+    ];
+    const responses = await Promise.all(
+      attempts.map((body) =>
+        request("/email-code/request-email-verification", { body, ip: nextIp() }),
+      ),
+    );
+    expect(new Set(responses.map((response) => JSON.stringify(response))).size).toBe(1);
+    expect(sent.map((message) => message.to)).toEqual([unverified.email]);
+  });
+
+  test("keep their existing sessions when email is switched on", async () => {
+    const { cookie } = await createUnverifiedAccount("unverified-session");
+    const response = await auth.handler(
+      new Request("http://localhost:3000/api/auth/get-session", {
+        headers: { cookie, [clientIpHeader]: nextIp() },
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ user: { emailVerified: false } });
   });
 });

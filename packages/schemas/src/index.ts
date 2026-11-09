@@ -1,5 +1,6 @@
 import { optionalEnvString, serverNameSchema } from "./env.ts";
 import { changePasswordSchema } from "./schemas/account/changePassword.ts";
+import { emailCodeSchema } from "./schemas/account/emailCode.ts";
 import { accountNameSchema } from "./schemas/account/fields.ts";
 import { signInSchema } from "./schemas/account/signIn.ts";
 import { signUpSchema } from "./schemas/account/signUp.ts";
@@ -37,6 +38,7 @@ export {
   changePasswordSchema,
   changeRecoveryPhraseSchema,
   createGroupSchema,
+  emailCodeSchema,
   FEEDBACK_MESSAGE_MAX_LENGTH,
   HISTORY_RECIPIENT_MISMATCH_MESSAGE,
   newGroupIdSchema,

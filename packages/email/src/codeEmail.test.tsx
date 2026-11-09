@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { renderCodeEmail } from "./codeEmail.tsx";
 import type { EmailCodePurpose } from "./types.ts";
 
-const purposes: EmailCodePurpose[] = ["sign-up", "password-reset", "recovery-reset"];
+const purposes: EmailCodePurpose[] = [
+  "sign-up",
+  "email-verification",
+  "password-reset",
+  "recovery-reset",
+];
 
 describe("renderCodeEmail", () => {
   test.each(purposes)("puts the %s code in the body only", async (purpose) => {
@@ -34,6 +39,7 @@ describe("renderCodeEmail", () => {
     );
     expect(subjects).toEqual([
       "Your OpenBeacon sign-up code",
+      "Your OpenBeacon email verification code",
       "Your OpenBeacon password reset code",
       "Your OpenBeacon recovery phrase reset code",
     ]);
