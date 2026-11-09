@@ -7,13 +7,26 @@ import { checkEmail, emailEnabled, sendSecurityAlertEmail } from "@openbeacon/em
 import { checkServices as checkConnections } from "@openbeacon/shared";
 import "./env.ts";
 
+const pendingAlerts = new Set<Promise<unknown>>();
+
 export const services = {
   db: prisma,
   s3: s3Client,
   r2: r2Client,
   securityAlerts: emailEnabled
-    ? createSecurityAlerts({ db: prisma, sendSecurityAlertEmail })
+    ? createSecurityAlerts({
+        db: prisma,
+        sendSecurityAlertEmail,
+        runInBackground: (task) => {
+          pendingAlerts.add(task);
+          void task.finally(() => pendingAlerts.delete(task));
+        },
+      })
     : null,
+};
+
+export const waitForSecurityAlerts = async () => {
+  await Promise.all(pendingAlerts);
 };
 
 export const checkServices = async () => {
@@ -27,6 +40,7 @@ export const checkServices = async () => {
 };
 
 export const closeServices = async () => {
+  await waitForSecurityAlerts();
   services.s3.destroy();
   services.r2.destroy();
   await services.db.$disconnect();

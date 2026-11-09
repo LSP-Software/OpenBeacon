@@ -2,7 +2,7 @@ import { deleteAccountRecords } from "@openbeacon/api/account-deletion.ts";
 import { env } from "@openbeacon/api/env.ts";
 import { deleteImageKey, deleteUserImages } from "@openbeacon/api/storage.ts";
 import { tryCatch } from "@openbeacon/shared";
-import { services } from "../services.ts";
+import { services, waitForSecurityAlerts } from "../services.ts";
 
 export const runAccountDeletion = async () => {
   const now = await getDatabaseTime();
@@ -59,6 +59,7 @@ export const runAccountDeletion = async () => {
     }
     await services.db.accountDeletionCleanup.deleteMany({ where: { userId: item.userId } });
   }
+  await waitForSecurityAlerts();
 };
 
 const getDatabaseTime = async () => {

@@ -6,6 +6,7 @@ const checkS3 = mock(async () => {});
 const checkR2 = mock(async () => {});
 const destroyS3 = mock(() => {});
 const destroyR2 = mock(() => {});
+let runInBackground = (_task: Promise<unknown>) => {};
 
 mock.module("@openbeacon/database", () => ({
   prisma: { $queryRaw: query, $disconnect: disconnect },
@@ -13,6 +14,17 @@ mock.module("@openbeacon/database", () => ({
 mock.module("@openbeacon/api/checkStorage.ts", () => ({ checkS3, checkR2 }));
 mock.module("@openbeacon/api/s3client.ts", () => ({ s3Client: { destroy: destroyS3 } }));
 mock.module("@openbeacon/api/r2.ts", () => ({ r2Client: { destroy: destroyR2 } }));
+mock.module("@openbeacon/email", () => ({
+  checkEmail: mock(async () => {}),
+  emailEnabled: true,
+  sendSecurityAlertEmail: mock(async () => {}),
+}));
+mock.module("@openbeacon/auth/securityAlerts.ts", () => ({
+  createSecurityAlerts: (input: { runInBackground: (task: Promise<unknown>) => void }) => {
+    runInBackground = input.runInBackground;
+    return {};
+  },
+}));
 process.env["DATABASE_URL"] = "postgresql://localhost:5432/test";
 const { checkServices, closeServices } = await import("./services.ts");
 afterAll(() => mock.restore());
@@ -26,6 +38,18 @@ test("checks all services and closes clients", async () => {
   expect(disconnect).toHaveBeenCalledTimes(1);
   expect(destroyS3).toHaveBeenCalledTimes(1);
   expect(destroyR2).toHaveBeenCalledTimes(1);
+});
+
+test("waits for pending security alerts before closing the database", async () => {
+  disconnect.mockClear();
+  let finishAlert = () => {};
+  runInBackground(new Promise<void>((resolve) => (finishAlert = resolve)));
+  const closing = closeServices();
+  await Bun.sleep(0);
+  expect(disconnect).not.toHaveBeenCalled();
+  finishAlert();
+  await closing;
+  expect(disconnect).toHaveBeenCalledTimes(1);
 });
 
 test("fails startup when a service check fails without logging credentials", async () => {
