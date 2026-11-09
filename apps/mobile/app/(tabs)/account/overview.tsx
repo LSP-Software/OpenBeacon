@@ -15,7 +15,6 @@ import {
   LockIcon,
   MailIcon,
   MapPinIcon,
-  ShieldAlertIcon,
   SunIcon,
   Trash2Icon,
 } from "lucide-react-native";
@@ -62,17 +61,13 @@ const categories = [
       {
         label: "Notifications",
         icon: BellIcon,
+        href: "/account/notifications",
+        requiresEmail: true,
       },
       {
         label: "Password and Security",
         icon: LockIcon,
         href: "/account/password",
-      },
-      {
-        label: "Email alerts",
-        icon: ShieldAlertIcon,
-        href: "/account/email-alerts",
-        requiresEmail: true,
       },
       {
         label: "Recovery phrase",
@@ -384,8 +379,10 @@ const AccountScreen = () => {
         <SettingsContainer
           categories={categories.map((category) => ({
             ...category,
-            settings: category.settings.filter(
-              (setting) => !("requiresEmail" in setting) || providers?.email,
+            settings: category.settings.map((setting) =>
+              "requiresEmail" in setting && !providers?.email
+                ? { label: setting.label, icon: setting.icon }
+                : setting,
             ),
           }))}
         />
