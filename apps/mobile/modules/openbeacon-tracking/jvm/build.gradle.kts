@@ -25,6 +25,7 @@ sourceSets {
       exclude("**/TrackingRuntime.kt")
       exclude("**/TrackingCaptureService.kt")
       exclude("**/TrackingUploadService.kt")
+      exclude("**/TrackingBootReceiver.kt")
       exclude("**/BatteryReader.kt")
       exclude("**/SecureEpochKeyStore.kt")
       exclude("**/Base64Codec.kt")
