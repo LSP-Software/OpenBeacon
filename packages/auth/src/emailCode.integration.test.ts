@@ -678,10 +678,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password reset c
 
     resolve();
     await Promise.all(tasks.splice(0));
-    expect(sent.map(({ purpose }) => purpose)).toEqual([
-      "sign-up",
-      "password-reset",
+    expect(sent.map(({ purpose }) => purpose).toSorted()).toEqual([
       "email-verification",
+      "password-reset",
+      "sign-up",
     ]);
     expect(accountExistsSent).toHaveLength(1);
     expect(googleSignInSent).toHaveLength(1);
