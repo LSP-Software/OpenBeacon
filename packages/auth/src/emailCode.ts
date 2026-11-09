@@ -14,6 +14,7 @@ import type {
   sendCodeEmail as sendCode,
   sendGoogleSignInEmail as sendGoogleSignIn,
 } from "@openbeacon/email";
+import { tryCatch } from "@openbeacon/shared";
 
 export const emailCodeLifetimeMs = 10 * 60 * 1000;
 export const emailCodeMaxAttempts = 5;
@@ -58,15 +59,6 @@ export const createEmailCodes = ({
 }) => {
   const identifierFor = ({ purpose, subject }: CodeTarget) =>
     `email-code:${purpose}:${purpose === "recovery-reset" ? subject : normalizeEmail(subject)}`;
-
-  const wrongGuessLimitFor = ({ purpose, subject }: CodeTarget) => ({
-    namespace: `emailCode.check.${purpose}`,
-    identifier:
-      purpose === "recovery-reset"
-        ? { type: "userId" as const, value: subject }
-        : { type: "email" as const, value: hashEmail(subject) },
-    ...emailCodeWrongGuessLimit,
-  });
 
   const hash = (identifier: string, code: string) =>
     createHmac("sha256", secret).update(`${identifier}:${code}`).digest();
@@ -131,42 +123,63 @@ export const createEmailCodes = ({
 
     sendGoogleSignIn: sendGoogleSignInEmail,
 
-    check: async ({ purpose, subject, code }: CodeTarget & { code: string }) => {
+    check: async ({
+      purpose,
+      subject,
+      code,
+    }: CodeTarget & { code: string }): Promise<
+      { valid: true } | { valid: false; reason: "invalid" | "expired" | "locked" }
+    > => {
       const identifier = identifierFor({ purpose, subject });
       if (!/^\d{6}$/.test(code)) return { valid: false, reason: "invalid" };
-      return db.$transaction(
-        async (
-          tx,
-        ): Promise<
-          { valid: true } | { valid: false; reason: "invalid" | "expired" | "locked" }
-        > => {
-          await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${identifier}))`);
-          const row = await tx.verification.findFirst({
-            where: { identifier },
-            orderBy: { createdAt: "desc" },
-          });
-          if (!row) return { valid: false, reason: "invalid" };
-          if (row.expiresAt <= now()) {
-            await tx.verification.deleteMany({ where: { id: row.id } });
-            return { valid: false, reason: "expired" };
+      const existing = await db.verification.findFirst({
+        where: { identifier },
+        select: { id: true },
+      });
+      if (!existing) return { valid: false, reason: "invalid" };
+      const wrongGuessLimit = {
+        namespace: `emailCode.check.${purpose}`,
+        identifier:
+          purpose === "recovery-reset"
+            ? { type: "userId" as const, value: subject }
+            : { type: "email" as const, value: hashEmail(subject) },
+        ...emailCodeWrongGuessLimit,
+      };
+      return db.$transaction(async (tx) => {
+        const [lock] = await tx.$queryRaw<{ acquired: boolean }[]>(
+          Prisma.sql`SELECT pg_try_advisory_xact_lock(hashtext(${identifier})) AS acquired`,
+        );
+        if (!lock?.acquired) return { valid: false, reason: "invalid" };
+        const row = await tx.verification.findFirst({
+          where: { identifier },
+          orderBy: { createdAt: "desc" },
+        });
+        if (!row) return { valid: false, reason: "invalid" };
+        if (row.expiresAt <= now()) {
+          await tx.verification.deleteMany({ where: { id: row.id } });
+          return { valid: false, reason: "expired" };
+        }
+        const allowance = await tryCatch(rateLimits.peek(wrongGuessLimit));
+        if (allowance.error) {
+          console.error(`[email-code] could not read the ${purpose} wrong guess allowance`);
+          return { valid: false, reason: "invalid" };
+        }
+        if (allowance.data.remaining < 1) return { valid: false, reason: "locked" };
+        const attempt = await tx.verification.updateMany({
+          where: { id: row.id, attempts: { lt: emailCodeMaxAttempts } },
+          data: { attempts: { increment: 1 } },
+        });
+        if (attempt.count === 0) return { valid: false, reason: "locked" };
+        if (!timingSafeEqual(Buffer.from(row.value, "hex"), hash(identifier, code))) {
+          const spent = await tryCatch(rateLimits.consume(wrongGuessLimit));
+          if (spent.error) {
+            console.error(`[email-code] could not record a ${purpose} wrong guess`);
           }
-          const wrongGuessLimit = wrongGuessLimitFor({ purpose, subject });
-          if ((await rateLimits.peek(wrongGuessLimit)).remaining < 1) {
-            return { valid: false, reason: "locked" };
-          }
-          const attempt = await tx.verification.updateMany({
-            where: { id: row.id, attempts: { lt: emailCodeMaxAttempts } },
-            data: { attempts: { increment: 1 } },
-          });
-          if (attempt.count === 0) return { valid: false, reason: "locked" };
-          if (!timingSafeEqual(Buffer.from(row.value, "hex"), hash(identifier, code))) {
-            await rateLimits.consume(wrongGuessLimit);
-            return { valid: false, reason: "invalid" };
-          }
-          const consumed = await tx.verification.deleteMany({ where: { id: row.id } });
-          return consumed.count === 1 ? { valid: true } : { valid: false, reason: "invalid" };
-        },
-      );
+          return { valid: false, reason: "invalid" };
+        }
+        const consumed = await tx.verification.deleteMany({ where: { id: row.id } });
+        return consumed.count === 1 ? { valid: true } : { valid: false, reason: "invalid" };
+      });
     },
 
     issueToken: async ({ purpose, value }: Omit<TokenTarget, "token">) => {

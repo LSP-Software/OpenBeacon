@@ -171,7 +171,8 @@ const issueCode = async (purpose: EmailCodePurpose, subject: string) => {
   return email.code;
 };
 
-const wrongCodeFor = (code: string) => ((Number(code) + 1) % 1_000_000).toString().padStart(6, "0");
+const wrongCodeFor = (code: string, offset = 1) =>
+  ((Number(code) + offset) % 1_000_000).toString().padStart(6, "0");
 
 const spendWrongGuesses = async (purpose: EmailCodePurpose, subject: string, count: number) => {
   let code = "";
@@ -272,17 +273,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
   test("parallel guesses can't get past the attempt limit", async () => {
     const subject = nextAddress("parallel-guesses");
     const code = await issueCode("sign-up", subject);
-    const guesses = Array.from({ length: 30 }, (_, index) =>
-      ((Number(code) + index + 1) % 1_000_000).toString().padStart(6, "0"),
-    );
     const results = await Promise.all(
-      guesses.map((guess) => codes.check({ purpose: "sign-up", subject, code: guess })),
+      Array.from({ length: 30 }, (_, index) =>
+        codes.check({ purpose: "sign-up", subject, code: wrongCodeFor(code, index + 1) }),
+      ),
     );
-    expect(
-      results.filter((result) => result.valid === false && result.reason === "invalid"),
-    ).toHaveLength(emailCodeMaxAttempts);
+    expect(results.every((result) => !result.valid)).toBe(true);
     const [row] = await codeRows("sign-up", subject);
-    expect(row?.attempts).toBe(emailCodeMaxAttempts);
+    expect(row?.attempts).toBeGreaterThanOrEqual(1);
+    expect(row?.attempts).toBeLessThanOrEqual(emailCodeMaxAttempts);
   });
 
   test("parallel submissions of the right code succeed only once", async () => {
@@ -346,7 +345,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
     });
   });
 
-  test("wrong guesses across several codes are capped for the day", async () => {
+  test("wrong guesses across several codes are capped", async () => {
     const subject = nextAddress("capped");
     await spendWrongGuesses("password-reset", subject, emailCodeWrongGuessLimit.limit);
     const code = await issueCode("password-reset", subject);
@@ -358,14 +357,25 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
     expect(row?.attempts).toBe(0);
   });
 
-  test("the cap lifts once the day has passed", async () => {
-    const subject = nextAddress("capped-reset");
+  test("the cap refills one guess at a time across the day", async () => {
+    const subject = nextAddress("capped-refill");
     await spendWrongGuesses("password-reset", subject, emailCodeWrongGuessLimit.limit);
-    clockMs += emailCodeWrongGuessLimit.windowMs;
+    clockMs += emailCodeWrongGuessLimit.windowMs / emailCodeWrongGuessLimit.limit - 1;
     const code = await issueCode("password-reset", subject);
     expect(await codes.check({ purpose: "password-reset", subject, code })).toEqual({
-      valid: true,
+      valid: false,
+      reason: "locked",
     });
+    clockMs += 1;
+    expect(
+      await codes.check({ purpose: "password-reset", subject, code: wrongCodeFor(code) }),
+    ).toEqual({ valid: false, reason: "invalid" });
+    expect(await codes.check({ purpose: "password-reset", subject, code })).toEqual({
+      valid: false,
+      reason: "locked",
+    });
+    const [row] = await codeRows("password-reset", subject);
+    expect(row?.attempts).toBe(1);
   });
 
   test("right codes don't use up the wrong guess allowance", async () => {
@@ -383,22 +393,59 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
     });
   });
 
-  test("parallel guesses can't get past the daily cap", async () => {
+  test("parallel guesses can't get past the cap", async () => {
     const subject = nextAddress("capped-parallel");
     await spendWrongGuesses("sign-up", subject, emailCodeWrongGuessLimit.limit - 1);
     const code = await issueCode("sign-up", subject);
     const results = await Promise.all(
-      Array.from({ length: emailCodeMaxAttempts }, (_, index) =>
-        codes.check({
-          purpose: "sign-up",
-          subject,
-          code: ((Number(code) + index + 1) % 1_000_000).toString().padStart(6, "0"),
-        }),
+      Array.from({ length: 30 }, (_, index) =>
+        codes.check({ purpose: "sign-up", subject, code: wrongCodeFor(code, index + 1) }),
       ),
     );
-    expect(
-      results.filter((result) => result.valid === false && result.reason === "invalid"),
-    ).toHaveLength(1);
+    expect(results.every((result) => !result.valid)).toBe(true);
+    const [row] = await codeRows("sign-up", subject);
+    expect(row?.attempts).toBe(1);
+    expect(await codes.check({ purpose: "sign-up", subject, code })).toEqual({
+      valid: false,
+      reason: "locked",
+    });
+  });
+
+  test("a wrong guess counts against the code and fails when the cap can't be recorded", async () => {
+    const subject = nextAddress("capped-redis-down");
+    const flakyCodes = createEmailCodes({
+      db: prisma,
+      secret: "integration-email-code-secret-000000000000",
+      rateLimits: {
+        peek: async ({ limit }) => ({
+          allowed: true,
+          limit,
+          remaining: limit,
+          retryAfterMs: 0,
+          resetAfterMs: 0,
+        }),
+        consume: async () => {
+          throw new Error("Redis is down");
+        },
+      },
+      sendCodeEmail: async () => {},
+      sendAccountExistsEmail: async () => {},
+      sendGoogleSignInEmail: async () => {},
+      now: () => new Date(clockMs),
+    });
+    const code = await issueCode("sign-up", subject);
+    const errors: unknown[][] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => errors.push(args);
+    const wrong = await flakyCodes
+      .check({ purpose: "sign-up", subject, code: wrongCodeFor(code) })
+      .finally(() => {
+        console.error = originalError;
+      });
+    expect(wrong).toEqual({ valid: false, reason: "invalid" });
+    expect(errors).toEqual([["[email-code] could not record a sign-up wrong guess"]]);
+    const [row] = await codeRows("sign-up", subject);
+    expect(row?.attempts).toBe(1);
   });
 
   test("the cap only applies to its own purpose and subject", async () => {
@@ -673,14 +720,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password reset c
     const { email, userId } = await createPasswordAccount("reset-capped");
     const failures: Awaited<ReturnType<typeof verifyResetCode>>[] = [];
     for (let round = 0; round < emailCodeWrongGuessLimit.limit / emailCodeMaxAttempts; round++) {
-      await requestResetCode(email);
-      const code = sent.at(-1)?.code ?? "";
+      expect((await requestResetCode(email)).status).toBe(200);
+      const code = sent.findLast((message) => message.to === email)?.code ?? "";
       for (let guess = 0; guess < emailCodeMaxAttempts; guess++) {
         failures.push(await verifyResetCode(email, wrongCodeFor(code)));
       }
     }
-    await requestResetCode(email);
-    const capped = await verifyResetCode(email, sent.at(-1)?.code ?? "");
+    expect((await requestResetCode(email)).status).toBe(200);
+    const capped = await verifyResetCode(
+      email,
+      sent.findLast((message) => message.to === email)?.code ?? "",
+    );
     expect(capped.status).toBe(400);
     expect(new Set([...failures, capped].map((failure) => failure.body)).size).toBe(1);
     expect(await resetTokenRows(userId)).toEqual([]);
