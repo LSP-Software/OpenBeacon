@@ -1,3 +1,4 @@
+import "./env.ts";
 import { checkR2, checkS3 } from "@openbeacon/api/checkStorage.ts";
 import { r2Client } from "@openbeacon/api/r2.ts";
 import { s3Client } from "@openbeacon/api/s3client.ts";
@@ -5,7 +6,6 @@ import { createSecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
 import { prisma } from "@openbeacon/database";
 import { checkEmail, emailEnabled, sendSecurityAlertEmail } from "@openbeacon/email";
 import { checkServices as checkConnections } from "@openbeacon/shared";
-import "./env.ts";
 
 const pendingAlerts = new Set<Promise<unknown>>();
 

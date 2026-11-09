@@ -100,10 +100,10 @@ describe("resolveEmailConfig", () => {
     ).toEqual({ transport: "console", fromAddress: "dev@example.com" });
   });
 
-  test("checks EMAIL_FROM is a plain address when Resend or SMTP is configured", () => {
+  test("checks EMAIL_FROM is a plain address whenever it is set", () => {
     for (const provider of [{ RESEND_API_KEY: "re_key" }, { SMTP_HOST: "smtp.example.com" }]) {
       expect(() => resolve({ ...provider, EMAIL_FROM: "not-an-email" })).toThrow(
-        "EMAIL_FROM must be a valid email address when Resend or SMTP is configured",
+        "EMAIL_FROM must be a valid email address",
       );
       expect(() => resolve({ ...provider, EMAIL_FROM: "Evil <a@example.com>" })).toThrow();
     }
@@ -119,6 +119,12 @@ describe("resolveEmailConfig", () => {
       fromAddress: "noreply@localhost",
     });
     expect(resolve({ EMAIL_CONSOLE: "true" }, "test")).toMatchObject({ transport: "console" });
+    expect(() =>
+      resolve({ EMAIL_CONSOLE: "true", EMAIL_FROM: "not-an-email" }, "development"),
+    ).toThrow("EMAIL_FROM must be a valid email address");
+    expect(() =>
+      resolve({ EMAIL_CONSOLE: "true", EMAIL_FROM: "Evil <a@example.com>" }, "development"),
+    ).toThrow("EMAIL_FROM must be a valid email address");
     expect(() => resolve({ EMAIL_CONSOLE: "true" }, "production")).toThrow(
       "EMAIL_CONSOLE is only allowed when NODE_ENV is development or test",
     );

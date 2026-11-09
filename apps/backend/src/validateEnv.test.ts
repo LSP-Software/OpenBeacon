@@ -93,4 +93,22 @@ describe("production environment validation", () => {
       expect(result.stdout.toString()).toContain("R2_PM_TILES_KEY: valid");
     }
   });
+
+  test("stops the backend with a clear line when the email settings are invalid", () => {
+    for (const [invalid, message] of [
+      [{ EMAIL_CONSOLE: "true", NODE_ENV: "production" }, "EMAIL_CONSOLE is only allowed"],
+      [{ EMAIL_FROM: "noreply@example.com" }, "EMAIL_FROM needs RESEND_API_KEY or SMTP_HOST"],
+    ] as const) {
+      const result = Bun.spawnSync({
+        cmd: [process.execPath, `${import.meta.dir}/index.ts`],
+        env: { ...env, ...invalid },
+      });
+      const stderr = result.stderr.toString();
+      expect(result.exitCode).not.toBe(0);
+      expect(stderr).toContain(`  Email: ${message}`);
+      expect(stderr).toContain("Environment configuration validation failed");
+      expect(stderr).not.toContain("at resolveEmailConfig");
+      expect(stderr).not.toContain("at loadEmailSettings");
+    }
+  });
 });

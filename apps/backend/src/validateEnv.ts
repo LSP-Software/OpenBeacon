@@ -1,6 +1,5 @@
 import { envSchema as apiEnvSchema } from "@openbeacon/api/envSchema.ts";
-import { emailEnvSchema, loadEmailSettings } from "@openbeacon/email/config.ts";
-import { tryCatch } from "@openbeacon/shared";
+import { emailEnvSchema, findEmailSettingsError } from "@openbeacon/email/config.ts";
 import { envSchema as backendEnvSchema } from "./envSchema.ts";
 
 const schemas = { ...backendEnvSchema, ...apiEnvSchema, ...emailEnvSchema };
@@ -38,10 +37,10 @@ if (
   );
 }
 
-const emailConfig = await tryCatch(Promise.resolve().then(loadEmailSettings));
-if (emailConfig.error) {
+const emailError = findEmailSettingsError();
+if (emailError) {
   valid = false;
-  console.error(`  Email: ${emailConfig.error.message}`);
+  console.error(`  Email: ${emailError}`);
 }
 
 if (!valid) {

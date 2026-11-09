@@ -1,3 +1,4 @@
+import "./env.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { runAccountDeletion } from "./jobs/accountDeletion.ts";
 import { startScheduler } from "./scheduler.ts";

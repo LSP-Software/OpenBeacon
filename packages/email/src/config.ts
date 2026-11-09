@@ -48,13 +48,16 @@ export const resolveEmailConfig = (
   const parseFrom = () => {
     const result = z.email().safeParse(env.EMAIL_FROM);
     if (!result.success) {
-      throw new Error("EMAIL_FROM must be a valid email address when Resend or SMTP is configured");
+      throw new Error("EMAIL_FROM must be a valid email address");
     }
     return result.data;
   };
 
   if (env.EMAIL_CONSOLE) {
-    return { transport: "console", fromAddress: env.EMAIL_FROM ?? "noreply@localhost" };
+    return {
+      transport: "console",
+      fromAddress: env.EMAIL_FROM === undefined ? "noreply@localhost" : parseFrom(),
+    };
   }
   if (env.RESEND_API_KEY) {
     return { transport: "resend", fromAddress: parseFrom(), apiKey: env.RESEND_API_KEY };
@@ -83,4 +86,13 @@ export const loadEmailSettings = () => {
     serverName: env.SERVER_NAME,
     config: resolveEmailConfig({ ...env, NODE_ENV: process.env["NODE_ENV"] }),
   };
+};
+
+export const findEmailSettingsError = () => {
+  try {
+    loadEmailSettings();
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
 };
