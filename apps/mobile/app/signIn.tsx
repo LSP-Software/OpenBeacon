@@ -128,7 +128,7 @@ const SignIn = () => {
                 <Pressable accessibilityRole="link">
                   <Text className="text-muted">
                     Don't have an account?{" "}
-                    <Text className="font-semibold text-primary">Create one</Text>
+                    <Text className="font-semibold text-primary-text">Create one</Text>
                   </Text>
                 </Pressable>
               </Link>

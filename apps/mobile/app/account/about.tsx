@@ -21,10 +21,10 @@ const AboutScreen = () => {
         </View>
       </SafeAreaView>
       <ScrollView contentContainerClassName="gap-5 px-6 py-6">
-        <Link href="https://openbeacon.net/privacy" className="text-primary">
+        <Link href="https://openbeacon.net/privacy" className="text-primary-text">
           Privacy policy
         </Link>
-        <Link href="https://openbeacon.net/terms" className="text-primary">
+        <Link href="https://openbeacon.net/terms" className="text-primary-text">
           Terms of service
         </Link>
         <Text>
@@ -39,14 +39,14 @@ const AboutScreen = () => {
         <Text>OpenBeacon is open source software.</Text>
         <Link
           href="https://github.com/LSP-Software/OpenBeacon/blob/main/LICENSE.md"
-          className="text-primary"
+          className="text-primary-text"
         >
           OpenBeacon licence
         </Link>
         <Text>
           Map data © OpenStreetMap contributors, available under the Open Database Licence.
         </Text>
-        <Link href="https://www.openstreetmap.org/copyright" className="text-primary">
+        <Link href="https://www.openstreetmap.org/copyright" className="text-primary-text">
           OpenStreetMap copyright and licence
         </Link>
         <Text>
@@ -57,13 +57,13 @@ const AboutScreen = () => {
         </Text>
         <Link
           href="https://github.com/LSP-Software/OpenBeacon/tree/main/apps/mobile/assets/map"
-          className="text-primary"
+          className="text-primary-text"
         >
           Map asset licences and sources
         </Link>
         <Link
           href="https://github.com/maplibre/maplibre-react-native/blob/main/LICENSE.md"
-          className="text-primary"
+          className="text-primary-text"
         >
           MapLibre React Native licence
         </Link>

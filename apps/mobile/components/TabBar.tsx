@@ -69,7 +69,9 @@ const TabLink = ({
       onPress={onPress}
     >
       <Icon as={icon} size={20} className={cn(isActive && "text-primary")} />
-      <Text className={cn("text-muted", isActive && "text-primary font-semibold")}>{label}</Text>
+      <Text className={cn("text-muted", isActive && "text-primary-text font-semibold")}>
+        {label}
+      </Text>
     </Button>
   );
 };

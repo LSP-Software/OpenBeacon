@@ -253,7 +253,7 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
                 <Icon as={ShieldIcon} size={18} className="text-primary" />
               </View>
               <View className="flex-1 gap-1">
-                <Text className="text-xs font-semibold uppercase tracking-[1px] text-primary">
+                <Text className="text-xs font-semibold uppercase tracking-[1px] text-primary-text">
                   Privacy-first by default
                 </Text>
                 <Text className="text-base font-semibold text-foreground">
