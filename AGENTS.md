@@ -44,6 +44,10 @@ console.log(result.data);
     g. Whilst rules a-f provide default guidance, prioritise readability above all. When extracting any local type for readability, place function types at the bottom of the file and other types near their first usage.
 11. When defining the database schema don't map field and table names
 12. When adding a link to another page make sure to use expo link component
+13. Every PR that changes shipped code must bump the matching version. Test files and Markdown don't count.
+    a. Client (`apps/mobile`, `packages/encryption`, `packages/schemas`, `packages/shared`): raise `expo.version` in `apps/mobile/app.json` and increment both `ios.buildNumber` and `android.versionCode`.
+    b. Server (`apps/backend`, `apps/scheduled-jobs`, and `packages/*` except `tsconfig`): raise `serverVersion` in `apps/backend/src/version.ts`.
+    c. Use patch for fixes, minor for features or database migrations. CI enforces this; check locally with `bun scripts/check-version-bump.ts origin/main`.
 
 # Testing
 
