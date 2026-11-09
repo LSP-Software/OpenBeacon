@@ -18,6 +18,7 @@ import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
+import { invalidCodeMessage } from "../../lib/emailCodes.ts";
 import { protectHistory } from "../../lib/protectHistory.ts";
 import { isResetConfirmed } from "../../lib/isResetConfirmed.ts";
 import {
@@ -81,9 +82,7 @@ const RecoveryPhraseResetScreen = () => {
   const verifyCode = async (code: string) => {
     const result = await tryCatch(verifyRecoveryResetCode(code));
     if (result.error) return result.error.message;
-    if (result.data.status === "invalidCode") {
-      return "The code is wrong or has expired. Check it, or send a new code.";
-    }
+    if (result.data.status === "invalidCode") return invalidCodeMessage;
     if (result.data.status === "reauthenticate") {
       await reauthenticate();
       return undefined;

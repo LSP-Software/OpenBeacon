@@ -18,6 +18,17 @@ export const emailCodes = {
     post<{ resetToken: string }>("/email-code/verify-password-reset-code", { email, code }),
 };
 
+export const invalidCodeMessage = "The code is wrong or has expired. Check it, or send a new code.";
+
+export const codeEntryErrorMessage = (
+  error: string,
+  invalidCodeCount: number,
+  repeatedInvalidCodeHint: string,
+) =>
+  error === invalidCodeMessage && invalidCodeCount > 1
+    ? `${error} ${repeatedInvalidCodeHint}`
+    : error;
+
 export const emailCodeErrorMessage = (error: {
   status: number;
   code?: string | undefined;
@@ -26,8 +37,6 @@ export const emailCodeErrorMessage = (error: {
   if (error.status === 429) {
     return "Too many codes have been requested. Try again in a few minutes.";
   }
-  if (error.code === "INVALID_CODE") {
-    return "The code is wrong or has expired. Check it, or send a new code.";
-  }
+  if (error.code === "INVALID_CODE") return invalidCodeMessage;
   return error.message ?? "Something went wrong. Please try again.";
 };

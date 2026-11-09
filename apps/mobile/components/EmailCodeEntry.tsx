@@ -1,9 +1,10 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { emailCodeSchema } from "@openbeacon/schemas";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Pressable, View } from "react-native";
 import type { z } from "zod";
+import { codeEntryErrorMessage, invalidCodeMessage } from "../lib/emailCodes.ts";
 import { Button } from "./ui/Button.tsx";
 import { Input } from "./ui/Input.tsx";
 import { Text } from "./ui/Text.tsx";
@@ -17,6 +18,7 @@ export const EmailCodeEntry = ({
   onResend,
   notice,
   resentMessage = "We've sent a new code. Earlier codes no longer work.",
+  repeatedInvalidCodeHint = "If new codes keep being rejected, wait a few hours and try again.",
   description = (
     <>
       We sent a 6-digit code to <Text className="font-semibold">{email}</Text>. It expires in 10
@@ -31,6 +33,7 @@ export const EmailCodeEntry = ({
   onResend: () => Promise<string | undefined>;
   notice?: string | undefined;
   resentMessage?: string;
+  repeatedInvalidCodeHint?: string;
 }) => {
   const form = useForm<z.infer<typeof emailCodeSchema>>({
     resolver: zodResolver(emailCodeSchema),
@@ -42,6 +45,7 @@ export const EmailCodeEntry = ({
   const [resendMessage, setResendMessage] = useState<string | null>(notice ?? null);
   const [resendAvailableAt, setResendAvailableAt] = useState(() => Date.now() + resendCooldownMs);
   const [now, setNow] = useState(() => Date.now());
+  const invalidCodeCount = useRef(0);
 
   useEffect(() => {
     if (now >= resendAvailableAt) return;
@@ -56,7 +60,11 @@ export const EmailCodeEntry = ({
     setSubmitting(true);
     const error = await onSubmit(code);
     setSubmitting(false);
-    if (error) form.setError("code", { message: error });
+    if (!error) return;
+    if (error === invalidCodeMessage) invalidCodeCount.current += 1;
+    form.setError("code", {
+      message: codeEntryErrorMessage(error, invalidCodeCount.current, repeatedInvalidCodeHint),
+    });
   };
 
   const resend = async () => {

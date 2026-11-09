@@ -113,6 +113,7 @@ const SignIn = () => {
                   email={unverified.email}
                   notice={unverified.notice}
                   submitLabel="Verify and sign in"
+                  repeatedInvalidCodeHint="If new codes keep being rejected, wait a few hours and try again, or go back and reset your password, which also confirms your email."
                   onSubmit={async (code) => {
                     const result = await emailCodes.verifyEmail(unverified.email, code);
                     if (result.error) return emailCodeErrorMessage(result.error);
