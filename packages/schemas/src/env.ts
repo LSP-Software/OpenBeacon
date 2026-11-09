@@ -8,3 +8,5 @@ export const optionalEnvString = z.preprocess((value) => {
   const trimmedValue = value.trim();
   return trimmedValue.length > 0 ? trimmedValue : undefined;
 }, z.string().min(1).optional());
+
+export const serverNameSchema = z.string().trim().min(1).default("OpenBeacon");

@@ -1,6 +1,7 @@
 import { accountRecoveryRouter } from "./router/accountRecoveryRouter.ts";
 import { accountRouter } from "./router/accountRouter.ts";
 import { authRouter } from "./router/authRouter.ts";
+import { emailAlertsRouter } from "./router/emailAlertsRouter.ts";
 import { feedbackRouter } from "./router/feedbackRouter.ts";
 import { groupEpochRouter } from "./router/group/groupEpochRouter.ts";
 import { groupInvitesRouter } from "./router/group/groupInvitesRouter.ts";
@@ -21,6 +22,7 @@ export const appRouter = createTRPCRouter({
   groupMembership: groupMembershipRouter,
   groupTracking: groupTrackingRouter,
   auth: authRouter,
+  emailAlerts: emailAlertsRouter,
   feedback: feedbackRouter,
   maps: mapsRouter,
 });

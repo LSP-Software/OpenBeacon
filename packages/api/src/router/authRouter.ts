@@ -40,6 +40,7 @@ export const authRouter = createTRPCRouter({
       return upsertUserDevice({
         db: ctx.db,
         input,
+        securityAlerts: ctx.securityAlerts,
         userId: ctx.session.user.id,
       });
     }),

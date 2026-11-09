@@ -17,6 +17,7 @@
     "useUnknownInCatchVariables": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": false,
+    "jsx": "react-jsx",
     "types": ["node"]
   }
 }

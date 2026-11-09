@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run --cwd ../.. --env-file=.env --hot apps/backend/src/index.ts",
+    "dev": "NODE_ENV=development bun run --cwd ../.. --env-file=.env --hot apps/backend/src/index.ts",
     "format": "bun fmt",
     "format:check": "bun fmt --check",
     "lint": "biome lint .",
@@ -18,6 +18,7 @@
     "@openbeacon/auth": "workspace:*",
     "@openbeacon/cache": "workspace:*",
     "@openbeacon/database": "workspace:*",
+    "@openbeacon/email": "workspace:*",
     "@openbeacon/schemas": "workspace:*",
     "@openbeacon/shared": "workspace:*",
     "@prisma/adapter-pg": "^7.4.2",

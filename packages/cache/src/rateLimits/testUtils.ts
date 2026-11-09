@@ -4,6 +4,8 @@
  * in unit tests. Shipping them in app bundles wastes size and can confuse auditors—configure bundlers to
  * omit `./testing` from production graphs where possible.
  */
+import { alertsTurnedOffScripts } from "../alertsTurnedOff/alertsTurnedOff.ts";
+
 export type BucketState = {
   expiresAt: number;
   lastMs: number;
@@ -13,6 +15,8 @@ export type BucketState = {
 export class FakeRedis {
   private readonly buckets = new Map<string, BucketState>();
   private readonly strings = new Map<string, { expiresAt: number; value: string }>();
+  private readonly alertsTurnedOff = new Map<string, { firstAt: string; alerts: Set<string> }>();
+  private readonly alertsTurnedOffIndex = new Map<string, number>();
   private closed = false;
 
   public async send(command: string, args: string[]): Promise<string[] | string | null> {
@@ -53,6 +57,31 @@ export class FakeRedis {
 
     if (command !== "EVAL") {
       throw new Error(`Unsupported command: ${command}`);
+    }
+
+    if (args[0] === alertsTurnedOffScripts.add) {
+      const [, , key = "", , userId = "", at = "", , ...alerts] = args;
+      const pending = this.alertsTurnedOff.get(key) ?? { firstAt: at, alerts: new Set<string>() };
+      for (const alert of alerts) pending.alerts.add(alert);
+      this.alertsTurnedOff.set(key, pending);
+      this.alertsTurnedOffIndex.set(userId, Number(pending.firstAt));
+      return pending.firstAt;
+    }
+
+    if (args[0] === alertsTurnedOffScripts.take) {
+      const [, , key = "", , userId = "", firstAtOrBefore = ""] = args;
+      const pending = this.alertsTurnedOff.get(key);
+      if (pending && Number(pending.firstAt) > Number(firstAtOrBefore)) return null;
+      this.alertsTurnedOff.delete(key);
+      this.alertsTurnedOffIndex.delete(userId);
+      return pending ? [pending.firstAt, ...pending.alerts] : null;
+    }
+
+    if (args[0] === alertsTurnedOffScripts.pending) {
+      return [...this.alertsTurnedOffIndex].flatMap(([userId, firstAt]) => [
+        userId,
+        String(firstAt),
+      ]);
     }
 
     const [, , key, nowMsValue, limitValue, windowMsValue, costValue, shouldConsumeValue] = args;

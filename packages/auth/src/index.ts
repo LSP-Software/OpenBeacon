@@ -1,115 +1,50 @@
-import { expo } from "@better-auth/expo";
-import { Prisma } from "@openbeacon/database";
-import { accountNameSchema } from "@openbeacon/schemas";
-import { betterAuth } from "better-auth";
-import { prismaAdapter } from "better-auth/adapters/prisma";
-import { APIError } from "better-auth/api";
+import { OpenBeaconCache, redisUrlSchema } from "@openbeacon/cache";
+import {
+  emailEnabled,
+  sendAccountExistsEmail,
+  sendCodeEmail,
+  sendGoogleSignInEmail,
+  sendSecurityAlertEmail,
+} from "@openbeacon/email";
 import { getAuthCapabilities } from "./capabilities.ts";
+import { createAuth } from "./createAuth.ts";
 import { db } from "./db.ts";
+import { createEmailCodes } from "./emailCode.ts";
 import { env } from "./env.ts";
+import { createSecurityAlerts } from "./securityAlerts.ts";
 
+export { clientIpHeader } from "./createAuth.ts";
+export { createEmailCodes, type EmailCodes } from "./emailCode.ts";
+export { createSecurityAlerts, type SecurityAlerts } from "./securityAlerts.ts";
 export { createGoogleDeletionAuthorization, verifyGoogleDeletionCode } from "./googleDeletion.ts";
 
-const googleClientId = env.GOOGLE_CLIENT_ID;
-const googleClientSecret = env.GOOGLE_CLIENT_SECRET;
-
 export const authCapabilities = getAuthCapabilities({
-  GOOGLE_CLIENT_ID: googleClientId,
-  GOOGLE_CLIENT_SECRET: googleClientSecret,
+  GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
+  emailEnabled,
 });
 
-export const auth = betterAuth({
-  plugins: [expo()],
-  databaseHooks: {
-    session: {
-      create: {
-        after: async (session) => {
-          const expired = await db.$transaction(async (tx) => {
-            await tx.$queryRaw(
-              Prisma.sql`SELECT id FROM "User" WHERE id = ${session.userId} FOR UPDATE`,
-            );
-            const [user] = await tx.$queryRaw<
-              Array<{ pendingDeletion: boolean; deletionExpired: boolean }>
-            >(
-              Prisma.sql`SELECT "pendingDeletion", ("deletionDate" IS NULL OR "deletionDate" <= (clock_timestamp() AT TIME ZONE 'UTC')) AS "deletionExpired" FROM "User" WHERE id = ${session.userId}`,
-            );
-            const activeSession = await tx.session.findUnique({
-              where: { id: session.id },
-              select: { id: true },
-            });
-            if (!user || !activeSession)
-              throw new APIError("UNAUTHORIZED", { message: "Session is no longer valid." });
-            if (user.pendingDeletion && user.deletionExpired) {
-              await tx.session.deleteMany({ where: { id: session.id } });
-              return true;
-            }
-            if (user.pendingDeletion) {
-              await tx.user.update({
-                where: { id: session.userId },
-                data: {
-                  pendingDeletion: false,
-                  deletionDate: null,
-                  deletionRetryAt: null,
-                  deletionCancellationPending: true,
-                },
-              });
-            }
-            return false;
-          });
-          if (expired)
-            throw new APIError("FORBIDDEN", {
-              message: "This account is scheduled for deletion and can no longer be accessed.",
-            });
-        },
-      },
-    },
-    user: {
-      create: {
-        before: async (user) => {
-          const result = accountNameSchema.safeParse(user.name);
-          if (!result.success)
-            throw new APIError("BAD_REQUEST", {
-              message: result.error.issues[0]?.message ?? "Invalid name",
-            });
-          return { data: { ...user, name: result.data } };
-        },
-      },
-      update: {
-        before: async (user) => {
-          if (user.name === undefined) return { data: user };
-          const result = accountNameSchema.safeParse(user.name);
-          if (!result.success)
-            throw new APIError("BAD_REQUEST", {
-              message: result.error.issues[0]?.message ?? "Invalid name",
-            });
-          return { data: { ...user, name: result.data } };
-        },
-      },
-    },
-  },
-  database: prismaAdapter(db, {
-    provider: "postgresql",
-  }),
-  secret: env.BETTER_AUTH_SECRET,
-  baseURL: env.BETTER_AUTH_URL,
-  emailAndPassword: {
-    enabled: true,
-  },
-  socialProviders:
-    authCapabilities.google && googleClientId && googleClientSecret
-      ? {
-          google: {
-            clientId: googleClientId,
-            clientSecret: googleClientSecret,
-            scope: ["email", "profile"],
-          },
-        }
-      : undefined,
-  trustedOrigins: [
-    "openbeacon://",
-    ...(process.env["NODE_ENV"] === "development" ? ["exp://", "exp://**"] : []),
-  ],
-});
+const cache = emailEnabled
+  ? new OpenBeaconCache({ redisUrl: redisUrlSchema.parse(process.env["REDIS_URL"]) })
+  : null;
+
+export const emailCodes = cache
+  ? createEmailCodes({
+      db,
+      secret: env.BETTER_AUTH_SECRET,
+      rateLimits: cache.rateLimits,
+      limitRequestsPerIp: env.EMAIL_CODE_IP_LIMIT,
+      sendCodeEmail,
+      sendAccountExistsEmail,
+      sendGoogleSignInEmail,
+    })
+  : null;
+
+export const securityAlerts = cache
+  ? createSecurityAlerts({ db, sendSecurityAlertEmail, alertsTurnedOff: cache.alertsTurnedOff })
+  : null;
+
+export const auth = createAuth({ emailCodes, securityAlerts });
 
 export type AuthType = {
   user: typeof auth.$Infer.Session.user | null;

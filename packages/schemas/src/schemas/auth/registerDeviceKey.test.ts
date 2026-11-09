@@ -90,6 +90,20 @@ describe("registerDeviceKeySchema", () => {
       false,
     );
   });
+
+  test("keeps a plain device model and drops one that could carry a link or run on", () => {
+    const modelOf = (model: string) =>
+      registerDeviceKeySchema.parse({
+        algorithm: DEVICE_KEY_ALGORITHM,
+        deviceId: "device-a",
+        publicKey: createDeviceKeyPair().publicKey,
+        model,
+      }).model;
+
+    expect(modelOf("  Pixel 8 Pro (GC3VE)  ")).toBe("Pixel 8 Pro (GC3VE)");
+    expect(modelOf("Pixel. Secure it at evil.com")).toBeUndefined();
+    expect(modelOf("P".repeat(41))).toBeUndefined();
+  });
 });
 
 describe("groupEpochBundleSchema", () => {

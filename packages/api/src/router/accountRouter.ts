@@ -229,8 +229,14 @@ export const accountRouter = {
             userId,
             imageUrlPrefix: `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`,
             mode: "scheduled",
+            securityAlerts: ctx.securityAlerts,
           }),
         );
+      } else {
+        ctx.securityAlerts?.send(userId, {
+          type: "deletion-scheduled",
+          deletionDate: result.deletionDate,
+        });
       }
       return result;
     }),

@@ -39,6 +39,8 @@ bun run dev --filter=@openbeacon/backend
 
 The API listens on the port in `OPENBEACON_API_PORT` (default `3000`).
 
+Email is optional. To send password resets, verification codes and security alerts, configure Resend or SMTP as described in [the backend guide](apps/backend/README.md#email).
+
 ## Run the mobile app
 
 From `apps/mobile` copy the example env and fill in values for your machine:
