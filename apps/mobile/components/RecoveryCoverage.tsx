@@ -31,9 +31,7 @@ export const RecoveryCoverage = ({ userId }: { userId: string | undefined }) => 
   });
 
   if (groups.isError) return <Text>Unable to load your groups. Please try again.</Text>;
-  if (groups.data && groupList.length === 0) {
-    return <Text>History from groups you join will be protected automatically.</Text>;
-  }
+  if (groups.data && groupList.length === 0) return null;
 
   return (
     <View className="gap-3">

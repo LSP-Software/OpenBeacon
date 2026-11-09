@@ -141,6 +141,9 @@ const RecoveryPhraseSetupScreen = () => {
           {step === "done" && (
             <View className="gap-4">
               <Text className="text-foreground text-3xl font-bold">Your phrase is set up</Text>
+              <Text className="text-muted-foreground text-base leading-6">
+                Use it to get your location history back if you lose or replace your phone.
+              </Text>
               {progress.failed > 0 && (
                 <Text className="text-muted-foreground text-base leading-6">
                   Some history couldn’t be protected yet. OpenBeacon will keep trying in the
