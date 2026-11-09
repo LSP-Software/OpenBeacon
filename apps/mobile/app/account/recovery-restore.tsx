@@ -17,6 +17,7 @@ import { RecoveryPhraseGrid } from "../../components/RecoveryPhraseGrid.tsx";
 import { RecoveryCoverage } from "../../components/RecoveryCoverage.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
+import { useHeldHistoryKeyVersions } from "../../hooks/useHeldHistoryKeyVersions.ts";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { restoreFromRecoveryPhrase } from "../../lib/recovery.ts";
@@ -34,6 +35,12 @@ const RecoveryRestoreScreen = () => {
   const { data: session } = authClient.useSession();
   const queryClient = useQueryClient();
   const status = useQuery(trpc.accountRecovery.status.queryOptions());
+  const currentVersion = status.data?.currentHistoryKey?.version;
+  const heldVersions = useHeldHistoryKeyVersions(
+    session?.user.id,
+    status.data?.currentHistoryKey ?? undefined,
+  );
+  const holdsCurrent = currentVersion !== undefined && heldVersions.data?.includes(currentVersion);
   const [step, setStep] = useState<"enter" | "restoring" | "done">("enter");
   const [userId, setUserId] = useState<string>();
   const [words, setWords] = useState(emptyWords);
@@ -149,23 +156,32 @@ const RecoveryRestoreScreen = () => {
               <Button onPress={restore} disabled={step === "restoring"}>
                 <Text>{step === "restoring" ? "Restoring…" : "Restore"}</Text>
               </Button>
-              {afterSignIn && (
+              {!holdsCurrent && (
                 <View className="gap-2">
-                  <Button variant="outline" onPress={skip} disabled={step === "restoring"}>
-                    <Text>Skip for now</Text>
-                  </Button>
+                  {afterSignIn && (
+                    <Button variant="outline" onPress={skip} disabled={step === "restoring"}>
+                      <Text>Skip for now</Text>
+                    </Button>
+                  )}
                   <Link
-                    href={{ pathname: "/account/recovery-reset", params: { afterSignIn: "true" } }}
+                    href={
+                      afterSignIn
+                        ? { pathname: "/account/recovery-reset", params: { afterSignIn: "true" } }
+                        : "/account/recovery-reset"
+                    }
+                    replace={!afterSignIn}
                     asChild
                   >
                     <Button variant="ghost" disabled={step === "restoring"}>
                       <Text>I’ve lost my phrase</Text>
                     </Button>
                   </Link>
-                  <Text className="text-muted-foreground text-sm leading-5">
-                    If you skip, live location still works on this phone, but older history won’t
-                    show here. You can restore later from Account › Recovery phrase.
-                  </Text>
+                  {afterSignIn && (
+                    <Text className="text-muted-foreground text-sm leading-5">
+                      If you skip, live location still works on this phone, but older history won’t
+                      show here. You can restore later from Account › Recovery phrase.
+                    </Text>
+                  )}
                 </View>
               )}
             </View>
