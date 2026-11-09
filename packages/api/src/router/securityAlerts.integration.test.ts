@@ -35,18 +35,38 @@ const sent: {
 let sendFailure: Error | null = null;
 let sendGate: Promise<void> | null = null;
 const tasks: Promise<unknown>[] = [];
-const securityAlerts = createSecurityAlerts({
-  db: prisma,
-  sendSecurityAlertEmail: async ({ to, userId, alert, timezone, hasPassword }) => {
-    if (sendFailure) throw sendFailure;
-    await sendGate;
-    sent.push({ to, userId, alert, timezone, hasPassword });
-  },
-  runInBackground: (task) => tasks.push(task),
-});
+let clockOffset = 0;
+const now = () => new Date(Date.now() + clockOffset);
+const timers: { dueAt: number; run: () => void }[] = [];
+const createAlerts = (alertsTurnedOff = cache.alertsTurnedOff) =>
+  createSecurityAlerts({
+    db: prisma,
+    sendSecurityAlertEmail: async ({ to, userId, alert, at, timezone, hasPassword }) => {
+      if (sendFailure) throw sendFailure;
+      await sendGate;
+      sent.push({ to, userId, alert, timezone, hasPassword });
+      sentAt.push(at);
+    },
+    now,
+    runInBackground: (task) => tasks.push(task),
+    alertsTurnedOff,
+    setTimer: (run, ms) => timers.push({ dueAt: now().getTime() + ms, run }),
+  });
+const sentAt: Date[] = [];
+const securityAlerts = createAlerts();
 const sentAlerts = async () => {
-  await Promise.all(tasks.splice(0));
+  while (tasks.length) await Promise.all(tasks.splice(0));
   return sent;
+};
+const waitSeconds = async (seconds: number) => {
+  await sentAlerts();
+  clockOffset += seconds * 1000;
+  const due = timers.filter(({ dueAt }) => dueAt <= now().getTime());
+  due.forEach((timer) => {
+    timers.splice(timers.indexOf(timer), 1);
+    timer.run();
+  });
+  return sentAlerts();
 };
 
 let accountCounter = 0;
@@ -124,10 +144,12 @@ const turnOffOptionalAlerts = (userId: string) =>
   });
 
 beforeEach(async () => {
-  await sentAlerts();
+  await waitSeconds(60);
   sent.length = 0;
+  timers.length = 0;
   sendFailure = null;
   sendGate = null;
+  sentAt.length = 0;
 });
 
 afterAll(async () => {
@@ -347,15 +369,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     expect(await sentAlerts()).toEqual([]);
   });
 
-  test("turning an alert off sends one alert naming it", async () => {
+  test("turning an alert off sends one alert naming it a minute later", async () => {
     const account = await createAccount();
+    const turnedOffAt = now();
 
     await account.caller.emailAlerts.updateSettings({
       alertNewDevice: true,
       alertDeletionScheduled: false,
     });
 
-    expect(await sentAlerts()).toEqual([
+    expect(await waitSeconds(59)).toEqual([]);
+    expect(await waitSeconds(1)).toEqual([
       {
         to: account.email,
         userId: account.userId,
@@ -364,6 +388,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
         hasPassword: true,
       },
     ]);
+    expect(Math.abs((sentAt[0]?.getTime() ?? 0) - turnedOffAt.getTime())).toBeLessThan(1000);
   });
 
   test("turning both alerts off at once sends one alert naming both", async () => {
@@ -374,8 +399,155 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
       alertDeletionScheduled: false,
     });
 
-    expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
+    expect((await waitSeconds(60)).map(({ alert }) => alert)).toEqual([
       { type: "alerts-turned-off", alerts: ["new-device", "deletion-scheduled"] },
+    ]);
+  });
+
+  test("turning alerts off one at a time within a minute sends one alert naming both", async () => {
+    const account = await createAccount();
+    const firstAt = now();
+
+    await account.caller.emailAlerts.updateSettings({
+      alertNewDevice: false,
+      alertDeletionScheduled: true,
+    });
+    await waitSeconds(30);
+    await account.caller.emailAlerts.updateSettings({
+      alertNewDevice: false,
+      alertDeletionScheduled: false,
+    });
+
+    expect(await waitSeconds(30)).toHaveLength(1);
+    expect(await waitSeconds(60)).toHaveLength(1);
+    expect(sent.map(({ alert }) => alert)).toEqual([
+      { type: "alerts-turned-off", alerts: ["new-device", "deletion-scheduled"] },
+    ]);
+    expect(Math.abs((sentAt[0]?.getTime() ?? 0) - firstAt.getTime())).toBeLessThan(1000);
+  });
+
+  test("turning an alert back on within the minute still sends the alert", async () => {
+    const account = await createAccount();
+
+    await account.caller.emailAlerts.updateSettings({
+      alertNewDevice: false,
+      alertDeletionScheduled: true,
+    });
+    await waitSeconds(10);
+    await account.caller.emailAlerts.updateSettings({
+      alertNewDevice: true,
+      alertDeletionScheduled: true,
+    });
+
+    expect((await waitSeconds(50)).map(({ alert }) => alert)).toEqual([
+      { type: "alerts-turned-off", alerts: ["new-device"] },
+    ]);
+  });
+
+  test("an alert turned off after the batch was sent starts a new batch", async () => {
+    const account = await createAccount();
+    await account.caller.emailAlerts.updateSettings({
+      alertNewDevice: false,
+      alertDeletionScheduled: true,
+    });
+    await waitSeconds(60);
+    await account.caller.emailAlerts.updateSettings({
+      alertNewDevice: false,
+      alertDeletionScheduled: false,
+    });
+
+    expect((await waitSeconds(60)).map(({ alert }) => alert)).toEqual([
+      { type: "alerts-turned-off", alerts: ["new-device"] },
+      { type: "alerts-turned-off", alerts: ["deletion-scheduled"] },
+    ]);
+  });
+
+  test("a restarted server sends the alerts another server was holding", async () => {
+    const account = await createAccount();
+    await account.caller.emailAlerts.updateSettings({
+      alertNewDevice: false,
+      alertDeletionScheduled: false,
+    });
+    await sentAlerts();
+    timers.length = 0;
+    await waitSeconds(30);
+
+    createAlerts().schedulePendingAlertsTurnedOff();
+
+    expect(await waitSeconds(29)).toEqual([]);
+    expect((await waitSeconds(1)).map(({ alert }) => alert)).toEqual([
+      { type: "alerts-turned-off", alerts: ["new-device", "deletion-scheduled"] },
+    ]);
+  });
+
+  test("a server that starts after the minute is up sends the held alert straight away", async () => {
+    const account = await createAccount();
+    await account.caller.emailAlerts.updateSettings({
+      alertNewDevice: false,
+      alertDeletionScheduled: true,
+    });
+    await sentAlerts();
+    timers.length = 0;
+    await waitSeconds(300);
+
+    createAlerts().schedulePendingAlertsTurnedOff();
+
+    expect((await waitSeconds(0)).map(({ alert }) => alert)).toEqual([
+      { type: "alerts-turned-off", alerts: ["new-device"] },
+    ]);
+  });
+
+  test("two servers holding the same alerts send it once", async () => {
+    const account = await createAccount();
+    await account.caller.emailAlerts.updateSettings({
+      alertNewDevice: false,
+      alertDeletionScheduled: false,
+    });
+    await sentAlerts();
+    createAlerts().schedulePendingAlertsTurnedOff();
+
+    expect(await waitSeconds(60)).toHaveLength(1);
+  });
+
+  test("a failed alerts turned off email doesn't fail the request", async () => {
+    const account = await createAccount();
+    sendFailure = new Error("SMTP is down");
+
+    expect(
+      await account.caller.emailAlerts.updateSettings({
+        alertNewDevice: false,
+        alertDeletionScheduled: false,
+      }),
+    ).toEqual({ alertNewDevice: false, alertDeletionScheduled: false });
+    expect(await waitSeconds(60)).toEqual([]);
+  });
+
+  test("the alert is sent straight away when it can't be held", async () => {
+    const account = await createAccount();
+    const caller = appRouter.createCaller({
+      cache,
+      db: prisma,
+      emailCodes: null,
+      securityAlerts: createAlerts({
+        ...cache.alertsTurnedOff,
+        add: async () => {
+          throw new Error("Redis is down");
+        },
+      }),
+      clientIp: `ip-${account.userId}`,
+      session: {
+        user: { id: account.userId },
+        session: { id: "held", createdAt: new Date() },
+      },
+    } as Parameters<typeof appRouter.createCaller>[0]);
+
+    await caller.emailAlerts.updateSettings({
+      alertNewDevice: false,
+      alertDeletionScheduled: true,
+    });
+
+    expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
+      { type: "alerts-turned-off", alerts: ["new-device"] },
     ]);
   });
 
@@ -396,7 +568,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
       alertDeletionScheduled: true,
     });
 
-    expect(await sentAlerts()).toEqual([]);
+    expect(await waitSeconds(60)).toEqual([]);
   });
 
   test("deleting an account immediately sends one alert to its address, even with optional alerts off", async () => {

@@ -24,13 +24,15 @@ export const authCapabilities = getAuthCapabilities({
   emailEnabled,
 });
 
-export const emailCodes = emailEnabled
+const cache = emailEnabled
+  ? new OpenBeaconCache({ redisUrl: redisUrlSchema.parse(process.env["REDIS_URL"]) })
+  : null;
+
+export const emailCodes = cache
   ? createEmailCodes({
       db,
       secret: env.BETTER_AUTH_SECRET,
-      rateLimits: new OpenBeaconCache({
-        redisUrl: redisUrlSchema.parse(process.env["REDIS_URL"]),
-      }).rateLimits,
+      rateLimits: cache.rateLimits,
       limitRequestsPerIp: env.EMAIL_CODE_IP_LIMIT,
       sendCodeEmail,
       sendAccountExistsEmail,
@@ -38,8 +40,8 @@ export const emailCodes = emailEnabled
     })
   : null;
 
-export const securityAlerts = emailEnabled
-  ? createSecurityAlerts({ db, sendSecurityAlertEmail })
+export const securityAlerts = cache
+  ? createSecurityAlerts({ db, sendSecurityAlertEmail, alertsTurnedOff: cache.alertsTurnedOff })
   : null;
 
 export const auth = createAuth({ emailCodes, securityAlerts });

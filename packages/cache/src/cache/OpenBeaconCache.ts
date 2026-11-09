@@ -1,4 +1,5 @@
 import { RedisClient, type RedisOptions } from "bun";
+import { createAlertsTurnedOff } from "../alertsTurnedOff/alertsTurnedOff.ts";
 import { createPmtilesSignedUrls } from "../pmtilesSignedUrls/pmtilesSignedUrls.ts";
 import type {
   PmtilesSignedUrlInput,
@@ -17,6 +18,7 @@ import type { RateLimitResult } from "../rateLimits/types.ts";
 import { type RedisLike, toRedisOptions } from "./redis.ts";
 
 export class OpenBeaconCache {
+  public readonly alertsTurnedOff: ReturnType<typeof createAlertsTurnedOff>;
   public readonly pmtilesSignedUrls: {
     get: (input: PmtilesSignedUrlInput) => Promise<PmtilesSignedUrlValue | null>;
     set: (input: SetPmtilesSignedUrlInput) => Promise<void>;
@@ -40,6 +42,7 @@ export class OpenBeaconCache {
       parsedOptions.redisUrl,
       toRedisOptions(parsedOptions.redisOptions),
     );
+    this.alertsTurnedOff = createAlertsTurnedOff({ redis: this.redis, keyPrefix: this.keyPrefix });
     this.pmtilesSignedUrls = createPmtilesSignedUrls({
       redis: this.redis,
       now: this.now,

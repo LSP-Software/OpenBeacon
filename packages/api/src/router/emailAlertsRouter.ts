@@ -34,8 +34,7 @@ export const emailAlertsRouter = {
       const turnedOff = (Object.keys(optionalSecurityAlerts) as OptionalSecurityAlert[]).filter(
         (type) => before[optionalSecurityAlerts[type]] && !after[optionalSecurityAlerts[type]],
       );
-      if (turnedOff.length)
-        ctx.securityAlerts?.send(userId, { type: "alerts-turned-off", alerts: turnedOff });
+      if (turnedOff.length) ctx.securityAlerts?.turnedOff(userId, turnedOff);
       return after;
     }),
   setTimezone: protectedProcedure

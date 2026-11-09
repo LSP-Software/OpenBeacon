@@ -127,22 +127,6 @@ describe("renderSecurityAlertEmail", () => {
     );
   });
 
-  test("turning alerts off lists each alert by its name in the app", async () => {
-    const one = await render({ type: "alerts-turned-off", alerts: ["deletion-scheduled"] });
-    expect(one.subject).toBe("Email alerts were turned off on your OpenBeacon account");
-    expect(one.text).toContain(
-      "These email alerts were turned off on Thursday, 9 July 2026 at 14:32 BST (13:32 UTC): Account deletion scheduled.",
-    );
-    const both = await render({
-      type: "alerts-turned-off",
-      alerts: ["new-device", "deletion-scheduled"],
-    });
-    expect(both.text).toContain(": New device added and Account deletion scheduled.");
-    expect(both.text).toContain(
-      "If this wasn't you, someone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device. Then turn the alerts back on in Account → Email alerts.",
-    );
-  });
-
   test("an account deletion alert says it can't be undone", async () => {
     const email = await render({ type: "account-deleted" });
     expect(email.subject).toBe("Your OpenBeacon account was deleted");

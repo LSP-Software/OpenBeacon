@@ -1,21 +1,27 @@
 import { timezoneSchema } from "@openbeacon/schemas";
 import { Text } from "@react-email/components";
+import { renderAlertsTurnedOffEmail } from "./alertsTurnedOffEmail.tsx";
 import { renderEmailLayout } from "./layout.tsx";
 import type { createSendEmail } from "./sender.ts";
 import { type EmailMessage, isOptionalSecurityAlert, type SecurityAlert } from "./types.ts";
 
+const secureGoogleAdvice =
+  "Secure your Google account, because someone may have used it to sign in.";
+
+const secureAccountAdvice = (hasPassword: boolean) =>
+  hasPassword
+    ? "In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device."
+    : secureGoogleAdvice;
+
+const signedInAdvice = (hasPassword: boolean) =>
+  `If this wasn't you, someone else is signed in to your account. ${secureAccountAdvice(hasPassword)}`;
+
 const alertCopy = (
-  alert: SecurityAlert,
+  alert: Exclude<SecurityAlert, { type: "alerts-turned-off" }>,
   happenedAt: string,
   formatTime: (date: Date) => string,
   hasPassword: boolean,
 ): { subject: string; happened: string; ifNotYou: string } => {
-  const secureGoogleAdvice =
-    "Secure your Google account, because someone may have used it to sign in.";
-  const secureAccountAdvice = hasPassword
-    ? "In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device."
-    : secureGoogleAdvice;
-  const signedInAdvice = `If this wasn't you, someone else is signed in to your account. ${secureAccountAdvice}`;
   switch (alert.type) {
     case "password-changed":
       return {
@@ -35,13 +41,13 @@ const alertCopy = (
       return {
         subject: "Your OpenBeacon recovery phrase was changed",
         happened: `Your OpenBeacon recovery phrase was changed on ${happenedAt}. Your old phrase no longer works.`,
-        ifNotYou: `${signedInAdvice} Then open Account → Recovery phrase and tap Change recovery phrase.`,
+        ifNotYou: `${signedInAdvice(hasPassword)} Then open Account → Recovery phrase and tap Change recovery phrase.`,
       };
     case "recovery-phrase-reset":
       return {
         subject: "Your OpenBeacon recovery phrase was reset",
         happened: `Your OpenBeacon recovery phrase was reset on ${happenedAt}. Your old phrase no longer works.`,
-        ifNotYou: `${signedInAdvice} Then open Account → Recovery phrase and tap "I’ve lost my phrase" to set a new one.`,
+        ifNotYou: `${signedInAdvice(hasPassword)} Then open Account → Recovery phrase and tap "I’ve lost my phrase" to set a new one.`,
       };
     case "new-device": {
       const platform =
@@ -53,29 +59,15 @@ const alertCopy = (
       return {
         subject: "A new device was added to your OpenBeacon account",
         happened: `A new device was added to your OpenBeacon account on ${happenedAt}: ${device}.`,
-        ifNotYou: signedInAdvice,
+        ifNotYou: signedInAdvice(hasPassword),
       };
     }
     case "deletion-scheduled":
       return {
         subject: "Your OpenBeacon account is scheduled for deletion",
         happened: `Your OpenBeacon account was scheduled for deletion on ${happenedAt}. It will be deleted on ${formatTime(alert.deletionDate)}. Signing in to the app before then cancels the deletion.`,
-        ifNotYou: `If this wasn't you, sign in to the app now to cancel it. ${secureAccountAdvice}`,
+        ifNotYou: `If this wasn't you, sign in to the app now to cancel it. ${secureAccountAdvice(hasPassword)}`,
       };
-    case "alerts-turned-off": {
-      const labels = alert.alerts.map(
-        (type) =>
-          ({
-            "new-device": "New device added",
-            "deletion-scheduled": "Account deletion scheduled",
-          })[type],
-      );
-      return {
-        subject: "Email alerts were turned off on your OpenBeacon account",
-        happened: `These email alerts were turned off on ${happenedAt}: ${labels.join(" and ")}.`,
-        ifNotYou: `${signedInAdvice} Then turn the alerts back on in Account → Email alerts.`,
-      };
-    }
     case "account-deleted":
       return {
         subject: "Your OpenBeacon account was deleted",
@@ -103,6 +95,15 @@ export const renderSecurityAlertEmail = async ({
   serverName: string;
 }): Promise<Omit<EmailMessage, "to"> & { canTurnOff: boolean }> => {
   const formatTime = (date: Date) => formatAlertTime(date, timezone);
+  if (alert.type === "alerts-turned-off") {
+    const email = await renderAlertsTurnedOffEmail({
+      alerts: alert.alerts,
+      happenedAt: formatTime(at),
+      signedInAdvice: signedInAdvice(hasPassword),
+      serverName,
+    });
+    return { ...email, canTurnOff: false };
+  }
   const { subject, happened, ifNotYou } = alertCopy(alert, formatTime(at), formatTime, hasPassword);
   const canTurnOff = isOptionalSecurityAlert(alert.type);
   const rendered = await renderEmailLayout({

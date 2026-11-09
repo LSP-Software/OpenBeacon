@@ -22,6 +22,7 @@ const renderEveryEmail = async () => {
     { type: "recovery-phrase-reset" },
     { type: "new-device", device: { model: "Pixel 8", platform: "android" } },
     { type: "deletion-scheduled", deletionDate: new Date("2026-07-16T13:32:00Z") },
+    { type: "alerts-turned-off", alerts: ["deletion-scheduled"] },
     { type: "alerts-turned-off", alerts: ["new-device", "deletion-scheduled"] },
     { type: "account-deleted" },
   ];
