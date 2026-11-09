@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, View } from "react-native";
 import { useGroupColorRevision } from "../../hooks/useGroupColorRevision.ts";
 import { Alert } from "../../lib/alert.ts";
 import { authClient } from "../../lib/auth-client.ts";
-import { GROUP_COLOR_PALETTE, getGroupColor } from "../../lib/groupColor.ts";
+import { GROUP_COLOR_NAMES, GROUP_COLOR_PALETTE, getGroupColor } from "../../lib/groupColor.ts";
 import { groupColorSyncQueryOptions, saveGroupColor } from "../../lib/groupColorSync.ts";
 import { Button } from "../ui/Button.tsx";
 import { Text } from "../ui/Text.tsx";
@@ -45,6 +45,7 @@ export const GroupMapColorPicker = ({ groupId }: { groupId: string }) => {
                 <Pressable
                   key={color}
                   accessibilityRole="button"
+                  accessibilityLabel={GROUP_COLOR_NAMES[color]}
                   accessibilityState={{ selected, disabled: locked }}
                   disabled={locked}
                   onPress={() => {
