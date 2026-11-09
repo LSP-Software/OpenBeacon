@@ -81,6 +81,7 @@ describe("production environment validation", () => {
       { SELF_HOSTED: "maybe" },
       { RESEND_API_KEY: "re_key", SMTP_HOST: "smtp.example.com", EMAIL_FROM: "a@example.com" },
       { RESEND_API_KEY: "re_key" },
+      { EMAIL_FROM: "noreply@example.com" },
       { EMAIL_CONSOLE: "true", NODE_ENV: "production" },
     ]) {
       const result = Bun.spawnSync({

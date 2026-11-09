@@ -38,6 +38,9 @@ export const resolveEmailConfig = (
   if (env.EMAIL_CONSOLE && (env.RESEND_API_KEY || env.SMTP_HOST)) {
     throw new Error("EMAIL_CONSOLE cannot be combined with RESEND_API_KEY or SMTP_HOST");
   }
+  if (env.EMAIL_FROM && !env.RESEND_API_KEY && !env.SMTP_HOST && !env.EMAIL_CONSOLE) {
+    throw new Error("EMAIL_FROM needs RESEND_API_KEY or SMTP_HOST");
+  }
   if (env.EMAIL_CONSOLE && env.NODE_ENV !== "development" && env.NODE_ENV !== "test") {
     throw new Error("EMAIL_CONSOLE is only allowed when NODE_ENV is development or test");
   }

@@ -91,8 +91,16 @@ describe("resolveEmailConfig", () => {
     ).toThrow("SMTP_USER and SMTP_PASSWORD must be set together");
   });
 
-  test("only checks EMAIL_FROM when Resend or SMTP is configured", () => {
-    expect(resolve({ EMAIL_FROM: "not-an-email" })).toEqual({ transport: "none" });
+  test("rejects EMAIL_FROM without a provider, unless printing to the console", () => {
+    expect(() => resolve({ EMAIL_FROM: "noreply@example.com" })).toThrow(
+      "EMAIL_FROM needs RESEND_API_KEY or SMTP_HOST",
+    );
+    expect(
+      resolve({ EMAIL_CONSOLE: "true", EMAIL_FROM: "dev@example.com" }, "development"),
+    ).toEqual({ transport: "console", fromAddress: "dev@example.com" });
+  });
+
+  test("checks EMAIL_FROM is a plain address when Resend or SMTP is configured", () => {
     for (const provider of [{ RESEND_API_KEY: "re_key" }, { SMTP_HOST: "smtp.example.com" }]) {
       expect(() => resolve({ ...provider, EMAIL_FROM: "not-an-email" })).toThrow(
         "EMAIL_FROM must be a valid email address when Resend or SMTP is configured",
