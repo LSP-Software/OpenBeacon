@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ActivityIndicator, Alert, Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { useGroupColorRevision } from "../../hooks/useGroupColorRevision.ts";
+import { Alert } from "../../lib/alert.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { GROUP_COLOR_PALETTE, getGroupColor } from "../../lib/groupColor.ts";
 import { groupColorSyncQueryOptions, saveGroupColor } from "../../lib/groupColorSync.ts";
