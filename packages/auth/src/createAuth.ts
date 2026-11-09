@@ -24,7 +24,7 @@ export const createAuth = ({
       "/send-verification-email",
       "/verify-email",
       "/request-password-reset",
-      "/reset-password",
+      ...(emailCodes ? [] : ["/reset-password"]),
       "/change-email",
       "/delete-user",
       "/delete-user/callback",
@@ -135,6 +135,9 @@ export const createAuth = ({
         },
       },
     },
+    verification: {
+      storeIdentifier: { default: "plain", overrides: { "reset-password:": "hashed" } },
+    },
     database: prismaAdapter(db, {
       provider: "postgresql",
     }),
@@ -143,6 +146,7 @@ export const createAuth = ({
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: emailCodes !== null,
+      revokeSessionsOnPasswordReset: true,
     },
     socialProviders:
       env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET

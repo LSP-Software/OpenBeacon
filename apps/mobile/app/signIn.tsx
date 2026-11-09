@@ -41,6 +41,7 @@ const SignIn = () => {
 
   const isSubmitting = emailLoading || googleLoading;
   const isGoogleEnabled = providers?.google === true && isNativeGoogleSignInConfigured;
+  const enteredEmail = form.watch("email");
 
   const handleLogin = async ({ email, password }: z.infer<typeof signInSchema>) => {
     setEmailLoading(true);
@@ -167,6 +168,19 @@ const SignIn = () => {
                   returnKeyType="done"
                   onSubmitEditing={form.handleSubmit(handleLogin)}
                 />
+                {providers?.email ? (
+                  <Link
+                    href={{
+                      pathname: "/forgotPassword",
+                      params: { joinCode, email: enteredEmail },
+                    }}
+                    asChild
+                  >
+                    <Pressable className="self-end py-1" accessibilityRole="link">
+                      <Text className="font-semibold text-primary-text">Forgot password?</Text>
+                    </Pressable>
+                  </Link>
+                ) : null}
                 <Button onPress={form.handleSubmit(handleLogin)} disabled={isSubmitting}>
                   <Text>{emailLoading ? "Signing in…" : "Sign In"}</Text>
                 </Button>

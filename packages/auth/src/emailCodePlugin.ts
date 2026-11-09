@@ -1,9 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { tryCatch } from "@openbeacon/shared";
 import type { BetterAuthPlugin } from "better-auth";
-import { APIError, createAuthEndpoint, getIP, resetPassword } from "better-auth/api";
+import { APIError, createAuthEndpoint, getIP } from "better-auth/api";
 import { z } from "zod";
 import { type EmailCodes, normalizeEmail } from "./emailCode.ts";
+
+export const resetTokenLifetimeMs = 5 * 60 * 1000;
 
 export const emailCodePlugin = (codes: EmailCodes | null) =>
   ({
@@ -134,31 +136,11 @@ export const emailCodePlugin = (codes: EmailCodes | null) =>
           return ctx.json({ success: true });
         },
       ),
-      resetPasswordWithCode: createAuthEndpoint(
-        "/email-code/reset-password",
-        {
-          method: "POST",
-          body: z.object({
-            email: z.email(),
-            code: z.string(),
-            newPassword: z.string(),
-          }),
-        },
+      verifyPasswordResetCode: createAuthEndpoint(
+        "/email-code/verify-password-reset-code",
+        { method: "POST", body: z.object({ email: z.email(), code: z.string() }) },
         async (ctx) => {
           if (!codes) throw new APIError("NOT_FOUND");
-          const { minPasswordLength, maxPasswordLength } = ctx.context.password.config;
-          if (ctx.body.newPassword.length < minPasswordLength) {
-            throw new APIError("BAD_REQUEST", {
-              message: "Password too short",
-              code: "PASSWORD_TOO_SHORT",
-            });
-          }
-          if (ctx.body.newPassword.length > maxPasswordLength) {
-            throw new APIError("BAD_REQUEST", {
-              message: "Password too long",
-              code: "PASSWORD_TOO_LONG",
-            });
-          }
           const email = normalizeEmail(ctx.body.email);
           const result = await codes.check({
             purpose: "password-reset",
@@ -171,18 +153,14 @@ export const emailCodePlugin = (codes: EmailCodes | null) =>
               })
             : null;
           if (!hasPassword(user)) throw invalidCode();
-          const token = randomUUID();
+          await ctx.context.internalAdapter.updateUser(user.user.id, { emailVerified: true });
+          const resetToken = randomBytes(32).toString("base64url");
           await ctx.context.internalAdapter.createVerificationValue({
-            identifier: `reset-password:${token}`,
+            identifier: `reset-password:${resetToken}`,
             value: user.user.id,
-            expiresAt: new Date(Date.now() + 60 * 1000),
+            expiresAt: new Date(Date.now() + resetTokenLifetimeMs),
           });
-          return resetPassword({
-            ...ctx,
-            params: {},
-            body: { token, newPassword: ctx.body.newPassword },
-            query: undefined,
-          });
+          return ctx.json({ resetToken });
         },
       ),
     },

@@ -12,6 +12,10 @@ export const emailCodes = {
     post<{ success: boolean }>("/email-code/request-email-verification", { email, password }),
   verifyEmail: (email: string, code: string) =>
     post<{ success: boolean }>("/email-code/verify-email", { email, code }),
+  requestPasswordReset: (email: string) =>
+    post<{ success: boolean }>("/email-code/request-password-reset", { email }),
+  verifyPasswordResetCode: (email: string, code: string) =>
+    post<{ resetToken: string }>("/email-code/verify-password-reset-code", { email, code }),
 };
 
 export const emailCodeErrorMessage = (error: { status: number; message?: string | undefined }) =>

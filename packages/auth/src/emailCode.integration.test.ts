@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis } from "@openbeacon/cache/testing";
@@ -13,6 +13,7 @@ import {
   emailCodeRequestLimits,
   signUpTokenLifetimeMs,
 } from "./emailCode.ts";
+import { resetTokenLifetimeMs } from "./emailCodePlugin.ts";
 
 class TestCache extends OpenBeaconCache {
   protected override createRedisClient(): FakeRedis {
@@ -74,8 +75,34 @@ const request = async (
 const requestResetCode = (email: string, ip = nextIp()) =>
   request("/email-code/request-password-reset", { body: { email }, ip });
 
-const resetWithCode = (body: { email: string; code: string; newPassword: string }) =>
-  request("/email-code/reset-password", { body, ip: nextIp() });
+const verifyResetCode = (email: string, code: string) =>
+  request("/email-code/verify-password-reset-code", { body: { email, code }, ip: nextIp() });
+
+const resetPassword = (token: string, newPassword: string, handler = auth.handler) =>
+  request("/reset-password", { body: { token, newPassword }, ip: nextIp() }, handler);
+
+const resetTokenFor = async (email: string) => {
+  await requestResetCode(email);
+  const code = sent.findLast((message) => message.to === email)?.code ?? "";
+  const verified = await verifyResetCode(email, code);
+  expect(verified.status).toBe(200);
+  return z.object({ resetToken: z.string() }).parse(JSON.parse(verified.body)).resetToken;
+};
+
+const resetTokenRows = (userId: string) =>
+  prisma.verification.findMany({ where: { value: userId } });
+
+const createResetToken = async (userId: string) => {
+  const token = crypto.randomUUID();
+  await (
+    await auth.$context
+  ).internalAdapter.createVerificationValue({
+    identifier: `reset-password:${token}`,
+    value: userId,
+    expiresAt: new Date(Date.now() + 60_000),
+  });
+  return token;
+};
 
 const createPasswordAccount = async (label: string) => {
   const email = nextAddress(label);
@@ -380,16 +407,20 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email code rate 
     expect(sent.filter((message) => message.to === email)).toHaveLength(1);
   });
 
-  test("unknown addresses are limited the same way as real ones", async () => {
+  test("unknown and Google-only addresses are limited the same way as password accounts", async () => {
     const { email } = await createPasswordAccount("limit-known");
+    const google = await createGoogleOnlyAccount("limit-google");
     const unknown = nextAddress("limit-unknown");
     const known = [];
+    const googleOnly = [];
     const missing = [];
     for (let index = 0; index <= emailCodeRequestLimits.perAddress.limit; index++) {
       known.push(await requestResetCode(email));
+      googleOnly.push(await requestResetCode(google.email));
       missing.push(await requestResetCode(unknown));
     }
     expect(missing).toEqual(known);
+    expect(googleOnly).toEqual(known);
     expect(known.map((response) => response.status)).toEqual([200, 200, 200, 429]);
   });
 });
@@ -414,6 +445,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password reset c
     expect(sent).toHaveLength(1);
   });
 
+  test("a Google-only account gets no email and no code", async () => {
+    const google = await createGoogleOnlyAccount("reset-google-silent");
+    await requestResetCode(google.email);
+    expect(sent).toEqual([]);
+    expect(accountExistsSent).toEqual([]);
+    expect(await codeRows("password-reset", google.email)).toEqual([]);
+  });
+
   test("a failed send doesn't change the response", async () => {
     const { email } = await createPasswordAccount("send-failure");
     const unknown = await requestResetCode(nextAddress("send-failure-unknown"));
@@ -428,43 +467,85 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password reset c
     expect(errors).toEqual([["[email-code] could not send a password reset code"]]);
   });
 
-  test("the right code resets the password once", async () => {
-    const { email, userId } = await createPasswordAccount("reset-ok");
+  test("the right code gives a reset token that resets the password once", async () => {
+    const { email } = await createPasswordAccount("reset-ok");
     await requestResetCode(email);
     const code = sent[0]?.code ?? "";
+    const verified = await verifyResetCode(email.toUpperCase(), code);
+    expect(verified.status).toBe(200);
+    const { resetToken } = z.object({ resetToken: z.string() }).parse(JSON.parse(verified.body));
+    expect(JSON.parse((await verifyResetCode(email, code)).body)).toMatchObject({
+      code: "INVALID_CODE",
+    });
+
     const newPassword = "a brand new passphrase";
-    expect((await resetWithCode({ email, code, newPassword })).status).toBe(200);
+    expect((await resetPassword(resetToken, newPassword)).status).toBe(200);
     expect(await signsInWith(email, newPassword)).toBe(true);
     expect(await signsInWith(email, password)).toBe(false);
-    const reused = await resetWithCode({ email, code, newPassword: "yet another passphrase" });
+    const reused = await resetPassword(resetToken, "yet another passphrase");
     expect(reused.status).toBe(400);
     expect(await signsInWith(email, newPassword)).toBe(true);
-    expect(
-      await prisma.verification.count({
-        where: { identifier: { startsWith: "reset-password:" }, value: userId },
-      }),
-    ).toBe(0);
   });
 
-  test("every failed reset gives the same error and leaves the password alone", async () => {
-    const { email } = await createPasswordAccount("reset-fail");
+  test("every failed code check gives the same error and no reset token", async () => {
+    const { email, userId } = await createPasswordAccount("reset-fail");
     const google = await createGoogleOnlyAccount("reset-fail-google");
     await requestResetCode(email);
     const code = sent[0]?.code ?? "";
-    const newPassword = "a brand new passphrase";
     const googleCode = await issueCode("password-reset", google.email);
     const signUpCode = await issueCode("sign-up", email);
     const failures = [
-      await resetWithCode({ email, code: wrongCodeFor(code), newPassword }),
-      await resetWithCode({ email: nextAddress("reset-fail-unknown"), code, newPassword }),
-      await resetWithCode({ email: google.email, code: googleCode, newPassword }),
-      await resetWithCode({ email, code: signUpCode, newPassword }),
+      await verifyResetCode(email, wrongCodeFor(code)),
+      await verifyResetCode(nextAddress("reset-fail-unknown"), code),
+      await verifyResetCode(google.email, googleCode),
+      await verifyResetCode(email, signUpCode),
     ];
     expect(failures.map((failure) => failure.status)).toEqual([400, 400, 400, 400]);
     expect(new Set(failures.map((failure) => failure.body)).size).toBe(1);
     expect(JSON.parse(failures[0]?.body ?? "{}")).toMatchObject({ code: "INVALID_CODE" });
+    expect(await resetTokenRows(userId)).toEqual([]);
+    expect(await resetTokenRows(google.userId)).toEqual([]);
+  });
+
+  test("an expired code gives no reset token", async () => {
+    const { email } = await createPasswordAccount("reset-expired");
+    await requestResetCode(email);
+    clockMs += emailCodeLifetimeMs;
+    expect((await verifyResetCode(email, sent[0]?.code ?? "")).status).toBe(400);
+  });
+
+  test("reset tokens are stored as a hash and last 5 minutes", async () => {
+    const { email, userId } = await createPasswordAccount("reset-token-stored");
+    const before = Date.now();
+    const token = await resetTokenFor(email);
+    const rows = await resetTokenRows(userId);
+    expect(rows.map((row) => row.identifier)).toEqual([
+      createHash("sha256").update(`reset-password:${token}`).digest("base64url"),
+    ]);
+    expect(rows[0]?.expiresAt.getTime()).toBeGreaterThanOrEqual(before + resetTokenLifetimeMs);
+    expect(rows[0]?.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + resetTokenLifetimeMs);
+  });
+
+  test("an expired reset token can't reset the password", async () => {
+    const { email, userId } = await createPasswordAccount("reset-token-expired");
+    const token = await resetTokenFor(email);
+    await prisma.verification.updateMany({
+      where: { value: userId },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    const result = await resetPassword(token, "a brand new passphrase");
+    expect(result.status).toBe(400);
+    expect(JSON.parse(result.body)).toMatchObject({ code: "INVALID_TOKEN" });
     expect(await signsInWith(email, password)).toBe(true);
-    expect(await prisma.account.count({ where: { userId: google.userId } })).toBe(1);
+  });
+
+  test("a password that's too short doesn't use up the reset token", async () => {
+    const { email } = await createPasswordAccount("reset-short");
+    const token = await resetTokenFor(email);
+    const short = await resetPassword(token, "short");
+    expect(short.status).toBe(400);
+    expect(JSON.parse(short.body)).toMatchObject({ code: "PASSWORD_TOO_SHORT" });
+    expect((await resetPassword(token, "long enough now")).status).toBe(200);
   });
 
   test("a reset can't add a password if the account loses its password login first", async () => {
@@ -477,21 +558,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password reset c
         accountId: `${prefix}-reset-unlinked-google`,
       },
     });
-    await requestResetCode(email);
-    const findUserByEmail = (await auth.$context).internalAdapter.findUserByEmail;
-    const unlinkAfterLookup = spyOn(
-      (await auth.$context).internalAdapter,
-      "findUserByEmail",
-    ).mockImplementation(async (...args) => {
-      const user = await findUserByEmail(...args);
-      await prisma.account.deleteMany({ where: { userId, providerId: "credential" } });
-      return user;
-    });
-    const result = await resetWithCode({
-      email,
-      code: sent[0]?.code ?? "",
-      newPassword: "a brand new passphrase",
-    }).finally(() => unlinkAfterLookup.mockRestore());
+    const token = await resetTokenFor(email);
+    await prisma.account.deleteMany({ where: { userId, providerId: "credential" } });
+    const result = await resetPassword(token, "a brand new passphrase");
     expect(result.status).toBe(400);
     expect(JSON.parse(result.body)).toMatchObject({ code: "PASSWORD_NOT_ALLOWED" });
     expect(
@@ -501,42 +570,59 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password reset c
 
   test("a reset token for a Google-only account can't add a password", async () => {
     const google = await createGoogleOnlyAccount("reset-token-google");
-    const token = crypto.randomUUID();
-    await prisma.verification.create({
-      data: {
-        id: `${prefix}-reset-token-google`,
-        identifier: `reset-password:${token}`,
-        value: google.userId,
-        expiresAt: new Date(Date.now() + 60_000),
-      },
-    });
-    await expect(
-      auth.api.resetPassword({ body: { token, newPassword: "a brand new passphrase" } }),
-    ).rejects.toMatchObject({ body: { code: "PASSWORD_NOT_ALLOWED" } });
+    const token = await createResetToken(google.userId);
+    const result = await resetPassword(token, "a brand new passphrase");
+    expect(JSON.parse(result.body)).toMatchObject({ code: "PASSWORD_NOT_ALLOWED" });
     expect(await prisma.account.count({ where: { userId: google.userId } })).toBe(1);
   });
 
-  test("an expired code can't reset the password", async () => {
-    const { email } = await createPasswordAccount("reset-expired");
-    await requestResetCode(email);
-    clockMs += emailCodeLifetimeMs;
-    const result = await resetWithCode({
-      email,
-      code: sent[0]?.code ?? "",
-      newPassword: "a brand new passphrase",
-    });
-    expect(result.status).toBe(400);
+  test("a reset signs out every session", async () => {
+    const { email, userId } = await createPasswordAccount("reset-revokes");
+    const cookies = [];
+    for (let index = 0; index < 2; index++) {
+      const response = await auth.handler(
+        new Request("http://localhost:3000/api/auth/sign-in/email", {
+          method: "POST",
+          headers: { "content-type": "application/json", [clientIpHeader]: nextIp() },
+          body: JSON.stringify({ email, password }),
+        }),
+      );
+      expect(response.status).toBe(200);
+      cookies.push(response.headers.get("set-cookie")?.split(";")[0] ?? "");
+    }
+    const sessionFor = async (cookie: string) => {
+      const response = await auth.handler(
+        new Request("http://localhost:3000/api/auth/get-session", {
+          headers: { cookie, [clientIpHeader]: nextIp() },
+        }),
+      );
+      return response.json();
+    };
+    for (const cookie of cookies) {
+      expect(await sessionFor(cookie)).toMatchObject({ user: { id: userId } });
+    }
+
+    const reset = await resetPassword(await resetTokenFor(email), "a brand new passphrase");
+    expect(reset.status).toBe(200);
+    for (const cookie of cookies) {
+      expect(await sessionFor(cookie)).toBeNull();
+    }
+    expect(await prisma.session.count({ where: { userId } })).toBe(0);
+  });
+
+  test("a correct reset code marks an unverified account verified, even without a reset", async () => {
+    const { email } = await createUnverifiedAccount("reset-verifies");
+    await resetTokenFor(email);
+    expect((await prisma.user.findUnique({ where: { email } }))?.emailVerified).toBe(true);
     expect(await signsInWith(email, password)).toBe(true);
   });
 
-  test("a password that's too short doesn't use up the code", async () => {
-    const { email } = await createPasswordAccount("reset-short");
+  test("a wrong reset code leaves an unverified account unverified", async () => {
+    const { email } = await createUnverifiedAccount("reset-fail-unverified");
     await requestResetCode(email);
-    const code = sent[0]?.code ?? "";
-    const short = await resetWithCode({ email, code, newPassword: "short" });
-    expect(short.status).toBe(400);
-    expect(JSON.parse(short.body)).toMatchObject({ code: "PASSWORD_TOO_SHORT" });
-    expect((await resetWithCode({ email, code, newPassword: "long enough now" })).status).toBe(200);
+    const result = await verifyResetCode(email, wrongCodeFor(sent[0]?.code ?? ""));
+    expect(result.status).toBe(400);
+    expect((await prisma.user.findUnique({ where: { email } }))?.emailVerified).toBe(false);
   });
 });
 
@@ -549,36 +635,24 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email routes", (
       { path: "/email-code/request-email-verification", body: { email, password } },
       { path: "/email-code/verify-email", body: { email, code: "000000" } },
       { path: "/email-code/request-password-reset", body: { email } },
-      {
-        path: "/email-code/reset-password",
-        body: { email, code: "000000", newPassword: "a brand new passphrase" },
-      },
+      { path: "/email-code/verify-password-reset-code", body: { email, code: "000000" } },
+      { path: "/reset-password", body: { token: "x", newPassword: "a brand new passphrase" } },
     ];
     const responses = await Promise.all(
       routes.map(({ path, body }) => request(path, { body, ip: nextIp() }, emailOff.handler)),
     );
-    expect(responses.map((response) => response.status)).toEqual([404, 404, 404, 404, 404, 404]);
+    expect(responses.map((response) => response.status)).toEqual([
+      404, 404, 404, 404, 404, 404, 404,
+    ]);
   });
 
   test("better-auth routes that could send email are switched off", async () => {
-    const { email } = await createPasswordAccount("disabled-routes");
-    const token = crypto.randomUUID();
-    await prisma.verification.create({
-      data: {
-        id: `${prefix}-callback`,
-        identifier: `reset-password:${token}`,
-        value: "unused",
-        expiresAt: new Date(Date.now() + 60_000),
-      },
-    });
+    const { email, userId } = await createPasswordAccount("disabled-routes");
+    const token = await createResetToken(userId);
     const responses = await Promise.all([
       request("/send-verification-email", { body: { email }, ip: nextIp() }),
       request("/verify-email?token=x", { method: "GET", ip: nextIp() }),
       request("/request-password-reset", { body: { email }, ip: nextIp() }),
-      request("/reset-password", {
-        body: { token, newPassword: "a brand new passphrase" },
-        ip: nextIp(),
-      }),
       request(`/reset-password/${token}?callbackURL=openbeacon://`, {
         method: "GET",
         ip: nextIp(),
@@ -588,7 +662,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email routes", (
       request("/delete-user/callback?token=x", { method: "GET", ip: nextIp() }),
     ]);
     expect(responses.map((response) => response.status)).toEqual([
-      404, 404, 404, 404, 404, 404, 404, 404,
+      404, 404, 404, 404, 404, 404, 404,
     ]);
     expect(await signsInWith(email, password)).toBe(true);
   });
