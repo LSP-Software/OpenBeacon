@@ -22,7 +22,7 @@ migrations before starting the server. Configure
 existing Redis-compatible service. The database user needs permission to apply
 migrations. Back up an existing database before applying schema changes and
 ensure migrations remain compatible with the previous release during rollout.
-Before accepting requests, the backend also checks PostgreSQL and Redis connectivity, lists S3 object versions, and checks that the configured R2 PMTiles object exists. These read-only checks require the corresponding credentials and permissions. If a check or migration fails, the new container does not start. Rolling back an image does
+Before accepting requests, the backend also checks PostgreSQL and Redis connectivity, lists S3 object versions, checks that the configured R2 PMTiles object exists, and checks the email provider when one is configured. These read-only checks require the corresponding credentials and permissions. If a check or migration fails, the new container does not start. Rolling back an image does
 not reverse migrations.
 
 For Google account deletion verification, add `<BETTER_AUTH_URL>/api/auth/google-deletion-callback` as an authorized redirect URI on the Google web OAuth client configured by `GOOGLE_CLIENT_ID`. For the hosted API this is `https://api.openbeacon.net/api/auth/google-deletion-callback`; each self-hosted backend needs its own exact public callback URI registered with its Google client. The Google account chooser may reuse an existing Google browser session and does not guarantee a fresh password prompt.
@@ -77,3 +77,22 @@ restore `latest-stable` before the next normal deployment.
 The workflow waits for Coolify to report the deployment result. If polling fails
 or times out, check the deployment in Coolify before retrying. Avoid starting
 other deployments manually while a workflow release is in progress.
+
+## Email
+
+Email is optional. Without it the backend starts normally, sends nothing, and reports `email: false` from `auth.providers` so the app can hide features that need it.
+
+To switch email on, configure one provider and a sender address in the root `.env`:
+
+- Resend: set `RESEND_API_KEY`. The hosted API uses Resend.
+- SMTP: set `SMTP_HOST`, plus `SMTP_USER` and `SMTP_PASSWORD` if your server needs a login. `SMTP_PORT` defaults to `587` with STARTTLS. Set `SMTP_SECURE=true` or `SMTP_PORT=465` for implicit TLS.
+
+Set `EMAIL_FROM` to the sender address, for example `noreply@example.com`. Emails always come from `OpenBeacon <EMAIL_FROM>`. A small "Sent from <SERVER_NAME>" line in the footer shows which server sent it. Setting both Resend and SMTP stops the backend from starting.
+
+Emails are branded HTML with a plain-text part. The logo is attached to the email and shown inline, so nothing loads from the internet: there are no remote images, tracking pixels or click tracking.
+
+At startup the backend checks the email settings without sending anything. For SMTP it connects and logs in. For Resend it checks the API key and, when the key has full access, that the `EMAIL_FROM` domain is verified in Resend. A sending-only key passes the key check, but the domain can't be checked with it. A failed check stops the backend from starting.
+
+Each account can trigger at most 20 emails an hour. Optional alerts over that cap are dropped. Security emails are always sent. The backend never logs email addresses, and only the development console mode below prints codes.
+
+For local development, set `EMAIL_CONSOLE=true` instead of a provider to print the plain-text part of each email, including codes, to the backend log. It is refused unless `NODE_ENV` is `development` or `test`; `bun run dev` sets `NODE_ENV=development`.

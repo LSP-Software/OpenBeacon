@@ -1,5 +1,6 @@
 import { expo } from "@better-auth/expo";
 import { Prisma } from "@openbeacon/database";
+import { emailEnabled } from "@openbeacon/email";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
@@ -16,6 +17,7 @@ const googleClientSecret = env.GOOGLE_CLIENT_SECRET;
 export const authCapabilities = getAuthCapabilities({
   GOOGLE_CLIENT_ID: googleClientId,
   GOOGLE_CLIENT_SECRET: googleClientSecret,
+  emailEnabled,
 });
 
 export const auth = betterAuth({

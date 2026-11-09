@@ -20,6 +20,15 @@
     "R2_BUCKET",
     "R2_PM_TILES_KEY",
     "SELF_HOSTED",
+    "SERVER_NAME",
+    "RESEND_API_KEY",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_SECURE",
+    "SMTP_USER",
+    "SMTP_PASSWORD",
+    "EMAIL_FROM",
+    "EMAIL_CONSOLE",
     "JAVA_HOME"
   ],
   "tasks": {

@@ -1,5 +1,5 @@
 import { redisUrlSchema } from "@openbeacon/cache";
-import { optionalEnvString } from "@openbeacon/schemas";
+import { optionalEnvString, serverNameSchema } from "@openbeacon/schemas";
 import { z } from "zod";
 
 export const envSchema = {
@@ -17,7 +17,7 @@ export const envSchema = {
       },
     ),
   REDIS_URL: redisUrlSchema,
-  SERVER_NAME: z.string().trim().min(1).default("OpenBeacon"),
+  SERVER_NAME: serverNameSchema,
   SELF_HOSTED: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z.stringbool().default(true),

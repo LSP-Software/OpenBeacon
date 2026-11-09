@@ -1,4 +1,4 @@
-import { optionalEnvString } from "./env.ts";
+import { optionalEnvString, serverNameSchema } from "./env.ts";
 import { changePasswordSchema } from "./schemas/account/changePassword.ts";
 import { accountNameSchema } from "./schemas/account/fields.ts";
 import { signInSchema } from "./schemas/account/signIn.ts";
@@ -47,6 +47,7 @@ export {
   groupTrackingUploadBatchSchema,
   inviteMemberToGroupSchema,
   optionalEnvString,
+  serverNameSchema,
   registerDeviceKeySchema,
   removeGroupMemberSchema,
   requestImageUploadInputSchema,

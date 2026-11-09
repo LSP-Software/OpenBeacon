@@ -17,6 +17,7 @@
   "dependencies": {
     "@better-auth/expo": "^1.7.14",
     "@openbeacon/database": "workspace:*",
+    "@openbeacon/email": "workspace:*",
     "@openbeacon/schemas": "workspace:*",
     "@t3-oss/env-core": "^0.13.10",
     "better-auth": "^1.7.14"
