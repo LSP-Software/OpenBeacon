@@ -15,8 +15,8 @@ import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
-import { backfillEveryGroup, setUpRecoveryPhrase } from "../../lib/recovery.ts";
-import { resealPersonalData } from "../../lib/resealPersonalData.ts";
+import { protectHistory } from "../../lib/protectHistory.ts";
+import { setUpRecoveryPhrase } from "../../lib/recovery.ts";
 
 const RecoveryPhraseSetupScreen = () => {
   const queryClient = useQueryClient();
@@ -69,10 +69,9 @@ const RecoveryPhraseSetupScreen = () => {
     }
     setUserId(device.userId);
     setStep("protecting");
-    await backfillEveryGroup({ device, onProgress: setProgress });
-    await queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
-    await resealPersonalData(device.userId);
-    await queryClient.invalidateQueries({ queryKey: ["personalNicknames"] });
+    await protectHistory({ device, onProgress: setProgress });
+    void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
+    void queryClient.invalidateQueries({ queryKey: ["personalNicknames"] });
     setStep("done");
   };
 
