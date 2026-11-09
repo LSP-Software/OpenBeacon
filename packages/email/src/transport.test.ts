@@ -81,6 +81,32 @@ describe("SMTP transport", () => {
       throw Object.assign(new Error("535 login failed for owner@example.com"), { code: "EAUTH" });
     });
     await expect(transport.verify()).rejects.toThrow("SMTP connection or login failed (EAUTH)");
+    smtpVerify.mockImplementationOnce(async () => {
+      throw Object.assign(new Error("535 login failed for owner@example.com"), {
+        code: "EAUTH",
+        responseCode: 535,
+      });
+    });
+    await expect(transport.verify()).rejects.toThrow("SMTP connection or login failed (EAUTH 535)");
+  });
+
+  test("reports why a send failed without addresses or content", async () => {
+    sendMail.mockImplementationOnce(async () => {
+      throw Object.assign(new Error("550 owner@example.com: mailbox unavailable"), {
+        code: "EENVELOPE",
+        responseCode: 550,
+        response: "550 owner@example.com: mailbox unavailable",
+      });
+    });
+    const error = await transport.send(message).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect(error instanceof Error && error.message).toBe(
+      "SMTP could not send email (EENVELOPE 550)",
+    );
+    sendMail.mockImplementationOnce(async () => {
+      throw new Error("Connection closed");
+    });
+    await expect(transport.send(message)).rejects.toThrow(/^SMTP could not send email$/);
   });
 });
 

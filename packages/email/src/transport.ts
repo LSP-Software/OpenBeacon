@@ -3,6 +3,14 @@ import nodemailer from "nodemailer";
 import { Resend } from "resend";
 import type { EmailConfig, EmailTransport } from "./types.ts";
 
+const smtpErrorDetails = (error: Error) => {
+  const details = [
+    "code" in error && typeof error.code === "string" ? error.code : null,
+    "responseCode" in error && typeof error.responseCode === "number" ? error.responseCode : null,
+  ].filter((detail) => detail !== null);
+  return details.length > 0 ? ` (${details.join(" ")})` : "";
+};
+
 export const createEmailTransport = (
   config: Exclude<EmailConfig, { transport: "none" }>,
 ): EmailTransport => {
@@ -72,14 +80,14 @@ export const createEmailTransport = (
           })),
         }),
       );
-      if (result.error) throw new Error("SMTP could not send email");
+      if (result.error) {
+        throw new Error(`SMTP could not send email${smtpErrorDetails(result.error)}`);
+      }
     },
     verify: async () => {
       const result = await tryCatch(transporter.verify());
       if (!result.error) return;
-      const code =
-        "code" in result.error && typeof result.error.code === "string" ? result.error.code : null;
-      throw new Error(`SMTP connection or login failed${code ? ` (${code})` : ""}`);
+      throw new Error(`SMTP connection or login failed${smtpErrorDetails(result.error)}`);
     },
   };
 };
