@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { auth, createSecurityAlerts } from "@openbeacon/auth";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis } from "@openbeacon/cache/testing";
-import { prisma } from "@openbeacon/database";
+import { type Prisma, prisma } from "@openbeacon/database";
 import type { SecurityAlert } from "@openbeacon/email";
 import {
   createDeviceKeyPair,
@@ -13,6 +13,7 @@ import {
   sealHistoryKeyEscrow,
 } from "@openbeacon/encryption";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
+import { upsertUserDevice } from "../lib/groupEpochs.ts";
 import { appRouter } from "../root.ts";
 
 class TestCache extends OpenBeaconCache {
@@ -193,6 +194,68 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     await registerDevice(account, { platform: "ios", model: "iPhone 15" });
     expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
       { type: "new-device", device: { model: "iPhone 15", platform: "ios" } },
+    ]);
+  });
+
+  test("a second device registered while the first is still saving sends one alert", async () => {
+    const account = await createAccount();
+    const firstSaved = Promise.withResolvers<void>();
+    const secondWaiting = Promise.withResolvers<void>();
+    const register = (
+      platform: "android" | "ios",
+      hooks: { beforeLock: () => void; afterCreate: () => Promise<void> },
+    ) =>
+      upsertUserDevice({
+        db: {
+          userDevice: prisma.userDevice,
+          $transaction: (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+            prisma.$transaction((tx) =>
+              callback({
+                ...tx,
+                $queryRaw: (...args: Parameters<typeof tx.$queryRaw>) => {
+                  hooks.beforeLock();
+                  return tx.$queryRaw(...args);
+                },
+                group: tx.group,
+                userDevice: {
+                  count: (args: Parameters<typeof tx.userDevice.count>[0]) =>
+                    tx.userDevice.count(args),
+                  create: async (args: Parameters<typeof tx.userDevice.create>[0]) => {
+                    const device = await tx.userDevice.create(args);
+                    await hooks.afterCreate();
+                    return device;
+                  },
+                },
+              } as unknown as Prisma.TransactionClient),
+            ),
+        } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
+        input: {
+          algorithm: DEVICE_KEY_ALGORITHM,
+          deviceId: `${account.userId}-${platform}`,
+          publicKey: createDeviceKeyPair().publicKey,
+          platform,
+        },
+        securityAlerts,
+        userId: account.userId,
+      });
+
+    const first = register("android", {
+      beforeLock: () => {},
+      afterCreate: async () => {
+        firstSaved.resolve();
+        await secondWaiting.promise;
+      },
+    });
+    await firstSaved.promise;
+    const second = register("ios", {
+      beforeLock: () => secondWaiting.resolve(),
+      afterCreate: async () => secondWaiting.resolve(),
+    });
+    await Promise.all([first, second]);
+
+    expect(await prisma.userDevice.count({ where: { userId: account.userId } })).toBe(2);
+    expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
+      { type: "new-device", device: { model: null, platform: "ios" } },
     ]);
   });
 
