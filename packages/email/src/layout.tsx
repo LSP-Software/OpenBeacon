@@ -20,6 +20,7 @@ const emailColors = {
   header: "#0a0911",
   text: "#1a1523",
   muted: "#6b6478",
+  faint: "#8f889b",
   border: "#e8e4ef",
 };
 
@@ -110,7 +111,7 @@ export const renderEmailLayout = async ({
             </Text>
             <Text
               style={{
-                color: emailColors.muted,
+                color: emailColors.faint,
                 fontSize: "12px",
                 lineHeight: "18px",
                 margin: "8px 0 0",
