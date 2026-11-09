@@ -35,9 +35,22 @@ describe("restore reminders", () => {
     expect(isRestoreCardDismissed({ userId: "user-2", version: 1 })).toBe(false);
   });
 
-  test.failing("OPE-232: skipping the sign-in prompt leaves the Account card visible", () => {
+  test("skipping the sign-in prompt leaves the Account card visible", () => {
     skipRestorePrompt({ userId: "user-1", version: 1 });
 
+    expect(isRestoreCardDismissed({ userId: "user-1", version: 1 })).toBe(false);
+  });
+
+  test("dismissing the Account card leaves the sign-in prompt to show", () => {
+    dismissRestoreCard({ userId: "user-1", version: 1 });
+
+    expect(isRestorePromptSkipped({ userId: "user-1", version: 1 })).toBe(false);
+  });
+
+  test("a value stored before the reminders were split only hides the sign-in prompt", () => {
+    storageValues.set("recovery.restoreDeclined.user-1", 1);
+
+    expect(isRestorePromptSkipped({ userId: "user-1", version: 1 })).toBe(true);
     expect(isRestoreCardDismissed({ userId: "user-1", version: 1 })).toBe(false);
   });
 });
