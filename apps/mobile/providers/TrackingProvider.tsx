@@ -148,7 +148,7 @@ export const TrackingProvider = ({
     }
     const version = cycleVersionRef.current;
     void (async () => {
-      if (changed && (previousUserId !== undefined || !userId)) {
+      if (changed && (typeof previousUserId === "string" || !userId)) {
         await tryCatch(service.revokeTrackingAccess());
       }
       if (version !== cycleVersionRef.current || !userId) return;
