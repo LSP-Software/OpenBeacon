@@ -3,6 +3,7 @@ import {
   emailEnabled,
   sendAccountExistsEmail,
   sendCodeEmail,
+  sendGoogleSignInEmail,
   sendSecurityAlertEmail,
 } from "@openbeacon/email";
 import { getAuthCapabilities } from "./capabilities.ts";
@@ -32,6 +33,7 @@ export const emailCodes = emailEnabled
       }).rateLimits,
       sendCodeEmail,
       sendAccountExistsEmail,
+      sendGoogleSignInEmail,
     })
   : null;
 

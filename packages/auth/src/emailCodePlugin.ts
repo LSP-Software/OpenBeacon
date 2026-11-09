@@ -124,13 +124,13 @@ export const emailCodePlugin = (codes: EmailCodes | null) =>
               const user = await ctx.context.internalAdapter.findUserByEmail(email, {
                 includeAccounts: true,
               });
-              if (!hasPassword(user)) return;
-              await codes.send({
-                purpose: "password-reset",
-                subject: email,
-                to: user.user.email,
-                userId: user.user.id,
-              });
+              if (!user) return;
+              const { email: to, id: userId } = user.user;
+              if (!hasPassword(user)) {
+                await codes.sendGoogleSignIn({ to, userId });
+                return;
+              }
+              await codes.send({ purpose: "password-reset", subject: email, to, userId });
             },
           });
           return ctx.json({ success: true });

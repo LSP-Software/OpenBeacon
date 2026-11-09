@@ -12,6 +12,7 @@ import type {
   EmailCodePurpose,
   sendAccountExistsEmail as sendAccountExists,
   sendCodeEmail as sendCode,
+  sendGoogleSignInEmail as sendGoogleSignIn,
 } from "@openbeacon/email";
 
 export const emailCodeLifetimeMs = 10 * 60 * 1000;
@@ -43,6 +44,7 @@ export const createEmailCodes = ({
   rateLimits,
   sendCodeEmail,
   sendAccountExistsEmail,
+  sendGoogleSignInEmail,
   now = () => new Date(),
 }: {
   db: PrismaClient;
@@ -50,6 +52,7 @@ export const createEmailCodes = ({
   rateLimits: Pick<OpenBeaconCache["rateLimits"], "consume">;
   sendCodeEmail: (email: Parameters<typeof sendCode>[0]) => Promise<unknown>;
   sendAccountExistsEmail: (email: Parameters<typeof sendAccountExists>[0]) => Promise<unknown>;
+  sendGoogleSignInEmail: (email: Parameters<typeof sendGoogleSignIn>[0]) => Promise<unknown>;
   now?: () => Date;
 }) => {
   const identifierFor = ({ purpose, subject }: CodeTarget) =>
@@ -115,6 +118,8 @@ export const createEmailCodes = ({
     },
 
     sendAccountExists: sendAccountExistsEmail,
+
+    sendGoogleSignIn: sendGoogleSignInEmail,
 
     check: async ({
       purpose,

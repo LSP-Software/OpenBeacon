@@ -27,6 +27,7 @@ let clockMs = Date.now();
 let sendFailure: Error | null = null;
 const sent: { to: string; purpose: EmailCodePurpose; code: string; userId?: string }[] = [];
 const accountExistsSent: { to: string; userId: string; hasPassword: boolean }[] = [];
+const googleSignInSent: { to: string; userId: string }[] = [];
 const tasks: Promise<unknown>[] = [];
 const alerts: { to: string; userId: string; alert: SecurityAlert }[] = [];
 let alertFailure: Error | null = null;
@@ -41,6 +42,9 @@ const codes = createEmailCodes({
   },
   sendAccountExistsEmail: async (email) => {
     accountExistsSent.push(email);
+  },
+  sendGoogleSignInEmail: async (email) => {
+    googleSignInSent.push(email);
   },
   now: () => new Date(clockMs),
 });
@@ -172,6 +176,7 @@ beforeEach(() => {
   sendFailure = null;
   sent.length = 0;
   accountExistsSent.length = 0;
+  googleSignInSent.length = 0;
   alerts.length = 0;
   alertFailure = null;
 });
@@ -445,12 +450,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password reset c
     expect(sent).toHaveLength(1);
   });
 
-  test("a Google-only account gets no email and no code", async () => {
-    const google = await createGoogleOnlyAccount("reset-google-silent");
-    await requestResetCode(google.email);
+  test("a Google-only account gets a Google sign-in email and no code", async () => {
+    const google = await createGoogleOnlyAccount("reset-google");
+    await requestResetCode(google.email.toUpperCase());
+    expect(googleSignInSent).toEqual([{ to: google.email, userId: google.userId }]);
     expect(sent).toEqual([]);
     expect(accountExistsSent).toEqual([]);
     expect(await codeRows("password-reset", google.email)).toEqual([]);
+  });
+
+  test("password accounts and unknown addresses get no Google sign-in email", async () => {
+    await requestResetCode((await createPasswordAccount("reset-no-google")).email);
+    await requestResetCode(nextAddress("reset-no-google-unknown"));
+    expect(googleSignInSent).toEqual([]);
   });
 
   test("a failed send doesn't change the response", async () => {

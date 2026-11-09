@@ -82,7 +82,7 @@ other deployments manually while a workflow release is in progress.
 
 Email is optional. Without it the backend starts normally, sends nothing, and reports `email: false` from `auth.providers`. The app then hides the sign-up code, Forgot password, the recovery reset code and Account → Email alerts. Users can't reset a forgotten password, and a recovery phrase reset needs only a fresh sign-in and typing `RESET`.
 
-With email on, the backend sends codes for sign-up, email verification, password reset and recovery phrase reset, an "already have an account" email when someone signs up with a registered address, and security alerts. The alerts are always on for a password or recovery phrase change or reset, for email alerts being turned off, and for account deletion. Users can turn off the new device and deletion scheduled alerts in Account → Email alerts.
+With email on, the backend sends codes for sign-up, email verification, password reset and recovery phrase reset, an "already have an account" email when someone signs up with a registered address, a "sign in with Google" email when someone asks to reset the password of an account that only uses Google, and security alerts. The alerts are always on for a password or recovery phrase change or reset, for email alerts being turned off, and for account deletion. Users can turn off the new device and deletion scheduled alerts in Account → Email alerts.
 
 To switch email on, configure one provider and a sender address in the root `.env`:
 
@@ -95,7 +95,7 @@ Emails are branded HTML with a plain-text part. The logo is attached to the emai
 
 At startup the backend checks the email settings without sending anything. For SMTP it connects and logs in. For Resend it checks the API key and, when the key has full access, that the `EMAIL_FROM` domain is verified in Resend with open tracking and click tracking off. A sending-only key passes the key check, but the domain and its tracking settings can't be checked with it, so check them yourself in Resend. A failed check stops the backend from starting.
 
-Each account can trigger at most 20 emails an hour. Over that cap, the new device, deletion scheduled and "already have an account" emails are dropped. Codes and the always-on alerts are still sent. The backend never logs email addresses, and only the development console mode below prints codes.
+Each account can trigger at most 20 emails an hour. Over that cap, the new device, deletion scheduled, "already have an account" and "sign in with Google" emails are dropped. Codes and the always-on alerts are still sent. The backend never logs email addresses, and only the development console mode below prints codes.
 
 For local development, set `EMAIL_CONSOLE=true` instead of a provider to print the plain-text part of each email, including codes, to the backend log. It is refused unless `NODE_ENV` is `development` or `test`; `bun run dev` sets `NODE_ENV=development`.
 

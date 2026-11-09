@@ -101,6 +101,7 @@ const emailCodes = createEmailCodes({
     sent.push(email);
   },
   sendAccountExistsEmail: async () => {},
+  sendGoogleSignInEmail: async () => {},
 });
 
 const caller = (userId: string, sessionCreatedAt = new Date(), codes: EmailCodes | null = null) =>

@@ -3,6 +3,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { renderAccountExistsEmail } from "./accountExistsEmail.tsx";
 import { renderCodeEmail } from "./codeEmail.tsx";
 import { loadEmailSettings } from "./config.ts";
+import { renderGoogleSignInEmail } from "./googleSignInEmail.tsx";
 import { renderEmailLayout } from "./layout.tsx";
 import { createSendSecurityAlertEmail } from "./securityAlertEmail.tsx";
 import { createSendEmail } from "./sender.ts";
@@ -75,6 +76,14 @@ export const sendAccountExistsEmail = async ({
   sendEmail({
     to,
     ...(await renderAccountExistsEmail({ hasPassword, serverName })),
+    userId,
+    optional: true,
+  });
+
+export const sendGoogleSignInEmail = async ({ to, userId }: { to: string; userId: string }) =>
+  sendEmail({
+    to,
+    ...(await renderGoogleSignInEmail({ serverName })),
     userId,
     optional: true,
   });
