@@ -33,7 +33,7 @@ const message = {
 };
 
 describe("SMTP transport", () => {
-  const transport = createEmailTransport({
+  const smtpConfig = {
     transport: "smtp",
     fromAddress: "noreply@example.com",
     host: "smtp.example.com",
@@ -41,9 +41,11 @@ describe("SMTP transport", () => {
     secure: false,
     requireTls: true,
     auth: null,
-  });
+  } as const;
+  const transport = createEmailTransport(smtpConfig);
 
   test("refuses to send unless STARTTLS succeeds", () => {
+    createEmailTransport(smtpConfig);
     expect(createTransport).toHaveBeenLastCalledWith(
       expect.objectContaining({ port: 587, secure: false, requireTLS: true }),
     );
