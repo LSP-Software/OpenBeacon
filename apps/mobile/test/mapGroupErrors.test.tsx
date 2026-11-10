@@ -107,8 +107,13 @@ mock.module("../lib/buildLiveMapMarkers.ts", () => ({
 }));
 mock.module("../lib/personalNicknames.ts", () => ({ loadPersonalNicknames: async () => ({}) }));
 mock.module("../lib/groupColor.ts", () => ({ getGroupColor: () => "red" }));
+const stored = new Map<string, boolean>();
 mock.module("../lib/storage.ts", () => ({
-  storage: { getBoolean: () => undefined, set: () => {} },
+  storage: {
+    getBoolean: (key: string) => stored.get(key),
+    remove: (key: string) => stored.delete(key),
+    set: (key: string, value: boolean) => stored.set(key, value),
+  },
 }));
 const { default: MapScreen } = await import("../app/(tabs)/map/index.tsx");
 
@@ -148,6 +153,33 @@ test("shows individual group links for up to two missing keys and a groups link 
     if (count === 3) expect(rendered).toContain("/(tabs)/groups");
   }
   await act(async () => root.unmount());
+});
+
+test("hides a dismissed key banner until that group's key works again", async () => {
+  groups = [{ id: "club", name: "Club", members: [] }];
+  sessionUser = { id: "me", image: null, name: "Me" };
+  queueEviction = null;
+  const missing = [{ data: { current: "missing", history: "complete" }, isError: false }] as const;
+  access = [...missing];
+  const root = createRoot();
+  await act(async () => root.render(<MapScreen />));
+  expect(JSON.stringify(root.container.toJSON())).toContain("Can’t show locations for");
+
+  const dismiss = root.container.queryAll((item) => item.type === "pressable").at(-1);
+  if (!dismiss) throw new Error("Dismiss button not found");
+  await act(async () => (dismiss.props as { onPress: () => void }).onPress());
+  expect(JSON.stringify(root.container.toJSON())).not.toContain("Can’t show locations for");
+
+  await act(async () => root.render(<MapScreen />));
+  expect(JSON.stringify(root.container.toJSON())).not.toContain("Can’t show locations for");
+
+  access = [{ data: { current: "available", history: "complete" }, isError: false }];
+  await act(async () => root.render(<MapScreen />));
+  access = [...missing];
+  await act(async () => root.render(<MapScreen />));
+  expect(JSON.stringify(root.container.toJSON())).toContain("Can’t show locations for");
+  await act(async () => root.unmount());
+  stored.clear();
 });
 
 test("shows removed offline history until the user dismisses it", async () => {

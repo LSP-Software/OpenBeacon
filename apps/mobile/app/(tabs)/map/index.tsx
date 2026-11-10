@@ -26,6 +26,9 @@ import { storage } from "../../../lib/storage.ts";
 import { TAB_BAR_CONTENT_HEIGHT } from "../../../lib/tabBarLayout.ts";
 import { dismissTrackingQueueEviction, getTrackingQueueEviction } from "../../../lib/tracking.ts";
 
+const keyBannerDismissedKey = (userId: string, groupId: string) =>
+  `map.keyBannerDismissed.${userId}.${groupId}`;
+
 const MapScreen = () => {
   const insets = useSafeAreaInsets();
   const { positions: livePositions, status: trackingStatus } = useMapLivePositions();
@@ -100,8 +103,17 @@ const MapScreen = () => {
     onSettled: () => queryClient.invalidateQueries({ queryKey: evictionQueryKey }),
   });
   const groupColorRevision = useGroupColorRevision();
+  const [, setKeyBannerRevision] = useState(0);
   const groupsMissingKeys =
-    groups?.filter((_, index) => keyAccess[index]?.data?.current === "missing") ?? [];
+    groups?.filter(
+      (group, index) =>
+        keyAccess[index]?.data?.current === "missing" &&
+        !storage.getBoolean(keyBannerDismissedKey(selfUserId, group.id)),
+    ) ?? [];
+  const dismissKeyBanners = (groupIds: readonly string[]) => {
+    for (const groupId of groupIds) storage.set(keyBannerDismissedKey(selfUserId, groupId), true);
+    setKeyBannerRevision((revision) => revision + 1);
+  };
 
   const selfFallback = useMemo(() => {
     void groupColorRevision;
@@ -162,6 +174,12 @@ const MapScreen = () => {
       status: trackingStatus,
     });
   }, [groupsWithNicknames, keyAccessByGroupId, markers, now, selfUserId, trackingStatus]);
+
+  useEffect(() => {
+    for (const [groupId, access] of keyAccessByGroupId) {
+      if (access === "available") storage.remove(keyBannerDismissedKey(selfUserId, groupId));
+    }
+  }, [keyAccessByGroupId, selfUserId]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -250,9 +268,19 @@ const MapScreen = () => {
                 This phone can’t access the group’s encryption key. Group locations may be
                 unavailable.
               </Text>
-              <Link href={{ pathname: "/(tabs)/groups/[groupId]", params: { groupId: group.id } }}>
-                <Text className="font-semibold text-red-500 dark:text-red-300">Open group</Text>
-              </Link>
+              <View className="flex-row flex-wrap items-center gap-3">
+                <Link
+                  href={{ pathname: "/(tabs)/groups/[groupId]", params: { groupId: group.id } }}
+                  asChild
+                >
+                  <Button size="sm">
+                    <Text>Open group</Text>
+                  </Button>
+                </Link>
+                <Button size="sm" variant="outline" onPress={() => dismissKeyBanners([group.id])}>
+                  <Text>Dismiss</Text>
+                </Button>
+              </View>
             </View>
           ))}
         {groupsMissingKeys.length > 2 && (
@@ -260,9 +288,20 @@ const MapScreen = () => {
             <Text className="font-semibold text-red-700 dark:text-red-400">
               Multiple groups require attention
             </Text>
-            <Link href="/(tabs)/groups">
-              <Text className="font-semibold text-red-500 dark:text-red-300">Open groups</Text>
-            </Link>
+            <View className="flex-row flex-wrap items-center gap-3">
+              <Link href="/(tabs)/groups" asChild>
+                <Button size="sm">
+                  <Text>Open groups</Text>
+                </Button>
+              </Link>
+              <Button
+                size="sm"
+                variant="outline"
+                onPress={() => dismissKeyBanners(groupsMissingKeys.map((group) => group.id))}
+              >
+                <Text>Dismiss</Text>
+              </Button>
+            </View>
           </View>
         )}
       </ScrollView>
