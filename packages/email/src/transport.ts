@@ -18,8 +18,10 @@ export const createEmailTransport = (
 
   if (config.transport === "console") {
     return {
-      send: async ({ subject, text }) => {
-        console.log(`Email from ${from}\nSubject: ${subject}\n\n${text}`);
+      send: async ({ to, summary }) => {
+        console.log(
+          `[email] to=${to} type=${summary.type}${summary.code ? ` code=${summary.code}` : ""}`,
+        );
       },
       verify: async () => {},
     };
@@ -28,7 +30,7 @@ export const createEmailTransport = (
   if (config.transport === "resend") {
     const resend = new Resend(config.apiKey);
     return {
-      send: async (message) => {
+      send: async ({ summary: _summary, ...message }) => {
         const result = await resend.emails.send({ from, ...message });
         if (result.error) throw new Error(`Resend could not send email: ${result.error.name}`);
       },
@@ -68,7 +70,7 @@ export const createEmailTransport = (
     ...(config.auth ? { auth: config.auth } : {}),
   });
   return {
-    send: async (message) => {
+    send: async ({ summary: _summary, ...message }) => {
       const result = await tryCatch(
         transporter.sendMail({
           from,

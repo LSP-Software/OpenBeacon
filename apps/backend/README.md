@@ -98,9 +98,9 @@ At startup the backend checks the email settings without sending anything. For S
 
 Each address can request 3 codes of each kind every 15 minutes. `EMAIL_CODE_IP_LIMIT=true` also limits each IP address to 20 code requests an hour across all addresses, which slows down someone sending codes to many addresses from one machine. It is off by default because it can block users who share an IP address, such as phones behind carrier NAT or a household on one connection.
 
-Each account can trigger at most 20 emails an hour. Over that cap, the new device, deletion scheduled, "already have an account" and "sign in with Google" emails are dropped. Codes and the always-on alerts are still sent. The backend never logs email addresses, and only the development console mode below prints codes.
+Each account can trigger at most 20 emails an hour. Over that cap, the new device, deletion scheduled, "already have an account" and "sign in with Google" emails are dropped. Codes and the always-on alerts are still sent. The backend never logs email addresses or codes, except in the development console mode below.
 
-For local development, set `EMAIL_CONSOLE=true` instead of a provider to print the plain-text part of each email, including codes, to the backend log. It is refused unless `NODE_ENV` is `development` or `test`; `bun run dev` sets `NODE_ENV=development`.
+For local development, set `EMAIL_CONSOLE=true` instead of a provider to print a one-line summary of each email to the log instead of sending it, for example `[email] to=alice@example.com type=password-reset code=123456`. It is refused unless `NODE_ENV` is `development` or `test`; the backend and runner `bun run dev` scripts set `NODE_ENV=development`.
 
 Give the scheduled job runner the same email settings and `REDIS_URL`, so it can send the account deleted email at the end of the grace period. See [the runner guide](../scheduled-jobs/README.md).
 

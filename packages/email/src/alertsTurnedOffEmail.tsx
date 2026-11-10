@@ -47,5 +47,9 @@ export const renderAlertsTurnedOffEmail = async ({
       </>
     ),
   });
-  return { subject: "Email alerts were turned off on your OpenBeacon account", ...rendered };
+  return {
+    subject: "Email alerts were turned off on your OpenBeacon account",
+    summary: { type: "alert:alerts-turned-off" },
+    ...rendered,
+  };
 };

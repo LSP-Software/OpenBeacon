@@ -28,5 +28,9 @@ export const renderGoogleSignInEmail = async ({
       </>
     ),
   });
-  return { subject: "Signing in to OpenBeacon with Google", ...rendered };
+  return {
+    subject: "Signing in to OpenBeacon with Google",
+    summary: { type: "google-sign-in" },
+    ...rendered,
+  };
 };
