@@ -15,9 +15,6 @@
     "./r2.ts": "./src/r2.ts"
   },
   "scripts": {
-    "format": "bun fmt",
-    "format:check": "bun fmt --check",
-    "lint": "biome lint .",
     "typecheck": "bun check",
     "test": "bun --env-file=../../.env.ci --env-file=../../.env test --isolate"
   },

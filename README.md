@@ -37,8 +37,10 @@ bun run db:migrate
 
 ```sh
 bun run --cwd packages/database --env-file=../../.env.ci prisma migrate deploy
-OPENBEACON_INTEGRATION=1 bun test --isolate --env-file=.env.ci $(find . -name '*.integration.test.ts' -not -path '*/node_modules/*')
+bun run test:integration
 ```
+
+`bun run test:integration` runs every `*.integration.test.ts` under `apps/` and `packages/` with `OPENBEACON_INTEGRATION=1`. Pass directories to run only their tests, such as `bun run test:integration packages/cache`, and pass `--env-file=<path>` to use another env file instead of `.env.ci`. Other `bun test` flags are passed through and must use the `--flag=value` form.
 
 Every test cache uses a random Redis key prefix, so several runs can share one Redis.
 

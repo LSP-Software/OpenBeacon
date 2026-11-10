@@ -43,19 +43,12 @@
       "persistent": true,
       "dependsOn": ["^db:generate"]
     },
-    "lint": {},
-    "format": {
-      "outputs": []
-    },
-    "format:check": {
-      "outputs": []
-    },
     "test": {
       "dependsOn": ["^db:generate"],
       "outputs": []
     },
     "typecheck": {
-      "dependsOn": ["^typecheck"],
+      "dependsOn": ["db:generate", "^db:generate"],
       "outputs": []
     },
     "db:generate": {

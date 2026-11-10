@@ -31,7 +31,8 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:room": "bash scripts/test-tracking-room.sh",
-    "ci": "bun run typecheck && bun run check && bun run test && bash scripts/test-tracking-room.sh --if-changed && bun test scripts && bun scripts/warn-skipped-integration-tests.ts"
+    "test:integration": "bun scripts/run-integration-tests.ts",
+    "ci": "bun run check && bun run typecheck && bun run test && bash scripts/test-tracking-room.sh --if-changed && bun test scripts && python3 -B -m unittest discover -s scripts && bun scripts/warn-skipped-integration-tests.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.4",

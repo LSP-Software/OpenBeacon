@@ -15,6 +15,10 @@ concurrency:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -25,7 +29,9 @@ jobs:
         run: |
           echo 'Production images must be built from main.' >&2
           exit 1
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Prepare image tags
         id: image_tags
         env:
@@ -61,10 +67,10 @@ jobs:
           COOLIFY_ENDPOINT: ${{ secrets.COOLIFY_ENDPOINT }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
         run: |
-          application=$(curl --fail-with-body --silent --show-error \
+          applications=$(curl --fail-with-body --silent --show-error \
             --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
-            "${COOLIFY_ENDPOINT%/}/api/v1/applications" | \
-            jq -cer 'if type != "array" then error("Expected an application list from Coolify") else [.[] | select(.name == "OpenBeacon Backend" and (.deleted_at == null))] | if length != 1 then error("Expected one active OpenBeacon Backend application; found \(length). Check the Coolify endpoint and token access.") elif (.[0].id | type != "number") then error("Backend application has no numeric id") elif (.[0].uuid | type != "string" or length == 0) then error("Backend application has no UUID") else .[0] | {id, uuid} end end')
+            "${COOLIFY_ENDPOINT%/}/api/v1/applications")
+          application=$(jq -cer 'if type != "array" then error("Expected an application list from Coolify") else [.[] | select(.name == "OpenBeacon Backend" and (.deleted_at == null))] | if length != 1 then error("Expected one active OpenBeacon Backend application; found \(length). Check the Coolify endpoint and token access.") elif (.[0].id | type != "number") then error("Backend application has no numeric id") elif (.[0].uuid | type != "string" or length == 0) then error("Backend application has no UUID") else .[0] | {id, uuid} end end' <<< "$applications")
           application_id=$(jq -er '.id | tostring' <<< "$application")
           application_uuid=$(jq -er '.uuid' <<< "$application")
           curl --fail-with-body --silent --show-error \
@@ -74,10 +80,7 @@ jobs:
               echo 'Unable to confirm that no backend deployment is active. Check Coolify before releasing.' >&2
               exit 1
             }
-          runner=$(curl --fail-with-body --silent --show-error \
-            --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
-            "${COOLIFY_ENDPOINT%/}/api/v1/applications" | \
-            jq -cer 'if type != "array" then error("Expected an application list") else [.[] | select(.name == "OpenBeacon Scheduled Jobs" and (.deleted_at == null))] | if length != 1 then error("Expected one OpenBeacon Scheduled Jobs application") else .[0] | {id, uuid} end end')
+          runner=$(jq -cer 'if type != "array" then error("Expected an application list") else [.[] | select(.name == "OpenBeacon Scheduled Jobs" and (.deleted_at == null))] | if length != 1 then error("Expected one OpenBeacon Scheduled Jobs application") else .[0] | {id, uuid} end end' <<< "$applications")
           runner_id=$(jq -er '.id | numbers | tostring' <<< "$runner")
           runner_uuid=$(jq -er '.uuid | strings | select(length > 0)' <<< "$runner")
           curl --fail-with-body --silent --show-error \
@@ -86,22 +89,26 @@ jobs:
             jq -e --arg app "$runner_id" 'if type != "array" then error("Unexpected deployments response") else all(.[]; (.application_id | tostring) != $app or (.status != "queued" and .status != "in_progress")) end' > /dev/null
           echo "uuid=${application_uuid}" >> "$GITHUB_OUTPUT"
           echo "runner_uuid=${runner_uuid}" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           push: true
           tags: docker.io/lspsoftware/openbeacon-backend:${{ github.sha }}
-      - uses: docker/build-push-action@v6
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: apps/scheduled-jobs/Dockerfile
           push: true
           tags: docker.io/lspsoftware/openbeacon-scheduled-jobs:${{ github.sha }}
+          cache-from: type=gha,scope=scheduled-jobs
+          cache-to: type=gha,mode=max,scope=scheduled-jobs
       - name: Publish release tags
         env:
           SHA: ${{ github.sha }}
@@ -128,7 +135,7 @@ jobs:
             --data-urlencode "uuid=${resource_uuid}" \
             "${COOLIFY_ENDPOINT%/}/api/v1/deploy")
           deployment_uuid=$(jq -er --arg app "$resource_uuid" '.deployments | map(select(.resource_uuid == $app)) | if length == 1 then .[0].deployment_uuid | select(type == "string" and length > 0) else empty end' <<< "$response")
-          for attempt in {1..120}; do
+          for _ in {1..120}; do
             status=$(curl --fail-with-body --silent --show-error \
               --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
               "${COOLIFY_ENDPOINT%/}/api/v1/deployments/${deployment_uuid}" | jq -er '.status | select(type == "string" and length > 0)')
