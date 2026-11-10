@@ -31,7 +31,12 @@ export const LiveMapPeopleTray = ({
       people: people.cantLocate,
       status: "cantLocate" as const,
     },
-    { key: "cantRead", label: "Can’t read", people: people.cantRead, status: "cantRead" as const },
+    {
+      key: "cantRead",
+      label: "Needs attention",
+      people: people.cantRead,
+      status: "cantRead" as const,
+    },
     { key: "hidden", label: "Hidden", people: people.hidden, status: "hidden" as const },
   ].filter((section) => section.people.length > 0);
   const pendingSections = [

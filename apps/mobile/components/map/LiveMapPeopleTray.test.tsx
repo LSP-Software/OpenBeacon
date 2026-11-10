@@ -128,7 +128,7 @@ describe("LiveMapPeopleTray", () => {
       outOfDate: [marker("m", "Mum Jones", 47)],
     });
     expect(output).not.toContain("Up to date");
-    expect(output).not.toContain("Can’t read");
+    expect(output).not.toContain("Needs attention");
     expect(output).toContain("Mum Jones, out of date, updated 47 minutes ago");
     expect(output).toContain('"Mum"');
     expect(output).toContain('"47m"');
