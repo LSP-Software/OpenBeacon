@@ -58,6 +58,30 @@ def version_devices(api_levels, memory_mb):
     return [(f"OpenBeacon_API_{api}", f"Android {ANDROID_VERSIONS[api][0]} (API {api}) {ROUTES[index % len(ROUTES)][0]}", memory_mb or ANDROID_VERSIONS[api][1], ROUTES[index % len(ROUTES)]) for index, api in enumerate(api_levels)]
 
 
+def available_memory_mb(system, meminfo=Path("/proc/meminfo")):
+    try:
+        if system == "Linux":
+            for line in meminfo.read_text().splitlines():
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) // 1024
+            return None
+        if system == "Darwin":
+            output = subprocess.check_output(["vm_stat"], text=True)
+            page_size = int(output.split("page size of ", 1)[1].split()[0])
+            pages = {key.strip(): int(value.strip().rstrip(".")) for key, value in (line.split(":", 1) for line in output.splitlines()[1:] if ":" in line)}
+            return sum(pages.get(key, 0) for key in ("Pages free", "Pages inactive", "Pages speculative")) * page_size // 1024 // 1024
+    except (OSError, subprocess.CalledProcessError, ValueError, IndexError):
+        return None
+    return None
+
+
+def memory_error(devices, available_mb, headroom_mb=2048):
+    needed_mb = sum(memory_mb for _, _, memory_mb, _ in devices) + headroom_mb
+    if available_mb is None or available_mb >= needed_mb:
+        return None
+    return f"{len(devices)} emulators need about {needed_mb} MiB of RAM including {headroom_mb} MiB headroom, but only {available_mb} MiB is available. Run fewer emulators with --android-versions, lower --memory-mb, or pass --skip-memory-check to start anyway."
+
+
 def create_version_avds(sdk, api_levels, abi):
     tools = sdk / "cmdline-tools" / "latest" / "bin"
     if not (tools / "sdkmanager").is_file() or not (tools / "avdmanager").is_file():
@@ -137,6 +161,7 @@ def main():
     devices_group.add_argument("--avd", help="Existing Android Virtual Device name for four route emulators (defaults to the first available)")
     devices_group.add_argument("--android-versions", nargs="*", type=int, choices=list(ANDROID_VERSIONS), metavar="API", help=f"Run one emulator per supported Android version, creating missing AVDs (API levels, default: {' '.join(map(str, ANDROID_VERSIONS))})")
     parser.add_argument("--memory-mb", type=int, help="RAM per emulator in MiB (default: 6144, or typical for each version with --android-versions)")
+    parser.add_argument("--skip-memory-check", action="store_true", help="Start the emulators even if the machine does not appear to have enough free RAM")
     parser.add_argument("--api-url", default="http://10.0.2.2:3000", help="Existing backend URL reachable from Android; skips local backend startup")
     parser.add_argument("--external-backend", action="store_true", help="Use an already running backend, including at the default URL")
     parser.add_argument("--apk", type=Path, help="Use an existing Expo development APK instead of building one")
@@ -178,6 +203,13 @@ def main():
         if not sdk:
             parser.error("set ANDROID_HOME to your Android SDK to create an emulator for each Android version")
         devices = version_devices(api_levels, args.memory_mb)
+    if not args.skip_memory_check:
+        available_mb = available_memory_mb(platform.system())
+        if available_mb is None:
+            print("Could not read available memory; skipping the RAM check.", flush=True)
+        error = memory_error(devices, available_mb)
+        if error:
+            parser.error(error)
     existing = subprocess.check_output(["adb", "devices"], text=True)
     ports = [5554 + 2 * index for index in range(len(devices))]
     if any(f"emulator-{port}\t" in existing for port in ports):
