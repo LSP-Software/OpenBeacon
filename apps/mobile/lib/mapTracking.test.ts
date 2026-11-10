@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { LiveMapEntry } from "./liveMapReducer.ts";
-import { createMapTrackingSession } from "./mapTracking.ts";
+import { createMapTrackingSession, REQUEST_TIMEOUT_MS } from "./mapTracking.ts";
 import type { MapTrackingDeps, MapTrackingEncryptedPoint } from "./mapTrackingTypes.ts";
 
 const point = ({
@@ -76,15 +76,15 @@ const createSession = (overrides: Partial<MapTrackingDeps> = {}) => {
   const deps: MapTrackingDeps = {
     clearEpochKeys: overrides.clearEpochKeys ?? (() => {}),
     decryptPoint: overrides.decryptPoint ?? baseDecrypt,
-    getLatest: async (groupId) => {
+    getLatest: async (groupId, signal) => {
       getLatestCalls.push(groupId);
-      return (overrides.getLatest ?? baseGetLatest)(groupId);
+      return (overrides.getLatest ?? baseGetLatest)(groupId, signal);
     },
     listGroups: overrides.listGroups ?? (async () => [{ id: "group-1" }]),
     now: () => now,
-    poll: async (input) => {
+    poll: async (input, signal) => {
       pollCalls.push(input);
-      return (overrides.poll ?? basePoll)(input);
+      return (overrides.poll ?? basePoll)(input, signal);
     },
     schedule:
       overrides.schedule ??
@@ -115,6 +115,14 @@ const createSession = (overrides: Partial<MapTrackingDeps> = {}) => {
     session,
     setNow: (value: number) => {
       now = value;
+    },
+    timeOutPendingRequests: async () => {
+      for (let round = 0; round < 5; round += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      for (const handle of scheduled.filter(({ delayMs }) => delayMs === REQUEST_TIMEOUT_MS)) {
+        handle.fn();
+      }
     },
   };
 };
@@ -1128,6 +1136,163 @@ describe("createMapTrackingSession status", () => {
     offline = false;
     await session.tick();
     expect(session.getStatus().connection).toBe("ok");
+  });
+
+  test("gives up on a latest fetch the server never answers, backs off, and recovers once it answers", async () => {
+    let hanging = false;
+    const signals: AbortSignal[] = [];
+    const { scheduled, session, timeOutPendingRequests } = createSession({
+      getLatest: async (_groupId, signal) => {
+        signals.push(signal);
+        return hanging ? new Promise(() => {}) : { points: [] };
+      },
+    });
+
+    session.setActive(true);
+    await session.tick();
+    expect(session.getStatus().connection).toBe("ok");
+    expect(signals[0]?.aborted).toBe(false);
+
+    hanging = true;
+    const stuckTick = session.tick();
+    await timeOutPendingRequests();
+    await stuckTick;
+
+    expect(signals[0]?.aborted).toBe(false);
+    expect(signals[1]?.aborted).toBe(true);
+    expect(session.getStatus().connection).toBe("failing");
+    expect(scheduled.at(-1)?.delayMs).toBe(5_000);
+
+    hanging = false;
+    await session.tick();
+    expect(session.getStatus().connection).toBe("ok");
+  });
+
+  test("gives up on a poll the server never answers so the tick still finishes the other group", async () => {
+    const row = (id: string, senderUserId: string, createdAt: string) =>
+      point({ createdAt: new Date(createdAt), id, senderUserId });
+    let pollHangs = false;
+    let group2Point = row("point-2", "user-2", "2026-07-17T12:00:00.000Z");
+    const { session, timeOutPendingRequests } = createSession({
+      getLatest: async (groupId) => ({
+        points: [
+          groupId === "group-1"
+            ? row("point-1", "user-1", "2026-07-17T12:00:00.000Z")
+            : group2Point,
+        ],
+      }),
+      listGroups: async () => [{ id: "group-1" }, { id: "group-2" }],
+      poll: async ({ groupId }) => {
+        if (groupId === "group-1" && pollHangs) {
+          return new Promise(() => {});
+        }
+        return { points: groupId === "group-2" ? [group2Point] : [] };
+      },
+    });
+
+    session.setActive(true);
+    await session.tick();
+
+    pollHangs = true;
+    group2Point = row("point-3", "user-2", "2026-07-17T12:01:00.000Z");
+    const stuckTick = session.tick();
+    await timeOutPendingRequests();
+    await stuckTick;
+
+    expect(session.getStatus()).toMatchObject({
+      connection: "failing",
+      groups: { "group-1": "loaded", "group-2": "loaded" },
+    });
+    expect(session.getLivePositions().find(({ userId }) => userId === "user-2")?.timestamp).toBe(
+      "2026-07-17T12:01:00.000Z",
+    );
+  });
+
+  test("gives up on a group list the server never answers and recovers once it answers", async () => {
+    let hanging = false;
+    const { session, timeOutPendingRequests } = createSession({
+      listGroups: async () => (hanging ? new Promise(() => {}) : [{ id: "group-1" }]),
+    });
+
+    session.setActive(true);
+    await session.tick();
+
+    hanging = true;
+    const stuckTick = session.tick();
+    await timeOutPendingRequests();
+    await stuckTick;
+    expect(session.getStatus()).toMatchObject({ connection: "failing", membership: "loaded" });
+
+    hanging = false;
+    await session.tick();
+    expect(session.getStatus().connection).toBe("ok");
+  });
+
+  test("aborts a hung request when the session goes inactive and refetches straight away on return", async () => {
+    let hanging = true;
+    const signals: AbortSignal[] = [];
+    const { getLatestCalls, session } = createSession({
+      getLatest: async (_groupId, signal) => {
+        signals.push(signal);
+        return hanging ? new Promise(() => {}) : { points: [] };
+      },
+    });
+
+    session.setActive(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(getLatestCalls).toEqual(["group-1"]);
+
+    session.setActive(false);
+    expect(signals[0]?.aborted).toBe(true);
+
+    hanging = false;
+    session.setActive(true);
+    await session.tick();
+
+    expect(getLatestCalls).toEqual(["group-1", "group-1"]);
+    expect(signals.at(-1)?.aborted).toBe(false);
+    expect(session.getStatus()).toMatchObject({
+      connection: "ok",
+      groups: { "group-1": "loaded" },
+      membership: "loaded",
+    });
+  });
+
+  test("does not report a group list aborted by going inactive as a failure", async () => {
+    let hanging = true;
+    const connections: string[] = [];
+    const { session } = createSession({
+      listGroups: async () => (hanging ? new Promise(() => {}) : [{ id: "group-1" }]),
+    });
+    session.subscribe(() => connections.push(session.getStatus().connection));
+
+    session.setActive(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    session.setActive(false);
+    hanging = false;
+    session.setActive(true);
+    await session.tick();
+
+    expect(connections).not.toContain("failing");
+    expect(session.getStatus()).toMatchObject({ connection: "ok", membership: "loaded" });
+  });
+
+  test("aborts a hung request when the session is destroyed", async () => {
+    const signals: AbortSignal[] = [];
+    const { session } = createSession({
+      getLatest: async (_groupId, signal) => {
+        signals.push(signal);
+        return new Promise(() => {});
+      },
+    });
+
+    session.setActive(true);
+    const stuckTick = session.tick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    session.destroy();
+    await stuckTick;
+    expect(signals[0]?.aborted).toBe(true);
   });
 
   test("stays failing while any one group's latest fetch failed", async () => {

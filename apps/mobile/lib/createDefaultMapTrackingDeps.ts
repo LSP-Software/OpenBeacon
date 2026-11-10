@@ -31,15 +31,11 @@ export const createDefaultMapTrackingDeps = (): MapTrackingDeps => {
       }
       return result;
     },
-    getLatest: async (groupId) => trpcClient.groupTracking.getLatest.query({ groupId }),
-    listGroups: async () => trpcClient.groupMembership.list.query(),
+    getLatest: async (groupId, signal) =>
+      trpcClient.groupTracking.getLatest.query({ groupId }, { signal }),
+    listGroups: async (signal) => trpcClient.groupMembership.list.query(undefined, { signal }),
     now: () => Date.now(),
-    poll: async ({ cursor, groupId, limit }) =>
-      trpcClient.groupTracking.poll.query({
-        cursor,
-        groupId,
-        limit,
-      }),
+    poll: async (input, signal) => trpcClient.groupTracking.poll.query(input, { signal }),
     schedule: (callback, delayMs) => {
       const timeoutId = setTimeout(callback, delayMs);
       return {

@@ -28,14 +28,20 @@ export type MapTrackingDeps = {
   }) => Promise<
     { entry: LiveMapEntry; status: "ok" } | { status: "ignored" } | { status: "undecryptable" }
   >;
-  getLatest: (groupId: string) => Promise<{ points: MapTrackingEncryptedPoint[] }>;
-  listGroups: () => Promise<Array<{ id: string }>>;
+  getLatest: (
+    groupId: string,
+    signal: AbortSignal,
+  ) => Promise<{ points: MapTrackingEncryptedPoint[] }>;
+  listGroups: (signal: AbortSignal) => Promise<Array<{ id: string }>>;
   now: () => number;
-  poll: (input: {
-    cursor: MapTrackingCursor | null;
-    groupId: string;
-    limit: number;
-  }) => Promise<{ points: MapTrackingEncryptedPoint[] }>;
+  poll: (
+    input: {
+      cursor: MapTrackingCursor | null;
+      groupId: string;
+      limit: number;
+    },
+    signal: AbortSignal,
+  ) => Promise<{ points: MapTrackingEncryptedPoint[] }>;
   schedule: (callback: () => void, delayMs: number) => { cancel: () => void };
 };
 
