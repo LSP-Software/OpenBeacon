@@ -59,16 +59,19 @@ def version_devices(api_levels, memory_mb):
 
 
 def available_memory_mb(system, meminfo=Path("/proc/meminfo")):
-    if system == "Linux":
-        for line in meminfo.read_text().splitlines():
-            if line.startswith("MemAvailable:"):
-                return int(line.split()[1]) // 1024
+    try:
+        if system == "Linux":
+            for line in meminfo.read_text().splitlines():
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) // 1024
+            return None
+        if system == "Darwin":
+            output = subprocess.check_output(["vm_stat"], text=True)
+            page_size = int(output.split("page size of ", 1)[1].split()[0])
+            pages = {key.strip(): int(value.strip().rstrip(".")) for key, value in (line.split(":", 1) for line in output.splitlines()[1:] if ":" in line)}
+            return sum(pages.get(key, 0) for key in ("Pages free", "Pages inactive", "Pages speculative")) * page_size // 1024 // 1024
+    except (OSError, subprocess.CalledProcessError, ValueError, IndexError):
         return None
-    if system == "Darwin":
-        output = subprocess.check_output(["vm_stat"], text=True)
-        page_size = int(output.split("page size of ", 1)[1].split()[0])
-        pages = {key.strip(): int(value.strip().rstrip(".")) for key, value in (line.split(":", 1) for line in output.splitlines()[1:] if ":" in line)}
-        return sum(pages.get(key, 0) for key in ("Pages free", "Pages inactive", "Pages speculative", "Pages purgeable")) * page_size // 1024 // 1024
     return None
 
 

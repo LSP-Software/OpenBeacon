@@ -154,13 +154,20 @@ class MemoryCheckTest(unittest.TestCase):
             meminfo.write_text("MemTotal:       32768000 kB\nMemFree:         1024000 kB\nMemAvailable:   16384000 kB\n")
             self.assertEqual(simulation.available_memory_mb("Linux", meminfo), 16000)
 
-    def test_counts_free_inactive_speculative_and_purgeable_pages_on_macos(self):
-        vm_stat = "Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free:                               1000.\nPages active:                             9000.\nPages inactive:                           2000.\nPages speculative:                         500.\nPages wired down:                         3000.\nPages purgeable:                           596.\n"
+    def test_counts_free_inactive_and_speculative_pages_on_macos(self):
+        vm_stat = "Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free:                               1000.\nPages active:                             9000.\nPages inactive:                           2596.\nPages speculative:                         500.\nPages wired down:                         3000.\nPages purgeable:                           596.\n"
         with patch.object(simulation.subprocess, "check_output", return_value=vm_stat):
             self.assertEqual(simulation.available_memory_mb("Darwin"), 64)
 
     def test_unknown_platform_has_no_reading(self):
         self.assertIsNone(simulation.available_memory_mb("Windows"))
+
+    def test_unreadable_memory_has_no_reading(self):
+        self.assertIsNone(simulation.available_memory_mb("Linux", Path("/nonexistent/meminfo")))
+        with patch.object(simulation.subprocess, "check_output", side_effect=simulation.subprocess.CalledProcessError(1, ["vm_stat"])):
+            self.assertIsNone(simulation.available_memory_mb("Darwin"))
+        with patch.object(simulation.subprocess, "check_output", side_effect=FileNotFoundError):
+            self.assertIsNone(simulation.available_memory_mb("Darwin"))
 
     def test_needs_every_emulator_plus_headroom(self):
         devices = simulation.version_devices([24, 36], None)
