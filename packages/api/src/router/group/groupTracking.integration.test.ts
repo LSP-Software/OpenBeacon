@@ -173,4 +173,51 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     }
     expect(await prisma.groupEncryptedPayload.count({ where: { groupId } })).toBe(1);
   });
+
+  test("getLatest returns each member's newest point and skips members with none", async () => {
+    const memberDeviceId = `${prefix}-member-device`;
+    await prisma.userDevice.create({
+      data: {
+        id: memberDeviceId,
+        userId: memberId,
+        publicKey: createDeviceKeyPair().publicKey,
+        publicKeyAlgorithm: "X25519",
+      },
+    });
+    const storePoint = (id: string, senderUserId: string, senderDeviceId: string, at: string) =>
+      prisma.groupEncryptedPayload.create({
+        data: {
+          id,
+          groupId,
+          epochId,
+          senderDeviceId,
+          senderUserId,
+          kind: TRACKING_POINT_KIND,
+          algorithm: "XChaCha20-Poly1305",
+          nonce: "nonce",
+          ciphertext: "ciphertext",
+          clientPointId: id,
+          createdAt: new Date(at),
+        },
+      });
+    const latestIds = async () =>
+      Object.fromEntries(
+        (await caller(memberId).groupTracking.getLatest({ groupId })).points.map((point) => [
+          point.senderUserId,
+          point.id,
+        ]),
+      );
+
+    await storePoint(`${prefix}-owner-old`, ownerId, ownerDeviceId, "2030-01-01T10:00:00.000Z");
+    await storePoint(`${prefix}-owner-tie-a`, ownerId, ownerDeviceId, "2030-01-01T12:00:00.000Z");
+    await storePoint(`${prefix}-owner-tie-b`, ownerId, ownerDeviceId, "2030-01-01T12:00:00.000Z");
+    expect(await latestIds()).toEqual({ [ownerId]: `${prefix}-owner-tie-b` });
+
+    await storePoint(`${prefix}-member-new`, memberId, memberDeviceId, "2030-01-01T11:00:00.000Z");
+    await storePoint(`${prefix}-member-old`, memberId, memberDeviceId, "2030-01-01T09:00:00.000Z");
+    expect(await latestIds()).toEqual({
+      [memberId]: `${prefix}-member-new`,
+      [ownerId]: `${prefix}-owner-tie-b`,
+    });
+  });
 });

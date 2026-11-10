@@ -269,7 +269,7 @@ describe("pollGroupTrackingPoints", () => {
 });
 
 describe("getLatestGroupTrackingPoints", () => {
-  test("uses DISTINCT ON senderUserId ordering", async () => {
+  test("looks up each member's newest point instead of sorting the whole group", async () => {
     const queryRaw = mock(async () => [
       {
         algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
@@ -306,7 +306,10 @@ describe("getLatestGroupTrackingPoints", () => {
     expect(queryRaw).toHaveBeenCalled();
     const sql = queryRaw.mock.calls[0]?.[0] as { strings: string[] };
     const sqlText = sql.strings.join("?");
-    expect(sqlText).toContain('DISTINCT ON ("senderUserId")');
-    expect(sqlText).toContain('ORDER BY "senderUserId" ASC, "createdAt" DESC, "id" DESC');
+    expect(sqlText).not.toContain("DISTINCT ON");
+    expect(sqlText).toContain('FROM "GroupMember" AS "member"');
+    expect(sqlText).toContain("CROSS JOIN LATERAL");
+    expect(sqlText).toContain('ORDER BY "point"."createdAt" DESC, "point"."id" DESC');
+    expect(sqlText).toContain("LIMIT 1");
   });
 });

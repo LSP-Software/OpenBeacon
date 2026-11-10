@@ -240,20 +240,28 @@ export const getLatestGroupTrackingPoints = async ({
   groupId: string;
 }) => {
   const points = await db.$queryRaw<GroupEncryptedPayloadRow[]>(Prisma.sql`
-    SELECT DISTINCT ON ("senderUserId")
-      "id",
-      "epochId",
-      "senderDeviceId",
-      "senderUserId",
-      "kind",
-      "algorithm",
-      "nonce",
-      "ciphertext",
-      "clientPointId",
-      "createdAt"
-    FROM "GroupEncryptedPayload"
-    WHERE "groupId" = ${groupId}
-    ORDER BY "senderUserId" ASC, "createdAt" DESC, "id" DESC
+    SELECT
+      "latest"."id",
+      "latest"."epochId",
+      "latest"."senderDeviceId",
+      "latest"."senderUserId",
+      "latest"."kind",
+      "latest"."algorithm",
+      "latest"."nonce",
+      "latest"."ciphertext",
+      "latest"."clientPointId",
+      "latest"."createdAt"
+    FROM "GroupMember" AS "member"
+    CROSS JOIN LATERAL (
+      SELECT *
+      FROM "GroupEncryptedPayload" AS "point"
+      WHERE "point"."groupId" = "member"."groupId"
+        AND "point"."senderUserId" = "member"."userId"
+      ORDER BY "point"."createdAt" DESC, "point"."id" DESC
+      LIMIT 1
+    ) AS "latest"
+    WHERE "member"."groupId" = ${groupId}
+    ORDER BY "latest"."senderUserId" ASC
   `);
 
   return { points };
