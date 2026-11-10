@@ -53,25 +53,25 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: bun scripts/check-version-bump.ts "origin/$BASE_REF"
 
-  postgres-integration:
+  integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: openbeacon
+          POSTGRES_DB: openbeacon_test
           POSTGRES_USER: openbeacon
           POSTGRES_PASSWORD: openbeacon
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U openbeacon -d openbeacon"
+          --health-cmd "pg_isready -U openbeacon -d openbeacon_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
       redis:
-        image: docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.2
+        image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.31.2
         ports:
           - 6379:6379
         options: >-
@@ -98,7 +98,7 @@ jobs:
           PGPASSWORD: openbeacon
           SHADOW_DATABASE_URL: postgresql://openbeacon:openbeacon@localhost:5432/openbeacon_shadow
         run: |
-          psql -h localhost -U openbeacon -d openbeacon -c 'CREATE DATABASE openbeacon_shadow'
+          psql -h localhost -U openbeacon -d openbeacon_test -c 'CREATE DATABASE openbeacon_shadow'
           bunx prisma migrate diff --config packages/database/prisma.config.ts --from-migrations packages/database/prisma/migrations --to-schema packages/database/prisma/schema.prisma --exit-code
       - name: Run every integration test file against PostgreSQL and Redis
         run: |

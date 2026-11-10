@@ -33,7 +33,7 @@ bun run db:migrate
 
 ## Run the integration tests
 
-`bun run ci` skips the integration tests. They need PostgreSQL and Redis running at the URLs in `.env.ci`; `docker compose up -d db redis` starts both. Apply the migrations to that database, then run:
+`bun run ci` skips the integration tests. They need PostgreSQL and Redis running at the URLs in `.env.ci`; `docker compose up -d db redis` starts both. The tests use a separate `openbeacon_test` database so they never touch your development data. The first command below creates it and applies the migrations:
 
 ```sh
 bun run --cwd packages/database --env-file=../../.env.ci prisma migrate deploy
