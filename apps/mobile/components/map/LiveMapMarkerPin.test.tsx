@@ -64,10 +64,15 @@ mock.module("../ui/Text.tsx", () => ({ Text: () => null }));
 mock.module("../ui/Icon.tsx", () => ({ Icon: () => React.createElement("clock") }));
 const { LiveMapMarkerPin } = await import("./LiveMapMarkerPin.tsx");
 
-const renderPin = async (timestamp: string | null, status?: "cantLocate" | "cantRead") => {
+const renderPin = async (
+  timestamp: string | null,
+  status?: "cantLocate" | "cantRead",
+  hasUnreadableUpdate = false,
+) => {
   await act(async () => {
     root?.render(
       <LiveMapMarkerPin
+        hasUnreadableUpdate={hasUnreadableUpdate}
         image={null}
         initials="AB"
         name="Alice"
@@ -177,5 +182,16 @@ describe("LiveMapMarkerPin", () => {
     expect(cantRead).not.toContain("Location is over");
     expect(cantRead).not.toContain("Location unknown");
     expect(circles.map((circle) => circle.strokeDasharray)).toEqual(["5 4"]);
+  });
+
+  test("swaps the clock for a ! when a newer location can't be read, keeping the solid ring", async () => {
+    root = createRoot();
+    const staleTimestamp = new Date(Date.now() - 3_600_000).toISOString();
+    circles = [];
+    await renderPin(staleTimestamp, undefined, true);
+    const pin = JSON.stringify(root.container.toJSON());
+    expect(pin).toContain("Newer location can’t be read");
+    expect(pin).not.toContain("Location is over");
+    expect(circles).toEqual([]);
   });
 });

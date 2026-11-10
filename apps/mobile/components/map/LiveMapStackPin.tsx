@@ -38,6 +38,7 @@ export const LiveMapStackPin = ({ members }: { members: readonly LiveMapMarker[]
         </View>
       ))}
       <LiveMapMarkerPin
+        hasUnreadableUpdate={lead.unreadableGroup !== undefined}
         image={lead.image}
         initials={lead.initials}
         name={lead.name}

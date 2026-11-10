@@ -125,6 +125,8 @@ export const LiveMapPeopleTray = ({
             <View className="flex-row gap-2">
               {section.people.map((person) => {
                 const timestamp = "timestamp" in person ? person.timestamp : null;
+                const hasUnreadableUpdate =
+                  "unreadableGroup" in person && person.unreadableGroup !== undefined;
                 const name = person.isSelf ? "You" : person.name;
                 return (
                   <TrayPerson
@@ -133,7 +135,9 @@ export const LiveMapPeopleTray = ({
                       name,
                       section.label.toLowerCase(),
                       ...(timestamp === null ? [] : [`updated ${timeSince(timestamp, now)}`]),
+                      ...(hasUnreadableUpdate ? ["newer location can’t be read"] : []),
                     ].join(", ")}
+                    hasUnreadableUpdate={hasUnreadableUpdate}
                     age={timestamp === null ? null : shortTimeSince(timestamp, now)}
                     person={person}
                     ringColor={"ringColor" in person ? person.ringColor : "transparent"}
@@ -172,6 +176,7 @@ const TrayPerson = memo(
   ({
     accessibilityLabel,
     age,
+    hasUnreadableUpdate,
     onSelectPerson,
     person,
     ringColor,
@@ -181,6 +186,7 @@ const TrayPerson = memo(
   }: {
     accessibilityLabel: string;
     age: string | null;
+    hasUnreadableUpdate: boolean;
     onSelectPerson: (userId: string) => void;
     person: MapPerson | LiveMapMarker;
     ringColor: string;
@@ -195,6 +201,7 @@ const TrayPerson = memo(
       onPress={() => onSelectPerson(person.userId)}
     >
       <LiveMapMarkerPin
+        hasUnreadableUpdate={hasUnreadableUpdate}
         image={person.image}
         initials={person.initials}
         name={person.name}

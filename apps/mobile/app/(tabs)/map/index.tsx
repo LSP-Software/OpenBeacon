@@ -17,7 +17,7 @@ import { trpc } from "../../../lib/api.ts";
 import { applySelfDeviceLocation } from "../../../lib/applySelfDeviceLocation.ts";
 import { authClient } from "../../../lib/auth-client.ts";
 import { buildLiveMapMarkers } from "../../../lib/buildLiveMapMarkers.ts";
-import { classifyMapPeople } from "../../../lib/classifyMapPeople.ts";
+import { classifyMapPeople, flagUnreadableMarkers } from "../../../lib/classifyMapPeople.ts";
 import { loadPersonalNicknames } from "../../../lib/personalNicknames.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { nextMapMarkerSelection } from "../../../lib/mapMarkerSelection.ts";
@@ -121,17 +121,21 @@ const MapScreen = () => {
       return [];
     }
 
-    return applySelfDeviceLocation({
-      markers: buildLiveMapMarkers({
-        getGroupColor,
-        groups: groupsWithNicknames ?? [],
-        positions: livePositions,
+    return flagUnreadableMarkers({
+      groups: groupsWithNicknames ?? [],
+      markers: applySelfDeviceLocation({
+        markers: buildLiveMapMarkers({
+          getGroupColor,
+          groups: groupsWithNicknames ?? [],
+          positions: livePositions,
+          selfUserId,
+        }),
+        selfDeviceLocation,
+        selfFallback,
         selfUserId,
+        lastSentAt,
       }),
-      selfDeviceLocation,
-      selfFallback,
-      selfUserId,
-      lastSentAt,
+      status: trackingStatus,
     });
   }, [
     groupColorRevision,
@@ -141,6 +145,7 @@ const MapScreen = () => {
     selfFallback,
     selfUserId,
     lastSentAt,
+    trackingStatus,
   ]);
 
   const people = useMemo(() => {

@@ -74,7 +74,12 @@ export const NativeMap = ({
     peopleTrayOpen && selectedMarker === null && !isStackSheetOpen && missingUserId === null;
   const trayPeople = isTrayOpen ? people : null;
   const [trayHeight, setTrayHeight] = useState(0);
-  const needsAttentionCount = (people?.cantLocate.length ?? 0) + (people?.cantRead.length ?? 0);
+  const unreadableMarkerCount = markers.filter(
+    (marker) => marker.unreadableGroup !== undefined,
+  ).length;
+  const hasKeyProblem = (people?.cantRead.length ?? 0) + unreadableMarkerCount > 0;
+  const needsAttentionCount =
+    (people?.cantLocate.length ?? 0) + (people?.cantRead.length ?? 0) + unreadableMarkerCount;
   const showAttentionCount =
     people !== null && people.finding.length === 0 && needsAttentionCount > 0;
   useEffect(() => {
@@ -441,7 +446,7 @@ export const NativeMap = ({
             <View
               className={cn(
                 "absolute -right-1 -top-1 h-5 min-w-5 items-center justify-center rounded-full border-2 border-card px-1",
-                people.cantRead.length > 0 ? "bg-destructive" : "bg-muted",
+                hasKeyProblem ? "bg-destructive" : "bg-muted",
               )}
             >
               <Text className="text-[11px] font-bold leading-[13px] text-white">
@@ -461,6 +466,7 @@ export const NativeMap = ({
           name={selectedMarker.name}
           otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
           timestamp={selectedMarker.timestamp}
+          unreadableGroup={selectedMarker.unreadableGroup}
           onHeightChange={(height) => {
             edge.onSheetHeightChange(height);
           }}

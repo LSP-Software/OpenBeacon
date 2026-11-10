@@ -59,6 +59,7 @@ export const LiveMapEdgeChip = ({
       <Animated.View style={{ transform: [{ translateX }, { translateY }, { scale }] }}>
         {peopleCount === 1 ? (
           <LiveMapMarkerPin
+            hasUnreadableUpdate={lead.unreadableGroup !== undefined}
             image={lead.image}
             initials={lead.initials}
             name={lead.name}

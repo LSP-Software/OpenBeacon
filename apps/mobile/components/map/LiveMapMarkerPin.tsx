@@ -32,6 +32,7 @@ const SPOTLIGHT_PATH = [
 ].join(" ");
 
 export const LiveMapMarkerPin = ({
+  hasUnreadableUpdate = false,
   headingDegrees = null,
   image,
   initials,
@@ -42,6 +43,7 @@ export const LiveMapMarkerPin = ({
   status,
   timestamp,
 }: {
+  hasUnreadableUpdate?: boolean;
   headingDegrees?: number | null;
   image: string | null;
   initials: string;
@@ -73,7 +75,7 @@ export const LiveMapMarkerPin = ({
 
   useEffect(() => {
     onBitmapContentChange?.();
-  }, [isStale, onBitmapContentChange]);
+  }, [hasUnreadableUpdate, isStale, onBitmapContentChange]);
   const showHeading = headingDegrees !== null;
   const size = showHeading ? OUTER_SIZE : PIN_SIZE;
 
@@ -196,9 +198,11 @@ export const LiveMapMarkerPin = ({
           >
             <Text className="text-[12px] font-bold leading-[14px] text-foreground">?</Text>
           </View>
-        ) : status === "cantRead" ? (
+        ) : status === "cantRead" || hasUnreadableUpdate ? (
           <View
-            accessibilityLabel="Can’t read location"
+            accessibilityLabel={
+              status === "cantRead" ? "Can’t read location" : "Newer location can’t be read"
+            }
             className="absolute bottom-0 left-0 size-5 items-center justify-center rounded-full border border-border bg-destructive"
           >
             <Text className="text-[12px] font-bold leading-[14px] text-destructive-foreground">

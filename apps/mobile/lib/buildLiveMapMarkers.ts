@@ -16,6 +16,7 @@ export type LiveMapMarker = {
   ringColors?: string[];
   sourceGroupId: string;
   timestamp: string | null;
+  unreadableGroup?: { id: string; name: string };
   userId: string;
 };
 

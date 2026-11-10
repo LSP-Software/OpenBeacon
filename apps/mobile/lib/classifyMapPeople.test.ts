@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { LiveMapMarker } from "./buildLiveMapMarkers.ts";
-import { classifyMapPeople } from "./classifyMapPeople.ts";
+import { classifyMapPeople, flagUnreadableMarkers } from "./classifyMapPeople.ts";
 import type { MapTrackingStatus } from "./mapTrackingTypes.ts";
 
 const NOW = Date.parse("2026-11-10T12:00:00.000Z");
@@ -254,5 +254,31 @@ describe("classifyMapPeople", () => {
     });
     expect(sectionsOf(settled)).toMatchObject({ cantLocate: ["me"], cantRead: ["mum"] });
     expect(settled.cantLocate[0]).toMatchObject({ isSelf: true, groupNames: ["Family"] });
+  });
+});
+
+describe("flagUnreadableMarkers", () => {
+  test("flags people whose newer point can't be read, but never you", () => {
+    const markers = [marker("me", 0, true), marker("mum", 30), marker("josh", 1)];
+    const flagged = flagUnreadableMarkers({
+      groups: [family, club],
+      markers,
+      status: {
+        ...loaded,
+        undecryptable: [
+          { groupId: "club", userId: "mum" },
+          { groupId: "family", userId: "me" },
+          { groupId: "family", userId: "josh" },
+        ],
+      },
+    });
+
+    expect(flagged.map((item) => item.unreadableGroup)).toEqual([
+      undefined,
+      { id: "club", name: "Climbing club" },
+      undefined,
+    ]);
+    expect(flagged[0]).toBe(markers[0]);
+    expect(flagged[2]).toBe(markers[2]);
   });
 });

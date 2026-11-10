@@ -2413,6 +2413,16 @@ describe("NativeMap integration harness", () => {
 
       await renderNativeMap({ people: createPeople(needsAttention) });
       expect(peopleButton()?.props["accessibilityLabel"]).toBe("People, 2 need attention");
+
+      const erin = createLiveMapMarkerFixture({
+        unreadableGroup: { id: "g1", name: "Family" },
+        userId: "erin",
+      });
+      await renderNativeMap({
+        markers: [erin],
+        people: createPeople({ outOfDate: [erin] }),
+      });
+      expect(peopleButton()?.props["accessibilityLabel"]).toBe("People, 1 need attention");
     });
 
     test("swaps the missing-person sheet for the person sheet when they get a location", async () => {

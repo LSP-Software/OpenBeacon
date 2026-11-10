@@ -110,3 +110,25 @@ export const classifyMapPeople = ({
 
   return people;
 };
+
+export const flagUnreadableMarkers = ({
+  groups,
+  markers,
+  status,
+}: {
+  groups: readonly { id: string; name: string; members: readonly { userId: string }[] }[];
+  markers: readonly LiveMapMarker[];
+  status: MapTrackingStatus;
+}): LiveMapMarker[] =>
+  markers.map((marker) => {
+    if (marker.isSelf) return marker;
+    const group = groups.find(
+      (item) =>
+        item.members.some((member) => member.userId === marker.userId) &&
+        status.undecryptable.some(
+          ({ groupId, userId }) => groupId === item.id && userId === marker.userId,
+        ),
+    );
+    if (!group) return marker;
+    return { ...marker, unreadableGroup: { id: group.id, name: group.name } };
+  });
