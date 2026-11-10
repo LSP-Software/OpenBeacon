@@ -45,6 +45,7 @@ export type SecurityAlert =
         | "password-reset"
         | "recovery-phrase-changed"
         | "recovery-phrase-reset"
+        | "other-sessions-signed-out"
         | "account-deleted";
     }
   | {

@@ -1,0 +1,125 @@
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import { auth, createSecurityAlerts } from "@openbeacon/auth";
+import { OpenBeaconCache } from "@openbeacon/cache";
+import { FakeRedis } from "@openbeacon/cache/testing";
+import { prisma } from "@openbeacon/database";
+import type { SecurityAlert } from "@openbeacon/email";
+import { appRouter } from "../root.ts";
+
+class TestCache extends OpenBeaconCache {
+  protected override createRedisClient(): FakeRedis {
+    return new FakeRedis();
+  }
+}
+
+const prefix = `sign-out-others-${crypto.randomUUID()}`;
+const password = "testing-password-123";
+const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+const sent: { userId: string; alert: SecurityAlert }[] = [];
+const tasks: Promise<unknown>[] = [];
+const securityAlerts = createSecurityAlerts({
+  db: prisma,
+  sendSecurityAlertEmail: async ({ userId, alert }) => {
+    sent.push({ userId, alert });
+  },
+  runInBackground: (task) => tasks.push(task),
+});
+const sentAlerts = async () => {
+  while (tasks.length) await Promise.all(tasks.splice(0));
+  return sent.splice(0);
+};
+
+let accountCounter = 0;
+const createAccount = async () => {
+  accountCounter += 1;
+  const email = `${prefix}-${accountCounter}@example.test`;
+  const { user } = await auth.api.signUpEmail({ body: { email, password, name: "Sessions Test" } });
+  await auth.api.signInEmail({ body: { email, password } });
+  await auth.api.signInEmail({ body: { email, password } });
+  const sessions = await prisma.session.findMany({
+    orderBy: { createdAt: "asc" },
+    where: { userId: user.id },
+  });
+  return { userId: user.id, sessions };
+};
+
+const callerFor = (
+  account: Awaited<ReturnType<typeof createAccount>>,
+  { sessionCreatedAt = new Date() }: { sessionCreatedAt?: Date } = {},
+) => {
+  const current = account.sessions.at(-1);
+  if (!current) throw new Error("The account has no session");
+  return appRouter.createCaller({
+    cache,
+    db: prisma,
+    emailCodes: null,
+    securityAlerts,
+    clientIp: `ip-${account.userId}`,
+    session: {
+      user: { id: account.userId },
+      session: { id: current.id, createdAt: sessionCreatedAt },
+    },
+  } as Parameters<typeof appRouter.createCaller>[0]);
+};
+
+const sessionIds = async (userId: string) =>
+  (await prisma.session.findMany({ select: { id: true }, where: { userId } })).map(({ id }) => id);
+
+beforeEach(async () => {
+  await sentAlerts();
+});
+
+afterAll(async () => {
+  if (process.env["OPENBEACON_INTEGRATION"] !== "1") return;
+  await prisma.user.deleteMany({ where: { email: { startsWith: prefix } } });
+  await prisma.$disconnect();
+});
+
+describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("signing out other sessions", () => {
+  test("ends every other session for the account and keeps this one", async () => {
+    const account = await createAccount();
+    const otherAccount = await createAccount();
+    expect(account.sessions).toHaveLength(3);
+
+    expect(await callerFor(account).account.signOutOtherSessions()).toEqual({ signedOut: 2 });
+
+    expect(await sessionIds(account.userId)).toEqual([account.sessions.at(-1)?.id]);
+    expect(await sessionIds(otherAccount.userId)).toHaveLength(3);
+  });
+
+  test("sends one always-on alert, even with optional alerts off", async () => {
+    const account = await createAccount();
+    await prisma.user.update({
+      where: { id: account.userId },
+      data: { alertNewDevice: false, alertDeletionScheduled: false },
+    });
+
+    await callerFor(account).account.signOutOtherSessions();
+
+    expect(await sentAlerts()).toEqual([
+      { userId: account.userId, alert: { type: "other-sessions-signed-out" } },
+    ]);
+  });
+
+  test("sends no alert when there were no other sessions", async () => {
+    const account = await createAccount();
+    const caller = callerFor(account);
+    await caller.account.signOutOtherSessions();
+    await sentAlerts();
+
+    expect(await caller.account.signOutOtherSessions()).toEqual({ signedOut: 0 });
+    expect(await sentAlerts()).toEqual([]);
+  });
+
+  test("needs a fresh sign-in", async () => {
+    const account = await createAccount();
+    const { sessionConfig } = await auth.$context;
+    const stale = new Date(Date.now() - (sessionConfig.freshAge + 1) * 1000);
+
+    await expect(
+      callerFor(account, { sessionCreatedAt: stale }).account.signOutOtherSessions(),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(await sessionIds(account.userId)).toHaveLength(3);
+    expect(await sentAlerts()).toEqual([]);
+  });
+});

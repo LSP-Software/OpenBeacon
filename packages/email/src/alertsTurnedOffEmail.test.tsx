@@ -38,10 +38,10 @@ describe("renderAlertsTurnedOffEmail", () => {
     );
   });
 
-  test("accounts without a password are told to secure Google instead", async () => {
+  test("accounts without a password are told to change their Google password, then sign out other sessions", async () => {
     const email = await render(["new-device"], false);
     expect(email.text).toContain(
-      "If this wasn't you\n\nSomeone else is signed in to your account. Secure your Google account, because someone may have used it to sign in.",
+      "If this wasn't you\n\nSomeone else is signed in to your account. Change your Google password, because someone may have used your Google account to sign in. After that, open the OpenBeacon app, go to Account and tap Sign out of all other sessions. Then turn this alert back on",
     );
     expect(email.text).not.toContain("change your password");
   });

@@ -1,4 +1,3 @@
-import { auth } from "@openbeacon/auth";
 import { Prisma } from "@openbeacon/database";
 import {
   changeRecoveryPhraseSchema,
@@ -9,21 +8,12 @@ import {
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type z from "zod";
-import { protectedProcedure } from "../procedures/auth/runtime.ts";
+import {
+  freshSessionProcedure,
+  isSessionFresh,
+  protectedProcedure,
+} from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
-
-const isSessionFresh = async (sessionCreatedAt: Date) => {
-  const { sessionConfig } = await auth.$context;
-  const sessionAge = Date.now() - new Date(sessionCreatedAt).getTime();
-  return sessionConfig.freshAge === 0 || sessionAge < sessionConfig.freshAge * 1000;
-};
-
-const freshSessionProcedure = protectedProcedure.use(async ({ ctx, next }) => {
-  if (!(await isSessionFresh(ctx.session.session.createdAt))) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Sign in again to continue." });
-  }
-  return next();
-});
 
 const emailCodeProcedure = freshSessionProcedure.use(({ ctx, next }) => {
   if (!ctx.emailCodes) {

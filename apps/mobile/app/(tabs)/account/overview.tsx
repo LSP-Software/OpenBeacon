@@ -395,6 +395,11 @@ const AccountScreen = () => {
                 : "Contacting your server to sign out."}
             </Text>
           )}
+          <Link href="/account/sign-out-others" asChild>
+            <Button variant="outline" disabled={!!signOutPhase}>
+              <Text>Sign out of all other sessions</Text>
+            </Button>
+          </Link>
           <Button onPress={handleSignOut} disabled={!!signOutPhase}>
             <Text>{signOutPhase ? "Signing out…" : "Sign out"}</Text>
           </Button>

@@ -79,8 +79,8 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
     <View className="gap-4">
       <Text className="text-foreground text-3xl font-bold">Confirm it’s you</Text>
       <Text className="text-muted-foreground text-base leading-6">
-        Sign in again to continue. This stops anyone who picks up your unlocked phone from setting
-        up or changing your recovery phrase.
+        Sign in again to continue. This stops anyone who picks up your unlocked phone from changing
+        your recovery phrase or signing you out on your other devices.
       </Text>
       {methods.data?.password && (
         <>

@@ -19,7 +19,7 @@ import {
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
-import { protectedProcedure } from "../procedures/auth/runtime.ts";
+import { freshSessionProcedure, protectedProcedure } from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
   deletionVerificationMethods: protectedProcedure.query(async ({ ctx }) => {
@@ -239,6 +239,16 @@ export const accountRouter = {
         });
       }
       return result;
+    }),
+  signOutOtherSessions: freshSessionProcedure
+    .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
+    .mutation(async ({ ctx }) => {
+      const userId = ctx.session.user.id;
+      const { count } = await ctx.db.session.deleteMany({
+        where: { userId, id: { not: ctx.session.session.id } },
+      });
+      if (count > 0) ctx.securityAlerts?.send(userId, { type: "other-sessions-signed-out" });
+      return { signedOut: count };
     }),
   deletionCancellationNotice: protectedProcedure.query(async ({ ctx }) => {
     const user = await ctx.db.user.findUniqueOrThrow({
