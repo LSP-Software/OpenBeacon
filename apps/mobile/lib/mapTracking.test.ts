@@ -221,6 +221,87 @@ describe("createMapTrackingSession", () => {
     ).toBe("2026-07-17T12:00:02.000Z");
   });
 
+  test("starts known groups' polls alongside the group list so they share one request", async () => {
+    const requests: string[] = [];
+    const { session } = createSession({
+      getLatest: async (groupId) => {
+        requests.push(`latest:${groupId}`);
+        return {
+          points: [
+            point({
+              createdAt: new Date("2026-07-17T12:00:00.000Z"),
+              id: `${groupId}-0`,
+              senderUserId: "user-1",
+            }),
+          ],
+        };
+      },
+      listGroups: async () => {
+        requests.push("list");
+        return [{ id: "group-1" }];
+      },
+      poll: async ({ groupId }) => {
+        requests.push(`poll:${groupId}`);
+        return { points: [] };
+      },
+    });
+
+    session.setActive(true);
+    await session.tick();
+    requests.length = 0;
+
+    const tick = session.tick();
+    expect(requests).toEqual(["list", "poll:group-1"]);
+    await tick;
+  });
+
+  test("polls a group that is new in the list in the same tick", async () => {
+    let groups = [{ id: "group-1" }];
+    const { getLatestCalls, pollCalls, session } = createSession({
+      getLatest: async (groupId) => ({
+        points: [
+          point({
+            createdAt: new Date("2026-07-17T12:00:00.000Z"),
+            id: `${groupId}-0`,
+            senderUserId: "user-1",
+          }),
+        ],
+      }),
+      listGroups: async () => groups,
+    });
+
+    session.setActive(true);
+    await session.tick();
+    groups = [{ id: "group-1" }, { id: "group-2" }];
+    await session.tick();
+
+    expect(getLatestCalls).toEqual(["group-1", "group-2"]);
+    expect(pollCalls.map(({ groupId }) => groupId)).toEqual(["group-1"]);
+  });
+
+  test("loads a newly listed group in the same scheduled tick when the list is slow", async () => {
+    let groups = [{ id: "group-1" }];
+    const { getLatestCalls, scheduled, session, setNow, settle } = createSession({
+      listGroups: async () => {
+        if (groups.length > 1) {
+          setNow(6_500);
+        }
+        return groups;
+      },
+    });
+    const wakes = () => scheduled.filter(({ delayMs }) => delayMs !== REQUEST_TIMEOUT_MS);
+
+    session.setActive(true);
+    await session.tick();
+    groups = [{ id: "group-1" }, { id: "group-2" }];
+    setNow(5_000);
+    wakes().at(-1)?.fn();
+    await settle();
+
+    expect(getLatestCalls).toEqual(["group-1", "group-1", "group-2"]);
+    expect(wakes().at(-1)?.delayMs).toBe(3_500);
+  });
+
   test("fetches the latest points instead of paging when a poll page is full", async () => {
     const coldRow = point({
       createdAt: new Date("2026-07-17T12:00:00.000Z"),
@@ -438,9 +519,47 @@ describe("createMapTrackingSession", () => {
     expect(pollCalls).toHaveLength(1);
 
     setNow(5 * 60_000);
-    await session.tick();
+    const reconcileTick = session.tick();
     expect(getLatestCalls).toEqual(["group-1", "group-1"]);
     expect(pollCalls).toHaveLength(2);
+    await reconcileTick;
+  });
+
+  test("a failed reconcile keeps the group busy until its poll finishes", async () => {
+    let reconciling = false;
+    let finishPoll: (() => void) | undefined;
+    const { pollCalls, session, setNow } = createSession({
+      getLatest: async () => {
+        if (reconciling) throw new Error("offline");
+        return {
+          points: [
+            point({
+              createdAt: new Date("2026-07-17T12:00:00.000Z"),
+              id: "point-0",
+              senderUserId: "user-1",
+            }),
+          ],
+        };
+      },
+      poll: () =>
+        new Promise((resolve) => {
+          finishPoll = () => resolve({ points: [] });
+        }),
+    });
+
+    session.setActive(true);
+    await session.tick();
+    reconciling = true;
+    setNow(5 * 60_000);
+    const reconcileTick = session.tick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const overlappingTick = session.tick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(pollCalls).toHaveLength(1);
+    finishPoll?.();
+    await reconcileTick;
+    await overlappingTick;
   });
 
   test("merges decryptable points across groups by senderUserId", async () => {
@@ -972,7 +1091,7 @@ describe("createMapTrackingSession", () => {
     };
     let group1PollStarted = false;
     let removedMembershipSeen = false;
-    const { session } = createSession({
+    const { session, settle } = createSession({
       getLatest: async (groupId) => ({
         points: [
           point({
@@ -1013,6 +1132,7 @@ describe("createMapTrackingSession", () => {
       await Promise.resolve();
     }
     expect(group1PollStarted).toBe(true);
+    await settle();
 
     groups = [{ id: "group-2" }];
     const membershipTick = session.tick();

@@ -11,18 +11,22 @@ let records: Record<string, { name: string | null; ciphertext: string }> = {};
 let buttons: { label: string; disabled: boolean; onPress: () => void }[] = [];
 let input = "";
 const mutate = mock(async (_input: unknown) => {});
-const member = { id: "member", role: "MEMBER", user: { id: "other", name: "Alice", image: null } };
+const group = {
+  id: "group",
+  members: [{ id: "member", role: "MEMBER", userId: "other", name: "Alice", image: null }],
+};
 const passthrough = ({ children }: { children?: ReactNode }) =>
   React.createElement(React.Fragment, null, children);
 mock.module("@tanstack/react-query", () => ({
   useMutation: () => ({ mutateAsync: mutate, isPending: false }),
   useQueryClient: () => ({ invalidateQueries: async () => {} }),
-  useQuery: (options: { queryKey?: unknown[] }) =>
+  useQuery: (options: { queryKey?: unknown[]; select?: (groups: unknown[]) => unknown }) =>
     options.queryKey?.[0] === "personalNicknames"
       ? { data: records, isPending: pending, isFetching: pending, isError: false }
-      : { data: [member], isPending: false },
+      : { data: options.select?.([group]), isPending: false },
 }));
 mock.module("expo-router", () => ({ useRouter: () => ({ replace: () => {} }) }));
+mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("lucide-react-native", () => ({ MapPinIcon: () => null, PlusCircleIcon: () => null }));
 mock.module("react-native", () => ({
   View: passthrough,
@@ -78,9 +82,7 @@ mock.module("../hooks/useGroupLivePositions.ts", () => ({ useGroupLivePositions:
 mock.module("../lib/api.ts", () => ({
   trpc: {
     groupMembership: {
-      members: { queryOptions: () => ({}), queryKey: () => [] },
-      list: { queryKey: () => [] },
-      get: { queryKey: () => [] },
+      list: { queryOptions: () => ({}), queryKey: () => [] },
       remove: { mutationOptions: () => ({}) },
       updateRole: { mutationOptions: () => ({}) },
       updateNickname: { mutationOptions: () => ({}) },

@@ -1,3 +1,4 @@
+import { useIsFocused } from "@react-navigation/native";
 import { Alert } from "../../../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { accountNameSchema } from "@openbeacon/schemas";
@@ -123,12 +124,16 @@ const AccountScreen = () => {
     resolver: zodResolver(schema),
     defaultValues: { name: "" },
   });
-  const groups = useQuery(trpc.groupMembership.list.queryOptions());
+  const isFocused = useIsFocused();
+  const groups = useQuery({ ...trpc.groupMembership.list.queryOptions(), subscribed: isFocused });
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
-  const devices = useQuery(trpc.auth.listMyDeviceKeys.queryOptions());
+  const devices = useQuery({ ...trpc.auth.listMyDeviceKeys.queryOptions(), subscribed: isFocused });
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
-  const recoveryStatus = useQuery(trpc.accountRecovery.status.queryOptions());
+  const recoveryStatus = useQuery({
+    ...trpc.accountRecovery.status.queryOptions(),
+    subscribed: isFocused,
+  });
   const recoveryPromptKey = `recovery.promptDismissed.${session?.user.id}`;
   const [recoveryPromptDismissed, setRecoveryPromptDismissed] = useState(false);
   const showRecoveryPrompt =
@@ -159,7 +164,6 @@ const AccountScreen = () => {
     await Promise.all([
       refetch(),
       queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() }),
-      queryClient.invalidateQueries({ queryKey: trpc.groupMembership.members.queryKey() }),
     ]);
     setNameOpen(false);
     Alert.alert("Profile updated", "Your name has been saved.");

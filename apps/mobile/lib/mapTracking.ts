@@ -398,14 +398,20 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
           return;
         }
 
-        if (deps.now() - state.lastReconcileAt >= RECONCILE_INTERVAL_MS) {
-          await reconcileTick(groupId, runId);
-          if (isCurrent(groupId, runId)) {
-            state.lastReconcileAt = deps.now();
-          }
-        }
-
-        await liveTick(groupId, runId);
+        const reconcile =
+          deps.now() - state.lastReconcileAt >= RECONCILE_INTERVAL_MS
+            ? reconcileTick(groupId, runId).then(() => {
+                if (isCurrent(groupId, runId)) {
+                  state.lastReconcileAt = deps.now();
+                }
+              })
+            : null;
+        const [reconciled, polled] = await Promise.allSettled([
+          reconcile,
+          liveTick(groupId, runId),
+        ]);
+        if (reconciled.status === "rejected") throw reconciled.reason;
+        if (polled.status === "rejected") throw polled.reason;
       })(),
     );
 
@@ -475,12 +481,27 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   const tickInternal = async ({ force }: { force: boolean }) => {
     const startedIn = activation;
     tickPhase = "listing";
-    const groups = await syncMembership();
+    const now = deps.now();
+    const isDue = (groupId: string) => {
+      const state = groupStates.get(groupId);
+      return state !== undefined && (force || state.nextDueAt <= now + DUE_WINDOW_MS);
+    };
+    const knownGroupIds = new Set(groupStates.keys());
+    const membership = syncMembership();
+    const knownGroupTicks = [...knownGroupIds]
+      .filter(isDue)
+      .map((groupId) => tickGroup(groupId, now));
+    const groups = await membership;
     if (activation !== startedIn) {
       return;
     }
 
+    tickPhase = "groups";
     if (!groups) {
+      await Promise.all(knownGroupTicks);
+      if (activation !== startedIn) {
+        return;
+      }
       clearSchedule();
       scheduled = deps.schedule(() => {
         void tick({ force: false });
@@ -490,21 +511,10 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
 
     membershipBackoffMs = STEADY_INTERVAL_MS;
-    tickPhase = "groups";
-    const now = deps.now();
-
-    await Promise.all(
-      groups.map(async ({ id: groupId }) => {
-        const state = groupStates.get(groupId);
-        if (!state) {
-          return;
-        }
-        if (!force && state.nextDueAt > now + DUE_WINDOW_MS) {
-          return;
-        }
-        await tickGroup(groupId, now);
-      }),
-    );
+    await Promise.all([
+      ...knownGroupTicks,
+      ...groups.filter(({ id }) => !knownGroupIds.has(id)).map(({ id }) => tickGroup(id, now)),
+    ]);
 
     if (activation === startedIn) {
       scheduleWake();

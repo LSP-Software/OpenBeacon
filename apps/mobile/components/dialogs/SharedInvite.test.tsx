@@ -7,12 +7,11 @@ import { createReactNativeTestModule } from "../../test/reactNativeTestModule.ts
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 let states: Record<string, "active" | "used" | "expired">;
-let requestedIds: string[];
+let memberIds: string[] | undefined;
+let statusRequests: string[][];
 let created: number;
-let enabled: boolean;
-const invalidate = mock(async () => {});
 const setOpen = mock((_open: boolean) => {});
-const queryClient = { invalidateQueries: invalidate };
+const focusListeners = new Set<(focused: boolean) => void>();
 
 mock.module("react-native", () => ({
   ...createReactNativeTestModule(),
@@ -31,6 +30,12 @@ mock.module("../ui/Text.tsx", () => ({
     React.createElement("text", null, children),
 }));
 mock.module("@tanstack/react-query", () => ({
+  focusManager: {
+    subscribe: (listener: (focused: boolean) => void) => {
+      focusListeners.add(listener);
+      return () => focusListeners.delete(listener);
+    },
+  },
   useMutation: () => {
     const [data, setData] = useState<{ id: string; code: string; expiresInMs: number }>();
     const [reset] = useState(() => () => setData(undefined));
@@ -50,28 +55,42 @@ mock.module("@tanstack/react-query", () => ({
       },
     };
   },
-  useQuery: (options: { enabled: boolean; inviteIds: string[] }) => {
-    enabled = options.enabled;
-    requestedIds = options.inviteIds;
+  useQuery: (
+    options:
+      | { kind: "list"; select: (groups: unknown[]) => unknown }
+      | { kind: "statuses"; inviteIds: string[] },
+  ) => {
+    const [data, setData] = useState<{ id: string; status: string }[]>();
+    if (options.kind === "list") {
+      return {
+        data:
+          memberIds &&
+          options.select([
+            { id: "group-1", members: memberIds.map((id) => ({ id })) },
+            { id: "group-2", members: [{ id: "other" }] },
+          ]),
+      };
+    }
     return {
-      data: enabled
-        ? options.inviteIds.flatMap((id) => (states[id] ? [{ id, status: states[id] }] : []))
-        : undefined,
+      data,
+      refetch: async () => {
+        statusRequests.push(options.inviteIds);
+        setData(
+          options.inviteIds.flatMap((id) => (states[id] ? [{ id, status: states[id] }] : [])),
+        );
+      },
     };
   },
-  useQueryClient: () => queryClient,
 }));
 mock.module("../../lib/api.ts", () => ({
   trpc: {
     groupInvites: {
       createShared: { mutationOptions: () => ({}) },
-      sharedStatuses: { queryOptions: (input: { inviteIds: string[] }) => input },
+      sharedStatuses: {
+        queryOptions: (input: { inviteIds: string[] }) => ({ ...input, kind: "statuses" }),
+      },
     },
-    groupMembership: {
-      members: { queryKey: () => ["members"] },
-      get: { queryKey: () => ["get"] },
-      list: { queryKey: () => ["list"] },
-    },
+    groupMembership: { list: { queryOptions: () => ({ kind: "list" }) } },
   },
 }));
 const { SharedInvite } = await import("./SharedInvite.tsx");
@@ -85,63 +104,104 @@ const createInvite = async (root: Root) => {
   });
 };
 
+const render = async (root: Root, value: "link" | "qr" = "qr") => {
+  await act(async () => {
+    root.render(<SharedInvite groupId="group-1" open setOpen={setOpen} value={value} />);
+    await Promise.resolve();
+  });
+};
+
 describe("shared invitation dialog", () => {
   beforeEach(() => {
     states = {};
-    requestedIds = [];
+    memberIds = ["owner"];
+    statusRequests = [];
     created = 0;
-    enabled = false;
-    invalidate.mockClear();
     setOpen.mockClear();
   });
-  test("shares one code across link and QR and closes only when the latest invite is used", async () => {
+  test("checks the latest invite only when someone joins, and closes once it is used", async () => {
     const root = createRoot();
-    await act(async () => {
-      root.render(<SharedInvite groupId="group-1" open setOpen={setOpen} value="link" />);
-    });
-    expect(enabled).toBe(false);
+    await render(root, "link");
     await createInvite(root);
-    expect(requestedIds).toEqual(["invite-1"]);
     expect(JSON.stringify(root.container.toJSON())).toContain("1".repeat(32));
-    await act(async () => {
-      root.render(<SharedInvite groupId="group-1" open setOpen={setOpen} value="qr" />);
-    });
+    await render(root);
     expect(root.container.queryAll((item) => item.type === "qr")[0]?.props["value"]).toBe(
       "1".repeat(32),
     );
+    expect(statusRequests).toEqual([]);
+
     await createInvite(root);
+    await render(root);
+    expect(statusRequests).toEqual([]);
+
     states = { "invite-1": "used", "invite-2": "active" };
-    await act(async () => {
-      root.render(<SharedInvite groupId="group-1" open setOpen={setOpen} value="qr" />);
-      await Promise.resolve();
-    });
+    memberIds = ["owner", "first-joiner"];
+    await render(root);
+    expect(statusRequests).toEqual([["invite-2"]]);
     expect(setOpen).not.toHaveBeenCalled();
-    expect(requestedIds).toEqual(["invite-2"]);
-    expect(invalidate).not.toHaveBeenCalled();
+
+    await render(root);
+    expect(statusRequests).toEqual([["invite-2"]]);
+
     states = { "invite-1": "used", "invite-2": "used" };
-    await act(async () => {
-      root.render(<SharedInvite groupId="group-1" open setOpen={setOpen} value="qr" />);
-    });
+    memberIds = ["owner", "first-joiner", "second-joiner"];
+    await render(root);
+    await render(root);
+    expect(statusRequests).toEqual([["invite-2"], ["invite-2"]]);
     expect(setOpen).toHaveBeenCalledWith(false);
-    expect(invalidate).toHaveBeenCalledTimes(3);
     await act(async () => root.unmount());
+  });
+  test("treats the first loaded member list as a baseline rather than a join", async () => {
+    const root = createRoot();
+    memberIds = undefined;
+    await render(root);
+    await createInvite(root);
+    await render(root);
+    memberIds = ["owner"];
+    await render(root);
+    expect(statusRequests).toEqual([]);
+
+    states = { "invite-1": "used" };
+    memberIds = ["owner", "joiner"];
+    await render(root);
+    await render(root);
+    expect(statusRequests).toEqual([["invite-1"]]);
+    expect(setOpen).toHaveBeenCalledWith(false);
+    await act(async () => root.unmount());
+  });
+  test("checks the invite again when the app comes back to the foreground", async () => {
+    const root = createRoot();
+    await render(root);
+    await createInvite(root);
+    await render(root);
+    states = { "invite-1": "used" };
+    await act(async () => {
+      for (const listener of focusListeners) listener(false);
+    });
+    expect(statusRequests).toEqual([]);
+    await act(async () => {
+      for (const listener of focusListeners) listener(true);
+    });
+    await render(root);
+    expect(statusRequests).toEqual([["invite-1"]]);
+    expect(setOpen).toHaveBeenCalledWith(false);
+    await act(async () => root.unmount());
+    expect(focusListeners.size).toBe(0);
   });
   test("does not close for expired, unavailable, or prior-dialog invitations", async () => {
     const root = createRoot();
-    await act(async () => {
-      root.render(<SharedInvite groupId="group-1" open setOpen={setOpen} value="qr" />);
-    });
+    await render(root);
     await createInvite(root);
     states = { "invite-1": "expired", "previous-dialog": "used" };
-    await act(async () => {
-      root.render(<SharedInvite groupId="group-1" open setOpen={setOpen} value="qr" />);
-    });
+    memberIds = ["owner", "joiner"];
+    await render(root);
+    await render(root);
     expect(JSON.stringify(root.container.toJSON())).toContain("expired");
     expect(setOpen).not.toHaveBeenCalled();
     states = {};
-    await act(async () => {
-      root.render(<SharedInvite groupId="group-1" open setOpen={setOpen} value="qr" />);
-    });
+    memberIds = ["owner"];
+    await render(root);
+    await render(root);
     expect(setOpen).not.toHaveBeenCalled();
     await act(async () => root.unmount());
   });

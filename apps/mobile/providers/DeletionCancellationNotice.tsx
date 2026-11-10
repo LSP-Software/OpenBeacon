@@ -42,13 +42,11 @@ export const DeletionCancellationNotice = () => {
       );
     };
     void check();
-    const interval = setInterval(() => void check(), 30_000);
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") void check();
     });
     return () => {
       active = false;
-      clearInterval(interval);
       subscription.remove();
     };
   }, [userId]);

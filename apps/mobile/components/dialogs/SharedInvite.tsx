@@ -1,9 +1,10 @@
 import { Alert } from "../../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { focusManager, useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { Share, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
+import { useCachedGroup } from "../../hooks/useCachedGroup.ts";
 import { trpc } from "../../lib/api.ts";
 import { Button } from "../ui/Button.tsx";
 import { Text } from "../ui/Text.tsx";
@@ -19,20 +20,37 @@ export const SharedInvite = ({
   setOpen: (open: boolean) => void;
   value: string;
 }) => {
-  const queryClient = useQueryClient();
   const invite = useMutation(trpc.groupInvites.createShared.mutationOptions());
   const [expired, setExpired] = useState(false);
   const inviteId = invite.data?.id;
   const expiresInMs = invite.data?.expiresInMs;
   const reset = invite.reset;
+  const { group } = useCachedGroup(groupId);
+  const memberIdsKey = group?.members.map((member) => member.id).join(",");
   const statuses = useQuery({
     ...trpc.groupInvites.sharedStatuses.queryOptions({
       groupId,
       inviteIds: inviteId ? [inviteId] : [],
     }),
-    enabled: open && !!inviteId,
-    refetchInterval: 3_000,
+    enabled: false,
   });
+  const refetchStatuses = statuses.refetch;
+  const lastSeenMembers = useRef<{ inviteId: string; memberIdsKey: string | undefined } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!open || !inviteId) return;
+    const previous = lastSeenMembers.current;
+    lastSeenMembers.current = { inviteId, memberIdsKey };
+    if (previous?.inviteId !== inviteId || previous.memberIdsKey === undefined) return;
+    if (previous.memberIdsKey !== memberIdsKey) void refetchStatuses();
+  }, [inviteId, memberIdsKey, open, refetchStatuses]);
+  useEffect(() => {
+    if (!open || !inviteId) return;
+    return focusManager.subscribe((focused) => {
+      if (focused) void refetchStatuses();
+    });
+  }, [inviteId, open, refetchStatuses]);
   const currentStatus = statuses.data?.find((item) => item.id === inviteId)?.status;
   const used = currentStatus === "used";
   useEffect(() => {
@@ -45,14 +63,7 @@ export const SharedInvite = ({
     if (!open || !used) return;
     reset();
     setOpen(false);
-    void Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: trpc.groupMembership.members.queryKey({ groupId }),
-      }),
-      queryClient.invalidateQueries({ queryKey: trpc.groupMembership.get.queryKey({ groupId }) }),
-      queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() }),
-    ]);
-  }, [groupId, open, queryClient, reset, setOpen, used]);
+  }, [open, reset, setOpen, used]);
   const create = async () => {
     const result = await tryCatch(invite.mutateAsync({ groupId }));
     if (result.error) {

@@ -41,7 +41,11 @@ const MapScreen = () => {
   const insets = useSafeAreaInsets();
   const { positions: livePositions, status: trackingStatus } = useMapLivePositions();
   const { data: session } = authClient.useSession();
-  const { data: groupsQueryData } = useQuery(trpc.groupMembership.list.queryOptions());
+  const isFocused = useIsFocused();
+  const { data: groupsQueryData } = useQuery({
+    ...trpc.groupMembership.list.queryOptions(),
+    enabled: false,
+  });
   const groups = useMembershipSnapshot(groupsQueryData);
   const nicknames = useQueries({
     queries: (groups ?? []).map((group) => ({
@@ -50,6 +54,7 @@ const MapScreen = () => {
       queryFn: () => loadPersonalNicknames(group.id, session!.user.id),
     })),
     combine: (results) => results.map((result) => result.data),
+    subscribed: isFocused,
   });
   const groupsWithNicknames = useMemo(
     () =>
@@ -93,7 +98,6 @@ const MapScreen = () => {
   } | null>(null);
   const peopleTrayOpen =
     peopleTrayOverride?.userId === selfUserId ? peopleTrayOverride.open : storedPeopleTrayOpen;
-  const isFocused = useIsFocused();
   const [appActive, setAppActive] = useState(() => AppState.currentState === "active");
   const [now, setNow] = useState(() => Date.now());
   const selfDeviceLocation = useSelfDeviceLocation(selfUserId.length > 0);
@@ -103,6 +107,7 @@ const MapScreen = () => {
   const { data: queueEviction } = useQuery({
     queryKey: evictionQueryKey,
     enabled: selfUserId.length > 0,
+    subscribed: isFocused,
     refetchInterval: 60_000,
     queryFn: () => getTrackingQueueEviction(selfUserId),
   });

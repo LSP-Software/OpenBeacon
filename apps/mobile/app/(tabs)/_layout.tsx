@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Redirect, Tabs } from "expo-router";
 import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
@@ -11,7 +11,6 @@ import { groupColorSyncQueryOptions } from "../../lib/groupColorSync.ts";
 export default function TabsLayout() {
   const { data: session, isPending } = authClient.useSession();
   useQuery(groupColorSyncQueryOptions(session?.user.id));
-  const queryClient = useQueryClient();
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
   const { mutate: setTimezone } = useMutation(trpc.emailAlerts.setTimezone.mutationOptions());
   const reportedTimezone = useRef<string | null>(null);
@@ -34,15 +33,6 @@ export default function TabsLayout() {
     });
     return () => subscription.remove();
   }, [userId, emailEnabled, setTimezone]);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active") return;
-      void queryClient.invalidateQueries({ queryKey: ["personalGroupColors"] });
-      void queryClient.invalidateQueries({ queryKey: ["personalNicknames"] });
-    });
-    return () => subscription.remove();
-  }, [queryClient]);
 
   if (isPending) {
     return <LoadingIndicator />;

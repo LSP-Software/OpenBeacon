@@ -1,6 +1,6 @@
 import { Alert } from "../../../../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { TextInput, View } from "react-native";
@@ -8,6 +8,7 @@ import { GroupMapColorPicker } from "../../../../components/map/GroupMapColorPic
 import { Button } from "../../../../components/ui/Button.tsx";
 import { Switch } from "../../../../components/ui/Switch.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
+import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
 import { useHiddenMapGroupIds } from "../../../../hooks/useHiddenMapGroupIds.ts";
 import { trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
@@ -17,9 +18,7 @@ import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
 
 const SettingsTab = ({ groupId }: { groupId: string }) => {
   const { data: session } = authClient.useSession();
-  const { data: members } = useQuery(trpc.groupMembership.members.queryOptions({ groupId }));
-  const { data: group } = useQuery(trpc.groupMembership.get.queryOptions({ groupId }));
-  const { data: groupList } = useQuery(trpc.groupMembership.list.queryOptions());
+  const { group, groupCount } = useCachedGroup(groupId);
   const hiddenGroupIds = useHiddenMapGroupIds(session?.user.id);
   const shownOnMap = !hiddenGroupIds.includes(groupId);
   const [name, setName] = useState("");
@@ -27,7 +26,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
   const router = useRouter();
   const rename = useMutation(trpc.groupSettings.rename.mutationOptions());
   const deleteGroup = useMutation(trpc.groupLifecycle.delete.mutationOptions());
-  const role = members?.find((member) => member.user.id === session?.user.id)?.role;
+  const role = group?.members.find((member) => member.userId === session?.user.id)?.role;
 
   return (
     <View className="gap-3 pt-1">
@@ -51,12 +50,9 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
                 return;
               }
               setName("");
-              await Promise.all([
-                queryClient.invalidateQueries({
-                  queryKey: trpc.groupMembership.get.queryKey({ groupId }),
-                }),
-                queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() }),
-              ]);
+              await queryClient.invalidateQueries({
+                queryKey: trpc.groupMembership.list.queryKey(),
+              });
             }}
           >
             <Text>Save name</Text>
@@ -65,7 +61,7 @@ const SettingsTab = ({ groupId }: { groupId: string }) => {
       )}
       <Text className="mb-1 text-lg font-medium text-muted-foreground">Appearance</Text>
       <GroupMapColorPicker groupId={groupId} />
-      {session && canHideMapGroups(groupList?.length ?? 0) && (
+      {session && canHideMapGroups(groupCount) && (
         <View className="flex-row items-center gap-4 rounded-lg border border-border bg-card p-4">
           <View className="flex-1 gap-1">
             <Text className="text-foreground font-medium">Show on map</Text>

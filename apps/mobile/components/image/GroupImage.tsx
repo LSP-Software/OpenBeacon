@@ -36,9 +36,6 @@ export const GroupImage = ({
         group.id === groupId ? { ...group, image: uploadedImageUrl } : group,
       ),
     );
-    queryClient.setQueryData(trpc.groupMembership.get.queryKey({ groupId }), (currentGroup) =>
-      currentGroup ? { ...currentGroup, image: uploadedImageUrl } : currentGroup,
-    );
   };
 
   return (
