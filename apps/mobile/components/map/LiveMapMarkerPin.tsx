@@ -1,7 +1,8 @@
-import { ClockIcon } from "lucide-react-native";
+import { ClockIcon, EyeOffIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { AppState, View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
+import { cn } from "../../lib/cn.ts";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
 import type { MapPersonStatus } from "../../lib/mapPeopleTypes.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
@@ -21,6 +22,26 @@ const polar = (radius: number, angleRad: number) => ({
   x: CENTER + radius * Math.sin(angleRad),
   y: CENTER - radius * Math.cos(angleRad),
 });
+
+const StatusBadge = ({
+  children,
+  destructive = false,
+  label,
+}: {
+  children: React.ReactNode;
+  destructive?: boolean;
+  label: string;
+}) => (
+  <View
+    accessibilityLabel={label}
+    className={cn(
+      "absolute bottom-0 left-0 size-5 items-center justify-center rounded-full border border-border",
+      destructive ? "bg-destructive" : "bg-card",
+    )}
+  >
+    {children}
+  </View>
+);
 
 const leftOuter = polar(OUTER_RADIUS, -SPOT_HALF_ANGLE_RAD);
 const rightOuter = polar(OUTER_RADIUS, SPOT_HALF_ANGLE_RAD);
@@ -191,31 +212,27 @@ export const LiveMapMarkerPin = ({
             ))}
           </Svg>
         ) : null}
-        {status === "cantLocate" ? (
-          <View
-            accessibilityLabel="Location unknown"
-            className="absolute bottom-0 left-0 size-5 items-center justify-center rounded-full border border-border bg-card"
-          >
+        {status === "hidden" ? (
+          <StatusBadge label="Hidden on the map">
+            <Icon as={EyeOffIcon} size={12} className="text-foreground" />
+          </StatusBadge>
+        ) : status === "cantLocate" ? (
+          <StatusBadge label="Location unknown">
             <Text className="text-[12px] font-bold leading-[14px] text-foreground">?</Text>
-          </View>
+          </StatusBadge>
         ) : status === "cantRead" || hasUnreadableUpdate ? (
-          <View
-            accessibilityLabel={
-              status === "cantRead" ? "Can’t read location" : "Newer location can’t be read"
-            }
-            className="absolute bottom-0 left-0 size-5 items-center justify-center rounded-full border border-border bg-destructive"
+          <StatusBadge
+            destructive
+            label={status === "cantRead" ? "Can’t read location" : "Newer location can’t be read"}
           >
             <Text className="text-[12px] font-bold leading-[14px] text-destructive-foreground">
               !
             </Text>
-          </View>
+          </StatusBadge>
         ) : isStale ? (
-          <View
-            accessibilityLabel="Location is over 10 minutes old"
-            className="absolute bottom-0 left-0 size-5 items-center justify-center rounded-full border border-border bg-card"
-          >
+          <StatusBadge label="Location is over 10 minutes old">
             <Icon as={ClockIcon} size={13} className="text-foreground" />
-          </View>
+          </StatusBadge>
         ) : null}
       </View>
     </View>

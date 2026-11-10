@@ -70,11 +70,26 @@ const routerReplace = mock(() => {});
 let root: Root | null = null;
 const testPlatform = { OS: "ios" as "ios" | "android" };
 let mapAssetUrls: { glyphs: string; sprites: string } | null = null;
+const backPressListeners = new Set<() => boolean>();
+const accessibilityAnnouncements: string[] = [];
 
 mock.module("react-native", () => {
   const reactNative = createReactNativeTestModule({ platformOS: "android" });
   return {
     ...reactNative,
+    AccessibilityInfo: {
+      addEventListener: () => ({ remove: () => {} }),
+      announceForAccessibility: (message: string) => {
+        accessibilityAnnouncements.push(message);
+      },
+      isScreenReaderEnabled: async () => false,
+    },
+    BackHandler: {
+      addEventListener: (_event: "hardwareBackPress", listener: () => boolean) => {
+        backPressListeners.add(listener);
+        return { remove: () => backPressListeners.delete(listener) };
+      },
+    },
     Platform: testPlatform,
     ActivityIndicator: () => React.createElement("activity-indicator"),
     Animated: {
@@ -124,6 +139,8 @@ mock.module("react-native", () => {
 
 mock.module("lucide-react-native", () => ({
   ArrowUpIcon: () => React.createElement("arrow-up-icon"),
+  EyeOffIcon: () => React.createElement("eye-off-icon"),
+  LayersIcon: () => React.createElement("layers-icon"),
   LocateFixedIcon: () => React.createElement("locate-fixed-icon"),
   MapPinIcon: () => React.createElement("map-pin-icon"),
   ScanIcon: () => React.createElement("scan-icon"),
@@ -258,8 +275,26 @@ mock.module("./LiveMapPeopleTray.tsx", () => ({
 }));
 
 mock.module("./LiveMapMissingPersonSheet.tsx", () => ({
-  LiveMapMissingPersonSheet: ({ person }: { person: { name: string } }) =>
-    React.createElement("live-map-missing-person-sheet", { name: person.name }),
+  LiveMapMissingPersonSheet: ({
+    onShowGroup,
+    person,
+  }: {
+    onShowGroup: (groupId: string) => void;
+    person: { name: string };
+  }) => React.createElement("live-map-missing-person-sheet", { name: person.name, onShowGroup }),
+}));
+
+mock.module("./LiveMapGroupVisibility.tsx", () => ({
+  LiveMapGroupMenu: ({
+    onSetHidden,
+  }: {
+    onSetHidden: (groupId: string, hidden: boolean) => void;
+  }) => React.createElement("live-map-group-menu", { onSetHidden }),
+  LiveMapHiddenGroupsNotice: (props: {
+    onOpenMenu: () => void;
+    onUndo: () => void;
+    toastGroupNames: readonly string[];
+  }) => React.createElement("live-map-hidden-groups-notice", props),
 }));
 
 mock.module("./LiveMapStackSheet.tsx", () => ({
@@ -387,6 +422,8 @@ describe("NativeMap integration harness", () => {
   beforeEach(() => {
     testPlatform.OS = "ios";
     mapAssetUrls = null;
+    backPressListeners.clear();
+    accessibilityAnnouncements.length = 0;
     resetNativeMapHarness();
     currentSignedPmtilesUrlQuery = {
       data: defaultSignedUrl,
@@ -2347,6 +2384,199 @@ describe("NativeMap integration harness", () => {
     ).toBe(true);
   });
 
+  describe("groups on the map", () => {
+    const family = {
+      color: "#FF1464",
+      hidden: false,
+      id: "family",
+      memberCount: 3,
+      name: "Family",
+    };
+    const club = { color: "#2A9D8F", hidden: false, id: "club", memberCount: 4, name: "Club" };
+    const emptyPeople: MapPeople = {
+      cantLocate: [],
+      cantRead: [],
+      connectionLost: false,
+      finding: [],
+      hidden: [],
+      outOfDate: [],
+      upToDate: [],
+      waiting: [],
+    };
+    const findOne = (type: string) =>
+      root?.container.queryAll((instance) => instance.type === type)[0];
+    const groupsButton = () =>
+      root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" &&
+          String(instance.props["accessibilityLabel"]).startsWith("Groups on the map"),
+      )[0];
+    const press = async (
+      instance: { props: Record<string, unknown> } | undefined,
+      key = "onPress",
+    ) => act(async () => (instance?.props[key] as (() => void) | undefined)?.());
+
+    test("only shows the groups button for people in two or more groups", async () => {
+      await renderNativeMap({ groupOptions: [family] });
+      expect(groupsButton()).toBeUndefined();
+
+      await renderNativeMap({ groupOptions: [family, club] });
+      expect(groupsButton()?.props["accessibilityLabel"]).toBe("Groups on the map");
+
+      await renderNativeMap({ groupOptions: [family, { ...club, hidden: true }] });
+      expect(groupsButton()?.props["accessibilityLabel"]).toBe("Groups on the map, 1 hidden");
+    });
+
+    test("hides a group from the menu, then undoes it from the toast", async () => {
+      const changes: Array<[string, boolean]> = [];
+      const onSetGroupHidden = (groupId: string, hidden: boolean) => {
+        changes.push([groupId, hidden]);
+      };
+      await renderNativeMap({ groupOptions: [family, club], onSetGroupHidden });
+
+      await press(groupsButton());
+      await act(async () =>
+        (
+          findOne("live-map-group-menu")?.props["onSetHidden"] as
+            ((groupId: string, hidden: boolean) => void) | undefined
+        )?.("club", true),
+      );
+      expect(changes).toEqual([["club", true]]);
+      expect(findOne("live-map-hidden-groups-notice")?.props["toastGroupNames"]).toEqual(["Club"]);
+      expect(accessibilityAnnouncements).toEqual([
+        "Club hidden. You’re still sharing your location with them.",
+      ]);
+
+      await press(findOne("live-map-hidden-groups-notice"), "onUndo");
+      expect(changes).toEqual([
+        ["club", true],
+        ["club", false],
+      ]);
+      expect(findOne("live-map-hidden-groups-notice")).toBeUndefined();
+    });
+
+    test("collects groups hidden in a row into one toast and undoes them all", async () => {
+      const school = { ...club, id: "school", name: "School" };
+      const changes: Array<[string, boolean]> = [];
+      await renderNativeMap({
+        groupOptions: [family, club, school],
+        onSetGroupHidden: (groupId, hidden) => {
+          changes.push([groupId, hidden]);
+        },
+      });
+
+      await press(groupsButton());
+      const setHidden = (groupId: string) =>
+        act(async () =>
+          (
+            findOne("live-map-group-menu")?.props["onSetHidden"] as
+              ((groupId: string, hidden: boolean) => void) | undefined
+          )?.(groupId, true),
+        );
+      await setHidden("club");
+      await setHidden("school");
+      expect(findOne("live-map-hidden-groups-notice")?.props["toastGroupNames"]).toEqual([
+        "Club",
+        "School",
+      ]);
+
+      await press(findOne("live-map-hidden-groups-notice"), "onUndo");
+      expect(changes).toEqual([
+        ["club", true],
+        ["school", true],
+        ["club", false],
+        ["school", false],
+      ]);
+    });
+
+    test("closes the menu when a person or stack is tapped", async () => {
+      const alice = createLiveMapMarkerFixture({ userId: "alice", name: "Alice" });
+      await renderNativeMap({ groupOptions: [family, club], markers: [alice] });
+
+      await press(groupsButton());
+      expect(findOne("live-map-group-menu")).toBeDefined();
+      await act(async () => emitNativeMapAnnotationSelected("alice"));
+      expect(findOne("live-map-group-menu")).toBeUndefined();
+
+      testPlatform.OS = "android";
+      await renderNativeMap({
+        groupOptions: [family, club],
+        markers: [alice, createLiveMapMarkerFixture({ userId: "bob", name: "Bob" })],
+      });
+      await press(groupsButton());
+      expect(findOne("live-map-group-menu")).toBeDefined();
+      const stack = root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" &&
+          instance.props["accessibilityLabel"] === "2 people: Alice, Bob",
+      )[0];
+      await press(stack);
+      expect(findOne("live-map-group-menu")).toBeUndefined();
+    });
+
+    test("closes the menu with the Android back button only while it is open", async () => {
+      await renderNativeMap({ groupOptions: [family, club] });
+      expect(backPressListeners.size).toBe(0);
+
+      await press(groupsButton());
+      const [onBackPress] = backPressListeners;
+      let handled = false;
+      await act(async () => {
+        handled = onBackPress?.() ?? false;
+      });
+      expect(handled).toBe(true);
+      expect(findOne("live-map-group-menu")).toBeUndefined();
+      expect(backPressListeners.size).toBe(0);
+    });
+
+    test("opens the menu from the hidden groups pill and closes it when the map is tapped", async () => {
+      await renderNativeMap({ groupOptions: [family, { ...club, hidden: true }] });
+      expect(findOne("live-map-group-menu")).toBeUndefined();
+
+      await press(findOne("live-map-hidden-groups-notice"), "onOpenMenu");
+      expect(findOne("live-map-group-menu")).toBeDefined();
+      expect(findOne("live-map-hidden-groups-notice")).toBeUndefined();
+
+      await act(async () => emitNativeMapPress());
+      expect(findOne("live-map-group-menu")).toBeUndefined();
+    });
+
+    test("shows a hidden person's group again from their sheet", async () => {
+      const changes: Array<[string, boolean]> = [];
+      const tom = {
+        groupNames: ["Club"],
+        hiddenGroups: [{ id: "club", name: "Club" }],
+        image: null,
+        initials: "To",
+        isSelf: false,
+        name: "Tom",
+        userId: "tom",
+      };
+      await renderNativeMap({
+        groupOptions: [family, { ...club, hidden: true }],
+        onSetGroupHidden: (groupId, hidden) => {
+          changes.push([groupId, hidden]);
+        },
+        people: { ...emptyPeople, hidden: [tom] },
+        peopleTrayOpen: true,
+      });
+
+      await act(async () =>
+        (
+          findOne("live-map-people-tray")?.props["onSelectPerson"] as
+            ((userId: string) => void) | undefined
+        )?.("tom"),
+      );
+      const sheet = findOne("live-map-missing-person-sheet");
+      expect(sheet?.props["name"]).toBe("Tom");
+
+      await act(async () =>
+        (sheet?.props["onShowGroup"] as ((groupId: string) => void) | undefined)?.("club"),
+      );
+      expect(changes).toEqual([["club", false]]);
+    });
+  });
+
   describe("people tray", () => {
     const person = (userId: string, name: string): MapPerson => ({
       groupNames: ["Family"],
@@ -2361,6 +2591,7 @@ describe("NativeMap integration harness", () => {
       cantRead: [],
       connectionLost: false,
       finding: [],
+      hidden: [],
       outOfDate: [],
       upToDate: [],
       waiting: [],

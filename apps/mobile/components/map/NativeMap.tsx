@@ -1,7 +1,21 @@
 import { Camera, Layer, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
-import { LocateFixedIcon, MapPinIcon, ScanIcon, UsersIcon } from "lucide-react-native";
+import {
+  EyeOffIcon,
+  LayersIcon,
+  LocateFixedIcon,
+  MapPinIcon,
+  ScanIcon,
+  UsersIcon,
+} from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, type GestureResponderEvent, Pressable, View } from "react-native";
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  BackHandler,
+  type GestureResponderEvent,
+  Pressable,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import {
@@ -10,11 +24,12 @@ import {
   liveMapStackExpansionZoom,
 } from "../../lib/liveMapPinGroups.ts";
 import { cn } from "../../lib/cn.ts";
-import type { MapPeople } from "../../lib/mapPeopleTypes.ts";
+import type { MapGroupOption, MapPeople } from "../../lib/mapPeopleTypes.ts";
 import { getSymbolVisibility } from "../../lib/protomaps-style.ts";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapEdgeChip } from "./LiveMapEdgeChip.tsx";
+import { LiveMapGroupMenu, LiveMapHiddenGroupsNotice } from "./LiveMapGroupVisibility.tsx";
 import { LiveMapMissingPersonSheet } from "./LiveMapMissingPersonSheet.tsx";
 import { LiveMapPeopleTray } from "./LiveMapPeopleTray.tsx";
 import { LiveMapPointAnnotation, SelfLiveMapPointAnnotation } from "./LiveMapPointAnnotation.tsx";
@@ -28,17 +43,21 @@ import { useLiveMapSelection } from "./useLiveMapSelection.ts";
 import { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
 export const NativeMap = ({
+  groupOptions = null,
   markers = [],
   now = 0,
   onPeopleTrayOpenChange,
+  onSetGroupHidden,
   onSelectUserId,
   people = null,
   peopleTrayOpen = false,
   selectedUserId = null,
 }: {
+  groupOptions?: readonly MapGroupOption[] | null;
   markers?: readonly LiveMapMarker[];
   now?: number;
   onPeopleTrayOpenChange?: (open: boolean) => void;
+  onSetGroupHidden?: (groupId: string, hidden: boolean) => void;
   onSelectUserId?: (userId: string | null) => void;
   people?: MapPeople | null;
   peopleTrayOpen?: boolean;
@@ -67,13 +86,34 @@ export const NativeMap = ({
   const isStackSheetOpen = stackSheetMembers.length > 1;
   const [missingUserId, setMissingUserId] = useState<string | null>(null);
   const missingPerson =
-    [...(people?.cantLocate ?? []), ...(people?.cantRead ?? [])].find(
+    [...(people?.cantLocate ?? []), ...(people?.cantRead ?? []), ...(people?.hidden ?? [])].find(
       (person) => person.userId === missingUserId,
     ) ?? null;
   const isTrayOpen =
     peopleTrayOpen && selectedMarker === null && !isStackSheetOpen && missingUserId === null;
   const trayPeople = isTrayOpen ? people : null;
   const [trayHeight, setTrayHeight] = useState(0);
+  const [mapHeight, setMapHeight] = useState(0);
+  const [groupMenuOpen, setGroupMenuOpen] = useState(false);
+  const [toastGroups, setToastGroups] = useState<readonly { id: string; name: string }[]>([]);
+  const [screenReaderEnabled, setScreenReaderEnabled] = useState(false);
+  const canHideGroups = groupOptions !== null && groupOptions.length > 1;
+  const hiddenGroupCount = groupOptions?.filter((group) => group.hidden).length ?? 0;
+  const setGroupHidden = (groupId: string, hidden: boolean) => {
+    onSetGroupHidden?.(groupId, hidden);
+    const group = groupOptions?.find((item) => item.id === groupId);
+    if (!hidden || !group) {
+      setToastGroups((current) => current.filter((item) => item.id !== groupId));
+      return;
+    }
+    AccessibilityInfo.announceForAccessibility(
+      `${group.name} hidden. You’re still sharing your location with them.`,
+    );
+    setToastGroups((current) => [
+      ...current.filter((item) => item.id !== groupId),
+      { id: groupId, name: group.name },
+    ]);
+  };
   const unreadableMarkerCount = markers.filter(
     (marker) => marker.unreadableGroup !== undefined,
   ).length;
@@ -121,7 +161,12 @@ export const NativeMap = ({
   const closeSheets = () => {
     setStackSheetUserIds(null);
     setMissingUserId(null);
+    setGroupMenuOpen(false);
     selection.clearSelectionFromReact();
+  };
+  const openGroupMenu = () => {
+    closeSheets();
+    setGroupMenuOpen(true);
   };
   const selfMarker = markers.find((marker) => marker.isSelf) ?? null;
   const hasMarkers = markers.length > 0;
@@ -163,6 +208,30 @@ export const NativeMap = ({
     );
 
   useEffect(() => {
+    void AccessibilityInfo.isScreenReaderEnabled().then(setScreenReaderEnabled);
+    const subscription = AccessibilityInfo.addEventListener(
+      "screenReaderChanged",
+      setScreenReaderEnabled,
+    );
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (toastGroups.length === 0 || screenReaderEnabled) return;
+    const timer = setTimeout(() => setToastGroups([]), 5_000);
+    return () => clearTimeout(timer);
+  }, [screenReaderEnabled, toastGroups]);
+
+  useEffect(() => {
+    if (!groupMenuOpen) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      setGroupMenuOpen(false);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [groupMenuOpen]);
+
+  useEffect(() => {
     if (missingUserId === null) return;
     const hasMarker = markers.some((marker) => marker.userId === missingUserId);
     if (!hasMarker && missingPerson !== null) return;
@@ -184,6 +253,7 @@ export const NativeMap = ({
   const pressStack = (group: LiveMapPinGroup, event?: GestureResponderEvent) => {
     rememberMarkerPress(event);
     setStackSheetUserIds(null);
+    setGroupMenuOpen(false);
     const zoomLevel = liveMapStackExpansionZoom({ group, zoom: pins.getZoom() });
     if (zoomLevel === null) {
       clearSelectionFromReact();
@@ -195,6 +265,7 @@ export const NativeMap = ({
 
   const pressEdgeChip = (chip: (typeof edgeMarkers)[number]) => {
     setStackSheetUserIds(null);
+    setGroupMenuOpen(false);
     const userIds = pins.groups
       .filter((group) => chip.memberIds.includes(group.id))
       .flatMap((group) => group.members.map((member) => member.userId));
@@ -219,6 +290,7 @@ export const NativeMap = ({
       onSelected: (event?: GestureResponderEvent) => {
         rememberMarkerPress(event);
         setStackSheetUserIds(null);
+        setGroupMenuOpen(false);
         handleAnnotationSelected(marker.userId);
       },
     };
@@ -246,6 +318,7 @@ export const NativeMap = ({
       className="flex-1"
       onLayout={(event) => {
         edge.onMapLayout(event.nativeEvent.layout);
+        setMapHeight(event.nativeEvent.layout.height);
       }}
     >
       <MapLibreMap
@@ -270,6 +343,7 @@ export const NativeMap = ({
           ) {
             return;
           }
+          setToastGroups([]);
           closeSheets();
         }}
         onRegionIsChanging={(feature) => {
@@ -396,6 +470,39 @@ export const NativeMap = ({
             className={showSymbols ? "text-foreground" : "text-muted"}
           />
         </Pressable>
+        {canHideGroups ? (
+          <Pressable
+            accessibilityLabel={
+              hiddenGroupCount > 0
+                ? `Groups on the map, ${hiddenGroupCount} hidden`
+                : "Groups on the map"
+            }
+            accessibilityRole="button"
+            accessibilityState={{ expanded: groupMenuOpen }}
+            onPress={() => {
+              if (groupMenuOpen) {
+                setGroupMenuOpen(false);
+                return;
+              }
+              openGroupMenu();
+            }}
+            className={cn(
+              "size-11 items-center justify-center rounded-full border shadow-sm shadow-black/10",
+              groupMenuOpen ? "border-foreground bg-foreground" : "border-border bg-card",
+            )}
+          >
+            <Icon
+              as={LayersIcon}
+              size={20}
+              className={groupMenuOpen ? "text-background" : "text-foreground"}
+            />
+            {hiddenGroupCount > 0 ? (
+              <View className="absolute -right-1 -top-1 size-5 items-center justify-center rounded-full border-2 border-card bg-muted">
+                <Icon as={EyeOffIcon} size={11} className="text-white" />
+              </View>
+            ) : null}
+          </Pressable>
+        ) : null}
         {hasMarkers ? (
           <>
             <Pressable
@@ -456,6 +563,29 @@ export const NativeMap = ({
           ) : null}
         </Pressable>
       </View>
+      {canHideGroups && groupMenuOpen ? (
+        <LiveMapGroupMenu
+          groups={groupOptions}
+          maxHeight={Math.max(mapHeight - 68, 0)}
+          onSetHidden={setGroupHidden}
+        />
+      ) : null}
+      {canHideGroups &&
+      (!groupMenuOpen || toastGroups.length > 0) &&
+      !selectedMarker &&
+      !isStackSheetOpen &&
+      !missingPerson ? (
+        <LiveMapHiddenGroupsNotice
+          bottom={trayPeople ? trayHeight + 12 : 40}
+          groups={groupOptions}
+          toastGroupNames={toastGroups.map((group) => group.name)}
+          onOpenMenu={openGroupMenu}
+          onUndo={() => {
+            for (const group of toastGroups) onSetGroupHidden?.(group.id, false);
+            setToastGroups([]);
+          }}
+        />
+      ) : null}
       {selectedMarker ? (
         <LiveMapPersonSheet
           key={selectedMarker.userId}
@@ -493,6 +623,9 @@ export const NativeMap = ({
           onDismiss={() => {
             setMissingUserId(null);
           }}
+          onShowGroup={(groupId) => {
+            setGroupHidden(groupId, false);
+          }}
           onHeightChange={(height) => {
             edge.onSheetHeightChange(height);
           }}
@@ -506,6 +639,7 @@ export const NativeMap = ({
             edge.onSheetHeightChange(height);
           }}
           onSelectPerson={(userId) => {
+            setGroupMenuOpen(false);
             if (markers.some((marker) => marker.userId === userId)) {
               goToPerson(userId);
               return;

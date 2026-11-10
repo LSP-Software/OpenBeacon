@@ -10,6 +10,7 @@ import { Text } from "../../../components/ui/Text.tsx";
 import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
 import { useCurrentGroupKeyAccess } from "../../../hooks/useGroupKeyAccess.ts";
 import { useMapLivePositions } from "../../../hooks/useMapLivePositions.ts";
+import { useHiddenMapGroupIds } from "../../../hooks/useHiddenMapGroupIds.ts";
 import { useMembershipSnapshot } from "../../../hooks/useMembershipSnapshot.ts";
 import { useTrackingUploadTime } from "../../../hooks/useTrackingUploadTime.ts";
 import { useSelfDeviceLocation } from "../../../hooks/useSelfDeviceLocation.ts";
@@ -20,6 +21,13 @@ import { buildLiveMapMarkers } from "../../../lib/buildLiveMapMarkers.ts";
 import { classifyMapPeople, flagUnreadableMarkers } from "../../../lib/classifyMapPeople.ts";
 import { loadPersonalNicknames } from "../../../lib/personalNicknames.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
+import { setMapGroupHidden } from "../../../lib/hiddenMapGroups.ts";
+import {
+  hideMapGroupMarkers,
+  listHiddenMapPeople,
+  resolveHiddenGroupIds,
+  shownMapGroups,
+} from "../../../lib/mapGroupVisibility.ts";
 import { nextMapMarkerSelection } from "../../../lib/mapMarkerSelection.ts";
 import { resolveSelfDeviceLocationFallback } from "../../../lib/resolveSelfDeviceLocationFallback.ts";
 import { storage } from "../../../lib/storage.ts";
@@ -103,10 +111,32 @@ const MapScreen = () => {
     onSettled: () => queryClient.invalidateQueries({ queryKey: evictionQueryKey }),
   });
   const groupColorRevision = useGroupColorRevision();
+  const storedHiddenGroupIds = useHiddenMapGroupIds(session?.user.id);
+  const hiddenGroupIds = useMemo(
+    () => resolveHiddenGroupIds(groups ?? [], storedHiddenGroupIds),
+    [groups, storedHiddenGroupIds],
+  );
+  const groupOptions = useMemo(() => {
+    void groupColorRevision;
+    return (groups ?? []).map((group) => ({
+      color: getGroupColor(group.id),
+      hidden: hiddenGroupIds.has(group.id),
+      id: group.id,
+      memberCount: group.members.filter((member) => member.userId !== selfUserId).length,
+      name: group.name,
+    }));
+  }, [groupColorRevision, groups, hiddenGroupIds, selfUserId]);
+  const shownGroups = useMemo(
+    () =>
+      groupsWithNicknames &&
+      shownMapGroups({ groups: groupsWithNicknames, hiddenGroupIds, selfUserId }),
+    [groupsWithNicknames, hiddenGroupIds, selfUserId],
+  );
   const [, setKeyBannerRevision] = useState(0);
   const groupsMissingKeys =
     groups?.filter(
       (group, index) =>
+        !hiddenGroupIds.has(group.id) &&
         keyAccess[index]?.data?.current === "missing" &&
         !storage.getBoolean(keyBannerDismissedKey(selfUserId, group.id)),
     ) ?? [];
@@ -134,25 +164,33 @@ const MapScreen = () => {
     }
 
     return flagUnreadableMarkers({
-      groups: groupsWithNicknames ?? [],
-      markers: applySelfDeviceLocation({
-        markers: buildLiveMapMarkers({
-          getGroupColor,
-          groups: groupsWithNicknames ?? [],
-          positions: livePositions,
+      groups: shownGroups ?? [],
+      markers: hideMapGroupMarkers({
+        getGroupColor,
+        groups: groupsWithNicknames ?? [],
+        hiddenGroupIds,
+        markers: applySelfDeviceLocation({
+          markers: buildLiveMapMarkers({
+            getGroupColor,
+            groups: groupsWithNicknames ?? [],
+            positions: livePositions,
+            selfUserId,
+          }),
+          selfDeviceLocation,
+          selfFallback,
           selfUserId,
+          lastSentAt,
         }),
-        selfDeviceLocation,
-        selfFallback,
         selfUserId,
-        lastSentAt,
       }),
       status: trackingStatus,
     });
   }, [
     groupColorRevision,
     groupsWithNicknames,
+    hiddenGroupIds,
     livePositions,
+    shownGroups,
     selfDeviceLocation,
     selfFallback,
     selfUserId,
@@ -161,19 +199,31 @@ const MapScreen = () => {
   ]);
 
   const people = useMemo(() => {
-    if (!selfUserId || !groupsWithNicknames) {
+    if (!selfUserId || !groupsWithNicknames || !shownGroups) {
       return null;
     }
 
-    return classifyMapPeople({
-      groups: groupsWithNicknames,
-      keyAccess: keyAccessByGroupId,
-      markers,
-      now,
-      selfUserId,
-      status: trackingStatus,
-    });
-  }, [groupsWithNicknames, keyAccessByGroupId, markers, now, selfUserId, trackingStatus]);
+    return {
+      ...classifyMapPeople({
+        groups: shownGroups,
+        keyAccess: keyAccessByGroupId,
+        markers,
+        now,
+        selfUserId,
+        status: trackingStatus,
+      }),
+      hidden: listHiddenMapPeople({ groups: groupsWithNicknames, hiddenGroupIds, selfUserId }),
+    };
+  }, [
+    groupsWithNicknames,
+    hiddenGroupIds,
+    keyAccessByGroupId,
+    markers,
+    now,
+    selfUserId,
+    shownGroups,
+    trackingStatus,
+  ]);
 
   useEffect(() => {
     for (const [groupId, access] of keyAccessByGroupId) {
@@ -207,6 +257,11 @@ const MapScreen = () => {
       style={{ paddingBottom: insets.bottom + TAB_BAR_CONTENT_HEIGHT }}
     >
       <NativeMap
+        groupOptions={groupOptions}
+        onSetGroupHidden={(groupId, hidden) => {
+          if (!selfUserId) return;
+          setMapGroupHidden({ groupId, hidden, userId: selfUserId });
+        }}
         markers={markers}
         now={now}
         people={people}

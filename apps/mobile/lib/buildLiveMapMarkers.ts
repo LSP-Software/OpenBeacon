@@ -1,3 +1,4 @@
+import type { MapGroup } from "./mapPeopleTypes.ts";
 import type { LiveMapPosition } from "./mapTrackingTypes.ts";
 
 export type LiveMapMarker = {
@@ -27,15 +28,7 @@ export const buildLiveMapMarkers = ({
   selfUserId,
 }: {
   getGroupColor: (groupId: string) => string;
-  groups: readonly {
-    id: string;
-    name: string;
-    members: readonly {
-      image: string | null;
-      name: string;
-      userId: string;
-    }[];
-  }[];
+  groups: readonly MapGroup[];
   positions: readonly LiveMapPosition[];
   selfUserId: string;
 }): LiveMapMarker[] => {

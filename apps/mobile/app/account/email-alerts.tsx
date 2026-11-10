@@ -1,16 +1,16 @@
 import { emailAlertSettingsSchema } from "@openbeacon/schemas";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Platform, ScrollView, Switch, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { z } from "zod";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { BackButton } from "../../components/headers/BackButton.tsx";
 import { Button } from "../../components/ui/Button.tsx";
+import { Switch } from "../../components/ui/Switch.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
 import { cn } from "../../lib/cn.ts";
-import { useColors } from "../../lib/theme.ts";
 
 const alerts = [
   {
@@ -38,7 +38,6 @@ const alerts = [
 }[];
 
 const EmailAlertsScreen = () => {
-  const colors = useColors();
   const queryClient = useQueryClient();
   const settings = useQuery(trpc.emailAlerts.settings.queryOptions());
   const settingsKey = trpc.emailAlerts.settings.queryKey();
@@ -112,13 +111,6 @@ const EmailAlertsScreen = () => {
                       accessibilityLabel={alert.label}
                       value={settings.data[setting]}
                       disabled={updateSettings.isPending}
-                      trackColor={{ true: colors.primary }}
-                      // Android's SwitchCompat tints the on thumb with the AppCompat accent (teal) unless thumbColor is set.
-                      thumbColor={
-                        Platform.OS === "android" && settings.data[setting]
-                          ? colors.primary
-                          : undefined
-                      }
                       onValueChange={(value) =>
                         updateSettings.mutate({ ...settings.data, [setting]: value })
                       }

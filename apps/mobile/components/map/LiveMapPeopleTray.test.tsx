@@ -63,6 +63,7 @@ const emptyPeople: MapPeople = {
   cantRead: [],
   connectionLost: false,
   finding: [],
+  hidden: [],
   outOfDate: [],
   upToDate: [],
   waiting: [],
@@ -108,6 +109,17 @@ describe("LiveMapPeopleTray", () => {
     expect(
       await renderTray({ connectionLost: true, upToDate: [marker("a", "Alice Smith", 2)] }),
     ).toContain("Can’t reach the server. Locations shown may be out of date.");
+  });
+
+  test("lists people from hidden groups last, with a hidden badge", async () => {
+    const output = await renderTray({
+      hidden: [{ ...person("t", "Tom"), hiddenGroups: [{ id: "club", name: "Club" }] }],
+      upToDate: [marker("a", "Alice Smith", 2)],
+    });
+    expect(output).toContain('"1"," ","hidden"');
+    expect(output.indexOf('"Hidden"')).toBeGreaterThan(output.indexOf('"Up to date"'));
+    expect(output).toContain("Tom, hidden");
+    expect(output).toContain('"status":"hidden"');
   });
 
   test("hides empty sections and labels people with first names and ages", async () => {

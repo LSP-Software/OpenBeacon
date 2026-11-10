@@ -107,12 +107,19 @@ mock.module("../lib/buildLiveMapMarkers.ts", () => ({
 }));
 mock.module("../lib/personalNicknames.ts", () => ({ loadPersonalNicknames: async () => ({}) }));
 mock.module("../lib/groupColor.ts", () => ({ getGroupColor: () => "red" }));
-const stored = new Map<string, boolean>();
+const stored = new Map<string, boolean | string>();
 mock.module("../lib/storage.ts", () => ({
   storage: {
-    getBoolean: (key: string) => stored.get(key),
+    getBoolean: (key: string) => {
+      const value = stored.get(key);
+      return typeof value === "boolean" ? value : undefined;
+    },
+    getString: (key: string) => {
+      const value = stored.get(key);
+      return typeof value === "string" ? value : undefined;
+    },
     remove: (key: string) => stored.delete(key),
-    set: (key: string, value: boolean) => stored.set(key, value),
+    set: (key: string, value: boolean | string) => stored.set(key, value),
   },
 }));
 const { default: MapScreen } = await import("../app/(tabs)/map/index.tsx");
@@ -180,6 +187,78 @@ test("hides a dismissed key banner until that group's key works again", async ()
   expect(JSON.stringify(root.container.toJSON())).toContain("Can’t show locations for");
   await act(async () => root.unmount());
   stored.clear();
+});
+
+const hiddenGroupMember = (userId: string) => ({ id: userId, image: null, name: userId, userId });
+
+test("ignores a hidden group's missing key and lists its members as hidden", async () => {
+  groups = [
+    {
+      id: "family",
+      name: "Family",
+      members: [hiddenGroupMember("me"), hiddenGroupMember("mum")],
+    },
+    {
+      id: "club",
+      name: "Club",
+      members: [hiddenGroupMember("me"), hiddenGroupMember("mum"), hiddenGroupMember("tom")],
+    },
+  ];
+  sessionUser = { id: "me", image: null, name: "Me" };
+  queueEviction = null;
+  trackingStatus = {
+    connection: "ok",
+    groups: { club: "loaded", family: "loaded" },
+    membership: "loaded",
+    undecryptable: [],
+  };
+  access = [
+    { data: { current: "available", history: "complete" }, isError: false },
+    { data: { current: "missing", history: "complete" }, isError: false },
+  ];
+  stored.set("map.hiddenGroups.me", JSON.stringify(["club"]));
+  const root = createRoot();
+  await act(async () => root.render(<MapScreen />));
+
+  expect(JSON.stringify(root.container.toJSON())).not.toContain("Can’t show locations for");
+  expect(mapProps?.people?.hidden.map((person) => person.userId)).toEqual(["tom"]);
+  expect(mapProps?.people?.cantRead).toEqual([]);
+  expect(mapProps?.people?.cantLocate.map((person) => person.userId)).toEqual(["me", "mum"]);
+  await act(async () => root.unmount());
+  stored.clear();
+  trackingStatus = { connection: "ok", groups: {}, membership: "loading", undecryptable: [] };
+});
+
+test("does not keep people in Finding while only their hidden group loads", async () => {
+  groups = [
+    {
+      id: "family",
+      name: "Family",
+      members: [hiddenGroupMember("me"), hiddenGroupMember("mum")],
+    },
+    { id: "club", name: "Club", members: [hiddenGroupMember("me"), hiddenGroupMember("mum")] },
+  ];
+  sessionUser = { id: "me", image: null, name: "Me" };
+  queueEviction = null;
+  trackingStatus = {
+    connection: "ok",
+    groups: { family: "loaded" },
+    membership: "loaded",
+    undecryptable: [],
+  };
+  access = [
+    { data: { current: "available", history: "complete" }, isError: false },
+    { data: { current: "available", history: "complete" }, isError: false },
+  ];
+  stored.set("map.hiddenGroups.me", JSON.stringify(["club"]));
+  const root = createRoot();
+  await act(async () => root.render(<MapScreen />));
+
+  expect(mapProps?.people?.finding).toEqual([]);
+  expect(mapProps?.people?.cantLocate.map((person) => person.userId)).toEqual(["me", "mum"]);
+  await act(async () => root.unmount());
+  stored.clear();
+  trackingStatus = { connection: "ok", groups: {}, membership: "loading", undecryptable: [] };
 });
 
 test("shows removed offline history until the user dismisses it", async () => {
