@@ -29,6 +29,9 @@ export const createAuth = ({
       "/request-password-reset",
       ...(emailCodes ? [] : ["/reset-password"]),
       "/change-email",
+      "/revoke-other-sessions",
+      "/revoke-sessions",
+      "/list-sessions",
       "/delete-user",
       "/delete-user/callback",
     ],
@@ -152,6 +155,7 @@ export const createAuth = ({
         },
       },
     },
+    session: { freshAge: 30 * 60 },
     verification: {
       storeIdentifier: { default: "plain", overrides: { "reset-password:": "hashed" } },
     },

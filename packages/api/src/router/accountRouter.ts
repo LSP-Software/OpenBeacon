@@ -19,7 +19,7 @@ import {
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
-import { protectedProcedure } from "../procedures/auth/runtime.ts";
+import { freshSessionProcedure, protectedProcedure } from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
   deletionVerificationMethods: protectedProcedure.query(async ({ ctx }) => {
@@ -239,6 +239,21 @@ export const accountRouter = {
         });
       }
       return result;
+    }),
+  signOutOtherSessions: freshSessionProcedure
+    .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
+    .mutation(async ({ ctx }) => {
+      const userId = ctx.session.user.id;
+      const others = { userId, id: { not: ctx.session.session.id } };
+      const now = new Date();
+      const signedOut = await ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
+        const live = await tx.session.deleteMany({ where: { ...others, expiresAt: { gt: now } } });
+        await tx.session.deleteMany({ where: { ...others, expiresAt: { lte: now } } });
+        return live.count;
+      });
+      if (signedOut > 0) ctx.securityAlerts?.send(userId, { type: "other-sessions-signed-out" });
+      return { signedOut };
     }),
   deletionCancellationNotice: protectedProcedure.query(async ({ ctx }) => {
     const user = await ctx.db.user.findUniqueOrThrow({

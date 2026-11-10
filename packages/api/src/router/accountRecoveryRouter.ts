@@ -1,4 +1,3 @@
-import { auth } from "@openbeacon/auth";
 import { Prisma } from "@openbeacon/database";
 import {
   changeRecoveryPhraseSchema,
@@ -9,21 +8,12 @@ import {
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type z from "zod";
-import { protectedProcedure } from "../procedures/auth/runtime.ts";
+import {
+  freshSessionProcedure,
+  protectedProcedure,
+  sessionFreshForMs,
+} from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
-
-const isSessionFresh = async (sessionCreatedAt: Date) => {
-  const { sessionConfig } = await auth.$context;
-  const sessionAge = Date.now() - new Date(sessionCreatedAt).getTime();
-  return sessionConfig.freshAge === 0 || sessionAge < sessionConfig.freshAge * 1000;
-};
-
-const freshSessionProcedure = protectedProcedure.use(async ({ ctx, next }) => {
-  if (!(await isSessionFresh(ctx.session.session.createdAt))) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Sign in again to continue." });
-  }
-  return next();
-});
 
 const emailCodeProcedure = freshSessionProcedure.use(({ ctx, next }) => {
   if (!ctx.emailCodes) {
@@ -66,7 +56,7 @@ const createHistoryKey = async (
 export const accountRecoveryRouter = createTRPCRouter({
   status: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
-    const [recoveryKey, historyKeys, sessionFresh] = await Promise.all([
+    const [recoveryKey, historyKeys, freshForMs] = await Promise.all([
       ctx.db.recoveryKey.findUnique({
         select: { algorithm: true, derivationVersion: true, publicKey: true },
         where: { userId },
@@ -76,13 +66,14 @@ export const accountRecoveryRouter = createTRPCRouter({
         select: { id: true, publicKey: true, version: true },
         where: { userId },
       }),
-      isSessionFresh(ctx.session.session.createdAt),
+      sessionFreshForMs(ctx.session.session.createdAt),
     ]);
     return {
       currentHistoryKey: historyKeys.at(-1) ?? null,
+      freshForMs,
       historyKeyVersions: historyKeys.map(({ version }) => version),
       recoveryKey,
-      sessionFresh,
+      sessionFresh: freshForMs === null || freshForMs > 0,
     };
   }),
   escrows: protectedProcedure.query(async ({ ctx }) => {

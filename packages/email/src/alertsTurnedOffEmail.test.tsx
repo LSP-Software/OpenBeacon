@@ -23,7 +23,7 @@ describe("renderAlertsTurnedOffEmail", () => {
     expect(email.text).not.toContain("New device added");
     expect(email.html.match(/<li\b/g)).toHaveLength(1);
     expect(email.text).toContain(
-      "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device. Then turn this alert back on in Account → Notifications → Email alerts.",
+      "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs out every other device. Then turn this alert back on in Account → Notifications → Email alerts.",
     );
   });
 
@@ -38,10 +38,10 @@ describe("renderAlertsTurnedOffEmail", () => {
     );
   });
 
-  test("accounts without a password are told to secure Google instead", async () => {
+  test("accounts without a password are told to change their Google password, then sign out other sessions", async () => {
     const email = await render(["new-device"], false);
     expect(email.text).toContain(
-      "If this wasn't you\n\nSomeone else is signed in to your account. Secure your Google account, because someone may have used it to sign in.",
+      `If this wasn't you\n\nSomeone else is signed in to your account. Change your Google password, because someone may have used your Google account to sign in. After that, in the OpenBeacon app, open Account → Password and Security and tap "Sign out of all other sessions". Then turn this alert back on`,
     );
     expect(email.text).not.toContain("change your password");
   });

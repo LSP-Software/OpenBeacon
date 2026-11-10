@@ -6,12 +6,15 @@ import type { createSendEmail } from "./sender.ts";
 import { type EmailMessage, isOptionalSecurityAlert, type SecurityAlert } from "./types.ts";
 
 const secureGoogleAdvice =
-  "Secure your Google account, because someone may have used it to sign in.";
+  "Change your Google password, because someone may have used your Google account to sign in.";
+
+const signOutOthersAdvice =
+  'open Account → Password and Security and tap "Sign out of all other sessions".';
 
 const secureAccountAdvice = (hasPassword: boolean) =>
   hasPassword
-    ? "In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device."
-    : secureGoogleAdvice;
+    ? "In the OpenBeacon app, change your password in Account → Password and Security. That signs out every other device."
+    : `${secureGoogleAdvice} After that, in the OpenBeacon app, ${signOutOthersAdvice}`;
 
 const signedInAdvice = (hasPassword: boolean) =>
   `Someone else is signed in to your account. ${secureAccountAdvice(hasPassword)}`;
@@ -36,7 +39,7 @@ const alertCopy = (
         happened: "Your OpenBeacon password was changed.",
         details: [{ label: "Changed at", value: happenedAt }],
         ifNotYou:
-          'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs you out on every other device.',
+          'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs out every other device.',
       };
     case "password-reset":
       return {
@@ -62,6 +65,19 @@ const alertCopy = (
         happened: "Your OpenBeacon recovery phrase was reset. Your old phrase no longer works.",
         details: [{ label: "Reset at", value: happenedAt }],
         ifNotYou: `${signedInAdvice(hasPassword)} Then open Account → Recovery phrase and tap "I’ve lost my phrase" to set a new one.`,
+      };
+    case "other-sessions-signed-out":
+      return {
+        subject: "Your other OpenBeacon sessions were signed out",
+        title: "Other sessions signed out",
+        happened:
+          "Every other session on your OpenBeacon account was signed out. Only the phone or tablet that did this is still signed in.",
+        details: [{ label: "Signed out at", value: happenedAt }],
+        ifNotYou: `Someone else is signed in to your account and may have signed you out. ${
+          hasPassword
+            ? 'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs out every other device, including theirs.'
+            : `${secureGoogleAdvice} After that, sign in to the OpenBeacon app, then ${signOutOthersAdvice}`
+        }`,
       };
     case "new-device": {
       const platform =
