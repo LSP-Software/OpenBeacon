@@ -16,7 +16,7 @@ services:
       retries: 10
     restart: always
   redis:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.2
     ports:
       - "6379:6379"
     restart: always

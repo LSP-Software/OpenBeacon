@@ -31,6 +31,17 @@ cd ./packages/database
 bun run db:migrate
 ```
 
+## Run the integration tests
+
+`bun run ci` skips the integration tests. They need PostgreSQL and Redis running at the URLs in `.env.ci`; `docker compose up -d db redis` starts both. Apply the migrations to that database, then run:
+
+```sh
+bun run --cwd packages/database --env-file=../../.env.ci prisma migrate deploy
+OPENBEACON_INTEGRATION=1 bun test --isolate --env-file=.env.ci $(find . -name '*.integration.test.ts' -not -path '*/node_modules/*')
+```
+
+Every test cache uses a random Redis key prefix, so several runs can share one Redis.
+
 ## Run the backend
 
 ```sh
@@ -139,10 +150,10 @@ Set these in `apps/mobile/.env`.
 
 ### Development only
 
-| Variable                 | Used by      | Required | Default | Example                                                               | What it does                                                        |
-| ------------------------ | ------------ | -------- | ------- | --------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `SHADOW_DATABASE_URL`    | `db:migrate` | No       | None    | `postgresql://openbeacon:openbeacon@localhost:5432/openbeacon_shadow` | Shadow database Prisma uses when creating migrations.               |
-| `OPENBEACON_INTEGRATION` | Tests        | No       | Unset   | `1`                                                                   | Set to `1` to run integration tests against the database and cache. |
+| Variable                 | Used by      | Required | Default | Example                                                               | What it does                                                         |
+| ------------------------ | ------------ | -------- | ------- | --------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `SHADOW_DATABASE_URL`    | `db:migrate` | No       | None    | `postgresql://openbeacon:openbeacon@localhost:5432/openbeacon_shadow` | Shadow database Prisma uses when creating migrations.                |
+| `OPENBEACON_INTEGRATION` | Tests        | No       | Unset   | `1`                                                                   | Set to `1` to run integration tests. They need PostgreSQL and Redis. |
 
 ## Scheduled job runner
 

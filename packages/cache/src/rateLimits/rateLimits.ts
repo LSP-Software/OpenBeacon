@@ -43,10 +43,9 @@ if tokens >= cost then
   end
 end
 
-local missing_tokens = math.max(0, cost - tokens)
 local retry_after_ms = 0
-if missing_tokens > 0 then
-  retry_after_ms = math.ceil(missing_tokens / refill_rate)
+if allowed == 0 then
+  retry_after_ms = math.ceil((cost - tokens) / refill_rate)
 end
 
 local reset_after_ms = math.ceil(math.max(0, limit - tokens) / refill_rate)

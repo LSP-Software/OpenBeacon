@@ -1,15 +1,8 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
 import { Hono } from "hono";
 import type { AppEnv } from "../types/AppEnv.ts";
 import { serverVersion } from "../version.ts";
-
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback HTTP endpoint", () => {
   test("a default self-hosted backend reports its version and rejects feedback", async () => {
@@ -20,7 +13,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback HTTP en
     const prefix = `http-feedback-${crypto.randomUUID()}`;
     const app = new Hono<AppEnv>().basePath("/api").route("/", trpc);
     const bindings = {
-      cache: new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
+      cache: new OpenBeaconCache({
+        redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
+        keyPrefix: `test-${crypto.randomUUID()}`,
+        now: () => 0,
+      }),
       clientIp: "127.0.0.1",
       db: prisma,
     };

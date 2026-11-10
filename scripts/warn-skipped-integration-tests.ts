@@ -13,8 +13,8 @@ if (process.env["OPENBEACON_INTEGRATION"] !== "1") {
   );
 
   console.warn(`
-\x1b[33m⚠ Skipped ${tests} PostgreSQL integration tests in ${files.length} files (OPENBEACON_INTEGRATION is not "1").
-  Apply the migrations to the database in DATABASE_URL, then run them with:
+\x1b[33m⚠ Skipped ${tests} integration tests in ${files.length} files (OPENBEACON_INTEGRATION is not "1").
+  They need PostgreSQL at DATABASE_URL and Redis at REDIS_URL. Apply the migrations, then run them with:
 
   OPENBEACON_INTEGRATION=1 bun test --isolate --env-file=.env.ci $(find . -name '*.integration.test.ts' -not -path '*/node_modules/*')\x1b[0m
 `);

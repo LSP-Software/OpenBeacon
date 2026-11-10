@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
 import { prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
@@ -14,12 +13,6 @@ import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { authRouter } from "../authRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
-
 const prefix = `tracking-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const epochId = `${prefix}-epoch`;
@@ -29,7 +22,11 @@ const outsiderId = `${prefix}-outsider`;
 const ownerDeviceId = `${prefix}-owner-device`;
 const deviceKey = createDeviceKeyPair();
 const epochKey = generateGroupEpochKey();
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+const cache = new OpenBeaconCache({
+  redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
+  keyPrefix: `test-${crypto.randomUUID()}`,
+  now: () => 0,
+});
 const router = createTRPCRouter({ auth: authRouter, groupTracking: groupTrackingRouter });
 const caller = (userId: string) =>
   router.createCaller({

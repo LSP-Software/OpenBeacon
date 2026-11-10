@@ -70,6 +70,16 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.2
+        ports:
+          - 6379:6379
+        options: >-
+          --ulimit memlock=-1
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -90,7 +100,7 @@ jobs:
         run: |
           psql -h localhost -U openbeacon -d openbeacon -c 'CREATE DATABASE openbeacon_shadow'
           bunx prisma migrate diff --config packages/database/prisma.config.ts --from-migrations packages/database/prisma/migrations --to-schema packages/database/prisma/schema.prisma --exit-code
-      - name: Run every integration test file against PostgreSQL
+      - name: Run every integration test file against PostgreSQL and Redis
         run: |
           mapfile -t files < <(find . -name '*.integration.test.ts' -not -path '*/node_modules/*' | sort)
           if [ "${#files[@]}" -eq 0 ]; then
