@@ -13,6 +13,7 @@ import {
   InfoIcon,
   KeyRoundIcon,
   LockIcon,
+  LogOutIcon,
   MailIcon,
   MapPinIcon,
   SunIcon,
@@ -68,6 +69,11 @@ const categories = [
         label: "Password and Security",
         icon: LockIcon,
         href: "/account/password",
+      },
+      {
+        label: "Sign out of all other sessions",
+        icon: LogOutIcon,
+        href: "/account/sign-out-others",
       },
       {
         label: "Recovery phrase",
@@ -395,11 +401,6 @@ const AccountScreen = () => {
                 : "Contacting your server to sign out."}
             </Text>
           )}
-          <Link href="/account/sign-out-others" asChild>
-            <Button variant="outline" disabled={!!signOutPhase}>
-              <Text>Sign out of all other sessions</Text>
-            </Button>
-          </Link>
           <Button onPress={handleSignOut} disabled={!!signOutPhase}>
             <Text>{signOutPhase ? "Signing out…" : "Sign out"}</Text>
           </Button>

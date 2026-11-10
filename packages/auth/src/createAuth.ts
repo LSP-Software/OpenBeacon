@@ -31,6 +31,7 @@ export const createAuth = ({
       "/change-email",
       "/revoke-other-sessions",
       "/revoke-sessions",
+      "/list-sessions",
       "/delete-user",
       "/delete-user/callback",
     ],

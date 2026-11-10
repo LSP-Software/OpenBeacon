@@ -1,7 +1,7 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { router } from "expo-router";
+import { Link, router, useNavigation } from "expo-router";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -17,6 +17,7 @@ import { trpc } from "../../lib/api.ts";
 const SignOutOtherSessionsScreen = () => {
   const [step, setStep] = useState<"verify" | "ready" | "signingOut">("verify");
   const gate = useIdentityGate();
+  const navigation = useNavigation();
   const methods = useQuery(trpc.account.deletionVerificationMethods.queryOptions());
   const signOutOthers = useMutation(trpc.account.signOutOtherSessions.mutationOptions());
 
@@ -32,7 +33,7 @@ const SignOutOtherSessionsScreen = () => {
     if (result.error instanceof TRPCClientError && result.error.data?.code === "FORBIDDEN") {
       await gate.recheck();
       setStep("verify");
-      Alert.alert("Sign in again", "No sessions were signed out. Confirm it’s you to carry on.");
+      Alert.alert("Sign in again", "Nothing was signed out. Confirm it’s you, then try again.");
       return;
     }
     if (result.error) {
@@ -40,19 +41,21 @@ const SignOutOtherSessionsScreen = () => {
       Alert.alert("Unable to sign out other sessions", result.error.message);
       return;
     }
-    router.back();
+    if (navigation.isFocused()) router.back();
+    if (result.data.signedOut === 0) {
+      Alert.alert("No other sessions", "You weren’t signed in anywhere else.");
+      return;
+    }
     Alert.alert(
       "Other sessions signed out",
-      result.data.signedOut === 0
-        ? "You weren’t signed in anywhere else. This phone is still signed in."
-        : "Every other device has been signed out. This phone is still signed in.",
+      "Every other session has been signed out. This phone is still signed in.",
     );
   };
 
   const confirmSignOut = () =>
     Alert.alert(
       "Sign out of all other sessions?",
-      "Every other device signed in to your account will be signed out. This phone stays signed in.",
+      "Every session except this phone will be signed out.",
       [
         { text: "Cancel", style: "cancel" },
         { text: "Sign out others", style: "destructive", onPress: signOut },
@@ -64,7 +67,7 @@ const SignOutOtherSessionsScreen = () => {
       <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
         <View className="flex-row items-center justify-between">
           {step === "signingOut" ? <View className="w-10" /> : <BackButton />}
-          <Text className="text-foreground text-2xl font-bold">Other sessions</Text>
+          <Text className="text-foreground text-2xl font-bold">Sign out others</Text>
           <View className="w-10" />
         </View>
       </SafeAreaView>
@@ -81,16 +84,13 @@ const SignOutOtherSessionsScreen = () => {
         >
           <View className="gap-2">
             <Text className="text-muted-foreground text-base leading-6">
-              Sign out every other phone or tablet that’s signed in to your account. This phone
-              stays signed in. Use this if you’ve lost a phone or think someone else is signed in.
+              Each phone or tablet where you’re signed in is a session. This signs out every session
+              except this phone. Use it if you’ve lost a phone or think someone else is signed in.
             </Text>
-            {methods.data && (
-              <Text className="text-muted-foreground text-base leading-6">
-                {methods.data.password
-                  ? "If someone else might know your password, change it in Password and Security instead. That signs out your other devices too."
-                  : "If someone else might be using your Google account, change your Google password first, or they could sign in again."}
-              </Text>
-            )}
+            <Text className="text-muted-foreground text-base leading-6">
+              Signed-out phones still show under Devices on the Account tab, but they must sign in
+              again to see anything new.
+            </Text>
           </View>
 
           {step === "verify" && gate.decision === null && <LoadingIndicator />}
@@ -109,6 +109,26 @@ const SignOutOtherSessionsScreen = () => {
                 {step === "signingOut" ? "Signing out…" : "Sign out of all other sessions"}
               </Text>
             </Button>
+          )}
+
+          {methods.data?.password && (
+            <View className="gap-4">
+              <Text className="text-muted-foreground text-base leading-6">
+                If someone else might know your password, change it instead. That signs out your
+                other sessions too.
+              </Text>
+              <Link href="/account/password" asChild>
+                <Button variant="outline" disabled={step === "signingOut"}>
+                  <Text>Change password</Text>
+                </Button>
+              </Link>
+            </View>
+          )}
+          {methods.data?.password === false && (
+            <Text className="text-muted-foreground text-base leading-6">
+              If someone else might be using your Google account, change your Google password first,
+              or they could sign in again.
+            </Text>
           )}
         </ScrollView>
       </KeyboardAvoidingView>

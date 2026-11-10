@@ -244,11 +244,13 @@ export const accountRouter = {
     .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
     .mutation(async ({ ctx }) => {
       const userId = ctx.session.user.id;
-      const { count } = await ctx.db.session.deleteMany({
-        where: { userId, id: { not: ctx.session.session.id } },
-      });
-      if (count > 0) ctx.securityAlerts?.send(userId, { type: "other-sessions-signed-out" });
-      return { signedOut: count };
+      const others = { userId, id: { not: ctx.session.session.id } };
+      const [signedOut] = await ctx.db.$transaction([
+        ctx.db.session.count({ where: { ...others, expiresAt: { gt: new Date() } } }),
+        ctx.db.session.deleteMany({ where: others }),
+      ]);
+      if (signedOut > 0) ctx.securityAlerts?.send(userId, { type: "other-sessions-signed-out" });
+      return { signedOut };
     }),
   deletionCancellationNotice: protectedProcedure.query(async ({ ctx }) => {
     const user = await ctx.db.user.findUniqueOrThrow({

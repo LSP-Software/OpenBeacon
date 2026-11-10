@@ -111,6 +111,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("signing out othe
     expect(await sentAlerts()).toEqual([]);
   });
 
+  test("clears expired sessions without counting them or sending an alert", async () => {
+    const account = await createAccount();
+    const [expired, live] = account.sessions;
+    await prisma.session.update({
+      where: { id: expired?.id },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+    await prisma.session.delete({ where: { id: live?.id } });
+
+    expect(await callerFor(account).account.signOutOtherSessions()).toEqual({ signedOut: 0 });
+
+    expect(await sessionIds(account.userId)).toEqual([account.sessions.at(-1)?.id]);
+    expect(await sentAlerts()).toEqual([]);
+  });
+
   test("needs a fresh sign-in", async () => {
     const account = await createAccount();
     const { sessionConfig } = await auth.$context;

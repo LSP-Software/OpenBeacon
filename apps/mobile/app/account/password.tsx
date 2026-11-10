@@ -1,7 +1,7 @@
 import { Alert } from "../../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
@@ -84,8 +84,9 @@ const PasswordScreen = () => {
           {accounts.isError && <Text>Unable to load your sign-in methods. Please try again.</Text>}
           {accounts.data && !hasPassword && (
             <Text>
-              Your account does not use a password. Sign in with the provider you used to create
-              your account.
+              Your account uses Google to sign in, so it doesn’t have a password. If you think
+              someone else is using your Google account, change your Google password, then sign out
+              of all other sessions.
             </Text>
           )}
           {hasPassword && (
@@ -127,6 +128,11 @@ const PasswordScreen = () => {
               </Button>
             </View>
           )}
+          <Link href="/account/sign-out-others" asChild>
+            <Button variant="outline">
+              <Text>Sign out of all other sessions</Text>
+            </Button>
+          </Link>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

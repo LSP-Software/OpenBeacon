@@ -927,12 +927,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email routes", (
     expect(await signsInWith(email, password)).toBe(true);
   });
 
-  test("better-auth routes that sign out other sessions without a fresh sign-in are switched off", async () => {
+  test("better-auth routes that list or sign out other sessions without a fresh sign-in are switched off", async () => {
     const responses = await Promise.all([
       request("/revoke-other-sessions", { body: {}, ip: nextIp() }),
       request("/revoke-sessions", { body: {}, ip: nextIp() }),
+      request("/list-sessions", { method: "GET", ip: nextIp() }),
     ]);
-    expect(responses.map((response) => response.status)).toEqual([404, 404]);
+    expect(responses.map((response) => response.status)).toEqual([404, 404, 404]);
   });
 });
 

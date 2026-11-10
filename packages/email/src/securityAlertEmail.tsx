@@ -8,12 +8,12 @@ import { type EmailMessage, isOptionalSecurityAlert, type SecurityAlert } from "
 const secureGoogleAdvice =
   "Change your Google password, because someone may have used your Google account to sign in.";
 
-const signOutOthersAdvice = "go to Account and tap Sign out of all other sessions.";
+const signOutOthersAdvice = 'open Account and tap "Sign out of all other sessions".';
 
 const secureAccountAdvice = (hasPassword: boolean) =>
   hasPassword
-    ? "In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device."
-    : `${secureGoogleAdvice} After that, open the OpenBeacon app, ${signOutOthersAdvice}`;
+    ? "In the OpenBeacon app, change your password in Account → Password and Security. That signs out every other device."
+    : `${secureGoogleAdvice} After that, in the OpenBeacon app, ${signOutOthersAdvice}`;
 
 const signedInAdvice = (hasPassword: boolean) =>
   `Someone else is signed in to your account. ${secureAccountAdvice(hasPassword)}`;
@@ -38,7 +38,7 @@ const alertCopy = (
         happened: "Your OpenBeacon password was changed.",
         details: [{ label: "Changed at", value: happenedAt }],
         ifNotYou:
-          'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs you out on every other device.',
+          'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs out every other device.',
       };
     case "password-reset":
       return {
@@ -74,7 +74,7 @@ const alertCopy = (
         details: [{ label: "Signed out at", value: happenedAt }],
         ifNotYou: `Someone else is signed in to your account and may have signed you out. ${
           hasPassword
-            ? 'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs you out on every other device.'
+            ? 'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs out every other device, including theirs.'
             : `${secureGoogleAdvice} After that, sign in to the OpenBeacon app, ${signOutOthersAdvice}`
         }`,
       };
