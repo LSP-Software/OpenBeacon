@@ -139,7 +139,7 @@ class OfflineTrackingQueueTest {
       Room
         .databaseBuilder(context, CiphertextQueueDatabase::class.java, name)
         .allowMainThreadQueries()
-        .addMigrations(CiphertextQueueDatabase.MIGRATION_1_2, CiphertextQueueDatabase.MIGRATION_2_3)
+        .addMigrations(*CiphertextQueueDatabase.MIGRATIONS)
         .build()
     try {
       val dao = migrated.ciphertextQueueDao()
@@ -211,7 +211,10 @@ class OfflineTrackingQueueTest {
     fillUntil { dao.getEviction("server-a/user-a") != null }
     val eviction = checkNotNull(dao.getEviction("server-a/user-a"))
     val otherOwner = dao.getEviction("server-a/user-b")
+    val oldestPending = boundedQueue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, "server-a/user-a").single()
+    assertEquals(listOf(oldestPending.id), boundedQueue.markInFlight(listOf(oldestPending.id), System.currentTimeMillis()))
     fillUntil { dao.getEviction("server-a/user-a")?.revision != eviction.revision }
+    assertEquals(listOf(oldestPending.id), boundedQueue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10, "server-a/user-a").map { it.id })
     val newer = checkNotNull(dao.getEviction("server-a/user-a"))
     assertTrue(newer.revision > eviction.revision)
     assertTrue(newer.pointCount > eviction.pointCount)

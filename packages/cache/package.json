@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The ./testing export exposes FakeRedis and BucketState for tests only; do not import ./testing in production (bundlers should exclude it from prod builds).",
+  "description": "The ./testing export (FakeRedis, BucketState) and the ./integration export (imports bun:test) are for tests only; do not import them in production (bundlers should exclude them from prod builds).",
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/rateLimits/testUtils.ts",

@@ -8,7 +8,7 @@ const clientPaths = [
   "packages/shared/",
 ];
 const serverPaths = ["apps/backend/", "apps/scheduled-jobs/", "packages/"];
-const serverFiles = ["Dockerfile", "apps/scheduled-jobs/Dockerfile", "bun.lock"];
+const serverFiles = ["Dockerfile", "bun.lock", "bunfig.toml"];
 
 const isServerFile = (file: string) =>
   serverFiles.includes(file) ||

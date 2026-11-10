@@ -32,6 +32,7 @@
     "test": "turbo test",
     "benchmark:offline-queue-storage": "bash scripts/benchmark-offline-queue-storage.sh",
     "test:integration": "bun scripts/run-integration-tests.ts",
+    "test:integration:migrate": "bun scripts/migrate-integration-database.ts",
     "ci": "bun run check && bun run typecheck && bun run test && bun test scripts && python3 -B -m unittest discover -s scripts && bun scripts/warn-skipped-integration-tests.ts"
   },
   "devDependencies": {

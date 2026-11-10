@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { createIntegrationTestCache } from "../integrationTestCache.ts";
 import { FakeRedis } from "../rateLimits/testUtils.ts";
 import { OpenBeaconCache } from "./OpenBeaconCache.ts";
 
@@ -9,29 +10,13 @@ class FakeRedisCache extends OpenBeaconCache {
 }
 
 let nowMs = 0;
-const caches = [
-  {
-    name: "Redis",
-    cache: new OpenBeaconCache({
-      redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
-      keyPrefix: `test-${crypto.randomUUID()}`,
-      now: () => nowMs,
-    }),
-  },
-  {
-    name: "FakeRedis",
-    cache: new FakeRedisCache({ redisUrl: "redis://localhost:6379", now: () => nowMs }),
-  },
-];
+const fakeRedisCache = new FakeRedisCache({ redisUrl: "redis://localhost:6379", now: () => nowMs });
+afterAll(() => fakeRedisCache.close());
 
-afterAll(async () => {
-  for (const { cache } of caches) {
-    for (const userId of ["user-1", "user-2"]) {
-      await cache.alertsTurnedOff.take({ userId, firstAtOrBefore: Number.MAX_SAFE_INTEGER });
-    }
-    cache.close();
-  }
-});
+const caches = [
+  { name: "Redis", cache: createIntegrationTestCache(() => nowMs) },
+  { name: "FakeRedis", cache: fakeRedisCache },
+];
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("OpenBeaconCache scripts", () => {
   test.each(caches)(

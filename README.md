@@ -37,11 +37,13 @@ bun run db:migrate
 `bun run ci` skips the integration tests. They need PostgreSQL and Redis running at the URLs in `.env.ci`; `docker compose up -d db redis` starts both. The tests use a separate `openbeacon_test` database so they never touch your development data. The first command below creates it and applies the migrations:
 
 ```sh
-bun run --cwd packages/database --env-file=../../.env.ci prisma migrate deploy
+bun run test:integration:migrate
 bun run test:integration
 ```
 
-`bun run test:integration` runs every `*.integration.test.ts` under `apps/` and `packages/` with `OPENBEACON_INTEGRATION=1`. Pass directories to run only their tests, such as `bun run test:integration packages/cache`, and pass `--env-file=<path>` to use another env file instead of `.env.ci`. Other `bun test` flags are passed through and must use the `--flag=value` form.
+Both commands take their settings from `.env.ci`, and its values win over variables exported in your shell. Pass `--env-file=<path>` to use another env file.
+
+`bun run test:integration` runs every `*.integration.test.ts` under `apps/` and `packages/` with `OPENBEACON_INTEGRATION=1`. Pass directories to run only their tests, such as `bun run test:integration packages/cache`. Other `bun test` flags are passed through and must use the `--flag=value` form.
 
 Every test cache uses a random Redis key prefix, so several runs can share one Redis.
 

@@ -1,6 +1,7 @@
 import {
   buildIntegrationTestCommand,
   findIntegrationTestFiles,
+  readEnvFile,
   repoRoot,
 } from "./integration-tests.ts";
 
@@ -17,7 +18,7 @@ if ("error" in result) {
 console.log(result.command.join(" "));
 const child = Bun.spawn(result.command, {
   cwd: repoRoot,
-  env: { ...process.env, OPENBEACON_INTEGRATION: "1" },
+  env: { ...process.env, ...(await readEnvFile(result.envFile)), OPENBEACON_INTEGRATION: "1" },
   stdio: ["inherit", "inherit", "inherit"],
 });
 process.exit(await child.exited);

@@ -24,16 +24,15 @@ COPY packages/tsconfig/package.json packages/tsconfig/
 RUN bun install --frozen-lockfile --production --omit=peer --filter @openbeacon/scheduled-jobs
 
 FROM oven/bun:1.4.4
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=deps /app ./
 COPY packages packages
-COPY apps/backend apps/backend
+COPY apps/backend/src/version.ts apps/backend/src/
 COPY apps/scheduled-jobs apps/scheduled-jobs
 COPY --from=prisma /app/packages/database/generated packages/database/generated
 
 USER bun
 ENV NODE_ENV=production
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --start-interval=5s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:3000/health > /dev/null || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD ["bun", "-e", "const r = await fetch('http://127.0.0.1:3000/health', { signal: AbortSignal.timeout(3000) }); process.exit(r.ok ? 0 : 1);"]
 CMD ["bun", "run", "apps/scheduled-jobs/src/index.ts"]

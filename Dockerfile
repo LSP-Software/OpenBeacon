@@ -20,7 +20,6 @@ COPY packages/database packages/database
 RUN DATABASE_URL=postgresql://localhost:5432/openbeacon bun run --cwd packages/database prisma generate
 
 FROM oven/bun:1.4.4
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=deps /app ./
 COPY packages packages
@@ -30,6 +29,6 @@ COPY --from=prisma /app/packages/database/generated packages/database/generated
 USER bun
 ENV NODE_ENV=production
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --start-interval=5s --retries=3 \
-    CMD curl -fsS "http://127.0.0.1:${OPENBEACON_API_PORT:-3000}/health" > /dev/null || exit 1
-CMD ["sh", "-c", "bun run apps/backend/src/validateEnv.ts && bun run --cwd packages/database prisma migrate deploy && exec bun run apps/backend/src/index.ts"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD ["bun", "-e", "const h = process.env.OPENBEACON_API_HOSTNAME; const host = !h || h === '0.0.0.0' || h === '::' ? '127.0.0.1' : h; const r = await fetch(`http://${host}:${process.env.OPENBEACON_API_PORT || 3000}/health`, { signal: AbortSignal.timeout(3000) }); process.exit(r.ok ? 0 : 1);"]
+CMD ["sh", "apps/backend/docker-entrypoint.sh"]

@@ -50,6 +50,12 @@
       "dependsOn": ["^db:generate"],
       "outputs": []
     },
+    "@openbeacon/mobile#test": {
+      "dependsOn": ["^db:generate"],
+      "outputs": [],
+      "env": ["ANDROID_HOME", "ANDROID_SDK_ROOT", "CI"],
+      "inputs": ["$TURBO_DEFAULT$", "../../scripts/test-offline-tracking-queue.sh"]
+    },
     "typecheck": {
       "dependsOn": ["db:generate", "^db:generate"],
       "outputs": []

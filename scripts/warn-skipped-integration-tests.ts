@@ -13,6 +13,7 @@ if (process.env["OPENBEACON_INTEGRATION"] !== "1") {
 \x1b[33m⚠ Skipped ${tests} integration tests in ${files.length} files (OPENBEACON_INTEGRATION is not "1").
   They need PostgreSQL at DATABASE_URL and Redis at REDIS_URL. Apply the migrations, then run them with:
 
+  bun run test:integration:migrate
   bun run test:integration\x1b[0m
 `);
 }

@@ -21,7 +21,7 @@ The limit is enforced in `RoomCiphertextQueue.insertAll`, in the same transactio
 
 ## Tests
 
-`OfflineTrackingQueueTest` covers account separation, duplicate client points, ciphertext-only storage, the version 1 migration and eviction. It runs the real Room database under Robolectric, so it needs the Android SDK but no emulator. `bun run --cwd apps/mobile test:native` runs it with the JVM tests, and so do `bun run test` and `bun run ci`. Without an Android SDK it is skipped locally with a warning and fails on CI. The first run prebuilds `apps/mobile/android` if it doesn't exist.
+`OfflineTrackingQueueTest` covers account separation, duplicate client points, ciphertext-only storage, the version 1 migration and eviction. It runs the real Room database under Robolectric, so it needs the Android SDK but no emulator. `src/test/resources/robolectric.properties` pins the Robolectric SDK to 35, the newest one that runs on Java 17, so a toolchain change can't silently move the tests to another SDK. `bun run --cwd apps/mobile test:native` runs it with the JVM tests, and so do `bun run test` and `bun run ci`. Without an Android SDK it is skipped locally with a warning and fails on CI. The first run prebuilds `apps/mobile/android` if it doesn't exist.
 
 ## Measured capacity
 

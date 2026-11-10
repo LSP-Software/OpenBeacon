@@ -17,7 +17,7 @@ class IntegrationTestCache extends OpenBeaconCache {
         "code" in error &&
         String(error.code).startsWith("ERR_REDIS_CONNECTION")
       ) {
-        throw new Error(`Integration tests need Redis running at REDIS_URL (${redisUrl})`, {
+        throw new Error(`Lost or couldn't open the Redis connection at REDIS_URL (${redisUrl})`, {
           cause: error,
         });
       }

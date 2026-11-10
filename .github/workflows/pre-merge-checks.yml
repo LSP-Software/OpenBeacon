@@ -4,18 +4,20 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -41,6 +43,12 @@ jobs:
           distribution: temurin
           java-version: 17
           cache: gradle
+
+      - name: Cache Robolectric Android jars
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: ${{ runner.os }}-robolectric-${{ hashFiles('apps/mobile/modules/openbeacon-tracking/android/build.gradle') }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -114,7 +122,7 @@ jobs:
       - name: Generate database client and apply migrations
         run: |
           bun run --cwd packages/database --env-file=../../.env.ci prisma generate
-          bun run --cwd packages/database --env-file=../../.env.ci prisma migrate deploy
+          bun run test:integration:migrate
       - name: Check the Prisma schema matches the migrations
         env:
           PGPASSWORD: openbeacon
@@ -150,3 +158,20 @@ jobs:
           push: false
           cache-from: type=gha,scope=scheduled-jobs
           cache-to: type=gha,mode=max,scope=scheduled-jobs
+
+  pre-merge-checks:
+    if: always()
+    needs: [ci, version-bump, integration, docker-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every pre-merge check to pass
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          failed=$(jq -r 'to_entries[] | select(.value.result != "success" and (.key != "version-bump" or .value.result != "skipped")) | "\(.key): \(.value.result)"' <<< "$NEEDS")
+          if [ -n "$failed" ]; then
+            echo "These pre-merge checks did not pass:" >&2
+            echo "$failed" >&2
+            exit 1
+          fi

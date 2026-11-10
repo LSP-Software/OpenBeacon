@@ -3,7 +3,13 @@ set -euo pipefail
 
 tracking_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tracking_module="apps/mobile/modules/openbeacon-tracking"
-android_home="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
+android_home="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+if [[ -z "$android_home" ]]; then
+  android_home="$HOME/Android/Sdk"
+  if [[ ! -d "$android_home" && -d "$HOME/Library/Android/sdk" ]]; then
+    android_home="$HOME/Library/Android/sdk"
+  fi
+fi
 adb_command="$android_home/platform-tools/adb"
 emulator_command="$android_home/emulator/emulator"
 if [[ ! -x "$adb_command" ]]; then
@@ -66,10 +72,20 @@ adb_with_timeout() {
   return "$status"
 }
 
-if [[ ! -d "$tracking_root/apps/mobile/android" ]]; then
+prebuilt=""
+if [[ -d "$tracking_root/apps/mobile/android" ]]; then
+  prebuilt="true"
+else
   (cd "$tracking_root/apps/mobile" && bunx expo prebuild --platform android --no-install)
 fi
-(cd "$tracking_root/apps/mobile/android" && ./gradlew :openbeacon-tracking:assembleDebugAndroidTest --no-daemon -q)
+gradle_status=0
+(cd "$tracking_root/apps/mobile/android" && ./gradlew :openbeacon-tracking:assembleDebugAndroidTest --no-daemon -q) || gradle_status="$?"
+if ((gradle_status != 0)); then
+  if [[ -n "$prebuilt" ]]; then
+    echo "Gradle failed using the existing apps/mobile/android. It may be a stale prebuild; delete it or run 'bunx expo prebuild --platform android --clean' in apps/mobile, then retry." >&2
+  fi
+  exit "$gradle_status"
+fi
 echo "Running the offline queue storage benchmark on $serial."
 adb_with_timeout 300 "waiting for boot" wait-for-device shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
 adb_with_timeout 300 "installing the test APK" install -r "$test_apk"

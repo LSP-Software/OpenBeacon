@@ -9,7 +9,7 @@ on:
         default: false
 
 concurrency:
-  group: deploy-backend-production
+  group: deploy-backend-${{ inputs.deploy && 'production' || github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -27,8 +27,8 @@ jobs:
       contents: read
     outputs:
       version: ${{ steps.image_tags.outputs.version }}
-      backend_digest: ${{ steps.backend_image.outputs.digest }}
-      scheduled_jobs_digest: ${{ steps.scheduled_jobs_image.outputs.digest }}
+      backend_digest: ${{ steps.backend_image.outputs.digest || steps.release_check.outputs.backend_digest }}
+      scheduled_jobs_digest: ${{ steps.scheduled_jobs_image.outputs.digest || steps.release_check.outputs.scheduled_jobs_digest }}
     steps:
       - name: Require main branch for deployment
         if: inputs.deploy && github.ref != 'refs/heads/main'
@@ -68,24 +68,42 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Require an unreleased version
+      - name: Require an unreleased version or a re-run of this commit's release
+        id: release_check
         if: inputs.deploy
         env:
           VERSION: ${{ steps.image_tags.outputs.version }}
+          COMMIT: ${{ github.sha }}
         run: |
+          errors=$(mktemp)
           for image in openbeacon-backend openbeacon-scheduled-jobs; do
             ref="docker.io/lspsoftware/${image}:${VERSION}"
-            if output=$(docker buildx imagetools inspect "$ref" 2>&1); then
+            if ! released=$(docker buildx imagetools inspect "$ref" --format '{{.Manifest.Digest}}' 2> "$errors"); then
+              if ! grep -qxF "ERROR: ${ref}: not found" "$errors"; then
+                echo "Could not check whether ${ref} exists:" >&2
+                cat "$errors" >&2
+                exit 1
+              fi
+              continue
+            fi
+            commit_ref="docker.io/lspsoftware/${image}:${COMMIT}"
+            if ! commit_image=$(docker buildx imagetools inspect "$commit_ref" --format '{{.Manifest.Digest}}' 2> "$errors"); then
+              if ! grep -qxF "ERROR: ${commit_ref}: not found" "$errors"; then
+                echo "Could not check whether ${commit_ref} exists:" >&2
+                cat "$errors" >&2
+                exit 1
+              fi
+            fi
+            if [ "$released" != "$commit_image" ]; then
               echo "${ref} already exists. Bump serverVersion in apps/backend/src/version.ts before deploying." >&2
               exit 1
             fi
-            if ! grep -qxF "ERROR: ${ref}: not found" <<< "$output"; then
-              echo "Could not check whether ${ref} exists:" >&2
-              echo "$output" >&2
-              exit 1
-            fi
+            echo "${ref} is this commit's image; reusing ${released}."
+            output_name="${image#openbeacon-}"
+            echo "${output_name//-/_}_digest=${released}" >> "$GITHUB_OUTPUT"
           done
       - id: backend_image
+        if: steps.release_check.outputs.backend_digest == ''
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -94,6 +112,7 @@ jobs:
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
       - id: scheduled_jobs_image
+        if: steps.release_check.outputs.scheduled_jobs_digest == ''
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -104,7 +123,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=scheduled-jobs
       - name: Publish branch tags
         env:
-          BACKEND_DIGEST: ${{ steps.backend_image.outputs.digest }}
+          BACKEND_DIGEST: ${{ steps.backend_image.outputs.digest || steps.release_check.outputs.backend_digest }}
           BACKEND_TAGS: ${{ steps.image_tags.outputs.tags }}
         run: |
           while IFS= read -r tag; do
@@ -158,14 +177,28 @@ jobs:
           BACKEND_DIGEST: ${{ needs.publish.outputs.backend_digest }}
           SCHEDULED_JOBS_DIGEST: ${{ needs.publish.outputs.scheduled_jobs_digest }}
         run: |
-          docker buildx imagetools create \
-            --tag "docker.io/lspsoftware/openbeacon-backend:${VERSION}" \
-            --tag docker.io/lspsoftware/openbeacon-backend:latest-stable \
-            "docker.io/lspsoftware/openbeacon-backend@${BACKEND_DIGEST}"
-          docker buildx imagetools create \
-            --tag "docker.io/lspsoftware/openbeacon-scheduled-jobs:${VERSION}" \
-            --tag docker.io/lspsoftware/openbeacon-scheduled-jobs:latest-stable \
-            "docker.io/lspsoftware/openbeacon-scheduled-jobs@${SCHEDULED_JOBS_DIGEST}"
+          errors=$(mktemp)
+          for release in "openbeacon-backend ${BACKEND_DIGEST}" "openbeacon-scheduled-jobs ${SCHEDULED_JOBS_DIGEST}"; do
+            read -r image digest <<< "$release"
+            ref="docker.io/lspsoftware/${image}:${VERSION}"
+            if released=$(docker buildx imagetools inspect "$ref" --format '{{.Manifest.Digest}}' 2> "$errors"); then
+              if [ "$released" != "$digest" ]; then
+                echo "${ref} already exists. Bump serverVersion in apps/backend/src/version.ts before deploying." >&2
+                exit 1
+              fi
+            elif ! grep -qxF "ERROR: ${ref}: not found" "$errors"; then
+              echo "Could not check whether ${ref} exists:" >&2
+              cat "$errors" >&2
+              exit 1
+            fi
+          done
+          for release in "openbeacon-backend ${BACKEND_DIGEST}" "openbeacon-scheduled-jobs ${SCHEDULED_JOBS_DIGEST}"; do
+            read -r image digest <<< "$release"
+            docker buildx imagetools create \
+              --tag "docker.io/lspsoftware/${image}:${VERSION}" \
+              --tag "docker.io/lspsoftware/${image}:latest-stable" \
+              "docker.io/lspsoftware/${image}@${digest}"
+          done
       - name: Trigger Coolify deployment
         env:
           COOLIFY_ENDPOINT: ${{ secrets.COOLIFY_ENDPOINT }}
