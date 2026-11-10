@@ -110,9 +110,11 @@ const createSession = (overrides: Partial<MapTrackingDeps> = {}) => {
 
   return {
     getLatestCalls,
+    getNow: () => now,
     pollCalls,
     scheduled,
     session,
+    settle: () => new Promise((resolve) => setTimeout(resolve, 0)),
     setNow: (value: number) => {
       now = value;
     },
@@ -219,10 +221,15 @@ describe("createMapTrackingSession", () => {
     ).toBe("2026-07-17T12:00:02.000Z");
   });
 
-  test("live catch-up polls again immediately when a page is full", async () => {
+  test("fetches the latest points instead of paging when a poll page is full", async () => {
     const coldRow = point({
       createdAt: new Date("2026-07-17T12:00:00.000Z"),
       id: "point-0",
+      senderUserId: "user-1",
+    });
+    const latestRow = point({
+      createdAt: new Date("2026-07-17T12:05:00.000Z"),
+      id: "latest-1",
       senderUserId: "user-1",
     });
     const fullPage = Array.from({ length: 100 }, (_, index) =>
@@ -232,36 +239,37 @@ describe("createMapTrackingSession", () => {
         senderUserId: "user-1",
       }),
     );
-    const partialPage = [
-      point({
-        createdAt: new Date("2026-07-17T12:02:00.000Z"),
-        id: "page-2-0",
-        senderUserId: "user-1",
-      }),
-    ];
-    let pollCount = 0;
-    const { pollCalls, session } = createSession({
-      getLatest: async () => ({ points: [coldRow] }),
-      poll: async () => {
-        pollCount += 1;
-        return { points: pollCount === 1 ? fullPage : partialPage };
+    const decrypted: string[] = [];
+    let latest = coldRow;
+    const { getLatestCalls, pollCalls, session } = createSession({
+      decryptPoint: async ({ groupId, point: row }) => {
+        decrypted.push(row.id);
+        return {
+          status: "ok",
+          entry: liveEntry({
+            serverCreatedAt: row.createdAt,
+            serverId: row.id,
+            sourceGroupId: groupId,
+            timestamp: row.createdAt.toISOString(),
+            userId: row.senderUserId,
+          }),
+        };
       },
+      getLatest: async () => ({ points: [latest] }),
+      poll: async () => ({ points: pollCalls.length === 1 ? fullPage : [] }),
     });
 
     session.setActive(true);
     await session.tick();
+    latest = latestRow;
     await session.tick();
 
-    expect(pollCalls).toHaveLength(2);
-    const lastFullPagePoint = fullPage[99];
-    if (!lastFullPagePoint) {
-      throw new Error("expected full page");
-    }
-    expect(pollCalls[1]?.cursor).toEqual({
-      createdAt: lastFullPagePoint.createdAt,
-      id: "page-1-99",
-    });
-    expect(session.getLivePositions()[0]?.timestamp).toBe("2026-07-17T12:02:00.000Z");
+    expect(getLatestCalls).toHaveLength(2);
+    expect(decrypted).toEqual(["point-0", "latest-1"]);
+    expect(session.getLivePositions()[0]?.timestamp).toBe("2026-07-17T12:05:00.000Z");
+
+    await session.tick();
+    expect(pollCalls[1]?.cursor?.id).toBe("latest-1");
   });
 
   test("undecryptable points skip marker updates but still advance the cursor", async () => {
@@ -543,35 +551,30 @@ describe("createMapTrackingSession", () => {
     ]);
   });
 
-  test("stops catch-up when a full page does not advance the cursor", async () => {
+  test("moves the cursor past a full page even when the latest points are older", async () => {
     const coldRow = point({
       createdAt: new Date("2026-07-17T12:00:00.000Z"),
       id: "point-0",
       senderUserId: "user-1",
     });
-    const stuckPage = Array.from({ length: 100 }, (_, index) =>
+    const fullPage = Array.from({ length: 100 }, (_, index) =>
       point({
-        createdAt: new Date("2026-07-17T12:00:01.000Z"),
-        id: `stuck-${index}`,
-        senderUserId: "user-1",
+        createdAt: new Date(Date.UTC(2026, 6, 17, 12, 0, 1 + index)),
+        id: `page-1-${index}`,
+        senderUserId: "user-left",
       }),
     );
-    let pollCount = 0;
-    const { session } = createSession({
+    const { pollCalls, session } = createSession({
       getLatest: async () => ({ points: [coldRow] }),
-      poll: async () => {
-        pollCount += 1;
-        return { points: stuckPage };
-      },
+      poll: async () => ({ points: pollCalls.length === 1 ? fullPage : [] }),
     });
 
     session.setActive(true);
     await session.tick();
     await session.tick();
-    expect(pollCount).toBe(2);
-
     await session.tick();
-    expect(pollCount).toBe(3);
+
+    expect(pollCalls[1]?.cursor?.id).toBe("page-1-99");
   });
 
   test("stops catch-up when the session becomes inactive", async () => {
@@ -695,6 +698,104 @@ describe("createMapTrackingSession", () => {
     expect(pollCalls.filter((call) => call.groupId === "group-fail").length).toBe(
       failPollsAfterAlignedRetry + 1,
     );
+  });
+
+  test("polls groups whose polls finish at different times together on the next wake", async () => {
+    const { getNow, pollCalls, scheduled, session, setNow, settle } = createSession({
+      getLatest: async (groupId) => ({
+        points: [
+          point({
+            createdAt: new Date("2026-07-17T12:00:00.000Z"),
+            id: `${groupId}-0`,
+            senderUserId: `user-${groupId}`,
+          }),
+        ],
+      }),
+      listGroups: async () => [{ id: "group-1" }, { id: "group-2" }],
+      poll: async ({ groupId }) => {
+        if (groupId === "group-2") {
+          await settle();
+          setNow(getNow() + 1_500);
+        }
+        return { points: [] };
+      },
+    });
+
+    session.setActive(true);
+    await session.tick();
+    await session.tick();
+    pollCalls.length = 0;
+
+    setNow(5_000);
+    scheduled.at(-1)?.fn();
+    await settle();
+
+    expect(pollCalls.map(({ groupId }) => groupId)).toEqual(["group-1", "group-2"]);
+  });
+
+  test("waits a full interval after a poll slower than the interval", async () => {
+    const { getNow, scheduled, session, setNow } = createSession({
+      getLatest: async () => ({
+        points: [
+          point({
+            createdAt: new Date("2026-07-17T12:00:00.000Z"),
+            id: "point-0",
+            senderUserId: "user-1",
+          }),
+        ],
+      }),
+      poll: async () => {
+        setNow(getNow() + 6_000);
+        return { points: [] };
+      },
+    });
+
+    session.setActive(true);
+    await session.tick();
+    await session.tick();
+
+    expect(getNow()).toBe(6_000);
+    expect(scheduled.at(-1)?.delayMs).toBe(5_000);
+  });
+
+  test("polls groups together again after failures that finish at slightly different times", async () => {
+    let failing = false;
+    const { getNow, pollCalls, scheduled, session, setNow, settle } = createSession({
+      getLatest: async (groupId) => ({
+        points: [
+          point({
+            createdAt: new Date("2026-07-17T12:00:00.000Z"),
+            id: `${groupId}-0`,
+            senderUserId: `user-${groupId}`,
+          }),
+        ],
+      }),
+      listGroups: async () => [{ id: "group-1" }, { id: "group-2" }],
+      poll: async ({ groupId }) => {
+        if (!failing) {
+          return { points: [] };
+        }
+        if (groupId === "group-2") {
+          await settle();
+          setNow(getNow() + 5);
+        }
+        throw new Error("Server unreachable");
+      },
+    });
+
+    session.setActive(true);
+    await session.tick();
+    failing = true;
+    setNow(5_000);
+    await session.tick();
+    pollCalls.length = 0;
+
+    failing = false;
+    setNow(10_000);
+    scheduled.at(-1)?.fn();
+    await settle();
+
+    expect(pollCalls.map(({ groupId }) => groupId)).toEqual(["group-1", "group-2"]);
   });
 
   test("failing group backoff resets to 5s after a successful poll", async () => {
@@ -952,42 +1053,88 @@ describe("createMapTrackingSession", () => {
     ).toEqual(["user-2"]);
   });
 
-  test("resume after pause performs one immediate tick per eligible group", async () => {
-    const coldByGroup: Record<string, MapTrackingEncryptedPoint> = {
-      "group-1": point({
-        createdAt: new Date("2026-07-17T12:00:00.000Z"),
-        id: "g1-0",
-        senderUserId: "user-1",
-      }),
-      "group-2": point({
-        createdAt: new Date("2026-07-17T12:00:00.000Z"),
-        id: "g2-0",
-        senderUserId: "user-2",
-      }),
-    };
+  test("resume after pause polls each group from where it left off", async () => {
     const { getLatestCalls, pollCalls, session } = createSession({
-      getLatest: async (groupId) => {
-        const row = coldByGroup[groupId];
-        if (!row) {
-          return { points: [] };
-        }
-        return { points: [row] };
-      },
+      getLatest: async (groupId) => ({
+        points: [
+          point({
+            createdAt: new Date("2026-07-17T12:00:00.000Z"),
+            id: `${groupId}-0`,
+            senderUserId: `user-${groupId}`,
+          }),
+        ],
+      }),
       listGroups: async () => [{ id: "group-1" }, { id: "group-2" }],
-      poll: async () => ({ points: [] }),
+      poll: async ({ groupId }) => ({
+        points:
+          groupId === "group-1"
+            ? [
+                point({
+                  createdAt: new Date("2026-07-17T12:03:00.000Z"),
+                  id: "group-1-1",
+                  senderUserId: "user-group-1",
+                }),
+              ]
+            : [],
+      }),
     });
 
     session.setActive(true);
     await session.tick();
     getLatestCalls.length = 0;
-    pollCalls.length = 0;
 
     session.setActive(false);
     session.setActive(true);
     await session.tick();
 
-    expect(pollCalls.map((call) => call.groupId).sort()).toEqual(["group-1", "group-2"]);
     expect(getLatestCalls).toEqual([]);
+    expect(pollCalls.map(({ cursor, groupId }) => [groupId, cursor?.id]).sort()).toEqual([
+      ["group-1", "group-1-0"],
+      ["group-2", "group-2-0"],
+    ]);
+    expect(
+      session.getLivePositions().find(({ userId }) => userId === "user-group-1")?.timestamp,
+    ).toBe("2026-07-17T12:03:00.000Z");
+  });
+
+  test("ignores a request from before its group was removed and added again", async () => {
+    let groups = [{ id: "group-1" }];
+    const pendingLatest: Array<() => void> = [];
+    const { getLatestCalls, pollCalls, session, settle } = createSession({
+      getLatest: (groupId) =>
+        new Promise((resolve) => {
+          pendingLatest.push(() =>
+            resolve({
+              points: [
+                point({
+                  createdAt: new Date("2026-07-17T12:00:00.000Z"),
+                  id: `${groupId}-${pendingLatest.length}`,
+                  senderUserId: "user-1",
+                }),
+              ],
+            }),
+          );
+        }),
+      listGroups: async () => groups,
+    });
+
+    session.setActive(true);
+    await settle();
+    groups = [];
+    void session.tick();
+    await settle();
+    groups = [{ id: "group-1" }];
+    void session.tick();
+    await settle();
+
+    pendingLatest[0]?.();
+    await settle();
+    expect(session.getLivePositions()).toEqual([]);
+
+    void session.tick();
+    await settle();
+    expect(getLatestCalls).toEqual(["group-1", "group-1"]);
+    expect(pollCalls).toEqual([]);
   });
 
   test("clears epoch keys for removed groups and on destroy", async () => {

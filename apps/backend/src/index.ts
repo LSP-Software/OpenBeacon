@@ -39,5 +39,8 @@ export default {
   },
   port: env.OPENBEACON_API_PORT,
   hostname: env.OPENBEACON_API_HOSTNAME,
+  // Bun drops a connection that sends nothing for 10 seconds by default, and Android's OkHttp
+  // then silently resends the request. Stay above the app's longest request timeout (30 seconds).
+  idleTimeout: 60,
   maxRequestBodySize: 8 * 1024 * 1024,
 };
