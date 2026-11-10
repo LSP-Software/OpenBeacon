@@ -245,10 +245,13 @@ export const accountRouter = {
     .mutation(async ({ ctx }) => {
       const userId = ctx.session.user.id;
       const others = { userId, id: { not: ctx.session.session.id } };
-      const [signedOut] = await ctx.db.$transaction([
-        ctx.db.session.count({ where: { ...others, expiresAt: { gt: new Date() } } }),
-        ctx.db.session.deleteMany({ where: others }),
-      ]);
+      const now = new Date();
+      const signedOut = await ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
+        const live = await tx.session.deleteMany({ where: { ...others, expiresAt: { gt: now } } });
+        await tx.session.deleteMany({ where: { ...others, expiresAt: { lte: now } } });
+        return live.count;
+      });
       if (signedOut > 0) ctx.securityAlerts?.send(userId, { type: "other-sessions-signed-out" });
       return { signedOut };
     }),

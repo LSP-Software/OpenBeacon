@@ -128,11 +128,18 @@ const PasswordScreen = () => {
               </Button>
             </View>
           )}
-          <Link href="/account/sign-out-others" asChild>
-            <Button variant="outline">
-              <Text>Sign out of all other sessions</Text>
-            </Button>
-          </Link>
+          <View className="gap-4">
+            {hasPassword && (
+              <Text className="text-muted-foreground text-base leading-6">
+                Lost a phone or tablet? Sign out everywhere else without changing your password.
+              </Text>
+            )}
+            <Link href="/account/sign-out-others" replace asChild>
+              <Button variant="outline">
+                <Text>Sign out of all other sessions</Text>
+              </Button>
+            </Link>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

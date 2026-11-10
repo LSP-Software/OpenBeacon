@@ -38,7 +38,12 @@ const SignOutOtherSessionsScreen = () => {
     }
     if (result.error) {
       setStep("ready");
-      Alert.alert("Unable to sign out other sessions", result.error.message);
+      Alert.alert(
+        "Unable to sign out other sessions",
+        result.error instanceof TRPCClientError && result.error.data
+          ? result.error.message
+          : "Check your connection and try again.",
+      );
       return;
     }
     if (navigation.isFocused()) router.back();
@@ -48,14 +53,14 @@ const SignOutOtherSessionsScreen = () => {
     }
     Alert.alert(
       "Other sessions signed out",
-      "Every other session has been signed out. This phone is still signed in.",
+      "Every other session has been signed out. This device is still signed in.",
     );
   };
 
   const confirmSignOut = () =>
     Alert.alert(
       "Sign out of all other sessions?",
-      "Every session except this phone will be signed out.",
+      "Every session except this device will be signed out.",
       [
         { text: "Cancel", style: "cancel" },
         { text: "Sign out others", style: "destructive", onPress: signOut },
@@ -85,13 +90,34 @@ const SignOutOtherSessionsScreen = () => {
           <View className="gap-2">
             <Text className="text-muted-foreground text-base leading-6">
               Each phone or tablet where you’re signed in is a session. This signs out every session
-              except this phone. Use it if you’ve lost a phone or think someone else is signed in.
+              except this device. Use it if you’ve lost a phone or tablet, or think someone else is
+              signed in.
             </Text>
             <Text className="text-muted-foreground text-base leading-6">
-              Signed-out phones still show under Devices on the Account tab, but they must sign in
-              again to see anything new.
+              Signed-out phones and tablets still show under Devices on the Account tab, but they
+              must sign in again to see anything new.
             </Text>
           </View>
+
+          {methods.data?.password && (
+            <View className="gap-4">
+              <Text className="text-muted-foreground text-base leading-6">
+                If someone else might know your password, change it instead. That signs out your
+                other sessions too.
+              </Text>
+              <Link href="/account/password" replace asChild>
+                <Button variant="outline" disabled={step === "signingOut"}>
+                  <Text>Change password</Text>
+                </Button>
+              </Link>
+            </View>
+          )}
+          {methods.data?.password === false && (
+            <Text className="text-muted-foreground text-base leading-6">
+              If someone else might be using your Google account, change your Google password first,
+              or they could sign in again.
+            </Text>
+          )}
 
           {step === "verify" && gate.decision === null && <LoadingIndicator />}
           {step === "verify" && gate.decision === "confirm" && (
@@ -109,26 +135,6 @@ const SignOutOtherSessionsScreen = () => {
                 {step === "signingOut" ? "Signing out…" : "Sign out of all other sessions"}
               </Text>
             </Button>
-          )}
-
-          {methods.data?.password && (
-            <View className="gap-4">
-              <Text className="text-muted-foreground text-base leading-6">
-                If someone else might know your password, change it instead. That signs out your
-                other sessions too.
-              </Text>
-              <Link href="/account/password" asChild>
-                <Button variant="outline" disabled={step === "signingOut"}>
-                  <Text>Change password</Text>
-                </Button>
-              </Link>
-            </View>
-          )}
-          {methods.data?.password === false && (
-            <Text className="text-muted-foreground text-base leading-6">
-              If someone else might be using your Google account, change your Google password first,
-              or they could sign in again.
-            </Text>
           )}
         </ScrollView>
       </KeyboardAvoidingView>

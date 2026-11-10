@@ -10,8 +10,8 @@ import { TRPCError } from "@trpc/server";
 import type z from "zod";
 import {
   freshSessionProcedure,
-  isSessionFresh,
   protectedProcedure,
+  sessionFreshForMs,
 } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 
@@ -56,7 +56,7 @@ const createHistoryKey = async (
 export const accountRecoveryRouter = createTRPCRouter({
   status: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
-    const [recoveryKey, historyKeys, sessionFresh] = await Promise.all([
+    const [recoveryKey, historyKeys, freshForMs] = await Promise.all([
       ctx.db.recoveryKey.findUnique({
         select: { algorithm: true, derivationVersion: true, publicKey: true },
         where: { userId },
@@ -66,13 +66,14 @@ export const accountRecoveryRouter = createTRPCRouter({
         select: { id: true, publicKey: true, version: true },
         where: { userId },
       }),
-      isSessionFresh(ctx.session.session.createdAt),
+      sessionFreshForMs(ctx.session.session.createdAt),
     ]);
     return {
       currentHistoryKey: historyKeys.at(-1) ?? null,
+      freshForMs,
       historyKeyVersions: historyKeys.map(({ version }) => version),
       recoveryKey,
-      sessionFresh,
+      sessionFresh: freshForMs === null || freshForMs > 0,
     };
   }),
   escrows: protectedProcedure.query(async ({ ctx }) => {

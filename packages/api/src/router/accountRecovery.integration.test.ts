@@ -257,6 +257,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
       expect(await account.accountRecovery.status()).toEqual({
         currentHistoryKey: null,
+        freshForMs: expect.any(Number),
         historyKeyVersions: [],
         recoveryKey: null,
         sessionFresh: true,
@@ -272,6 +273,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           publicKey: historyKey.input.publicKey,
           version: 1,
         },
+        freshForMs: expect.any(Number),
         historyKeyVersions: [1],
         recoveryKey: {
           algorithm: "X25519",
@@ -547,11 +549,26 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         }),
       ).rejects.toMatchObject({ code: "FORBIDDEN", message: "Sign in again to continue." });
       expect(await stale.accountRecovery.status()).toMatchObject({
+        freshForMs: 0,
         recoveryKey: null,
         sessionFresh: false,
       });
       expect(await prisma.recoveryKey.count({ where: { userId: staleSetupUser } })).toBe(0);
       expect(await prisma.accountHistoryKey.count({ where: { userId: staleSetupUser } })).toBe(0);
+    });
+
+    test("status reports how long the session stays fresh", async () => {
+      const fresh = await caller(staleSetupUser).accountRecovery.status();
+      expect(fresh.freshForMs).toBeGreaterThan(14 * 60 * 1000);
+      expect(fresh.freshForMs).toBeLessThanOrEqual(15 * 60 * 1000);
+
+      const nearlyStale = await caller(
+        staleSetupUser,
+        new Date(Date.now() - 14 * 60 * 1000),
+      ).accountRecovery.status();
+      expect(nearlyStale.sessionFresh).toBe(true);
+      expect(nearlyStale.freshForMs).toBeGreaterThan(50 * 1000);
+      expect(nearlyStale.freshForMs).toBeLessThanOrEqual(60 * 1000);
     });
 
     test("a session from more than 15 minutes ago cannot change or reset the phrase", async () => {

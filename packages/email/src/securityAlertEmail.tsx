@@ -8,7 +8,7 @@ import { type EmailMessage, isOptionalSecurityAlert, type SecurityAlert } from "
 const secureGoogleAdvice =
   "Change your Google password, because someone may have used your Google account to sign in.";
 
-const signOutOthersAdvice = 'open Account and tap "Sign out of all other sessions".';
+const signOutOthersAdvice = 'open the Account tab and tap "Sign out of all other sessions".';
 
 const secureAccountAdvice = (hasPassword: boolean) =>
   hasPassword
@@ -70,12 +70,12 @@ const alertCopy = (
         subject: "Your other OpenBeacon sessions were signed out",
         title: "Other sessions signed out",
         happened:
-          "Every other device signed in to your OpenBeacon account was signed out. Only the device that did this is still signed in.",
+          "Every other session on your OpenBeacon account was signed out. Only the phone or tablet that did this is still signed in.",
         details: [{ label: "Signed out at", value: happenedAt }],
         ifNotYou: `Someone else is signed in to your account and may have signed you out. ${
           hasPassword
             ? 'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs out every other device, including theirs.'
-            : `${secureGoogleAdvice} After that, sign in to the OpenBeacon app, ${signOutOthersAdvice}`
+            : `${secureGoogleAdvice} After that, sign in to the OpenBeacon app, then ${signOutOthersAdvice}`
         }`,
       };
     case "new-device": {
