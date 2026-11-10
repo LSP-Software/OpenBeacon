@@ -2,6 +2,11 @@ name: Deploy backend
 
 on:
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: Trigger the Coolify deployment after publishing
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-backend-production
@@ -132,6 +137,7 @@ jobs:
               "docker.io/lspsoftware/${image}:${VERSION}"
           done
       - name: Trigger Coolify deployment
+        if: inputs.deploy
         env:
           COOLIFY_ENDPOINT: ${{ secrets.COOLIFY_ENDPOINT }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}

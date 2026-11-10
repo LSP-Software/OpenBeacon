@@ -63,9 +63,10 @@ It waits for approval in the `production` GitHub environment, which holds the
 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `COOLIFY_ENDPOINT` and `COOLIFY_TOKEN`
 secrets. It then builds both images, pushes them to
 `lspsoftware/openbeacon-backend` and `lspsoftware/openbeacon-scheduled-jobs`
-tagged with `serverVersion` from `src/version.ts` and `latest-stable`, and asks
-Coolify to deploy `latest-stable` to the `OpenBeacon Backend` and
-`OpenBeacon Scheduled Jobs` applications. The workflow fails if that version was
+tagged with `serverVersion` from `src/version.ts` and `latest-stable`. With
+"Trigger the Coolify deployment" ticked, it then asks Coolify to deploy
+`latest-stable` to the `OpenBeacon Backend` and `OpenBeacon Scheduled Jobs`
+applications; leave it unticked to deploy from Coolify yourself later. The workflow fails if that version was
 already released from a different commit, so bump `serverVersion` for every
 release. Re-running a failed deploy is safe: images this commit already pushed
 are reused instead of rebuilt.
