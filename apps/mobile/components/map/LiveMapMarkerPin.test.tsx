@@ -64,7 +64,7 @@ mock.module("../ui/Text.tsx", () => ({ Text: () => null }));
 mock.module("../ui/Icon.tsx", () => ({ Icon: () => React.createElement("clock") }));
 const { LiveMapMarkerPin } = await import("./LiveMapMarkerPin.tsx");
 
-const renderPin = async (timestamp: string | null) => {
+const renderPin = async (timestamp: string | null, status?: "cantLocate" | "cantRead") => {
   await act(async () => {
     root?.render(
       <LiveMapMarkerPin
@@ -72,6 +72,7 @@ const renderPin = async (timestamp: string | null) => {
         initials="AB"
         name="Alice"
         ringColor="#fff"
+        status={status}
         timestamp={timestamp}
       />,
     );
@@ -153,5 +154,28 @@ describe("LiveMapMarkerPin", () => {
     expect(JSON.stringify(root.container.toJSON())).toContain("Location is over 10 minutes old");
     await renderPin(null);
     expect(JSON.stringify(root.container.toJSON())).not.toContain("Location is over");
+  });
+
+  test("shows the status badge and dashed ring instead of the clock when a status is set", async () => {
+    root = createRoot();
+    const staleTimestamp = new Date(Date.now() - 3_600_000).toISOString();
+    await renderPin(staleTimestamp);
+    expect(JSON.stringify(root.container.toJSON())).toContain("Location is over 10 minutes old");
+
+    circles = [];
+    await renderPin(staleTimestamp, "cantLocate");
+    const cantLocate = JSON.stringify(root.container.toJSON());
+    expect(cantLocate).toContain("Location unknown");
+    expect(cantLocate).not.toContain("Location is over");
+    expect(cantLocate).not.toContain("Can’t read location");
+    expect(circles.map((circle) => circle.strokeDasharray)).toEqual(["5 4"]);
+
+    circles = [];
+    await renderPin(staleTimestamp, "cantRead");
+    const cantRead = JSON.stringify(root.container.toJSON());
+    expect(cantRead).toContain("Can’t read location");
+    expect(cantRead).not.toContain("Location is over");
+    expect(cantRead).not.toContain("Location unknown");
+    expect(circles.map((circle) => circle.strokeDasharray)).toEqual(["5 4"]);
   });
 });

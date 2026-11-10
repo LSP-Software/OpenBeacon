@@ -16,7 +16,7 @@ export const classifyMapPeople = ({
     name: string;
     members: readonly { image: string | null; name: string; userId: string }[];
   }[];
-  keyAccess: ReadonlyMap<string, "available" | "missing" | "unavailable">;
+  keyAccess: ReadonlyMap<string, "available" | "failed" | "missing" | "unavailable">;
   markers: readonly LiveMapMarker[];
   now: number;
   selfUserId: string;
@@ -25,6 +25,7 @@ export const classifyMapPeople = ({
   const people: MapPeople = {
     cantLocate: [],
     cantRead: [],
+    connectionLost: status.connection === "failing",
     finding: [],
     outOfDate: [],
     upToDate: [],
@@ -41,7 +42,7 @@ export const classifyMapPeople = ({
   );
   const loadStatus = (groupId: string) =>
     status.groups[groupId] ?? (status.membership === "failed" ? "failed" : "loading");
-  const handled = new Set([selfUserId, ...markers.map((marker) => marker.userId)]);
+  const handled = new Set(markers.map((marker) => marker.userId));
 
   for (const group of groups) {
     for (const member of group.members) {
@@ -55,6 +56,7 @@ export const classifyMapPeople = ({
         groupNames: memberGroups.map((item) => item.name),
         image: member.image,
         initials: initialsFromName(member.name),
+        isSelf: member.userId === selfUserId,
         name: member.name,
         userId: member.userId,
       };
@@ -65,7 +67,13 @@ export const classifyMapPeople = ({
         people.finding.push(person);
         continue;
       }
-      if (memberGroups.some((item) => loadStatus(item.id) === "failed")) {
+      if (
+        memberGroups.some(
+          (item) =>
+            keyAccess.get(item.id) === "failed" ||
+            (keyAccess.get(item.id) !== "missing" && loadStatus(item.id) === "failed"),
+        )
+      ) {
         people.waiting.push(person);
         continue;
       }
@@ -75,7 +83,7 @@ export const classifyMapPeople = ({
         undecryptable.has(JSON.stringify([item.id, member.userId])),
       );
       const unreadableGroup = keyGroup ?? pointGroup;
-      if (unreadableGroup) {
+      if (unreadableGroup && !person.isSelf) {
         people.cantRead.push({
           ...person,
           groupId: unreadableGroup.id,
@@ -89,18 +97,16 @@ export const classifyMapPeople = ({
     }
   }
 
-  const byName = (first: { name: string }, second: { name: string }) =>
-    first.name.localeCompare(second.name);
-  people.upToDate.sort(
-    (first, second) => Number(second.isSelf) - Number(first.isSelf) || byName(first, second),
-  );
-  people.outOfDate.sort(
-    (first, second) => Number(second.isSelf) - Number(first.isSelf) || byName(first, second),
-  );
-  people.cantLocate.sort(byName);
-  people.cantRead.sort(byName);
-  people.finding.sort(byName);
-  people.waiting.sort(byName);
+  const selfFirstThenByName = (
+    first: { isSelf: boolean; name: string },
+    second: { isSelf: boolean; name: string },
+  ) => Number(second.isSelf) - Number(first.isSelf) || first.name.localeCompare(second.name);
+  people.upToDate.sort(selfFirstThenByName);
+  people.outOfDate.sort(selfFirstThenByName);
+  people.cantLocate.sort(selfFirstThenByName);
+  people.cantRead.sort(selfFirstThenByName);
+  people.finding.sort(selfFirstThenByName);
+  people.waiting.sort(selfFirstThenByName);
 
   return people;
 };

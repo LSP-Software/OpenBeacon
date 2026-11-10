@@ -1013,12 +1013,18 @@ describe("createMapTrackingSession", () => {
 describe("createMapTrackingSession status", () => {
   test("starts loading and marks the membership and group loaded after the first fetch", async () => {
     const { session } = createSession();
-    expect(session.getStatus()).toEqual({ groups: {}, membership: "loading", undecryptable: [] });
+    expect(session.getStatus()).toEqual({
+      connection: "ok",
+      groups: {},
+      membership: "loading",
+      undecryptable: [],
+    });
 
     session.setActive(true);
     await session.tick();
 
     expect(session.getStatus()).toEqual({
+      connection: "ok",
       groups: { "group-1": "loaded" },
       membership: "loaded",
       undecryptable: [],
@@ -1071,6 +1077,78 @@ describe("createMapTrackingSession status", () => {
     await session.tick();
 
     expect(session.getStatus().membership).toBe("failed");
+    expect(session.getStatus().connection).toBe("failing");
+  });
+
+  test("flags the connection when fetches start failing after a successful load and clears it once a tick succeeds", async () => {
+    let offline = false;
+    const { session } = createSession({
+      getLatest: async () => {
+        if (offline) throw new Error("offline");
+        return { points: [] };
+      },
+    });
+    const seen: string[] = [];
+    session.subscribe(() => {
+      seen.push(session.getStatus().connection);
+    });
+
+    session.setActive(true);
+    await session.tick();
+    expect(session.getStatus().connection).toBe("ok");
+
+    offline = true;
+    await session.tick();
+    expect(session.getStatus()).toMatchObject({
+      connection: "failing",
+      groups: { "group-1": "loaded" },
+    });
+
+    offline = false;
+    await session.tick();
+    expect(session.getStatus().connection).toBe("ok");
+    expect(seen.slice(-2)).toEqual(["failing", "ok"]);
+  });
+
+  test("flags the connection when the group list fails after it loaded once", async () => {
+    let offline = false;
+    const { session } = createSession({
+      listGroups: async () => {
+        if (offline) throw new Error("offline");
+        return [{ id: "group-1" }];
+      },
+    });
+
+    session.setActive(true);
+    await session.tick();
+    offline = true;
+    await session.tick();
+    expect(session.getStatus()).toMatchObject({ connection: "failing", membership: "loaded" });
+
+    offline = false;
+    await session.tick();
+    expect(session.getStatus().connection).toBe("ok");
+  });
+
+  test("stays failing while any one group's latest fetch failed", async () => {
+    let failing = new Set(["group-1", "group-2"]);
+    const { session } = createSession({
+      getLatest: async (groupId) => {
+        if (failing.has(groupId)) throw new Error("offline");
+        return { points: [] };
+      },
+      listGroups: async () => [{ id: "group-1" }, { id: "group-2" }],
+    });
+
+    session.setActive(true);
+    await session.tick();
+    failing = new Set(["group-2"]);
+    await session.tick();
+    expect(session.getStatus().connection).toBe("failing");
+
+    failing = new Set();
+    await session.tick();
+    expect(session.getStatus().connection).toBe("ok");
   });
 
   test("records senders whose latest point can't be decrypted and clears them once one decrypts", async () => {
@@ -1148,6 +1226,7 @@ describe("createMapTrackingSession status", () => {
     await session.tick();
 
     expect(session.getStatus()).toEqual({
+      connection: "ok",
       groups: { "group-2": "loaded" },
       membership: "loaded",
       undecryptable: [{ groupId: "group-2", userId: "user-1" }],

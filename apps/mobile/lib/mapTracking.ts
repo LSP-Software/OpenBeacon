@@ -82,10 +82,21 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   const groupLoadStatus = new Map<string, "loaded" | "failed">();
   const undecryptableByGroup = new Map<string, Set<string>>();
   let membershipStatus: MapTrackingStatus["membership"] = "loading";
-  let status: MapTrackingStatus = { groups: {}, membership: "loading", undecryptable: [] };
+  let membershipFailing = false;
+  const failingGroups = new Set<string>();
+  let status: MapTrackingStatus = {
+    connection: "ok",
+    groups: {},
+    membership: "loading",
+    undecryptable: [],
+  };
+
+  const currentConnection = (): MapTrackingStatus["connection"] =>
+    membershipFailing || failingGroups.size > 0 ? "failing" : "ok";
 
   const refreshStatus = () => {
     status = {
+      connection: currentConnection(),
       groups: Object.fromEntries(groupLoadStatus),
       membership: membershipStatus,
       undecryptable: [...undecryptableByGroup].flatMap(([groupId, userIds]) =>
@@ -94,14 +105,26 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     };
   };
 
-  const setGroupLoadStatus = (groupId: string, next: "loaded" | "failed") => {
-    const current = groupLoadStatus.get(groupId);
-    if (current === next || (current === "loaded" && next === "failed")) {
+  const publishStatus = (loadChanged: boolean) => {
+    if (!loadChanged && currentConnection() === status.connection) {
       return;
     }
-    groupLoadStatus.set(groupId, next);
     refreshStatus();
     notify();
+  };
+
+  const recordGroupResult = (groupId: string, outcome: "loaded" | "failed") => {
+    const current = groupLoadStatus.get(groupId);
+    const loadChanged = current !== outcome && current !== "loaded";
+    if (loadChanged) {
+      groupLoadStatus.set(groupId, outcome);
+    }
+    if (outcome === "failed") {
+      failingGroups.add(groupId);
+    } else {
+      failingGroups.delete(groupId);
+    }
+    publishStatus(loadChanged);
   };
 
   const notify = () => {
@@ -159,6 +182,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     groupStates.delete(groupId);
     positionsByGroup.delete(groupId);
     groupLoadStatus.delete(groupId);
+    failingGroups.delete(groupId);
     undecryptableByGroup.delete(groupId);
     refreshStatus();
     if (clearKeys) {
@@ -377,21 +401,21 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
 
     if (result.error) {
       markGroupFailure(groupId, runId);
-      setGroupLoadStatus(groupId, "failed");
+      recordGroupResult(groupId, "failed");
       return;
     }
 
     markGroupSuccess(groupId, runId);
-    setGroupLoadStatus(groupId, "loaded");
+    recordGroupResult(groupId, "loaded");
   };
 
-  const setMembershipStatus = (next: MapTrackingStatus["membership"]) => {
-    if (membershipStatus === next || (membershipStatus === "loaded" && next === "failed")) {
-      return;
+  const recordMembershipResult = (outcome: "loaded" | "failed") => {
+    const loadChanged = membershipStatus !== outcome && membershipStatus !== "loaded";
+    if (loadChanged) {
+      membershipStatus = outcome;
     }
-    membershipStatus = next;
-    refreshStatus();
-    notify();
+    membershipFailing = outcome === "failed";
+    publishStatus(loadChanged);
   };
 
   const syncMembership = async () => {
@@ -401,7 +425,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
 
     if (groupsResult.error) {
-      setMembershipStatus("failed");
+      recordMembershipResult("failed");
       return null;
     }
 
@@ -423,7 +447,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     for (const { id: groupId } of groups) {
       ensureGroupState(groupId);
     }
-    setMembershipStatus("loaded");
+    recordMembershipResult("loaded");
 
     return groups;
   };

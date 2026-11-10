@@ -1,7 +1,8 @@
+import { useIsFocused } from "@react-navigation/native";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { AppState, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeMap } from "../../../components/map/NativeMap.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
@@ -31,28 +32,58 @@ const MapScreen = () => {
   const { data: session } = authClient.useSession();
   const { data: groupsQueryData } = useQuery(trpc.groupMembership.list.queryOptions());
   const groups = useMembershipSnapshot(groupsQueryData);
-  const nicknameQueries = useQueries({
+  const nicknames = useQueries({
     queries: (groups ?? []).map((group) => ({
       queryKey: ["personalNicknames", group.id, session?.user.id],
       enabled: !!session?.user.id,
       queryFn: () => loadPersonalNicknames(group.id, session!.user.id),
     })),
+    combine: (results) => results.map((result) => result.data),
   });
-  const groupsWithNicknames = groups?.map((group, index) => ({
-    ...group,
-    members: group.members.map((member) => ({
-      ...member,
-      name: nicknameQueries[index]?.data?.[member.id]?.name ?? member.name,
-    })),
-  }));
+  const groupsWithNicknames = useMemo(
+    () =>
+      groups?.map((group, index) => ({
+        ...group,
+        members: group.members.map((member) => ({
+          ...member,
+          name: nicknames[index]?.[member.id]?.name ?? member.name,
+        })),
+      })),
+    [groups, nicknames],
+  );
   const keyAccess = useCurrentGroupKeyAccess(
     groups?.map((group) => group.id) ?? [],
     session?.user.id,
   );
+  const keyAccessSignature = keyAccess
+    .map((access) => access.data?.current ?? (access.isError ? "failed" : ""))
+    .join(",");
+  const keyAccessByGroupId = useMemo(() => {
+    const statuses = keyAccessSignature.split(",");
+    const byGroupId = new Map<string, "available" | "failed" | "missing" | "unavailable">();
+    groups?.forEach((group, index) => {
+      const status = (["available", "failed", "missing", "unavailable"] as const).find(
+        (item) => item === statuses[index],
+      );
+      if (status) byGroupId.set(group.id, status);
+    });
+    return byGroupId;
+  }, [groups, keyAccessSignature]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selfUserId = session?.user.id ?? "";
   const peopleTrayKey = `map.peopleTrayOpen.${selfUserId}`;
-  const [peopleTrayOpen, setPeopleTrayOpen] = useState<boolean | null>(null);
+  const storedPeopleTrayOpen = useMemo(
+    () => storage.getBoolean(peopleTrayKey) ?? false,
+    [peopleTrayKey],
+  );
+  const [peopleTrayOverride, setPeopleTrayOverride] = useState<{
+    open: boolean;
+    userId: string;
+  } | null>(null);
+  const peopleTrayOpen =
+    peopleTrayOverride?.userId === selfUserId ? peopleTrayOverride.open : storedPeopleTrayOpen;
+  const isFocused = useIsFocused();
+  const [appActive, setAppActive] = useState(() => AppState.currentState === "active");
   const [now, setNow] = useState(() => Date.now());
   const selfDeviceLocation = useSelfDeviceLocation(selfUserId.length > 0);
   const lastSentAt = useTrackingUploadTime(selfUserId, groups?.map((group) => group.id) ?? []);
@@ -117,13 +148,6 @@ const MapScreen = () => {
       return null;
     }
 
-    const keyAccessByGroupId = new Map<string, "available" | "missing" | "unavailable">();
-    groupsWithNicknames.forEach((group, index) => {
-      const access = keyAccess[index];
-      const current = access?.data?.current ?? (access?.isError ? "unavailable" : undefined);
-      if (current) keyAccessByGroupId.set(group.id, current);
-    });
-
     return classifyMapPeople({
       groups: groupsWithNicknames,
       keyAccess: keyAccessByGroupId,
@@ -132,12 +156,21 @@ const MapScreen = () => {
       selfUserId,
       status: trackingStatus,
     });
-  }, [groupsWithNicknames, keyAccess, markers, now, selfUserId, trackingStatus]);
+  }, [groupsWithNicknames, keyAccessByGroupId, markers, now, selfUserId, trackingStatus]);
 
   useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      setAppActive(state === "active");
+    });
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!isFocused || !appActive || !peopleTrayOpen) return;
+    setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(timer);
-  }, []);
+  }, [appActive, isFocused, peopleTrayOpen]);
 
   useEffect(() => {
     if (selectedUserId && !markers.some((marker) => marker.userId === selectedUserId)) {
@@ -154,10 +187,10 @@ const MapScreen = () => {
         markers={markers}
         now={now}
         people={people}
-        peopleTrayOpen={peopleTrayOpen ?? storage.getBoolean(peopleTrayKey) ?? false}
+        peopleTrayOpen={peopleTrayOpen}
         onPeopleTrayOpenChange={(open) => {
           storage.set(peopleTrayKey, open);
-          setPeopleTrayOpen(open);
+          setPeopleTrayOverride({ open, userId: selfUserId });
         }}
         selectedUserId={selectedUserId}
         onSelectUserId={(userId) => {

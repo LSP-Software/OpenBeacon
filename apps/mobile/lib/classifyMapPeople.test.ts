@@ -23,6 +23,7 @@ const marker = (userId: string, minutesAgo: number | null, isSelf = false): Live
 });
 
 const loaded: MapTrackingStatus = {
+  connection: "ok",
   groups: { family: "loaded", club: "loaded" },
   membership: "loaded",
   undecryptable: [],
@@ -105,6 +106,7 @@ describe("classifyMapPeople", () => {
         groupNames: ["Climbing club"],
         image: null,
         initials: "jo",
+        isSelf: false,
         name: "josh",
         reason: "groupKey",
         userId: "josh",
@@ -170,21 +172,87 @@ describe("classifyMapPeople", () => {
       markers: [],
       now: NOW,
       selfUserId: "me",
-      status: { groups: {}, membership: "failed", undecryptable: [] },
+      status: { connection: "failing", groups: {}, membership: "failed", undecryptable: [] },
     });
-    expect(sectionsOf(listFailed).waiting).toEqual(["mum"]);
+    expect(sectionsOf(listFailed).waiting).toEqual(["me", "mum"]);
+    expect(listFailed.connectionLost).toBe(true);
   });
 
-  test("leaves the signed-in user out when they have no marker", () => {
+  test("ignores a failed fetch for a group whose key is missing, since it can't locate anyone", () => {
     const people = classifyMapPeople({
-      groups: [family],
-      keyAccess: available,
+      groups: [family, club],
+      keyAccess: new Map([
+        ["family", "available"],
+        ["club", "missing"],
+      ]),
+      markers: [marker("me", 0, true)],
+      now: NOW,
+      selfUserId: "me",
+      status: { ...loaded, groups: { family: "loaded", club: "failed" } },
+    });
+
+    expect(sectionsOf(people)).toMatchObject({ cantRead: ["josh", "mum"], waiting: [] });
+    expect(people.cantRead.map(({ reason }) => reason)).toEqual(["groupKey", "groupKey"]);
+  });
+
+  test("still finds people while a key-missing group is on its first fetch", () => {
+    const people = classifyMapPeople({
+      groups: [club],
+      keyAccess: new Map([["club", "missing"]]),
       markers: [],
+      now: NOW,
+      selfUserId: "me",
+      status: { ...loaded, groups: {} },
+    });
+
+    expect(sectionsOf(people).finding).toEqual(["josh", "mum"]);
+  });
+
+  test("waits rather than calling people missing when their group's key check failed", () => {
+    const people = classifyMapPeople({
+      groups: [family, club],
+      keyAccess: new Map([
+        ["family", "available"],
+        ["club", "failed"],
+      ]),
+      markers: [marker("me", 0, true)],
       now: NOW,
       selfUserId: "me",
       status: loaded,
     });
 
-    expect(sectionsOf(people).cantLocate).toEqual(["mum"]);
+    expect(sectionsOf(people)).toMatchObject({
+      cantLocate: [],
+      cantRead: [],
+      waiting: ["josh", "mum"],
+    });
+  });
+
+  test("holds the signed-in user in finding like everyone else, then lists them first in can't locate", () => {
+    const familyWithZoe = {
+      id: "family",
+      name: "Family",
+      members: [member("me", "Zoe"), member("mum", "Ann")],
+    };
+    const loading = classifyMapPeople({
+      groups: [familyWithZoe],
+      keyAccess: available,
+      markers: [],
+      now: NOW,
+      selfUserId: "me",
+      status: { ...loaded, groups: {} },
+    });
+    expect(sectionsOf(loading)).toMatchObject({ cantLocate: [], finding: ["me", "mum"] });
+
+    const settled = classifyMapPeople({
+      groups: [familyWithZoe],
+      keyAccess: new Map([["family", "missing"]]),
+      markers: [],
+      now: NOW,
+      selfUserId: "me",
+      status: loaded,
+    });
+    expect(sectionsOf(settled)).toMatchObject({ cantLocate: ["me"], cantRead: ["mum"] });
+    expect(settled.cantLocate[0]).toMatchObject({ isSelf: true, groupNames: ["Family"] });
   });
 });

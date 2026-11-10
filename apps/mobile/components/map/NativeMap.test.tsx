@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import React, { act } from "react";
 import { createRoot, type Root } from "test-renderer";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
+import type { MapPeople, MapPerson } from "../../lib/mapPeopleTypes.ts";
 import { nextMapMarkerSelection } from "../../lib/mapMarkerSelection.ts";
 import { createReactNativeTestModule } from "../../test/reactNativeTestModule.ts";
 import {
@@ -252,7 +253,8 @@ mock.module("./LiveMapPersonSheet.tsx", () => ({
 }));
 
 mock.module("./LiveMapPeopleTray.tsx", () => ({
-  LiveMapPeopleTray: () => React.createElement("live-map-people-tray"),
+  LiveMapPeopleTray: ({ onSelectPerson }: { onSelectPerson: (userId: string) => void }) =>
+    React.createElement("live-map-people-tray", { onSelectPerson }),
 }));
 
 mock.module("./LiveMapMissingPersonSheet.tsx", () => ({
@@ -308,13 +310,7 @@ const emitUserPanAfterProgrammaticCamera = () => {
   }
 };
 
-const renderNativeMap = async (
-  props: {
-    markers?: readonly LiveMapMarker[];
-    onSelectUserId?: (userId: string | null) => void;
-    selectedUserId?: string | null;
-  } = {},
-) => {
+const renderNativeMap = async (props: React.ComponentProps<typeof NativeMap> = {}) => {
   if (!root) {
     root = createRoot();
   }
@@ -2328,5 +2324,136 @@ describe("NativeMap integration harness", () => {
           (command.stop as { zoomLevel?: number }).zoomLevel === 14,
       ),
     ).toBe(true);
+  });
+
+  describe("people tray", () => {
+    const person = (userId: string, name: string): MapPerson => ({
+      groupNames: ["Family"],
+      image: null,
+      initials: name.slice(0, 2).toUpperCase(),
+      isSelf: false,
+      name,
+      userId,
+    });
+    const createPeople = (overrides: Partial<MapPeople> = {}): MapPeople => ({
+      cantLocate: [],
+      cantRead: [],
+      connectionLost: false,
+      finding: [],
+      outOfDate: [],
+      upToDate: [],
+      waiting: [],
+      ...overrides,
+    });
+    const peopleButton = () =>
+      root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" &&
+          String(instance.props["accessibilityLabel"]).startsWith("People"),
+      )[0];
+    const trays = () =>
+      root?.container.queryAll((instance) => instance.type === "live-map-people-tray") ?? [];
+
+    test("shows the people button before membership has loaded", async () => {
+      await renderNativeMap();
+
+      expect(peopleButton()?.props["accessibilityLabel"]).toBe("People");
+    });
+
+    test("opens the tray from the people button once people are known", async () => {
+      const openChanges: boolean[] = [];
+      const onPeopleTrayOpenChange = (open: boolean) => {
+        openChanges.push(open);
+      };
+      await renderNativeMap({ onPeopleTrayOpenChange });
+
+      await act(async () => (peopleButton()?.props["onPress"] as (() => void) | undefined)?.());
+      expect(openChanges).toEqual([true]);
+
+      await renderNativeMap({ onPeopleTrayOpenChange, peopleTrayOpen: true });
+      expect(trays()).toHaveLength(0);
+
+      await renderNativeMap({
+        onPeopleTrayOpenChange,
+        people: createPeople({ cantLocate: [person("bob", "Bob")] }),
+        peopleTrayOpen: true,
+      });
+      expect(trays()).toHaveLength(1);
+
+      await act(async () => (peopleButton()?.props["onPress"] as (() => void) | undefined)?.());
+      expect(openChanges).toEqual([true, false]);
+    });
+
+    test("hides the tray while a person sheet is open", async () => {
+      const alice = createLiveMapMarkerFixture({ userId: "alice" });
+      await renderNativeMap({
+        markers: [alice],
+        people: createPeople({ upToDate: [alice] }),
+        peopleTrayOpen: true,
+        selectedUserId: "alice",
+      });
+
+      expect(trays()).toHaveLength(0);
+      expect(
+        root?.container.queryAll((instance) => instance.type === "live-map-person-sheet"),
+      ).toHaveLength(1);
+    });
+
+    test("counts people who can't be located or read once nobody is still being found", async () => {
+      const unreadable = { ...person("carol", "Carol"), groupId: "g1", groupName: "Family" };
+      const needsAttention = {
+        cantLocate: [person("bob", "Bob")],
+        cantRead: [{ ...unreadable, reason: "groupKey" as const }],
+      };
+
+      await renderNativeMap({
+        people: createPeople({ ...needsAttention, finding: [person("dan", "Dan")] }),
+      });
+      expect(peopleButton()?.props["accessibilityLabel"]).toBe("People");
+
+      await renderNativeMap({ people: createPeople(needsAttention) });
+      expect(peopleButton()?.props["accessibilityLabel"]).toBe("People, 2 need attention");
+    });
+
+    test("swaps the missing-person sheet for the person sheet when they get a location", async () => {
+      const selections: Array<string | null> = [];
+      const onSelectUserId = (userId: string | null) => {
+        selections.push(userId);
+      };
+      const bob = person("bob", "Bob");
+      await renderNativeMap({
+        onSelectUserId,
+        people: createPeople({ cantLocate: [bob] }),
+        peopleTrayOpen: true,
+      });
+      await act(async () =>
+        (trays()[0]?.props["onSelectPerson"] as ((userId: string) => void) | undefined)?.("bob"),
+      );
+      const missingSheets = () =>
+        root?.container.queryAll((instance) => instance.type === "live-map-missing-person-sheet") ??
+        [];
+      expect(missingSheets()).toHaveLength(1);
+      expect(trays()).toHaveLength(0);
+
+      const bobMarker = createLiveMapMarkerFixture({ userId: "bob", name: "Bob" });
+      await renderNativeMap({
+        markers: [bobMarker],
+        onSelectUserId,
+        people: createPeople({ upToDate: [bobMarker] }),
+        peopleTrayOpen: true,
+      });
+      await flushEffects();
+
+      expect(missingSheets()).toHaveLength(0);
+      expect(selections.at(-1)).toBe("bob");
+      expect(
+        getNativeMapCameraCommands().some(
+          (command) =>
+            command.type === "setCamera" &&
+            (command.stop as { centerCoordinate?: [number, number] }).centerCoordinate?.[0] ===
+              bobMarker.longitude,
+        ),
+      ).toBe(true);
+    });
   });
 });

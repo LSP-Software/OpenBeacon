@@ -4,9 +4,12 @@ export type MapPerson = {
   groupNames: string[];
   image: string | null;
   initials: string;
+  isSelf: boolean;
   name: string;
   userId: string;
 };
+
+export type MapPersonStatus = "cantLocate" | "cantRead";
 
 export type MapUnreadablePerson = MapPerson & {
   groupId: string;
@@ -16,6 +19,7 @@ export type MapUnreadablePerson = MapPerson & {
 
 export type MapPeople = {
   cantLocate: MapPerson[];
+  connectionLost: boolean;
   cantRead: MapUnreadablePerson[];
   finding: MapPerson[];
   outOfDate: LiveMapMarker[];

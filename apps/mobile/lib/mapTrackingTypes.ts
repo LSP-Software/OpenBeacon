@@ -40,6 +40,7 @@ export type MapTrackingDeps = {
 };
 
 export type MapTrackingStatus = {
+  connection: "ok" | "failing";
   groups: Readonly<Record<string, "loaded" | "failed">>;
   membership: "loading" | "loaded" | "failed";
   undecryptable: readonly { groupId: string; userId: string }[];

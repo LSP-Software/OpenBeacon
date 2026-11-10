@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { AppState, View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
+import type { MapPersonStatus } from "../../lib/mapPeopleTypes.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Text } from "../ui/Text.tsx";
 import { Icon } from "../ui/Icon.tsx";
@@ -48,7 +49,7 @@ export const LiveMapMarkerPin = ({
   onBitmapContentChange?: () => void;
   ringColor: string;
   ringColors?: string[] | undefined;
-  status?: "cantLocate" | "cantRead" | undefined;
+  status?: MapPersonStatus | null | undefined;
   timestamp: string | null;
 }) => {
   const [, setTick] = useState(0);
@@ -164,7 +165,7 @@ export const LiveMapMarkerPin = ({
               cy={22}
               r={20.5}
               fill="none"
-              stroke="#A39DAE"
+              stroke="#8A8299"
               strokeWidth={3}
               strokeDasharray="5 4"
             />
@@ -197,8 +198,8 @@ export const LiveMapMarkerPin = ({
           </View>
         ) : status === "cantRead" ? (
           <View
-            accessibilityLabel="Can't read location"
-            className="absolute bottom-0 left-0 size-5 items-center justify-center rounded-full border border-white bg-destructive"
+            accessibilityLabel="Can’t read location"
+            className="absolute bottom-0 left-0 size-5 items-center justify-center rounded-full border border-border bg-destructive"
           >
             <Text className="text-[12px] font-bold leading-[14px] text-destructive-foreground">
               !

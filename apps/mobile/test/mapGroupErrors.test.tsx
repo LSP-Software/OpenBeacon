@@ -1,18 +1,36 @@
 import { expect, mock, test } from "bun:test";
 import React, { act } from "react";
 import { createRoot } from "test-renderer";
+import type { MapPeople } from "../lib/mapPeopleTypes.ts";
+import type { MapTrackingStatus } from "../lib/mapTrackingTypes.ts";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-let groups: { id: string; name: string; members: never[] }[] = [];
-let access: {
-  data: {
-    current: "available" | "missing" | "unavailable";
-    history: "complete" | { partialFrom: Date };
-  };
+let groups: {
+  id: string;
+  name: string;
+  members: { id: string; image: null; name: string; userId: string }[];
 }[] = [];
+let access: (
+  | {
+      data: {
+        current: "available" | "missing" | "unavailable";
+        history: "complete" | { partialFrom: Date };
+      };
+      isError: false;
+    }
+  | { data: undefined; isError: true }
+)[] = [];
+let sessionUser: { id: string; image: null; name: string } | null = null;
+let trackingStatus: MapTrackingStatus = {
+  connection: "ok",
+  groups: {},
+  membership: "loading",
+  undecryptable: [],
+};
+let mapProps: { people: MapPeople | null } | null = null;
 let queueEviction: {
   owner: string;
   pointCount: number;
@@ -44,7 +62,9 @@ mock.module("expo-router", () => ({
   Link: ({ children, href }: { children: React.ReactNode; href: unknown }) =>
     React.createElement("a", { href }, children),
 }));
+mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("react-native", () => ({
+  AppState: { currentState: "active", addEventListener: () => ({ remove: () => {} }) },
   View: ({ children }: { children: React.ReactNode }) =>
     React.createElement("view", null, children),
   ScrollView: ({ children }: { children: React.ReactNode }) =>
@@ -53,7 +73,12 @@ mock.module("react-native", () => ({
 mock.module("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0 }),
 }));
-mock.module("../components/map/NativeMap.tsx", () => ({ NativeMap: () => null }));
+mock.module("../components/map/NativeMap.tsx", () => ({
+  NativeMap: (props: { people: MapPeople | null }) => {
+    mapProps = props;
+    return null;
+  },
+}));
 mock.module("../components/ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) =>
     React.createElement("text", null, children),
@@ -61,10 +86,7 @@ mock.module("../components/ui/Text.tsx", () => ({
 mock.module("../hooks/useGroupColorRevision.ts", () => ({ useGroupColorRevision: () => 0 }));
 mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useCurrentGroupKeyAccess: () => access }));
 mock.module("../hooks/useMapLivePositions.ts", () => ({
-  useMapLivePositions: () => ({
-    positions: [],
-    status: { groups: {}, membership: "loading", undecryptable: [] },
-  }),
+  useMapLivePositions: () => ({ positions: [], status: trackingStatus }),
 }));
 mock.module("../hooks/useMembershipSnapshot.ts", () => ({ useMembershipSnapshot: () => groups }));
 mock.module("../hooks/useTrackingUploadTime.ts", () => ({ useTrackingUploadTime: () => null }));
@@ -73,7 +95,7 @@ mock.module("../lib/api.ts", () => ({
   trpc: { groupMembership: { list: { queryOptions: () => ({}) } } },
 }));
 mock.module("../lib/auth-client.ts", () => ({
-  authClient: { useSession: () => ({ data: null }) },
+  authClient: { useSession: () => ({ data: sessionUser ? { user: sessionUser } : null }) },
 }));
 mock.module("../lib/resolveSelfDeviceLocationFallback.ts", () => ({
   resolveSelfDeviceLocationFallback: () => null,
@@ -100,10 +122,19 @@ test("shows individual group links for up to two missing keys and a groups link 
   for (const count of [0, 1, 2, 3]) {
     const partial = { partialFrom: new Date(0) };
     access = [
-      { data: { current: count > 0 ? "missing" : "available", history: "complete" } },
-      { data: { current: "available", history: partial } },
-      { data: { current: count > 1 ? "missing" : "available", history: partial } },
-      { data: { current: count > 2 ? "missing" : "available", history: "complete" } },
+      {
+        data: { current: count > 0 ? "missing" : "available", history: "complete" },
+        isError: false,
+      },
+      { data: { current: "available", history: partial }, isError: false },
+      {
+        data: { current: count > 1 ? "missing" : "available", history: partial },
+        isError: false,
+      },
+      {
+        data: { current: count > 2 ? "missing" : "available", history: "complete" },
+        isError: false,
+      },
     ];
     await act(async () => root.render(<MapScreen />));
     const rendered = JSON.stringify(root.container.toJSON());
@@ -143,5 +174,32 @@ test("shows removed offline history until the user dismisses it", async () => {
   if (!dismiss) throw new Error("Dismiss button not found");
   await act(async () => (dismiss.props as { onPress: () => void }).onPress());
   expect(dismissedEvictions).toEqual([queueEviction]);
+  await act(async () => root.unmount());
+});
+
+test("keeps members waiting instead of missing when their group's key check errored", async () => {
+  const member = (id: string) => ({ id, image: null, name: id, userId: id });
+  groups = [
+    { id: "family", name: "Family", members: [member("me"), member("mum")] },
+    { id: "club", name: "Club", members: [member("me"), member("josh")] },
+  ];
+  access = [
+    { data: { current: "available", history: "complete" }, isError: false },
+    { data: undefined, isError: true },
+  ];
+  sessionUser = { id: "me", image: null, name: "Me" };
+  trackingStatus = {
+    connection: "ok",
+    groups: { family: "loaded", club: "loaded" },
+    membership: "loaded",
+    undecryptable: [],
+  };
+  const root = createRoot();
+  await act(async () => root.render(<MapScreen />));
+
+  const people = mapProps?.people;
+  expect(people?.waiting.map(({ userId }) => userId)).toEqual(["me", "josh"]);
+  expect(people?.cantLocate.map(({ userId }) => userId)).toEqual(["mum"]);
+  expect(people?.cantRead).toEqual([]);
   await act(async () => root.unmount());
 });

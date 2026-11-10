@@ -232,7 +232,7 @@ export const useLiveMapCamera = ({
     fitMarkersAndPreserveCamera({ markersToFit, padding: fitEveryonePadding });
   };
 
-  const goToEdgeMarker = (userId: string) => {
+  const goToPerson = (userId: string) => {
     const marker = markersRef.current.find((item) => item.userId === userId);
     if (!marker) return;
     edge.suppress([userId]);
@@ -448,7 +448,7 @@ export const useLiveMapCamera = ({
     cameraPadding,
     fitEveryoneInFrame,
     goToCurrentLocation,
-    goToEdgeMarker,
+    goToPerson,
     fitEdgeGroup,
     zoomIntoStack,
     maybeSuspendFollowFromRegionChange,

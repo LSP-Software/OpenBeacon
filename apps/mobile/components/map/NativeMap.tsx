@@ -70,12 +70,9 @@ export const NativeMap = ({
     [...(people?.cantLocate ?? []), ...(people?.cantRead ?? [])].find(
       (person) => person.userId === missingUserId,
     ) ?? null;
-  const isTrayVisible =
-    people !== null &&
-    peopleTrayOpen &&
-    selectedMarker === null &&
-    !isStackSheetOpen &&
-    missingPerson === null;
+  const isTrayOpen =
+    peopleTrayOpen && selectedMarker === null && !isStackSheetOpen && missingUserId === null;
+  const trayPeople = isTrayOpen ? people : null;
   const [trayHeight, setTrayHeight] = useState(0);
   const needsAttentionCount = (people?.cantLocate.length ?? 0) + (people?.cantRead.length ?? 0);
   const showAttentionCount =
@@ -100,7 +97,7 @@ export const NativeMap = ({
         ? "stack"
         : missingPerson
           ? `missing:${missingPerson.userId}`
-          : isTrayVisible
+          : trayPeople
             ? "tray"
             : null),
     topInset: insets.top,
@@ -116,19 +113,20 @@ export const NativeMap = ({
       return group !== undefined && (group.members.length > 1 || edge.isEdgeMarker(group.id));
     },
   });
+  const closeSheets = () => {
+    setStackSheetUserIds(null);
+    setMissingUserId(null);
+    selection.clearSelectionFromReact();
+  };
   const selfMarker = markers.find((marker) => marker.isSelf) ?? null;
   const hasMarkers = markers.length > 0;
   const camera = useLiveMapCamera({
-    bottomOverlayHeight: isTrayVisible ? trayHeight : 0,
+    bottomOverlayHeight: trayPeople ? trayHeight : 0,
     edge,
     mapStyle,
     mapRevision: map.mapRevision,
     markers,
-    onClearSelection: () => {
-      setStackSheetUserIds(null);
-      setMissingUserId(null);
-      selection.clearSelectionFromReact();
-    },
+    onClearSelection: closeSheets,
     onSelectUser: selection.handleAnnotationSelected,
     pmtilesUrl,
     selectedMarker,
@@ -141,7 +139,7 @@ export const NativeMap = ({
     fitEdgeGroup,
     fitEveryoneInFrame,
     goToCurrentLocation,
-    goToEdgeMarker,
+    goToPerson,
     maybeSuspendFollowFromRegionChange,
     zoomIntoStack,
   } = camera;
@@ -158,6 +156,14 @@ export const NativeMap = ({
         Number(first.isSelf) - Number(second.isSelf) ||
         first.name.localeCompare(second.name),
     );
+
+  useEffect(() => {
+    if (missingUserId === null) return;
+    const hasMarker = markers.some((marker) => marker.userId === missingUserId);
+    if (!hasMarker && missingPerson !== null) return;
+    setMissingUserId(null);
+    if (hasMarker) goToPerson(missingUserId);
+  }, [goToPerson, markers, missingPerson, missingUserId]);
 
   const edgeGroupIds = new Set(edgeMarkers.flatMap((chip) => chip.memberIds));
 
@@ -189,7 +195,7 @@ export const NativeMap = ({
       .flatMap((group) => group.members.map((member) => member.userId));
     const [onlyUserId] = userIds;
     if (userIds.length === 1 && onlyUserId !== undefined) {
-      goToEdgeMarker(onlyUserId);
+      goToPerson(onlyUserId);
       return;
     }
     fitEdgeGroup(userIds);
@@ -259,9 +265,7 @@ export const NativeMap = ({
           ) {
             return;
           }
-          setStackSheetUserIds(null);
-          setMissingUserId(null);
-          clearSelectionFromReact();
+          closeSheets();
         }}
         onRegionIsChanging={(feature) => {
           const { bounds, animated, userInteraction, zoom } = feature.nativeEvent;
@@ -409,47 +413,43 @@ export const NativeMap = ({
             ) : null}
           </>
         ) : null}
-        {people ? (
-          <Pressable
-            accessibilityLabel={
-              showAttentionCount ? `People, ${needsAttentionCount} can’t be located` : "People"
+        <Pressable
+          accessibilityLabel={
+            showAttentionCount ? `People, ${needsAttentionCount} need attention` : "People"
+          }
+          accessibilityRole="button"
+          accessibilityState={{ expanded: isTrayOpen }}
+          onPress={() => {
+            if (isTrayOpen) {
+              onPeopleTrayOpenChange?.(false);
+              return;
             }
-            accessibilityRole="button"
-            accessibilityState={{ expanded: isTrayVisible }}
-            onPress={() => {
-              if (isTrayVisible) {
-                onPeopleTrayOpenChange?.(false);
-                return;
-              }
-              setStackSheetUserIds(null);
-              setMissingUserId(null);
-              clearSelectionFromReact();
-              onPeopleTrayOpenChange?.(true);
-            }}
-            className={cn(
-              "size-11 items-center justify-center rounded-full border shadow-sm shadow-black/10",
-              isTrayVisible ? "border-foreground bg-foreground" : "border-border bg-card",
-            )}
-          >
-            <Icon
-              as={UsersIcon}
-              size={20}
-              className={isTrayVisible ? "text-background" : "text-foreground"}
-            />
-            {showAttentionCount ? (
-              <View
-                className={cn(
-                  "absolute -right-1 -top-1 h-5 min-w-5 items-center justify-center rounded-full border-2 border-card px-1",
-                  people.cantRead.length > 0 ? "bg-destructive" : "bg-muted",
-                )}
-              >
-                <Text className="text-[11px] font-bold leading-[13px] text-white">
-                  {needsAttentionCount}
-                </Text>
-              </View>
-            ) : null}
-          </Pressable>
-        ) : null}
+            closeSheets();
+            onPeopleTrayOpenChange?.(true);
+          }}
+          className={cn(
+            "size-11 items-center justify-center rounded-full border shadow-sm shadow-black/10",
+            isTrayOpen ? "border-foreground bg-foreground" : "border-border bg-card",
+          )}
+        >
+          <Icon
+            as={UsersIcon}
+            size={20}
+            className={isTrayOpen ? "text-background" : "text-foreground"}
+          />
+          {showAttentionCount ? (
+            <View
+              className={cn(
+                "absolute -right-1 -top-1 h-5 min-w-5 items-center justify-center rounded-full border-2 border-card px-1",
+                people.cantRead.length > 0 ? "bg-destructive" : "bg-muted",
+              )}
+            >
+              <Text className="text-[11px] font-bold leading-[13px] text-white">
+                {needsAttentionCount}
+              </Text>
+            </View>
+          ) : null}
+        </Pressable>
       </View>
       {selectedMarker ? (
         <LiveMapPersonSheet
@@ -491,22 +491,19 @@ export const NativeMap = ({
             edge.onSheetHeightChange(height);
           }}
         />
-      ) : isTrayVisible ? (
+      ) : trayPeople ? (
         <LiveMapPeopleTray
           now={now}
-          people={people}
+          people={trayPeople}
           onHeightChange={(height) => {
             setTrayHeight(height);
             edge.onSheetHeightChange(height);
           }}
           onSelectPerson={(userId) => {
-            setStackSheetUserIds(null);
             if (markers.some((marker) => marker.userId === userId)) {
-              setMissingUserId(null);
-              goToEdgeMarker(userId);
+              goToPerson(userId);
               return;
             }
-            clearSelectionFromReact();
             setMissingUserId(userId);
           }}
         />

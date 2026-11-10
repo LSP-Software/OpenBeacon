@@ -5,6 +5,13 @@ import { createDefaultMapTrackingDeps } from "../lib/createDefaultMapTrackingDep
 import { createMapTrackingSession } from "../lib/mapTracking.ts";
 import type { LiveMapPosition, MapTrackingStatus } from "../lib/mapTrackingTypes.ts";
 
+const INITIAL_STATUS: MapTrackingStatus = {
+  connection: "ok",
+  groups: {},
+  membership: "loading",
+  undecryptable: [],
+};
+
 export const useLiveTrackingPositions = ({ groupId }: { groupId?: string } = {}) => {
   const isFocused = useIsFocused();
   const [tracking, setTracking] = useState<{
@@ -59,5 +66,3 @@ export const useLiveTrackingPositions = ({ groupId }: { groupId?: string } = {})
 
   return tracking;
 };
-
-const INITIAL_STATUS: MapTrackingStatus = { groups: {}, membership: "loading", undecryptable: [] };
