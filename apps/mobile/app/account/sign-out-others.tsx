@@ -19,7 +19,10 @@ const SignOutOtherSessionsScreen = () => {
   const gate = useIdentityGate();
   const navigation = useNavigation();
   const methods = useQuery(trpc.account.deletionVerificationMethods.queryOptions());
-  const signOutOthers = useMutation(trpc.account.signOutOtherSessions.mutationOptions());
+  const signOutOthers = useMutation({
+    ...trpc.account.signOutOtherSessions.mutationOptions(),
+    networkMode: "always",
+  });
 
   useEffect(() => {
     if (step === "verify" && gate.decision === "ready") {

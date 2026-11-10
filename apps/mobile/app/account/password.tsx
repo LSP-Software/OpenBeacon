@@ -74,12 +74,14 @@ const PasswordScreen = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View className="gap-2">
-            <Text className="text-foreground text-3xl font-bold">Change password</Text>
-            <Text className="text-muted-foreground text-base leading-6">
-              Enter your current password, then choose a new one.
-            </Text>
-          </View>
+          {hasPassword && (
+            <View className="gap-2">
+              <Text className="text-foreground text-3xl font-bold">Change password</Text>
+              <Text className="text-muted-foreground text-base leading-6">
+                Enter your current password, then choose a new one.
+              </Text>
+            </View>
+          )}
 
           {accounts.isError && <Text>Unable to load your sign-in methods. Please try again.</Text>}
           {accounts.data && !hasPassword && (
