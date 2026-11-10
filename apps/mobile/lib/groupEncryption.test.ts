@@ -225,7 +225,7 @@ describe("group encryption helpers", () => {
     });
     const { rotateGroupEpochIfRequired } = await importGroupEncryptionModule();
     await expect(rotateGroupEpochIfRequired("group-a")).rejects.toThrow("Network unavailable");
-    await expect(rotateGroupEpochIfRequired("group-a")).resolves.toBeUndefined();
+    await expect(rotateGroupEpochIfRequired("group-a")).resolves.toBe(true);
     expect(rotationContextMock).toHaveBeenCalledTimes(2);
     const input = rotateMock.mock.calls[1]?.[0] as {
       nextEpoch: { recipientKeys: Array<Parameters<typeof unwrapEpochKey>[0]["wrappedEpochKey"]> };

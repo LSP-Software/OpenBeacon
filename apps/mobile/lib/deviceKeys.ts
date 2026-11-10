@@ -10,12 +10,14 @@ import * as Device from "expo-device";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { trpcClient } from "./api.ts";
+import { baseUrl } from "./base-url.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { storage } from "./storage.ts";
 
 const DEVICE_ID_KEY = "encryption.device.id";
 const DEVICE_PUBLIC_KEY_KEY = "encryption.device.publicKey";
 const DEVICE_PRIVATE_KEY_KEY = "encryption.device.privateKey";
+const REGISTERED_DEVICE_KEY = "encryption.device.registered";
 
 const getScopedDeviceKey = (key: string, userId: string) => `${key}.${userId}`;
 
@@ -204,26 +206,86 @@ const createDeviceKeyContext = async (userId: string) => {
   };
 };
 
-const deviceRegistrations = new Map<
-  string,
-  Promise<NonNullable<Awaited<ReturnType<typeof getStoredDeviceKeyContext>>> & { userId: string }>
->();
+type DeviceRegistration = NonNullable<Awaited<ReturnType<typeof getStoredDeviceKeyContext>>> & {
+  userId: string;
+};
+
+const deviceRegistrations = new Map<string, Promise<DeviceRegistration>>();
 let deviceRegistrationGeneration = 0;
+let registeredDevice: DeviceRegistration | null = null;
+
+export const forgetDeviceKeyRegistration = () => {
+  registeredDevice = null;
+  storage.remove(REGISTERED_DEVICE_KEY);
+};
 
 export const cancelDeviceKeyRegistrations = () => {
   deviceRegistrationGeneration += 1;
   deviceRegistrations.clear();
+  forgetDeviceKeyRegistration();
 };
 
-export const ensureDeviceKeyRegistration = async () => {
+const withStorageTimeout = async <T>(task: Promise<T>) => {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const result = await tryCatch(
+    Promise.race([
+      task,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("Device key storage is unavailable.")), 10_000);
+      }),
+    ]),
+  );
+  clearTimeout(timeout);
+  if (result.error) throw result.error;
+  return result.data;
+};
+
+const loadRegisteredDevice = async (): Promise<DeviceRegistration | null> => {
+  if (registeredDevice) return registeredDevice;
+  const stored = storage.getString(REGISTERED_DEVICE_KEY);
+  if (!stored) return null;
+  const record = await tryCatch(Promise.resolve().then((): unknown => JSON.parse(stored)));
+  if (!Array.isArray(record.data) || record.data[0] !== baseUrl) return null;
+  const [, userId, deviceId, publicKey] = record.data;
+  if (typeof userId !== "string") return null;
+  const context = await withStorageTimeout(getStoredDeviceKeyContext(userId));
+  if (!context || context.deviceId !== deviceId || context.publicKey !== publicKey) return null;
+  return { ...context, userId };
+};
+
+export const getRegisteredDeviceKey = async () => {
   const generation = deviceRegistrationGeneration;
+  const device = await tryCatch(loadRegisteredDevice());
+  if (generation !== deviceRegistrationGeneration || !device.data) return null;
+  registeredDevice = device.data;
+  return device.data;
+};
+
+export const ensureDeviceKeyRegistration = async ({
+  checkOwner = false,
+}: { checkOwner?: boolean } = {}) => {
+  const generation = deviceRegistrationGeneration;
+  const cached = await getRegisteredDeviceKey();
+  if (cached && !checkOwner) return cached;
   const userId = await getCurrentDeviceKeyOwnerId();
   if (generation !== deviceRegistrationGeneration)
     throw new Error("Device registration cancelled.");
+  if (cached?.userId === userId) return cached;
+  if (cached) forgetDeviceKeyRegistration();
   const pending = deviceRegistrations.get(userId);
   if (pending) return pending;
   const task = registerCurrentDeviceKey(userId, generation)
-    .then((context) => ({ ...context, userId }))
+    .then((context) => {
+      const device = { ...context, userId };
+      if (generation === deviceRegistrationGeneration) {
+        registeredDevice = device;
+        storage.set(
+          REGISTERED_DEVICE_KEY,
+          JSON.stringify([baseUrl, userId, context.deviceId, context.publicKey]),
+        );
+      }
+      return device;
+    })
     .finally(() => {
       if (deviceRegistrations.get(userId) === task) deviceRegistrations.delete(userId);
     });
@@ -232,18 +294,7 @@ export const ensureDeviceKeyRegistration = async () => {
 };
 
 const registerCurrentDeviceKey = async (userId: string, generation: number) => {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  const result = await tryCatch(
-    Promise.race([
-      getOrCreateDeviceKeyContext(userId),
-      new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error("Device key storage is unavailable.")), 10_000);
-      }),
-    ]),
-  );
-  clearTimeout(timeout);
-  if (result.error) throw result.error;
-  const context = result.data;
+  const context = await withStorageTimeout(getOrCreateDeviceKeyContext(userId));
   if (generation !== deviceRegistrationGeneration)
     throw new Error("Device registration cancelled.");
   await registerDeviceKey({ ...context, userId });

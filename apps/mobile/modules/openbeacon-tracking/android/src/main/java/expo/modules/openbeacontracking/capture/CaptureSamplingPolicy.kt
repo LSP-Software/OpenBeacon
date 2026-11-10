@@ -4,6 +4,7 @@ data class CaptureSamplingDecision(
   val shouldQueue: Boolean,
   val intervalMs: Long,
   val forceUpload: Boolean,
+  val uploadIntervalMs: Long,
 )
 
 object CaptureSamplingPolicy {
@@ -11,6 +12,8 @@ object CaptureSamplingPolicy {
   const val MOVING_INTERVAL_MS = 10_000L
   const val BATTERY_SAVER_DEFAULT_INTERVAL_MS = 60_000L
   const val BATTERY_SAVER_MOVING_INTERVAL_MS = 20_000L
+  const val UPLOAD_INTERVAL_MS = 60_000L
+  const val BATTERY_SAVER_UPLOAD_INTERVAL_MS = 120_000L
   const val MOVING_SPEED_MPS = 1.0
   const val STATIONARY_DISTANCE_METERS = 25.0
   const val MAX_STATIONARY_SKIP_MS = 300_000L
@@ -42,6 +45,7 @@ object CaptureSamplingPolicy {
         ),
       intervalMs = intervalMs,
       forceUpload = forcedRefresh,
+      uploadIntervalMs = if (batterySaver) BATTERY_SAVER_UPLOAD_INTERVAL_MS else UPLOAD_INTERVAL_MS,
     )
   }
 

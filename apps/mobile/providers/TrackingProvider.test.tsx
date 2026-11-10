@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, mock, test } from "bun:test";
 import { act } from "react";
 import { createRoot, type Root } from "test-renderer";
 import { requestTrackingSync } from "../lib/trackingEvents.ts";
@@ -19,7 +19,8 @@ let sessionState: {
 let appStateListener: ((nextAppState: string) => void) | null = null;
 let reconcileGate: Promise<void> | null = null;
 let recoveryGate: Promise<void> | null = null;
-let reconcileCalls: Array<{ startCapture: boolean }> = [];
+let reconcileCalls: Array<{ startCapture: boolean; force: boolean }> = [];
+let reconcileChanged = false;
 let flushCalls = 0;
 let flushModes: boolean[] = [];
 let revokeCalls = 0;
@@ -36,10 +37,11 @@ let root: Root | null = null;
 const invalidateQueries = mock(async (_input: { queryKey: string[] }) => {});
 const queryClient = { invalidateQueries };
 const trackingService = {
-  reconcileTrackingKeys: async (input: { startCapture: boolean }) => {
+  reconcileTrackingKeys: async (input: { startCapture: boolean; force: boolean }) => {
     reconcileCalls.push(input);
     await reconcileGate;
     if (failReconcile) throw new Error("group key error");
+    return reconcileChanged;
   },
   flushPendingTrackingPoints: async (force = false) => {
     flushCalls += 1;
@@ -137,6 +139,7 @@ describe("TrackingProvider", () => {
     };
     appStateListener = null;
     reconcileCalls = [];
+    reconcileChanged = false;
     reconcileGate = null;
     recoveryGate = null;
     flushCalls = 0;
@@ -166,10 +169,21 @@ describe("TrackingProvider", () => {
   test("reconciles keys and flushes on authenticated launch", async () => {
     await renderProvider();
 
-    expect(reconcileCalls).toEqual([{ startCapture: true }]);
+    expect(reconcileCalls).toEqual([{ startCapture: true, force: true }]);
     expect(flushCalls).toBe(1);
     expect(flushModes).toEqual([true]);
     expect(revokeCalls).toBe(0);
+  });
+
+  test("refreshes key access only when the key check finds something new", async () => {
+    await renderProvider();
+    expect(invalidateQueries).not.toHaveBeenCalled();
+
+    reconcileChanged = true;
+    requestTrackingSync();
+    await flushEffects();
+
+    expect(invalidateQueries).toHaveBeenCalledTimes(1);
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["groupKeyAccess"] });
   });
 
@@ -214,8 +228,28 @@ describe("TrackingProvider", () => {
     appStateListener?.("active");
     await flushEffects();
 
-    expect(reconcileCalls).toEqual([{ startCapture: true }, { startCapture: true }]);
+    expect(reconcileCalls).toEqual([
+      { startCapture: true, force: true },
+      { startCapture: true, force: true },
+    ]);
     expect(flushCalls).toBe(2);
+  });
+
+  test("the 30-second cycle doesn't force a key check", async () => {
+    jest.useFakeTimers();
+    try {
+      await renderProvider();
+
+      jest.advanceTimersByTime(30_000);
+      await flushEffects();
+
+      expect(reconcileCalls).toEqual([
+        { startCapture: true, force: true },
+        { startCapture: true, force: false },
+      ]);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test("reconciles immediately after group or epoch changes", async () => {
@@ -224,7 +258,10 @@ describe("TrackingProvider", () => {
     requestTrackingSync();
     await flushEffects();
 
-    expect(reconcileCalls).toEqual([{ startCapture: true }, { startCapture: true }]);
+    expect(reconcileCalls).toEqual([
+      { startCapture: true, force: true },
+      { startCapture: true, force: true },
+    ]);
     expect(flushCalls).toBe(2);
   });
 
@@ -252,9 +289,9 @@ describe("TrackingProvider", () => {
     await flushEffects();
 
     expect(reconcileCalls).toEqual([
-      { startCapture: true },
-      { startCapture: true },
-      { startCapture: true },
+      { startCapture: true, force: true },
+      { startCapture: true, force: true },
+      { startCapture: true, force: true },
     ]);
     expect(flushCalls).toBe(3);
   });
@@ -264,7 +301,7 @@ describe("TrackingProvider", () => {
 
     await renderProvider();
 
-    expect(reconcileCalls).toEqual([{ startCapture: false }]);
+    expect(reconcileCalls).toEqual([{ startCapture: false, force: true }]);
   });
 
   test("reconciles when location sharing permission changes", async () => {
@@ -281,9 +318,9 @@ describe("TrackingProvider", () => {
     }
 
     expect(reconcileCalls).toEqual([
-      { startCapture: false },
-      { startCapture: true },
-      { startCapture: false },
+      { startCapture: false, force: true },
+      { startCapture: true, force: false },
+      { startCapture: false, force: false },
     ]);
   });
 
@@ -316,7 +353,7 @@ describe("TrackingProvider", () => {
     });
 
     expect(revokeCalls).toBe(revokesWhileSignedOut);
-    expect(reconcileCalls).toEqual([{ startCapture: true }]);
+    expect(reconcileCalls).toEqual([{ startCapture: true, force: true }]);
   });
 
   test("signing in after a logout only revokes the previous account once", async () => {
@@ -332,7 +369,10 @@ describe("TrackingProvider", () => {
     await flushEffects();
 
     expect(revokeCalls).toBe(1);
-    expect(reconcileCalls).toEqual([{ startCapture: true }, { startCapture: true }]);
+    expect(reconcileCalls).toEqual([
+      { startCapture: true, force: true },
+      { startCapture: true, force: true },
+    ]);
   });
 
   test("revokes the previous account before reconciling an account switch", async () => {
@@ -353,7 +393,10 @@ describe("TrackingProvider", () => {
     });
 
     expect(revokeCalls).toBe(1);
-    expect(reconcileCalls).toEqual([{ startCapture: true }, { startCapture: true }]);
+    expect(reconcileCalls).toEqual([
+      { startCapture: true, force: true },
+      { startCapture: true, force: true },
+    ]);
   });
 
   test("account switches do not wait for an old reconciliation", async () => {

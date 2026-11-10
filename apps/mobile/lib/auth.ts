@@ -92,7 +92,7 @@ export const revokePendingSessionToken = async () => {
 export const completeAuthenticatedSessionSetup = async () => {
   await revokePendingSessionToken();
 
-  const { error, data } = await tryCatch(ensureDeviceKeyRegistration());
+  const { error, data } = await tryCatch(ensureDeviceKeyRegistration({ checkOwner: true }));
   if (error) {
     return {
       data: null,

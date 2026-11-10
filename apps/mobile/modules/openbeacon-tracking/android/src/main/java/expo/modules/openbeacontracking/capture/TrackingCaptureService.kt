@@ -20,6 +20,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import expo.modules.openbeacontracking.R
 import expo.modules.openbeacontracking.TrackingRuntime
+import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,6 +41,7 @@ class TrackingCaptureService : Service() {
   private var currentIntervalMs = DEFAULT_INTERVAL_MS
   private var lastQueued: LastQueuedFix? = null
   private var lastUploadRequestMs = 0L
+  private var currentUploadIntervalMs = CaptureSamplingPolicy.UPLOAD_INTERVAL_MS
   private val refreshState = CaptureRefreshState()
 
   private var locationCallback: LocationCallback? = null
@@ -153,8 +155,10 @@ class TrackingCaptureService : Service() {
         captureScope.launch {
           enqueueEncryptedFix(location, generation)
           val nowMs = System.currentTimeMillis()
+          val uploadDue = synchronized(captureStateLock) { nowMs - lastUploadRequestMs >= currentUploadIntervalMs }
+          if (!uploadDue || !hasPendingUploads()) return@launch
           synchronized(captureStateLock) {
-            if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && nowMs - lastUploadRequestMs >= UPLOAD_INTERVAL_MS) {
+            if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && nowMs - lastUploadRequestMs >= currentUploadIntervalMs) {
               try {
                 startService(Intent(this@TrackingCaptureService, TrackingUploadService::class.java))
                 lastUploadRequestMs = nowMs
@@ -242,7 +246,8 @@ class TrackingCaptureService : Service() {
         fixId = location.elapsedRealtimeNanos.takeIf { it > 0 },
       )
       synchronized(captureStateLock) {
-        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && queuedCount > 0 && (decision.forceUpload || nowMs - lastUploadRequestMs >= UPLOAD_INTERVAL_MS)) {
+        currentUploadIntervalMs = decision.uploadIntervalMs
+        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && queuedCount > 0 && (decision.forceUpload || nowMs - lastUploadRequestMs >= decision.uploadIntervalMs)) {
           val uploadIntent = Intent(this, TrackingUploadService::class.java)
           startService(uploadIntent)
           lastUploadRequestMs = nowMs
@@ -263,6 +268,12 @@ class TrackingCaptureService : Service() {
       Log.e(TAG, "Failed to encrypt and queue location fix.", error)
     }
   }
+
+  private fun hasPendingUploads(): Boolean =
+    TrackingRuntime
+      .ciphertextQueue(this)
+      .listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, TrackingRuntime.queueOwner(this))
+      .isNotEmpty()
 
   private fun distanceMeters(
     fromLatitude: Double,
@@ -328,6 +339,5 @@ class TrackingCaptureService : Service() {
     private const val TAG = "TrackingCapture"
     private const val CHANNEL_ID = "openbeacon_tracking_capture"
     private const val NOTIFICATION_ID = 7260
-    private const val UPLOAD_INTERVAL_MS = 30_000L
   }
 }

@@ -14,6 +14,7 @@ export const RecoveryCoverage = ({ userId }: { userId: string | undefined }) => 
     queries: groupList.map(({ id: groupId }) => ({
       queryKey: ["groupKeyAccess", userId, groupId, "recovery", historyKeyVersion],
       enabled: Boolean(userId && historyKeyVersion !== undefined),
+      staleTime: Infinity,
       queryFn: async () => {
         if (historyKeyVersion === undefined) throw new Error("History key is unavailable");
         const device = await ensureDeviceKeyRegistration();
