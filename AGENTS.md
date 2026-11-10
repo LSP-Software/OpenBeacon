@@ -48,6 +48,12 @@ console.log(result.data);
     a. Client (`apps/mobile`, `packages/encryption`, `packages/schemas`, `packages/shared`): raise `expo.version` in `apps/mobile/app.json` and increment both `ios.buildNumber` and `android.versionCode`.
     b. Server (`apps/backend`, `apps/scheduled-jobs`, and `packages/*` except `tsconfig`): raise `serverVersion` in `apps/backend/src/version.ts`.
     c. Use patch for fixes, minor for features or database migrations. CI enforces this; check locally with `bun scripts/check-version-bump.ts origin/main`.
+14. API compatibility levels live in `packages/shared/src/apiCompatibilityLevel.ts`. Change them only when:
+    a. The app calls something older servers don't have: raise `apiCompatibilityLevel` and set `minServerApiCompatibilityLevel` to it.
+    b. You remove or narrow something supported apps use: raise `apiCompatibilityLevel` and set `minClientApiCompatibilityLevel` to it.
+    c. You change an encrypted format or what a field means: raise the minimum for whichever side can't cope.
+    d. Any level change needs at least a minor version bump of both the app and the server. Anything else needs no level change. See `docs/development/api-compatibility.md`.
+    e. Every PR body contains either `API compatibility: unchanged` or `API compatibility: raised because …`.
 
 # Testing
 

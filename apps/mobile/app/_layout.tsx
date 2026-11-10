@@ -3,6 +3,10 @@ import "../global.css";
 import { PortalHost } from "@rn-primitives/portal";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
+import {
+  ApiCompatibilityGate,
+  useApiCompatibilityGateShown,
+} from "../components/ApiCompatibilityGate.tsx";
 import { AlertHost } from "../components/ui/Alert.tsx";
 import { OfflineBanner } from "../components/OfflineBanner.tsx";
 import { queryClient } from "../lib/api.ts";
@@ -13,6 +17,8 @@ import { ThemeProvider } from "../providers/ThemeProvider.tsx";
 import { TrackingProvider } from "../providers/TrackingProvider.tsx";
 
 const RootLayout = () => {
+  const compatibilityGateShown = useApiCompatibilityGateShown();
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -21,11 +27,18 @@ const RootLayout = () => {
             <SessionDataCleanup />
             <DeletionCancellationNotice />
             <View className="flex-1 bg-background">
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                }}
-              />
+              <View
+                className="flex-1"
+                importantForAccessibility={compatibilityGateShown ? "no-hide-descendants" : "auto"}
+                accessibilityElementsHidden={compatibilityGateShown}
+              >
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                  }}
+                />
+              </View>
+              <ApiCompatibilityGate />
               <OfflineBanner />
             </View>
           </TrackingProvider>
