@@ -4,7 +4,7 @@ import {
   ListObjectVersionsCommand,
   HeadObjectCommand,
 } from "@aws-sdk/client-s3";
-import { OpenBeaconCache } from "@openbeacon/cache";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { env } from "../../env.ts";
@@ -25,11 +25,7 @@ const router = createTRPCRouter({
   groupSettings: groupSettingsRouter,
 });
 let now = 0;
-const cache = new OpenBeaconCache({
-  redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
-  keyPrefix: `test-${crypto.randomUUID()}`,
-  now: () => now,
-});
+const cache = createIntegrationTestCache(() => now);
 const prefix = `settings-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const users = [0, 1, 2].map((n) => `${prefix}-${n}`);

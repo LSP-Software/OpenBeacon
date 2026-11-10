@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createEmailCodes, type EmailCodes } from "@openbeacon/auth";
-import { OpenBeaconCache } from "@openbeacon/cache";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
@@ -21,11 +21,7 @@ import { createTRPCRouter } from "../trpcRuntime.ts";
 import { accountRecoveryRouter } from "./accountRecoveryRouter.ts";
 
 const router = createTRPCRouter({ accountRecovery: accountRecoveryRouter });
-const cache = new OpenBeaconCache({
-  redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
-  keyPrefix: `test-${crypto.randomUUID()}`,
-  now: () => 0,
-});
+const cache = createIntegrationTestCache(() => 0);
 const prefix = `recovery-${crypto.randomUUID()}`;
 const users = [
   "setup",
@@ -93,11 +89,7 @@ const sent: { to: string; purpose: string; code: string; userId?: string }[] = [
 const emailCodes = createEmailCodes({
   db: prisma,
   secret: "integration-email-code-secret-000000000000",
-  rateLimits: new OpenBeaconCache({
-    redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
-    keyPrefix: `test-${crypto.randomUUID()}`,
-    now: () => 0,
-  }).rateLimits,
+  rateLimits: createIntegrationTestCache(() => 0).rateLimits,
   limitRequestsPerIp: false,
   sendCodeEmail: async (email) => {
     sent.push(email);

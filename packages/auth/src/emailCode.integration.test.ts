@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { OpenBeaconCache } from "@openbeacon/cache";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import type { EmailCodePurpose, SecurityAlert } from "@openbeacon/email";
 import { z } from "zod";
@@ -30,11 +30,7 @@ let alertFailure: Error | null = null;
 const codes = createEmailCodes({
   db: prisma,
   secret: "integration-email-code-secret-000000000000",
-  rateLimits: new OpenBeaconCache({
-    redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
-    keyPrefix: `test-${crypto.randomUUID()}`,
-    now: () => clockMs,
-  }).rateLimits,
+  rateLimits: createIntegrationTestCache(() => clockMs).rateLimits,
   limitRequestsPerIp: true,
   sendCodeEmail: async (email) => {
     if (sendFailure) throw sendFailure;
@@ -549,11 +545,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email code rate 
     const unlimitedCodes = createEmailCodes({
       db: prisma,
       secret: "integration-email-code-secret-000000000000",
-      rateLimits: new OpenBeaconCache({
-        redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
-        keyPrefix: `test-${crypto.randomUUID()}`,
-        now: () => clockMs,
-      }).rateLimits,
+      rateLimits: createIntegrationTestCache(() => clockMs).rateLimits,
       limitRequestsPerIp: false,
       sendCodeEmail: async () => {},
       sendAccountExistsEmail: async () => {},

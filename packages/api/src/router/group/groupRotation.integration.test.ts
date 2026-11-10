@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { OpenBeaconCache } from "@openbeacon/cache";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
@@ -19,11 +19,7 @@ const userId = `${prefix}-user`;
 const deviceId = `${prefix}-device`;
 const groupId = `${prefix}-group`;
 const key = createDeviceKeyPair();
-const cache = new OpenBeaconCache({
-  redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
-  keyPrefix: `test-${crypto.randomUUID()}`,
-  now: () => 0,
-});
+const cache = createIntegrationTestCache(() => 0);
 const router = createTRPCRouter({
   groupEpoch: groupEpochRouter,
   groupTracking: groupTrackingRouter,

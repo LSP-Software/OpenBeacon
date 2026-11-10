@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { auth, createSecurityAlerts } from "@openbeacon/auth";
-import { OpenBeaconCache } from "@openbeacon/cache";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { type Prisma, prisma } from "@openbeacon/database";
 import type { SecurityAlert } from "@openbeacon/email";
 import {
@@ -17,11 +17,7 @@ import { appRouter } from "../root.ts";
 
 const prefix = `alerts-${crypto.randomUUID()}`;
 const password = "testing-password-123";
-const cache = new OpenBeaconCache({
-  redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
-  keyPrefix: `test-${crypto.randomUUID()}`,
-  now: () => 0,
-});
+const cache = createIntegrationTestCache(() => 0);
 const sent: {
   to: string;
   userId: string;

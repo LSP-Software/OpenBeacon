@@ -7,7 +7,8 @@
   "description": "The ./testing export exposes FakeRedis and BucketState for tests only; do not import ./testing in production (bundlers should exclude it from prod builds).",
   "exports": {
     ".": "./src/index.ts",
-    "./testing": "./src/rateLimits/testUtils.ts"
+    "./testing": "./src/rateLimits/testUtils.ts",
+    "./integration": "./src/integrationTestCache.ts"
   },
   "scripts": {
     "format": "bun fmt",

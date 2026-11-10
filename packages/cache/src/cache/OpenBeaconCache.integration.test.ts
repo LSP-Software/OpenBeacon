@@ -24,8 +24,13 @@ const caches = [
   },
 ];
 
-afterAll(() => {
-  for (const { cache } of caches) cache.close();
+afterAll(async () => {
+  for (const { cache } of caches) {
+    for (const userId of ["user-1", "user-2"]) {
+      await cache.alertsTurnedOff.take({ userId, firstAtOrBefore: Number.MAX_SAFE_INTEGER });
+    }
+    cache.close();
+  }
 });
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("OpenBeaconCache scripts", () => {
@@ -37,7 +42,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("OpenBeaconCache 
         namespace: "auth.registerDeviceKey",
         identifier: { type: "userId" as const, value: "user-1" },
         limit: 2,
-        windowMs: 1_000,
+        windowMs: 60_000,
       };
       const result = (
         allowed: boolean,
@@ -53,24 +58,26 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("OpenBeaconCache 
       });
 
       expect(await cache.rateLimits.peek(input)).toEqual(result(true, 2, 0, 0));
-      expect(await cache.rateLimits.consume(input)).toEqual(result(true, 1, 0, 500));
-      expect(await cache.rateLimits.consume(input)).toEqual(result(true, 0, 0, 1_000));
-      expect(await cache.rateLimits.consume(input)).toEqual(result(false, 0, 500, 1_000));
+      expect(await cache.rateLimits.consume(input)).toEqual(result(true, 1, 0, 30_000));
+      expect(await cache.rateLimits.consume(input)).toEqual(result(true, 0, 0, 60_000));
+      expect(await cache.rateLimits.consume(input)).toEqual(result(false, 0, 30_000, 60_000));
 
-      nowMs = 500;
-      expect(await cache.rateLimits.consume(input)).toEqual(result(true, 0, 0, 1_000));
+      nowMs = 30_000;
+      expect(await cache.rateLimits.consume(input)).toEqual(result(true, 0, 0, 60_000));
 
-      nowMs = 750;
-      expect(await cache.rateLimits.consume(input)).toEqual(result(false, 0, 250, 750));
-      expect(await cache.rateLimits.peek({ ...input, cost: 0 })).toEqual(result(true, 0, 0, 750));
+      nowMs = 45_000;
+      expect(await cache.rateLimits.consume(input)).toEqual(result(false, 0, 15_000, 45_000));
+      expect(await cache.rateLimits.peek({ ...input, cost: 0 })).toEqual(
+        result(true, 0, 0, 45_000),
+      );
 
-      nowMs = 1_500;
+      nowMs = 90_000;
       expect(await cache.rateLimits.peek(input)).toEqual(result(true, 2, 0, 0));
       expect(await cache.rateLimits.consume({ ...input, cost: 2 })).toEqual(
-        result(true, 0, 0, 1_000),
+        result(true, 0, 0, 60_000),
       );
       expect(await cache.rateLimits.consume({ ...input, cost: 2 })).toEqual(
-        result(false, 0, 1_000, 1_000),
+        result(false, 0, 60_000, 60_000),
       );
 
       expect(await cache.rateLimits.reset(input)).toBe(1);
@@ -79,6 +86,30 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("OpenBeaconCache 
       expect(await cache.rateLimits.reset(input)).toBe(1);
     },
   );
+
+  test.each(caches)("$name stores, replaces and resets signed map URLs", async ({ cache }) => {
+    nowMs = Date.now();
+    const store = cache.pmtilesSignedUrls;
+    const first = {
+      expiresAt: new Date(nowMs + 60_000).toISOString(),
+      url: "https://tiles.example.com/map.pmtiles?signature=first",
+    };
+    const second = {
+      expiresAt: new Date(nowMs + 120_000).toISOString(),
+      url: "https://tiles.example.com/map.pmtiles?signature=second",
+    };
+
+    expect(await store.get({ userId: "user-1" })).toBeNull();
+    await store.set({ userId: "user-1", ...first });
+    expect(await store.get({ userId: "user-1" })).toEqual(first);
+    await store.set({ userId: "user-1", ...second });
+    expect(await store.get({ userId: "user-1" })).toEqual(second);
+    expect(await store.get({ userId: "user-2" })).toBeNull();
+
+    expect(await store.reset({ userId: "user-1" })).toBe(1);
+    expect(await store.get({ userId: "user-1" })).toBeNull();
+    expect(await store.reset({ userId: "user-1" })).toBe(0);
+  });
 
   test.each(caches)(
     "$name keeps turned-off alerts until they are due and taken",

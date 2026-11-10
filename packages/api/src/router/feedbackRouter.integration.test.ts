@@ -1,15 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { OpenBeaconCache } from "@openbeacon/cache";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { appRouter } from "../root.ts";
 
 const prefix = `feedback-test-${crypto.randomUUID()}`;
 const caller = appRouter.createCaller({
-  cache: new OpenBeaconCache({
-    redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
-    keyPrefix: `test-${crypto.randomUUID()}`,
-    now: () => 0,
-  }),
+  cache: createIntegrationTestCache(() => 0),
   clientIp: "127.0.0.1",
   db: prisma,
   serverVersion: "9.9.9",

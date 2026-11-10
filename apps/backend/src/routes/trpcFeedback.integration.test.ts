@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { OpenBeaconCache } from "@openbeacon/cache";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { Hono } from "hono";
 import type { AppEnv } from "../types/AppEnv.ts";
 import { serverVersion } from "../version.ts";
@@ -13,11 +13,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback HTTP en
     const prefix = `http-feedback-${crypto.randomUUID()}`;
     const app = new Hono<AppEnv>().basePath("/api").route("/", trpc);
     const bindings = {
-      cache: new OpenBeaconCache({
-        redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
-        keyPrefix: `test-${crypto.randomUUID()}`,
-        now: () => 0,
-      }),
+      cache: createIntegrationTestCache(() => 0),
       clientIp: "127.0.0.1",
       db: prisma,
     };

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { auth } from "@openbeacon/auth";
-import { OpenBeaconCache } from "@openbeacon/cache";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { Prisma, prisma } from "@openbeacon/database";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
@@ -9,11 +9,7 @@ import { appRouter } from "../root.ts";
 
 const email = `deletion-${crypto.randomUUID()}@example.test`;
 const password = "testing-password-123";
-const cache = new OpenBeaconCache({
-  redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
-  keyPrefix: `test-${crypto.randomUUID()}`,
-  now: () => 0,
-});
+const cache = createIntegrationTestCache(() => 0);
 let userId = "";
 const caller = (sessionId: string) =>
   appRouter.createCaller({
