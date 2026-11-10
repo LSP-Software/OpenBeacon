@@ -32,6 +32,7 @@ export const LiveMapPeopleTray = ({
       status: "cantLocate" as const,
     },
     { key: "cantRead", label: "Can’t read", people: people.cantRead, status: "cantRead" as const },
+    { key: "hidden", label: "Hidden", people: people.hidden, status: "hidden" as const },
   ].filter((section) => section.people.length > 0);
   const pendingSections = [
     { key: "finding", label: "Finding", chip: "Finding", count: people.finding.length },
@@ -66,6 +67,7 @@ export const LiveMapPeopleTray = ({
               className={cn(
                 "flex-row items-center gap-1 rounded-full border px-2.5 py-1 active:opacity-70",
                 isProblem ? "border-destructive" : "border-border",
+                section.status === "hidden" && "border-dashed",
               )}
               hitSlop={{ top: 9, bottom: 9 }}
               onPress={() => {

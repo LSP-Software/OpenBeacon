@@ -1,6 +1,6 @@
 import { initialsFromName, type LiveMapMarker } from "./buildLiveMapMarkers.ts";
 import { locationStaleAt } from "./locationStaleAt.ts";
-import type { MapPeople } from "./mapPeopleTypes.ts";
+import type { MapGroup, MapPeople } from "./mapPeopleTypes.ts";
 import type { MapTrackingStatus } from "./mapTrackingTypes.ts";
 
 export const classifyMapPeople = ({
@@ -11,11 +11,7 @@ export const classifyMapPeople = ({
   selfUserId,
   status,
 }: {
-  groups: readonly {
-    id: string;
-    name: string;
-    members: readonly { image: string | null; name: string; userId: string }[];
-  }[];
+  groups: readonly MapGroup[];
   keyAccess: ReadonlyMap<string, "available" | "failed" | "missing" | "unavailable">;
   markers: readonly LiveMapMarker[];
   now: number;
@@ -27,6 +23,7 @@ export const classifyMapPeople = ({
     cantRead: [],
     connectionLost: status.connection === "failing",
     finding: [],
+    hidden: [],
     outOfDate: [],
     upToDate: [],
     waiting: [],

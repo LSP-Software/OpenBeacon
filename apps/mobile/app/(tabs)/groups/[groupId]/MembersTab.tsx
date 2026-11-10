@@ -28,6 +28,7 @@ import { authClient } from "../../../../lib/auth-client.ts";
 import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
 import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses.ts";
 import { buildRemoveGroupMemberInput, submitEpochChange } from "../../../../lib/groupEncryption.ts";
+import { forgetHiddenMapGroup } from "../../../../lib/hiddenMapGroups.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
 import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
 
@@ -113,6 +114,7 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                       }),
                   });
                 }
+                if (isSelf) forgetHiddenMapGroup({ groupId, userId: member.user.id });
                 await queryClient.invalidateQueries({
                   queryKey: trpc.groupMembership.list.queryKey(),
                 });

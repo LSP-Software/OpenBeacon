@@ -54,7 +54,7 @@ mock.module("react-native-svg", () => ({
   RadialGradient: () => null,
   Stop: () => null,
 }));
-mock.module("lucide-react-native", () => ({ ClockIcon: () => null }));
+mock.module("lucide-react-native", () => ({ ClockIcon: () => null, EyeOffIcon: () => null }));
 mock.module("../ui/Avatar.tsx", () => ({
   Avatar: ({ children }: { children: React.ReactNode }) => children,
   AvatarFallback: () => null,

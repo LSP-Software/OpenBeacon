@@ -101,6 +101,7 @@ mock.module("../lib/groupEncryption.ts", () => ({
     submit(await build())) satisfies typeof submitEpochChange,
 }));
 mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
+mock.module("../lib/hiddenMapGroups.ts", () => ({ forgetHiddenMapGroup: () => {} }));
 mock.module("../lib/batteryVisual.ts", () => ({ getBatteryVisual: () => null }));
 const { default: MembersTab } = await import("../app/(tabs)/groups/[groupId]/MembersTab.tsx");
 const button = (label: string) => buttons.findLast((item) => item.label === label)!;
