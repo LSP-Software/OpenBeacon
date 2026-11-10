@@ -156,6 +156,14 @@ class OpenBeaconTrackingModule : Module() {
           .ciphertextQueue(requireContext())
           .requeue(ids.map { it.toLong() }, System.currentTimeMillis(), error)
       }
+
+      Function("showCompatibilityNotice") { title: String, body: String ->
+        CompatibilityNotice.show(requireContext(), title, body)
+      }
+
+      Function("clearCompatibilityNotice") {
+        CompatibilityNotice.clear(requireContext())
+      }
     }
 
   private fun requireContext() =

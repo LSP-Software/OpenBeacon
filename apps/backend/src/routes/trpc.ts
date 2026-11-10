@@ -2,14 +2,25 @@ import { appRouter, createTRPCContext } from "@openbeacon/api";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { Hono } from "hono";
 import { env } from "../env.ts";
+import { findUnknownProcedure, unknownProcedureBody } from "../helpers/apiCompatibility.ts";
 import type { AppEnv } from "../types/AppEnv.ts";
 import { serverVersion } from "../version.ts";
 
 const router = new Hono<AppEnv>();
+const endpoint = "/api/trpc";
 
-router.on(["POST", "GET"], "/trpc/*", (c) => {
+router.on(["POST", "GET"], "/trpc/*", async (c) => {
+  if (
+    findUnknownProcedure({
+      url: c.req.url,
+      endpoint,
+      procedures: appRouter._def.procedures,
+    }) !== undefined
+  ) {
+    return c.json(unknownProcedureBody, 404);
+  }
   return fetchRequestHandler({
-    endpoint: "/api/trpc",
+    endpoint,
     req: c.req.raw,
     router: appRouter,
     onError: ({ error, path }) => {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { apiCompatibilityLevel, minClientApiCompatibilityLevel } from "@openbeacon/shared";
 import { serverVersion } from "../version.ts";
 
 describe("health endpoint", () => {
@@ -15,6 +16,8 @@ describe("health endpoint", () => {
       status: "ok",
       version: serverVersion,
       serverName: "Family server",
+      apiCompatibilityLevel,
+      minClientApiCompatibilityLevel,
     });
   });
 });

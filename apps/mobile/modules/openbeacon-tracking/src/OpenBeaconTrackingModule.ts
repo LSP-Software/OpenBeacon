@@ -61,6 +61,8 @@ declare class OpenBeaconTrackingModule extends NativeModule {
   acknowledgeCiphertextEviction(owner: string, revision: number): Promise<void>;
   deleteCiphertexts(ids: number[]): Promise<void>;
   requeueCiphertexts(ids: number[], error?: string | null): Promise<void>;
+  showCompatibilityNotice(title: string, body: string): boolean;
+  clearCompatibilityNotice(): void;
 }
 
 export default requireNativeModule<OpenBeaconTrackingModule>("OpenBeaconTracking");

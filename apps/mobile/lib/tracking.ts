@@ -7,6 +7,12 @@ import { tryCatch } from "@openbeacon/shared";
 import { Platform } from "react-native";
 import type { CiphertextQueueItem } from "../modules/openbeacon-tracking/index.ts";
 import { trpcClient } from "./api.ts";
+import {
+  apiCompatibilityNotice,
+  getApiCompatibility,
+  markApiCompatibilityNotified,
+  refreshApiCompatibilityInBackground,
+} from "./apiCompatibility.ts";
 import { baseUrl } from "./base-url.ts";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
@@ -15,6 +21,7 @@ import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
 import { backfillHistoryWraps } from "./recovery.ts";
+import { hasCustomServerUrl } from "./server-url.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
 
@@ -528,7 +535,7 @@ const flushPendingTrackingPointsInternal = async (
 };
 
 export const flushPendingTrackingPoints = (force = false): Promise<void> => {
-  if (trackingPaused) return Promise.resolve();
+  if (trackingPaused || getApiCompatibility()) return Promise.resolve();
   if (flushPromise) {
     return force
       ? flushPromise.catch(() => {}).then(() => flushPendingTrackingPoints(true))
@@ -555,12 +562,45 @@ export const flushPendingTrackingPoints = (force = false): Promise<void> => {
   return current;
 };
 
+const showApiCompatibilityNotice = async () => {
+  const compatibility = getApiCompatibility();
+  if (!compatibility || compatibility.notified) return;
+  const trackingModule = await loadTrackingModule();
+  if (!trackingModule) return;
+  const { title, body } = apiCompatibilityNotice({
+    problem: compatibility.problem,
+    selfHosted: hasCustomServerUrl(),
+  });
+  const shown = await tryCatch(
+    Promise.resolve().then(() => trackingModule.showCompatibilityNotice(title, body)),
+  );
+  if (shown.data) markApiCompatibilityNotified();
+};
+
+export const clearApiCompatibilityNotice = async () => {
+  const trackingModule = await loadTrackingModule();
+  if (!trackingModule) return;
+  await tryCatch(Promise.resolve().then(() => trackingModule.clearCompatibilityNotice()));
+};
+
 export const syncBackgroundTracking = async () => {
+  if (getApiCompatibility()) {
+    await refreshApiCompatibilityInBackground();
+    if (!getApiCompatibility()) await clearApiCompatibilityNotice();
+  }
+  if (getApiCompatibility()) {
+    await showApiCompatibilityNotice();
+    return;
+  }
   const reconciliation = await tryCatch(
     reconcileTrackingKeys({ startCapture: true, onlyIfRunning: true }),
   );
   if (getErrorCode(reconciliation.error) === "UNAUTHORIZED") return;
   const result = await tryCatch(flushPendingTrackingPoints());
+  if (getApiCompatibility()) {
+    await showApiCompatibilityNotice();
+    return;
+  }
   if (result.error && !(await isDeviceOffline())) {
     throw result.error;
   }

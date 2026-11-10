@@ -134,6 +134,35 @@ mock.module("./historyKeys.ts", () => ({
 
 mock.module("./base-url.ts", () => ({ baseUrl: "https://api.example.test" }));
 
+let apiCompatibility: {
+  problem: "appTooOld" | "serverTooOld" | "outOfSync";
+  serverVersion: string | null;
+  notified: boolean;
+} | null = null;
+let apiCompatibilityRefreshClears = false;
+let apiCompatibilityRefreshes = 0;
+const compatibilityNotices: { title: string; body: string }[] = [];
+let compatibilityNoticeAllowed = true;
+let compatibilityNoticeClears = 0;
+
+mock.module("./apiCompatibility.ts", () => ({
+  getApiCompatibility: () => apiCompatibility,
+  refreshApiCompatibilityInBackground: async () => {
+    apiCompatibilityRefreshes += 1;
+    if (apiCompatibilityRefreshClears) apiCompatibility = null;
+    return apiCompatibilityRefreshClears ? "ok" : null;
+  },
+  markApiCompatibilityNotified: () => {
+    if (apiCompatibility) apiCompatibility = { ...apiCompatibility, notified: true };
+  },
+  apiCompatibilityNotice: ({ problem }: { problem: string }) => ({
+    title: problem,
+    body: `${problem} body`,
+  }),
+}));
+
+mock.module("./server-url.ts", () => ({ hasCustomServerUrl: () => false }));
+
 mock.module("./api.ts", () => ({
   trpcClient: {
     auth: {
@@ -334,6 +363,14 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
     requeueCiphertexts: async (ids: number[], error?: string | null) => {
       requeued.push({ ids, error });
     },
+    showCompatibilityNotice: (title: string, body: string) => {
+      if (!compatibilityNoticeAllowed) return false;
+      compatibilityNotices.push({ title, body });
+      return true;
+    },
+    clearCompatibilityNotice: () => {
+      compatibilityNoticeClears += 1;
+    },
   },
 }));
 
@@ -392,6 +429,12 @@ describe("tracking service", () => {
     rotationChecks.length = 0;
     requestedOwners.length = 0;
     currentUserId = "user-1";
+    apiCompatibility = null;
+    apiCompatibilityRefreshClears = false;
+    apiCompatibilityRefreshes = 0;
+    compatibilityNotices.length = 0;
+    compatibilityNoticeAllowed = true;
+    compatibilityNoticeClears = 0;
     storedHistoryKeyVersions.clear();
     storedHistoryKeyVersions.add(1);
     ownerContextCalls = 0;
@@ -1270,6 +1313,75 @@ describe("tracking service", () => {
     expect(recordedUploads).toEqual([]);
     expect(stopCaptureCalls).toBe(0);
     expect(revokedGroups).toEqual([]);
+  });
+
+  test("background sync leaves the queue alone and notifies once while the app and server don't match", async () => {
+    captureRunning = true;
+    apiCompatibility = { problem: "appTooOld", serverVersion: null, notified: false };
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+
+    await syncBackgroundTracking();
+    await syncBackgroundTracking();
+
+    expect(apiCompatibilityRefreshes).toBe(2);
+    expect(uploadCalls).toEqual([]);
+    expect(markedInFlight).toEqual([]);
+    expect(deleted).toEqual([]);
+    expect(provisionCalls).toHaveLength(0);
+    expect(compatibilityNotices).toEqual([{ title: "appTooOld", body: "appTooOld body" }]);
+  });
+
+  test("background sync uploads again once a fresh check shows the server was updated", async () => {
+    captureRunning = true;
+    apiCompatibility = { problem: "serverTooOld", serverVersion: "0.1.0", notified: true };
+    apiCompatibilityRefreshClears = true;
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+
+    await syncBackgroundTracking();
+
+    expect(uploadCalls).toHaveLength(1);
+    expect(deleted).toEqual([[1]]);
+    expect(compatibilityNotices).toEqual([]);
+    expect(compatibilityNoticeClears).toBe(1);
+  });
+
+  test("background sync tries the notice again when Android didn't show it", async () => {
+    captureRunning = true;
+    apiCompatibility = { problem: "serverTooOld", serverVersion: "0.1.0", notified: false };
+    compatibilityNoticeAllowed = false;
+
+    await syncBackgroundTracking();
+    expect(apiCompatibility.notified).toBe(false);
+
+    compatibilityNoticeAllowed = true;
+    await syncBackgroundTracking();
+    expect(apiCompatibility.notified).toBe(true);
+    expect(compatibilityNotices).toEqual([{ title: "serverTooOld", body: "serverTooOld body" }]);
+  });
+
+  test("an upload rejected for compatibility keeps its points and notifies without failing the task", async () => {
+    captureRunning = true;
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    uploadGroup = async () => {
+      apiCompatibility = { problem: "appTooOld", serverVersion: null, notified: false };
+      throw new Error("Upgrade Required");
+    };
+
+    await expect(syncBackgroundTracking()).resolves.toBeUndefined();
+
+    expect(deleted).toEqual([]);
+    expect(requeued.map(({ ids }) => ids)).toEqual([[1]]);
+    expect(compatibilityNotices).toEqual([{ title: "appTooOld", body: "appTooOld body" }]);
+  });
+
+  test("foreground flushes skip uploading while the app and server don't match", async () => {
+    apiCompatibility = { problem: "outOfSync", serverVersion: null, notified: false };
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+
+    await flushPendingTrackingPoints(true);
+
+    expect(markedInFlight).toEqual([]);
+    expect(uploadCalls).toEqual([]);
   });
 
   test("stops background capture when registration reports a revoked session", async () => {
