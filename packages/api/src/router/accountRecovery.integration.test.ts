@@ -537,7 +537,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(restoreHistoryKeys(resetUser, oldPhrase)).rejects.toThrow();
     }, 20_000);
 
-    test("a session older than the better-auth fresh age cannot set up a phrase and status reports it", async () => {
+    test("a session from more than 15 minutes ago cannot set up a phrase and status reports it", async () => {
       const phrase = generateRecoveryPhrase();
       const stale = caller(staleSetupUser, staleSessionCreatedAt);
       await expect(
@@ -554,20 +554,20 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await prisma.accountHistoryKey.count({ where: { userId: staleSetupUser } })).toBe(0);
     });
 
-    test("a session older than the better-auth fresh age cannot change or reset the phrase", async () => {
+    test("a session from more than 15 minutes ago cannot change or reset the phrase", async () => {
       const phrase = generateRecoveryPhrase();
       const historyKey = newHistoryKey({ phrase, userId: staleUser, version: 1 });
       await caller(staleUser).accountRecovery.setup({
         historyKey: historyKey.input,
         recoveryKey: recoveryKeyInput(phrase),
       });
-      const nearlyStale = new Date(Date.now() - 23 * 60 * 60 * 1000);
+      const nearlyStale = new Date(Date.now() - 14 * 60 * 1000);
       await caller(staleUser, nearlyStale).accountRecovery.changePhrase({
         escrows: [{ ...historyKey.input.escrow, version: 1 }],
         recoveryKey: recoveryKeyInput(phrase),
       });
       await expect(
-        caller(staleUser, new Date(Date.now() - 25 * 60 * 60 * 1000)).accountRecovery.reset({
+        caller(staleUser, new Date(Date.now() - 16 * 60 * 1000)).accountRecovery.reset({
           confirmReset: true,
           historyKey: newHistoryKey({ phrase, userId: staleUser, version: 2 }).input,
           recoveryKey: recoveryKeyInput(phrase),
