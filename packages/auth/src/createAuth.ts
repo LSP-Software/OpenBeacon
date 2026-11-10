@@ -155,7 +155,7 @@ export const createAuth = ({
         },
       },
     },
-    session: { freshAge: 15 * 60 },
+    session: { freshAge: 30 * 60 },
     verification: {
       storeIdentifier: { default: "plain", overrides: { "reset-password:": "hashed" } },
     },

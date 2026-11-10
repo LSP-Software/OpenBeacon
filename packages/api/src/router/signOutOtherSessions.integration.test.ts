@@ -126,18 +126,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("signing out othe
     expect(await sentAlerts()).toEqual([]);
   });
 
-  test("needs a sign-in from the last 15 minutes", async () => {
+  test("needs a sign-in from the last 30 minutes", async () => {
     const account = await createAccount();
     const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
 
     await expect(
-      callerFor(account, { sessionCreatedAt: minutesAgo(16) }).account.signOutOtherSessions(),
+      callerFor(account, { sessionCreatedAt: minutesAgo(31) }).account.signOutOtherSessions(),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(await sessionIds(account.userId)).toHaveLength(3);
     expect(await sentAlerts()).toEqual([]);
 
     expect(
-      await callerFor(account, { sessionCreatedAt: minutesAgo(14) }).account.signOutOtherSessions(),
+      await callerFor(account, { sessionCreatedAt: minutesAgo(29) }).account.signOutOtherSessions(),
     ).toEqual({ signedOut: 2 });
   });
 });

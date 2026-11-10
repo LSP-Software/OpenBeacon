@@ -539,7 +539,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(restoreHistoryKeys(resetUser, oldPhrase)).rejects.toThrow();
     }, 20_000);
 
-    test("a session from more than 15 minutes ago cannot set up a phrase and status reports it", async () => {
+    test("a session from more than 30 minutes ago cannot set up a phrase and status reports it", async () => {
       const phrase = generateRecoveryPhrase();
       const stale = caller(staleSetupUser, staleSessionCreatedAt);
       await expect(
@@ -559,32 +559,32 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     test("status reports how long the session stays fresh", async () => {
       const fresh = await caller(staleSetupUser).accountRecovery.status();
-      expect(fresh.freshForMs).toBeGreaterThan(14 * 60 * 1000);
-      expect(fresh.freshForMs).toBeLessThanOrEqual(15 * 60 * 1000);
+      expect(fresh.freshForMs).toBeGreaterThan(29 * 60 * 1000);
+      expect(fresh.freshForMs).toBeLessThanOrEqual(30 * 60 * 1000);
 
       const nearlyStale = await caller(
         staleSetupUser,
-        new Date(Date.now() - 14 * 60 * 1000),
+        new Date(Date.now() - 29 * 60 * 1000),
       ).accountRecovery.status();
       expect(nearlyStale.sessionFresh).toBe(true);
       expect(nearlyStale.freshForMs).toBeGreaterThan(50 * 1000);
       expect(nearlyStale.freshForMs).toBeLessThanOrEqual(60 * 1000);
     });
 
-    test("a session from more than 15 minutes ago cannot change or reset the phrase", async () => {
+    test("a session from more than 30 minutes ago cannot change or reset the phrase", async () => {
       const phrase = generateRecoveryPhrase();
       const historyKey = newHistoryKey({ phrase, userId: staleUser, version: 1 });
       await caller(staleUser).accountRecovery.setup({
         historyKey: historyKey.input,
         recoveryKey: recoveryKeyInput(phrase),
       });
-      const nearlyStale = new Date(Date.now() - 14 * 60 * 1000);
+      const nearlyStale = new Date(Date.now() - 29 * 60 * 1000);
       await caller(staleUser, nearlyStale).accountRecovery.changePhrase({
         escrows: [{ ...historyKey.input.escrow, version: 1 }],
         recoveryKey: recoveryKeyInput(phrase),
       });
       await expect(
-        caller(staleUser, new Date(Date.now() - 16 * 60 * 1000)).accountRecovery.reset({
+        caller(staleUser, new Date(Date.now() - 31 * 60 * 1000)).accountRecovery.reset({
           confirmReset: true,
           historyKey: newHistoryKey({ phrase, userId: staleUser, version: 2 }).input,
           recoveryKey: recoveryKeyInput(phrase),
