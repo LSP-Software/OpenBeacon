@@ -11,7 +11,7 @@ The core concept of this app is to be privacy focused so if users pay for us to 
 3. Before committing, run `bun install --frozen-lockfile`; if it fails due to lockfile changes, run `bun install`, commit `bun.lock`, then re-run the frozen install.
 4. After making changes, always run the ci script (`bun run ci`) to ensure your changes haven't broken anything.
 5. We need strong types to ensure high quality code so AI tools don't introduce errors, anything added must use strict types, try to reuse types where possible but if not introduce types.
-6. When making database changes make sure to create a migration with the db:generate script in the database package.
+6. When making database changes make sure to create a migration with the db:migrate script in the database package. db:generate only regenerates the Prisma client.
 7. All TypeScript import paths must end with `.ts`, not `.js`.
 8. Try to use our custom try catch function instead of the standard try catch implementation. When awaiting many calls in one go this can get lengthy so feel free to use the old try catch to keep it simple.
 
