@@ -289,6 +289,12 @@ export const groupMembershipRouter = {
         await tx.groupEncryptedPayload.deleteMany({
           where: { groupId: input.groupId, senderUserId: member.userId },
         });
+        await tx.groupEpochRecipientKey.deleteMany({
+          where: {
+            groupEpoch: { groupId: input.groupId },
+            recipientDevice: { userId: member.userId },
+          },
+        });
         await tx.groupEpochHistoryWrap.deleteMany({
           where: { groupEpoch: { groupId: input.groupId }, historyKey: { userId: member.userId } },
         });
