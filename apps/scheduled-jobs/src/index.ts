@@ -1,5 +1,6 @@
 import "./env.ts";
 import { tryCatch } from "@openbeacon/shared";
+import { startHealthServer } from "./health.ts";
 import { jobs } from "./jobs/index.ts";
 import { startScheduler } from "./scheduler.ts";
 import { checkServices, closeServices } from "./services.ts";
@@ -12,11 +13,11 @@ if (result.error) {
 }
 
 const stop = startScheduler(jobs);
+const healthServer = startHealthServer(3000);
 console.log("Scheduled job runner started");
-const keepAlive = setInterval(() => {}, 60_000);
 
 const shutdown = async () => {
-  clearInterval(keepAlive);
+  await healthServer.stop();
   await stop();
   await closeServices();
   process.exit(0);

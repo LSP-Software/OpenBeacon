@@ -3,6 +3,9 @@
   "license": "SEE LICENSE IN LICENSE.md",
   "private": true,
   "type": "module",
+  "exports": {
+    "./version.ts": "./src/version.ts"
+  },
   "scripts": {
     "dev": "NODE_ENV=development bun run --cwd ../.. --env-file=.env --hot apps/backend/src/index.ts",
     "format": "bun fmt",
