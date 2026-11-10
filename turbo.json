@@ -31,7 +31,10 @@
     "EMAIL_FROM",
     "EMAIL_CONSOLE",
     "EMAIL_CODE_IP_LIMIT",
-    "JAVA_HOME"
+    "JAVA_HOME",
+    "ANDROID_HOME",
+    "ANDROID_SDK_ROOT",
+    "CI"
   ],
   "tasks": {
     "build": {

@@ -9,9 +9,9 @@
     "android": "expo prebuild -p android && expo run:android",
     "ios": "expo run:ios",
     "typecheck": "bun check",
-    "test": "bun test --isolate && bun run test:native-crypto",
-    "test:native-crypto": "cd modules/openbeacon-tracking/jvm && ./gradlew test --no-daemon",
-    "test:room": "bash ../../scripts/test-tracking-room.sh",
+    "test": "bun test --isolate && bun run test:native",
+    "test:native": "(cd modules/openbeacon-tracking/jvm && ./gradlew test --no-daemon) && bash ../../scripts/test-offline-tracking-queue.sh",
+    "benchmark:offline-queue-storage": "bash ../../scripts/benchmark-offline-queue-storage.sh",
     "test:map-assets:package": "bun scripts/check-map-assets-package.ts"
   },
   "dependencies": {

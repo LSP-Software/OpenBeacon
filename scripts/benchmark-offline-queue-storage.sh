@@ -3,31 +3,12 @@ set -euo pipefail
 
 tracking_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tracking_module="apps/mobile/modules/openbeacon-tracking"
-
-if [[ "${1:-}" == "--if-changed" ]]; then
-  if [[ -n "${CI:-}" ]]; then
-    echo "Skipping Room tracking tests on hosted CI; they run in local ci."
-    exit 0
-  fi
-  base="$(git -C "$tracking_root" merge-base HEAD main 2>/dev/null || git -C "$tracking_root" merge-base HEAD origin/main 2>/dev/null || true)"
-  if [[ -n "$base" ]]; then
-    changed="$(
-      git -C "$tracking_root" diff --name-only "$base" -- "$tracking_module" scripts/test-tracking-room.sh
-      git -C "$tracking_root" ls-files --others --exclude-standard -- "$tracking_module"
-    )"
-    if [[ -z "$changed" ]]; then
-      echo "Skipping Room tracking tests: no changes under $tracking_module since main."
-      exit 0
-    fi
-  fi
-fi
-
 android_home="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
 adb_command="$android_home/platform-tools/adb"
 emulator_command="$android_home/emulator/emulator"
 if [[ ! -x "$adb_command" ]]; then
-  echo "WARNING: Skipping Room tracking tests: no Android SDK found at $android_home. Set ANDROID_HOME to run them." >&2
-  exit 0
+  echo "No Android SDK found at $android_home. Set ANDROID_HOME to run the offline queue storage benchmark." >&2
+  exit 1
 fi
 
 min_sdk="$(sed -n 's/^minSdk = "\([0-9]*\)"$/\1/p' "$tracking_root/node_modules/react-native/gradle/libs.versions.toml" 2>/dev/null || true)"
@@ -49,11 +30,11 @@ serial="${ANDROID_SERIAL:-$(newest_device)}"
 if [[ -z "$serial" ]]; then
   avd="$([[ -x "$emulator_command" ]] && "$emulator_command" -list-avds 2>/dev/null | head -n 1 || true)"
   if [[ -z "$avd" ]]; then
-    echo "WARNING: Skipping Room tracking tests: no responsive device on API ${min_sdk:-unknown} or newer and no Android emulator AVD to boot." >&2
-    exit 0
+    echo "No responsive device on API ${min_sdk:-unknown} or newer and no Android emulator AVD to boot for the offline queue storage benchmark." >&2
+    exit 1
   fi
   existing="$("$adb_command" devices | awk 'NR > 1 { print $1 }')"
-  echo "Booting emulator $avd for Room tracking tests..."
+  echo "Booting emulator $avd for the offline queue storage benchmark..."
   "$emulator_command" -avd "$avd" -no-window -no-audio -no-boot-anim -no-snapshot-save >/dev/null 2>&1 &
   started_emulator="$!"
   for _ in $(seq 1 120); do
@@ -89,9 +70,9 @@ if [[ ! -d "$tracking_root/apps/mobile/android" ]]; then
   (cd "$tracking_root/apps/mobile" && bunx expo prebuild --platform android --no-install)
 fi
 (cd "$tracking_root/apps/mobile/android" && ./gradlew :openbeacon-tracking:assembleDebugAndroidTest --no-daemon -q)
-echo "Running Room tracking tests on $serial."
+echo "Running the offline queue storage benchmark on $serial."
 adb_with_timeout 300 "waiting for boot" wait-for-device shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
 adb_with_timeout 300 "installing the test APK" install -r "$test_apk"
-result="$(adb_with_timeout 600 "running the instrumentation" shell am instrument -w "$test_package/expo.modules.openbeacontracking.queue.RoomQueueInstrumentation")"
+result="$(adb_with_timeout 600 "running the instrumentation" shell am instrument -w "$test_package/expo.modules.openbeacontracking.queue.OfflineQueueStorageBenchmark")"
 printf '%s\n' "$result"
-[[ "$result" == *"Room queue privacy tests passed"* ]]
+[[ "$result" == *"Offline queue storage benchmark finished"* ]]

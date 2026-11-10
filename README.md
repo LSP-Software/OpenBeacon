@@ -8,6 +8,7 @@ This repo is a Bun monorepo: a React Native (Expo) app under `apps/mobile`, an A
 
 - [Bun](https://bun.sh) (see `packageManager` in the root `package.json` for the version this repo expects)
 - **Java 17** — needed for Android builds
+- **Android SDK** — needed for the offline tracking queue tests in `bun run ci`; they're skipped with a warning without it (set `ANDROID_HOME` if it isn't in `~/Android/Sdk`)
 - **PostgreSQL** and **Redis** — the backend expects them; URLs are set in `.env`
 
 ## Development Enviroment Setup
