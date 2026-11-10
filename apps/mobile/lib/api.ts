@@ -1,13 +1,22 @@
 import type { AppRouter } from "@openbeacon/api";
 import { QueryClient } from "@tanstack/react-query";
-import { createTRPCClient, httpBatchLink, loggerLink } from "@trpc/client";
+import { createTRPCClient, httpBatchLink, loggerLink, TRPCClientError } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import superjson from "superjson";
 import { apiCompatibilityFetch, withApiCompatibilityHeader } from "./apiCompatibility.ts";
 import { authClient } from "./auth-client.ts";
 import { baseUrl, getFeedbackUrl } from "./base-url.ts";
+import { RequestTimeoutError, timeoutLink } from "./timeoutLink.ts";
 
-export const queryClient = new QueryClient();
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) =>
+        failureCount < 3 &&
+        !(error instanceof TRPCClientError && error.cause instanceof RequestTimeoutError),
+    },
+  },
+});
 
 export const trpcClient = createTRPCClient<AppRouter>({
   links: [
@@ -19,6 +28,7 @@ export const trpcClient = createTRPCClient<AppRouter>({
         console.log(`[TRPC] ${opts.direction} ${opts.path}`);
       },
     }),
+    timeoutLink(),
     httpBatchLink({
       transformer: superjson,
       url: `${baseUrl}/api/trpc`,
@@ -40,6 +50,7 @@ export const trpcClient = createTRPCClient<AppRouter>({
 
 export const feedbackClient = createTRPCClient<AppRouter>({
   links: [
+    timeoutLink(),
     httpBatchLink({
       transformer: superjson,
       url: `${getFeedbackUrl()}/api/trpc`,
