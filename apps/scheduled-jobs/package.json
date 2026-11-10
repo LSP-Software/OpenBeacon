@@ -13,8 +13,10 @@
   "dependencies": {
     "@openbeacon/api": "workspace:*",
     "@openbeacon/auth": "workspace:*",
+    "@openbeacon/backend": "workspace:*",
     "@openbeacon/database": "workspace:*",
     "@openbeacon/email": "workspace:*",
+    "@openbeacon/schemas": "workspace:*",
     "@openbeacon/shared": "workspace:*"
   }
 }
