@@ -20,6 +20,7 @@ const STEADY_INTERVAL_MS = 5_000;
 const MAX_BACKOFF_MS = 60_000;
 const RECONCILE_INTERVAL_MS = 5 * 60_000;
 const POLL_LIMIT = 100;
+export const REQUEST_TIMEOUT_MS = 15_000;
 
 const maxCursor = (points: readonly MapTrackingEncryptedPoint[]): MapTrackingCursor | null => {
   let cursor: MapTrackingCursor | null = null;
@@ -61,6 +62,7 @@ const toLiveMapPosition = ({
 
 export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   let active = false;
+  let activation = 0;
   let scheduled: { cancel: () => void } | null = null;
   let tickPromise: Promise<void> | null = null;
   let tickPhase: "idle" | "listing" | "groups" = "idle";
@@ -89,6 +91,24 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     groups: {},
     membership: "loading",
     undecryptable: [],
+  };
+
+  const pendingRequests = new Set<AbortController>();
+
+  const withTimeout = async <T>(request: (signal: AbortSignal) => Promise<T>) => {
+    const controller = new AbortController();
+    const response = request(controller.signal);
+    const aborted = new Promise<never>((_, reject) => {
+      controller.signal.addEventListener("abort", () => {
+        reject(new Error("Map tracking request aborted"));
+      });
+    });
+    const timer = deps.schedule(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    pendingRequests.add(controller);
+    return Promise.race([response, aborted]).finally(() => {
+      timer.cancel();
+      pendingRequests.delete(controller);
+    });
   };
 
   const currentConnection = (): MapTrackingStatus["connection"] =>
@@ -288,7 +308,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   };
 
   const coldTick = async (groupId: string, runId: number) => {
-    const { points } = await deps.getLatest(groupId);
+    const { points } = await withTimeout((signal) => deps.getLatest(groupId, signal));
     if (!isCurrent(groupId, runId)) {
       return;
     }
@@ -320,11 +340,9 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         return;
       }
 
-      const { points } = await deps.poll({
-        cursor,
-        groupId,
-        limit: POLL_LIMIT,
-      });
+      const { points } = await withTimeout((signal) =>
+        deps.poll({ cursor, groupId, limit: POLL_LIMIT }, signal),
+      );
 
       if (!isCurrent(groupId, runId)) {
         return;
@@ -355,7 +373,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   };
 
   const reconcileTick = async (groupId: string, runId: number) => {
-    const { points } = await deps.getLatest(groupId);
+    const { points } = await withTimeout((signal) => deps.getLatest(groupId, signal));
     if (!isCurrent(groupId, runId) || points.length === 0) {
       return;
     }
@@ -419,8 +437,9 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   };
 
   const syncMembership = async () => {
-    const groupsResult = await tryCatch(deps.listGroups());
-    if (!active) {
+    const startedIn = activation;
+    const groupsResult = await tryCatch(withTimeout(deps.listGroups));
+    if (activation !== startedIn) {
       return null;
     }
 
@@ -453,15 +472,14 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   };
 
   const tickInternal = async ({ force }: { force: boolean }) => {
+    const startedIn = activation;
     tickPhase = "listing";
     const groups = await syncMembership();
-    if (!active) {
-      tickPhase = "idle";
+    if (activation !== startedIn) {
       return;
     }
 
     if (!groups) {
-      tickPhase = "idle";
       clearSchedule();
       scheduled = deps.schedule(() => {
         void tick({ force: false });
@@ -487,8 +505,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       }),
     );
 
-    tickPhase = "idle";
-    if (active) {
+    if (activation === startedIn) {
       scheduleWake();
     }
   };
@@ -506,18 +523,31 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       return;
     }
 
-    tickPromise = tickInternal({ force }).finally(() => {
-      tickPromise = null;
-      tickPhase = "idle";
+    const run = tickInternal({ force }).finally(() => {
+      if (tickPromise === run) {
+        tickPromise = null;
+        tickPhase = "idle";
+      }
     });
+    tickPromise = run;
 
-    await tickPromise;
+    await run;
+  };
+
+  const deactivate = () => {
+    active = false;
+    activation += 1;
+    tickPromise = null;
+    tickPhase = "idle";
+    clearSchedule();
+    for (const controller of pendingRequests) {
+      controller.abort();
+    }
   };
 
   return {
     destroy: () => {
-      active = false;
-      clearSchedule();
+      deactivate();
       listeners.clear();
       for (const groupId of [...groupStates.keys()]) {
         removeGroup(groupId, { clearKeys: false });
@@ -535,9 +565,8 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         return;
       }
 
-      active = nextActive;
-      if (!active) {
-        clearSchedule();
+      if (!nextActive) {
+        deactivate();
         for (const state of groupStates.values()) {
           state.runId += 1;
           state.inFlight = false;
@@ -545,6 +574,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         return;
       }
 
+      active = true;
       for (const state of groupStates.values()) {
         state.nextDueAt = deps.now();
       }
