@@ -155,7 +155,7 @@ export const LiveMapMarkerPin = ({
                 }}
               />
             ) : null}
-            <AvatarFallback>
+            <AvatarFallback className={status ? "bg-neutral-500" : ""}>
               <Text className="font-bold">{initials}</Text>
             </AvatarFallback>
           </Avatar>

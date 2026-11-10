@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { fitLiveMapMarkers } from "../../lib/fitLiveMapMarkers.ts";
 import {
@@ -47,6 +47,8 @@ export const useLiveMapCamera = ({
   const { cameraRef, scheduleRelease, setCamera } = useLiveMapCameraCommands();
   const initialFitStateRef = useRef(createLiveMapInitialFitState());
   const initialFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [styleLoadedRevision, setStyleLoadedRevision] = useState<number | null>(null);
+  const isStyleLoaded = styleLoadedRevision === mapRevision;
   const preservedCameraRef = useRef(INITIAL_MAP_CAMERA);
   const pendingCameraRestoreRef = useRef(false);
   const previousPmtilesUrlRef = useRef<string | null>(null);
@@ -298,7 +300,7 @@ export const useLiveMapCamera = ({
   }, []);
 
   useEffect(() => {
-    if (!mapStyle || !cameraRef.current) {
+    if (!mapStyle || !isStyleLoaded || !cameraRef.current) {
       return;
     }
 
@@ -325,7 +327,7 @@ export const useLiveMapCamera = ({
       });
       scheduleLiveMapInitialFitClose(initialFitTimerRef, initialFitStateRef);
     }
-  }, [cameraPadding, mapStyle, markers]);
+  }, [cameraPadding, isStyleLoaded, mapStyle, markers]);
 
   useEffect(() => {
     if (!mapStyle || !cameraRef.current) return;
@@ -393,6 +395,7 @@ export const useLiveMapCamera = ({
   };
 
   const onStyleLoaded = () => {
+    setStyleLoadedRevision(mapRevision);
     if (!pendingCameraRestoreRef.current) {
       return;
     }

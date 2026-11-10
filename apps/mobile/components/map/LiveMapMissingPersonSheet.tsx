@@ -26,7 +26,7 @@ export const LiveMapMissingPersonSheet = ({
         <View className="flex-row items-center gap-3">
           <Avatar alt={person.name} className="size-12" style={{ opacity: 0.45 }}>
             {person.image ? <AvatarImage source={{ uri: person.image }} /> : null}
-            <AvatarFallback>
+            <AvatarFallback className="bg-neutral-500">
               <Text className="font-bold">{person.initials}</Text>
             </AvatarFallback>
           </Avatar>

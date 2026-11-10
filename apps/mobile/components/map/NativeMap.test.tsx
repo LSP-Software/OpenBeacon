@@ -1182,6 +1182,7 @@ describe("NativeMap integration harness", () => {
     });
 
     await renderNativeMap({ markers: [alice, bob] });
+    await finishLoadingStyle();
     await flushEffects();
 
     const fitCountBeforeRefresh = getNativeMapCameraCommands().filter(
@@ -1275,6 +1276,24 @@ describe("NativeMap integration harness", () => {
     ).toBe(true);
   });
 
+  test("waits for the map style to load before the first fit", async () => {
+    const alice = createLiveMapMarkerFixture({
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "alice",
+    });
+
+    await renderNativeMap({ markers: [alice] });
+    await flushEffects();
+    expect(getNativeMapCameraCommands()).toEqual([]);
+
+    await finishLoadingStyle();
+    await flushEffects();
+    expect(
+      getNativeMapCameraCommands().filter((command) => command.type === "setCamera"),
+    ).toHaveLength(1);
+  });
+
   test("preserves programmatic fit camera across remount without region events", async () => {
     const alice = createLiveMapMarkerFixture({
       latitude: 51.5,
@@ -1283,6 +1302,7 @@ describe("NativeMap integration harness", () => {
     });
 
     await renderNativeMap({ markers: [alice] });
+    await finishLoadingStyle();
     await flushEffects();
 
     currentSignedPmtilesUrlQuery = {
@@ -1346,6 +1366,7 @@ describe("NativeMap integration harness", () => {
     });
 
     await renderNativeMap({ markers: [self] });
+    await finishLoadingStyle();
     await flushEffects();
 
     expect(
