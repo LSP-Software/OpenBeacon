@@ -11,6 +11,7 @@ let memberIds: string[] | undefined;
 let statusRequests: string[][];
 let created: number;
 const setOpen = mock((_open: boolean) => {});
+const focusListeners = new Set<(focused: boolean) => void>();
 
 mock.module("react-native", () => ({
   ...createReactNativeTestModule(),
@@ -29,6 +30,12 @@ mock.module("../ui/Text.tsx", () => ({
     React.createElement("text", null, children),
 }));
 mock.module("@tanstack/react-query", () => ({
+  focusManager: {
+    subscribe: (listener: (focused: boolean) => void) => {
+      focusListeners.add(listener);
+      return () => focusListeners.delete(listener);
+    },
+  },
   useMutation: () => {
     const [data, setData] = useState<{ id: string; code: string; expiresInMs: number }>();
     const [reset] = useState(() => () => setData(undefined));
@@ -161,6 +168,25 @@ describe("shared invitation dialog", () => {
     expect(statusRequests).toEqual([["invite-1"]]);
     expect(setOpen).toHaveBeenCalledWith(false);
     await act(async () => root.unmount());
+  });
+  test("checks the invite again when the app comes back to the foreground", async () => {
+    const root = createRoot();
+    await render(root);
+    await createInvite(root);
+    await render(root);
+    states = { "invite-1": "used" };
+    await act(async () => {
+      for (const listener of focusListeners) listener(false);
+    });
+    expect(statusRequests).toEqual([]);
+    await act(async () => {
+      for (const listener of focusListeners) listener(true);
+    });
+    await render(root);
+    expect(statusRequests).toEqual([["invite-1"]]);
+    expect(setOpen).toHaveBeenCalledWith(false);
+    await act(async () => root.unmount());
+    expect(focusListeners.size).toBe(0);
   });
   test("does not close for expired, unavailable, or prior-dialog invitations", async () => {
     const root = createRoot();

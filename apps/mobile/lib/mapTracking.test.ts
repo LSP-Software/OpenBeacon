@@ -525,6 +525,43 @@ describe("createMapTrackingSession", () => {
     await reconcileTick;
   });
 
+  test("a failed reconcile keeps the group busy until its poll finishes", async () => {
+    let reconciling = false;
+    let finishPoll: (() => void) | undefined;
+    const { pollCalls, session, setNow } = createSession({
+      getLatest: async () => {
+        if (reconciling) throw new Error("offline");
+        return {
+          points: [
+            point({
+              createdAt: new Date("2026-07-17T12:00:00.000Z"),
+              id: "point-0",
+              senderUserId: "user-1",
+            }),
+          ],
+        };
+      },
+      poll: () =>
+        new Promise((resolve) => {
+          finishPoll = () => resolve({ points: [] });
+        }),
+    });
+
+    session.setActive(true);
+    await session.tick();
+    reconciling = true;
+    setNow(5 * 60_000);
+    const reconcileTick = session.tick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const overlappingTick = session.tick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(pollCalls).toHaveLength(1);
+    finishPoll?.();
+    await reconcileTick;
+    await overlappingTick;
+  });
+
   test("merges decryptable points across groups by senderUserId", async () => {
     const { session } = createSession({
       getLatest: async (groupId) => ({

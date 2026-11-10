@@ -406,7 +406,12 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
                 }
               })
             : null;
-        await Promise.all([reconcile, liveTick(groupId, runId)]);
+        const [reconciled, polled] = await Promise.allSettled([
+          reconcile,
+          liveTick(groupId, runId),
+        ]);
+        if (reconciled.status === "rejected") throw reconciled.reason;
+        if (polled.status === "rejected") throw polled.reason;
       })(),
     );
 

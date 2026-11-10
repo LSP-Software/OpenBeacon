@@ -6,7 +6,10 @@ export const useRefetchWhileFocused = (queryKeys: QueryKey[], intervalMs: number
   const isFocused = useIsFocused();
   const queryClient = useQueryClient();
   const queryKeysRef = useRef(queryKeys);
-  queryKeysRef.current = queryKeys;
+
+  useEffect(() => {
+    queryKeysRef.current = queryKeys;
+  }, [queryKeys]);
 
   useEffect(() => {
     if (!isFocused) return;

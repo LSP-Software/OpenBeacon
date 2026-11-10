@@ -66,6 +66,7 @@ const GroupScreen = () => {
   );
   const { group, isPending, isMissing } = useCachedGroup(groupId);
   const [verifyFailedFor, setVerifyFailedFor] = useState<string | null>(null);
+  const [verifyAttempt, setVerifyAttempt] = useState(0);
   const historyPartialFrom =
     keyAccess?.data && keyAccess.data.history !== "complete"
       ? keyAccess.data.history.partialFrom
@@ -102,14 +103,26 @@ const GroupScreen = () => {
     return () => {
       active = false;
     };
-  }, [groupId, isFocused, isMissing, queryClient, router]);
+  }, [groupId, isFocused, isMissing, queryClient, router, verifyAttempt]);
 
   if (isPending || (isMissing && verifyFailedFor !== groupId)) {
     return <LoadingIndicator />;
   }
 
   if (!group) {
-    return <Text>Group not found</Text>;
+    return (
+      <View className="flex-1 items-center justify-center gap-4 bg-background px-6">
+        <Text>Group not found</Text>
+        <Button
+          onPress={() => {
+            setVerifyFailedFor(null);
+            setVerifyAttempt((attempt) => attempt + 1);
+          }}
+        >
+          <Text>Try again</Text>
+        </Button>
+      </View>
+    );
   }
 
   return (

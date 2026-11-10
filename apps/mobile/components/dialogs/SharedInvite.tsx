@@ -1,6 +1,6 @@
 import { Alert } from "../../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { focusManager, useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Share, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
@@ -45,6 +45,12 @@ export const SharedInvite = ({
     if (previous?.inviteId !== inviteId || previous.memberIdsKey === undefined) return;
     if (previous.memberIdsKey !== memberIdsKey) void refetchStatuses();
   }, [inviteId, memberIdsKey, open, refetchStatuses]);
+  useEffect(() => {
+    if (!open || !inviteId) return;
+    return focusManager.subscribe((focused) => {
+      if (focused) void refetchStatuses();
+    });
+  }, [inviteId, open, refetchStatuses]);
   const currentStatus = statuses.data?.find((item) => item.id === inviteId)?.status;
   const used = currentStatus === "used";
   useEffect(() => {

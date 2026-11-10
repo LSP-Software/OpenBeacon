@@ -279,3 +279,23 @@ test("shows not found when the group can't be checked, for example offline", asy
     root.unmount();
   });
 });
+
+test("tries the check again from not found once the connection is back", async () => {
+  fetchGroups = async () => {
+    throw new Error("Network request failed");
+  };
+  queryResult = { ...queryResult, data: [] };
+  const root = createRoot();
+  await act(async () => {
+    root.render(<GroupScreen />);
+  });
+  fetchGroups = async () => [];
+  const [tryAgain] = root.container.queryAll((item) => item.type === "pressable");
+  if (!tryAgain) throw new Error("Try again button not found");
+  await act(async () => (tryAgain.props as { onPress: () => void }).onPress());
+  expect(fetchQuery).toHaveBeenCalledTimes(2);
+  expect(replace).toHaveBeenCalledWith("/(tabs)/groups/list");
+  await act(async () => {
+    root.unmount();
+  });
+});
