@@ -20,9 +20,15 @@ defaults:
     shell: bash
 
 jobs:
-  deploy:
+  publish:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.image_tags.outputs.version }}
+      backend_digest: ${{ steps.backend_image.outputs.digest }}
+      scheduled_jobs_digest: ${{ steps.scheduled_jobs_image.outputs.digest }}
     steps:
       - name: Require main branch for deployment
         if: inputs.deploy && github.ref != 'refs/heads/main'
@@ -51,18 +57,70 @@ jobs:
             branch="${branch}-$(printf '%s' "$BRANCH" | sha256sum | cut -c1-8)"
           fi
           {
+            echo "version=${version}"
             echo 'tags<<EOF'
             echo "docker.io/lspsoftware/openbeacon-backend:branch-${branch}"
             echo "docker.io/lspsoftware/openbeacon-backend:${version}-${branch}"
-            if [ "$BRANCH" = main ]; then
-              echo "docker.io/lspsoftware/openbeacon-backend:${version}"
-              echo 'docker.io/lspsoftware/openbeacon-backend:latest-stable'
-            fi
             echo EOF
           } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Require an unreleased version
+        if: inputs.deploy
+        env:
+          VERSION: ${{ steps.image_tags.outputs.version }}
+        run: |
+          for image in openbeacon-backend openbeacon-scheduled-jobs; do
+            ref="docker.io/lspsoftware/${image}:${VERSION}"
+            if output=$(docker buildx imagetools inspect "$ref" 2>&1); then
+              echo "${ref} already exists. Bump serverVersion in apps/backend/src/version.ts before deploying." >&2
+              exit 1
+            fi
+            if ! grep -qxF "ERROR: ${ref}: not found" <<< "$output"; then
+              echo "Could not check whether ${ref} exists:" >&2
+              echo "$output" >&2
+              exit 1
+            fi
+          done
+      - id: backend_image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: docker.io/lspsoftware/openbeacon-backend:${{ github.sha }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+      - id: scheduled_jobs_image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/scheduled-jobs/Dockerfile
+          push: true
+          tags: docker.io/lspsoftware/openbeacon-scheduled-jobs:${{ github.sha }}
+          cache-from: type=gha,scope=scheduled-jobs
+          cache-to: type=gha,mode=max,scope=scheduled-jobs
+      - name: Publish branch tags
+        env:
+          BACKEND_DIGEST: ${{ steps.backend_image.outputs.digest }}
+          BACKEND_TAGS: ${{ steps.image_tags.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            docker buildx imagetools create --tag "$tag" "docker.io/lspsoftware/openbeacon-backend@${BACKEND_DIGEST}"
+          done <<< "$BACKEND_TAGS"
+
+  deploy:
+    needs: publish
+    if: inputs.deploy && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    permissions: {}
+    steps:
       - name: Find Coolify application and check for an active deployment
         id: coolify_application
-        if: inputs.deploy
         env:
           COOLIFY_ENDPOINT: ${{ secrets.COOLIFY_ENDPOINT }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
@@ -94,35 +152,21 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          push: true
-          tags: docker.io/lspsoftware/openbeacon-backend:${{ github.sha }}
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: apps/scheduled-jobs/Dockerfile
-          push: true
-          tags: docker.io/lspsoftware/openbeacon-scheduled-jobs:${{ github.sha }}
-          cache-from: type=gha,scope=scheduled-jobs
-          cache-to: type=gha,mode=max,scope=scheduled-jobs
       - name: Publish release tags
         env:
-          SHA: ${{ github.sha }}
-          BRANCH: ${{ github.ref_name }}
-          BACKEND_TAGS: ${{ steps.image_tags.outputs.tags }}
+          VERSION: ${{ needs.publish.outputs.version }}
+          BACKEND_DIGEST: ${{ needs.publish.outputs.backend_digest }}
+          SCHEDULED_JOBS_DIGEST: ${{ needs.publish.outputs.scheduled_jobs_digest }}
         run: |
-          while IFS= read -r tag; do
-            docker buildx imagetools create --tag "$tag" "docker.io/lspsoftware/openbeacon-backend:${SHA}"
-          done <<< "$BACKEND_TAGS"
-          if [ "$BRANCH" = main ]; then
-            docker buildx imagetools create --tag docker.io/lspsoftware/openbeacon-scheduled-jobs:latest-stable "docker.io/lspsoftware/openbeacon-scheduled-jobs:${SHA}"
-          fi
+          docker buildx imagetools create \
+            --tag "docker.io/lspsoftware/openbeacon-backend:${VERSION}" \
+            --tag docker.io/lspsoftware/openbeacon-backend:latest-stable \
+            "docker.io/lspsoftware/openbeacon-backend@${BACKEND_DIGEST}"
+          docker buildx imagetools create \
+            --tag "docker.io/lspsoftware/openbeacon-scheduled-jobs:${VERSION}" \
+            --tag docker.io/lspsoftware/openbeacon-scheduled-jobs:latest-stable \
+            "docker.io/lspsoftware/openbeacon-scheduled-jobs@${SCHEDULED_JOBS_DIGEST}"
       - name: Trigger Coolify deployment
-        if: inputs.deploy
         env:
           COOLIFY_ENDPOINT: ${{ secrets.COOLIFY_ENDPOINT }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}

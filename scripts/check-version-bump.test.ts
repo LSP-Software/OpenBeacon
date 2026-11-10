@@ -61,6 +61,33 @@ describe("findMissingVersionBumps", () => {
     ).toEqual([]);
   });
 
+  test("treats Docker build files and the lockfile as server code", () => {
+    for (const file of [
+      "Dockerfile",
+      "apps/scheduled-jobs/Dockerfile",
+      ".dockerignore",
+      "apps/scheduled-jobs/.dockerignore",
+      "bun.lock",
+    ]) {
+      expect(findMissingVersionBumps({ changedFiles: [file], base, head: base })).toEqual([
+        "Server code changed: raise serverVersion in apps/backend/src/version.ts above 0.1.5.",
+      ]);
+      expect(
+        findMissingVersionBumps({ changedFiles: [file], base, head: { ...base, server: "0.1.6" } }),
+      ).toEqual([]);
+    }
+  });
+
+  test("only matches Docker and lockfile paths exactly", () => {
+    expect(
+      findMissingVersionBumps({
+        changedFiles: ["docs/Dockerfile", "docs/bun.lock", "my.dockerignore"],
+        base,
+        head: base,
+      }),
+    ).toEqual([]);
+  });
+
   test("requires both versions when a shared package changes", () => {
     expect(
       findMissingVersionBumps({

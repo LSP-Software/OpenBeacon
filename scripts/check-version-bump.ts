@@ -8,6 +8,13 @@ const clientPaths = [
   "packages/shared/",
 ];
 const serverPaths = ["apps/backend/", "apps/scheduled-jobs/", "packages/"];
+const serverFiles = ["Dockerfile", "apps/scheduled-jobs/Dockerfile", "bun.lock"];
+
+const isServerFile = (file: string) =>
+  serverFiles.includes(file) ||
+  file === ".dockerignore" ||
+  file.endsWith("/.dockerignore") ||
+  (serverPaths.some((path) => file.startsWith(path)) && !file.startsWith("packages/tsconfig/"));
 
 type Versions = {
   client: { version: string; buildNumber: number; versionCode: number };
@@ -98,13 +105,7 @@ export const findMissingVersionBumps = ({
     }
   }
 
-  if (
-    shipped.some(
-      (file) =>
-        serverPaths.some((path) => file.startsWith(path)) && !file.startsWith("packages/tsconfig/"),
-    ) &&
-    !isSemverGreater(head.server, base.server)
-  ) {
+  if (shipped.some(isServerFile) && !isSemverGreater(head.server, base.server)) {
     problems.push(
       `Server code changed: raise serverVersion in ${serverVersionPath} above ${base.server}.`,
     );

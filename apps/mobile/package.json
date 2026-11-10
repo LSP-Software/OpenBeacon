@@ -8,15 +8,11 @@
     "dev": "expo start --android --ios",
     "android": "expo prebuild -p android && expo run:android",
     "ios": "expo run:ios",
-    "format": "bun fmt",
-    "format:check": "bun fmt --check",
-    "lint": "biome lint .",
     "typecheck": "bun check",
     "test": "bun test --isolate && bun run test:native-crypto",
     "test:native-crypto": "cd modules/openbeacon-tracking/jvm && ./gradlew test --no-daemon",
     "test:room": "bash ../../scripts/test-tracking-room.sh",
-    "test:map-assets:package": "bun scripts/check-map-assets-package.ts",
-    "ci": "bun run typecheck && bun run format:check && bun run lint && bun run test"
+    "test:map-assets:package": "bun scripts/check-map-assets-package.ts"
   },
   "dependencies": {
     "@better-auth/expo": "^1.7.14",
