@@ -13,7 +13,6 @@ import {
   InfoIcon,
   KeyRoundIcon,
   LockIcon,
-  LogOutIcon,
   MailIcon,
   MapPinIcon,
   SunIcon,
@@ -69,11 +68,6 @@ const categories = [
         label: "Password and Security",
         icon: LockIcon,
         href: "/account/password",
-      },
-      {
-        label: "Sign out of all other sessions",
-        icon: LogOutIcon,
-        href: "/account/sign-out-others",
       },
       {
         label: "Recovery phrase",

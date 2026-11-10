@@ -8,7 +8,8 @@ import { type EmailMessage, isOptionalSecurityAlert, type SecurityAlert } from "
 const secureGoogleAdvice =
   "Change your Google password, because someone may have used your Google account to sign in.";
 
-const signOutOthersAdvice = 'open the Account tab and tap "Sign out of all other sessions".';
+const signOutOthersAdvice =
+  'open Account → Password and Security and tap "Sign out of all other sessions".';
 
 const secureAccountAdvice = (hasPassword: boolean) =>
   hasPassword
