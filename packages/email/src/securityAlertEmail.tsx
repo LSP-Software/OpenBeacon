@@ -173,7 +173,7 @@ export const renderSecurityAlertEmail = async ({
         }
       : {}),
   });
-  return { subject, ...rendered, canTurnOff };
+  return { subject, summary: { type: `alert:${alert.type}` }, ...rendered, canTurnOff };
 };
 
 export const createSendSecurityAlertEmail =

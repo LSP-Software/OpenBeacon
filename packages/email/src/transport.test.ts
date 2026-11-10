@@ -29,6 +29,7 @@ const message = {
   subject: "Subject",
   html: '<img src="cid:openbeacon-logo">',
   text: "Body",
+  summary: { type: "password-reset", code: "042917" },
   attachments: [{ filename: "openbeacon.png", content: logo, contentId: "openbeacon-logo" }],
 };
 
@@ -123,7 +124,11 @@ describe("Resend transport", () => {
     await transport.send(message);
     expect(resendSend).toHaveBeenCalledWith({
       from: "OpenBeacon <noreply@example.com>",
-      ...message,
+      to: message.to,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+      attachments: message.attachments,
     });
   });
 
@@ -184,14 +189,18 @@ describe("Resend transport", () => {
 });
 
 describe("console transport", () => {
-  test("prints the plain-text part without the recipient's address", async () => {
+  test("prints one line with the recipient, type and code", async () => {
     const log = spyOn(console, "log").mockImplementation(() => {});
-    await createEmailTransport({ transport: "console", fromAddress: "noreply@localhost" }).send(
-      message,
-    );
-    expect(log).toHaveBeenCalledWith(
-      "Email from OpenBeacon <noreply@localhost>\nSubject: Subject\n\nBody",
-    );
+    const transport = createEmailTransport({
+      transport: "console",
+      fromAddress: "noreply@localhost",
+    });
+    await transport.send(message);
+    await transport.send({ ...message, summary: { type: "account-exists" } });
+    expect(log.mock.calls).toEqual([
+      ["[email] to=owner@example.com type=password-reset code=042917"],
+      ["[email] to=owner@example.com type=account-exists"],
+    ]);
     log.mockRestore();
   });
 });

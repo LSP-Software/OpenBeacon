@@ -6,6 +6,7 @@ export type EmailMessage = {
   subject: string;
   html: string;
   text: string;
+  summary: { type: string; code?: string };
   attachments: { filename: string; content: Buffer; contentId: string }[];
 };
 

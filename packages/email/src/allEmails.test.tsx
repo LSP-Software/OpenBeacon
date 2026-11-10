@@ -95,6 +95,15 @@ describe("every email", () => {
     }
   });
 
+  test("summarises each kind of email with its own type and only code emails carry a code", async () => {
+    const emails = await renderEveryEmail();
+    const typesBySubject = new Map(emails.map(({ subject, summary }) => [subject, summary.type]));
+    expect(new Set(typesBySubject.values()).size).toBe(typesBySubject.size);
+    for (const email of emails) {
+      expect(email.summary.code).toBe(email.text.includes(code) ? code : undefined);
+    }
+  });
+
   test("never puts a code in the subject", async () => {
     for (const email of await renderEveryEmail()) {
       expect(email.subject).not.toMatch(/\d{6}/);
