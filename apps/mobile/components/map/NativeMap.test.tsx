@@ -126,6 +126,7 @@ mock.module("lucide-react-native", () => ({
   LocateFixedIcon: () => React.createElement("locate-fixed-icon"),
   MapPinIcon: () => React.createElement("map-pin-icon"),
   ScanIcon: () => React.createElement("scan-icon"),
+  UsersIcon: () => React.createElement("users-icon"),
 }));
 
 mock.module("../ui/Icon.tsx", () => ({
@@ -248,6 +249,15 @@ mock.module("../../providers/ThemeProvider.tsx", () => ({
 mock.module("./LiveMapPersonSheet.tsx", () => ({
   LiveMapPersonSheet: ({ name }: { name: string }) =>
     React.createElement("live-map-person-sheet", { name }),
+}));
+
+mock.module("./LiveMapPeopleTray.tsx", () => ({
+  LiveMapPeopleTray: () => React.createElement("live-map-people-tray"),
+}));
+
+mock.module("./LiveMapMissingPersonSheet.tsx", () => ({
+  LiveMapMissingPersonSheet: ({ person }: { person: { name: string } }) =>
+    React.createElement("live-map-missing-person-sheet", { name: person.name }),
 }));
 
 mock.module("./LiveMapStackSheet.tsx", () => ({

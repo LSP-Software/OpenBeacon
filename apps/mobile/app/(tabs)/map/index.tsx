@@ -16,16 +16,18 @@ import { trpc } from "../../../lib/api.ts";
 import { applySelfDeviceLocation } from "../../../lib/applySelfDeviceLocation.ts";
 import { authClient } from "../../../lib/auth-client.ts";
 import { buildLiveMapMarkers } from "../../../lib/buildLiveMapMarkers.ts";
+import { classifyMapPeople } from "../../../lib/classifyMapPeople.ts";
 import { loadPersonalNicknames } from "../../../lib/personalNicknames.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { nextMapMarkerSelection } from "../../../lib/mapMarkerSelection.ts";
 import { resolveSelfDeviceLocationFallback } from "../../../lib/resolveSelfDeviceLocationFallback.ts";
+import { storage } from "../../../lib/storage.ts";
 import { TAB_BAR_CONTENT_HEIGHT } from "../../../lib/tabBarLayout.ts";
 import { dismissTrackingQueueEviction, getTrackingQueueEviction } from "../../../lib/tracking.ts";
 
 const MapScreen = () => {
   const insets = useSafeAreaInsets();
-  const livePositions = useMapLivePositions();
+  const { positions: livePositions, status: trackingStatus } = useMapLivePositions();
   const { data: session } = authClient.useSession();
   const { data: groupsQueryData } = useQuery(trpc.groupMembership.list.queryOptions());
   const groups = useMembershipSnapshot(groupsQueryData);
@@ -49,6 +51,9 @@ const MapScreen = () => {
   );
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selfUserId = session?.user.id ?? "";
+  const peopleTrayKey = `map.peopleTrayOpen.${selfUserId}`;
+  const [peopleTrayOpen, setPeopleTrayOpen] = useState<boolean | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const selfDeviceLocation = useSelfDeviceLocation(selfUserId.length > 0);
   const lastSentAt = useTrackingUploadTime(selfUserId, groups?.map((group) => group.id) ?? []);
   const queryClient = useQueryClient();
@@ -107,6 +112,33 @@ const MapScreen = () => {
     lastSentAt,
   ]);
 
+  const people = useMemo(() => {
+    if (!selfUserId || !groupsWithNicknames) {
+      return null;
+    }
+
+    const keyAccessByGroupId = new Map<string, "available" | "missing" | "unavailable">();
+    groupsWithNicknames.forEach((group, index) => {
+      const access = keyAccess[index];
+      const current = access?.data?.current ?? (access?.isError ? "unavailable" : undefined);
+      if (current) keyAccessByGroupId.set(group.id, current);
+    });
+
+    return classifyMapPeople({
+      groups: groupsWithNicknames,
+      keyAccess: keyAccessByGroupId,
+      markers,
+      now,
+      selfUserId,
+      status: trackingStatus,
+    });
+  }, [groupsWithNicknames, keyAccess, markers, now, selfUserId, trackingStatus]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     if (selectedUserId && !markers.some((marker) => marker.userId === selectedUserId)) {
       setSelectedUserId(null);
@@ -120,6 +152,13 @@ const MapScreen = () => {
     >
       <NativeMap
         markers={markers}
+        now={now}
+        people={people}
+        peopleTrayOpen={peopleTrayOpen ?? storage.getBoolean(peopleTrayKey) ?? false}
+        onPeopleTrayOpenChange={(open) => {
+          storage.set(peopleTrayKey, open);
+          setPeopleTrayOpen(open);
+        }}
         selectedUserId={selectedUserId}
         onSelectUserId={(userId) => {
           setSelectedUserId((current) => nextMapMarkerSelection(current, userId));

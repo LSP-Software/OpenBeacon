@@ -1,6 +1,7 @@
 import { View } from "react-native";
 import { useTimeSince } from "../../hooks/useTimeSince.ts";
 import { getBatteryVisual } from "../../lib/batteryVisual.ts";
+import { locationStaleAt } from "../../lib/locationStaleAt.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
@@ -28,6 +29,7 @@ export const LiveMapPersonSheet = ({
   timestamp: string | null;
 }) => {
   const updatedAge = useTimeSince(timestamp);
+  const isOutOfDate = !isSelf && timestamp !== null && Date.now() >= locationStaleAt(timestamp);
   const batteryVisual = battery
     ? getBatteryVisual({
         batteryLevel: battery.level,
@@ -58,6 +60,14 @@ export const LiveMapPersonSheet = ({
               </Text>
             </View>
           </View>
+          {isOutOfDate ? (
+            <View className="mt-3 rounded-xl bg-background p-3">
+              <Text className="text-sm">
+                {name}’s phone hasn’t sent a location since then. It might be offline, out of
+                battery, or have location turned off.
+              </Text>
+            </View>
+          ) : null}
           {battery && batteryVisual ? (
             <View className="mt-3 flex-row items-center gap-2">
               <Icon as={batteryVisual.icon} size={20} className={batteryVisual.colorClass} />

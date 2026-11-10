@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getTimeSinceRefreshIntervalMs, timeSince } from "./timeSince.ts";
+import { getTimeSinceRefreshIntervalMs, shortTimeSince, timeSince } from "./timeSince.ts";
 
 describe("timeSince", () => {
   test("formats minutes, hours and days with their remaining units", () => {
@@ -25,5 +25,23 @@ describe("getTimeSinceRefreshIntervalMs", () => {
     expect(getTimeSinceRefreshIntervalMs(now - 90_500, now)).toBe(29_500);
     expect(getTimeSinceRefreshIntervalMs(now - 3_600_000, now)).toBe(60_000);
     expect(getTimeSinceRefreshIntervalMs(now - 86_400_000, now)).toBe(60_000);
+  });
+});
+
+describe("shortTimeSince", () => {
+  const now = Date.parse("2026-11-10T12:00:00.000Z");
+  const ago = (ms: number) => new Date(now - ms).toISOString();
+
+  test("rounds down to the largest whole unit", () => {
+    expect(shortTimeSince(ago(59_000), now)).toBe("now");
+    expect(shortTimeSince(ago(60_000), now)).toBe("1m");
+    expect(shortTimeSince(ago(59 * 60_000), now)).toBe("59m");
+    expect(shortTimeSince(ago(60 * 60_000), now)).toBe("1h");
+    expect(shortTimeSince(ago(47 * 3_600_000), now)).toBe("1d");
+  });
+
+  test("treats future and invalid timestamps as now", () => {
+    expect(shortTimeSince(ago(-60_000), now)).toBe("now");
+    expect(shortTimeSince("not a date", now)).toBe("now");
   });
 });

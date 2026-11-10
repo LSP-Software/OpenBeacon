@@ -5,6 +5,7 @@ import type {
   MapTrackingCursor,
   MapTrackingDeps,
   MapTrackingEncryptedPoint,
+  MapTrackingStatus,
 } from "./mapTrackingTypes.ts";
 
 export type {
@@ -12,6 +13,7 @@ export type {
   MapTrackingCursor,
   MapTrackingDeps,
   MapTrackingEncryptedPoint,
+  MapTrackingStatus,
 } from "./mapTrackingTypes.ts";
 
 const STEADY_INTERVAL_MS = 5_000;
@@ -77,6 +79,30 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   >();
   const positionsByGroup = new Map<string, Map<string, LiveMapEntry>>();
   const listeners = new Set<() => void>();
+  const groupLoadStatus = new Map<string, "loaded" | "failed">();
+  const undecryptableByGroup = new Map<string, Set<string>>();
+  let membershipStatus: MapTrackingStatus["membership"] = "loading";
+  let status: MapTrackingStatus = { groups: {}, membership: "loading", undecryptable: [] };
+
+  const refreshStatus = () => {
+    status = {
+      groups: Object.fromEntries(groupLoadStatus),
+      membership: membershipStatus,
+      undecryptable: [...undecryptableByGroup].flatMap(([groupId, userIds]) =>
+        [...userIds].map((userId) => ({ groupId, userId })),
+      ),
+    };
+  };
+
+  const setGroupLoadStatus = (groupId: string, next: "loaded" | "failed") => {
+    const current = groupLoadStatus.get(groupId);
+    if (current === next || (current === "loaded" && next === "failed")) {
+      return;
+    }
+    groupLoadStatus.set(groupId, next);
+    refreshStatus();
+    notify();
+  };
 
   const notify = () => {
     for (const listener of listeners) {
@@ -132,6 +158,9 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
     groupStates.delete(groupId);
     positionsByGroup.delete(groupId);
+    groupLoadStatus.delete(groupId);
+    undecryptableByGroup.delete(groupId);
+    refreshStatus();
     if (clearKeys) {
       deps.clearEpochKeys(groupId);
     }
@@ -191,6 +220,8 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     runId: number;
   }) => {
     const entries: LiveMapEntry[] = [];
+    const undecryptable = new Set(undecryptableByGroup.get(groupId));
+    let undecryptableChanged = false;
 
     for (const point of points) {
       if (!isCurrent(groupId, runId)) {
@@ -204,6 +235,22 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
 
       if (result.status === "ok") {
         entries.push(result.entry);
+        undecryptableChanged = undecryptable.delete(point.senderUserId) || undecryptableChanged;
+      } else if (result.status === "undecryptable" && !undecryptable.has(point.senderUserId)) {
+        undecryptable.add(point.senderUserId);
+        undecryptableChanged = true;
+      }
+    }
+
+    if (undecryptableChanged) {
+      if (undecryptable.size > 0) {
+        undecryptableByGroup.set(groupId, undecryptable);
+      } else {
+        undecryptableByGroup.delete(groupId);
+      }
+      refreshStatus();
+      if (entries.length === 0) {
+        notify();
       }
     }
 
@@ -330,10 +377,21 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
 
     if (result.error) {
       markGroupFailure(groupId, runId);
+      setGroupLoadStatus(groupId, "failed");
       return;
     }
 
     markGroupSuccess(groupId, runId);
+    setGroupLoadStatus(groupId, "loaded");
+  };
+
+  const setMembershipStatus = (next: MapTrackingStatus["membership"]) => {
+    if (membershipStatus === next || (membershipStatus === "loaded" && next === "failed")) {
+      return;
+    }
+    membershipStatus = next;
+    refreshStatus();
+    notify();
   };
 
   const syncMembership = async () => {
@@ -343,6 +401,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
 
     if (groupsResult.error) {
+      setMembershipStatus("failed");
       return null;
     }
 
@@ -364,6 +423,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     for (const { id: groupId } of groups) {
       ensureGroupState(groupId);
     }
+    setMembershipStatus("loaded");
 
     return groups;
   };
@@ -442,6 +502,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       deps.clearEpochKeys();
     },
     getLivePositions: () => [...getLiveMap().values()].map(toLiveMapPosition),
+    getStatus: () => status,
     setActive: (nextActive: boolean) => {
       if (active === nextActive) {
         if (nextActive) {

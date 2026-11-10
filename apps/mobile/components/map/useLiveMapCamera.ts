@@ -20,6 +20,7 @@ import type { useLiveMapEdgeMarkers } from "./useLiveMapEdgeMarkers.ts";
 import type { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
 export const useLiveMapCamera = ({
+  bottomOverlayHeight,
   edge,
   mapStyle,
   mapRevision,
@@ -31,6 +32,7 @@ export const useLiveMapCamera = ({
   selectedUserId,
   topInset,
 }: {
+  bottomOverlayHeight: number;
   edge: Pick<ReturnType<typeof useLiveMapEdgeMarkers>, "suppress" | "release" | "releaseAfter">;
   mapStyle: ReturnType<typeof useNativeMapStyle>["mapStyle"];
   mapRevision: number;
@@ -66,21 +68,21 @@ export const useLiveMapCamera = ({
   const selectedLongitude = selectedMarker?.longitude;
   const cameraPadding = useMemo(
     () => ({
-      paddingBottom: selectedUserId ? 220 : 48,
+      paddingBottom: selectedUserId ? 220 : 48 + bottomOverlayHeight,
       paddingLeft: 32,
       paddingRight: 32,
       paddingTop: topInset + 56,
     }),
-    [topInset, selectedUserId],
+    [bottomOverlayHeight, topInset, selectedUserId],
   );
   const fitEveryonePadding = useMemo(
     () => ({
-      paddingBottom: 48,
+      paddingBottom: 48 + bottomOverlayHeight,
       paddingLeft: 32,
       paddingRight: 32,
       paddingTop: topInset + 56,
     }),
-    [topInset],
+    [bottomOverlayHeight, topInset],
   );
   const cameraPaddingRef = useRef(cameraPadding);
   cameraPaddingRef.current = cameraPadding;

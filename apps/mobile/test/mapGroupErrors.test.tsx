@@ -60,7 +60,12 @@ mock.module("../components/ui/Text.tsx", () => ({
 }));
 mock.module("../hooks/useGroupColorRevision.ts", () => ({ useGroupColorRevision: () => 0 }));
 mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useCurrentGroupKeyAccess: () => access }));
-mock.module("../hooks/useMapLivePositions.ts", () => ({ useMapLivePositions: () => [] }));
+mock.module("../hooks/useMapLivePositions.ts", () => ({
+  useMapLivePositions: () => ({
+    positions: [],
+    status: { groups: {}, membership: "loading", undecryptable: [] },
+  }),
+}));
 mock.module("../hooks/useMembershipSnapshot.ts", () => ({ useMembershipSnapshot: () => groups }));
 mock.module("../hooks/useTrackingUploadTime.ts", () => ({ useTrackingUploadTime: () => null }));
 mock.module("../hooks/useSelfDeviceLocation.ts", () => ({ useSelfDeviceLocation: () => null }));
@@ -74,9 +79,15 @@ mock.module("../lib/resolveSelfDeviceLocationFallback.ts", () => ({
   resolveSelfDeviceLocationFallback: () => null,
 }));
 mock.module("../lib/applySelfDeviceLocation.ts", () => ({ applySelfDeviceLocation: () => [] }));
-mock.module("../lib/buildLiveMapMarkers.ts", () => ({ buildLiveMapMarkers: () => [] }));
+mock.module("../lib/buildLiveMapMarkers.ts", () => ({
+  buildLiveMapMarkers: () => [],
+  initialsFromName: () => "??",
+}));
 mock.module("../lib/personalNicknames.ts", () => ({ loadPersonalNicknames: async () => ({}) }));
 mock.module("../lib/groupColor.ts", () => ({ getGroupColor: () => "red" }));
+mock.module("../lib/storage.ts", () => ({
+  storage: { getBoolean: () => undefined, set: () => {} },
+}));
 const { default: MapScreen } = await import("../app/(tabs)/map/index.tsx");
 
 test("shows individual group links for up to two missing keys and a groups link above that", async () => {

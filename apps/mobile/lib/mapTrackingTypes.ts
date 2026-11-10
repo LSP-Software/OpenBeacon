@@ -38,3 +38,9 @@ export type MapTrackingDeps = {
   }) => Promise<{ points: MapTrackingEncryptedPoint[] }>;
   schedule: (callback: () => void, delayMs: number) => { cancel: () => void };
 };
+
+export type MapTrackingStatus = {
+  groups: Readonly<Record<string, "loaded" | "failed">>;
+  membership: "loading" | "loaded" | "failed";
+  undecryptable: readonly { groupId: string; userId: string }[];
+};

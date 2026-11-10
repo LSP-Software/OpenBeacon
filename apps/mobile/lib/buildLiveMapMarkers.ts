@@ -91,7 +91,7 @@ export const buildLiveMapMarkers = ({
   return markers;
 };
 
-const initialsFromName = (name: string) => {
+export const initialsFromName = (name: string) => {
   const initials = name.charAt(0) + name.charAt(1);
   return initials.length === 2 ? initials : "??";
 };
