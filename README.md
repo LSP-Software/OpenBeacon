@@ -211,7 +211,7 @@ bun run emulators
 
 The command installs dependencies, starts PostgreSQL and Redis, applies database migrations, starts the backend, builds the Android development APK, and launches Metro and four emulators. On first run it creates `.env` if needed and tells you which required storage settings to fill in. Configure `S3_ACCESS_KEY_ID`, `S3_ACCESS_KEY`, `S3_BUCKET_NAME`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, and `R2_PM_TILES_KEY` there; real storage credentials and a PMTiles object are needed for storage and map features. Configure native Google sign-in values in `apps/mobile/.env` if needed. Existing `.env` files are preserved.
 
-The first available AVD is used by default. Each emulator is allocated 6 GiB RAM (24 GiB across four devices); the host also needs memory for the operating system and build tools. To change the allocation, select an AVD, or use an already running backend instead of starting the local one:
+The first available AVD is used by default. Each emulator is allocated 6 GiB RAM (24 GiB across four devices); the host also needs memory for the operating system and build tools. Before building, the script checks that the available RAM covers every emulator plus 2 GiB and stops if it doesn't; pass `--skip-memory-check` to start anyway. To change the allocation, select an AVD, or use an already running backend instead of starting the local one:
 
 ```sh
 bun run emulators --avd Medium_Phone
