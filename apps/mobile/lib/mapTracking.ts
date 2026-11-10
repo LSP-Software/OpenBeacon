@@ -37,7 +37,7 @@ const maxCursor = (points: readonly MapTrackingEncryptedPoint[]): MapTrackingCur
   return cursor;
 };
 
-const isCursorAfter = (candidate: MapTrackingCursor, current: MapTrackingCursor) =>
+export const isCursorAfter = (candidate: MapTrackingCursor, current: MapTrackingCursor) =>
   candidate.createdAt.getTime() > current.createdAt.getTime() ||
   (candidate.createdAt.getTime() === current.createdAt.getTime() && candidate.id > current.id);
 
