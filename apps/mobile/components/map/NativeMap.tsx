@@ -576,7 +576,7 @@ export const NativeMap = ({
       !isStackSheetOpen &&
       !missingPerson ? (
         <LiveMapHiddenGroupsNotice
-          bottom={(trayPeople ? trayHeight : 0) + 12}
+          bottom={trayPeople ? trayHeight + 12 : 40}
           groups={groupOptions}
           toastGroupNames={toastGroups.map((group) => group.name)}
           onOpenMenu={openGroupMenu}
