@@ -1,38 +1,21 @@
+import { useIsFocused } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
 import { trpc } from "../lib/api.ts";
 import { getPmtilesUrlRefreshDelayMs } from "../lib/pmtilesUrl.ts";
 
 export const useSignedPmtilesUrl = () => {
-  const query = useQuery({
+  const isFocused = useIsFocused();
+
+  return useQuery({
     ...trpc.maps.getSignedPmtilesUrl.queryOptions(),
-    staleTime: Infinity,
+    subscribed: isFocused,
+    staleTime: ({ state }) =>
+      state.data ? getPmtilesUrlRefreshDelayMs({ refreshAt: state.data.refreshAt }) : 0,
+    refetchInterval: ({ state }) =>
+      state.data
+        ? Math.max(getPmtilesUrlRefreshDelayMs({ refreshAt: state.data.refreshAt }), 1_000)
+        : false,
     retry: (_failureCount, error) => error.data?.code !== "UNAUTHORIZED",
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30_000),
   });
-
-  useEffect(() => {
-    const refreshAt = query.data?.refreshAt;
-
-    if (!refreshAt) {
-      return;
-    }
-
-    const refreshInMs = getPmtilesUrlRefreshDelayMs({ refreshAt });
-
-    if (refreshInMs === 0) {
-      void query.refetch();
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      void query.refetch();
-    }, refreshInMs);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [query.data?.refreshAt, query.refetch]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return query;
 };

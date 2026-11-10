@@ -53,6 +53,7 @@ class CaptureSamplingPolicyTest {
 
     assertTrue(decision.shouldQueue)
     assertEquals(10_000L, decision.intervalMs)
+    assertEquals(60_000L, decision.uploadIntervalMs)
   }
 
   @Test
@@ -74,6 +75,8 @@ class CaptureSamplingPolicyTest {
 
     assertEquals(60_000L, idle.intervalMs)
     assertEquals(20_000L, moving.intervalMs)
+    assertEquals(120_000L, idle.uploadIntervalMs)
+    assertEquals(120_000L, moving.uploadIntervalMs)
   }
 
   @Test
@@ -101,6 +104,7 @@ class CaptureSamplingPolicyTest {
       )
 
     assertEquals(60_000L, decision.intervalMs)
+    assertEquals(120_000L, decision.uploadIntervalMs)
   }
 
   @Test
@@ -127,6 +131,7 @@ class CaptureSamplingPolicyTest {
       )
 
     assertEquals(30_000L, decision.intervalMs)
+    assertEquals(60_000L, decision.uploadIntervalMs)
   }
 
   @Test

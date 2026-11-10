@@ -16,18 +16,32 @@ import {
 import { baseUrl } from "./base-url.ts";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
-import { cancelDeviceKeyRegistrations, ensureDeviceKeyRegistration } from "./deviceKeys.ts";
+import {
+  cancelDeviceKeyRegistrations,
+  ensureDeviceKeyRegistration,
+  forgetDeviceKeyRegistration,
+  getRegisteredDeviceKey,
+} from "./deviceKeys.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
 import { backfillHistoryWraps } from "./recovery.ts";
 import { hasCustomServerUrl } from "./server-url.ts";
+import {
+  clearTrackingKeyCheck,
+  getMembershipSignature,
+  hasMembershipChanged,
+  isTrackingKeyCheckDue,
+  markTrackingKeysStale,
+  recordTrackingKeyCheck,
+} from "./trackingKeyCheck.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
 
-let reconcilePromise: Promise<void> | null = null;
+let reconcilePromise: Promise<boolean> | null = null;
 const cancelReconciliations = new Set<() => void>();
-let reconcileOptions: { startCapture: boolean; onlyIfRunning: boolean } | null = null;
+let reconcileOptions: { startCapture: boolean; onlyIfRunning: boolean; force: boolean } | null =
+  null;
 let reconcileVersion = 0;
 let flushPromise: Promise<void> | null = null;
 let flushWork: Promise<void> | null = null;
@@ -35,15 +49,29 @@ let flushController: AbortController | null = null;
 let revokePromise: Promise<void> | null = null;
 let captureRefreshPending = false;
 let trackingPaused = false;
+let uploadRejectedKeys = false;
+let keyAccessChangePending = false;
 const observedGroupEpochs = new Map<string, string>();
 const lastCleanBackfills = new Map<string, { at: number; missingVersion: number | null }>();
 
+const getOwner = (userId: string) => JSON.stringify([baseUrl, userId]);
+
 const getQueueOwner = async (signal?: AbortSignal) => {
+  const device = await getRegisteredDeviceKey();
+  if (device) return getOwner(device.userId);
   const { userId } = await trpcClient.auth.deviceKeyContext.query(
     undefined,
     signal ? { signal } : undefined,
   );
-  return JSON.stringify([baseUrl, userId]);
+  return getOwner(userId);
+};
+
+const getKeyCheckScope = (userId: string, startCapture: boolean) =>
+  JSON.stringify([baseUrl, userId, startCapture]);
+
+const hasFreshKeyCheck = async (startCapture: boolean) => {
+  const device = await getRegisteredDeviceKey();
+  return Boolean(device && !isTrackingKeyCheckDue(getKeyCheckScope(device.userId, startCapture)));
 };
 
 const loadTrackingModule = async () => {
@@ -119,32 +147,63 @@ const recordCleanBackfill = ({
   }
 };
 
+const applyCaptureState = async ({
+  hasKeys,
+  isCurrent,
+  onlyIfRunning,
+  trackingModule,
+}: {
+  hasKeys: boolean;
+  isCurrent: () => boolean;
+  onlyIfRunning: boolean;
+  trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>;
+}) => {
+  if (!hasKeys) {
+    if (trackingModule.isCaptureRunning()) await trackingModule.stopCapture();
+    return;
+  }
+  if (!isCurrent() || (onlyIfRunning && !trackingModule.isCaptureRunning())) return;
+  if (!trackingModule.isCaptureRunning()) {
+    await trackingModule.startCapture();
+    captureRefreshPending = false;
+  } else if (captureRefreshPending) {
+    await trackingModule.refreshCapture();
+    captureRefreshPending = false;
+  }
+};
+
 const reconcileTrackingKeysInternal = async ({
   startCapture,
   onlyIfRunning = false,
+  force,
   isCurrent,
 }: {
   startCapture: boolean;
   onlyIfRunning?: boolean;
+  force: boolean;
   isCurrent: () => boolean;
-}): Promise<void> => {
+}): Promise<boolean> => {
   const trackingModule = await loadTrackingModule();
   if (!isCurrent() || (onlyIfRunning && (!trackingModule || !trackingModule.isCaptureRunning()))) {
-    return;
+    return false;
   }
 
   if (!trackingModule || !startCapture) {
     if (trackingModule) {
       if (trackingModule.isCaptureRunning()) await trackingModule.stopCapture();
-      if (!isCurrent()) return;
+      if (!isCurrent()) return false;
       trackingModule.revokeEpochKeys();
     }
-    const groups = await trpcClient.groupMembership.list.query();
-    if (!isCurrent()) return;
-    const device = await tryCatch(ensureDeviceKeyRegistration());
+    if (!force && (await hasFreshKeyCheck(false))) return false;
+    if (!isCurrent()) return false;
+    const [groups, device] = await Promise.all([
+      trpcClient.groupMembership.list.query(),
+      tryCatch(ensureDeviceKeyRegistration({ checkOwner: force })),
+    ]);
+    if (!isCurrent()) return false;
     if (getErrorCode(device.error) === "UNAUTHORIZED") throw device.error;
     const backfillCheck = device.data ? await checkHistoryBackfill(device.data.userId) : null;
-    if (!isCurrent()) return;
+    if (!isCurrent()) return false;
     const results = await Promise.all(
       groups.map(async ({ id: groupId }) => {
         const rotation = await tryCatch(rotateGroupEpochIfRequired(groupId));
@@ -154,31 +213,59 @@ const reconcileTrackingKeysInternal = async ({
     );
     const unauthorized = results.flat().find(({ error }) => getErrorCode(error) === "UNAUTHORIZED");
     if (unauthorized?.error) throw unauthorized.error;
+    const membership = getMembershipSignature(groups);
+    const changed =
+      hasMembershipChanged(membership) ||
+      results.some(([rotation, backfill]) => rotation?.data === true || Boolean(backfill?.data));
     if (device.data && isCurrent()) {
-      recordCleanBackfill({
-        backfills: results.flatMap((result) => result.slice(1)),
-        check: backfillCheck,
-        userId: device.data.userId,
-      });
+      const backfills = results.flatMap((result) => result.slice(1));
+      recordCleanBackfill({ backfills, check: backfillCheck, userId: device.data.userId });
+      if (backfillCheck?.completed !== false && results.flat().every(({ error }) => !error)) {
+        recordTrackingKeyCheck({
+          membership,
+          scope: getKeyCheckScope(device.data.userId, false),
+        });
+      }
     }
-    return;
+    return changed;
   }
 
-  const deviceKeyContext = await ensureDeviceKeyRegistration();
-  if (!isCurrent()) return;
-  const owner = await getQueueOwner();
-  if (!isCurrent() || owner !== JSON.stringify([baseUrl, deviceKeyContext.userId])) return;
+  if (!force && (await hasFreshKeyCheck(true))) {
+    if (!isCurrent()) return false;
+    await applyCaptureState({
+      hasKeys: trackingModule.listProvisionedEpochKeys().length > 0,
+      isCurrent,
+      onlyIfRunning,
+      trackingModule,
+    });
+    return false;
+  }
+  if (!isCurrent()) return false;
+
+  const [deviceKeyContext, groups] = await Promise.all([
+    ensureDeviceKeyRegistration({ checkOwner: force }),
+    trpcClient.groupMembership.list.query(),
+  ]);
+  if (!isCurrent()) return false;
+  const owner = getOwner(deviceKeyContext.userId);
   trackingModule.setQueueOwner(owner);
-  const groups = await trpcClient.groupMembership.list.query();
-  if (!isCurrent()) return;
   const preserveGroupIds = new Set<string>();
+  let rotated = false;
+  let rotationFailed = false;
   const epochs = (
     await Promise.all(
       groups.map(async ({ id: groupId }) => {
-        const rotation = await tryCatch(rotateGroupEpochIfRequired(groupId));
+        const [rotation, firstLatest] = await Promise.all([
+          tryCatch(rotateGroupEpochIfRequired(groupId)),
+          tryCatch(trpcClient.groupEpoch.getLatest.query({ groupId })),
+        ]);
         if (!isCurrent()) return null;
         if (getErrorCode(rotation.error) === "UNAUTHORIZED") throw rotation.error;
-        const latest = await tryCatch(trpcClient.groupEpoch.getLatest.query({ groupId }));
+        rotationFailed ||= Boolean(rotation.error);
+        rotated ||= rotation.data === true;
+        const latest = rotation.data
+          ? await tryCatch(trpcClient.groupEpoch.getLatest.query({ groupId }))
+          : firstLatest;
         if (latest.error) {
           if (getErrorCode(latest.error) === "UNAUTHORIZED") throw latest.error;
           preserveGroupIds.add(groupId);
@@ -192,13 +279,11 @@ const reconcileTrackingKeysInternal = async ({
       }),
     )
   ).filter((epoch) => epoch !== null);
-  if (!isCurrent()) return;
-  if (isCurrent()) {
-    for (const { groupId, epochId } of epochs) {
-      const previousEpochId = observedGroupEpochs.get(groupId);
-      observedGroupEpochs.set(groupId, epochId);
-      if (previousEpochId && previousEpochId !== epochId) notifyGroupEpochChange(groupId);
-    }
+  if (!isCurrent()) return false;
+  for (const { groupId, epochId } of epochs) {
+    const previousEpochId = observedGroupEpochs.get(groupId);
+    observedGroupEpochs.set(groupId, epochId);
+    if (previousEpochId && previousEpochId !== epochId) notifyGroupEpochChange(groupId);
   }
   const resolvedEpochs = (
     await Promise.all(
@@ -227,12 +312,16 @@ const reconcileTrackingKeysInternal = async ({
     senderDeviceId: deviceKeyContext.deviceId,
   }));
 
-  if (!isCurrent() || (onlyIfRunning && !trackingModule.isCaptureRunning())) return;
+  if (!isCurrent() || (onlyIfRunning && !trackingModule.isCaptureRunning())) return false;
 
   const currentKeys = [...trackingModule.listProvisionedEpochKeys()];
   const preservedKeys = currentKeys.filter(({ groupId }) => preserveGroupIds.has(groupId));
   const desiredKeyMetadata = [...resolvedKeyMetadata, ...preservedKeys];
-  if (!haveMatchingProvisionedKeys({ current: currentKeys, desired: desiredKeyMetadata })) {
+  const keysChanged = !haveMatchingProvisionedKeys({
+    current: currentKeys,
+    desired: desiredKeyMetadata,
+  });
+  if (keysChanged) {
     const keys = resolvedEpochs.map(({ epochId, epochKey, groupId }) => ({
       epochId,
       epochKeyBase64: encodeBase64(epochKey.expose()),
@@ -240,7 +329,7 @@ const reconcileTrackingKeysInternal = async ({
       kind: TRACKING_POINT_KIND,
       senderDeviceId: deviceKeyContext.deviceId,
     }));
-    if (!isCurrent() || (onlyIfRunning && !trackingModule.isCaptureRunning())) return;
+    if (!isCurrent() || (onlyIfRunning && !trackingModule.isCaptureRunning())) return false;
     trackingModule.provisionEpochKeys(keys, [...preserveGroupIds]);
     if (
       currentKeys.length > 0 &&
@@ -255,23 +344,19 @@ const reconcileTrackingKeysInternal = async ({
     }
   }
 
-  if (startCapture && desiredKeyMetadata.length > 0) {
-    if (!isCurrent() || (onlyIfRunning && !trackingModule.isCaptureRunning())) return;
-    if (!trackingModule.isCaptureRunning()) {
-      await trackingModule.startCapture();
-      captureRefreshPending = false;
-    } else if (captureRefreshPending) {
-      await trackingModule.refreshCapture();
-      captureRefreshPending = false;
-    }
-  } else if (trackingModule.isCaptureRunning()) {
-    await trackingModule.stopCapture();
-  }
+  await applyCaptureState({
+    hasKeys: desiredKeyMetadata.length > 0,
+    isCurrent,
+    onlyIfRunning,
+    trackingModule,
+  });
 
-  if (!isCurrent()) return;
+  if (!isCurrent()) return false;
+  const membership = getMembershipSignature(groups);
+  const changed = keysChanged || rotated || hasMembershipChanged(membership);
   const backfillCheck = await checkHistoryBackfill(deviceKeyContext.userId);
-  if (!backfillCheck || !isCurrent()) return;
-  const backfills = backfillCheck.canBackfill
+  if (!isCurrent()) return false;
+  const backfills = backfillCheck?.canBackfill
     ? await Promise.all(
         groups.map(({ id: groupId }) =>
           tryCatch(backfillHistoryWraps({ device: deviceKeyContext, groupId })),
@@ -280,28 +365,53 @@ const reconcileTrackingKeysInternal = async ({
     : [];
   const unauthorized = backfills.find(({ error }) => getErrorCode(error) === "UNAUTHORIZED");
   if (unauthorized?.error) throw unauthorized.error;
-  recordCleanBackfill({ backfills, check: backfillCheck, userId: deviceKeyContext.userId });
+  if (backfillCheck) {
+    recordCleanBackfill({ backfills, check: backfillCheck, userId: deviceKeyContext.userId });
+  }
+  if (
+    isCurrent() &&
+    preserveGroupIds.size === 0 &&
+    !rotationFailed &&
+    backfillCheck?.completed !== false &&
+    backfills.every(({ error }) => !error)
+  ) {
+    recordTrackingKeyCheck({
+      membership,
+      scope: getKeyCheckScope(deviceKeyContext.userId, true),
+    });
+  }
+  return changed || backfills.some(({ data }) => Boolean(data));
+};
+
+export const takeKeyAccessChange = () => {
+  const changed = keyAccessChangePending;
+  keyAccessChangePending = false;
+  return changed;
 };
 
 export const reconcileTrackingKeys = ({
   startCapture,
   onlyIfRunning = false,
+  force = false,
 }: {
   startCapture: boolean;
   onlyIfRunning?: boolean;
-}): Promise<void> => {
-  if (trackingPaused) return Promise.resolve();
+  force?: boolean;
+}): Promise<boolean> => {
+  if (trackingPaused) return Promise.resolve(false);
   if (
     reconcilePromise &&
     (onlyIfRunning ||
-      (reconcileOptions?.startCapture === startCapture && !reconcileOptions.onlyIfRunning))
+      (reconcileOptions?.startCapture === startCapture &&
+        !reconcileOptions.onlyIfRunning &&
+        (reconcileOptions.force || !force)))
   ) {
     return reconcilePromise;
   }
 
   const previous = reconcilePromise;
   const version = ++reconcileVersion;
-  reconcileOptions = { startCapture, onlyIfRunning };
+  reconcileOptions = { startCapture, onlyIfRunning, force };
   const stopImmediately = !startCapture
     ? (async () => {
         const trackingModule = await loadTrackingModule();
@@ -311,11 +421,12 @@ export const reconcileTrackingKeys = ({
   const task = (async () => {
     await stopImmediately;
     if (previous) await tryCatch(previous);
-    if (version !== reconcileVersion) return;
+    if (version !== reconcileVersion) return false;
     const result = await tryCatch(
       reconcileTrackingKeysInternal({
         startCapture,
         onlyIfRunning,
+        force,
         isCurrent: () => version === reconcileVersion,
       }),
     );
@@ -324,10 +435,12 @@ export const reconcileTrackingKeys = ({
         await revokeTrackingAccess();
       throw result.error;
     }
+    if (result.data) keyAccessChangePending = true;
+    return result.data;
   })();
   let cancel = () => {};
-  const cancelled = new Promise<void>((resolve) => {
-    cancel = resolve;
+  const cancelled = new Promise<boolean>((resolve) => {
+    cancel = () => resolve(false);
   });
   cancelReconciliations.add(cancel);
   const wrapped = Promise.race([task, cancelled]).finally(() => {
@@ -415,6 +528,31 @@ const uploadClaimedItems = async (
     throw new Error("Tracking upload cancelled");
   }
   if (uploadResult.error) {
+    const code = getErrorCode(uploadResult.error);
+    if (code === "FORBIDDEN" || code === "BAD_REQUEST") {
+      const device = await getRegisteredDeviceKey();
+      const usesCurrentDevice = items.some(
+        ({ senderDeviceId }) => senderDeviceId === device?.deviceId,
+      );
+      const provisionedKeys = trackingModule.listProvisionedEpochKeys();
+      const usesCurrentKey = items.some((item) =>
+        provisionedKeys.some(
+          (key) => getProvisionedKeyIdentity(key) === getProvisionedKeyIdentity(item),
+        ),
+      );
+      if (
+        code === "FORBIDDEN" &&
+        usesCurrentDevice &&
+        uploadResult.error.message === "The active device is not registered."
+      ) {
+        forgetDeviceKeyRegistration();
+        markTrackingKeysStale();
+        uploadRejectedKeys = true;
+      } else if (usesCurrentKey) {
+        markTrackingKeysStale();
+        uploadRejectedKeys = true;
+      }
+    }
     if (getErrorCode(uploadResult.error) === "UNAUTHORIZED") {
       await revokeTrackingAccess({ cancelFlush: false });
       await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
@@ -596,10 +734,14 @@ export const syncBackgroundTracking = async () => {
     reconcileTrackingKeys({ startCapture: true, onlyIfRunning: true }),
   );
   if (getErrorCode(reconciliation.error) === "UNAUTHORIZED") return;
+  uploadRejectedKeys = false;
   const result = await tryCatch(flushPendingTrackingPoints());
   if (getApiCompatibility()) {
     await showApiCompatibilityNotice();
     return;
+  }
+  if (uploadRejectedKeys) {
+    await tryCatch(reconcileTrackingKeys({ startCapture: true, onlyIfRunning: true }));
   }
   if (result.error && !(await isDeviceOffline())) {
     throw result.error;
@@ -613,6 +755,8 @@ const revokeTrackingAccessInternal = async (): Promise<void> => {
   cancelReconciliations.clear();
   reconcilePromise = null;
   captureRefreshPending = false;
+  clearTrackingKeyCheck();
+  keyAccessChangePending = false;
   const trackingModule = await loadTrackingModule();
   if (!trackingModule) {
     return;
@@ -713,7 +857,7 @@ export const recoverUnassignedTrackingPoints = async ({
     throw new Error("The tracking account has changed.");
   }
   for (const deviceId of deviceIds) {
-    await trackingModule.assignUnassignedCiphertexts(deviceId, JSON.stringify([baseUrl, userId]));
+    await trackingModule.assignUnassignedCiphertexts(deviceId, getOwner(userId));
   }
   await flushPendingTrackingPoints(true);
 };
@@ -721,7 +865,7 @@ export const recoverUnassignedTrackingPoints = async ({
 export const getTrackingQueueEviction = async (userId: string) => {
   const trackingModule = await loadTrackingModule();
   if (!trackingModule) return null;
-  const owner = JSON.stringify([baseUrl, userId]);
+  const owner = getOwner(userId);
   const eviction = await trackingModule.getCiphertextEviction(owner);
   return eviction ? { ...eviction, owner } : null;
 };

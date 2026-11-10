@@ -35,6 +35,14 @@ const deleted: number[][] = [];
 const requeued: Array<{ ids: number[]; error: string | null | undefined }> = [];
 const uploadCalls: Array<{ groupId: string; points: unknown[] }> = [];
 const rotationChecks: string[] = [];
+const requests: string[] = [];
+const storageValues = new Map<string, string>();
+let registeredDevice: {
+  deviceId: string;
+  privateKey: typeof deviceKeyPair.privateKey;
+  userId: string;
+} | null = null;
+let membershipGroups: Array<{ id: string; members: Array<{ id: string }> }> = [];
 const requestedOwners: string[] = [];
 let currentUserId = "user-1";
 let ownerContextCalls = 0;
@@ -115,14 +123,39 @@ mock.module("expo-network", () => ({
 
 mock.module("react-native", () => createReactNativeTestModule({ platformOS: "android" }));
 
+mock.module("./storage.ts", () => ({
+  storage: {
+    getString: (key: string) => storageValues.get(key),
+    remove: (key: string) => storageValues.delete(key),
+    set: (key: string, value: string) => {
+      storageValues.set(key, value);
+    },
+  },
+}));
+
 mock.module("./deviceKeys.ts", () => ({
-  cancelDeviceKeyRegistrations: () => {},
-  ensureDeviceKeyRegistration: async () => {
+  cancelDeviceKeyRegistrations: () => {
+    registeredDevice = null;
+  },
+  forgetDeviceKeyRegistration: () => {
+    registeredDevice = null;
+  },
+  getRegisteredDeviceKey: async () => registeredDevice,
+  ensureDeviceKeyRegistration: async ({ checkOwner = false }: { checkOwner?: boolean } = {}) => {
+    if (registeredDevice && !checkOwner) return registeredDevice;
+    requests.push("auth.deviceKeyContext");
+    if (registeredDevice?.userId === currentUserId) return registeredDevice;
+    requests.push("auth.registerDeviceKey");
     if (registrationError) throw registrationError;
     if (failRegistration) throw new Error("offline");
     onRegistration?.();
     await registrationWait;
-    return { deviceId: "device-1", privateKey: deviceKeyPair.privateKey, userId: currentUserId };
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: currentUserId,
+    };
+    return registeredDevice;
   },
 }));
 
@@ -168,6 +201,7 @@ mock.module("./api.ts", () => ({
     auth: {
       deviceKeyContext: {
         query: async () => {
+          requests.push("auth.deviceKeyContext");
           ownerContextCalls += 1;
           await ownerQueryGate;
           return { userId: currentUserId, recipients: [{ deviceId: "device-1" }] };
@@ -177,6 +211,7 @@ mock.module("./api.ts", () => ({
     accountRecovery: {
       status: {
         query: async () => {
+          requests.push("accountRecovery.status");
           recoveryStatusCalls += 1;
           if (recoveryStatusError) throw recoveryStatusError;
           return (
@@ -190,12 +225,16 @@ mock.module("./api.ts", () => ({
     },
     groupMembership: {
       list: {
-        query: async () => [{ id: "group-1" }, { id: "group-2" }],
+        query: async () => {
+          requests.push("groupMembership.list");
+          return membershipGroups;
+        },
       },
     },
     groupEpoch: {
       listHistoryBackfill: {
         query: async ({ groupId }: { groupId: string }) => {
+          requests.push("groupEpoch.listHistoryBackfill");
           backfillQueries.push(groupId);
           captureStateSeenByBackfill.push({
             provisions: provisionCalls.length,
@@ -239,6 +278,7 @@ mock.module("./api.ts", () => ({
       },
       addHistoryWraps: {
         mutate: async (input: { groupId: string; wraps: WrappedHistoryEpochKey[] }) => {
+          requests.push("groupEpoch.addHistoryWraps");
           historyWrapUploads.push(input);
           missingHistoryWraps.delete(input.groupId);
           return { added: input.wraps.length };
@@ -246,6 +286,7 @@ mock.module("./api.ts", () => ({
       },
       rotationContext: {
         query: async ({ groupId }: { groupId: string }) => {
+          requests.push("groupEpoch.rotationContext");
           rotationChecks.push(groupId);
           if (rotationError && groupId === "group-1") throw rotationError;
           if (failRotation || groupId === failedGroup) throw new Error("Rotation unavailable");
@@ -254,12 +295,14 @@ mock.module("./api.ts", () => ({
       },
       getLatest: {
         query: async ({ groupId }: { groupId: string }) => {
+          requests.push("groupEpoch.getLatest");
           if (groupId === failedLatestGroup) throw new Error("Latest epoch unavailable");
           return { epochId: groupId === "group-1" ? "epoch-1" : "epoch-2", groupId };
         },
       },
       getEpochKeyWraps: {
         query: async ({ epochId, groupId }: { epochId: string; groupId: string }) => {
+          requests.push("groupEpoch.getEpochKeyWraps");
           if (groupId === failedWrappedGroup) throw new Error("Wrapped key unavailable");
           if (groupId === missingWrappedGroup) return { deviceWrap: null, historyWraps: [] };
           if (groupId === historyOnlyGroup) {
@@ -300,6 +343,7 @@ mock.module("./api.ts", () => ({
     groupTracking: {
       uploadBatch: {
         mutate: async (input: { groupId: string; points: unknown[] }) => {
+          requests.push("groupTracking.uploadBatch");
           uploadCalls.push(input);
           return uploadGroup(input);
         },
@@ -385,7 +429,9 @@ const {
   resumeTracking,
   revokeTrackingAccess,
   syncBackgroundTracking,
+  takeKeyAccessChange,
 } = await import("./tracking.ts");
+const { noteGroupMembership } = await import("./trackingKeyCheck.ts");
 
 const createQueueItem = ({
   clientPointId,
@@ -427,6 +473,13 @@ describe("tracking service", () => {
     requeued.length = 0;
     uploadCalls.length = 0;
     rotationChecks.length = 0;
+    requests.length = 0;
+    storageValues.clear();
+    registeredDevice = null;
+    membershipGroups = [
+      { id: "group-1", members: [{ id: "member-1" }] },
+      { id: "group-2", members: [{ id: "member-2" }] },
+    ];
     requestedOwners.length = 0;
     currentUserId = "user-1";
     apiCompatibility = null;
@@ -630,7 +683,7 @@ describe("tracking service", () => {
     for (let index = 0; index < 200 && !started; index++) await Promise.resolve();
     expect(started).toBe(true);
     await prepareTrackingSignOut();
-    await expect(previous).resolves.toBeUndefined();
+    await expect(previous).resolves.toBe(false);
     currentUserId = "user-2";
     registrationWait = null;
     onRegistration = null;
@@ -845,19 +898,19 @@ describe("tracking service", () => {
     jest.useFakeTimers();
     try {
       await reconcileTrackingKeys({ startCapture: true });
-      await reconcileTrackingKeys({ startCapture: false });
+      await reconcileTrackingKeys({ startCapture: false, force: true });
 
       expect(recoveryStatusCalls).toBe(1);
       expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
 
       jest.advanceTimersByTime(10 * 60 * 1000 - 1);
-      await reconcileTrackingKeys({ startCapture: false });
+      await reconcileTrackingKeys({ startCapture: false, force: true });
 
       expect(recoveryStatusCalls).toBe(1);
       expect(backfillQueries).toHaveLength(2);
 
       jest.advanceTimersByTime(1);
-      await reconcileTrackingKeys({ startCapture: false });
+      await reconcileTrackingKeys({ startCapture: false, force: true });
 
       expect(recoveryStatusCalls).toBe(2);
       expect(backfillQueries).toHaveLength(4);
@@ -886,7 +939,7 @@ describe("tracking service", () => {
     expect(backfillQueries).toEqual([]);
 
     storedHistoryKeyVersions.add(2);
-    await reconcileTrackingKeys({ startCapture: false });
+    await reconcileTrackingKeys({ startCapture: false, force: true });
 
     expect(recoveryStatusCalls).toBe(2);
     expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
@@ -901,7 +954,7 @@ describe("tracking service", () => {
     expect(backfillQueries).toEqual([]);
 
     storedHistoryKeyVersions.add(2);
-    await reconcileTrackingKeys({ startCapture: true });
+    await reconcileTrackingKeys({ startCapture: true, force: true });
 
     expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
   });
@@ -1672,5 +1725,308 @@ describe("tracking service", () => {
     await expect(revokeTrackingAccess()).rejects.toThrow("revoke failed");
 
     expect(stopCaptureCalls).toBe(1);
+  });
+  describe("request counts", () => {
+    const keyCheckRequests = [
+      "groupMembership.list",
+      "groupEpoch.rotationContext",
+      "groupEpoch.getLatest",
+    ];
+    const queueBothGroups = () => {
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+        createQueueItem({ clientPointId: "point-2", groupId: "group-2", id: 2 }),
+      ];
+    };
+    const startTracking = async () => {
+      captureRunning = true;
+      await reconcileTrackingKeys({ startCapture: true, force: true });
+      requests.length = 0;
+    };
+
+    test("a background sync with nothing new sends only the uploads", async () => {
+      await startTracking();
+      queueBothGroups();
+
+      await syncBackgroundTracking();
+
+      expect(requests).toEqual(["groupTracking.uploadBatch", "groupTracking.uploadBatch"]);
+    });
+
+    test("a background sync with an empty queue sends nothing", async () => {
+      await startTracking();
+
+      await syncBackgroundTracking();
+      await syncBackgroundTracking();
+
+      expect(requests).toEqual([]);
+    });
+
+    test("registers the device once across many syncs", async () => {
+      await reconcileTrackingKeys({ startCapture: true, force: true });
+      captureRunning = true;
+      for (let index = 0; index < 5; index++) {
+        queueBothGroups();
+        await syncBackgroundTracking();
+      }
+      await reconcileTrackingKeys({ startCapture: true, force: true });
+
+      expect(requests.filter((request) => request === "auth.registerDeviceKey")).toHaveLength(1);
+    });
+
+    test("the key check runs again once four minutes have passed", async () => {
+      jest.useFakeTimers();
+      try {
+        await startTracking();
+
+        jest.advanceTimersByTime(4 * 60 * 1000 - 1);
+        await syncBackgroundTracking();
+        expect(requests).toEqual([]);
+
+        jest.advanceTimersByTime(1);
+        await syncBackgroundTracking();
+        expect(requests).toEqual(expect.arrayContaining(keyCheckRequests));
+        expect(requests).not.toContain("auth.registerDeviceKey");
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    test("a forced key check confirms the account without registering again", async () => {
+      await startTracking();
+
+      await reconcileTrackingKeys({ startCapture: true, force: true });
+
+      expect(requests).toContain("auth.deviceKeyContext");
+      expect(requests).toEqual(expect.arrayContaining(keyCheckRequests));
+      expect(requests).not.toContain("auth.registerDeviceKey");
+    });
+
+    test("an upload the server rejects as forbidden registers again and rechecks keys in the same run", async () => {
+      await startTracking();
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      uploadGroup = async () => {
+        throw Object.assign(new Error("The active device is not registered."), {
+          data: { code: "FORBIDDEN" },
+        });
+      };
+
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+      expect(requests[0]).toBe("groupTracking.uploadBatch");
+      expect(requests).toEqual(
+        expect.arrayContaining(["auth.registerDeviceKey", ...keyCheckRequests]),
+      );
+    });
+
+    test("an upload with an unknown epoch rechecks keys in the same run", async () => {
+      await startTracking();
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      uploadGroup = async () => {
+        throw Object.assign(new Error("Epoch does not belong to this group."), {
+          data: { code: "BAD_REQUEST" },
+        });
+      };
+
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+      expect(requests).toEqual(expect.arrayContaining(keyCheckRequests));
+      expect(requests).not.toContain("auth.registerDeviceKey");
+    });
+
+    const rejectUploads = (code: string, message: string) => {
+      uploadGroup = async () => {
+        throw Object.assign(new Error(message), { data: { code } });
+      };
+    };
+
+    test("being removed from a group rechecks keys without registering again", async () => {
+      await startTracking();
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      rejectUploads("FORBIDDEN", "You are not a member of this group");
+
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+      expect(requests).toEqual(expect.arrayContaining(keyCheckRequests));
+      expect(requests).not.toContain("auth.registerDeviceKey");
+    });
+
+    test("points still queued for a group this phone has left only retry the upload", async () => {
+      await startTracking();
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-3", id: 1 }),
+      ];
+      rejectUploads("FORBIDDEN", "You are not a member of this group");
+
+      for (let index = 0; index < 3; index++) {
+        await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+      }
+
+      expect(requests).toEqual([
+        "groupTracking.uploadBatch",
+        "groupTracking.uploadBatch",
+        "groupTracking.uploadBatch",
+      ]);
+    });
+
+    test("points from an old device key that the server no longer knows don't register again", async () => {
+      await startTracking();
+      pendingCiphertexts = [
+        createQueueItem({
+          clientPointId: "point-1",
+          groupId: "group-1",
+          id: 1,
+          senderDeviceId: "device-old",
+        }),
+      ];
+      rejectUploads("FORBIDDEN", "The active device is not registered.");
+
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+      expect(requests).toEqual(["groupTracking.uploadBatch", "groupTracking.uploadBatch"]);
+    });
+
+    test("points for an epoch this phone no longer uses only retry the upload", async () => {
+      await startTracking();
+      pendingCiphertexts = [
+        {
+          ...createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+          epochId: "epoch-0",
+        },
+      ];
+      rejectUploads("BAD_REQUEST", "Epoch does not belong to this group.");
+
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+      expect(requests).toEqual(["groupTracking.uploadBatch", "groupTracking.uploadBatch"]);
+    });
+
+    test("a key check that's due but failing is tried once per sync, not again after a failed upload", async () => {
+      jest.useFakeTimers();
+      try {
+        await startTracking();
+        jest.advanceTimersByTime(5 * 60 * 1000);
+        failedLatestGroup = "group-2";
+        pendingCiphertexts = [
+          createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+        ];
+        rejectUploads("INTERNAL_SERVER_ERROR", "Server unavailable");
+
+        await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+        expect(requests.filter((request) => request === "groupMembership.list")).toHaveLength(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    test("a failed upload that isn't about keys doesn't recheck them", async () => {
+      await startTracking();
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      uploadGroup = async () => {
+        throw new Error("Network request failed");
+      };
+
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+      expect(requests).toEqual(["groupTracking.uploadBatch"]);
+    });
+
+    test("a membership change seen on the map rechecks keys on the next sync", async () => {
+      await startTracking();
+      noteGroupMembership(membershipGroups);
+      await syncBackgroundTracking();
+      expect(requests).toEqual([]);
+
+      membershipGroups = [
+        ...membershipGroups,
+        { id: "group-1", members: [{ id: "member-1" }, { id: "member-3" }] },
+      ].slice(1);
+      noteGroupMembership(membershipGroups);
+      await syncBackgroundTracking();
+
+      expect(requests).toEqual(expect.arrayContaining(keyCheckRequests));
+    });
+
+    test("a key check that couldn't finish runs again on the next sync", async () => {
+      captureRunning = true;
+      failedLatestGroup = "group-2";
+      await reconcileTrackingKeys({ startCapture: true, force: true });
+      requests.length = 0;
+
+      await syncBackgroundTracking();
+
+      expect(requests).toEqual(expect.arrayContaining(keyCheckRequests));
+    });
+
+    test("signing out clears the cache, so the next account registers and checks keys", async () => {
+      await startTracking();
+      await revokeTrackingAccess();
+      currentUserId = "user-2";
+      resumeTracking();
+
+      await reconcileTrackingKeys({ startCapture: true });
+
+      expect(requests).toEqual(
+        expect.arrayContaining(["auth.registerDeviceKey", ...keyCheckRequests]),
+      );
+    });
+
+    test("the queue owner comes from the cached registration", async () => {
+      await startTracking();
+      queueBothGroups();
+
+      await flushPendingTrackingPoints();
+
+      expect(ownerContextCalls).toBe(0);
+      expect(requestedOwners).toEqual([JSON.stringify(["https://api.example.test", "user-1"])]);
+    });
+
+    test("turning sharing on straight after a key check with sharing off provisions keys", async () => {
+      await reconcileTrackingKeys({ startCapture: false, force: true });
+
+      await reconcileTrackingKeys({ startCapture: true });
+
+      expect(provisionedKeys.map(({ groupId }) => groupId).sort()).toEqual(["group-1", "group-2"]);
+      expect(startCaptureCalls).toBe(1);
+    });
+
+    test("a change found by a background sync is kept until the app takes it", async () => {
+      takeKeyAccessChange();
+      captureRunning = true;
+      await reconcileTrackingKeys({ startCapture: true, force: true });
+      takeKeyAccessChange();
+      jest.useFakeTimers();
+      try {
+        jest.advanceTimersByTime(4 * 60 * 1000);
+        membershipGroups = [{ id: "group-1", members: [{ id: "member-1" }] }];
+
+        await syncBackgroundTracking();
+
+        expect(takeKeyAccessChange()).toBe(true);
+        expect(takeKeyAccessChange()).toBe(false);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    test("reports a change only when the key check finds something new", async () => {
+      captureRunning = true;
+      expect(await reconcileTrackingKeys({ startCapture: true, force: true })).toBe(true);
+      expect(await reconcileTrackingKeys({ startCapture: true, force: true })).toBe(false);
+
+      membershipGroups = [{ id: "group-1", members: [{ id: "member-1" }] }];
+      expect(await reconcileTrackingKeys({ startCapture: true, force: true })).toBe(true);
+    });
   });
 });

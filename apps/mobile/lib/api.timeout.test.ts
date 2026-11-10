@@ -1,3 +1,4 @@
+import { TRPCClientError } from "@trpc/client";
 import { afterAll, beforeEach, expect, mock, test } from "bun:test";
 import { SERVER_UNREACHABLE_MESSAGE } from "./serverUnreachable.ts";
 
@@ -129,6 +130,28 @@ test("other failed queries are still retried", () => {
 
   expect(retry(0, new Error("Internal server error"))).toBe(true);
   expect(retry(3, new Error("Internal server error"))).toBe(false);
+});
+
+test("a query the server refused is not retried", () => {
+  const retry = queryClient.getDefaultOptions().queries?.retry;
+  if (typeof retry !== "function") throw new Error("retry is not configured");
+
+  for (const code of [
+    "BAD_REQUEST",
+    "UNAUTHORIZED",
+    "FORBIDDEN",
+    "NOT_FOUND",
+    "TOO_MANY_REQUESTS",
+  ]) {
+    const error = new TRPCClientError("Refused", {
+      result: { error: { code: -32603, message: "Refused", data: { code } } },
+    });
+    expect(retry(0, error)).toBe(false);
+  }
+  const serverError = new TRPCClientError("Failed", {
+    result: { error: { code: -32603, message: "Failed", data: { code: "INTERNAL_SERVER_ERROR" } } },
+  });
+  expect(retry(0, serverError)).toBe(true);
 });
 
 test("calls work again once the server answers", async () => {

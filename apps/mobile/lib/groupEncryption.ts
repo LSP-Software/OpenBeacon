@@ -158,8 +158,8 @@ export const buildRemoveGroupMemberInput = async ({
   };
 };
 
-export const rotateGroupEpochIfRequired = async (groupId: string) => {
-  await submitEpochChange({
+export const rotateGroupEpochIfRequired = async (groupId: string) =>
+  submitEpochChange({
     build: async () => {
       const context = await trpcClient.groupEpoch.rotationContext.query({ groupId });
       if (!context) return null;
@@ -176,7 +176,7 @@ export const rotateGroupEpochIfRequired = async (groupId: string) => {
       };
     },
     submit: async (input) => {
-      if (input) await trpcClient.groupEpoch.rotate.mutate(input);
+      if (!input) return false;
+      return (await trpcClient.groupEpoch.rotate.mutate(input)).rotated;
     },
   });
-};

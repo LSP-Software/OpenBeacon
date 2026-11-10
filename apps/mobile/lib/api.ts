@@ -22,7 +22,13 @@ export const queryClient = new QueryClient({
     queries: {
       retry: (failureCount, error) =>
         failureCount < 3 &&
-        !(error instanceof TRPCClientError && error.cause instanceof RequestTimeoutError),
+        !(
+          error instanceof TRPCClientError &&
+          (error.cause instanceof RequestTimeoutError ||
+            ["BAD_REQUEST", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "TOO_MANY_REQUESTS"].includes(
+              error.data?.code,
+            ))
+        ),
     },
   },
 });

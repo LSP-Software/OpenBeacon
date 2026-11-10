@@ -16,9 +16,10 @@ const trackingService = {
     (await import("../lib/tracking.ts")).getUnassignedTrackingPoints(),
   recoverUnassignedTrackingPoints: async (input: { deviceIds: string[]; userId: string }) =>
     (await import("../lib/tracking.ts")).recoverUnassignedTrackingPoints(input),
-  reconcileTrackingKeys: async (input: { startCapture: boolean }) =>
+  reconcileTrackingKeys: async (input: { startCapture: boolean; force: boolean }) =>
     (await import("../lib/tracking.ts")).reconcileTrackingKeys(input),
   revokeTrackingAccess: async () => (await import("../lib/tracking.ts")).revokeTrackingAccess(),
+  takeKeyAccessChange: async () => (await import("../lib/tracking.ts")).takeKeyAccessChange(),
 };
 
 export const TrackingProvider = ({
@@ -39,6 +40,7 @@ export const TrackingProvider = ({
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
   const requestedCycleRef = useRef(0);
   const forceFlushRef = useRef(false);
+  const forceKeyCheckRef = useRef(false);
   const recoveryCheckedUserRef = useRef<string | null>(null);
   const startCaptureRef = useRef(permissionState?.isReadyForSharing ?? false);
   const userId = session?.user.id ?? null;
@@ -46,9 +48,13 @@ export const TrackingProvider = ({
   startCaptureRef.current = startCapture;
 
   const runTrackingCycle = useCallback(
-    (force = false) => {
+    ({
+      forceFlush = false,
+      forceKeyCheck = false,
+    }: { forceFlush?: boolean; forceKeyCheck?: boolean } = {}) => {
       if (!sessionReadyRef.current) return Promise.resolve();
-      forceFlushRef.current ||= force;
+      forceFlushRef.current ||= forceFlush;
+      forceKeyCheckRef.current ||= forceKeyCheck;
       requestedCycleRef.current += 1;
 
       if (activeCycleRef.current) {
@@ -63,13 +69,19 @@ export const TrackingProvider = ({
         ) {
           const cycle = requestedCycleRef.current;
           const forceFlush = forceFlushRef.current;
+          const forceKeyCheck = forceKeyCheckRef.current;
           forceFlushRef.current = false;
+          forceKeyCheckRef.current = false;
           await tryCatch(
             service.reconcileTrackingKeys({
               startCapture: startCaptureRef.current,
+              force: forceKeyCheck,
             }),
           );
           if (version !== cycleVersionRef.current) return;
+          if (appStateRef.current === "active" && (await service.takeKeyAccessChange())) {
+            void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
+          }
           await tryCatch(service.flushPendingTrackingPoints(forceFlush));
           if (version !== cycleVersionRef.current) return;
           const userId = previousUserIdRef.current;
@@ -114,9 +126,6 @@ export const TrackingProvider = ({
               );
             }
           }
-          if (appStateRef.current === "active") {
-            void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
-          }
           completedCycleRef.current = cycle;
         }
       })().finally(() => {
@@ -143,6 +152,7 @@ export const TrackingProvider = ({
       requestedCycleRef.current = 0;
       completedCycleRef.current = 0;
       forceFlushRef.current = false;
+      forceKeyCheckRef.current = false;
       recoveryCheckedUserRef.current = null;
       previousUserIdRef.current = userId;
     }
@@ -157,7 +167,7 @@ export const TrackingProvider = ({
         if (version !== cycleVersionRef.current) return;
         sessionReadyRef.current = true;
       }
-      await runTrackingCycle(changed);
+      await runTrackingCycle({ forceFlush: changed, forceKeyCheck: changed });
     })();
   }, [isPending, runTrackingCycle, service, startCapture, userId]);
 
@@ -170,7 +180,7 @@ export const TrackingProvider = ({
       appStateRef.current = nextAppState;
 
       if (appBecameActive && userId) {
-        void runTrackingCycle();
+        void runTrackingCycle({ forceKeyCheck: true });
       }
     });
 
@@ -201,7 +211,7 @@ export const TrackingProvider = ({
     }
 
     return subscribeToTrackingSync(() => {
-      void runTrackingCycle();
+      void runTrackingCycle({ forceKeyCheck: true });
     });
   }, [runTrackingCycle, userId]);
 

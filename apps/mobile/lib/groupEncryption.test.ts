@@ -73,8 +73,11 @@ const sharedAcceptanceContextMock = mock(async (_input: { code: string }) => ({
   recipients: (await deviceKeyContextQueryMock()).recipients,
 }));
 
-const rotationContextMock = mock(async (_input: { groupId: string }) =>
-  sharedAcceptanceContextMock({ code: "" }),
+const rotationContextMock = mock(
+  async (_input: {
+    groupId: string;
+  }): Promise<Awaited<ReturnType<typeof sharedAcceptanceContextMock>> | null> =>
+    sharedAcceptanceContextMock({ code: "" }),
 );
 const rotateMock = mock(async (_input: unknown) => ({ rotated: true }));
 
@@ -219,13 +222,29 @@ describe("group encryption helpers", () => {
       "device-b",
     ]);
   });
+  test("reports no rotation and skips the mutation when the group doesn't need one", async () => {
+    rotationContextMock.mockImplementationOnce(async () => null);
+    const { rotateGroupEpochIfRequired } = await importGroupEncryptionModule();
+
+    await expect(rotateGroupEpochIfRequired("group-a")).resolves.toBe(false);
+    expect(rotateMock).not.toHaveBeenCalled();
+  });
+
+  test("reports no rotation when another member rotated first", async () => {
+    rotateMock.mockImplementationOnce(async () => ({ rotated: false }));
+    const { rotateGroupEpochIfRequired } = await importGroupEncryptionModule();
+
+    await expect(rotateGroupEpochIfRequired("group-a")).resolves.toBe(false);
+    expect(rotateMock).toHaveBeenCalledTimes(1);
+  });
+
   test("retries a failed automatic rotation using the normal recipient keys", async () => {
     rotateMock.mockImplementationOnce(async () => {
       throw new Error("Network unavailable");
     });
     const { rotateGroupEpochIfRequired } = await importGroupEncryptionModule();
     await expect(rotateGroupEpochIfRequired("group-a")).rejects.toThrow("Network unavailable");
-    await expect(rotateGroupEpochIfRequired("group-a")).resolves.toBeUndefined();
+    await expect(rotateGroupEpochIfRequired("group-a")).resolves.toBe(true);
     expect(rotationContextMock).toHaveBeenCalledTimes(2);
     const input = rotateMock.mock.calls[1]?.[0] as {
       nextEpoch: { recipientKeys: Array<Parameters<typeof unwrapEpochKey>[0]["wrappedEpochKey"]> };

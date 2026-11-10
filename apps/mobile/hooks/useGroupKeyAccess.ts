@@ -74,6 +74,7 @@ const useGroupKeyAccessQueries = <Result>({
     queries: groupIds.map((groupId) => ({
       queryKey: ["groupKeyAccess", userId, groupId, scope],
       enabled: Boolean(userId && isFocused),
+      staleTime: 5 * 60 * 1000,
       queryFn: async () => {
         if (!userId) throw new Error("User is unavailable");
         const device = await ensureDeviceKeyRegistration();
