@@ -99,7 +99,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
-    test("leave deletes tracking, rotates keys, prevents old uploads after rejoining and protects the last owner", async () => {
+    test("leave deletes tracking and device wraps, rotates keys, prevents old uploads after rejoining and protects the last owner", async () => {
       const devices = await prisma.userDevice.findMany({ where: { id: ownerDevice } });
       const initial = createInitialGroupEpoch({
         creator: { deviceId: ownerDevice, privateKey: ownerKey.privateKey },
@@ -191,6 +191,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(
         (await owner.groupMembership.members({ groupId })).map((item) => item.user.id),
       ).toEqual([ownerId]);
+      expect(
+        await prisma.groupEpochRecipientKey.count({
+          where: { groupEpoch: { groupId }, recipientDeviceId: memberDevice },
+        }),
+      ).toBe(0);
+      expect(
+        await prisma.groupEpochRecipientKey.count({
+          where: { groupEpochId: joined.epoch.epochId, recipientDeviceId: ownerDevice },
+        }),
+      ).toBe(1);
       await expect(
         member.groupTracking.uploadBatch({ groupId, points: [point] }),
       ).rejects.toThrow();
@@ -203,6 +213,25 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         recipients: rejoin.recipients,
       });
       await member.groupInvites.accept({ inviteId: reinvite.id, nextEpoch: bundle(rejoined) });
+      expect(
+        await prisma.groupEpochRecipientKey.count({
+          where: { groupEpoch: { groupId }, recipientDeviceId: memberDevice },
+        }),
+      ).toBe(1);
+      expect(
+        (
+          await member.groupEpoch.getEpochKeyWraps({
+            groupId,
+            deviceId: memberDevice,
+            epochId: joined.epoch.epochId,
+          })
+        ).deviceWrap,
+      ).toBeNull();
+      const rejoinedWraps = await member.groupEpoch.listEpochKeyWraps({
+        groupId,
+        deviceId: memberDevice,
+      });
+      expect(rejoinedWraps.epochs.map((epoch) => epoch.epochId)).toEqual([rejoined.epoch.epochId]);
       await expect(
         member.groupTracking.uploadBatch({ groupId, points: [point] }),
       ).rejects.toThrow();
