@@ -4,17 +4,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-  - package-ecosystem: docker
-    directories:
-      - /
-      - /apps/scheduled-jobs
-    schedule:
-      interval: weekly
-  - package-ecosystem: docker-compose
-    directory: /
-    schedule:
-      interval: weekly
+    open-pull-requests-limit: 0

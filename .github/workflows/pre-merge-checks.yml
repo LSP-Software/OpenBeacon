@@ -4,29 +4,51 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
 
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
+
+      - name: Cache Robolectric Android jars
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: ${{ runner.os }}-robolectric-${{ hashFiles('apps/mobile/modules/openbeacon-tracking/android/build.gradle') }}
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -35,17 +57,17 @@ jobs:
         run: bun run ci
 
   version-bump:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
       - name: Check client and server versions were bumped
@@ -53,49 +75,103 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: bun scripts/check-version-bump.ts "origin/$BASE_REF"
 
-  postgres-integration:
+  integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16.15
         env:
-          POSTGRES_DB: openbeacon
+          POSTGRES_DB: openbeacon_test
           POSTGRES_USER: openbeacon
           POSTGRES_PASSWORD: openbeacon
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U openbeacon -d openbeacon"
+          --health-cmd "pg_isready -U openbeacon -d openbeacon_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.31.2
+        ports:
+          - 6379:6379
+        options: >-
+          --ulimit memlock=-1
+          --health-cmd "redis-cli ping"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: package.json
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Generate database client and apply migrations
         run: |
           bun run --cwd packages/database --env-file=../../.env.ci prisma generate
-          bun run --cwd packages/database --env-file=../../.env.ci prisma migrate deploy
+          bun run test:integration:migrate
       - name: Check the Prisma schema matches the migrations
         env:
           PGPASSWORD: openbeacon
           SHADOW_DATABASE_URL: postgresql://openbeacon:openbeacon@localhost:5432/openbeacon_shadow
         run: |
-          psql -h localhost -U openbeacon -d openbeacon -c 'CREATE DATABASE openbeacon_shadow'
+          psql -h localhost -U openbeacon -d openbeacon_test -c 'CREATE DATABASE openbeacon_shadow'
           bunx prisma migrate diff --config packages/database/prisma.config.ts --from-migrations packages/database/prisma/migrations --to-schema packages/database/prisma/schema.prisma --exit-code
-      - name: Run every integration test file against PostgreSQL
+      - name: Run every integration test file against PostgreSQL and Redis
+        run: bun run test:integration
+
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build backend image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+      - name: Build scheduled jobs image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/scheduled-jobs/Dockerfile
+          push: false
+          cache-from: type=gha,scope=scheduled-jobs
+          cache-to: type=gha,mode=max,scope=scheduled-jobs
+
+  pre-merge-checks:
+    if: always()
+    needs: [ci, version-bump, integration, docker-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every pre-merge check to pass
+        env:
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          mapfile -t files < <(find . -name '*.integration.test.ts' -not -path '*/node_modules/*' | sort)
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "No integration test files found"
+          failed=$(jq -r 'to_entries[] | select(.value.result != "success" and (.key != "version-bump" or .value.result != "skipped")) | "\(.key): \(.value.result)"' <<< "$NEEDS")
+          if [ -n "$failed" ]; then
+            echo "These pre-merge checks did not pass:" >&2
+            echo "$failed" >&2
             exit 1
           fi
-          printf '%s\n' "${files[@]}"
-          OPENBEACON_INTEGRATION=1 bun test --isolate --env-file=.env.ci "${files[@]}"

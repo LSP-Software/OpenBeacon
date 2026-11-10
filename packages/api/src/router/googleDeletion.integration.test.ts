@@ -1,20 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 
 process.env.GOOGLE_CLIENT_ID = "google-deletion-test-client";
 process.env.GOOGLE_CLIENT_SECRET = "google-deletion-test-secret";
 
 const { prisma } = await import("@openbeacon/database");
 const { appRouter } = await import("../root.ts");
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
 let rateLimitTime = 0;
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => rateLimitTime });
+const cache = createIntegrationTestCache(() => rateLimitTime);
 const id = `google-deletion-${crypto.randomUUID()}`;
 const sessionId = `${id}-session`;
 const email = `${id}@example.test`;

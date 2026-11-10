@@ -8,6 +8,7 @@ This repo is a Bun monorepo: a React Native (Expo) app under `apps/mobile`, an A
 
 - [Bun](https://bun.sh) (see `packageManager` in the root `package.json` for the version this repo expects)
 - **Java 17** — needed for Android builds
+- **Android SDK** — needed for the offline tracking queue tests in `bun run ci`; they're skipped with a warning without it (set `ANDROID_HOME` if it isn't in `~/Android/Sdk`)
 - **PostgreSQL** and **Redis** — the backend expects them; URLs are set in `.env`
 
 ## Development Enviroment Setup
@@ -30,6 +31,21 @@ Apply database migrations (from the repo root):
 cd ./packages/database
 bun run db:migrate
 ```
+
+## Run the integration tests
+
+`bun run ci` skips the integration tests. They need PostgreSQL and Redis running at the URLs in `.env.ci`; `docker compose up -d db redis` starts both. The tests use a separate `openbeacon_test` database so they never touch your development data. The first command below creates it and applies the migrations:
+
+```sh
+bun run test:integration:migrate
+bun run test:integration
+```
+
+Both commands take their settings from `.env.ci`, and its values win over variables exported in your shell. Pass `--env-file=<path>` to use another env file.
+
+`bun run test:integration` runs every `*.integration.test.ts` under `apps/` and `packages/` with `OPENBEACON_INTEGRATION=1`. Pass directories to run only their tests, such as `bun run test:integration packages/cache`. Other `bun test` flags are passed through and must use the `--flag=value` form.
+
+Every test cache uses a random Redis key prefix, so several runs can share one Redis.
 
 ## Run the backend
 
@@ -139,10 +155,10 @@ Set these in `apps/mobile/.env`.
 
 ### Development only
 
-| Variable                 | Used by      | Required | Default | Example                                                               | What it does                                                        |
-| ------------------------ | ------------ | -------- | ------- | --------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `SHADOW_DATABASE_URL`    | `db:migrate` | No       | None    | `postgresql://openbeacon:openbeacon@localhost:5432/openbeacon_shadow` | Shadow database Prisma uses when creating migrations.               |
-| `OPENBEACON_INTEGRATION` | Tests        | No       | Unset   | `1`                                                                   | Set to `1` to run integration tests against the database and cache. |
+| Variable                 | Used by      | Required | Default | Example                                                               | What it does                                                         |
+| ------------------------ | ------------ | -------- | ------- | --------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `SHADOW_DATABASE_URL`    | `db:migrate` | No       | None    | `postgresql://openbeacon:openbeacon@localhost:5432/openbeacon_shadow` | Shadow database Prisma uses when creating migrations.                |
+| `OPENBEACON_INTEGRATION` | Tests        | No       | Unset   | `1`                                                                   | Set to `1` to run integration tests. They need PostgreSQL and Redis. |
 
 ## Scheduled job runner
 

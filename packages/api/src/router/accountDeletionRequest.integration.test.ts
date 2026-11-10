@@ -1,22 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { auth } from "@openbeacon/auth";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { Prisma, prisma } from "@openbeacon/database";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
 import { appRouter } from "../root.ts";
 
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
-
 const email = `deletion-${crypto.randomUUID()}@example.test`;
 const password = "testing-password-123";
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+const cache = createIntegrationTestCache(() => 0);
 let userId = "";
 const caller = (sessionId: string) =>
   appRouter.createCaller({

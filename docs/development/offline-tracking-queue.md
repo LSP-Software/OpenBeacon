@@ -19,9 +19,13 @@ The limit is enforced in `RoomCiphertextQueue.insertAll`, in the same transactio
 - The JS uploader only sends the points it actually claimed. A point evicted between listing and claiming is skipped, so the server never receives a point the user was told was removed.
 - Each eviction is recorded per account and server (count, oldest and newest queue time, revision). The Map screen shows a dismissible banner with the affected time range. Dismissing acknowledges a specific revision, so evictions that happen afterwards show again.
 
+## Tests
+
+`OfflineTrackingQueueTest` covers account separation, duplicate client points, ciphertext-only storage, the version 1 migration and eviction. It runs the real Room database under Robolectric, so it needs the Android SDK but no emulator. `src/test/resources/robolectric.properties` pins the Robolectric SDK to 35, the newest one that runs on Java 17, so a toolchain change can't silently move the tests to another SDK. `bun run --cwd apps/mobile test:native` runs it with the JVM tests, and so do `bun run test` and `bun run ci`. Without an Android SDK it is skipped locally with a warning and fails on CI. The first run prebuilds `apps/mobile/android` if it doesn't exist.
+
 ## Measured capacity
 
-The `RoomQueueInstrumentation` test (`bun run test:room`; local `bun run ci` runs it automatically when the tracking module changes, GitHub does not) captures 12,000 fixes for two groups at the production limit and reports actual usage. On an x86_64 emulator it retained 16,813 group-points (about 561 bytes each) using 10,149,784 bytes on disk. That's about 1.9 days of continuous movement at one point every 10 seconds for one group, or half that with two groups.
+The `OfflineQueueStorageBenchmark` instrumentation (`bun run benchmark:offline-queue-storage`) runs on a connected device or boots the first emulator AVD. It captures 12,000 fixes for two groups at the production limit and reports actual usage. CI doesn't run it. On an x86_64 emulator it retained 16,813 group-points (about 561 bytes each) using 10,149,784 bytes on disk. That's about 1.9 days of continuous movement at one point every 10 seconds for one group, or half that with two groups.
 
 ## Limitations
 

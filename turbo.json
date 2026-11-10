@@ -31,7 +31,10 @@
     "EMAIL_FROM",
     "EMAIL_CONSOLE",
     "EMAIL_CODE_IP_LIMIT",
-    "JAVA_HOME"
+    "JAVA_HOME",
+    "ANDROID_HOME",
+    "ANDROID_SDK_ROOT",
+    "CI"
   ],
   "tasks": {
     "build": {
@@ -43,19 +46,18 @@
       "persistent": true,
       "dependsOn": ["^db:generate"]
     },
-    "lint": {},
-    "format": {
-      "outputs": []
-    },
-    "format:check": {
-      "outputs": []
-    },
     "test": {
       "dependsOn": ["^db:generate"],
       "outputs": []
     },
+    "@openbeacon/mobile#test": {
+      "dependsOn": ["^db:generate"],
+      "outputs": [],
+      "env": ["ANDROID_HOME", "ANDROID_SDK_ROOT", "CI"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/test-offline-tracking-queue.sh"]
+    },
     "typecheck": {
-      "dependsOn": ["^typecheck"],
+      "dependsOn": ["db:generate", "^db:generate"],
       "outputs": []
     },
     "db:generate": {

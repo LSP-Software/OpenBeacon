@@ -8,12 +8,8 @@
   },
   "scripts": {
     "dev": "NODE_ENV=development bun run --cwd ../.. --env-file=.env --hot apps/backend/src/index.ts",
-    "format": "bun fmt",
-    "format:check": "bun fmt --check",
-    "lint": "biome lint .",
     "typecheck": "bun check",
-    "test": "bun test --isolate",
-    "ci": "bun run typecheck && bun run format:check && bun run lint"
+    "test": "bun test --isolate"
   },
   "dependencies": {
     "@better-auth/expo": "^1.7.14",

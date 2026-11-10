@@ -58,25 +58,26 @@ allows Cloudflare's IP ranges. Otherwise use `cloudflare-authenticated`.
 
 The `Deploy backend` GitHub Actions workflow also builds and deploys the separate scheduled job runner. Every installation needs the runner: besides account deletion, it deletes expired email codes and verification tokens every hour. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
 
-The `Deploy backend` GitHub Actions workflow is manually dispatched on `main`.
-Configure
-repository secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `COOLIFY_ENDPOINT`,
-and `COOLIFY_TOKEN`. The deployment finds the Coolify application by its unique
-name, `OpenBeacon Backend`. The Docker Hub account must be able
-to push `lspsoftware/openbeacon-backend`. Each build publishes the commit SHA,
-the backend version with a branch suffix, and a moving `branch-` tag. Branch
-names are converted to lowercase Docker tags; non-main branches also receive a
-hash suffix to distinguish similar names. A main build additionally publishes
-the version without a suffix and updates `latest-stable`. Version tags are
-updated if the same version is built again. Selecting the deploy option on main
-also asks Coolify to deploy `latest-stable`. For the first deployment, apply the
-Coolify infrastructure plan, populate its environment variables, and dispatch the
-workflow with the deploy option. To roll back, point
-Coolify at the desired commit SHA and redeploy;
-restore `latest-stable` before the next normal deployment.
-The workflow waits for Coolify to report the deployment result. If polling fails
-or times out, check the deployment in Coolify before retrying. Avoid starting
-other deployments manually while a workflow release is in progress.
+To deploy, dispatch the `Deploy backend` GitHub Actions workflow from `main`.
+It waits for approval in the `production` GitHub environment, which holds the
+`DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `COOLIFY_ENDPOINT` and `COOLIFY_TOKEN`
+secrets. It then builds both images, pushes them to
+`lspsoftware/openbeacon-backend` and `lspsoftware/openbeacon-scheduled-jobs`
+tagged with `serverVersion` from `src/version.ts` and `latest-stable`. With
+"Trigger the Coolify deployment" ticked, it then asks Coolify to deploy
+`latest-stable` to the `OpenBeacon Backend` and `OpenBeacon Scheduled Jobs`
+applications; leave it unticked to deploy from Coolify yourself later. The workflow fails if that version was
+already released from a different commit, so bump `serverVersion` for every
+release. Re-running a failed deploy is safe: images this commit already pushed
+are reused instead of rebuilt.
+
+For the first deployment, apply the Coolify infrastructure plan and populate its
+environment variables before dispatching the workflow. To roll back, point
+Coolify at an earlier version tag and redeploy; restore `latest-stable` before
+the next normal deployment. The workflow waits for Coolify to report the
+deployment result. If polling fails or times out, check the deployment in
+Coolify before retrying. Avoid starting other deployments manually while a
+workflow release is in progress.
 
 ## Email
 

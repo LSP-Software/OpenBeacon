@@ -11,7 +11,7 @@ The runner requires `DATABASE_URL`, `S3_ACCESS_KEY_ID`, `S3_ACCESS_KEY`, `S3_BUC
 
 On startup the runner checks PostgreSQL with `SELECT 1`, lists S3 object versions, checks that the R2 PMTiles object exists and, when email is configured, checks the email settings without sending anything. Its credentials also need permission to delete image objects, versions and delete markers. It exits if configuration or connectivity checks fail. Clients are closed on shutdown. The Docker image generates the Prisma client but does not apply migrations.
 
-Once the checks pass, the runner serves `GET /health` on `127.0.0.1:3000`, inside the container only. It returns the same status, backend version and server name (`SERVER_NAME`) as the backend's health check. The image includes curl and a Docker `HEALTHCHECK` that calls it, so Coolify can tell when the runner is up. Leave the port unpublished.
+Once the checks pass, the runner serves `GET /health` on `127.0.0.1:3000`, inside the container only. It returns the same status, backend version and server name (`SERVER_NAME`) as the backend's health check. The image's Docker `HEALTHCHECK` calls it with Bun, so Coolify can tell when the runner is up. Leave the port unpublished.
 
 ## Adding a job
 
@@ -25,4 +25,4 @@ Keep tracking plaintext, encryption keys, credentials, and user data out of logs
 
 ## Deployment
 
-The backend release workflow builds both images from the same commit and, when deployment is selected, deploys the backend first and then the `OpenBeacon Scheduled Jobs` Coolify application. Apply the corresponding Coolify infrastructure configuration before using the updated workflow. A backend deployment failure prevents the runner deployment; a runner deployment failure leaves the backend deployed and requires operator intervention. Check both applications after a release and roll back both to matching commit tags when needed. Future schema changes must remain compatible across the rollout. The runner image does not apply migrations; the backend owns them.
+The backend release workflow builds both images from the same commit and deploys the backend first and then the `OpenBeacon Scheduled Jobs` Coolify application. Apply the corresponding Coolify infrastructure configuration before using the updated workflow. A backend deployment failure prevents the runner deployment; a runner deployment failure leaves the backend deployed and requires operator intervention. Check both applications after a release and roll back both to the same version tag when needed. Future schema changes must remain compatible across the rollout. The runner image does not apply migrations; the backend owns them.

@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
@@ -31,12 +30,6 @@ import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 
 setDefaultTimeout(60_000);
 
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
-
 const router = createTRPCRouter({
   accountRecovery: accountRecoveryRouter,
   auth: authRouter,
@@ -45,7 +38,7 @@ const router = createTRPCRouter({
   groupLifecycle: groupLifecycleRouter,
   groupMembership: groupMembershipRouter,
 });
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+const cache = createIntegrationTestCache(() => 0);
 const prefix = `history-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const otherGroupId = `${prefix}-other-group`;

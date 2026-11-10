@@ -1,18 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
-
 const router = createTRPCRouter({ groupMembership: groupMembershipRouter });
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+const cache = createIntegrationTestCache(() => 0);
 const prefix = `personal-data-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const users = [0, 1].map((n) => `${prefix}-${n}`);

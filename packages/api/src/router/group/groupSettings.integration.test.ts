@@ -4,8 +4,7 @@ import {
   ListObjectVersionsCommand,
   HeadObjectCommand,
 } from "@aws-sdk/client-s3";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { env } from "../../env.ts";
@@ -19,12 +18,6 @@ import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 import { groupSettingsRouter } from "./groupSettingsRouter.ts";
 
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
-
 const router = createTRPCRouter({
   groupLifecycle: groupLifecycleRouter,
   groupInvites: groupInvitesRouter,
@@ -32,7 +25,7 @@ const router = createTRPCRouter({
   groupSettings: groupSettingsRouter,
 });
 let now = 0;
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => now });
+const cache = createIntegrationTestCache(() => now);
 const prefix = `settings-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const users = [0, 1, 2].map((n) => `${prefix}-${n}`);

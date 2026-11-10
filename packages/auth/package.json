@@ -9,9 +9,6 @@
     "./securityAlerts.ts": "./src/securityAlerts.ts"
   },
   "scripts": {
-    "format": "bun fmt",
-    "format:check": "bun fmt --check",
-    "lint": "biome lint .",
     "typecheck": "bun check",
     "test": "bun --env-file=../../.env.ci --env-file=../../.env test --isolate"
   },

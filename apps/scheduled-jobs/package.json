@@ -7,8 +7,7 @@
     "start": "bun run src/index.ts",
     "delete-account": "bun run src/deleteAccount.ts",
     "typecheck": "bun check",
-    "test": "bun --env-file=../../.env.ci --env-file=../../.env test --isolate",
-    "ci": "bun run typecheck && bun run test"
+    "test": "bun --env-file=../../.env.ci --env-file=../../.env test --isolate"
   },
   "dependencies": {
     "@openbeacon/api": "workspace:*",
