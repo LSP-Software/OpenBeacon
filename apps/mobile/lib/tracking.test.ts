@@ -429,6 +429,7 @@ const {
   resumeTracking,
   revokeTrackingAccess,
   syncBackgroundTracking,
+  takeKeyAccessChange,
 } = await import("./tracking.ts");
 const { noteGroupMembership } = await import("./trackingKeyCheck.ts");
 
@@ -1773,12 +1774,12 @@ describe("tracking service", () => {
       expect(requests.filter((request) => request === "auth.registerDeviceKey")).toHaveLength(1);
     });
 
-    test("the key check runs again once five minutes have passed", async () => {
+    test("the key check runs again once four minutes have passed", async () => {
       jest.useFakeTimers();
       try {
         await startTracking();
 
-        jest.advanceTimersByTime(5 * 60 * 1000 - 1);
+        jest.advanceTimersByTime(4 * 60 * 1000 - 1);
         await syncBackgroundTracking();
         expect(requests).toEqual([]);
 
@@ -1998,6 +1999,25 @@ describe("tracking service", () => {
 
       expect(provisionedKeys.map(({ groupId }) => groupId).sort()).toEqual(["group-1", "group-2"]);
       expect(startCaptureCalls).toBe(1);
+    });
+
+    test("a change found by a background sync is kept until the app takes it", async () => {
+      takeKeyAccessChange();
+      captureRunning = true;
+      await reconcileTrackingKeys({ startCapture: true, force: true });
+      takeKeyAccessChange();
+      jest.useFakeTimers();
+      try {
+        jest.advanceTimersByTime(4 * 60 * 1000);
+        membershipGroups = [{ id: "group-1", members: [{ id: "member-1" }] }];
+
+        await syncBackgroundTracking();
+
+        expect(takeKeyAccessChange()).toBe(true);
+        expect(takeKeyAccessChange()).toBe(false);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     test("reports a change only when the key check finds something new", async () => {

@@ -136,7 +136,13 @@ test("a query the server refused is not retried", () => {
   const retry = queryClient.getDefaultOptions().queries?.retry;
   if (typeof retry !== "function") throw new Error("retry is not configured");
 
-  for (const code of ["BAD_REQUEST", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND"]) {
+  for (const code of [
+    "BAD_REQUEST",
+    "UNAUTHORIZED",
+    "FORBIDDEN",
+    "NOT_FOUND",
+    "TOO_MANY_REQUESTS",
+  ]) {
     const error = new TRPCClientError("Refused", {
       result: { error: { code: -32603, message: "Refused", data: { code } } },
     });

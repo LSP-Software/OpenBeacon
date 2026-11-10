@@ -50,6 +50,7 @@ let revokePromise: Promise<void> | null = null;
 let captureRefreshPending = false;
 let trackingPaused = false;
 let uploadRejectedKeys = false;
+let keyAccessChangePending = false;
 const observedGroupEpochs = new Map<string, string>();
 const lastCleanBackfills = new Map<string, { at: number; missingVersion: number | null }>();
 
@@ -382,6 +383,12 @@ const reconcileTrackingKeysInternal = async ({
   return changed || backfills.some(({ data }) => Boolean(data));
 };
 
+export const takeKeyAccessChange = () => {
+  const changed = keyAccessChangePending;
+  keyAccessChangePending = false;
+  return changed;
+};
+
 export const reconcileTrackingKeys = ({
   startCapture,
   onlyIfRunning = false,
@@ -428,6 +435,7 @@ export const reconcileTrackingKeys = ({
         await revokeTrackingAccess();
       throw result.error;
     }
+    if (result.data) keyAccessChangePending = true;
     return result.data;
   })();
   let cancel = () => {};
@@ -748,6 +756,7 @@ const revokeTrackingAccessInternal = async (): Promise<void> => {
   reconcilePromise = null;
   captureRefreshPending = false;
   clearTrackingKeyCheck();
+  keyAccessChangePending = false;
   const trackingModule = await loadTrackingModule();
   if (!trackingModule) {
     return;

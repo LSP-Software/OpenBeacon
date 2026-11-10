@@ -25,7 +25,9 @@ export const queryClient = new QueryClient({
         !(
           error instanceof TRPCClientError &&
           (error.cause instanceof RequestTimeoutError ||
-            ["BAD_REQUEST", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND"].includes(error.data?.code))
+            ["BAD_REQUEST", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "TOO_MANY_REQUESTS"].includes(
+              error.data?.code,
+            ))
         ),
     },
   },

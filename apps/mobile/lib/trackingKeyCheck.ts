@@ -1,7 +1,7 @@
 import { storage } from "./storage.ts";
 
 const KEY_CHECK_KEY = "tracking.keyCheck";
-const KEY_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+const KEY_CHECK_INTERVAL_MS = 4 * 60 * 1000;
 
 let checkedMembership: string | null = null;
 

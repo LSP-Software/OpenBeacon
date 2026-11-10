@@ -19,6 +19,7 @@ const trackingService = {
   reconcileTrackingKeys: async (input: { startCapture: boolean; force: boolean }) =>
     (await import("../lib/tracking.ts")).reconcileTrackingKeys(input),
   revokeTrackingAccess: async () => (await import("../lib/tracking.ts")).revokeTrackingAccess(),
+  takeKeyAccessChange: async () => (await import("../lib/tracking.ts")).takeKeyAccessChange(),
 };
 
 export const TrackingProvider = ({
@@ -71,14 +72,14 @@ export const TrackingProvider = ({
           const forceKeyCheck = forceKeyCheckRef.current;
           forceFlushRef.current = false;
           forceKeyCheckRef.current = false;
-          const reconciliation = await tryCatch(
+          await tryCatch(
             service.reconcileTrackingKeys({
               startCapture: startCaptureRef.current,
               force: forceKeyCheck,
             }),
           );
           if (version !== cycleVersionRef.current) return;
-          if (reconciliation.data && appStateRef.current === "active") {
+          if (appStateRef.current === "active" && (await service.takeKeyAccessChange())) {
             void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
           }
           await tryCatch(service.flushPendingTrackingPoints(forceFlush));

@@ -21,6 +21,7 @@ let reconcileGate: Promise<void> | null = null;
 let recoveryGate: Promise<void> | null = null;
 let reconcileCalls: Array<{ startCapture: boolean; force: boolean }> = [];
 let reconcileChanged = false;
+let keyAccessChangePending = false;
 let flushCalls = 0;
 let flushModes: boolean[] = [];
 let revokeCalls = 0;
@@ -41,7 +42,13 @@ const trackingService = {
     reconcileCalls.push(input);
     await reconcileGate;
     if (failReconcile) throw new Error("group key error");
+    if (reconcileChanged) keyAccessChangePending = true;
     return reconcileChanged;
+  },
+  takeKeyAccessChange: async () => {
+    const changed = keyAccessChangePending;
+    keyAccessChangePending = false;
+    return changed;
   },
   flushPendingTrackingPoints: async (force = false) => {
     flushCalls += 1;
@@ -140,6 +147,7 @@ describe("TrackingProvider", () => {
     appStateListener = null;
     reconcileCalls = [];
     reconcileChanged = false;
+    keyAccessChangePending = false;
     reconcileGate = null;
     recoveryGate = null;
     flushCalls = 0;
@@ -233,6 +241,20 @@ describe("TrackingProvider", () => {
       { startCapture: true, force: true },
     ]);
     expect(flushCalls).toBe(2);
+  });
+
+  test("a key access change found in the background is applied on the next active cycle", async () => {
+    await renderProvider();
+    keyAccessChangePending = true;
+    expect(invalidateQueries).not.toHaveBeenCalled();
+
+    appStateListener?.("background");
+    await flushEffects();
+    appStateListener?.("active");
+    await flushEffects();
+
+    expect(invalidateQueries).toHaveBeenCalledTimes(1);
+    expect(keyAccessChangePending).toBe(false);
   });
 
   test("the 30-second cycle doesn't force a key check", async () => {

@@ -230,6 +230,10 @@ class TrackingCaptureService : Service() {
       }
     }
 
+    synchronized(captureStateLock) {
+      currentUploadIntervalMs = decision.uploadIntervalMs
+    }
+
     if (!decision.shouldQueue) {
       return
     }
@@ -246,7 +250,6 @@ class TrackingCaptureService : Service() {
         fixId = location.elapsedRealtimeNanos.takeIf { it > 0 },
       )
       synchronized(captureStateLock) {
-        currentUploadIntervalMs = decision.uploadIntervalMs
         if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && queuedCount > 0 && (decision.forceUpload || nowMs - lastUploadRequestMs >= decision.uploadIntervalMs)) {
           val uploadIntent = Intent(this, TrackingUploadService::class.java)
           startService(uploadIntent)
@@ -270,10 +273,15 @@ class TrackingCaptureService : Service() {
   }
 
   private fun hasPendingUploads(): Boolean =
-    TrackingRuntime
-      .ciphertextQueue(this)
-      .listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, TrackingRuntime.queueOwner(this))
-      .isNotEmpty()
+    try {
+      TrackingRuntime
+        .ciphertextQueue(this)
+        .listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, TrackingRuntime.queueOwner(this))
+        .isNotEmpty()
+    } catch (error: Exception) {
+      Log.e(TAG, "Failed to check for pending uploads.", error)
+      false
+    }
 
   private fun distanceMeters(
     fromLatitude: Double,
