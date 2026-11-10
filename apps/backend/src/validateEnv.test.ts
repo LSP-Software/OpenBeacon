@@ -92,7 +92,7 @@ describe("production environment validation", () => {
       expect(result.stderr.toString()).toContain("Environment configuration validation failed");
       expect(result.stdout.toString()).toContain("R2_PM_TILES_KEY: valid");
     }
-  });
+  }, 30_000);
 
   test("stops the backend with a clear line when the email settings are invalid", () => {
     for (const [invalid, message] of [

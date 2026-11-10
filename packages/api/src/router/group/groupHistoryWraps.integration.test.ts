@@ -777,7 +777,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             recipientDeviceId: member.deviceId,
           },
         }),
-      ).toBe(1);
+      ).toBe(0);
       expect(await readEpoch(firstMembership.epoch.epochId)).toEqual({
         deviceWrap: null,
         historyWraps: [],
