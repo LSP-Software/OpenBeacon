@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { AppState, View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
+import type { MapPersonStatus } from "../../lib/mapPeopleTypes.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Text } from "../ui/Text.tsx";
 import { Icon } from "../ui/Icon.tsx";
@@ -31,6 +32,7 @@ const SPOTLIGHT_PATH = [
 ].join(" ");
 
 export const LiveMapMarkerPin = ({
+  hasUnreadableUpdate = false,
   headingDegrees = null,
   image,
   initials,
@@ -38,8 +40,10 @@ export const LiveMapMarkerPin = ({
   onBitmapContentChange,
   ringColor,
   ringColors,
+  status,
   timestamp,
 }: {
+  hasUnreadableUpdate?: boolean;
   headingDegrees?: number | null;
   image: string | null;
   initials: string;
@@ -47,6 +51,7 @@ export const LiveMapMarkerPin = ({
   onBitmapContentChange?: () => void;
   ringColor: string;
   ringColors?: string[] | undefined;
+  status?: MapPersonStatus | null | undefined;
   timestamp: string | null;
 }) => {
   const [, setTick] = useState(0);
@@ -70,7 +75,7 @@ export const LiveMapMarkerPin = ({
 
   useEffect(() => {
     onBitmapContentChange?.();
-  }, [isStale, onBitmapContentChange]);
+  }, [hasUnreadableUpdate, isStale, onBitmapContentChange]);
   const showHeading = headingDegrees !== null;
   const size = showHeading ? OUTER_SIZE : PIN_SIZE;
 
@@ -134,14 +139,14 @@ export const LiveMapMarkerPin = ({
             height: 44,
             borderRadius: 22,
             borderWidth: 3,
-            borderColor: ringColors ? "transparent" : ringColor,
+            borderColor: ringColors || status ? "transparent" : ringColor,
             overflow: "hidden",
             backgroundColor: "#FFFFFF",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <Avatar alt={name} className="size-10">
+          <Avatar alt={name} className="size-10" style={status ? { opacity: 0.45 } : undefined}>
             {image ? (
               <AvatarImage
                 source={{ uri: image }}
@@ -150,12 +155,24 @@ export const LiveMapMarkerPin = ({
                 }}
               />
             ) : null}
-            <AvatarFallback>
+            <AvatarFallback className={status ? "bg-neutral-500" : ""}>
               <Text className="font-bold">{initials}</Text>
             </AvatarFallback>
           </Avatar>
         </View>
-        {ringColors ? (
+        {status ? (
+          <Svg width={44} height={44} style={{ position: "absolute" }} pointerEvents="none">
+            <Circle
+              cx={22}
+              cy={22}
+              r={20.5}
+              fill="none"
+              stroke="#8A8299"
+              strokeWidth={3}
+              strokeDasharray="5 4"
+            />
+          </Svg>
+        ) : ringColors ? (
           <Svg width={44} height={44} style={{ position: "absolute" }} pointerEvents="none">
             {ringColors.map((color, index) => (
               <Circle
@@ -174,7 +191,25 @@ export const LiveMapMarkerPin = ({
             ))}
           </Svg>
         ) : null}
-        {isStale ? (
+        {status === "cantLocate" ? (
+          <View
+            accessibilityLabel="Location unknown"
+            className="absolute bottom-0 left-0 size-5 items-center justify-center rounded-full border border-border bg-card"
+          >
+            <Text className="text-[12px] font-bold leading-[14px] text-foreground">?</Text>
+          </View>
+        ) : status === "cantRead" || hasUnreadableUpdate ? (
+          <View
+            accessibilityLabel={
+              status === "cantRead" ? "Can’t read location" : "Newer location can’t be read"
+            }
+            className="absolute bottom-0 left-0 size-5 items-center justify-center rounded-full border border-border bg-destructive"
+          >
+            <Text className="text-[12px] font-bold leading-[14px] text-destructive-foreground">
+              !
+            </Text>
+          </View>
+        ) : isStale ? (
           <View
             accessibilityLabel="Location is over 10 minutes old"
             className="absolute bottom-0 left-0 size-5 items-center justify-center rounded-full border border-border bg-card"

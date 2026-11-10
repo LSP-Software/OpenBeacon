@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { fitLiveMapMarkers } from "../../lib/fitLiveMapMarkers.ts";
 import {
@@ -20,6 +20,7 @@ import type { useLiveMapEdgeMarkers } from "./useLiveMapEdgeMarkers.ts";
 import type { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
 export const useLiveMapCamera = ({
+  bottomOverlayHeight,
   edge,
   mapStyle,
   mapRevision,
@@ -31,6 +32,7 @@ export const useLiveMapCamera = ({
   selectedUserId,
   topInset,
 }: {
+  bottomOverlayHeight: number;
   edge: Pick<ReturnType<typeof useLiveMapEdgeMarkers>, "suppress" | "release" | "releaseAfter">;
   mapStyle: ReturnType<typeof useNativeMapStyle>["mapStyle"];
   mapRevision: number;
@@ -45,6 +47,8 @@ export const useLiveMapCamera = ({
   const { cameraRef, scheduleRelease, setCamera } = useLiveMapCameraCommands();
   const initialFitStateRef = useRef(createLiveMapInitialFitState());
   const initialFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [styleLoadedRevision, setStyleLoadedRevision] = useState<number | null>(null);
+  const isStyleLoaded = styleLoadedRevision === mapRevision;
   const preservedCameraRef = useRef(INITIAL_MAP_CAMERA);
   const pendingCameraRestoreRef = useRef(false);
   const previousPmtilesUrlRef = useRef<string | null>(null);
@@ -66,21 +70,21 @@ export const useLiveMapCamera = ({
   const selectedLongitude = selectedMarker?.longitude;
   const cameraPadding = useMemo(
     () => ({
-      paddingBottom: selectedUserId ? 220 : 48,
+      paddingBottom: selectedUserId ? 220 : 48 + bottomOverlayHeight,
       paddingLeft: 32,
       paddingRight: 32,
       paddingTop: topInset + 56,
     }),
-    [topInset, selectedUserId],
+    [bottomOverlayHeight, topInset, selectedUserId],
   );
   const fitEveryonePadding = useMemo(
     () => ({
-      paddingBottom: 48,
+      paddingBottom: 48 + bottomOverlayHeight,
       paddingLeft: 32,
       paddingRight: 32,
       paddingTop: topInset + 56,
     }),
-    [topInset],
+    [bottomOverlayHeight, topInset],
   );
   const cameraPaddingRef = useRef(cameraPadding);
   cameraPaddingRef.current = cameraPadding;
@@ -230,7 +234,7 @@ export const useLiveMapCamera = ({
     fitMarkersAndPreserveCamera({ markersToFit, padding: fitEveryonePadding });
   };
 
-  const goToEdgeMarker = (userId: string) => {
+  const goToPerson = (userId: string) => {
     const marker = markersRef.current.find((item) => item.userId === userId);
     if (!marker) return;
     edge.suppress([userId]);
@@ -296,7 +300,7 @@ export const useLiveMapCamera = ({
   }, []);
 
   useEffect(() => {
-    if (!mapStyle || !cameraRef.current) {
+    if (!mapStyle || !isStyleLoaded || !cameraRef.current) {
       return;
     }
 
@@ -323,7 +327,7 @@ export const useLiveMapCamera = ({
       });
       scheduleLiveMapInitialFitClose(initialFitTimerRef, initialFitStateRef);
     }
-  }, [cameraPadding, mapStyle, markers]);
+  }, [cameraPadding, isStyleLoaded, mapStyle, markers]);
 
   useEffect(() => {
     if (!mapStyle || !cameraRef.current) return;
@@ -391,6 +395,7 @@ export const useLiveMapCamera = ({
   };
 
   const onStyleLoaded = () => {
+    setStyleLoadedRevision(mapRevision);
     if (!pendingCameraRestoreRef.current) {
       return;
     }
@@ -446,7 +451,7 @@ export const useLiveMapCamera = ({
     cameraPadding,
     fitEveryoneInFrame,
     goToCurrentLocation,
-    goToEdgeMarker,
+    goToPerson,
     fitEdgeGroup,
     zoomIntoStack,
     maybeSuspendFollowFromRegionChange,

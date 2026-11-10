@@ -42,3 +42,16 @@ export const getTimeSinceRefreshIntervalMs = (
   const interval = elapsedSeconds < 60 ? 1_000 : 60_000;
   return interval - ((now - new Date(input).getTime()) % interval);
 };
+
+export const shortTimeSince = (input: Date | string | number, now: number = Date.now()) => {
+  const elapsedSeconds = elapsedSecondsSince(input, now);
+  if (elapsedSeconds === null || elapsedSeconds < 60) {
+    return "now";
+  }
+  const minutes = Math.floor(elapsedSeconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
+};

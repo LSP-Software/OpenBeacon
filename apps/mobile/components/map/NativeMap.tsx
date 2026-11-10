@@ -1,5 +1,5 @@
 import { Camera, Layer, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
-import { LocateFixedIcon, MapPinIcon, ScanIcon } from "lucide-react-native";
+import { LocateFixedIcon, MapPinIcon, ScanIcon, UsersIcon } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, type GestureResponderEvent, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,9 +9,14 @@ import {
   type LiveMapPinOffset,
   liveMapStackExpansionZoom,
 } from "../../lib/liveMapPinGroups.ts";
+import { cn } from "../../lib/cn.ts";
+import type { MapPeople } from "../../lib/mapPeopleTypes.ts";
 import { getSymbolVisibility } from "../../lib/protomaps-style.ts";
 import { Icon } from "../ui/Icon.tsx";
+import { Text } from "../ui/Text.tsx";
 import { LiveMapEdgeChip } from "./LiveMapEdgeChip.tsx";
+import { LiveMapMissingPersonSheet } from "./LiveMapMissingPersonSheet.tsx";
+import { LiveMapPeopleTray } from "./LiveMapPeopleTray.tsx";
 import { LiveMapPointAnnotation, SelfLiveMapPointAnnotation } from "./LiveMapPointAnnotation.tsx";
 import { LiveMapPersonSheet } from "./LiveMapPersonSheet.tsx";
 import { LiveMapStackAnnotation } from "./LiveMapStackAnnotation.tsx";
@@ -24,11 +29,19 @@ import { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
 export const NativeMap = ({
   markers = [],
+  now = 0,
+  onPeopleTrayOpenChange,
   onSelectUserId,
+  people = null,
+  peopleTrayOpen = false,
   selectedUserId = null,
 }: {
   markers?: readonly LiveMapMarker[];
+  now?: number;
+  onPeopleTrayOpenChange?: (open: boolean) => void;
   onSelectUserId?: (userId: string | null) => void;
+  people?: MapPeople | null;
+  peopleTrayOpen?: boolean;
   selectedUserId?: string | null;
 } = {}) => {
   const insets = useSafeAreaInsets();
@@ -52,6 +65,23 @@ export const NativeMap = ({
     markers.filter((marker) => marker.userId === userId),
   );
   const isStackSheetOpen = stackSheetMembers.length > 1;
+  const [missingUserId, setMissingUserId] = useState<string | null>(null);
+  const missingPerson =
+    [...(people?.cantLocate ?? []), ...(people?.cantRead ?? [])].find(
+      (person) => person.userId === missingUserId,
+    ) ?? null;
+  const isTrayOpen =
+    peopleTrayOpen && selectedMarker === null && !isStackSheetOpen && missingUserId === null;
+  const trayPeople = isTrayOpen ? people : null;
+  const [trayHeight, setTrayHeight] = useState(0);
+  const unreadableMarkerCount = markers.filter(
+    (marker) => marker.unreadableGroup !== undefined,
+  ).length;
+  const hasKeyProblem = (people?.cantRead.length ?? 0) + unreadableMarkerCount > 0;
+  const needsAttentionCount =
+    (people?.cantLocate.length ?? 0) + (people?.cantRead.length ?? 0) + unreadableMarkerCount;
+  const showAttentionCount =
+    people !== null && people.finding.length === 0 && needsAttentionCount > 0;
   useEffect(() => {
     if (stackSheetUserIds === null) return;
     const stillTogether =
@@ -66,7 +96,15 @@ export const NativeMap = ({
   const edge = useLiveMapEdgeMarkers({
     markers: edgeSubjects,
     mapRevision: map.mapRevision,
-    sheetKey: selectedMarker?.userId ?? (isStackSheetOpen ? "stack" : null),
+    sheetKey:
+      selectedMarker?.userId ??
+      (isStackSheetOpen
+        ? "stack"
+        : missingPerson
+          ? `missing:${missingPerson.userId}`
+          : trayPeople
+            ? "tray"
+            : null),
     topInset: insets.top,
   });
   const { edgeMarkers, mapRef } = edge;
@@ -80,17 +118,20 @@ export const NativeMap = ({
       return group !== undefined && (group.members.length > 1 || edge.isEdgeMarker(group.id));
     },
   });
+  const closeSheets = () => {
+    setStackSheetUserIds(null);
+    setMissingUserId(null);
+    selection.clearSelectionFromReact();
+  };
   const selfMarker = markers.find((marker) => marker.isSelf) ?? null;
   const hasMarkers = markers.length > 0;
   const camera = useLiveMapCamera({
+    bottomOverlayHeight: trayPeople ? trayHeight : 0,
     edge,
     mapStyle,
     mapRevision: map.mapRevision,
     markers,
-    onClearSelection: () => {
-      setStackSheetUserIds(null);
-      selection.clearSelectionFromReact();
-    },
+    onClearSelection: closeSheets,
     onSelectUser: selection.handleAnnotationSelected,
     pmtilesUrl,
     selectedMarker,
@@ -103,7 +144,7 @@ export const NativeMap = ({
     fitEdgeGroup,
     fitEveryoneInFrame,
     goToCurrentLocation,
-    goToEdgeMarker,
+    goToPerson,
     maybeSuspendFollowFromRegionChange,
     zoomIntoStack,
   } = camera;
@@ -120,6 +161,14 @@ export const NativeMap = ({
         Number(first.isSelf) - Number(second.isSelf) ||
         first.name.localeCompare(second.name),
     );
+
+  useEffect(() => {
+    if (missingUserId === null) return;
+    const hasMarker = markers.some((marker) => marker.userId === missingUserId);
+    if (!hasMarker && missingPerson !== null) return;
+    setMissingUserId(null);
+    if (hasMarker) goToPerson(missingUserId);
+  }, [goToPerson, markers, missingPerson, missingUserId]);
 
   const edgeGroupIds = new Set(edgeMarkers.flatMap((chip) => chip.memberIds));
 
@@ -151,7 +200,7 @@ export const NativeMap = ({
       .flatMap((group) => group.members.map((member) => member.userId));
     const [onlyUserId] = userIds;
     if (userIds.length === 1 && onlyUserId !== undefined) {
-      goToEdgeMarker(onlyUserId);
+      goToPerson(onlyUserId);
       return;
     }
     fitEdgeGroup(userIds);
@@ -221,8 +270,7 @@ export const NativeMap = ({
           ) {
             return;
           }
-          setStackSheetUserIds(null);
-          clearSelectionFromReact();
+          closeSheets();
         }}
         onRegionIsChanging={(feature) => {
           const { bounds, animated, userInteraction, zoom } = feature.nativeEvent;
@@ -370,6 +418,43 @@ export const NativeMap = ({
             ) : null}
           </>
         ) : null}
+        <Pressable
+          accessibilityLabel={
+            showAttentionCount ? `People, ${needsAttentionCount} need attention` : "People"
+          }
+          accessibilityRole="button"
+          accessibilityState={{ expanded: isTrayOpen }}
+          onPress={() => {
+            if (isTrayOpen) {
+              onPeopleTrayOpenChange?.(false);
+              return;
+            }
+            closeSheets();
+            onPeopleTrayOpenChange?.(true);
+          }}
+          className={cn(
+            "size-11 items-center justify-center rounded-full border shadow-sm shadow-black/10",
+            isTrayOpen ? "border-foreground bg-foreground" : "border-border bg-card",
+          )}
+        >
+          <Icon
+            as={UsersIcon}
+            size={20}
+            className={isTrayOpen ? "text-background" : "text-foreground"}
+          />
+          {showAttentionCount ? (
+            <View
+              className={cn(
+                "absolute -right-1 -top-1 h-5 min-w-5 items-center justify-center rounded-full border-2 border-card px-1",
+                hasKeyProblem ? "bg-destructive" : "bg-muted",
+              )}
+            >
+              <Text className="text-[11px] font-bold leading-[13px] text-white">
+                {needsAttentionCount}
+              </Text>
+            </View>
+          ) : null}
+        </Pressable>
       </View>
       {selectedMarker ? (
         <LiveMapPersonSheet
@@ -381,6 +466,7 @@ export const NativeMap = ({
           name={selectedMarker.name}
           otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
           timestamp={selectedMarker.timestamp}
+          unreadableGroup={selectedMarker.unreadableGroup}
           onHeightChange={(height) => {
             edge.onSheetHeightChange(height);
           }}
@@ -398,6 +484,33 @@ export const NativeMap = ({
           onSelectUser={(userId) => {
             setStackSheetUserIds(null);
             handleAnnotationSelected(userId);
+          }}
+        />
+      ) : missingPerson ? (
+        <LiveMapMissingPersonSheet
+          key={missingPerson.userId}
+          person={missingPerson}
+          onDismiss={() => {
+            setMissingUserId(null);
+          }}
+          onHeightChange={(height) => {
+            edge.onSheetHeightChange(height);
+          }}
+        />
+      ) : trayPeople ? (
+        <LiveMapPeopleTray
+          now={now}
+          people={trayPeople}
+          onHeightChange={(height) => {
+            setTrayHeight(height);
+            edge.onSheetHeightChange(height);
+          }}
+          onSelectPerson={(userId) => {
+            if (markers.some((marker) => marker.userId === userId)) {
+              goToPerson(userId);
+              return;
+            }
+            setMissingUserId(userId);
           }}
         />
       ) : null}

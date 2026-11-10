@@ -1,7 +1,8 @@
+import { useIsFocused } from "@react-navigation/native";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { AppState, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeMap } from "../../../components/map/NativeMap.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
@@ -16,39 +17,77 @@ import { trpc } from "../../../lib/api.ts";
 import { applySelfDeviceLocation } from "../../../lib/applySelfDeviceLocation.ts";
 import { authClient } from "../../../lib/auth-client.ts";
 import { buildLiveMapMarkers } from "../../../lib/buildLiveMapMarkers.ts";
+import { classifyMapPeople, flagUnreadableMarkers } from "../../../lib/classifyMapPeople.ts";
 import { loadPersonalNicknames } from "../../../lib/personalNicknames.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { nextMapMarkerSelection } from "../../../lib/mapMarkerSelection.ts";
 import { resolveSelfDeviceLocationFallback } from "../../../lib/resolveSelfDeviceLocationFallback.ts";
+import { storage } from "../../../lib/storage.ts";
 import { TAB_BAR_CONTENT_HEIGHT } from "../../../lib/tabBarLayout.ts";
 import { dismissTrackingQueueEviction, getTrackingQueueEviction } from "../../../lib/tracking.ts";
 
+const keyBannerDismissedKey = (userId: string, groupId: string) =>
+  `map.keyBannerDismissed.${userId}.${groupId}`;
+
 const MapScreen = () => {
   const insets = useSafeAreaInsets();
-  const livePositions = useMapLivePositions();
+  const { positions: livePositions, status: trackingStatus } = useMapLivePositions();
   const { data: session } = authClient.useSession();
   const { data: groupsQueryData } = useQuery(trpc.groupMembership.list.queryOptions());
   const groups = useMembershipSnapshot(groupsQueryData);
-  const nicknameQueries = useQueries({
+  const nicknames = useQueries({
     queries: (groups ?? []).map((group) => ({
       queryKey: ["personalNicknames", group.id, session?.user.id],
       enabled: !!session?.user.id,
       queryFn: () => loadPersonalNicknames(group.id, session!.user.id),
     })),
+    combine: (results) => results.map((result) => result.data),
   });
-  const groupsWithNicknames = groups?.map((group, index) => ({
-    ...group,
-    members: group.members.map((member) => ({
-      ...member,
-      name: nicknameQueries[index]?.data?.[member.id]?.name ?? member.name,
-    })),
-  }));
+  const groupsWithNicknames = useMemo(
+    () =>
+      groups?.map((group, index) => ({
+        ...group,
+        members: group.members.map((member) => ({
+          ...member,
+          name: nicknames[index]?.[member.id]?.name ?? member.name,
+        })),
+      })),
+    [groups, nicknames],
+  );
   const keyAccess = useCurrentGroupKeyAccess(
     groups?.map((group) => group.id) ?? [],
     session?.user.id,
   );
+  const keyAccessSignature = keyAccess
+    .map((access) => access.data?.current ?? (access.isError ? "failed" : ""))
+    .join(",");
+  const keyAccessByGroupId = useMemo(() => {
+    const statuses = keyAccessSignature.split(",");
+    const byGroupId = new Map<string, "available" | "failed" | "missing" | "unavailable">();
+    groups?.forEach((group, index) => {
+      const status = (["available", "failed", "missing", "unavailable"] as const).find(
+        (item) => item === statuses[index],
+      );
+      if (status) byGroupId.set(group.id, status);
+    });
+    return byGroupId;
+  }, [groups, keyAccessSignature]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selfUserId = session?.user.id ?? "";
+  const peopleTrayKey = `map.peopleTrayOpen.${selfUserId}`;
+  const storedPeopleTrayOpen = useMemo(
+    () => storage.getBoolean(peopleTrayKey) ?? false,
+    [peopleTrayKey],
+  );
+  const [peopleTrayOverride, setPeopleTrayOverride] = useState<{
+    open: boolean;
+    userId: string;
+  } | null>(null);
+  const peopleTrayOpen =
+    peopleTrayOverride?.userId === selfUserId ? peopleTrayOverride.open : storedPeopleTrayOpen;
+  const isFocused = useIsFocused();
+  const [appActive, setAppActive] = useState(() => AppState.currentState === "active");
+  const [now, setNow] = useState(() => Date.now());
   const selfDeviceLocation = useSelfDeviceLocation(selfUserId.length > 0);
   const lastSentAt = useTrackingUploadTime(selfUserId, groups?.map((group) => group.id) ?? []);
   const queryClient = useQueryClient();
@@ -64,8 +103,17 @@ const MapScreen = () => {
     onSettled: () => queryClient.invalidateQueries({ queryKey: evictionQueryKey }),
   });
   const groupColorRevision = useGroupColorRevision();
+  const [, setKeyBannerRevision] = useState(0);
   const groupsMissingKeys =
-    groups?.filter((_, index) => keyAccess[index]?.data?.current === "missing") ?? [];
+    groups?.filter(
+      (group, index) =>
+        keyAccess[index]?.data?.current === "missing" &&
+        !storage.getBoolean(keyBannerDismissedKey(selfUserId, group.id)),
+    ) ?? [];
+  const dismissKeyBanners = (groupIds: readonly string[]) => {
+    for (const groupId of groupIds) storage.set(keyBannerDismissedKey(selfUserId, groupId), true);
+    setKeyBannerRevision((revision) => revision + 1);
+  };
 
   const selfFallback = useMemo(() => {
     void groupColorRevision;
@@ -85,17 +133,21 @@ const MapScreen = () => {
       return [];
     }
 
-    return applySelfDeviceLocation({
-      markers: buildLiveMapMarkers({
-        getGroupColor,
-        groups: groupsWithNicknames ?? [],
-        positions: livePositions,
+    return flagUnreadableMarkers({
+      groups: groupsWithNicknames ?? [],
+      markers: applySelfDeviceLocation({
+        markers: buildLiveMapMarkers({
+          getGroupColor,
+          groups: groupsWithNicknames ?? [],
+          positions: livePositions,
+          selfUserId,
+        }),
+        selfDeviceLocation,
+        selfFallback,
         selfUserId,
+        lastSentAt,
       }),
-      selfDeviceLocation,
-      selfFallback,
-      selfUserId,
-      lastSentAt,
+      status: trackingStatus,
     });
   }, [
     groupColorRevision,
@@ -105,7 +157,43 @@ const MapScreen = () => {
     selfFallback,
     selfUserId,
     lastSentAt,
+    trackingStatus,
   ]);
+
+  const people = useMemo(() => {
+    if (!selfUserId || !groupsWithNicknames) {
+      return null;
+    }
+
+    return classifyMapPeople({
+      groups: groupsWithNicknames,
+      keyAccess: keyAccessByGroupId,
+      markers,
+      now,
+      selfUserId,
+      status: trackingStatus,
+    });
+  }, [groupsWithNicknames, keyAccessByGroupId, markers, now, selfUserId, trackingStatus]);
+
+  useEffect(() => {
+    for (const [groupId, access] of keyAccessByGroupId) {
+      if (access === "available") storage.remove(keyBannerDismissedKey(selfUserId, groupId));
+    }
+  }, [keyAccessByGroupId, selfUserId]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      setAppActive(state === "active");
+    });
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!isFocused || !appActive || !peopleTrayOpen) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, [appActive, isFocused, peopleTrayOpen]);
 
   useEffect(() => {
     if (selectedUserId && !markers.some((marker) => marker.userId === selectedUserId)) {
@@ -120,6 +208,13 @@ const MapScreen = () => {
     >
       <NativeMap
         markers={markers}
+        now={now}
+        people={people}
+        peopleTrayOpen={peopleTrayOpen}
+        onPeopleTrayOpenChange={(open) => {
+          storage.set(peopleTrayKey, open);
+          setPeopleTrayOverride({ open, userId: selfUserId });
+        }}
         selectedUserId={selectedUserId}
         onSelectUserId={(userId) => {
           setSelectedUserId((current) => nextMapMarkerSelection(current, userId));
@@ -173,9 +268,19 @@ const MapScreen = () => {
                 This phone can’t access the group’s encryption key. Group locations may be
                 unavailable.
               </Text>
-              <Link href={{ pathname: "/(tabs)/groups/[groupId]", params: { groupId: group.id } }}>
-                <Text className="font-semibold text-red-500 dark:text-red-300">Open group</Text>
-              </Link>
+              <View className="flex-row flex-wrap items-center gap-3">
+                <Link
+                  href={{ pathname: "/(tabs)/groups/[groupId]", params: { groupId: group.id } }}
+                  asChild
+                >
+                  <Button size="sm">
+                    <Text>Open group</Text>
+                  </Button>
+                </Link>
+                <Button size="sm" variant="outline" onPress={() => dismissKeyBanners([group.id])}>
+                  <Text>Dismiss</Text>
+                </Button>
+              </View>
             </View>
           ))}
         {groupsMissingKeys.length > 2 && (
@@ -183,9 +288,20 @@ const MapScreen = () => {
             <Text className="font-semibold text-red-700 dark:text-red-400">
               Multiple groups require attention
             </Text>
-            <Link href="/(tabs)/groups">
-              <Text className="font-semibold text-red-500 dark:text-red-300">Open groups</Text>
-            </Link>
+            <View className="flex-row flex-wrap items-center gap-3">
+              <Link href="/(tabs)/groups" asChild>
+                <Button size="sm">
+                  <Text>Open groups</Text>
+                </Button>
+              </Link>
+              <Button
+                size="sm"
+                variant="outline"
+                onPress={() => dismissKeyBanners(groupsMissingKeys.map((group) => group.id))}
+              >
+                <Text>Dismiss</Text>
+              </Button>
+            </View>
           </View>
         )}
       </ScrollView>

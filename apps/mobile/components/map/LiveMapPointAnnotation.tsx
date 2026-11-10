@@ -54,7 +54,14 @@ export const LiveMapPointAnnotation = ({
   useEffect(() => {
     // Android PointAnnotation bitmaps need an explicit refresh when chrome or heading changes
     annotationRef.current?.refresh();
-  }, [headingDegrees, marker.image, marker.initials, marker.ringColor, marker.ringColors]);
+  }, [
+    headingDegrees,
+    marker.image,
+    marker.initials,
+    marker.ringColor,
+    marker.ringColors,
+    marker.unreadableGroup,
+  ]);
 
   if (Platform.OS === "android") {
     return (
@@ -67,6 +74,7 @@ export const LiveMapPointAnnotation = ({
         >
           <LiveMapPinMotion arrival={arrival} gatherTo={gatherTo}>
             <LiveMapMarkerPin
+              hasUnreadableUpdate={marker.unreadableGroup !== undefined}
               headingDegrees={headingDegrees}
               image={marker.image}
               initials={marker.initials}
@@ -92,6 +100,7 @@ export const LiveMapPointAnnotation = ({
     >
       <LiveMapPinMotion arrival={arrival} gatherTo={gatherTo}>
         <LiveMapMarkerPin
+          hasUnreadableUpdate={marker.unreadableGroup !== undefined}
           headingDegrees={headingDegrees}
           image={marker.image}
           initials={marker.initials}
