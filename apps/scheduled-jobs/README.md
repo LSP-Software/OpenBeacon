@@ -11,6 +11,8 @@ The runner requires `DATABASE_URL`, `S3_ACCESS_KEY_ID`, `S3_ACCESS_KEY`, `S3_BUC
 
 On startup the runner checks PostgreSQL with `SELECT 1`, lists S3 object versions, checks that the R2 PMTiles object exists and, when email is configured, checks the email settings without sending anything. Its credentials also need permission to delete image objects, versions and delete markers. It exits if configuration or connectivity checks fail. Clients are closed on shutdown. The Docker image generates the Prisma client but does not apply migrations.
 
+Once the checks pass, the runner serves `GET /health` on `127.0.0.1:3000`, inside the container only. It returns the same status, backend version and server name (`SERVER_NAME`) as the backend's health check. The image includes curl and a Docker `HEALTHCHECK` that calls it, so Coolify can tell when the runner is up. Leave the port unpublished.
+
 ## Adding a job
 
 Register an object in `src/index.ts` with a unique stable `name`, a positive integer `delay` in milliseconds (at most 2,147,483,647), and an async `run` function. Put job-specific work in `src/jobs`. The shared Prisma, S3, and R2 clients are available from `src/services.ts`; pass them to jobs explicitly. Create and validate additional clients once at startup and close them after the scheduler stops. Grant only the permissions jobs need in addition to the startup checks.
