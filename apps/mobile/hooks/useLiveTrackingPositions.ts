@@ -29,7 +29,8 @@ export const useLiveTrackingPositions = ({ groupId }: { groupId?: string } = {})
       groupId
         ? {
             ...deps,
-            listGroups: async () => [{ id: groupId }],
+            listGroups: async (signal) =>
+              (await deps.listGroups(signal)).filter(({ id }) => id === groupId),
           }
         : deps,
     );

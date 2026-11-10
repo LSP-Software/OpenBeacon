@@ -7,7 +7,7 @@ import { createReactNativeTestModule } from "./reactNativeTestModule.ts";
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-let queryResult: { data: unknown; isPending: boolean; error: { data: { code: string } } | null };
+let queryResult: { data: unknown; isPending: boolean };
 let isFocused = true;
 let sessionUserId = "user-1";
 const storedValues = new Map<string, number>();
@@ -20,11 +20,15 @@ let keyAccess: {
   isError: boolean;
 }[] = [];
 const replace = mock(() => {});
-const fetchQuery = mock(async () => groups);
+let fetchGroups: () => Promise<{ id: string }[]> = async () => groups;
+const fetchQuery = mock(() => fetchGroups());
 const queryClient = { fetchQuery };
 const router = { replace };
 mock.module("@tanstack/react-query", () => ({
-  useQuery: () => queryResult,
+  useQuery: ({ select }: { select?: (data: unknown) => unknown }) => ({
+    ...queryResult,
+    data: select && queryResult.data !== undefined ? select(queryResult.data) : queryResult.data,
+  }),
   useQueryClient: () => queryClient,
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => isFocused }));
@@ -45,7 +49,6 @@ mock.module("lucide-react-native", () => ({
 mock.module("../lib/api.ts", () => ({
   trpc: {
     groupMembership: {
-      get: { queryOptions: () => ({}) },
       list: { queryOptions: () => ({}) },
     },
     accountRecovery: {
@@ -63,7 +66,7 @@ mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useGroupKeyHistoryAccess: 
 mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
 mock.module("../components/image/GroupImage.tsx", () => ({ GroupImage: () => null }));
 mock.module("../components/LoadingIndicator.tsx", () => ({
-  LoadingIndicator: () => null,
+  LoadingIndicator: () => "Loading",
 }));
 mock.module("../components/RefreshablePage.tsx", () => ({
   RefreshablePage: ({ children }: { children: React.ReactNode }) => children,
@@ -88,26 +91,30 @@ mock.module("../app/(tabs)/groups/[groupId]/SettingsTab.tsx", () => ({ default: 
 
 const { default: GroupScreen } = await import("../app/(tabs)/groups/[groupId]/index.tsx");
 
+const family = (members: { role: string; userId: string }[]) => ({
+  id: "group-1",
+  image: null,
+  members,
+  name: "Family",
+});
+
 beforeEach(() => {
   isFocused = true;
   sessionUserId = "user-1";
   storedValues.clear();
   groups = [];
+  fetchGroups = async () => groups;
   keyAccess = [];
   replace.mockClear();
   fetchQuery.mockClear();
-  queryResult = {
-    data: { id: "group-1", name: "Family", groupMembers: [] },
-    isPending: false,
-    error: null,
-  };
+  queryResult = { data: [family([])], isPending: false };
 });
 
 test("shows key access problems without offering recovery", async () => {
   keyAccess = [{ data: { current: "missing", history: "complete" }, isError: true }];
   queryResult = {
     ...queryResult,
-    data: { id: "group-1", name: "Family", groupMembers: [{ role: "OWNER" }] },
+    data: [family([{ role: "OWNER", userId: "user-1" }])],
   };
   const root = createRoot();
   await act(async () => root.render(<GroupScreen />));
@@ -118,7 +125,7 @@ test("shows key access problems without offering recovery", async () => {
 
   queryResult = {
     ...queryResult,
-    data: { id: "group-1", name: "Family", groupMembers: [{ role: "MEMBER" }] },
+    data: [family([{ role: "MEMBER", userId: "user-1" }])],
   };
   await act(async () => root.render(<GroupScreen />));
   expect(JSON.stringify(root.container.toJSON())).not.toContain("Restore group key");
@@ -191,13 +198,13 @@ test("shows the partial history warning again when more history becomes unreadab
   await act(async () => root.unmount());
 });
 
-test("does not redirect from an unfocused group screen when its refresh loses access", async () => {
+test("does not redirect from an unfocused group screen when the group leaves the list", async () => {
   isFocused = false;
   const root = createRoot();
   await act(async () => {
     root.render(<GroupScreen />);
   });
-  queryResult = { ...queryResult, error: { data: { code: "FORBIDDEN" } } };
+  queryResult = { ...queryResult, data: [] };
   await act(async () => {
     root.render(<GroupScreen />);
   });
@@ -212,25 +219,25 @@ test("does not redirect from an unfocused group screen when its refresh loses ac
   });
 });
 
-test("returns to groups when a deleted group becomes inaccessible during a refetch", async () => {
+test("returns to groups once a fresh list confirms the group is gone", async () => {
   const root = createRoot();
   await act(async () => {
     root.render(<GroupScreen />);
   });
-  queryResult = { ...queryResult, error: { data: { code: "FORBIDDEN" } } };
+  queryResult = { ...queryResult, data: [] };
   await act(async () => {
     root.render(<GroupScreen />);
   });
-  expect(replace).toHaveBeenCalledWith("/(tabs)/groups/list");
   expect(fetchQuery).toHaveBeenCalled();
+  expect(replace).toHaveBeenCalledWith("/(tabs)/groups/list");
   await act(async () => {
     root.unmount();
   });
 });
 
-test("does not redirect when a fresh membership list still contains the group", async () => {
+test("stays when a fresh list still contains a group the cached list was missing", async () => {
   groups = [{ id: "group-1" }];
-  queryResult = { ...queryResult, error: { data: { code: "FORBIDDEN" } } };
+  queryResult = { ...queryResult, data: [] };
   const root = createRoot();
   await act(async () => {
     root.render(<GroupScreen />);
@@ -242,12 +249,31 @@ test("does not redirect when a fresh membership list still contains the group", 
   });
 });
 
-test("does not leave the group on a temporary request failure", async () => {
-  queryResult = { ...queryResult, error: { data: { code: "INTERNAL_SERVER_ERROR" } } };
+test("shows loading rather than not found while checking a group missing from the cache", async () => {
+  fetchGroups = () => new Promise(() => {});
+  queryResult = { ...queryResult, data: [] };
   const root = createRoot();
   await act(async () => {
     root.render(<GroupScreen />);
   });
+  const rendered = JSON.stringify(root.container.toJSON());
+  expect(rendered).toContain("Loading");
+  expect(rendered).not.toContain("Group not found");
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+test("shows not found when the group can't be checked, for example offline", async () => {
+  fetchGroups = async () => {
+    throw new Error("Network request failed");
+  };
+  queryResult = { ...queryResult, data: [] };
+  const root = createRoot();
+  await act(async () => {
+    root.render(<GroupScreen />);
+  });
+  expect(JSON.stringify(root.container.toJSON())).toContain("Group not found");
   expect(replace).not.toHaveBeenCalled();
   await act(async () => {
     root.unmount();

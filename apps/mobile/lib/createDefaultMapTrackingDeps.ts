@@ -1,4 +1,4 @@
-import { trpcClient } from "./api.ts";
+import { queryClient, trpc, trpcClient } from "./api.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { isCursorAfter } from "./mapTracking.ts";
 import { createMapTrackingDecryptPoint } from "./mapTrackingDecrypt.ts";
@@ -33,7 +33,11 @@ export const createDefaultMapTrackingDeps = (): MapTrackingDeps => {
     },
     getLatest: async (groupId, signal) =>
       trpcClient.groupTracking.getLatest.query({ groupId }, { signal }),
-    listGroups: async (signal) => trpcClient.groupMembership.list.query(undefined, { signal }),
+    listGroups: async (signal) => {
+      const groups = await trpcClient.groupMembership.list.query(undefined, { signal });
+      queryClient.setQueryData(trpc.groupMembership.list.queryKey(), groups);
+      return groups;
+    },
     now: () => Date.now(),
     poll: async (input, signal) => trpcClient.groupTracking.poll.query(input, { signal }),
     schedule: (callback, delayMs) => {

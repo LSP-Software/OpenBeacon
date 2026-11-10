@@ -1,4 +1,5 @@
 import { Alert } from "../../../lib/alert.ts";
+import { useIsFocused } from "@react-navigation/native";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
@@ -15,6 +16,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "../../../component
 import { Icon } from "../../../components/ui/Icon.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
+import { useRefetchWhileFocused } from "../../../hooks/useRefetchWhileFocused.ts";
 import { type RouterOutputs, trpc } from "../../../lib/api.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { buildAcceptInviteInput, submitEpochChange } from "../../../lib/groupEncryption.ts";
@@ -24,12 +26,26 @@ import { useSingleFlight } from "../../../lib/useSingleFlight.ts";
 export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
 
+  const isFocused = useIsFocused();
   const { data: groupList, isPending: isFetchingGroupList } = useQuery({
     ...trpc.groupMembership.list.queryOptions(),
-    refetchInterval: 10_000,
+    subscribed: isFocused,
   });
-  const { data: groupInvites, isPending: isFetchingGroupInvites } = useQuery(
-    trpc.groupInvites.list.queryOptions(),
+  const { data: groupInvites, isPending: isFetchingGroupInvites } = useQuery({
+    ...trpc.groupInvites.list.queryOptions(),
+    subscribed: isFocused,
+  });
+  const { data: joinAlerts } = useQuery({
+    ...trpc.groupInvites.joinAlerts.queryOptions(),
+    subscribed: isFocused,
+  });
+  useRefetchWhileFocused(
+    [
+      trpc.groupMembership.list.queryKey(),
+      trpc.groupInvites.list.queryKey(),
+      trpc.groupInvites.joinAlerts.queryKey(),
+    ],
+    10_000,
   );
 
   if (isFetchingGroupList || isFetchingGroupInvites) {
@@ -56,7 +72,7 @@ export default function GroupsScreen() {
             <Text>Scan QR or enter join code</Text>
           </Button>
         </Link>
-        <GroupJoinAlerts />
+        <GroupJoinAlerts alerts={joinAlerts ?? []} />
         <GroupInvitesList groupInvites={groupInvites ?? []} />
         <GroupList
           groupList={groupList ?? []}
@@ -67,18 +83,14 @@ export default function GroupsScreen() {
   );
 }
 
-const GroupJoinAlerts = () => {
+const GroupJoinAlerts = ({ alerts }: { alerts: RouterOutputs["groupInvites"]["joinAlerts"] }) => {
   const queryClient = useQueryClient();
-  const alerts = useQuery({
-    ...trpc.groupInvites.joinAlerts.queryOptions(),
-    refetchInterval: 30_000,
-  });
   const dismiss = useMutation(trpc.groupInvites.dismissJoinAlert.mutationOptions());
-  if (!alerts.data?.length) return null;
+  if (!alerts.length) return null;
   return (
     <View className="gap-3 mb-4">
       <Text className="font-bold text-lg">Group activity</Text>
-      {alerts.data.map((item) => (
+      {alerts.map((item) => (
         <Card key={item.id}>
           <CardHeader>
             <Text>

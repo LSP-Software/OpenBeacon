@@ -1,12 +1,21 @@
 import type { AppRouter } from "@openbeacon/api";
-import { QueryClient } from "@tanstack/react-query";
+import { focusManager, QueryClient } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink, loggerLink, TRPCClientError } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
+import { AppState } from "react-native";
 import superjson from "superjson";
 import { apiCompatibilityFetch, withApiCompatibilityHeader } from "./apiCompatibility.ts";
 import { authClient } from "./auth-client.ts";
 import { baseUrl, getFeedbackUrl } from "./base-url.ts";
 import { RequestTimeoutError, timeoutLink } from "./timeoutLink.ts";
+
+focusManager.setEventListener((handleFocus) => {
+  handleFocus(AppState.currentState !== "background");
+  const subscription = AppState.addEventListener("change", (state) => {
+    handleFocus(state !== "background");
+  });
+  return () => subscription.remove();
+});
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,6 +41,7 @@ export const trpcClient = createTRPCClient<AppRouter>({
     httpBatchLink({
       transformer: superjson,
       url: `${baseUrl}/api/trpc`,
+      maxURLLength: 2048,
       fetch: (url, options) =>
         apiCompatibilityFetch(url, { ...options, signal: options?.signal ?? null }),
       async headers() {
@@ -72,5 +82,14 @@ export const trpc = createTRPCOptionsProxy<AppRouter>({
   client: trpcClient,
   queryClient,
 });
+
+for (const queryKey of [
+  trpc.auth.providers.queryKey(),
+  trpc.account.version.queryKey(),
+  trpc.account.serverName.queryKey(),
+  trpc.account.deletionVerificationMethods.queryKey(),
+]) {
+  queryClient.setQueryDefaults(queryKey, { staleTime: Infinity });
+}
 
 export type { RouterInputs, RouterOutputs } from "@openbeacon/api";

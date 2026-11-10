@@ -1,10 +1,11 @@
+import { useIsFocused } from "@react-navigation/native";
 import { Alert } from "../../../../lib/alert.ts";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { MapPinIcon, PlusCircleIcon } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from "react-native";
 import { InviteMemberToGroupDialog } from "../../../../components/dialogs/InviteMemberToGroupDialog.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
@@ -18,6 +19,7 @@ import {
 } from "../../../../components/ui/Dialog.tsx";
 import { Icon } from "../../../../components/ui/Icon.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
+import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
 import { useGroupLivePositions } from "../../../../hooks/useGroupLivePositions.ts";
 import { trpc } from "../../../../lib/api.ts";
 import {
@@ -48,18 +50,26 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
   const [successorDialogOpen, setSuccessorDialogOpen] = useState(false);
   const [successorMemberId, setSuccessorMemberId] = useState<string | null>(null);
   const { data: session } = authClient.useSession();
+  const isFocused = useIsFocused();
   const queryClient = useQueryClient();
   const router = useRouter();
   const removeMember = useMutation(trpc.groupMembership.remove.mutationOptions());
   const deleteGroup = useMutation(trpc.groupLifecycle.delete.mutationOptions());
   const updateRole = useMutation(trpc.groupMembership.updateRole.mutationOptions());
-  const { data: members, isPending: isFetchingMembers } = useQuery({
-    ...trpc.groupMembership.members.queryOptions({ groupId }),
-    refetchInterval: 10_000,
-  });
+  const { group, isPending: isFetchingMembers } = useCachedGroup(groupId);
+  const members = useMemo(
+    () =>
+      group?.members.map((member) => ({
+        id: member.id,
+        role: member.role,
+        user: { id: member.userId, image: member.image, name: member.name },
+      })),
+    [group],
+  );
   const nicknameQuery = useQuery({
     queryKey: ["personalNicknames", groupId, session?.user.id],
     enabled: !!session?.user.id,
+    subscribed: isFocused,
     queryFn: () => loadPersonalNicknames(groupId, session!.user.id),
   });
   const nicknames = nicknameQuery.data ?? {};
@@ -114,19 +124,13 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                       }),
                   });
                 }
-                if (isSelf) forgetHiddenMapGroup({ groupId, userId: member.user.id });
+                if (isSelf) {
+                  forgetHiddenMapGroup({ groupId, userId: member.user.id });
+                  router.replace("/(tabs)/groups/list");
+                }
                 await queryClient.invalidateQueries({
                   queryKey: trpc.groupMembership.list.queryKey(),
                 });
-                if (isSelf) {
-                  router.replace("/(tabs)/groups/list");
-                } else {
-                  await queryClient.invalidateQueries({
-                    queryKey: trpc.groupMembership.members.queryKey({
-                      groupId,
-                    }),
-                  });
-                }
                 requestTrackingSync();
               })(),
             );
@@ -218,14 +222,9 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                 Alert.alert("Unable to save nickname", result.error.message);
                 return;
               }
-              await Promise.all([
-                queryClient.invalidateQueries({
-                  queryKey: trpc.groupMembership.members.queryKey({ groupId }),
-                }),
-                queryClient.invalidateQueries({
-                  queryKey: ["personalNicknames", groupId, session?.user.id],
-                }),
-              ]);
+              await queryClient.invalidateQueries({
+                queryKey: ["personalNicknames", groupId, session?.user.id],
+              });
               setNicknameMember(null);
             }}
           >
@@ -318,19 +317,9 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                             Alert.alert("Unable to change role", result.error.message);
                             return;
                           }
-                          await Promise.all([
-                            queryClient.invalidateQueries({
-                              queryKey: trpc.groupMembership.members.queryKey({ groupId }),
-                            }),
-                            queryClient.invalidateQueries({
-                              queryKey: trpc.groupMembership.get.queryKey({
-                                groupId,
-                              }),
-                            }),
-                            queryClient.invalidateQueries({
-                              queryKey: trpc.groupMembership.list.queryKey(),
-                            }),
-                          ]);
+                          await queryClient.invalidateQueries({
+                            queryKey: trpc.groupMembership.list.queryKey(),
+                          });
                           setChangingRole(null);
                         },
                       },

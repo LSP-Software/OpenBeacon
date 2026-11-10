@@ -1,9 +1,17 @@
 import { expect, mock, test } from "bun:test";
+import { QueryClient } from "@tanstack/react-query";
 import type { MapTrackingEncryptedPoint } from "./mapTrackingTypes.ts";
 import { subscribeToGroupEpochChanges } from "./trackingEvents.ts";
 
 let status: "ok" | "undecryptable" = "undecryptable";
-mock.module("./api.ts", () => ({ trpcClient: {} }));
+const queryClient = new QueryClient();
+const groupListKey = [["groupMembership", "list"], { type: "query" }];
+const groups = [{ id: "group", image: null, members: [], name: "Climbing club" }];
+mock.module("./api.ts", () => ({
+  queryClient,
+  trpc: { groupMembership: { list: { queryKey: () => groupListKey } } },
+  trpcClient: { groupMembership: { list: { query: async () => groups } } },
+}));
 mock.module("./epochKeys.ts", () => ({
   createHistoryKeyReader: () => async () => null,
   resolveEpochKey: async () => null,
@@ -16,6 +24,13 @@ mock.module("./mapTrackingDecrypt.ts", () => ({
 
 const { createDefaultMapTrackingDeps }: typeof import("./createDefaultMapTrackingDeps.ts") =
   await import("./createDefaultMapTrackingDeps.ts");
+
+test("shares the group list it fetches with the screens", async () => {
+  const deps = createDefaultMapTrackingDeps();
+
+  expect(await deps.listGroups(new AbortController().signal)).toEqual(groups);
+  expect(queryClient.getQueryData<typeof groups>(groupListKey)).toEqual(groups);
+});
 
 test("a newly decryptable epoch refreshes group key access once", async () => {
   const deps = createDefaultMapTrackingDeps();
