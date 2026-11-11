@@ -1221,7 +1221,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts"
     const response = await auth.handler(
       new Request("http://localhost:3000/api/auth/change-password", {
         method: "POST",
-        headers: { "content-type": "application/json", cookie, [clientIpHeader]: nextIp() },
+        headers: {
+          "content-type": "application/json",
+          cookie,
+          origin: "http://localhost:3000",
+          [clientIpHeader]: nextIp(),
+        },
         body: JSON.stringify({ currentPassword, newPassword: "a brand new passphrase" }),
       }),
     );
@@ -1264,7 +1269,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts"
       const response = await auth.handler(
         new Request("http://localhost:3000/api/auth/change-password", {
           method: "POST",
-          headers: { "content-type": "application/json", cookie, [clientIpHeader]: nextIp() },
+          headers: {
+            "content-type": "application/json",
+            cookie,
+            origin: "http://localhost:3000",
+            [clientIpHeader]: nextIp(),
+          },
           body: JSON.stringify({
             currentPassword: password,
             newPassword: "a brand new passphrase",
