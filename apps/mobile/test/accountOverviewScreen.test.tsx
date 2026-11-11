@@ -39,10 +39,10 @@ mock.module("@hookform/resolvers/zod", () => ({ zodResolver: () => {} }));
 mock.module("lucide-react-native", () =>
   Object.fromEntries(
     [
-      "AlertCircleIcon",
       "BellIcon",
       "CameraIcon",
       "HelpCircleIcon",
+      "HistoryIcon",
       "InfoIcon",
       "KeyRoundIcon",
       "LockIcon",

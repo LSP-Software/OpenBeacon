@@ -1,11 +1,12 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
-import { Link, router, useFocusEffect } from "expo-router";
+import { type Href, Link, router, useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { Button } from "../../components/ui/Button.tsx";
+import { RadioCardGroup } from "../../components/ui/RadioCardGroup.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
@@ -24,6 +25,58 @@ const SetUpPhoneScreen = () => {
   const cancellingRef = useRef(false);
   const refetchDeviceStatus = deviceStatus.refetch;
   const noun = thisDeviceNoun();
+  const recoveryKey = !!status.data?.recoveryKey;
+  const options: {
+    id: "link" | "restore" | "waiting" | "reset";
+    title: string;
+    description: string;
+    href: Href;
+  }[] = [
+    ...(noOtherPhone
+      ? []
+      : [
+          {
+            id: "link" as const,
+            title: "Link with your other device",
+            description: `Your other device scans a code on this ${noun}, and this ${noun} gets your full location history.`,
+            href: "/setup/link" as const,
+          },
+        ]),
+    ...(recoveryKey
+      ? [
+          {
+            id: "restore" as const,
+            title: "Enter your recovery phrase",
+            description: `This ${noun} gets your full location history.`,
+            href: { pathname: "/account/recovery-restore", params: { setup: "true" } } as const,
+          },
+        ]
+      : []),
+    ...(!recoveryKey && !noOtherPhone
+      ? [
+          {
+            id: "waiting" as const,
+            title: "Create a phrase on your other device",
+            description:
+              "Your account doesn’t have a recovery phrase yet. Create one on another device you still have, then enter it here.",
+            href: "/setup/waiting" as const,
+          },
+        ]
+      : []),
+    {
+      id: "reset",
+      title: recoveryKey
+        ? "I’ve lost my phrase"
+        : noOtherPhone
+          ? "Start fresh"
+          : "I don’t have another device",
+      description:
+        "Set up a new recovery phrase. Your location history from before today will be lost.",
+      href: { pathname: "/account/recovery-reset", params: { setup: "true" } },
+    },
+  ];
+  const [choice, setChoice] = useState<(typeof options)[number]["id"] | null>(null);
+  const selected = options.find((option) => option.id === choice) ?? options[0];
 
   useFocusEffect(
     useCallback(() => {
@@ -118,66 +171,20 @@ const SetUpPhoneScreen = () => {
           </Text>
         )}
 
-        {status.data && !noOtherPhone && (
+        {status.data && selected && (
           <View className="gap-4">
-            <Text className="text-foreground text-xl font-semibold">
-              Do you have another phone or tablet signed in?
+            <Text accessibilityRole="header" className="font-semibold">
+              How do you want to set up this {noun}?
             </Text>
-            <Link href="/setup/link" asChild>
-              <Button>
-                <Text>Yes, link with your other device</Text>
-              </Button>
-            </Link>
-            <Text className="text-muted-foreground text-base leading-6">
-              Your other device scans a code on this {noun}, and this {noun} gets your full location
-              history. If you don’t have it with you:
-            </Text>
-          </View>
-        )}
-
-        {status.data?.recoveryKey && (
-          <View className="gap-4">
-            <Text className="text-muted-foreground text-base leading-6">
-              Enter your recovery phrase. This {noun} then gets your full location history.
-            </Text>
-            <Link
-              href={{ pathname: "/account/recovery-restore", params: { setup: "true" } }}
-              asChild
-            >
-              <Button variant="outline">
-                <Text>Enter your recovery phrase</Text>
-              </Button>
-            </Link>
-            <Link href={{ pathname: "/account/recovery-reset", params: { setup: "true" } }} asChild>
-              <Button variant="ghost">
-                <Text>I’ve lost my phrase</Text>
-              </Button>
-            </Link>
-          </View>
-        )}
-
-        {status.data && !status.data.recoveryKey && noOtherPhone && (
-          <Link href={{ pathname: "/account/recovery-reset", params: { setup: "true" } }} asChild>
-            <Button variant="outline">
-              <Text>Start fresh</Text>
-            </Button>
-          </Link>
-        )}
-
-        {status.data && !status.data.recoveryKey && !noOtherPhone && (
-          <View className="gap-4">
-            <Text className="text-muted-foreground text-base leading-6">
-              Your account doesn’t have a recovery phrase yet. Create one on another device you
-              still have, then enter it here.
-            </Text>
-            <Link href="/setup/waiting" asChild>
-              <Button variant="outline">
-                <Text>Create a phrase on your other device</Text>
-              </Button>
-            </Link>
-            <Link href={{ pathname: "/account/recovery-reset", params: { setup: "true" } }} asChild>
-              <Button variant="ghost">
-                <Text>I don’t have another device</Text>
+            <RadioCardGroup
+              accessibilityLabel="Setup method"
+              options={options.map((option) => ({ ...option, value: option.id }))}
+              selected={selected.id}
+              onChange={setChoice}
+            />
+            <Link href={selected.href} asChild>
+              <Button disabled={cancelling}>
+                <Text>Continue</Text>
               </Button>
             </Link>
           </View>
