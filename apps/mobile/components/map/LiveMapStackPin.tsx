@@ -7,6 +7,9 @@ import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
 export const LiveMapStackPin = ({ members }: { members: readonly LiveMapMarker[] }) => {
   const [lead, ...others] = members;
   if (!lead) return null;
+  const ringColors = [
+    ...new Set(members.flatMap((member) => member.ringColors ?? [member.ringColor])),
+  ];
 
   return (
     <View collapsable={false} style={{ width: 48, height: 48 }}>
@@ -43,7 +46,7 @@ export const LiveMapStackPin = ({ members }: { members: readonly LiveMapMarker[]
         initials={lead.initials}
         name={lead.name}
         ringColor={lead.ringColor}
-        ringColors={lead.ringColors}
+        ringColors={ringColors.length > 1 ? ringColors : undefined}
         timestamp={lead.timestamp}
       />
       <View

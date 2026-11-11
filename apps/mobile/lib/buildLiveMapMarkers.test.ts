@@ -320,3 +320,19 @@ test("only marks this device as self and badges people with two or more devices"
   ]);
   expect(labelled[2]).toBe(markers[2]);
 });
+
+test.each([
+  ["1", "1"],
+  ["1Alice", "1A"],
+  ["12 Alice", "12"],
+  ["A", "A"],
+  ["", "??"],
+])("preserves valid initials for the name %j", (name, initials) => {
+  const markers = buildLiveMapMarkers({
+    getGroupColor: () => "red",
+    groups: [{ id: "family", name: "Family", members: [{ image: null, name, userId: "alice" }] }],
+    positions: [position({ sourceGroupId: "family", userId: "alice" })],
+    selfDeviceId: "other-phone",
+  });
+  expect(markers[0]?.initials).toBe(initials);
+});

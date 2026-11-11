@@ -1,4 +1,4 @@
-import type { LiveMapMarker } from "./buildLiveMapMarkers.ts";
+import { initialsFromName, type LiveMapMarker } from "./buildLiveMapMarkers.ts";
 import type { SelfDeviceLocation } from "./selfDeviceLocation.ts";
 
 export const applySelfDeviceLocation = ({
@@ -56,9 +56,4 @@ export const applySelfDeviceLocation = ({
       userId: selfUserId,
     },
   ];
-};
-
-const initialsFromName = (name: string) => {
-  const initials = name.charAt(0) + name.charAt(1);
-  return initials.length === 2 ? initials : "??";
 };
