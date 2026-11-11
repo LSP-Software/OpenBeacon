@@ -164,12 +164,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
 
     await expect(
       callerFor(account).account.removeDevice({ deviceId: account.thisPhone.id }),
-    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    await expect(
-      callerFor(account, { deviceId: "" }).account.removeDevice({
-        deviceId: account.thisPhone.id,
-      }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "To remove this phone, sign out and choose to remove it.",
+    });
 
     expect(await revokedAt(account.thisPhone.id)).toBeNull();
     expect(await sessionIds(account.userId)).toHaveLength(3);

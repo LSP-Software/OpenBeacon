@@ -148,20 +148,13 @@ describe("group epoch helpers", () => {
     userId: "user-a",
   };
 
-  test("updates an existing device for the same user without replacing key material", async () => {
+  test("returns an existing device for the same user without replacing key material or marking it active", async () => {
     const updateMany = mock(async () => ({ count: 1 }));
-    const findUniqueOrThrow = mock(async () => storedDevice);
 
     const result = await upsertUserDevice({
       db: {
         userDevice: {
-          findUnique: async () => ({
-            publicKey: "public-key",
-            publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
-            revokedAt: null,
-            userId: "user-a",
-          }),
-          findUniqueOrThrow,
+          findUnique: async () => storedDevice,
           updateMany,
         },
       } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
@@ -174,11 +167,8 @@ describe("group epoch helpers", () => {
       userId: "user-a",
     });
 
-    expect(updateMany).toHaveBeenCalledWith({
-      data: { lastSeenAt: expect.any(Date) },
-      where: { id: "device-a", revokedAt: null },
-    });
-    expect(result.publicKey).toBe("public-key");
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(result).toEqual(storedDevice);
   });
 
   test("rejects a removed device without clearing its removal", async () => {
@@ -210,31 +200,6 @@ describe("group epoch helpers", () => {
     expect(updateMany).not.toHaveBeenCalled();
   });
 
-  test("rejects a device removed while it registers", async () => {
-    const result = upsertUserDevice({
-      db: {
-        userDevice: {
-          findUnique: async () => ({
-            publicKey: "public-key",
-            publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
-            revokedAt: null,
-            userId: "user-a",
-          }),
-          updateMany: async () => ({ count: 0 }),
-        },
-      } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
-      securityAlerts: null,
-      input: {
-        algorithm: DEVICE_KEY_ALGORITHM,
-        deviceId: "device-a",
-        publicKey: "public-key",
-      },
-      userId: "user-a",
-    });
-
-    await expect(result).rejects.toHaveProperty("cause.message", "DEVICE_REMOVED");
-  });
-
   test("treats same-user create races as an idempotent success", async () => {
     let findUniqueCallCount = 0;
     const create = mock(async () => {
@@ -254,12 +219,7 @@ describe("group epoch helpers", () => {
         return null;
       }
 
-      return {
-        publicKey: "public-key",
-        publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
-        revokedAt: null,
-        userId: "user-a",
-      };
+      return storedDevice;
     });
 
     const result = await upsertUserDevice({
@@ -268,7 +228,6 @@ describe("group epoch helpers", () => {
           run({ $queryRaw: async () => [], userDevice: { count: async () => 0, create } }),
         userDevice: {
           findUnique,
-          findUniqueOrThrow: async () => storedDevice,
           updateMany,
         },
       } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
@@ -283,10 +242,7 @@ describe("group epoch helpers", () => {
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(findUnique).toHaveBeenCalledTimes(2);
-    expect(updateMany).toHaveBeenCalledWith({
-      data: { lastSeenAt: expect.any(Date) },
-      where: { id: "device-a", revokedAt: null },
-    });
+    expect(updateMany).not.toHaveBeenCalled();
     expect(result.userId).toBe("user-a");
   });
 
@@ -512,6 +468,7 @@ describe("group epoch helpers", () => {
     const wrappedKeyCreatedAt = new Date("2026-03-26T12:00:00.000Z");
 
     await persistGroupEpoch({
+      deviceId: "device-a",
       db: {
         $queryRaw: async () => [],
         group: { updateMany: async () => ({ count: 1 }) },
@@ -641,6 +598,7 @@ describe("group epoch helpers", () => {
   test("rejects mismatched recipient sets", async () => {
     await expect(
       persistGroupEpoch({
+        deviceId: "device-a",
         db: {
           group: { updateMany: async () => ({ count: 1 }) },
           groupEpoch: {
@@ -711,6 +669,7 @@ describe("group epoch helpers", () => {
 
     await expect(
       persistGroupEpoch({
+        deviceId: "device-a",
         db: {
           group: { updateMany: async () => ({ count: 1 }) },
           groupEpoch: {
@@ -756,6 +715,35 @@ describe("group epoch helpers", () => {
         userId: "user-a",
       }),
     ).rejects.toThrow("Wrapped epoch keys must be created by the active device.");
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  test("rejects an epoch that names another of the account's devices as its creator", async () => {
+    const create = mock(async () => ({}));
+    const findFirstDevice = mock(async () => ({ id: "device-b", publicKey: "public-b" }));
+
+    await expect(
+      persistGroupEpoch({
+        deviceId: "device-a",
+        db: {
+          group: { updateMany: async () => ({ count: 1 }) },
+          groupEpoch: { create, findFirst: async () => ({ epochNumber: 1 }) },
+          groupEpochRecipientKey: { createMany: async () => ({}) },
+          groupMember: { findFirst: async () => ({ id: "member-a" }) },
+          userDevice: { findFirst: findFirstDevice, findMany: async () => [] },
+        },
+        epoch: {
+          createdByDeviceId: "device-b",
+          epochId: "epoch-2",
+          epochNumber: 2,
+          historyKeys: [],
+          recipientKeys: [],
+        },
+        groupId: "group-1",
+        userId: "user-a",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(findFirstDevice).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
 });

@@ -210,7 +210,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     sent.length = 0;
     const phrase = generateRecoveryPhrase();
 
-    await account.caller.accountRecovery.reset({
+    await (
+      await account.activeCaller()
+    ).accountRecovery.reset({
       confirmReset: true,
       historyKey: { ...historyKeyInput(phrase, account.userId), version: 2 },
       recoveryKey: recoveryKeyInput(phrase),
@@ -232,7 +234,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
       }),
     ).rejects.toThrow("No recovery phrase is set up.");
     await expect(
-      account.caller.accountRecovery.reset({
+      (await account.activeCaller()).accountRecovery.reset({
         confirmReset: true,
         historyKey: { ...historyKeyInput(phrase, account.userId), version: 2 },
         recoveryKey: recoveryKeyInput(phrase),

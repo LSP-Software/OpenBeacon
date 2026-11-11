@@ -16,7 +16,9 @@ import {
   sealHistoryKeyEscrow,
   wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
+import { tryCatch } from "@openbeacon/shared";
 import { holdRowLock } from "../lib/databaseLocks.testUtil.ts";
+import { DeviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 import { accountHistoryRouter } from "./accountHistoryRouter.ts";
 import { accountRecoveryRouter } from "./accountRecoveryRouter.ts";
@@ -642,6 +644,32 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           confirmReset: false,
         } as unknown as typeof resetInput),
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      for (const [device, refusal] of [
+        [{ deviceId: null, unverifiedDeviceId: `${resetUser}-device` }, DeviceUnverifiedError],
+        [{ deviceId: null, unverifiedDeviceId: null }, null],
+      ] as const) {
+        const { error } = await tryCatch(
+          router
+            .createCaller({
+              cache,
+              db: prisma,
+              emailCodes: null,
+              clientIp: `ip-${resetUser}`,
+              ...device,
+              session: {
+                user: { id: resetUser },
+                session: { id: `${resetUser}-session`, createdAt: new Date() },
+              },
+            } as Parameters<typeof router.createCaller>[0])
+            .accountRecovery.reset(resetInput),
+        );
+        expect(error).toMatchObject(
+          refusal
+            ? { code: "FORBIDDEN" }
+            : { code: "BAD_REQUEST", message: "This phone isn't registered yet." },
+        );
+        if (refusal) expect((error as { cause?: unknown }).cause).toBeInstanceOf(refusal);
+      }
       for (const version of [2, 4]) {
         await expect(
           caller(resetUser).accountRecovery.reset({

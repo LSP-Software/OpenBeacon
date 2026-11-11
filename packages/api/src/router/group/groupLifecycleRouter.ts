@@ -7,7 +7,7 @@ import { persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { buildGroupAvatarPath } from "../../lib/image-upload.ts";
 import { deleteFile, extractImageStorageObject } from "../../lib/storage.ts";
 import { groupOwnerProcedure } from "../../procedures/auth/group.ts";
-import { activeDeviceProcedure, protectedProcedure } from "../../procedures/auth/runtime.ts";
+import { activeDeviceProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 
 export const groupLifecycleRouter = {
@@ -135,6 +135,7 @@ export const groupLifecycleRouter = {
 
         await persistGroupEpoch({
           db: tx,
+          deviceId: ctx.deviceId,
           epoch: input.initialEpoch,
           groupId: input.groupId,
           userId: ctx.session.user.id,

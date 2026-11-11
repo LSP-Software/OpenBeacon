@@ -76,6 +76,7 @@ export const groupEpochRouter = {
         if (!group.epochRotationRequired) return { rotated: false };
         await persistGroupEpoch({
           db: tx,
+          deviceId: ctx.deviceId,
           epoch: input.nextEpoch,
           groupId: input.groupId,
           userId: ctx.session.user.id,

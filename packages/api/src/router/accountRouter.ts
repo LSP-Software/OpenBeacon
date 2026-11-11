@@ -27,6 +27,7 @@ import { deleteAccountRecords } from "../lib/account-deletion.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
 import {
+  findActiveDeviceId,
   freshSessionProcedure,
   protectedProcedure,
   requireActiveDevice,
@@ -321,6 +322,7 @@ export const accountRouter = {
     .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
     .input(updateDeviceSchema)
     .mutation(async ({ ctx, input }) => {
+      if (input.deviceId !== ctx.deviceId) await findActiveDeviceId(ctx);
       const updated = await ctx.db.userDevice.updateMany({
         where: { id: input.deviceId, userId: ctx.session.user.id, revokedAt: null },
         data: {
@@ -335,12 +337,6 @@ export const accountRouter = {
     .meta({ rateLimit: { limit: 10, windowMs: 60_000 } })
     .input(removeDeviceSchema)
     .mutation(async ({ ctx, input }) => {
-      if (input.deviceId === ctx.deviceId) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "To remove this phone, sign out and choose to remove it.",
-        });
-      }
       const device = await removeUserDevice({
         db: ctx.db,
         deviceId: input.deviceId,

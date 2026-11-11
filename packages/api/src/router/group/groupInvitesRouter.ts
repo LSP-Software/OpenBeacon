@@ -152,6 +152,7 @@ export const groupInvitesRouter = {
         });
         await persistGroupEpoch({
           db: tx,
+          deviceId: ctx.deviceId,
           epoch: input.nextEpoch,
           groupId: invite.groupId,
           userId: ctx.session.user.id,
@@ -267,6 +268,7 @@ export const groupInvitesRouter = {
 
         await persistGroupEpoch({
           db: tx,
+          deviceId: ctx.deviceId,
           epoch: input.nextEpoch,
           groupId: invite.groupId,
           userId: ctx.session.user.id,

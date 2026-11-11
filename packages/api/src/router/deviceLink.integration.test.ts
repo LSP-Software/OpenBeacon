@@ -374,6 +374,34 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toEqual({ completedAt: null });
     });
 
+    test("a new link made while an approval lands keeps the approved handover", async () => {
+      const account = await createAccount("create-race");
+      const { linkId } = await account.pending.api.deviceLink.create();
+      const lock = await holdRowLock({ db: prisma, id: account.userId, table: "User" });
+      const creating = account.pending.api.deviceLink.create();
+      await lock.waitForWaiters(1);
+      await prisma.deviceLink.update({
+        where: { id: linkId },
+        data: {
+          approverDeviceId: account.active.deviceId,
+          ciphertext: "handover",
+          completedAt: new Date(),
+          enc: "enc",
+        },
+      });
+      await prisma.userDevice.update({
+        where: { id: account.pending.deviceId },
+        data: { activatedAt: new Date(), activatedBy: "link" },
+      });
+      await lock.release();
+
+      await expect(creating).rejects.toMatchObject({ code: "CONFLICT" });
+      expect(await account.pending.api.deviceLink.status({ linkId })).toMatchObject({
+        ciphertext: "handover",
+        state: "approved",
+      });
+    });
+
     test("removing a device deletes its own links but keeps a handover it approved", async () => {
       const account = await createAccount("remove");
       const second = await register(account.userId, "second");

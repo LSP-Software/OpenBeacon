@@ -12,10 +12,10 @@ import {
 } from "../../lib/image-upload.ts";
 import { deleteFile } from "../../lib/storage.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
-import { groupAdminProcedure, groupMemberProcedure } from "../../procedures/auth/group.ts";
+import { activeGroupMemberProcedure, groupAdminProcedure } from "../../procedures/auth/group.ts";
 
 export const groupSettingsRouter = {
-  rename: groupMemberProcedure
+  rename: activeGroupMemberProcedure
     .input(createGroupSchema.extend({ groupId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       return ctx.db.$transaction(async (tx) => {

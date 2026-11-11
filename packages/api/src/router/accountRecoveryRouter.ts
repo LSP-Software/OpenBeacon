@@ -12,6 +12,7 @@ import {
   freshSessionProcedure,
   protectedProcedure,
   requireActiveDevice,
+  requireThisDevice,
   sessionFreshForMs,
 } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
@@ -210,10 +211,11 @@ export const accountRecoveryRouter = createTRPCRouter({
     };
   }),
   reset: freshSessionProcedure
+    .use(requireThisDevice)
     .input(resetAccountRecoverySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const { emailCodes } = ctx;
+      const { deviceId, emailCodes } = ctx;
       if (emailCodes && !input.resetToken) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
@@ -252,9 +254,7 @@ export const accountRecoveryRouter = createTRPCRouter({
         await tx.recoveryKey.deleteMany({ where: { userId } });
         await tx.recoveryKey.create({ data: { ...input.recoveryKey, userId } });
         await createHistoryKey(tx, userId, input.historyKey);
-        if (ctx.deviceId) {
-          await activateDevice({ activatedBy: "reset", db: tx, deviceId: ctx.deviceId, userId });
-        }
+        await activateDevice({ activatedBy: "reset", db: tx, deviceId, userId });
       });
       ctx.securityAlerts?.send(userId, { type: "recovery-phrase-reset" });
       return { historyKeyVersion: input.historyKey.version };

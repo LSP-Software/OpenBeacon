@@ -3,7 +3,7 @@ import { removeGroupMemberSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
-import { groupMemberProcedure } from "../../procedures/auth/group.ts";
+import { activeGroupMemberProcedure, groupMemberProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 import { removeGroupMemberWithOwnerGuard } from "./assertGroupMemberCanBeRemoved.ts";
@@ -57,7 +57,7 @@ export const groupMembershipRouter = {
   get: groupMemberProcedure.query(async ({ ctx }) => {
     return ctx.group;
   }),
-  removalContext: groupMemberProcedure
+  removalContext: activeGroupMemberProcedure
     .input(z.object({ groupId: z.string().min(1), memberId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       if (
@@ -117,7 +117,7 @@ export const groupMembershipRouter = {
       select: { targetId: true, ciphertext: true },
     }),
   ),
-  updateNickname: groupMemberProcedure
+  updateNickname: activeGroupMemberProcedure
     .input(
       z.object({
         groupId: z.string().min(1),
@@ -179,7 +179,7 @@ export const groupMembershipRouter = {
     });
     return colors.map((color) => ({ groupId: color.owner.groupId, ciphertext: color.ciphertext }));
   }),
-  updateColor: groupMemberProcedure
+  updateColor: activeGroupMemberProcedure
     .input(
       z.object({
         groupId: z.string().min(1),
@@ -206,7 +206,7 @@ export const groupMembershipRouter = {
         update: { ciphertext: input.ciphertext },
       });
     }),
-  remove: groupMemberProcedure
+  remove: activeGroupMemberProcedure
     .meta({
       rateLimit: {
         limit: 80,
@@ -291,6 +291,7 @@ export const groupMembershipRouter = {
 
         await persistGroupEpoch({
           db: tx,
+          deviceId: ctx.deviceId,
           epoch: input.nextEpoch,
           excludedUserId: member.userId,
           groupId: input.groupId,
@@ -321,7 +322,7 @@ export const groupMembershipRouter = {
         };
       });
     }),
-  updateRole: groupMemberProcedure
+  updateRole: activeGroupMemberProcedure
     .input(
       z.object({
         groupId: z.string().min(1),

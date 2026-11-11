@@ -65,6 +65,7 @@ export const deviceLinkRouter = createTRPCRouter({
     .mutation(async ({ ctx }) => {
       const userId = ctx.session.user.id;
       return ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
         const device = await tx.userDevice.findFirst({
           select: { activatedAt: true },
           where: { id: ctx.deviceId, userId, revokedAt: null },
@@ -83,7 +84,7 @@ export const deviceLinkRouter = createTRPCRouter({
               "None of your other phones are signed in, so there's nothing to scan this code. Use your recovery phrase or start fresh.",
           });
         }
-        await tx.deviceLink.deleteMany({ where: { deviceId: ctx.deviceId } });
+        await tx.deviceLink.deleteMany({ where: { deviceId: ctx.deviceId, completedAt: null } });
         const link = await tx.deviceLink.create({
           data: {
             deviceId: ctx.deviceId,

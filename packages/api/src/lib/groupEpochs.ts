@@ -347,12 +347,14 @@ export const getGroupRemovalContext = async ({
 
 export const persistGroupEpoch = async ({
   db,
+  deviceId,
   epoch,
   excludedUserId,
   groupId,
   userId,
 }: {
   db: GroupEpochPersistenceDb;
+  deviceId: string;
   epoch: {
     createdByDeviceId: string;
     epochId: string;
@@ -364,6 +366,13 @@ export const persistGroupEpoch = async ({
   groupId: string;
   userId: string;
 }) => {
+  if (epoch.createdByDeviceId !== deviceId) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Group keys must be created by this phone.",
+    });
+  }
+
   const actingMember = await db.groupMember.findFirst({
     select: {
       id: true,
@@ -548,15 +557,6 @@ export const persistGroupEpoch = async ({
 export const defaultDeviceIcon = (model: string | undefined) =>
   model && /iPad|Tab/.test(model) ? "tablet" : "phone";
 
-const touchUserDevice = async (db: Pick<PrismaClient, "userDevice">, deviceId: string) => {
-  const touched = await db.userDevice.updateMany({
-    data: { lastSeenAt: new Date() },
-    where: { id: deviceId, revokedAt: null },
-  });
-  if (touched.count === 0) throw deviceRemovedError();
-  return db.userDevice.findUniqueOrThrow({ where: { id: deviceId } });
-};
-
 export const upsertUserDevice = async ({
   db,
   input,
@@ -583,12 +583,6 @@ export const upsertUserDevice = async ({
   }
 
   const existingDevice = await db.userDevice.findUnique({
-    select: {
-      publicKey: true,
-      publicKeyAlgorithm: true,
-      revokedAt: true,
-      userId: true,
-    },
     where: {
       id: input.deviceId,
     },
@@ -613,7 +607,7 @@ export const upsertUserDevice = async ({
       });
     }
 
-    return touchUserDevice(db, input.deviceId);
+    return existingDevice;
   }
 
   const createResult = await tryCatch(
@@ -680,12 +674,6 @@ export const upsertUserDevice = async ({
   }
 
   const conflictingDevice = await db.userDevice.findUnique({
-    select: {
-      publicKey: true,
-      publicKeyAlgorithm: true,
-      revokedAt: true,
-      userId: true,
-    },
     where: {
       id: input.deviceId,
     },
@@ -704,7 +692,7 @@ export const upsertUserDevice = async ({
     conflictingDevice.publicKeyAlgorithm === input.algorithm
   ) {
     if (conflictingDevice.revokedAt) throw deviceRemovedError();
-    return touchUserDevice(db, input.deviceId);
+    return conflictingDevice;
   }
 
   if (conflictingDevice) {
