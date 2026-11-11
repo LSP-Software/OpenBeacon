@@ -122,6 +122,7 @@ describe("createMapTrackingDecryptPoint", () => {
       status: "ok",
       entry: {
         battery: { charging: true, level: 42 },
+        deviceId: "device-sender",
         latitude: 51.5,
         longitude: -0.12,
         serverCreatedAt: encrypted.createdAt,

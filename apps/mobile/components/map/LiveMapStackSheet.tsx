@@ -23,7 +23,9 @@ const StackSheetRow = ({ marker, onPress }: { marker: LiveMapMarker; onPress: ()
       </Avatar>
       <View className="min-w-0 flex-1">
         <Text className="text-foreground font-semibold" numberOfLines={1}>
-          {marker.isSelf ? `${marker.name} (you)` : marker.name}
+          {[marker.isSelf ? `${marker.name} (you)` : marker.name, marker.deviceName]
+            .filter(Boolean)
+            .join(" · ")}
         </Text>
         <Text className="text-muted text-sm">
           {updatedAge === null ? "No location sent yet" : `Updated ${updatedAge}`}
@@ -37,12 +39,12 @@ export const LiveMapStackSheet = ({
   members,
   onDismiss,
   onHeightChange,
-  onSelectUser,
+  onSelectDevice,
 }: {
   members: readonly LiveMapMarker[];
   onDismiss: () => void;
   onHeightChange: (height: number) => void;
-  onSelectUser: (userId: string) => void;
+  onSelectDevice: (deviceId: string) => void;
 }) => (
   <LiveMapBottomSheet
     accessibilityLabel={`${members.length} people here`}
@@ -55,9 +57,9 @@ export const LiveMapStackSheet = ({
     <ScrollView style={{ maxHeight: 300 }} bounces={false} overScrollMode="never">
       {members.map((marker) => (
         <StackSheetRow
-          key={marker.userId}
+          key={marker.deviceId}
           marker={marker}
-          onPress={() => onSelectUser(marker.userId)}
+          onPress={() => onSelectDevice(marker.deviceId)}
         />
       ))}
     </ScrollView>

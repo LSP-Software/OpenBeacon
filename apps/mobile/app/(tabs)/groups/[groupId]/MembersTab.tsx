@@ -29,6 +29,7 @@ import {
 import { authClient } from "../../../../lib/auth-client.ts";
 import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
 import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses.ts";
+import { deviceIcons } from "../../../../lib/deviceIcons.ts";
 import { buildRemoveGroupMemberInput, submitEpochChange } from "../../../../lib/groupEncryption.ts";
 import { forgetHiddenMapGroup } from "../../../../lib/hiddenMapGroups.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
@@ -74,7 +75,12 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
   });
   const nicknames = nicknameQuery.data ?? {};
   const livePositions = useGroupLivePositions(groupId);
+  const memberDevices = useQuery({
+    ...trpc.groupMembership.listMemberDevices.queryOptions({ groupId }),
+    subscribed: isFocused,
+  });
   const memberStatuses = buildMemberLiveStatuses({
+    memberDevices: memberDevices.data ?? [],
     members: (members ?? []).map((member) => ({
       ...member,
       nickname: nicknames[member.id]?.name ?? null,
@@ -417,7 +423,29 @@ const MemberCard = ({ member }: { member: ReturnType<typeof buildMemberLiveStatu
               )}
             </View>
           </View>
-          {member.battery && batteryVisual ? (
+          {member.activeDeviceCount >= 2 && member.devices.length > 0 ? (
+            member.devices.map((device) => {
+              const deviceBattery = getBatteryVisual({
+                batteryLevel: device.battery.level,
+                charging: device.battery.charging,
+              });
+              return (
+                <View key={device.deviceId} className="flex-row items-center gap-2">
+                  <Icon
+                    as={deviceIcons[device.icon ?? "phone"].icon}
+                    className="text-muted-foreground size-4"
+                  />
+                  <Text className="text-muted shrink text-sm" numberOfLines={1}>
+                    {device.name ?? "Device"} · {timeSince(device.timestamp)}
+                  </Text>
+                  <Icon as={deviceBattery.icon} size={16} className={deviceBattery.colorClass} />
+                  <Text className={`${deviceBattery.colorClass} text-sm`}>
+                    {device.battery.level}%
+                  </Text>
+                </View>
+              );
+            })
+          ) : member.battery && batteryVisual ? (
             <View className="flex-row items-center gap-2">
               <Icon as={batteryVisual.icon} size={20} className={batteryVisual.colorClass} />
               <Text className={`${batteryVisual.colorClass} text-sm`}>

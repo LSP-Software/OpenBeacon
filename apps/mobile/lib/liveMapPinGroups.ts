@@ -1,6 +1,7 @@
 import type { LiveMapMarker } from "./buildLiveMapMarkers.ts";
 import { mergeClosestPairs } from "./mergeClosestPairs.ts";
 
+const SAME_PERSON_MERGE_METERS = 50;
 const SPLIT_SEARCH_STEP = 0.25;
 const MAX_SPLIT_ZOOM = 17;
 
@@ -25,8 +26,50 @@ const worldPoint = (latitude: number, longitude: number) => {
 const pixelsPerWorld = (zoom: number) => 512 * 2 ** zoom;
 
 const groupId = (members: readonly LiveMapMarker[]) => {
-  const userIds = members.map((member) => member.userId).sort();
-  return userIds.length === 1 ? (userIds[0] ?? "") : `stack:${userIds[0]}`;
+  const deviceIds = members.map((member) => member.deviceId).sort();
+  return deviceIds.length === 1 ? (deviceIds[0] ?? "") : `stack:${deviceIds[0]}`;
+};
+
+const metersBetween = (
+  first: { latitude: number; longitude: number },
+  second: { latitude: number; longitude: number },
+) => {
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latitudeDelta = toRadians(second.latitude - first.latitude);
+  const longitudeDelta = toRadians(second.longitude - first.longitude);
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(toRadians(first.latitude)) *
+      Math.cos(toRadians(second.latitude)) *
+      Math.sin(longitudeDelta / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.min(1, Math.sqrt(a)));
+};
+
+export const mergeSamePersonDevices = (markers: readonly LiveMapMarker[]): LiveMapMarker[] => {
+  const preferred = [...markers].sort(
+    (first, second) =>
+      Number(second.isSelf) - Number(first.isSelf) ||
+      (second.timestamp ?? "").localeCompare(first.timestamp ?? ""),
+  );
+  const merged: Array<{ deviceIds: string[]; marker: LiveMapMarker }> = [];
+  for (const marker of preferred) {
+    const pin = merged.find(
+      (item) =>
+        item.marker.userId === marker.userId &&
+        metersBetween(item.marker, marker) <= SAME_PERSON_MERGE_METERS,
+    );
+    if (pin) {
+      pin.deviceIds.push(marker.deviceId);
+    } else {
+      merged.push({ deviceIds: [marker.deviceId], marker });
+    }
+  }
+  const deviceIdsByPin = new Map(merged.map((item) => [item.marker.deviceId, item.deviceIds]));
+  return markers.flatMap((marker) => {
+    const deviceIds = deviceIdsByPin.get(marker.deviceId);
+    if (deviceIds === undefined) return [];
+    return [deviceIds.length > 1 ? { ...marker, mergedDeviceIds: deviceIds } : marker];
+  });
 };
 
 export const groupLiveMapPins = ({
@@ -38,13 +81,15 @@ export const groupLiveMapPins = ({
   previous?: readonly LiveMapPinGroup[];
   zoom: number;
 }): LiveMapPinGroup[] => {
-  const previousGroupIdByUserId = new Map(
-    previous.flatMap((group) => group.members.map((member) => [member.userId, group.id] as const)),
+  const previousGroupIdByDeviceId = new Map(
+    previous.flatMap((group) =>
+      group.members.map((member) => [member.deviceId, group.id] as const),
+    ),
   );
   const scale = pixelsPerWorld(zoom);
   const clusters = mergeClosestPairs({
     clusters: markers.map((marker) => {
-      const previousGroupId = previousGroupIdByUserId.get(marker.userId);
+      const previousGroupId = previousGroupIdByDeviceId.get(marker.deviceId);
       return {
         members: [marker],
         previousGroupIds: new Set(previousGroupId === undefined ? [] : [previousGroupId]),
@@ -85,7 +130,7 @@ export const hasSameLiveMapPinGroups = (
     groups
       .map((group) =>
         group.members
-          .map((member) => member.userId)
+          .map((member) => member.deviceId)
           .sort()
           .join(","),
       )
@@ -135,9 +180,9 @@ export const liveMapPinTransition = ({
   previous: readonly LiveMapPinGroup[];
   zoom: number;
 }) => {
-  const groupByUserId = (groups: readonly LiveMapPinGroup[]) =>
-    new Map(groups.flatMap((group) => group.members.map((m) => [m.userId, group] as const)));
-  const previousByUserId = groupByUserId(previous);
+  const groupByDeviceId = (groups: readonly LiveMapPinGroup[]) =>
+    new Map(groups.flatMap((group) => group.members.map((m) => [m.deviceId, group] as const)));
+  const previousByDeviceId = groupByDeviceId(previous);
   const previousById = new Map(previous.map((group) => [group.id, group]));
   const arrivals = new Map<string, LiveMapPinOffset>();
   const gathering: Array<{ gatherTo: LiveMapPinOffset; marker: LiveMapMarker }> = [];
@@ -147,7 +192,7 @@ export const liveMapPinTransition = ({
     const before = previousById.get(group.id);
     if (isStack && !before) {
       const parentStack = group.members
-        .map((member) => previousByUserId.get(member.userId))
+        .map((member) => previousByDeviceId.get(member.deviceId))
         .find((candidate) => candidate !== undefined && candidate.members.length > 1);
       arrivals.set(
         group.id,
@@ -159,7 +204,7 @@ export const liveMapPinTransition = ({
     }
 
     for (const member of group.members) {
-      const memberBefore = previousByUserId.get(member.userId);
+      const memberBefore = previousByDeviceId.get(member.deviceId);
       if (!memberBefore) continue;
       if (isStack && memberBefore.members.length === 1) {
         gathering.push({ marker: member, gatherTo: screenOffset(member, group, zoom) });

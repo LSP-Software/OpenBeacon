@@ -92,7 +92,12 @@ mock.module("../hooks/useMembershipSnapshot.ts", () => ({ useMembershipSnapshot:
 mock.module("../hooks/useTrackingUploadTime.ts", () => ({ useTrackingUploadTime: () => null }));
 mock.module("../hooks/useSelfDeviceLocation.ts", () => ({ useSelfDeviceLocation: () => null }));
 mock.module("../lib/api.ts", () => ({
-  trpc: { groupMembership: { list: { queryOptions: () => ({}) } } },
+  trpc: {
+    groupMembership: {
+      list: { queryOptions: () => ({}) },
+      listMemberDevices: { queryOptions: () => ({}) },
+    },
+  },
 }));
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: sessionUser ? { user: sessionUser } : null }) },
@@ -104,6 +109,7 @@ mock.module("../lib/applySelfDeviceLocation.ts", () => ({ applySelfDeviceLocatio
 mock.module("../lib/buildLiveMapMarkers.ts", () => ({
   buildLiveMapMarkers: () => [],
   initialsFromName: () => "??",
+  labelDeviceIcons: ({ markers }: { markers: unknown[] }) => markers,
 }));
 mock.module("../lib/personalNicknames.ts", () => ({ loadPersonalNicknames: async () => ({}) }));
 mock.module("../lib/groupColor.ts", () => ({ getGroupColor: () => "red" }));

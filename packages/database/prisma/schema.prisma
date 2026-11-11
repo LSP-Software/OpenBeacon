@@ -300,6 +300,7 @@ model GroupEncryptedPayload {
   @@unique([groupId, clientPointId])
   @@index([groupId, createdAt, id])
   @@index([groupId, senderUserId, createdAt])
+  @@index([groupId, senderDeviceId, createdAt])
   @@index([epochId])
   @@index([senderDeviceId])
   @@index([senderUserId])

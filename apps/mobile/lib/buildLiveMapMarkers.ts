@@ -1,4 +1,5 @@
-import type { MapGroup } from "./mapPeopleTypes.ts";
+import type { DeviceIcon } from "./deviceIcons.ts";
+import type { MapGroup, MapMemberDevice } from "./mapPeopleTypes.ts";
 import type { LiveMapPosition } from "./mapTrackingTypes.ts";
 
 export type LiveMapMarker = {
@@ -6,11 +7,15 @@ export type LiveMapMarker = {
     charging: boolean;
     level: number;
   } | null;
+  deviceIcon?: DeviceIcon;
+  deviceId: string;
+  deviceName?: string;
   image: string | null;
   initials: string;
   isSelf: boolean;
   latitude: number;
   longitude: number;
+  mergedDeviceIds?: string[];
   name: string;
   otherSharedGroupNames: string[];
   ringColor: string;
@@ -25,12 +30,12 @@ export const buildLiveMapMarkers = ({
   getGroupColor,
   groups,
   positions,
-  selfUserId,
+  selfDeviceId,
 }: {
   getGroupColor: (groupId: string) => string;
   groups: readonly MapGroup[];
   positions: readonly LiveMapPosition[];
-  selfUserId: string;
+  selfDeviceId: string;
 }): LiveMapMarker[] => {
   const memberByUserId = new Map<string, { image: string | null; name: string }>();
   for (const group of groups) {
@@ -62,9 +67,10 @@ export const buildLiveMapMarkers = ({
 
     markers.push({
       battery: livePosition.battery,
+      deviceId: livePosition.deviceId,
       image: member.image,
       initials: initialsFromName(member.name),
-      isSelf: livePosition.userId === selfUserId,
+      isSelf: livePosition.deviceId === selfDeviceId,
       latitude: livePosition.latitude,
       longitude: livePosition.longitude,
       name: member.name,
@@ -84,6 +90,21 @@ export const buildLiveMapMarkers = ({
 
   return markers;
 };
+
+export const labelDeviceIcons = ({
+  markers,
+  memberDevices,
+}: {
+  markers: readonly LiveMapMarker[];
+  memberDevices: readonly MapMemberDevice[];
+}): LiveMapMarker[] =>
+  markers.map((marker) => {
+    const devices = memberDevices.filter((device) => device.userId === marker.userId);
+    const device = devices.find((item) => item.deviceId === marker.deviceId);
+    return devices.length >= 2 && device
+      ? { ...marker, deviceIcon: device.icon, deviceName: device.name }
+      : marker;
+  });
 
 export const initialsFromName = (name: string) => {
   const initials = name.charAt(0) + name.charAt(1);

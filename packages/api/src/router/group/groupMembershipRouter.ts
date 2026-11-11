@@ -94,6 +94,22 @@ export const groupMembershipRouter = {
         },
       });
     }),
+  listMemberDevices: groupMemberProcedure.query(async ({ ctx, input }) => {
+    const devices = await ctx.db.userDevice.findMany({
+      where: {
+        revokedAt: null,
+        user: { groupMembers: { some: { groupId: input.groupId } } },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, userId: true, name: true, icon: true },
+    });
+    return devices.map((device) => ({
+      deviceId: device.id,
+      userId: device.userId,
+      name: device.name,
+      icon: device.icon,
+    }));
+  }),
   nicknames: groupMemberProcedure.query(async ({ ctx }) =>
     ctx.db.personalGroupNickname.findMany({
       where: { ownerId: ctx.groupMember.id },

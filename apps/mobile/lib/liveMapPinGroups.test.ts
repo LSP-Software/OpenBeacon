@@ -5,10 +5,17 @@ import {
   hasSameLiveMapPinGroups,
   liveMapPinTransition,
   liveMapStackExpansionZoom,
+  mergeSamePersonDevices,
 } from "./liveMapPinGroups.ts";
 
-const person = (userId: string, latitude: number, longitude: number): LiveMapMarker => ({
+const person = (
+  userId: string,
+  latitude: number,
+  longitude: number,
+  device: Partial<Pick<LiveMapMarker, "deviceId" | "isSelf" | "timestamp">> = {},
+): LiveMapMarker => ({
   battery: null,
+  deviceId: device.deviceId ?? userId,
   image: null,
   initials: userId.slice(0, 2),
   isSelf: false,
@@ -18,8 +25,9 @@ const person = (userId: string, latitude: number, longitude: number): LiveMapMar
   otherSharedGroupNames: [],
   ringColor: "#000000",
   sourceGroupId: "group",
-  timestamp: null,
+  timestamp: device.timestamp ?? null,
   userId,
+  ...(device.isSelf ? { isSelf: true } : {}),
 });
 
 describe("groupLiveMapPins", () => {
@@ -130,5 +138,53 @@ describe("hasSameLiveMapPinGroups", () => {
 
     expect(hasSameLiveMapPinGroups(separate, reversed)).toBe(true);
     expect(hasSameLiveMapPinGroups(separate, together)).toBe(false);
+  });
+});
+
+describe("mergeSamePersonDevices", () => {
+  test("merges a person's devices within 50 m into the newest one", () => {
+    const phone = person("alice", 51.5, -0.12, {
+      deviceId: "phone",
+      timestamp: "2026-07-17T12:00:00.000Z",
+    });
+    const tablet = person("alice", 51.5003, -0.12, {
+      deviceId: "tablet",
+      timestamp: "2026-07-17T12:05:00.000Z",
+    });
+    const bob = person("bob", 51.5, -0.12, { timestamp: "2026-07-17T12:10:00.000Z" });
+
+    expect(mergeSamePersonDevices([phone, tablet, bob])).toEqual([
+      { ...tablet, mergedDeviceIds: ["tablet", "phone"] },
+      bob,
+    ]);
+  });
+
+  test("keeps a person's devices apart beyond 50 m", () => {
+    const phone = person("alice", 51.5, -0.12, { deviceId: "phone" });
+    const tablet = person("alice", 51.5006, -0.12, { deviceId: "tablet" });
+
+    expect(mergeSamePersonDevices([phone, tablet])).toEqual([phone, tablet]);
+  });
+
+  test("keeps this phone as the merged pin so the heading stays on it", () => {
+    const phone = person("alice", 51.5, -0.12, {
+      deviceId: "phone",
+      isSelf: true,
+      timestamp: "2026-07-17T12:00:00.000Z",
+    });
+    const tablet = person("alice", 51.5001, -0.12, {
+      deviceId: "tablet",
+      timestamp: "2026-07-17T12:05:00.000Z",
+    });
+
+    expect(mergeSamePersonDevices([tablet, phone])).toEqual([
+      { ...phone, mergedDeviceIds: ["phone", "tablet"] },
+    ]);
+  });
+
+  test("leaves a single device unchanged", () => {
+    const markers = [person("alice", 51.5, -0.12), person("bob", 51.5, -0.12)];
+
+    expect(mergeSamePersonDevices(markers)).toEqual(markers);
   });
 });

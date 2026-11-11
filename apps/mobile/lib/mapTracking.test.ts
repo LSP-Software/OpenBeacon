@@ -7,11 +7,13 @@ const point = ({
   createdAt,
   epochId = "epoch-1",
   id,
+  senderDeviceId,
   senderUserId,
 }: {
   createdAt: Date;
   epochId?: string;
   id: string;
+  senderDeviceId?: string;
   senderUserId: string;
 }): MapTrackingEncryptedPoint => ({
   algorithm: "XChaCha20-Poly1305",
@@ -22,17 +24,19 @@ const point = ({
   id,
   kind: "trackingPoint",
   nonce: `nonce-${id}`,
-  senderDeviceId: `device-${senderUserId}`,
+  senderDeviceId: senderDeviceId ?? `device-${senderUserId}`,
   senderUserId,
 });
 
 const liveEntry = ({
+  deviceId,
   sourceGroupId,
   timestamp,
   userId,
   serverCreatedAt,
   serverId,
 }: {
+  deviceId?: string;
   serverCreatedAt: Date;
   serverId: string;
   sourceGroupId: string;
@@ -40,6 +44,7 @@ const liveEntry = ({
   userId: string;
 }): LiveMapEntry => ({
   battery: { charging: false, level: 80 },
+  deviceId: deviceId ?? `device-${userId}`,
   latitude: 51.5,
   longitude: -0.12,
   serverCreatedAt,
@@ -63,6 +68,7 @@ const createSession = (overrides: Partial<MapTrackingDeps> = {}) => {
   const baseDecrypt: MapTrackingDeps["decryptPoint"] = async ({ groupId, point: row }) => ({
     status: "ok",
     entry: liveEntry({
+      deviceId: row.senderDeviceId,
       serverCreatedAt: row.createdAt,
       serverId: row.id,
       sourceGroupId: groupId,
@@ -151,6 +157,7 @@ describe("createMapTrackingSession", () => {
     expect(session.getLivePositions()).toEqual([
       {
         battery: { charging: false, level: 80 },
+        deviceId: "device-user-1",
         latitude: 51.5,
         longitude: -0.12,
         sourceGroupId: "group-1",
@@ -584,6 +591,7 @@ describe("createMapTrackingSession", () => {
     expect(session.getLivePositions()).toEqual([
       {
         battery: { charging: false, level: 80 },
+        deviceId: "device-user-1",
         latitude: 51.5,
         longitude: -0.12,
         sourceGroupId: "group-2",
@@ -623,6 +631,7 @@ describe("createMapTrackingSession", () => {
     expect(session.getLivePositions()).toEqual([
       {
         battery: { charging: false, level: 80 },
+        deviceId: "device-user-2",
         latitude: 51.5,
         longitude: -0.12,
         sourceGroupId: "group-2",
@@ -660,6 +669,7 @@ describe("createMapTrackingSession", () => {
     expect(session.getLivePositions()).toEqual([
       {
         battery: { charging: false, level: 80 },
+        deviceId: "device-user-1",
         latitude: 51.5,
         longitude: -0.12,
         sourceGroupId: "group-1",
@@ -1612,6 +1622,7 @@ describe("createMapTrackingSession status", () => {
           ? {
               status: "ok",
               entry: liveEntry({
+                deviceId: row.senderDeviceId,
                 serverCreatedAt: row.createdAt,
                 serverId: row.id,
                 sourceGroupId: groupId,
@@ -1628,7 +1639,9 @@ describe("createMapTrackingSession status", () => {
 
     session.setActive(true);
     await session.tick();
-    expect(session.getStatus().undecryptable).toEqual([{ groupId: "group-1", userId: "user-1" }]);
+    expect(session.getStatus().undecryptable).toEqual([
+      { deviceId: "device-user-1", groupId: "group-1", userId: "user-1" },
+    ]);
     expect(notifications).toBeGreaterThan(0);
 
     readable = true;
@@ -1661,7 +1674,63 @@ describe("createMapTrackingSession status", () => {
       connection: "ok",
       groups: { "group-2": "loaded" },
       membership: "loaded",
-      undecryptable: [{ groupId: "group-2", userId: "user-1" }],
+      undecryptable: [{ deviceId: "device-user-1", groupId: "group-2", userId: "user-1" }],
     });
+  });
+
+  test("keeps each device of a user and marks only the unreadable device", async () => {
+    const { session } = createSession({
+      getLatest: async () => ({
+        points: [
+          point({
+            createdAt: new Date("2026-07-17T12:00:00.000Z"),
+            id: "phone-point",
+            senderDeviceId: "phone",
+            senderUserId: "user-1",
+          }),
+          point({
+            createdAt: new Date("2026-07-17T12:01:00.000Z"),
+            id: "tablet-point",
+            senderDeviceId: "tablet",
+            senderUserId: "user-1",
+          }),
+          point({
+            createdAt: new Date("2026-07-17T12:02:00.000Z"),
+            id: "watch-point",
+            senderDeviceId: "watch",
+            senderUserId: "user-1",
+          }),
+        ],
+      }),
+      decryptPoint: async ({ groupId, point: row }) =>
+        row.senderDeviceId === "watch"
+          ? { status: "undecryptable" }
+          : {
+              status: "ok",
+              entry: liveEntry({
+                deviceId: row.senderDeviceId,
+                serverCreatedAt: row.createdAt,
+                serverId: row.id,
+                sourceGroupId: groupId,
+                timestamp: row.createdAt.toISOString(),
+                userId: row.senderUserId,
+              }),
+            },
+    });
+
+    session.setActive(true);
+    await session.tick();
+
+    expect(
+      session
+        .getLivePositions()
+        .map(({ deviceId, timestamp, userId }) => ({ deviceId, timestamp, userId })),
+    ).toEqual([
+      { deviceId: "phone", timestamp: "2026-07-17T12:00:00.000Z", userId: "user-1" },
+      { deviceId: "tablet", timestamp: "2026-07-17T12:01:00.000Z", userId: "user-1" },
+    ]);
+    expect(session.getStatus().undecryptable).toEqual([
+      { deviceId: "watch", groupId: "group-1", userId: "user-1" },
+    ]);
   });
 });

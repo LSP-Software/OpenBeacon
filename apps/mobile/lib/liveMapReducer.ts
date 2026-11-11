@@ -3,6 +3,7 @@ export type LiveMapEntry = {
     charging: boolean;
     level: number;
   };
+  deviceId: string;
   latitude: number;
   longitude: number;
   serverCreatedAt: Date;
@@ -36,9 +37,9 @@ export const reduceLivePositions = (
   const next = new Map(current);
 
   for (const candidate of candidates) {
-    const existing = next.get(candidate.userId);
+    const existing = next.get(candidate.deviceId);
     if (!existing || isNewerThan(candidate, existing)) {
-      next.set(candidate.userId, candidate);
+      next.set(candidate.deviceId, candidate);
     }
   }
 

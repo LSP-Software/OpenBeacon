@@ -10,7 +10,7 @@ describe("reduceLiveMapInitialFit", () => {
     const result = reduceLiveMapInitialFit(createLiveMapInitialFitState(), {
       nowMs: 1_000,
       type: "markers",
-      userIds: [],
+      markerIds: [],
     });
 
     expect(result.shouldFit).toBe(false);
@@ -21,13 +21,13 @@ describe("reduceLiveMapInitialFit", () => {
     const result = reduceLiveMapInitialFit(createLiveMapInitialFitState(), {
       nowMs: 1_000,
       type: "markers",
-      userIds: ["self"],
+      markerIds: ["self"],
     });
 
     expect(result.shouldFit).toBe(true);
     expect(result.state).toEqual({
       coalesceStartedAtMs: 1_000,
-      fittedUserIds: ["self"],
+      fittedMarkerIds: ["self"],
       phase: "coalescing",
     });
   });
@@ -36,17 +36,17 @@ describe("reduceLiveMapInitialFit", () => {
     const afterSelf = reduceLiveMapInitialFit(createLiveMapInitialFitState(), {
       nowMs: 1_000,
       type: "markers",
-      userIds: ["self"],
+      markerIds: ["self"],
     });
 
     const afterGroup = reduceLiveMapInitialFit(afterSelf.state, {
       nowMs: 1_200,
       type: "markers",
-      userIds: ["self", "alice"],
+      markerIds: ["self", "alice"],
     });
 
     expect(afterGroup.shouldFit).toBe(true);
-    expect(afterGroup.state.fittedUserIds).toEqual(["self", "alice"]);
+    expect(afterGroup.state.fittedMarkerIds).toEqual(["self", "alice"]);
     expect(afterGroup.state.phase).toBe("coalescing");
   });
 
@@ -54,24 +54,24 @@ describe("reduceLiveMapInitialFit", () => {
     const afterSelf = reduceLiveMapInitialFit(createLiveMapInitialFitState(), {
       nowMs: 1_000,
       type: "markers",
-      userIds: ["self"],
+      markerIds: ["self"],
     });
 
     const again = reduceLiveMapInitialFit(afterSelf.state, {
       nowMs: 1_100,
       type: "markers",
-      userIds: ["self"],
+      markerIds: ["self"],
     });
 
     expect(again.shouldFit).toBe(false);
-    expect(again.state.fittedUserIds).toEqual(["self"]);
+    expect(again.state.fittedMarkerIds).toEqual(["self"]);
   });
 
   test("closes the initial fit after the coalesce window elapses", () => {
     const afterSelf = reduceLiveMapInitialFit(createLiveMapInitialFitState(), {
       nowMs: 1_000,
       type: "markers",
-      userIds: ["self"],
+      markerIds: ["self"],
     });
 
     const closed = reduceLiveMapInitialFit(afterSelf.state, {
@@ -85,7 +85,7 @@ describe("reduceLiveMapInitialFit", () => {
     const lateMember = reduceLiveMapInitialFit(closed.state, {
       nowMs: 1_000 + LIVE_MAP_INITIAL_FIT_COALESCE_MS + 50,
       type: "markers",
-      userIds: ["self", "alice"],
+      markerIds: ["self", "alice"],
     });
 
     expect(lateMember.shouldFit).toBe(false);
@@ -96,7 +96,7 @@ describe("reduceLiveMapInitialFit", () => {
     const afterSelf = reduceLiveMapInitialFit(createLiveMapInitialFitState(), {
       nowMs: 1_000,
       type: "markers",
-      userIds: ["self"],
+      markerIds: ["self"],
     });
 
     const afterPan = reduceLiveMapInitialFit(afterSelf.state, {
@@ -109,7 +109,7 @@ describe("reduceLiveMapInitialFit", () => {
     const afterAlice = reduceLiveMapInitialFit(afterPan.state, {
       nowMs: 1_100,
       type: "markers",
-      userIds: ["self", "alice"],
+      markerIds: ["self", "alice"],
     });
 
     expect(afterAlice.shouldFit).toBe(false);
@@ -119,7 +119,7 @@ describe("reduceLiveMapInitialFit", () => {
     const afterSelf = reduceLiveMapInitialFit(createLiveMapInitialFitState(), {
       nowMs: 1_000,
       type: "markers",
-      userIds: ["self"],
+      markerIds: ["self"],
     });
 
     const afterShowEveryone = reduceLiveMapInitialFit(afterSelf.state, {
@@ -134,7 +134,7 @@ describe("reduceLiveMapInitialFit", () => {
     const closed = reduceLiveMapInitialFit(
       {
         coalesceStartedAtMs: 1_000,
-        fittedUserIds: ["self"],
+        fittedMarkerIds: ["self"],
         phase: "closed",
       },
       { type: "reset" },

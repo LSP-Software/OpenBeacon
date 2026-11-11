@@ -11,6 +11,7 @@ import {
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { authRouter } from "../authRouter.ts";
+import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 
 const prefix = `tracking-${crypto.randomUUID()}`;
@@ -23,7 +24,11 @@ const ownerDeviceId = `${prefix}-owner-device`;
 const deviceKey = createDeviceKeyPair();
 const epochKey = generateGroupEpochKey();
 const cache = createIntegrationTestCache(() => 0);
-const router = createTRPCRouter({ auth: authRouter, groupTracking: groupTrackingRouter });
+const router = createTRPCRouter({
+  auth: authRouter,
+  groupMembership: groupMembershipRouter,
+  groupTracking: groupTrackingRouter,
+});
 const caller = (userId: string) =>
   router.createCaller({
     cache,
@@ -120,6 +125,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     const point = { ...encrypt(), clientPointId: `${prefix}-point` };
     const accepted = await caller(ownerId).groupTracking.uploadBatch({ groupId, points: [point] });
     expect(accepted.accepted).toEqual([point.clientPointId]);
+    expect(
+      (await prisma.userDevice.findUniqueOrThrow({ where: { id: ownerDeviceId } })).lastLocationAt,
+    ).toBeInstanceOf(Date);
     const duplicate = await caller(ownerId).groupTracking.uploadBatch({
       groupId,
       points: [{ ...encrypt(), clientPointId: point.clientPointId }],
@@ -176,17 +184,28 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     expect(await prisma.groupEncryptedPayload.count({ where: { groupId } })).toBe(1);
   });
 
-  test("getLatest returns each member's newest point and skips members with none", async () => {
+  test("getLatest returns each device's newest point and skips devices with none", async () => {
     const memberDeviceId = `${prefix}-member-device`;
-    await prisma.userDevice.create({
-      data: {
-        id: memberDeviceId,
-        userId: memberId,
+    const ownerTabletId = `${prefix}-owner-tablet`;
+    const ownerRemovedId = `${prefix}-owner-removed`;
+    const ownerSilentId = `${prefix}-owner-silent`;
+    await prisma.userDevice.createMany({
+      data: [
+        { id: memberDeviceId, userId: memberId, name: "Phone", icon: "phone" as const },
+        { id: ownerTabletId, userId: ownerId, name: "Tablet", icon: "tablet" as const },
+        {
+          id: ownerRemovedId,
+          userId: ownerId,
+          name: "Old phone",
+          icon: "phone" as const,
+          revokedAt: new Date(),
+        },
+        { id: ownerSilentId, userId: ownerId, name: "Watch", icon: "watch" as const },
+      ].map((device) => ({
+        ...device,
         publicKey: createDeviceKeyPair().publicKey,
         publicKeyAlgorithm: "X25519",
-        name: "Phone",
-        icon: "phone",
-      },
+      })),
     });
     const storePoint = (id: string, senderUserId: string, senderDeviceId: string, at: string) =>
       prisma.groupEncryptedPayload.create({
@@ -204,24 +223,55 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
           createdAt: new Date(at),
         },
       });
-    const latestIds = async () =>
-      Object.fromEntries(
-        (await caller(memberId).groupTracking.getLatest({ groupId })).points.map((point) => [
-          point.senderUserId,
-          point.id,
-        ]),
-      );
+    const latest = async () =>
+      (await caller(memberId).groupTracking.getLatest({ groupId })).points.map((point) => [
+        point.senderUserId,
+        point.senderDeviceId,
+        point.id,
+      ]);
 
     await storePoint(`${prefix}-owner-old`, ownerId, ownerDeviceId, "2030-01-01T10:00:00.000Z");
     await storePoint(`${prefix}-owner-tie-a`, ownerId, ownerDeviceId, "2030-01-01T12:00:00.000Z");
     await storePoint(`${prefix}-owner-tie-b`, ownerId, ownerDeviceId, "2030-01-01T12:00:00.000Z");
-    expect(await latestIds()).toEqual({ [ownerId]: `${prefix}-owner-tie-b` });
+    expect(await latest()).toEqual([[ownerId, ownerDeviceId, `${prefix}-owner-tie-b`]]);
 
+    await storePoint(`${prefix}-tablet-old`, ownerId, ownerTabletId, "2030-01-01T08:00:00.000Z");
+    await storePoint(`${prefix}-removed-new`, ownerId, ownerRemovedId, "2030-01-01T13:00:00.000Z");
     await storePoint(`${prefix}-member-new`, memberId, memberDeviceId, "2030-01-01T11:00:00.000Z");
     await storePoint(`${prefix}-member-old`, memberId, memberDeviceId, "2030-01-01T09:00:00.000Z");
-    expect(await latestIds()).toEqual({
-      [memberId]: `${prefix}-member-new`,
-      [ownerId]: `${prefix}-owner-tie-b`,
+    expect(
+      (await latest()).sort((first, second) => first.join().localeCompare(second.join())),
+    ).toEqual(
+      [
+        [memberId, memberDeviceId, `${prefix}-member-new`],
+        [ownerId, ownerDeviceId, `${prefix}-owner-tie-b`],
+        [ownerId, ownerTabletId, `${prefix}-tablet-old`],
+      ].sort((first, second) => first.join().localeCompare(second.join())),
+    );
+
+    const devices = await caller(memberId).groupMembership.listMemberDevices({ groupId });
+    expect(
+      devices
+        .filter((device) => device.deviceId.startsWith(prefix))
+        .map((device) => device.deviceId)
+        .sort(),
+    ).toEqual(
+      [
+        ownerDeviceId,
+        ownerTabletId,
+        ownerSilentId,
+        memberDeviceId,
+        `${prefix}-registration-race`,
+      ].sort(),
+    );
+    expect(devices.find((device) => device.deviceId === ownerTabletId)).toEqual({
+      deviceId: ownerTabletId,
+      userId: ownerId,
+      name: "Tablet",
+      icon: "tablet",
     });
+    await expect(
+      caller(outsiderId).groupMembership.listMemberDevices({ groupId }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

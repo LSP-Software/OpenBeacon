@@ -56,6 +56,8 @@ export const LiveMapPointAnnotation = ({
     annotationRef.current?.refresh();
   }, [
     headingDegrees,
+    marker.deviceIcon,
+    marker.mergedDeviceIds?.length,
     marker.image,
     marker.initials,
     marker.ringColor,
@@ -74,6 +76,8 @@ export const LiveMapPointAnnotation = ({
         >
           <LiveMapPinMotion arrival={arrival} gatherTo={gatherTo}>
             <LiveMapMarkerPin
+              deviceCount={marker.mergedDeviceIds?.length}
+              deviceIcon={marker.deviceIcon}
               hasUnreadableUpdate={marker.unreadableGroup !== undefined}
               headingDegrees={headingDegrees}
               image={marker.image}
@@ -92,7 +96,7 @@ export const LiveMapPointAnnotation = ({
   return (
     <ViewAnnotation
       ref={annotationRef}
-      id={marker.userId}
+      id={marker.deviceId}
       lngLat={[marker.longitude, marker.latitude]}
       anchor="center"
       onDeselect={onDeselected}
@@ -100,6 +104,8 @@ export const LiveMapPointAnnotation = ({
     >
       <LiveMapPinMotion arrival={arrival} gatherTo={gatherTo}>
         <LiveMapMarkerPin
+          deviceCount={marker.mergedDeviceIds?.length}
+          deviceIcon={marker.deviceIcon}
           hasUnreadableUpdate={marker.unreadableGroup !== undefined}
           headingDegrees={headingDegrees}
           image={marker.image}

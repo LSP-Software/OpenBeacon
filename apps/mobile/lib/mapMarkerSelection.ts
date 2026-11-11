@@ -1,14 +1,14 @@
 export const nextMapMarkerSelection = (
-  currentSelectedUserId: string | null,
-  tappedUserId: string | null,
+  currentSelectedDeviceId: string | null,
+  tappedDeviceId: string | null,
 ) => {
-  if (tappedUserId === null) {
+  if (tappedDeviceId === null) {
     return null;
   }
 
-  if (currentSelectedUserId === tappedUserId) {
+  if (currentSelectedDeviceId === tappedDeviceId) {
     return null;
   }
 
-  return tappedUserId;
+  return tappedDeviceId;
 };

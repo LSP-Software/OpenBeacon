@@ -85,6 +85,7 @@ const createCaller = async ({
     },
     userDevice: {
       findMany: findManyDevicesMock ?? mock(async () => [{ id: "device-1", userId: "user-1" }]),
+      updateMany: mock(async () => ({ count: 1 })),
     },
   };
   const context = {

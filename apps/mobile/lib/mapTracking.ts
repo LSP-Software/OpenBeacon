@@ -45,6 +45,7 @@ export const isCursorAfter = (candidate: MapTrackingCursor, current: MapTracking
 
 const toLiveMapPosition = ({
   battery,
+  deviceId,
   latitude,
   longitude,
   sourceGroupId,
@@ -53,6 +54,7 @@ const toLiveMapPosition = ({
   userId,
 }: LiveMapEntry): LiveMapPosition => ({
   battery,
+  deviceId,
   latitude,
   longitude,
   sourceGroupId,
@@ -84,7 +86,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   const positionsByGroup = new Map<string, Map<string, LiveMapEntry>>();
   const listeners = new Set<() => void>();
   const groupLoadStatus = new Map<string, "loaded" | "failed">();
-  const undecryptableByGroup = new Map<string, Set<string>>();
+  const undecryptableByGroup = new Map<string, Map<string, { deviceId: string; userId: string }>>();
   let membershipStatus: MapTrackingStatus["membership"] = "loading";
   let membershipFailing = false;
   const failingGroups = new Set<string>();
@@ -121,8 +123,8 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       connection: currentConnection(),
       groups: Object.fromEntries(groupLoadStatus),
       membership: membershipStatus,
-      undecryptable: [...undecryptableByGroup].flatMap(([groupId, userIds]) =>
-        [...userIds].map((userId) => ({ groupId, userId })),
+      undecryptable: [...undecryptableByGroup].flatMap(([groupId, devices]) =>
+        [...devices.values()].map((device) => ({ groupId, ...device })),
       ),
     };
   };
@@ -275,7 +277,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     runId: number;
   }) => {
     const entries: LiveMapEntry[] = [];
-    const undecryptable = new Set(undecryptableByGroup.get(groupId));
+    const undecryptable = new Map(undecryptableByGroup.get(groupId));
     let undecryptableChanged = false;
 
     for (const point of points) {
@@ -288,11 +290,15 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         return;
       }
 
+      const deviceKey = `${point.senderUserId}:${point.senderDeviceId}`;
       if (result.status === "ok") {
         entries.push(result.entry);
-        undecryptableChanged = undecryptable.delete(point.senderUserId) || undecryptableChanged;
-      } else if (result.status === "undecryptable" && !undecryptable.has(point.senderUserId)) {
-        undecryptable.add(point.senderUserId);
+        undecryptableChanged = undecryptable.delete(deviceKey) || undecryptableChanged;
+      } else if (result.status === "undecryptable" && !undecryptable.has(deviceKey)) {
+        undecryptable.set(deviceKey, {
+          deviceId: point.senderDeviceId,
+          userId: point.senderUserId,
+        });
         undecryptableChanged = true;
       }
     }

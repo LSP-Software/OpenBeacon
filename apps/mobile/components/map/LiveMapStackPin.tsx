@@ -12,7 +12,7 @@ export const LiveMapStackPin = ({ members }: { members: readonly LiveMapMarker[]
     <View collapsable={false} style={{ width: 48, height: 48 }}>
       {others.slice(0, 2).map((member, index) => (
         <View
-          key={member.userId}
+          key={member.deviceId}
           collapsable={false}
           style={{
             position: "absolute",

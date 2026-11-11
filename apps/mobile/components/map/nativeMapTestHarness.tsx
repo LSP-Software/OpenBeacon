@@ -94,6 +94,7 @@ export const createLiveMapMarkerFixture = (
   sourceGroupId: "group-1",
   timestamp: "2026-07-19T10:00:00.000Z",
   ...overrides,
+  deviceId: overrides.deviceId ?? overrides.userId,
 });
 
 export const resetNativeMapHarness = () => {

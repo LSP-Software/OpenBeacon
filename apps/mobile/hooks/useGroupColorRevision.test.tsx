@@ -29,6 +29,7 @@ let latestRingColors: string[] = [];
 const positions: LiveMapPosition[] = [
   {
     battery: { charging: false, level: 80 },
+    deviceId: "device",
     latitude: 51.5,
     longitude: -0.12,
     sourceGroupId: "family",
@@ -38,6 +39,7 @@ const positions: LiveMapPosition[] = [
   },
   {
     battery: { charging: false, level: 80 },
+    deviceId: "device",
     latitude: 51.51,
     longitude: -0.13,
     sourceGroupId: "family",
@@ -91,7 +93,7 @@ describe("useGroupColorRevision", () => {
           getGroupColor,
           groups,
           positions,
-          selfUserId: "self",
+          selfDeviceId: "self-phone",
         });
       }, [groupColorRevision]);
       latestRingColors = markers.map((marker) => marker.ringColor);

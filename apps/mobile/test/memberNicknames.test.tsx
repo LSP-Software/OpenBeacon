@@ -27,7 +27,18 @@ mock.module("@tanstack/react-query", () => ({
 }));
 mock.module("expo-router", () => ({ useRouter: () => ({ replace: () => {} }) }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
-mock.module("lucide-react-native", () => ({ MapPinIcon: () => null, PlusCircleIcon: () => null }));
+mock.module("lucide-react-native", () => ({
+  MapPinIcon: () => null,
+  PlusCircleIcon: () => null,
+  BackpackIcon: () => null,
+  CarIcon: () => null,
+  HouseIcon: () => null,
+  LaptopIcon: () => null,
+  SmartphoneIcon: () => null,
+  TabletIcon: () => null,
+  TagIcon: () => null,
+  WatchIcon: () => null,
+}));
 mock.module("react-native", () => ({
   View: passthrough,
   ScrollView: passthrough,
@@ -83,6 +94,7 @@ mock.module("../lib/api.ts", () => ({
   trpc: {
     groupMembership: {
       list: { queryOptions: () => ({}), queryKey: () => [] },
+      listMemberDevices: { queryOptions: () => ({}) },
       remove: { mutationOptions: () => ({}) },
       updateRole: { mutationOptions: () => ({}) },
       updateNickname: { mutationOptions: () => ({}) },

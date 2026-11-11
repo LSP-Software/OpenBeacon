@@ -5,8 +5,8 @@ export const buildLiveMapTrackingCameraStop = ({
   padding,
   previousLatitude,
   previousLongitude,
-  previouslyTrackedUserId,
-  selectedUserId,
+  previouslyTrackedDeviceId,
+  selectedDeviceId,
 }: {
   followSuspended: boolean;
   latitude: number;
@@ -19,10 +19,10 @@ export const buildLiveMapTrackingCameraStop = ({
   };
   previousLatitude: number | null;
   previousLongitude: number | null;
-  previouslyTrackedUserId: string | null;
-  selectedUserId: string;
+  previouslyTrackedDeviceId: string | null;
+  selectedDeviceId: string;
 }) => {
-  const isNewFocus = previouslyTrackedUserId !== selectedUserId;
+  const isNewFocus = previouslyTrackedDeviceId !== selectedDeviceId;
 
   if (followSuspended && !isNewFocus) {
     return null;

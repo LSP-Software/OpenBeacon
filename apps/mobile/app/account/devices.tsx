@@ -3,17 +3,6 @@ import { deviceIconSchema, deviceNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
-import {
-  BackpackIcon,
-  CarIcon,
-  HouseIcon,
-  LaptopIcon,
-  type LucideIcon,
-  SmartphoneIcon,
-  TabletIcon,
-  TagIcon,
-  WatchIcon,
-} from "lucide-react-native";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Pressable, ScrollView, View } from "react-native";
@@ -26,27 +15,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../componen
 import { Icon } from "../../components/ui/Icon.tsx";
 import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
+import { useLiveTrackingPositions } from "../../hooks/useLiveTrackingPositions.ts";
 import { Alert } from "../../lib/alert.ts";
 import { type RouterOutputs, trpc } from "../../lib/api.ts";
+import { authClient } from "../../lib/auth-client.ts";
 import { cn } from "../../lib/cn.ts";
+import { deviceIcons } from "../../lib/deviceIcons.ts";
 import { shortTimeSince } from "../../lib/timeSince.ts";
-
-const deviceIcons = {
-  phone: { icon: SmartphoneIcon, label: "Phone" },
-  tablet: { icon: TabletIcon, label: "Tablet" },
-  watch: { icon: WatchIcon, label: "Watch" },
-  car: { icon: CarIcon, label: "Car" },
-  laptop: { icon: LaptopIcon, label: "Laptop" },
-  bag: { icon: BackpackIcon, label: "Bag" },
-  tag: { icon: TagIcon, label: "Tag" },
-  home: { icon: HouseIcon, label: "Home" },
-} satisfies Record<z.infer<typeof deviceIconSchema>, { icon: LucideIcon; label: string }>;
 
 const schema = z.object({ name: deviceNameSchema, icon: deviceIconSchema });
 
 const DevicesScreen = () => {
   const queryClient = useQueryClient();
   const devices = useQuery(trpc.account.listDevices.queryOptions());
+  const { data: session } = authClient.useSession();
+  const groups = useQuery(trpc.groupMembership.list.queryOptions());
+  const { positions } = useLiveTrackingPositions();
   const updateDevice = useMutation(trpc.account.updateDevice.mutationOptions());
   const [editing, setEditing] = useState<RouterOutputs["account"]["listDevices"][number] | null>(
     null,
@@ -157,6 +141,11 @@ const DevicesScreen = () => {
           <View className="overflow-hidden rounded-3xl border border-border bg-card">
             {devices.data.map((device, index) => {
               const lastActive = shortTimeSince(device.lastSeenAt);
+              const position = positions.find(
+                (item) => item.deviceId === device.id && item.userId === session?.user.id,
+              );
+              const lastLocationAt = position?.timestamp ?? device.lastLocationAt;
+              const lastLocation = lastLocationAt ? shortTimeSince(lastLocationAt) : null;
               return (
                 <Pressable
                   key={device.id}
@@ -195,6 +184,20 @@ const DevicesScreen = () => {
                       {device.isCurrent || lastActive === "now"
                         ? "Active now"
                         : `Last active ${lastActive} ago`}
+                    </Text>
+                    <Text className="text-muted-foreground text-sm">
+                      {groups.data?.length === 0
+                        ? "Not sharing with any group"
+                        : [
+                            lastLocation === null
+                              ? "No location shared yet"
+                              : lastLocation === "now"
+                                ? "Location updated now"
+                                : `Location updated ${lastLocation} ago`,
+                            position ? `Battery ${position.battery.level}%` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
                     </Text>
                   </View>
                 </Pressable>

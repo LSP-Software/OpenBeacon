@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { buildLiveMapMarkers } from "./buildLiveMapMarkers.ts";
+import { buildLiveMapMarkers, labelDeviceIcons } from "./buildLiveMapMarkers.ts";
 import type { LiveMapPosition } from "./mapTrackingTypes.ts";
 
 const position = (
   overrides: Partial<LiveMapPosition> & Pick<LiveMapPosition, "userId" | "sourceGroupId">,
 ): LiveMapPosition => ({
   battery: { charging: false, level: 80 },
+  deviceId: `${overrides.userId}-phone`,
   latitude: 51.5,
   longitude: -0.12,
   speed: null,
@@ -41,12 +42,13 @@ describe("buildLiveMapMarkers", () => {
           userId: "bob",
         }),
       ],
-      selfUserId: "alice",
+      selfDeviceId: "alice-phone",
     });
 
     expect(markers).toEqual([
       {
         battery: { charging: false, level: 80 },
+        deviceId: "alice-phone",
         image: "https://example.com/a.png",
         initials: "Al",
         isSelf: true,
@@ -61,6 +63,7 @@ describe("buildLiveMapMarkers", () => {
       },
       {
         battery: { charging: true, level: 40 },
+        deviceId: "bob-phone",
         image: null,
         initials: "Bo",
         isSelf: false,
@@ -103,7 +106,7 @@ describe("buildLiveMapMarkers", () => {
         },
       ],
       positions: [position({ sourceGroupId: "hiking", userId: "carol" })],
-      selfUserId: "alice",
+      selfDeviceId: "alice-phone",
     });
 
     expect(markers).toHaveLength(1);
@@ -123,7 +126,7 @@ describe("buildLiveMapMarkers", () => {
       getGroupColor: (id) => colors[Number(id)]!,
       groups,
       positions: [position({ sourceGroupId: "0", userId: "alice" })],
-      selfUserId: "other",
+      selfDeviceId: "other-phone",
     });
     expect(markers[0]?.ringColors).toEqual(["red", "blue"]);
   });
@@ -139,7 +142,7 @@ describe("buildLiveMapMarkers", () => {
         },
       ],
       positions: [position({ sourceGroupId: "former", userId: "alice" })],
-      selfUserId: "other",
+      selfDeviceId: "other-phone",
     });
     expect(markers[0]?.ringColor).toBe("blue");
     expect(markers[0]?.ringColors).toBeUndefined();
@@ -151,7 +154,7 @@ describe("buildLiveMapMarkers", () => {
         getGroupColor: () => "#E85D4C",
         groups: [],
         positions: [],
-        selfUserId: "alice",
+        selfDeviceId: "alice-phone",
       }),
     ).toEqual([]);
   });
@@ -170,7 +173,7 @@ describe("buildLiveMapMarkers", () => {
         position({ sourceGroupId: "family", userId: "alice" }),
         position({ sourceGroupId: "family", userId: "removed-bob" }),
       ],
-      selfUserId: "alice",
+      selfDeviceId: "alice-phone",
     });
 
     expect(markers.map((marker) => marker.userId)).toEqual(["alice"]);
@@ -187,7 +190,7 @@ describe("buildLiveMapMarkers", () => {
         },
       ],
       positions: [position({ sourceGroupId: "family", userId: "newly-joined" })],
-      selfUserId: "alice",
+      selfDeviceId: "alice-phone",
     });
 
     expect(markers).toEqual([]);
@@ -207,12 +210,13 @@ describe("buildLiveMapMarkers", () => {
         },
       ],
       positions: [position({ sourceGroupId: "family", userId: "dana" })],
-      selfUserId: "alice",
+      selfDeviceId: "alice-phone",
     });
 
     expect(markers).toEqual([
       {
         battery: { charging: false, level: 80 },
+        deviceId: "dana-phone",
         image: "https://example.com/dana.png",
         initials: "Da",
         isSelf: false,
@@ -239,7 +243,7 @@ describe("buildLiveMapMarkers", () => {
         },
       ],
       positions: [position({ sourceGroupId: "family", userId: "alice" })],
-      selfUserId: "alice",
+      selfDeviceId: "alice-phone",
     });
 
     expect(markers).toHaveLength(1);
@@ -256,8 +260,51 @@ test("uses the member name from the position's source group", () => {
       { id: "family", name: "Family", members: [{ userId: "alice", name: "Mum", image: null }] },
     ],
     positions: [position({ userId: "alice", sourceGroupId: "family" })],
-    selfUserId: "other",
+    selfDeviceId: "other-phone",
   });
   expect(markers[0]?.name).toBe("Mum");
   expect(markers[0]?.initials).toBe("Mu");
+});
+
+test("only marks this device as self and badges people with two or more devices", () => {
+  const markers = buildLiveMapMarkers({
+    getGroupColor: () => "#E85D4C",
+    groups: [
+      {
+        id: "family",
+        name: "Family",
+        members: [
+          { image: null, name: "Alice", userId: "alice" },
+          { image: null, name: "Bob", userId: "bob" },
+        ],
+      },
+    ],
+    positions: [
+      position({ sourceGroupId: "family", userId: "alice" }),
+      position({ deviceId: "alice-tablet", sourceGroupId: "family", userId: "alice" }),
+      position({ sourceGroupId: "family", userId: "bob" }),
+    ],
+    selfDeviceId: "alice-phone",
+  });
+
+  expect(markers.map(({ deviceId, isSelf }) => ({ deviceId, isSelf }))).toEqual([
+    { deviceId: "alice-phone", isSelf: true },
+    { deviceId: "alice-tablet", isSelf: false },
+    { deviceId: "bob-phone", isSelf: false },
+  ]);
+
+  const labelled = labelDeviceIcons({
+    markers,
+    memberDevices: [
+      { deviceId: "alice-phone", icon: "phone", name: "Pixel 9", userId: "alice" },
+      { deviceId: "alice-tablet", icon: "tablet", name: "iPad", userId: "alice" },
+      { deviceId: "bob-phone", icon: "phone", name: "Pixel 8", userId: "bob" },
+    ],
+  });
+  expect(labelled.map(({ deviceIcon, deviceName }) => ({ deviceIcon, deviceName }))).toEqual([
+    { deviceIcon: "phone", deviceName: "Pixel 9" },
+    { deviceIcon: "tablet", deviceName: "iPad" },
+    { deviceIcon: undefined, deviceName: undefined },
+  ]);
+  expect(labelled[2]).toBe(markers[2]);
 });

@@ -3,6 +3,7 @@ import { reduceLivePositions } from "./liveMapReducer.ts";
 
 const entry = ({
   battery = { charging: false, level: 80 },
+  deviceId,
   latitude,
   longitude,
   serverCreatedAt,
@@ -13,6 +14,7 @@ const entry = ({
   userId,
 }: {
   battery?: { charging: boolean; level: number };
+  deviceId?: string;
   latitude: number;
   longitude: number;
   serverCreatedAt: Date;
@@ -23,6 +25,7 @@ const entry = ({
   userId: string;
 }) => ({
   battery,
+  deviceId: deviceId ?? userId,
   latitude,
   longitude,
   serverCreatedAt,
@@ -178,5 +181,37 @@ describe("reduceLivePositions", () => {
     ]);
 
     expect([...next.keys()].sort()).toEqual(["user-1", "user-2"]);
+  });
+
+  test("keeps two devices of one user apart", () => {
+    const phone = entry({
+      battery: { charging: false, level: 20 },
+      deviceId: "phone",
+      latitude: 51.5,
+      longitude: -0.1,
+      serverCreatedAt: new Date("2026-07-17T12:05:00.000Z"),
+      serverId: "a",
+      sourceGroupId: "group-a",
+      timestamp: "2026-07-17T12:05:00.000Z",
+      userId: "user-1",
+    });
+    const tablet = entry({
+      battery: { charging: true, level: 90 },
+      deviceId: "tablet",
+      latitude: 52.2,
+      longitude: 0.1,
+      serverCreatedAt: new Date("2026-07-17T12:00:00.000Z"),
+      serverId: "b",
+      sourceGroupId: "group-a",
+      timestamp: "2026-07-17T12:00:00.000Z",
+      userId: "user-1",
+    });
+
+    const next = reduceLivePositions(new Map(), [phone, tablet]);
+    const again = reduceLivePositions(next, [tablet, phone]);
+
+    expect(next.get("phone")).toEqual(phone);
+    expect(next.get("tablet")).toEqual(tablet);
+    expect(again).toEqual(next);
   });
 });
