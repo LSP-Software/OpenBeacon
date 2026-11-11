@@ -28,7 +28,7 @@ describe("renderAlertsTurnedOffEmail", () => {
   });
 
   test("several alerts are listed one per line", async () => {
-    const email = await render(["new-device", "deletion-scheduled"]);
+    const email = await render(["new-sign-in", "deletion-scheduled"]);
     expect(email.text).toContain(
       "These email alerts were turned off:\n\n * New sign-in\n * Account deletion scheduled\n",
     );
@@ -39,7 +39,7 @@ describe("renderAlertsTurnedOffEmail", () => {
   });
 
   test("accounts without a password are told to change their Google password, then sign out other sessions", async () => {
-    const email = await render(["new-device"], false);
+    const email = await render(["new-sign-in"], false);
     expect(email.text).toContain(
       `If this wasn't you\n\nSomeone else is signed in to your account. Change your Google password, because someone may have used your Google account to sign in. After that, in the OpenBeacon app, open Account → Password and Security and tap "Sign out of all other sessions". Then turn this alert back on`,
     );

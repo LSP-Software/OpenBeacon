@@ -100,7 +100,7 @@ const alertCopy = (
             : `${secureGoogleAdvice} After that, sign in to the OpenBeacon app, then ${signOutOthersAdvice}`
         }`,
       };
-    case "new-device": {
+    case "new-sign-in": {
       const platform = alert.device.platform && platformNames[alert.device.platform];
       const device =
         alert.device.model && platform

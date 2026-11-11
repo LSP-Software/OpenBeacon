@@ -169,7 +169,7 @@ const changePhrase = async (account: Awaited<ReturnType<typeof createAccount>>) 
 const turnOffOptionalAlerts = (userId: string) =>
   prisma.user.update({
     where: { id: userId },
-    data: { alertNewDevice: false, alertDeletionScheduled: false },
+    data: { alertNewSignIn: false, alertDeletionScheduled: false },
   });
 
 beforeEach(async () => {
@@ -254,7 +254,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
     await registerDevice(account, { platform: "ios", model: "iPhone 15" });
     expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
-      { type: "new-device", device: { model: "iPhone 15", platform: "ios" } },
+      { type: "new-sign-in", device: { model: "iPhone 15", platform: "ios" } },
     ]);
   });
 
@@ -316,7 +316,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
     expect(await prisma.userDevice.count({ where: { userId: account.userId } })).toBe(2);
     expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
-      { type: "new-device", device: { model: null, platform: "ios" } },
+      { type: "new-sign-in", device: { model: null, platform: "ios" } },
     ]);
   });
 
@@ -344,7 +344,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
     await sentAlerts();
@@ -368,7 +368,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
       platform: "android",
     });
     expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
-      { type: "new-device", device: { model: null, platform: "android" } },
+      { type: "new-sign-in", device: { model: null, platform: "android" } },
     ]);
   });
 
@@ -396,7 +396,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: true,
+      alertNewSignIn: true,
       alertDeletionScheduled: false,
     });
     await sentAlerts();
@@ -414,7 +414,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: true,
+      alertNewSignIn: true,
       alertDeletionScheduled: false,
     });
 
@@ -437,12 +437,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: false,
     });
 
     expect((await waitSeconds(60)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device", "deletion-scheduled"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in", "deletion-scheduled"] },
     ]);
   });
 
@@ -453,21 +453,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
     await waitSeconds(30);
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: false,
     });
 
     expect(await waitSeconds(30)).toHaveLength(1);
     expect(await waitSeconds(60)).toHaveLength(1);
     expect(sent.map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device", "deletion-scheduled"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in", "deletion-scheduled"] },
     ]);
     expect(Math.abs((sentAt[0]?.getTime() ?? 0) - firstAt.getTime())).toBeLessThan(1000);
   });
@@ -478,19 +478,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
     await waitSeconds(10);
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: true,
+      alertNewSignIn: true,
       alertDeletionScheduled: true,
     });
 
     expect((await waitSeconds(50)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in"] },
     ]);
   });
 
@@ -499,19 +499,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
     await waitSeconds(60);
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: false,
     });
 
     expect((await waitSeconds(60)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in"] },
       { type: "alerts-turned-off", alerts: ["deletion-scheduled"] },
     ]);
   });
@@ -521,7 +521,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: false,
     });
     await sentAlerts();
@@ -532,7 +532,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
     expect(await waitSeconds(29)).toEqual([]);
     expect((await waitSeconds(1)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device", "deletion-scheduled"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in", "deletion-scheduled"] },
     ]);
   });
 
@@ -541,7 +541,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
     await sentAlerts();
@@ -551,7 +551,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     createAlerts().schedulePendingAlertsTurnedOff();
 
     expect((await waitSeconds(0)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in"] },
     ]);
   });
 
@@ -560,7 +560,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: false,
     });
     await sentAlerts();
@@ -577,10 +577,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
       await (
         await account.activeCaller()
       ).emailAlerts.updateSettings({
-        alertNewDevice: false,
+        alertNewSignIn: false,
         alertDeletionScheduled: false,
       }),
-    ).toEqual({ alertNewDevice: false, alertDeletionScheduled: false });
+    ).toEqual({ alertNewSignIn: false, alertDeletionScheduled: false });
     expect(await waitSeconds(60)).toEqual([]);
   });
 
@@ -618,12 +618,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     );
 
     await caller.emailAlerts.updateSettings({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
 
     expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in"] },
     ]);
   });
 
@@ -634,19 +634,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: true,
+      alertNewSignIn: true,
       alertDeletionScheduled: false,
     });
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: true,
+      alertNewSignIn: true,
       alertDeletionScheduled: false,
     });
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: true,
+      alertNewSignIn: true,
       alertDeletionScheduled: true,
     });
 
@@ -720,7 +720,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     resolve();
 
     expect((await sentAlerts()).map(({ alert }) => alert.type)).toEqual([
-      "new-device",
+      "new-sign-in",
       "deletion-scheduled",
     ]);
   });
@@ -749,17 +749,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email alert sett
     const account = await createAccount();
 
     expect(await (await account.activeCaller()).emailAlerts.settings()).toEqual({
-      alertNewDevice: true,
+      alertNewSignIn: true,
       alertDeletionScheduled: true,
     });
     await (
       await account.activeCaller()
     ).emailAlerts.updateSettings({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
     expect(await (await account.activeCaller()).emailAlerts.settings()).toEqual({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
   });

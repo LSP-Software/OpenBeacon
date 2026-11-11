@@ -5,7 +5,7 @@ import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure } from "../procedures/auth/runtime.ts";
 
-const settingsSelect = { alertDeletionScheduled: true, alertNewDevice: true };
+const settingsSelect = { alertDeletionScheduled: true, alertNewSignIn: true };
 
 export const emailAlertsRouter = {
   settings: protectedProcedure.query(({ ctx }) =>

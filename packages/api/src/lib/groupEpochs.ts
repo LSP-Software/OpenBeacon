@@ -648,7 +648,7 @@ export const upsertUserDevice = async ({
   if (!createResult.error) {
     if (createResult.data.activatedAt === null) {
       securityAlerts?.send(userId, {
-        type: "new-device",
+        type: "new-sign-in",
         device: { model: input.model ?? null, platform: input.platform ?? null },
       });
     }

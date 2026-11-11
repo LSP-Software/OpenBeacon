@@ -22,10 +22,10 @@ const renderEveryEmail = async () => {
     { type: "recovery-phrase-reset" },
     { type: "other-sessions-signed-out", device: null },
     { type: "device-removed", device: { name: "Pixel 8", model: "Pixel 8", platform: "android" } },
-    { type: "new-device", device: { model: "Pixel 8", platform: "android" } },
+    { type: "new-sign-in", device: { model: "Pixel 8", platform: "android" } },
     { type: "deletion-scheduled", deletionDate: new Date("2026-07-16T13:32:00Z") },
     { type: "alerts-turned-off", alerts: ["deletion-scheduled"] },
-    { type: "alerts-turned-off", alerts: ["new-device", "deletion-scheduled"] },
+    { type: "alerts-turned-off", alerts: ["new-sign-in", "deletion-scheduled"] },
     { type: "account-deleted" },
   ];
   return [
@@ -114,7 +114,7 @@ describe("every email", () => {
   test("escapes the device model and server name", async () => {
     const email = await renderSecurityAlertEmail({
       alert: {
-        type: "new-device",
+        type: "new-sign-in",
         device: { model: '<img src="https://evil.test/p.png">', platform: "ios" },
       },
       at: new Date("2026-07-09T13:32:00Z"),

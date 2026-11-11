@@ -1233,7 +1233,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts"
     const { email, userId } = await createPasswordAccount("reset-alert");
     await prisma.user.update({
       where: { id: userId },
-      data: { alertNewDevice: false, alertDeletionScheduled: false },
+      data: { alertNewSignIn: false, alertDeletionScheduled: false },
     });
 
     expect((await resetPassword(await resetTokenFor(email), "a brand new passphrase")).status).toBe(

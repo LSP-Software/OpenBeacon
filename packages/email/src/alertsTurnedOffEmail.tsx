@@ -17,7 +17,7 @@ export const renderAlertsTurnedOffEmail = async ({
   const labels = alerts.map(
     (type) =>
       ({
-        "new-device": "New sign-in",
+        "new-sign-in": "New sign-in",
         "deletion-scheduled": "Account deletion scheduled",
       })[type],
   );

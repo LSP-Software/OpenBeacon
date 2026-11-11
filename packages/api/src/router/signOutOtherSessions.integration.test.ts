@@ -105,7 +105,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("signing out othe
     const account = await createAccount();
     await prisma.user.update({
       where: { id: account.userId },
-      data: { alertNewDevice: false, alertDeletionScheduled: false },
+      data: { alertNewSignIn: false, alertDeletionScheduled: false },
     });
 
     await callerFor(account).account.signOutOtherSessions();

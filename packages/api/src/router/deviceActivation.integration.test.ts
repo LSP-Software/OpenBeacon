@@ -494,7 +494,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
       expect(await deviceState(next.deviceId)).toEqual({ activatedAt: null, activatedBy: null });
       expect(next.send.mock.calls).toEqual([
-        [account.userId, expect.objectContaining({ type: "new-device" })],
+        [account.userId, expect.objectContaining({ type: "new-sign-in" })],
       ]);
       expect(await next.api.device.status()).toEqual({
         accountHasActiveDevice: false,

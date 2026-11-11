@@ -20,7 +20,7 @@ model User {
   deletionRetryAt DateTime?
   deletionDate   DateTime?
   timezone       String?
-  alertNewDevice Boolean         @default(true)
+  alertNewSignIn Boolean         @default(true)
   alertDeletionScheduled Boolean @default(true)
   sessions       Session[]
   accounts       Account[]

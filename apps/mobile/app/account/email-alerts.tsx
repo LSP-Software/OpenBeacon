@@ -24,7 +24,7 @@ const alerts = [
   {
     label: "New sign-in",
     description: "When a new phone or tablet signs in to your account.",
-    setting: "alertNewDevice",
+    setting: "alertNewSignIn",
   },
   {
     label: "Account deletion scheduled",
