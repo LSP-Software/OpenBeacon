@@ -54,6 +54,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
         userId,
       })),
     });
+    await prisma.deviceChallenge.createMany({
+      data: [
+        { name: "expired", expiresAt: new Date(clock.now.getTime() - 60_000) },
+        { name: "live", expiresAt: new Date(clock.now.getTime() + 60_000) },
+      ].map(({ expiresAt, name }) => ({
+        challengeHash: "hash",
+        deviceId: `${prefix}-oldActive`,
+        expiresAt,
+        id: `${prefix}-${name}-challenge`,
+        purpose: "activation" as const,
+      })),
+    });
   });
 
   afterAll(async () => {
@@ -89,5 +101,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
       `${prefix}-oldActive-link`,
       `${prefix}-recentlyLinked-link`,
     ]);
+  });
+
+  test("deletes expired device challenges and keeps live ones", async () => {
+    const challenges = await prisma.deviceChallenge.findMany({
+      where: { deviceId: `${prefix}-oldActive` },
+      select: { id: true },
+    });
+    expect(challenges.map(({ id }) => id)).toEqual([`${prefix}-live-challenge`]);
   });
 });

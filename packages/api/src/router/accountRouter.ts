@@ -24,6 +24,7 @@ import {
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
+import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
 import {
   freshSessionProcedure,
@@ -352,7 +353,10 @@ export const accountRouter = {
   removeThisDevice: protectedProcedure
     .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
     .mutation(async ({ ctx }) => {
-      if (!ctx.deviceId) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!ctx.deviceId) {
+        if (ctx.unverifiedDeviceId) throw deviceUnverifiedError();
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
       const device = await removeUserDevice({
         db: ctx.db,
         deviceId: ctx.deviceId,

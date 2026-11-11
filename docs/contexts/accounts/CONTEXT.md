@@ -9,7 +9,7 @@ A 6-digit code the server emails to an account's address, which the owner types 
 _Avoid_: OTP, magic link, verification link, PIN
 
 **Session**:
-One sign-in to an account. The server links a Session to the device named in the first request that carries the device header, and from then on it can't act as another device. Signing a session out ends its sign-in but doesn't remove the device from Devices.
+One sign-in to an account. A Session is linked to a device when it registers that device as new, or when the phone proves it holds the device's Device key by opening a challenge sealed to it. Naming a device in the device header never links it; until the session is linked, anything that needs a device fails with `DEVICE_UNVERIFIED`. Once linked, it can't act as another device. Signing a session out ends its sign-in but doesn't remove the device from Devices.
 _Avoid_: Login, device
 
 **Device name**:

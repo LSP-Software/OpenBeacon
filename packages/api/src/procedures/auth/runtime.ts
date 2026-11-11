@@ -1,6 +1,7 @@
 import { auth } from "@openbeacon/auth";
 import { TRPCError } from "@trpc/server";
 import { devicePendingError } from "../../lib/deviceActivation.ts";
+import { deviceUnverifiedError } from "../../lib/deviceUnverified.ts";
 import { t } from "../../trpcRuntime.ts";
 import { createAuthProcedures } from "./base.ts";
 
@@ -25,12 +26,14 @@ export const freshSessionProcedure = protectedProcedure.use(async ({ ctx, next }
 
 export const thisDeviceProcedure = protectedProcedure.use(async ({ ctx, next }) => {
   if (!ctx.deviceId) {
+    if (ctx.unverifiedDeviceId) throw deviceUnverifiedError();
     throw new TRPCError({ code: "BAD_REQUEST", message: "This phone isn't registered yet." });
   }
   return next({ ctx: { deviceId: ctx.deviceId } });
 });
 
 export const requireActiveDevice = t.middleware(async ({ ctx, next }) => {
+  if (!ctx.deviceId && ctx.unverifiedDeviceId) throw deviceUnverifiedError();
   const userId = ctx.session?.user.id;
   const device =
     ctx.deviceId && userId

@@ -56,6 +56,7 @@ model Session {
   deviceId  String?
   device    UserDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
   googleDeletionChallenges GoogleDeletionChallenge[]
+  deviceChallenge DeviceChallenge?
 
   @@index([userId])
   @@index([deviceId])
@@ -243,6 +244,7 @@ model UserDevice {
   sentHistoryWraps       GroupEpochHistoryWrap[]
   deviceLink             DeviceLink?              @relation("DeviceLinkNewDevice")
   approvedDeviceLinks    DeviceLink[]             @relation("DeviceLinkApprover")
+  challenges             DeviceChallenge[]
 
   @@index([userId])
 }
@@ -263,6 +265,27 @@ model DeviceLink {
 
   @@index([userId])
   @@index([approverDeviceId])
+  @@index([expiresAt])
+}
+
+enum DeviceChallengePurpose {
+  activation
+  sessionLink
+}
+
+model DeviceChallenge {
+  id                String                 @id
+  deviceId          String
+  device            UserDevice             @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  sessionId         String?                @unique
+  session           Session?               @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  purpose           DeviceChallengePurpose
+  challengeHash     String
+  historyKeyVersion Int?
+  expiresAt         DateTime
+  createdAt         DateTime               @default(now())
+
+  @@index([deviceId, purpose])
   @@index([expiresAt])
 }
 

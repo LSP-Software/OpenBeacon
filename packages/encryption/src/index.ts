@@ -485,6 +485,7 @@ export {
   openDeviceActivationChallenge,
   sealDeviceActivationChallenge,
 } from "./deviceActivation.ts";
+export { openSessionLinkChallenge, sealSessionLinkChallenge } from "./sessionLink.ts";
 export {
   createDeviceLinkSecret,
   formatDeviceLinkCode,

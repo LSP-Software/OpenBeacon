@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
@@ -33,22 +33,30 @@ const cache = createIntegrationTestCache(() => 0);
 const prefix = `device-activation-${crypto.randomUUID()}`;
 const userIds: string[] = [];
 
-const caller = (userId: string, deviceId: string | null) =>
+const caller = (
+  userId: string,
+  deviceId: string | null,
+  securityAlerts: { send: (userId: string, alert: { type: string }) => void } | null = null,
+) =>
   router.createCaller({
     cache,
     db: prisma,
     clientIp: "127.0.0.1",
     deviceId,
     emailCodes: null,
-    securityAlerts: null,
+    securityAlerts,
     session: {
       user: { id: userId },
       session: { id: `${userId}-session`, createdAt: new Date() },
     },
   } as Parameters<typeof router.createCaller>[0]);
 
-const register = (userId: string, deviceId: string) =>
-  caller(userId, null).auth.registerDeviceKey({
+const register = (
+  userId: string,
+  deviceId: string,
+  securityAlerts: Parameters<typeof caller>[2] = null,
+) =>
+  caller(userId, null, securityAlerts).auth.registerDeviceKey({
     algorithm: "X25519",
     deviceId,
     expectedUserId: userId,
@@ -101,6 +109,44 @@ const answer = async (
   });
 };
 
+const resetFrom = async (api: ReturnType<typeof caller>, userId: string) => {
+  const recoveryKey = deriveRecoveryKeyPair(generateRecoveryPhrase());
+  const historyKey = createHistoryKeyPair();
+  await api.accountRecovery.reset({
+    confirmReset: true,
+    historyKey: {
+      algorithm: historyKey.algorithm,
+      escrow: sealHistoryKeyEscrow({
+        historyPrivateKey: historyKey.privateKey,
+        recoveryPrivateKey: recoveryKey.privateKey,
+        userId,
+        version: 2,
+      }),
+      id: crypto.randomUUID(),
+      publicKey: historyKey.publicKey,
+      version: 2,
+    },
+    recoveryKey: {
+      algorithm: recoveryKey.algorithm,
+      derivationVersion: recoveryKey.derivationVersion,
+      publicKey: recoveryKey.publicKey,
+    },
+  });
+  return recoveryKey;
+};
+
+const removeDevices = (deviceIds: string[]) =>
+  prisma.userDevice.updateMany({
+    where: { id: { in: deviceIds } },
+    data: { revokedAt: new Date() },
+  });
+
+const registerAfterRemoval = async (account: Awaited<ReturnType<typeof createAccount>>) => {
+  const send = mock((_userId: string, _alert: { type: string }) => {});
+  const device = await register(account.userId, `${account.userId}-after-removal`, { send });
+  return { api: caller(account.userId, device.id), deviceId: device.id, send };
+};
+
 const deviceState = (deviceId: string) =>
   prisma.userDevice.findUniqueOrThrow({
     where: { id: deviceId },
@@ -117,9 +163,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     afterAll(async () => {
       await prisma.group.deleteMany({ where: { id: { in: userIds.map((id) => `${id}-group`) } } });
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
-      await prisma.verification.deleteMany({
-        where: { identifier: { startsWith: `device-activation:${prefix}` } },
-      });
       await prisma.$disconnect();
     });
 
@@ -135,10 +178,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       expect(await rotationRequired(account.groupId)).toBe(false);
       expect(await account.pending.device.status()).toEqual({
+        accountHasActiveDevice: true,
         activated: false,
         registered: true,
       });
       expect(await caller(account.userId, account.firstDeviceId).device.status()).toEqual({
+        accountHasActiveDevice: false,
         activated: true,
         registered: true,
       });
@@ -246,8 +291,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("an expired challenge fails", async () => {
       const account = await createAccount("expired");
       const opened = await answer(account, account.historyPrivateKey);
-      await prisma.verification.updateMany({
-        where: { identifier: `device-activation:${account.pendingDeviceId}` },
+      await prisma.deviceChallenge.updateMany({
+        where: { deviceId: account.pendingDeviceId, purpose: "activation" },
         data: { expiresAt: new Date(Date.now() - 1_000) },
       });
       await expect(account.pending.device.activate({ answer: opened })).rejects.toMatchObject({
@@ -352,29 +397,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     test("a reset with no phrase set up activates the Pending device that calls it", async () => {
       const account = await createAccount("reset");
-      const phrase = generateRecoveryPhrase();
-      const recoveryKey = deriveRecoveryKeyPair(phrase);
-      const historyKey = createHistoryKeyPair();
-      await account.pending.accountRecovery.reset({
-        confirmReset: true,
-        historyKey: {
-          algorithm: historyKey.algorithm,
-          escrow: sealHistoryKeyEscrow({
-            historyPrivateKey: historyKey.privateKey,
-            recoveryPrivateKey: recoveryKey.privateKey,
-            userId: account.userId,
-            version: 2,
-          }),
-          id: crypto.randomUUID(),
-          publicKey: historyKey.publicKey,
-          version: 2,
-        },
-        recoveryKey: {
-          algorithm: recoveryKey.algorithm,
-          derivationVersion: recoveryKey.derivationVersion,
-          publicKey: recoveryKey.publicKey,
-        },
-      });
+      const recoveryKey = await resetFrom(account.pending, account.userId);
       expect(await deviceState(account.pendingDeviceId)).toEqual({
         activatedAt: expect.any(Date),
         activatedBy: "reset",
@@ -383,6 +406,119 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await account.pending.accountRecovery.status()).toMatchObject({
         historyKeyVersions: [2],
         recoveryKey: { publicKey: recoveryKey.publicKey },
+      });
+    });
+
+    test("a phone on an account that has never had an active phone is active straight away", async () => {
+      const userId = `${prefix}-brand-new`;
+      userIds.push(userId);
+      await prisma.user.create({
+        data: { id: userId, name: "new", email: `${userId}@example.test` },
+      });
+      const send = mock((_userId: string, _alert: { type: string }) => {});
+      const device = await register(userId, `${userId}-phone`, { send });
+      expect(await deviceState(device.id)).toEqual({
+        activatedAt: expect.any(Date),
+        activatedBy: "firstDevice",
+      });
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    test("once every phone is removed, the next one is Pending, sends an alert and can use the phrase", async () => {
+      const account = await createAccount("all-removed-phrase");
+      await removeDevices([account.firstDeviceId, account.pendingDeviceId]);
+      const next = await registerAfterRemoval(account);
+
+      expect(await deviceState(next.deviceId)).toEqual({ activatedAt: null, activatedBy: null });
+      expect(next.send.mock.calls).toEqual([
+        [account.userId, expect.objectContaining({ type: "new-device" })],
+      ]);
+      expect(await next.api.device.status()).toEqual({
+        accountHasActiveDevice: false,
+        activated: false,
+        registered: true,
+      });
+      expect(await rotationRequired(account.groupId)).toBe(false);
+
+      const challenge = await next.api.device.activationChallenge();
+      await next.api.device.activate({
+        answer: openDeviceActivationChallenge({
+          deviceId: next.deviceId,
+          historyPrivateKey: account.historyPrivateKey,
+          sealed: challenge.sealed,
+          userId: account.userId,
+        }),
+      });
+      expect(await deviceState(next.deviceId)).toEqual({
+        activatedAt: expect.any(Date),
+        activatedBy: "phrase",
+      });
+    });
+
+    test("once every phone is removed, the next one can be set up by starting fresh", async () => {
+      const account = await createAccount("all-removed-reset");
+      await removeDevices([account.firstDeviceId, account.pendingDeviceId]);
+      const next = await registerAfterRemoval(account);
+      expect((await deviceState(next.deviceId)).activatedAt).toBeNull();
+
+      await resetFrom(next.api, account.userId);
+      expect(await deviceState(next.deviceId)).toEqual({
+        activatedAt: expect.any(Date),
+        activatedBy: "reset",
+      });
+    });
+
+    test("a Pending phone left on the account doesn't make the next one active", async () => {
+      const account = await createAccount("pending-left");
+      await removeDevices([account.firstDeviceId]);
+      const next = await registerAfterRemoval(account);
+      expect(await deviceState(next.deviceId)).toEqual({ activatedAt: null, activatedBy: null });
+      expect(await next.api.device.status()).toMatchObject({ accountHasActiveDevice: false });
+      expect(await account.pending.device.status()).toMatchObject({
+        accountHasActiveDevice: false,
+      });
+    });
+
+    test("status says whether another phone on the account is active", async () => {
+      const account = await createAccount("other-active");
+      const first = caller(account.userId, account.firstDeviceId);
+      expect(await account.pending.device.status()).toMatchObject({ accountHasActiveDevice: true });
+      expect(await first.device.status()).toMatchObject({ accountHasActiveDevice: false });
+
+      const second = await register(account.userId, `${account.userId}-second`);
+      await prisma.userDevice.update({
+        where: { id: second.id },
+        data: { activatedAt: new Date(), activatedBy: "link" },
+      });
+      expect(await first.device.status()).toMatchObject({ accountHasActiveDevice: true });
+
+      await removeDevices([second.id]);
+      expect(await first.device.status()).toMatchObject({ accountHasActiveDevice: false });
+      await removeDevices([account.firstDeviceId]);
+      expect(await account.pending.device.status()).toMatchObject({
+        accountHasActiveDevice: false,
+      });
+    });
+
+    test("status leaves out the phone a session names but hasn't proved", async () => {
+      const account = await createAccount("unverified-status");
+      const unverified = router.createCaller({
+        cache,
+        db: prisma,
+        clientIp: "127.0.0.1",
+        deviceId: null,
+        unverifiedDeviceId: account.firstDeviceId,
+        emailCodes: null,
+        securityAlerts: null,
+        session: {
+          user: { id: account.userId },
+          session: { id: `${account.userId}-unverified`, createdAt: new Date() },
+        },
+      } as Parameters<typeof router.createCaller>[0]);
+      expect(await unverified.device.status()).toEqual({
+        accountHasActiveDevice: false,
+        activated: false,
+        registered: false,
       });
     });
   },

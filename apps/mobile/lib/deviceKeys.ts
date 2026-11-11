@@ -15,6 +15,7 @@ import { createSecureId } from "./createSecureId.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { deleteStoredHistoryKeys } from "./historyKeys.ts";
 import { readRegisteredDevice, REGISTERED_DEVICE_KEY } from "./registeredDevice.ts";
+import { linkSessionToDevice } from "./sessionLink.ts";
 import { storage } from "./storage.ts";
 
 const DEVICE_ID_KEY = "encryption.device.id";
@@ -319,6 +320,11 @@ const registerCurrentDeviceKey = async (userId: string, generation: number) => {
   if (registered.error) throw registered.error;
   if (generation !== deviceRegistrationGeneration)
     throw new Error("Device registration cancelled.");
+  if (registered.data.sessionLinked === false) {
+    await linkSessionToDevice({ ...context, userId });
+    if (generation !== deviceRegistrationGeneration)
+      throw new Error("Device registration cancelled.");
+  }
 
   return context;
 };

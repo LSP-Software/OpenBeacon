@@ -7,6 +7,12 @@ import { createRoot, type Root } from "test-renderer";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 let deviceActive: boolean | Error = false;
+let recoveryKey: object | null = {};
+let deviceStatus: { data?: { accountHasActiveDevice?: boolean }; isError: boolean } = {
+  data: { accountHasActiveDevice: true },
+  isError: false,
+};
+const refetchDeviceStatus = mock(async () => {});
 let signOutError: Error | null = null;
 const replace = mock((_route: string) => {});
 const signOutOfThisPhone = mock(
@@ -23,7 +29,10 @@ mock.module("expo-router", () => ({
   useFocusEffect: (callback: () => void) => useEffect(() => callback(), [callback]),
 }));
 mock.module("@tanstack/react-query", () => ({
-  useQuery: () => ({ data: { recoveryKey: {} }, isError: false, isPending: false }),
+  useQuery: ({ queryKey }: { queryKey: string }) =>
+    queryKey === "device"
+      ? { ...deviceStatus, isPending: !deviceStatus.data, refetch: refetchDeviceStatus }
+      : { data: { recoveryKey }, isError: false, isPending: false },
 }));
 mock.module("react-native", () => ({ ScrollView: View, View }));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
@@ -34,7 +43,10 @@ mock.module("../components/ui/Button.tsx", () => ({
 }));
 mock.module("../components/ui/Text.tsx", () => ({ Text: View }));
 mock.module("../lib/api.ts", () => ({
-  trpc: { accountRecovery: { status: { queryOptions: () => ({}) } } },
+  trpc: {
+    accountRecovery: { status: { queryOptions: () => ({ queryKey: "recovery" }) } },
+    device: { status: { queryOptions: () => ({ queryKey: "device" }) } },
+  },
 }));
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: { session: { token: "session-token" } } }) },
@@ -64,8 +76,15 @@ const signOut = async () => {
   await act(async () => (button.props as { onPress: () => Promise<void> }).onPress());
 };
 
+const shownText = () => JSON.stringify(root?.container.toJSON() ?? null);
+
+const linkOptions = ["Yes, link with your other phone", "Create a phrase on your other phone"];
+
 beforeEach(() => {
   deviceActive = false;
+  recoveryKey = {};
+  deviceStatus = { data: { accountHasActiveDevice: true }, isError: false };
+  refetchDeviceStatus.mockClear();
   signOutError = null;
   replace.mockClear();
   signOutOfThisPhone.mockClear();
@@ -107,4 +126,39 @@ test("still leaves setup when signing out throws", async () => {
   await render();
   await signOut();
   expect(replace.mock.calls).toEqual([["/"]]);
+});
+
+test("hides linking when no other phone on the account is active", async () => {
+  deviceStatus = { data: { accountHasActiveDevice: false }, isError: false };
+  await render();
+  expect(shownText()).not.toContain("Yes, link with your other phone");
+  expect(shownText()).toContain("None of your other phones are signed in");
+  expect(shownText()).toContain("Enter your recovery phrase");
+  expect(shownText()).toContain("I’ve lost my phrase");
+});
+
+test("with no phrase and no other active phone, only offers starting fresh", async () => {
+  deviceStatus = { data: { accountHasActiveDevice: false }, isError: false };
+  recoveryKey = null;
+  await render();
+  for (const option of linkOptions) expect(shownText()).not.toContain(option);
+  expect(shownText()).not.toContain("Enter your recovery phrase");
+  expect(shownText()).toContain("Start fresh");
+});
+
+test.each([
+  ["another phone is active", { data: { accountHasActiveDevice: true }, isError: false }],
+  ["the check is still loading", { isError: false }],
+  ["the check failed", { isError: true }],
+  ["the server doesn't say", { data: {}, isError: false }],
+])("keeps linking on offer when %s", async (_name, status) => {
+  deviceStatus = status;
+  recoveryKey = null;
+  await render();
+  for (const option of linkOptions) expect(shownText()).toContain(option);
+});
+
+test("checks again for another active phone each time setup is shown", async () => {
+  await render();
+  expect(refetchDeviceStatus).toHaveBeenCalled();
 });

@@ -73,6 +73,16 @@ export const deviceLinkRouter = createTRPCRouter({
         if (device.activatedAt) {
           throw new TRPCError({ code: "CONFLICT", message: "This phone is already set up." });
         }
+        const approvers = await tx.userDevice.count({
+          where: { userId, activatedAt: { not: null }, revokedAt: null },
+        });
+        if (approvers === 0) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "None of your other phones are signed in, so there's nothing to scan this code. Use your recovery phrase or start fresh.",
+          });
+        }
         await tx.deviceLink.deleteMany({ where: { deviceId: ctx.deviceId } });
         const link = await tx.deviceLink.create({
           data: {

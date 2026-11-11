@@ -6,6 +6,7 @@ import type { SecurityAlert } from "@openbeacon/email";
 import { deviceIdHeader, deviceRemovedCause, tryCatch } from "@openbeacon/shared";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { DeviceRemovedError } from "../lib/deviceRemoved.ts";
+import { DeviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { upsertUserDevice } from "../lib/groupEpochs.ts";
 import { linkRequestDevice } from "../lib/requestDevice.ts";
 import { appRouter } from "../root.ts";
@@ -219,6 +220,29 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
     );
     expect((await sentAlerts()).map(({ alert }) => alert.type)).toEqual(["device-removed"]);
   });
+
+  test("asks a session that hasn't proved this phone to prove it before removing it", async () => {
+    const account = await createAccount();
+    const unverified = appRouter.createCaller({
+      cache,
+      db: prisma,
+      emailCodes: null,
+      securityAlerts,
+      clientIp: `ip-${account.userId}`,
+      deviceId: null,
+      unverifiedDeviceId: account.thisPhone.id,
+      session: {
+        user: { id: account.userId },
+        session: { id: account.sessions.unlinked, createdAt: new Date() },
+      },
+    } as Parameters<typeof appRouter.createCaller>[0]);
+
+    const result = await tryCatch(unverified.account.removeThisDevice());
+
+    expect(result.error).toMatchObject({ code: "FORBIDDEN" });
+    expect((result.error as { cause?: unknown }).cause).toBeInstanceOf(DeviceUnverifiedError);
+    expect(await revokedAt(account.thisPhone.id)).toBeNull();
+  });
 });
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("a removed device", () => {
@@ -323,7 +347,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("a removed device
         deviceId: account.lostPhone.id,
         session: { id: other.sessions.current, userId: other.userId },
       }),
-    ).toEqual({ removed: false, deviceId: null });
+    ).toEqual({ removed: false, deviceId: null, unverifiedDeviceId: null });
     expect(await sessionIds(other.userId)).toHaveLength(3);
   });
 });

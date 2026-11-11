@@ -16,7 +16,7 @@ Without it, an account with no phrase has nothing a new device could be given, s
 ## Consequences
 
 - An account without a phrase holds History key versions with no Recovery escrow. Restore never offers them, and the server only returns versions that have an escrow. A Device link (below) is the only way such a version reaches another device.
-- Two devices of an account created before this can race to create v1. The server takes the first, and the other carries on with Device wraps and Personal data v2 until it gets the key.
+- Two devices of an account created before this can race to create v1. The server takes the first, and the other carries on with Device wraps and can't change Personal data until it gets the key.
 - Setting up a phrase needs a device that holds every History key version. A device that lost the race, or a new device that hasn't been given the key, can't set one up.
 - Epoch creation keeps requiring a History wrap for each member's current History key. Members whose accounts haven't got v1 yet have no current key, so they get no History wrap until they do.
 
@@ -30,4 +30,6 @@ What this doesn't cover:
 
 - The new device trusts the server for the approver's public key until devices can be verified (OPE-213). A server that swapped it could only hand over keys that still have to match the published History public keys, and it can't learn the PSK.
 - The server activates the new device when the handover is stored, before the new device has opened it. If the new device rejects it, it's active without the History key, and the user can Restore with their phrase.
+- Only a session linked to an Active device can approve a Device link. A session is linked when it registers its device as new or opens a challenge sealed to the device's Device key (a Session link), so knowing the password and an Active device's ID isn't enough to approve a Pending device.
+- A Device link needs another Active device. Only an account's first device ever is active straight away, so once every device has been removed, the next one is Pending and can only be set up by Restore or a Recovery reset. The app hides the QR option then, and `deviceLink.create` refuses.
 - A Device link doesn't rotate anything. The new device can read every Epoch that has a History wrap for the versions it receives.

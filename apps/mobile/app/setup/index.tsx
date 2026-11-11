@@ -15,15 +15,19 @@ import { signOutOfThisPhone } from "../../lib/signOut.ts";
 const SetUpPhoneScreen = () => {
   const { data: session } = authClient.useSession();
   const status = useQuery(trpc.accountRecovery.status.queryOptions());
+  const deviceStatus = useQuery(trpc.device.status.queryOptions());
+  const noOtherPhone = deviceStatus.data?.accountHasActiveDevice === false;
   const [signingOut, setSigningOut] = useState(false);
+  const refetchDeviceStatus = deviceStatus.refetch;
 
   useFocusEffect(
     useCallback(() => {
+      void refetchDeviceStatus();
       void (async () => {
         const active = await tryCatch(isThisDeviceActive());
         if (active.data === true) router.replace("/");
       })();
-    }, []),
+    }, [refetchDeviceStatus]),
   );
 
   const signOut = async () => {
@@ -66,7 +70,14 @@ const SetUpPhoneScreen = () => {
           </View>
         )}
 
-        {status.data && (
+        {status.data && noOtherPhone && (
+          <Text className="text-muted-foreground text-base leading-6">
+            None of your other phones are signed in, so you’ll need your recovery phrase or to start
+            fresh.
+          </Text>
+        )}
+
+        {status.data && !noOtherPhone && (
           <View className="gap-4">
             <Text className="text-foreground text-xl font-semibold">
               Do you have another phone signed in?
@@ -104,7 +115,15 @@ const SetUpPhoneScreen = () => {
           </View>
         )}
 
-        {status.data && !status.data.recoveryKey && (
+        {status.data && !status.data.recoveryKey && noOtherPhone && (
+          <Link href={{ pathname: "/account/recovery-reset", params: { setup: "true" } }} asChild>
+            <Button variant="outline">
+              <Text>Start fresh</Text>
+            </Button>
+          </Link>
+        )}
+
+        {status.data && !status.data.recoveryKey && !noOtherPhone && (
           <View className="gap-4">
             <Text className="text-muted-foreground text-base leading-6">
               Your account doesn’t have a recovery phrase yet. Create one on a phone you still have,

@@ -19,5 +19,6 @@ export const runPendingDeviceCleanup = async () => {
         ],
       },
     }),
+    services.db.deviceChallenge.deleteMany({ where: { expiresAt: { lt: now } } }),
   ]);
 };

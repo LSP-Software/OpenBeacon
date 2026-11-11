@@ -29,11 +29,11 @@ _Avoid_: Account wrap, backup wrap, recovery wrap
 ### Devices
 
 **Active device**:
-A device that has been set up, so it's in its account's Epochs and can send and see locations. A device is active as soon as it registers if the account has no Active device that hasn't been removed.
+A device that has been set up, so it's in its account's Epochs and can send and see locations. A device is active as soon as it registers only if its account has never had an Active device, removed ones included.
 _Avoid_: Approved device, trusted device, verified device
 
 **Pending device**:
-A device signed in to an account that already has an Active device, and not yet set up. It gets no Device wraps, can't upload or see locations, and can't create a History key. The server deletes it if it isn't set up within 7 days.
+A device signed in to an account that has had an Active device before, and not yet set up. That includes the next device after every device has been removed. It gets no Device wraps, can't upload or see locations, and can't create a History key. The server deletes it if it isn't set up within 7 days.
 _Avoid_: Unapproved device, untrusted device, new device
 
 **Activation**:
@@ -43,6 +43,10 @@ _Avoid_: Approval, verification, enrolment
 **Device link**:
 A Pending device getting every History key version from an Active device of the same account, by showing a QR code that the Active device scans. The QR code carries the new device's Device key and a secret that never reaches the server. Approving it is the device's Activation. A code expires after 10 minutes.
 _Avoid_: Pairing, sync, transfer
+
+**Session link**:
+A Session proving it runs on a device by opening a challenge the server sealed to that device's Device key. A Session that registers a new device is linked to it straight away. Until it's linked, a Session can't act as any device, even one it names.
+_Avoid_: Device verification, session binding, pairing
 
 ### Recovery
 

@@ -51,8 +51,12 @@ const link = async (account: Awaited<ReturnType<typeof createAccount>>, deviceId
     deviceId,
     session: { id: account.sessionId, userId: account.userId },
   });
-  return result.removed ? "removed" : result.deviceId;
+  if (result.removed) return "removed";
+  return result.unverifiedDeviceId ? `unverified:${result.unverifiedDeviceId}` : result.deviceId;
 };
+
+const linkSession = (account: Awaited<ReturnType<typeof createAccount>>) =>
+  prisma.session.update({ where: { id: account.sessionId }, data: { deviceId: account.deviceId } });
 
 afterAll(async () => {
   if (process.env["OPENBEACON_INTEGRATION"] !== "1") return;
@@ -61,13 +65,22 @@ afterAll(async () => {
 });
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("the device header", () => {
-  test("links the session to the device", async () => {
+  test("never links a session by itself, and marks the phone it names as unverified", async () => {
     const account = await createAccount();
 
-    expect(await link(account, account.deviceId)).toBe(account.deviceId);
+    expect(
+      await Promise.all([link(account, account.deviceId), link(account, account.deviceId)]),
+    ).toEqual([`unverified:${account.deviceId}`, `unverified:${account.deviceId}`]);
 
     const session = await prisma.session.findUniqueOrThrow({ where: { id: account.sessionId } });
-    expect(session.deviceId).toBe(account.deviceId);
+    expect(session.deviceId).toBeNull();
+  });
+
+  test("gives a linked session its device", async () => {
+    const account = await createAccount();
+    await linkSession(account);
+
+    expect(await link(account, account.deviceId)).toBe(account.deviceId);
   });
 
   test("keeps a session's existing device and ignores another one it names", async () => {
@@ -82,7 +95,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("the device heade
         icon: "tablet",
       },
     });
-    await link(account, account.deviceId);
+    await linkSession(account);
 
     expect(await link(account, other.id)).toBeNull();
     expect(await link(account, account.deviceId)).toBe(account.deviceId);
@@ -95,19 +108,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("the device heade
     expect(await prisma.session.findUnique({ where: { id: account.sessionId } })).toBeNull();
   });
 
-  test("gives the device to every request when a new session sends several at once", async () => {
-    const account = await createAccount();
-
-    expect(
-      await Promise.all([link(account, account.deviceId), link(account, account.deviceId)]),
-    ).toEqual([account.deviceId, account.deviceId]);
-  });
-
   test("updates last active at most every 5 minutes", async () => {
     const account = await createAccount();
     const lastSeen = async () =>
       (await prisma.userDevice.findUniqueOrThrow({ where: { id: account.deviceId } })).lastSeenAt;
     const recent = await lastSeen();
+    await linkSession(account);
 
     await link(account, account.deviceId);
     expect(await lastSeen()).toEqual(recent);
@@ -118,6 +124,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("the device heade
     });
     await link(account, account.deviceId);
     expect((await lastSeen()).getTime()).toBeGreaterThan(minutesAgo(1).getTime());
+  });
+
+  test("doesn't mark a phone as active for a session it hasn't proved", async () => {
+    const account = await createAccount();
+    await prisma.userDevice.update({
+      where: { id: account.deviceId },
+      data: { lastSeenAt: minutesAgo(6) },
+    });
+
+    await link(account, account.deviceId);
+
+    const device = await prisma.userDevice.findUniqueOrThrow({ where: { id: account.deviceId } });
+    expect(device.lastSeenAt.getTime()).toBeLessThan(minutesAgo(5).getTime());
   });
 
   test("ignores another account's device and unknown ids", async () => {

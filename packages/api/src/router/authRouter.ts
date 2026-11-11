@@ -37,12 +37,18 @@ export const authRouter = createTRPCRouter({
       if (input.expectedUserId !== ctx.session.user.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "The active account has changed." });
       }
-      return upsertUserDevice({
+      const device = await upsertUserDevice({
         db: ctx.db,
         input,
         securityAlerts: ctx.securityAlerts,
+        sessionId: ctx.session.session.id,
         userId: ctx.session.user.id,
       });
+      const session = await ctx.db.session.findUnique({
+        select: { deviceId: true },
+        where: { id: ctx.session.session.id },
+      });
+      return { ...device, sessionLinked: session?.deviceId === device.id };
     }),
   listMyDeviceKeys: protectedProcedure.query(async ({ ctx }) =>
     ctx.db.userDevice.findMany({

@@ -5,6 +5,7 @@ import {
   deviceIdHeader,
   devicePendingCause,
   deviceRemovedCause,
+  deviceUnverifiedCause,
   tryCatch,
 } from "@openbeacon/shared";
 import { initTRPC } from "@trpc/server";
@@ -12,6 +13,7 @@ import superjson from "superjson";
 import { ZodError, z } from "zod";
 import { DevicePendingError } from "./lib/deviceActivation.ts";
 import { DeviceRemovedError, deviceRemovedError } from "./lib/deviceRemoved.ts";
+import { DeviceUnverifiedError } from "./lib/deviceUnverified.ts";
 import { linkRequestDevice } from "./lib/requestDevice.ts";
 import { RateLimitContextError } from "./middlewares/rateLimit.ts";
 
@@ -38,6 +40,7 @@ export const createTRPCContext = async (opts: {
       )
     : null;
   if (device?.data?.removed) throw deviceRemovedError();
+  const requestDevice = device?.data?.removed === false ? device.data : null;
 
   return {
     cache: opts.cache,
@@ -45,7 +48,8 @@ export const createTRPCContext = async (opts: {
     emailCodes,
     securityAlerts,
     session,
-    deviceId: device?.data?.removed === false ? device.data.deviceId : null,
+    deviceId: requestDevice?.deviceId ?? null,
+    unverifiedDeviceId: requestDevice?.unverifiedDeviceId ?? null,
     serverVersion: opts.serverVersion,
     serverName: opts.serverName,
     selfHosted: opts.selfHosted,
@@ -102,7 +106,9 @@ export const createTRPCComponents = () => {
                 ? deviceRemovedCause
                 : error.cause instanceof DevicePendingError
                   ? devicePendingCause
-                  : null,
+                  : error.cause instanceof DeviceUnverifiedError
+                    ? deviceUnverifiedCause
+                    : null,
             zodError:
               error.cause instanceof ZodError
                 ? z.flattenError(error.cause as ZodError<Record<string, unknown>>)

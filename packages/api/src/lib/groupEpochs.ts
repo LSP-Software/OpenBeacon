@@ -561,6 +561,7 @@ export const upsertUserDevice = async ({
   db,
   input,
   securityAlerts,
+  sessionId,
   userId,
 }: {
   db: Pick<PrismaClient, "$transaction" | "userDevice">;
@@ -574,6 +575,7 @@ export const upsertUserDevice = async ({
     icon?: z.infer<typeof deviceIconSchema> | undefined;
   };
   securityAlerts: SecurityAlerts | null;
+  sessionId: string | null;
   userId: string;
 }) => {
   if (input.algorithm !== DEVICE_KEY_ALGORITHM) {
@@ -618,9 +620,7 @@ export const upsertUserDevice = async ({
     db.$transaction(async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`);
       const pending =
-        (await tx.userDevice.count({
-          where: { userId, activatedAt: { not: null }, revokedAt: null },
-        })) > 0;
+        (await tx.userDevice.count({ where: { userId, activatedAt: { not: null } } })) > 0;
       const device = await tx.userDevice.create({
         data: {
           id: input.deviceId,
@@ -635,6 +635,12 @@ export const upsertUserDevice = async ({
           userId,
         },
       });
+      if (sessionId) {
+        await tx.session.updateMany({
+          data: { deviceId: device.id },
+          where: { id: sessionId, userId },
+        });
+      }
       if (!pending) {
         await tx.group.updateMany({
           data: { epochRotationRequired: true },

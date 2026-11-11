@@ -279,6 +279,23 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
     });
 
+    test("a Pending device can't make a link when no other phone on the account is active", async () => {
+      const account = await createAccount("no-approver");
+      await prisma.userDevice.update({
+        where: { id: account.active.deviceId },
+        data: { revokedAt: new Date() },
+      });
+      const other = await register(account.userId, "other-pending");
+
+      await expect(account.pending.api.deviceLink.create()).rejects.toMatchObject({
+        code: "PRECONDITION_FAILED",
+      });
+      await expect(other.api.deviceLink.create()).rejects.toMatchObject({
+        code: "PRECONDITION_FAILED",
+      });
+      expect(await prisma.deviceLink.count({ where: { userId: account.userId } })).toBe(0);
+    });
+
     test("declining removes the Pending device and its link", async () => {
       const account = await createAccount("decline");
       const { linkId } = await account.pending.api.deviceLink.create();
@@ -306,7 +323,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         deviceId: account.active.deviceId,
         session: { id: pendingSessionId, userId: account.userId },
       });
-      expect(named).toEqual({ removed: false, deviceId: null });
+      expect(named).toEqual({ removed: false, deviceId: null, unverifiedDeviceId: null });
       const spoofed = caller(
         account.userId,
         named.removed ? null : named.deviceId,

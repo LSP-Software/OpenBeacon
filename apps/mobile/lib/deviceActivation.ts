@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration, getDeviceActiveKey } from "./deviceKeys.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
+import { linkSessionToDevice } from "./sessionLink.ts";
 import { storage } from "./storage.ts";
 
 export const ACTIVATION_KEY_MISSING_MESSAGE =
@@ -16,7 +17,9 @@ export const markThisDeviceActive = (deviceId: string) => {
 export const isThisDeviceActive = async () => {
   const device = await ensureDeviceKeyRegistration();
   if (storage.getBoolean(getDeviceActiveKey(device.deviceId))) return true;
-  const { activated } = await trpcClient.device.status.query();
+  const status = await trpcClient.device.status.query();
+  if (!status.registered) await linkSessionToDevice(device);
+  const { activated } = status.registered ? status : await trpcClient.device.status.query();
   if (activated) markThisDeviceActive(device.deviceId);
   return activated;
 };

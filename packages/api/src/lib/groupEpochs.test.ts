@@ -99,7 +99,7 @@ describe("group epoch helpers", () => {
     });
   });
 
-  test("a device on an account that already has an active device is Pending", async () => {
+  test("a device on an account that has ever had an active device is Pending", async () => {
     const create = mock(async ({ data }: { data: Record<string, unknown> }) => data);
     const updateMany = mock(async () => ({ count: 1 }));
     const count = mock(async (_args: unknown) => 1);
@@ -128,7 +128,7 @@ describe("group epoch helpers", () => {
     });
 
     expect(count).toHaveBeenCalledWith({
-      where: { userId: "user-a", activatedAt: { not: null }, revokedAt: null },
+      where: { userId: "user-a", activatedAt: { not: null } },
     });
     expect(create.mock.calls[0]?.[0].data).toMatchObject({ activatedAt: null, activatedBy: null });
     expect(updateMany).not.toHaveBeenCalled();

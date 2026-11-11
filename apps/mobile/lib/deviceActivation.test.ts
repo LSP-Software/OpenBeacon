@@ -4,6 +4,8 @@ const navigations: unknown[] = [];
 const storageValues = new Map<string, boolean>();
 let statusQueries = 0;
 let serverActivated = false;
+let sessionLinked = true;
+const links: string[] = [];
 
 mock.module("expo-router", () => ({
   router: {
@@ -19,7 +21,7 @@ mock.module("./api.ts", () => ({
       status: {
         query: async () => {
           statusQueries += 1;
-          return { activated: serverActivated };
+          return { activated: sessionLinked && serverActivated, registered: sessionLinked };
         },
       },
     },
@@ -29,6 +31,13 @@ mock.module("./api.ts", () => ({
 mock.module("./deviceKeys.ts", () => ({
   ensureDeviceKeyRegistration: async () => ({ deviceId: "device-1", userId: "user-1" }),
   getDeviceActiveKey: (deviceId: string) => `encryption.device.active.${deviceId}`,
+}));
+
+mock.module("./sessionLink.ts", () => ({
+  linkSessionToDevice: async ({ deviceId }: { deviceId: string }) => {
+    links.push(deviceId);
+    sessionLinked = true;
+  },
 }));
 
 mock.module("./historyKeys.ts", () => ({ getStoredHistoryKey: async () => null }));
@@ -56,6 +65,8 @@ describe("device activation", () => {
     storageValues.clear();
     statusQueries = 0;
     serverActivated = false;
+    sessionLinked = true;
+    links.length = 0;
   });
 
   afterEach(() => {
@@ -87,5 +98,15 @@ describe("device activation", () => {
 
     expect(statusQueries).toBe(2);
     expect(storageValues.get("encryption.device.active.device-1")).toBe(true);
+  });
+
+  test("a sign-in that hasn't proved this phone yet proves it before asking again", async () => {
+    serverActivated = true;
+    sessionLinked = false;
+
+    expect(await isThisDeviceActive()).toBe(true);
+
+    expect(links).toEqual(["device-1"]);
+    expect(statusQueries).toBe(2);
   });
 });

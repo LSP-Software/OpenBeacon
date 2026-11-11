@@ -16,7 +16,12 @@ let ownerQueryGate: Promise<void> | null = null;
 let onOwnerQuery: (() => void) | null = null;
 let ownerQueries = 0;
 
-const registerDeviceKeyMock = mock(async (_input: { expectedUserId: string }) => ({}));
+const registerDeviceKeyMock = mock(
+  async (_input: { expectedUserId: string }): Promise<{ sessionLinked?: boolean }> => ({}),
+);
+const sessionChallengeMock = mock(async (_input: { deviceId: string }) => ({
+  linked: true as const,
+}));
 const deleteItemAsyncMock = mock(async (key: string) => {
   secureStoreValues.delete(key);
 });
@@ -61,6 +66,10 @@ mock.module("./api.ts", () => ({
     },
   },
   trpcClient: {
+    device: {
+      linkSession: { mutate: async () => ({ linked: true }) },
+      sessionChallenge: { mutate: sessionChallengeMock },
+    },
     auth: {
       deviceKeyContext: {
         query: async () => {
@@ -108,6 +117,8 @@ describe("device key registration", () => {
     deleteItemAsyncMock.mockClear();
     registerDeviceKeyMock.mockReset();
     registerDeviceKeyMock.mockImplementation(async () => ({}));
+    sessionChallengeMock.mockReset();
+    sessionChallengeMock.mockImplementation(async () => ({ linked: true as const }));
     setItemAsyncMock.mockClear();
   });
 
@@ -511,5 +522,35 @@ describe("device key registration", () => {
     if (!deviceId) throw new Error("The device id was not kept.");
     expect(secureStoreValues.has("encryption.history.user-a.1")).toBe(true);
     expect((await ensureDeviceKeyRegistration()).deviceId).toBe(deviceId);
+  });
+
+  test("a phone that was already registered proves its key before the registration is kept", async () => {
+    const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
+    registerDeviceKeyMock.mockImplementation(async () => ({ sessionLinked: false }));
+
+    const device = await ensureDeviceKeyRegistration();
+
+    expect(sessionChallengeMock).toHaveBeenCalledTimes(1);
+    expect(sessionChallengeMock).toHaveBeenCalledWith({ deviceId: device.deviceId });
+    expect(storageValues.has("encryption.device.registered")).toBe(true);
+  });
+
+  test("a failed proof keeps this phone's keys and isn't remembered", async () => {
+    const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
+    secureStoreValues.set("encryption.history.user-a.1", "history-key-1");
+    registerDeviceKeyMock.mockImplementation(async () => ({ sessionLinked: false }));
+    sessionChallengeMock.mockImplementationOnce(async () => {
+      throw new Error("offline");
+    });
+
+    await expect(ensureDeviceKeyRegistration()).rejects.toThrow("offline");
+
+    const deviceId = storageValues.get("encryption.device.id.user-a");
+    if (!deviceId) throw new Error("The device id was not kept.");
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(true);
+    expect(secureStoreValues.has("encryption.history.user-a.1")).toBe(true);
+    expect(storageValues.has("encryption.device.registered")).toBe(false);
+    expect((await ensureDeviceKeyRegistration()).deviceId).toBe(deviceId);
+    expect(sessionChallengeMock).toHaveBeenCalledTimes(2);
   });
 });
