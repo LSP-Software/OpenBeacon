@@ -74,15 +74,28 @@ export default function HomeScreen() {
         return;
       }
 
-      void (async () => {
+      let cancelled = false;
+      let retry: ReturnType<typeof setTimeout> | undefined;
+      const route = async () => {
         const savedLink = await tryCatch(ensureDeviceKeyRegistration().then(readSavedDeviceLink));
+        if (cancelled) return;
         if (savedLink.data) {
           router.replace("/setup/link");
           return;
         }
         const active = await tryCatch(isThisDeviceActive());
-        router.replace(active.data === false ? "/setup" : "/(tabs)/map");
-      })();
+        if (cancelled) return;
+        if (active.error) {
+          retry = setTimeout(() => void route(), 5_000);
+          return;
+        }
+        router.replace(active.data ? "/(tabs)/map" : "/setup");
+      };
+      void route();
+      return () => {
+        cancelled = true;
+        clearTimeout(retry);
+      };
     }, [rootNavigationState?.key, session, isPending]),
   );
 

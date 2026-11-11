@@ -1,4 +1,4 @@
-import { afterEach, expect, mock, test } from "bun:test";
+import { afterEach, expect, jest, mock, test } from "bun:test";
 import React, { act, useEffect } from "react";
 import { createRoot, type Root } from "test-renderer";
 
@@ -15,10 +15,8 @@ const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("expo-router", () => ({
   router: { replace, push: () => {} },
   useRootNavigationState: () => ({ key: "root" }),
-  useFocusEffect: (callback: () => void) =>
-    useEffect(() => {
-      if (focused) callback();
-    }, [callback, focused]),
+  useFocusEffect: (callback: () => (() => void) | undefined) =>
+    useEffect(() => (focused ? callback() : undefined), [callback, focused]),
 }));
 mock.module("react-native", () => ({
   Animated: {
@@ -90,10 +88,38 @@ test("a Pending device opens setup instead of the map", async () => {
   expect(replace.mock.calls).toEqual([["/setup"]]);
 });
 
-test("opens the map when the device status can't be checked", async () => {
-  deviceActive = new Error("offline");
-  await renderSignedIn();
-  expect(replace.mock.calls).toEqual([["/(tabs)/map"]]);
+test("keeps loading and checks again when the device status can't be checked", async () => {
+  jest.useFakeTimers();
+  try {
+    deviceActive = new Error("offline");
+    await renderSignedIn();
+    expect(replace).not.toHaveBeenCalled();
+
+    deviceActive = false;
+    await act(async () => {
+      jest.advanceTimersByTime(5_000);
+    });
+    expect(replace.mock.calls).toEqual([["/setup"]]);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test("stops checking once the home screen loses focus", async () => {
+  jest.useFakeTimers();
+  try {
+    deviceActive = new Error("offline");
+    await renderSignedIn();
+    focused = false;
+    await act(() => root?.render(<HomeScreen />));
+    deviceActive = true;
+    await act(async () => {
+      jest.advanceTimersByTime(5_000);
+    });
+    expect(replace).not.toHaveBeenCalled();
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 test("a Pending device with a saved setup code goes back to finish linking", async () => {

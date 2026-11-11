@@ -18,6 +18,7 @@ import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
+import { activateWithHistoryKey, isThisDeviceActive } from "../../lib/deviceActivation.ts";
 import { invalidCodeMessage } from "../../lib/emailCodes.ts";
 import { protectHistory } from "../../lib/protectHistory.ts";
 import { isResetConfirmed } from "../../lib/isResetConfirmed.ts";
@@ -132,6 +133,10 @@ const RecoveryPhraseResetScreen = () => {
       return;
     }
     const { device } = result.data;
+    const active = await tryCatch(isThisDeviceActive());
+    if (active.data === false && result.data.status === "reset") {
+      await tryCatch(activateWithHistoryKey());
+    }
     void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });
     void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", device.userId] });
     void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });

@@ -4,10 +4,12 @@ import { useEffect } from "react";
 import { AppState } from "react-native";
 import { trpcClient } from "../lib/api.ts";
 import { authClient } from "../lib/auth-client.ts";
+import { useThisDeviceState } from "../lib/deviceActivation.ts";
 
 export const DeletionCancellationNotice = () => {
   const { data: session } = authClient.useSession();
-  const userId = session?.user.id;
+  const thisDeviceActive = useThisDeviceState() === "active";
+  const userId = thisDeviceActive ? session?.user.id : undefined;
 
   useEffect(() => {
     if (!userId) return;

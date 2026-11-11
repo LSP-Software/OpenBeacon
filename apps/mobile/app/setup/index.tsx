@@ -1,12 +1,13 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Link, router, useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
+import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { isThisDeviceActive } from "../../lib/deviceActivation.ts";
@@ -17,7 +18,8 @@ const SetUpPhoneScreen = () => {
   const status = useQuery(trpc.accountRecovery.status.queryOptions());
   const deviceStatus = useQuery(trpc.device.status.queryOptions());
   const noOtherPhone = deviceStatus.data?.accountHasActiveDevice === false;
-  const [signingOut, setSigningOut] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const cancellingRef = useRef(false);
   const refetchDeviceStatus = deviceStatus.refetch;
 
   useFocusEffect(
@@ -30,18 +32,47 @@ const SetUpPhoneScreen = () => {
     }, [refetchDeviceStatus]),
   );
 
-  const signOut = async () => {
-    setSigningOut(true);
-    await tryCatch(
+  const leaveSetup = async ({ removeThisPhone }: { removeThisPhone: boolean }) => {
+    if (cancellingRef.current) return;
+    cancellingRef.current = true;
+    setCancelling(true);
+    const result = await tryCatch(
       signOutOfThisPhone({
         onSigningOut: () => {},
-        removeThisPhone: false,
+        removeThisPhone,
         sessionTokenToRevoke: session?.session?.token ?? null,
       }),
     );
-    setSigningOut(false);
+    cancellingRef.current = false;
+    setCancelling(false);
+    if (result.data?.status === "serverUnreachable") {
+      Alert.alert(
+        "Couldn’t reach the server",
+        "This phone may not have been removed. Try again, or sign out anyway. If you sign out, this phone will be removed automatically within 7 days.",
+        [
+          { text: "Back", style: "cancel" },
+          { text: "Sign out anyway", onPress: () => leaveSetup({ removeThisPhone: false }) },
+          { text: "Try again", onPress: () => leaveSetup({ removeThisPhone: true }) },
+        ],
+      );
+      return;
+    }
     router.replace("/");
   };
+
+  const confirmCancel = () =>
+    Alert.alert(
+      "Cancel setup?",
+      "This phone will be removed from your account and signed out. You can sign in again later to set it up.",
+      [
+        { text: "Keep setting up", style: "cancel" },
+        {
+          text: "Cancel and remove",
+          style: "destructive",
+          onPress: () => leaveSetup({ removeThisPhone: true }),
+        },
+      ],
+    );
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -142,8 +173,8 @@ const SetUpPhoneScreen = () => {
           </View>
         )}
 
-        <Button variant="outline" onPress={signOut} disabled={signingOut}>
-          <Text>{signingOut ? "Signing out…" : "Sign out"}</Text>
+        <Button variant="outline" onPress={confirmCancel} disabled={cancelling}>
+          <Text>{cancelling ? "Cancelling…" : "Cancel and remove this phone"}</Text>
         </Button>
       </ScrollView>
     </SafeAreaView>

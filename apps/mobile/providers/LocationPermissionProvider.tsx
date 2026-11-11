@@ -13,6 +13,7 @@ import {
 } from "../components/ui/Dialog.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
+import { useThisDeviceState } from "../lib/deviceActivation.ts";
 import {
   getLocationPermissionState,
   type LocationPermissionState,
@@ -31,6 +32,8 @@ const LocationPermissionContext = createContext<{
 
 export const LocationPermissionProvider = ({ children }: { children: React.ReactNode }) => {
   const { data: session, isPending } = authClient.useSession();
+  const thisDeviceActive = useThisDeviceState() === "active";
+  const signedIn = Boolean(session) && thisDeviceActive;
   const [permissionState, setPermissionState] = useState<LocationPermissionState | null>(null);
   const [isLaunchingLocationSetup, setIsLaunchingLocationSetup] = useState(true);
   const [isBackgroundPermissionDialogOpen, setIsBackgroundPermissionDialogOpen] = useState(false);
@@ -54,7 +57,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
   );
   const syncLocationPermissions = useCallback(
     async (flow: "refresh" | "launchRequest"): Promise<LocationPermissionState | null> => {
-      if (!session) return null;
+      if (!signedIn) return null;
       while (permissionCheckRef.current) {
         if (flow === "refresh") return null;
         await permissionCheckRef.current;
@@ -87,7 +90,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
 
       return permissionResult.data;
     },
-    [session, shouldOpenBackgroundPermissionDialog],
+    [signedIn, shouldOpenBackgroundPermissionDialog],
   );
 
   useEffect(() => {
@@ -95,7 +98,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
       return;
     }
 
-    if (!session) {
+    if (!signedIn) {
       setPermissionState(null);
       setIsLaunchingLocationSetup(true);
       return;
@@ -113,7 +116,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
     return () => {
       cancelled = true;
     };
-  }, [isPending, session, syncLocationPermissions]);
+  }, [isPending, signedIn, syncLocationPermissions]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {

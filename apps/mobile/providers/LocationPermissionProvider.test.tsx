@@ -84,6 +84,11 @@ mock.module("../lib/auth-client.ts", () => ({
   },
 }));
 
+let thisDeviceState: "unregistered" | "registered" | "active" = "active";
+mock.module("../lib/deviceActivation.ts", () => ({
+  useThisDeviceState: () => thisDeviceState,
+}));
+
 mock.module("../lib/locationPermissions.ts", () => ({
   getLocationPermissionState: async () => {
     refreshCalls += 1;
@@ -208,6 +213,7 @@ describe("LocationPermissionProvider", () => {
       missing: [],
     });
     appStateListener = null;
+    thisDeviceState = "active";
   });
 
   afterEach(async () => {
@@ -223,6 +229,28 @@ describe("LocationPermissionProvider", () => {
     expect(notificationRequestCalls).toBe(1);
     expect(permissionRequestOrder).toEqual(["notification", "location"]);
     expect(refreshCalls).toBe(0);
+  });
+
+  test("doesn't ask for permissions until this phone is set up", async () => {
+    thisDeviceState = "registered";
+    const root = await renderProvider();
+    appStateListener?.("background");
+    appStateListener?.("active");
+    await flushEffects();
+
+    expect(notificationRequestCalls).toBe(0);
+    expect(launchRequestCalls).toBe(0);
+    expect(refreshCalls).toBe(0);
+
+    thisDeviceState = "active";
+    await act(async () => {
+      root.render(<LocationPermissionProvider>{null}</LocationPermissionProvider>);
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(notificationRequestCalls).toBe(1);
+    expect(launchRequestCalls).toBe(1);
   });
 
   test("runs launch setup when the app resumes during the notification prompt", async () => {

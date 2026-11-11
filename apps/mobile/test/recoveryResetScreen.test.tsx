@@ -19,6 +19,16 @@ const resetRecoveryPhrase = mock(async (): Promise<ResetResult> => ({
   device: { userId: "user-1" },
 }));
 const protectHistory = mock(async () => {});
+let serverActive = true;
+const steps: string[] = [];
+const isThisDeviceActive = mock(async () => {
+  steps.push("checkActive");
+  return serverActive;
+});
+const activateWithHistoryKey = mock(async () => {
+  steps.push("activate");
+  serverActive = true;
+});
 
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("expo-router", () => ({
@@ -71,6 +81,7 @@ mock.module("../lib/api.ts", () => ({
 }));
 mock.module("../lib/emailCodes.ts", () => ({ invalidCodeMessage: "Invalid code" }));
 mock.module("../lib/protectHistory.ts", () => ({ protectHistory }));
+mock.module("../lib/deviceActivation.ts", () => ({ activateWithHistoryKey, isThisDeviceActive }));
 mock.module("../lib/recovery.ts", () => ({
   requestRecoveryResetCode: async () => ({ status: "sent", email: "a@b.c" }),
   resetRecoveryPhrase,
@@ -118,6 +129,10 @@ beforeEach(() => {
   gestureEnabled = undefined;
   resetRecoveryPhrase.mockClear();
   protectHistory.mockClear();
+  serverActive = true;
+  steps.length = 0;
+  isThisDeviceActive.mockClear();
+  activateWithHistoryKey.mockClear();
 });
 
 afterEach(async () => {
@@ -182,4 +197,39 @@ test("a phrase this phone couldn't save links to restoring it in place of this s
     await act(async () => root?.unmount());
     root = null;
   }
+});
+
+test("a reset picks up that the server set this phone up before protecting history", async () => {
+  searchParams = { setup: "true" };
+  protectHistory.mockImplementationOnce(async () => {
+    steps.push("protect");
+  });
+  const { onConfirm } = await reachPhraseStep();
+  await act(async () => onConfirm(new Uint8Array(16)));
+  expect(steps).toEqual(["checkActive", "protect"]);
+  expect(activateWithHistoryKey).not.toHaveBeenCalled();
+});
+
+test("re-entering the account's current phrase sets this phone up with it before protecting history", async () => {
+  searchParams = { setup: "true" };
+  serverActive = false;
+  protectHistory.mockImplementationOnce(async () => {
+    steps.push("protect");
+  });
+  const { onConfirm } = await reachPhraseStep();
+  await act(async () => onConfirm(new Uint8Array(16)));
+  expect(steps).toEqual(["checkActive", "activate", "protect"]);
+});
+
+test("a phrase this phone couldn't save doesn't try to set the phone up with it", async () => {
+  searchParams = { setup: "true" };
+  serverActive = false;
+  resetRecoveryPhrase.mockImplementationOnce(async () => ({
+    status: "unsaved",
+    device: { userId: "user-1" },
+  }));
+  const { onConfirm } = await reachPhraseStep();
+  await act(async () => onConfirm(new Uint8Array(16)));
+  expect(isThisDeviceActive).toHaveBeenCalledTimes(1);
+  expect(activateWithHistoryKey).not.toHaveBeenCalled();
 });

@@ -65,16 +65,27 @@ mock.module("./savedDeviceLink.ts", () => ({
   },
 }));
 
+let registeredDeviceId: string | null = "device-1";
+mock.module("./registeredDevice.ts", () => ({
+  readRegisteredDeviceNow: () =>
+    registeredDeviceId
+      ? { deviceId: registeredDeviceId, publicKey: "key", userId: "user-1" }
+      : null,
+}));
+
 mock.module("./storage.ts", () => ({
   storage: {
     getBoolean: (key: string) => storageValues.get(key),
+    remove: (key: string) => {
+      storageValues.delete(key);
+    },
     set: (key: string, value: boolean) => {
       storageValues.set(key, value);
     },
   },
 }));
 
-const { activateWithHistoryKey, handleDevicePending, isThisDeviceActive } =
+const { activateWithHistoryKey, handleDevicePending, isThisDeviceActive, readThisDeviceState } =
   await import("./deviceActivation.ts");
 
 const settle = async () => {
@@ -92,6 +103,7 @@ describe("device activation", () => {
     sessionLinked = true;
     links.length = 0;
     deletedSavedLinks.length = 0;
+    registeredDeviceId = "device-1";
   });
 
   afterEach(() => {
@@ -113,6 +125,30 @@ describe("device activation", () => {
     handleDevicePending();
     await settle();
     expect(navigations).toEqual(["/setup", "/setup"]);
+  });
+
+  test("this phone counts as set up only once its registered device is marked active", async () => {
+    registeredDeviceId = null;
+    expect(readThisDeviceState()).toBe("unregistered");
+    registeredDeviceId = "device-1";
+    expect(readThisDeviceState()).toBe("registered");
+    serverActivated = true;
+    await isThisDeviceActive();
+    expect(readThisDeviceState()).toBe("active");
+    registeredDeviceId = "device-2";
+    expect(readThisDeviceState()).toBe("registered");
+  });
+
+  test("a pending error from the server forgets that this phone was set up", async () => {
+    storageValues.set("encryption.device.active.device-1", true);
+    expect(readThisDeviceState()).toBe("active");
+    handleDevicePending();
+    expect(readThisDeviceState()).toBe("registered");
+  });
+
+  test("restoring with the phrase marks this phone set up", async () => {
+    await activateWithHistoryKey();
+    expect(readThisDeviceState()).toBe("active");
   });
 
   test("asks the server until this phone is active, then remembers it", async () => {

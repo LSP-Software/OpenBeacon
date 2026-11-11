@@ -14,13 +14,18 @@ let deviceStatus: { data?: { accountHasActiveDevice?: boolean }; isError: boolea
 };
 const refetchDeviceStatus = mock(async () => {});
 let signOutError: Error | null = null;
+let signOutStatus: "phoneRemoved" | "signedOut" | "serverUnreachable" = "phoneRemoved";
+let signOutGate: Promise<void> | null = null;
 const replace = mock((_route: string) => {});
 const signOutOfThisPhone = mock(
   async (_input: { removeThisPhone: boolean; sessionTokenToRevoke: string | null }) => {
+    await signOutGate;
     if (signOutError) throw signOutError;
-    return { status: "signedOut" as const };
+    return { status: signOutStatus };
   },
 );
+type AlertButton = { text: string; onPress?: () => void };
+const alerts: { title: string; message: string; buttons: AlertButton[] }[] = [];
 
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("expo-router", () => ({
@@ -52,6 +57,13 @@ mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: { session: { token: "session-token" } } }) },
 }));
 mock.module("../lib/signOut.ts", () => ({ signOutOfThisPhone }));
+mock.module("../lib/alert.ts", () => ({
+  Alert: {
+    alert: (title: string, message: string, buttons: AlertButton[]) => {
+      alerts.push({ title, message, buttons });
+    },
+  },
+}));
 mock.module("../lib/deviceActivation.ts", () => ({
   isThisDeviceActive: async () => {
     if (deviceActive instanceof Error) throw deviceActive;
@@ -68,12 +80,23 @@ const render = async () => {
   await act(async () => root?.render(<SetUpPhoneScreen />));
 };
 
-const signOut = async () => {
+const pressCancel = async () => {
   const button = root?.container
     .queryAll((item) => item.type === "mock-button")
-    .find((item) => JSON.stringify(item.children).includes("Sign out"));
-  if (!button) throw new Error("Missing Sign out");
-  await act(async () => (button.props as { onPress: () => Promise<void> }).onPress());
+    .find((item) => JSON.stringify(item.children).includes("Cancel and remove this phone"));
+  if (!button) throw new Error("Missing Cancel and remove this phone");
+  await act(async () => (button.props as { onPress: () => void }).onPress());
+};
+
+const pressAlertButton = async (text: string) => {
+  const button = alerts.at(-1)?.buttons.find((item) => item.text === text);
+  if (!button) throw new Error(`Missing ${text}`);
+  await act(async () => button.onPress?.());
+};
+
+const cancelSetup = async () => {
+  await pressCancel();
+  await pressAlertButton("Cancel and remove");
 };
 
 const shownText = () => JSON.stringify(root?.container.toJSON() ?? null);
@@ -86,6 +109,9 @@ beforeEach(() => {
   deviceStatus = { data: { accountHasActiveDevice: true }, isError: false };
   refetchDeviceStatus.mockClear();
   signOutError = null;
+  signOutStatus = "phoneRemoved";
+  signOutGate = null;
+  alerts.length = 0;
   replace.mockClear();
   signOutOfThisPhone.mockClear();
 });
@@ -112,20 +138,87 @@ test("stays on setup when the device status can't be checked", async () => {
   expect(replace).not.toHaveBeenCalled();
 });
 
-test("Sign out uses the shared sign-out so a failed sign-out is revoked later", async () => {
+test("Cancel asks first, and keeping setup going does nothing", async () => {
   await render();
-  await signOut();
-  expect(signOutOfThisPhone.mock.calls.map(([input]) => input)).toMatchObject([
-    { removeThisPhone: false, sessionTokenToRevoke: "session-token" },
+  await pressCancel();
+  expect(alerts.map(({ title }) => title)).toEqual(["Cancel setup?"]);
+  await pressAlertButton("Keep setting up");
+  expect(signOutOfThisPhone).not.toHaveBeenCalled();
+  expect(replace).not.toHaveBeenCalled();
+});
+
+test.each(["phoneRemoved", "signedOut"] as const)(
+  "cancelling removes this phone and leaves setup when sign-out says %s",
+  async (status) => {
+    signOutStatus = status;
+    await render();
+    await cancelSetup();
+    expect(signOutOfThisPhone.mock.calls.map(([input]) => input)).toMatchObject([
+      { removeThisPhone: true, sessionTokenToRevoke: "session-token" },
+    ]);
+    expect(replace.mock.calls).toEqual([["/"]]);
+  },
+);
+
+test("when the server can't be reached, stays on setup and offers to try again or sign out anyway", async () => {
+  signOutStatus = "serverUnreachable";
+  await render();
+  await cancelSetup();
+  expect(replace).not.toHaveBeenCalled();
+  expect(alerts.at(-1)?.title).toBe("Couldn’t reach the server");
+  expect(alerts.at(-1)?.message).toContain("removed automatically within 7 days");
+  expect(alerts.at(-1)?.buttons.map(({ text }) => text)).toEqual([
+    "Back",
+    "Sign out anyway",
+    "Try again",
   ]);
+
+  await pressAlertButton("Try again");
+  expect(signOutOfThisPhone.mock.calls.at(-1)?.[0]).toMatchObject({ removeThisPhone: true });
+  expect(replace).not.toHaveBeenCalled();
+
+  signOutStatus = "signedOut";
+  await pressAlertButton("Sign out anyway");
+  expect(signOutOfThisPhone.mock.calls.at(-1)?.[0]).toMatchObject({ removeThisPhone: false });
+  expect(replace.mock.calls).toEqual([["/"]]);
+});
+
+test("Back after an unreachable server stays on setup", async () => {
+  signOutStatus = "serverUnreachable";
+  await render();
+  await cancelSetup();
+  await pressAlertButton("Back");
+  expect(signOutOfThisPhone).toHaveBeenCalledTimes(1);
+  expect(replace).not.toHaveBeenCalled();
+});
+
+test("confirming twice only removes this phone once", async () => {
+  let finish = () => {};
+  signOutGate = new Promise((resolve) => {
+    finish = resolve;
+  });
+  await render();
+  await pressCancel();
+  const confirm = alerts.at(-1)?.buttons.find(({ text }) => text === "Cancel and remove");
+  await act(async () => {
+    confirm?.onPress?.();
+    confirm?.onPress?.();
+  });
+  await act(async () => finish());
+  expect(signOutOfThisPhone).toHaveBeenCalledTimes(1);
   expect(replace.mock.calls).toEqual([["/"]]);
 });
 
 test("still leaves setup when signing out throws", async () => {
   signOutError = new Error("offline");
   await render();
-  await signOut();
+  await cancelSetup();
   expect(replace.mock.calls).toEqual([["/"]]);
+});
+
+test("setup no longer offers a plain sign out", async () => {
+  await render();
+  expect(shownText()).not.toContain('"Sign out"');
 });
 
 test("hides linking when no other phone on the account is active", async () => {

@@ -1,9 +1,11 @@
 import { openDeviceActivationChallenge } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { router } from "expo-router";
+import { useSyncExternalStore } from "react";
 import { trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration, getDeviceActiveKey } from "./deviceKeys.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
+import { readRegisteredDeviceNow } from "./registeredDevice.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
 import { linkSessionToDevice } from "./sessionLink.ts";
 import { storage } from "./storage.ts";
@@ -14,6 +16,20 @@ export const ACTIVATION_KEY_MISSING_MESSAGE =
 export const markThisDeviceActive = (deviceId: string) => {
   storage.set(getDeviceActiveKey(deviceId), true);
 };
+
+export const readThisDeviceState = () => {
+  const device = readRegisteredDeviceNow();
+  if (!device) return "unregistered";
+  return storage.getBoolean(getDeviceActiveKey(device.deviceId)) === true ? "active" : "registered";
+};
+
+const subscribeToThisDeviceState = (onChange: () => void) => {
+  const listener = storage.addOnValueChangedListener(onChange);
+  return () => listener.remove();
+};
+
+export const useThisDeviceState = () =>
+  useSyncExternalStore(subscribeToThisDeviceState, readThisDeviceState);
 
 export const isThisDeviceActive = async () => {
   const device = await ensureDeviceKeyRegistration();
@@ -52,6 +68,8 @@ export const activateWithHistoryKey = async () => {
 let lastSetupRedirect = 0;
 
 export const handleDevicePending = () => {
+  const device = readRegisteredDeviceNow();
+  if (device) storage.remove(getDeviceActiveKey(device.deviceId));
   if (Date.now() - lastSetupRedirect < 10_000) return;
   lastSetupRedirect = Date.now();
   void tryCatch(Promise.resolve().then(() => router.replace("/setup")));
