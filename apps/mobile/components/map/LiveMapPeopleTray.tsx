@@ -64,11 +64,13 @@ export const LiveMapPeopleTray = ({
       <View className="flex-row flex-wrap gap-1.5 px-3 pb-2">
         {sections.map((section) => {
           const isProblem = section.status === "cantRead";
+          const chipLabel =
+            isProblem && section.people.length > 1 ? "need attention" : section.label.toLowerCase();
           return (
             <Pressable
               key={section.key}
               accessibilityRole="button"
-              accessibilityLabel={`Show ${section.people.length} ${section.label.toLowerCase()}`}
+              accessibilityLabel={`Show ${section.people.length} ${chipLabel}`}
               className={cn(
                 "flex-row items-center gap-1 rounded-full border px-2.5 py-1 active:opacity-70",
                 isProblem ? "border-destructive" : "border-border",
@@ -88,7 +90,7 @@ export const LiveMapPeopleTray = ({
                   isProblem ? "text-destructive" : "text-foreground",
                 )}
               >
-                {section.people.length} {section.label.toLowerCase()}
+                {section.people.length} {chipLabel}
               </Text>
             </Pressable>
           );
