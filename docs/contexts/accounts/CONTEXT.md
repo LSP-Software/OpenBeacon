@@ -9,11 +9,11 @@ A 6-digit code the server emails to an account's address, which the owner types 
 _Avoid_: OTP, magic link, verification link, PIN
 
 **Session**:
-One sign-in to an account. Each Session belongs to one device, which the app names on every request. Signing a session out ends its sign-in but doesn't remove the device from Devices.
+One sign-in to an account. The server links a Session to the device named in the first request that carries the device header, and from then on it can't act as another device. Signing a session out ends its sign-in but doesn't remove the device from Devices.
 _Avoid_: Login, device
 
 **Device name**:
-The name the owner gives a device, such as "Pixel 9" or "Car tablet". A new device is named after its model. It's stored in plain text, like a profile name, so group members and Security alerts can show it.
+The name the owner gives a device, such as "Pixel 9" or "Car tablet". A new device is named after its model. It's stored in plain text, like a profile name, so group members and Security alerts can show it. Every member of a group can see the Device name and Device icon of each Active device of the group's members, even from their own Pending device.
 _Avoid_: Device label, nickname
 
 **Device icon**:

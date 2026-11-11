@@ -29,7 +29,7 @@ _Avoid_: Account wrap, backup wrap, recovery wrap
 ### Devices
 
 **Active device**:
-A device that has been set up, so it's in its account's Epochs and can send and see locations. The first device on an account is active as soon as it registers.
+A device that has been set up, so it's in its account's Epochs and can send and see locations. A device is active as soon as it registers if the account has no Active device that hasn't been removed.
 _Avoid_: Approved device, trusted device, verified device
 
 **Pending device**:
