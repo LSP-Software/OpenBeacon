@@ -250,11 +250,11 @@ export const accountRecoveryRouter = createTRPCRouter({
             message: "Your email confirmation has expired. Confirm a new code.",
           });
         }
+        await activateDevice({ activatedBy: "reset", db: tx, deviceId, userId });
         await tx.accountHistoryKey.deleteMany({ where: { userId } });
         await tx.recoveryKey.deleteMany({ where: { userId } });
         await tx.recoveryKey.create({ data: { ...input.recoveryKey, userId } });
         await createHistoryKey(tx, userId, input.historyKey);
-        await activateDevice({ activatedBy: "reset", db: tx, deviceId, userId });
       });
       ctx.securityAlerts?.send(userId, { type: "recovery-phrase-reset" });
       return { historyKeyVersion: input.historyKey.version };

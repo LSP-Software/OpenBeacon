@@ -11,8 +11,10 @@ import {
   generateRecoveryPhrase,
   type HistoryPrivateKeyMaterial,
   openDeviceActivationChallenge,
+  openSessionLinkChallenge,
   sealHistoryKeyEscrow,
 } from "@openbeacon/encryption";
+import { DevicePendingError } from "../lib/deviceActivation.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 import { accountHistoryRouter } from "./accountHistoryRouter.ts";
 import { accountRecoveryRouter } from "./accountRecoveryRouter.ts";
@@ -232,6 +234,62 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await rotationRequired(account.groupId)).toBe(true);
     });
 
+    test("a session-link answer can't activate a Pending phone", async () => {
+      const account = await createAccount("session-answer");
+      const keyPair = createDeviceKeyPair();
+      const device = await caller(account.userId, null).auth.registerDeviceKey({
+        algorithm: "X25519",
+        deviceId: `${account.userId}-keyed`,
+        expectedUserId: account.userId,
+        publicKey: keyPair.publicKey,
+      });
+      const linked = caller(account.userId, device.id);
+      await linked.device.activationChallenge();
+
+      const unlinkedSessionId = `${account.userId}-unlinked-session`;
+      await prisma.session.create({
+        data: {
+          expiresAt: new Date(Date.now() + 60_000),
+          id: unlinkedSessionId,
+          token: `${unlinkedSessionId}-token`,
+          userId: account.userId,
+        },
+      });
+      const unlinked = router.createCaller({
+        cache,
+        db: prisma,
+        clientIp: "127.0.0.1",
+        deviceId: null,
+        emailCodes: null,
+        securityAlerts: null,
+        session: {
+          user: { id: account.userId },
+          session: { id: unlinkedSessionId, createdAt: new Date() },
+        },
+      } as Parameters<typeof router.createCaller>[0]);
+      const challenge = await unlinked.device.sessionChallenge({ deviceId: device.id });
+      if (challenge.linked) throw new Error("The session was already linked.");
+      const sessionAnswer = openSessionLinkChallenge({
+        deviceId: device.id,
+        devicePrivateKey: keyPair.privateKey,
+        sealed: challenge.sealed,
+        userId: account.userId,
+      });
+
+      await expect(linked.device.activate({ answer: sessionAnswer })).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "This phone couldn't prove it holds your history key. Try again.",
+      });
+      expect(await deviceState(device.id)).toEqual({ activatedAt: null, activatedBy: null });
+      expect(await rotationRequired(account.groupId)).toBe(false);
+      expect(
+        await prisma.deviceChallenge.findMany({
+          select: { purpose: true, sessionId: true },
+          where: { deviceId: device.id },
+        }),
+      ).toEqual([{ purpose: "sessionLink", sessionId: unlinkedSessionId }]);
+    });
+
     test("activating again after a lost response says the phone is active", async () => {
       const account = await createAccount("retry");
       const opened = await answer(account, account.historyPrivateKey);
@@ -246,7 +304,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     test("a Pending device can't run group admin or owner actions or set up a phrase", async () => {
       const account = await createAccount("pending-admin");
-      const devicePending = { code: "FORBIDDEN", message: expect.stringContaining("Set up") };
+      const devicePending = { code: "FORBIDDEN", cause: expect.any(DevicePendingError) };
 
       await expect(
         account.pending.groupInvites.sharedStatuses({
@@ -331,7 +389,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("a Pending device can't create or join a group", async () => {
       const host = await createAccount("join-host");
       const account = await createAccount("joiner");
-      const devicePending = { code: "FORBIDDEN", message: expect.stringContaining("Set up") };
+      const devicePending = { code: "FORBIDDEN", cause: expect.any(DevicePendingError) };
       const newGroupId = crypto.randomUUID();
       const keyPair = createDeviceKeyPair();
       const epoch = createInitialGroupEpoch({

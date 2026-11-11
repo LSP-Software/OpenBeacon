@@ -486,15 +486,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expectReadable([late], retry.epochId, retry.epochKey);
     });
 
-    test("a reset racing epoch creation is rejected as a version mismatch and the rebuilt epoch succeeds", async () => {
+    test("an epoch built before a reset is rejected as a version mismatch and the rebuilt epoch succeeds", async () => {
       const first = await buildRotation(owner);
-      const lock = await holdRowLock({ db: prisma, id: groupId, table: "Group" });
-      const rotation = rotate(owner, first.bundle);
-      await lock.waitForWaiters(1);
       await resetPhrase(member);
       expect(member.history!.version).toBe(3);
-      await lock.release();
-      await rejectsWith(rotation, HISTORY_RECIPIENT_MISMATCH_MESSAGE);
+      await rejectsWith(rotate(owner, first.bundle), HISTORY_RECIPIENT_MISMATCH_MESSAGE);
 
       const retry = await buildRotation(owner);
       expect(
@@ -505,6 +501,24 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         expectedOwners(owner, member, late, sharer),
       );
       await expectReadable([member], retry.epochId, retry.epochKey);
+    });
+
+    test("a reset waits for epoch creation already holding the group", async () => {
+      const versionBefore = member.history!.version;
+      const first = await buildRotation(owner);
+      const lock = await holdRowLock({ db: prisma, id: groupId, table: "Group" });
+      const rotation = rotate(owner, first.bundle);
+      await lock.waitForWaiters(1);
+      const reset = resetPhrase(member);
+      await lock.waitForWaiters(2);
+      await lock.release();
+      await expect(rotation).resolves.toEqual({ rotated: true });
+      await reset;
+      expect(member.history!.version).toBe(versionBefore + 1);
+
+      const next = await buildRotation(owner);
+      await expect(rotate(owner, next.bundle)).resolves.toEqual({ rotated: true });
+      await expectReadable([member], next.epochId, next.epochKey);
     });
 
     test("epoch creation holds the history keys it wraps to until it commits", async () => {

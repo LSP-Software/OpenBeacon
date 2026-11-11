@@ -1,11 +1,13 @@
 import { Prisma, type PrismaClient } from "@openbeacon/database";
 
 export const holdRowLock = async ({
+  beforeCommit,
   db,
   id,
   mode = "FOR UPDATE",
   table,
 }: {
+  beforeCommit?: (tx: Prisma.TransactionClient) => Promise<unknown>;
   db: PrismaClient;
   id: string;
   mode?: "FOR NO KEY UPDATE" | "FOR UPDATE";
@@ -26,6 +28,7 @@ export const holdRowLock = async ({
       );
       markLocked();
       await released;
+      await beforeCommit?.(tx);
     },
     { timeout: 20_000 },
   );

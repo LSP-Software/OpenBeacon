@@ -275,9 +275,32 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       ].sort((first, second) => first.join().localeCompare(second.join())),
     );
 
+    const pending = caller(ownerId, ownerPendingId).groupTracking;
+    await expect(pending.getLatest({ groupId })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(pending.poll({ groupId })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(
-      caller(ownerId, ownerPendingId).groupTracking.getLatest({ groupId }),
+      pending.uploadBatch({
+        groupId,
+        points: [
+          {
+            ...encryptGroupPayload({
+              epochId,
+              epochKey,
+              groupId,
+              kind: TRACKING_POINT_KIND,
+              payload: { latitude: 1, longitude: 1 },
+              senderDeviceId: ownerPendingId,
+            }),
+            clientPointId: `${prefix}-pending-upload`,
+          },
+        ],
+      }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(
+      await prisma.groupEncryptedPayload.count({
+        where: { clientPointId: `${prefix}-pending-upload` },
+      }),
+    ).toBe(0);
 
     const devices = await caller(memberId).groupMembership.listMemberDevices({ groupId });
     expect(

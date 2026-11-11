@@ -28,6 +28,6 @@ export const deviceLinkIdSchema = z.object({
 
 export const approveDeviceLinkSchema = z.object({
   linkId: z.uuid(),
-  enc: z.base64().max(64),
+  enc: z.string().regex(/^[A-Za-z0-9+/]{43}=$/),
   ciphertext: z.base64().min(1).max(200_000),
 });

@@ -12,6 +12,7 @@ import {
   sealDeviceLinkHandover,
 } from "@openbeacon/encryption";
 import { holdRowLock } from "../lib/databaseLocks.testUtil.ts";
+import { DevicePendingError } from "../lib/deviceActivation.ts";
 import { linkRequestDevice } from "../lib/requestDevice.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 import { accountHistoryRouter } from "./accountHistoryRouter.ts";
@@ -206,15 +207,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         stranger.active.api.deviceLink.approve({ linkId, ...sealed }),
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
-      const removed = await register(account.userId, "removed");
-      await prisma.userDevice.update({
-        where: { id: removed.deviceId },
-        data: { activatedAt: new Date(), revokedAt: new Date() },
-      });
-      await expect(removed.api.deviceLink.approve({ linkId, ...sealed })).rejects.toMatchObject({
-        code: "FORBIDDEN",
-      });
-
       expect((await deviceState(account.pending.deviceId)).activatedAt).toBeNull();
       expect(await rotationRequired(account.groupId)).toBe(false);
     });
@@ -314,6 +306,39 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
     });
 
+    test("declining refuses a phone that was approved while the decline waited", async () => {
+      const account = await createAccount("decline-race");
+      const { linkId } = await account.pending.api.deviceLink.create();
+      const lock = await holdRowLock({ db: prisma, id: account.userId, table: "User" });
+      const declining = account.active.api.deviceLink.decline({ linkId });
+      await lock.waitForWaiters(1);
+      await prisma.deviceLink.update({
+        where: { id: linkId },
+        data: {
+          approverDeviceId: account.active.deviceId,
+          ciphertext: "handover",
+          completedAt: new Date(),
+          enc: "enc",
+        },
+      });
+      await prisma.userDevice.update({
+        where: { id: account.pending.deviceId },
+        data: { activatedAt: new Date(), activatedBy: "link" },
+      });
+      await lock.release();
+
+      await expect(declining).rejects.toMatchObject({
+        code: "CONFLICT",
+        message:
+          "This phone has already been set up. Remove it from your devices if it isn't yours.",
+      });
+      expect(await deviceState(account.pending.deviceId)).toMatchObject({
+        activatedAt: expect.any(Date),
+        revokedAt: null,
+      });
+      expect(await prisma.session.count({ where: { deviceId: account.pending.deviceId } })).toBe(1);
+    });
+
     test("a Pending device's session can't act as an active device by naming it", async () => {
       const account = await createAccount("spoof");
       const { linkId } = await account.pending.api.deviceLink.create();
@@ -364,7 +389,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       await lock.release();
 
-      await expect(approval).rejects.toMatchObject({ code: "FORBIDDEN" });
+      const refused = await approval.catch((error: unknown) => error);
+      expect(refused).toMatchObject({ code: "FORBIDDEN" });
+      expect((refused as { cause?: unknown }).cause).toBeInstanceOf(DevicePendingError);
       expect((await deviceState(account.pending.deviceId)).activatedAt).toBeNull();
       expect(
         await prisma.deviceLink.findUniqueOrThrow({

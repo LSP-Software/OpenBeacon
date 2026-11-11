@@ -211,6 +211,9 @@ export const groupEpochRouter = {
       }),
     )
     .query(async ({ ctx, input }) => {
+      if (input.deviceId !== ctx.deviceId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "That device ID isn't this phone." });
+      }
       const userId = ctx.session.user.id;
       const device = await ctx.db.userDevice.findFirst({
         where: { id: input.deviceId, revokedAt: null, activatedAt: { not: null }, userId },
@@ -269,6 +272,9 @@ export const groupEpochRouter = {
   addHistoryWraps: activeGroupMemberProcedure
     .input(addHistoryWrapsSchema)
     .mutation(async ({ ctx, input }) => {
+      if (input.deviceId !== ctx.deviceId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "That device ID isn't this phone." });
+      }
       const userId = ctx.session.user.id;
       const epochIds = new Set(input.wraps.map(({ epochId }) => epochId));
       if (epochIds.size !== input.wraps.length) {

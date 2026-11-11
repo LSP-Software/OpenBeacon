@@ -638,12 +638,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(
         caller(resetUser, staleSessionCreatedAt).accountRecovery.reset(resetInput),
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
-      await expect(
+      const unconfirmed = await tryCatch(
         caller(resetUser).accountRecovery.reset({
           ...resetInput,
           confirmReset: false,
         } as unknown as typeof resetInput),
-      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      );
+      expect(unconfirmed.error).toMatchObject({
+        code: "BAD_REQUEST",
+        cause: { issues: [expect.objectContaining({ path: ["confirmReset"] })] },
+      });
       for (const [device, refusal] of [
         [{ deviceId: null, unverifiedDeviceId: `${resetUser}-device` }, DeviceUnverifiedError],
         [{ deviceId: null, unverifiedDeviceId: null }, null],

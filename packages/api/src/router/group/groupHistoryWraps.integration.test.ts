@@ -859,31 +859,56 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toEqual({ added: 0 });
     });
 
-    test("listHistoryBackfill rejects another member's device and a revoked device", async () => {
-      const backfillWith = (deviceId: string) =>
-        caller(other.userId).groupEpoch.listHistoryBackfill({
-          deviceId,
-          groupId,
-        });
-      await expect(backfillWith(owner.deviceId)).rejects.toMatchObject({
-        code: "FORBIDDEN",
+    test("history backfill and wraps only accept the calling phone's own device", async () => {
+      const secondPhone = await prisma.userDevice.create({
+        data: {
+          activatedAt: new Date(),
+          icon: "phone",
+          id: `${prefix}-other-second-device`,
+          name: "Second phone",
+          publicKey: createDeviceKeyPair().publicKey,
+          publicKeyAlgorithm: "X25519",
+          userId: other.userId,
+        },
       });
+      const fromSecondPhone = caller(other.userId, secondPhone.id);
+      const refused = { code: "FORBIDDEN", message: "That device ID isn't this phone." };
+      const backfillWith = (deviceId: string) =>
+        fromSecondPhone.groupEpoch.listHistoryBackfill({ deviceId, groupId });
+
+      await expect(backfillWith(owner.deviceId)).rejects.toMatchObject(refused);
+      await expect(backfillWith(other.deviceId)).rejects.toMatchObject(refused);
+      await expect(
+        fromSecondPhone.groupEpoch.addHistoryWraps({
+          deviceId: other.deviceId,
+          groupId,
+          historyKeyId: other.historyKey.id,
+          wraps: [
+            wrapFor({
+              account: other,
+              epochId: epochs.third.epoch.epochId,
+              epochKey: epochs.third.epochKey,
+            }),
+          ],
+        }),
+      ).rejects.toMatchObject(refused);
 
       await prisma.userDevice.update({
         data: { revokedAt: new Date() },
         where: { id: other.deviceId },
       });
       try {
-        await expect(backfillWith(other.deviceId)).rejects.toMatchObject({
-          code: "FORBIDDEN",
-        });
+        await expect(backfillWith(other.deviceId)).rejects.toMatchObject(refused);
       } finally {
         await prisma.userDevice.update({
           data: { revokedAt: null },
           where: { id: other.deviceId },
         });
+        await prisma.userDevice.delete({ where: { id: secondPhone.id } });
       }
-      await expect(backfillWith(other.deviceId)).resolves.toHaveProperty("epochs");
+      await expect(
+        caller(other.userId).groupEpoch.listHistoryBackfill({ deviceId: other.deviceId, groupId }),
+      ).resolves.toHaveProperty("epochs");
     });
   },
 );

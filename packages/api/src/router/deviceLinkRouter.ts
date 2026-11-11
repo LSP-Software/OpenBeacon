@@ -159,6 +159,7 @@ export const deviceLinkRouter = createTRPCRouter({
         userId,
         currentSessionId: ctx.session.session.id,
         current: false,
+        pendingOnly: true,
       });
       ctx.securityAlerts?.send(userId, { type: "device-removed", device });
     }),

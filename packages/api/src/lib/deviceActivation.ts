@@ -1,6 +1,7 @@
 import type { DeviceActivation, Prisma } from "@openbeacon/database";
 import { devicePendingCause } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
+import { lockUserGroups } from "./lockUserGroups.ts";
 
 export class DevicePendingError extends Error {
   constructor() {
@@ -12,7 +13,7 @@ export class DevicePendingError extends Error {
 export const devicePendingError = () =>
   new TRPCError({
     code: "FORBIDDEN",
-    message: "Set up this phone before it can see locations.",
+    message: "Finish setting up this phone first.",
     cause: new DevicePendingError(),
   });
 
@@ -23,10 +24,11 @@ export const activateDevice = async ({
   userId,
 }: {
   activatedBy: DeviceActivation;
-  db: Pick<Prisma.TransactionClient, "group" | "userDevice">;
+  db: Pick<Prisma.TransactionClient, "$queryRaw" | "group" | "groupMember" | "userDevice">;
   deviceId: string;
   userId: string;
 }) => {
+  await lockUserGroups(db, userId);
   const activated = await db.userDevice.updateMany({
     data: { activatedAt: new Date(), activatedBy },
     where: { id: deviceId, userId, activatedAt: null, revokedAt: null },

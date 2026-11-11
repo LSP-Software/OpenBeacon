@@ -5,6 +5,7 @@ import { prisma } from "@openbeacon/database";
 import type { SecurityAlert } from "@openbeacon/email";
 import { deviceIdHeader, deviceRemovedCause, tryCatch } from "@openbeacon/shared";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import { holdRowLock } from "../lib/databaseLocks.testUtil.ts";
 import { DeviceRemovedError } from "../lib/deviceRemoved.ts";
 import { DeviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { upsertUserDevice } from "../lib/groupEpochs.ts";
@@ -137,6 +138,26 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
     expect(otherGroup.epochRotationRequired).toBe(false);
     const devices = await callerFor(account).account.listDevices();
     expect(devices.map(({ id }) => id)).toEqual([account.thisPhone.id]);
+  });
+
+  test("waits for an upload holding the group before touching the removed phone", async () => {
+    const account = await createAccount();
+    const upload = await holdRowLock({
+      db: prisma,
+      id: account.groupId,
+      table: "Group",
+      beforeCommit: (tx) =>
+        tx.userDevice.update({
+          where: { id: account.lostPhone.id },
+          data: { lastLocationAt: new Date() },
+        }),
+    });
+    const removing = callerFor(account).account.removeDevice({ deviceId: account.lostPhone.id });
+    await upload.waitForWaiters(1);
+    await upload.release();
+    await removing;
+
+    expect(await revokedAt(account.lostPhone.id)).toBeInstanceOf(Date);
   });
 
   test("sends the always-on device removed alert", async () => {

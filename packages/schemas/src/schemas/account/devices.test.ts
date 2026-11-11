@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { deviceIconSchema, deviceNameSchema } from "./devices.ts";
+import { approveDeviceLinkSchema, deviceIconSchema, deviceNameSchema } from "./devices.ts";
 
 describe("deviceNameSchema", () => {
   test("trims names", () => {
@@ -30,5 +30,27 @@ describe("deviceIconSchema", () => {
       "home",
     ]);
     expect(deviceIconSchema.safeParse("rocket").success).toBe(false);
+  });
+});
+
+describe("approveDeviceLinkSchema", () => {
+  const approval = {
+    linkId: crypto.randomUUID(),
+    enc: Buffer.alloc(32, 7).toString("base64"),
+    ciphertext: "AAAA",
+  };
+
+  test("accepts a 32-byte encapsulated key", () => {
+    expect(approveDeviceLinkSchema.safeParse(approval).success).toBe(true);
+  });
+
+  test("rejects an empty or wrongly sized encapsulated key", () => {
+    for (const enc of [
+      "",
+      Buffer.alloc(31).toString("base64"),
+      Buffer.alloc(33).toString("base64"),
+    ]) {
+      expect(approveDeviceLinkSchema.safeParse({ ...approval, enc }).success).toBe(false);
+    }
   });
 });

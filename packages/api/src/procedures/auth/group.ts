@@ -4,7 +4,7 @@ import z from "zod";
 import { protectedProcedure, requireActiveDevice } from "./runtime.ts";
 
 export const groupMemberProcedure = protectedProcedure
-  .input(z.object({ groupId: z.string() }))
+  .input(z.object({ groupId: z.string().min(1).max(128) }))
   .use(async ({ ctx, next, input }) => {
     const group = await ctx.db.group.findUnique({
       where: {
