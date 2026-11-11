@@ -29,6 +29,7 @@ export const createAuth = ({
       "/request-password-reset",
       ...(emailCodes ? [] : ["/reset-password"]),
       "/change-email",
+      "/update-user",
       "/revoke-other-sessions",
       "/revoke-sessions",
       "/list-sessions",

@@ -27,6 +27,7 @@ import { deleteAccountRecords } from "../lib/account-deletion.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
 import {
+  activeDeviceProcedure,
   findActiveDeviceId,
   freshSessionProcedure,
   protectedProcedure,
@@ -291,7 +292,7 @@ export const accountRouter = {
         data: { deletionCancellationPending: false },
       });
     }),
-  updateName: protectedProcedure
+  updateName: activeDeviceProcedure
     .input(z.object({ name: accountNameSchema }))
     .mutation(async ({ ctx, input }) => {
       return ctx.db.user.update({
@@ -364,7 +365,7 @@ export const accountRouter = {
     }),
   version: protectedProcedure.query(({ ctx }) => ctx.serverVersion),
   serverName: protectedProcedure.query(({ ctx }) => ctx.serverName),
-  requestProfileImageUpload: protectedProcedure
+  requestProfileImageUpload: activeDeviceProcedure
     .meta({
       rateLimit: {
         limit: 10,
@@ -400,7 +401,7 @@ export const accountRouter = {
 
       return { presignedUrl };
     }),
-  confirmProfileImageUpload: protectedProcedure
+  confirmProfileImageUpload: activeDeviceProcedure
     .meta({
       rateLimit: {
         limit: 20,

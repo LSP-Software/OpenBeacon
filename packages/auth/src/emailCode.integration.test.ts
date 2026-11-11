@@ -927,6 +927,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email routes", (
     ]);
     expect(responses.map((response) => response.status)).toEqual([404, 404, 404]);
   });
+
+  test("better-auth's update-user route is switched off so profile edits go through the device gate", async () => {
+    const response = await request("/update-user", {
+      body: { name: "Changed", image: "https://example.com/a.png" },
+      ip: nextIp(),
+    });
+    expect(response.status).toBe(404);
+  });
 });
 
 const requestSignUpCode = (email: string, ip = nextIp()) =>

@@ -19,7 +19,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
         { name: "oldPending", createdAt: ago(8), activatedAt: null },
         { name: "newPending", createdAt: ago(6), activatedAt: null },
         { name: "oldActive", createdAt: ago(30), activatedAt: ago(30) },
-        { name: "oldRemoved", createdAt: ago(30), activatedAt: null, revokedAt: ago(1) },
+        { name: "removedPending", createdAt: ago(9), activatedAt: null, revokedAt: ago(8) },
+        { name: "recentlyRemovedPending", createdAt: ago(9), activatedAt: null, revokedAt: ago(6) },
+        { name: "removedActive", createdAt: ago(30), activatedAt: ago(30), revokedAt: ago(20) },
         { name: "recentlyLinked", createdAt: ago(3), activatedAt: ago(2) },
         { name: "longAgoLinked", createdAt: ago(10), activatedAt: ago(9) },
       ].map((device) => ({
@@ -32,7 +34,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
       })),
     });
     await prisma.session.createMany({
-      data: ["oldPending", "newPending"].map((name) => ({
+      data: ["oldPending", "newPending", "removedPending"].map((name) => ({
         id: `${prefix}-${name}-session`,
         token: `${prefix}-${name}-token`,
         userId,
@@ -77,7 +79,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
     await prisma.$disconnect();
   });
 
-  test("deletes Pending devices older than 7 days and signs them out", async () => {
+  test("deletes Pending devices older than 7 days and removed ones a week after removal", async () => {
     await runPendingDeviceCleanup();
     const devices = await prisma.userDevice.findMany({
       where: { userId },
@@ -88,8 +90,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
       "longAgoLinked",
       "newPending",
       "oldActive",
-      "oldRemoved",
       "recentlyLinked",
+      "recentlyRemovedPending",
+      "removedActive",
     ]);
     const sessions = await prisma.session.findMany({ where: { userId }, select: { id: true } });
     expect(sessions.map(({ id }) => id)).toEqual([`${prefix}-newPending-session`]);

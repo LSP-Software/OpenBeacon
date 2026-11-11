@@ -198,6 +198,61 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("the device heade
     });
     expect(otherDevice.lastSeenAt.getTime()).toBeLessThan(minutesAgo(9).getTime());
   });
+
+  test("a removed Pending phone whose record was cleaned up signs in again as a new Pending phone", async () => {
+    const account = await createAccount();
+    await prisma.userDevice.update({
+      where: { id: account.deviceId },
+      data: { activatedAt: new Date() },
+    });
+    const keyPair = createDeviceKeyPair();
+    const phoneId = `${account.deviceId}-cleaned`;
+    await prisma.userDevice.create({
+      data: {
+        icon: "phone",
+        id: phoneId,
+        name: "Removed phone",
+        publicKey: keyPair.publicKey,
+        publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
+        revokedAt: new Date(),
+        userId: account.userId,
+      },
+    });
+    expect(await linkRequestDevice({ db: prisma, deviceId: phoneId, session: null })).toEqual({
+      removed: true,
+    });
+
+    await prisma.userDevice.delete({ where: { id: phoneId } });
+    expect(await linkRequestDevice({ db: prisma, deviceId: phoneId, session: null })).toEqual({
+      removed: false,
+      deviceId: null,
+      unverifiedDeviceId: null,
+    });
+
+    const session = await prisma.session.create({
+      data: {
+        expiresAt: new Date(Date.now() + 60 * 60_000),
+        id: `${phoneId}-session`,
+        token: `${phoneId}-token`,
+        userId: account.userId,
+      },
+    });
+    const phone = { ...account, sessionId: session.id };
+    expect(await link(phone, phoneId)).toBeNull();
+    const registered = await callerFor(phone, {
+      deviceId: null,
+      unverifiedDeviceId: null,
+    }).auth.registerDeviceKey({
+      algorithm: DEVICE_KEY_ALGORITHM,
+      deviceId: phoneId,
+      expectedUserId: account.userId,
+      publicKey: keyPair.publicKey,
+    });
+
+    expect(registered).toMatchObject({ id: phoneId, activatedAt: null, revokedAt: null });
+    expect(registered.sessionLinked).toBe(true);
+    expect(await link(phone, phoneId)).toBe(phoneId);
+  });
 });
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account devices", () => {
@@ -306,5 +361,47 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account devices"
         callerFor(account).account.updateDevice({ deviceId: account.deviceId, name }),
       ).rejects.toMatchObject({ code: "BAD_REQUEST" });
     }
+  });
+});
+
+describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account profile", () => {
+  const contentHash = `${"a".repeat(43)}=`;
+
+  test("only an active phone can change the name and photo other members see", async () => {
+    const account = await createAccount();
+    await linkSession(account);
+
+    for (const [device, cause] of [
+      [{ deviceId: account.deviceId, unverifiedDeviceId: null }, DevicePendingError],
+      [{ deviceId: null, unverifiedDeviceId: account.deviceId }, DeviceUnverifiedError],
+    ] as const) {
+      const caller = callerFor(account, device);
+      for (const call of [
+        () => caller.account.updateName({ name: "Someone else" }),
+        () => caller.account.requestProfileImageUpload({ contentHash, fileSize: 100 }),
+        () => caller.account.confirmProfileImageUpload(),
+      ]) {
+        const result = await tryCatch(call());
+        expect(result.error).toMatchObject({ code: "FORBIDDEN" });
+        expect((result.error as { cause?: unknown }).cause).toBeInstanceOf(cause);
+      }
+    }
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: account.userId } })).name).toBe(
+      "Devices Test",
+    );
+    expect(await prisma.pendingUpload.findFirst({ where: { userId: account.userId } })).toBeNull();
+
+    await prisma.userDevice.update({
+      where: { id: account.deviceId },
+      data: { activatedAt: new Date() },
+    });
+
+    expect(await callerFor(account).account.updateName({ name: "New name" })).toEqual({
+      name: "New name",
+    });
+    await callerFor(account).account.requestProfileImageUpload({ contentHash, fileSize: 100 });
+    expect(
+      await prisma.pendingUpload.findFirst({ where: { userId: account.userId } }),
+    ).not.toBeNull();
   });
 });

@@ -3,10 +3,10 @@ import { services } from "../services.ts";
 
 export const runPendingDeviceCleanup = async () => {
   const now = await getDatabaseTime();
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60_000);
   const expired = {
     activatedAt: null,
-    revokedAt: null,
-    createdAt: { lt: new Date(now.getTime() - 7 * 24 * 60 * 60_000) },
+    OR: [{ revokedAt: null, createdAt: { lt: weekAgo } }, { revokedAt: { lt: weekAgo } }],
   };
   await services.db.$transaction([
     services.db.session.deleteMany({ where: { device: { is: expired } } }),
