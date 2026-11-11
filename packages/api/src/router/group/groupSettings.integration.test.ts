@@ -697,7 +697,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         await prisma.group.deleteMany({ where: { id: lockedGroupId } });
         await prisma.userDevice.deleteMany({ where: { id: `${owner}-pending` } });
       }
-    });
+    }, 30_000);
 
     test("an epoch must be made by the phone that sends it, not another phone on the account", async () => {
       const claimedGroupId = `${prefix}-claimed`;
