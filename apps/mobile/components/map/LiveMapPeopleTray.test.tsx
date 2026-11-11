@@ -122,13 +122,29 @@ describe("LiveMapPeopleTray", () => {
     expect(output).toContain('"status":"hidden"');
   });
 
+  test("matches the needs attention chip to the number of people", async () => {
+    const unreadable = (userId: string, name: string) => ({
+      ...person(userId, name),
+      groupId: "group-1",
+      groupName: "Family",
+      reason: "groupKey" as const,
+    });
+    const one = await renderTray({ cantRead: [unreadable("a", "Alice")] });
+    expect(one).toContain('"1"," ","needs attention"');
+    expect(one).toContain("Show 1 needs attention");
+    const two = await renderTray({ cantRead: [unreadable("a", "Alice"), unreadable("b", "Bob")] });
+    expect(two).toContain('"2"," ","need attention"');
+    expect(two).toContain("Show 2 need attention");
+    expect(two).toContain("Needs attention");
+  });
+
   test("hides empty sections and labels people with first names and ages", async () => {
     const output = await renderTray({
       cantLocate: [{ ...person("me", "Sam King"), isSelf: true }, person("n", "Nan")],
       outOfDate: [marker("m", "Mum Jones", 47)],
     });
     expect(output).not.toContain("Up to date");
-    expect(output).not.toContain("Can’t read");
+    expect(output).not.toContain("Needs attention");
     expect(output).toContain("Mum Jones, out of date, updated 47 minutes ago");
     expect(output).toContain('"Mum"');
     expect(output).toContain('"47m"');
