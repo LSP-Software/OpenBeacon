@@ -44,8 +44,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
       data: [
         { name: "newPending", expiresAt: new Date(clock.now.getTime() - 2 * day) },
         { name: "oldActive", expiresAt: new Date(clock.now.getTime() - 60_000) },
-        { name: "recentlyLinked", expiresAt: ago(2), completedAt: ago(2) },
-        { name: "longAgoLinked", expiresAt: ago(9), completedAt: ago(9) },
+        {
+          name: "recentlyLinked",
+          expiresAt: new Date(clock.now.getTime() - 60_000),
+          completedAt: new Date(clock.now.getTime() - 60_000),
+        },
+        { name: "longAgoLinked", expiresAt: ago(2), completedAt: ago(2) },
       ].map(({ expiresAt, name, ...link }) => ({
         ...link,
         deviceId: `${prefix}-${name}`,
@@ -91,7 +95,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
     expect(sessions.map(({ id }) => id)).toEqual([`${prefix}-newPending-session`]);
   });
 
-  test("deletes open links a day after they expire and completed ones after 7 days", async () => {
+  test("deletes open and approved links a day after they expire", async () => {
     const links = await prisma.deviceLink.findMany({
       where: { userId },
       select: { id: true },
