@@ -76,16 +76,26 @@ mock.module("./alert.ts", () => ({
 
 Date.now = () => now;
 
+const httpStatuses: Record<string, number> = {
+  FORBIDDEN: 403,
+  INTERNAL_SERVER_ERROR: 500,
+  NOT_FOUND: 404,
+  SERVICE_UNAVAILABLE: 503,
+  TOO_MANY_REQUESTS: 429,
+  UNAUTHORIZED: 401,
+};
+
 const refusal = (code: string, cause: string | null = null) =>
   TRPCClientError.from({
     error: {
       code: -32003,
-      data: { cause, code, httpStatus: code === "NOT_FOUND" ? 404 : 403 },
+      data: { cause, code, httpStatus: httpStatuses[code] },
       message: "Refused",
     },
   });
 
-const { handleDeviceUnverified, linkSessionToDevice } = await import("./sessionLink.ts");
+const { handleDeviceUnverified, linkSessionToDevice, signOutAfterRefusedSessionLink } =
+  await import("./sessionLink.ts");
 
 const settle = async () => {
   for (let index = 0; index < 20; index++) await Promise.resolve();
@@ -210,7 +220,7 @@ describe("linking this sign-in to the phone", () => {
   });
 
   test("a removed phone is left to the wipe instead of signing out here", async () => {
-    challengeError = refusal("FORBIDDEN", deviceRemovedCause);
+    challengeError = refusal("UNAUTHORIZED", deviceRemovedCause);
     const handling = handleDeviceUnverified();
     await settle();
     release();
@@ -218,5 +228,42 @@ describe("linking this sign-in to the phone", () => {
 
     expect(calls).toEqual(["challenge:device-1"]);
     expect(alerts).toEqual([]);
+  });
+
+  for (const code of ["INTERNAL_SERVER_ERROR", "SERVICE_UNAVAILABLE", "TOO_MANY_REQUESTS"]) {
+    test(`${code} from the server doesn't sign out and retries only after the back-off`, async () => {
+      challengeError = refusal(code);
+      const first = handleDeviceUnverified();
+      await settle();
+      release();
+      await first;
+      now += 5_000;
+      await handleDeviceUnverified();
+
+      expect(calls).toEqual(["challenge:device-1"]);
+      expect(alerts).toEqual([]);
+
+      challengeError = null;
+      now += 6_000;
+      const retry = handleDeviceUnverified();
+      await settle();
+      release();
+      await retry;
+
+      expect(calls.filter((call) => call.startsWith("signOut"))).toEqual([]);
+      expect(calls.at(-1)).toBe("invalidate");
+    });
+  }
+
+  test("a refused link seen by both the recovery and another caller signs out and alerts once", async () => {
+    challengeError = refusal("FORBIDDEN");
+    const direct = linkSessionToDevice(device).catch(() => signOutAfterRefusedSessionLink());
+    const recovery = handleDeviceUnverified();
+    await settle();
+    release();
+    await Promise.all([recovery, direct]);
+
+    expect(calls.filter((call) => call.startsWith("signOut"))).toHaveLength(1);
+    expect(alerts).toEqual(["You’ve been signed out|Sign in again to keep using this phone."]);
   });
 });

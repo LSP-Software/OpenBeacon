@@ -11,6 +11,8 @@ let signOuts = 0;
 let sessionUserId: string | null = "user-a";
 let registerError: Error | null = null;
 let stalledDelete: string | null = null;
+let providersError: Error | null = null;
+const providerRequests: unknown[] = [];
 
 mock.module("expo-router", () => ({
   router: {
@@ -57,6 +59,13 @@ mock.module("./api.ts", () => ({
   trpc: { accountRecovery: { status: { queryKey: () => [["accountRecovery", "status"]] } } },
   trpcClient: {
     auth: {
+      providers: {
+        query: async (_input: undefined, options: unknown) => {
+          providerRequests.push(options);
+          if (providersError) throw providersError;
+          return { emailPassword: true, google: false };
+        },
+      },
       deviceKeyContext: {
         query: async () => {
           if (!sessionUserId) throw new Error("UNAUTHORIZED");
@@ -94,8 +103,23 @@ mock.module("./trackingKeyCheck.ts", () => ({ clearTrackingKeyCheck: () => {} })
 mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => {} }));
 
 const { ensureDeviceKeyRegistration } = await import("./deviceKeys.ts");
-const { handleDeviceRemoved, wipeAfterRemovingThisPhone, wipeThisPhone } =
-  await import("./deviceRemoved.ts");
+const {
+  checkThisPhoneAfterSessionLoss,
+  handleDeviceRemoved,
+  wipeAfterRemovingThisPhone,
+  wipeThisPhone,
+} = await import("./deviceRemoved.ts");
+
+const removedError = () =>
+  new TRPCClientError("This device was removed.", {
+    result: {
+      error: {
+        code: -32001,
+        message: "This device was removed.",
+        data: { cause: deviceRemovedCause, code: "UNAUTHORIZED", httpStatus: 401 },
+      },
+    },
+  });
 
 const seedSignedOutPhone = async () => {
   const key = createDeviceKeyPair();
@@ -132,6 +156,8 @@ describe("wiping a removed phone", () => {
     sessionUserId = "user-a";
     registerError = null;
     stalledDelete = null;
+    providersError = null;
+    providerRequests.length = 0;
   });
 
   test("wipes a signed-in phone using its registration", async () => {
@@ -257,5 +283,57 @@ describe("wiping a removed phone", () => {
 
     expectWiped(device.deviceId);
     expect(queueDeletions).toEqual([{ deviceId: device.deviceId, userId: "user-a" }]);
+  });
+
+  test("a phone whose session was lost and which the server reports removed is wiped and shows the removed screen", async () => {
+    const device = await ensureDeviceKeyRegistration();
+    sessionUserId = null;
+    secureStoreValues.set("encryption.history.user-a.3", "history-3");
+    secureStoreValues.set(`encryption.deviceLink.user-a.${device.deviceId}`, "saved-link");
+    providersError = removedError();
+
+    await checkThisPhoneAfterSessionLoss();
+
+    expect(providerRequests).toEqual([{ context: { handleDeviceErrors: false } }]);
+    expectWiped(device.deviceId);
+    expect(storageValues.has("encryption.device.registered")).toBe(false);
+    expect(queueDeletions).toEqual([{ deviceId: device.deviceId, userId: "user-a" }]);
+    expect(navigations).toEqual(["/device-removed"]);
+  });
+
+  test("a phone whose session was lost but is still in Devices only forgets its registration", async () => {
+    const device = await ensureDeviceKeyRegistration();
+    sessionUserId = null;
+
+    await checkThisPhoneAfterSessionLoss();
+
+    expect(providerRequests).toHaveLength(1);
+    expect(storageValues.has("encryption.device.registered")).toBe(false);
+    expect(storageValues.get("encryption.device.id.user-a")).toBe(device.deviceId);
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(true);
+    expect(signOuts).toBe(0);
+    expect(navigations).toEqual([]);
+  });
+
+  test("a lost session that can't reach the server forgets the registration without wiping", async () => {
+    const device = await ensureDeviceKeyRegistration();
+    sessionUserId = null;
+    providersError = TRPCClientError.from(new TypeError("Network request failed"));
+
+    await checkThisPhoneAfterSessionLoss();
+
+    expect(storageValues.has("encryption.device.registered")).toBe(false);
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(true);
+    expect(storageValues.get("encryption.device.id.user-a")).toBe(device.deviceId);
+    expect(navigations).toEqual([]);
+  });
+
+  test("a lost session without a registration sends nothing", async () => {
+    await seedSignedOutPhone();
+
+    await checkThisPhoneAfterSessionLoss();
+
+    expect(providerRequests).toEqual([]);
+    expect(signOuts).toBe(0);
   });
 });

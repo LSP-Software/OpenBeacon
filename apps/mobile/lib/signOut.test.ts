@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { deviceRemovedCause } from "@openbeacon/shared";
+import { deviceRemovedCause, deviceUnverifiedCause } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
 
 const secureStoreValues = new Map<string, string>();
@@ -7,6 +7,8 @@ const storageValues = new Map<string, string | boolean>();
 const events: string[] = [];
 const removalHeaders: Array<string | undefined> = [];
 let removalError: Error | null = null;
+let removalErrors: Error[] = [];
+let challengeError: Error | null = null;
 let signOutError: Error | null = null;
 let removedErrorDuringRemoval = false;
 
@@ -62,12 +64,23 @@ mock.module("./api.ts", () => ({
         mutate: async () => {
           events.push("removeThisDevice");
           removalHeaders.push(await readHeaderDeviceId());
+          const queued = removalErrors.shift();
+          if (queued) throw queued;
           if (removalError) throw removalError;
           if (removedErrorDuringRemoval) {
             const { handleDeviceRemoved } = await import("./deviceRemoved.ts");
             void handleDeviceRemoved();
           }
           return {};
+        },
+      },
+    },
+    device: {
+      sessionChallenge: {
+        mutate: async () => {
+          events.push("sessionChallenge");
+          if (challengeError) throw challengeError;
+          return { linked: true };
         },
       },
     },
@@ -102,6 +115,12 @@ mock.module("./tracking.ts", () => ({
   revokeTrackingAccess: async () => {},
 }));
 
+mock.module("./trackingEvents.ts", () => ({
+  requestTrackingSync: () => {
+    events.push("requestTrackingSync");
+  },
+}));
+
 mock.module("./groupColor.ts", () => ({ clearGroupColors: () => {} }));
 mock.module("./trackingKeyCheck.ts", () => ({ clearTrackingKeyCheck: () => {} }));
 mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => {} }));
@@ -118,6 +137,8 @@ describe("signing out of this phone", () => {
     events.length = 0;
     removalHeaders.length = 0;
     removalError = null;
+    removalErrors = [];
+    challengeError = null;
     signOutError = null;
     removedErrorDuringRemoval = false;
   });
@@ -175,7 +196,12 @@ describe("signing out of this phone", () => {
     });
 
     expect(result).toEqual({ status: "serverUnreachable" });
-    expect(events).toEqual([`prepare:${device.deviceId}`, "removeThisDevice", "resumeTracking"]);
+    expect(events).toEqual([
+      `prepare:${device.deviceId}`,
+      "removeThisDevice",
+      "resumeTracking",
+      "requestTrackingSync",
+    ]);
     expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(true);
     expect(secureStoreValues.get("encryption.history.user-a.1")).toBe("history-1");
     expect(secureStoreValues.has("sessionTokenToRevokeOnNextLogin")).toBe(false);
@@ -206,8 +232,8 @@ describe("signing out of this phone", () => {
     await ensureDeviceKeyRegistration();
     removalError = TRPCClientError.from({
       error: {
-        code: -32003,
-        data: { cause: deviceRemovedCause, code: "FORBIDDEN", httpStatus: 403 },
+        code: -32001,
+        data: { cause: deviceRemovedCause, code: "UNAUTHORIZED", httpStatus: 401 },
         message: "This device was removed.",
       },
     });
@@ -219,6 +245,133 @@ describe("signing out of this phone", () => {
     });
 
     expect(result).toEqual({ status: "phoneRemoved" });
+    expect(events.some((event) => event.startsWith("navigate:"))).toBe(false);
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(false);
+  });
+
+  test("a server fault while removing counts as unreachable and keeps this phone signed in", async () => {
+    await ensureDeviceKeyRegistration();
+    removalError = TRPCClientError.from({
+      error: {
+        code: -32603,
+        data: { code: "INTERNAL_SERVER_ERROR", httpStatus: 500 },
+        message: "Internal server error",
+      },
+    });
+
+    const result = await signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: true,
+      sessionTokenToRevoke: null,
+    });
+
+    expect(result).toEqual({ status: "serverUnreachable" });
+    expect(events).not.toContain("signOut");
+    expect(storageValues.get("encryption.device.registered")).toBeDefined();
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(true);
+  });
+
+  test("a sign-in that isn't linked to this phone yet is linked, then the removal is retried", async () => {
+    const device = await ensureDeviceKeyRegistration();
+    removalErrors = [
+      TRPCClientError.from({
+        error: {
+          code: -32003,
+          data: { cause: deviceUnverifiedCause, code: "FORBIDDEN", httpStatus: 403 },
+          message: "Confirm this phone first.",
+        },
+      }),
+    ];
+
+    const result = await signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: true,
+      sessionTokenToRevoke: null,
+    });
+
+    expect(result).toEqual({ status: "phoneRemoved" });
+    expect(removalHeaders).toEqual([device.deviceId, device.deviceId]);
+    expect(events).toEqual([
+      `prepare:${device.deviceId}`,
+      "removeThisDevice",
+      "sessionChallenge",
+      "removeThisDevice",
+      "deleteQueue",
+      "signOut",
+    ]);
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(false);
+  });
+
+  test("an unlinked sign-in that can't reach the server to link stays signed in", async () => {
+    const device = await ensureDeviceKeyRegistration();
+    removalErrors = [
+      TRPCClientError.from({
+        error: {
+          code: -32003,
+          data: { cause: deviceUnverifiedCause, code: "FORBIDDEN", httpStatus: 403 },
+          message: "Confirm this phone first.",
+        },
+      }),
+    ];
+    challengeError = TRPCClientError.from(new TypeError("Network request failed"));
+
+    const result = await signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: true,
+      sessionTokenToRevoke: null,
+    });
+
+    expect(result).toEqual({ status: "serverUnreachable" });
+    expect(events).toEqual([
+      `prepare:${device.deviceId}`,
+      "removeThisDevice",
+      "sessionChallenge",
+      "resumeTracking",
+      "requestTrackingSync",
+    ]);
+    expect(storageValues.get("encryption.device.registered")).toBeDefined();
+  });
+
+  test("trying again after this phone was already wiped reports it removed instead of still in Devices", async () => {
+    removalError = TRPCClientError.from({
+      error: {
+        code: -32001,
+        data: { code: "UNAUTHORIZED", httpStatus: 401 },
+        message: "UNAUTHORIZED",
+      },
+    });
+
+    const result = await signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: true,
+      sessionTokenToRevoke: null,
+    });
+
+    expect(result).toEqual({ status: "phoneRemoved" });
+    expect(events).not.toContain("signOut");
+  });
+
+  test("a refused removal while another request is wiping this phone joins the wipe", async () => {
+    await ensureDeviceKeyRegistration();
+    removalError = TRPCClientError.from({
+      error: {
+        code: -32001,
+        data: { code: "UNAUTHORIZED", httpStatus: 401 },
+        message: "UNAUTHORIZED",
+      },
+    });
+    const { handleDeviceRemoved } = await import("./deviceRemoved.ts");
+    const wiping = handleDeviceRemoved();
+
+    const result = await signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: true,
+      sessionTokenToRevoke: null,
+    });
+    await wiping;
+
+    expect(result).toEqual({ status: "phoneRemoved" });
+    expect(events.filter((event) => event === "signOut")).toHaveLength(1);
     expect(events.some((event) => event.startsWith("navigate:"))).toBe(false);
     expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(false);
   });

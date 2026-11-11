@@ -51,6 +51,10 @@ const deviceRemovedLink: TRPCLink<AppRouter> =
         next: (value) => observer.next(value),
         complete: () => observer.complete(),
         error: (error) => {
+          if (op.context["handleDeviceErrors"] === false) {
+            observer.error(error);
+            return;
+          }
           if (isDeviceRemovedError(error)) {
             void import("./deviceRemoved.ts").then(({ handleDeviceRemoved }) =>
               handleDeviceRemoved(),

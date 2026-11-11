@@ -42,7 +42,38 @@ export const linkSessionToDevice = (device: Parameters<typeof proveDevice>[0]) =
 };
 
 let pendingRecovery: Promise<void> | null = null;
+let pendingSignOut: Promise<void> | null = null;
 let lastFailure = 0;
+
+export const isSessionLinkRefused = (error: unknown) =>
+  error instanceof TRPCClientError &&
+  !!error.data &&
+  error.data.httpStatus < 500 &&
+  error.data.code !== "TOO_MANY_REQUESTS" &&
+  !isDeviceRemovedError(error);
+
+export const signOutAfterRefusedSessionLink = () => {
+  pendingSignOut ??= (async () => {
+    const [{ authClient }, { signOutOfThisPhone }, { router }] = await Promise.all([
+      import("./auth-client.ts"),
+      import("./signOut.ts"),
+      import("expo-router"),
+    ]);
+    const session = await tryCatch(authClient.getSession());
+    await tryCatch(
+      signOutOfThisPhone({
+        onSigningOut: () => {},
+        removeThisPhone: false,
+        sessionTokenToRevoke: session.data?.data?.session.token ?? null,
+      }),
+    );
+    await tryCatch(Promise.resolve().then(() => router.replace("/")));
+    Alert.alert("You’ve been signed out", "Sign in again to keep using this phone.");
+  })().finally(() => {
+    pendingSignOut = null;
+  });
+  return pendingSignOut;
+};
 
 const recoverUnverifiedSession = async () => {
   const { getRegisteredDeviceKey } = await import("./deviceKeys.ts");
@@ -54,28 +85,7 @@ const recoverUnverifiedSession = async () => {
     return;
   }
   lastFailure = Date.now();
-  const refused =
-    linked.error instanceof TRPCClientError &&
-    !!linked.error.data &&
-    linked.error.data.httpStatus < 500 &&
-    linked.error.data.code !== "TOO_MANY_REQUESTS" &&
-    !isDeviceRemovedError(linked.error);
-  if (!refused) return;
-  const [{ authClient }, { signOutOfThisPhone }, { router }] = await Promise.all([
-    import("./auth-client.ts"),
-    import("./signOut.ts"),
-    import("expo-router"),
-  ]);
-  const session = await tryCatch(authClient.getSession());
-  await tryCatch(
-    signOutOfThisPhone({
-      onSigningOut: () => {},
-      removeThisPhone: false,
-      sessionTokenToRevoke: session.data?.data?.session.token ?? null,
-    }),
-  );
-  await tryCatch(Promise.resolve().then(() => router.replace("/")));
-  Alert.alert("You’ve been signed out", "Sign in again to keep using this phone.");
+  if (isSessionLinkRefused(linked.error)) await signOutAfterRefusedSessionLink();
 };
 
 export const handleDeviceUnverified = () => {

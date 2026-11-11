@@ -9,6 +9,7 @@ import {
   stopDeviceKeyRegistrations,
 } from "./deviceKeys.ts";
 import { clearGroupColors } from "./groupColor.ts";
+import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { deleteStoredHistoryKeys } from "./historyKeys.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
@@ -62,3 +63,20 @@ const wipeOnce = ({ removedHere }: { removedHere: boolean }) => {
 export const handleDeviceRemoved = () => wipeOnce({ removedHere: false });
 
 export const wipeAfterRemovingThisPhone = () => wipeOnce({ removedHere: true });
+
+export const isWipingThisPhone = () => removal !== null;
+
+export const checkThisPhoneAfterSessionLoss = async () => {
+  const registered = await readRegisteredDevice();
+  if (!registered) return;
+  stopDeviceKeyRegistrations();
+  const result = await tryCatch(
+    trpcClient.auth.providers.query(undefined, { context: { handleDeviceErrors: false } }),
+  );
+  if ((await readRegisteredDevice())?.deviceId !== registered.deviceId) return;
+  if (isDeviceRemovedError(result.error)) {
+    await handleDeviceRemoved();
+    return;
+  }
+  forgetDeviceKeyRegistration();
+};

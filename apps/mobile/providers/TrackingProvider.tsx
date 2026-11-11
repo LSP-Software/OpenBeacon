@@ -18,7 +18,10 @@ const trackingService = {
     (await import("../lib/tracking.ts")).recoverUnassignedTrackingPoints(input),
   reconcileTrackingKeys: async (input: { startCapture: boolean; force: boolean }) =>
     (await import("../lib/tracking.ts")).reconcileTrackingKeys(input),
-  revokeTrackingAccess: async () => (await import("../lib/tracking.ts")).revokeTrackingAccess(),
+  revokeTrackingAccess: async (input: { keepDeviceRegistration: boolean }) =>
+    (await import("../lib/tracking.ts")).revokeTrackingAccess(input),
+  checkThisPhoneAfterSessionLoss: async () =>
+    (await import("../lib/deviceRemoved.ts")).checkThisPhoneAfterSessionLoss(),
   takeKeyAccessChange: async () => (await import("../lib/tracking.ts")).takeKeyAccessChange(),
 };
 
@@ -159,7 +162,9 @@ export const TrackingProvider = ({
     const version = cycleVersionRef.current;
     void (async () => {
       if (changed && (typeof previousUserId === "string" || !userId)) {
-        await tryCatch(service.revokeTrackingAccess());
+        await tryCatch(service.revokeTrackingAccess({ keepDeviceRegistration: !userId }));
+        if (!userId && version === cycleVersionRef.current)
+          await tryCatch(service.checkThisPhoneAfterSessionLoss());
       }
       if (version !== cycleVersionRef.current || !userId) return;
       if (changed) {

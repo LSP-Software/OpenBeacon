@@ -34,7 +34,7 @@ const socialSignInMock = mock(
     },
   }),
 );
-const ensureDeviceKeyRegistrationMock = mock(async () => ({
+const ensureDeviceKeyRegistrationMock = mock(async (_input?: { linkSession?: boolean }) => ({
   algorithm: "x25519-xsalsa20-poly1305",
   deviceId: "device-a",
   privateKey: {
@@ -209,6 +209,7 @@ describe("auth Google sign-in configuration", () => {
 
     expect(result.error).toBeNull();
     expect(ensureDeviceKeyRegistrationMock).toHaveBeenCalledTimes(1);
+    expect(ensureDeviceKeyRegistrationMock).toHaveBeenCalledWith({ linkSession: true });
   });
 
   test("returns a readable error when device setup fails", async () => {

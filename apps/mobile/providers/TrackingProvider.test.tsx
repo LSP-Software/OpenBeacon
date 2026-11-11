@@ -25,6 +25,8 @@ let keyAccessChangePending = false;
 let flushCalls = 0;
 let flushModes: boolean[] = [];
 let revokeCalls = 0;
+let revokeInputs: Array<{ keepDeviceRegistration: boolean }> = [];
+let sessionLossChecks = 0;
 let isReadyForSharing = true;
 let failFlush = false;
 let failReconcile = false;
@@ -55,8 +57,12 @@ const trackingService = {
     flushModes.push(force);
     if (failFlush) throw new Error("offline");
   },
-  revokeTrackingAccess: async () => {
+  revokeTrackingAccess: async (input: { keepDeviceRegistration: boolean }) => {
     revokeCalls += 1;
+    revokeInputs.push(input);
+  },
+  checkThisPhoneAfterSessionLoss: async () => {
+    sessionLossChecks += 1;
   },
   resumeTracking: async () => {},
   getUnassignedTrackingPoints: async () => {
@@ -153,6 +159,8 @@ describe("TrackingProvider", () => {
     flushCalls = 0;
     flushModes = [];
     revokeCalls = 0;
+    revokeInputs = [];
+    sessionLossChecks = 0;
     isReadyForSharing = true;
     failFlush = false;
     failReconcile = false;
@@ -360,6 +368,45 @@ describe("TrackingProvider", () => {
     });
 
     expect(revokeCalls).toBe(1);
+  });
+
+  test("losing the session keeps this phone's registration and checks whether it was removed", async () => {
+    await renderProvider();
+    sessionState = { data: null, isPending: false };
+
+    await act(async () => {
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(revokeInputs).toEqual([{ keepDeviceRegistration: true }]);
+    expect(sessionLossChecks).toBe(1);
+  });
+
+  test("a signed-out launch checks whether this phone was removed", async () => {
+    sessionState = { data: null, isPending: false };
+    await renderProvider();
+    await flushEffects();
+
+    expect(revokeInputs).toEqual([{ keepDeviceRegistration: true }]);
+    expect(sessionLossChecks).toBe(1);
+  });
+
+  test("switching straight to another account doesn't check the old phone registration", async () => {
+    await renderProvider();
+    sessionState = { data: { user: { id: "user-2" } }, isPending: false };
+
+    await act(async () => {
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(revokeInputs).toEqual([{ keepDeviceRegistration: false }]);
+    expect(sessionLossChecks).toBe(0);
   });
 
   test("OPE-231: signing in after being signed out doesn't revoke tracking access", async () => {
