@@ -5,7 +5,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import z from "zod";
 import { activateDevice } from "../lib/deviceActivation.ts";
-import { protectedProcedure } from "../procedures/auth/runtime.ts";
+import { protectedProcedure, thisDeviceProcedure } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 
 const challengeLifetimeMs = 5 * 60_000;
@@ -13,13 +13,6 @@ const challengeLifetimeMs = 5 * 60_000;
 const challengeIdentifier = (deviceId: string) => `device-activation:${deviceId}`;
 
 const hashChallenge = (challenge: Uint8Array) => createHash("sha256").update(challenge).digest();
-
-const thisDeviceProcedure = protectedProcedure.use(async ({ ctx, next }) => {
-  if (!ctx.deviceId) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "This phone isn't registered yet." });
-  }
-  return next({ ctx: { deviceId: ctx.deviceId } });
-});
 
 const challengeValueSchema = z.object({
   hash: z.string(),

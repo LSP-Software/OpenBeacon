@@ -21,7 +21,7 @@ One of a fixed set of pictures the owner picks for a device: phone, tablet, watc
 _Avoid_: Device type, avatar
 
 **Removing a device**:
-Taking a lost or stolen device off the account in Account → Devices. It needs a recent sign-in. The server signs the device out, refuses its requests from then on, and leaves it out of new Epochs. The phone wipes its keys and data the next time it reaches the server. It's different from signing out, which keeps the device in Devices so it can sign in again. Removing a device can't take back anything it has already seen.
+Taking a lost or stolen device off the account in Account → Devices. It needs a recent sign-in. The server signs the device out, refuses its requests from then on, and leaves it out of new Epochs. The phone wipes its keys and data the next time it reaches the server. It's different from signing out, which keeps the device in Devices so it can sign in again. Removing a device can't take back anything it has already seen. Tapping "Not me" after scanning a Pending device's code removes it too, without a recent sign-in, because a Pending device can't see anything yet.
 _Avoid_: Revoking, deleting a device, unlinking
 
 **Security alert**:

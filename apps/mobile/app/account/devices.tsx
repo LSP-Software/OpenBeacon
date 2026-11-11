@@ -213,6 +213,11 @@ const DevicesScreen = () => {
               );
             })}
           </View>
+          <Link href="/account/add-device" asChild>
+            <Button variant="outline">
+              <Text>Add a device</Text>
+            </Button>
+          </Link>
         </ScrollView>
       )}
     </View>

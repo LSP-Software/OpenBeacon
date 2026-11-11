@@ -9,6 +9,7 @@ const HPKE_VERSION_LABEL = textEncoder.encode("HPKE-v1");
 const KEM_ID = 0x0020;
 const BASE_MODE = 0x00;
 const AUTH_MODE = 0x02;
+const AUTH_PSK_MODE = 0x03;
 
 const i2osp = (value: number, length: number) => {
   const bytes = new Uint8Array(length);
@@ -52,19 +53,35 @@ const deriveKemSharedSecret = (dh: Uint8Array, kemContext: Uint8Array) =>
     32,
   );
 
-const createCipher = (
-  mode: typeof BASE_MODE | typeof AUTH_MODE,
-  sharedSecret: Uint8Array,
-  info: Uint8Array,
-  aad: Uint8Array,
-) => {
+const createCipher = ({
+  aad,
+  info,
+  mode,
+  psk = new Uint8Array(),
+  pskId = new Uint8Array(),
+  sharedSecret,
+}: {
+  aad: Uint8Array;
+  info: Uint8Array;
+  mode: typeof BASE_MODE | typeof AUTH_MODE | typeof AUTH_PSK_MODE;
+  psk?: Uint8Array;
+  pskId?: Uint8Array;
+  sharedSecret: Uint8Array;
+}) => {
+  const usesPsk = mode === AUTH_PSK_MODE;
+  if (usesPsk !== psk.length > 0 || usesPsk !== pskId.length > 0) {
+    throw new Error("Inconsistent HPKE PSK inputs.");
+  }
+  if (usesPsk && psk.length < 32) {
+    throw new Error("HPKE PSK is too short.");
+  }
   const empty = new Uint8Array();
   const keyScheduleContext = concatBytes(
     i2osp(mode, 1),
-    labeledExtract(HPKE_SUITE_ID, empty, "psk_id_hash", empty),
+    labeledExtract(HPKE_SUITE_ID, empty, "psk_id_hash", pskId),
     labeledExtract(HPKE_SUITE_ID, empty, "info_hash", info),
   );
-  const secret = labeledExtract(HPKE_SUITE_ID, sharedSecret, "secret", empty);
+  const secret = labeledExtract(HPKE_SUITE_ID, sharedSecret, "secret", psk);
 
   return chacha20poly1305(
     labeledExpand(HPKE_SUITE_ID, secret, "key", keyScheduleContext, 32),
@@ -72,6 +89,45 @@ const createCipher = (
     aad,
   );
 };
+
+const encapsulateAuth = ({
+  ephemeralPrivateKey,
+  recipientPublicKey,
+  senderPrivateKey,
+}: {
+  ephemeralPrivateKey: Uint8Array;
+  recipientPublicKey: Uint8Array;
+  senderPrivateKey: Uint8Array;
+}) => {
+  const enc = x25519.getPublicKey(ephemeralPrivateKey);
+  return {
+    enc,
+    sharedSecret: deriveKemSharedSecret(
+      concatBytes(
+        x25519.getSharedSecret(ephemeralPrivateKey, recipientPublicKey),
+        x25519.getSharedSecret(senderPrivateKey, recipientPublicKey),
+      ),
+      concatBytes(enc, recipientPublicKey, x25519.getPublicKey(senderPrivateKey)),
+    ),
+  };
+};
+
+const decapsulateAuth = ({
+  enc,
+  recipientPrivateKey,
+  senderPublicKey,
+}: {
+  enc: Uint8Array;
+  recipientPrivateKey: Uint8Array;
+  senderPublicKey: Uint8Array;
+}) =>
+  deriveKemSharedSecret(
+    concatBytes(
+      x25519.getSharedSecret(recipientPrivateKey, enc),
+      x25519.getSharedSecret(recipientPrivateKey, senderPublicKey),
+    ),
+    concatBytes(enc, x25519.getPublicKey(recipientPrivateKey), senderPublicKey),
+  );
 
 export const sealAuth = ({
   aad,
@@ -88,17 +144,14 @@ export const sealAuth = ({
   recipientPublicKey: Uint8Array;
   senderPrivateKey: Uint8Array;
 }) => {
-  const enc = x25519.getPublicKey(ephemeralPrivateKey);
-  const sharedSecret = deriveKemSharedSecret(
-    concatBytes(
-      x25519.getSharedSecret(ephemeralPrivateKey, recipientPublicKey),
-      x25519.getSharedSecret(senderPrivateKey, recipientPublicKey),
-    ),
-    concatBytes(enc, recipientPublicKey, x25519.getPublicKey(senderPrivateKey)),
-  );
+  const { enc, sharedSecret } = encapsulateAuth({
+    ephemeralPrivateKey,
+    recipientPublicKey,
+    senderPrivateKey,
+  });
 
   return {
-    ciphertext: createCipher(AUTH_MODE, sharedSecret, info, aad).encrypt(plaintext),
+    ciphertext: createCipher({ aad, info, mode: AUTH_MODE, sharedSecret }).encrypt(plaintext),
     enc,
   };
 };
@@ -118,15 +171,78 @@ export const openAuth = ({
   recipientPrivateKey: Uint8Array;
   senderPublicKey: Uint8Array;
 }) => {
-  const sharedSecret = deriveKemSharedSecret(
-    concatBytes(
-      x25519.getSharedSecret(recipientPrivateKey, enc),
-      x25519.getSharedSecret(recipientPrivateKey, senderPublicKey),
-    ),
-    concatBytes(enc, x25519.getPublicKey(recipientPrivateKey), senderPublicKey),
-  );
+  const sharedSecret = decapsulateAuth({ enc, recipientPrivateKey, senderPublicKey });
 
-  return createCipher(AUTH_MODE, sharedSecret, info, aad).decrypt(ciphertext);
+  return createCipher({ aad, info, mode: AUTH_MODE, sharedSecret }).decrypt(ciphertext);
+};
+
+export const sealAuthPsk = ({
+  aad,
+  ephemeralPrivateKey = x25519.utils.randomSecretKey(),
+  info,
+  plaintext,
+  psk,
+  pskId,
+  recipientPublicKey,
+  senderPrivateKey,
+}: {
+  aad: Uint8Array;
+  ephemeralPrivateKey?: Uint8Array;
+  info: Uint8Array;
+  plaintext: Uint8Array;
+  psk: Uint8Array;
+  pskId: Uint8Array;
+  recipientPublicKey: Uint8Array;
+  senderPrivateKey: Uint8Array;
+}) => {
+  const { enc, sharedSecret } = encapsulateAuth({
+    ephemeralPrivateKey,
+    recipientPublicKey,
+    senderPrivateKey,
+  });
+
+  return {
+    ciphertext: createCipher({
+      aad,
+      info,
+      mode: AUTH_PSK_MODE,
+      psk,
+      pskId,
+      sharedSecret,
+    }).encrypt(plaintext),
+    enc,
+  };
+};
+
+export const openAuthPsk = ({
+  aad,
+  ciphertext,
+  enc,
+  info,
+  psk,
+  pskId,
+  recipientPrivateKey,
+  senderPublicKey,
+}: {
+  aad: Uint8Array;
+  ciphertext: Uint8Array;
+  enc: Uint8Array;
+  info: Uint8Array;
+  psk: Uint8Array;
+  pskId: Uint8Array;
+  recipientPrivateKey: Uint8Array;
+  senderPublicKey: Uint8Array;
+}) => {
+  const sharedSecret = decapsulateAuth({ enc, recipientPrivateKey, senderPublicKey });
+
+  return createCipher({
+    aad,
+    info,
+    mode: AUTH_PSK_MODE,
+    psk,
+    pskId,
+    sharedSecret,
+  }).decrypt(ciphertext);
 };
 
 export const sealBase = ({
@@ -149,7 +265,7 @@ export const sealBase = ({
   );
 
   return {
-    ciphertext: createCipher(BASE_MODE, sharedSecret, info, aad).encrypt(plaintext),
+    ciphertext: createCipher({ aad, info, mode: BASE_MODE, sharedSecret }).encrypt(plaintext),
     enc,
   };
 };
@@ -172,5 +288,5 @@ export const openBase = ({
     concatBytes(enc, x25519.getPublicKey(recipientPrivateKey)),
   );
 
-  return createCipher(BASE_MODE, sharedSecret, info, aad).decrypt(ciphertext);
+  return createCipher({ aad, info, mode: BASE_MODE, sharedSecret }).decrypt(ciphertext);
 };

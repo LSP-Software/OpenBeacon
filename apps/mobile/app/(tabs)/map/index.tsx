@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppState, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeMap } from "../../../components/map/NativeMap.tsx";
+import { NewSignInBanner } from "../../../components/NewSignInBanner.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
@@ -313,6 +314,7 @@ const MapScreen = () => {
         className="absolute left-4 right-4"
         style={{ top: insets.top + 8, maxHeight: "65%" }}
       >
+        <NewSignInBanner subscribed={isFocused} />
         {queueEviction && (
           <View className="mb-2 gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4">
             <Text className="font-semibold text-amber-700 dark:text-amber-400">

@@ -37,13 +37,17 @@ A device signed in to an account that already has an Active device, and not yet 
 _Avoid_: Unapproved device, untrusted device, new device
 
 **Activation**:
-A Pending device becoming an Active device. It happens when the device proves it holds the current History key after a Restore, or after a Recovery reset on that device. QR linking will be a third way. Activation flags the account's Groups for a new Epoch, so the next one includes the device.
+A Pending device becoming an Active device. It happens in one of three ways: an Active device of the account approves a Device link, the device proves it holds the current History key after a Restore, or a Recovery reset on that device. Activation flags the account's Groups for a new Epoch, so the next one includes the device.
 _Avoid_: Approval, verification, enrolment
+
+**Device link**:
+A Pending device getting every History key version from an Active device of the same account, by showing a QR code that the Active device scans. The QR code carries the new device's Device key and a secret that never reaches the server. Approving it is the device's Activation. A code expires after 10 minutes.
+_Avoid_: Pairing, sync, transfer
 
 ### Recovery
 
 **Recovery phrase**:
-The 12 words a user writes down to get their History key onto a new device. It's never stored or sent anywhere.
+The 12 words a user writes down to get their History key onto a new device when they have no other phone to link from. It's never stored or sent anywhere.
 _Avoid_: Seed phrase, mnemonic, recovery code, backup code, password
 
 **Recovery key**:
@@ -59,7 +63,7 @@ One History key version's private key encrypted to and authenticated by the Reco
 _Avoid_: Backup, key backup, escrowed key, recovery blob
 
 **Enrolled device**:
-A device that holds the account's current History key, because it created that key or Restored it.
+A device that holds the account's current History key, because it created that key, Restored it or got it through a Device link.
 _Avoid_: Trusted device, approved device, verified device, primary device
 
 **Backfill**:

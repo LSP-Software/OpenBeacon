@@ -1,6 +1,8 @@
 import { optionalEnvString, serverNameSchema } from "./env.ts";
 import {
+  approveDeviceLinkSchema,
   deviceIconSchema,
+  deviceLinkIdSchema,
   deviceNameSchema,
   removeDeviceSchema,
   updateDeviceSchema,
@@ -77,4 +79,6 @@ export {
   removeDeviceSchema,
   updateDeviceSchema,
   wrappedEpochKeySchema,
+  approveDeviceLinkSchema,
+  deviceLinkIdSchema,
 };

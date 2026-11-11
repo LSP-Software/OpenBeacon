@@ -11,5 +11,8 @@ export const runPendingDeviceCleanup = async () => {
   await services.db.$transaction([
     services.db.session.deleteMany({ where: { device: { is: expired } } }),
     services.db.userDevice.deleteMany({ where: expired }),
+    services.db.deviceLink.deleteMany({
+      where: { expiresAt: { lt: new Date(now.getTime() - 24 * 60 * 60_000) } },
+    }),
   ]);
 };

@@ -38,6 +38,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
         expiresAt: new Date(clock.now.getTime() + day),
       })),
     });
+    await prisma.deviceLink.createMany({
+      data: [
+        { name: "newPending", expiresAt: new Date(clock.now.getTime() - 2 * day) },
+        { name: "oldActive", expiresAt: new Date(clock.now.getTime() - 60_000) },
+      ].map(({ expiresAt, name }) => ({
+        deviceId: `${prefix}-${name}`,
+        expiresAt,
+        id: `${prefix}-${name}-link`,
+        userId,
+      })),
+    });
   });
 
   afterAll(async () => {
@@ -55,5 +66,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
     expect(devices.map(({ name }) => name)).toEqual(["newPending", "oldActive", "oldRemoved"]);
     const sessions = await prisma.session.findMany({ where: { userId }, select: { id: true } });
     expect(sessions.map(({ id }) => id)).toEqual([`${prefix}-newPending-session`]);
+  });
+
+  test("deletes device links that expired more than a day ago", async () => {
+    const links = await prisma.deviceLink.findMany({ where: { userId }, select: { id: true } });
+    expect(links.map(({ id }) => id)).toEqual([`${prefix}-oldActive-link`]);
   });
 });

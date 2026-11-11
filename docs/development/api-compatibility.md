@@ -77,7 +77,7 @@ A server from before this handshake has no level fields on `/health`. The app tr
 
 ## Level history
 
-| Level | Change                                                                                                                                                                |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | Compatibility levels introduced.                                                                                                                                      |
-| 2     | The app lists and edits devices (`account.listDevices`, `updateDevice`). The server makes later devices Pending until they're set up, so the client minimum is 2 too. |
+| Level | Change                                                                                                                                                                                                                                       |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | Compatibility levels introduced.                                                                                                                                                                                                             |
+| 2     | The app lists, edits, removes and links devices (`account.listDevices`, `updateDevice`, `removeDevice`, the `device` and `deviceLink` routers). The server makes later devices Pending until they're set up, so the client minimum is 2 too. |

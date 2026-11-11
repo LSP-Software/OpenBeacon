@@ -23,6 +23,13 @@ export const freshSessionProcedure = protectedProcedure.use(async ({ ctx, next }
   return next();
 });
 
+export const thisDeviceProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  if (!ctx.deviceId) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "This phone isn't registered yet." });
+  }
+  return next({ ctx: { deviceId: ctx.deviceId } });
+});
+
 export const requireActiveDevice = t.middleware(async ({ ctx, next }) => {
   const userId = ctx.session?.user.id;
   const device =

@@ -48,6 +48,23 @@ const SetUpPhoneScreen = () => {
           </View>
         )}
 
+        {status.data && (
+          <View className="gap-4">
+            <Text className="text-foreground text-xl font-semibold">
+              Do you have another phone signed in?
+            </Text>
+            <Link href="/setup/link" asChild>
+              <Button>
+                <Text>Yes, link with your other phone</Text>
+              </Button>
+            </Link>
+            <Text className="text-muted-foreground text-base leading-6">
+              Your other phone scans a code on this one, and this phone gets your full location
+              history. If you don’t have it with you:
+            </Text>
+          </View>
+        )}
+
         {status.data?.recoveryKey && (
           <View className="gap-4">
             <Text className="text-muted-foreground text-base leading-6">
@@ -57,7 +74,7 @@ const SetUpPhoneScreen = () => {
               href={{ pathname: "/account/recovery-restore", params: { setup: "true" } }}
               asChild
             >
-              <Button>
+              <Button variant="outline">
                 <Text>Enter your recovery phrase</Text>
               </Button>
             </Link>
@@ -72,11 +89,11 @@ const SetUpPhoneScreen = () => {
         {status.data && !status.data.recoveryKey && (
           <View className="gap-4">
             <Text className="text-muted-foreground text-base leading-6">
-              Your account doesn’t have a recovery phrase yet, so this phone can’t read the history
-              on your other phones. Create a phrase on a phone you still have, then enter it here.
+              Your account doesn’t have a recovery phrase yet. Create one on a phone you still have,
+              then enter it here.
             </Text>
             <Link href="/setup/waiting" asChild>
-              <Button>
+              <Button variant="outline">
                 <Text>Create a phrase on your other phone</Text>
               </Button>
             </Link>

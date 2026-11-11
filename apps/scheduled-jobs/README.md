@@ -4,7 +4,7 @@ The scheduled job runner is a separate Bun process and Docker image released alo
 
 - `account-deletion` runs once per minute. It deletes accounts at the end of their grace period and retries image cleanup.
 - `verification-cleanup` runs once per hour. It deletes `Verification` rows whose `expiresAt` is before the database time. These hold email codes, the tokens issued for a correct code and better-auth's own verification records, together with the email address or user ID they are for. Unexpired rows are kept. It runs whether or not email is configured.
-- `pending-device-cleanup` runs once per hour. It deletes Pending devices (signed in but never set up) created more than 7 days before the database time, and signs out their sessions. Active and removed devices are kept.
+- `pending-device-cleanup` runs once per hour. It deletes Pending devices (signed in but never set up) created more than 7 days before the database time, and signs out their sessions. Active and removed devices are kept. It also deletes device links (QR codes) whose code expired more than a day ago.
 
 Run it locally with `bun run dev --filter=@openbeacon/scheduled-jobs`; it reads the root `.env`.
 

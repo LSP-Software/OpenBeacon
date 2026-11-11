@@ -10,7 +10,7 @@ Group Epoch keys and Personal data are encrypted to a random, versioned History 
 
 - **Derive the History key from the phrase.** It's simpler, with one key and no escrow. But replacing the key would mean a new phrase: every device revocation, and every phrase that might have been seen, would force the user to write down new words and every History wrap to be redone.
 - **Random History key, escrowed to a phrase-derived Recovery key.** This is the option we chose.
-- **No phrase; hand the History key from one device to another.** Rejected for now. Until devices can be verified (OPE-213), the server decides which device receives it, so anyone who takes over the password could ask for the whole history.
+- **No phrase; hand the History key from one device to another.** Rejected for now. Until devices can be verified (OPE-213), the server decides which device receives it, so anyone who takes over the password could ask for the whole history. [ADR 0002](./0002-every-account-has-a-history-key.md#handing-the-history-key-to-a-new-device-ope-293) adds this as a Device link, where a QR code fixes the receiving device instead of the server.
 
 ## Why
 

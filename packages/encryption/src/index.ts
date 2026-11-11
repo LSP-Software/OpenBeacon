@@ -485,3 +485,10 @@ export {
   openDeviceActivationChallenge,
   sealDeviceActivationChallenge,
 } from "./deviceActivation.ts";
+export {
+  createDeviceLinkSecret,
+  formatDeviceLinkCode,
+  openDeviceLinkHandover,
+  parseDeviceLinkCode,
+  sealDeviceLinkHandover,
+} from "./deviceLink.ts";

@@ -38,6 +38,7 @@ model User {
   createdSharedInvites       GroupSharedInvite[]
   recoveryKey                RecoveryKey?
   historyKeys                AccountHistoryKey[]
+  deviceLinks                DeviceLink[]
 
   @@index([pendingDeletion, deletionDate])
 }
@@ -240,8 +241,29 @@ model UserDevice {
   recipientEpochKeys     GroupEpochRecipientKey[] @relation("GroupEpochRecipientDevice")
   groupEncryptedPayloads GroupEncryptedPayload[]  @relation("GroupEncryptedPayloadSenderDevice")
   sentHistoryWraps       GroupEpochHistoryWrap[]
+  deviceLink             DeviceLink?              @relation("DeviceLinkNewDevice")
+  approvedDeviceLinks    DeviceLink[]             @relation("DeviceLinkApprover")
 
   @@index([userId])
+}
+
+model DeviceLink {
+  id               String      @id
+  userId           String
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId         String      @unique
+  device           UserDevice  @relation("DeviceLinkNewDevice", fields: [deviceId], references: [id], onDelete: Cascade)
+  approverDeviceId String?
+  approverDevice   UserDevice? @relation("DeviceLinkApprover", fields: [approverDeviceId], references: [id], onDelete: Cascade)
+  enc              String?
+  ciphertext       String?
+  createdAt        DateTime    @default(now())
+  expiresAt        DateTime
+  completedAt      DateTime?
+
+  @@index([userId])
+  @@index([approverDeviceId])
+  @@index([expiresAt])
 }
 
 enum DeviceIcon {

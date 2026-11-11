@@ -21,3 +21,13 @@ export const updateDeviceSchema = z.object({
 export const removeDeviceSchema = z.object({
   deviceId: z.string().min(1).max(128),
 });
+
+export const deviceLinkIdSchema = z.object({
+  linkId: z.uuid(),
+});
+
+export const approveDeviceLinkSchema = z.object({
+  linkId: z.uuid(),
+  enc: z.base64().max(64),
+  ciphertext: z.base64().min(1).max(200_000),
+});
