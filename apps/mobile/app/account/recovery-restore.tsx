@@ -2,6 +2,7 @@ import { Alert } from "../../lib/alert.ts";
 import { diagnoseRecoveryPhraseInput, parseRecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { TRPCClientError } from "@trpc/client";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import {
   allowScreenCaptureAsync,
@@ -38,21 +39,25 @@ const RecoveryRestoreScreen = () => {
     status.data?.currentHistoryKey ?? undefined,
   );
   const holdsCurrent = currentVersion !== undefined && heldVersions.data?.includes(currentVersion);
-  const [step, setStep] = useState<"enter" | "restoring" | "done">("enter");
+  const [step, setStep] = useState<
+    "enter" | "restoring" | "activating" | "activationFailed" | "done"
+  >("enter");
   const [userId, setUserId] = useState<string>();
   const [words, setWords] = useState(emptyWords);
   const [problem, setProblem] = useState<{ message: string; invalidIndexes: number[] }>();
+  const [activationProblem, setActivationProblem] = useState<string>();
 
-  const entering = step !== "done";
+  const entering = step === "enter" || step === "restoring";
+  const protecting = step !== "done";
   useEffect(() => {
-    if (!entering) return;
+    if (!protecting) return;
     void tryCatch(preventScreenCaptureAsync("recovery-restore"));
     void tryCatch(enableAppSwitcherProtectionAsync());
     return () => {
       void tryCatch(allowScreenCaptureAsync("recovery-restore"));
       void tryCatch(disableAppSwitcherProtectionAsync());
     };
-  }, [entering]);
+  }, [protecting]);
 
   const restore = async () => {
     setProblem(undefined);
@@ -94,16 +99,26 @@ const RecoveryRestoreScreen = () => {
     void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });
     void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", result.data.userId] });
     void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", result.data.userId] });
+    await finish(result.data.userId);
+  };
+
+  const finish = async (restoredUserId: string) => {
     if (setup) {
+      setStep("activating");
+      setActivationProblem(undefined);
       const activated = await tryCatch(activateWithHistoryKey());
       if (activated.error) {
-        setStep("enter");
-        Alert.alert("Unable to set up this phone", activated.error.message);
+        setActivationProblem(
+          activated.error instanceof TRPCClientError && !activated.error.data
+            ? "We couldn’t reach your server. Check your connection and try again."
+            : activated.error.message,
+        );
+        setStep("activationFailed");
         return;
       }
     }
     requestTrackingSync();
-    await resealPersonalData(result.data.userId);
+    await resealPersonalData(restoredUserId);
     await queryClient.invalidateQueries({ queryKey: ["personalNicknames"] });
     if (setup) {
       router.replace("/setup/name");
@@ -116,7 +131,11 @@ const RecoveryRestoreScreen = () => {
     <View className="flex-1 bg-background">
       <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
         <View className="flex-row items-center justify-between">
-          {step === "restoring" ? <View className="w-10" /> : <BackButton />}
+          {step === "restoring" || step === "activating" ? (
+            <View className="w-10" />
+          ) : (
+            <BackButton />
+          )}
           <Text className="text-foreground text-2xl font-bold">Restore</Text>
           <View className="w-10" />
         </View>
@@ -171,6 +190,25 @@ const RecoveryRestoreScreen = () => {
                   </Button>
                 </Link>
               )}
+            </View>
+          )}
+
+          {(step === "activating" || step === "activationFailed") && userId && (
+            <View className="gap-4">
+              <Text className="text-foreground text-3xl font-bold">Your history is restored</Text>
+              <Text
+                accessibilityLiveRegion="polite"
+                className={
+                  activationProblem
+                    ? "text-destructive text-base leading-6"
+                    : "text-muted-foreground text-base leading-6"
+                }
+              >
+                {activationProblem ?? "Setting up this phone…"}
+              </Text>
+              <Button onPress={() => finish(userId)} loading={step === "activating"}>
+                <Text>Try again</Text>
+              </Button>
             </View>
           )}
 

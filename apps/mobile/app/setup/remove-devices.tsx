@@ -1,9 +1,9 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { router, Stack, useFocusEffect } from "expo-router";
 import { CheckIcon } from "lucide-react-native";
-import { useEffect, useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { BackHandler, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { Button } from "../../components/ui/Button.tsx";
@@ -24,6 +24,13 @@ const RemoveOldDevicesScreen = () => {
   const otherDevices = devices.data?.filter((device) => !device.isCurrent) ?? [];
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [removing, setRemoving] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => true);
+      return () => subscription.remove();
+    }, []),
+  );
 
   useEffect(() => {
     if (devices.data && otherDevices.length === 0) router.replace("/setup/name");
@@ -58,6 +65,7 @@ const RemoveOldDevicesScreen = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <ScrollView
         className="flex-1"
         contentContainerClassName="gap-6 px-6 py-6 pb-16"
@@ -73,6 +81,17 @@ const RemoveOldDevicesScreen = () => {
           </Text>
         </View>
         {devices.isPending && <LoadingIndicator />}
+        {devices.isError && (
+          <View className="gap-4">
+            <Text className="text-muted-foreground text-base leading-6">
+              We couldn’t load your devices. Check your connection and try again, or keep them all
+              and remove any later in Account → Devices.
+            </Text>
+            <Button variant="outline" onPress={() => devices.refetch()}>
+              <Text>Try again</Text>
+            </Button>
+          </View>
+        )}
         {otherDevices.length > 0 && (
           <View className="overflow-hidden rounded-3xl border border-border bg-card">
             {otherDevices.map((device, index) => {

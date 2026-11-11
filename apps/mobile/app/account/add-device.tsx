@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
 import { useRef, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Linking, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../../components/headers/BackButton.tsx";
 import { Button } from "../../components/ui/Button.tsx";
@@ -97,12 +97,26 @@ const AddDeviceScreen = () => {
             </Text>
             {problem && <Text className="text-destructive text-base leading-6">{problem}</Text>}
             {permission?.granted ? (
-              <View className="overflow-hidden rounded-3xl">
+              <View
+                accessible
+                accessibilityLabel="Camera. Point it at the code on your new phone."
+                className="overflow-hidden rounded-3xl"
+              >
                 <CameraView
                   style={{ height: 320 }}
                   barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
                   onBarcodeScanned={step === "scan" ? ({ data }) => void check(data) : undefined}
                 />
+              </View>
+            ) : permission && !permission.canAskAgain ? (
+              <View className="gap-4">
+                <Text className="text-muted-foreground text-base leading-6">
+                  OpenBeacon isn’t allowed to use the camera. Turn on camera access in Settings to
+                  scan the code.
+                </Text>
+                <Button onPress={() => void tryCatch(Linking.openSettings())}>
+                  <Text>Open Settings</Text>
+                </Button>
               </View>
             ) : (
               <Button

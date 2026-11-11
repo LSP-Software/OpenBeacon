@@ -1,6 +1,7 @@
 import { createDeviceLinkSecret, formatDeviceLinkCode } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { TRPCClientError } from "@trpc/client";
 import { router } from "expo-router";
 import {
   allowScreenCaptureAsync,
@@ -8,7 +9,7 @@ import {
   enableAppSwitcherProtectionAsync,
   preventScreenCaptureAsync,
 } from "expo-screen-capture";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,9 +19,13 @@ import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 import { ensureDeviceKeyRegistration } from "../../lib/deviceKeys.ts";
-import { finishDeviceLink } from "../../lib/deviceLink.ts";
+import { finishDeviceLink, HANDOVER_REJECTED_MESSAGE } from "../../lib/deviceLink.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
+
+const UNREACHABLE_MESSAGE = "We couldn’t reach your server. Check your connection and try again.";
+
+type Handover = Omit<Parameters<typeof finishDeviceLink>[0], "linkId" | "psk">;
 
 const LinkWithOtherPhoneScreen = () => {
   const queryClient = useQueryClient();
@@ -30,27 +35,62 @@ const LinkWithOtherPhoneScreen = () => {
     linkId: string;
     psk: Uint8Array;
   } | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  const finishing = useRef(false);
+  const [handover, setHandover] = useState<Handover | null>(null);
+  const [problem, setProblem] = useState<{
+    message: string;
+    action: "newCode" | "finish" | "continue" | "home";
+  } | null>(null);
   const status = useQuery({
     ...trpc.deviceLink.status.queryOptions({ linkId: link?.linkId ?? "" }),
-    enabled: link !== null && problem === null,
-    refetchInterval: (query) => (query.state.data?.state === "waiting" ? 2_000 : false),
+    enabled: link !== null && handover === null && problem === null,
+    refetchInterval: (query) => {
+      const state = query.state.data?.state;
+      return state === "approved" || state === "expired" ? false : 2_000;
+    },
   });
 
   const showNewCode = async () => {
     setProblem(null);
     setLink(null);
-    finishing.current = false;
+    setHandover(null);
     const created = await tryCatch(
       Promise.all([ensureDeviceKeyRegistration(), createLink.mutateAsync()]),
     );
+    if (created.error instanceof TRPCClientError && created.error.data?.code === "CONFLICT") {
+      setProblem({ message: "This phone is already set up.", action: "home" });
+      return;
+    }
     if (created.error) {
-      setProblem("We couldn’t reach your server. Check your connection and try again.");
+      setProblem({ message: UNREACHABLE_MESSAGE, action: "newCode" });
       return;
     }
     const [device, { linkId }] = created.data;
     setLink({ devicePublicKey: device.publicKey, linkId, psk: createDeviceLinkSecret() });
+  };
+
+  const finish = async (approved: Handover, current: { linkId: string; psk: Uint8Array }) => {
+    setProblem(null);
+    const finished = await tryCatch(
+      finishDeviceLink({ ...approved, linkId: current.linkId, psk: current.psk }),
+    );
+    if (finished.error) {
+      if (finished.error.message === HANDOVER_REJECTED_MESSAGE) {
+        setProblem({ message: HANDOVER_REJECTED_MESSAGE, action: "continue" });
+        return;
+      }
+      setProblem({
+        message:
+          finished.error instanceof TRPCClientError && !finished.error.data
+            ? UNREACHABLE_MESSAGE
+            : finished.error.message,
+        action: "finish",
+      });
+      return;
+    }
+    await queryClient.invalidateQueries();
+    requestTrackingSync();
+    await tryCatch(resealPersonalData(finished.data.userId));
+    router.replace("/setup/name");
   };
 
   useEffect(() => {
@@ -68,31 +108,23 @@ const LinkWithOtherPhoneScreen = () => {
 
   useEffect(() => {
     const data = status.data;
-    if (!link || data?.state !== "approved" || finishing.current) return;
-    finishing.current = true;
-    void (async () => {
-      const finished = await tryCatch(
-        finishDeviceLink({ ...data, linkId: link.linkId, psk: link.psk }),
-      );
-      if (finished.error) {
-        setProblem(finished.error.message);
-        return;
-      }
-      await queryClient.invalidateQueries();
-      requestTrackingSync();
-      await tryCatch(resealPersonalData(finished.data.userId));
-      router.replace("/setup/name");
-    })();
-  }, [link, queryClient, status.data]);
+    if (!link || data?.state !== "approved" || handover) return;
+    const approved = {
+      approverPublicKey: data.approverPublicKey,
+      ciphertext: data.ciphertext,
+      enc: data.enc,
+    };
+    setHandover(approved);
+    void finish(approved, link);
+  }, [link, handover, status.data]);
 
-  const approved = status.data?.state === "approved";
   const expired = status.data?.state === "expired";
 
   return (
     <View className="flex-1 bg-background">
       <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
         <View className="flex-row items-center justify-between">
-          <BackButton />
+          {handover && !problem ? <View className="w-10" /> : <BackButton />}
           <Text className="text-foreground text-2xl font-bold">Set up</Text>
           <View className="w-10" />
         </View>
@@ -110,18 +142,33 @@ const LinkWithOtherPhoneScreen = () => {
 
         {problem ? (
           <View className="gap-4">
-            <Text className="text-destructive text-base leading-6">{problem}</Text>
-            {approved ? (
+            <Text className="text-destructive text-base leading-6">{problem.message}</Text>
+            {problem.action === "continue" && (
               <Button onPress={() => router.replace("/setup/name")}>
                 <Text>Continue</Text>
               </Button>
-            ) : (
+            )}
+            {problem.action === "home" && (
+              <Button onPress={() => router.replace("/")}>
+                <Text>Continue</Text>
+              </Button>
+            )}
+            {problem.action === "finish" && (
+              <Button
+                onPress={() => {
+                  if (handover && link) void finish(handover, link);
+                }}
+              >
+                <Text>Try again</Text>
+              </Button>
+            )}
+            {problem.action === "newCode" && (
               <Button onPress={showNewCode}>
                 <Text>Try again</Text>
               </Button>
             )}
           </View>
-        ) : approved ? (
+        ) : handover ? (
           <View className="items-center gap-4">
             <LoadingIndicator />
             <Text className="text-muted-foreground text-base">Setting up this phone…</Text>
@@ -137,7 +184,12 @@ const LinkWithOtherPhoneScreen = () => {
           </View>
         ) : link ? (
           <View className="items-center gap-4">
-            <View className="rounded-3xl bg-white p-4">
+            <View
+              accessible
+              accessibilityRole="image"
+              accessibilityLabel="Setup code. Scan it with your other phone."
+              className="rounded-3xl bg-white p-4"
+            >
               <QRCode
                 value={formatDeviceLinkCode({
                   devicePublicKey: link.devicePublicKey,
@@ -153,7 +205,7 @@ const LinkWithOtherPhoneScreen = () => {
             >
               {status.isError
                 ? "We can’t reach your server right now. We’ll keep trying."
-                : "Waiting for your other phone. This screen moves on by itself once it’s approved."}
+                : "Waiting for your other phone. This screen moves on by itself once you tap Add on it."}
             </Text>
           </View>
         ) : (

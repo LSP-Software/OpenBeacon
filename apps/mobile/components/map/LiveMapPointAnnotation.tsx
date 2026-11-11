@@ -71,7 +71,13 @@ export const LiveMapPointAnnotation = ({
         <Pressable
           onPress={onSelected}
           accessibilityRole="button"
-          accessibilityLabel={marker.name}
+          accessibilityLabel={
+            marker.mergedDeviceIds && marker.mergedDeviceIds.length > 1
+              ? `${marker.name}, ${marker.mergedDeviceIds.length} devices here`
+              : marker.deviceName
+                ? `${marker.name}, ${marker.deviceName}`
+                : marker.name
+          }
           style={{ alignSelf: "flex-start" }}
         >
           <LiveMapPinMotion arrival={arrival} gatherTo={gatherTo}>

@@ -1,7 +1,7 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
-import { Link, router } from "expo-router";
-import { useState } from "react";
+import { Link, router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
@@ -9,14 +9,32 @@ import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
+import { isThisDeviceActive } from "../../lib/deviceActivation.ts";
+import { signOutOfThisPhone } from "../../lib/signOut.ts";
 
 const SetUpPhoneScreen = () => {
+  const { data: session } = authClient.useSession();
   const status = useQuery(trpc.accountRecovery.status.queryOptions());
   const [signingOut, setSigningOut] = useState(false);
 
+  useFocusEffect(
+    useCallback(() => {
+      void (async () => {
+        const active = await tryCatch(isThisDeviceActive());
+        if (active.data === true) router.replace("/");
+      })();
+    }, []),
+  );
+
   const signOut = async () => {
     setSigningOut(true);
-    await tryCatch(authClient.signOut());
+    await tryCatch(
+      signOutOfThisPhone({
+        onSigningOut: () => {},
+        removeThisPhone: false,
+        sessionTokenToRevoke: session?.session?.token ?? null,
+      }),
+    );
     setSigningOut(false);
     router.replace("/");
   };

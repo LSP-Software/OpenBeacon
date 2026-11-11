@@ -145,13 +145,8 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
     ? getBatteryVisual({ batteryLevel: device.battery.level, charging: device.battery.charging })
     : null;
 
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Show ${device.name}`}
-      className="min-h-11 flex-row items-center gap-3 py-1.5 active:opacity-70"
-      onPress={onPress}
-    >
+  const content = (
+    <>
       <View className="size-9 items-center justify-center rounded-xl border border-border bg-background">
         <Icon as={deviceIcons[device.icon].icon} size={18} className="text-foreground" />
       </View>
@@ -176,6 +171,19 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
           <Text className={`${batteryVisual.colorClass} text-sm`}>{device.battery.level}%</Text>
         </View>
       ) : null}
+    </>
+  );
+
+  return device.timestamp === null ? (
+    <View className="min-h-11 flex-row items-center gap-3 py-1.5">{content}</View>
+  ) : (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Show ${device.name}`}
+      className="min-h-11 flex-row items-center gap-3 py-1.5 active:opacity-70"
+      onPress={onPress}
+    >
+      {content}
     </Pressable>
   );
 };

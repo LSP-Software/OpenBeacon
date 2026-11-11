@@ -2,10 +2,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { deviceIconSchema, deviceNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { router } from "expo-router";
-import { useEffect } from "react";
+import { router, Stack, useFocusEffect } from "expo-router";
+import { useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
-import { Pressable, ScrollView, View } from "react-native";
+import { BackHandler, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
@@ -37,6 +37,13 @@ const NameThisPhoneScreen = () => {
   });
   const selectedIcon = form.watch("icon");
 
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => true);
+      return () => subscription.remove();
+    }, []),
+  );
+
   useEffect(() => {
     if (thisPhone) form.reset({ name: thisPhone.name, icon: thisPhone.icon });
   }, [thisPhone?.id]);
@@ -57,6 +64,7 @@ const NameThisPhoneScreen = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
+      <Stack.Screen options={{ gestureEnabled: false }} />
       <ScrollView
         className="flex-1"
         contentContainerClassName="gap-6 px-6 py-6 pb-16"
@@ -72,6 +80,16 @@ const NameThisPhoneScreen = () => {
         </View>
         {devices.isPending ? (
           <LoadingIndicator />
+        ) : devices.isError ? (
+          <View className="gap-4">
+            <Text className="text-muted-foreground text-base leading-6">
+              We couldn’t load this phone’s details. Check your connection and try again, or skip
+              and name it later in Account → Devices.
+            </Text>
+            <Button variant="outline" onPress={() => devices.refetch()}>
+              <Text>Try again</Text>
+            </Button>
+          </View>
         ) : (
           <View className="gap-4">
             <Input control={form.control} name="name" label="Name" maxLength={40} />
@@ -100,9 +118,11 @@ const NameThisPhoneScreen = () => {
             </View>
           </View>
         )}
-        <Button onPress={form.handleSubmit(save)} loading={updateDevice.isPending}>
-          <Text>Continue</Text>
-        </Button>
+        {!devices.isError && (
+          <Button onPress={form.handleSubmit(save)} loading={updateDevice.isPending}>
+            <Text>Continue</Text>
+          </Button>
+        )}
         <Button variant="ghost" onPress={finish} disabled={updateDevice.isPending}>
           <Text>Skip</Text>
         </Button>
