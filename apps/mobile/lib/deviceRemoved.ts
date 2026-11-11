@@ -11,6 +11,7 @@ import {
 import { clearGroupColors } from "./groupColor.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { deleteStoredHistoryKeys } from "./historyKeys.ts";
+import { clearPendingJoinCodes } from "./pendingJoinCode.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
 import { clearTrackingKeyCheck } from "./trackingKeyCheck.ts";
@@ -37,6 +38,7 @@ export const wipeThisPhone = async () => {
     await tryCatch(deleteDeviceKey(userId));
   }
   forgetDeviceKeyRegistration();
+  clearPendingJoinCodes();
   queryClient.clear();
   clearGroupColors();
   clearTrackingUploadTimes();

@@ -109,14 +109,14 @@ const AddDeviceScreen = () => {
         {(step === "scan" || step === "checking") && (
           <View className="gap-4">
             <Text className="text-muted-foreground text-base leading-6">
-              On your new phone, sign in and choose “Yes, link with your other phone”. Then scan the
-              code it shows.
+              On the new phone or tablet, sign in and choose “Yes, link with your other device”.
+              Then scan the code it shows.
             </Text>
             {problem && <Text className="text-destructive text-base leading-6">{problem}</Text>}
             {permission?.granted ? (
               <View
                 accessible
-                accessibilityLabel="Camera. Point it at the code on your new phone."
+                accessibilityLabel="Camera. Point it at the code on the new device."
                 className="overflow-hidden rounded-3xl"
               >
                 <CameraView
@@ -141,7 +141,7 @@ const AddDeviceScreen = () => {
                   if (!(await requestPermission()).granted) {
                     Alert.alert(
                       "Camera permission required",
-                      "Allow camera access to scan the code on your new phone.",
+                      "Allow camera access to scan the code on the new device.",
                     );
                   }
                 }}

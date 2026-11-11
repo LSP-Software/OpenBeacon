@@ -12,7 +12,7 @@ import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
 import { cn } from "../../lib/cn.ts";
-import { deviceIcons } from "../../lib/deviceIcons.ts";
+import { deviceIconFor } from "../../lib/deviceIcons.ts";
 
 const RemoveOldDevicesScreen = () => {
   const queryClient = useQueryClient();
@@ -76,7 +76,7 @@ const RemoveOldDevicesScreen = () => {
             Remove devices you no longer have
           </Text>
           <Text className="text-muted-foreground text-base leading-6">
-            Removed devices are signed out and won’t receive new locations. Untick any phone you
+            Removed devices are signed out and won’t receive new locations. Untick any device you
             still use.
           </Text>
         </View>
@@ -107,7 +107,10 @@ const RemoveOldDevicesScreen = () => {
                     index < otherDevices.length - 1 && "border-b border-border/50",
                   )}
                 >
-                  <Icon as={deviceIcons[device.icon].icon} className="text-primary size-5" />
+                  <Icon
+                    as={deviceIconFor(device.icon, device.platform).icon}
+                    className="text-primary size-5"
+                  />
                   <View className="flex-1">
                     <Text className="text-foreground text-base font-medium">{device.name}</Text>
                     {device.model && (

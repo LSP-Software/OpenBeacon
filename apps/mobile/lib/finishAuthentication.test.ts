@@ -41,6 +41,12 @@ mock.module("./createHistoryKey.ts", () => ({
   },
 }));
 
+mock.module("./pendingJoinCode.ts", () => ({
+  clearPendingJoinCodes: () => events.push("clearJoinCodes"),
+  savePendingJoinCode: ({ code, userId }: { code: string; userId: string }) =>
+    events.push(`saveJoinCode:${userId}:${code}`),
+}));
+
 const { finishAuthentication } = await import("./finishAuthentication.ts");
 
 describe("finishing authentication", () => {
@@ -55,7 +61,13 @@ describe("finishing authentication", () => {
   test("a new account creates its history key after the device registers and before leaving", async () => {
     await finishAuthentication({ joinCode: "ABC123", newAccount: true });
 
-    expect(events).toEqual(["register", "status", "createHistoryKey:user-1", "navigate"]);
+    expect(events).toEqual([
+      "register",
+      "status",
+      "clearJoinCodes",
+      "createHistoryKey:user-1",
+      "navigate",
+    ]);
     expect(replacements).toEqual([{ pathname: "/join", params: { code: "ABC123" } }]);
   });
 
@@ -69,7 +81,7 @@ describe("finishing authentication", () => {
   test("signing in on an active device goes home without creating a history key", async () => {
     await finishAuthentication({ joinCode: undefined });
 
-    expect(events).toEqual(["register", "status", "navigate"]);
+    expect(events).toEqual(["register", "status", "clearJoinCodes", "navigate"]);
     expect(replacements).toEqual(["/"]);
   });
 
@@ -77,7 +89,15 @@ describe("finishing authentication", () => {
     deviceActive = false;
     await finishAuthentication({ joinCode: "ABC123", newAccount: true });
 
-    expect(events).toEqual(["register", "status", "navigate"]);
+    expect(events).toEqual(["register", "status", "saveJoinCode:user-1:ABC123", "navigate"]);
+    expect(replacements).toEqual(["/setup"]);
+  });
+
+  test("a Pending device signing in without an invite forgets any invite saved earlier", async () => {
+    deviceActive = false;
+    await finishAuthentication({ joinCode: undefined });
+
+    expect(events).toEqual(["register", "status", "clearJoinCodes", "navigate"]);
     expect(replacements).toEqual(["/setup"]);
   });
 
@@ -92,7 +112,7 @@ describe("finishing authentication", () => {
     registrationError = new Error("offline");
     await finishAuthentication({ joinCode: undefined, newAccount: true });
 
-    expect(events).toEqual(["register", "navigate"]);
+    expect(events).toEqual(["register", "clearJoinCodes", "navigate"]);
     expect(replacements).toEqual(["/"]);
   });
 

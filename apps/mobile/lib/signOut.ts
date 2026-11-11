@@ -4,6 +4,7 @@ import * as SecureStore from "expo-secure-store";
 import { trpcClient } from "./api.ts";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "./auth-client.ts";
 import { cancelDeviceKeyRegistrations, getRegisteredDeviceKey } from "./deviceKeys.ts";
+import { clearPendingJoinCodes } from "./pendingJoinCode.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
 import { linkSessionToDevice } from "./sessionLink.ts";
@@ -62,5 +63,6 @@ export const signOutOfThisPhone = async ({
     await tryCatch(SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke));
   }
   cancelDeviceKeyRegistrations();
+  clearPendingJoinCodes();
   return { status: "signedOut" };
 };

@@ -14,6 +14,7 @@ let stalledDelete: string | null = null;
 let providersError: Error | null = null;
 const providerRequests: unknown[] = [];
 
+mock.module("./pendingJoinCode.ts", () => ({ clearPendingJoinCodes: () => {} }));
 mock.module("expo-router", () => ({
   router: {
     replace: (target: unknown) => {

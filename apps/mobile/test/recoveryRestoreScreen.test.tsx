@@ -16,6 +16,7 @@ const backHandlers = new Set<() => boolean>();
 let gestureEnabled: boolean | undefined;
 const pressHardwareBack = () => [...backHandlers].some((handler) => handler());
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
+mock.module("../lib/thisDeviceNoun.ts", () => ({ thisDeviceNoun: () => "phone" }));
 mock.module("expo-router", () => ({
   Link: ({
     children,

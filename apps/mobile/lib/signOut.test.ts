@@ -12,6 +12,7 @@ let challengeError: Error | null = null;
 let signOutError: Error | null = null;
 let removedErrorDuringRemoval = false;
 
+mock.module("./pendingJoinCode.ts", () => ({ clearPendingJoinCodes: () => {} }));
 mock.module("expo-router", () => ({
   router: {
     replace: (target: unknown) => {

@@ -3,9 +3,9 @@ import { tryCatch } from "@openbeacon/shared";
 import { focusManager, useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Share, View } from "react-native";
-import QRCode from "react-native-qrcode-svg";
 import { useCachedGroup } from "../../hooks/useCachedGroup.ts";
 import { trpc } from "../../lib/api.ts";
+import { BrandedQrCode } from "../BrandedQrCode.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Text } from "../ui/Text.tsx";
 
@@ -79,7 +79,11 @@ export const SharedInvite = ({
         <>
           <Text>Valid for five minutes and one use.</Text>
           {value === "qr" ? (
-            <QRCode value={invite.data.code} size={200} />
+            <BrandedQrCode
+              accessibilityLabel="Invitation code. Scan it to join the group."
+              size={200}
+              value={invite.data.code}
+            />
           ) : (
             <>
               <Text selectable>{invite.data.code}</Text>

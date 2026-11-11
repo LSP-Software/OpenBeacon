@@ -2,10 +2,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { deviceIconSchema, deviceNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { router, Stack, useFocusEffect } from "expo-router";
+import { Stack, useFocusEffect } from "expo-router";
 import { useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
-import { BackHandler, Pressable, ScrollView, View } from "react-native";
+import { BackHandler, Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
@@ -16,14 +16,16 @@ import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
 import { cn } from "../../lib/cn.ts";
-import { deviceIcons } from "../../lib/deviceIcons.ts";
+import { deviceIconFor } from "../../lib/deviceIcons.ts";
+import { openAppAfterSetup } from "../../lib/pendingJoinCode.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 
 const schema = z.object({ name: deviceNameSchema, icon: deviceIconSchema });
 
 const finish = () => {
   requestTrackingSync();
-  router.replace("/");
+  openAppAfterSetup("/");
 };
 
 const NameThisPhoneScreen = () => {
@@ -36,6 +38,7 @@ const NameThisPhoneScreen = () => {
     defaultValues: { name: "", icon: "phone" },
   });
   const selectedIcon = form.watch("icon");
+  const noun = thisDeviceNoun();
 
   useFocusEffect(
     useCallback(() => {
@@ -72,9 +75,9 @@ const NameThisPhoneScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <View className="gap-4">
-          <Text className="text-foreground text-3xl font-bold">Name this phone</Text>
+          <Text className="text-foreground text-3xl font-bold">Name this {noun}</Text>
           <Text className="text-muted-foreground text-base leading-6">
-            This phone is set up. Its name and icon help you tell your devices apart on the map and
+            This {noun} is set up. Its name and icon help you tell your devices apart on the map and
             in Account → Devices.
           </Text>
         </View>
@@ -83,7 +86,7 @@ const NameThisPhoneScreen = () => {
         ) : devices.isError ? (
           <View className="gap-4">
             <Text className="text-muted-foreground text-base leading-6">
-              We couldn’t load this phone’s details. Check your connection and try again, or skip
+              We couldn’t load this {noun}’s details. Check your connection and try again, or skip
               and name it later in Account → Devices.
             </Text>
             <Button variant="outline" onPress={() => devices.refetch()}>
@@ -100,7 +103,7 @@ const NameThisPhoneScreen = () => {
                   <Pressable
                     key={icon}
                     accessibilityRole="radio"
-                    accessibilityLabel={deviceIcons[icon].label}
+                    accessibilityLabel={deviceIconFor(icon, Platform.OS).label}
                     accessibilityState={{ checked: selected }}
                     onPress={() => form.setValue("icon", icon)}
                     className={cn(
@@ -109,7 +112,7 @@ const NameThisPhoneScreen = () => {
                     )}
                   >
                     <Icon
-                      as={deviceIcons[icon].icon}
+                      as={deviceIconFor(icon, Platform.OS).icon}
                       className={selected ? "text-primary size-6" : "text-muted-foreground size-6"}
                     />
                   </Pressable>

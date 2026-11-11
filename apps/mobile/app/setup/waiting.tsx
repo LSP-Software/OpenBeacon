@@ -7,6 +7,7 @@ import { BackButton } from "../../components/headers/BackButton.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const WaitingForPhraseScreen = () => {
   const status = useQuery({
@@ -14,6 +15,7 @@ const WaitingForPhraseScreen = () => {
     refetchInterval: 5_000,
   });
   const phraseReady = Boolean(status.data?.recoveryKey);
+  const noun = thisDeviceNoun();
 
   useEffect(() => {
     if (phraseReady) {
@@ -36,11 +38,11 @@ const WaitingForPhraseScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <Text className="text-foreground text-3xl font-bold">
-          Create a phrase on your other phone
+          Create a phrase on your other device
         </Text>
         <View className="gap-3">
           {[
-            "Open OpenBeacon on your other phone.",
+            "Open OpenBeacon on your other phone or tablet.",
             "Go to Account → Recovery phrase and tap Create recovery phrase.",
             "Write down the 12 words and keep them somewhere safe.",
           ].map((step, index) => (
@@ -56,11 +58,11 @@ const WaitingForPhraseScreen = () => {
         >
           {status.isError
             ? "We can’t reach the server right now. We’ll keep trying."
-            : "Waiting for your phrase. This phone moves on as soon as it’s ready."}
+            : `Waiting for your phrase. This ${noun} moves on as soon as it’s ready.`}
         </Text>
         <Link href={{ pathname: "/account/recovery-reset", params: { setup: "true" } }} asChild>
           <Button variant="ghost">
-            <Text>I can’t get to my other phone</Text>
+            <Text>I can’t get to my other device</Text>
           </Button>
         </Link>
       </ScrollView>

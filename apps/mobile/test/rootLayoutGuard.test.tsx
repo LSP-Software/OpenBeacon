@@ -71,7 +71,8 @@ const rootRoutes = (directory: string, prefix = ""): string[] =>
       const hasLayout = readdirSync(nested).includes("_layout.tsx");
       return hasLayout ? [`${prefix}${entry.name}`] : rootRoutes(nested, `${prefix}${entry.name}/`);
     }
-    if (!entry.name.endsWith(".tsx") || entry.name === "_layout.tsx") return [];
+    if (!entry.name.endsWith(".tsx") || entry.name === "_layout.tsx" || entry.name.startsWith("+"))
+      return [];
     return [`${prefix}${entry.name.replace(/\.tsx$/, "")}`];
   });
 

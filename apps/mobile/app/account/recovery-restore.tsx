@@ -25,6 +25,7 @@ import { activateWithHistoryKey } from "../../lib/deviceActivation.ts";
 import { restoreFromRecoveryPhrase } from "../../lib/recovery.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const emptyWords = () => Array.from({ length: 12 }, () => "");
 
@@ -161,8 +162,8 @@ const RecoveryRestoreScreen = () => {
               <Text className="text-foreground text-3xl font-bold">Restore your history</Text>
               <Text className="text-muted-foreground text-base leading-6">
                 {setup
-                  ? "Enter the 12 words of your recovery phrase to set up this phone. It then gets your groups’ location history too."
-                  : "Your account has a recovery phrase. Enter its 12 words to read your groups’ location history on this phone."}
+                  ? `Enter the 12 words of your recovery phrase to set up this ${thisDeviceNoun()}. It then gets your groups’ location history too.`
+                  : `Your account has a recovery phrase. Enter its 12 words to read your groups’ location history on this ${thisDeviceNoun()}.`}
               </Text>
               <RecoveryPhraseGrid
                 words={words}
@@ -209,7 +210,7 @@ const RecoveryRestoreScreen = () => {
                     : "text-muted-foreground text-base leading-6"
                 }
               >
-                {activationProblem ?? "Setting up this phone…"}
+                {activationProblem ?? `Setting up this ${thisDeviceNoun()}…`}
               </Text>
               <Button onPress={() => finish(userId)} loading={step === "activating"}>
                 <Text>Try again</Text>

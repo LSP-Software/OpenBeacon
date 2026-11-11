@@ -4,6 +4,7 @@ import { createHistoryKeyIfMissing } from "./createHistoryKey.ts";
 import { isThisDeviceActive } from "./deviceActivation.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
+import { clearPendingJoinCodes, savePendingJoinCode } from "./pendingJoinCode.ts";
 
 export const finishAuthentication = async ({
   joinCode,
@@ -15,10 +16,13 @@ export const finishAuthentication = async ({
   const registration = await tryCatch(ensureDeviceKeyRegistration());
   if (isDeviceRemovedError(registration.error)) return;
   const active = registration.data ? await tryCatch(isThisDeviceActive()) : null;
-  if (active?.data === false) {
+  if (active?.data === false && registration.data) {
+    if (joinCode) savePendingJoinCode({ code: joinCode, userId: registration.data.userId });
+    else clearPendingJoinCodes();
     router.replace("/setup");
     return;
   }
+  clearPendingJoinCodes();
   if (newAccount && registration.data) {
     await tryCatch(createHistoryKeyIfMissing(registration.data.userId));
   }

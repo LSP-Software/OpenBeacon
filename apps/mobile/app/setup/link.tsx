@@ -11,8 +11,8 @@ import {
 } from "expo-screen-capture";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, ScrollView, View } from "react-native";
-import QRCode from "react-native-qrcode-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { BrandedQrCode } from "../../components/BrandedQrCode.tsx";
 import { BackButton } from "../../components/headers/BackButton.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { Button } from "../../components/ui/Button.tsx";
@@ -22,12 +22,14 @@ import { KEY_NOT_SAVED_MESSAGE } from "../../lib/createHistoryKey.ts";
 import { isThisDeviceActive } from "../../lib/deviceActivation.ts";
 import { ensureDeviceKeyRegistration } from "../../lib/deviceKeys.ts";
 import { finishDeviceLink, HANDOVER_REJECTED_MESSAGE } from "../../lib/deviceLink.ts";
+import { openAppAfterSetup } from "../../lib/pendingJoinCode.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 import {
   deleteSavedDeviceLink,
   readSavedDeviceLink,
   saveDeviceLink,
 } from "../../lib/savedDeviceLink.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 
 const problemMessage = (error: Error) => {
@@ -63,6 +65,7 @@ const LinkWithOtherPhoneScreen = () => {
     action: "start" | "newCode" | "finish" | "confirm" | "continue" | "home" | "setup";
   } | null>(null);
   const forgottenLinkId = useRef<string | null>(null);
+  const noun = thisDeviceNoun();
   const status = useQuery({
     ...trpc.deviceLink.status.queryOptions({ linkId: link?.linkId ?? "" }),
     enabled: link !== null && handover === null && problem === null,
@@ -80,7 +83,7 @@ const LinkWithOtherPhoneScreen = () => {
       Promise.all([ensureDeviceKeyRegistration(), createLink.mutateAsync()]),
     );
     if (created.error instanceof TRPCClientError && created.error.data?.code === "CONFLICT") {
-      setProblem({ message: "This phone is already set up.", action: "home" });
+      setProblem({ message: `This ${noun} is already set up.`, action: "home" });
       return;
     }
     if (
@@ -141,7 +144,7 @@ const LinkWithOtherPhoneScreen = () => {
     const active = await tryCatch(isThisDeviceActive());
     if (active.data !== true) {
       setProblem({
-        message: `${HANDOVER_REJECTED_MESSAGE} We couldn’t check that this phone is set up. Check your connection and try again.`,
+        message: `${HANDOVER_REJECTED_MESSAGE} We couldn’t check that this ${noun} is set up. Check your connection and try again.`,
         action: "confirm",
       });
       return;
@@ -214,7 +217,7 @@ const LinkWithOtherPhoneScreen = () => {
     void (async () => {
       await tryCatch(deleteSavedDeviceLink(link));
       if (link.active) {
-        router.replace("/");
+        openAppAfterSetup("/");
         return;
       }
       if (gone) await showNewCode();
@@ -241,10 +244,10 @@ const LinkWithOtherPhoneScreen = () => {
         contentContainerClassName="gap-6 px-6 py-6 pb-16"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-foreground text-3xl font-bold">Link with your other phone</Text>
+        <Text className="text-foreground text-3xl font-bold">Link with your other device</Text>
         <Text className="text-muted-foreground text-base leading-6">
-          Open OpenBeacon on your other phone and scan this code. You’ll find the scanner in Account
-          → Devices → Add a device.
+          Open OpenBeacon on your other phone or tablet and scan this code. You’ll find the scanner
+          in Account → Devices → Add a device.
         </Text>
 
         {problem ? (
@@ -263,11 +266,9 @@ const LinkWithOtherPhoneScreen = () => {
               </Button>
             )}
             {problem.action === "home" && (
-              <Link href="/" replace asChild>
-                <Button>
-                  <Text>Continue</Text>
-                </Button>
-              </Link>
+              <Button onPress={() => openAppAfterSetup("/")}>
+                <Text>Continue</Text>
+              </Button>
             )}
             {problem.action === "finish" && (
               <Button
@@ -299,7 +300,7 @@ const LinkWithOtherPhoneScreen = () => {
         ) : handover ? (
           <View className="items-center gap-4">
             <LoadingIndicator />
-            <Text className="text-muted-foreground text-base">Setting up this phone…</Text>
+            <Text className="text-muted-foreground text-base">Setting up this {noun}…</Text>
           </View>
         ) : expired ? (
           <View className="gap-4">
@@ -314,32 +315,24 @@ const LinkWithOtherPhoneScreen = () => {
           <View className="gap-4">
             <Text className="text-muted-foreground text-base leading-6">
               {status.error instanceof TRPCClientError && status.error.data
-                ? "We couldn’t finish linking. This phone is already set up, so you can carry on."
-                : "We can’t reach the server right now. This phone is already set up, so you can carry on and we’ll finish linking next time you open the app."}
+                ? `We couldn’t finish linking. This ${noun} is already set up, so you can carry on.`
+                : `We can’t reach the server right now. This ${noun} is already set up, so you can carry on and we’ll finish linking next time you open the app.`}
             </Text>
-            <Link href="/(tabs)/map" replace asChild>
-              <Button>
-                <Text>Continue to the map</Text>
-              </Button>
-            </Link>
+            <Button onPress={() => openAppAfterSetup("/(tabs)/map")}>
+              <Text>Continue to the map</Text>
+            </Button>
           </View>
         ) : link && !link.active ? (
           <View className="items-center gap-4">
-            <View
-              accessible
-              accessibilityRole="image"
-              accessibilityLabel="Setup code. Scan it with your other phone."
-              className="rounded-3xl bg-white p-4"
-            >
-              <QRCode
-                value={formatDeviceLinkCode({
-                  devicePublicKey: link.devicePublicKey,
-                  linkId: link.linkId,
-                  psk: link.psk,
-                })}
-                size={240}
-              />
-            </View>
+            <BrandedQrCode
+              accessibilityLabel="Setup code. Scan it with your other phone or tablet."
+              size={256}
+              value={formatDeviceLinkCode({
+                devicePublicKey: link.devicePublicKey,
+                linkId: link.linkId,
+                psk: link.psk,
+              })}
+            />
             <Text
               accessibilityLiveRegion="polite"
               className="text-muted-foreground text-center text-base leading-6"
@@ -348,7 +341,7 @@ const LinkWithOtherPhoneScreen = () => {
                 ? problemMessage(status.error)
                 : status.isError
                   ? "We can’t reach the server right now. We’ll keep trying."
-                  : "Waiting for your other phone. This screen moves on by itself once you tap Add on it."}
+                  : "Waiting for your other device. This screen moves on by itself once you tap Add on it."}
             </Text>
           </View>
         ) : (

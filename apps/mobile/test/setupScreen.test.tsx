@@ -71,6 +71,14 @@ mock.module("../lib/deviceActivation.ts", () => ({
   },
 }));
 
+let deviceNoun: "phone" | "tablet" = "phone";
+mock.module("../lib/thisDeviceNoun.ts", () => ({ thisDeviceNoun: () => deviceNoun }));
+const clearPendingJoinCodes = mock(() => {});
+mock.module("../lib/pendingJoinCode.ts", () => ({
+  clearPendingJoinCodes,
+  openAppAfterSetup: (home: string) => replace(home),
+}));
+
 const { default: SetUpPhoneScreen } = await import("../app/setup/index.tsx");
 
 let root: Root | null = null;
@@ -101,7 +109,7 @@ const cancelSetup = async () => {
 
 const shownText = () => JSON.stringify(root?.container.toJSON() ?? null);
 
-const linkOptions = ["Yes, link with your other phone", "Create a phrase on your other phone"];
+const linkOptions = ["Yes, link with your other device", "Create a phrase on your other device"];
 
 beforeEach(() => {
   deviceActive = false;
@@ -114,6 +122,8 @@ beforeEach(() => {
   alerts.length = 0;
   replace.mockClear();
   signOutOfThisPhone.mockClear();
+  clearPendingJoinCodes.mockClear();
+  deviceNoun = "phone";
 });
 
 afterEach(async () => {
@@ -246,8 +256,8 @@ test("setup no longer offers a plain sign out", async () => {
 test("hides linking when no other phone on the account is active", async () => {
   deviceStatus = { data: { accountHasActiveDevice: false }, isError: false };
   await render();
-  expect(shownText()).not.toContain("Yes, link with your other phone");
-  expect(shownText()).toContain("None of your other phones are signed in");
+  expect(shownText()).not.toContain("Yes, link with your other device");
+  expect(shownText()).toContain("None of your other devices are signed in");
   expect(shownText()).toContain("Enter your recovery phrase");
   expect(shownText()).toContain("I’ve lost my phrase");
 });
@@ -276,4 +286,25 @@ test.each([
 test("checks again for another active phone each time setup is shown", async () => {
   await render();
   expect(refetchDeviceStatus).toHaveBeenCalled();
+});
+
+test("a tablet is called a tablet", async () => {
+  deviceNoun = "tablet";
+  await render();
+  expect(shownText()).toContain('"Set up this ","tablet"');
+  expect(shownText()).not.toContain('"phone"');
+  expect(shownText()).toContain("Cancel and remove this tablet");
+});
+
+test("cancelling forgets an invite saved for after setup", async () => {
+  await render();
+  await cancelSetup();
+  expect(clearPendingJoinCodes).toHaveBeenCalledTimes(1);
+});
+
+test("an invite isn't forgotten when the server can't be reached to cancel", async () => {
+  signOutStatus = "serverUnreachable";
+  await render();
+  await cancelSetup();
+  expect(clearPendingJoinCodes).not.toHaveBeenCalled();
 });

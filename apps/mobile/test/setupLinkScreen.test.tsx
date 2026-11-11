@@ -112,7 +112,11 @@ mock.module("react-native", () => ({
 }));
 mock.module("lucide-react-native", () => ({ ArrowLeftIcon: () => null }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
-mock.module("react-native-qrcode-svg", () => ({ default: () => null }));
+mock.module("../components/BrandedQrCode.tsx", () => ({ BrandedQrCode: () => null }));
+mock.module("expo-device", () => ({ DeviceType: { PHONE: 1, TABLET: 2 }, deviceType: 1 }));
+mock.module("../lib/pendingJoinCode.ts", () => ({
+  openAppAfterSetup: (home: string) => replace(home),
+}));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
 mock.module("../components/ui/Button.tsx", () => ({

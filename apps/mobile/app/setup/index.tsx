@@ -11,7 +11,9 @@ import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { isThisDeviceActive } from "../../lib/deviceActivation.ts";
+import { clearPendingJoinCodes, openAppAfterSetup } from "../../lib/pendingJoinCode.ts";
 import { signOutOfThisPhone } from "../../lib/signOut.ts";
+import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
 const SetUpPhoneScreen = () => {
   const { data: session } = authClient.useSession();
@@ -21,13 +23,14 @@ const SetUpPhoneScreen = () => {
   const [cancelling, setCancelling] = useState(false);
   const cancellingRef = useRef(false);
   const refetchDeviceStatus = deviceStatus.refetch;
+  const noun = thisDeviceNoun();
 
   useFocusEffect(
     useCallback(() => {
       void refetchDeviceStatus();
       void (async () => {
         const active = await tryCatch(isThisDeviceActive());
-        if (active.data === true) router.replace("/");
+        if (active.data === true) openAppAfterSetup("/");
       })();
     }, [refetchDeviceStatus]),
   );
@@ -48,7 +51,7 @@ const SetUpPhoneScreen = () => {
     if (result.data?.status === "serverUnreachable") {
       Alert.alert(
         "Couldn’t reach the server",
-        "This phone may not have been removed. Try again, or sign out anyway. If you sign out, this phone will be removed automatically within 7 days.",
+        `This ${noun} may not have been removed. Try again, or sign out anyway. If you sign out, this ${noun} will be removed automatically within 7 days.`,
         [
           { text: "Back", style: "cancel" },
           { text: "Sign out anyway", onPress: () => leaveSetup({ removeThisPhone: false }) },
@@ -57,11 +60,12 @@ const SetUpPhoneScreen = () => {
       );
       return;
     }
+    clearPendingJoinCodes();
     router.replace("/");
     if (removeThisPhone && result.data?.status === "signedOut") {
       Alert.alert(
         "You’re signed out",
-        "This phone couldn’t be removed now; it will be removed automatically within 7 days.",
+        `This ${noun} couldn’t be removed now; it will be removed automatically within 7 days.`,
       );
     }
   };
@@ -69,7 +73,7 @@ const SetUpPhoneScreen = () => {
   const confirmCancel = () =>
     Alert.alert(
       "Cancel setup?",
-      "This phone will be removed from your account and signed out. You can sign in again later to set it up.",
+      `This ${noun} will be removed from your account and signed out. You can sign in again later to set it up.`,
       [
         { text: "Keep setting up", style: "cancel" },
         {
@@ -88,9 +92,9 @@ const SetUpPhoneScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <View className="gap-4">
-          <Text className="text-foreground text-3xl font-bold">Set up this phone</Text>
+          <Text className="text-foreground text-3xl font-bold">Set up this {noun}</Text>
           <Text className="text-muted-foreground text-base leading-6">
-            You’re signed in, but this phone can’t see anyone’s location until it’s set up. That
+            You’re signed in, but this {noun} can’t see anyone’s location until it’s set up. That
             keeps your family’s locations safe if someone else learns your password.
           </Text>
         </View>
@@ -109,23 +113,23 @@ const SetUpPhoneScreen = () => {
 
         {status.data && noOtherPhone && (
           <Text className="text-muted-foreground text-base leading-6">
-            None of your other phones are signed in, so you’ll need your recovery phrase or to start
-            fresh.
+            None of your other devices are signed in, so you’ll need your recovery phrase or to
+            start fresh.
           </Text>
         )}
 
         {status.data && !noOtherPhone && (
           <View className="gap-4">
             <Text className="text-foreground text-xl font-semibold">
-              Do you have another phone signed in?
+              Do you have another phone or tablet signed in?
             </Text>
             <Link href="/setup/link" asChild>
               <Button>
-                <Text>Yes, link with your other phone</Text>
+                <Text>Yes, link with your other device</Text>
               </Button>
             </Link>
             <Text className="text-muted-foreground text-base leading-6">
-              Your other phone scans a code on this one, and this phone gets your full location
+              Your other device scans a code on this {noun}, and this {noun} gets your full location
               history. If you don’t have it with you:
             </Text>
           </View>
@@ -134,7 +138,7 @@ const SetUpPhoneScreen = () => {
         {status.data?.recoveryKey && (
           <View className="gap-4">
             <Text className="text-muted-foreground text-base leading-6">
-              Enter your recovery phrase. This phone then gets your full location history.
+              Enter your recovery phrase. This {noun} then gets your full location history.
             </Text>
             <Link
               href={{ pathname: "/account/recovery-restore", params: { setup: "true" } }}
@@ -163,24 +167,24 @@ const SetUpPhoneScreen = () => {
         {status.data && !status.data.recoveryKey && !noOtherPhone && (
           <View className="gap-4">
             <Text className="text-muted-foreground text-base leading-6">
-              Your account doesn’t have a recovery phrase yet. Create one on a phone you still have,
-              then enter it here.
+              Your account doesn’t have a recovery phrase yet. Create one on another device you
+              still have, then enter it here.
             </Text>
             <Link href="/setup/waiting" asChild>
               <Button variant="outline">
-                <Text>Create a phrase on your other phone</Text>
+                <Text>Create a phrase on your other device</Text>
               </Button>
             </Link>
             <Link href={{ pathname: "/account/recovery-reset", params: { setup: "true" } }} asChild>
               <Button variant="ghost">
-                <Text>I don’t have another phone</Text>
+                <Text>I don’t have another device</Text>
               </Button>
             </Link>
           </View>
         )}
 
         <Button variant="outline" onPress={confirmCancel} disabled={cancelling}>
-          <Text>{cancelling ? "Cancelling…" : "Cancel and remove this phone"}</Text>
+          <Text>{cancelling ? "Cancelling…" : `Cancel and remove this ${noun}`}</Text>
         </Button>
       </ScrollView>
     </SafeAreaView>

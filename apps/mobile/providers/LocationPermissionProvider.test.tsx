@@ -85,6 +85,12 @@ mock.module("../lib/auth-client.ts", () => ({
 }));
 
 let thisDeviceState: "unregistered" | "registered" | "active" = "active";
+let pathname = "/map";
+let searchParams: { setup?: string } = {};
+mock.module("expo-router", () => ({
+  useGlobalSearchParams: () => searchParams,
+  usePathname: () => pathname,
+}));
 mock.module("../lib/deviceActivation.ts", () => ({
   useThisDeviceState: () => thisDeviceState,
 }));
@@ -214,6 +220,8 @@ describe("LocationPermissionProvider", () => {
     });
     appStateListener = null;
     thisDeviceState = "active";
+    pathname = "/map";
+    searchParams = {};
   });
 
   afterEach(async () => {
@@ -248,6 +256,44 @@ describe("LocationPermissionProvider", () => {
       await Promise.resolve();
     });
     await flushEffects();
+
+    expect(notificationRequestCalls).toBe(1);
+    expect(launchRequestCalls).toBe(1);
+  });
+
+  test.each([
+    ["linking", "/setup/link", {}],
+    ["naming this phone", "/setup/name", {}],
+    ["removing old devices", "/setup/remove-devices", {}],
+    ["restoring from the phrase during setup", "/account/recovery-restore", { setup: "true" }],
+    ["starting fresh during setup", "/account/recovery-reset", { setup: "true" }],
+  ])("waits until setup is finished before asking, while %s", async (_step, setupPath, params) => {
+    pathname = setupPath;
+    searchParams = params;
+    const root = await renderProvider();
+    appStateListener?.("background");
+    appStateListener?.("active");
+    await flushEffects();
+
+    expect(notificationRequestCalls).toBe(0);
+    expect(launchRequestCalls).toBe(0);
+    expect(refreshCalls).toBe(0);
+
+    pathname = "/";
+    searchParams = {};
+    await act(async () => {
+      root.render(<LocationPermissionProvider>{null}</LocationPermissionProvider>);
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(notificationRequestCalls).toBe(1);
+    expect(launchRequestCalls).toBe(1);
+  });
+
+  test("asks as usual on the recovery screens outside setup", async () => {
+    pathname = "/account/recovery-reset";
+    await renderProvider();
 
     expect(notificationRequestCalls).toBe(1);
     expect(launchRequestCalls).toBe(1);
