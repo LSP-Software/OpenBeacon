@@ -805,8 +805,9 @@ const revokeTrackingAccessInternal = async (): Promise<void> => {
 
 export const revokeTrackingAccess = ({
   cancelFlush = true,
-}: { cancelFlush?: boolean } = {}): Promise<void> => {
-  cancelDeviceKeyRegistrations();
+  keepDeviceRegistration = false,
+}: { cancelFlush?: boolean; keepDeviceRegistration?: boolean } = {}): Promise<void> => {
+  if (!keepDeviceRegistration) cancelDeviceKeyRegistrations();
   if (cancelFlush) {
     flushController?.abort();
     flushPromise = null;
@@ -835,7 +836,7 @@ export const prepareTrackingSignOut = async (): Promise<void> => {
   try {
     await Promise.race([
       (async () => {
-        await revokeTrackingAccess();
+        await revokeTrackingAccess({ keepDeviceRegistration: true });
         if (previousFlush) await previousFlush;
         if (!controller.signal.aborted) {
           await flushPendingTrackingPointsInternal(true, controller.signal);
@@ -854,13 +855,13 @@ export const deleteQueuedTrackingPoints = async ({
   deviceId,
   userId,
 }: {
-  deviceId: string;
+  deviceId: string | undefined;
   userId: string;
 }) => {
   const trackingModule = await loadTrackingModule();
   if (!trackingModule) return;
   const owner = getOwner(userId);
-  await trackingModule.assignUnassignedCiphertexts(deviceId, owner);
+  if (deviceId) await trackingModule.assignUnassignedCiphertexts(deviceId, owner);
   for (;;) {
     const items = await trackingModule.listPendingCiphertexts(owner, 500);
     if (!items.length) return;

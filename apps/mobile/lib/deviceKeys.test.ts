@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, jest, mock, test } from "bun:test";
 import { createDeviceKeyPair, encodeBase64 } from "@openbeacon/encryption";
+import { deviceRemovedCause } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 const secureStoreValues = new Map<string, string>();
@@ -461,5 +463,53 @@ describe("device key registration", () => {
       "encryption.device.privateKey.user-a",
       expect.any(Object),
     );
+  });
+
+  test("a phone refused because it was removed deletes its keys, so the next sign-in registers a new device", async () => {
+    const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
+    const removed = await ensureDeviceKeyRegistration();
+    secureStoreValues.set("encryption.history.user-a.1", "history-key-1");
+    secureStoreValues.set("encryption.history.user-a.2", "history-key-2");
+    storageValues.set(`encryption.device.active.${removed.deviceId}`, "true");
+    registerDeviceKeyMock.mockImplementationOnce(async () => {
+      throw new TRPCClientError("This device was removed.", {
+        result: {
+          error: {
+            code: -32600,
+            message: "This device was removed.",
+            data: { cause: deviceRemovedCause },
+          },
+        },
+      });
+    });
+
+    const { ensureDeviceKeyRegistration: registerAfterRestart } = await importDeviceKeysModule();
+    storageValues.delete("encryption.device.registered");
+    await expect(registerAfterRestart()).rejects.toBeInstanceOf(TRPCClientError);
+
+    expect(storageValues.get("encryption.device.id.user-a")).toBeUndefined();
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(false);
+    expect(secureStoreValues.has("encryption.history.user-a.1")).toBe(false);
+    expect(secureStoreValues.has("encryption.history.user-a.2")).toBe(false);
+    expect(storageValues.has(`encryption.device.active.${removed.deviceId}`)).toBe(false);
+
+    const replacement = await registerAfterRestart();
+    expect(replacement.deviceId).not.toBe(removed.deviceId);
+    expect(replacement.publicKey).not.toBe(removed.publicKey);
+  });
+
+  test("a registration that fails for another reason keeps this phone's keys", async () => {
+    const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
+    secureStoreValues.set("encryption.history.user-a.1", "history-key-1");
+    registerDeviceKeyMock.mockImplementationOnce(async () => {
+      throw new Error("offline");
+    });
+
+    await expect(ensureDeviceKeyRegistration()).rejects.toThrow("offline");
+
+    const deviceId = storageValues.get("encryption.device.id.user-a");
+    if (!deviceId) throw new Error("The device id was not kept.");
+    expect(secureStoreValues.has("encryption.history.user-a.1")).toBe(true);
+    expect((await ensureDeviceKeyRegistration()).deviceId).toBe(deviceId);
   });
 });

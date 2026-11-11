@@ -229,6 +229,17 @@ mock.module("./deviceKeys.ts", () => ({
   }),
 }));
 
+const storageValues = new Map<string, string>();
+mock.module("./storage.ts", () => ({
+  storage: {
+    getString: (key: string) => storageValues.get(key),
+    remove: (key: string) => storageValues.delete(key),
+    set: (key: string, value: string) => {
+      storageValues.set(key, value);
+    },
+  },
+}));
+
 mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async (input: { userId: string; version: number }) => {
     if (input.version === failingReadVersion) throw new Error("SecureStore unavailable");
@@ -256,7 +267,6 @@ const {
   backfillEveryGroup,
   backfillHistoryWraps,
   changeRecoveryPhrase,
-  findMissingHistoryKey,
   HISTORY_KEYS_MISMATCH_MESSAGE,
   MISSING_HISTORY_KEYS_MESSAGE,
   PHRASE_MISMATCH_MESSAGE,
@@ -267,6 +277,7 @@ const {
 } = await import("./recovery.ts");
 const { unwrapEpochKeyFromWraps } = await import("./epochKeys.ts");
 const { checkGroupKeyAccess } = await import("./groupKeyAccess.ts");
+const { getCurrentHistoryKeyState } = await import("./currentHistoryKey.ts");
 
 const createEpoch = ({
   epochNumber,
@@ -639,7 +650,7 @@ describe("resetRecoveryPhrase", () => {
     phone = createPhone("device-3");
     await expect(restoreFromRecoveryPhrase(oldPhrase)).rejects.toThrow(PHRASE_MISMATCH_MESSAGE);
     phone = enrolledPhone;
-    expect(await findMissingHistoryKey()).toEqual({ userId, version: 3 });
+    expect(await getCurrentHistoryKeyState(userId)).toEqual({ status: "missing", version: 3 });
     for (const epoch of enrolledOnly) {
       expect(await readThroughHistoryWraps(enrolledPhone, epoch)).toBeNull();
       expect(await readThroughDeviceWrap(enrolledPhone, epoch)).toBe(keyOf(epoch));
@@ -694,10 +705,10 @@ describe("resetRecoveryPhrase", () => {
     expect((await resetRecoveryPhrase(newPhrase)).status).toBe("unsaved");
     expect(historyKeys.map(({ version }) => version)).toEqual([3]);
     expect(resettingPhone.secureStore.size).toBe(0);
-    expect(await findMissingHistoryKey()).toEqual({ userId, version: 3 });
+    expect(await getCurrentHistoryKeyState(userId)).toEqual({ status: "missing", version: 3 });
 
     expect(await restoreFromRecoveryPhrase(newPhrase)).toEqual({ userId, versions: [3] });
-    expect(await findMissingHistoryKey()).toBeNull();
+    expect(await getCurrentHistoryKeyState(userId)).toMatchObject({ status: "held" });
   });
 });
 

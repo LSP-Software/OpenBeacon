@@ -5,7 +5,6 @@ import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, router } from "expo-router";
-import * as SecureStore from "expo-secure-store";
 import {
   AlertCircleIcon,
   BellIcon,
@@ -47,7 +46,7 @@ import { Separator } from "../../../components/ui/Separator.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { useHeldHistoryKeyVersions } from "../../../hooks/useHeldHistoryKeyVersions.ts";
 import { trpc } from "../../../lib/api.ts";
-import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../../../lib/auth-client.ts";
+import { authClient } from "../../../lib/auth-client.ts";
 import {
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
@@ -125,10 +124,6 @@ const AccountScreen = () => {
   const { data: session, refetch } = authClient.useSession();
   const queryClient = useQueryClient();
   const updateName = useMutation(trpc.account.updateName.mutationOptions());
-  const removeThisDevice = useMutation({
-    ...trpc.account.removeThisDevice.mutationOptions(),
-    networkMode: "always",
-  });
   const [nameOpen, setNameOpen] = useState(false);
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -182,33 +177,45 @@ const AccountScreen = () => {
   const signOut = async ({ removeThisPhone }: { removeThisPhone: boolean }) => {
     if (signOutPhase) return;
     setSignOutPhase("uploading");
-    const sessionTokenToRevoke = session?.session?.token ?? null;
-
-    const tracking = await import("../../../lib/tracking.ts");
-    await tryCatch(tracking.prepareTrackingSignOut());
-    setSignOutPhase("signingOut");
-    if (removeThisPhone) {
-      const removed = await tryCatch(removeThisDevice.mutateAsync());
-      if (!removed.error) {
-        const { wipeThisPhone } = await import("../../../lib/deviceRemoved.ts");
-        await wipeThisPhone();
-        setSignOutPhase(null);
-        router.replace("/");
-        return;
-      }
+    const { signOutOfThisPhone } = await import("../../../lib/signOut.ts");
+    const { phoneRemoved } = await signOutOfThisPhone({
+      onSigningOut: () => setSignOutPhase("signingOut"),
+      removeThisPhone,
+      sessionTokenToRevoke: session?.session?.token ?? null,
+    });
+    if (removeThisPhone && !phoneRemoved) {
       Alert.alert(
         "This phone is still in Devices",
         "You’ve been signed out, but we couldn’t remove this phone. Remove it from another device in Account → Devices.",
       );
     }
-    const { error: signOutError } = await authClient.signOut();
-
-    if (signOutError && sessionTokenToRevoke) {
-      await tryCatch(SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke));
-    }
-
     setSignOutPhase(null);
     router.replace("/");
+  };
+
+  const isOnlyCopyOfHistory =
+    recoveryStatus.data?.recoveryKey === null &&
+    heldHistoryKeyVersions.data?.includes(currentHistoryKeyVersion) === true &&
+    devices.data?.every((device) => device.isCurrent || !device.activatedAt) === true;
+
+  const confirmRemoveThisPhone = () => {
+    if (!isOnlyCopyOfHistory) {
+      void signOut({ removeThisPhone: true });
+      return;
+    }
+    Alert.alert(
+      "Your location history will be lost",
+      "This is the only phone with your location history and you haven’t set up a recovery phrase. If you remove it, your history can’t be recovered. Set up a recovery phrase first.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Set up recovery phrase", onPress: () => router.push("/account/recovery-setup") },
+        {
+          text: "Remove and lose history",
+          style: "destructive",
+          onPress: () => signOut({ removeThisPhone: true }),
+        },
+      ],
+    );
   };
 
   const confirmSignOut = () =>
@@ -221,7 +228,7 @@ const AccountScreen = () => {
         {
           text: "Also remove this phone from your account",
           style: "destructive",
-          onPress: () => signOut({ removeThisPhone: true }),
+          onPress: confirmRemoveThisPhone,
         },
       ],
     );

@@ -181,6 +181,17 @@ mock.module("./deviceKeys.ts", () => ({
   }),
 }));
 
+const storageValues = new Map<string, string>();
+mock.module("./storage.ts", () => ({
+  storage: {
+    getString: (key: string) => storageValues.get(key),
+    remove: (key: string) => storageValues.delete(key),
+    set: (key: string, value: string) => {
+      storageValues.set(key, value);
+    },
+  },
+}));
+
 mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async (input: { userId: string; version: number }) =>
     phone.secureStore.get(`${input.userId}.${input.version}`) ?? null,
@@ -204,7 +215,6 @@ mock.module("./historyKeys.ts", () => ({
 
 const {
   backfillHistoryWraps,
-  findMissingHistoryKey,
   PHRASE_MISMATCH_MESSAGE,
   RECOVERY_DATA_MISMATCH_MESSAGE,
   restoreFromRecoveryPhrase,
@@ -212,6 +222,7 @@ const {
 } = await import("./recovery.ts");
 const { unwrapEpochKeyFromWraps } = await import("./epochKeys.ts");
 const { KEY_NOT_SAVED_MESSAGE } = await import("./createHistoryKey.ts");
+const { getCurrentHistoryKeyState } = await import("./currentHistoryKey.ts");
 
 const createEpoch = ({
   epochNumber,
@@ -624,35 +635,9 @@ describe("restoreFromRecoveryPhrase", () => {
     expect((await setUpRecoveryPhrase(phrase)).status).toBe("created");
     const epoch = createEpoch({ epochNumber: 1, groupId: "group-a", holders: [firstPhone] });
 
-    expect(await findMissingHistoryKey()).toBeNull();
+    expect(await getCurrentHistoryKeyState(userId)).toMatchObject({ status: "held" });
     await expectReadable(firstPhone, epoch);
     await expectReadable(firstPhone, epoch, { useDeviceWrap: true });
-  });
-});
-
-describe("findMissingHistoryKey", () => {
-  test("reports nothing without a phrase, then the current version until this phone holds it", async () => {
-    expect(await findMissingHistoryKey()).toBeNull();
-    const phrase = await setUpOnFirstPhone();
-    expect(await findMissingHistoryKey()).toBeNull();
-    phone = createPhone("device-2");
-    expect(await findMissingHistoryKey()).toEqual({ userId, version: 1 });
-    addHistoryKeyVersion(phrase, [firstPhone]);
-    expect(await findMissingHistoryKey()).toEqual({ userId, version: 2 });
-
-    await restoreFromRecoveryPhrase(phrase);
-
-    expect(await findMissingHistoryKey()).toBeNull();
-  });
-
-  test("reports a stored key that doesn't match the account's current key until restore replaces it", async () => {
-    const phrase = await setUpOnFirstPhone();
-    firstPhone.secureStore.set(`${userId}.1`, createHistoryKeyPair().privateKey);
-    expect(await findMissingHistoryKey()).toEqual({ userId, version: 1 });
-
-    await restoreFromRecoveryPhrase(phrase);
-
-    expect(await findMissingHistoryKey()).toBeNull();
   });
 });
 

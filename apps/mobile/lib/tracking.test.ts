@@ -167,6 +167,7 @@ mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async ({ userId, version }: { userId: string; version: number }) =>
     userId === "user-1" && storedHistoryKeyVersions.has(version) ? historyKeyPair.privateKey : null,
   storeHistoryKey: async () => {},
+  deleteStoredHistoryKeys: async () => {},
 }));
 
 mock.module("./deviceActivation.ts", () => ({
@@ -629,6 +630,29 @@ describe("tracking service", () => {
     resumeTracking();
     await expect(flushPendingTrackingPoints(true)).rejects.toThrow("Tracking upload failed");
     expect(uploadCalls).toHaveLength(2);
+  });
+
+  test("the sign-out upload still sends this phone's device id and keeps it for the rest of sign-out", async () => {
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    const deviceIdsAtUpload: Array<string | undefined> = [];
+    uploadGroup = async ({ points }) => {
+      deviceIdsAtUpload.push(registeredDevice?.deviceId);
+      return {
+        accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
+        duplicates: [],
+      };
+    };
+
+    await prepareTrackingSignOut();
+
+    expect(stopCaptureCalls).toBe(1);
+    expect(deviceIdsAtUpload).toEqual(["device-1"]);
+    expect(registeredDevice?.deviceId).toBe("device-1");
   });
 
   test("sign out times out and retains a late upload response", async () => {

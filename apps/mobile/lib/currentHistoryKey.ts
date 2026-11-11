@@ -20,7 +20,13 @@ export const checkStoredHistoryKey = async ({
 export const getCurrentHistoryKeyState = async (userId: string) => {
   const { currentHistoryKey, recoveryKey } = await trpcClient.accountRecovery.status.query();
   if (!currentHistoryKey) return { status: "none" as const };
-  const state = await checkStoredHistoryKey({ ...currentHistoryKey, userId });
+  let state = await checkStoredHistoryKey({ ...currentHistoryKey, userId });
+  if (state.status === "mismatch" && currentHistoryKey.version === 1) {
+    const { forgetLostFirstHistoryKey } = await import("./createHistoryKey.ts");
+    if (await forgetLostFirstHistoryKey({ publicKey: currentHistoryKey.publicKey, userId })) {
+      state = { status: "missing", version: 1 };
+    }
+  }
   if (state.status === "missing" && !recoveryKey) {
     return { status: "onOtherDevice" as const, version: state.version };
   }

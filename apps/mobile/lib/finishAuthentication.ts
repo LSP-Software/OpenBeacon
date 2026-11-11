@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { createHistoryKeyIfMissing } from "./createHistoryKey.ts";
 import { isThisDeviceActive } from "./deviceActivation.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
+import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 
 export const finishAuthentication = async ({
   joinCode,
@@ -12,6 +13,7 @@ export const finishAuthentication = async ({
   newAccount?: boolean;
 }) => {
   const registration = await tryCatch(ensureDeviceKeyRegistration());
+  if (isDeviceRemovedError(registration.error)) return;
   const active = registration.data ? await tryCatch(isThisDeviceActive()) : null;
   if (active?.data === false) {
     router.replace("/setup");

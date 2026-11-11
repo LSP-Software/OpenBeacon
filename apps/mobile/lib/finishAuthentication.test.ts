@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { deviceRemovedCause } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 
 const replacements: unknown[] = [];
 let createHistoryKeyError: Error | null = null;
@@ -92,5 +94,21 @@ describe("finishing authentication", () => {
 
     expect(events).toEqual(["register", "navigate"]);
     expect(replacements).toEqual(["/"]);
+  });
+
+  test("leaves navigation to the removed-phone handler when this phone was removed", async () => {
+    registrationError = new TRPCClientError("This device was removed.", {
+      result: {
+        error: {
+          code: -32600,
+          message: "This device was removed.",
+          data: { cause: deviceRemovedCause },
+        },
+      },
+    });
+    await finishAuthentication({ joinCode: "ABC123", newAccount: true });
+
+    expect(events).toEqual(["register"]);
+    expect(replacements).toEqual([]);
   });
 });

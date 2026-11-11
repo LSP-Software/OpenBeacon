@@ -2,22 +2,20 @@ import { openDeviceActivationChallenge } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { router } from "expo-router";
 import { trpcClient } from "./api.ts";
-import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
+import { ensureDeviceKeyRegistration, getDeviceActiveKey } from "./deviceKeys.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
 import { storage } from "./storage.ts";
 
 export const ACTIVATION_KEY_MISSING_MESSAGE =
   "This phone doesn't have your account's current history key, so it can't be set up this way.";
 
-const activeKey = (deviceId: string) => `encryption.device.active.${deviceId}`;
-
 export const markThisDeviceActive = (deviceId: string) => {
-  storage.set(activeKey(deviceId), true);
+  storage.set(getDeviceActiveKey(deviceId), true);
 };
 
 export const isThisDeviceActive = async () => {
   const device = await ensureDeviceKeyRegistration();
-  if (storage.getBoolean(activeKey(device.deviceId))) return true;
+  if (storage.getBoolean(getDeviceActiveKey(device.deviceId))) return true;
   const { activated } = await trpcClient.device.status.query();
   if (activated) markThisDeviceActive(device.deviceId);
   return activated;

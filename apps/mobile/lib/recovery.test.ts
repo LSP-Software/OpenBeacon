@@ -209,6 +209,17 @@ mock.module("./deviceKeys.ts", () => ({
   }),
 }));
 
+const storageValues = new Map<string, string>();
+mock.module("./storage.ts", () => ({
+  storage: {
+    getString: (key: string) => storageValues.get(key),
+    remove: (key: string) => storageValues.delete(key),
+    set: (key: string, value: string) => {
+      storageValues.set(key, value);
+    },
+  },
+}));
+
 mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async ({ userId, version }: { userId: string; version: number }) =>
     storedHistoryKeys.get(`${userId}.${version}`) ?? null,
