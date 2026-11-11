@@ -8,12 +8,6 @@ import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 
-const steps = [
-  "Open OpenBeacon on your other phone.",
-  "Go to Account → Recovery phrase and tap Create recovery phrase.",
-  "Write down the 12 words and keep them somewhere safe.",
-];
-
 const WaitingForPhraseScreen = () => {
   const status = useQuery({
     ...trpc.accountRecovery.status.queryOptions(),
@@ -45,7 +39,11 @@ const WaitingForPhraseScreen = () => {
           Create a phrase on your other phone
         </Text>
         <View className="gap-3">
-          {steps.map((step, index) => (
+          {[
+            "Open OpenBeacon on your other phone.",
+            "Go to Account → Recovery phrase and tap Create recovery phrase.",
+            "Write down the 12 words and keep them somewhere safe.",
+          ].map((step, index) => (
             <View key={step} className="flex-row gap-3">
               <Text className="text-primary text-base font-bold">{index + 1}.</Text>
               <Text className="text-foreground flex-1 text-base leading-6">{step}</Text>

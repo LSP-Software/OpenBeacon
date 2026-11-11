@@ -2,21 +2,20 @@ import { createDeviceLinkSecret, formatDeviceLinkCode } from "@openbeacon/encryp
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import {
   allowScreenCaptureAsync,
   disableAppSwitcherProtectionAsync,
   enableAppSwitcherProtectionAsync,
   preventScreenCaptureAsync,
 } from "expo-screen-capture";
-import { ArrowLeftIcon } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { BackHandler, ScrollView, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { BackButton } from "../../components/headers/BackButton.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { Button } from "../../components/ui/Button.tsx";
-import { Icon } from "../../components/ui/Icon.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
 import { KEY_NOT_SAVED_MESSAGE } from "../../lib/createHistoryKey.ts";
@@ -49,7 +48,7 @@ const LinkWithOtherPhoneScreen = () => {
   const [handover, setHandover] = useState<Handover | null>(null);
   const [problem, setProblem] = useState<{
     message: string;
-    action: "start" | "newCode" | "finish" | "continue" | "home";
+    action: "start" | "newCode" | "finish" | "continue" | "home" | "setup";
   } | null>(null);
   const forgottenLinkId = useRef<string | null>(null);
   const status = useQuery({
@@ -72,8 +71,21 @@ const LinkWithOtherPhoneScreen = () => {
       setProblem({ message: "This phone is already set up.", action: "home" });
       return;
     }
+    if (
+      created.error instanceof TRPCClientError &&
+      created.error.data?.code === "PRECONDITION_FAILED"
+    ) {
+      setProblem({ message: created.error.message, action: "setup" });
+      return;
+    }
     if (created.error) {
-      setProblem({ message: UNREACHABLE_MESSAGE, action: "newCode" });
+      setProblem({
+        message:
+          created.error instanceof TRPCClientError && !created.error.data
+            ? UNREACHABLE_MESSAGE
+            : created.error.message,
+        action: "newCode",
+      });
       return;
     }
     const [device, { linkId }] = created.data;
@@ -147,6 +159,16 @@ const LinkWithOtherPhoneScreen = () => {
     void start();
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        () => handover !== null && problem === null,
+      );
+      return () => subscription.remove();
+    }, [handover, problem]),
+  );
+
   useEffect(() => {
     void tryCatch(preventScreenCaptureAsync("device-link"));
     void tryCatch(enableAppSwitcherProtectionAsync());
@@ -184,25 +206,16 @@ const LinkWithOtherPhoneScreen = () => {
     })();
   }, [link, handover, status.data, status.error]);
 
-  const expired = status.data?.state === "expired";
+  const expired = status.data?.state === "expired" && link?.active !== true;
+  const unreachable =
+    status.isError &&
+    !(status.error instanceof TRPCClientError && status.error.data?.code === "NOT_FOUND");
 
   return (
     <View className="flex-1 bg-background">
       <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
         <View className="flex-row items-center justify-between">
-          {handover && !problem ? (
-            <View className="w-10" />
-          ) : (
-            <Pressable
-              className="flex flex-row items-center gap-1"
-              onPress={() => (router.canGoBack() ? router.back() : router.replace("/setup"))}
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-            >
-              <Icon as={ArrowLeftIcon} className="text-primary" />
-              <Text className="text-primary">Back</Text>
-            </Pressable>
-          )}
+          {handover && !problem ? <View className="w-10" /> : <BackButton fallback="/setup" />}
           <Text className="text-foreground text-2xl font-bold">Set up</Text>
           <View className="w-10" />
         </View>
@@ -240,6 +253,11 @@ const LinkWithOtherPhoneScreen = () => {
                 <Text>Try again</Text>
               </Button>
             )}
+            {problem.action === "setup" && (
+              <Button onPress={() => router.replace("/setup")}>
+                <Text>See other ways to set up</Text>
+              </Button>
+            )}
             {problem.action === "start" && (
               <Button onPress={start}>
                 <Text>Try again</Text>
@@ -265,7 +283,17 @@ const LinkWithOtherPhoneScreen = () => {
               <Text>Show a new code</Text>
             </Button>
           </View>
-        ) : link ? (
+        ) : link?.active && unreachable ? (
+          <View className="gap-4">
+            <Text className="text-muted-foreground text-base leading-6">
+              We can’t reach your server right now. This phone is already set up, so you can carry
+              on and we’ll finish linking next time you open the app.
+            </Text>
+            <Button onPress={() => router.replace("/(tabs)/map")}>
+              <Text>Continue to the map</Text>
+            </Button>
+          </View>
+        ) : link && !link.active ? (
           <View className="items-center gap-4">
             <View
               accessible

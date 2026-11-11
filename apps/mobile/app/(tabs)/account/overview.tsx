@@ -193,19 +193,25 @@ const AccountScreen = () => {
     router.replace("/");
   };
 
-  const isOnlyCopyOfHistory =
-    recoveryStatus.data?.recoveryKey === null &&
-    heldHistoryKeyVersions.data?.includes(currentHistoryKeyVersion) === true &&
-    devices.data?.every((device) => device.isCurrent || !device.activatedAt) === true;
+  const historyCheckIncomplete =
+    !recoveryStatus.data || !heldHistoryKeyVersions.data || !devices.data;
+  const mightBeOnlyCopyOfHistory =
+    !recoveryStatus.data?.recoveryKey &&
+    heldHistoryKeyVersions.data?.includes(currentHistoryKeyVersion) !== false &&
+    devices.data?.some((device) => !device.isCurrent && device.activatedAt) !== true;
 
   const confirmRemoveThisPhone = () => {
-    if (!isOnlyCopyOfHistory) {
+    if (!mightBeOnlyCopyOfHistory) {
       void signOut({ removeThisPhone: true });
       return;
     }
     Alert.alert(
-      "Your location history will be lost",
-      "This is the only phone with your location history and you haven’t set up a recovery phrase. If you remove it, your history can’t be recovered. Set up a recovery phrase first.",
+      historyCheckIncomplete
+        ? "Your location history might be lost"
+        : "Your location history will be lost",
+      historyCheckIncomplete
+        ? "We couldn’t check whether another phone or a recovery phrase can read your location history. If this is the only phone with it, removing it means your history can’t be recovered."
+        : "This is the only phone with your location history and you haven’t set up a recovery phrase. If you remove it, your history can’t be recovered. Set up a recovery phrase first.",
       [
         { text: "Cancel", style: "cancel" },
         { text: "Set up recovery phrase", onPress: () => router.push("/account/recovery-setup") },

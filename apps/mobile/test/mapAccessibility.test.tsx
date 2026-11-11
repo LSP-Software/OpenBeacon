@@ -31,7 +31,9 @@ mock.module("../hooks/useSelfDeviceHeading.ts", () => ({ useSelfDeviceHeading: (
 mock.module("../hooks/useTimeSince.ts", () => ({
   useTimeSince: (timestamp: string | null) => (timestamp ? "1 min ago" : null),
 }));
-mock.module("../lib/batteryVisual.ts", () => ({ getBatteryVisual: () => null }));
+mock.module("../lib/batteryVisual.ts", () => ({
+  getBatteryVisual: () => ({ colorClass: "", icon: () => null }),
+}));
 mock.module("../lib/deviceIcons.ts", () => ({
   deviceIcons: { phone: { icon: () => null, label: "Phone" } },
 }));
@@ -122,6 +124,15 @@ test("a device row without a location on the map isn't a button", async () => {
       devices={[
         { ...device, deviceId: "device-1", name: "Phone", timestamp: "2026-11-11T12:00:00.000Z" },
         { ...device, deviceId: "device-2", name: "Tablet", timestamp: null },
+        {
+          ...device,
+          battery: { charging: false, level: 40 },
+          deviceId: "device-3",
+          isThisDevice: true,
+          name: "Pixel",
+          timestamp: "2026-11-11T12:00:00.000Z",
+          unreadable: true,
+        },
       ]}
       image={null}
       initials="Al"
@@ -131,5 +142,11 @@ test("a device row without a location on the map isn't a button", async () => {
       timestamp={null}
     />,
   );
-  expect(rows).toEqual([{ accessibilityLabel: "Show Phone", accessibilityRole: "button" }]);
+  expect(rows).toEqual([
+    { accessibilityLabel: "Show Phone, Updated 1 min ago", accessibilityRole: "button" },
+    {
+      accessibilityLabel: "Show Pixel (this phone), Newer location can’t be read, battery 40%",
+      accessibilityRole: "button",
+    },
+  ]);
 });

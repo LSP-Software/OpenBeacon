@@ -144,6 +144,13 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
   const batteryVisual = device.battery
     ? getBatteryVisual({ batteryLevel: device.battery.level, charging: device.battery.charging })
     : null;
+  const label = device.isThisDevice ? `${device.name} (this phone)` : device.name;
+  const updated = device.unreadable
+    ? "Newer location can’t be read"
+    : updatedAge === null
+      ? "No location yet"
+      : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`;
+  const batteryLevel = device.battery && batteryVisual ? `${device.battery.level}%` : null;
 
   const content = (
     <>
@@ -152,23 +159,19 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
       </View>
       <View className="min-w-0 flex-1">
         <Text className="text-foreground font-semibold" numberOfLines={1}>
-          {device.isThisDevice ? `${device.name} (this phone)` : device.name}
+          {label}
         </Text>
         <Text
           className={device.unreadable ? "text-destructive text-sm" : "text-muted text-sm"}
           numberOfLines={1}
         >
-          {device.unreadable
-            ? "Newer location can’t be read"
-            : updatedAge === null
-              ? "No location yet"
-              : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`}
+          {updated}
         </Text>
       </View>
-      {device.battery && batteryVisual ? (
+      {batteryVisual && batteryLevel ? (
         <View className="flex-row items-center gap-1">
           <Icon as={batteryVisual.icon} size={18} className={batteryVisual.colorClass} />
-          <Text className={`${batteryVisual.colorClass} text-sm`}>{device.battery.level}%</Text>
+          <Text className={`${batteryVisual.colorClass} text-sm`}>{batteryLevel}</Text>
         </View>
       ) : null}
     </>
@@ -179,7 +182,9 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
   ) : (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Show ${device.name}`}
+      accessibilityLabel={[`Show ${label}`, updated, batteryLevel && `battery ${batteryLevel}`]
+        .filter(Boolean)
+        .join(", ")}
       className="min-h-11 flex-row items-center gap-3 py-1.5 active:opacity-70"
       onPress={onPress}
     >

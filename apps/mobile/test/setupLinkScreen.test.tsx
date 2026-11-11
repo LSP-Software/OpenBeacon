@@ -21,6 +21,8 @@ const approvedStatus = {
 
 let statusData: { state: string } | undefined;
 let goneLinkId: string | null = null;
+let statusError: Error | null = null;
+const backHandlers = new Set<() => boolean>();
 let deviceActive = false;
 const secureStoreValues = new Map<string, string>();
 const shownCodes: { linkId: string; psk: Uint8Array }[] = [];
@@ -42,12 +44,13 @@ const finishDeviceLink = mock(
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("expo-router", () => ({
   router: { back: () => {}, canGoBack: () => false, replace },
+  useFocusEffect: (effect: () => () => void) => React.useEffect(effect, [effect]),
 }));
 mock.module("@tanstack/react-query", () => ({
   useMutation: () => ({ isPending: false, mutateAsync: createLink }),
   useQuery: (options: typeof queryOptions) => {
     queryOptions = options;
-    const error = goneLinkId !== null && options.linkId === goneLinkId ? notFound() : null;
+    const error = goneLinkId !== null && options.linkId === goneLinkId ? notFound() : statusError;
     return { data: error ? undefined : statusData, error, isError: error !== null };
   },
   useQueryClient: () => ({ invalidateQueries: async () => {} }),
@@ -77,7 +80,17 @@ mock.module("expo-screen-capture", () => ({
   enableAppSwitcherProtectionAsync: async () => {},
   preventScreenCaptureAsync: async () => {},
 }));
-mock.module("react-native", () => ({ Pressable: View, ScrollView: View, View }));
+mock.module("react-native", () => ({
+  BackHandler: {
+    addEventListener: (_event: string, handler: () => boolean) => {
+      backHandlers.add(handler);
+      return { remove: () => backHandlers.delete(handler) };
+    },
+  },
+  Pressable: View,
+  ScrollView: View,
+  View,
+}));
 mock.module("lucide-react-native", () => ({ ArrowLeftIcon: () => null }));
 mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
 mock.module("react-native-qrcode-svg", () => ({ default: () => null }));
@@ -141,6 +154,7 @@ const relaunch = async () => {
 beforeEach(() => {
   statusData = undefined;
   goneLinkId = null;
+  statusError = null;
   deviceActive = false;
   secureStoreValues.clear();
   shownCodes.length = 0;
@@ -315,4 +329,95 @@ test("a code that couldn't be saved isn't shown", async () => {
   expect(rendered()).toContain("Unable to save your keys on this phone.");
   await pressButton("Try again");
   expect(shownCodes.at(-1)?.linkId).toBe("link-2");
+});
+
+const pressHardwareBack = () => [...backHandlers].some((handler) => handler());
+
+test("hardware back is blocked only while the handover is being finished", async () => {
+  let release = () => {};
+  finishDeviceLink.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = () => resolve({ userId: "user-1" });
+      }),
+  );
+  await render();
+  expect(pressHardwareBack()).toBe(false);
+
+  statusData = approvedStatus;
+  await render();
+  expect(pressHardwareBack()).toBe(true);
+
+  await act(async () => release());
+});
+
+test("an active phone resuming a saved code doesn't show it while checking it", async () => {
+  await render();
+  deviceActive = true;
+  shownCodes.length = 0;
+  await relaunch();
+
+  expect(shownCodes).toEqual([]);
+  expect(rendered()).not.toContain("Waiting for your other phone");
+});
+
+test("an active phone that can't reach the server can carry on to the map", async () => {
+  await render();
+  deviceActive = true;
+  statusError = new TRPCClientError("Network request failed");
+  shownCodes.length = 0;
+  await relaunch();
+
+  expect(shownCodes).toEqual([]);
+  expect(secureStoreValues.size).toBe(1);
+  await pressButton("Continue to the map");
+  expect(replace.mock.calls).toEqual([["/(tabs)/map"]]);
+});
+
+test("a Pending phone that can't reach the server keeps showing its saved code", async () => {
+  await render();
+  statusError = new TRPCClientError("Network request failed");
+  shownCodes.length = 0;
+  await relaunch();
+
+  expect(shownCodes.at(-1)?.linkId).toBe("link-1");
+  expect(rendered()).toContain("We can’t reach your server right now. We’ll keep trying.");
+});
+
+test("no other signed-in phone shows the server's reason and goes back to the setup options", async () => {
+  const message = "None of your other phones are signed in.";
+  createLink.mockImplementationOnce(async () => {
+    throw TRPCClientError.from({
+      error: { code: -32012, data: { code: "PRECONDITION_FAILED" }, message },
+    });
+  });
+  await render();
+
+  expect(rendered()).toContain(message);
+  expect(rendered()).not.toContain("couldn’t reach your server");
+  expect(rendered()).not.toContain("Try again");
+  await pressButton("See other ways to set up");
+  expect(replace.mock.calls).toEqual([["/setup"]]);
+});
+
+test("a failure to create a code shows the server's message when the server answered", async () => {
+  createLink.mockImplementationOnce(async () => {
+    throw TRPCClientError.from({
+      error: { code: -32603, data: { code: "INTERNAL_SERVER_ERROR" }, message: "Server broke" },
+    });
+  });
+  await render();
+
+  expect(rendered()).toContain("Server broke");
+  await pressButton("Try again");
+  expect(shownCodes.at(-1)?.linkId).toBe("link-2");
+});
+
+test("a failure to create a code with no answer says the server can't be reached", async () => {
+  createLink.mockImplementationOnce(async () => {
+    throw new TRPCClientError("Network request failed");
+  });
+  await render();
+
+  expect(rendered()).toContain("We couldn’t reach your server");
 });
