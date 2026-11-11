@@ -33,7 +33,7 @@ A device that has been set up, so it's in its account's Epochs and can send and 
 _Avoid_: Approved device, trusted device, verified device
 
 **Pending device**:
-A device signed in to an account that has had an Active device before, and not yet set up. That includes the next device after every device has been removed. It gets no Device wraps, can't upload or see locations, and can't create a History key. The server deletes it if it isn't set up within 7 days.
+A device signed in to an account that has had an Active device before, and not yet set up. That includes the next device after every device has been removed. It gets no Device wraps, can't upload or see locations, and can't create a History key. The server deletes it if it isn't set up within 7 days. A removed Pending device isn't deleted until the account is.
 _Avoid_: Unapproved device, untrusted device, new device
 
 **Activation**:

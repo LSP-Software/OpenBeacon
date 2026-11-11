@@ -29,7 +29,7 @@ ADR 0001 rejected a device-to-device handover because the server chose the recei
 What this doesn't cover:
 
 - The new device trusts the server for the approver's public key until devices can be verified (OPE-213). A server that swapped it could only hand over keys that still have to match the published History public keys, and it can't learn the PSK.
-- The server activates the new device when the handover is stored, before the new device has opened it. If the new device rejects it, it's active without the History key, and the user can Restore with their phrase.
+- The server activates the new device when the handover is stored, before the new device has opened it. If the new device rejects it, it's active without the History key. With a recovery phrase, the user can Restore. Without one, a Device link can't help, because the server refuses a link for a phone that's already active. The user can set up a phrase on another phone and then Restore, or run a Recovery reset.
 - Only a session linked to an Active device can approve a Device link. A session is linked when it registers its device as new or opens a challenge sealed to the device's Device key (a Session link), so knowing the password and an Active device's ID isn't enough to approve a Pending device.
 - A Device link needs another Active device. Only an account's first device ever is active straight away, so once every device has been removed, the next one is Pending and can only be set up by Restore or a Recovery reset. The app hides the QR option then, and `deviceLink.create` refuses.
 - A Device link doesn't rotate anything. The new device can read every Epoch that has a History wrap for the versions it receives.
