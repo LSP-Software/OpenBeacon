@@ -42,6 +42,7 @@ router.on(["POST", "GET"], "/trpc/*", async (c) => {
         serverVersion,
         serverName: env.SERVER_NAME,
         selfHosted: env.SELF_HOSTED,
+        feedbackWebhookUrl: env.DISCORD_FEEDBACK_WEBHOOK_URL,
         ...(c.env.clientIp != null ? { clientIp: c.env.clientIp } : {}),
       }),
   });

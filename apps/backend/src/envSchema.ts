@@ -31,6 +31,10 @@ export const envSchema = {
   TRUSTED_PROXY_PROVIDER: z
     .enum(["none", "cloudflare", "cloudflare-authenticated", "trusted-proxy"])
     .default("none"),
+  DISCORD_FEEDBACK_WEBHOOK_URL: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.url({ protocol: /^https$/ }).optional(),
+  ),
   CLOUDFLARE_ORIGIN_SECRET: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z.string().min(32).optional(),

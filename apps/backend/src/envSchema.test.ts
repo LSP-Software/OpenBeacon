@@ -15,3 +15,15 @@ test("leaves the email code IP limit off unless EMAIL_CODE_IP_LIMIT is true", ()
   expect(envSchema.EMAIL_CODE_IP_LIMIT.parse("true")).toBe(true);
   expect(envSchema.EMAIL_CODE_IP_LIMIT.safeParse("maybe").success).toBe(false);
 });
+
+test("only accepts an HTTPS Discord feedback webhook and treats empty as unset", () => {
+  expect(envSchema.DISCORD_FEEDBACK_WEBHOOK_URL.parse(undefined)).toBeUndefined();
+  expect(envSchema.DISCORD_FEEDBACK_WEBHOOK_URL.parse("")).toBeUndefined();
+  expect(
+    envSchema.DISCORD_FEEDBACK_WEBHOOK_URL.parse("https://discord.com/api/webhooks/1/token"),
+  ).toBe("https://discord.com/api/webhooks/1/token");
+  expect(
+    envSchema.DISCORD_FEEDBACK_WEBHOOK_URL.safeParse("http://discord.com/api/webhooks/1/token")
+      .success,
+  ).toBe(false);
+});

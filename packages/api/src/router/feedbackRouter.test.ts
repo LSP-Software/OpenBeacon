@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis } from "@openbeacon/cache/testing";
 import { FEEDBACK_MESSAGE_MAX_LENGTH } from "@openbeacon/schemas";
@@ -14,11 +14,13 @@ const createCaller = ({
   create,
   session,
   selfHosted = false,
+  feedbackWebhookUrl = null,
   cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
 }: {
   create: ReturnType<typeof mock>;
   session: { user: { id: string; email: string } } | null;
   selfHosted?: boolean;
+  feedbackWebhookUrl?: string | null;
   cache?: TestCache;
 }) =>
   appRouter.createCaller({
@@ -27,11 +29,16 @@ const createCaller = ({
     serverVersion: "9.9.9",
     serverName: "Hosted",
     selfHosted,
+    feedbackWebhookUrl,
     db: { feedback: { create } },
     session,
   } as unknown as Parameters<typeof appRouter.createCaller>[0]);
 
 describe("feedback", () => {
+  afterEach(() => {
+    mock.restore();
+  });
+
   test("accepts feedback without a session so self-hosted users can reach OpenBeacon", async () => {
     const create = mock(async () => ({}));
     const caller = createCaller({ create, session: null });
@@ -56,6 +63,7 @@ describe("feedback", () => {
             maplibreVersion: "10.4.2",
             serverVersion: "0.1.1",
           },
+          select: { id: true },
         },
       ],
       [
@@ -68,6 +76,7 @@ describe("feedback", () => {
             maplibreVersion: null,
             serverVersion: null,
           },
+          select: { id: true },
         },
       ],
     ]);
@@ -93,6 +102,7 @@ describe("feedback", () => {
             maplibreVersion: null,
             serverVersion: null,
           },
+          select: { id: true },
         },
       ],
     ]);
@@ -155,5 +165,54 @@ describe("feedback", () => {
       code: "TOO_MANY_REQUESTS",
     });
     expect(create).toHaveBeenCalledTimes(3);
+  });
+
+  test("alerts Discord without sharing the message or email", async () => {
+    const fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(new Response(null));
+    const create = mock(async () => ({ id: "feedback-1" }));
+    const caller = createCaller({
+      create,
+      session: null,
+      feedbackWebhookUrl: "https://discord.com/api/webhooks/1/token",
+    });
+
+    await caller.feedback.submit({ message: "secret @everyone", email: "user@example.com" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe("https://discord.com/api/webhooks/1/token");
+    const body = String(init?.body);
+    expect(JSON.parse(body)).toEqual({
+      content: "New feedback `feedback-1` (contact email included)",
+      allowed_mentions: { parse: [] },
+    });
+    expect(body).not.toContain("secret");
+    expect(body).not.toContain("user@example.com");
+  });
+
+  test("still accepts feedback when the Discord alert fails", async () => {
+    spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+    const create = mock(async () => ({ id: "feedback-1" }));
+    const caller = createCaller({
+      create,
+      session: null,
+      feedbackWebhookUrl: "https://discord.com/api/webhooks/1/token",
+    });
+
+    await caller.feedback.submit({ message: "hello" });
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("sends no alert when no webhook is configured", async () => {
+    const fetchMock = spyOn(globalThis, "fetch");
+    const create = mock(async () => ({ id: "feedback-1" }));
+    const caller = createCaller({ create, session: null });
+
+    await caller.feedback.submit({ message: "hello" });
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
