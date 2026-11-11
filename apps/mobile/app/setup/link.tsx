@@ -9,18 +9,26 @@ import {
   enableAppSwitcherProtectionAsync,
   preventScreenCaptureAsync,
 } from "expo-screen-capture";
-import { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { ArrowLeftIcon } from "lucide-react-native";
+import { useEffect, useRef, useState } from "react";
+import { Pressable, ScrollView, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { BackButton } from "../../components/headers/BackButton.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { Button } from "../../components/ui/Button.tsx";
+import { Icon } from "../../components/ui/Icon.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
+import { KEY_NOT_SAVED_MESSAGE } from "../../lib/createHistoryKey.ts";
+import { isThisDeviceActive } from "../../lib/deviceActivation.ts";
 import { ensureDeviceKeyRegistration } from "../../lib/deviceKeys.ts";
 import { finishDeviceLink, HANDOVER_REJECTED_MESSAGE } from "../../lib/deviceLink.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
+import {
+  deleteSavedDeviceLink,
+  readSavedDeviceLink,
+  saveDeviceLink,
+} from "../../lib/savedDeviceLink.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 
 const UNREACHABLE_MESSAGE = "We couldn’t reach your server. Check your connection and try again.";
@@ -31,15 +39,19 @@ const LinkWithOtherPhoneScreen = () => {
   const queryClient = useQueryClient();
   const createLink = useMutation(trpc.deviceLink.create.mutationOptions());
   const [link, setLink] = useState<{
+    active: boolean;
+    deviceId: string;
     devicePublicKey: string;
     linkId: string;
     psk: Uint8Array;
+    userId: string;
   } | null>(null);
   const [handover, setHandover] = useState<Handover | null>(null);
   const [problem, setProblem] = useState<{
     message: string;
-    action: "newCode" | "finish" | "continue" | "home";
+    action: "start" | "newCode" | "finish" | "continue" | "home";
   } | null>(null);
+  const forgottenLinkId = useRef<string | null>(null);
   const status = useQuery({
     ...trpc.deviceLink.status.queryOptions({ linkId: link?.linkId ?? "" }),
     enabled: link !== null && handover === null && problem === null,
@@ -65,7 +77,45 @@ const LinkWithOtherPhoneScreen = () => {
       return;
     }
     const [device, { linkId }] = created.data;
-    setLink({ devicePublicKey: device.publicKey, linkId, psk: createDeviceLinkSecret() });
+    const psk = createDeviceLinkSecret();
+    const saved = await tryCatch(
+      saveDeviceLink({ deviceId: device.deviceId, linkId, psk, userId: device.userId }),
+    );
+    if (saved.error) {
+      setProblem({ message: KEY_NOT_SAVED_MESSAGE, action: "newCode" });
+      return;
+    }
+    setLink({
+      active: false,
+      deviceId: device.deviceId,
+      devicePublicKey: device.publicKey,
+      linkId,
+      psk,
+      userId: device.userId,
+    });
+  };
+
+  const start = async () => {
+    setProblem(null);
+    const device = await tryCatch(ensureDeviceKeyRegistration());
+    if (device.error) {
+      setProblem({ message: UNREACHABLE_MESSAGE, action: "start" });
+      return;
+    }
+    const saved = await tryCatch(readSavedDeviceLink(device.data));
+    if (!saved.data) {
+      await showNewCode();
+      return;
+    }
+    const active = await tryCatch(isThisDeviceActive());
+    setLink({
+      active: active.data === true,
+      deviceId: device.data.deviceId,
+      devicePublicKey: device.data.publicKey,
+      linkId: saved.data.linkId,
+      psk: saved.data.psk,
+      userId: device.data.userId,
+    });
   };
 
   const finish = async (approved: Handover, current: { linkId: string; psk: Uint8Array }) => {
@@ -94,7 +144,7 @@ const LinkWithOtherPhoneScreen = () => {
   };
 
   useEffect(() => {
-    void showNewCode();
+    void start();
   }, []);
 
   useEffect(() => {
@@ -118,13 +168,41 @@ const LinkWithOtherPhoneScreen = () => {
     void finish(approved, link);
   }, [link, handover, status.data]);
 
+  useEffect(() => {
+    if (!link || handover || forgottenLinkId.current === link.linkId) return;
+    const state = status.data?.state;
+    const gone = status.error instanceof TRPCClientError && status.error.data?.code === "NOT_FOUND";
+    if (!gone && state !== "expired" && !(link.active && state === "waiting")) return;
+    forgottenLinkId.current = link.linkId;
+    void (async () => {
+      await tryCatch(deleteSavedDeviceLink(link));
+      if (link.active) {
+        router.replace("/");
+        return;
+      }
+      if (gone) await showNewCode();
+    })();
+  }, [link, handover, status.data, status.error]);
+
   const expired = status.data?.state === "expired";
 
   return (
     <View className="flex-1 bg-background">
       <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
         <View className="flex-row items-center justify-between">
-          {handover && !problem ? <View className="w-10" /> : <BackButton />}
+          {handover && !problem ? (
+            <View className="w-10" />
+          ) : (
+            <Pressable
+              className="flex flex-row items-center gap-1"
+              onPress={() => (router.canGoBack() ? router.back() : router.replace("/setup"))}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <Icon as={ArrowLeftIcon} className="text-primary" />
+              <Text className="text-primary">Back</Text>
+            </Pressable>
+          )}
           <Text className="text-foreground text-2xl font-bold">Set up</Text>
           <View className="w-10" />
         </View>
@@ -159,6 +237,11 @@ const LinkWithOtherPhoneScreen = () => {
                   if (handover && link) void finish(handover, link);
                 }}
               >
+                <Text>Try again</Text>
+              </Button>
+            )}
+            {problem.action === "start" && (
+              <Button onPress={start}>
                 <Text>Try again</Text>
               </Button>
             )}

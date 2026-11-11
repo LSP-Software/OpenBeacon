@@ -7,6 +7,7 @@ import {
   type HistoryPrivateKeyMaterial,
   sealDeviceLinkHandover,
 } from "@openbeacon/encryption";
+import { expectNoSecretsIn } from "../test/secretLeaks.testUtil.ts";
 
 const linkId = "8d3c1f57-6f0e-4f43-9a51-6f41b8f0a2d1";
 const approver = createDeviceKeyPair();
@@ -20,6 +21,20 @@ let heldKeys = new Map<number, HistoryPrivateKeyMaterial>();
 let approved: { ciphertext: string; enc: string; linkId: string } | null = null;
 const stored: { userId: string; version: number }[] = [];
 const activeDevices: string[] = [];
+const serverInputs: unknown[] = [];
+const secureStoreValues = new Map<string, string>();
+let failKeyStorage = false;
+
+mock.module("expo-secure-store", () => ({
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: "when-unlocked-this-device-only",
+  deleteItemAsync: async (key: string) => {
+    secureStoreValues.delete(key);
+  },
+  getItemAsync: async (key: string) => secureStoreValues.get(key) ?? null,
+  setItemAsync: async (key: string, value: string) => {
+    secureStoreValues.set(key, value);
+  },
+}));
 
 mock.module("./api.ts", () => ({
   trpcClient: {
@@ -34,18 +49,22 @@ mock.module("./api.ts", () => ({
     deviceLink: {
       approve: {
         mutate: async (input: { ciphertext: string; enc: string; linkId: string }) => {
+          serverInputs.push(input);
           approved = input;
         },
       },
       get: {
-        query: async () => ({
-          deviceId: "device-new",
-          icon: "phone",
-          model: "Pixel 9",
-          name: "Pixel 9",
-          platform: "android",
-          publicKey: registeredPublicKey,
-        }),
+        query: async (input: { linkId: string }) => {
+          serverInputs.push(input);
+          return {
+            deviceId: "device-new",
+            icon: "phone",
+            model: "Pixel 9",
+            name: "Pixel 9",
+            platform: "android",
+            publicKey: registeredPublicKey,
+          };
+        },
       },
     },
   },
@@ -58,6 +77,7 @@ mock.module("./deviceKeys.ts", () => ({
 mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async ({ version }: { version: number }) => heldKeys.get(version) ?? null,
   storeHistoryKey: async ({ userId, version }: { userId: string; version: number }) => {
+    if (failKeyStorage) throw new Error("Keychain locked");
     stored.push({ userId, version });
   },
 }));
@@ -81,6 +101,7 @@ const {
   lookUpDeviceLink,
   NOT_A_DEVICE_CODE_MESSAGE,
 } = await import("./deviceLink.ts");
+const { readSavedDeviceLink, saveDeviceLink } = await import("./savedDeviceLink.ts");
 
 const code = formatDeviceLinkCode({ devicePublicKey: newDevice.publicKey, linkId, psk });
 
@@ -101,7 +122,12 @@ describe("device link on the phones", () => {
     approved = null;
     stored.length = 0;
     activeDevices.length = 0;
+    serverInputs.length = 0;
+    secureStoreValues.clear();
+    failKeyStorage = false;
   });
+
+  const newPhone = { deviceId: "device-new", userId: "user-1" };
 
   test("the new phone stores the handed-over History key and becomes active", async () => {
     const sealed = await approveAndSwitchToNewDevice();
@@ -111,6 +137,56 @@ describe("device link on the phones", () => {
     expect(Object.keys(sealed).sort()).toEqual(["ciphertext", "enc", "linkId"]);
     expect(stored).toEqual([{ userId: "user-1", version: 1 }]);
     expect(activeDevices).toEqual(["device-new"]);
+  });
+
+  test("the QR code's secret never reaches the server", async () => {
+    await saveDeviceLink({ ...newPhone, linkId, psk });
+    const sealed = await approveAndSwitchToNewDevice();
+    const saved = await readSavedDeviceLink(newPhone);
+    if (!saved) throw new Error("The link wasn't saved.");
+
+    await finishDeviceLink({ ...sealed, approverPublicKey: approver.publicKey, psk: saved.psk });
+
+    expect(saved.psk).toEqual(psk);
+    expect(serverInputs.length).toBeGreaterThan(0);
+    expectNoSecretsIn(JSON.stringify(serverInputs), { secrets: [psk], phrases: [] });
+  });
+
+  test("the new phone forgets its saved link once the handover is stored", async () => {
+    await saveDeviceLink({ ...newPhone, linkId, psk });
+    const sealed = await approveAndSwitchToNewDevice();
+
+    await finishDeviceLink({ ...sealed, approverPublicKey: approver.publicKey, psk });
+
+    expect(await readSavedDeviceLink(newPhone)).toBeNull();
+  });
+
+  test("the new phone keeps its saved link when it couldn't store the handover", async () => {
+    await saveDeviceLink({ ...newPhone, linkId, psk });
+    const sealed = await approveAndSwitchToNewDevice();
+    failKeyStorage = true;
+
+    await expect(
+      finishDeviceLink({ ...sealed, approverPublicKey: approver.publicKey, psk }),
+    ).rejects.toThrow("This phone couldn't save the key.");
+
+    expect(await readSavedDeviceLink(newPhone)).toEqual({ linkId, psk });
+    expect(activeDevices).toEqual([]);
+  });
+
+  test("the new phone forgets its saved link when the handover is rejected", async () => {
+    await saveDeviceLink({ ...newPhone, linkId, psk });
+    const sealed = await approveAndSwitchToNewDevice();
+
+    await expect(
+      finishDeviceLink({
+        ...sealed,
+        approverPublicKey: createDeviceKeyPair().publicKey,
+        psk,
+      }),
+    ).rejects.toThrow(HANDOVER_REJECTED_MESSAGE);
+
+    expect(await readSavedDeviceLink(newPhone)).toBeNull();
   });
 
   test("the scanning phone refuses a code that isn't a device link", async () => {

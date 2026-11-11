@@ -6,6 +6,7 @@ import { cancelDeviceKeyRegistrations, deleteDeviceKey, getStoredDeviceId } from
 import { clearGroupColors } from "./groupColor.ts";
 import { deleteStoredHistoryKeys } from "./historyKeys.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
+import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
 import { clearTrackingKeyCheck } from "./trackingKeyCheck.ts";
 import { clearTrackingUploadTimes } from "./trackingUploadTime.ts";
 
@@ -26,6 +27,7 @@ export const wipeThisPhone = async () => {
     await tryCatch(
       deleteStoredHistoryKeys({ userId, upToVersion: Math.max(currentHistoryKeyVersion, 100) }),
     );
+    if (deviceId) await tryCatch(deleteSavedDeviceLink({ deviceId, userId }));
     await tryCatch(deleteDeviceKey(userId));
   }
   queryClient.clear();

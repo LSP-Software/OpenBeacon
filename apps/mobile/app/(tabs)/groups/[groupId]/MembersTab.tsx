@@ -175,9 +175,8 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
             <DialogTitle>Set nickname for {nicknameMember?.name}</DialogTitle>
           </DialogHeader>
           <Text>
-            Only you can see this nickname. It’s encrypted before it leaves this phone. With a
-            recovery phrase, your other phones can read it too. Leave it blank to use their profile
-            name.
+            Only you can see this nickname. It’s encrypted before it leaves this phone, and your
+            other phones can read it too. Leave it blank to use their profile name.
           </Text>
           {nicknameQuery.isError && (
             <Text>Unable to load nicknames. Try again before making changes.</Text>

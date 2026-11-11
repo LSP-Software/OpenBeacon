@@ -9,6 +9,7 @@ import { createRoot, type Root } from "test-renderer";
 let focused = true;
 let session: { user: { name: string } } | null = null;
 let deviceActive: boolean | Error = true;
+let savedLink: { linkId: string; psk: Uint8Array } | null | Error = null;
 const replace = mock((_route: string) => {});
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("expo-router", () => ({
@@ -49,6 +50,18 @@ mock.module("../lib/deviceActivation.ts", () => ({
   },
 }));
 
+mock.module("../lib/deviceKeys.ts", () => ({
+  ensureDeviceKeyRegistration: async () => ({ deviceId: "device-1", userId: "user-1" }),
+}));
+mock.module("../lib/savedDeviceLink.ts", () => ({
+  deleteSavedDeviceLink: async () => {},
+  saveDeviceLink: async () => {},
+  readSavedDeviceLink: async () => {
+    if (savedLink instanceof Error) throw savedLink;
+    return savedLink;
+  },
+}));
+
 const { default: HomeScreen } = await import("../app/index.tsx");
 let root: Root | null = null;
 afterEach(async () => {
@@ -56,6 +69,7 @@ afterEach(async () => {
   root = null;
   replace.mockClear();
   deviceActive = true;
+  savedLink = null;
 });
 
 const renderSignedIn = async () => {
@@ -80,6 +94,26 @@ test("opens the map when the device status can't be checked", async () => {
   deviceActive = new Error("offline");
   await renderSignedIn();
   expect(replace.mock.calls).toEqual([["/(tabs)/map"]]);
+});
+
+test("a Pending device with a saved setup code goes back to finish linking", async () => {
+  deviceActive = false;
+  savedLink = { linkId: "link-1", psk: new Uint8Array(32) };
+  await renderSignedIn();
+  expect(replace.mock.calls).toEqual([["/setup/link"]]);
+});
+
+test("an active device with a saved setup code still goes back to finish linking", async () => {
+  savedLink = { linkId: "link-1", psk: new Uint8Array(32) };
+  await renderSignedIn();
+  expect(replace.mock.calls).toEqual([["/setup/link"]]);
+});
+
+test("routes as usual when the saved setup code can't be read", async () => {
+  deviceActive = false;
+  savedLink = new Error("Keychain locked");
+  await renderSignedIn();
+  expect(replace.mock.calls).toEqual([["/setup"]]);
 });
 
 test("refreshing a session while the home screen is unfocused does not navigate away from account", async () => {

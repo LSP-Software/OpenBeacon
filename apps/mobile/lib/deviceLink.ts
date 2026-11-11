@@ -10,6 +10,7 @@ import { KEY_NOT_SAVED_MESSAGE } from "./createHistoryKey.ts";
 import { markThisDeviceActive } from "./deviceActivation.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { getStoredHistoryKey, storeHistoryKey } from "./historyKeys.ts";
+import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
 
 export const NOT_A_DEVICE_CODE_MESSAGE =
   "That isn’t an OpenBeacon setup code. On your new phone, choose “Link with your other phone”.";
@@ -76,8 +77,12 @@ export const finishDeviceLink = async ({
 }) => {
   const device = await ensureDeviceKeyRegistration();
   const status = await trpcClient.accountRecovery.status.query();
+  const reject = async () => {
+    await tryCatch(deleteSavedDeviceLink(device));
+    return new Error(HANDOVER_REJECTED_MESSAGE);
+  };
   const currentHistoryKeyVersion = status.currentHistoryKey?.version;
-  if (currentHistoryKeyVersion === undefined) throw new Error(HANDOVER_REJECTED_MESSAGE);
+  if (currentHistoryKeyVersion === undefined) throw await reject();
   const opened = await tryCatch(
     Promise.resolve().then(() =>
       openDeviceLinkHandover({
@@ -93,7 +98,7 @@ export const finishDeviceLink = async ({
       }),
     ),
   );
-  if (opened.error) throw new Error(HANDOVER_REJECTED_MESSAGE);
+  if (opened.error) throw await reject();
   const stored = await tryCatch(
     Promise.all(
       opened.data.map(({ privateKey, version }) =>
@@ -103,5 +108,6 @@ export const finishDeviceLink = async ({
   );
   if (stored.error) throw new Error(KEY_NOT_SAVED_MESSAGE);
   markThisDeviceActive(device.deviceId);
+  await tryCatch(deleteSavedDeviceLink(device));
   return { userId: device.userId };
 };

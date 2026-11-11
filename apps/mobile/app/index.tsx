@@ -8,6 +8,8 @@ import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
 import { isThisDeviceActive } from "../lib/deviceActivation.ts";
+import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
+import { readSavedDeviceLink } from "../lib/savedDeviceLink.ts";
 import { useColors } from "../lib/theme.ts";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -73,6 +75,11 @@ export default function HomeScreen() {
       }
 
       void (async () => {
+        const savedLink = await tryCatch(ensureDeviceKeyRegistration().then(readSavedDeviceLink));
+        if (savedLink.data) {
+          router.replace("/setup/link");
+          return;
+        }
         const active = await tryCatch(isThisDeviceActive());
         router.replace(active.data === false ? "/setup" : "/(tabs)/map");
       })();

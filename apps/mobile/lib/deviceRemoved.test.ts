@@ -91,6 +91,7 @@ const seedSignedOutPhone = async () => {
   storageValues.set(`encryption.device.active.${device.deviceId}`, true);
   secureStoreValues.set("encryption.history.user-a.1", "history-1");
   secureStoreValues.set("encryption.history.user-a.3", "history-3");
+  secureStoreValues.set(`encryption.deviceLink.user-a.${device.deviceId}`, "saved-link");
   return device;
 };
 
@@ -100,6 +101,7 @@ const expectWiped = (deviceId: string) => {
   expect(secureStoreValues.has("encryption.history.user-a.1")).toBe(false);
   expect(secureStoreValues.has("encryption.history.user-a.3")).toBe(false);
   expect(storageValues.has(`encryption.device.active.${deviceId}`)).toBe(false);
+  expect(secureStoreValues.has(`encryption.deviceLink.user-a.${deviceId}`)).toBe(false);
 };
 
 describe("wiping a removed phone", () => {
@@ -117,6 +119,7 @@ describe("wiping a removed phone", () => {
     sessionUserId = null;
     storageValues.set(`encryption.device.active.${device.deviceId}`, true);
     secureStoreValues.set("encryption.history.user-a.3", "history-3");
+    secureStoreValues.set(`encryption.deviceLink.user-a.${device.deviceId}`, "saved-link");
 
     await wipeThisPhone();
 
