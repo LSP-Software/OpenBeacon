@@ -14,6 +14,7 @@ import {
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
 import { upsertUserDevice } from "../lib/groupEpochs.ts";
 import { appRouter } from "../root.ts";
+import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
 
 const prefix = `alerts-${crypto.randomUUID()}`;
 const password = "testing-password-123";
@@ -69,15 +70,17 @@ const createAccount = async () => {
   const { user } = await auth.api.signUpEmail({ body: { email, password, name: "Alert Test" } });
   const session = await prisma.session.findFirstOrThrow({ where: { userId: user.id } });
   const callerWith = (deviceId: string | null) =>
-    appRouter.createCaller({
-      cache,
-      db: prisma,
-      emailCodes: null,
-      securityAlerts,
-      clientIp: `ip-${user.id}`,
-      deviceId,
-      session: { user: { id: user.id }, session: { id: session.id, createdAt: new Date() } },
-    } as Parameters<typeof appRouter.createCaller>[0]);
+    appRouter.createCaller(
+      withDeviceActive({
+        cache,
+        db: prisma,
+        emailCodes: null,
+        securityAlerts,
+        clientIp: `ip-${user.id}`,
+        deviceId,
+        session: { user: { id: user.id }, session: { id: session.id, createdAt: new Date() } },
+      }) as Parameters<typeof appRouter.createCaller>[0],
+    );
   const activeCaller = async () => {
     const device = await prisma.userDevice.create({
       data: {
@@ -338,7 +341,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
   test("new device alerts can be turned off", async () => {
     const account = await createAccount();
     await registerDevice(account);
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: false,
       alertDeletionScheduled: true,
     });
@@ -369,9 +374,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
   test("scheduling deletion sends one alert with the deletion date", async () => {
     const account = await createAccount();
-    await account.caller.emailAlerts.setTimezone({ timezone: "Europe/London" });
+    await (await account.activeCaller()).emailAlerts.setTimezone({ timezone: "Europe/London" });
 
-    const { deletionDate } = await account.caller.account.requestDeletion({ password });
+    const { deletionDate } = await (
+      await account.activeCaller()
+    ).account.requestDeletion({ password });
 
     expect(await sentAlerts()).toEqual([
       {
@@ -386,14 +393,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
   test("deletion alerts can be turned off", async () => {
     const account = await createAccount();
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: true,
       alertDeletionScheduled: false,
     });
     await sentAlerts();
     sent.length = 0;
 
-    await account.caller.account.requestDeletion({ password });
+    await (await account.activeCaller()).account.requestDeletion({ password });
 
     expect(await sentAlerts()).toEqual([]);
   });
@@ -402,7 +411,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     const account = await createAccount();
     const turnedOffAt = now();
 
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: true,
       alertDeletionScheduled: false,
     });
@@ -423,7 +434,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
   test("turning both alerts off at once sends one alert naming both", async () => {
     const account = await createAccount();
 
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: false,
       alertDeletionScheduled: false,
     });
@@ -437,12 +450,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     const account = await createAccount();
     const firstAt = now();
 
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: false,
       alertDeletionScheduled: true,
     });
     await waitSeconds(30);
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: false,
       alertDeletionScheduled: false,
     });
@@ -458,12 +475,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
   test("turning an alert back on within the minute still sends the alert", async () => {
     const account = await createAccount();
 
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: false,
       alertDeletionScheduled: true,
     });
     await waitSeconds(10);
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: true,
       alertDeletionScheduled: true,
     });
@@ -475,12 +496,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
   test("an alert turned off after the batch was sent starts a new batch", async () => {
     const account = await createAccount();
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: false,
       alertDeletionScheduled: true,
     });
     await waitSeconds(60);
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: false,
       alertDeletionScheduled: false,
     });
@@ -493,7 +518,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
   test("a restarted server sends the alerts another server was holding", async () => {
     const account = await createAccount();
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: false,
       alertDeletionScheduled: false,
     });
@@ -511,7 +538,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
   test("a server that starts after the minute is up sends the held alert straight away", async () => {
     const account = await createAccount();
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: false,
       alertDeletionScheduled: true,
     });
@@ -528,7 +557,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
   test("two servers holding the same alerts send it once", async () => {
     const account = await createAccount();
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: false,
       alertDeletionScheduled: false,
     });
@@ -543,7 +574,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     sendFailure = new Error("SMTP is down");
 
     expect(
-      await account.caller.emailAlerts.updateSettings({
+      await (
+        await account.activeCaller()
+      ).emailAlerts.updateSettings({
         alertNewDevice: false,
         alertDeletionScheduled: false,
       }),
@@ -553,22 +586,36 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
   test("the alert is sent straight away when it can't be held", async () => {
     const account = await createAccount();
-    const caller = appRouter.createCaller({
-      cache,
-      db: prisma,
-      emailCodes: null,
-      securityAlerts: createAlerts({
-        ...cache.alertsTurnedOff,
-        add: async () => {
-          throw new Error("Redis is down");
-        },
-      }),
-      clientIp: `ip-${account.userId}`,
-      session: {
-        user: { id: account.userId },
-        session: { id: "held", createdAt: new Date() },
+    const device = await prisma.userDevice.create({
+      data: {
+        activatedAt: new Date(),
+        icon: "phone",
+        id: `${account.userId}-held`,
+        name: "Phone",
+        publicKey: createDeviceKeyPair().publicKey,
+        publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
+        userId: account.userId,
       },
-    } as Parameters<typeof appRouter.createCaller>[0]);
+    });
+    const caller = appRouter.createCaller(
+      withDeviceActive({
+        cache,
+        db: prisma,
+        emailCodes: null,
+        securityAlerts: createAlerts({
+          ...cache.alertsTurnedOff,
+          add: async () => {
+            throw new Error("Redis is down");
+          },
+        }),
+        clientIp: `ip-${account.userId}`,
+        deviceId: device.id,
+        session: {
+          user: { id: account.userId },
+          session: { id: "held", createdAt: new Date() },
+        },
+      }) as Parameters<typeof appRouter.createCaller>[0],
+    );
 
     await caller.emailAlerts.updateSettings({
       alertNewDevice: false,
@@ -584,15 +631,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     const account = await createAccount();
     await turnOffOptionalAlerts(account.userId);
 
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: true,
       alertDeletionScheduled: false,
     });
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: true,
       alertDeletionScheduled: false,
     });
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: true,
       alertDeletionScheduled: true,
     });
@@ -604,7 +657,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     const account = await createAccount();
     await turnOffOptionalAlerts(account.userId);
 
-    await account.caller.account.requestDeletion({ password, immediate: true });
+    await (await account.activeCaller()).account.requestDeletion({ password, immediate: true });
 
     expect(await prisma.user.findUnique({ where: { id: account.userId } })).toBeNull();
     expect(await sentAlerts()).toEqual([
@@ -620,7 +673,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
   test("a scheduled deletion sends the account deleted alert only when it runs", async () => {
     const account = await createAccount();
-    await account.caller.account.requestDeletion({ password });
+    await (await account.activeCaller()).account.requestDeletion({ password });
     expect((await sentAlerts()).map(({ alert }) => alert.type)).toEqual(["deletion-scheduled"]);
     sent.length = 0;
     await prisma.$executeRaw`UPDATE "User" SET "deletionDate" = (clock_timestamp() AT TIME ZONE 'UTC') - interval '1 second' WHERE id = ${account.userId}`;
@@ -663,7 +716,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     sendGate = promise;
 
     await registerDevice(account, { platform: "ios" });
-    await account.caller.account.requestDeletion({ password });
+    await (await account.activeCaller()).account.requestDeletion({ password });
     resolve();
 
     expect((await sentAlerts()).map(({ alert }) => alert.type)).toEqual([
@@ -679,7 +732,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
     await changePhrase(account);
     const device = await registerDevice(account);
-    await account.caller.account.requestDeletion({ password });
+    await (await account.activeCaller()).account.requestDeletion({ password });
 
     expect(await prisma.userDevice.count({ where: { id: device.id } })).toBe(1);
     expect(
@@ -695,15 +748,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email alert sett
   test("both optional alerts start on and can be changed", async () => {
     const account = await createAccount();
 
-    expect(await account.caller.emailAlerts.settings()).toEqual({
+    expect(await (await account.activeCaller()).emailAlerts.settings()).toEqual({
       alertNewDevice: true,
       alertDeletionScheduled: true,
     });
-    await account.caller.emailAlerts.updateSettings({
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
       alertNewDevice: false,
       alertDeletionScheduled: true,
     });
-    expect(await account.caller.emailAlerts.settings()).toEqual({
+    expect(await (await account.activeCaller()).emailAlerts.settings()).toEqual({
       alertNewDevice: false,
       alertDeletionScheduled: true,
     });
@@ -713,7 +768,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email alert sett
     const account = await createAccount();
 
     await expect(
-      account.caller.emailAlerts.setTimezone({ timezone: "Mars/Olympus" }),
+      (await account.activeCaller()).emailAlerts.setTimezone({ timezone: "Mars/Olympus" }),
     ).rejects.toThrow("Unknown timezone.");
     expect(
       await prisma.user.findUniqueOrThrow({

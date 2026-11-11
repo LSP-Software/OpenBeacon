@@ -7,12 +7,12 @@ import {
   listUserRecipientPublicKeys,
   upsertUserDevice,
 } from "../lib/groupEpochs.ts";
-import { protectedProcedure, publicProcedure } from "../procedures/auth/runtime.ts";
+import { protectedProcedure, publicProcedure, setupProcedure } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 
 export const authRouter = createTRPCRouter({
   providers: publicProcedure.query(() => authCapabilities),
-  deviceKeyContext: protectedProcedure
+  deviceKeyContext: setupProcedure
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .query(async ({ ctx }) => ({
       historyRecipients: await listHistoryRecipients({
@@ -25,7 +25,7 @@ export const authRouter = createTRPCRouter({
       }),
       userId: ctx.session.user.id,
     })),
-  registerDeviceKey: protectedProcedure
+  registerDeviceKey: setupProcedure
     .meta({
       rateLimit: {
         limit: 120,

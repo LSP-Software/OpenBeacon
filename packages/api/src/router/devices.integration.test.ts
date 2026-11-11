@@ -8,6 +8,7 @@ import { DevicePendingError } from "../lib/deviceActivation.ts";
 import { DeviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { linkRequestDevice } from "../lib/requestDevice.ts";
 import { appRouter } from "../root.ts";
+import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
 
 const prefix = `devices-${crypto.randomUUID()}`;
 const password = "testing-password-123";
@@ -42,18 +43,20 @@ const callerFor = (
     unverifiedDeviceId: null,
   },
 ) =>
-  appRouter.createCaller({
-    cache,
-    db: prisma,
-    emailCodes: null,
-    securityAlerts: null,
-    clientIp: `ip-${account.userId}`,
-    ...device,
-    session: {
-      user: { id: account.userId },
-      session: { id: account.sessionId, createdAt: new Date() },
-    },
-  } as Parameters<typeof appRouter.createCaller>[0]);
+  appRouter.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      emailCodes: null,
+      securityAlerts: null,
+      clientIp: `ip-${account.userId}`,
+      ...device,
+      session: {
+        user: { id: account.userId },
+        session: { id: account.sessionId, createdAt: new Date() },
+      },
+    }) as Parameters<typeof appRouter.createCaller>[0],
+  );
 
 const link = async (account: Awaited<ReturnType<typeof createAccount>>, deviceId: string) => {
   const result = await linkRequestDevice({
@@ -67,6 +70,9 @@ const link = async (account: Awaited<ReturnType<typeof createAccount>>, deviceId
 
 const linkSession = (account: Awaited<ReturnType<typeof createAccount>>) =>
   prisma.session.update({ where: { id: account.sessionId }, data: { deviceId: account.deviceId } });
+
+const activate = (account: Awaited<ReturnType<typeof createAccount>>) =>
+  prisma.userDevice.update({ where: { id: account.deviceId }, data: { activatedAt: new Date() } });
 
 afterAll(async () => {
   if (process.env["OPENBEACON_INTEGRATION"] !== "1") return;
@@ -227,6 +233,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("the device heade
       removed: false,
       deviceId: null,
       unverifiedDeviceId: null,
+      deviceActive: false,
     });
 
     const session = await prisma.session.create({
@@ -279,6 +286,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account devices"
         icon: "tablet",
       },
     });
+    await activate(account);
 
     const devices = await callerFor(account).account.listDevices();
 
@@ -290,6 +298,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account devices"
 
   test("renames a device and changes its icon", async () => {
     const account = await createAccount();
+    await activate(account);
 
     await callerFor(account).account.updateDevice({
       deviceId: account.deviceId,
@@ -304,10 +313,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account devices"
   test("rejects another account's device", async () => {
     const account = await createAccount();
     const other = await createAccount();
-    await prisma.userDevice.update({
-      where: { id: account.deviceId },
-      data: { activatedAt: new Date() },
-    });
+    await activate(account);
 
     await expect(
       callerFor(account).account.updateDevice({ deviceId: other.deviceId, name: "Mine now" }),
@@ -317,7 +323,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account devices"
     expect(device.name).toBe("Pixel 9");
   });
 
-  test("a phone that isn't set up can name itself but not the account's other phones", async () => {
+  test("a phone that isn't set up can't list or name any phone", async () => {
     const account = await createAccount();
     await linkSession(account);
     const other = await prisma.userDevice.create({
@@ -332,22 +338,25 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account devices"
       },
     });
 
-    await callerFor(account).account.updateDevice({ deviceId: account.deviceId, name: "Mine" });
-
     for (const [device, cause] of [
       [{ deviceId: account.deviceId, unverifiedDeviceId: null }, DevicePendingError],
       [{ deviceId: null, unverifiedDeviceId: other.id }, DeviceUnverifiedError],
     ] as const) {
-      const result = await tryCatch(
-        callerFor(account, device).account.updateDevice({ deviceId: other.id, name: "Taken" }),
-      );
-      expect(result.error).toMatchObject({ code: "FORBIDDEN" });
-      expect((result.error as { cause?: unknown }).cause).toBeInstanceOf(cause);
+      const caller = callerFor(account, device);
+      for (const call of [
+        () => caller.account.listDevices(),
+        () => caller.account.updateDevice({ deviceId: account.deviceId, name: "Mine" }),
+        () => caller.account.updateDevice({ deviceId: other.id, name: "Taken" }),
+      ]) {
+        const result = await tryCatch(call());
+        expect(result.error).toMatchObject({ code: "FORBIDDEN" });
+        expect((result.error as { cause?: unknown }).cause).toBeInstanceOf(cause);
+      }
     }
 
     expect(
       (await prisma.userDevice.findUniqueOrThrow({ where: { id: account.deviceId } })).name,
-    ).toBe("Mine");
+    ).toBe("Pixel 9");
     expect((await prisma.userDevice.findUniqueOrThrow({ where: { id: other.id } })).name).toBe(
       "Other phone",
     );
@@ -355,6 +364,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account devices"
 
   test("rejects bad names", async () => {
     const account = await createAccount();
+    await activate(account);
 
     for (const name of ["   ", "a".repeat(41), "Car\nKeys"]) {
       await expect(

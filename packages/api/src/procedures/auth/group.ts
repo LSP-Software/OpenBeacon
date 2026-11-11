@@ -1,7 +1,7 @@
 import { GroupRole } from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
 import z from "zod";
-import { protectedProcedure, requireActiveDevice } from "./runtime.ts";
+import { protectedProcedure } from "./runtime.ts";
 
 export const groupMemberProcedure = protectedProcedure
   .input(z.object({ groupId: z.string().min(1).max(128) }))
@@ -29,9 +29,7 @@ export const groupMemberProcedure = protectedProcedure
     });
   });
 
-export const activeGroupMemberProcedure = groupMemberProcedure.use(requireActiveDevice);
-
-export const groupAdminProcedure = activeGroupMemberProcedure.use(async ({ ctx, next }) => {
+export const groupAdminProcedure = groupMemberProcedure.use(async ({ ctx, next }) => {
   if (ctx.groupMember.role !== GroupRole.OWNER && ctx.groupMember.role !== GroupRole.ADMIN) {
     throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
   }
@@ -41,7 +39,7 @@ export const groupAdminProcedure = activeGroupMemberProcedure.use(async ({ ctx, 
   });
 });
 
-export const groupOwnerProcedure = activeGroupMemberProcedure.use(async ({ ctx, next }) => {
+export const groupOwnerProcedure = groupMemberProcedure.use(async ({ ctx, next }) => {
   if (ctx.groupMember.role !== GroupRole.OWNER) {
     throw new TRPCError({ code: "FORBIDDEN", message: "You are not the owner of this group" });
   }

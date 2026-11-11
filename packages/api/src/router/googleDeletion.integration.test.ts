@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
+import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
 
 process.env.GOOGLE_CLIENT_ID = "google-deletion-test-client";
 process.env.GOOGLE_CLIENT_SECRET = "google-deletion-test-secret";
@@ -24,12 +25,15 @@ const jwk = {
 };
 const tokens = new Map<string, { token: string; verifier: string }>();
 const caller = (session = sessionId) =>
-  appRouter.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    session: { user: { id, email }, session: { id: session } },
-  } as Parameters<typeof appRouter.createCaller>[0]);
+  appRouter.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId: `${id}-device`,
+      session: { user: { id, email }, session: { id: session } },
+    }) as Parameters<typeof appRouter.createCaller>[0],
+  );
 const jwt = (claims: Record<string, unknown>, invalidSignature = false) => {
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const now = Math.floor(Date.now() / 1000);
@@ -57,6 +61,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.user.create({ data: { id, email, name: "Google user" } });
       await prisma.account.create({
         data: { id: `${id}-account`, userId: id, providerId: "google", accountId: googleSubject },
+      });
+      await prisma.userDevice.create({
+        data: {
+          activatedAt: new Date(),
+          icon: "phone",
+          id: `${id}-device`,
+          name: "Phone",
+          publicKey: "public-key",
+          publicKeyAlgorithm: "X25519",
+          userId: id,
+        },
       });
       await prisma.session.createMany({
         data: [sessionId, `${id}-other`].map((session) => ({

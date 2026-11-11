@@ -4,7 +4,7 @@ import { approveDeviceLinkSchema, deviceLinkIdSchema } from "@openbeacon/schemas
 import { TRPCError } from "@trpc/server";
 import { activateDevice, devicePendingError } from "../lib/deviceActivation.ts";
 import { removeUserDevice } from "../lib/removeDevice.ts";
-import { activeDeviceProcedure, thisDeviceProcedure } from "../procedures/auth/runtime.ts";
+import { protectedProcedure, setupDeviceProcedure } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 
 const linkLifetimeMs = 10 * 60_000;
@@ -60,7 +60,7 @@ const findOpenLink = async ({
 };
 
 export const deviceLinkRouter = createTRPCRouter({
-  create: thisDeviceProcedure
+  create: setupDeviceProcedure
     .meta({ rateLimit: { limit: 20, windowMs: 60_000 } })
     .mutation(async ({ ctx }) => {
       const userId = ctx.session.user.id;
@@ -99,7 +99,7 @@ export const deviceLinkRouter = createTRPCRouter({
         return { expiresAt: link.expiresAt, linkId: link.id };
       });
     }),
-  get: activeDeviceProcedure
+  get: protectedProcedure
     .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
     .input(deviceLinkIdSchema)
     .query(async ({ ctx, input }) => {
@@ -117,7 +117,7 @@ export const deviceLinkRouter = createTRPCRouter({
         publicKey: device.publicKey,
       };
     }),
-  approve: activeDeviceProcedure
+  approve: protectedProcedure
     .meta({ rateLimit: { limit: 10, windowMs: 60_000 } })
     .input(approveDeviceLinkSchema)
     .mutation(async ({ ctx, input }) => {
@@ -147,7 +147,7 @@ export const deviceLinkRouter = createTRPCRouter({
         return { deviceId: device.id };
       });
     }),
-  decline: activeDeviceProcedure
+  decline: protectedProcedure
     .meta({ rateLimit: { limit: 10, windowMs: 60_000 } })
     .input(deviceLinkIdSchema)
     .mutation(async ({ ctx, input }) => {
@@ -172,7 +172,7 @@ export const deviceLinkRouter = createTRPCRouter({
       });
       ctx.securityAlerts?.send(userId, { type: "device-removed", device });
     }),
-  status: thisDeviceProcedure
+  status: setupDeviceProcedure
     .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })
     .input(deviceLinkIdSchema)
     .query(async ({ ctx, input }) => {

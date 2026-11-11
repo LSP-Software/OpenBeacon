@@ -11,11 +11,11 @@ import {
   setPendingImageUploadForUser,
 } from "../../lib/image-upload.ts";
 import { deleteFile } from "../../lib/storage.ts";
-import { activeDeviceProcedure } from "../../procedures/auth/runtime.ts";
-import { activeGroupMemberProcedure, groupAdminProcedure } from "../../procedures/auth/group.ts";
+import { protectedProcedure } from "../../procedures/auth/runtime.ts";
+import { groupMemberProcedure, groupAdminProcedure } from "../../procedures/auth/group.ts";
 
 export const groupSettingsRouter = {
-  rename: activeGroupMemberProcedure
+  rename: groupMemberProcedure
     .input(createGroupSchema.extend({ groupId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       return ctx.db.$transaction(async (tx) => {
@@ -72,7 +72,7 @@ export const groupSettingsRouter = {
 
       return { presignedUrl };
     }),
-  confirmGroupImageUpload: activeDeviceProcedure
+  confirmGroupImageUpload: protectedProcedure
     .meta({ rateLimit: { limit: 32, windowMs: 60_000 } })
     .input(z.object({ groupId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {

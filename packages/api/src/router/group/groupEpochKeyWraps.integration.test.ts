@@ -20,6 +20,7 @@ import { authRouter } from "../authRouter.ts";
 import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 setDefaultTimeout(60_000);
 
@@ -57,16 +58,18 @@ const caller = (
   userId: string,
   deviceId = accounts.find((item) => item.userId === userId)?.deviceId ?? null,
 ) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    deviceId,
-    session: {
-      user: { id: userId },
-      session: { id: `${userId}-session`, createdAt: new Date() },
-    },
-  } as Parameters<typeof router.createCaller>[0]);
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId,
+      session: {
+        user: { id: userId },
+        session: { id: `${userId}-session`, createdAt: new Date() },
+      },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 
 const bundle = ({
   creator,

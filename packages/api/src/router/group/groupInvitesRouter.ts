@@ -11,7 +11,7 @@ import {
 } from "../../lib/groupEpochs.ts";
 import { createGroupJoinAlerts } from "../../lib/groupJoinAlerts.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";
-import { activeDeviceProcedure, protectedProcedure } from "../../procedures/auth/runtime.ts";
+import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 
 export const groupInvitesRouter = {
@@ -111,7 +111,7 @@ export const groupInvitesRouter = {
         userId: ctx.session.user.id,
       });
     }),
-  acceptShared: activeDeviceProcedure
+  acceptShared: protectedProcedure
     .meta({
       rateLimit: { limit: 40, ipLimit: 160, namespace: "groupInvites.redeem", windowMs: 60_000 },
     })
@@ -174,7 +174,7 @@ export const groupInvitesRouter = {
         userId: ctx.session.user.id,
       }),
     ),
-  accept: activeDeviceProcedure
+  accept: protectedProcedure
     .meta({
       rateLimit: {
         limit: 32,

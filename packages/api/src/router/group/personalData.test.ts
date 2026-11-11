@@ -22,8 +22,8 @@ test("nicknames are scoped to the caller's membership and targets in the same gr
     clientIp: "127.0.0.1",
     session: { user: { id: "user" } },
     deviceId: "device",
+    deviceActive: true,
     db: {
-      userDevice: { findFirst: async () => ({ id: "device" }) },
       group: {
         findUnique: async () => ({
           id: "group",
@@ -104,8 +104,8 @@ test("group colors are scoped to the caller's own memberships", async () => {
     clientIp: "127.0.0.1",
     session: { user: { id: "user" } },
     deviceId: "device",
+    deviceActive: true,
     db: {
-      userDevice: { findFirst: async () => ({ id: "device" }) },
       group: {
         findUnique: async () => ({
           id: "group",

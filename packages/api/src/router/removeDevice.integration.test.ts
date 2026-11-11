@@ -12,6 +12,7 @@ import { upsertUserDevice } from "../lib/groupEpochs.ts";
 import { linkRequestDevice } from "../lib/requestDevice.ts";
 import { appRouter } from "../root.ts";
 import { createTRPCContext } from "../trpc.ts";
+import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
 
 const prefix = `remove-device-${crypto.randomUUID()}`;
 const password = "testing-password-123";
@@ -78,18 +79,20 @@ const createAccount = async () => {
 type Account = Awaited<ReturnType<typeof createAccount>>;
 
 const callerFor = (account: Account, { deviceId = account.thisPhone.id } = {}) =>
-  appRouter.createCaller({
-    cache,
-    db: prisma,
-    emailCodes: null,
-    securityAlerts,
-    clientIp: `ip-${account.userId}`,
-    deviceId,
-    session: {
-      user: { id: account.userId },
-      session: { id: account.sessions.current, createdAt: new Date() },
-    },
-  } as Parameters<typeof appRouter.createCaller>[0]);
+  appRouter.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      emailCodes: null,
+      securityAlerts,
+      clientIp: `ip-${account.userId}`,
+      deviceId,
+      session: {
+        user: { id: account.userId },
+        session: { id: account.sessions.current, createdAt: new Date() },
+      },
+    }) as Parameters<typeof appRouter.createCaller>[0],
+  );
 
 const sessionIds = async (userId: string) =>
   (await prisma.session.findMany({ select: { id: true }, where: { userId } }))
@@ -234,18 +237,20 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
 
   test("needs a recent sign-in", async () => {
     const account = await createAccount();
-    const stale = appRouter.createCaller({
-      cache,
-      db: prisma,
-      emailCodes: null,
-      securityAlerts,
-      clientIp: `ip-${account.userId}`,
-      deviceId: account.thisPhone.id,
-      session: {
-        user: { id: account.userId },
-        session: { id: account.sessions.current, createdAt: new Date(0) },
-      },
-    } as Parameters<typeof appRouter.createCaller>[0]);
+    const stale = appRouter.createCaller(
+      withDeviceActive({
+        cache,
+        db: prisma,
+        emailCodes: null,
+        securityAlerts,
+        clientIp: `ip-${account.userId}`,
+        deviceId: account.thisPhone.id,
+        session: {
+          user: { id: account.userId },
+          session: { id: account.sessions.current, createdAt: new Date(0) },
+        },
+      }) as Parameters<typeof appRouter.createCaller>[0],
+    );
 
     await expect(
       stale.account.removeDevice({ deviceId: account.lostPhone.id }),
@@ -267,19 +272,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
 
   test("asks a session that hasn't proved this phone to prove it before removing it", async () => {
     const account = await createAccount();
-    const unverified = appRouter.createCaller({
-      cache,
-      db: prisma,
-      emailCodes: null,
-      securityAlerts,
-      clientIp: `ip-${account.userId}`,
-      deviceId: null,
-      unverifiedDeviceId: account.thisPhone.id,
-      session: {
-        user: { id: account.userId },
-        session: { id: account.sessions.unlinked, createdAt: new Date() },
-      },
-    } as Parameters<typeof appRouter.createCaller>[0]);
+    const unverified = appRouter.createCaller(
+      withDeviceActive({
+        cache,
+        db: prisma,
+        emailCodes: null,
+        securityAlerts,
+        clientIp: `ip-${account.userId}`,
+        deviceId: null,
+        unverifiedDeviceId: account.thisPhone.id,
+        session: {
+          user: { id: account.userId },
+          session: { id: account.sessions.unlinked, createdAt: new Date() },
+        },
+      }) as Parameters<typeof appRouter.createCaller>[0],
+    );
 
     const result = await tryCatch(unverified.account.removeThisDevice());
 
@@ -391,7 +398,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("a removed device
         deviceId: account.lostPhone.id,
         session: { id: other.sessions.current, userId: other.userId },
       }),
-    ).toEqual({ removed: false, deviceId: null, unverifiedDeviceId: null });
+    ).toEqual({ removed: false, deviceId: null, unverifiedDeviceId: null, deviceActive: false });
     expect(await sessionIds(other.userId)).toHaveLength(3);
   });
 });

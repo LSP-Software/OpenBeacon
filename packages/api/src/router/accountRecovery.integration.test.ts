@@ -23,6 +23,7 @@ import { DeviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 import { accountHistoryRouter } from "./accountHistoryRouter.ts";
 import { accountRecoveryRouter } from "./accountRecoveryRouter.ts";
+import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
 
 const router = createTRPCRouter({
   accountHistory: accountHistoryRouter,
@@ -121,17 +122,19 @@ const emailCodes = createEmailCodes({
 });
 
 const caller = (userId: string, sessionCreatedAt = new Date(), codes: EmailCodes | null = null) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    emailCodes: codes,
-    clientIp: `ip-${userId}`,
-    deviceId: `${userId}-device`,
-    session: {
-      user: { id: userId },
-      session: { id: `${userId}-session`, createdAt: sessionCreatedAt },
-    },
-  } as Parameters<typeof router.createCaller>[0]);
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      emailCodes: codes,
+      clientIp: `ip-${userId}`,
+      deviceId: `${userId}-device`,
+      session: {
+        user: { id: userId },
+        session: { id: `${userId}-session`, createdAt: sessionCreatedAt },
+      },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 
 const recoveryKeyInput = (phrase: RecoveryPhrase) => {
   const { algorithm, derivationVersion, publicKey } = deriveRecoveryKeyPair(phrase);
@@ -658,17 +661,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ] as const) {
         const { error } = await tryCatch(
           router
-            .createCaller({
-              cache,
-              db: prisma,
-              emailCodes: null,
-              clientIp: `ip-${resetUser}`,
-              ...device,
-              session: {
-                user: { id: resetUser },
-                session: { id: `${resetUser}-session`, createdAt: new Date() },
-              },
-            } as Parameters<typeof router.createCaller>[0])
+            .createCaller(
+              withDeviceActive({
+                cache,
+                db: prisma,
+                emailCodes: null,
+                clientIp: `ip-${resetUser}`,
+                ...device,
+                session: {
+                  user: { id: resetUser },
+                  session: { id: `${resetUser}-session`, createdAt: new Date() },
+                },
+              }) as Parameters<typeof router.createCaller>[0],
+            )
             .accountRecovery.reset(resetInput),
         );
         expect(error).toMatchObject(

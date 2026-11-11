@@ -28,15 +28,13 @@ import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { lockUserGroups } from "../lib/lockUserGroups.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
 import {
-  activeDeviceProcedure,
-  findActiveDeviceId,
   freshSessionProcedure,
   protectedProcedure,
-  requireActiveDevice,
+  setupProcedure,
 } from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
-  deletionVerificationMethods: protectedProcedure.query(async ({ ctx }) => {
+  deletionVerificationMethods: setupProcedure.query(async ({ ctx }) => {
     const accounts = await ctx.db.account.findMany({
       where: { userId: ctx.session.user.id },
       select: { providerId: true, password: true },
@@ -290,7 +288,7 @@ export const accountRouter = {
         data: { deletionCancellationPending: false },
       });
     }),
-  updateName: activeDeviceProcedure
+  updateName: protectedProcedure
     .input(z.object({ name: accountNameSchema }))
     .mutation(async ({ ctx, input }) => {
       return ctx.db.user.update({
@@ -321,7 +319,6 @@ export const accountRouter = {
     .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
     .input(updateDeviceSchema)
     .mutation(async ({ ctx, input }) => {
-      if (input.deviceId !== ctx.deviceId) await findActiveDeviceId(ctx);
       const updated = await ctx.db.userDevice.updateMany({
         where: { id: input.deviceId, userId: ctx.session.user.id, revokedAt: null },
         data: {
@@ -332,7 +329,6 @@ export const accountRouter = {
       if (updated.count === 0) throw new TRPCError({ code: "NOT_FOUND" });
     }),
   removeDevice: freshSessionProcedure
-    .use(requireActiveDevice)
     .meta({ rateLimit: { limit: 10, windowMs: 60_000 } })
     .input(removeDeviceSchema)
     .mutation(async ({ ctx, input }) => {
@@ -345,7 +341,7 @@ export const accountRouter = {
       });
       ctx.securityAlerts?.send(ctx.session.user.id, { type: "device-removed", device });
     }),
-  removeThisDevice: protectedProcedure
+  removeThisDevice: setupProcedure
     .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
     .mutation(async ({ ctx }) => {
       if (!ctx.deviceId) {
@@ -361,9 +357,9 @@ export const accountRouter = {
       });
       ctx.securityAlerts?.send(ctx.session.user.id, { type: "device-removed", device });
     }),
-  version: protectedProcedure.query(({ ctx }) => ctx.serverVersion),
+  version: setupProcedure.query(({ ctx }) => ctx.serverVersion),
   serverName: protectedProcedure.query(({ ctx }) => ctx.serverName),
-  requestProfileImageUpload: activeDeviceProcedure
+  requestProfileImageUpload: protectedProcedure
     .meta({
       rateLimit: {
         limit: 10,
@@ -399,7 +395,7 @@ export const accountRouter = {
 
       return { presignedUrl };
     }),
-  confirmProfileImageUpload: activeDeviceProcedure
+  confirmProfileImageUpload: protectedProcedure
     .meta({
       rateLimit: {
         limit: 20,

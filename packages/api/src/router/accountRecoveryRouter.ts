@@ -10,15 +10,15 @@ import { TRPCError } from "@trpc/server";
 import type z from "zod";
 import {
   freshSessionProcedure,
-  protectedProcedure,
-  requireActiveDevice,
+  requireFreshSession,
   requireThisDevice,
   sessionFreshForMs,
+  setupProcedure,
 } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 import { activateDevice, devicePendingError, lockThisDevice } from "../lib/deviceActivation.ts";
 
-const emailCodeProcedure = freshSessionProcedure.use(({ ctx, next }) => {
+const emailCodeProcedure = setupProcedure.use(requireFreshSession).use(({ ctx, next }) => {
   if (!ctx.emailCodes) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Email isn't set up on this server." });
   }
@@ -87,7 +87,7 @@ const replaceEscrows = async (
 };
 
 export const accountRecoveryRouter = createTRPCRouter({
-  status: protectedProcedure.query(async ({ ctx }) => {
+  status: setupProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
     const [recoveryKey, historyKeys, freshForMs] = await Promise.all([
       ctx.db.recoveryKey.findUnique({
@@ -110,7 +110,7 @@ export const accountRecoveryRouter = createTRPCRouter({
       sessionFresh: freshForMs === null || freshForMs > 0,
     };
   }),
-  escrows: protectedProcedure.query(async ({ ctx }) => {
+  escrows: setupProcedure.query(async ({ ctx }) => {
     const historyKeys = await ctx.db.accountHistoryKey.findMany({
       orderBy: { version: "asc" },
       where: { userId: ctx.session.user.id },
@@ -135,7 +135,6 @@ export const accountRecoveryRouter = createTRPCRouter({
     );
   }),
   setup: freshSessionProcedure
-    .use(requireActiveDevice)
     .input(setupAccountRecoverySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -158,7 +157,6 @@ export const accountRecoveryRouter = createTRPCRouter({
       return { historyKeyVersions: input.escrows.map(({ version }) => version) };
     }),
   changePhrase: freshSessionProcedure
-    .use(requireActiveDevice)
     .input(changeRecoveryPhraseSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -217,7 +215,8 @@ export const accountRecoveryRouter = createTRPCRouter({
       resetToken: await ctx.emailCodes.issueToken({ purpose: "recovery-reset", value: userId }),
     };
   }),
-  reset: freshSessionProcedure
+  reset: setupProcedure
+    .use(requireFreshSession)
     .use(requireThisDevice)
     .input(resetAccountRecoverySchema)
     .mutation(async ({ ctx, input }) => {

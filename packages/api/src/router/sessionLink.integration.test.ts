@@ -36,7 +36,7 @@ const callerFor = async ({
 }) => {
   const device = deviceId
     ? await linkRequestDevice({ db: prisma, deviceId, session: { id: sessionId, userId } })
-    : { removed: false as const, deviceId: null, unverifiedDeviceId: null };
+    : { removed: false as const, deviceId: null, unverifiedDeviceId: null, deviceActive: false };
   if (device.removed) throw new DeviceRemovedError();
   return appRouter.createCaller({
     cache,
@@ -46,6 +46,7 @@ const callerFor = async ({
     clientIp: `ip-${userId}`,
     deviceId: device.deviceId,
     unverifiedDeviceId: device.unverifiedDeviceId,
+    deviceActive: device.deviceActive,
     session: { user: { id: userId }, session: { id: sessionId, createdAt: new Date() } },
   } as Parameters<typeof appRouter.createCaller>[0]);
 };
@@ -231,7 +232,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       );
       await expectUnverified(spoofed.account.removeThisDevice());
 
-      expect((await spoofed.account.listDevices()).every(({ isCurrent }) => !isCurrent)).toBe(true);
+      await expectUnverified(spoofed.account.listDevices());
       expect(await sessionDevice(intruder.id)).toBeNull();
       const devices = await prisma.userDevice.findMany({
         select: { activatedAt: true, id: true, revokedAt: true },

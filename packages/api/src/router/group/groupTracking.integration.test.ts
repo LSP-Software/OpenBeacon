@@ -14,6 +14,7 @@ import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { authRouter } from "../authRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 const prefix = `tracking-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
@@ -23,6 +24,7 @@ const memberId = `${prefix}-member`;
 const outsiderId = `${prefix}-outsider`;
 const ownerDeviceId = `${prefix}-owner-device`;
 const memberDeviceId = `${prefix}-member-device`;
+const outsiderDeviceId = `${prefix}-outsider-device`;
 const deviceKey = createDeviceKeyPair();
 const epochKey = generateGroupEpochKey();
 const cache = createIntegrationTestCache(() => 0);
@@ -32,13 +34,15 @@ const router = createTRPCRouter({
   groupTracking: groupTrackingRouter,
 });
 const caller = (userId: string, deviceId: string | null = null) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    deviceId,
-    session: { user: { id: userId }, session: { id: `${userId}-session` } },
-  } as Parameters<typeof router.createCaller>[0]);
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId,
+      session: { user: { id: userId }, session: { id: `${userId}-session` } },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with PostgreSQL", () => {
   beforeAll(async () => {
@@ -60,16 +64,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
         activatedAt: new Date(),
       },
     });
-    await prisma.userDevice.create({
-      data: {
-        id: memberDeviceId,
-        userId: memberId,
+    await prisma.userDevice.createMany({
+      data: [
+        { id: memberDeviceId, userId: memberId },
+        { id: outsiderDeviceId, userId: outsiderId },
+      ].map((device) => ({
+        ...device,
         publicKey: createDeviceKeyPair().publicKey,
         publicKeyAlgorithm: "X25519",
         name: "Phone",
-        icon: "phone",
+        icon: "phone" as const,
         activatedAt: new Date(),
-      },
+      })),
     });
     await prisma.group.create({
       data: {
@@ -184,9 +190,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
         points: [{ ...point, clientPointId: `${prefix}-forged` }],
       }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(caller(outsiderId).groupTracking.poll({ groupId })).rejects.toMatchObject({
-      code: "FORBIDDEN",
-    });
+    await expect(
+      caller(outsiderId, outsiderDeviceId).groupTracking.poll({ groupId }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN", message: "You are not a member of this group" });
     for (const input of [
       { ...point, nonce: `${" ".repeat(1_000_000)}${point.nonce}` },
       { ...point, ciphertext: "x".repeat(4097) },
@@ -304,7 +310,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       }),
     ).toBe(0);
 
-    const devices = await caller(memberId).groupMembership.listMemberDevices({ groupId });
+    const devices = await caller(memberId, memberDeviceId).groupMembership.listMemberDevices({
+      groupId,
+    });
     expect(
       devices
         .filter((device) => device.deviceId.startsWith(prefix))
@@ -318,7 +326,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       icon: "tablet",
     });
     await expect(
-      caller(outsiderId).groupMembership.listMemberDevices({ groupId }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      caller(outsiderId, outsiderDeviceId).groupMembership.listMemberDevices({ groupId }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN", message: "You are not a member of this group" });
   });
 });

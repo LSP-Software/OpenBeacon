@@ -9,6 +9,7 @@ import {
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 const router = createTRPCRouter({
   groupInvites: groupInvitesRouter,
@@ -21,13 +22,15 @@ const users = [0, 1, 2, 3].map((i) => `${prefix}-${i}`);
 const keys = users.map(() => createDeviceKeyPair());
 const email = (userId: string) => `${userId}@example.test`;
 const caller = (userId: string) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    deviceId: `${userId}-device`,
-    session: { user: { id: userId }, session: { id: `${userId}-session` } },
-  } as Parameters<typeof router.createCaller>[0]);
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId: `${userId}-device`,
+      session: { user: { id: userId }, session: { id: `${userId}-session` } },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
   createdByDeviceId: result.epoch.createdByDeviceId,
   epochId: result.epoch.epochId,

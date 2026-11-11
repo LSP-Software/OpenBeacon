@@ -11,12 +11,12 @@ import {
   pollGroupTrackingPoints,
   uploadGroupTrackingBatch,
 } from "../../lib/groupTracking.ts";
-import { activeGroupMemberProcedure } from "../../procedures/auth/group.ts";
+import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 
 const DEFAULT_POLL_LIMIT = 100;
 
 export const groupTrackingRouter = {
-  uploadBatch: activeGroupMemberProcedure
+  uploadBatch: groupMemberProcedure
     .meta({
       rateLimit: {
         limit: 240,
@@ -49,7 +49,7 @@ export const groupTrackingRouter = {
         });
       });
     }),
-  poll: activeGroupMemberProcedure
+  poll: groupMemberProcedure
     .meta({ rateLimit: { limit: 480, windowMs: 60_000 } })
     .input(groupTrackingPollSchema)
     .query(async ({ ctx, input }) => {
@@ -60,7 +60,7 @@ export const groupTrackingRouter = {
         limit: input.limit ?? DEFAULT_POLL_LIMIT,
       });
     }),
-  getLatest: activeGroupMemberProcedure
+  getLatest: groupMemberProcedure
     .meta({ rateLimit: { limit: 480, windowMs: 60_000 } })
     .input(groupTrackingGetLatestSchema)
     .query(async ({ ctx, input }) => {

@@ -9,7 +9,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import z from "zod";
 import { activateDevice } from "../lib/deviceActivation.ts";
-import { protectedProcedure, thisDeviceProcedure } from "../procedures/auth/runtime.ts";
+import { setupDeviceProcedure, setupProcedure } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 
 const challengeLifetimeMs = 5 * 60_000;
@@ -75,7 +75,7 @@ const findDeviceToLink = async ({
 const sessionLinkInput = z.object({ deviceId: z.string().min(1).max(128) });
 
 export const deviceRouter = createTRPCRouter({
-  status: protectedProcedure.query(async ({ ctx }) => {
+  status: setupProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
     const thisDeviceId = ctx.deviceId ?? ctx.unverifiedDeviceId;
     const [device, otherActiveDevices] = await Promise.all([
@@ -100,7 +100,7 @@ export const deviceRouter = createTRPCRouter({
       registered: Boolean(device),
     };
   }),
-  activationChallenge: thisDeviceProcedure
+  activationChallenge: setupDeviceProcedure
     .meta({ rateLimit: { limit: 20, windowMs: 60_000 } })
     .mutation(async ({ ctx }) => {
       const userId = ctx.session.user.id;
@@ -138,7 +138,7 @@ export const deviceRouter = createTRPCRouter({
         }),
       };
     }),
-  activate: thisDeviceProcedure
+  activate: setupDeviceProcedure
     .meta({ rateLimit: { limit: 20, windowMs: 60_000 } })
     .input(z.object({ answer: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
@@ -180,7 +180,7 @@ export const deviceRouter = createTRPCRouter({
         return { activated: true };
       });
     }),
-  sessionChallenge: protectedProcedure
+  sessionChallenge: setupProcedure
     .meta({ rateLimit: { limit: 20, windowMs: 60_000 } })
     .input(sessionLinkInput)
     .mutation(async ({ ctx, input }) => {
@@ -211,7 +211,7 @@ export const deviceRouter = createTRPCRouter({
         }),
       };
     }),
-  linkSession: protectedProcedure
+  linkSession: setupProcedure
     .meta({ rateLimit: { limit: 20, windowMs: 60_000 } })
     .input(sessionLinkInput.extend({ answer: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {

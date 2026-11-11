@@ -13,6 +13,7 @@ import { deleteAccountRecords } from "../../lib/account-deletion.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 const prefix = `rotation-${crypto.randomUUID()}`;
 const userId = `${prefix}-user`;
@@ -24,13 +25,15 @@ const router = createTRPCRouter({
   groupEpoch: groupEpochRouter,
   groupTracking: groupTrackingRouter,
 });
-const caller = router.createCaller({
-  cache,
-  db: prisma,
-  clientIp: "127.0.0.1",
-  deviceId,
-  session: { user: { id: userId } },
-} as Parameters<typeof router.createCaller>[0]);
+const caller = router.createCaller(
+  withDeviceActive({
+    cache,
+    db: prisma,
+    clientIp: "127.0.0.1",
+    deviceId,
+    session: { user: { id: userId } },
+  }) as Parameters<typeof router.createCaller>[0],
+);
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "group rotation with PostgreSQL",
@@ -80,8 +83,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         cache,
         db: prisma,
         clientIp: "127.0.0.1",
+        deviceId: `${prefix}-outsider-device`,
+        deviceActive: true,
         session: { user: { id: `${prefix}-outsider` } },
-      } as Parameters<typeof router.createCaller>[0]);
+      } as unknown as Parameters<typeof router.createCaller>[0]);
       await expect(outsider.groupEpoch.rotationContext({ groupId })).rejects.toThrow(
         "not a member",
       );

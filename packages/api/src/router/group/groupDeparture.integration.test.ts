@@ -17,6 +17,7 @@ import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 const router = createTRPCRouter({
   groupInvites: groupInvitesRouter,
@@ -37,13 +38,15 @@ const memberEmail = `${memberId}@example.test`;
 const ownerKey = createDeviceKeyPair();
 const memberKey = createDeviceKeyPair();
 const caller = (userId: string, deviceId: string) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    deviceId,
-    session: { user: { id: userId }, session: { id: `${userId}-session` } },
-  } as Parameters<typeof router.createCaller>[0]);
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId,
+      session: { user: { id: userId }, session: { id: `${userId}-session` } },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 const owner = caller(ownerId, ownerDevice);
 const member = caller(memberId, memberDevice);
 const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({

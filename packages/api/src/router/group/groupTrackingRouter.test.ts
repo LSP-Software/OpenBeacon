@@ -88,12 +88,12 @@ const createCaller = async ({
     userDevice: {
       findMany: findManyDevicesMock ?? mock(async () => [{ id: "device-1", userId: "user-1" }]),
       updateMany: mock(async () => ({ count: 1 })),
-      findFirst: mock(async () => (pending ? null : { id: "device-1" })),
     },
   };
   const context = {
     cache,
     deviceId: "device-1",
+    deviceActive: !pending,
     clientIp: "203.0.113.10",
     db: {
       ...db,

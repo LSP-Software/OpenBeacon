@@ -21,6 +21,7 @@ import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 import { groupSettingsRouter } from "./groupSettingsRouter.ts";
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 const router = createTRPCRouter({
   groupEpoch: groupEpochRouter,
@@ -41,13 +42,15 @@ const caller = (
     unverifiedDeviceId: null,
   },
 ) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    ...device,
-    session: { user: { id: userId } },
-  } as Parameters<typeof router.createCaller>[0]);
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      ...device,
+      session: { user: { id: userId } },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 const unopenableEpoch = (createdByDeviceId: string) => {
   const epochId = crypto.randomUUID();
   return {
@@ -599,7 +602,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.group.delete({ where: { id: permissionGroupId } });
     });
 
-    test("a phone that isn't set up can read the group but not change it", async () => {
+    test("a phone that isn't set up can't read or change the group", async () => {
       const lockedGroupId = `${prefix}-not-set-up`;
       const [owner, member] = [users[0]!, users[2]!];
       await prisma.userDevice.create({
@@ -638,11 +641,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             DeviceUnverifiedError,
           ],
         ] as const) {
-          expect(await api.groupMembership.get({ groupId: lockedGroupId })).toMatchObject({
-            id: lockedGroupId,
-          });
-          expect(await api.groupMembership.members({ groupId: lockedGroupId })).toHaveLength(2);
           const attempts = [
+            () => api.groupMembership.list(),
+            () => api.groupMembership.get({ groupId: lockedGroupId }),
+            () => api.groupMembership.members({ groupId: lockedGroupId }),
+            () => api.groupMembership.listMemberDevices({ groupId: lockedGroupId }),
+            () => api.groupMembership.nicknames({ groupId: lockedGroupId }),
+            () => api.groupMembership.colors(),
             () => api.groupMembership.removalContext({ groupId: lockedGroupId, memberId }),
             () =>
               api.groupMembership.updateNickname({

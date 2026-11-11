@@ -7,7 +7,7 @@ import { persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { buildGroupAvatarPath } from "../../lib/image-upload.ts";
 import { deleteFile, extractImageStorageObject } from "../../lib/storage.ts";
 import { groupOwnerProcedure } from "../../procedures/auth/group.ts";
-import { activeDeviceProcedure } from "../../procedures/auth/runtime.ts";
+import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 
 export const groupLifecycleRouter = {
@@ -81,7 +81,7 @@ export const groupLifecycleRouter = {
       );
       return { message: "Group deleted successfully" };
     }),
-  create: activeDeviceProcedure
+  create: protectedProcedure
     .meta({
       rateLimit: {
         limit: 32,

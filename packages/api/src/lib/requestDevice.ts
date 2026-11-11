@@ -11,13 +11,24 @@ export const linkRequestDevice = async ({
   session: { id: string; userId: string } | null;
   now?: Date;
 }): Promise<
-  { removed: true } | { removed: false; deviceId: string | null; unverifiedDeviceId: string | null }
+  | { removed: true }
+  | {
+      removed: false;
+      deviceId: string | null;
+      unverifiedDeviceId: string | null;
+      deviceActive: boolean;
+    }
 > => {
-  const unknown = { removed: false as const, deviceId: null, unverifiedDeviceId: null };
+  const unknown = {
+    removed: false as const,
+    deviceId: null,
+    unverifiedDeviceId: null,
+    deviceActive: false,
+  };
   if (deviceId.length > 128) return unknown;
   const device = await db.userDevice.findUnique({
     where: { id: deviceId },
-    select: { userId: true, lastSeenAt: true, revokedAt: true },
+    select: { userId: true, lastSeenAt: true, revokedAt: true, activatedAt: true },
   });
   if (!device || (session && device.userId !== session.userId)) return unknown;
   if (device.revokedAt) {
@@ -39,5 +50,10 @@ export const linkRequestDevice = async ({
       data: { lastSeenAt: now },
     });
   }
-  return { removed: false, deviceId, unverifiedDeviceId: null };
+  return {
+    removed: false,
+    deviceId,
+    unverifiedDeviceId: null,
+    deviceActive: device.activatedAt !== null,
+  };
 };

@@ -3,7 +3,7 @@ import { removeGroupMemberSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
-import { activeGroupMemberProcedure, groupMemberProcedure } from "../../procedures/auth/group.ts";
+import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 import { removeGroupMemberWithOwnerGuard } from "./assertGroupMemberCanBeRemoved.ts";
@@ -57,7 +57,7 @@ export const groupMembershipRouter = {
   get: groupMemberProcedure.query(async ({ ctx }) => {
     return ctx.group;
   }),
-  removalContext: activeGroupMemberProcedure
+  removalContext: groupMemberProcedure
     .input(z.object({ groupId: z.string().min(1), memberId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       if (
@@ -117,7 +117,7 @@ export const groupMembershipRouter = {
       select: { targetId: true, ciphertext: true },
     }),
   ),
-  updateNickname: activeGroupMemberProcedure
+  updateNickname: groupMemberProcedure
     .input(
       z.object({
         groupId: z.string().min(1),
@@ -179,7 +179,7 @@ export const groupMembershipRouter = {
     });
     return colors.map((color) => ({ groupId: color.owner.groupId, ciphertext: color.ciphertext }));
   }),
-  updateColor: activeGroupMemberProcedure
+  updateColor: groupMemberProcedure
     .input(
       z.object({
         groupId: z.string().min(1),
@@ -206,7 +206,7 @@ export const groupMembershipRouter = {
         update: { ciphertext: input.ciphertext },
       });
     }),
-  remove: activeGroupMemberProcedure
+  remove: groupMemberProcedure
     .meta({
       rateLimit: {
         limit: 80,
@@ -322,7 +322,7 @@ export const groupMembershipRouter = {
         };
       });
     }),
-  updateRole: activeGroupMemberProcedure
+  updateRole: groupMemberProcedure
     .input(
       z.object({
         groupId: z.string().min(1),

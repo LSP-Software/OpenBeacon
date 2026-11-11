@@ -3,6 +3,7 @@ import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 const router = createTRPCRouter({ groupMembership: groupMembershipRouter });
 const cache = createIntegrationTestCache(() => 0);
@@ -11,13 +12,15 @@ const groupId = `${prefix}-group`;
 const users = [0, 1].map((n) => `${prefix}-${n}`);
 const [owner = "", other = ""] = users;
 const caller = (userId: string) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    deviceId: `${userId}-device`,
-    session: { user: { id: userId } },
-  } as Parameters<typeof router.createCaller>[0]);
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId: `${userId}-device`,
+      session: { user: { id: userId } },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 const storedColor = async (userId: string) =>
   (
     await prisma.personalGroupColor.findFirst({

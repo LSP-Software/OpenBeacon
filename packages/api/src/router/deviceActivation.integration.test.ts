@@ -22,6 +22,7 @@ import { authRouter } from "./authRouter.ts";
 import { deviceRouter } from "./deviceRouter.ts";
 import { groupInvitesRouter } from "./group/groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./group/groupLifecycleRouter.ts";
+import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
 
 const router = createTRPCRouter({
   accountHistory: accountHistoryRouter,
@@ -40,18 +41,20 @@ const caller = (
   deviceId: string | null,
   securityAlerts: { send: (userId: string, alert: { type: string }) => void } | null = null,
 ) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    deviceId,
-    emailCodes: null,
-    securityAlerts,
-    session: {
-      user: { id: userId },
-      session: { id: `${userId}-session`, createdAt: new Date() },
-    },
-  } as Parameters<typeof router.createCaller>[0]);
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId,
+      emailCodes: null,
+      securityAlerts,
+      session: {
+        user: { id: userId },
+        session: { id: `${userId}-session`, createdAt: new Date() },
+      },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 
 const register = (
   userId: string,
@@ -255,18 +258,20 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           userId: account.userId,
         },
       });
-      const unlinked = router.createCaller({
-        cache,
-        db: prisma,
-        clientIp: "127.0.0.1",
-        deviceId: null,
-        emailCodes: null,
-        securityAlerts: null,
-        session: {
-          user: { id: account.userId },
-          session: { id: unlinkedSessionId, createdAt: new Date() },
-        },
-      } as Parameters<typeof router.createCaller>[0]);
+      const unlinked = router.createCaller(
+        withDeviceActive({
+          cache,
+          db: prisma,
+          clientIp: "127.0.0.1",
+          deviceId: null,
+          emailCodes: null,
+          securityAlerts: null,
+          session: {
+            user: { id: account.userId },
+            session: { id: unlinkedSessionId, createdAt: new Date() },
+          },
+        }) as Parameters<typeof router.createCaller>[0],
+      );
       const challenge = await unlinked.device.sessionChallenge({ deviceId: device.id });
       if (challenge.linked) throw new Error("The session was already linked.");
       const sessionAnswer = openSessionLinkChallenge({
@@ -560,19 +565,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     test("status leaves out the phone a session names but hasn't proved", async () => {
       const account = await createAccount("unverified-status");
-      const unverified = router.createCaller({
-        cache,
-        db: prisma,
-        clientIp: "127.0.0.1",
-        deviceId: null,
-        unverifiedDeviceId: account.firstDeviceId,
-        emailCodes: null,
-        securityAlerts: null,
-        session: {
-          user: { id: account.userId },
-          session: { id: `${account.userId}-unverified`, createdAt: new Date() },
-        },
-      } as Parameters<typeof router.createCaller>[0]);
+      const unverified = router.createCaller(
+        withDeviceActive({
+          cache,
+          db: prisma,
+          clientIp: "127.0.0.1",
+          deviceId: null,
+          unverifiedDeviceId: account.firstDeviceId,
+          emailCodes: null,
+          securityAlerts: null,
+          session: {
+            user: { id: account.userId },
+            session: { id: `${account.userId}-unverified`, createdAt: new Date() },
+          },
+        }) as Parameters<typeof router.createCaller>[0],
+      );
       expect(await unverified.device.status()).toEqual({
         accountHasActiveDevice: false,
         activated: false,

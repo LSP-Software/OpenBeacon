@@ -50,6 +50,7 @@ export const createTRPCContext = async (opts: {
     session,
     deviceId: requestDevice?.deviceId ?? null,
     unverifiedDeviceId: requestDevice?.unverifiedDeviceId ?? null,
+    deviceActive: requestDevice?.deviceActive ?? false,
     serverVersion: opts.serverVersion,
     serverName: opts.serverName,
     selfHosted: opts.selfHosted,

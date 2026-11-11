@@ -19,6 +19,7 @@ import { accountHistoryRouter } from "./accountHistoryRouter.ts";
 import { accountRouter } from "./accountRouter.ts";
 import { authRouter } from "./authRouter.ts";
 import { deviceLinkRouter } from "./deviceLinkRouter.ts";
+import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
 
 const router = createTRPCRouter({
   account: accountRouter,
@@ -44,18 +45,20 @@ const caller = (
   deviceId: string | null,
   sessionId = `${userId}-${deviceId}-session`,
 ) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    deviceId,
-    emailCodes: null,
-    securityAlerts,
-    session: {
-      user: { id: userId },
-      session: { id: sessionId, createdAt: new Date() },
-    },
-  } as Parameters<typeof router.createCaller>[0]);
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId,
+      emailCodes: null,
+      securityAlerts,
+      session: {
+        user: { id: userId },
+        session: { id: sessionId, createdAt: new Date() },
+      },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 
 const register = async (userId: string, name: string) => {
   const keyPair = createDeviceKeyPair();
@@ -348,7 +351,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         deviceId: account.active.deviceId,
         session: { id: pendingSessionId, userId: account.userId },
       });
-      expect(named).toEqual({ removed: false, deviceId: null, unverifiedDeviceId: null });
+      expect(named).toEqual({
+        removed: false,
+        deviceId: null,
+        unverifiedDeviceId: null,
+        deviceActive: false,
+      });
       const spoofed = caller(
         account.userId,
         named.removed ? null : named.deviceId,
