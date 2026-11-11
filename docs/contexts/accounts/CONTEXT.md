@@ -20,12 +20,16 @@ _Avoid_: Device label, nickname
 One of a fixed set of pictures the owner picks for a device: phone, tablet, watch, car, laptop, bag, tag or home. A new device gets tablet if its model contains "iPad" or "Tab", and phone otherwise.
 _Avoid_: Device type, avatar
 
+**Removing a device**:
+Taking a lost or stolen device off the account in Account → Devices. It needs a recent sign-in. The server signs the device out, refuses its requests from then on, and leaves it out of new Epochs. The phone wipes its keys and data the next time it reaches the server. It's different from signing out, which keeps the device in Devices so it can sign in again. Removing a device can't take back anything it has already seen.
+_Avoid_: Revoking, deleting a device, unlinking
+
 **Security alert**:
 An email telling the owner that something important happened to their account, such as a password change, a new device or a deletion.
 _Avoid_: Email alert, notice, notification, Place Alert
 
 **Always-on alert**:
-A Security alert the owner can't turn off: password changed or reset, Recovery phrase changed or reset, other sessions signed out, Security alerts turned off, and account deleted.
+A Security alert the owner can't turn off: password changed or reset, Recovery phrase changed or reset, other sessions signed out, device removed, Security alerts turned off, and account deleted.
 _Avoid_: Mandatory alert, required alert
 
 **Optional alert**:

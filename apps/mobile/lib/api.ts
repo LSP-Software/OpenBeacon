@@ -1,13 +1,21 @@
 import type { AppRouter } from "@openbeacon/api";
 import { focusManager, QueryClient } from "@tanstack/react-query";
-import { createTRPCClient, httpBatchLink, loggerLink, TRPCClientError } from "@trpc/client";
+import {
+  createTRPCClient,
+  httpBatchLink,
+  loggerLink,
+  type TRPCLink,
+  TRPCClientError,
+} from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import { deviceIdHeader } from "@openbeacon/shared";
+import { observable } from "@trpc/server/observable";
 import { AppState } from "react-native";
 import superjson from "superjson";
 import { apiCompatibilityFetch, withApiCompatibilityHeader } from "./apiCompatibility.ts";
 import { authClient } from "./auth-client.ts";
 import { baseUrl, getFeedbackUrl } from "./base-url.ts";
+import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
 import { RequestTimeoutError, timeoutLink } from "./timeoutLink.ts";
 
@@ -35,8 +43,27 @@ export const queryClient = new QueryClient({
   },
 });
 
+const deviceRemovedLink: TRPCLink<AppRouter> =
+  () =>
+  ({ op, next }) =>
+    observable((observer) =>
+      next(op).subscribe({
+        next: (value) => observer.next(value),
+        complete: () => observer.complete(),
+        error: (error) => {
+          if (isDeviceRemovedError(error)) {
+            void import("./deviceRemoved.ts").then(({ handleDeviceRemoved }) =>
+              handleDeviceRemoved(),
+            );
+          }
+          observer.error(error);
+        },
+      }),
+    );
+
 export const trpcClient = createTRPCClient<AppRouter>({
   links: [
+    deviceRemovedLink,
     loggerLink({
       enabled: (opts) =>
         process.env.NODE_ENV === "development" ||

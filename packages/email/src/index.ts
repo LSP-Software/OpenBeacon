@@ -25,6 +25,7 @@ export const checkEmail = async () => {
 
 export {
   type EmailCodePurpose,
+  type AlertDevice,
   type EmailMessage,
   isOptionalSecurityAlert,
   type OptionalSecurityAlert,

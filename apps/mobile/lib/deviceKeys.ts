@@ -219,6 +219,16 @@ export const forgetDeviceKeyRegistration = () => {
   storage.remove(REGISTERED_DEVICE_KEY);
 };
 
+export const deleteDeviceKey = async (userId: string) => {
+  cancelDeviceKeyRegistrations();
+  await clearStoredDeviceKeyContext(getScopedDeviceKeyNames(userId));
+  await clearStoredDeviceKeyContext({
+    deviceIdKey: DEVICE_ID_KEY,
+    privateKeyKey: DEVICE_PRIVATE_KEY_KEY,
+    publicKeyKey: DEVICE_PUBLIC_KEY_KEY,
+  });
+};
+
 export const cancelDeviceKeyRegistrations = () => {
   deviceRegistrationGeneration += 1;
   deviceRegistrations.clear();

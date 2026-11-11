@@ -29,7 +29,7 @@ const selectEpochKeyWraps = ({ deviceId, userId }: { deviceId: string; userId: s
         recipientDeviceId: true,
         wrappedKey: true,
       },
-      where: { recipientDeviceId: deviceId, recipientDevice: { userId } },
+      where: { recipientDeviceId: deviceId, recipientDevice: { revokedAt: null, userId } },
     },
     senderPublicKey: true,
   }) satisfies Prisma.GroupEpochSelect;

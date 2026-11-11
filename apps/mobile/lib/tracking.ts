@@ -816,6 +816,24 @@ export const prepareTrackingSignOut = async (): Promise<void> => {
   }
 };
 
+export const deleteQueuedTrackingPoints = async ({
+  deviceId,
+  userId,
+}: {
+  deviceId: string;
+  userId: string;
+}) => {
+  const trackingModule = await loadTrackingModule();
+  if (!trackingModule) return;
+  const owner = getOwner(userId);
+  await trackingModule.assignUnassignedCiphertexts(deviceId, owner);
+  for (;;) {
+    const items = await trackingModule.listPendingCiphertexts(owner, 500);
+    if (!items.length) return;
+    await trackingModule.deleteCiphertexts(items.map(({ id }) => id));
+  }
+};
+
 export const resumeTracking = () => {
   trackingPaused = false;
   lastCleanBackfills.clear();

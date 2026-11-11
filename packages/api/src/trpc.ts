@@ -1,10 +1,11 @@
 import { auth, emailCodes, securityAlerts } from "@openbeacon/auth";
 import type { OpenBeaconCache } from "@openbeacon/cache";
 import type { PrismaClient } from "@openbeacon/database";
-import { deviceIdHeader, tryCatch } from "@openbeacon/shared";
+import { deviceIdHeader, deviceRemovedCause, tryCatch } from "@openbeacon/shared";
 import { initTRPC } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError, z } from "zod";
+import { DeviceRemovedError, deviceRemovedError } from "./lib/deviceRemoved.ts";
 import { linkRequestDevice } from "./lib/requestDevice.ts";
 import { RateLimitContextError } from "./middlewares/rateLimit.ts";
 
@@ -21,17 +22,16 @@ export const createTRPCContext = async (opts: {
     headers: opts.headers,
   });
   const requestDeviceId = opts.headers.get(deviceIdHeader);
-  const device =
-    session && requestDeviceId
-      ? await tryCatch(
-          linkRequestDevice({
-            db: opts.db,
-            deviceId: requestDeviceId,
-            sessionId: session.session.id,
-            userId: session.user.id,
-          }),
-        )
-      : null;
+  const device = requestDeviceId
+    ? await tryCatch(
+        linkRequestDevice({
+          db: opts.db,
+          deviceId: requestDeviceId,
+          session: session ? { id: session.session.id, userId: session.user.id } : null,
+        }),
+      )
+    : null;
+  if (device?.data?.removed) throw deviceRemovedError();
 
   return {
     cache: opts.cache,
@@ -39,7 +39,7 @@ export const createTRPCContext = async (opts: {
     emailCodes,
     securityAlerts,
     session,
-    deviceId: device?.data ?? null,
+    deviceId: device?.data?.removed === false ? device.data.deviceId : null,
     serverVersion: opts.serverVersion,
     serverName: opts.serverName,
     selfHosted: opts.selfHosted,
@@ -67,20 +67,31 @@ export const createTRPCComponents = () => {
           return {
             ...shape,
             message: "Unable to process request.",
-            data: { code: shape.data.code, httpStatus: shape.data.httpStatus, zodError: null },
+            data: {
+              code: shape.data.code,
+              httpStatus: shape.data.httpStatus,
+              zodError: null,
+              cause: null,
+            },
           };
         }
         if (error.code === "TOO_MANY_REQUESTS") {
           return {
             ...shape,
             message: "Too many requests. Please try again later.",
-            data: { code: shape.data.code, httpStatus: shape.data.httpStatus, zodError: null },
+            data: {
+              code: shape.data.code,
+              httpStatus: shape.data.httpStatus,
+              zodError: null,
+              cause: null,
+            },
           };
         }
         return {
           ...shape,
           data: {
             ...shape.data,
+            cause: error.cause instanceof DeviceRemovedError ? deviceRemovedCause : null,
             zodError:
               error.cause instanceof ZodError
                 ? z.flattenError(error.cause as ZodError<Record<string, unknown>>)

@@ -125,6 +125,10 @@ const AccountScreen = () => {
   const { data: session, refetch } = authClient.useSession();
   const queryClient = useQueryClient();
   const updateName = useMutation(trpc.account.updateName.mutationOptions());
+  const removeThisDevice = useMutation({
+    ...trpc.account.removeThisDevice.mutationOptions(),
+    networkMode: "always",
+  });
   const [nameOpen, setNameOpen] = useState(false);
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -175,7 +179,7 @@ const AccountScreen = () => {
     Alert.alert("Profile updated", "Your name has been saved.");
   };
 
-  const handleSignOut = async () => {
+  const signOut = async ({ removeThisPhone }: { removeThisPhone: boolean }) => {
     if (signOutPhase) return;
     setSignOutPhase("uploading");
     const sessionTokenToRevoke = session?.session?.token ?? null;
@@ -183,6 +187,20 @@ const AccountScreen = () => {
     const tracking = await import("../../../lib/tracking.ts");
     await tryCatch(tracking.prepareTrackingSignOut());
     setSignOutPhase("signingOut");
+    if (removeThisPhone) {
+      const removed = await tryCatch(removeThisDevice.mutateAsync());
+      if (!removed.error) {
+        const { wipeThisPhone } = await import("../../../lib/deviceRemoved.ts");
+        await wipeThisPhone();
+        setSignOutPhase(null);
+        router.replace("/");
+        return;
+      }
+      Alert.alert(
+        "This phone is still in Devices",
+        "You’ve been signed out, but we couldn’t remove this phone. Remove it from another device in Account → Devices.",
+      );
+    }
     const { error: signOutError } = await authClient.signOut();
 
     if (signOutError && sessionTokenToRevoke) {
@@ -192,6 +210,21 @@ const AccountScreen = () => {
     setSignOutPhase(null);
     router.replace("/");
   };
+
+  const confirmSignOut = () =>
+    Alert.alert(
+      "Sign out?",
+      "This phone stays in Account → Devices, so you can sign in on it again. If you’re giving it away or won’t use it again, remove it too.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign out", onPress: () => signOut({ removeThisPhone: false }) },
+        {
+          text: "Also remove this phone from your account",
+          style: "destructive",
+          onPress: () => signOut({ removeThisPhone: true }),
+        },
+      ],
+    );
 
   return (
     <View className="flex-1 bg-background">
@@ -405,7 +438,7 @@ const AccountScreen = () => {
                 : "Contacting your server to sign out."}
             </Text>
           )}
-          <Button onPress={handleSignOut} disabled={!!signOutPhase}>
+          <Button onPress={confirmSignOut} disabled={!!signOutPhase}>
             <Text>{signOutPhase ? "Signing out…" : "Sign out"}</Text>
           </Button>
         </View>

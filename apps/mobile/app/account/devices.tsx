@@ -2,6 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { deviceIconSchema, deviceNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "expo-router";
 import {
   BackpackIcon,
   CarIcon,
@@ -109,6 +110,26 @@ const DevicesScreen = () => {
           <Button onPress={form.handleSubmit(save)} loading={updateDevice.isPending}>
             <Text>Save</Text>
           </Button>
+          {editing?.isCurrent ? (
+            <Text className="text-muted-foreground text-sm leading-5">
+              To remove this phone, sign out on the Account tab and choose to remove it.
+            </Text>
+          ) : (
+            editing && (
+              <Link
+                href={{
+                  pathname: "/account/remove-device",
+                  params: { deviceId: editing.id, name: editing.name },
+                }}
+                onPress={() => setEditing(null)}
+                asChild
+              >
+                <Button variant="destructive">
+                  <Text>Remove device</Text>
+                </Button>
+              </Link>
+            )
+          )}
         </DialogContent>
       </Dialog>
 
@@ -130,7 +151,8 @@ const DevicesScreen = () => {
           showsVerticalScrollIndicator={false}
         >
           <Text className="text-muted-foreground text-base leading-6">
-            Phones and tablets signed in to your account. Tap one to rename it or change its icon.
+            Phones and tablets signed in to your account. Tap one to rename it, change its icon or
+            remove it.
           </Text>
           <View className="overflow-hidden rounded-3xl border border-border bg-card">
             {devices.data.map((device, index) => {
@@ -139,7 +161,7 @@ const DevicesScreen = () => {
                 <Pressable
                   key={device.id}
                   accessibilityRole="button"
-                  accessibilityHint="Edit name and icon"
+                  accessibilityHint="Edit name and icon, or remove it"
                   className={cn(
                     "flex-row items-center gap-4 px-5 py-4",
                     index < devices.data.length - 1 && "border-b border-border/50",

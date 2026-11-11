@@ -39,6 +39,12 @@ export const optionalSecurityAlerts = {
 
 export type OptionalSecurityAlert = keyof typeof optionalSecurityAlerts;
 
+export type AlertDevice = {
+  name: string;
+  model: string | null;
+  platform: z.infer<typeof devicePlatformSchema> | null;
+};
+
 export type SecurityAlert =
   | {
       type:
@@ -46,9 +52,10 @@ export type SecurityAlert =
         | "password-reset"
         | "recovery-phrase-changed"
         | "recovery-phrase-reset"
-        | "other-sessions-signed-out"
         | "account-deleted";
     }
+  | { type: "other-sessions-signed-out"; device: AlertDevice | null }
+  | { type: "device-removed"; device: AlertDevice }
   | {
       type: "new-device";
       device: { model: string | null; platform: z.infer<typeof devicePlatformSchema> | null };

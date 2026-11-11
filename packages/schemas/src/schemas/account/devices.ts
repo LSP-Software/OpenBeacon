@@ -17,3 +17,7 @@ export const updateDeviceSchema = z.object({
   name: deviceNameSchema.optional(),
   icon: deviceIconSchema.optional(),
 });
+
+export const removeDeviceSchema = z.object({
+  deviceId: z.string().min(1).max(128),
+});

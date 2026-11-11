@@ -10,6 +10,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import {
   accountNameSchema,
+  removeDeviceSchema,
   requestImageUploadInputSchema,
   updateDeviceSchema,
 } from "@openbeacon/schemas";
@@ -23,6 +24,7 @@ import {
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
+import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
 import { freshSessionProcedure, protectedProcedure } from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
@@ -250,13 +252,21 @@ export const accountRouter = {
       const userId = ctx.session.user.id;
       const others = { userId, id: { not: ctx.session.session.id } };
       const now = new Date();
-      const signedOut = await ctx.db.$transaction(async (tx) => {
+      const { signedOut, device } = await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
         const live = await tx.session.deleteMany({ where: { ...others, expiresAt: { gt: now } } });
         await tx.session.deleteMany({ where: { ...others, expiresAt: { lte: now } } });
-        return live.count;
+        const current = await tx.session.findUnique({
+          where: { id: ctx.session.session.id },
+          select: { device: { select: { name: true, model: true, platform: true } } },
+        });
+        return {
+          signedOut: live.count,
+          device: current?.device ? toAlertDevice(current.device) : null,
+        };
       });
-      if (signedOut > 0) ctx.securityAlerts?.send(userId, { type: "other-sessions-signed-out" });
+      if (signedOut > 0)
+        ctx.securityAlerts?.send(userId, { type: "other-sessions-signed-out", device });
       return { signedOut };
     }),
   deletionCancellationNotice: protectedProcedure.query(async ({ ctx }) => {
@@ -314,6 +324,38 @@ export const accountRouter = {
         },
       });
       if (updated.count === 0) throw new TRPCError({ code: "NOT_FOUND" });
+    }),
+  removeDevice: freshSessionProcedure
+    .meta({ rateLimit: { limit: 10, windowMs: 60_000 } })
+    .input(removeDeviceSchema)
+    .mutation(async ({ ctx, input }) => {
+      if (input.deviceId === ctx.deviceId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "To remove this phone, sign out and choose to remove it.",
+        });
+      }
+      const device = await removeUserDevice({
+        db: ctx.db,
+        deviceId: input.deviceId,
+        userId: ctx.session.user.id,
+        currentSessionId: ctx.session.session.id,
+        current: false,
+      });
+      ctx.securityAlerts?.send(ctx.session.user.id, { type: "device-removed", device });
+    }),
+  removeThisDevice: protectedProcedure
+    .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
+    .mutation(async ({ ctx }) => {
+      if (!ctx.deviceId) throw new TRPCError({ code: "NOT_FOUND" });
+      const device = await removeUserDevice({
+        db: ctx.db,
+        deviceId: ctx.deviceId,
+        userId: ctx.session.user.id,
+        currentSessionId: ctx.session.session.id,
+        current: true,
+      });
+      ctx.securityAlerts?.send(ctx.session.user.id, { type: "device-removed", device });
     }),
   version: protectedProcedure.query(({ ctx }) => ctx.serverVersion),
   serverName: protectedProcedure.query(({ ctx }) => ctx.serverName),

@@ -330,6 +330,26 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(whole.nextCursor).toBeNull();
     });
 
+    test("leaves a removed device out of wraps and recipients", async () => {
+      await prisma.userDevice.update({
+        where: { id: member.deviceId },
+        data: { revokedAt: new Date() },
+      });
+
+      const page = await list(member, {});
+      expect(page.epochs.map(({ deviceWrap }) => deviceWrap)).toEqual([null]);
+      const single = await caller(member.userId).groupEpoch.getEpochKeyWraps({
+        deviceId: member.deviceId,
+        epochId: epochs.second.epoch.epochId,
+        groupId,
+      });
+      expect(single.deviceWrap).toBeNull();
+      const recipients = await caller(owner.userId).groupEpoch.listRecipientPublicKeys({ groupId });
+      expect(JSON.stringify(recipients)).not.toContain(member.deviceId);
+
+      await prisma.userDevice.update({ where: { id: member.deviceId }, data: { revokedAt: null } });
+    });
+
     test("rejects limits outside 1 to 100", async () => {
       await expect(list(owner, { limit: 0 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
       await expect(list(owner, { limit: 101 })).rejects.toMatchObject({ code: "BAD_REQUEST" });

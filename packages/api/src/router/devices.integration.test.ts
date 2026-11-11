@@ -45,13 +45,14 @@ const callerFor = (account: Awaited<ReturnType<typeof createAccount>>) =>
     },
   } as Parameters<typeof appRouter.createCaller>[0]);
 
-const link = (account: Awaited<ReturnType<typeof createAccount>>, deviceId: string) =>
-  linkRequestDevice({
+const link = async (account: Awaited<ReturnType<typeof createAccount>>, deviceId: string) => {
+  const result = await linkRequestDevice({
     db: prisma,
     deviceId,
-    sessionId: account.sessionId,
-    userId: account.userId,
+    session: { id: account.sessionId, userId: account.userId },
   });
+  return result.removed ? "removed" : result.deviceId;
+};
 
 afterAll(async () => {
   if (process.env["OPENBEACON_INTEGRATION"] !== "1") return;

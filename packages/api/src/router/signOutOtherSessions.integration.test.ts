@@ -90,7 +90,39 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("signing out othe
     await callerFor(account).account.signOutOtherSessions();
 
     expect(await sentAlerts()).toEqual([
-      { userId: account.userId, alert: { type: "other-sessions-signed-out" } },
+      { userId: account.userId, alert: { type: "other-sessions-signed-out", device: null } },
+    ]);
+  });
+
+  test("names the device that signed the others out", async () => {
+    const account = await createAccount();
+    const device = await prisma.userDevice.create({
+      data: {
+        id: `${prefix}-device-${crypto.randomUUID()}`,
+        userId: account.userId,
+        publicKey: "key",
+        publicKeyAlgorithm: "X25519",
+        model: "Pixel 9",
+        platform: "android",
+        name: "Sam's phone",
+        icon: "phone",
+      },
+    });
+    await prisma.session.update({
+      where: { id: account.sessions.at(-1)?.id },
+      data: { deviceId: device.id },
+    });
+
+    await callerFor(account).account.signOutOtherSessions();
+
+    expect(await sentAlerts()).toEqual([
+      {
+        userId: account.userId,
+        alert: {
+          type: "other-sessions-signed-out",
+          device: { name: "Sam's phone", model: "Pixel 9", platform: "android" },
+        },
+      },
     ]);
   });
 

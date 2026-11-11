@@ -18,6 +18,7 @@ import {
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type { z } from "zod";
+import { deviceRemovedError } from "./deviceRemoved.ts";
 
 type DeviceRecord = {
   createdAt: Date;
@@ -542,6 +543,15 @@ export const persistGroupEpoch = async ({
 export const defaultDeviceIcon = (model: string | undefined) =>
   model && /iPad|Tab/.test(model) ? "tablet" : "phone";
 
+const touchUserDevice = async (db: Pick<PrismaClient, "userDevice">, deviceId: string) => {
+  const touched = await db.userDevice.updateMany({
+    data: { lastSeenAt: new Date() },
+    where: { id: deviceId, revokedAt: null },
+  });
+  if (touched.count === 0) throw deviceRemovedError();
+  return db.userDevice.findUniqueOrThrow({ where: { id: deviceId } });
+};
+
 export const upsertUserDevice = async ({
   db,
   input,
@@ -569,6 +579,7 @@ export const upsertUserDevice = async ({
     select: {
       publicKey: true,
       publicKeyAlgorithm: true,
+      revokedAt: true,
       userId: true,
     },
     where: {
@@ -584,6 +595,7 @@ export const upsertUserDevice = async ({
   }
 
   if (existingDevice) {
+    if (existingDevice.revokedAt) throw deviceRemovedError();
     if (
       existingDevice.publicKey !== input.publicKey ||
       existingDevice.publicKeyAlgorithm !== input.algorithm
@@ -594,15 +606,7 @@ export const upsertUserDevice = async ({
       });
     }
 
-    return db.userDevice.update({
-      data: {
-        lastSeenAt: new Date(),
-        revokedAt: null,
-      },
-      where: {
-        id: input.deviceId,
-      },
-    });
+    return touchUserDevice(db, input.deviceId);
   }
 
   const createResult = await tryCatch(
@@ -663,6 +667,7 @@ export const upsertUserDevice = async ({
     select: {
       publicKey: true,
       publicKeyAlgorithm: true,
+      revokedAt: true,
       userId: true,
     },
     where: {
@@ -682,15 +687,8 @@ export const upsertUserDevice = async ({
     conflictingDevice.publicKey === input.publicKey &&
     conflictingDevice.publicKeyAlgorithm === input.algorithm
   ) {
-    return db.userDevice.update({
-      data: {
-        lastSeenAt: new Date(),
-        revokedAt: null,
-      },
-      where: {
-        id: input.deviceId,
-      },
-    });
+    if (conflictingDevice.revokedAt) throw deviceRemovedError();
+    return touchUserDevice(db, input.deviceId);
   }
 
   if (conflictingDevice) {

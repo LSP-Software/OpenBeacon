@@ -22,7 +22,8 @@ const alwaysOn: SecurityAlert[] = [
   { type: "password-reset" },
   { type: "recovery-phrase-changed" },
   { type: "recovery-phrase-reset" },
-  { type: "other-sessions-signed-out" },
+  { type: "other-sessions-signed-out", device: null },
+  { type: "device-removed", device: { name: "Pixel 8", model: "Pixel 8", platform: "android" } },
   { type: "alerts-turned-off", alerts: ["new-device"] },
   { type: "account-deleted" },
 ];
@@ -158,7 +159,11 @@ describe("renderSecurityAlertEmail", () => {
       ...optional,
       { type: "recovery-phrase-changed" as const },
       { type: "recovery-phrase-reset" as const },
-      { type: "other-sessions-signed-out" as const },
+      { type: "other-sessions-signed-out" as const, device: null },
+      {
+        type: "device-removed" as const,
+        device: { name: "Car tablet", model: null, platform: null },
+      },
       { type: "alerts-turned-off" as const, alerts: ["new-device" as const] },
     ]) {
       const email = await render(alert, { hasPassword: false });
@@ -177,16 +182,16 @@ describe("renderSecurityAlertEmail", () => {
     const device = { model: "Pixel 8", platform: "android" } as const;
     const withPassword = await render({ type: "new-device", device });
     expect(withPassword.text).toContain(
-      "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs out every other device.",
+      "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, open Account → Devices, tap Pixel 8 and tap Remove device. In the OpenBeacon app, change your password in Account → Password and Security. That signs out every other device.",
     );
     const google = await render({ type: "new-device", device }, { hasPassword: false });
     expect(google.text).toContain(
-      `If this wasn't you\n\nSomeone else is signed in to your account. Change your Google password, because someone may have used your Google account to sign in. After that, in the OpenBeacon app, open Account → Password and Security and tap "Sign out of all other sessions".`,
+      `If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, open Account → Devices, tap Pixel 8 and tap Remove device. Change your Google password, because someone may have used your Google account to sign in. After that, in the OpenBeacon app, open Account → Password and Security and tap "Sign out of all other sessions".`,
     );
   });
 
   test("an other sessions alert tells the owner how to get back in and sign the other person out", async () => {
-    const withPassword = await render({ type: "other-sessions-signed-out" });
+    const withPassword = await render({ type: "other-sessions-signed-out", device: null });
     expect(withPassword.subject).toBe("Your other OpenBeacon sessions were signed out");
     expect(withPassword.text).toContain(
       "Other sessions signed out\n\nEvery other session on your OpenBeacon account was signed out. Only the phone or tablet that did this is still signed in.",
@@ -194,10 +199,35 @@ describe("renderSecurityAlertEmail", () => {
     expect(withPassword.text).toContain(
       "If this wasn't you\n\nSomeone else is signed in to your account and may have signed you out. Use \"Forgot password\" on the app's sign-in screen to choose a new password. That signs out every other device, including theirs.",
     );
-    const google = await render({ type: "other-sessions-signed-out" }, { hasPassword: false });
+    const google = await render(
+      { type: "other-sessions-signed-out", device: null },
+      { hasPassword: false },
+    );
     expect(google.text).toContain(
       `After that, sign in to the OpenBeacon app, then open Account → Password and Security and tap "Sign out of all other sessions".`,
     );
+  });
+
+  test("an other sessions alert names the device that did it", async () => {
+    const email = await render({
+      type: "other-sessions-signed-out",
+      device: { name: "Sam’s phone", model: "Pixel 8", platform: "android" },
+    });
+    expect(email.text).toContain("Only Sam’s phone is still signed in.");
+    expect(email.text).toContain("Signed out by\nSam’s phone (Pixel 8, Android)\n");
+  });
+
+  test("a device removed alert names the device and says it gets no new locations", async () => {
+    const email = await render({
+      type: "device-removed",
+      device: { name: "Pixel 8", model: "Pixel 8", platform: "android" },
+    });
+    expect(email.subject).toBe("A device was removed from your OpenBeacon account");
+    expect(email.text).toContain(
+      "Device removed\n\nPixel 8 was removed from your OpenBeacon account. It was signed out and won’t receive new locations.",
+    );
+    expect(email.text).toContain("Device\nPixel 8 (Android)\n");
+    expect(email.text).toContain("Someone else is signed in to your account.");
   });
 
   test("a deletion alert tells the owner to cancel it, then secure the account", async () => {

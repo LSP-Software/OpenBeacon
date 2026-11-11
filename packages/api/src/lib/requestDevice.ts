@@ -3,31 +3,40 @@ import type { PrismaClient } from "@openbeacon/database";
 export const linkRequestDevice = async ({
   db,
   deviceId,
-  sessionId,
-  userId,
+  session,
   now = new Date(),
 }: {
   db: Pick<PrismaClient, "session" | "userDevice">;
   deviceId: string;
-  sessionId: string;
-  userId: string;
+  session: { id: string; userId: string } | null;
   now?: Date;
-}) => {
-  if (deviceId.length > 128) return null;
-  const device = await db.userDevice.findFirst({
-    where: { id: deviceId, userId },
-    select: { lastSeenAt: true, sessions: { where: { id: sessionId }, select: { id: true } } },
+}): Promise<{ removed: true } | { removed: false; deviceId: string | null }> => {
+  if (deviceId.length > 128) return { removed: false, deviceId: null };
+  const device = await db.userDevice.findUnique({
+    where: { id: deviceId },
+    select: {
+      userId: true,
+      lastSeenAt: true,
+      revokedAt: true,
+      sessions: { where: { id: session?.id ?? "" }, select: { id: true } },
+    },
   });
-  if (!device) return null;
+  if (!device || (session && device.userId !== session.userId))
+    return { removed: false, deviceId: null };
+  if (device.revokedAt) {
+    if (session) await db.session.deleteMany({ where: { id: session.id } });
+    return { removed: true };
+  }
+  if (!session) return { removed: false, deviceId: null };
   const lastSeenBefore = new Date(now.getTime() - 5 * 60_000);
   await Promise.all([
     device.sessions.length === 0 &&
-      db.session.updateMany({ where: { id: sessionId, deviceId: null }, data: { deviceId } }),
+      db.session.updateMany({ where: { id: session.id, deviceId: null }, data: { deviceId } }),
     device.lastSeenAt <= lastSeenBefore &&
       db.userDevice.updateMany({
         where: { id: deviceId, lastSeenAt: { lte: lastSeenBefore } },
         data: { lastSeenAt: now },
       }),
   ]);
-  return deviceId;
+  return { removed: false, deviceId };
 };

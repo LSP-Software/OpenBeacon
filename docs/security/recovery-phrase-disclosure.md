@@ -59,5 +59,5 @@ If your server sends email, its email provider sees when you ask for a reset cod
 ## Current limits
 
 - We don't send an email when you set up a phrase for the first time.
-- If someone steals a phone that can read your history, it can keep reading new history until we add a way to remove a phone from your account.
+- If someone steals a phone that can read your history, remove it in Account → Devices. The server then refuses its requests, but the phone keeps anything it has already seen, and until we can change your history key it still holds a key that opens your history.
 - Your phone trusts the server to give it the right keys for other people's phones and for your history. A server that was deliberately changed to swap those keys could receive new history. We plan to add key verification so phones don't have to trust the server for this. When you restore, the app only accepts recovery data that was made with your phrase.

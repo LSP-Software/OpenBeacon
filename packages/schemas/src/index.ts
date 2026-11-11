@@ -2,6 +2,7 @@ import { optionalEnvString, serverNameSchema } from "./env.ts";
 import {
   deviceIconSchema,
   deviceNameSchema,
+  removeDeviceSchema,
   updateDeviceSchema,
 } from "./schemas/account/devices.ts";
 import { changePasswordSchema } from "./schemas/account/changePassword.ts";
@@ -71,6 +72,7 @@ export {
   signUpSchema,
   submitFeedbackSchema,
   TRACKING_POINT_KIND,
+  removeDeviceSchema,
   updateDeviceSchema,
   wrappedEpochKeySchema,
 };
