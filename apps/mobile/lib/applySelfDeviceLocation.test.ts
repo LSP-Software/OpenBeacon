@@ -277,3 +277,21 @@ describe("applySelfDeviceLocation", () => {
     ]);
   });
 });
+
+test.each(["1", "A"])("preserves the one-character self name %j on the local GPS pin", (name) => {
+  const markers = applySelfDeviceLocation({
+    lastSentAt: null,
+    markers: [],
+    selfDeviceLocation: { latitude: 51.5, longitude: -0.12, timestamp: "2026-07-17T12:00:00.000Z" },
+    selfFallback: {
+      image: null,
+      name,
+      otherSharedGroupNames: [],
+      ringColor: "red",
+      sourceGroupId: "family",
+    },
+    selfDeviceId: "self-phone",
+    selfUserId: "self",
+  });
+  expect(markers[0]?.initials).toBe(name);
+});

@@ -114,7 +114,7 @@ export const labelDeviceIcons = ({
 
 export const initialsFromName = (name: string) => {
   const initials = name.charAt(0) + name.charAt(1);
-  return initials.length === 2 ? initials : "??";
+  return initials || "??";
 };
 
 const otherSharedGroupNames = ({

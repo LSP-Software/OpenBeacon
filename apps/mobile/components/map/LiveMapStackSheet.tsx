@@ -1,9 +1,9 @@
 import { Pressable, ScrollView, View } from "react-native";
 import { useTimeSince } from "../../hooks/useTimeSince.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
-import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
+import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
 
 const StackSheetRow = ({ marker, onPress }: { marker: LiveMapMarker; onPress: () => void }) => {
   const updatedAge = useTimeSince(marker.timestamp);
@@ -15,12 +15,17 @@ const StackSheetRow = ({ marker, onPress }: { marker: LiveMapMarker; onPress: ()
       className="flex-row items-center gap-3 py-2 active:opacity-70"
       onPress={onPress}
     >
-      <Avatar alt={marker.name} className="size-11">
-        {marker.image ? <AvatarImage source={{ uri: marker.image }} /> : null}
-        <AvatarFallback>
-          <Text className="font-bold">{marker.initials}</Text>
-        </AvatarFallback>
-      </Avatar>
+      <LiveMapMarkerPin
+        deviceIcon={marker.deviceIcon}
+        devicePlatform={marker.devicePlatform}
+        hasUnreadableUpdate={marker.unreadableGroup !== undefined}
+        image={marker.image}
+        initials={marker.initials}
+        name={marker.name}
+        ringColor={marker.ringColor}
+        ringColors={marker.ringColors}
+        timestamp={marker.timestamp}
+      />
       <View className="min-w-0 flex-1">
         <Text className="text-foreground font-semibold" numberOfLines={1}>
           {[marker.isSelf ? `${marker.name} (you)` : marker.name, marker.deviceName]
