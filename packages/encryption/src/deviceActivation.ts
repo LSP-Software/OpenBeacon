@@ -11,11 +11,13 @@ export const sealDeviceActivationChallenge = ({
   challenge,
   deviceId,
   historyPublicKey,
+  ephemeralPrivateKey,
   userId,
 }: {
   challenge: Uint8Array;
   deviceId: string;
   historyPublicKey: string;
+  ephemeralPrivateKey?: Uint8Array;
   userId: string;
 }) => {
   if (challenge.length !== DEVICE_ACTIVATION_CHALLENGE_LENGTH) {
@@ -26,6 +28,7 @@ export const sealDeviceActivationChallenge = ({
     info: getInfo(userId, deviceId),
     plaintext: challenge,
     recipientPublicKey: decodeBase64(historyPublicKey),
+    ...(ephemeralPrivateKey === undefined ? {} : { ephemeralPrivateKey }),
   });
   return { ciphertext: encodeBase64(sealed.ciphertext), enc: encodeBase64(sealed.enc) };
 };

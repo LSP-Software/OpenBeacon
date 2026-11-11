@@ -83,7 +83,7 @@ Replacing the Recovery phrase from an Enrolled device. The History key versions 
 _Avoid_: Rotation, re-key, reset
 
 **Recovery reset**:
-Replacing the Recovery phrase when it's lost and no Enrolled device is left, or making a new one when the account never had one. It deletes every History key version and starts a new one with a Recovery escrow. On a Pending device it's the "Start fresh" option, and the device's Activation.
+Replacing the Recovery phrase when it's lost and no Enrolled device is left, or making a new one when the account never had one. It deletes every History key version and starts a new one with a Recovery escrow. It needs a Session linked to a device and activates that device. On a Pending device it's the "Start fresh" option.
 _Avoid_: Start over, wipe, phrase change
 
 ### Personal data

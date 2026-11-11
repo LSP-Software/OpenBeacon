@@ -9,7 +9,7 @@ A 6-digit code the server emails to an account's address, which the owner types 
 _Avoid_: OTP, magic link, verification link, PIN
 
 **Session**:
-One sign-in to an account. A Session is linked to a device when it registers that device as new, or when the phone proves it holds the device's Device key by opening a challenge sealed to it. Naming a device in the device header never links it; until the session is linked, anything that needs a device fails with `DEVICE_UNVERIFIED`. Once linked, it can't act as another device. Signing a session out ends its sign-in but doesn't remove the device from Devices.
+One sign-in to an account. A Session is linked to a device when it registers that device as new, or when a session with no device proves the phone holds the device's Device key by opening a challenge sealed to it. Registering a new device moves the link to that device, even from another one. Naming a device in the device header never links it. A session with no device that names one gets `DEVICE_UNVERIFIED` for anything that needs a device. A linked session that names a different device is refused as if that device were Pending or not registered. Signing a session out ends its sign-in but doesn't remove the device from Devices.
 _Avoid_: Login, device
 
 **Device name**:
@@ -21,7 +21,7 @@ One of a fixed set of pictures the owner picks for a device: phone, tablet, watc
 _Avoid_: Device type, avatar
 
 **Removing a device**:
-Taking a lost or stolen device off the account in Account → Devices. It needs a recent sign-in. The server signs the device out, refuses its requests from then on, and leaves it out of new Epochs. The phone wipes its keys and data the next time it reaches the server. It's different from signing out, which keeps the device in Devices so it can sign in again. Removing a device can't take back anything it has already seen. Tapping "Not me" after scanning a Pending device's code removes it too, without a recent sign-in, because a Pending device can't see anything yet.
+Taking a lost or stolen device off the account in Account → Devices. It needs a recent sign-in on an Active device. The server signs the device out, refuses its requests from then on, and leaves it out of new Epochs. The phone wipes its keys and data the next time it reaches the server. It's different from signing out, which keeps the device in Devices so it can sign in again. Removing a device can't take back anything it has already seen. Tapping "Not me" after scanning a Pending device's code removes it too, without a recent sign-in, because a Pending device can't see anything yet.
 _Avoid_: Revoking, deleting a device, unlinking
 
 **Security alert**:

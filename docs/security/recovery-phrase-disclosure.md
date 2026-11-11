@@ -23,12 +23,12 @@ Your other phones keep working as before.
 - History from before you joined a group. New members never get a group's earlier history.
 - History from groups you've left.
 - History from before you set up the phrase that none of your phones could read.
-- Nicknames and colours saved on a phone that never had your phrase, if that phone is gone. Each phone protects its own saved ones with your phrase once it has it.
+- Nicknames and colours an older version of the app saved on a phone that's now gone.
 - Your password or your sign-in. The phrase only works once you're signed in to your account.
 
 ## If you don't set up a phrase
 
-If you lose every phone you're signed in on, or reset them or delete the app from them, your encrypted location history, nicknames and colours are gone for good. Resetting your password doesn't bring them back. Live location still works on a new phone. Your groups' encryption keys are updated automatically when you sign in.
+If you lose every phone you're signed in on, or reset them or delete the app from them, your encrypted location history, nicknames and colours are gone for good. Resetting your password doesn't bring them back. While you still have a phone, you can link a new phone to it and keep your history. If you don't, you can start fresh on the new phone. Live location then works again, but your earlier history doesn't come back.
 
 ## If you lose your phrase
 
@@ -51,8 +51,6 @@ The server never receives your phrase or the keys that unlock your history. It c
 - how many versions of your history key there are, and when each was created
 - how many of each group's encryption keys are protected for you, and when they were added
 - for your nicknames and colours: who you've nicknamed, that you've set a colour, roughly how long each nickname is, and which key version protects it.
-
-Other members' phones can also see whether you have a recovery phrase, because they protect new group keys for you when they create them.
 
 If your server sends email, its email provider sees when you ask for a reset code and when your phrase is changed or reset, from the emails we send you. Emails never contain your phrase.
 

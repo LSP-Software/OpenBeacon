@@ -11,11 +11,13 @@ export const sealSessionLinkChallenge = ({
   challenge,
   deviceId,
   devicePublicKey,
+  ephemeralPrivateKey,
   userId,
 }: {
   challenge: Uint8Array;
   deviceId: string;
   devicePublicKey: string;
+  ephemeralPrivateKey?: Uint8Array;
   userId: string;
 }) => {
   if (challenge.length !== SESSION_LINK_CHALLENGE_LENGTH) {
@@ -26,6 +28,7 @@ export const sealSessionLinkChallenge = ({
     info: getInfo(userId, deviceId),
     plaintext: challenge,
     recipientPublicKey: decodeBase64(devicePublicKey),
+    ...(ephemeralPrivateKey === undefined ? {} : { ephemeralPrivateKey }),
   });
   return { ciphertext: encodeBase64(sealed.ciphertext), enc: encodeBase64(sealed.enc) };
 };
