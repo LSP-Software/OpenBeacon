@@ -428,14 +428,20 @@ const MemberCard = ({ member }: { member: ReturnType<typeof buildMemberLiveStatu
                 batteryLevel: device.battery.level,
                 charging: device.battery.charging,
               });
+              const updated = timeSince(device.timestamp);
               return (
-                <View key={device.deviceId} className="flex-row items-center gap-2">
+                <View
+                  key={device.deviceId}
+                  accessible
+                  accessibilityLabel={`${device.name ?? "Device"}, updated ${updated}, battery ${device.battery.level}%`}
+                  className="flex-row items-center gap-2"
+                >
                   <Icon
                     as={deviceIcons[device.icon ?? "phone"].icon}
                     className="text-muted-foreground size-4"
                   />
                   <Text className="text-muted shrink text-sm" numberOfLines={1}>
-                    {device.name ?? "Device"} · {timeSince(device.timestamp)}
+                    {device.name ?? "Device"} · {updated}
                   </Text>
                   <Icon as={deviceBattery.icon} size={16} className={deviceBattery.colorClass} />
                   <Text className={`${deviceBattery.colorClass} text-sm`}>

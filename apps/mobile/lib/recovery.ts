@@ -18,6 +18,7 @@ import { createHistoryKey, KEY_NOT_SAVED_MESSAGE } from "./createHistoryKey.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { type EpochKeyDevice, unwrapDeviceWrap } from "./epochKeys.ts";
 import { getStoredHistoryKey, storeHistoryKey } from "./historyKeys.ts";
+import { needsFreshSignIn } from "./needsFreshSignIn.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
 
 export const pickConfirmationIndexes = () => {
@@ -46,9 +47,6 @@ export const confirmsRecoveryPhrase = ({
 
 const hasTrpcCode = (error: unknown, code: string) =>
   error instanceof TRPCClientError && error.data?.code === code;
-
-const needsFreshSignIn = (error: unknown) =>
-  error instanceof TRPCClientError && error.data?.code === "FORBIDDEN" && !error.data.cause;
 
 const recoveryKeyInput = (recoveryKey: ReturnType<typeof deriveRecoveryKeyPair>) =>
   ({

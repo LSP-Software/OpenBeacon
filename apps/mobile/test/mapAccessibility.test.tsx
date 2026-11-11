@@ -40,7 +40,18 @@ mock.module("../lib/deviceIcons.ts", () => ({
 mock.module("../components/map/LiveMapMarkerPin.tsx", () => ({ LiveMapMarkerPin: () => null }));
 mock.module("../components/map/LiveMapPinMotion.tsx", () => ({ LiveMapPinMotion: Passthrough }));
 mock.module("../components/map/LiveMapBottomSheet.tsx", () => ({
-  LiveMapBottomSheet: ({ header }: { header: React.ReactNode }) => <>{header}</>,
+  LiveMapBottomSheet: ({
+    children,
+    header,
+  }: {
+    children?: React.ReactNode;
+    header: React.ReactNode;
+  }) => (
+    <>
+      {header}
+      {children}
+    </>
+  ),
 }));
 mock.module("../components/ui/Avatar.tsx", () => ({
   Avatar: Passthrough,
@@ -149,4 +160,28 @@ test("a device row without a location on the map isn't a button", async () => {
       accessibilityRole: "button",
     },
   ]);
+});
+
+test("someone with several devices still gets a way to open the group whose key is missing", async () => {
+  const device = { battery: null, icon: "phone" as const, isThisDevice: false, timestamp: null };
+  const links = (
+    await pressables(
+      <LiveMapPersonSheet
+        battery={null}
+        devices={[
+          { ...device, deviceId: "device-1", name: "Phone", unreadable: true },
+          { ...device, deviceId: "device-2", name: "Tablet", unreadable: false },
+        ]}
+        image={null}
+        initials="Al"
+        name="Alice"
+        onDismiss={() => {}}
+        otherSharedGroupNames={[]}
+        timestamp={null}
+        unreadableGroup={{ id: "group-1", name: "Family" }}
+      />,
+    )
+  ).filter((item) => item.accessibilityRole === "link");
+  expect(links).toHaveLength(1);
+  expect(JSON.stringify(root?.container.toJSON())).toContain(`["Open ","Family"]`);
 });

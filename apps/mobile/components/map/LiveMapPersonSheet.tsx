@@ -116,11 +116,12 @@ export const LiveMapPersonSheet = ({
         </>
       }
     >
-      {unreadableGroup && !isMultiDevice ? (
+      {unreadableGroup ? (
         <View className="mt-3 gap-2 rounded-xl border border-destructive p-3">
           <Text className="text-sm">
-            {name}’s newer locations were encrypted with a key this phone doesn’t have, so this is
-            the last location it can read.
+            {isMultiDevice
+              ? `Some of ${name}’s newer locations were encrypted with a key this phone doesn’t have.`
+              : `${name}’s newer locations were encrypted with a key this phone doesn’t have, so this is the last location it can read.`}
           </Text>
           <Link
             href={{

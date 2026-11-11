@@ -2,10 +2,10 @@ import { Alert } from "../../lib/alert.ts";
 import type { RecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
-import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
+import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
 import { EmailCodeEntry } from "../../components/EmailCodeEntry.tsx";
@@ -42,6 +42,14 @@ const RecoveryPhraseResetScreen = () => {
   const [codeEmail, setCodeEmail] = useState<string>();
   const [resetToken, setResetToken] = useState<string>();
   const gate = useIdentityGate({ enabled: step === "verify" });
+  const busy = step === "saving" || step === "protecting";
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => busy);
+      return () => subscription.remove();
+    }, [busy]),
+  );
 
   const reauthenticate = async () => {
     await gate.recheck();
@@ -146,9 +154,10 @@ const RecoveryPhraseResetScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
+      <Stack.Screen options={{ gestureEnabled: !busy }} />
       <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
         <View className="flex-row items-center justify-between">
-          {step === "saving" || step === "protecting" ? <View className="w-10" /> : <BackButton />}
+          {busy ? <View className="w-10" /> : <BackButton />}
           <Text className="text-foreground text-2xl font-bold">
             {setup ? "Start fresh" : "Reset phrase"}
           </Text>

@@ -47,6 +47,8 @@ import { Text } from "../../../components/ui/Text.tsx";
 import { useHeldHistoryKeyVersions } from "../../../hooks/useHeldHistoryKeyVersions.ts";
 import { trpc } from "../../../lib/api.ts";
 import { authClient } from "../../../lib/auth-client.ts";
+import { getStoredDeviceId } from "../../../lib/deviceKeys.ts";
+import { historyLossRisk } from "../../../lib/historyLossRisk.ts";
 import {
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
@@ -193,30 +195,36 @@ const AccountScreen = () => {
     router.replace("/");
   };
 
-  const historyCheckIncomplete =
-    !recoveryStatus.data || !heldHistoryKeyVersions.data || !devices.data;
-  const mightBeOnlyCopyOfHistory =
-    !recoveryStatus.data?.recoveryKey &&
-    heldHistoryKeyVersions.data?.includes(currentHistoryKeyVersion) !== false &&
-    devices.data?.some((device) => !device.isCurrent && device.activatedAt) !== true;
-
   const confirmRemoveThisPhone = () => {
-    if (!mightBeOnlyCopyOfHistory) {
+    const risk = historyLossRisk({
+      devices: devices.data,
+      heldVersions: heldHistoryKeyVersions.data,
+      recoveryStatus: recoveryStatus.data,
+      thisDeviceId: session?.user.id ? getStoredDeviceId(session.user.id) : undefined,
+    });
+    if (risk === "none") {
       void signOut({ removeThisPhone: true });
       return;
     }
     Alert.alert(
-      historyCheckIncomplete
+      risk === "possible"
         ? "Your location history might be lost"
         : "Your location history will be lost",
-      historyCheckIncomplete
+      risk === "possible"
         ? "We couldn’t check whether another phone or a recovery phrase can read your location history. If this is the only phone with it, removing it means your history can’t be recovered."
         : "This is the only phone with your location history and you haven’t set up a recovery phrase. If you remove it, your history can’t be recovered. Set up a recovery phrase first.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Set up recovery phrase", onPress: () => router.push("/account/recovery-setup") },
+        ...(recoveryStatus.data
+          ? [
+              {
+                text: "Set up recovery phrase",
+                onPress: () => router.push("/account/recovery-setup"),
+              },
+            ]
+          : []),
         {
-          text: "Remove and lose history",
+          text: risk === "possible" ? "Remove anyway" : "Remove and lose history",
           style: "destructive",
           onPress: () => signOut({ removeThisPhone: true }),
         },

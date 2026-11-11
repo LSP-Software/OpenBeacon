@@ -24,6 +24,8 @@ let goneLinkId: string | null = null;
 let statusError: Error | null = null;
 const backHandlers = new Set<() => boolean>();
 let deviceActive = false;
+let canGoBack = false;
+let gestureEnabled: boolean | undefined;
 const secureStoreValues = new Map<string, string>();
 const shownCodes: { linkId: string; psk: Uint8Array }[] = [];
 let queryOptions: {
@@ -43,7 +45,17 @@ const finishDeviceLink = mock(
 
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("expo-router", () => ({
-  router: { back: () => {}, canGoBack: () => false, replace },
+  Link: ({ children, href }: { children: React.ReactElement; href: string }) =>
+    React.cloneElement(children as React.ReactElement<{ onPress?: () => void }>, {
+      onPress: () => replace(href),
+    }),
+  router: { back: () => {}, canGoBack: () => canGoBack, replace },
+  Stack: {
+    Screen: ({ options }: { options: { gestureEnabled?: boolean } }) => {
+      gestureEnabled = options.gestureEnabled;
+      return null;
+    },
+  },
   useFocusEffect: (effect: () => () => void) => React.useEffect(effect, [effect]),
 }));
 mock.module("@tanstack/react-query", () => ({
@@ -156,6 +168,8 @@ beforeEach(() => {
   goneLinkId = null;
   statusError = null;
   deviceActive = false;
+  canGoBack = false;
+  gestureEnabled = undefined;
   secureStoreValues.clear();
   shownCodes.length = 0;
   replace.mockClear();
@@ -333,22 +347,36 @@ test("a code that couldn't be saved isn't shown", async () => {
 
 const pressHardwareBack = () => [...backHandlers].some((handler) => handler());
 
-test("hardware back is blocked only while the handover is being finished", async () => {
-  let release = () => {};
+test("back is blocked only while the handover is being finished", async () => {
+  let fail = () => {};
   finishDeviceLink.mockImplementationOnce(
     () =>
-      new Promise((resolve) => {
-        release = () => resolve({ userId: "user-1" });
+      new Promise((_resolve, reject) => {
+        fail = () => reject(new TRPCClientError("Network request failed"));
       }),
   );
+  canGoBack = true;
   await render();
   expect(pressHardwareBack()).toBe(false);
+  expect(gestureEnabled).toBe(true);
 
   statusData = approvedStatus;
   await render();
   expect(pressHardwareBack()).toBe(true);
+  expect(gestureEnabled).toBe(false);
 
-  await act(async () => release());
+  await act(async () => fail());
+  expect(rendered()).toContain("We couldn’t reach your server");
+  expect(pressHardwareBack()).toBe(false);
+  expect(gestureEnabled).toBe(true);
+  expect(replace).not.toHaveBeenCalled();
+});
+
+test("hardware back goes to the setup options when there's nothing to go back to", async () => {
+  await render();
+
+  expect(pressHardwareBack()).toBe(true);
+  expect(replace.mock.calls).toEqual([["/setup"]]);
 });
 
 test("an active phone resuming a saved code doesn't show it while checking it", async () => {
@@ -400,7 +428,7 @@ test("no other signed-in phone shows the server's reason and goes back to the se
   expect(replace.mock.calls).toEqual([["/setup"]]);
 });
 
-test("a failure to create a code shows the server's message when the server answered", async () => {
+test("a server failure to create a code doesn't show the server's raw error", async () => {
   createLink.mockImplementationOnce(async () => {
     throw TRPCClientError.from({
       error: { code: -32603, data: { code: "INTERNAL_SERVER_ERROR" }, message: "Server broke" },
@@ -408,9 +436,25 @@ test("a failure to create a code shows the server's message when the server answ
   });
   await render();
 
-  expect(rendered()).toContain("Server broke");
+  expect(rendered()).not.toContain("Server broke");
+  expect(rendered()).toContain("Something went wrong on your server. Try again.");
   await pressButton("Try again");
   expect(shownCodes.at(-1)?.linkId).toBe("link-2");
+});
+
+test("a failure to create a code shows the server's reason when it's one we expect", async () => {
+  createLink.mockImplementationOnce(async () => {
+    throw TRPCClientError.from({
+      error: {
+        code: -32029,
+        data: { code: "TOO_MANY_REQUESTS" },
+        message: "Too many requests. Please try again later.",
+      },
+    });
+  });
+  await render();
+
+  expect(rendered()).toContain("Too many requests. Please try again later.");
 });
 
 test("a failure to create a code with no answer says the server can't be reached", async () => {

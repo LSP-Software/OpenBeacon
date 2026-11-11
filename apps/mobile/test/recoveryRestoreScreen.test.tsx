@@ -12,6 +12,9 @@ let heldVersions: number[] = [];
 const replace = mock((_route: string) => {});
 const restoreFromRecoveryPhrase = mock(async () => ({ userId: "user-1" }));
 const activateWithHistoryKey = mock(async () => {});
+const backHandlers = new Set<() => boolean>();
+let gestureEnabled: boolean | undefined;
+const pressHardwareBack = () => [...backHandlers].some((handler) => handler());
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("expo-router", () => ({
   Link: ({
@@ -24,6 +27,13 @@ mock.module("expo-router", () => ({
     replace?: boolean;
   }) => React.createElement("expo-link", { href: JSON.stringify(href), replace }, children),
   router: { back: () => {}, replace },
+  Stack: {
+    Screen: ({ options }: { options: { gestureEnabled?: boolean } }) => {
+      gestureEnabled = options.gestureEnabled;
+      return null;
+    },
+  },
+  useFocusEffect: (effect: () => () => void) => React.useEffect(effect, [effect]),
   useLocalSearchParams: () => searchParams,
 }));
 mock.module("@tanstack/react-query", () => ({
@@ -39,6 +49,12 @@ mock.module("expo-screen-capture", () => ({
   preventScreenCaptureAsync: async () => {},
 }));
 mock.module("react-native", () => ({
+  BackHandler: {
+    addEventListener: (_event: string, handler: () => boolean) => {
+      backHandlers.add(handler);
+      return { remove: () => backHandlers.delete(handler) };
+    },
+  },
   KeyboardAvoidingView: View,
   Platform: { OS: "ios", select: () => undefined },
   ScrollView: View,
@@ -92,6 +108,7 @@ beforeEach(() => {
   replace.mockClear();
   restoreFromRecoveryPhrase.mockClear();
   activateWithHistoryKey.mockClear();
+  gestureEnabled = undefined;
 });
 
 test("setting up a new phone without the current key offers resetting and never skipping", async () => {
@@ -155,5 +172,42 @@ test("when setting up fails after the phrase is restored, Try again only retries
   expect(restoreFromRecoveryPhrase).toHaveBeenCalledTimes(1);
   expect(activateWithHistoryKey).toHaveBeenCalledTimes(2);
   expect(replace.mock.calls).toEqual([["/setup/name"]]);
+  await act(async () => root.unmount());
+});
+
+test("back is blocked while this phone is being set up after the phrase is restored", async () => {
+  searchParams = { setup: "true" };
+  let release = () => {};
+  activateWithHistoryKey.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const root = createRoot();
+  await act(async () => root.render(<RecoveryRestoreScreen />));
+  expect(pressHardwareBack()).toBe(false);
+  expect(gestureEnabled).toBe(true);
+
+  const [grid] = root.container.queryAll((item) => item.type === "phrase-grid");
+  if (!grid) throw new Error("Missing phrase grid");
+  await act(async () =>
+    (grid.props as { onChangeWords: (words: string[]) => void }).onChangeWords(
+      Array.from({ length: 12 }, () => "word"),
+    ),
+  );
+  const restore = root.container
+    .queryAll((item) => item.type === "mock-button")
+    .find((item) => JSON.stringify(item.children).includes("Restore"));
+  if (!restore) throw new Error("Missing button Restore");
+  await act(async () => {
+    void (restore.props as { onPress: () => Promise<void> }).onPress();
+  });
+
+  expect(activateWithHistoryKey).toHaveBeenCalledTimes(1);
+  expect(pressHardwareBack()).toBe(true);
+  expect(gestureEnabled).toBe(false);
+
+  await act(async () => release());
   await act(async () => root.unmount());
 });

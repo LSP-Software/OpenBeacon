@@ -13,6 +13,7 @@ import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
+import { needsFreshSignIn } from "../../lib/needsFreshSignIn.ts";
 
 const RemoveDeviceScreen = () => {
   const { deviceId, name } = useLocalSearchParams<{ deviceId: string; name: string }>();
@@ -34,7 +35,7 @@ const RemoveDeviceScreen = () => {
   const remove = async () => {
     setStep("removing");
     const result = await tryCatch(removeDevice.mutateAsync({ deviceId }));
-    if (result.error instanceof TRPCClientError && result.error.data?.code === "FORBIDDEN") {
+    if (needsFreshSignIn(result.error)) {
       await gate.recheck();
       setStep("verify");
       Alert.alert("Sign in again", "Nothing was removed. Confirm it’s you, then try again.");

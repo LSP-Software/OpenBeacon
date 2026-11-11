@@ -2,7 +2,7 @@ import { createDeviceLinkSecret, formatDeviceLinkCode } from "@openbeacon/encryp
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { router, useFocusEffect } from "expo-router";
+import { Link, router, Stack, useFocusEffect } from "expo-router";
 import {
   allowScreenCaptureAsync,
   disableAppSwitcherProtectionAsync,
@@ -31,6 +31,20 @@ import {
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 
 const UNREACHABLE_MESSAGE = "We couldn’t reach your server. Check your connection and try again.";
+
+const problemMessage = (error: Error) => {
+  if (!(error instanceof TRPCClientError)) return error.message;
+  if (!error.data) return UNREACHABLE_MESSAGE;
+  return [
+    "BAD_REQUEST",
+    "CONFLICT",
+    "FORBIDDEN",
+    "PRECONDITION_FAILED",
+    "TOO_MANY_REQUESTS",
+  ].includes(error.data.code)
+    ? error.message
+    : "Something went wrong on your server. Try again.";
+};
 
 type Handover = Omit<Parameters<typeof finishDeviceLink>[0], "linkId" | "psk">;
 
@@ -79,13 +93,7 @@ const LinkWithOtherPhoneScreen = () => {
       return;
     }
     if (created.error) {
-      setProblem({
-        message:
-          created.error instanceof TRPCClientError && !created.error.data
-            ? UNREACHABLE_MESSAGE
-            : created.error.message,
-        action: "newCode",
-      });
+      setProblem({ message: problemMessage(created.error), action: "newCode" });
       return;
     }
     const [device, { linkId }] = created.data;
@@ -140,13 +148,7 @@ const LinkWithOtherPhoneScreen = () => {
         setProblem({ message: HANDOVER_REJECTED_MESSAGE, action: "continue" });
         return;
       }
-      setProblem({
-        message:
-          finished.error instanceof TRPCClientError && !finished.error.data
-            ? UNREACHABLE_MESSAGE
-            : finished.error.message,
-        action: "finish",
-      });
+      setProblem({ message: problemMessage(finished.error), action: "finish" });
       return;
     }
     await queryClient.invalidateQueries();
@@ -161,10 +163,12 @@ const LinkWithOtherPhoneScreen = () => {
 
   useFocusEffect(
     useCallback(() => {
-      const subscription = BackHandler.addEventListener(
-        "hardwareBackPress",
-        () => handover !== null && problem === null,
-      );
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        if (handover !== null && problem === null) return true;
+        if (router.canGoBack()) return false;
+        router.replace("/setup");
+        return true;
+      });
       return () => subscription.remove();
     }, [handover, problem]),
   );
@@ -213,6 +217,7 @@ const LinkWithOtherPhoneScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
+      <Stack.Screen options={{ gestureEnabled: !(handover && !problem) }} />
       <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
         <View className="flex-row items-center justify-between">
           {handover && !problem ? <View className="w-10" /> : <BackButton fallback="/setup" />}
@@ -235,14 +240,18 @@ const LinkWithOtherPhoneScreen = () => {
           <View className="gap-4">
             <Text className="text-destructive text-base leading-6">{problem.message}</Text>
             {problem.action === "continue" && (
-              <Button onPress={() => router.replace("/setup/name")}>
-                <Text>Continue</Text>
-              </Button>
+              <Link href="/setup/name" replace asChild>
+                <Button>
+                  <Text>Continue</Text>
+                </Button>
+              </Link>
             )}
             {problem.action === "home" && (
-              <Button onPress={() => router.replace("/")}>
-                <Text>Continue</Text>
-              </Button>
+              <Link href="/" replace asChild>
+                <Button>
+                  <Text>Continue</Text>
+                </Button>
+              </Link>
             )}
             {problem.action === "finish" && (
               <Button
@@ -254,9 +263,11 @@ const LinkWithOtherPhoneScreen = () => {
               </Button>
             )}
             {problem.action === "setup" && (
-              <Button onPress={() => router.replace("/setup")}>
-                <Text>See other ways to set up</Text>
-              </Button>
+              <Link href="/setup" replace asChild>
+                <Button>
+                  <Text>See other ways to set up</Text>
+                </Button>
+              </Link>
             )}
             {problem.action === "start" && (
               <Button onPress={start}>
@@ -289,9 +300,11 @@ const LinkWithOtherPhoneScreen = () => {
               We can’t reach your server right now. This phone is already set up, so you can carry
               on and we’ll finish linking next time you open the app.
             </Text>
-            <Button onPress={() => router.replace("/(tabs)/map")}>
-              <Text>Continue to the map</Text>
-            </Button>
+            <Link href="/(tabs)/map" replace asChild>
+              <Button>
+                <Text>Continue to the map</Text>
+              </Button>
+            </Link>
           </View>
         ) : link && !link.active ? (
           <View className="items-center gap-4">

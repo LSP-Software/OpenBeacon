@@ -3,15 +3,15 @@ import { diagnoseRecoveryPhraseInput, parseRecoveryPhrase } from "@openbeacon/en
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
-import { Link, router, useLocalSearchParams } from "expo-router";
+import { Link, router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
   allowScreenCaptureAsync,
   disableAppSwitcherProtectionAsync,
   enableAppSwitcherProtectionAsync,
   preventScreenCaptureAsync,
 } from "expo-screen-capture";
-import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../../components/headers/BackButton.tsx";
 import { RecoveryPhraseGrid } from "../../components/RecoveryPhraseGrid.tsx";
@@ -48,6 +48,14 @@ const RecoveryRestoreScreen = () => {
   const [activationProblem, setActivationProblem] = useState<string>();
 
   const entering = step === "enter" || step === "restoring";
+  const busy = step === "restoring" || step === "activating";
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => busy);
+      return () => subscription.remove();
+    }, [busy]),
+  );
   const protecting = step !== "done";
   useEffect(() => {
     if (!protecting) return;
@@ -129,13 +137,10 @@ const RecoveryRestoreScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
+      <Stack.Screen options={{ gestureEnabled: !busy }} />
       <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
         <View className="flex-row items-center justify-between">
-          {step === "restoring" || step === "activating" ? (
-            <View className="w-10" />
-          ) : (
-            <BackButton />
-          )}
+          {busy ? <View className="w-10" /> : <BackButton />}
           <Text className="text-foreground text-2xl font-bold">Restore</Text>
           <View className="w-10" />
         </View>
