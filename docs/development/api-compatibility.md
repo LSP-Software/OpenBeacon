@@ -77,6 +77,7 @@ A server from before this handshake has no level fields on `/health`. The app tr
 
 ## Level history
 
-| Level | Change                           |
-| ----- | -------------------------------- |
-| 1     | Compatibility levels introduced. |
+| Level | Change                                                                   |
+| ----- | ------------------------------------------------------------------------ |
+| 1     | Compatibility levels introduced.                                         |
+| 2     | The app lists and edits devices (`account.listDevices`, `updateDevice`). |

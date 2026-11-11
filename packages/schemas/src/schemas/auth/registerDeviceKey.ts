@@ -6,6 +6,7 @@ import {
   WRAPPED_EPOCH_KEY_ALGORITHM,
 } from "@openbeacon/encryption";
 import z from "zod";
+import { deviceIconSchema, deviceNameSchema } from "../account/devices.ts";
 
 const devicePublicKeySchema = z
   .string()
@@ -35,6 +36,8 @@ export const registerDeviceKeySchema = z.object({
       const trimmed = model?.trim();
       return trimmed && /^[\p{L}\p{N} ()+_-]{1,40}$/u.test(trimmed) ? trimmed : undefined;
     }),
+  name: deviceNameSchema.optional(),
+  icon: deviceIconSchema.optional(),
 });
 
 export const encodedBytes = (length: number) =>

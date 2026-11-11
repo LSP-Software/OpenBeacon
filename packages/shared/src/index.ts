@@ -9,3 +9,4 @@ export {
   minServerApiCompatibilityLevel,
   parseApiCompatibilityLevel,
 } from "./apiCompatibilityLevel.ts";
+export { deviceIdHeader } from "./deviceIdHeader.ts";

@@ -1,4 +1,9 @@
 import { optionalEnvString, serverNameSchema } from "./env.ts";
+import {
+  deviceIconSchema,
+  deviceNameSchema,
+  updateDeviceSchema,
+} from "./schemas/account/devices.ts";
 import { changePasswordSchema } from "./schemas/account/changePassword.ts";
 import { emailAlertSettingsSchema, timezoneSchema } from "./schemas/account/emailAlerts.ts";
 import { emailCodeSchema } from "./schemas/account/emailCode.ts";
@@ -35,6 +40,8 @@ import {
 import { requestImageUploadInputSchema } from "./schemas/image/requestImageUpload.ts";
 
 export {
+  deviceIconSchema,
+  deviceNameSchema,
   devicePlatformSchema,
   emailAlertSettingsSchema,
   timezoneSchema,
@@ -64,5 +71,6 @@ export {
   signUpSchema,
   submitFeedbackSchema,
   TRACKING_POINT_KIND,
+  updateDeviceSchema,
   wrappedEpochKeySchema,
 };

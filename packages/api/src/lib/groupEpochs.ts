@@ -10,7 +10,11 @@ import {
   type WrappedEpochKey,
   type WrappedHistoryEpochKey,
 } from "@openbeacon/encryption";
-import { type devicePlatformSchema, HISTORY_RECIPIENT_MISMATCH_MESSAGE } from "@openbeacon/schemas";
+import {
+  type deviceIconSchema,
+  type devicePlatformSchema,
+  HISTORY_RECIPIENT_MISMATCH_MESSAGE,
+} from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type { z } from "zod";
@@ -535,6 +539,9 @@ export const persistGroupEpoch = async ({
   });
 };
 
+export const defaultDeviceIcon = (model: string | undefined) =>
+  model && /iPad|Tab/.test(model) ? "tablet" : "phone";
+
 export const upsertUserDevice = async ({
   db,
   input,
@@ -548,6 +555,8 @@ export const upsertUserDevice = async ({
     publicKey: string;
     platform?: z.infer<typeof devicePlatformSchema> | undefined;
     model?: string | undefined;
+    name?: string | undefined;
+    icon?: z.infer<typeof deviceIconSchema> | undefined;
   };
   securityAlerts: SecurityAlerts | null;
   userId: string;
@@ -599,10 +608,15 @@ export const upsertUserDevice = async ({
   const createResult = await tryCatch(
     db.$transaction(async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`);
+      const firstDevice = (await tx.userDevice.count({ where: { userId } })) === 0;
       const device = await tx.userDevice.create({
         data: {
           id: input.deviceId,
           model: input.model ?? null,
+          name: input.name ?? input.model ?? "Phone",
+          icon: input.icon ?? defaultDeviceIcon(input.model),
+          activatedAt: new Date(),
+          activatedBy: firstDevice ? "firstDevice" : "existing",
           platform: input.platform ?? null,
           publicKey: input.publicKey,
           publicKeyAlgorithm: input.algorithm,
@@ -613,7 +627,7 @@ export const upsertUserDevice = async ({
         data: { epochRotationRequired: true },
         where: { groupMembers: { some: { userId } } },
       });
-      return { device, firstDevice: (await tx.userDevice.count({ where: { userId } })) === 1 };
+      return { device, firstDevice };
     }),
   );
 

@@ -12,12 +12,12 @@ import { Platform } from "react-native";
 import { trpcClient } from "./api.ts";
 import { baseUrl } from "./base-url.ts";
 import { createSecureId } from "./createSecureId.ts";
+import { readRegisteredDevice, REGISTERED_DEVICE_KEY } from "./registeredDevice.ts";
 import { storage } from "./storage.ts";
 
 const DEVICE_ID_KEY = "encryption.device.id";
 const DEVICE_PUBLIC_KEY_KEY = "encryption.device.publicKey";
 const DEVICE_PRIVATE_KEY_KEY = "encryption.device.privateKey";
-const REGISTERED_DEVICE_KEY = "encryption.device.registered";
 
 const getScopedDeviceKey = (key: string, userId: string) => `${key}.${userId}`;
 
@@ -242,12 +242,9 @@ const withStorageTimeout = async <T>(task: Promise<T>) => {
 
 const loadRegisteredDevice = async (): Promise<DeviceRegistration | null> => {
   if (registeredDevice) return registeredDevice;
-  const stored = storage.getString(REGISTERED_DEVICE_KEY);
-  if (!stored) return null;
-  const record = await tryCatch(Promise.resolve().then((): unknown => JSON.parse(stored)));
-  if (!Array.isArray(record.data) || record.data[0] !== baseUrl) return null;
-  const [, userId, deviceId, publicKey] = record.data;
-  if (typeof userId !== "string") return null;
+  const record = await readRegisteredDevice();
+  if (!record) return null;
+  const { userId, deviceId, publicKey } = record;
   const context = await withStorageTimeout(getStoredDeviceKeyContext(userId));
   if (!context || context.deviceId !== deviceId || context.publicKey !== publicKey) return null;
   return { ...context, userId };

@@ -1,9 +1,11 @@
 import { auth, emailCodes, securityAlerts } from "@openbeacon/auth";
 import type { OpenBeaconCache } from "@openbeacon/cache";
 import type { PrismaClient } from "@openbeacon/database";
+import { deviceIdHeader, tryCatch } from "@openbeacon/shared";
 import { initTRPC } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError, z } from "zod";
+import { linkRequestDevice } from "./lib/requestDevice.ts";
 import { RateLimitContextError } from "./middlewares/rateLimit.ts";
 
 export const createTRPCContext = async (opts: {
@@ -18,6 +20,16 @@ export const createTRPCContext = async (opts: {
   const session = await auth.api.getSession({
     headers: opts.headers,
   });
+  const device = session
+    ? await tryCatch(
+        linkRequestDevice({
+          db: opts.db,
+          deviceId: opts.headers.get(deviceIdHeader),
+          sessionId: session.session.id,
+          userId: session.user.id,
+        }),
+      )
+    : null;
 
   return {
     cache: opts.cache,
@@ -25,6 +37,7 @@ export const createTRPCContext = async (opts: {
     emailCodes,
     securityAlerts,
     session,
+    deviceId: device?.data ?? null,
     serverVersion: opts.serverVersion,
     serverName: opts.serverName,
     selfHosted: opts.selfHosted,

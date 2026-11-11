@@ -52,9 +52,12 @@ model Session {
   userAgent String?
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId  String?
+  device    UserDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
   googleDeletionChallenges GoogleDeletionChallenge[]
 
   @@index([userId])
+  @@index([deviceId])
 }
 
 model GoogleDeletionChallenge {
@@ -224,15 +227,40 @@ model UserDevice {
   publicKeyAlgorithm     String
   platform               String?
   model                  String?
+  name                   String
+  icon                   DeviceIcon
   createdAt              DateTime                 @default(now())
   lastSeenAt             DateTime                 @default(now())
+  lastLocationAt         DateTime?
+  activatedAt            DateTime?
+  activatedBy            DeviceActivation?
   revokedAt              DateTime?
+  sessions               Session[]
   createdGroupEpochs     GroupEpoch[]             @relation("GroupEpochCreatedByDevice")
   recipientEpochKeys     GroupEpochRecipientKey[] @relation("GroupEpochRecipientDevice")
   groupEncryptedPayloads GroupEncryptedPayload[]  @relation("GroupEncryptedPayloadSenderDevice")
   sentHistoryWraps       GroupEpochHistoryWrap[]
 
   @@index([userId])
+}
+
+enum DeviceIcon {
+  phone
+  tablet
+  watch
+  car
+  laptop
+  bag
+  tag
+  home
+}
+
+enum DeviceActivation {
+  firstDevice
+  link
+  phrase
+  reset
+  existing
 }
 
 model GroupEpoch {

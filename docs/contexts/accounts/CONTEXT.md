@@ -9,8 +9,16 @@ A 6-digit code the server emails to an account's address, which the owner types 
 _Avoid_: OTP, magic link, verification link, PIN
 
 **Session**:
-One phone or tablet signed in to an account. Signing a session out ends its sign-in but doesn't remove the phone or tablet from Devices.
+One sign-in to an account. Each Session belongs to one device, which the app names on every request. Signing a session out ends its sign-in but doesn't remove the device from Devices.
 _Avoid_: Login, device
+
+**Device name**:
+The name the owner gives a device, such as "Pixel 9" or "Car tablet". A new device is named after its model. It's stored in plain text, like a profile name, so group members and Security alerts can show it.
+_Avoid_: Device label, nickname
+
+**Device icon**:
+One of a fixed set of pictures the owner picks for a device: phone, tablet, watch, car, laptop, bag, tag or home. A new device gets tablet if its model contains "iPad" or "Tab", and phone otherwise.
+_Avoid_: Device type, avatar
 
 **Security alert**:
 An email telling the owner that something important happened to their account, such as a password change, a new device or a deletion.

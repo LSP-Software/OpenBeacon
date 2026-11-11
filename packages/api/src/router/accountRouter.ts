@@ -8,7 +8,11 @@ import {
 } from "@openbeacon/auth";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
-import { accountNameSchema, requestImageUploadInputSchema } from "@openbeacon/schemas";
+import {
+  accountNameSchema,
+  requestImageUploadInputSchema,
+  updateDeviceSchema,
+} from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod";
 import { env } from "../env.ts";
@@ -279,6 +283,37 @@ export const accountRouter = {
         data: { name: input.name },
         select: { name: true },
       });
+    }),
+  listDevices: protectedProcedure.query(async ({ ctx }) => {
+    const devices = await ctx.db.userDevice.findMany({
+      where: { userId: ctx.session.user.id, revokedAt: null },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        name: true,
+        icon: true,
+        platform: true,
+        model: true,
+        createdAt: true,
+        lastSeenAt: true,
+        lastLocationAt: true,
+        activatedAt: true,
+      },
+    });
+    return devices.map((device) => ({ ...device, isCurrent: device.id === ctx.deviceId }));
+  }),
+  updateDevice: protectedProcedure
+    .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
+    .input(updateDeviceSchema)
+    .mutation(async ({ ctx, input }) => {
+      const updated = await ctx.db.userDevice.updateMany({
+        where: { id: input.deviceId, userId: ctx.session.user.id, revokedAt: null },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.icon !== undefined ? { icon: input.icon } : {}),
+        },
+      });
+      if (updated.count === 0) throw new TRPCError({ code: "NOT_FOUND" });
     }),
   version: protectedProcedure.query(({ ctx }) => ctx.serverVersion),
   serverName: protectedProcedure.query(({ ctx }) => ctx.serverName),

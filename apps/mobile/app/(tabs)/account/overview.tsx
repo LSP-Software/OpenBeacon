@@ -16,12 +16,13 @@ import {
   LockIcon,
   MailIcon,
   MapPinIcon,
+  SmartphoneIcon,
   SunIcon,
   Trash2Icon,
 } from "lucide-react-native";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
 import { SettingsContainer } from "../../../components/containers/settingsContainer.tsx";
@@ -64,6 +65,11 @@ const categories = [
         icon: BellIcon,
         href: "/account/notifications",
         requiresEmail: true,
+      },
+      {
+        label: "Devices",
+        icon: SmartphoneIcon,
+        href: "/account/devices",
       },
       {
         label: "Password and Security",
@@ -127,7 +133,7 @@ const AccountScreen = () => {
   const isFocused = useIsFocused();
   const groups = useQuery({ ...trpc.groupMembership.list.queryOptions(), subscribed: isFocused });
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
-  const devices = useQuery({ ...trpc.auth.listMyDeviceKeys.queryOptions(), subscribed: isFocused });
+  const devices = useQuery({ ...trpc.account.listDevices.queryOptions(), subscribed: isFocused });
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
   const recoveryStatus = useQuery({
@@ -266,14 +272,14 @@ const AccountScreen = () => {
 
               <Separator className="my-4" orientation="vertical" />
 
-              <View className="flex flex-col items-center">
-                <Text className="text-foreground font-bold text-xl">
-                  {devices.isError
-                    ? "—"
-                    : (devices.data?.filter((device) => !device.revokedAt).length ?? "—")}
-                </Text>
-                <Text className="text-muted-foreground text-base font-medium">Devices</Text>
-              </View>
+              <Link href="/account/devices" asChild>
+                <Pressable accessibilityRole="link" className="flex flex-col items-center">
+                  <Text className="text-foreground font-bold text-xl">
+                    {devices.isError ? "—" : (devices.data?.length ?? "—")}
+                  </Text>
+                  <Text className="text-muted-foreground text-base font-medium">Devices</Text>
+                </Pressable>
+              </Link>
             </View>
           </View>
         </View>

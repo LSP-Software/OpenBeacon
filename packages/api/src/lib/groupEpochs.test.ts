@@ -30,7 +30,7 @@ describe("group epoch helpers", () => {
           run({
             $queryRaw: async () => [],
             group: { updateMany },
-            userDevice: { count: async () => 1, create },
+            userDevice: { count: async () => 0, create },
           }),
         userDevice: {
           findUnique: async () => null,
@@ -47,9 +47,56 @@ describe("group epoch helpers", () => {
 
     expect(result.publicKey).toBe("public-key");
     expect("privateKey" in result).toBe(false);
+    expect(create.mock.calls[0]?.[0].data).toMatchObject({
+      name: "Phone",
+      icon: "phone",
+      activatedAt: expect.any(Date),
+      activatedBy: "firstDevice",
+    });
     expect(updateMany).toHaveBeenCalledWith({
       data: { epochRotationRequired: true },
       where: { groupMembers: { some: { userId: "user-a" } } },
+    });
+  });
+
+  test("names a new device after its model and picks its icon", async () => {
+    const register = async (input: { model?: string; name?: string; icon?: "car" }) => {
+      const create = mock(async ({ data }: { data: Record<string, unknown> }) => data);
+      await upsertUserDevice({
+        db: {
+          $transaction: async (run: (tx: object) => Promise<unknown>) =>
+            run({
+              $queryRaw: async () => [],
+              group: { updateMany: async () => ({ count: 0 }) },
+              userDevice: { count: async () => 1, create },
+            }),
+          userDevice: { findUnique: async () => null },
+        } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
+        securityAlerts: null,
+        input: {
+          algorithm: DEVICE_KEY_ALGORITHM,
+          deviceId: "device-b",
+          publicKey: "public-key",
+          ...input,
+        },
+        userId: "user-a",
+      });
+      return create.mock.calls[0]?.[0].data;
+    };
+
+    expect(await register({ model: "Pixel 9" })).toMatchObject({
+      name: "Pixel 9",
+      icon: "phone",
+      activatedBy: "existing",
+    });
+    expect(await register({ model: "iPad Air" })).toMatchObject({
+      name: "iPad Air",
+      icon: "tablet",
+    });
+    expect(await register({ model: "Galaxy Tab S9" })).toMatchObject({ icon: "tablet" });
+    expect(await register({ model: "iPad Air", name: "Car tablet", icon: "car" })).toMatchObject({
+      name: "Car tablet",
+      icon: "car",
     });
   });
 
@@ -134,7 +181,7 @@ describe("group epoch helpers", () => {
     const result = await upsertUserDevice({
       db: {
         $transaction: async (run: (tx: object) => Promise<unknown>) =>
-          run({ $queryRaw: async () => [], userDevice: { create } }),
+          run({ $queryRaw: async () => [], userDevice: { count: async () => 0, create } }),
         userDevice: {
           findUnique,
           update,
