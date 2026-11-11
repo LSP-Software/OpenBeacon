@@ -29,11 +29,11 @@ _Avoid_: Account wrap, backup wrap, recovery wrap
 ### Devices
 
 **Active device**:
-A device that has been set up, so it's in its account's Epochs and can send and see locations. A device is active as soon as it registers only if its account has never had an Active device, removed ones included.
+A device that has been set up, so it's in its account's Epochs and can send and see locations. Everything outside setup needs a Session linked to an Active device. A device is active as soon as it registers only if its account has never had an Active device, removed ones included.
 _Avoid_: Approved device, trusted device, verified device
 
 **Pending device**:
-A device signed in to an account that has had an Active device before, and not yet set up. That includes the next device after every device has been removed. It gets no Device wraps, can't upload or see locations, and can't create a History key. The server deletes it if it isn't set up within 7 days. A removed Pending device is deleted 7 days after it was removed; a removed device that was ever Active stays until the account is deleted.
+A device signed in to an account that has had an Active device before, and not yet set up. That includes the next device after every device has been removed. It isn't trusted: it can only be set up, or removed when the user cancels setup. It gets no Device wraps, can't upload or see locations, and can't create a History key. The server only lets it use the setup procedures, and the app only shows it the setup screens. The server deletes it if it isn't set up within 7 days. A removed Pending device is deleted 7 days after it was removed; a removed device that was ever Active stays until the account is deleted.
 _Avoid_: Unapproved device, untrusted device, new device
 
 **Activation**:
