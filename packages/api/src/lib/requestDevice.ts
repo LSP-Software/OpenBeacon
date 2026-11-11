@@ -28,15 +28,25 @@ export const linkRequestDevice = async ({
     return { removed: true };
   }
   if (!session) return { removed: false, deviceId: null };
+  if (device.sessions.length === 0) {
+    const linked = await db.session.updateMany({
+      where: { id: session.id, deviceId: null },
+      data: { deviceId },
+    });
+    if (linked.count === 0) {
+      const current = await db.session.findUnique({
+        where: { id: session.id },
+        select: { deviceId: true },
+      });
+      if (current?.deviceId !== deviceId) return { removed: false, deviceId: null };
+    }
+  }
   const lastSeenBefore = new Date(now.getTime() - 5 * 60_000);
-  await Promise.all([
-    device.sessions.length === 0 &&
-      db.session.updateMany({ where: { id: session.id, deviceId: null }, data: { deviceId } }),
-    device.lastSeenAt <= lastSeenBefore &&
-      db.userDevice.updateMany({
-        where: { id: deviceId, lastSeenAt: { lte: lastSeenBefore } },
-        data: { lastSeenAt: now },
-      }),
-  ]);
+  if (device.lastSeenAt <= lastSeenBefore) {
+    await db.userDevice.updateMany({
+      where: { id: deviceId, lastSeenAt: { lte: lastSeenBefore } },
+      data: { lastSeenAt: now },
+    });
+  }
   return { removed: false, deviceId };
 };

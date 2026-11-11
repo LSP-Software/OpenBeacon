@@ -51,6 +51,7 @@ const createAccount = async () => {
         platform: "android",
         name,
         icon: "phone",
+        activatedAt: new Date(),
       },
     });
   const thisPhone = await createDevice("This phone");
@@ -167,7 +168,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
       callerFor(account, { deviceId: "" }).account.removeDevice({
         deviceId: account.thisPhone.id,
       }),
-    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
 
     expect(await revokedAt(account.thisPhone.id)).toBeNull();
     expect(await sessionIds(account.userId)).toHaveLength(3);

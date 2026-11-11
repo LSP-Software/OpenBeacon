@@ -70,7 +70,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("the device heade
     expect(session.deviceId).toBe(account.deviceId);
   });
 
-  test("keeps a session's existing device", async () => {
+  test("keeps a session's existing device and ignores another one it names", async () => {
     const account = await createAccount();
     const other = await prisma.userDevice.create({
       data: {
@@ -84,10 +84,23 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("the device heade
     });
     await link(account, account.deviceId);
 
-    expect(await link(account, other.id)).toBe(other.id);
+    expect(await link(account, other.id)).toBeNull();
+    expect(await link(account, account.deviceId)).toBe(account.deviceId);
 
     const session = await prisma.session.findUniqueOrThrow({ where: { id: account.sessionId } });
     expect(session.deviceId).toBe(account.deviceId);
+
+    await prisma.userDevice.update({ where: { id: other.id }, data: { revokedAt: new Date() } });
+    expect(await link(account, other.id)).toBe("removed");
+    expect(await prisma.session.findUnique({ where: { id: account.sessionId } })).toBeNull();
+  });
+
+  test("gives the device to every request when a new session sends several at once", async () => {
+    const account = await createAccount();
+
+    expect(
+      await Promise.all([link(account, account.deviceId), link(account, account.deviceId)]),
+    ).toEqual([account.deviceId, account.deviceId]);
   });
 
   test("updates last active at most every 5 minutes", async () => {

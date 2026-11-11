@@ -11,6 +11,7 @@ import type z from "zod";
 import {
   freshSessionProcedure,
   protectedProcedure,
+  requireActiveDevice,
   sessionFreshForMs,
 } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
@@ -136,6 +137,7 @@ export const accountRecoveryRouter = createTRPCRouter({
     );
   }),
   setup: freshSessionProcedure
+    .use(requireActiveDevice)
     .input(setupAccountRecoverySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -153,6 +155,7 @@ export const accountRecoveryRouter = createTRPCRouter({
       return { historyKeyVersions: input.escrows.map(({ version }) => version) };
     }),
   changePhrase: freshSessionProcedure
+    .use(requireActiveDevice)
     .input(changeRecoveryPhraseSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;

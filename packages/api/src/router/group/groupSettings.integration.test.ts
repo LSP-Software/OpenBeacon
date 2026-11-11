@@ -34,6 +34,7 @@ const caller = (userId: string) =>
     cache,
     db: prisma,
     clientIp: "127.0.0.1",
+    deviceId: `${userId}-device`,
     session: { user: { id: userId } },
   } as Parameters<typeof router.createCaller>[0]);
 
@@ -46,6 +47,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     beforeAll(async () => {
       await prisma.user.createMany({
         data: users.map((id) => ({ id, name: id, email: `${id}@example.test` })),
+      });
+      await prisma.userDevice.createMany({
+        data: users.map((userId) => ({
+          activatedAt: new Date(),
+          icon: "phone" as const,
+          id: `${userId}-device`,
+          name: "Phone",
+          publicKey: "public-key",
+          publicKeyAlgorithm: "X25519",
+          userId,
+        })),
       });
       await prisma.group.create({
         data: {

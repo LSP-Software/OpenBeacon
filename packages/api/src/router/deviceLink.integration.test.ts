@@ -11,6 +11,8 @@ import {
   openDeviceLinkHandover,
   sealDeviceLinkHandover,
 } from "@openbeacon/encryption";
+import { holdRowLock } from "../lib/databaseLocks.testUtil.ts";
+import { linkRequestDevice } from "../lib/requestDevice.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 import { accountHistoryRouter } from "./accountHistoryRouter.ts";
 import { accountRouter } from "./accountRouter.ts";
@@ -36,7 +38,11 @@ const securityAlerts = createSecurityAlerts({
   runInBackground: (task) => alertTasks.push(task),
 });
 
-const caller = (userId: string, deviceId: string | null) =>
+const caller = (
+  userId: string,
+  deviceId: string | null,
+  sessionId = `${userId}-${deviceId}-session`,
+) =>
   router.createCaller({
     cache,
     db: prisma,
@@ -46,7 +52,7 @@ const caller = (userId: string, deviceId: string | null) =>
     securityAlerts,
     session: {
       user: { id: userId },
-      session: { id: `${userId}-${deviceId}-session`, createdAt: new Date() },
+      session: { id: sessionId, createdAt: new Date() },
     },
   } as Parameters<typeof router.createCaller>[0]);
 
@@ -158,6 +164,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(status.approverPublicKey).toBe(account.active.publicKey);
       const opened = openDeviceLinkHandover({
         approverPublicKey: status.approverPublicKey,
+        currentHistoryKeyVersion: 1,
         devicePrivateKey: account.pending.privateKey,
         linkId,
         newDeviceId: account.pending.deviceId,
@@ -290,7 +297,67 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
     });
 
-    test("removing a device deletes its links, as the new device or the approver", async () => {
+    test("a Pending device's session can't act as an active device by naming it", async () => {
+      const account = await createAccount("spoof");
+      const { linkId } = await account.pending.api.deviceLink.create();
+      const pendingSessionId = `${account.userId}-${account.pending.deviceId}-session`;
+      const named = await linkRequestDevice({
+        db: prisma,
+        deviceId: account.active.deviceId,
+        session: { id: pendingSessionId, userId: account.userId },
+      });
+      expect(named).toEqual({ removed: false, deviceId: null });
+      const spoofed = caller(
+        account.userId,
+        named.removed ? null : named.deviceId,
+        pendingSessionId,
+      );
+
+      await expect(
+        spoofed.deviceLink.approve({
+          linkId,
+          ...sealFor(account, linkId, createDeviceLinkSecret()),
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(spoofed.account.removeThisDevice()).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+      expect((await deviceState(account.pending.deviceId)).activatedAt).toBeNull();
+      expect((await deviceState(account.active.deviceId)).revokedAt).toBeNull();
+    });
+
+    test("a Pending device with a fresh session can't remove an active device", async () => {
+      const account = await createAccount("pending-remove");
+      await expect(
+        account.pending.api.account.removeDevice({ deviceId: account.active.deviceId }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect((await deviceState(account.active.deviceId)).revokedAt).toBeNull();
+    });
+
+    test("an approver removed while its approval waits can't approve", async () => {
+      const account = await createAccount("approver-removed");
+      const { linkId } = await account.pending.api.deviceLink.create();
+      const sealed = sealFor(account, linkId, createDeviceLinkSecret());
+      const lock = await holdRowLock({ db: prisma, id: account.userId, table: "User" });
+      const approval = account.active.api.deviceLink.approve({ linkId, ...sealed });
+      await lock.waitForWaiters(1);
+      await prisma.userDevice.update({
+        where: { id: account.active.deviceId },
+        data: { revokedAt: new Date() },
+      });
+      await lock.release();
+
+      await expect(approval).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect((await deviceState(account.pending.deviceId)).activatedAt).toBeNull();
+      expect(
+        await prisma.deviceLink.findUniqueOrThrow({
+          where: { id: linkId },
+          select: { completedAt: true },
+        }),
+      ).toEqual({ completedAt: null });
+    });
+
+    test("removing a device deletes its own links but keeps a handover it approved", async () => {
       const account = await createAccount("remove");
       const second = await register(account.userId, "second");
       await prisma.userDevice.update({
@@ -316,7 +383,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         }),
       });
       await account.active.api.account.removeDevice({ deviceId: second.deviceId });
-      expect(await prisma.deviceLink.count({ where: { id: approved.linkId } })).toBe(0);
+      expect(await later.api.deviceLink.status({ linkId: approved.linkId })).toMatchObject({
+        approverPublicKey: second.publicKey,
+        state: "approved",
+      });
     });
 
     test("deleting the account deletes its links", async () => {

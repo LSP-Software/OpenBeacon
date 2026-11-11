@@ -68,15 +68,31 @@ const createAccount = async () => {
   const email = `${prefix}-${accountCounter}@example.test`;
   const { user } = await auth.api.signUpEmail({ body: { email, password, name: "Alert Test" } });
   const session = await prisma.session.findFirstOrThrow({ where: { userId: user.id } });
-  const caller = appRouter.createCaller({
-    cache,
-    db: prisma,
-    emailCodes: null,
-    securityAlerts,
-    clientIp: `ip-${user.id}`,
-    session: { user: { id: user.id }, session: { id: session.id, createdAt: new Date() } },
-  } as Parameters<typeof appRouter.createCaller>[0]);
-  return { caller, email, userId: user.id };
+  const callerWith = (deviceId: string | null) =>
+    appRouter.createCaller({
+      cache,
+      db: prisma,
+      emailCodes: null,
+      securityAlerts,
+      clientIp: `ip-${user.id}`,
+      deviceId,
+      session: { user: { id: user.id }, session: { id: session.id, createdAt: new Date() } },
+    } as Parameters<typeof appRouter.createCaller>[0]);
+  const activeCaller = async () => {
+    const device = await prisma.userDevice.create({
+      data: {
+        activatedAt: new Date(),
+        icon: "phone",
+        id: `${user.id}-${crypto.randomUUID()}`,
+        name: "Phone",
+        publicKey: createDeviceKeyPair().publicKey,
+        publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
+        userId: user.id,
+      },
+    });
+    return callerWith(device.id);
+  };
+  return { activeCaller, caller: callerWith(null), email, userId: user.id };
 };
 
 const registerDevice = (
@@ -112,7 +128,10 @@ const recoveryKeyInput = (phrase: ReturnType<typeof generateRecoveryPhrase>) => 
   return { algorithm, derivationVersion, publicKey };
 };
 
-const setUpRecovery = async ({ caller, userId }: Awaited<ReturnType<typeof createAccount>>) => {
+const setUpRecovery = async ({
+  activeCaller,
+  userId,
+}: Awaited<ReturnType<typeof createAccount>>) => {
   const phrase = generateRecoveryPhrase();
   const historyKey = historyKeyInput(phrase, userId);
   await prisma.accountHistoryKey.create({
@@ -124,7 +143,9 @@ const setUpRecovery = async ({ caller, userId }: Awaited<ReturnType<typeof creat
       version: historyKey.version,
     },
   });
-  await caller.accountRecovery.setup({
+  await (
+    await activeCaller()
+  ).accountRecovery.setup({
     escrows: [{ ...historyKey.escrow, version: historyKey.version }],
     recoveryKey: recoveryKeyInput(phrase),
   });
@@ -136,7 +157,7 @@ const changePhrase = async (account: Awaited<ReturnType<typeof createAccount>>) 
   await sentAlerts();
   sent.length = 0;
   const phrase = generateRecoveryPhrase();
-  return account.caller.accountRecovery.changePhrase({
+  return (await account.activeCaller()).accountRecovery.changePhrase({
     escrows: [{ ...historyKeyInput(phrase, account.userId).escrow, version: historyKey.version }],
     recoveryKey: recoveryKeyInput(phrase),
   });
@@ -205,7 +226,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     const phrase = generateRecoveryPhrase();
 
     await expect(
-      account.caller.accountRecovery.changePhrase({
+      (await account.activeCaller()).accountRecovery.changePhrase({
         escrows: [{ ...historyKeyInput(phrase, account.userId).escrow, version: 1 }],
         recoveryKey: recoveryKeyInput(phrase),
       }),

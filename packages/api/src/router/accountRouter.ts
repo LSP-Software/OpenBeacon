@@ -25,7 +25,11 @@ import {
 } from "../lib/image-upload.ts";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
-import { freshSessionProcedure, protectedProcedure } from "../procedures/auth/runtime.ts";
+import {
+  freshSessionProcedure,
+  protectedProcedure,
+  requireActiveDevice,
+} from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
   deletionVerificationMethods: protectedProcedure.query(async ({ ctx }) => {
@@ -326,6 +330,7 @@ export const accountRouter = {
       if (updated.count === 0) throw new TRPCError({ code: "NOT_FOUND" });
     }),
   removeDevice: freshSessionProcedure
+    .use(requireActiveDevice)
     .meta({ rateLimit: { limit: 10, windowMs: 60_000 } })
     .input(removeDeviceSchema)
     .mutation(async ({ ctx, input }) => {

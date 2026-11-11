@@ -44,9 +44,7 @@ export const removeUserDevice = async ({
       });
     }
     await tx.userDevice.update({ where: { id: deviceId }, data: { revokedAt: new Date() } });
-    await tx.deviceLink.deleteMany({
-      where: { OR: [{ deviceId }, { approverDeviceId: deviceId }] },
-    });
+    await tx.deviceLink.deleteMany({ where: { deviceId } });
     await tx.session.deleteMany({
       where: {
         userId,

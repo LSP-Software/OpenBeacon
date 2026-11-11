@@ -31,7 +31,7 @@ export const groupMemberProcedure = protectedProcedure
 
 export const activeGroupMemberProcedure = groupMemberProcedure.use(requireActiveDevice);
 
-export const groupAdminProcedure = groupMemberProcedure.use(async ({ ctx, next }) => {
+export const groupAdminProcedure = activeGroupMemberProcedure.use(async ({ ctx, next }) => {
   if (ctx.groupMember.role !== GroupRole.OWNER && ctx.groupMember.role !== GroupRole.ADMIN) {
     throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
   }
@@ -41,7 +41,7 @@ export const groupAdminProcedure = groupMemberProcedure.use(async ({ ctx, next }
   });
 });
 
-export const groupOwnerProcedure = groupMemberProcedure.use(async ({ ctx, next }) => {
+export const groupOwnerProcedure = activeGroupMemberProcedure.use(async ({ ctx, next }) => {
   if (ctx.groupMember.role !== GroupRole.OWNER) {
     throw new TRPCError({ code: "FORBIDDEN", message: "You are not the owner of this group" });
   }

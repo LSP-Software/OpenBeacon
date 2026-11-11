@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@openbeacon/database";
 import { approveDeviceLinkSchema, deviceLinkIdSchema } from "@openbeacon/schemas";
 import { TRPCError } from "@trpc/server";
-import { activateDevice } from "../lib/deviceActivation.ts";
+import { activateDevice, devicePendingError } from "../lib/deviceActivation.ts";
 import { removeUserDevice } from "../lib/removeDevice.ts";
 import { activeDeviceProcedure, thisDeviceProcedure } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
@@ -111,6 +111,11 @@ export const deviceLinkRouter = createTRPCRouter({
       const userId = ctx.session.user.id;
       return ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
+        const approver = await tx.userDevice.findFirst({
+          select: { id: true },
+          where: { id: ctx.deviceId, userId, activatedAt: { not: null }, revokedAt: null },
+        });
+        if (!approver) throw devicePendingError();
         const device = await findOpenLink({ db: tx, linkId: input.linkId, userId });
         await tx.deviceLink.update({
           where: { id: input.linkId },

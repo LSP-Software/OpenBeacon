@@ -75,6 +75,11 @@ export const deviceRouter = createTRPCRouter({
       const deviceId = ctx.deviceId;
       const answer = await tryCatch(Promise.resolve().then(() => decodeBase64(input.answer)));
       const identifier = challengeIdentifier(deviceId);
+      const alreadyActive = await ctx.db.userDevice.findFirst({
+        select: { id: true },
+        where: { id: deviceId, userId, activatedAt: { not: null }, revokedAt: null },
+      });
+      if (alreadyActive) return { activated: true };
       const stored = await ctx.db.verification.findFirst({
         select: { expiresAt: true, value: true },
         where: { identifier },

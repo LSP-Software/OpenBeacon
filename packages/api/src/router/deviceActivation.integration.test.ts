@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
   createHistoryKeyPair,
+  createInitialGroupEpoch,
   deriveRecoveryKeyPair,
   encodeBase64,
   generateRecoveryPhrase,
@@ -16,12 +18,16 @@ import { accountHistoryRouter } from "./accountHistoryRouter.ts";
 import { accountRecoveryRouter } from "./accountRecoveryRouter.ts";
 import { authRouter } from "./authRouter.ts";
 import { deviceRouter } from "./deviceRouter.ts";
+import { groupInvitesRouter } from "./group/groupInvitesRouter.ts";
+import { groupLifecycleRouter } from "./group/groupLifecycleRouter.ts";
 
 const router = createTRPCRouter({
   accountHistory: accountHistoryRouter,
   accountRecovery: accountRecoveryRouter,
   auth: authRouter,
   device: deviceRouter,
+  groupInvites: groupInvitesRouter,
+  groupLifecycle: groupLifecycleRouter,
 });
 const cache = createIntegrationTestCache(() => 0);
 const prefix = `device-activation-${crypto.randomUUID()}`;
@@ -181,6 +187,62 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await rotationRequired(account.groupId)).toBe(true);
     });
 
+    test("activating again after a lost response says the phone is active", async () => {
+      const account = await createAccount("retry");
+      const opened = await answer(account, account.historyPrivateKey);
+      await account.pending.device.activate({ answer: opened });
+      const activated = await deviceState(account.pendingDeviceId);
+
+      expect(await account.pending.device.activate({ answer: opened })).toEqual({
+        activated: true,
+      });
+      expect(await deviceState(account.pendingDeviceId)).toEqual(activated);
+    });
+
+    test("a Pending device can't run group admin or owner actions or set up a phrase", async () => {
+      const account = await createAccount("pending-admin");
+      const devicePending = { code: "FORBIDDEN", message: expect.stringContaining("Set up") };
+
+      await expect(
+        account.pending.groupInvites.sharedStatuses({
+          groupId: account.groupId,
+          inviteIds: ["invite"],
+        }),
+      ).rejects.toMatchObject(devicePending);
+      await expect(
+        account.pending.groupLifecycle.delete({ groupId: account.groupId }),
+      ).rejects.toMatchObject(devicePending);
+      expect(await prisma.group.count({ where: { id: account.groupId } })).toBe(1);
+
+      const phrase = generateRecoveryPhrase();
+      const recoveryKey = deriveRecoveryKeyPair(phrase);
+      const input = {
+        escrows: [
+          {
+            ...sealHistoryKeyEscrow({
+              historyPrivateKey: account.historyPrivateKey,
+              recoveryPrivateKey: recoveryKey.privateKey,
+              userId: account.userId,
+              version: 1,
+            }),
+            version: 1,
+          },
+        ],
+        recoveryKey: {
+          algorithm: recoveryKey.algorithm,
+          derivationVersion: recoveryKey.derivationVersion,
+          publicKey: recoveryKey.publicKey,
+        },
+      };
+      await expect(account.pending.accountRecovery.setup(input)).rejects.toMatchObject(
+        devicePending,
+      );
+      await expect(account.pending.accountRecovery.changePhrase(input)).rejects.toMatchObject(
+        devicePending,
+      );
+      expect(await prisma.recoveryKey.count({ where: { userId: account.userId } })).toBe(0);
+    });
+
     test("an expired challenge fails", async () => {
       const account = await createAccount("expired");
       const opened = await answer(account, account.historyPrivateKey);
@@ -219,6 +281,73 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(account.pending.device.activationChallenge()).rejects.toMatchObject({
         code: "NOT_FOUND",
       });
+    });
+
+    test("a Pending device can't create or join a group", async () => {
+      const host = await createAccount("join-host");
+      const account = await createAccount("joiner");
+      const devicePending = { code: "FORBIDDEN", message: expect.stringContaining("Set up") };
+      const newGroupId = crypto.randomUUID();
+      const keyPair = createDeviceKeyPair();
+      const epoch = createInitialGroupEpoch({
+        creator: { deviceId: account.pendingDeviceId, privateKey: keyPair.privateKey },
+        groupId: newGroupId,
+        recipients: [
+          {
+            algorithm: "X25519",
+            createdAt: new Date(),
+            deviceId: account.pendingDeviceId,
+            publicKey: keyPair.publicKey,
+            revokedAt: null,
+            userId: account.userId,
+          },
+        ],
+      });
+      const nextEpoch = {
+        createdByDeviceId: epoch.epoch.createdByDeviceId,
+        epochId: epoch.epoch.epochId,
+        epochNumber: epoch.epoch.epochNumber,
+        historyKeys: [],
+        recipientKeys: epoch.wrappedKeys,
+      };
+      const invite = await prisma.groupMemberInvite.create({
+        data: {
+          groupId: host.groupId,
+          inviterId: host.userId,
+          recipientId: account.userId,
+          role: "MEMBER",
+        },
+      });
+      const code = "A".repeat(32);
+      await prisma.groupSharedInvite.create({
+        data: {
+          codeHash: createHash("sha256").update(code).digest("hex"),
+          creatorId: host.userId,
+          expiresAt: new Date(Date.now() + 60_000),
+          groupId: host.groupId,
+        },
+      });
+
+      await expect(
+        account.pending.groupLifecycle.create({
+          groupId: newGroupId,
+          initialEpoch: nextEpoch,
+          name: "Mine",
+        }),
+      ).rejects.toMatchObject(devicePending);
+      await expect(
+        account.pending.groupInvites.accept({ inviteId: invite.id, nextEpoch }),
+      ).rejects.toMatchObject(devicePending);
+      await expect(
+        account.pending.groupInvites.acceptShared({ code, nextEpoch }),
+      ).rejects.toMatchObject(devicePending);
+
+      expect(await prisma.group.count({ where: { id: newGroupId } })).toBe(0);
+      expect(await prisma.groupMember.count({ where: { userId: account.userId } })).toBe(1);
+      expect(await prisma.groupMemberInvite.count({ where: { id: invite.id } })).toBe(1);
+      expect(
+        await prisma.groupSharedInvite.count({ where: { groupId: host.groupId, usedAt: null } }),
+      ).toBe(1);
     });
 
     test("a reset with no phrase set up activates the Pending device that calls it", async () => {

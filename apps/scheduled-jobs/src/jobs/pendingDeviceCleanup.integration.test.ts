@@ -20,6 +20,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
         { name: "newPending", createdAt: ago(6), activatedAt: null },
         { name: "oldActive", createdAt: ago(30), activatedAt: ago(30) },
         { name: "oldRemoved", createdAt: ago(30), activatedAt: null, revokedAt: ago(1) },
+        { name: "recentlyLinked", createdAt: ago(3), activatedAt: ago(2) },
+        { name: "longAgoLinked", createdAt: ago(10), activatedAt: ago(9) },
       ].map((device) => ({
         ...device,
         id: `${prefix}-${device.name}`,
@@ -42,7 +44,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
       data: [
         { name: "newPending", expiresAt: new Date(clock.now.getTime() - 2 * day) },
         { name: "oldActive", expiresAt: new Date(clock.now.getTime() - 60_000) },
-      ].map(({ expiresAt, name }) => ({
+        { name: "recentlyLinked", expiresAt: ago(2), completedAt: ago(2) },
+        { name: "longAgoLinked", expiresAt: ago(9), completedAt: ago(9) },
+      ].map(({ expiresAt, name, ...link }) => ({
+        ...link,
         deviceId: `${prefix}-${name}`,
         expiresAt,
         id: `${prefix}-${name}-link`,
@@ -63,13 +68,26 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
       select: { name: true },
       orderBy: { name: "asc" },
     });
-    expect(devices.map(({ name }) => name)).toEqual(["newPending", "oldActive", "oldRemoved"]);
+    expect(devices.map(({ name }) => name)).toEqual([
+      "longAgoLinked",
+      "newPending",
+      "oldActive",
+      "oldRemoved",
+      "recentlyLinked",
+    ]);
     const sessions = await prisma.session.findMany({ where: { userId }, select: { id: true } });
     expect(sessions.map(({ id }) => id)).toEqual([`${prefix}-newPending-session`]);
   });
 
-  test("deletes device links that expired more than a day ago", async () => {
-    const links = await prisma.deviceLink.findMany({ where: { userId }, select: { id: true } });
-    expect(links.map(({ id }) => id)).toEqual([`${prefix}-oldActive-link`]);
+  test("deletes open links a day after they expire and completed ones after 7 days", async () => {
+    const links = await prisma.deviceLink.findMany({
+      where: { userId },
+      select: { id: true },
+      orderBy: { id: "asc" },
+    });
+    expect(links.map(({ id }) => id)).toEqual([
+      `${prefix}-oldActive-link`,
+      `${prefix}-recentlyLinked-link`,
+    ]);
   });
 });

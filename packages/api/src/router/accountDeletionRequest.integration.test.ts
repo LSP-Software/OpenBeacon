@@ -78,7 +78,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       const inviteeId = `${userId}-invitee`;
       await prisma.user.create({
-        data: { id: inviteeId, name: "Invitee", email: `${inviteeId}@example.test` },
+        data: {
+          id: inviteeId,
+          name: "Invitee",
+          email: `${inviteeId}@example.test`,
+          devices: {
+            create: {
+              activatedAt: new Date(),
+              icon: "phone",
+              id: `${inviteeId}-device`,
+              name: "Phone",
+              publicKey: "public-key",
+              publicKeyAlgorithm: "X25519",
+            },
+          },
+        },
       });
       const invite = await prisma.groupMemberInvite.create({
         data: { inviterId: userId, recipientId: inviteeId, groupId: soloGroup.id, role: "MEMBER" },
@@ -102,6 +116,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         cache,
         db: prisma,
         clientIp: "127.0.0.1",
+        deviceId: `${inviteeId}-device`,
         session: {
           user: { id: inviteeId, email: `${inviteeId}@example.test` },
           session: { id: "invitee-session" },
@@ -263,6 +278,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       const id = account.user.id;
       const session = await prisma.session.findFirstOrThrow({ where: { userId: id } });
+      const device = await prisma.userDevice.create({
+        data: {
+          activatedAt: new Date(),
+          icon: "phone",
+          id: `${id}-device`,
+          name: "Phone",
+          publicKey: "public-key",
+          publicKeyAlgorithm: "X25519",
+          userId: id,
+        },
+      });
       const groupId = `group-${crypto.randomUUID()}`;
       let unlock: () => void = () => {};
       let locked: () => void = () => {};
@@ -288,6 +314,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           cache,
           db: prisma,
           clientIp: "127.0.0.1",
+          deviceId: device.id,
           session: { user: { id, email: accountEmail }, session: { id: session.id } },
         } as Parameters<typeof appRouter.createCaller>[0]);
         const creation = caller.groupLifecycle.create({
@@ -313,7 +340,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         });
         unlock();
         await deletion;
-        await expect(creation).rejects.toThrow();
+        await expect(creation).rejects.toMatchObject({ code: "UNAUTHORIZED" });
         expect(await prisma.group.findUnique({ where: { id: groupId } })).toBeNull();
       } finally {
         unlock();
