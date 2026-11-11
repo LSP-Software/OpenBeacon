@@ -22,6 +22,7 @@ const vectors = JSON.parse(
   approverPublicKeyBase64: string;
   ciphertextBase64: string;
   code: string;
+  currentHistoryKeyVersion: number;
   encBase64: string;
   ephemeralPrivateKeyHex: string;
   historyKeys: { privateKeyHex: string; publicKeyBase64: string; version: number }[];
@@ -91,6 +92,7 @@ describe("device link v1 vectors", () => {
   test("the new device opens the vector handover", () => {
     const opened = openDeviceLinkHandover({
       approverPublicKey: vectors.approverPublicKeyBase64,
+      currentHistoryKeyVersion: vectors.currentHistoryKeyVersion,
       devicePrivateKey: new DevicePrivateKeyMaterial(hexToBytes(vectors.newDevicePrivateKeyHex)),
       linkId: vectors.linkId,
       newDeviceId: vectors.newDeviceId,

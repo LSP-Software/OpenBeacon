@@ -5,6 +5,7 @@ import {
   createHistoryKeyPair,
   formatDeviceLinkCode,
   type HistoryPrivateKeyMaterial,
+  sealDeviceLinkHandover,
 } from "@openbeacon/encryption";
 
 const linkId = "8d3c1f57-6f0e-4f43-9a51-6f41b8f0a2d1";
@@ -129,6 +130,65 @@ describe("device link on the phones", () => {
       APPROVER_MISSING_HISTORY_KEY_MESSAGE,
     );
     expect(approved).toBeNull();
+  });
+
+  test("the scanning phone refuses to share a stored key that doesn't match the published History key", async () => {
+    const olderKey = createHistoryKeyPair();
+    publishedHistoryKeys = [
+      { publicKey: olderKey.publicKey, version: 1 },
+      { publicKey: historyKey.publicKey, version: 2 },
+    ];
+    heldKeys = new Map([
+      [1, olderKey.privateKey],
+      [2, createHistoryKeyPair().privateKey],
+    ]);
+
+    await expect(approveDeviceLink(await lookUpDeviceLink(code))).rejects.toThrow(
+      APPROVER_MISSING_HISTORY_KEY_MESSAGE,
+    );
+    expect(approved).toBeNull();
+  });
+
+  test("the scanning phone leaves out an older stored key that doesn't match its published key", async () => {
+    publishedHistoryKeys = [
+      { publicKey: createHistoryKeyPair().publicKey, version: 1 },
+      { publicKey: historyKey.publicKey, version: 2 },
+    ];
+    heldKeys = new Map([
+      [1, createHistoryKeyPair().privateKey],
+      [2, historyKey.privateKey],
+    ]);
+    await approveDeviceLink(await lookUpDeviceLink(code));
+    if (!approved) throw new Error("Nothing was approved.");
+    thisDevice = { ...newDevice, deviceId: "device-new", userId: "user-1" };
+
+    await finishDeviceLink({ ...approved, approverPublicKey: approver.publicKey, psk });
+
+    expect(stored).toEqual([{ userId: "user-1", version: 2 }]);
+  });
+
+  test("the new phone rejects a handover without the current History key", async () => {
+    const olderKey = createHistoryKeyPair();
+    publishedHistoryKeys = [
+      { publicKey: olderKey.publicKey, version: 1 },
+      { publicKey: historyKey.publicKey, version: 2 },
+    ];
+    thisDevice = { ...newDevice, deviceId: "device-new", userId: "user-1" };
+    const sealed = sealDeviceLinkHandover({
+      approverPrivateKey: approver.privateKey,
+      historyKeys: [{ privateKey: olderKey.privateKey, version: 1 }],
+      linkId,
+      newDeviceId: "device-new",
+      newDevicePublicKey: newDevice.publicKey,
+      psk,
+      userId: "user-1",
+    });
+
+    await expect(
+      finishDeviceLink({ ...sealed, approverPublicKey: approver.publicKey, linkId, psk }),
+    ).rejects.toThrow(HANDOVER_REJECTED_MESSAGE);
+    expect(stored).toEqual([]);
+    expect(activeDevices).toEqual([]);
   });
 
   test("the new phone rejects a key that doesn't match the published History public key", async () => {

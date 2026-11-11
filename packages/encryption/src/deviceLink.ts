@@ -63,10 +63,10 @@ export const formatDeviceLinkCode = ({
 
 export const parseDeviceLinkCode = (code: string) => {
   const match =
-    /^openbeacon-link:1:([A-Za-z0-9_-]{1,64}):([A-Za-z0-9_-]{43}):([A-Za-z0-9_-]{43})$/.exec(
+    /^openbeacon-link:1:([0-9A-Fa-f-]{36}):([A-Za-z0-9_-]{43}):([A-Za-z0-9_-]{43})$/.exec(
       code.trim(),
     );
-  if (!match?.[1] || !match[2] || !match[3]) return null;
+  if (!match?.[1] || !match[2] || !match[3] || !z.uuid().safeParse(match[1]).success) return null;
   return {
     devicePublicKey: encodeBase64(decodeBase64Url(match[2])),
     linkId: match[1],
@@ -118,6 +118,7 @@ export const sealDeviceLinkHandover = ({
 
 export const openDeviceLinkHandover = ({
   approverPublicKey,
+  currentHistoryKeyVersion,
   devicePrivateKey,
   linkId,
   newDeviceId,
@@ -127,6 +128,7 @@ export const openDeviceLinkHandover = ({
   userId,
 }: {
   approverPublicKey: string;
+  currentHistoryKeyVersion: number;
   devicePrivateKey: DevicePrivateKeyMaterial;
   linkId: string;
   newDeviceId: string;
@@ -149,6 +151,9 @@ export const openDeviceLinkHandover = ({
   const versions = new Set(handover.historyKeys.map(({ version }) => version));
   if (versions.size !== handover.historyKeys.length) {
     throw new Error("The handover repeats a History key version.");
+  }
+  if (!versions.has(currentHistoryKeyVersion)) {
+    throw new Error("The handover is missing the current History key.");
   }
   return handover.historyKeys.map(({ privateKey, version }) => {
     const key = new HistoryPrivateKeyMaterial(ensureKeyLength(decodeBase64(privateKey)));

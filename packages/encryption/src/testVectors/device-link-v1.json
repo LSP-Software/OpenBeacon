@@ -2,9 +2,9 @@
   "version": 1,
   "description": "Device link (QR) handover vectors for OPE-293. HPKE AuthPSK, DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, ChaCha20-Poly1305. Changing any output breaks linking between app versions.",
   "userId": "user_vector_1",
-  "linkId": "link_vector_1",
+  "linkId": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
   "newDeviceId": "device_vector_new",
-  "infoJson": "[\"openbeacon.device-link.v1\",\"user_vector_1\",\"link_vector_1\",\"device_vector_new\"]",
+  "infoJson": "[\"openbeacon.device-link.v1\",\"user_vector_1\",\"6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b\",\"device_vector_new\"]",
   "pskId": "openbeacon.device-link.v1",
   "pskHex": "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
   "approverPrivateKeyHex": "1011111111111111111111111111111111111111111111111111111111111151",
@@ -12,6 +12,7 @@
   "newDevicePrivateKeyHex": "2022222222222222222222222222222222222222222222222222222222222262",
   "newDevicePublicKeyBase64": "D6poTtKIZ7l/Smot7l34zpdOdrcBjj8iocTPJnhXDyA=",
   "ephemeralPrivateKeyHex": "3033333333333333333333333333333333333333333333333333333333333373",
+  "currentHistoryKeyVersion": 2,
   "historyKeys": [
     {
       "version": 1,
@@ -25,7 +26,7 @@
     }
   ],
   "plaintextJson": "{\"historyKeys\":[{\"privateKey\":\"QERERERERERERERERERERERERERERERERERERERERFQ=\",\"version\":1},{\"privateKey\":\"UFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVWU=\",\"version\":2}],\"v\":1}",
-  "code": "openbeacon-link:1:link_vector_1:D6poTtKIZ7l_Smot7l34zpdOdrcBjj8iocTPJnhXDyA:gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp8",
+  "code": "openbeacon-link:1:6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b:D6poTtKIZ7l_Smot7l34zpdOdrcBjj8iocTPJnhXDyA:gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp8",
   "encBase64": "ew1H2TQn+DERYHgcfHM/2J+IlwrvSQ2KoO4ZpMuKGxQ=",
-  "ciphertextBase64": "mxdhm4wB0CM357T4YPh+Y8NL3nMjT7re8qA5jPzis+rVa3ShK7gvPCpFf7sU9FfBNfQo5POPfDC78nuJzpgOo4Ux3fyZUr71mn1O8ZjT2VtxzMboRlESmc1ejD7xRgnsmi6Wf99tx9Tq9/O1el3Z2vm0Sbhy6YiA0fipnVX228No7+/8yYBXqJ2kQutkBpJ469wE+3I6WVlF99tP/wXj/tGTc9dD88/9ajGJaJZMuybv4Nzu3dGZZWgD+w=="
+  "ciphertextBase64": "+qwbWkX4xWQpdYmRa3CbbJ8Tk83Vz0WjA4lYpmIuFen4kZuMQV0Po8MwupABzy/Ie32LqAc31Wbn7LDim+lQ3P3eWX5XEjfjffIhliXUYaJXJnRJqQczWcJHMrnOGcoz+clmluaOngzg3ccxFSAH/bWjjzu8Ikg3Tro5KEDChfEN+oV+4Evp2GBZJZ+/xSP+yTcATCExkkLr/ajevwamzruZpJH72oIVIWZo+6eluIYbhKHKfpGlYe68LA=="
 }

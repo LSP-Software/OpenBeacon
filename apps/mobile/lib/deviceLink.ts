@@ -1,4 +1,5 @@
 import {
+  getHistoryPublicKey,
   openDeviceLinkHandover,
   parseDeviceLinkCode,
   sealDeviceLinkHandover,
@@ -36,9 +37,11 @@ export const approveDeviceLink = async ({
   const status = await trpcClient.accountRecovery.status.query();
   const historyKeys = (
     await Promise.all(
-      status.historyKeys.map(async ({ version }) => {
+      status.historyKeys.map(async ({ publicKey, version }) => {
         const privateKey = await getStoredHistoryKey({ userId: approver.userId, version });
-        return privateKey ? [{ privateKey, version }] : [];
+        return privateKey && getHistoryPublicKey(privateKey) === publicKey
+          ? [{ privateKey, version }]
+          : [];
       }),
     )
   ).flat();
@@ -73,10 +76,13 @@ export const finishDeviceLink = async ({
 }) => {
   const device = await ensureDeviceKeyRegistration();
   const status = await trpcClient.accountRecovery.status.query();
+  const currentHistoryKeyVersion = status.currentHistoryKey?.version;
+  if (currentHistoryKeyVersion === undefined) throw new Error(HANDOVER_REJECTED_MESSAGE);
   const opened = await tryCatch(
     Promise.resolve().then(() =>
       openDeviceLinkHandover({
         approverPublicKey,
+        currentHistoryKeyVersion,
         devicePrivateKey: device.privateKey,
         linkId,
         newDeviceId: device.deviceId,
