@@ -12,13 +12,19 @@ let createError: Error | null = null;
 let statusError: Error | null = null;
 let serverHistoryKey: { publicKey: string; version: number } | null = null;
 let recoveryKey: object | null = null;
+let createGate: Promise<void> | null = null;
+let creates = 0;
 
 mock.module("./api.ts", () => ({
   trpcClient: {
     accountHistory: {
       create: {
-        mutate: async () => {
+        mutate: async ({ publicKey }: { publicKey: string }) => {
+          creates += 1;
+          await createGate;
           if (createError) throw createError;
+          if (serverHistoryKey) throw new Error("CONFLICT");
+          serverHistoryKey = { publicKey, version: 1 };
           return {};
         },
       },
@@ -71,6 +77,23 @@ describe("creating the first History key", () => {
     statusError = null;
     serverHistoryKey = null;
     recoveryKey = null;
+    createGate = null;
+    creates = 0;
+  });
+
+  test("two overlapping creates on one phone publish one key and keep it", async () => {
+    let release = () => {};
+    createGate = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    const both = Promise.allSettled([createHistoryKey(userId), createHistoryKey(userId)]);
+    for (let index = 0; index < 50; index++) await Promise.resolve();
+    release();
+    await both;
+
+    expect(creates).toBe(1);
+    expect(storedPublicKey()).toBe(serverHistoryKey?.publicKey ?? "none");
   });
 
   test("keeps the key when neither the create nor the status check answers, since the create may have saved it", async () => {

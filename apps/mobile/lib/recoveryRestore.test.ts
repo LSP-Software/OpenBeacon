@@ -192,6 +192,8 @@ mock.module("./storage.ts", () => ({
   },
 }));
 
+mock.module("./savedDeviceLink.ts", () => ({ deleteSavedDeviceLink: async () => {} }));
+
 mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async (input: { userId: string; version: number }) =>
     phone.secureStore.get(`${input.userId}.${input.version}`) ?? null,

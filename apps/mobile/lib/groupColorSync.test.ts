@@ -37,6 +37,7 @@ mock.module("./deviceKeys.ts", () => ({
 mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async () => historyKey.privateKey,
   storeHistoryKey: async () => {},
+  deleteStoredHistoryKeys: async () => {},
 }));
 mock.module("./api.ts", () => ({
   trpcClient: {

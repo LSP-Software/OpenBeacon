@@ -240,6 +240,8 @@ mock.module("./storage.ts", () => ({
   },
 }));
 
+mock.module("./savedDeviceLink.ts", () => ({ deleteSavedDeviceLink: async () => {} }));
+
 mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async (input: { userId: string; version: number }) => {
     if (input.version === failingReadVersion) throw new Error("SecureStore unavailable");

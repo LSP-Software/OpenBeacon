@@ -2,7 +2,12 @@ import { tryCatch } from "@openbeacon/shared";
 import { router } from "expo-router";
 import { queryClient, trpc, trpcClient } from "./api.ts";
 import { authClient } from "./auth-client.ts";
-import { cancelDeviceKeyRegistrations, deleteDeviceKey, getStoredDeviceId } from "./deviceKeys.ts";
+import {
+  deleteDeviceKey,
+  forgetDeviceKeyRegistration,
+  getStoredDeviceId,
+  stopDeviceKeyRegistrations,
+} from "./deviceKeys.ts";
 import { clearGroupColors } from "./groupColor.ts";
 import { deleteStoredHistoryKeys } from "./historyKeys.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
@@ -12,7 +17,7 @@ import { clearTrackingUploadTimes } from "./trackingUploadTime.ts";
 
 export const wipeThisPhone = async () => {
   const registered = await readRegisteredDevice();
-  cancelDeviceKeyRegistrations();
+  stopDeviceKeyRegistrations();
   const userId =
     registered?.userId ?? (await tryCatch(trpcClient.auth.deviceKeyContext.query())).data?.userId;
   const deviceId = registered?.deviceId ?? (userId ? getStoredDeviceId(userId) : undefined);
@@ -21,7 +26,7 @@ export const wipeThisPhone = async () => {
     queryClient.getQueryData(trpc.accountRecovery.status.queryKey())?.currentHistoryKey?.version ??
     0;
   const tracking = await import("./tracking.ts");
-  await tryCatch(tracking.revokeTrackingAccess());
+  await tryCatch(tracking.revokeTrackingAccess({ keepDeviceRegistration: true }));
   if (userId) {
     await tryCatch(tracking.deleteQueuedTrackingPoints({ deviceId, userId }));
     await tryCatch(
@@ -30,6 +35,7 @@ export const wipeThisPhone = async () => {
     if (deviceId) await tryCatch(deleteSavedDeviceLink({ deviceId, userId }));
     await tryCatch(deleteDeviceKey(userId));
   }
+  forgetDeviceKeyRegistration();
   queryClient.clear();
   clearGroupColors();
   clearTrackingUploadTimes();

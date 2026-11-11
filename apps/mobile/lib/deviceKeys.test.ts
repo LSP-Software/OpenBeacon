@@ -170,6 +170,26 @@ describe("device key registration", () => {
     expect(registerDeviceKeyMock).toHaveBeenCalledTimes(1);
   });
 
+  test("signing in again over a leftover registration links the new session to this phone", async () => {
+    const device = await (await importDeviceKeysModule()).ensureDeviceKeyRegistration();
+    const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
+
+    await ensureDeviceKeyRegistration({ checkOwner: true });
+
+    expect(sessionChallengeMock).toHaveBeenCalledWith({ deviceId: device.deviceId });
+    expect(registerDeviceKeyMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("a failed link over a leftover registration fails the owner check", async () => {
+    await (await importDeviceKeysModule()).ensureDeviceKeyRegistration();
+    const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
+    sessionChallengeMock.mockImplementationOnce(async () => {
+      throw new Error("offline");
+    });
+
+    await expect(ensureDeviceKeyRegistration({ checkOwner: true })).rejects.toThrow("offline");
+  });
+
   test("registers again after a cancel or a forget", async () => {
     const {
       cancelDeviceKeyRegistrations,
@@ -283,9 +303,9 @@ describe("device key registration", () => {
   });
 
   test("concurrent initialization creates one device identity", async () => {
-    const { getOrCreateDeviceKeyContext } = await importDeviceKeysModule();
+    const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
     const contexts = await Promise.all(
-      Array.from({ length: 5 }, () => getOrCreateDeviceKeyContext("user-a")),
+      Array.from({ length: 5 }, () => ensureDeviceKeyRegistration()),
     );
     expect(new Set(contexts.map((context) => context.deviceId)).size).toBe(1);
     expect(setItemAsyncMock).toHaveBeenCalledTimes(1);
@@ -323,12 +343,11 @@ describe("device key registration", () => {
   });
 
   test("a cancelled registration cannot block or clear a later registration for the same account", async () => {
-    const {
-      cancelDeviceKeyRegistrations,
-      ensureDeviceKeyRegistration,
-      getOrCreateDeviceKeyContext,
-    } = await importDeviceKeysModule();
-    const original = await getOrCreateDeviceKeyContext("user-a");
+    const { cancelDeviceKeyRegistrations, ensureDeviceKeyRegistration } =
+      await importDeviceKeysModule();
+    const original = await ensureDeviceKeyRegistration();
+    cancelDeviceKeyRegistrations();
+    registerDeviceKeyMock.mockClear();
     const privateKey = secureStoreValues.get("encryption.device.privateKey.user-a");
     let rejectOld: (error: Error) => void = () => {};
     let releaseNew: () => void = () => {};
@@ -464,9 +483,9 @@ describe("device key registration", () => {
   test("rolls back scoped storage when secure store persistence fails", async () => {
     secureStoreSetError = new Error("secure store failed");
 
-    const { getOrCreateDeviceKeyContext } = await importDeviceKeysModule();
+    const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
 
-    await expect(getOrCreateDeviceKeyContext("user-a")).rejects.toThrow("secure store failed");
+    await expect(ensureDeviceKeyRegistration()).rejects.toThrow("secure store failed");
     expect(storageValues.get("encryption.device.id.user-a")).toBeUndefined();
     expect(storageValues.get("encryption.device.publicKey.user-a")).toBeUndefined();
     expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(false);
@@ -476,12 +495,10 @@ describe("device key registration", () => {
     );
   });
 
-  test("a phone refused because it was removed deletes its keys, so the next sign-in registers a new device", async () => {
+  test("a phone refused because it was removed keeps its keys for the wipe to find", async () => {
     const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
     const removed = await ensureDeviceKeyRegistration();
     secureStoreValues.set("encryption.history.user-a.1", "history-key-1");
-    secureStoreValues.set("encryption.history.user-a.2", "history-key-2");
-    storageValues.set(`encryption.device.active.${removed.deviceId}`, "true");
     registerDeviceKeyMock.mockImplementationOnce(async () => {
       throw new TRPCClientError("This device was removed.", {
         result: {
@@ -498,15 +515,10 @@ describe("device key registration", () => {
     storageValues.delete("encryption.device.registered");
     await expect(registerAfterRestart()).rejects.toBeInstanceOf(TRPCClientError);
 
-    expect(storageValues.get("encryption.device.id.user-a")).toBeUndefined();
-    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(false);
-    expect(secureStoreValues.has("encryption.history.user-a.1")).toBe(false);
-    expect(secureStoreValues.has("encryption.history.user-a.2")).toBe(false);
-    expect(storageValues.has(`encryption.device.active.${removed.deviceId}`)).toBe(false);
-
-    const replacement = await registerAfterRestart();
-    expect(replacement.deviceId).not.toBe(removed.deviceId);
-    expect(replacement.publicKey).not.toBe(removed.publicKey);
+    expect(storageValues.get("encryption.device.id.user-a")).toBe(removed.deviceId);
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(true);
+    expect(secureStoreValues.has("encryption.history.user-a.1")).toBe(true);
+    expect(deleteItemAsyncMock).not.toHaveBeenCalled();
   });
 
   test("a registration that fails for another reason keeps this phone's keys", async () => {

@@ -18,6 +18,7 @@ import { createHistoryKey, KEY_NOT_SAVED_MESSAGE } from "./createHistoryKey.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { type EpochKeyDevice, unwrapDeviceWrap } from "./epochKeys.ts";
 import { getStoredHistoryKey, storeHistoryKey } from "./historyKeys.ts";
+import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
 
 export const pickConfirmationIndexes = () => {
   const indexes = new Set<number>();
@@ -45,6 +46,9 @@ export const confirmsRecoveryPhrase = ({
 
 const hasTrpcCode = (error: unknown, code: string) =>
   error instanceof TRPCClientError && error.data?.code === code;
+
+const needsFreshSignIn = (error: unknown) =>
+  error instanceof TRPCClientError && error.data?.code === "FORBIDDEN" && !error.data.cause;
 
 const recoveryKeyInput = (recoveryKey: ReturnType<typeof deriveRecoveryKeyPair>) =>
   ({
@@ -146,7 +150,7 @@ export const setUpRecoveryPhrase = async (phrase: RecoveryPhrase) => {
       recoveryKey: recoveryKeyInput(recoveryKey),
     }),
   );
-  if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };
+  if (needsFreshSignIn(result.error)) return { status: "reauthenticate" as const };
   if (hasTrpcCode(result.error, "CONFLICT")) {
     const latest = await trpcClient.accountRecovery.status.query();
     if (!latest.recoveryKey) throw new Error(RECOVERY_CHANGED_MESSAGE);
@@ -280,7 +284,7 @@ export const changeRecoveryPhrase = async (phrase: RecoveryPhrase) => {
       recoveryKey: recoveryKeyInput(recoveryKey),
     }),
   );
-  if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };
+  if (needsFreshSignIn(result.error)) return { status: "reauthenticate" as const };
   if (hasTrpcCode(result.error, "CONFLICT") || hasTrpcCode(result.error, "NOT_FOUND")) {
     throw new Error(RECOVERY_CHANGED_MESSAGE);
   }
@@ -290,14 +294,14 @@ export const changeRecoveryPhrase = async (phrase: RecoveryPhrase) => {
 
 export const requestRecoveryResetCode = async () => {
   const result = await tryCatch(trpcClient.accountRecovery.requestResetCode.mutate());
-  if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };
+  if (needsFreshSignIn(result.error)) return { status: "reauthenticate" as const };
   if (result.error) throw result.error;
   return { email: result.data.email, status: "sent" as const };
 };
 
 export const verifyRecoveryResetCode = async (code: string) => {
   const result = await tryCatch(trpcClient.accountRecovery.verifyResetCode.mutate({ code }));
-  if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };
+  if (needsFreshSignIn(result.error)) return { status: "reauthenticate" as const };
   if (hasTrpcCode(result.error, "BAD_REQUEST")) return { status: "invalidCode" as const };
   if (result.error) throw result.error;
   return { resetToken: result.data.resetToken, status: "verified" as const };
@@ -315,6 +319,7 @@ export const resetRecoveryPhrase = async (phrase: RecoveryPhrase, resetToken?: s
   if (status.recoveryKey?.publicKey === input.recoveryKey.publicKey) {
     const restored = await tryCatch(restoreFromRecoveryPhrase(phrase));
     if (restored.error) return { device, status: "unsaved" as const };
+    await tryCatch(deleteSavedDeviceLink(device));
     return { device, status: "reset" as const, version: version - 1 };
   }
   const result = await tryCatch(
@@ -324,7 +329,7 @@ export const resetRecoveryPhrase = async (phrase: RecoveryPhrase, resetToken?: s
       ...(resetToken ? { resetToken } : {}),
     }),
   );
-  if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };
+  if (needsFreshSignIn(result.error)) return { status: "reauthenticate" as const };
   if (hasTrpcCode(result.error, "PRECONDITION_FAILED")) {
     return { status: "confirmationExpired" as const };
   }
@@ -332,6 +337,7 @@ export const resetRecoveryPhrase = async (phrase: RecoveryPhrase, resetToken?: s
     throw new Error(RECOVERY_CHANGED_MESSAGE);
   }
   if (result.error) throw result.error;
+  await tryCatch(deleteSavedDeviceLink(device));
   const stored = await tryCatch(
     storeHistoryKey({ privateKey: historyPrivateKey, userId: device.userId, version }),
   );

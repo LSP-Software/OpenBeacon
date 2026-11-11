@@ -45,6 +45,10 @@ mock.module("./deviceKeys.ts", () => ({
 mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async () => heldHistoryKey,
   storeHistoryKey: async () => {},
+  deleteStoredHistoryKeys: async () => {},
+}));
+mock.module("./storage.ts", () => ({
+  storage: { getString: () => undefined, remove: () => {}, set: () => {} },
 }));
 const { encryptPersonalNickname, decryptPersonalNickname, loadPersonalNicknames } =
   await import("./personalNicknames.ts");

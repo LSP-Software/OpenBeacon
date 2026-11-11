@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { createDeviceKeyPair, encodeBase64 } from "@openbeacon/encryption";
+import { deviceRemovedCause } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 
 const secureStoreValues = new Map<string, string>();
 const storageValues = new Map<string, string | boolean>();
@@ -6,6 +9,8 @@ const navigations: unknown[] = [];
 const queueDeletions: Array<{ deviceId: string | undefined; userId: string }> = [];
 let signOuts = 0;
 let sessionUserId: string | null = "user-a";
+let registerError: Error | null = null;
+let stalledDelete: string | null = null;
 
 mock.module("expo-router", () => ({
   router: {
@@ -20,6 +25,7 @@ mock.module("expo-device", () => ({ modelName: "Pixel 8" }));
 mock.module("expo-secure-store", () => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: "when-unlocked-this-device-only",
   deleteItemAsync: async (key: string) => {
+    if (key === stalledDelete) await new Promise(() => {});
     secureStoreValues.delete(key);
   },
   getItemAsync: async (key: string) => secureStoreValues.get(key) ?? null,
@@ -57,7 +63,12 @@ mock.module("./api.ts", () => ({
           return { recipients: [], userId: sessionUserId };
         },
       },
-      registerDeviceKey: { mutate: async () => ({}) },
+      registerDeviceKey: {
+        mutate: async () => {
+          if (registerError) throw registerError;
+          return {};
+        },
+      },
     },
   },
 }));
@@ -82,12 +93,18 @@ mock.module("./groupColor.ts", () => ({ clearGroupColors: () => {} }));
 mock.module("./trackingKeyCheck.ts", () => ({ clearTrackingKeyCheck: () => {} }));
 mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => {} }));
 
-const { ensureDeviceKeyRegistration, getOrCreateDeviceKeyContext } =
-  await import("./deviceKeys.ts");
+const { ensureDeviceKeyRegistration } = await import("./deviceKeys.ts");
 const { handleDeviceRemoved, wipeThisPhone } = await import("./deviceRemoved.ts");
 
 const seedSignedOutPhone = async () => {
-  const device = await getOrCreateDeviceKeyContext("user-a");
+  const key = createDeviceKeyPair();
+  const device = { deviceId: "device-a" };
+  storageValues.set("encryption.device.id.user-a", device.deviceId);
+  storageValues.set("encryption.device.publicKey.user-a", key.publicKey);
+  secureStoreValues.set(
+    "encryption.device.privateKey.user-a",
+    encodeBase64(key.privateKey.expose()),
+  );
   storageValues.set(`encryption.device.active.${device.deviceId}`, true);
   secureStoreValues.set("encryption.history.user-a.1", "history-1");
   secureStoreValues.set("encryption.history.user-a.3", "history-3");
@@ -112,6 +129,8 @@ describe("wiping a removed phone", () => {
     queueDeletions.length = 0;
     signOuts = 0;
     sessionUserId = "user-a";
+    registerError = null;
+    stalledDelete = null;
   });
 
   test("wipes a signed-in phone using its registration", async () => {
@@ -160,5 +179,54 @@ describe("wiping a removed phone", () => {
     expectWiped(device.deviceId);
     expect(signOuts).toBe(1);
     expect(navigations).toEqual(["/device-removed"]);
+  });
+
+  test("a wipe stopped part-way keeps the registration, so the next launch finishes it", async () => {
+    const device = await ensureDeviceKeyRegistration();
+    sessionUserId = null;
+    secureStoreValues.set("encryption.history.user-a.1", "history-1");
+    secureStoreValues.set("encryption.history.user-a.3", "history-3");
+    secureStoreValues.set(`encryption.deviceLink.user-a.${device.deviceId}`, "saved-link");
+    stalledDelete = "encryption.device.privateKey.user-a";
+
+    void wipeThisPhone();
+    for (
+      let index = 0;
+      index < 200 && secureStoreValues.has("encryption.history.user-a.1");
+      index++
+    )
+      await Promise.resolve();
+    for (let index = 0; index < 50; index++) await Promise.resolve();
+
+    expect(secureStoreValues.has("encryption.history.user-a.1")).toBe(false);
+    expect(storageValues.has("encryption.device.registered")).toBe(true);
+    stalledDelete = null;
+    queueDeletions.length = 0;
+
+    await wipeThisPhone();
+
+    expectWiped(device.deviceId);
+    expect(storageValues.has("encryption.device.registered")).toBe(false);
+    expect(queueDeletions).toEqual([{ deviceId: device.deviceId, userId: "user-a" }]);
+  });
+
+  test("a registration refused as removed leaves the cleanup to the wipe", async () => {
+    const device = await seedSignedOutPhone();
+    registerError = new TRPCClientError("This device was removed.", {
+      result: {
+        error: {
+          code: -32600,
+          message: "This device was removed.",
+          data: { cause: deviceRemovedCause },
+        },
+      },
+    });
+
+    await expect(ensureDeviceKeyRegistration()).rejects.toBeInstanceOf(TRPCClientError);
+    expect(storageValues.get("encryption.device.id.user-a")).toBe(device.deviceId);
+    await wipeThisPhone();
+
+    expectWiped(device.deviceId);
+    expect(queueDeletions).toEqual([{ deviceId: device.deviceId, userId: "user-a" }]);
   });
 });

@@ -211,6 +211,8 @@ mock.module("./historyKeys.ts", () => ({
   },
 }));
 
+mock.module("./savedDeviceLink.ts", () => ({ deleteSavedDeviceLink: async () => {} }));
+
 mock.module("./storage.ts", () => ({
   storage: {
     getAllKeys: () => [...phone.storage.keys()],

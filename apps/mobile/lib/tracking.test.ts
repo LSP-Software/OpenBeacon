@@ -170,6 +170,8 @@ mock.module("./historyKeys.ts", () => ({
   deleteStoredHistoryKeys: async () => {},
 }));
 
+mock.module("./savedDeviceLink.ts", () => ({ deleteSavedDeviceLink: async () => {} }));
+
 mock.module("./deviceActivation.ts", () => ({
   isThisDeviceActive: async () => thisDeviceActive,
 }));

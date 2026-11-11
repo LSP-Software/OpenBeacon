@@ -19,7 +19,7 @@ export const DEVICE_KEY_MISMATCH_MESSAGE =
 export const APPROVER_MISSING_HISTORY_KEY_MESSAGE =
   "This phone doesn’t have your account’s current history key, so it can’t set up another phone. Use your recovery phrase on the new phone instead.";
 export const HANDOVER_REJECTED_MESSAGE =
-  "Your other phone’s reply couldn’t be checked, so this phone didn’t use it. Try again, or set up with your recovery phrase.";
+  "This phone is set up, but your other phone’s reply couldn’t be checked, so it can’t read location history yet. To read it, restore your recovery phrase in Account → Recovery phrase.";
 
 export const lookUpDeviceLink = async (code: string) => {
   const parsed = parseDeviceLinkCode(code);

@@ -12,8 +12,6 @@ import { Platform } from "react-native";
 import { trpcClient } from "./api.ts";
 import { baseUrl } from "./base-url.ts";
 import { createSecureId } from "./createSecureId.ts";
-import { isDeviceRemovedError } from "./deviceRemovedError.ts";
-import { deleteStoredHistoryKeys } from "./historyKeys.ts";
 import { readRegisteredDevice, REGISTERED_DEVICE_KEY } from "./registeredDevice.ts";
 import { linkSessionToDevice } from "./sessionLink.ts";
 import { storage } from "./storage.ts";
@@ -176,7 +174,7 @@ const deviceKeyContexts = new Map<
   Promise<NonNullable<Awaited<ReturnType<typeof getStoredDeviceKeyContext>>>>
 >();
 
-export const getOrCreateDeviceKeyContext = (userId: string) => {
+const getOrCreateDeviceKeyContext = (userId: string) => {
   const pending = deviceKeyContexts.get(userId);
   if (pending) return pending;
   const task = createDeviceKeyContext(userId).finally(() => {
@@ -225,7 +223,6 @@ export const forgetDeviceKeyRegistration = () => {
 };
 
 export const deleteDeviceKey = async (userId: string) => {
-  cancelDeviceKeyRegistrations();
   for (const deviceId of [getStoredDeviceId(userId), storage.getString(DEVICE_ID_KEY)]) {
     if (deviceId) storage.remove(getDeviceActiveKey(deviceId));
   }
@@ -237,9 +234,14 @@ export const deleteDeviceKey = async (userId: string) => {
   });
 };
 
-export const cancelDeviceKeyRegistrations = () => {
+export const stopDeviceKeyRegistrations = () => {
   deviceRegistrationGeneration += 1;
   deviceRegistrations.clear();
+  registeredDevice = null;
+};
+
+export const cancelDeviceKeyRegistrations = () => {
+  stopDeviceKeyRegistrations();
   forgetDeviceKeyRegistration();
 };
 
@@ -285,7 +287,12 @@ export const ensureDeviceKeyRegistration = async ({
   const userId = await getCurrentDeviceKeyOwnerId();
   if (generation !== deviceRegistrationGeneration)
     throw new Error("Device registration cancelled.");
-  if (cached?.userId === userId) return cached;
+  if (cached?.userId === userId) {
+    await linkSessionToDevice(cached);
+    if (generation !== deviceRegistrationGeneration)
+      throw new Error("Device registration cancelled.");
+    return cached;
+  }
   if (cached) forgetDeviceKeyRegistration();
   const pending = deviceRegistrations.get(userId);
   if (pending) return pending;
@@ -312,15 +319,10 @@ const registerCurrentDeviceKey = async (userId: string, generation: number) => {
   const context = await withStorageTimeout(getOrCreateDeviceKeyContext(userId));
   if (generation !== deviceRegistrationGeneration)
     throw new Error("Device registration cancelled.");
-  const registered = await tryCatch(registerDeviceKey({ ...context, userId }));
-  if (isDeviceRemovedError(registered.error)) {
-    await tryCatch(deleteDeviceKey(userId));
-    await tryCatch(deleteStoredHistoryKeys({ userId, upToVersion: 100 }));
-  }
-  if (registered.error) throw registered.error;
+  const registered = await registerDeviceKey({ ...context, userId });
   if (generation !== deviceRegistrationGeneration)
     throw new Error("Device registration cancelled.");
-  if (registered.data.sessionLinked === false) {
+  if (registered.sessionLinked === false) {
     await linkSessionToDevice({ ...context, userId });
     if (generation !== deviceRegistrationGeneration)
       throw new Error("Device registration cancelled.");

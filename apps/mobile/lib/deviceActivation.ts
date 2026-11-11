@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration, getDeviceActiveKey } from "./deviceKeys.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
+import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
 import { linkSessionToDevice } from "./sessionLink.ts";
 import { storage } from "./storage.ts";
 
@@ -45,6 +46,7 @@ export const activateWithHistoryKey = async () => {
   if (answer.error) throw new Error(ACTIVATION_KEY_MISSING_MESSAGE);
   await trpcClient.device.activate.mutate({ answer: answer.data });
   markThisDeviceActive(device.deviceId);
+  await tryCatch(deleteSavedDeviceLink(device));
 };
 
 let lastSetupRedirect = 0;

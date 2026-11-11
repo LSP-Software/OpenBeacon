@@ -209,6 +209,13 @@ mock.module("./deviceKeys.ts", () => ({
   }),
 }));
 
+const deletedSavedLinks: { deviceId: string; userId: string }[] = [];
+mock.module("./savedDeviceLink.ts", () => ({
+  deleteSavedDeviceLink: async ({ deviceId, userId }: { deviceId: string; userId: string }) => {
+    deletedSavedLinks.push({ deviceId, userId });
+  },
+}));
+
 const storageValues = new Map<string, string>();
 mock.module("./storage.ts", () => ({
   storage: {
@@ -336,6 +343,7 @@ beforeEach(() => {
   setupMock.mockClear();
   listHistoryBackfillMock.mockClear();
   addHistoryWrapsMock.mockClear();
+  deletedSavedLinks.length = 0;
 });
 
 const openSetupEscrow = (phrase: RecoveryPhrase, version: number) => {
@@ -525,6 +533,17 @@ describe("setUpRecoveryPhrase", () => {
     expect(serverHistoryKeys.every(({ escrow }) => escrow === null)).toBe(true);
   });
 
+  test("a FORBIDDEN because this phone isn't set up or confirmed is thrown, not a sign-in request", async () => {
+    for (const cause of ["DEVICE_PENDING", "DEVICE_UNVERIFIED"]) {
+      setupError = TRPCClientError.from({
+        error: { code: -32003, data: { cause, code: "FORBIDDEN" }, message: cause },
+      });
+
+      await expect(setUpRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow(cause);
+    }
+    expect(serverRecoveryKey).toBeNull();
+  });
+
   test("other errors are thrown and set up no phrase", async () => {
     setupError = new Error("Network error");
 
@@ -548,6 +567,7 @@ describe("resetRecoveryPhrase", () => {
 
     expect(result.status).toBe("reset");
     expect(resetMock).toHaveBeenCalledTimes(1);
+    expect(deletedSavedLinks).toEqual([{ deviceId: device.deviceId, userId: device.userId }]);
     const committed = resetAccountRecoverySchema.parse(resetMock.mock.calls[0]?.[0]);
     const opened = openHistoryKeyEscrow({
       escrow: committed.historyKey.escrow,
@@ -565,6 +585,16 @@ describe("resetRecoveryPhrase", () => {
     );
   });
 
+  test("a reset forgets a link this phone saved, since the reset sets it up", async () => {
+    await setUpRecoveryPhrase(generateRecoveryPhrase());
+    validResetTokens.add("reset-token");
+
+    const result = await resetRecoveryPhrase(generateRecoveryPhrase(), "reset-token");
+
+    expect(result.status).toBe("reset");
+    expect(deletedSavedLinks).toEqual([{ deviceId: device.deviceId, userId: device.userId }]);
+  });
+
   test("a spent or expired confirmation asks for a new code and changes nothing", async () => {
     const original = generateRecoveryPhrase();
     await setUpRecoveryPhrase(original);
@@ -572,6 +602,7 @@ describe("resetRecoveryPhrase", () => {
     const result = await resetRecoveryPhrase(generateRecoveryPhrase(), "spent-token");
 
     expect(result).toEqual({ status: "confirmationExpired" });
+    expect(deletedSavedLinks).toEqual([]);
     expect(serverRecoveryKey?.publicKey).toBe(deriveRecoveryKeyPair(original).publicKey);
     expect(storedHistoryKeys.has(`${device.userId}.2`)).toBe(false);
   });

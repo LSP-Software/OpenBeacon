@@ -1,15 +1,14 @@
-import { createHistoryKeyPair, getHistoryPublicKey } from "@openbeacon/encryption";
+import { createHistoryKeyPair } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { trpcClient } from "./api.ts";
-import { deleteStoredHistoryKeys, getStoredHistoryKey, storeHistoryKey } from "./historyKeys.ts";
+import { getUnpublishedHistoryKeyName } from "./currentHistoryKey.ts";
+import { deleteStoredHistoryKeys, storeHistoryKey } from "./historyKeys.ts";
 import { storage } from "./storage.ts";
-
-const getUnpublishedHistoryKeyName = (userId: string) => `encryption.history.unpublished.${userId}`;
 
 export const KEY_NOT_SAVED_MESSAGE =
   "Unable to save your keys on this phone. Unlock your phone and try again.";
 
-export const createHistoryKey = async (userId: string) => {
+const publishFirstHistoryKey = async (userId: string) => {
   const historyKey = createHistoryKeyPair();
   const unpublishedName = getUnpublishedHistoryKeyName(userId);
   storage.set(unpublishedName, historyKey.publicKey);
@@ -41,27 +40,20 @@ export const createHistoryKey = async (userId: string) => {
   throw created.error;
 };
 
+const pendingCreates = new Map<string, Promise<boolean>>();
+
+export const createHistoryKey = (userId: string) => {
+  const pending = pendingCreates.get(userId);
+  if (pending) return pending;
+  const task = publishFirstHistoryKey(userId).finally(() => {
+    pendingCreates.delete(userId);
+  });
+  pendingCreates.set(userId, task);
+  return task;
+};
+
 export const createHistoryKeyIfMissing = async (userId: string) => {
   const { currentHistoryKey } = await trpcClient.accountRecovery.status.query();
   if (currentHistoryKey) return false;
   return createHistoryKey(userId);
-};
-
-export const forgetLostFirstHistoryKey = async ({
-  publicKey,
-  userId,
-}: {
-  publicKey: string;
-  userId: string;
-}) => {
-  const unpublished = storage.getString(getUnpublishedHistoryKeyName(userId));
-  if (!unpublished) return false;
-  const stored = await getStoredHistoryKey({ userId, version: 1 });
-  if (unpublished === publicKey || !stored || getHistoryPublicKey(stored) !== unpublished) {
-    storage.remove(getUnpublishedHistoryKeyName(userId));
-    return false;
-  }
-  await deleteStoredHistoryKeys({ userId, upToVersion: 1 });
-  storage.remove(getUnpublishedHistoryKeyName(userId));
-  return true;
 };
