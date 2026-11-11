@@ -4,7 +4,7 @@
 
 - [Places](./docs/contexts/places/CONTEXT.md) — group-shared Places, Place Transitions, Place Alerts, and mutes
 - [Accounts](./docs/contexts/accounts/CONTEXT.md) — Email codes, Security alerts, Sessions, Device names and icons, and Removing a device
-- [Encryption](./docs/contexts/encryption/CONTEXT.md) — Epoch keys, Device wraps and History wraps, the Recovery phrase and History key, Personal data, Active and Pending devices, and Device links
+- [Encryption](./docs/contexts/encryption/CONTEXT.md) — Epoch keys, Device wraps and History wraps, the Recovery phrase and History key, Personal data, Active and Pending devices, Device links and Session links
 
 ## Relationships
 

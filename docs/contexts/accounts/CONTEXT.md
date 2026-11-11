@@ -9,11 +9,11 @@ A 6-digit code the server emails to an account's address, which the owner types 
 _Avoid_: OTP, magic link, verification link, PIN
 
 **Session**:
-One sign-in to an account. A Session is linked to a device when it registers that device as new, or when a session with no device proves the phone holds the device's Device key by opening a challenge sealed to it. Registering a new device moves the link to that device, even from another one. Naming a device in the device header never links it. A session with no device that names one gets `DEVICE_UNVERIFIED` for anything that needs a device. A linked session that names a different device is refused as if that device were Pending or not registered. Signing a session out ends its sign-in but doesn't remove the device from Devices.
+One sign-in to an account. A Session is linked to a device when it registers that device as new, or when a session with no device proves the phone holds the device's Device key by opening a challenge sealed to it. Registering a new device moves the link to that device, even from another one. Naming a device in the device header never links it. A session with no device that names one gets `DEVICE_UNVERIFIED` for anything that needs a device. A linked session that names a different device is refused as if that device were Pending or not registered. If the server refuses a session's proof with any 4xx error except a rate limit or `DEVICE_REMOVED`, the app signs out and shows "Sign in again to keep using this phone." After a network failure, a 5xx error or a rate limit, it tries again after 10 seconds. Signing a session out ends its sign-in but doesn't remove the device from Devices. The server keeps a Session until it's signed out, its device is removed or deleted, or the account is deleted. A sign-in that expires without being used again stays until then.
 _Avoid_: Login, device
 
 **Device name**:
-The name the owner gives a device, such as "Pixel 9" or "Car tablet". A new device is named after its model. It's stored in plain text, like a profile name, so group members and Security alerts can show it. Every member of a group can see the Device name and Device icon of each Active device of the group's members, even from their own Pending device.
+The name the owner gives a device, such as "Pixel 9" or "Car tablet". A new device is named after its model. It's stored in plain text, like a profile name, so group members and Security alerts can show it. It can't contain invisible formatting characters, such as bidi overrides or zero-width spaces. Every member of a group, from any signed-in session, can see the Device name and Device icon of each Active device of the group's members.
 _Avoid_: Device label, nickname
 
 **Device icon**:

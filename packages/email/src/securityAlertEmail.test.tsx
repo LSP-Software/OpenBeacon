@@ -230,6 +230,9 @@ describe("renderSecurityAlertEmail", () => {
     );
     expect(email.text).toContain("Device\nPixel 8 (Android)\n");
     expect(email.text).toContain("Someone else is signed in to your account.");
+    expect(email.text).toContain(
+      "To use the removed device again, sign in on it and set it up again.",
+    );
   });
 
   test("a deletion alert tells the owner to cancel it, then secure the account", async () => {

@@ -35,7 +35,7 @@ If you lose every phone you're signed in on, or reset them or delete the app fro
 - **You still have a phone that can read your history:** create a new phrase on that phone in Account › Recovery phrase. Your old phrase stops working. Your history isn't affected.
 - **You don't:** you can reset your phrase. Your old phrase stops working, and history from before the reset can't be recovered, except what your phones can still read with their own keys. Other phones will need the new phrase.
 
-Setting up, changing or resetting your phrase asks you to sign in again first, unless you signed in recently. Resetting also asks you to type `RESET`. If your server sends email, resetting also asks for a code we email you, and we email you after your phrase is changed or reset.
+Setting up, changing or resetting your phrase asks you to sign in again first, unless you signed in recently. Resetting also asks you to type `RESET`. If the server sends email, resetting also asks for a code we email you, and we email you after your phrase is changed or reset.
 
 ## Keep it safe
 
@@ -52,7 +52,7 @@ The server never receives your phrase or the keys that unlock your history. It c
 - how many of each group's encryption keys are protected for you, and when they were added
 - for your nicknames and colours: who you've nicknamed, that you've set a colour, roughly how long each nickname is, and which key version protects it.
 
-If your server sends email, its email provider sees when you ask for a reset code and when your phrase is changed or reset, from the emails we send you. Emails never contain your phrase.
+If the server sends email, its email provider sees when you ask for a reset code and when your phrase is changed or reset, from the emails we send you. Emails never contain your phrase.
 
 ## Current limits
 

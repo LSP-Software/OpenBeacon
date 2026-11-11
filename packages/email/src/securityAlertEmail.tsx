@@ -130,7 +130,7 @@ const alertCopy = (
           { label: "Device", value: describeDevice(alert.device) },
           { label: "Removed at", value: happenedAt },
         ],
-        ifNotYou: `${signedInAdvice(hasPassword)} To use the removed device again, sign in on it.`,
+        ifNotYou: `${signedInAdvice(hasPassword)} To use the removed device again, sign in on it and set it up again.`,
       };
     case "deletion-scheduled":
       return {
