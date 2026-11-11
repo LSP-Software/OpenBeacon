@@ -39,7 +39,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: { id: userId, name: "User", email: `${userId}@example.test` },
       });
       await prisma.userDevice.create({
-        data: { id: deviceId, userId, publicKey: key.publicKey, publicKeyAlgorithm: "X25519" },
+        data: {
+          id: deviceId,
+          userId,
+          publicKey: key.publicKey,
+          publicKeyAlgorithm: "X25519",
+          name: "Phone",
+          icon: "phone",
+        },
       });
       await prisma.group.create({
         data: {
@@ -160,6 +167,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           userId: departing,
           publicKey: departingKey.publicKey,
           publicKeyAlgorithm: "X25519",
+          name: "Phone",
+          icon: "phone",
         },
       });
       await prisma.group.create({

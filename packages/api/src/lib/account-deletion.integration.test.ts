@@ -44,12 +44,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       await prisma.userDevice.createMany({
         data: [
-          { id: deletedDevice, userId: deletedUser, publicKey: "a", publicKeyAlgorithm: "X25519" },
+          {
+            id: deletedDevice,
+            userId: deletedUser,
+            publicKey: "a",
+            publicKeyAlgorithm: "X25519",
+            name: "Phone",
+            icon: "phone",
+          },
           {
             id: remainingDevice,
             userId: remainingUser,
             publicKey: "b",
             publicKeyAlgorithm: "X25519",
+            name: "Phone",
+            icon: "phone",
           },
         ],
       });

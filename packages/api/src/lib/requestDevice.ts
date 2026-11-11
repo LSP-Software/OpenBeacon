@@ -8,12 +8,12 @@ export const linkRequestDevice = async ({
   now = new Date(),
 }: {
   db: Pick<PrismaClient, "session" | "userDevice">;
-  deviceId: string | null;
+  deviceId: string;
   sessionId: string;
   userId: string;
   now?: Date;
 }) => {
-  if (!deviceId || deviceId.length > 128) return null;
+  if (deviceId.length > 128) return null;
   const device = await db.userDevice.findFirst({
     where: { id: deviceId, userId },
     select: { lastSeenAt: true, sessions: { where: { id: sessionId }, select: { id: true } } },

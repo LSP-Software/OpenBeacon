@@ -20,16 +20,18 @@ export const createTRPCContext = async (opts: {
   const session = await auth.api.getSession({
     headers: opts.headers,
   });
-  const device = session
-    ? await tryCatch(
-        linkRequestDevice({
-          db: opts.db,
-          deviceId: opts.headers.get(deviceIdHeader),
-          sessionId: session.session.id,
-          userId: session.user.id,
-        }),
-      )
-    : null;
+  const requestDeviceId = opts.headers.get(deviceIdHeader);
+  const device =
+    session && requestDeviceId
+      ? await tryCatch(
+          linkRequestDevice({
+            db: opts.db,
+            deviceId: requestDeviceId,
+            sessionId: session.session.id,
+            userId: session.user.id,
+          }),
+        )
+      : null;
 
   return {
     cache: opts.cache,

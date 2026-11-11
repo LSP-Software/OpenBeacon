@@ -223,6 +223,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             id: item.deviceId,
             publicKey: item.key.publicKey,
             publicKeyAlgorithm: item.key.algorithm,
+            name: "Phone",
+            icon: "phone",
             userId: item.userId,
           },
         });
@@ -453,6 +455,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           id: revokedDeviceId,
           publicKey: createDeviceKeyPair().publicKey,
           publicKeyAlgorithm: "X25519",
+          name: "Phone",
+          icon: "phone",
           revokedAt: new Date(),
           userId: other.userId,
         },

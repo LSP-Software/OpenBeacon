@@ -242,6 +242,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             id: item.deviceId,
             publicKey: item.key.publicKey,
             publicKeyAlgorithm: item.key.algorithm,
+            name: "Phone",
+            icon: "phone",
             userId: item.userId,
           },
         });

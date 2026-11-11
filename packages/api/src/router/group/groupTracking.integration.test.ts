@@ -47,6 +47,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
         userId: ownerId,
         publicKey: deviceKey.publicKey,
         publicKeyAlgorithm: "X25519",
+        name: "Phone",
+        icon: "phone",
       },
     });
     await prisma.group.create({
@@ -182,6 +184,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
         userId: memberId,
         publicKey: createDeviceKeyPair().publicKey,
         publicKeyAlgorithm: "X25519",
+        name: "Phone",
+        icon: "phone",
       },
     });
     const storePoint = (id: string, senderUserId: string, senderDeviceId: string, at: string) =>

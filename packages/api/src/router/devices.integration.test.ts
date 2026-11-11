@@ -18,7 +18,7 @@ const createAccount = async () => {
   const session = await prisma.session.findFirstOrThrow({ where: { userId: user.id } });
   const device = await prisma.userDevice.create({
     data: {
-      id: `${prefix}-device-${accountCounter}`,
+      id: `${prefix}-device-${crypto.randomUUID()}`,
       userId: user.id,
       publicKey: "key",
       publicKeyAlgorithm: "x25519",
