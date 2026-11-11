@@ -280,14 +280,16 @@ export const getRegisteredDeviceKey = async () => {
 
 export const ensureDeviceKeyRegistration = async ({
   checkOwner = false,
-}: { checkOwner?: boolean } = {}) => {
+  linkSession = false,
+}: { checkOwner?: boolean; linkSession?: boolean } = {}) => {
   const generation = deviceRegistrationGeneration;
   const cached = await getRegisteredDeviceKey();
-  if (cached && !checkOwner) return cached;
+  if (cached && !checkOwner && !linkSession) return cached;
   const userId = await getCurrentDeviceKeyOwnerId();
   if (generation !== deviceRegistrationGeneration)
     throw new Error("Device registration cancelled.");
   if (cached?.userId === userId) {
+    if (!linkSession) return cached;
     await linkSessionToDevice(cached);
     if (generation !== deviceRegistrationGeneration)
       throw new Error("Device registration cancelled.");

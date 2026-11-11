@@ -170,24 +170,34 @@ describe("device key registration", () => {
     expect(registerDeviceKeyMock).toHaveBeenCalledTimes(1);
   });
 
-  test("signing in again over a leftover registration links the new session to this phone", async () => {
-    const device = await (await importDeviceKeysModule()).ensureDeviceKeyRegistration();
+  test("checking the owner of a leftover registration doesn't link the session", async () => {
+    await (await importDeviceKeysModule()).ensureDeviceKeyRegistration();
     const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
 
     await ensureDeviceKeyRegistration({ checkOwner: true });
+
+    expect(ownerQueries).toBe(2);
+    expect(sessionChallengeMock).not.toHaveBeenCalled();
+  });
+
+  test("confirming identity over a leftover registration links the new session to this phone", async () => {
+    const device = await (await importDeviceKeysModule()).ensureDeviceKeyRegistration();
+    const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
+
+    await ensureDeviceKeyRegistration({ linkSession: true });
 
     expect(sessionChallengeMock).toHaveBeenCalledWith({ deviceId: device.deviceId });
     expect(registerDeviceKeyMock).toHaveBeenCalledTimes(1);
   });
 
-  test("a failed link over a leftover registration fails the owner check", async () => {
+  test("a failed link over a leftover registration fails the identity confirmation", async () => {
     await (await importDeviceKeysModule()).ensureDeviceKeyRegistration();
     const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
     sessionChallengeMock.mockImplementationOnce(async () => {
       throw new Error("offline");
     });
 
-    await expect(ensureDeviceKeyRegistration({ checkOwner: true })).rejects.toThrow("offline");
+    await expect(ensureDeviceKeyRegistration({ linkSession: true })).rejects.toThrow("offline");
   });
 
   test("registers again after a cancel or a forget", async () => {

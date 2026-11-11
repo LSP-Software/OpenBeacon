@@ -10,6 +10,8 @@ import {
   wrapEpochKeyForHistoryKey,
   wrapEpochKeyForRecipient,
 } from "@openbeacon/encryption";
+import { deviceRemovedCause } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 const deviceKeyPair = createDeviceKeyPair();
@@ -1597,6 +1599,35 @@ describe("tracking service", () => {
     expect(requeued).toHaveLength(1);
   });
 
+  test("an upload refused because this phone was removed keeps the registration for the wipe", async () => {
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    captureRunning = true;
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    uploadGroup = async () => {
+      throw createDeviceRemovedError();
+    };
+    await expect(syncBackgroundTracking()).rejects.toThrow();
+    expect(stopCaptureCalls).toBe(1);
+    expect(registeredDevice?.deviceId).toBe("device-1");
+  });
+
+  test("a key check refused because this phone was removed keeps the registration for the wipe", async () => {
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    captureRunning = true;
+    rotationError = createDeviceRemovedError();
+    await syncBackgroundTracking();
+    expect(stopCaptureCalls).toBe(1);
+    expect(registeredDevice?.deviceId).toBe("device-1");
+  });
+
   test("stops capture when a group rotation check reports an unauthorized session", async () => {
     captureRunning = true;
     rotationError = Object.assign(new Error("Session revoked"), { data: { code: "UNAUTHORIZED" } });
@@ -2165,3 +2196,14 @@ describe("tracking service", () => {
     });
   });
 });
+
+const createDeviceRemovedError = () =>
+  new TRPCClientError("This device was removed.", {
+    result: {
+      error: {
+        code: -32001,
+        message: "This device was removed.",
+        data: { code: "UNAUTHORIZED", cause: deviceRemovedCause },
+      },
+    },
+  });

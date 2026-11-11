@@ -19,8 +19,8 @@ export const signOutOfThisPhone = async ({
   if (removeThisPhone) {
     const removed = await tryCatch(trpcClient.account.removeThisDevice.mutate());
     if (!removed.error) {
-      const { wipeThisPhone } = await import("./deviceRemoved.ts");
-      await wipeThisPhone();
+      const { wipeAfterRemovingThisPhone } = await import("./deviceRemoved.ts");
+      await wipeAfterRemovingThisPhone();
       return { phoneRemoved: true };
     }
   }

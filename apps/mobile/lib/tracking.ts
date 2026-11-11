@@ -24,6 +24,7 @@ import {
   forgetDeviceKeyRegistration,
   getRegisteredDeviceKey,
 } from "./deviceKeys.ts";
+import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
@@ -466,7 +467,7 @@ export const reconcileTrackingKeys = ({
     );
     if (result.error) {
       if (version === reconcileVersion && getErrorCode(result.error) === "UNAUTHORIZED")
-        await revokeTrackingAccess();
+        await revokeTrackingAccess({ keepDeviceRegistration: isDeviceRemovedError(result.error) });
       throw result.error;
     }
     if (result.data) keyAccessChangePending = true;
@@ -588,7 +589,10 @@ const uploadClaimedItems = async (
       }
     }
     if (getErrorCode(uploadResult.error) === "UNAUTHORIZED") {
-      await revokeTrackingAccess({ cancelFlush: false });
+      await revokeTrackingAccess({
+        cancelFlush: false,
+        keepDeviceRegistration: isDeviceRemovedError(uploadResult.error),
+      });
       await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
       throw uploadResult.error;
     }

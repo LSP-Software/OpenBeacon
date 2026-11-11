@@ -94,7 +94,8 @@ mock.module("./trackingKeyCheck.ts", () => ({ clearTrackingKeyCheck: () => {} })
 mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => {} }));
 
 const { ensureDeviceKeyRegistration } = await import("./deviceKeys.ts");
-const { handleDeviceRemoved, wipeThisPhone } = await import("./deviceRemoved.ts");
+const { handleDeviceRemoved, wipeAfterRemovingThisPhone, wipeThisPhone } =
+  await import("./deviceRemoved.ts");
 
 const seedSignedOutPhone = async () => {
   const key = createDeviceKeyPair();
@@ -146,6 +147,10 @@ describe("wiping a removed phone", () => {
     expect(storageValues.has("encryption.device.registered")).toBe(false);
     expect(queueDeletions).toEqual([{ deviceId: device.deviceId, userId: "user-a" }]);
     expect(signOuts).toBe(1);
+    sessionUserId = "user-a";
+    const replacement = await ensureDeviceKeyRegistration();
+    expect(replacement.deviceId).not.toBe(device.deviceId);
+    expect(replacement.publicKey).not.toBe(device.publicKey);
   });
 
   test("wipes a phone that signed out normally, using the signed-in account", async () => {
@@ -181,7 +186,7 @@ describe("wiping a removed phone", () => {
     expect(navigations).toEqual(["/device-removed"]);
   });
 
-  test("a wipe stopped part-way keeps the registration, so the next launch finishes it", async () => {
+  test("a wipe stopped part-way keeps the registration, so a later wipe still finds this phone and finishes", async () => {
     const device = await ensureDeviceKeyRegistration();
     sessionUserId = null;
     secureStoreValues.set("encryption.history.user-a.1", "history-1");
@@ -203,11 +208,35 @@ describe("wiping a removed phone", () => {
     stalledDelete = null;
     queueDeletions.length = 0;
 
-    await wipeThisPhone();
+    await handleDeviceRemoved();
 
     expectWiped(device.deviceId);
     expect(storageValues.has("encryption.device.registered")).toBe(false);
     expect(queueDeletions).toEqual([{ deviceId: device.deviceId, userId: "user-a" }]);
+    expect(navigations).toEqual(["/device-removed"]);
+  });
+
+  test("removing this phone while a removed error is wiping it wipes once and doesn't open the removed screen", async () => {
+    const device = await seedSignedOutPhone();
+    const fromRemovedError = handleDeviceRemoved();
+    const fromRemoval = wipeAfterRemovingThisPhone();
+    expect(fromRemoval).toBe(fromRemovedError);
+    await fromRemoval;
+
+    expectWiped(device.deviceId);
+    expect(signOuts).toBe(1);
+    expect(navigations).toEqual([]);
+  });
+
+  test("a removed error while removing this phone joins its wipe without opening the removed screen", async () => {
+    await seedSignedOutPhone();
+    const fromRemoval = wipeAfterRemovingThisPhone();
+    const fromRemovedError = handleDeviceRemoved();
+    expect(fromRemovedError).toBe(fromRemoval);
+    await fromRemovedError;
+
+    expect(signOuts).toBe(1);
+    expect(navigations).toEqual([]);
   });
 
   test("a registration refused as removed leaves the cleanup to the wipe", async () => {

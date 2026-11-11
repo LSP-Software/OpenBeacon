@@ -6,8 +6,15 @@ const events: string[] = [];
 const removalHeaders: Array<string | undefined> = [];
 let removalError: Error | null = null;
 let signOutError: Error | null = null;
+let removedErrorDuringRemoval = false;
 
-mock.module("expo-router", () => ({ router: { replace: () => {} } }));
+mock.module("expo-router", () => ({
+  router: {
+    replace: (target: unknown) => {
+      events.push(`navigate:${String(target)}`);
+    },
+  },
+}));
 mock.module("expo-device", () => ({ modelName: "Pixel 8" }));
 
 mock.module("expo-secure-store", () => ({
@@ -54,6 +61,10 @@ mock.module("./api.ts", () => ({
           events.push("removeThisDevice");
           removalHeaders.push(await readHeaderDeviceId());
           if (removalError) throw removalError;
+          if (removedErrorDuringRemoval) {
+            const { handleDeviceRemoved } = await import("./deviceRemoved.ts");
+            void handleDeviceRemoved();
+          }
           return {};
         },
       },
@@ -101,6 +112,7 @@ describe("signing out of this phone", () => {
     removalHeaders.length = 0;
     removalError = null;
     signOutError = null;
+    removedErrorDuringRemoval = false;
   });
 
   test("removing this phone sends its device id, then wipes its keys and signs out", async () => {
@@ -125,6 +137,23 @@ describe("signing out of this phone", () => {
     expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(false);
     expect(secureStoreValues.has("encryption.history.user-a.1")).toBe(false);
     expect(storageValues.has("encryption.device.registered")).toBe(false);
+  });
+
+  test("a removed error from another request during removal shares the wipe and doesn't open the removed screen", async () => {
+    await ensureDeviceKeyRegistration();
+    removedErrorDuringRemoval = true;
+
+    const result = await signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: true,
+      sessionTokenToRevoke: null,
+    });
+
+    expect(result).toEqual({ phoneRemoved: true });
+    expect(events.filter((event) => event === "signOut")).toHaveLength(1);
+    expect(events.filter((event) => event === "deleteQueue")).toHaveLength(1);
+    expect(events.some((event) => event.startsWith("navigate:"))).toBe(false);
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(false);
   });
 
   test("a failed removal still signs out but keeps the keys for the next sign-in", async () => {

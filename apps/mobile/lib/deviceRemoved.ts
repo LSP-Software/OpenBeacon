@@ -44,13 +44,21 @@ export const wipeThisPhone = async () => {
 };
 
 let removal: Promise<void> | null = null;
+let showRemovedScreen = true;
 
-export const handleDeviceRemoved = () => {
+const wipeOnce = ({ removedHere }: { removedHere: boolean }) => {
+  if (removedHere) showRemovedScreen = false;
   removal ??= (async () => {
     await wipeThisPhone();
-    await tryCatch(Promise.resolve().then(() => router.replace("/device-removed")));
+    if (showRemovedScreen)
+      await tryCatch(Promise.resolve().then(() => router.replace("/device-removed")));
   })().finally(() => {
     removal = null;
+    showRemovedScreen = true;
   });
   return removal;
 };
+
+export const handleDeviceRemoved = () => wipeOnce({ removedHere: false });
+
+export const wipeAfterRemovingThisPhone = () => wipeOnce({ removedHere: true });
