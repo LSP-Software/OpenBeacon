@@ -8,7 +8,7 @@ import {
   deviceUnverifiedCause,
   tryCatch,
 } from "@openbeacon/shared";
-import { initTRPC } from "@trpc/server";
+import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError, z } from "zod";
 import { DevicePendingError } from "./lib/deviceActivation.ts";
@@ -39,6 +39,7 @@ export const createTRPCContext = async (opts: {
         }),
       )
     : null;
+  if (device?.error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
   if (device?.data?.removed) throw deviceRemovedError();
   const requestDevice = device?.data?.removed === false ? device.data : null;
 

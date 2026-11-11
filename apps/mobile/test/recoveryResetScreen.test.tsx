@@ -19,6 +19,7 @@ const resetRecoveryPhrase = mock(async (): Promise<ResetResult> => ({
   device: { userId: "user-1" },
 }));
 const protectHistory = mock(async () => {});
+const replace = mock((_route: string) => {});
 let serverActive = true;
 const steps: string[] = [];
 const isThisDeviceActive = mock(async () => {
@@ -41,7 +42,7 @@ mock.module("expo-router", () => ({
     href: unknown;
     replace?: boolean;
   }) => React.createElement("expo-link", { href: JSON.stringify(href), replace }, children),
-  router: { back: () => {}, replace: () => {} },
+  router: { back: () => {}, replace },
   Stack: {
     Screen: ({ options }: { options: { gestureEnabled?: boolean } }) => {
       gestureEnabled = options.gestureEnabled;
@@ -129,6 +130,7 @@ beforeEach(() => {
   gestureEnabled = undefined;
   resetRecoveryPhrase.mockClear();
   protectHistory.mockClear();
+  replace.mockClear();
   serverActive = true;
   steps.length = 0;
   isThisDeviceActive.mockClear();
@@ -232,4 +234,54 @@ test("a phrase this phone couldn't save doesn't try to set the phone up with it"
   await act(async () => onConfirm(new Uint8Array(16)));
   expect(isThisDeviceActive).toHaveBeenCalledTimes(1);
   expect(activateWithHistoryKey).not.toHaveBeenCalled();
+});
+
+const rendered = () => JSON.stringify(root?.container.toJSON());
+
+const pressButton = async (label: string) => {
+  const button = root?.container
+    .queryAll((item) => item.type === "mock-button")
+    .find((item) => JSON.stringify(item.children).includes(label));
+  if (!button) throw new Error(`Missing button ${label}`);
+  await act(async () => (button.props as { onPress: () => void }).onPress());
+};
+
+test("a reset that can't confirm this phone is set up waits with Try again instead of moving on", async () => {
+  searchParams = { setup: "true" };
+  isThisDeviceActive.mockImplementationOnce(async () => {
+    throw new Error("Network request failed");
+  });
+  const { onConfirm } = await reachPhraseStep();
+  await act(async () => onConfirm(new Uint8Array(16)));
+
+  expect(protectHistory).not.toHaveBeenCalled();
+  expect(replace).not.toHaveBeenCalled();
+  expect(rendered()).toContain("couldn’t finish setting up this phone");
+  expect(pressHardwareBack()).toBe(false);
+  expect(gestureEnabled).toBe(true);
+
+  await pressButton("Try again");
+
+  expect(resetRecoveryPhrase).toHaveBeenCalledTimes(1);
+  expect(protectHistory).toHaveBeenCalledTimes(1);
+  expect(replace.mock.calls).toEqual([["/setup/remove-devices"]]);
+});
+
+test("a failed set up with the current phrase waits with Try again instead of moving on", async () => {
+  searchParams = { setup: "true" };
+  serverActive = false;
+  activateWithHistoryKey.mockImplementationOnce(async () => {
+    throw new Error("Network request failed");
+  });
+  const { onConfirm } = await reachPhraseStep();
+  await act(async () => onConfirm(new Uint8Array(16)));
+
+  expect(protectHistory).not.toHaveBeenCalled();
+  expect(replace).not.toHaveBeenCalled();
+  expect(rendered()).toContain("couldn’t finish setting up this phone");
+
+  await pressButton("Try again");
+
+  expect(activateWithHistoryKey).toHaveBeenCalledTimes(2);
+  expect(replace.mock.calls).toEqual([["/setup/remove-devices"]]);
 });

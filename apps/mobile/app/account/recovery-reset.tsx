@@ -20,6 +20,7 @@ import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
 import { activateWithHistoryKey, isThisDeviceActive } from "../../lib/deviceActivation.ts";
 import { invalidCodeMessage } from "../../lib/emailCodes.ts";
+import type { EpochKeyDevice } from "../../lib/epochKeys.ts";
 import { protectHistory } from "../../lib/protectHistory.ts";
 import { isResetConfirmed } from "../../lib/isResetConfirmed.ts";
 import {
@@ -33,7 +34,15 @@ const RecoveryPhraseResetScreen = () => {
   const { setup } = useLocalSearchParams<{ setup?: string }>();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<
-    "warn" | "verify" | "code" | "phrase" | "saving" | "protecting" | "unsaved" | "done"
+    | "warn"
+    | "verify"
+    | "code"
+    | "phrase"
+    | "saving"
+    | "protecting"
+    | "unconfirmed"
+    | "unsaved"
+    | "done"
   >("warn");
   const {
     data: providers,
@@ -108,6 +117,7 @@ const RecoveryPhraseResetScreen = () => {
   }, [step, gate.decision]);
   const [progress, setProgress] = useState({ done: 0, failed: 0, total: 0 });
   const [userId, setUserId] = useState<string>();
+  const [resetDevice, setResetDevice] = useState<EpochKeyDevice>();
   const form = useForm<{ confirmation: string }>({ defaultValues: { confirmation: "" } });
   const confirmation = useWatch({ control: form.control, name: "confirmation" });
 
@@ -133,19 +143,33 @@ const RecoveryPhraseResetScreen = () => {
       return;
     }
     const { device } = result.data;
-    const active = await tryCatch(isThisDeviceActive());
-    if (active.data === false && result.data.status === "reset") {
-      await tryCatch(activateWithHistoryKey());
+    if (result.data.status === "unsaved") {
+      await tryCatch(isThisDeviceActive());
+      void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });
+      void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", device.userId] });
+      void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
+      setStep("unsaved");
+      return;
+    }
+    await finishReset(device);
+  };
+
+  const finishReset = async (device: EpochKeyDevice) => {
+    setResetDevice(device);
+    setStep("protecting");
+    const confirmed = await tryCatch(
+      isThisDeviceActive().then(async (active) => {
+        if (!active) await activateWithHistoryKey();
+      }),
+    );
+    if (confirmed.error) {
+      setStep("unconfirmed");
+      return;
     }
     void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });
     void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", device.userId] });
     void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
-    if (result.data.status === "unsaved") {
-      setStep("unsaved");
-      return;
-    }
     setUserId(device.userId);
-    setStep("protecting");
     await protectHistory({ device, onProgress: setProgress });
     void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
     void queryClient.invalidateQueries({ queryKey: ["personalNicknames"] });
@@ -297,6 +321,23 @@ const RecoveryPhraseResetScreen = () => {
                   ? "Checking your groups…"
                   : `Protected ${progress.done} of ${progress.total} groups.`}
               </Text>
+            </View>
+          )}
+
+          {step === "unconfirmed" && (
+            <View className="gap-4">
+              <Text className="text-foreground text-3xl font-bold">Finish setting up</Text>
+              <Text className="text-muted-foreground text-base leading-6">
+                Your new phrase is set up, but we couldn’t finish setting up this phone. Check your
+                connection and try again.
+              </Text>
+              <Button
+                onPress={() => {
+                  if (resetDevice) void finishReset(resetDevice);
+                }}
+              >
+                <Text>Try again</Text>
+              </Button>
             </View>
           )}
 

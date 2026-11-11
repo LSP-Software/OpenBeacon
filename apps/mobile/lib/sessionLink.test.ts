@@ -198,15 +198,34 @@ describe("linking this sign-in to the phone", () => {
     expect(alerts).toEqual(["You’ve been signed out|Sign in again to keep using this phone."]);
   });
 
-  test("stops retrying after five failed attempts in a row", async () => {
+  test("after five failed attempts in a row, tries only once every five minutes", async () => {
     challengeError = TRPCClientError.from(new TypeError("Network request failed"));
     for (let index = 0; index < 5; index++) await attemptAfterBackOff();
     expect(challengeCount()).toBe(5);
 
-    challengeError = null;
     await attemptAfterBackOff();
-
+    now += 240_000;
+    await attemptAfterBackOff();
     expect(challengeCount()).toBe(5);
+
+    now += 30_000;
+    await attemptAfterBackOff();
+    expect(challengeCount()).toBe(6);
+
+    now += 280_000;
+    await attemptAfterBackOff();
+    expect(challengeCount()).toBe(6);
+
+    challengeError = null;
+    now += 10_000;
+    await attemptAfterBackOff();
+    expect(challengeCount()).toBe(7);
+    expect(calls.at(-1)).toBe("invalidate");
+
+    challengeError = TRPCClientError.from(new TypeError("Network request failed"));
+    await attemptAfterBackOff();
+    await attemptAfterBackOff();
+    expect(challengeCount()).toBe(9);
     expect(calls.filter((call) => call.startsWith("signOut"))).toEqual([]);
     expect(alerts).toEqual([]);
   });

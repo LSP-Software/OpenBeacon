@@ -21,7 +21,6 @@ import { getStoredHistoryKey } from "./historyKeys.ts";
 import {
   cancelDeviceKeyRegistrations,
   ensureDeviceKeyRegistration,
-  forgetDeviceKeyRegistration,
   getRegisteredDeviceKey,
 } from "./deviceKeys.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
@@ -576,14 +575,11 @@ const uploadClaimedItems = async (
         ),
       );
       if (
-        code === "FORBIDDEN" &&
-        usesCurrentDevice &&
-        uploadResult.error.message === "The active device is not registered."
+        usesCurrentKey ||
+        (code === "FORBIDDEN" &&
+          usesCurrentDevice &&
+          uploadResult.error.message === "The active device is not registered.")
       ) {
-        forgetDeviceKeyRegistration();
-        markTrackingKeysStale();
-        uploadRejectedKeys = true;
-      } else if (usesCurrentKey) {
         markTrackingKeysStale();
         uploadRejectedKeys = true;
       }

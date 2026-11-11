@@ -58,6 +58,12 @@ const SetUpPhoneScreen = () => {
       return;
     }
     router.replace("/");
+    if (removeThisPhone && result.data?.status === "signedOut") {
+      Alert.alert(
+        "You’re signed out",
+        "This phone couldn’t be removed now; it will be removed automatically within 7 days.",
+      );
+    }
   };
 
   const confirmCancel = () =>

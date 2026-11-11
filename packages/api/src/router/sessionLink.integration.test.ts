@@ -279,6 +279,53 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await sessionDevice(intruder.id)).toBeNull();
     });
 
+    test("a database failure while reading the phone fails the request instead of treating it as no phone", async () => {
+      const account = await createAccount();
+      const signIn = await account.signIn();
+      const req = new Request("http://localhost/api/trpc/device.activationChallenge", {
+        body: "{}",
+        headers: {
+          "content-type": "application/json",
+          cookie: signIn.cookie,
+          [deviceIdHeader]: account.phone.id,
+        },
+        method: "POST",
+      });
+      const brokenDb = new Proxy(prisma, {
+        get: (target, property, receiver) =>
+          property === "userDevice"
+            ? {
+                findUnique: async () => {
+                  throw new Error("Connection to the database was lost");
+                },
+              }
+            : Reflect.get(target, property, receiver),
+      });
+
+      const response = await fetchRequestHandler({
+        endpoint: "/api/trpc",
+        req,
+        router: appRouter,
+        createContext: async () => ({
+          ...(await createTRPCContext({
+            cache,
+            db: brokenDb,
+            headers: req.headers,
+            serverVersion: "test",
+            serverName: "test",
+            selfHosted: true,
+          })),
+          clientIp: "127.0.0.1",
+        }),
+      });
+
+      expect(response.status).toBe(500);
+      const body = JSON.stringify(await response.json());
+      expect(body).toContain('"code":"INTERNAL_SERVER_ERROR"');
+      expect(body).toContain('"cause":null');
+      expect(body).not.toContain("Connection to the database was lost");
+    });
+
     test("the phone's key links the sign-in, which then passes the gates", async () => {
       const account = await createAccount();
       const signIn = await account.signIn();

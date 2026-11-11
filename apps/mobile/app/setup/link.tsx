@@ -60,7 +60,7 @@ const LinkWithOtherPhoneScreen = () => {
   const [handover, setHandover] = useState<Handover | null>(null);
   const [problem, setProblem] = useState<{
     message: string;
-    action: "start" | "newCode" | "finish" | "continue" | "home" | "setup";
+    action: "start" | "newCode" | "finish" | "confirm" | "continue" | "home" | "setup";
   } | null>(null);
   const forgottenLinkId = useRef<string | null>(null);
   const status = useQuery({
@@ -136,6 +136,19 @@ const LinkWithOtherPhoneScreen = () => {
     });
   };
 
+  const confirmActive = async () => {
+    setProblem(null);
+    const active = await tryCatch(isThisDeviceActive());
+    if (active.data !== true) {
+      setProblem({
+        message: `${HANDOVER_REJECTED_MESSAGE} We couldn’t check that this phone is set up. Check your connection and try again.`,
+        action: "confirm",
+      });
+      return;
+    }
+    setProblem({ message: HANDOVER_REJECTED_MESSAGE, action: "continue" });
+  };
+
   const finish = async (approved: Handover, current: { linkId: string; psk: Uint8Array }) => {
     setProblem(null);
     const finished = await tryCatch(
@@ -143,7 +156,7 @@ const LinkWithOtherPhoneScreen = () => {
     );
     if (finished.error) {
       if (finished.error.message === HANDOVER_REJECTED_MESSAGE) {
-        setProblem({ message: HANDOVER_REJECTED_MESSAGE, action: "continue" });
+        await confirmActive();
         return;
       }
       setProblem({ message: problemMessage(finished.error), action: "finish" });
@@ -243,6 +256,11 @@ const LinkWithOtherPhoneScreen = () => {
                   <Text>Continue</Text>
                 </Button>
               </Link>
+            )}
+            {problem.action === "confirm" && (
+              <Button onPress={confirmActive}>
+                <Text>Try again</Text>
+              </Button>
             )}
             {problem.action === "home" && (
               <Link href="/" replace asChild>

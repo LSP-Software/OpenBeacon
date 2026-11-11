@@ -24,6 +24,7 @@ let goneLinkId: string | null = null;
 let statusError: Error | null = null;
 const backHandlers = new Set<() => boolean>();
 let deviceActive = false;
+let activeCheck: () => Promise<boolean> = async () => deviceActive;
 let canGoBack = false;
 let gestureEnabled: boolean | undefined;
 const secureStoreValues = new Map<string, string>();
@@ -129,7 +130,7 @@ mock.module("../lib/api.ts", () => ({
 }));
 mock.module("../lib/deviceKeys.ts", () => ({ ensureDeviceKeyRegistration }));
 mock.module("../lib/deviceActivation.ts", () => ({
-  isThisDeviceActive: async () => deviceActive,
+  isThisDeviceActive: () => activeCheck(),
 }));
 mock.module("../lib/createHistoryKey.ts", () => ({
   KEY_NOT_SAVED_MESSAGE: "Unable to save your keys on this phone.",
@@ -168,6 +169,7 @@ beforeEach(() => {
   goneLinkId = null;
   statusError = null;
   deviceActive = false;
+  activeCheck = async () => deviceActive;
   canGoBack = false;
   gestureEnabled = undefined;
   secureStoreValues.clear();
@@ -216,11 +218,12 @@ test("a network error after approval offers Try again with the same handover", a
   expect(replace.mock.calls).toEqual([["/setup/name"]]);
 });
 
-test("a rejected handover only offers Continue", async () => {
+test("a rejected handover only offers Continue once the server confirms this phone is set up", async () => {
   finishDeviceLink.mockImplementationOnce(async () => {
     throw new Error(HANDOVER_REJECTED_MESSAGE);
   });
   await render();
+  activeCheck = async () => true;
   statusData = approvedStatus;
   await render();
 
@@ -228,6 +231,44 @@ test("a rejected handover only offers Continue", async () => {
   expect(rendered()).not.toContain("Try again");
   await pressButton("Continue");
   expect(replace.mock.calls).toEqual([["/setup/name"]]);
+});
+
+test("a rejected handover that can't be confirmed offers Try again instead of Continue", async () => {
+  finishDeviceLink.mockImplementationOnce(async () => {
+    throw new Error(HANDOVER_REJECTED_MESSAGE);
+  });
+  await render();
+  activeCheck = async () => {
+    throw new TRPCClientError("Network request failed");
+  };
+  statusData = approvedStatus;
+  await render();
+
+  expect(rendered()).toContain("We couldn’t check that this phone is set up");
+  expect(rendered()).not.toContain("Continue");
+  expect(replace).not.toHaveBeenCalled();
+  canGoBack = true;
+  expect(pressHardwareBack()).toBe(false);
+
+  activeCheck = async () => true;
+  await pressButton("Try again");
+
+  expect(finishDeviceLink).toHaveBeenCalledTimes(1);
+  expect(rendered()).toContain(HANDOVER_REJECTED_MESSAGE);
+  await pressButton("Continue");
+  expect(replace.mock.calls).toEqual([["/setup/name"]]);
+});
+
+test("a rejected handover the server says isn't set up offers Try again", async () => {
+  finishDeviceLink.mockImplementationOnce(async () => {
+    throw new Error(HANDOVER_REJECTED_MESSAGE);
+  });
+  await render();
+  statusData = approvedStatus;
+  await render();
+
+  expect(rendered()).toContain("We couldn’t check that this phone is set up");
+  expect(rendered()).not.toContain("Continue");
 });
 
 test("a phone that's already set up is told so instead of being told the server is unreachable", async () => {

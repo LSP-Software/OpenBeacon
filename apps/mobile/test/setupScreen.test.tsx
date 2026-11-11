@@ -160,6 +160,28 @@ test.each(["phoneRemoved", "signedOut"] as const)(
   },
 );
 
+test("cancelling says the phone is only signed out when the server refuses to remove it", async () => {
+  await render();
+  await cancelSetup();
+  expect(alerts.map(({ title }) => title)).toEqual(["Cancel setup?"]);
+
+  signOutStatus = "signedOut";
+  await cancelSetup();
+  expect(alerts.at(-1)?.title).toBe("You’re signed out");
+  expect(alerts.at(-1)?.message).toBe(
+    "This phone couldn’t be removed now; it will be removed automatically within 7 days.",
+  );
+});
+
+test("signing out anyway after an unreachable server doesn't warn again", async () => {
+  signOutStatus = "serverUnreachable";
+  await render();
+  await cancelSetup();
+  signOutStatus = "signedOut";
+  await pressAlertButton("Sign out anyway");
+  expect(alerts.map(({ title }) => title)).toEqual(["Cancel setup?", "Couldn’t reach the server"]);
+});
+
 test("when the server can't be reached, stays on setup and offers to try again or sign out anyway", async () => {
   signOutStatus = "serverUnreachable";
   await render();

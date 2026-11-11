@@ -113,7 +113,8 @@ const recoverUnverifiedSession = async () => {
 
 export const handleDeviceUnverified = () => {
   if (pendingRecovery) return pendingRecovery;
-  if (failedRecoveries >= 5 || Date.now() - lastFailure < 10_000) return Promise.resolve();
+  const backOff = failedRecoveries >= 5 ? 300_000 : 10_000;
+  if (Date.now() - lastFailure < backOff) return Promise.resolve();
   const task = recoverUnverifiedSession().finally(() => {
     pendingRecovery = null;
   });

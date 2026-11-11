@@ -1968,7 +1968,7 @@ describe("tracking service", () => {
       expect(requests).not.toContain("auth.registerDeviceKey");
     });
 
-    test("an upload the server rejects as forbidden registers again and rechecks keys in the same run", async () => {
+    test("an upload the server rejects as forbidden keeps this phone's registration and rechecks keys in the same run", async () => {
       await startTracking();
       pendingCiphertexts = [
         createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
@@ -1982,9 +1982,9 @@ describe("tracking service", () => {
       await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
 
       expect(requests[0]).toBe("groupTracking.uploadBatch");
-      expect(requests).toEqual(
-        expect.arrayContaining(["auth.registerDeviceKey", ...keyCheckRequests]),
-      );
+      expect(requests).toEqual(expect.arrayContaining(keyCheckRequests));
+      expect(requests).not.toContain("auth.registerDeviceKey");
+      expect(registeredDevice?.deviceId).toBe("device-1");
     });
 
     test("an upload with an unknown epoch rechecks keys in the same run", async () => {
