@@ -62,7 +62,7 @@ export const groupEpochRouter = {
     return getGroupJoinContext({ db: ctx.db, groupId: input.groupId, userId: ctx.session.user.id });
   }),
   rotate: activeGroupMemberProcedure
-    .input(z.object({ groupId: z.string(), nextEpoch: groupEpochBundleSchema }))
+    .input(z.object({ groupId: z.string().min(1).max(128), nextEpoch: groupEpochBundleSchema }))
     .mutation(async ({ ctx, input }) => {
       return ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
@@ -145,9 +145,9 @@ export const groupEpochRouter = {
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .input(
       z.object({
-        deviceId: z.string().min(1),
-        epochId: z.string().min(1),
-        groupId: z.string().min(1),
+        deviceId: z.string().min(1).max(128),
+        epochId: z.string().min(1).max(128),
+        groupId: z.string().min(1).max(128),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -167,8 +167,8 @@ export const groupEpochRouter = {
     .input(
       z.object({
         cursor: z.number().int().positive().nullish(),
-        deviceId: z.string().min(1),
-        groupId: z.string().min(1),
+        deviceId: z.string().min(1).max(128),
+        groupId: z.string().min(1).max(128),
         limit: z.number().int().min(1).max(100).default(100),
       }),
     )
@@ -206,8 +206,8 @@ export const groupEpochRouter = {
     .input(
       z.object({
         cursor: z.number().int().nonnegative().nullish(),
-        deviceId: z.string().min(1),
-        groupId: z.string().min(1),
+        deviceId: z.string().min(1).max(128),
+        groupId: z.string().min(1).max(128),
       }),
     )
     .query(async ({ ctx, input }) => {

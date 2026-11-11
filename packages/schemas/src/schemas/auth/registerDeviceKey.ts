@@ -61,7 +61,7 @@ export const wrappedEpochKeySchema = z.object({
   wrappedKey: encodedBytes(48),
 });
 
-export const historyKeyVersionSchema = z.number().int().positive();
+export const historyKeyVersionSchema = z.number().int().positive().max(2_147_483_647);
 
 export const wrappedHistoryEpochKeySchema = z.strictObject({
   algorithm: z.literal(WRAPPED_EPOCH_KEY_ALGORITHM),
@@ -80,9 +80,9 @@ export const groupEpochBundleSchema = z
   .object({
     createdByDeviceId: z.string().min(1).max(128),
     epochId: z.string().min(1).max(128),
-    epochNumber: z.number().int().positive(),
-    historyKeys: z.array(wrappedHistoryEpochKeySchema),
-    recipientKeys: z.array(wrappedEpochKeySchema).min(1),
+    epochNumber: z.number().int().positive().max(2_147_483_647),
+    historyKeys: z.array(wrappedHistoryEpochKeySchema).max(1000),
+    recipientKeys: z.array(wrappedEpochKeySchema).min(1).max(5000),
   })
   .superRefine(({ epochId, recipientKeys }, ctx) => {
     recipientKeys.forEach((recipient, index) => {

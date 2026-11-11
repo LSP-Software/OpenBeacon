@@ -32,7 +32,7 @@ export const authRouter = createTRPCRouter({
         windowMs: 60_000,
       },
     })
-    .input(registerDeviceKeySchema.extend({ expectedUserId: z.string().min(1) }))
+    .input(registerDeviceKeySchema.extend({ expectedUserId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       if (input.expectedUserId !== ctx.session.user.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "The active account has changed." });

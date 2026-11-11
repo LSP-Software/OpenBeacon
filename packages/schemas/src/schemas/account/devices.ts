@@ -8,7 +8,7 @@ export const deviceNameSchema = z
   .trim()
   .min(1, { message: "Name is required" })
   .max(40, { message: "Name must be at most 40 characters" })
-  .refine((name) => !/[\p{Cc}\p{Cs}]/u.test(name), {
+  .refine((name) => !/[\p{Cc}\p{Cs}]|(?!\u200d)\p{Cf}/u.test(name), {
     message: "Name contains invalid characters",
   });
 

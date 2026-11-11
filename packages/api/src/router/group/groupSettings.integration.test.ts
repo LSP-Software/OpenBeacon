@@ -667,6 +667,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             () =>
               api.groupMembership.updateRole({ groupId: lockedGroupId, memberId, role: "ADMIN" }),
             () => api.groupSettings.rename({ groupId: lockedGroupId, name: "Taken" }),
+            () => api.groupSettings.confirmGroupImageUpload({ groupId: lockedGroupId }),
           ];
           for (const attempt of attempts) {
             const { error } = await tryCatch(attempt());

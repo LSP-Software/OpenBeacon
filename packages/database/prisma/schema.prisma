@@ -323,6 +323,7 @@ model GroupEpoch {
 
   @@unique([groupId, epochNumber])
   @@index([groupId, createdAt])
+  @@index([createdByDeviceId])
 }
 
 model GroupEncryptedPayload {
@@ -363,6 +364,7 @@ model GroupEpochRecipientKey {
   createdAt          DateTime   @default(now())
 
   @@unique([groupEpochId, recipientDeviceId])
+  @@index([recipientDeviceId])
 }
 
 model RecoveryKey {

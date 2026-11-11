@@ -15,6 +15,22 @@ describe("deviceNameSchema", () => {
       expect(deviceNameSchema.safeParse(name).success).toBe(false);
     }
   });
+  test("rejects invisible format characters that could disguise another phone's name", () => {
+    for (const name of [
+      "Sam\u202Es iPhone",
+      "Sam\u200B's iPhone",
+      "\u2066Phone\u2069",
+      "Pho\uFEFFne",
+    ]) {
+      expect(deviceNameSchema.safeParse(name).success).toBe(false);
+    }
+  });
+
+  test("keeps emoji joined with zero-width joiners", () => {
+    expect(deviceNameSchema.safeParse("\u{1F468}\u200D\u{1F469}\u200D\u{1F467} iPad").success).toBe(
+      true,
+    );
+  });
 });
 
 describe("deviceIconSchema", () => {
