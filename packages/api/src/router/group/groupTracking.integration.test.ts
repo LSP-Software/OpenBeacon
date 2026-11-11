@@ -215,7 +215,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     const ownerPendingId = `${prefix}-owner-pending`;
     await prisma.userDevice.createMany({
       data: [
-        { id: ownerTabletId, userId: ownerId, name: "Tablet", icon: "tablet" as const },
+        {
+          id: ownerTabletId,
+          userId: ownerId,
+          name: "Tablet",
+          icon: "tablet" as const,
+          platform: "android",
+        },
         {
           id: ownerRemovedId,
           userId: ownerId,
@@ -324,7 +330,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       userId: ownerId,
       name: "Tablet",
       icon: "tablet",
+      platform: "android",
     });
+    expect(devices.find((device) => device.deviceId === ownerSilentId)?.platform).toBeNull();
     await expect(
       caller(outsiderId, outsiderDeviceId).groupMembership.listMemberDevices({ groupId }),
     ).rejects.toMatchObject({ code: "FORBIDDEN", message: "You are not a member of this group" });

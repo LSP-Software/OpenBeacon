@@ -2,7 +2,7 @@ import { Link } from "expo-router";
 import { Pressable, View } from "react-native";
 import { useTimeSince } from "../../hooks/useTimeSince.ts";
 import { getBatteryVisual } from "../../lib/batteryVisual.ts";
-import { type DeviceIcon, deviceIcons } from "../../lib/deviceIcons.ts";
+import { type DeviceIcon, deviceIconFor } from "../../lib/deviceIcons.ts";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Icon } from "../ui/Icon.tsx";
@@ -15,6 +15,7 @@ type PersonDevice = {
   icon: DeviceIcon;
   isThisDevice: boolean;
   name: string;
+  platform: string | null;
   timestamp: string | null;
   unreadable: boolean;
 };
@@ -156,7 +157,11 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
   const content = (
     <>
       <View className="size-9 items-center justify-center rounded-xl border border-border bg-background">
-        <Icon as={deviceIcons[device.icon].icon} size={18} className="text-foreground" />
+        <Icon
+          as={deviceIconFor(device.icon, device.platform).icon}
+          size={18}
+          className="text-foreground"
+        />
       </View>
       <View className="min-w-0 flex-1">
         <Text className="text-foreground font-semibold" numberOfLines={1}>

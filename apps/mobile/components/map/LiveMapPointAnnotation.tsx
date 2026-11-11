@@ -57,6 +57,7 @@ export const LiveMapPointAnnotation = ({
   }, [
     headingDegrees,
     marker.deviceIcon,
+    marker.devicePlatform,
     marker.mergedDeviceIds?.length,
     marker.image,
     marker.initials,
@@ -84,6 +85,7 @@ export const LiveMapPointAnnotation = ({
             <LiveMapMarkerPin
               deviceCount={marker.mergedDeviceIds?.length}
               deviceIcon={marker.deviceIcon}
+              devicePlatform={marker.devicePlatform}
               hasUnreadableUpdate={marker.unreadableGroup !== undefined}
               headingDegrees={headingDegrees}
               image={marker.image}
@@ -112,6 +114,7 @@ export const LiveMapPointAnnotation = ({
         <LiveMapMarkerPin
           deviceCount={marker.mergedDeviceIds?.length}
           deviceIcon={marker.deviceIcon}
+          devicePlatform={marker.devicePlatform}
           hasUnreadableUpdate={marker.unreadableGroup !== undefined}
           headingDegrees={headingDegrees}
           image={marker.image}

@@ -59,10 +59,10 @@ mock.module("lucide-react-native", () => ({
   EyeOffIcon: () => null,
   BackpackIcon: () => null,
   CarIcon: () => null,
+  createLucideIcon: () => () => null,
   HouseIcon: () => null,
   LaptopIcon: () => null,
   SmartphoneIcon: () => null,
-  TabletIcon: () => null,
   TagIcon: () => null,
   WatchIcon: () => null,
 }));
@@ -204,5 +204,33 @@ describe("LiveMapMarkerPin", () => {
     expect(pin).toContain("Newer location can’t be read");
     expect(pin).not.toContain("Location is over");
     expect(circles).toEqual([]);
+  });
+
+  test("names the device badge after the phone's platform", async () => {
+    root = createRoot();
+    const badge = async (
+      deviceIcon: "phone" | "tablet",
+      devicePlatform: "android" | "ios" | null,
+    ) => {
+      await act(async () => {
+        root?.render(
+          <LiveMapMarkerPin
+            deviceIcon={deviceIcon}
+            devicePlatform={devicePlatform}
+            image={null}
+            initials="AB"
+            name="Alice"
+            ringColor="#fff"
+            timestamp={null}
+          />,
+        );
+      });
+      return JSON.stringify(root?.container.toJSON());
+    };
+
+    expect(await badge("phone", "ios")).toContain('"iPhone"');
+    expect(await badge("phone", "android")).toContain('"Android phone"');
+    expect(await badge("phone", null)).toContain('"Phone"');
+    expect(await badge("tablet", "ios")).toContain('"Tablet"');
   });
 });

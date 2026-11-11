@@ -20,7 +20,7 @@ import { Alert } from "../../lib/alert.ts";
 import { type RouterOutputs, trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { cn } from "../../lib/cn.ts";
-import { deviceIcons } from "../../lib/deviceIcons.ts";
+import { deviceIconFor } from "../../lib/deviceIcons.ts";
 import { shortTimeSince } from "../../lib/timeSince.ts";
 
 const schema = z.object({ name: deviceNameSchema, icon: deviceIconSchema });
@@ -71,11 +71,12 @@ const DevicesScreen = () => {
           <View accessibilityRole="radiogroup" className="flex-row flex-wrap gap-3">
             {deviceIconSchema.options.map((icon) => {
               const selected = selectedIcon === icon;
+              const option = deviceIconFor(icon, editing?.platform);
               return (
                 <Pressable
                   key={icon}
                   accessibilityRole="radio"
-                  accessibilityLabel={deviceIcons[icon].label}
+                  accessibilityLabel={option.label}
                   accessibilityState={{ checked: selected }}
                   onPress={() => form.setValue("icon", icon)}
                   className={cn(
@@ -84,7 +85,7 @@ const DevicesScreen = () => {
                   )}
                 >
                   <Icon
-                    as={deviceIcons[icon].icon}
+                    as={option.icon}
                     className={selected ? "text-primary size-6" : "text-muted-foreground size-6"}
                   />
                 </Pressable>
@@ -161,7 +162,10 @@ const DevicesScreen = () => {
                   }}
                 >
                   <View className="size-11 items-center justify-center rounded-2xl border border-border bg-background/70">
-                    <Icon as={deviceIcons[device.icon].icon} className="text-primary size-5" />
+                    <Icon
+                      as={deviceIconFor(device.icon, device.platform).icon}
+                      className="text-primary size-5"
+                    />
                   </View>
                   <View className="flex-1 gap-1">
                     <View className="flex-row flex-wrap items-center gap-2">

@@ -87,7 +87,11 @@ mock.module("../components/ui/Text.tsx", () => ({
 mock.module("../hooks/useGroupColorRevision.ts", () => ({ useGroupColorRevision: () => 0 }));
 mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useCurrentGroupKeyAccess: () => access }));
 mock.module("../hooks/useMapLivePositions.ts", () => ({
-  useMapLivePositions: () => ({ positions: [], status: trackingStatus }),
+  useMapLivePositions: () => ({
+    dropRemovedDevices: () => {},
+    positions: [],
+    status: trackingStatus,
+  }),
 }));
 mock.module("../hooks/useMembershipSnapshot.ts", () => ({ useMembershipSnapshot: () => groups }));
 mock.module("../hooks/useTrackingUploadTime.ts", () => ({ useTrackingUploadTime: () => null }));

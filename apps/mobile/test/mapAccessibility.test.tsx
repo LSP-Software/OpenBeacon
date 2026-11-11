@@ -35,7 +35,7 @@ mock.module("../lib/batteryVisual.ts", () => ({
   getBatteryVisual: () => ({ colorClass: "", icon: () => null }),
 }));
 mock.module("../lib/deviceIcons.ts", () => ({
-  deviceIcons: { phone: { icon: () => null, label: "Phone" } },
+  deviceIconFor: () => ({ icon: () => null, label: "Phone" }),
 }));
 mock.module("../components/map/LiveMapMarkerPin.tsx", () => ({ LiveMapMarkerPin: () => null }));
 mock.module("../components/map/LiveMapPinMotion.tsx", () => ({ LiveMapPinMotion: Passthrough }));
@@ -127,6 +127,7 @@ test("a device row without a location on the map isn't a button", async () => {
     battery: null,
     icon: "phone" as const,
     isThisDevice: false,
+    platform: null,
     unreadable: false,
   };
   const rows = await pressables(
@@ -163,7 +164,13 @@ test("a device row without a location on the map isn't a button", async () => {
 });
 
 test("someone with several devices still gets a way to open the group whose key is missing", async () => {
-  const device = { battery: null, icon: "phone" as const, isThisDevice: false, timestamp: null };
+  const device = {
+    battery: null,
+    icon: "phone" as const,
+    isThisDevice: false,
+    platform: null,
+    timestamp: null,
+  };
   const links = (
     await pressables(
       <LiveMapPersonSheet

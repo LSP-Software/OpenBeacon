@@ -10,6 +10,7 @@ export type LiveMapMarker = {
   deviceIcon?: DeviceIcon;
   deviceId: string;
   deviceName?: string;
+  devicePlatform?: MapMemberDevice["platform"];
   image: string | null;
   initials: string;
   isSelf: boolean;
@@ -102,7 +103,12 @@ export const labelDeviceIcons = ({
     const devices = memberDevices.filter((device) => device.userId === marker.userId);
     const device = devices.find((item) => item.deviceId === marker.deviceId);
     return devices.length >= 2 && device
-      ? { ...marker, deviceIcon: device.icon, deviceName: device.name }
+      ? {
+          ...marker,
+          deviceIcon: device.icon,
+          deviceName: device.name,
+          devicePlatform: device.platform,
+        }
       : marker;
   });
 

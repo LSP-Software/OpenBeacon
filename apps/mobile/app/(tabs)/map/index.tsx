@@ -1,7 +1,7 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeMap } from "../../../components/map/NativeMap.tsx";
@@ -42,7 +42,11 @@ const keyBannerDismissedKey = (userId: string, groupId: string) =>
 
 const MapScreen = () => {
   const insets = useSafeAreaInsets();
-  const { positions: livePositions, status: trackingStatus } = useMapLivePositions();
+  const {
+    dropRemovedDevices,
+    positions: livePositions,
+    status: trackingStatus,
+  } = useMapLivePositions();
   const { data: session } = authClient.useSession();
   const isFocused = useIsFocused();
   const { data: groupsQueryData } = useQuery({
@@ -97,13 +101,35 @@ const MapScreen = () => {
     queryFn: readRegisteredDevice,
   });
   const selfDeviceId = registeredDevice?.userId === selfUserId ? registeredDevice.deviceId : "";
-  const memberDevices = useQueries({
+  const memberDeviceLists = useQueries({
     queries: (groups ?? []).map((group) => ({
       ...trpc.groupMembership.listMemberDevices.queryOptions({ groupId: group.id }),
       subscribed: isFocused,
     })),
-    combine: uniqueMemberDevices,
+    combine: listMemberDeviceResults,
   });
+  const memberDevices = useMemo(
+    () => [
+      ...new Map(
+        memberDeviceLists
+          .flatMap((devices) => devices ?? [])
+          .map((device) => [device.deviceId, device]),
+      ).values(),
+    ],
+    [memberDeviceLists],
+  );
+  const appliedMemberDeviceLists = useRef(new WeakSet<readonly MapMemberDevice[]>());
+  useEffect(() => {
+    groups?.forEach((group, index) => {
+      const devices = memberDeviceLists[index];
+      if (!devices || appliedMemberDeviceLists.current.has(devices)) return;
+      appliedMemberDeviceLists.current.add(devices);
+      dropRemovedDevices({
+        activeDeviceIds: new Set(devices.map(({ deviceId }) => deviceId)),
+        groupId: group.id,
+      });
+    });
+  }, [dropRemovedDevices, groups, memberDeviceLists]);
   const peopleTrayKey = `map.peopleTrayOpen.${selfUserId}`;
   const storedPeopleTrayOpen = useMemo(
     () => storage.getBoolean(peopleTrayKey) ?? false,
@@ -399,12 +425,8 @@ const MapScreen = () => {
   );
 };
 
-const uniqueMemberDevices = (
+const listMemberDeviceResults = (
   results: readonly { data?: readonly MapMemberDevice[] | undefined }[],
-) => [
-  ...new Map(
-    results.flatMap((result) => result.data ?? []).map((device) => [device.deviceId, device]),
-  ).values(),
-];
+) => results.map((result) => result.data);
 
 export default MapScreen;

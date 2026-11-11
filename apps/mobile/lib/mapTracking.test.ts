@@ -1734,3 +1734,166 @@ describe("createMapTrackingSession status", () => {
     ]);
   });
 });
+
+describe("createMapTrackingSession removed devices", () => {
+  const quietPoint = point({
+    createdAt: new Date("2026-05-01T08:00:00.000Z"),
+    id: "quiet-point",
+    senderDeviceId: "quiet",
+    senderUserId: "user-1",
+  });
+  const removedPoint = point({
+    createdAt: new Date("2026-07-17T12:00:00.000Z"),
+    id: "removed-point",
+    senderDeviceId: "removed",
+    senderUserId: "user-1",
+  });
+  const deviceIds = (session: ReturnType<typeof createMapTrackingSession>) =>
+    session
+      .getLivePositions()
+      .map(({ deviceId }) => deviceId)
+      .sort();
+
+  test("the five-minute reconcile drops devices the server no longer lists and keeps quiet ones", async () => {
+    let latest = [quietPoint, removedPoint];
+    const { session, setNow } = createSession({ getLatest: async () => ({ points: latest }) });
+
+    session.setActive(true);
+    await session.tick();
+    expect(deviceIds(session)).toEqual(["quiet", "removed"]);
+
+    latest = [quietPoint];
+    setNow(5 * 60_000);
+    await session.tick();
+
+    expect(deviceIds(session)).toEqual(["quiet"]);
+  });
+
+  test("a reconcile with no points left clears the group's pins", async () => {
+    let latest = [removedPoint];
+    const { session, setNow } = createSession({ getLatest: async () => ({ points: latest }) });
+
+    session.setActive(true);
+    await session.tick();
+    latest = [];
+    setNow(5 * 60_000);
+    await session.tick();
+
+    expect(deviceIds(session)).toEqual([]);
+  });
+
+  test("keeps a device whose first point arrives by poll while the reconcile is in flight", async () => {
+    let releaseLatest: (() => void) | null = null;
+    let latestCalls = 0;
+    const newPoint = point({
+      createdAt: new Date("2026-07-17T12:05:00.000Z"),
+      id: "new-point",
+      senderDeviceId: "new",
+      senderUserId: "user-2",
+    });
+    const { session, setNow, settle } = createSession({
+      getLatest: async () => {
+        latestCalls += 1;
+        if (latestCalls === 1) return { points: [quietPoint] };
+        await new Promise<void>((resolve) => {
+          releaseLatest = resolve;
+        });
+        return { points: [quietPoint] };
+      },
+      poll: async () => ({ points: latestCalls > 1 ? [newPoint] : [] }),
+    });
+
+    session.setActive(true);
+    await session.tick();
+    setNow(5 * 60_000);
+    const reconcile = session.tick();
+    await settle();
+    await settle();
+    expect(deviceIds(session)).toEqual(["new", "quiet"]);
+    releaseLatest!();
+    await reconcile;
+
+    expect(deviceIds(session)).toEqual(["new", "quiet"]);
+  });
+
+  test("forgets an unreadable device once the server no longer lists it", async () => {
+    let latest = [quietPoint, removedPoint];
+    const { session, setNow } = createSession({
+      decryptPoint: async ({ groupId, point: row }) =>
+        row.senderDeviceId === "removed"
+          ? { status: "undecryptable" }
+          : {
+              status: "ok",
+              entry: liveEntry({
+                deviceId: row.senderDeviceId,
+                serverCreatedAt: row.createdAt,
+                serverId: row.id,
+                sourceGroupId: groupId,
+                timestamp: row.createdAt.toISOString(),
+                userId: row.senderUserId,
+              }),
+            },
+      getLatest: async () => ({ points: latest }),
+    });
+
+    session.setActive(true);
+    await session.tick();
+    expect(session.getStatus().undecryptable).toHaveLength(1);
+
+    latest = [quietPoint];
+    setNow(5 * 60_000);
+    await session.tick();
+
+    expect(session.getStatus().undecryptable).toEqual([]);
+  });
+
+  test("drops devices missing from the group's active device list without a request", async () => {
+    const { getLatestCalls, pollCalls, session } = createSession({
+      decryptPoint: async ({ groupId, point: row }) =>
+        row.senderDeviceId === "unreadable"
+          ? { status: "undecryptable" }
+          : {
+              status: "ok",
+              entry: liveEntry({
+                deviceId: row.senderDeviceId,
+                serverCreatedAt: row.createdAt,
+                serverId: row.id,
+                sourceGroupId: groupId,
+                timestamp: row.createdAt.toISOString(),
+                userId: row.senderUserId,
+              }),
+            },
+      getLatest: async () => ({
+        points: [
+          quietPoint,
+          removedPoint,
+          point({
+            createdAt: new Date("2026-07-17T12:00:00.000Z"),
+            id: "unreadable-point",
+            senderDeviceId: "unreadable",
+            senderUserId: "user-2",
+          }),
+        ],
+      }),
+    });
+    let notifications = 0;
+    session.subscribe(() => {
+      notifications += 1;
+    });
+
+    session.setActive(true);
+    await session.tick();
+    const requests = getLatestCalls.length + pollCalls.length;
+    notifications = 0;
+
+    session.dropRemovedDevices({ activeDeviceIds: new Set(["quiet"]), groupId: "group-1" });
+
+    expect(deviceIds(session)).toEqual(["quiet"]);
+    expect(session.getStatus().undecryptable).toEqual([]);
+    expect(notifications).toBe(1);
+    expect(getLatestCalls.length + pollCalls.length).toBe(requests);
+
+    session.dropRemovedDevices({ activeDeviceIds: new Set(["quiet"]), groupId: "group-1" });
+    expect(notifications).toBe(1);
+  });
+});

@@ -45,3 +45,22 @@ export const reduceLivePositions = (
 
   return next;
 };
+
+export const dropInactiveDevices = (
+  current: ReadonlyMap<string, LiveMapEntry>,
+  {
+    activeDeviceIds,
+    seenAtRequest,
+  }: {
+    activeDeviceIds: ReadonlySet<string>;
+    seenAtRequest: ReadonlyMap<string, LiveMapEntry>;
+  },
+) => {
+  const next = new Map(current);
+  for (const [deviceId, entry] of current) {
+    if (!activeDeviceIds.has(deviceId) && seenAtRequest.get(deviceId) === entry) {
+      next.delete(deviceId);
+    }
+  }
+  return next.size === current.size ? current : next;
+};

@@ -59,6 +59,7 @@ describe("buildMemberLiveStatuses", () => {
             deviceId: "bob-phone",
             icon: null,
             name: null,
+            platform: null,
             timestamp: "2026-07-17T12:05:00.000Z",
           },
         ],
@@ -129,8 +130,20 @@ describe("buildMemberLiveStatuses", () => {
   test("lists each device newest first and shows the newest one for the person", () => {
     const [alice] = buildMemberLiveStatuses({
       memberDevices: [
-        { deviceId: "alice-phone", icon: "phone", name: "Pixel 9", userId: "alice" },
-        { deviceId: "alice-tablet", icon: "tablet", name: "iPad", userId: "alice" },
+        {
+          deviceId: "alice-phone",
+          icon: "phone",
+          name: "Pixel 9",
+          platform: "android",
+          userId: "alice",
+        },
+        {
+          deviceId: "alice-tablet",
+          icon: "tablet",
+          name: "iPad",
+          platform: "ios",
+          userId: "alice",
+        },
       ],
       members: [
         {

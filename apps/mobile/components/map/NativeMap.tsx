@@ -612,6 +612,7 @@ export const NativeMap = ({
                   icon: device.icon,
                   isThisDevice: device.marker?.isSelf ?? false,
                   name: device.name,
+                  platform: device.platform,
                   timestamp: device.marker?.timestamp ?? null,
                   unreadable: device.unreadable || device.marker?.unreadableGroup !== undefined,
                 }))

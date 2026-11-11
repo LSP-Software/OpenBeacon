@@ -296,15 +296,27 @@ test("only marks this device as self and badges people with two or more devices"
   const labelled = labelDeviceIcons({
     markers,
     memberDevices: [
-      { deviceId: "alice-phone", icon: "phone", name: "Pixel 9", userId: "alice" },
-      { deviceId: "alice-tablet", icon: "tablet", name: "iPad", userId: "alice" },
-      { deviceId: "bob-phone", icon: "phone", name: "Pixel 8", userId: "bob" },
+      {
+        deviceId: "alice-phone",
+        icon: "phone",
+        name: "Pixel 9",
+        platform: "android",
+        userId: "alice",
+      },
+      { deviceId: "alice-tablet", icon: "tablet", name: "iPad", platform: "ios", userId: "alice" },
+      { deviceId: "bob-phone", icon: "phone", name: "Pixel 8", platform: "android", userId: "bob" },
     ],
   });
-  expect(labelled.map(({ deviceIcon, deviceName }) => ({ deviceIcon, deviceName }))).toEqual([
-    { deviceIcon: "phone", deviceName: "Pixel 9" },
-    { deviceIcon: "tablet", deviceName: "iPad" },
-    { deviceIcon: undefined, deviceName: undefined },
+  expect(
+    labelled.map(({ deviceIcon, deviceName, devicePlatform }) => ({
+      deviceIcon,
+      deviceName,
+      devicePlatform,
+    })),
+  ).toEqual([
+    { deviceIcon: "phone", deviceName: "Pixel 9", devicePlatform: "android" },
+    { deviceIcon: "tablet", deviceName: "iPad", devicePlatform: "ios" },
+    { deviceIcon: undefined, deviceName: undefined, devicePlatform: undefined },
   ]);
   expect(labelled[2]).toBe(markers[2]);
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { reduceLivePositions } from "./liveMapReducer.ts";
+import { dropInactiveDevices, reduceLivePositions } from "./liveMapReducer.ts";
 
 const entry = ({
   battery = { charging: false, level: 80 },
@@ -213,5 +213,61 @@ describe("reduceLivePositions", () => {
     expect(next.get("phone")).toEqual(phone);
     expect(next.get("tablet")).toEqual(tablet);
     expect(again).toEqual(next);
+  });
+});
+
+describe("dropInactiveDevices", () => {
+  const devicePin = (deviceId: string, timestamp: string) =>
+    entry({
+      deviceId,
+      latitude: 51.5,
+      longitude: -0.1,
+      serverCreatedAt: new Date(timestamp),
+      serverId: `point-${deviceId}`,
+      sourceGroupId: "group-a",
+      timestamp,
+      userId: "user-1",
+    });
+
+  test("drops removed devices and keeps active ones however old their last point is", () => {
+    const removed = devicePin("removed", "2026-07-17T12:00:00.000Z");
+    const quiet = devicePin("quiet", "2026-05-01T08:00:00.000Z");
+    const current = new Map([
+      ["removed", removed],
+      ["quiet", quiet],
+    ]);
+
+    const next = dropInactiveDevices(current, {
+      activeDeviceIds: new Set(["quiet"]),
+      seenAtRequest: current,
+    });
+
+    expect([...next.keys()]).toEqual(["quiet"]);
+    expect(next.get("quiet")).toBe(quiet);
+  });
+
+  test("keeps a device whose point arrived after the authoritative view was requested", () => {
+    const before = new Map([["old", devicePin("old", "2026-07-17T12:00:00.000Z")]]);
+    const arrived = devicePin("new", "2026-07-17T12:01:00.000Z");
+    const updated = devicePin("old", "2026-07-17T12:02:00.000Z");
+    const current = new Map([
+      ["old", updated],
+      ["new", arrived],
+    ]);
+
+    const next = dropInactiveDevices(current, {
+      activeDeviceIds: new Set(),
+      seenAtRequest: before,
+    });
+
+    expect(next).toEqual(current);
+  });
+
+  test("returns the same map when nothing is dropped", () => {
+    const current = new Map([["phone", devicePin("phone", "2026-07-17T12:00:00.000Z")]]);
+
+    expect(
+      dropInactiveDevices(current, { activeDeviceIds: new Set(["phone"]), seenAtRequest: current }),
+    ).toBe(current);
   });
 });

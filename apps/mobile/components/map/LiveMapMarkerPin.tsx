@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { AppState, View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
 import { cn } from "../../lib/cn.ts";
-import { type DeviceIcon, deviceIcons } from "../../lib/deviceIcons.ts";
+import { type DeviceIcon, deviceIconFor } from "../../lib/deviceIcons.ts";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
 import type { MapPersonStatus } from "../../lib/mapPeopleTypes.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
@@ -56,6 +56,7 @@ const SPOTLIGHT_PATH = [
 export const LiveMapMarkerPin = ({
   deviceCount,
   deviceIcon,
+  devicePlatform,
   hasUnreadableUpdate = false,
   headingDegrees = null,
   image,
@@ -69,6 +70,7 @@ export const LiveMapMarkerPin = ({
 }: {
   deviceCount?: number | undefined;
   deviceIcon?: DeviceIcon | undefined;
+  devicePlatform?: string | null | undefined;
   hasUnreadableUpdate?: boolean;
   headingDegrees?: number | null;
   image: string | null;
@@ -104,6 +106,7 @@ export const LiveMapMarkerPin = ({
   }, [hasUnreadableUpdate, isStale, onBitmapContentChange]);
   const showHeading = headingDegrees !== null;
   const size = showHeading ? OUTER_SIZE : PIN_SIZE;
+  const badgeIcon = deviceIcon ? deviceIconFor(deviceIcon, devicePlatform) : null;
 
   return (
     <View
@@ -239,12 +242,12 @@ export const LiveMapMarkerPin = ({
             <Icon as={ClockIcon} size={13} className="text-foreground" />
           </StatusBadge>
         ) : null}
-        {deviceIcon ? (
+        {badgeIcon ? (
           <View
-            accessibilityLabel={deviceIcons[deviceIcon].label}
+            accessibilityLabel={badgeIcon.label}
             className="absolute bottom-0 right-0 size-5 items-center justify-center rounded-full border border-border bg-card"
           >
-            <Icon as={deviceIcons[deviceIcon].icon} size={12} className="text-foreground" />
+            <Icon as={badgeIcon.icon} size={14} className="text-foreground" />
           </View>
         ) : null}
         {deviceCount !== undefined && deviceCount > 1 ? (

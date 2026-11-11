@@ -29,7 +29,7 @@ import {
 import { authClient } from "../../../../lib/auth-client.ts";
 import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
 import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses.ts";
-import { deviceIcons } from "../../../../lib/deviceIcons.ts";
+import { deviceIconFor } from "../../../../lib/deviceIcons.ts";
 import { buildRemoveGroupMemberInput, submitEpochChange } from "../../../../lib/groupEncryption.ts";
 import { forgetHiddenMapGroup } from "../../../../lib/hiddenMapGroups.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
@@ -437,7 +437,7 @@ const MemberCard = ({ member }: { member: ReturnType<typeof buildMemberLiveStatu
                   className="flex-row items-center gap-2"
                 >
                   <Icon
-                    as={deviceIcons[device.icon ?? "phone"].icon}
+                    as={deviceIconFor(device.icon ?? "phone", device.platform).icon}
                     className="text-muted-foreground size-4"
                   />
                   <Text className="text-muted shrink text-sm" numberOfLines={1}>

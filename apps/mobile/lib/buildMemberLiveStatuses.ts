@@ -30,6 +30,7 @@ export const buildMemberLiveStatuses = ({
           deviceId: position.deviceId,
           icon: device?.icon ?? null,
           name: device?.name ?? null,
+          platform: device?.platform ?? null,
           timestamp: position.timestamp,
         };
       });

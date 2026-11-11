@@ -38,10 +38,10 @@ mock.module("lucide-react-native", () => ({
   PlusCircleIcon: () => null,
   BackpackIcon: () => null,
   CarIcon: () => null,
+  createLucideIcon: () => () => null,
   HouseIcon: () => null,
   LaptopIcon: () => null,
   SmartphoneIcon: () => null,
-  TabletIcon: () => null,
   TagIcon: () => null,
   WatchIcon: () => null,
 }));
@@ -189,8 +189,8 @@ test("each of a member's devices is read out as one line", async () => {
     { ...position, battery: { charging: true, level: 35 }, deviceId: "tablet" },
   ];
   memberDevices = [
-    { deviceId: "phone", icon: "phone", name: "Pixel", userId: "other" },
-    { deviceId: "tablet", icon: "tablet", name: "iPad", userId: "other" },
+    { deviceId: "phone", icon: "phone", name: "Pixel", platform: "android", userId: "other" },
+    { deviceId: "tablet", icon: "tablet", name: "iPad", platform: "ios", userId: "other" },
   ];
   await act(async () => root.render(<MembersTab groupId="group" />));
   const labels = root.container

@@ -45,6 +45,7 @@ export type MapMemberDevice = {
   deviceId: string;
   icon: DeviceIcon;
   name: string;
+  platform: "android" | "ios" | null;
   userId: string;
 };
 

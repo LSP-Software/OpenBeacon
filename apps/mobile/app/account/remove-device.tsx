@@ -52,6 +52,9 @@ const RemoveDeviceScreen = () => {
       return;
     }
     await queryClient.invalidateQueries({ queryKey: trpc.account.listDevices.queryKey() });
+    void queryClient.invalidateQueries({
+      queryKey: trpc.groupMembership.listMemberDevices.pathKey(),
+    });
     if (navigation.isFocused()) router.back();
     Alert.alert("Device removed", `${name} was signed out and won’t receive new locations.`);
   };

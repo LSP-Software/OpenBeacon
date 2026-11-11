@@ -54,6 +54,9 @@ mock.module("../lib/api.ts", () => ({
       listDevices: { queryKey: () => [] },
       removeDevice: { mutationOptions: () => ({}) },
     },
+    groupMembership: {
+      listMemberDevices: { pathKey: () => [] },
+    },
   },
 }));
 
