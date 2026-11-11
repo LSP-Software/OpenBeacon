@@ -84,6 +84,10 @@ const ForgotPassword = () => {
 
     const signedIn = await authClient.signIn.email({ email: step.email, password });
     const sessionSetup = signedIn.error ? null : await completeAuthenticatedSessionSetup();
+    if (sessionSetup?.deviceRemoved) {
+      setLoading(false);
+      return;
+    }
     if (signedIn.error || sessionSetup?.error) {
       setLoading(false);
       Alert.alert(

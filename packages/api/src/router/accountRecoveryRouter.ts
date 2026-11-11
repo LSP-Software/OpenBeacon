@@ -10,25 +10,25 @@ import { TRPCError } from "@trpc/server";
 import type z from "zod";
 import {
   freshSessionProcedure,
-  protectedProcedure,
+  requireFreshSession,
+  requireThisDevice,
   sessionFreshForMs,
+  setupProcedure,
 } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
+import { activateDevice, devicePendingError, lockThisDevice } from "../lib/deviceActivation.ts";
 
-const emailCodeProcedure = freshSessionProcedure.use(({ ctx, next }) => {
+const emailCodeProcedure = setupProcedure.use(requireFreshSession).use(({ ctx, next }) => {
   if (!ctx.emailCodes) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Email isn't set up on this server." });
   }
   return next({ ctx: { emailCodes: ctx.emailCodes } });
 });
 
-const lockUser = (tx: Prisma.TransactionClient, userId: string) =>
-  tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
-
 const createHistoryKey = async (
   tx: Prisma.TransactionClient,
   userId: string,
-  historyKey: z.infer<typeof setupAccountRecoverySchema>["historyKey"],
+  historyKey: z.infer<typeof resetAccountRecoverySchema>["historyKey"],
 ) => {
   const result = await tryCatch(
     tx.accountHistoryKey.create({
@@ -53,8 +53,41 @@ const createHistoryKey = async (
   if (result.error) throw result.error;
 };
 
+const replaceEscrows = async (
+  tx: Prisma.TransactionClient,
+  userId: string,
+  escrows: z.infer<typeof changeRecoveryPhraseSchema>["escrows"],
+) => {
+  const historyKeys = await tx.accountHistoryKey.findMany({
+    select: { version: true },
+    where: { userId },
+  });
+  const existingVersions = new Set(historyKeys.map(({ version }) => version));
+  const escrowVersions = new Set(escrows.map(({ version }) => version));
+  if (
+    escrowVersions.size !== escrows.length ||
+    escrowVersions.size !== existingVersions.size ||
+    [...escrowVersions].some((version) => !existingVersions.has(version))
+  ) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "Escrows must cover exactly the existing history key versions.",
+    });
+  }
+  for (const escrow of escrows) {
+    await tx.accountHistoryKey.update({
+      data: {
+        escrowAlgorithm: escrow.algorithm,
+        escrowCiphertext: escrow.ciphertext,
+        escrowEnc: escrow.enc,
+      },
+      where: { userId_version: { userId, version: escrow.version } },
+    });
+  }
+};
+
 export const accountRecoveryRouter = createTRPCRouter({
-  status: protectedProcedure.query(async ({ ctx }) => {
+  status: setupProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
     const [recoveryKey, historyKeys, freshForMs] = await Promise.all([
       ctx.db.recoveryKey.findUnique({
@@ -71,84 +104,74 @@ export const accountRecoveryRouter = createTRPCRouter({
     return {
       currentHistoryKey: historyKeys.at(-1) ?? null,
       freshForMs,
+      historyKeys: historyKeys.map(({ publicKey, version }) => ({ publicKey, version })),
       historyKeyVersions: historyKeys.map(({ version }) => version),
       recoveryKey,
       sessionFresh: freshForMs === null || freshForMs > 0,
     };
   }),
-  escrows: protectedProcedure.query(async ({ ctx }) => {
+  escrows: setupProcedure.query(async ({ ctx }) => {
     const historyKeys = await ctx.db.accountHistoryKey.findMany({
       orderBy: { version: "asc" },
       where: { userId: ctx.session.user.id },
     });
-    return historyKeys.map((historyKey) => ({
-      escrow: {
-        algorithm: historyKey.escrowAlgorithm,
-        ciphertext: historyKey.escrowCiphertext,
-        enc: historyKey.escrowEnc,
-      },
-      id: historyKey.id,
-      publicKey: historyKey.publicKey,
-      userId: historyKey.userId,
-      version: historyKey.version,
-    }));
+    return historyKeys.flatMap(
+      ({ escrowAlgorithm, escrowCiphertext, escrowEnc, id, publicKey, userId, version }) =>
+        escrowAlgorithm && escrowCiphertext && escrowEnc
+          ? [
+              {
+                escrow: {
+                  algorithm: escrowAlgorithm,
+                  ciphertext: escrowCiphertext,
+                  enc: escrowEnc,
+                },
+                id,
+                publicKey,
+                userId,
+                version,
+              },
+            ]
+          : [],
+    );
   }),
   setup: freshSessionProcedure
     .input(setupAccountRecoverySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      if (input.historyKey.version !== 1) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "The first history key must be v1." });
-      }
       await ctx.db.$transaction(async (tx) => {
-        await lockUser(tx, userId);
+        const thisDevice = await lockThisDevice({
+          db: tx,
+          deviceId: ctx.deviceId,
+          userId,
+        });
+        if (!thisDevice.active) throw devicePendingError();
         if (await tx.recoveryKey.findUnique({ where: { userId } })) {
           throw new TRPCError({
             code: "CONFLICT",
             message: "A recovery phrase is already set up.",
           });
         }
+        await replaceEscrows(tx, userId, input.escrows);
         await tx.recoveryKey.create({ data: { ...input.recoveryKey, userId } });
-        await createHistoryKey(tx, userId, input.historyKey);
       });
-      return { historyKeyVersion: input.historyKey.version };
+      return { historyKeyVersions: input.escrows.map(({ version }) => version) };
     }),
   changePhrase: freshSessionProcedure
     .input(changeRecoveryPhraseSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       await ctx.db.$transaction(async (tx) => {
-        await lockUser(tx, userId);
+        const thisDevice = await lockThisDevice({
+          db: tx,
+          deviceId: ctx.deviceId,
+          userId,
+        });
+        if (!thisDevice.active) throw devicePendingError();
         if (!(await tx.recoveryKey.findUnique({ where: { userId } }))) {
           throw new TRPCError({ code: "NOT_FOUND", message: "No recovery phrase is set up." });
         }
-        const historyKeys = await tx.accountHistoryKey.findMany({
-          select: { version: true },
-          where: { userId },
-        });
-        const existingVersions = new Set(historyKeys.map(({ version }) => version));
-        const escrowVersions = new Set(input.escrows.map(({ version }) => version));
-        if (
-          escrowVersions.size !== input.escrows.length ||
-          escrowVersions.size !== existingVersions.size ||
-          [...escrowVersions].some((version) => !existingVersions.has(version))
-        ) {
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "Escrows must cover exactly the existing history key versions.",
-          });
-        }
+        await replaceEscrows(tx, userId, input.escrows);
         await tx.recoveryKey.update({ data: input.recoveryKey, where: { userId } });
-        for (const escrow of input.escrows) {
-          await tx.accountHistoryKey.update({
-            data: {
-              escrowAlgorithm: escrow.algorithm,
-              escrowCiphertext: escrow.ciphertext,
-              escrowEnc: escrow.enc,
-            },
-            where: { userId_version: { userId, version: escrow.version } },
-          });
-        }
       });
       ctx.securityAlerts?.send(userId, { type: "recovery-phrase-changed" });
       return { historyKeyVersions: input.escrows.map(({ version }) => version) };
@@ -192,11 +215,13 @@ export const accountRecoveryRouter = createTRPCRouter({
       resetToken: await ctx.emailCodes.issueToken({ purpose: "recovery-reset", value: userId }),
     };
   }),
-  reset: freshSessionProcedure
+  reset: setupProcedure
+    .use(requireFreshSession)
+    .use(requireThisDevice)
     .input(resetAccountRecoverySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const { emailCodes } = ctx;
+      const { deviceId, emailCodes } = ctx;
       if (emailCodes && !input.resetToken) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
@@ -204,10 +229,11 @@ export const accountRecoveryRouter = createTRPCRouter({
         });
       }
       await ctx.db.$transaction(async (tx) => {
-        await lockUser(tx, userId);
-        if (!(await tx.recoveryKey.findUnique({ where: { userId } }))) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "No recovery phrase is set up." });
-        }
+        const thisDevice = await lockThisDevice({
+          db: tx,
+          deviceId,
+          userId,
+        });
         const latestHistoryKey = await tx.accountHistoryKey.findFirst({
           orderBy: { version: "desc" },
           select: { version: true },
@@ -234,8 +260,14 @@ export const accountRecoveryRouter = createTRPCRouter({
             message: "Your email confirmation has expired. Confirm a new code.",
           });
         }
+        if (
+          !(await activateDevice({ activatedBy: "reset", db: tx, deviceId, userId })) &&
+          !thisDevice.active
+        ) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "This phone isn't registered yet." });
+        }
         await tx.accountHistoryKey.deleteMany({ where: { userId } });
-        await tx.recoveryKey.delete({ where: { userId } });
+        await tx.recoveryKey.deleteMany({ where: { userId } });
         await tx.recoveryKey.create({ data: { ...input.recoveryKey, userId } });
         await createHistoryKey(tx, userId, input.historyKey);
       });

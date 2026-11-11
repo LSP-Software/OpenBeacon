@@ -139,6 +139,14 @@ mock.module("react-native", () => {
 
 mock.module("lucide-react-native", () => ({
   ArrowUpIcon: () => React.createElement("arrow-up-icon"),
+  BackpackIcon: () => React.createElement("device-icon"),
+  CarIcon: () => React.createElement("device-icon"),
+  HouseIcon: () => React.createElement("device-icon"),
+  LaptopIcon: () => React.createElement("device-icon"),
+  SmartphoneIcon: () => React.createElement("device-icon"),
+  TabletIcon: () => React.createElement("device-icon"),
+  TagIcon: () => React.createElement("device-icon"),
+  WatchIcon: () => React.createElement("device-icon"),
   EyeOffIcon: () => React.createElement("eye-off-icon"),
   LayersIcon: () => React.createElement("layers-icon"),
   LocateFixedIcon: () => React.createElement("locate-fixed-icon"),
@@ -388,18 +396,18 @@ const renderSelectableNativeMap = async (
   }
 
   const SelectableNativeMap = () => {
-    const [selectedUserId, setSelectedUserId] = React.useState<string | null>(null);
-    const selectedUserIdRef = React.useRef<string | null>(null);
+    const [selectedDeviceId, setSelectedDeviceId] = React.useState<string | null>(null);
+    const selectedDeviceIdRef = React.useRef<string | null>(null);
 
     return (
       <NativeMap
         markers={markers}
-        selectedUserId={selectedUserId}
-        onSelectUserId={(userId) => {
-          const next = nextMapMarkerSelection(selectedUserIdRef.current, userId);
-          selectedUserIdRef.current = next;
+        selectedDeviceId={selectedDeviceId}
+        onSelectDeviceId={(userId) => {
+          const next = nextMapMarkerSelection(selectedDeviceIdRef.current, userId);
+          selectedDeviceIdRef.current = next;
           selectionHistory.push(next);
-          setSelectedUserId(next);
+          setSelectedDeviceId(next);
         }}
       />
     );
@@ -546,8 +554,8 @@ describe("NativeMap integration harness", () => {
     setNativeMapProjectedPoint([-10, 300]);
     await renderNativeMap({
       markers: [marker],
-      selectedUserId: "alice",
-      onSelectUserId: (id) => selections.push(id),
+      selectedDeviceId: "alice",
+      onSelectDeviceId: (id) => selections.push(id),
     });
     const views =
       root?.container.queryAll(
@@ -654,7 +662,7 @@ describe("NativeMap integration harness", () => {
     setNativeMapProjectedPoint([200, 570]);
     await renderNativeMap({
       markers: [createLiveMapMarkerFixture({ userId: "alice" })],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     const views =
       root?.container.queryAll(
@@ -1002,7 +1010,7 @@ describe("NativeMap integration harness", () => {
   test("restores selected person padding when retrying the same archive", async () => {
     const alice = createLiveMapMarkerFixture({ userId: "alice", latitude: 51.5, longitude: -0.12 });
     forceRefreshUrl = "https://cached.example/pmtiles-1?signature=new";
-    await renderNativeMap({ markers: [alice], selectedUserId: "alice" });
+    await renderNativeMap({ markers: [alice], selectedDeviceId: "alice" });
     await flushEffects();
     await failMapLoad();
     await finishLoadingStyle();
@@ -1272,7 +1280,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice, bob],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1291,7 +1299,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice, bob],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
     await finishLoadingStyle();
@@ -1438,7 +1446,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1457,7 +1465,7 @@ describe("NativeMap integration harness", () => {
     const commandsAfterFocus = getNativeMapCameraCommands().length;
     await renderNativeMap({
       markers: [aliceMoved],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1487,14 +1495,14 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
     const commandsAfterFocus = getNativeMapCameraCommands().length;
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1515,7 +1523,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1524,7 +1532,7 @@ describe("NativeMap integration harness", () => {
     const commandsAfterPan = getNativeMapCameraCommands().length;
     await renderNativeMap({
       markers: [aliceMoved],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1532,12 +1540,12 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [aliceMoved],
-      selectedUserId: null,
+      selectedDeviceId: null,
     });
     await flushEffects();
     await renderNativeMap({
       markers: [aliceMoved],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1567,7 +1575,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1589,7 +1597,7 @@ describe("NativeMap integration harness", () => {
     const commandsAfterPan = getNativeMapCameraCommands().length;
     await renderNativeMap({
       markers: [aliceMoved],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1610,7 +1618,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1619,7 +1627,7 @@ describe("NativeMap integration harness", () => {
     const commandsAfterQuirk = getNativeMapCameraCommands().length;
     await renderNativeMap({
       markers: [aliceMoved],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1646,7 +1654,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1665,7 +1673,7 @@ describe("NativeMap integration harness", () => {
     setNativeMapSelfHeadingDegrees(90);
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1735,14 +1743,14 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [self],
-      selectedUserId: "self",
+      selectedDeviceId: "self",
     });
     await flushEffects();
 
     const commandsAfterSelection = getNativeMapCameraCommands().length;
     await renderNativeMap({
       markers: [self, alice],
-      selectedUserId: "self",
+      selectedDeviceId: "self",
     });
     await flushEffects();
 
@@ -1770,10 +1778,10 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice, bob],
-      onSelectUserId: (userId) => {
+      onSelectDeviceId: (userId) => {
         selections.push(userId);
       },
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1806,7 +1814,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [self, alice],
-      onSelectUserId: (userId) => {
+      onSelectDeviceId: (userId) => {
         selections.push(userId);
       },
     });
@@ -1866,10 +1874,10 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [self],
-      onSelectUserId: (userId) => {
+      onSelectDeviceId: (userId) => {
         selections.push(userId);
       },
-      selectedUserId: "self",
+      selectedDeviceId: "self",
     });
     await flushEffects();
 
@@ -1912,7 +1920,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice, bob],
-      onSelectUserId: (userId) => {
+      onSelectDeviceId: (userId) => {
         selections.push(userId);
       },
     });
@@ -2032,10 +2040,10 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      onSelectUserId: (userId) => {
+      onSelectDeviceId: (userId) => {
         selections.push(userId);
       },
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
 
     emitNativeMapAnnotationDeselected("alice");
@@ -2120,7 +2128,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
 
     expect(getNativeMapAnnotationSelectedProp("alice")).toBeUndefined();
@@ -2642,7 +2650,7 @@ describe("NativeMap integration harness", () => {
         markers: [alice],
         people: createPeople({ upToDate: [alice] }),
         peopleTrayOpen: true,
-        selectedUserId: "alice",
+        selectedDeviceId: "alice",
       });
 
       expect(trays()).toHaveLength(0);
@@ -2679,12 +2687,12 @@ describe("NativeMap integration harness", () => {
 
     test("swaps the missing-person sheet for the person sheet when they get a location", async () => {
       const selections: Array<string | null> = [];
-      const onSelectUserId = (userId: string | null) => {
+      const onSelectDeviceId = (userId: string | null) => {
         selections.push(userId);
       };
       const bob = person("bob", "Bob");
       await renderNativeMap({
-        onSelectUserId,
+        onSelectDeviceId,
         people: createPeople({ cantLocate: [bob] }),
         peopleTrayOpen: true,
       });
@@ -2700,7 +2708,7 @@ describe("NativeMap integration harness", () => {
       const bobMarker = createLiveMapMarkerFixture({ userId: "bob", name: "Bob" });
       await renderNativeMap({
         markers: [bobMarker],
-        onSelectUserId,
+        onSelectDeviceId,
         people: createPeople({ upToDate: [bobMarker] }),
         peopleTrayOpen: true,
       });

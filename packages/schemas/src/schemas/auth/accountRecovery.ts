@@ -37,9 +37,10 @@ const newHistoryKeySchema = z.strictObject({
   version: historyKeyVersionSchema,
 });
 
-export const setupAccountRecoverySchema = z.strictObject({
-  historyKey: newHistoryKeySchema,
-  recoveryKey: recoveryKeySchema,
+export const createAccountHistoryKeySchema = z.strictObject({
+  algorithm: z.literal(X25519_KEY_ALGORITHM),
+  id: z.uuid(),
+  publicKey: x25519PublicKeySchema,
 });
 
 export const changeRecoveryPhraseSchema = z.strictObject({
@@ -49,6 +50,8 @@ export const changeRecoveryPhraseSchema = z.strictObject({
     .max(1000),
   recoveryKey: recoveryKeySchema,
 });
+
+export const setupAccountRecoverySchema = changeRecoveryPhraseSchema;
 
 export const resetAccountRecoverySchema = z.strictObject({
   confirmReset: z.literal(true),

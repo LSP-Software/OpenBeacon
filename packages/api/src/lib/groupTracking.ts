@@ -63,11 +63,16 @@ type GroupTrackingDb = {
     }) => Promise<Array<{ id: string }>>;
   };
   userDevice: {
+    updateMany: (args: {
+      data: { lastLocationAt: Date };
+      where: { id: { in: string[] }; userId: string };
+    }) => Promise<{ count: number }>;
     findMany: (args: {
       select: { id: true; userId: true };
       where: {
         id: { in: string[] };
         revokedAt: null;
+        activatedAt: { not: null };
         userId: string;
       };
     }) => Promise<Array<{ id: string; userId: string }>>;
@@ -120,6 +125,7 @@ export const uploadGroupTrackingBatch = async ({
       where: {
         id: { in: senderDeviceIds },
         revokedAt: null,
+        activatedAt: { not: null },
         userId,
       },
     }),
@@ -175,6 +181,13 @@ export const uploadGroupTrackingBatch = async ({
         senderUserId: userId,
       })),
       skipDuplicates: true,
+    });
+    await db.userDevice.updateMany({
+      data: { lastLocationAt: new Date() },
+      where: {
+        id: { in: [...new Set(pointsToInsert.map((point) => point.senderDeviceId))] },
+        userId,
+      },
     });
   }
 
@@ -252,16 +265,21 @@ export const getLatestGroupTrackingPoints = async ({
       "latest"."clientPointId",
       "latest"."createdAt"
     FROM "GroupMember" AS "member"
+    JOIN "UserDevice" AS "device"
+      ON "device"."userId" = "member"."userId"
+      AND "device"."revokedAt" IS NULL
+      AND "device"."activatedAt" IS NOT NULL
     CROSS JOIN LATERAL (
       SELECT *
       FROM "GroupEncryptedPayload" AS "point"
       WHERE "point"."groupId" = "member"."groupId"
+        AND "point"."senderDeviceId" = "device"."id"
         AND "point"."senderUserId" = "member"."userId"
       ORDER BY "point"."createdAt" DESC, "point"."id" DESC
       LIMIT 1
     ) AS "latest"
     WHERE "member"."groupId" = ${groupId}
-    ORDER BY "latest"."senderUserId" ASC
+    ORDER BY "latest"."senderUserId" ASC, "latest"."senderDeviceId" ASC
   `);
 
   return { points };

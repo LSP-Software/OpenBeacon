@@ -1,10 +1,11 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeMap } from "../../../components/map/NativeMap.tsx";
+import { NewSignInBanner } from "../../../components/NewSignInBanner.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
@@ -17,7 +18,7 @@ import { useSelfDeviceLocation } from "../../../hooks/useSelfDeviceLocation.ts";
 import { trpc } from "../../../lib/api.ts";
 import { applySelfDeviceLocation } from "../../../lib/applySelfDeviceLocation.ts";
 import { authClient } from "../../../lib/auth-client.ts";
-import { buildLiveMapMarkers } from "../../../lib/buildLiveMapMarkers.ts";
+import { buildLiveMapMarkers, labelDeviceIcons } from "../../../lib/buildLiveMapMarkers.ts";
 import { classifyMapPeople, flagUnreadableMarkers } from "../../../lib/classifyMapPeople.ts";
 import { loadPersonalNicknames } from "../../../lib/personalNicknames.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
@@ -29,6 +30,8 @@ import {
   shownMapGroups,
 } from "../../../lib/mapGroupVisibility.ts";
 import { nextMapMarkerSelection } from "../../../lib/mapMarkerSelection.ts";
+import type { MapMemberDevice } from "../../../lib/mapPeopleTypes.ts";
+import { readRegisteredDevice } from "../../../lib/registeredDevice.ts";
 import { resolveSelfDeviceLocationFallback } from "../../../lib/resolveSelfDeviceLocationFallback.ts";
 import { storage } from "../../../lib/storage.ts";
 import { TAB_BAR_CONTENT_HEIGHT } from "../../../lib/tabBarLayout.ts";
@@ -39,7 +42,11 @@ const keyBannerDismissedKey = (userId: string, groupId: string) =>
 
 const MapScreen = () => {
   const insets = useSafeAreaInsets();
-  const { positions: livePositions, status: trackingStatus } = useMapLivePositions();
+  const {
+    dropRemovedDevices,
+    positions: livePositions,
+    status: trackingStatus,
+  } = useMapLivePositions();
   const { data: session } = authClient.useSession();
   const isFocused = useIsFocused();
   const { data: groupsQueryData } = useQuery({
@@ -85,8 +92,44 @@ const MapScreen = () => {
     });
     return byGroupId;
   }, [groups, keyAccessSignature]);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const selfUserId = session?.user.id ?? "";
+  const { data: registeredDevice } = useQuery({
+    queryKey: ["registeredDevice", selfUserId],
+    enabled: selfUserId.length > 0,
+    staleTime: Number.POSITIVE_INFINITY,
+    queryFn: readRegisteredDevice,
+  });
+  const selfDeviceId = registeredDevice?.userId === selfUserId ? registeredDevice.deviceId : "";
+  const memberDeviceLists = useQueries({
+    queries: (groups ?? []).map((group) => ({
+      ...trpc.groupMembership.listMemberDevices.queryOptions({ groupId: group.id }),
+      subscribed: isFocused,
+    })),
+    combine: listMemberDeviceResults,
+  });
+  const memberDevices = useMemo(
+    () => [
+      ...new Map(
+        memberDeviceLists
+          .flatMap((devices) => devices ?? [])
+          .map((device) => [device.deviceId, device]),
+      ).values(),
+    ],
+    [memberDeviceLists],
+  );
+  const appliedMemberDeviceLists = useRef(new WeakSet<readonly MapMemberDevice[]>());
+  useEffect(() => {
+    groups?.forEach((group, index) => {
+      const devices = memberDeviceLists[index];
+      if (!devices || appliedMemberDeviceLists.current.has(devices)) return;
+      appliedMemberDeviceLists.current.add(devices);
+      dropRemovedDevices({
+        activeDeviceIds: new Set(devices.map(({ deviceId }) => deviceId)),
+        groupId: group.id,
+      });
+    });
+  }, [dropRemovedDevices, groups, memberDeviceLists]);
   const peopleTrayKey = `map.peopleTrayOpen.${selfUserId}`;
   const storedPeopleTrayOpen = useMemo(
     () => storage.getBoolean(peopleTrayKey) ?? false,
@@ -168,34 +211,40 @@ const MapScreen = () => {
       return [];
     }
 
-    return flagUnreadableMarkers({
-      groups: shownGroups ?? [],
-      markers: hideMapGroupMarkers({
-        getGroupColor,
-        groups: groupsWithNicknames ?? [],
-        hiddenGroupIds,
-        markers: applySelfDeviceLocation({
-          markers: buildLiveMapMarkers({
-            getGroupColor,
-            groups: groupsWithNicknames ?? [],
-            positions: livePositions,
+    return labelDeviceIcons({
+      markers: flagUnreadableMarkers({
+        groups: shownGroups ?? [],
+        markers: hideMapGroupMarkers({
+          getGroupColor,
+          groups: groupsWithNicknames ?? [],
+          hiddenGroupIds,
+          markers: applySelfDeviceLocation({
+            markers: buildLiveMapMarkers({
+              getGroupColor,
+              groups: groupsWithNicknames ?? [],
+              positions: livePositions,
+              selfDeviceId,
+            }),
+            selfDeviceId,
+            selfDeviceLocation,
+            selfFallback,
             selfUserId,
+            lastSentAt,
           }),
-          selfDeviceLocation,
-          selfFallback,
           selfUserId,
-          lastSentAt,
         }),
-        selfUserId,
+        status: trackingStatus,
       }),
-      status: trackingStatus,
+      memberDevices,
     });
   }, [
     groupColorRevision,
     groupsWithNicknames,
     hiddenGroupIds,
     livePositions,
+    memberDevices,
     shownGroups,
+    selfDeviceId,
     selfDeviceLocation,
     selfFallback,
     selfUserId,
@@ -251,10 +300,10 @@ const MapScreen = () => {
   }, [appActive, isFocused, peopleTrayOpen]);
 
   useEffect(() => {
-    if (selectedUserId && !markers.some((marker) => marker.userId === selectedUserId)) {
-      setSelectedUserId(null);
+    if (selectedDeviceId && !markers.some((marker) => marker.deviceId === selectedDeviceId)) {
+      setSelectedDeviceId(null);
     }
-  }, [markers, selectedUserId]);
+  }, [markers, selectedDeviceId]);
 
   return (
     <View
@@ -262,6 +311,12 @@ const MapScreen = () => {
       style={{ paddingBottom: insets.bottom + TAB_BAR_CONTENT_HEIGHT }}
     >
       <NativeMap
+        devices={memberDevices.map((device) => ({
+          ...device,
+          unreadable: trackingStatus.undecryptable.some(
+            (item) => item.deviceId === device.deviceId && item.userId === device.userId,
+          ),
+        }))}
         groupOptions={groupOptions}
         onSetGroupHidden={(groupId, hidden) => {
           if (!selfUserId) return;
@@ -275,9 +330,9 @@ const MapScreen = () => {
           storage.set(peopleTrayKey, open);
           setPeopleTrayOverride({ open, userId: selfUserId });
         }}
-        selectedUserId={selectedUserId}
-        onSelectUserId={(userId) => {
-          setSelectedUserId((current) => nextMapMarkerSelection(current, userId));
+        selectedDeviceId={selectedDeviceId}
+        onSelectDeviceId={(deviceId) => {
+          setSelectedDeviceId((current) => nextMapMarkerSelection(current, deviceId));
         }}
       />
       <ScrollView
@@ -285,6 +340,7 @@ const MapScreen = () => {
         className="absolute left-4 right-4"
         style={{ top: insets.top + 8, maxHeight: "65%" }}
       >
+        <NewSignInBanner subscribed={isFocused} />
         {queueEviction && (
           <View className="mb-2 gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4">
             <Text className="font-semibold text-amber-700 dark:text-amber-400">
@@ -368,5 +424,9 @@ const MapScreen = () => {
     </View>
   );
 };
+
+const listMemberDeviceResults = (
+  results: readonly { data?: readonly MapMemberDevice[] | undefined }[],
+) => results.map((result) => result.data);
 
 export default MapScreen;

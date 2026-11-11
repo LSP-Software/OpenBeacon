@@ -1,4 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
+import { useGlobalSearchParams, usePathname } from "expo-router";
 import type React from "react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
@@ -13,6 +14,7 @@ import {
 } from "../components/ui/Dialog.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
+import { useThisDeviceState } from "../lib/deviceActivation.ts";
 import {
   getLocationPermissionState,
   type LocationPermissionState,
@@ -31,6 +33,12 @@ const LocationPermissionContext = createContext<{
 
 export const LocationPermissionProvider = ({ children }: { children: React.ReactNode }) => {
   const { data: session, isPending } = authClient.useSession();
+  const thisDeviceActive = useThisDeviceState() === "active";
+  const pathname = usePathname();
+  const { setup } = useGlobalSearchParams<{ setup?: string }>();
+  const inSetup =
+    pathname.startsWith("/setup") || (pathname.startsWith("/account/recovery-") && Boolean(setup));
+  const readyToAsk = Boolean(session) && thisDeviceActive && !inSetup;
   const [permissionState, setPermissionState] = useState<LocationPermissionState | null>(null);
   const [isLaunchingLocationSetup, setIsLaunchingLocationSetup] = useState(true);
   const [isBackgroundPermissionDialogOpen, setIsBackgroundPermissionDialogOpen] = useState(false);
@@ -54,7 +62,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
   );
   const syncLocationPermissions = useCallback(
     async (flow: "refresh" | "launchRequest"): Promise<LocationPermissionState | null> => {
-      if (!session) return null;
+      if (!readyToAsk) return null;
       while (permissionCheckRef.current) {
         if (flow === "refresh") return null;
         await permissionCheckRef.current;
@@ -87,7 +95,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
 
       return permissionResult.data;
     },
-    [session, shouldOpenBackgroundPermissionDialog],
+    [readyToAsk, shouldOpenBackgroundPermissionDialog],
   );
 
   useEffect(() => {
@@ -95,7 +103,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
       return;
     }
 
-    if (!session) {
+    if (!readyToAsk) {
       setPermissionState(null);
       setIsLaunchingLocationSetup(true);
       return;
@@ -113,7 +121,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
     return () => {
       cancelled = true;
     };
-  }, [isPending, session, syncLocationPermissions]);
+  }, [isPending, readyToAsk, syncLocationPermissions]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {

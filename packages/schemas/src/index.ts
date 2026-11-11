@@ -1,4 +1,12 @@
 import { optionalEnvString, serverNameSchema } from "./env.ts";
+import {
+  approveDeviceLinkSchema,
+  deviceIconSchema,
+  deviceLinkIdSchema,
+  deviceNameSchema,
+  removeDeviceSchema,
+  updateDeviceSchema,
+} from "./schemas/account/devices.ts";
 import { changePasswordSchema } from "./schemas/account/changePassword.ts";
 import { emailAlertSettingsSchema, timezoneSchema } from "./schemas/account/emailAlerts.ts";
 import { emailCodeSchema } from "./schemas/account/emailCode.ts";
@@ -8,6 +16,7 @@ import { signUpSchema } from "./schemas/account/signUp.ts";
 import {
   addHistoryWrapsSchema,
   changeRecoveryPhraseSchema,
+  createAccountHistoryKeySchema,
   resetAccountRecoverySchema,
   setupAccountRecoverySchema,
 } from "./schemas/auth/accountRecovery.ts";
@@ -35,6 +44,8 @@ import {
 import { requestImageUploadInputSchema } from "./schemas/image/requestImageUpload.ts";
 
 export {
+  deviceIconSchema,
+  deviceNameSchema,
   devicePlatformSchema,
   emailAlertSettingsSchema,
   timezoneSchema,
@@ -42,6 +53,7 @@ export {
   addHistoryWrapsSchema,
   changePasswordSchema,
   changeRecoveryPhraseSchema,
+  createAccountHistoryKeySchema,
   createGroupSchema,
   emailCodeSchema,
   FEEDBACK_MESSAGE_MAX_LENGTH,
@@ -64,5 +76,9 @@ export {
   signUpSchema,
   submitFeedbackSchema,
   TRACKING_POINT_KIND,
+  removeDeviceSchema,
+  updateDeviceSchema,
   wrappedEpochKeySchema,
+  approveDeviceLinkSchema,
+  deviceLinkIdSchema,
 };

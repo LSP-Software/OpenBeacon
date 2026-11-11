@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { deviceRemovedCause } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 const GOOGLE_WEB_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID";
@@ -34,7 +36,7 @@ const socialSignInMock = mock(
     },
   }),
 );
-const ensureDeviceKeyRegistrationMock = mock(async () => ({
+const ensureDeviceKeyRegistrationMock = mock(async (_input?: { linkSession?: boolean }) => ({
   algorithm: "x25519-xsalsa20-poly1305",
   deviceId: "device-a",
   privateKey: {
@@ -102,6 +104,11 @@ mock.module("./deviceKeys.ts", () => ({
   ensureDeviceKeyRegistration: ensureDeviceKeyRegistrationMock,
 }));
 
+const resetSessionLinkRetriesMock = mock(() => {});
+mock.module("./sessionLink.ts", () => ({
+  resetSessionLinkRetries: resetSessionLinkRetriesMock,
+}));
+
 const importAuthModule = async () =>
   import(`./auth.ts?test=${Math.random().toString(36).slice(2)}`) as Promise<
     typeof import("./auth.ts")
@@ -122,6 +129,7 @@ describe("auth Google sign-in configuration", () => {
     deleteItemAsyncMock.mockClear();
     setItemAsyncMock.mockClear();
     revokeSessionMock.mockClear();
+    resetSessionLinkRetriesMock.mockClear();
     delete process.env[GOOGLE_WEB_CLIENT_ID_ENV];
     delete process.env[GOOGLE_IOS_CLIENT_ID_ENV];
     delete process.env[GOOGLE_IOS_URL_SCHEME_ENV];
@@ -209,6 +217,35 @@ describe("auth Google sign-in configuration", () => {
 
     expect(result.error).toBeNull();
     expect(ensureDeviceKeyRegistrationMock).toHaveBeenCalledTimes(1);
+    expect(ensureDeviceKeyRegistrationMock).toHaveBeenCalledWith({ linkSession: true });
+  });
+
+  test("a new sign-in lets the phone retry linking its session again", async () => {
+    const { completeAuthenticatedSessionSetup } = await importAuthModule();
+
+    await completeAuthenticatedSessionSetup();
+
+    expect(resetSessionLinkRetriesMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("reports a removed phone without an error message", async () => {
+    ensureDeviceKeyRegistrationMock.mockImplementationOnce(async () => {
+      throw TRPCClientError.from({
+        error: {
+          code: -32001,
+          data: { cause: deviceRemovedCause, code: "UNAUTHORIZED", httpStatus: 401 },
+          message: "Removed",
+        },
+      });
+    });
+
+    const { completeAuthenticatedSessionSetup } = await importAuthModule();
+
+    await expect(completeAuthenticatedSessionSetup()).resolves.toEqual({
+      data: null,
+      deviceRemoved: true,
+      error: null,
+    });
   });
 
   test("returns a readable error when device setup fails", async () => {

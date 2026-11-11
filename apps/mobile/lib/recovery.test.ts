@@ -9,14 +9,20 @@ import {
   generateGroupEpochKey,
   generateRecoveryPhrase,
   getHistoryPublicKey,
+  type HistoryKeyEscrow,
   type HistoryPrivateKeyMaterial,
   openHistoryKeyEscrow,
+  type RecoveryPhrase,
   type WrappedEpochKey,
   type WrappedHistoryEpochKey,
   wrapEpochKeyForRecipient,
 } from "@openbeacon/encryption";
 import { expectNoSecretsIn } from "../test/secretLeaks.testUtil.ts";
-import { resetAccountRecoverySchema, setupAccountRecoverySchema } from "@openbeacon/schemas";
+import {
+  createAccountHistoryKeySchema,
+  resetAccountRecoverySchema,
+  setupAccountRecoverySchema,
+} from "@openbeacon/schemas";
 import { TRPCClientError } from "@trpc/client";
 
 const deviceKeyPair = createDeviceKeyPair();
@@ -32,10 +38,21 @@ type ServerEpoch = {
 };
 
 let epochs: ServerEpoch[] = [];
-let serverHistoryKey: { id: string; publicKey: string; version: number } | null = null;
+type ServerHistoryKey = {
+  escrow: HistoryKeyEscrow | null;
+  id: string;
+  publicKey: string;
+  version: number;
+};
+
+let serverHistoryKeys: ServerHistoryKey[] = [];
+let serverRecoveryKey: ReturnType<typeof setupAccountRecoverySchema.parse>["recoveryKey"] | null =
+  null;
 let setupError: Error | null = null;
 let loseSetupResponse = false;
-let committedSetup: ReturnType<typeof setupAccountRecoverySchema.parse> | null = null;
+let createError: Error | null = null;
+let loseCreateResponse = false;
+let beforeCreate: (() => void) | null = null;
 let loseResetResponse = false;
 const validResetTokens = new Set<string>();
 let failNextStore = false;
@@ -45,19 +62,37 @@ let addHistoryWrapsCalls = 0;
 const serverInputs: unknown[] = [];
 const storedHistoryKeys = new Map<string, HistoryPrivateKeyMaterial>();
 
+const currentServerHistoryKey = () => serverHistoryKeys.at(-1) ?? null;
+
+const createMock = mock(async (input: unknown) => {
+  serverInputs.push(input);
+  beforeCreate?.();
+  if (createError) throw createError;
+  const parsed = createAccountHistoryKeySchema.parse(input);
+  if (serverHistoryKeys.length > 0) throw conflictError();
+  serverHistoryKeys = [{ escrow: null, id: parsed.id, publicKey: parsed.publicKey, version: 1 }];
+  if (loseCreateResponse) throw new Error("Network request failed");
+  return { historyKeyVersion: 1 };
+});
+
 const setupMock = mock(async (input: unknown) => {
   serverInputs.push(input);
   if (setupError) throw setupError;
-  if (committedSetup) throw conflictError();
   const parsed = setupAccountRecoverySchema.parse(input);
-  committedSetup = parsed;
-  serverHistoryKey = {
-    id: parsed.historyKey.id,
-    publicKey: parsed.historyKey.publicKey,
-    version: parsed.historyKey.version,
-  };
+  const escrowVersions = parsed.escrows.map(({ version }) => version).sort((a, b) => a - b);
+  if (
+    serverRecoveryKey ||
+    escrowVersions.join() !== serverHistoryKeys.map(({ version }) => version).join()
+  ) {
+    throw conflictError();
+  }
+  serverRecoveryKey = parsed.recoveryKey;
+  for (const { version, ...escrow } of parsed.escrows) {
+    const row = serverHistoryKeys.find((historyKey) => historyKey.version === version);
+    if (row) row.escrow = escrow;
+  }
   if (loseSetupResponse) throw new Error("Network request failed");
-  return { historyKeyVersion: parsed.historyKey.version };
+  return { historyKeyVersions: escrowVersions };
 });
 
 const resetMock = mock(async (input: unknown) => {
@@ -71,12 +106,8 @@ const resetMock = mock(async (input: unknown) => {
       },
     });
   }
-  committedSetup = { historyKey: parsed.historyKey, recoveryKey: parsed.recoveryKey };
-  serverHistoryKey = {
-    id: parsed.historyKey.id,
-    publicKey: parsed.historyKey.publicKey,
-    version: parsed.historyKey.version,
-  };
+  serverRecoveryKey = parsed.recoveryKey;
+  serverHistoryKeys = [parsed.historyKey];
   if (loseResetResponse) throw new Error("Network request failed");
   return { historyKeyVersion: parsed.historyKey.version };
 });
@@ -84,7 +115,7 @@ const resetMock = mock(async (input: unknown) => {
 const listHistoryBackfillMock = mock(
   async (input: { cursor?: number | null; deviceId: string; groupId: string }) => {
     serverInputs.push(input);
-    const historyKey = serverHistoryKey;
+    const historyKey = currentServerHistoryKey();
     if (!historyKey) return { epochs: [], historyKey: null, nextCursor: null };
     const matching = epochs.filter(
       (epoch) =>
@@ -99,7 +130,12 @@ const listHistoryBackfillMock = mock(
         epochId,
         epochNumber,
       })),
-      historyKey: { ...historyKey, userId: serverClaimedUserId },
+      historyKey: {
+        id: historyKey.id,
+        publicKey: historyKey.publicKey,
+        userId: serverClaimedUserId,
+        version: historyKey.version,
+      },
       nextCursor: matching.length > 50 ? (page.at(-1)?.epochNumber ?? null) : null,
     };
   },
@@ -128,30 +164,34 @@ const addHistoryWrapsMock = mock(
 
 mock.module("./api.ts", () => ({
   trpcClient: {
+    accountHistory: { create: { mutate: createMock } },
     accountRecovery: {
       escrows: {
         query: async () =>
-          committedSetup
-            ? [
-                {
-                  escrow: committedSetup.historyKey.escrow,
-                  id: committedSetup.historyKey.id,
-                  publicKey: committedSetup.historyKey.publicKey,
-                  userId: device.userId,
-                  version: committedSetup.historyKey.version,
-                },
-              ]
-            : [],
+          serverHistoryKeys.flatMap(({ escrow, ...row }) =>
+            escrow ? [{ ...row, escrow, userId: device.userId }] : [],
+          ),
       },
       reset: { mutate: resetMock },
       setup: { mutate: setupMock },
       status: {
-        query: async () => ({
-          currentHistoryKey: serverHistoryKey,
-          historyKeyVersions: serverHistoryKey ? [serverHistoryKey.version] : [],
-          recoveryKey: committedSetup?.recoveryKey ?? null,
-          sessionFresh: true,
-        }),
+        query: async () => {
+          const current = currentServerHistoryKey();
+          return {
+            currentHistoryKey: current && {
+              id: current.id,
+              publicKey: current.publicKey,
+              version: current.version,
+            },
+            historyKeys: serverHistoryKeys.map(({ publicKey, version }) => ({
+              publicKey,
+              version,
+            })),
+            historyKeyVersions: serverHistoryKeys.map(({ version }) => version),
+            recoveryKey: serverRecoveryKey,
+            sessionFresh: true,
+          };
+        },
       },
     },
     groupEpoch: {
@@ -169,6 +209,24 @@ mock.module("./deviceKeys.ts", () => ({
   }),
 }));
 
+const deletedSavedLinks: { deviceId: string; userId: string }[] = [];
+mock.module("./savedDeviceLink.ts", () => ({
+  deleteSavedDeviceLink: async ({ deviceId, userId }: { deviceId: string; userId: string }) => {
+    deletedSavedLinks.push({ deviceId, userId });
+  },
+}));
+
+const storageValues = new Map<string, string>();
+mock.module("./storage.ts", () => ({
+  storage: {
+    getString: (key: string) => storageValues.get(key),
+    remove: (key: string) => storageValues.delete(key),
+    set: (key: string, value: string) => {
+      storageValues.set(key, value);
+    },
+  },
+}));
+
 mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async ({ userId, version }: { userId: string; version: number }) =>
     storedHistoryKeys.get(`${userId}.${version}`) ?? null,
@@ -184,15 +242,30 @@ mock.module("./historyKeys.ts", () => ({
     if (failNextStore) throw new Error("SecureStore unavailable");
     storedHistoryKeys.set(`${userId}.${version}`, privateKey);
   },
+  deleteStoredHistoryKeys: async ({
+    userId,
+    upToVersion,
+  }: {
+    userId: string;
+    upToVersion: number;
+  }) => {
+    for (let version = 1; version <= upToVersion; version += 1) {
+      storedHistoryKeys.delete(`${userId}.${version}`);
+    }
+  },
 }));
 
 const {
   backfillHistoryWraps,
   confirmsRecoveryPhrase,
+  HISTORY_KEY_ON_OTHER_DEVICE_MESSAGE,
   pickConfirmationIndexes,
   resetRecoveryPhrase,
   setUpRecoveryPhrase,
+  SETUP_KEYS_MISMATCH_MESSAGE,
 } = await import("./recovery.ts");
+const { createHistoryKey, createHistoryKeyIfMissing, KEY_NOT_SAVED_MESSAGE } =
+  await import("./createHistoryKey.ts");
 const { unwrapEpochKeyFromWraps } = await import("./epochKeys.ts");
 const { checkGroupKeyAccess } = await import("./groupKeyAccess.ts");
 
@@ -250,10 +323,14 @@ const conflictError = () =>
 
 beforeEach(() => {
   epochs = [];
-  serverHistoryKey = null;
+  serverHistoryKeys = [];
+  serverRecoveryKey = null;
   setupError = null;
   loseSetupResponse = false;
-  committedSetup = null;
+  createError = null;
+  loseCreateResponse = false;
+  beforeCreate = null;
+  createMock.mockClear();
   loseResetResponse = false;
   validResetTokens.clear();
   resetMock.mockClear();
@@ -266,63 +343,166 @@ beforeEach(() => {
   setupMock.mockClear();
   listHistoryBackfillMock.mockClear();
   addHistoryWrapsMock.mockClear();
+  deletedSavedLinks.length = 0;
+});
+
+const openSetupEscrow = (phrase: RecoveryPhrase, version: number) => {
+  const input = setupAccountRecoverySchema.parse(setupMock.mock.calls.at(-1)?.[0]);
+  const escrow = input.escrows.find((candidate) => candidate.version === version);
+  const historyKey = serverHistoryKeys.find((candidate) => candidate.version === version);
+  if (!escrow || !historyKey) throw new Error(`No escrow for v${version}`);
+  return openHistoryKeyEscrow({
+    escrow: { algorithm: escrow.algorithm, ciphertext: escrow.ciphertext, enc: escrow.enc },
+    historyKey: { publicKey: historyKey.publicKey, userId: device.userId, version },
+    recoveryPrivateKey: deriveRecoveryKeyPair(phrase).privateKey,
+  });
+};
+
+const storedKey = (version: number) => {
+  const stored = storedHistoryKeys.get(`${device.userId}.${version}`);
+  if (!stored) throw new Error(`No stored key for v${version}`);
+  return encodeBase64(stored.expose());
+};
+
+const holdServerHistoryKey = (version: number) => {
+  const historyKey = createHistoryKeyPair();
+  serverHistoryKeys.push({
+    escrow: null,
+    id: crypto.randomUUID(),
+    publicKey: historyKey.publicKey,
+    version,
+  });
+  storedHistoryKeys.set(`${device.userId}.${version}`, historyKey.privateKey);
+};
+
+describe("createHistoryKey", () => {
+  test("creates v1 with no escrow once and stores its private key", async () => {
+    expect(await createHistoryKeyIfMissing(device.userId)).toBe(true);
+    expect(await createHistoryKeyIfMissing(device.userId)).toBe(false);
+
+    expect(createMock).toHaveBeenCalledTimes(1);
+    expect(serverHistoryKeys).toMatchObject([{ escrow: null, version: 1 }]);
+    const stored = storedHistoryKeys.get(`${device.userId}.1`);
+    expect(stored && getHistoryPublicKey(stored)).toBe(serverHistoryKeys[0]?.publicKey);
+  });
+
+  test("a phone that loses the race keeps nothing and reports that it doesn't hold the key", async () => {
+    const winner = createHistoryKeyPair();
+    beforeCreate = () => {
+      serverHistoryKeys = [{ escrow: null, id: "winner", publicKey: winner.publicKey, version: 1 }];
+    };
+
+    expect(await createHistoryKey(device.userId)).toBe(false);
+
+    expect(serverHistoryKeys).toMatchObject([{ id: "winner", publicKey: winner.publicKey }]);
+    expect(storedHistoryKeys.size).toBe(0);
+  });
+
+  test("a lost response for a create that went through keeps the key", async () => {
+    loseCreateResponse = true;
+
+    expect(await createHistoryKey(device.userId)).toBe(true);
+
+    const stored = storedHistoryKeys.get(`${device.userId}.1`);
+    expect(stored && getHistoryPublicKey(stored)).toBe(serverHistoryKeys[0]?.publicKey);
+  });
+
+  test("a create that fails before reaching the server throws and keeps nothing", async () => {
+    createError = new Error("Network error");
+
+    await expect(createHistoryKey(device.userId)).rejects.toThrow("Network error");
+
+    expect(serverHistoryKeys).toEqual([]);
+    expect(storedHistoryKeys.size).toBe(0);
+  });
+
+  test("a phone that can't save the key never sends it to the server", async () => {
+    failNextStore = true;
+
+    await expect(createHistoryKey(device.userId)).rejects.toThrow(KEY_NOT_SAVED_MESSAGE);
+
+    expect(createMock).not.toHaveBeenCalled();
+    expect(serverHistoryKeys).toEqual([]);
+  });
 });
 
 describe("setUpRecoveryPhrase", () => {
-  test("registers a valid escrow and stores history key v1", async () => {
+  test("on an account with no history key, creates v1 and escrows it", async () => {
     const phrase = generateRecoveryPhrase();
 
     const result = await setUpRecoveryPhrase(phrase);
 
     expect(result.status).toBe("created");
+    expect(createMock).toHaveBeenCalledTimes(1);
     const input = setupAccountRecoverySchema.parse(setupMock.mock.calls[0]?.[0]);
-    const recoveryKey = deriveRecoveryKeyPair(phrase);
-    expect(input.recoveryKey.publicKey).toBe(recoveryKey.publicKey);
-    expect(input.historyKey.version).toBe(1);
-    const opened = openHistoryKeyEscrow({
-      escrow: input.historyKey.escrow,
-      historyKey: { publicKey: input.historyKey.publicKey, userId: device.userId, version: 1 },
-      recoveryPrivateKey: recoveryKey.privateKey,
-    });
-    const stored = storedHistoryKeys.get(`${device.userId}.1`);
-    expect(stored).toBeDefined();
-    expect(encodeBase64((stored as HistoryPrivateKeyMaterial).expose())).toBe(
-      encodeBase64(opened.expose()),
+    expect(input.recoveryKey.publicKey).toBe(deriveRecoveryKeyPair(phrase).publicKey);
+    expect(input.escrows.map(({ version }) => version)).toEqual([1]);
+    expect(encodeBase64(openSetupEscrow(phrase, 1).expose())).toBe(storedKey(1));
+  });
+
+  test("escrows every version the account already has without creating one", async () => {
+    holdServerHistoryKey(1);
+    holdServerHistoryKey(2);
+    const phrase = generateRecoveryPhrase();
+
+    expect((await setUpRecoveryPhrase(phrase)).status).toBe("created");
+
+    expect(createMock).not.toHaveBeenCalled();
+    for (const version of [1, 2]) {
+      expect(encodeBase64(openSetupEscrow(phrase, version).expose())).toBe(storedKey(version));
+    }
+    expect(serverHistoryKeys.every(({ escrow }) => escrow !== null)).toBe(true);
+  });
+
+  test("a phone without the account's history key sets up nothing", async () => {
+    holdServerHistoryKey(1);
+    storedHistoryKeys.clear();
+
+    await expect(setUpRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow(
+      HISTORY_KEY_ON_OTHER_DEVICE_MESSAGE,
     );
-    expect(getHistoryPublicKey(opened)).toBe(input.historyKey.publicKey);
+
+    expect(setupMock).not.toHaveBeenCalled();
+    expect(serverRecoveryKey).toBeNull();
+  });
+
+  test("a stored key that doesn't match the account's is never escrowed", async () => {
+    holdServerHistoryKey(1);
+    storedHistoryKeys.set(`${device.userId}.1`, createHistoryKeyPair().privateKey);
+
+    await expect(setUpRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow(
+      SETUP_KEYS_MISMATCH_MESSAGE,
+    );
+
+    expect(setupMock).not.toHaveBeenCalled();
   });
 
   test("escrow is bound to the user, so another account's recovery key can't open it", async () => {
     const phrase = generateRecoveryPhrase();
     await setUpRecoveryPhrase(phrase);
     const input = setupAccountRecoverySchema.parse(setupMock.mock.calls[0]?.[0]);
+    const escrow = input.escrows[0] as HistoryKeyEscrow & { version: number };
 
     expect(() =>
       openHistoryKeyEscrow({
-        escrow: input.historyKey.escrow,
-        historyKey: { publicKey: input.historyKey.publicKey, userId: "user-2", version: 1 },
+        escrow: { algorithm: escrow.algorithm, ciphertext: escrow.ciphertext, enc: escrow.enc },
+        historyKey: {
+          publicKey: serverHistoryKeys[0]?.publicKey ?? "",
+          userId: "user-2",
+          version: 1,
+        },
         recoveryPrivateKey: deriveRecoveryKeyPair(phrase).privateKey,
       }),
     ).toThrow();
   });
 
-  test("CONFLICT sends the user to restore and stores nothing", async () => {
-    setupError = conflictError();
-
-    const result = await setUpRecoveryPhrase(generateRecoveryPhrase());
-
-    expect(result).toEqual({ status: "conflict" });
-    expect(storedHistoryKeys.size).toBe(0);
-  });
-
-  test("a CONFLICT for a phrase set up on another phone reports conflict and stores nothing", async () => {
+  test("a phrase set up on another phone reports conflict", async () => {
     await setUpRecoveryPhrase(generateRecoveryPhrase());
-    storedHistoryKeys.clear();
 
     const result = await setUpRecoveryPhrase(generateRecoveryPhrase());
 
     expect(result).toEqual({ status: "conflict" });
-    expect(storedHistoryKeys.size).toBe(0);
+    expect(setupMock).toHaveBeenCalledTimes(1);
   });
 
   test("a CONFLICT after this phone's setup response was lost finishes with the same phrase", async () => {
@@ -330,29 +510,18 @@ describe("setUpRecoveryPhrase", () => {
     loseSetupResponse = true;
     await expect(setUpRecoveryPhrase(phrase)).rejects.toThrow("Network request failed");
     loseSetupResponse = false;
-    expect(storedHistoryKeys.size).toBe(0);
+    const created = storedKey(1);
 
     const result = await setUpRecoveryPhrase(phrase);
 
-    expect(result.status).not.toBe("conflict");
-    const committed = setupAccountRecoverySchema.parse(setupMock.mock.calls[0]?.[0]);
-    const opened = openHistoryKeyEscrow({
-      escrow: committed.historyKey.escrow,
-      historyKey: {
-        publicKey: committed.historyKey.publicKey,
-        userId: device.userId,
-        version: 1,
-      },
-      recoveryPrivateKey: deriveRecoveryKeyPair(phrase).privateKey,
-    });
-    const stored = storedHistoryKeys.get(`${device.userId}.1`);
-    expect(stored).toBeDefined();
-    expect(encodeBase64((stored as HistoryPrivateKeyMaterial).expose())).toBe(
-      encodeBase64(opened.expose()),
-    );
+    expect(result.status).toBe("created");
+    expect(setupMock).toHaveBeenCalledTimes(1);
+    expect(createMock).toHaveBeenCalledTimes(1);
+    expect(encodeBase64(openSetupEscrow(phrase, 1).expose())).toBe(created);
+    expect(storedKey(1)).toBe(created);
   });
 
-  test("FORBIDDEN asks for a fresh sign-in and stores nothing", async () => {
+  test("FORBIDDEN asks for a fresh sign-in and sets up no phrase", async () => {
     setupError = TRPCClientError.from({
       error: { code: -32003, data: { code: "FORBIDDEN" }, message: "Sign in again to continue." },
     });
@@ -360,25 +529,26 @@ describe("setUpRecoveryPhrase", () => {
     const result = await setUpRecoveryPhrase(generateRecoveryPhrase());
 
     expect(result).toEqual({ status: "reauthenticate" });
-    expect(storedHistoryKeys.size).toBe(0);
+    expect(serverRecoveryKey).toBeNull();
+    expect(serverHistoryKeys.every(({ escrow }) => escrow === null)).toBe(true);
   });
 
-  test("a phone that can't save the key reports unsaved after the server setup succeeded", async () => {
-    failNextStore = true;
+  test("a FORBIDDEN because this phone isn't set up or confirmed is thrown, not a sign-in request", async () => {
+    for (const cause of ["DEVICE_PENDING", "DEVICE_UNVERIFIED"]) {
+      setupError = TRPCClientError.from({
+        error: { code: -32003, data: { cause, code: "FORBIDDEN" }, message: cause },
+      });
 
-    const result = await setUpRecoveryPhrase(generateRecoveryPhrase());
-
-    expect(result.status).toBe("unsaved");
-    expect(setupMock).toHaveBeenCalledTimes(1);
-    expect(serverHistoryKey?.version).toBe(1);
-    expect(storedHistoryKeys.size).toBe(0);
+      await expect(setUpRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow(cause);
+    }
+    expect(serverRecoveryKey).toBeNull();
   });
 
-  test("other errors are thrown and store nothing", async () => {
+  test("other errors are thrown and set up no phrase", async () => {
     setupError = new Error("Network error");
 
     await expect(setUpRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow("Network error");
-    expect(storedHistoryKeys.size).toBe(0);
+    expect(serverRecoveryKey).toBeNull();
   });
 });
 
@@ -397,6 +567,7 @@ describe("resetRecoveryPhrase", () => {
 
     expect(result.status).toBe("reset");
     expect(resetMock).toHaveBeenCalledTimes(1);
+    expect(deletedSavedLinks).toEqual([{ deviceId: device.deviceId, userId: device.userId }]);
     const committed = resetAccountRecoverySchema.parse(resetMock.mock.calls[0]?.[0]);
     const opened = openHistoryKeyEscrow({
       escrow: committed.historyKey.escrow,
@@ -414,6 +585,16 @@ describe("resetRecoveryPhrase", () => {
     );
   });
 
+  test("a reset forgets a link this phone saved, since the reset sets it up", async () => {
+    await setUpRecoveryPhrase(generateRecoveryPhrase());
+    validResetTokens.add("reset-token");
+
+    const result = await resetRecoveryPhrase(generateRecoveryPhrase(), "reset-token");
+
+    expect(result.status).toBe("reset");
+    expect(deletedSavedLinks).toEqual([{ deviceId: device.deviceId, userId: device.userId }]);
+  });
+
   test("a spent or expired confirmation asks for a new code and changes nothing", async () => {
     const original = generateRecoveryPhrase();
     await setUpRecoveryPhrase(original);
@@ -421,7 +602,8 @@ describe("resetRecoveryPhrase", () => {
     const result = await resetRecoveryPhrase(generateRecoveryPhrase(), "spent-token");
 
     expect(result).toEqual({ status: "confirmationExpired" });
-    expect(committedSetup?.recoveryKey.publicKey).toBe(deriveRecoveryKeyPair(original).publicKey);
+    expect(deletedSavedLinks).toEqual([]);
+    expect(serverRecoveryKey?.publicKey).toBe(deriveRecoveryKeyPair(original).publicKey);
     expect(storedHistoryKeys.has(`${device.userId}.2`)).toBe(false);
   });
 });
@@ -462,7 +644,22 @@ describe("backfillHistoryWraps", () => {
     expect(addHistoryWrapsMock).not.toHaveBeenCalled();
   });
 
-  test("does nothing before a phrase is set up", async () => {
+  test("fills every wrap once an account without a phrase gets its history key", async () => {
+    epochs = Array.from({ length: 3 }, (_, index) => createServerEpoch(index + 1));
+    await createHistoryKeyIfMissing(device.userId);
+
+    expect(await backfillHistoryWraps({ device, groupId: "group-1" })).toBe(3);
+
+    expect(serverRecoveryKey).toBeNull();
+    for (const epoch of epochs) {
+      const epochKey = await resolveThroughHistoryWrapOnly(epoch);
+      expect(epochKey && encodeBase64(epochKey.expose())).toBe(
+        encodeBase64(epoch.epochKey.expose()),
+      );
+    }
+  });
+
+  test("does nothing before the account has a history key", async () => {
     epochs = [createServerEpoch(1)];
 
     expect(await backfillHistoryWraps({ device, groupId: "group-1" })).toBe(0);
@@ -506,10 +703,10 @@ describe("backfillHistoryWraps", () => {
   test("refuses to wrap to a history public key that doesn't match the stored key", async () => {
     epochs = [createServerEpoch(1)];
     await setUpRecoveryPhrase(generateRecoveryPhrase());
-    serverHistoryKey = {
-      ...(serverHistoryKey as { id: string; publicKey: string; version: number }),
+    serverHistoryKeys = serverHistoryKeys.map((historyKey) => ({
+      ...historyKey,
       publicKey: createHistoryKeyPair().publicKey,
-    };
+    }));
 
     await expect(backfillHistoryWraps({ device, groupId: "group-1" })).rejects.toThrow();
     expect(addHistoryWrapsMock).not.toHaveBeenCalled();
@@ -518,7 +715,9 @@ describe("backfillHistoryWraps", () => {
   test("uploads nothing and doesn't fail when the current history key was set up elsewhere", async () => {
     epochs = [createServerEpoch(1), createServerEpoch(2)];
     const otherKeys = createHistoryKeyPair();
-    serverHistoryKey = { id: "history-key-elsewhere", publicKey: otherKeys.publicKey, version: 1 };
+    serverHistoryKeys = [
+      { escrow: null, id: "history-key-elsewhere", publicKey: otherKeys.publicKey, version: 1 },
+    ];
 
     expect(await backfillHistoryWraps({ device, groupId: "group-1" })).toBe(0);
     expect(addHistoryWrapsMock).not.toHaveBeenCalled();
@@ -529,7 +728,9 @@ describe("backfillHistoryWraps", () => {
     epochs = [createServerEpoch(1)];
     await setUpRecoveryPhrase(generateRecoveryPhrase());
     const resetElsewhere = createHistoryKeyPair();
-    serverHistoryKey = { id: "history-key-v2", publicKey: resetElsewhere.publicKey, version: 2 };
+    serverHistoryKeys = [
+      { escrow: null, id: "history-key-v2", publicKey: resetElsewhere.publicKey, version: 2 },
+    ];
 
     expect(await backfillHistoryWraps({ device, groupId: "group-1" })).toBe(0);
     expect(addHistoryWrapsMock).not.toHaveBeenCalled();

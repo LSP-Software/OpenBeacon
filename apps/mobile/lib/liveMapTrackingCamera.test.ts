@@ -21,8 +21,8 @@ describe("buildLiveMapTrackingCameraStop", () => {
         padding,
         previousLatitude: null,
         previousLongitude: null,
-        previouslyTrackedUserId: null,
-        selectedUserId: "alice",
+        previouslyTrackedDeviceId: null,
+        selectedDeviceId: "alice",
       }),
     ).toEqual({
       animationDuration: 500,
@@ -42,8 +42,8 @@ describe("buildLiveMapTrackingCameraStop", () => {
         padding,
         previousLatitude: 51.5,
         previousLongitude: -0.12,
-        previouslyTrackedUserId: "alice",
-        selectedUserId: "alice",
+        previouslyTrackedDeviceId: "alice",
+        selectedDeviceId: "alice",
       }),
     ).toEqual({
       animationDuration: 400,
@@ -62,8 +62,8 @@ describe("buildLiveMapTrackingCameraStop", () => {
         padding,
         previousLatitude: 50.8,
         previousLongitude: -1.1,
-        previouslyTrackedUserId: "alice",
-        selectedUserId: "bob",
+        previouslyTrackedDeviceId: "alice",
+        selectedDeviceId: "bob",
       }),
     ).toEqual({
       animationDuration: 500,
@@ -83,8 +83,8 @@ describe("buildLiveMapTrackingCameraStop", () => {
         padding,
         previousLatitude: 51.5,
         previousLongitude: -0.12,
-        previouslyTrackedUserId: "alice",
-        selectedUserId: "alice",
+        previouslyTrackedDeviceId: "alice",
+        selectedDeviceId: "alice",
       }),
     ).toBeNull();
   });
@@ -98,8 +98,8 @@ describe("buildLiveMapTrackingCameraStop", () => {
         padding,
         previousLatitude: 51.5,
         previousLongitude: -0.12,
-        previouslyTrackedUserId: "alice",
-        selectedUserId: "alice",
+        previouslyTrackedDeviceId: "alice",
+        selectedDeviceId: "alice",
       }),
     ).toBeNull();
 
@@ -111,8 +111,8 @@ describe("buildLiveMapTrackingCameraStop", () => {
         padding,
         previousLatitude: 50.8,
         previousLongitude: -1.1,
-        previouslyTrackedUserId: "alice",
-        selectedUserId: "bob",
+        previouslyTrackedDeviceId: "alice",
+        selectedDeviceId: "bob",
       }),
     ).toEqual({
       animationDuration: 500,

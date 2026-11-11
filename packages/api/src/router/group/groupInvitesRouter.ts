@@ -27,7 +27,7 @@ export const groupInvitesRouter = {
     }),
   ),
   dismissJoinAlert: protectedProcedure
-    .input(z.object({ id: z.string().min(1) }))
+    .input(z.object({ id: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.groupJoinAlert.deleteMany({
         where: { id: input.id, recipientId: ctx.session.user.id },
@@ -35,7 +35,7 @@ export const groupInvitesRouter = {
     }),
   createShared: groupAdminProcedure
     .meta({ rateLimit: { limit: 32, windowMs: 60_000 } })
-    .input(z.object({ groupId: z.string().min(1) }))
+    .input(z.object({ groupId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       const code = randomBytes(16).toString("hex").toUpperCase();
       const expiresAt = new Date(Date.now() + 300_000);
@@ -71,8 +71,8 @@ export const groupInvitesRouter = {
   sharedStatuses: groupAdminProcedure
     .input(
       z.object({
-        groupId: z.string().min(1),
-        inviteIds: z.array(z.string().min(1)).min(1).max(500),
+        groupId: z.string().min(1).max(128),
+        inviteIds: z.array(z.string().min(1).max(128)).min(1).max(500),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -152,6 +152,7 @@ export const groupInvitesRouter = {
         });
         await persistGroupEpoch({
           db: tx,
+          deviceId: ctx.deviceId,
           epoch: input.nextEpoch,
           groupId: invite.groupId,
           userId: ctx.session.user.id,
@@ -165,7 +166,7 @@ export const groupInvitesRouter = {
       return { message: "Invite accepted." };
     }),
   acceptanceContext: protectedProcedure
-    .input(z.object({ inviteId: z.string().min(1) }))
+    .input(z.object({ inviteId: z.string().min(1).max(128) }))
     .query(async ({ ctx, input }) =>
       getInviteAcceptanceContext({
         db: ctx.db,
@@ -182,7 +183,7 @@ export const groupInvitesRouter = {
     })
     .input(
       z.object({
-        inviteId: z.string().min(1),
+        inviteId: z.string().min(1).max(128),
         nextEpoch: groupEpochBundleSchema,
       }),
     )
@@ -267,6 +268,7 @@ export const groupInvitesRouter = {
 
         await persistGroupEpoch({
           db: tx,
+          deviceId: ctx.deviceId,
           epoch: input.nextEpoch,
           groupId: invite.groupId,
           userId: ctx.session.user.id,
@@ -303,7 +305,7 @@ export const groupInvitesRouter = {
         windowMs: 60_000,
       },
     })
-    .input(z.object({ inviteId: z.string() }))
+    .input(z.object({ inviteId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.$transaction(async (tx) => {
         const invite = await tx.groupMemberInvite.findFirst({
@@ -465,7 +467,7 @@ export const groupInvitesRouter = {
 
 const assertAccountCanJoinGroup = async (tx: Prisma.TransactionClient, userId: string) => {
   const [user] = await tx.$queryRaw<Array<{ pendingDeletion: boolean }>>(
-    Prisma.sql`SELECT "pendingDeletion" FROM "User" WHERE id = ${userId} FOR UPDATE`,
+    Prisma.sql`SELECT "pendingDeletion" FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
   );
   if (!user || user.pendingDeletion) {
     throw new TRPCError({

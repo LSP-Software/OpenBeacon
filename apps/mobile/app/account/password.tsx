@@ -1,5 +1,6 @@
 import { Alert } from "../../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Link, router } from "expo-router";
 import { useState } from "react";
@@ -13,6 +14,8 @@ import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { authClient } from "../../lib/auth-client.ts";
 import { changePasswordFormSchema } from "../../lib/changePasswordSchema.ts";
+import { ensureDeviceKeyRegistration } from "../../lib/deviceKeys.ts";
+import { isSessionLinkRefused, signOutAfterRefusedSessionLink } from "../../lib/sessionLink.ts";
 
 const PasswordScreen = () => {
   const [saving, setSaving] = useState(false);
@@ -41,12 +44,18 @@ const PasswordScreen = () => {
       newPassword,
       revokeOtherSessions: true,
     });
-    setSaving(false);
     if (result.error) {
+      setSaving(false);
       Alert.alert("Unable to change password", result.error.message);
       return;
     }
     form.reset();
+    const linked = await tryCatch(ensureDeviceKeyRegistration({ linkSession: true }));
+    setSaving(false);
+    if (isSessionLinkRefused(linked.error)) {
+      await signOutAfterRefusedSessionLink();
+      return;
+    }
     Alert.alert(
       "Password changed",
       "Your other devices have been signed out. Use your new password next time you sign in.",

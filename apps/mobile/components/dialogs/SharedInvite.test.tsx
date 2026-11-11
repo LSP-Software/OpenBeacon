@@ -18,8 +18,8 @@ mock.module("react-native", () => ({
   Alert: { alert: () => {} },
   Share: { share: async () => ({}) },
 }));
-mock.module("react-native-qrcode-svg", () => ({
-  default: ({ value }: { value: string }) => React.createElement("qr", { value }),
+mock.module("../BrandedQrCode.tsx", () => ({
+  BrandedQrCode: ({ value }: { value: string }) => React.createElement("qr", { value }),
 }));
 mock.module("../ui/Button.tsx", () => ({
   Button: ({ children, onPress }: { children: React.ReactNode; onPress?: () => void }) =>

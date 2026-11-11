@@ -1,5 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
-import { type LiveMapEntry, reduceLivePositions } from "./liveMapReducer.ts";
+import { dropInactiveDevices, type LiveMapEntry, reduceLivePositions } from "./liveMapReducer.ts";
 import type {
   LiveMapPosition,
   MapTrackingCursor,
@@ -45,6 +45,7 @@ export const isCursorAfter = (candidate: MapTrackingCursor, current: MapTracking
 
 const toLiveMapPosition = ({
   battery,
+  deviceId,
   latitude,
   longitude,
   sourceGroupId,
@@ -53,6 +54,7 @@ const toLiveMapPosition = ({
   userId,
 }: LiveMapEntry): LiveMapPosition => ({
   battery,
+  deviceId,
   latitude,
   longitude,
   sourceGroupId,
@@ -81,10 +83,10 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       runId: number;
     }
   >();
-  const positionsByGroup = new Map<string, Map<string, LiveMapEntry>>();
+  const positionsByGroup = new Map<string, ReadonlyMap<string, LiveMapEntry>>();
   const listeners = new Set<() => void>();
   const groupLoadStatus = new Map<string, "loaded" | "failed">();
-  const undecryptableByGroup = new Map<string, Set<string>>();
+  const undecryptableByGroup = new Map<string, Map<string, { deviceId: string; userId: string }>>();
   let membershipStatus: MapTrackingStatus["membership"] = "loading";
   let membershipFailing = false;
   const failingGroups = new Set<string>();
@@ -121,8 +123,8 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       connection: currentConnection(),
       groups: Object.fromEntries(groupLoadStatus),
       membership: membershipStatus,
-      undecryptable: [...undecryptableByGroup].flatMap(([groupId, userIds]) =>
-        [...userIds].map((userId) => ({ groupId, userId })),
+      undecryptable: [...undecryptableByGroup].flatMap(([groupId, devices]) =>
+        [...devices.values()].map((device) => ({ groupId, ...device })),
       ),
     };
   };
@@ -275,7 +277,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     runId: number;
   }) => {
     const entries: LiveMapEntry[] = [];
-    const undecryptable = new Set(undecryptableByGroup.get(groupId));
+    const undecryptable = new Map(undecryptableByGroup.get(groupId));
     let undecryptableChanged = false;
 
     for (const point of points) {
@@ -288,11 +290,15 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         return;
       }
 
+      const deviceKey = `${point.senderUserId}:${point.senderDeviceId}`;
       if (result.status === "ok") {
         entries.push(result.entry);
-        undecryptableChanged = undecryptable.delete(point.senderUserId) || undecryptableChanged;
-      } else if (result.status === "undecryptable" && !undecryptable.has(point.senderUserId)) {
-        undecryptable.add(point.senderUserId);
+        undecryptableChanged = undecryptable.delete(deviceKey) || undecryptableChanged;
+      } else if (result.status === "undecryptable" && !undecryptable.has(deviceKey)) {
+        undecryptable.set(deviceKey, {
+          deviceId: point.senderDeviceId,
+          userId: point.senderUserId,
+        });
         undecryptableChanged = true;
       }
     }
@@ -318,19 +324,79 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     notify();
   };
 
-  const coldTick = async (groupId: string, runId: number) => {
+  const snapshotGroup = (groupId: string) => ({
+    positions: positionsByGroup.get(groupId) ?? new Map<string, LiveMapEntry>(),
+    undecryptable: undecryptableByGroup.get(groupId) ?? new Map<string, never>(),
+  });
+
+  const dropRemovedDevices = ({
+    activeDeviceIds,
+    groupId,
+    seenAtRequest = snapshotGroup(groupId),
+  }: {
+    activeDeviceIds: ReadonlySet<string>;
+    groupId: string;
+    seenAtRequest?: ReturnType<typeof snapshotGroup>;
+  }) => {
+    let changed = false;
+    const positions = positionsByGroup.get(groupId);
+    if (positions) {
+      const kept = dropInactiveDevices(positions, {
+        activeDeviceIds,
+        seenAtRequest: seenAtRequest.positions,
+      });
+      if (kept !== positions) {
+        positionsByGroup.set(groupId, kept);
+        changed = true;
+      }
+    }
+
+    const undecryptable = undecryptableByGroup.get(groupId);
+    if (undecryptable) {
+      const kept = new Map(
+        [...undecryptable].filter(
+          ([key, device]) =>
+            activeDeviceIds.has(device.deviceId) || seenAtRequest.undecryptable.get(key) !== device,
+        ),
+      );
+      if (kept.size !== undecryptable.size) {
+        if (kept.size > 0) {
+          undecryptableByGroup.set(groupId, kept);
+        } else {
+          undecryptableByGroup.delete(groupId);
+        }
+        refreshStatus();
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      notify();
+    }
+  };
+
+  const loadLatest = async (groupId: string, runId: number) => {
+    const seenAtRequest = snapshotGroup(groupId);
     const { points } = await withTimeout((signal) => deps.getLatest(groupId, signal));
     if (!isCurrent(groupId, runId)) {
-      return;
+      return [];
     }
 
+    dropRemovedDevices({
+      activeDeviceIds: new Set(points.map(({ senderDeviceId }) => senderDeviceId)),
+      groupId,
+      seenAtRequest,
+    });
+    if (points.length > 0) {
+      await mergeDecrypted({ groupId, points, runId });
+    }
+    return points;
+  };
+
+  const coldTick = async (groupId: string, runId: number) => {
+    const points = await loadLatest(groupId, runId);
     const state = groupStates.get(groupId);
-    if (!state || points.length === 0) {
-      return;
-    }
-
-    await mergeDecrypted({ groupId, points, runId });
-    if (!isCurrent(groupId, runId)) {
+    if (!state || points.length === 0 || !isCurrent(groupId, runId)) {
       return;
     }
 
@@ -373,15 +439,6 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     state.cursor = nextCursor;
   };
 
-  const reconcileTick = async (groupId: string, runId: number) => {
-    const { points } = await withTimeout((signal) => deps.getLatest(groupId, signal));
-    if (!isCurrent(groupId, runId) || points.length === 0) {
-      return;
-    }
-
-    await mergeDecrypted({ groupId, points, runId });
-  };
-
   const tickGroup = async (groupId: string, tickStartedAt: number) => {
     const state = groupStates.get(groupId);
     if (!state || !active || state.inFlight) {
@@ -400,7 +457,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
 
         const reconcile =
           deps.now() - state.lastReconcileAt >= RECONCILE_INTERVAL_MS
-            ? reconcileTick(groupId, runId).then(() => {
+            ? loadLatest(groupId, runId).then(() => {
                 if (isCurrent(groupId, runId)) {
                   state.lastReconcileAt = deps.now();
                 }
@@ -566,6 +623,13 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       positionsByGroup.clear();
       deps.clearEpochKeys();
     },
+    dropRemovedDevices: ({
+      activeDeviceIds,
+      groupId,
+    }: {
+      activeDeviceIds: ReadonlySet<string>;
+      groupId: string;
+    }) => dropRemovedDevices({ activeDeviceIds, groupId }),
     getLivePositions: () => [...getLiveMap().values()].map(toLiveMapPosition),
     getStatus: () => status,
     setActive: (nextActive: boolean) => {

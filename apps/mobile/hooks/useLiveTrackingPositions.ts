@@ -1,5 +1,5 @@
 import { useIsFocused } from "@react-navigation/native";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { createDefaultMapTrackingDeps } from "../lib/createDefaultMapTrackingDeps.ts";
 import { createMapTrackingSession } from "../lib/mapTracking.ts";
@@ -65,5 +65,12 @@ export const useLiveTrackingPositions = ({ groupId }: { groupId?: string } = {})
     };
   }, [isFocused]);
 
-  return tracking;
+  const dropRemovedDevices = useCallback(
+    (input: { activeDeviceIds: ReadonlySet<string>; groupId: string }) => {
+      sessionRef.current?.dropRemovedDevices(input);
+    },
+    [],
+  );
+
+  return { ...tracking, dropRemovedDevices };
 };

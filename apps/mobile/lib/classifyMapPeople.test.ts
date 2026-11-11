@@ -7,8 +7,14 @@ const NOW = Date.parse("2026-11-10T12:00:00.000Z");
 
 const member = (userId: string, name = userId) => ({ image: null, name, userId });
 
-const marker = (userId: string, minutesAgo: number | null, isSelf = false): LiveMapMarker => ({
+const marker = (
+  userId: string,
+  minutesAgo: number | null,
+  isSelf = false,
+  deviceId = `${userId}-phone`,
+): LiveMapMarker => ({
   battery: null,
+  deviceId,
   image: null,
   initials: userId.slice(0, 2),
   isSelf,
@@ -121,7 +127,10 @@ describe("classifyMapPeople", () => {
       markers: [marker("me", 0, true), marker("mum", 1)],
       now: NOW,
       selfUserId: "me",
-      status: { ...loaded, undecryptable: [{ groupId: "club", userId: "josh" }] },
+      status: {
+        ...loaded,
+        undecryptable: [{ deviceId: "josh-phone", groupId: "club", userId: "josh" }],
+      },
     });
 
     expect(people.cantRead.map(({ reason, userId }) => ({ reason, userId }))).toEqual([
@@ -266,9 +275,9 @@ describe("flagUnreadableMarkers", () => {
       status: {
         ...loaded,
         undecryptable: [
-          { groupId: "club", userId: "mum" },
-          { groupId: "family", userId: "me" },
-          { groupId: "family", userId: "josh" },
+          { deviceId: "mum-phone", groupId: "club", userId: "mum" },
+          { deviceId: "me-phone", groupId: "family", userId: "me" },
+          { deviceId: "josh-phone", groupId: "family", userId: "josh" },
         ],
       },
     });
@@ -280,5 +289,97 @@ describe("flagUnreadableMarkers", () => {
     ]);
     expect(flagged[0]).toBe(markers[0]);
     expect(flagged[2]).toBe(markers[2]);
+  });
+});
+
+describe("classifyMapPeople with several devices", () => {
+  test("shows one chip per person using the best status of their devices", () => {
+    const people = classifyMapPeople({
+      groups: [family, club],
+      keyAccess: available,
+      markers: [
+        marker("mum", 30, false, "mum-phone"),
+        marker("mum", 2, false, "mum-tablet"),
+        marker("josh", 40, false, "josh-phone"),
+        marker("josh", 20, false, "josh-tablet"),
+      ],
+      now: NOW,
+      selfUserId: "me",
+      status: loaded,
+    });
+
+    expect(sectionsOf(people)).toMatchObject({ outOfDate: ["josh"], upToDate: ["mum"] });
+    expect(people.upToDate.map((item) => item.deviceId)).toEqual(["mum-tablet"]);
+    expect(people.outOfDate.map((item) => item.deviceId)).toEqual(["josh-tablet"]);
+  });
+
+  test("keeps a person located when only one of their two devices can't be read", () => {
+    const status = {
+      ...loaded,
+      undecryptable: [{ deviceId: "mum-tablet", groupId: "family", userId: "mum" }],
+    };
+    const markers = flagUnreadableMarkers({
+      groups: [family, club],
+      markers: [marker("mum", 1, false, "mum-phone")],
+      status,
+    });
+    const people = classifyMapPeople({
+      groups: [family, club],
+      keyAccess: available,
+      markers,
+      now: NOW,
+      selfUserId: "me",
+      status,
+    });
+
+    expect(markers[0]?.unreadableGroup).toBeUndefined();
+    expect(sectionsOf(people)).toMatchObject({ cantRead: [], upToDate: ["mum"] });
+  });
+
+  test("flags only the device whose newer point can't be read", () => {
+    const flagged = flagUnreadableMarkers({
+      groups: [family],
+      markers: [marker("mum", 1, false, "mum-phone"), marker("mum", 1, false, "mum-tablet")],
+      status: {
+        ...loaded,
+        undecryptable: [{ deviceId: "mum-tablet", groupId: "family", userId: "mum" }],
+      },
+    });
+
+    expect(flagged.map((item) => item.unreadableGroup)).toEqual([
+      undefined,
+      { id: "family", name: "Family" },
+    ]);
+  });
+
+  test("needs attention when the person's only device can't be read", () => {
+    const people = classifyMapPeople({
+      groups: [family, club],
+      keyAccess: available,
+      markers: [],
+      now: NOW,
+      selfUserId: "me",
+      status: {
+        ...loaded,
+        undecryptable: [{ deviceId: "josh-tablet", groupId: "club", userId: "josh" }],
+      },
+    });
+
+    expect(sectionsOf(people).cantRead).toEqual(["josh"]);
+  });
+
+  test("shows you as yourself when only your other device has a location", () => {
+    const people = classifyMapPeople({
+      groups: [family],
+      keyAccess: available,
+      markers: [marker("me", 1, false, "me-tablet")],
+      now: NOW,
+      selfUserId: "me",
+      status: loaded,
+    });
+
+    expect(people.upToDate.map(({ deviceId, isSelf }) => ({ deviceId, isSelf }))).toEqual([
+      { deviceId: "me-tablet", isSelf: true },
+    ]);
   });
 });

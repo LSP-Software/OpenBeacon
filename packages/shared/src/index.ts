@@ -9,3 +9,5 @@ export {
   minServerApiCompatibilityLevel,
   parseApiCompatibilityLevel,
 } from "./apiCompatibilityLevel.ts";
+export { deviceIdHeader } from "./deviceIdHeader.ts";
+export { devicePendingCause, deviceRemovedCause, deviceUnverifiedCause } from "./deviceRemoved.ts";

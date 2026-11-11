@@ -481,3 +481,15 @@ export {
   unwrapHistoryEpochKey,
   wrapEpochKeyForHistoryKey,
 } from "./recovery.ts";
+export {
+  openDeviceActivationChallenge,
+  sealDeviceActivationChallenge,
+} from "./deviceActivation.ts";
+export { openSessionLinkChallenge, sealSessionLinkChallenge } from "./sessionLink.ts";
+export {
+  createDeviceLinkSecret,
+  formatDeviceLinkCode,
+  openDeviceLinkHandover,
+  parseDeviceLinkCode,
+  sealDeviceLinkHandover,
+} from "./deviceLink.ts";

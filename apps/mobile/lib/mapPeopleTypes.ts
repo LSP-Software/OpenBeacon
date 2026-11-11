@@ -1,4 +1,5 @@
 import type { LiveMapMarker } from "./buildLiveMapMarkers.ts";
+import type { DeviceIcon } from "./deviceIcons.ts";
 
 export type MapPerson = {
   groupNames: string[];
@@ -38,6 +39,14 @@ export type MapGroupOption = {
   id: string;
   memberCount: number;
   name: string;
+};
+
+export type MapMemberDevice = {
+  deviceId: string;
+  icon: DeviceIcon;
+  name: string;
+  platform: "android" | "ios" | null;
+  userId: string;
 };
 
 export type MapGroup = {

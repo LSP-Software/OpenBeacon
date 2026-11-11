@@ -15,21 +15,25 @@ describe("OpenBeaconCache alertsTurnedOff", () => {
   test("keeps the first time and every alert added until taken", async () => {
     const store = createStore();
 
-    expect(await store.add({ userId: "user-1", alerts: ["new-device"], at: 1000 })).toBe(1000);
+    expect(await store.add({ userId: "user-1", alerts: ["new-sign-in"], at: 1000 })).toBe(1000);
     expect(
-      await store.add({ userId: "user-1", alerts: ["new-device", "deletion-scheduled"], at: 5000 }),
+      await store.add({
+        userId: "user-1",
+        alerts: ["new-sign-in", "deletion-scheduled"],
+        at: 5000,
+      }),
     ).toBe(1000);
     expect(await store.pending()).toEqual([{ userId: "user-1", firstAt: 1000 }]);
 
     const taken = await store.take({ userId: "user-1", firstAtOrBefore: 1000 });
     expect(taken?.firstAt).toBe(1000);
-    expect(taken?.alerts.toSorted()).toEqual(["deletion-scheduled", "new-device"]);
+    expect(taken?.alerts.toSorted()).toEqual(["deletion-scheduled", "new-sign-in"]);
     expect(await store.pending()).toEqual([]);
   });
 
   test("only one caller can take the alerts", async () => {
     const store = createStore();
-    await store.add({ userId: "user-1", alerts: ["new-device"], at: 1000 });
+    await store.add({ userId: "user-1", alerts: ["new-sign-in"], at: 1000 });
 
     const results = await Promise.all([
       store.take({ userId: "user-1", firstAtOrBefore: 2000 }),
@@ -41,7 +45,7 @@ describe("OpenBeaconCache alertsTurnedOff", () => {
 
   test("leaves alerts that aren't due yet", async () => {
     const store = createStore();
-    await store.add({ userId: "user-1", alerts: ["new-device"], at: 1000 });
+    await store.add({ userId: "user-1", alerts: ["new-sign-in"], at: 1000 });
 
     expect(await store.take({ userId: "user-1", firstAtOrBefore: 999 })).toBeNull();
     expect(await store.pending()).toEqual([{ userId: "user-1", firstAt: 1000 }]);

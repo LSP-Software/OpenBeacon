@@ -10,6 +10,8 @@ import {
   wrapEpochKeyForHistoryKey,
   wrapEpochKeyForRecipient,
 } from "@openbeacon/encryption";
+import { deviceRemovedCause } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 const deviceKeyPair = createDeviceKeyPair();
@@ -93,6 +95,10 @@ let recoveryStatus: {
 let recoveryStatusError: Error | null = null;
 let recoveryStatusCalls = 0;
 const storedHistoryKeyVersions = new Set([1]);
+let createHistoryKeyResult: boolean | Error = true;
+let thisDeviceActive = true;
+let createHistoryKeyCalls = 0;
+const resealedUsers: string[] = [];
 let backfillErrors = new Map<string, Error>();
 let missingHistoryWraps = new Map<string, string[]>();
 const backfillQueries: string[] = [];
@@ -163,6 +169,38 @@ mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async ({ userId, version }: { userId: string; version: number }) =>
     userId === "user-1" && storedHistoryKeyVersions.has(version) ? historyKeyPair.privateKey : null,
   storeHistoryKey: async () => {},
+  deleteStoredHistoryKeys: async () => {},
+}));
+
+mock.module("./savedDeviceLink.ts", () => ({ deleteSavedDeviceLink: async () => {} }));
+
+mock.module("./deviceActivation.ts", () => ({
+  isThisDeviceActive: async () => thisDeviceActive,
+}));
+
+mock.module("./createHistoryKey.ts", () => ({
+  KEY_NOT_SAVED_MESSAGE: "Unable to save your keys on this phone.",
+  createHistoryKey: async () => {
+    createHistoryKeyCalls += 1;
+    if (createHistoryKeyResult instanceof Error) throw createHistoryKeyResult;
+    if (createHistoryKeyResult) storedHistoryKeyVersions.add(1);
+    recoveryStatus = {
+      currentHistoryKey: {
+        publicKey: createHistoryKeyResult
+          ? historyKeyPair.publicKey
+          : createHistoryKeyPair().publicKey,
+        version: 1,
+      },
+      recoveryKey: null,
+    };
+    return createHistoryKeyResult;
+  },
+}));
+
+mock.module("./resealPersonalData.ts", () => ({
+  resealPersonalData: async (userId: string) => {
+    resealedUsers.push(userId);
+  },
 }));
 
 mock.module("./base-url.ts", () => ({ baseUrl: "https://api.example.test" }));
@@ -490,6 +528,10 @@ describe("tracking service", () => {
     compatibilityNoticeClears = 0;
     storedHistoryKeyVersions.clear();
     storedHistoryKeyVersions.add(1);
+    createHistoryKeyResult = true;
+    createHistoryKeyCalls = 0;
+    thisDeviceActive = true;
+    resealedUsers.length = 0;
     ownerContextCalls = 0;
     ownerQueryGate = null;
     unassignedCount = 0;
@@ -592,6 +634,29 @@ describe("tracking service", () => {
     resumeTracking();
     await expect(flushPendingTrackingPoints(true)).rejects.toThrow("Tracking upload failed");
     expect(uploadCalls).toHaveLength(2);
+  });
+
+  test("the sign-out upload still sends this phone's device id and keeps it for the rest of sign-out", async () => {
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    const deviceIdsAtUpload: Array<string | undefined> = [];
+    uploadGroup = async ({ points }) => {
+      deviceIdsAtUpload.push(registeredDevice?.deviceId);
+      return {
+        accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
+        duplicates: [],
+      };
+    };
+
+    await prepareTrackingSignOut();
+
+    expect(stopCaptureCalls).toBe(1);
+    expect(deviceIdsAtUpload).toEqual(["device-1"]);
+    expect(registeredDevice?.deviceId).toBe("device-1");
   });
 
   test("sign out times out and retains a late upload response", async () => {
@@ -979,13 +1044,85 @@ describe("tracking service", () => {
     expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
   });
 
-  test("skips every backfill call when the account has no recovery phrase", async () => {
+  test("an account with no history key gets v1 from this phone, which backfills and re-seals", async () => {
     recoveryStatus = { currentHistoryKey: null, recoveryKey: null };
+    storedHistoryKeyVersions.clear();
+    missingHistoryWraps.set("group-1", ["epoch-1"]);
+
     await reconcileTrackingKeys({ startCapture: true });
+
+    expect(createHistoryKeyCalls).toBe(1);
+    expect(startCaptureCalls).toBe(1);
+    const wrap = historyWrapUploads[0]?.wraps[0];
+    if (!wrap) throw new Error("Missing history wrap");
+    expect(
+      encodeBase64(
+        unwrapHistoryEpochKey({
+          epochId: "epoch-1",
+          historyKeyVersion: 1,
+          historyPrivateKey: historyKeyPair.privateKey,
+          userId: "user-1",
+          wrappedEpochKey: wrap,
+        }).expose(),
+      ),
+    ).toBe(encodeBase64(epochKey1.expose()));
+    expect(resealedUsers).toEqual(["user-1"]);
+  });
+
+  test("a Pending device doesn't capture, rotate, backfill or create a history key", async () => {
+    recoveryStatus = { currentHistoryKey: null, recoveryKey: null };
+    storedHistoryKeyVersions.clear();
+    thisDeviceActive = false;
+
+    await reconcileTrackingKeys({ startCapture: true });
+    await reconcileTrackingKeys({ startCapture: false, force: true });
+
+    expect(startCaptureCalls).toBe(0);
+    expect(provisionCalls).toEqual([]);
+    expect(rotationChecks).toEqual([]);
+    expect(createHistoryKeyCalls).toBe(0);
+    expect(backfillQueries).toEqual([]);
+  });
+
+  test("without capture, a phone with no history key on the account still creates it", async () => {
+    recoveryStatus = { currentHistoryKey: null, recoveryKey: null };
+    storedHistoryKeyVersions.clear();
+
     await reconcileTrackingKeys({ startCapture: false });
 
-    expect(backfillQueries).toEqual([]);
+    expect(createHistoryKeyCalls).toBe(1);
+    expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
+    expect(resealedUsers).toEqual(["user-1"]);
+  });
+
+  test("a phone that loses the race to create the history key keeps sharing without it", async () => {
+    recoveryStatus = { currentHistoryKey: null, recoveryKey: null };
+    storedHistoryKeyVersions.clear();
+    createHistoryKeyResult = false;
+
+    await reconcileTrackingKeys({ startCapture: true });
     expect(startCaptureCalls).toBe(1);
+    await reconcileTrackingKeys({ startCapture: true, force: true });
+
+    expect(createHistoryKeyCalls).toBe(1);
+    expect(backfillQueries).toEqual([]);
+    expect(resealedUsers).toEqual([]);
+  });
+
+  test("a failed history key create keeps sharing and is retried on the next reconcile", async () => {
+    recoveryStatus = { currentHistoryKey: null, recoveryKey: null };
+    storedHistoryKeyVersions.clear();
+    createHistoryKeyResult = new Error("offline");
+
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(startCaptureCalls).toBe(1);
+    expect(backfillQueries).toEqual([]);
+
+    createHistoryKeyResult = true;
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(createHistoryKeyCalls).toBe(2);
+    expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
   });
 
   test("skips every backfill call when this phone doesn't hold the current history key", async () => {
@@ -1462,6 +1599,35 @@ describe("tracking service", () => {
     expect(requeued).toHaveLength(1);
   });
 
+  test("an upload refused because this phone was removed keeps the registration for the wipe", async () => {
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    captureRunning = true;
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    uploadGroup = async () => {
+      throw createDeviceRemovedError();
+    };
+    await expect(syncBackgroundTracking()).rejects.toThrow();
+    expect(stopCaptureCalls).toBe(1);
+    expect(registeredDevice?.deviceId).toBe("device-1");
+  });
+
+  test("a key check refused because this phone was removed keeps the registration for the wipe", async () => {
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    captureRunning = true;
+    rotationError = createDeviceRemovedError();
+    await syncBackgroundTracking();
+    expect(stopCaptureCalls).toBe(1);
+    expect(registeredDevice?.deviceId).toBe("device-1");
+  });
+
   test("stops capture when a group rotation check reports an unauthorized session", async () => {
     captureRunning = true;
     rotationError = Object.assign(new Error("Session revoked"), { data: { code: "UNAUTHORIZED" } });
@@ -1802,7 +1968,7 @@ describe("tracking service", () => {
       expect(requests).not.toContain("auth.registerDeviceKey");
     });
 
-    test("an upload the server rejects as forbidden registers again and rechecks keys in the same run", async () => {
+    test("an upload the server rejects as forbidden keeps this phone's registration and rechecks keys in the same run", async () => {
       await startTracking();
       pendingCiphertexts = [
         createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
@@ -1816,9 +1982,9 @@ describe("tracking service", () => {
       await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
 
       expect(requests[0]).toBe("groupTracking.uploadBatch");
-      expect(requests).toEqual(
-        expect.arrayContaining(["auth.registerDeviceKey", ...keyCheckRequests]),
-      );
+      expect(requests).toEqual(expect.arrayContaining(keyCheckRequests));
+      expect(requests).not.toContain("auth.registerDeviceKey");
+      expect(registeredDevice?.deviceId).toBe("device-1");
     });
 
     test("an upload with an unknown epoch rechecks keys in the same run", async () => {
@@ -2030,3 +2196,14 @@ describe("tracking service", () => {
     });
   });
 });
+
+const createDeviceRemovedError = () =>
+  new TRPCClientError("This device was removed.", {
+    result: {
+      error: {
+        code: -32001,
+        message: "This device was removed.",
+        data: { code: "UNAUTHORIZED", cause: deviceRemovedCause },
+      },
+    },
+  });

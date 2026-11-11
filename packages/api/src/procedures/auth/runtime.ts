@@ -1,12 +1,10 @@
 import { auth } from "@openbeacon/auth";
 import { TRPCError } from "@trpc/server";
+import { deviceUnverifiedError } from "../../lib/deviceUnverified.ts";
 import { t } from "../../trpcRuntime.ts";
 import { createAuthProcedures } from "./base.ts";
 
-const procedures = createAuthProcedures({ t });
-
-export const protectedProcedure = procedures.protectedProcedure;
-export const publicProcedure = procedures.publicProcedure;
+export const { protectedProcedure, publicProcedure, setupProcedure } = createAuthProcedures({ t });
 
 export const sessionFreshForMs = async (sessionCreatedAt: Date): Promise<number | null> => {
   const { sessionConfig } = await auth.$context;
@@ -15,9 +13,22 @@ export const sessionFreshForMs = async (sessionCreatedAt: Date): Promise<number 
   return Math.max(0, sessionConfig.freshAge * 1000 - sessionAge);
 };
 
-export const freshSessionProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+export const requireFreshSession = t.middleware(async ({ ctx, next }) => {
+  if (!ctx.session) throw new TRPCError({ code: "UNAUTHORIZED" });
   if ((await sessionFreshForMs(ctx.session.session.createdAt)) === 0) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Sign in again to continue." });
   }
   return next();
 });
+
+export const freshSessionProcedure = protectedProcedure.use(requireFreshSession);
+
+export const requireThisDevice = t.middleware(async ({ ctx, next }) => {
+  if (!ctx.deviceId) {
+    if (ctx.unverifiedDeviceId) throw deviceUnverifiedError();
+    throw new TRPCError({ code: "BAD_REQUEST", message: "This phone isn't registered yet." });
+  }
+  return next({ ctx: { deviceId: ctx.deviceId } });
+});
+
+export const setupDeviceProcedure = setupProcedure.use(requireThisDevice);

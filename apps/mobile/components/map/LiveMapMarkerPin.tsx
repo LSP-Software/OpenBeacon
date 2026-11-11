@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { AppState, View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
 import { cn } from "../../lib/cn.ts";
+import { type DeviceIcon, deviceIconFor } from "../../lib/deviceIcons.ts";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
 import type { MapPersonStatus } from "../../lib/mapPeopleTypes.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
@@ -53,6 +54,9 @@ const SPOTLIGHT_PATH = [
 ].join(" ");
 
 export const LiveMapMarkerPin = ({
+  deviceCount,
+  deviceIcon,
+  devicePlatform,
   hasUnreadableUpdate = false,
   headingDegrees = null,
   image,
@@ -64,6 +68,9 @@ export const LiveMapMarkerPin = ({
   status,
   timestamp,
 }: {
+  deviceCount?: number | undefined;
+  deviceIcon?: DeviceIcon | undefined;
+  devicePlatform?: string | null | undefined;
   hasUnreadableUpdate?: boolean;
   headingDegrees?: number | null;
   image: string | null;
@@ -99,6 +106,7 @@ export const LiveMapMarkerPin = ({
   }, [hasUnreadableUpdate, isStale, onBitmapContentChange]);
   const showHeading = headingDegrees !== null;
   const size = showHeading ? OUTER_SIZE : PIN_SIZE;
+  const badgeIcon = deviceIcon ? deviceIconFor(deviceIcon, devicePlatform) : null;
 
   return (
     <View
@@ -233,6 +241,24 @@ export const LiveMapMarkerPin = ({
           <StatusBadge label="Location is over 10 minutes old">
             <Icon as={ClockIcon} size={13} className="text-foreground" />
           </StatusBadge>
+        ) : null}
+        {badgeIcon ? (
+          <View
+            accessibilityLabel={badgeIcon.label}
+            className="absolute bottom-0 right-0 size-5 items-center justify-center rounded-full border border-border bg-card"
+          >
+            <Icon as={badgeIcon.icon} size={14} className="text-foreground" />
+          </View>
+        ) : null}
+        {deviceCount !== undefined && deviceCount > 1 ? (
+          <View
+            accessibilityLabel={`${deviceCount} devices here`}
+            className="absolute -right-1 -top-1 h-5 min-w-5 items-center justify-center rounded-full border border-border bg-card px-1"
+          >
+            <Text className="text-[11px] font-bold leading-[13px] text-foreground">
+              {deviceCount}
+            </Text>
+          </View>
         ) : null}
       </View>
     </View>

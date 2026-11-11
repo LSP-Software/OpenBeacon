@@ -52,6 +52,8 @@ const createCaller = <TRouter extends AnyRouter>({
   const context: CallerContext = {
     cache,
     db: {},
+    deviceId: "device-1",
+    deviceActive: true,
     session: userId
       ? {
           user: {
@@ -268,6 +270,8 @@ describe("rateLimitMiddleware", () => {
             cache,
             db: {} as never,
             clientIp: "198.51.100.1",
+            deviceId: "device-1",
+            deviceActive: true,
             session: { user: { id: "user-1" } },
           }) as never,
       });
@@ -304,7 +308,13 @@ describe("rateLimitMiddleware", () => {
       req: new Request("http://localhost/trpc/lookup"),
       router,
       createContext: () =>
-        ({ cache, db: {} as never, session: { user: { id: "user-1" } } }) as never,
+        ({
+          cache,
+          db: {} as never,
+          deviceId: "device-1",
+          deviceActive: true,
+          session: { user: { id: "user-1" } },
+        }) as never,
     });
     expect(response.status).toBe(400);
     const body = await response.text();

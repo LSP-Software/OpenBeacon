@@ -84,6 +84,17 @@ mock.module("../lib/auth-client.ts", () => ({
   },
 }));
 
+let thisDeviceState: "unregistered" | "registered" | "active" = "active";
+let pathname = "/map";
+let searchParams: { setup?: string } = {};
+mock.module("expo-router", () => ({
+  useGlobalSearchParams: () => searchParams,
+  usePathname: () => pathname,
+}));
+mock.module("../lib/deviceActivation.ts", () => ({
+  useThisDeviceState: () => thisDeviceState,
+}));
+
 mock.module("../lib/locationPermissions.ts", () => ({
   getLocationPermissionState: async () => {
     refreshCalls += 1;
@@ -208,6 +219,9 @@ describe("LocationPermissionProvider", () => {
       missing: [],
     });
     appStateListener = null;
+    thisDeviceState = "active";
+    pathname = "/map";
+    searchParams = {};
   });
 
   afterEach(async () => {
@@ -223,6 +237,66 @@ describe("LocationPermissionProvider", () => {
     expect(notificationRequestCalls).toBe(1);
     expect(permissionRequestOrder).toEqual(["notification", "location"]);
     expect(refreshCalls).toBe(0);
+  });
+
+  test("doesn't ask for permissions until this phone is set up", async () => {
+    thisDeviceState = "registered";
+    const root = await renderProvider();
+    appStateListener?.("background");
+    appStateListener?.("active");
+    await flushEffects();
+
+    expect(notificationRequestCalls).toBe(0);
+    expect(launchRequestCalls).toBe(0);
+    expect(refreshCalls).toBe(0);
+
+    thisDeviceState = "active";
+    await act(async () => {
+      root.render(<LocationPermissionProvider>{null}</LocationPermissionProvider>);
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(notificationRequestCalls).toBe(1);
+    expect(launchRequestCalls).toBe(1);
+  });
+
+  test.each([
+    ["linking", "/setup/link", {}],
+    ["naming this phone", "/setup/name", {}],
+    ["removing old devices", "/setup/remove-devices", {}],
+    ["restoring from the phrase during setup", "/account/recovery-restore", { setup: "true" }],
+    ["starting fresh during setup", "/account/recovery-reset", { setup: "true" }],
+  ])("waits until setup is finished before asking, while %s", async (_step, setupPath, params) => {
+    pathname = setupPath;
+    searchParams = params;
+    const root = await renderProvider();
+    appStateListener?.("background");
+    appStateListener?.("active");
+    await flushEffects();
+
+    expect(notificationRequestCalls).toBe(0);
+    expect(launchRequestCalls).toBe(0);
+    expect(refreshCalls).toBe(0);
+
+    pathname = "/";
+    searchParams = {};
+    await act(async () => {
+      root.render(<LocationPermissionProvider>{null}</LocationPermissionProvider>);
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(notificationRequestCalls).toBe(1);
+    expect(launchRequestCalls).toBe(1);
+  });
+
+  test("asks as usual on the recovery screens outside setup", async () => {
+    pathname = "/account/recovery-reset";
+    await renderProvider();
+
+    expect(notificationRequestCalls).toBe(1);
+    expect(launchRequestCalls).toBe(1);
   });
 
   test("runs launch setup when the app resumes during the notification prompt", async () => {

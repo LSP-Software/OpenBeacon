@@ -29,9 +29,21 @@ export const classifyMapPeople = ({
     waiting: [],
   };
 
+  const bestByUserId = new Map<string, { isOutOfDate: boolean; marker: LiveMapMarker }>();
   for (const marker of markers) {
     const isOutOfDate = marker.timestamp !== null && now >= locationStaleAt(marker.timestamp);
-    (isOutOfDate ? people.outOfDate : people.upToDate).push(marker);
+    const best = bestByUserId.get(marker.userId);
+    const comparison = best
+      ? Number(best.isOutOfDate) - Number(isOutOfDate) ||
+        Number(marker.isSelf) - Number(best.marker.isSelf) ||
+        (marker.timestamp ?? "").localeCompare(best.marker.timestamp ?? "")
+      : 1;
+    if (comparison > 0) bestByUserId.set(marker.userId, { isOutOfDate, marker });
+  }
+  for (const { isOutOfDate, marker } of bestByUserId.values()) {
+    const person =
+      marker.userId === selfUserId && !marker.isSelf ? { ...marker, isSelf: true } : marker;
+    (isOutOfDate ? people.outOfDate : people.upToDate).push(person);
   }
 
   const undecryptable = new Set(
@@ -123,7 +135,8 @@ export const flagUnreadableMarkers = ({
       (item) =>
         item.members.some((member) => member.userId === marker.userId) &&
         status.undecryptable.some(
-          ({ groupId, userId }) => groupId === item.id && userId === marker.userId,
+          ({ deviceId, groupId, userId }) =>
+            groupId === item.id && userId === marker.userId && deviceId === marker.deviceId,
         ),
     );
     if (!group) return marker;

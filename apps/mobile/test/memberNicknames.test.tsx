@@ -2,6 +2,8 @@ import { expect, mock, test } from "bun:test";
 import React, { act, type ReactNode } from "react";
 import { createRoot } from "test-renderer";
 import type { submitEpochChange } from "../lib/groupEncryption.ts";
+import type { MapMemberDevice } from "../lib/mapPeopleTypes.ts";
+import type { LiveMapPosition } from "../lib/mapTrackingTypes.ts";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -10,6 +12,8 @@ let pending = true;
 let records: Record<string, { name: string | null; ciphertext: string }> = {};
 let buttons: { label: string; disabled: boolean; onPress: () => void }[] = [];
 let input = "";
+let positions: LiveMapPosition[] = [];
+let memberDevices: MapMemberDevice[] = [];
 const mutate = mock(async (_input: unknown) => {});
 const group = {
   id: "group",
@@ -23,13 +27,27 @@ mock.module("@tanstack/react-query", () => ({
   useQuery: (options: { queryKey?: unknown[]; select?: (groups: unknown[]) => unknown }) =>
     options.queryKey?.[0] === "personalNicknames"
       ? { data: records, isPending: pending, isFetching: pending, isError: false }
-      : { data: options.select?.([group]), isPending: false },
+      : options.queryKey?.[0] === "memberDevices"
+        ? { data: memberDevices, isPending: false }
+        : { data: options.select?.([group]), isPending: false },
 }));
 mock.module("expo-router", () => ({ useRouter: () => ({ replace: () => {} }) }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
-mock.module("lucide-react-native", () => ({ MapPinIcon: () => null, PlusCircleIcon: () => null }));
+mock.module("lucide-react-native", () => ({
+  MapPinIcon: () => null,
+  PlusCircleIcon: () => null,
+  BackpackIcon: () => null,
+  CarIcon: () => null,
+  createLucideIcon: () => () => null,
+  HouseIcon: () => null,
+  LaptopIcon: () => null,
+  SmartphoneIcon: () => null,
+  TagIcon: () => null,
+  WatchIcon: () => null,
+}));
 mock.module("react-native", () => ({
-  View: passthrough,
+  View: ({ accessibilityLabel, children }: { accessibilityLabel?: string; children?: ReactNode }) =>
+    React.createElement("view", { accessibilityLabel }, children),
   ScrollView: passthrough,
   Pressable: passthrough,
   ActivityIndicator: () => null,
@@ -78,11 +96,14 @@ mock.module("../components/dialogs/InviteMemberToGroupDialog.tsx", () => ({
   InviteMemberToGroupDialog: () => null,
 }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
-mock.module("../hooks/useGroupLivePositions.ts", () => ({ useGroupLivePositions: () => [] }));
+mock.module("../hooks/useGroupLivePositions.ts", () => ({
+  useGroupLivePositions: () => positions,
+}));
 mock.module("../lib/api.ts", () => ({
   trpc: {
     groupMembership: {
       list: { queryOptions: () => ({}), queryKey: () => [] },
+      listMemberDevices: { queryOptions: () => ({ queryKey: ["memberDevices"] }) },
       remove: { mutationOptions: () => ({}) },
       updateRole: { mutationOptions: () => ({}) },
       updateNickname: { mutationOptions: () => ({}) },
@@ -104,7 +125,10 @@ mock.module("../lib/groupEncryption.ts", () => ({
 }));
 mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("../lib/hiddenMapGroups.ts", () => ({ forgetHiddenMapGroup: () => {} }));
-mock.module("../lib/batteryVisual.ts", () => ({ getBatteryVisual: () => null }));
+mock.module("../lib/batteryVisual.ts", () => ({
+  getBatteryVisual: () => ({ colorClass: "", icon: () => null }),
+}));
+mock.module("../lib/timeSince.ts", () => ({ timeSince: () => "2 minutes ago" }));
 const { default: MembersTab } = await import("../app/(tabs)/groups/[groupId]/MembersTab.tsx");
 const button = (label: string) => buttons.findLast((item) => item.label === label)!;
 
@@ -145,5 +169,39 @@ test("keeps an unreadable nickname on blank save and replaces it when a new nick
     ciphertext: "new-ciphertext",
     expectedCiphertext: "old",
   });
+  await act(async () => root.unmount());
+});
+
+test("each of a member's devices is read out as one line", async () => {
+  const root = createRoot();
+  pending = false;
+  records = {};
+  const position = {
+    latitude: 51.5,
+    longitude: -0.1,
+    sourceGroupId: "group",
+    speed: null,
+    timestamp: "2026-11-11T12:00:00.000Z",
+    userId: "other",
+  };
+  positions = [
+    { ...position, battery: { charging: false, level: 80 }, deviceId: "phone" },
+    { ...position, battery: { charging: true, level: 35 }, deviceId: "tablet" },
+  ];
+  memberDevices = [
+    { deviceId: "phone", icon: "phone", name: "Pixel", platform: "android", userId: "other" },
+    { deviceId: "tablet", icon: "tablet", name: "iPad", platform: "ios", userId: "other" },
+  ];
+  await act(async () => root.render(<MembersTab groupId="group" />));
+  const labels = root.container
+    .queryAll((item) => item.type === "view")
+    .map((item) => (item.props as { accessibilityLabel?: string }).accessibilityLabel)
+    .filter(Boolean);
+  expect(labels).toEqual([
+    "Pixel, updated 2 minutes ago, battery 80%",
+    "iPad, updated 2 minutes ago, battery 35%",
+  ]);
+  positions = [];
+  memberDevices = [];
   await act(async () => root.unmount());
 });

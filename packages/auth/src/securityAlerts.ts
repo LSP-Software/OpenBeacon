@@ -20,7 +20,7 @@ export const findAlertRecipient = async (
         where: { providerId: "credential", password: { not: null } },
       },
       alertDeletionScheduled: true,
-      alertNewDevice: true,
+      alertNewSignIn: true,
       email: true,
       id: true,
       timezone: true,

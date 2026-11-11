@@ -17,6 +17,7 @@ import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 const router = createTRPCRouter({
   groupInvites: groupInvitesRouter,
@@ -36,15 +37,18 @@ const ownerEmail = `${ownerId}@example.test`;
 const memberEmail = `${memberId}@example.test`;
 const ownerKey = createDeviceKeyPair();
 const memberKey = createDeviceKeyPair();
-const caller = (userId: string) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    session: { user: { id: userId }, session: { id: `${userId}-session` } },
-  } as Parameters<typeof router.createCaller>[0]);
-const owner = caller(ownerId);
-const member = caller(memberId);
+const caller = (userId: string, deviceId: string) =>
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId,
+      session: { user: { id: userId }, session: { id: `${userId}-session` } },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
+const owner = caller(ownerId, ownerDevice);
+const member = caller(memberId, memberDevice);
 const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
   createdByDeviceId: result.epoch.createdByDeviceId,
   epochId: result.epoch.epochId,
@@ -81,6 +85,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             userId,
             publicKey: key.publicKey,
             publicKeyAlgorithm: key.algorithm,
+            name: "Phone",
+            icon: "phone",
+            activatedAt: new Date(),
           },
         });
       }
@@ -168,7 +175,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const ownerMember = members.find((item) => item.user.id === ownerId)!;
       await expect(
         member.groupMembership.removalContext({ groupId, memberId: ownerMember.id }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "FORBIDDEN", message: "You cannot remove this member." });
       const context = await member.groupMembership.removalContext({ groupId, memberId: self.id });
       const next = createNextGroupEpoch({
         creator: { deviceId: memberDevice, privateKey: memberKey.privateKey },
@@ -196,7 +203,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toBe(1);
       await expect(
         member.groupTracking.uploadBatch({ groupId, points: [point] }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: "FORBIDDEN", message: "You are not a member of this group" });
       await owner.groupInvites.send({ groupId, invites: [{ email: memberEmail, role: "MEMBER" }] });
       const reinvite = (await member.groupInvites.list())[0]!;
       const rejoin = await member.groupInvites.acceptanceContext({ inviteId: reinvite.id });
@@ -227,7 +234,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(rejoinedWraps.epochs.map((epoch) => epoch.epochId)).toEqual([rejoined.epoch.epochId]);
       await expect(
         member.groupTracking.uploadBatch({ groupId, points: [point] }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "Epoch does not belong to this group.",
+      });
       const ownerContext = await owner.groupMembership.removalContext({
         groupId,
         memberId: ownerMember.id,
@@ -320,7 +330,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           ...transfer,
           nextEpoch: { ...transfer.nextEpoch, epochNumber: 999 },
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "Epoch number does not match the next group epoch.",
+      });
       expect(
         (await owner.groupMembership.members({ groupId })).find((item) => item.id === successor.id)
           ?.role,

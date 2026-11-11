@@ -4,6 +4,7 @@ import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import type { SecurityAlert } from "@openbeacon/email";
 import { appRouter } from "../root.ts";
+import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
 
 const prefix = `sign-out-others-${crypto.randomUUID()}`;
 const password = "testing-password-123";
@@ -33,7 +34,24 @@ const createAccount = async () => {
     orderBy: { createdAt: "asc" },
     where: { userId: user.id },
   });
-  return { userId: user.id, sessions };
+  const device = await prisma.userDevice.create({
+    data: {
+      activatedAt: new Date(),
+      id: `${prefix}-device-${crypto.randomUUID()}`,
+      userId: user.id,
+      publicKey: "key",
+      publicKeyAlgorithm: "X25519",
+      model: "Pixel 9",
+      platform: "android",
+      name: "Sam's phone",
+      icon: "phone",
+    },
+  });
+  await prisma.session.update({
+    where: { id: sessions.at(-1)?.id },
+    data: { deviceId: device.id },
+  });
+  return { userId: user.id, sessions, deviceId: device.id };
 };
 
 const callerFor = (
@@ -42,17 +60,20 @@ const callerFor = (
 ) => {
   const current = account.sessions.at(-1);
   if (!current) throw new Error("The account has no session");
-  return appRouter.createCaller({
-    cache,
-    db: prisma,
-    emailCodes: null,
-    securityAlerts,
-    clientIp: `ip-${account.userId}`,
-    session: {
-      user: { id: account.userId },
-      session: { id: current.id, createdAt: sessionCreatedAt },
-    },
-  } as Parameters<typeof appRouter.createCaller>[0]);
+  return appRouter.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      emailCodes: null,
+      securityAlerts,
+      clientIp: `ip-${account.userId}`,
+      deviceId: account.deviceId,
+      session: {
+        user: { id: account.userId },
+        session: { id: current.id, createdAt: sessionCreatedAt },
+      },
+    }) as Parameters<typeof appRouter.createCaller>[0],
+  );
 };
 
 const sessionIds = async (userId: string) =>
@@ -84,13 +105,35 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("signing out othe
     const account = await createAccount();
     await prisma.user.update({
       where: { id: account.userId },
-      data: { alertNewDevice: false, alertDeletionScheduled: false },
+      data: { alertNewSignIn: false, alertDeletionScheduled: false },
     });
 
     await callerFor(account).account.signOutOtherSessions();
 
     expect(await sentAlerts()).toEqual([
-      { userId: account.userId, alert: { type: "other-sessions-signed-out" } },
+      {
+        userId: account.userId,
+        alert: {
+          type: "other-sessions-signed-out",
+          device: { name: "Sam's phone", model: "Pixel 9", platform: "android" },
+        },
+      },
+    ]);
+  });
+
+  test("names the device that signed the others out", async () => {
+    const account = await createAccount();
+
+    await callerFor(account).account.signOutOtherSessions();
+
+    expect(await sentAlerts()).toEqual([
+      {
+        userId: account.userId,
+        alert: {
+          type: "other-sessions-signed-out",
+          device: { name: "Sam's phone", model: "Pixel 9", platform: "android" },
+        },
+      },
     ]);
   });
 

@@ -2,13 +2,13 @@ export const LIVE_MAP_INITIAL_FIT_COALESCE_MS = 800;
 
 type LiveMapInitialFitState = {
   coalesceStartedAtMs: number | null;
-  fittedUserIds: string[];
+  fittedMarkerIds: string[];
   phase: "waiting" | "coalescing" | "closed";
 };
 
 export const createLiveMapInitialFitState = (): LiveMapInitialFitState => ({
   coalesceStartedAtMs: null,
-  fittedUserIds: [],
+  fittedMarkerIds: [],
   phase: "waiting",
 });
 
@@ -55,24 +55,24 @@ export const reduceLiveMapInitialFit = (
     };
   }
 
-  if (event.userIds.length === 0) {
+  if (event.markerIds.length === 0) {
     return { shouldFit: false, state };
   }
 
-  const nextFittedUserIds = uniqueInOrder(event.userIds);
+  const nextFittedMarkerIds = uniqueInOrder(event.markerIds);
 
   if (state.phase === "waiting") {
     return {
       shouldFit: true,
       state: {
         coalesceStartedAtMs: event.nowMs,
-        fittedUserIds: nextFittedUserIds,
+        fittedMarkerIds: nextFittedMarkerIds,
         phase: "coalescing",
       },
     };
   }
 
-  if (!hasNewMembers(state.fittedUserIds, nextFittedUserIds)) {
+  if (!hasNewMembers(state.fittedMarkerIds, nextFittedMarkerIds)) {
     return { shouldFit: false, state };
   }
 
@@ -80,29 +80,29 @@ export const reduceLiveMapInitialFit = (
     shouldFit: true,
     state: {
       ...state,
-      fittedUserIds: nextFittedUserIds,
+      fittedMarkerIds: nextFittedMarkerIds,
     },
   };
 };
 
-const uniqueInOrder = (userIds: readonly string[]) => {
+const uniqueInOrder = (markerIds: readonly string[]) => {
   const seen = new Set<string>();
   const result: string[] = [];
-  for (const userId of userIds) {
-    if (seen.has(userId)) {
+  for (const markerId of markerIds) {
+    if (seen.has(markerId)) {
       continue;
     }
-    seen.add(userId);
-    result.push(userId);
+    seen.add(markerId);
+    result.push(markerId);
   }
   return result;
 };
 
-const hasNewMembers = (fittedUserIds: readonly string[], nextUserIds: readonly string[]) =>
-  nextUserIds.some((userId) => !fittedUserIds.includes(userId));
+const hasNewMembers = (fittedMarkerIds: readonly string[], nextMarkerIds: readonly string[]) =>
+  nextMarkerIds.some((markerId) => !fittedMarkerIds.includes(markerId));
 
 type LiveMapInitialFitEvent =
-  | { type: "markers"; userIds: readonly string[]; nowMs: number }
+  | { type: "markers"; markerIds: readonly string[]; nowMs: number }
   | { type: "coalesce_elapsed"; nowMs: number }
   | { type: "user_camera_control" }
   | { type: "show_everyone" }

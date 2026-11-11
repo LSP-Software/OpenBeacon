@@ -30,7 +30,7 @@ describe("group epoch helpers", () => {
           run({
             $queryRaw: async () => [],
             group: { updateMany },
-            userDevice: { count: async () => 1, create },
+            userDevice: { count: async () => 0, create },
           }),
         userDevice: {
           findUnique: async () => null,
@@ -47,34 +47,117 @@ describe("group epoch helpers", () => {
 
     expect(result.publicKey).toBe("public-key");
     expect("privateKey" in result).toBe(false);
+    expect(create.mock.calls[0]?.[0].data).toMatchObject({
+      name: "Phone",
+      icon: "phone",
+      activatedAt: expect.any(Date),
+      activatedBy: "firstDevice",
+    });
     expect(updateMany).toHaveBeenCalledWith({
       data: { epochRotationRequired: true },
       where: { groupMembers: { some: { userId: "user-a" } } },
     });
   });
 
-  test("updates an existing device for the same user without replacing key material", async () => {
-    const update = mock(async ({ data }: { data: Record<string, unknown> }) => ({
-      createdAt: new Date("2026-03-26T12:00:00.000Z"),
-      id: "device-a",
-      lastSeenAt: data.lastSeenAt as Date,
-      publicKey: "public-key",
-      publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
-      revokedAt: null,
+  test("names a new device after its model and picks its icon", async () => {
+    const register = async (input: { model?: string; name?: string; icon?: "car" }) => {
+      const create = mock(async ({ data }: { data: Record<string, unknown> }) => data);
+      await upsertUserDevice({
+        db: {
+          $transaction: async (run: (tx: object) => Promise<unknown>) =>
+            run({
+              $queryRaw: async () => [],
+              group: { updateMany: async () => ({ count: 0 }) },
+              userDevice: { count: async () => 1, create },
+            }),
+          userDevice: { findUnique: async () => null },
+        } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
+        securityAlerts: null,
+        input: {
+          algorithm: DEVICE_KEY_ALGORITHM,
+          deviceId: "device-b",
+          publicKey: "public-key",
+          ...input,
+        },
+        userId: "user-a",
+      });
+      return create.mock.calls[0]?.[0].data;
+    };
+
+    expect(await register({ model: "Pixel 9" })).toMatchObject({
+      name: "Pixel 9",
+      icon: "phone",
+    });
+    expect(await register({ model: "iPad Air" })).toMatchObject({
+      name: "iPad Air",
+      icon: "tablet",
+    });
+    expect(await register({ model: "Galaxy Tab S9" })).toMatchObject({ icon: "tablet" });
+    expect(await register({ model: "iPad Air", name: "Car tablet", icon: "car" })).toMatchObject({
+      name: "Car tablet",
+      icon: "car",
+    });
+  });
+
+  test("a device on an account that has ever had an active device is Pending", async () => {
+    const create = mock(async ({ data }: { data: Record<string, unknown> }) => data);
+    const updateMany = mock(async () => ({ count: 1 }));
+    const count = mock(async (_args: unknown) => 1);
+    const send = mock(() => {});
+    await upsertUserDevice({
+      db: {
+        $transaction: async (run: (tx: object) => Promise<unknown>) =>
+          run({
+            $queryRaw: async () => [],
+            group: { updateMany },
+            userDevice: { count, create },
+          }),
+        userDevice: { findUnique: async () => null },
+      } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
+      securityAlerts: { send } as unknown as Parameters<
+        typeof upsertUserDevice
+      >[0]["securityAlerts"],
+      input: {
+        algorithm: DEVICE_KEY_ALGORITHM,
+        deviceId: "device-b",
+        model: "Pixel 9",
+        platform: "android",
+        publicKey: "public-key",
+      },
       userId: "user-a",
-    }));
+    });
+
+    expect(count).toHaveBeenCalledWith({
+      where: { userId: "user-a", activatedAt: { not: null } },
+    });
+    expect(create.mock.calls[0]?.[0].data).toMatchObject({ activatedAt: null, activatedBy: null });
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith("user-a", {
+      type: "new-sign-in",
+      device: { model: "Pixel 9", platform: "android" },
+    });
+  });
+
+  const storedDevice = {
+    createdAt: new Date("2026-03-26T12:00:00.000Z"),
+    id: "device-a",
+    lastSeenAt: new Date(),
+    publicKey: "public-key",
+    publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
+    revokedAt: null,
+    userId: "user-a",
+  };
+
+  test("returns an existing device for the same user without replacing key material or marking it active", async () => {
+    const updateMany = mock(async () => ({ count: 1 }));
 
     const result = await upsertUserDevice({
       db: {
         userDevice: {
-          findUnique: async () => ({
-            publicKey: "public-key",
-            publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
-            userId: "user-a",
-          }),
-          update,
+          findUnique: async () => storedDevice,
+          updateMany,
         },
-      },
+      } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
       securityAlerts: null,
       input: {
         algorithm: DEVICE_KEY_ALGORITHM,
@@ -84,17 +167,37 @@ describe("group epoch helpers", () => {
       userId: "user-a",
     });
 
-    expect(update).toHaveBeenCalled();
-    expect(update.mock.calls[0]?.[0]).toEqual({
-      data: {
-        lastSeenAt: expect.any(Date),
-        revokedAt: null,
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(result).toEqual(storedDevice);
+  });
+
+  test("rejects a removed device without clearing its removal", async () => {
+    const updateMany = mock(async () => ({ count: 1 }));
+
+    const result = upsertUserDevice({
+      db: {
+        userDevice: {
+          findUnique: async () => ({
+            publicKey: "public-key",
+            publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
+            revokedAt: new Date(),
+            userId: "user-a",
+          }),
+          updateMany,
+        },
+      } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
+      securityAlerts: null,
+      input: {
+        algorithm: DEVICE_KEY_ALGORITHM,
+        deviceId: "device-a",
+        publicKey: "public-key",
       },
-      where: {
-        id: "device-a",
-      },
+      userId: "user-a",
     });
-    expect(result.publicKey).toBe("public-key");
+
+    await expect(result).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(result).rejects.toHaveProperty("cause.message", "DEVICE_REMOVED");
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   test("treats same-user create races as an idempotent success", async () => {
@@ -108,15 +211,7 @@ describe("group epoch helpers", () => {
         },
       });
     });
-    const update = mock(async ({ data }: { data: Record<string, unknown> }) => ({
-      createdAt: new Date("2026-03-26T12:00:00.000Z"),
-      id: "device-a",
-      lastSeenAt: data.lastSeenAt as Date,
-      publicKey: "public-key",
-      publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
-      revokedAt: null,
-      userId: "user-a",
-    }));
+    const updateMany = mock(async () => ({ count: 1 }));
     const findUnique = mock(async () => {
       findUniqueCallCount += 1;
 
@@ -124,20 +219,16 @@ describe("group epoch helpers", () => {
         return null;
       }
 
-      return {
-        publicKey: "public-key",
-        publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
-        userId: "user-a",
-      };
+      return storedDevice;
     });
 
     const result = await upsertUserDevice({
       db: {
         $transaction: async (run: (tx: object) => Promise<unknown>) =>
-          run({ $queryRaw: async () => [], userDevice: { create } }),
+          run({ $queryRaw: async () => [], userDevice: { count: async () => 0, create } }),
         userDevice: {
           findUnique,
-          update,
+          updateMany,
         },
       } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
       securityAlerts: null,
@@ -151,15 +242,7 @@ describe("group epoch helpers", () => {
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(findUnique).toHaveBeenCalledTimes(2);
-    expect(update).toHaveBeenCalledWith({
-      data: {
-        lastSeenAt: expect.any(Date),
-        revokedAt: null,
-      },
-      where: {
-        id: "device-a",
-      },
-    });
+    expect(updateMany).not.toHaveBeenCalled();
     expect(result.userId).toBe("user-a");
   });
 
@@ -312,6 +395,7 @@ describe("group epoch helpers", () => {
           },
         ],
         revokedAt: null,
+        activatedAt: { not: null },
       },
     });
     expect(result.latestEpoch?.epochNumber).toBe(1);
@@ -384,6 +468,7 @@ describe("group epoch helpers", () => {
     const wrappedKeyCreatedAt = new Date("2026-03-26T12:00:00.000Z");
 
     await persistGroupEpoch({
+      deviceId: "device-a",
       db: {
         $queryRaw: async () => [],
         group: { updateMany: async () => ({ count: 1 }) },
@@ -451,6 +536,7 @@ describe("group epoch helpers", () => {
       where: {
         id: "device-a",
         revokedAt: null,
+        activatedAt: { not: null },
         userId: "user-a",
       },
     });
@@ -468,6 +554,7 @@ describe("group epoch helpers", () => {
       },
       where: {
         revokedAt: null,
+        activatedAt: { not: null },
         user: {
           groupMembers: {
             some: {
@@ -511,6 +598,7 @@ describe("group epoch helpers", () => {
   test("rejects mismatched recipient sets", async () => {
     await expect(
       persistGroupEpoch({
+        deviceId: "device-a",
         db: {
           group: { updateMany: async () => ({ count: 1 }) },
           groupEpoch: {
@@ -581,6 +669,7 @@ describe("group epoch helpers", () => {
 
     await expect(
       persistGroupEpoch({
+        deviceId: "device-a",
         db: {
           group: { updateMany: async () => ({ count: 1 }) },
           groupEpoch: {
@@ -626,6 +715,35 @@ describe("group epoch helpers", () => {
         userId: "user-a",
       }),
     ).rejects.toThrow("Wrapped epoch keys must be created by the active device.");
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  test("rejects an epoch that names another of the account's devices as its creator", async () => {
+    const create = mock(async () => ({}));
+    const findFirstDevice = mock(async () => ({ id: "device-b", publicKey: "public-b" }));
+
+    await expect(
+      persistGroupEpoch({
+        deviceId: "device-a",
+        db: {
+          group: { updateMany: async () => ({ count: 1 }) },
+          groupEpoch: { create, findFirst: async () => ({ epochNumber: 1 }) },
+          groupEpochRecipientKey: { createMany: async () => ({}) },
+          groupMember: { findFirst: async () => ({ id: "member-a" }) },
+          userDevice: { findFirst: findFirstDevice, findMany: async () => [] },
+        },
+        epoch: {
+          createdByDeviceId: "device-b",
+          epochId: "epoch-2",
+          epochNumber: 2,
+          historyKeys: [],
+          recipientKeys: [],
+        },
+        groupId: "group-1",
+        userId: "user-a",
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(findFirstDevice).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
 });

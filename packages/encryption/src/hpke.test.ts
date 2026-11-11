@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { x25519 } from "@noble/curves/ed25519.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { openAuth, openBase, sealAuth, sealBase } from "./hpke.ts";
+import { openAuth, openAuthPsk, openBase, sealAuth, sealAuthPsk, sealBase } from "./hpke.ts";
 
 const rfc9180AuthVector = {
   aad: hexToBytes("436f756e742d30"),
@@ -22,6 +22,29 @@ const rfc9180AuthVector = {
   ),
   senderPrivateKey: hexToBytes("2def0cb58ffcf83d1062dd085c8aceca7f4c0c3fd05912d847b61f3e54121f05"),
   senderPublicKey: hexToBytes("f0f4f9e96c54aeed3f323de8534fffd7e0577e4ce269896716bcb95643c8712b"),
+};
+
+const rfc9180AuthPskVector = {
+  aad: hexToBytes("436f756e742d30"),
+  ciphertext: hexToBytes(
+    "9aa52e29274fc6172e38a4461361d2342585d3aeec67fb3b721ecd63f059577c7fe886be0ede01456ebc67d597",
+  ),
+  enc: hexToBytes("656a2e00dc9990fd189e6e473459392df556e9a2758754a09db3f51179a3fc02"),
+  ephemeralPrivateKey: hexToBytes(
+    "5e6dd73e82b856339572b7245d3cbb073a7561c0bee52873490e305cbb710410",
+  ),
+  info: hexToBytes("4f6465206f6e2061204772656369616e2055726e"),
+  plaintext: hexToBytes("4265617574792069732074727574682c20747275746820626561757479"),
+  psk: hexToBytes("0247fd33b913760fa1fa51e1892d9f307fbe65eb171e8132c2af18555a738b82"),
+  pskId: hexToBytes("456e6e796e20447572696e206172616e204d6f726961"),
+  recipientPrivateKey: hexToBytes(
+    "7b36a42822e75bf3362dfabbe474b3016236408becb83b859a6909e22803cb0c",
+  ),
+  recipientPublicKey: hexToBytes(
+    "a5099431c35c491ec62ca91df1525d6349cb8aa170c51f9581f8627be6334851",
+  ),
+  senderPrivateKey: hexToBytes("90761c5b0a7ef0985ed66687ad708b921d9803d51637c8d1cb72d03ed0f64418"),
+  senderPublicKey: hexToBytes("3ac5bd4dd66ff9f2740bef0d6ccb66daa77bff7849d7895182b07fb74d087c45"),
 };
 
 const rfc9180BaseVector = {
@@ -182,5 +205,74 @@ describe("HPKE base mode", () => {
     expect(() => openBase({ ...valid, enc: new Uint8Array(32) })).toThrow();
     expect(() => openBase({ ...valid, info: new Uint8Array([9]) })).toThrow();
     expect(() => openBase({ ...valid, aad: new Uint8Array([9]) })).toThrow();
+  });
+});
+
+describe("HPKE auth PSK mode", () => {
+  test("matches the RFC 9180 DHKEM(X25519)/HKDF-SHA256/ChaCha20Poly1305 auth PSK vector", () => {
+    const sealed = sealAuthPsk(rfc9180AuthPskVector);
+
+    expect(bytesToHex(sealed.enc)).toBe(bytesToHex(rfc9180AuthPskVector.enc));
+    expect(bytesToHex(sealed.ciphertext)).toBe(bytesToHex(rfc9180AuthPskVector.ciphertext));
+    expect(bytesToHex(openAuthPsk(rfc9180AuthPskVector))).toBe(
+      bytesToHex(rfc9180AuthPskVector.plaintext),
+    );
+  });
+
+  test("rejects a changed PSK, PSK id, sender, recipient, info or aad", () => {
+    const sender = createKeyPair();
+    const recipient = createKeyPair();
+    const psk = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const pskId = new Uint8Array([7]);
+    const sealed = sealAuthPsk({
+      aad: new Uint8Array([1]),
+      info: new Uint8Array([2]),
+      plaintext: new Uint8Array([3, 4, 5]),
+      psk,
+      pskId,
+      recipientPublicKey: recipient.publicKey,
+      senderPrivateKey: sender.privateKey,
+    });
+    const valid = {
+      aad: new Uint8Array([1]),
+      ciphertext: sealed.ciphertext,
+      enc: sealed.enc,
+      info: new Uint8Array([2]),
+      psk,
+      pskId,
+      recipientPrivateKey: recipient.privateKey,
+      senderPublicKey: sender.publicKey,
+    };
+
+    expect(openAuthPsk(valid)).toEqual(new Uint8Array([3, 4, 5]));
+    expect(() =>
+      openAuthPsk({ ...valid, psk: globalThis.crypto.getRandomValues(new Uint8Array(32)) }),
+    ).toThrow();
+    expect(() => openAuthPsk({ ...valid, pskId: new Uint8Array([8]) })).toThrow();
+    expect(() => openAuthPsk({ ...valid, senderPublicKey: createKeyPair().publicKey })).toThrow();
+    expect(() =>
+      openAuthPsk({ ...valid, recipientPrivateKey: createKeyPair().privateKey }),
+    ).toThrow();
+    expect(() => openAuthPsk({ ...valid, info: new Uint8Array([9]) })).toThrow();
+    expect(() => openAuthPsk({ ...valid, aad: new Uint8Array([9]) })).toThrow();
+    expect(() => openAuth(valid)).toThrow();
+  });
+
+  test("refuses an empty or short PSK or an empty PSK id", () => {
+    const sender = createKeyPair();
+    const recipient = createKeyPair();
+    const input = {
+      aad: new Uint8Array(),
+      info: new Uint8Array(),
+      plaintext: new Uint8Array([1]),
+      psk: new Uint8Array(32).fill(1),
+      pskId: new Uint8Array([1]),
+      recipientPublicKey: recipient.publicKey,
+      senderPrivateKey: sender.privateKey,
+    };
+
+    expect(() => sealAuthPsk({ ...input, psk: new Uint8Array() })).toThrow();
+    expect(() => sealAuthPsk({ ...input, psk: new Uint8Array(16).fill(1) })).toThrow();
+    expect(() => sealAuthPsk({ ...input, pskId: new Uint8Array() })).toThrow();
   });
 });

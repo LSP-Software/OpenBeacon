@@ -3,12 +3,14 @@ import type { SelfDeviceLocation } from "./selfDeviceLocation.ts";
 
 export const applySelfDeviceLocation = ({
   markers,
+  selfDeviceId,
   selfDeviceLocation,
   selfFallback,
   selfUserId,
   lastSentAt,
 }: {
   markers: readonly LiveMapMarker[];
+  selfDeviceId: string;
   selfDeviceLocation: SelfDeviceLocation | null;
   selfFallback: {
     image: string | null;
@@ -22,11 +24,16 @@ export const applySelfDeviceLocation = ({
   lastSentAt: string | null;
 }): LiveMapMarker[] => {
   const others =
-    selfUserId.length === 0
+    selfDeviceId.length === 0
       ? [...markers]
-      : markers.filter((marker) => marker.userId !== selfUserId);
+      : markers.filter((marker) => marker.deviceId !== selfDeviceId);
 
-  if (!selfDeviceLocation || selfUserId.length === 0 || !selfFallback) {
+  if (
+    !selfDeviceLocation ||
+    selfUserId.length === 0 ||
+    selfDeviceId.length === 0 ||
+    !selfFallback
+  ) {
     return others;
   }
 
@@ -34,6 +41,7 @@ export const applySelfDeviceLocation = ({
     ...others,
     {
       battery: null,
+      deviceId: selfDeviceId,
       image: selfFallback.image,
       initials: initialsFromName(selfFallback.name),
       isSelf: true,

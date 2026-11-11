@@ -43,6 +43,10 @@ mock.module("../lib/api.ts", () => ({
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: { user: { id: "user-1" } } }) },
 }));
+let thisDeviceState: "unregistered" | "registered" | "active" = "active";
+mock.module("../lib/deviceActivation.ts", () => ({
+  useThisDeviceState: () => thisDeviceState,
+}));
 const { DeletionCancellationNotice } = await import("./DeletionCancellationNotice.tsx");
 let root: Root | null = null;
 const flush = async () =>
@@ -52,6 +56,7 @@ const flush = async () =>
   });
 
 beforeEach(() => {
+  thisDeviceState = "active";
   failCheck = false;
   failAcknowledgement = false;
   button = undefined;
@@ -110,4 +115,23 @@ test("shows the notice again when acknowledgement fails", async () => {
   });
   await flush();
   expect(acknowledge).toHaveBeenCalledTimes(2);
+});
+
+test("a phone that isn't set up doesn't check until it's active", async () => {
+  thisDeviceState = "registered";
+  await act(async () => {
+    root = createRoot();
+    root.render(<DeletionCancellationNotice />);
+  });
+  await act(async () => {
+    listener?.("active");
+  });
+  await flush();
+  expect(check).not.toHaveBeenCalled();
+  thisDeviceState = "active";
+  await act(async () => {
+    root?.render(<DeletionCancellationNotice />);
+  });
+  await flush();
+  expect(check).toHaveBeenCalledTimes(1);
 });

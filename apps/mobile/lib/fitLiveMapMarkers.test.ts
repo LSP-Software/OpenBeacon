@@ -13,6 +13,7 @@ const marker = (
   overrides: Partial<LiveMapMarker> & Pick<LiveMapMarker, "latitude" | "longitude" | "userId">,
 ): LiveMapMarker => ({
   battery: null,
+  deviceId: `${overrides.userId}-phone`,
   image: null,
   initials: "Al",
   isSelf: false,

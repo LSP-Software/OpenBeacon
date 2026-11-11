@@ -20,7 +20,7 @@ model User {
   deletionRetryAt DateTime?
   deletionDate   DateTime?
   timezone       String?
-  alertNewDevice Boolean         @default(true)
+  alertNewSignIn Boolean         @default(true)
   alertDeletionScheduled Boolean @default(true)
   sessions       Session[]
   accounts       Account[]
@@ -38,6 +38,7 @@ model User {
   createdSharedInvites       GroupSharedInvite[]
   recoveryKey                RecoveryKey?
   historyKeys                AccountHistoryKey[]
+  deviceLinks                DeviceLink[]
 
   @@index([pendingDeletion, deletionDate])
 }
@@ -52,9 +53,13 @@ model Session {
   userAgent String?
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId  String?
+  device    UserDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
   googleDeletionChallenges GoogleDeletionChallenge[]
+  deviceChallenge DeviceChallenge?
 
   @@index([userId])
+  @@index([deviceId])
 }
 
 model GoogleDeletionChallenge {
@@ -224,15 +229,83 @@ model UserDevice {
   publicKeyAlgorithm     String
   platform               String?
   model                  String?
+  name                   String
+  icon                   DeviceIcon
   createdAt              DateTime                 @default(now())
   lastSeenAt             DateTime                 @default(now())
+  lastLocationAt         DateTime?
+  activatedAt            DateTime?
+  activatedBy            DeviceActivation?
   revokedAt              DateTime?
+  sessions               Session[]
   createdGroupEpochs     GroupEpoch[]             @relation("GroupEpochCreatedByDevice")
   recipientEpochKeys     GroupEpochRecipientKey[] @relation("GroupEpochRecipientDevice")
   groupEncryptedPayloads GroupEncryptedPayload[]  @relation("GroupEncryptedPayloadSenderDevice")
   sentHistoryWraps       GroupEpochHistoryWrap[]
+  deviceLink             DeviceLink?              @relation("DeviceLinkNewDevice")
+  approvedDeviceLinks    DeviceLink[]             @relation("DeviceLinkApprover")
+  challenges             DeviceChallenge[]
 
   @@index([userId])
+}
+
+model DeviceLink {
+  id               String      @id
+  userId           String
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId         String      @unique
+  device           UserDevice  @relation("DeviceLinkNewDevice", fields: [deviceId], references: [id], onDelete: Cascade)
+  approverDeviceId String?
+  approverDevice   UserDevice? @relation("DeviceLinkApprover", fields: [approverDeviceId], references: [id], onDelete: Cascade)
+  enc              String?
+  ciphertext       String?
+  createdAt        DateTime    @default(now())
+  expiresAt        DateTime
+  completedAt      DateTime?
+
+  @@index([userId])
+  @@index([approverDeviceId])
+  @@index([expiresAt])
+}
+
+enum DeviceChallengePurpose {
+  activation
+  sessionLink
+}
+
+model DeviceChallenge {
+  id                String                 @id
+  deviceId          String
+  device            UserDevice             @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  sessionId         String?                @unique
+  session           Session?               @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  purpose           DeviceChallengePurpose
+  challengeHash     String
+  historyKeyVersion Int?
+  expiresAt         DateTime
+  createdAt         DateTime               @default(now())
+
+  @@index([deviceId, purpose])
+  @@index([expiresAt])
+}
+
+enum DeviceIcon {
+  phone
+  tablet
+  watch
+  car
+  laptop
+  bag
+  tag
+  home
+}
+
+enum DeviceActivation {
+  firstDevice
+  link
+  phrase
+  reset
+  existing
 }
 
 model GroupEpoch {
@@ -250,6 +323,7 @@ model GroupEpoch {
 
   @@unique([groupId, epochNumber])
   @@index([groupId, createdAt])
+  @@index([createdByDeviceId])
 }
 
 model GroupEncryptedPayload {
@@ -272,6 +346,7 @@ model GroupEncryptedPayload {
   @@unique([groupId, clientPointId])
   @@index([groupId, createdAt, id])
   @@index([groupId, senderUserId, createdAt])
+  @@index([groupId, senderDeviceId, createdAt])
   @@index([epochId])
   @@index([senderDeviceId])
   @@index([senderUserId])
@@ -289,6 +364,7 @@ model GroupEpochRecipientKey {
   createdAt          DateTime   @default(now())
 
   @@unique([groupEpochId, recipientDeviceId])
+  @@index([recipientDeviceId])
 }
 
 model RecoveryKey {
@@ -308,9 +384,9 @@ model AccountHistoryKey {
   version          Int
   publicKey        String
   algorithm        String
-  escrowEnc        String
-  escrowCiphertext String
-  escrowAlgorithm  String
+  escrowEnc        String?
+  escrowCiphertext String?
+  escrowAlgorithm  String?
   createdAt        DateTime                @default(now())
   historyWraps     GroupEpochHistoryWrap[]
 

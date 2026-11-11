@@ -20,9 +20,9 @@ import { setUpRecoveryPhrase } from "../../lib/recovery.ts";
 
 const RecoveryPhraseSetupScreen = () => {
   const queryClient = useQueryClient();
-  const [step, setStep] = useState<
-    "verify" | "phrase" | "saving" | "protecting" | "unsaved" | "done"
-  >("verify");
+  const [step, setStep] = useState<"verify" | "phrase" | "saving" | "protecting" | "done">(
+    "verify",
+  );
   const gate = useIdentityGate();
 
   useEffect(() => {
@@ -63,10 +63,6 @@ const RecoveryPhraseSetupScreen = () => {
     void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });
     void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", device.userId] });
     void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
-    if (result.data.status === "unsaved") {
-      setStep("unsaved");
-      return;
-    }
     setUserId(device.userId);
     setStep("protecting");
     await protectHistory({ device, onProgress: setProgress });
@@ -121,19 +117,6 @@ const RecoveryPhraseSetupScreen = () => {
                   ? "Checking your groups…"
                   : `Protected ${progress.done} of ${progress.total} groups.`}
               </Text>
-            </View>
-          )}
-
-          {step === "unsaved" && (
-            <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Restore your phrase</Text>
-              <Text className="text-muted-foreground text-base leading-6">
-                Your phrase is set up, but this phone couldn’t save its key. Restore with the phrase
-                you just wrote down.
-              </Text>
-              <Button onPress={() => router.replace("/account/recovery-restore")}>
-                <Text>Restore with recovery phrase</Text>
-              </Button>
             </View>
           )}
 

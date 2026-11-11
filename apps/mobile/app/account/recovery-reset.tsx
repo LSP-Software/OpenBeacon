@@ -2,10 +2,10 @@ import { Alert } from "../../lib/alert.ts";
 import type { RecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { Link, router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
-import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
+import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ConfirmIdentity } from "../../components/ConfirmIdentity.tsx";
 import { EmailCodeEntry } from "../../components/EmailCodeEntry.tsx";
@@ -18,7 +18,9 @@ import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { trpc } from "../../lib/api.ts";
+import { activateWithHistoryKey, isThisDeviceActive } from "../../lib/deviceActivation.ts";
 import { invalidCodeMessage } from "../../lib/emailCodes.ts";
+import type { EpochKeyDevice } from "../../lib/epochKeys.ts";
 import { protectHistory } from "../../lib/protectHistory.ts";
 import { isResetConfirmed } from "../../lib/isResetConfirmed.ts";
 import {
@@ -29,10 +31,18 @@ import {
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 
 const RecoveryPhraseResetScreen = () => {
-  const { afterSignIn } = useLocalSearchParams<{ afterSignIn?: string }>();
+  const { setup } = useLocalSearchParams<{ setup?: string }>();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<
-    "warn" | "verify" | "code" | "phrase" | "saving" | "protecting" | "unsaved" | "done"
+    | "warn"
+    | "verify"
+    | "code"
+    | "phrase"
+    | "saving"
+    | "protecting"
+    | "unconfirmed"
+    | "unsaved"
+    | "done"
   >("warn");
   const {
     data: providers,
@@ -42,6 +52,14 @@ const RecoveryPhraseResetScreen = () => {
   const [codeEmail, setCodeEmail] = useState<string>();
   const [resetToken, setResetToken] = useState<string>();
   const gate = useIdentityGate({ enabled: step === "verify" });
+  const busy = step === "saving" || step === "protecting";
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => busy);
+      return () => subscription.remove();
+    }, [busy]),
+  );
 
   const reauthenticate = async () => {
     await gate.recheck();
@@ -99,6 +117,7 @@ const RecoveryPhraseResetScreen = () => {
   }, [step, gate.decision]);
   const [progress, setProgress] = useState({ done: 0, failed: 0, total: 0 });
   const [userId, setUserId] = useState<string>();
+  const [resetDevice, setResetDevice] = useState<EpochKeyDevice>();
   const form = useForm<{ confirmation: string }>({ defaultValues: { confirmation: "" } });
   const confirmation = useWatch({ control: form.control, name: "confirmation" });
 
@@ -124,28 +143,53 @@ const RecoveryPhraseResetScreen = () => {
       return;
     }
     const { device } = result.data;
-    void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });
-    void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", device.userId] });
-    void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
     if (result.data.status === "unsaved") {
+      await tryCatch(isThisDeviceActive());
+      void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });
+      void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", device.userId] });
+      void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
       setStep("unsaved");
       return;
     }
-    setUserId(device.userId);
+    await finishReset(device);
+  };
+
+  const finishReset = async (device: EpochKeyDevice) => {
+    setResetDevice(device);
     setStep("protecting");
+    const confirmed = await tryCatch(
+      isThisDeviceActive().then(async (active) => {
+        if (!active) await activateWithHistoryKey();
+      }),
+    );
+    if (confirmed.error) {
+      setStep("unconfirmed");
+      return;
+    }
+    void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });
+    void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", device.userId] });
+    void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
+    setUserId(device.userId);
     await protectHistory({ device, onProgress: setProgress });
     void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
     void queryClient.invalidateQueries({ queryKey: ["personalNicknames"] });
     requestTrackingSync();
+    if (setup) {
+      router.replace("/setup/remove-devices");
+      return;
+    }
     setStep("done");
   };
 
   return (
     <View className="flex-1 bg-background">
+      <Stack.Screen options={{ gestureEnabled: !busy }} />
       <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
         <View className="flex-row items-center justify-between">
-          {step === "saving" || step === "protecting" ? <View className="w-10" /> : <BackButton />}
-          <Text className="text-foreground text-2xl font-bold">Reset phrase</Text>
+          {busy ? <View className="w-10" /> : <BackButton />}
+          <Text className="text-foreground text-2xl font-bold">
+            {setup ? "Start fresh" : "Reset phrase"}
+          </Text>
           <View className="w-10" />
         </View>
       </SafeAreaView>
@@ -160,7 +204,23 @@ const RecoveryPhraseResetScreen = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {step === "warn" && (
+          {step === "warn" && setup && (
+            <View className="gap-4">
+              <Text className="text-foreground text-3xl font-bold">Start fresh on this phone?</Text>
+              <View className="gap-2 rounded-lg border border-destructive bg-destructive/10 p-4">
+                <Text className="font-semibold">
+                  Your location history from before today will be deleted for good.
+                </Text>
+                <Text className="text-muted-foreground leading-6">
+                  Your groups and members stay. You’ll get a new recovery phrase, and this phone is
+                  set up straight away. Your other phones keep working but will need the new phrase
+                  to read history.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {step === "warn" && !setup && (
             <View className="gap-4">
               <Text className="text-foreground text-3xl font-bold">
                 Reset your recovery phrase?
@@ -181,6 +241,11 @@ const RecoveryPhraseResetScreen = () => {
               <Text className="text-muted-foreground text-base leading-6">
                 Your groups and live location sharing aren’t affected.
               </Text>
+            </View>
+          )}
+
+          {step === "warn" && (
+            <View className="gap-4">
               {providers?.email && (
                 <Text className="text-muted-foreground text-base leading-6">
                   To make sure it’s you, we’ll email you a code before you get your new phrase.
@@ -204,7 +269,7 @@ const RecoveryPhraseResetScreen = () => {
                   void refetchProviders();
                   Alert.alert(
                     "Unable to continue",
-                    "We couldn’t reach your server. Check your connection and try again.",
+                    "We couldn’t reach the server. Check your connection and try again.",
                   );
                 }}
                 disabled={!isResetConfirmed(confirmation) || providersPending}
@@ -259,6 +324,23 @@ const RecoveryPhraseResetScreen = () => {
             </View>
           )}
 
+          {step === "unconfirmed" && (
+            <View className="gap-4">
+              <Text className="text-foreground text-3xl font-bold">Finish setting up</Text>
+              <Text className="text-muted-foreground text-base leading-6">
+                Your new phrase is set up, but we couldn’t finish setting up this phone. Check your
+                connection and try again.
+              </Text>
+              <Button
+                onPress={() => {
+                  if (resetDevice) void finishReset(resetDevice);
+                }}
+              >
+                <Text>Try again</Text>
+              </Button>
+            </View>
+          )}
+
           {step === "unsaved" && (
             <View className="gap-4">
               <Text className="text-foreground text-3xl font-bold">Restore your new phrase</Text>
@@ -266,17 +348,19 @@ const RecoveryPhraseResetScreen = () => {
                 Your new phrase is set up, but this phone couldn’t save its key. Restore with the
                 phrase you just wrote down.
               </Text>
-              <Button
-                onPress={() =>
-                  router.replace(
-                    afterSignIn
-                      ? { pathname: "/account/recovery-restore", params: { afterSignIn: "true" } }
-                      : "/account/recovery-restore",
-                  )
+              <Link
+                href={
+                  setup
+                    ? { pathname: "/account/recovery-restore", params: { setup: "true" } }
+                    : "/account/recovery-restore"
                 }
+                replace
+                asChild
               >
-                <Text>Restore with recovery phrase</Text>
-              </Button>
+                <Button>
+                  <Text>Restore with recovery phrase</Text>
+                </Button>
+              </Link>
             </View>
           )}
 
@@ -293,7 +377,7 @@ const RecoveryPhraseResetScreen = () => {
                 </Text>
               )}
               <RecoveryCoverage userId={userId} />
-              <Button onPress={() => (afterSignIn ? router.replace("/") : router.back())}>
+              <Button onPress={() => router.back()}>
                 <Text>Done</Text>
               </Button>
             </View>

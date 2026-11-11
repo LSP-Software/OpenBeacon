@@ -23,19 +23,19 @@ Your other phones keep working as before.
 - History from before you joined a group. New members never get a group's earlier history.
 - History from groups you've left.
 - History from before you set up the phrase that none of your phones could read.
-- Nicknames and colours saved on a phone that never had your phrase, if that phone is gone. Each phone protects its own saved ones with your phrase once it has it.
+- Nicknames and colours an older version of the app saved on a phone that's now gone.
 - Your password or your sign-in. The phrase only works once you're signed in to your account.
 
 ## If you don't set up a phrase
 
-If you lose every phone you're signed in on, or reset them or delete the app from them, your encrypted location history, nicknames and colours are gone for good. Resetting your password doesn't bring them back. Live location still works on a new phone. Your groups' encryption keys are updated automatically when you sign in.
+If you lose every phone you're signed in on, or reset them or delete the app from them, your encrypted location history, nicknames and colours are gone for good. Resetting your password doesn't bring them back. While you still have a phone, you can link a new phone to it and keep your history. If you don't, you can start fresh on the new phone. Live location then works again, but your earlier history doesn't come back.
 
 ## If you lose your phrase
 
 - **You still have a phone that can read your history:** create a new phrase on that phone in Account › Recovery phrase. Your old phrase stops working. Your history isn't affected.
 - **You don't:** you can reset your phrase. Your old phrase stops working, and history from before the reset can't be recovered, except what your phones can still read with their own keys. Other phones will need the new phrase.
 
-Setting up, changing or resetting your phrase asks you to sign in again first, unless you signed in recently. Resetting also asks you to type `RESET`. If your server sends email, resetting also asks for a code we email you, and we email you after your phrase is changed or reset.
+Setting up, changing or resetting your phrase asks you to sign in again first, unless you signed in recently. Resetting also asks you to type `RESET`. If the server sends email, resetting also asks for a code we email you, and we email you after your phrase is changed or reset.
 
 ## Keep it safe
 
@@ -52,12 +52,10 @@ The server never receives your phrase or the keys that unlock your history. It c
 - how many of each group's encryption keys are protected for you, and when they were added
 - for your nicknames and colours: who you've nicknamed, that you've set a colour, roughly how long each nickname is, and which key version protects it.
 
-Other members' phones can also see whether you have a recovery phrase, because they protect new group keys for you when they create them.
-
-If your server sends email, its email provider sees when you ask for a reset code and when your phrase is changed or reset, from the emails we send you. Emails never contain your phrase.
+If the server sends email, its email provider sees when you ask for a reset code and when your phrase is changed or reset, from the emails we send you. Emails never contain your phrase.
 
 ## Current limits
 
 - We don't send an email when you set up a phrase for the first time.
-- If someone steals a phone that can read your history, it can keep reading new history until we add a way to remove a phone from your account.
+- If someone steals a phone that can read your history, remove it in Account → Devices. The server then refuses its requests, but the phone keeps anything it has already seen, and until we can change your history key it still holds a key that opens your history.
 - Your phone trusts the server to give it the right keys for other people's phones and for your history. A server that was deliberately changed to swap those keys could receive new history. We plan to add key verification so phones don't have to trust the server for this. When you restore, the app only accepts recovery data that was made with your phrase.

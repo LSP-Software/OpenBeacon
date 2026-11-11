@@ -12,11 +12,11 @@ import {
 } from "../../lib/image-upload.ts";
 import { deleteFile } from "../../lib/storage.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
-import { groupAdminProcedure, groupMemberProcedure } from "../../procedures/auth/group.ts";
+import { groupMemberProcedure, groupAdminProcedure } from "../../procedures/auth/group.ts";
 
 export const groupSettingsRouter = {
   rename: groupMemberProcedure
-    .input(createGroupSchema.extend({ groupId: z.string().min(1) }))
+    .input(createGroupSchema.extend({ groupId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       return ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
@@ -44,7 +44,7 @@ export const groupSettingsRouter = {
     })
     .input(
       requestImageUploadInputSchema({ maxImageFileSize: env.MAX_IMAGE_FILE_SIZE }).extend({
-        groupId: z.string(),
+        groupId: z.string().min(1).max(128),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -74,7 +74,7 @@ export const groupSettingsRouter = {
     }),
   confirmGroupImageUpload: protectedProcedure
     .meta({ rateLimit: { limit: 32, windowMs: 60_000 } })
-    .input(z.object({ groupId: z.string() }))
+    .input(z.object({ groupId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const imagePath = buildGroupAvatarPath(userId, input.groupId);

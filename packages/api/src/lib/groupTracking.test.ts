@@ -31,12 +31,14 @@ describe("uploadGroupTrackingBatch", () => {
   let findManyPayloads: ReturnType<typeof mock>;
   let findManyEpochs: ReturnType<typeof mock>;
   let findManyDevices: ReturnType<typeof mock>;
+  let updateManyDevices: ReturnType<typeof mock>;
 
   beforeEach(() => {
     createMany = mock(async () => ({ count: 1 }));
     findManyPayloads = mock(async () => []);
     findManyEpochs = mock(async () => [{ id: "epoch-1" }]);
     findManyDevices = mock(async () => [{ id: "device-1", userId: "user-1" }]);
+    updateManyDevices = mock(async () => ({ count: 1 }));
   });
 
   const createDb = () => ({
@@ -50,6 +52,7 @@ describe("uploadGroupTrackingBatch", () => {
     },
     userDevice: {
       findMany: findManyDevices,
+      updateMany: updateManyDevices,
     },
   });
 
@@ -80,6 +83,10 @@ describe("uploadGroupTrackingBatch", () => {
         },
       ],
       skipDuplicates: true,
+    });
+    expect(updateManyDevices).toHaveBeenCalledWith({
+      data: { lastLocationAt: expect.any(Date) },
+      where: { id: { in: ["device-1"] }, userId: "user-1" },
     });
   });
 
@@ -118,6 +125,7 @@ describe("uploadGroupTrackingBatch", () => {
       duplicates: ["point-1"],
     });
     expect(createMany).not.toHaveBeenCalled();
+    expect(updateManyDevices).not.toHaveBeenCalled();
   });
 
   test("partitions mixed accepted and duplicate clientPointIds in one batch", async () => {
@@ -233,6 +241,7 @@ describe("pollGroupTrackingPoints", () => {
         },
         userDevice: {
           findMany: mock(async () => []),
+          updateMany: mock(async () => ({ count: 0 })),
         },
       },
       groupId: "group-1",
@@ -269,7 +278,7 @@ describe("pollGroupTrackingPoints", () => {
 });
 
 describe("getLatestGroupTrackingPoints", () => {
-  test("looks up each member's newest point instead of sorting the whole group", async () => {
+  test("looks up the newest point of each member's devices instead of sorting the whole group", async () => {
     const queryRaw = mock(async () => [
       {
         algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
@@ -297,6 +306,7 @@ describe("getLatestGroupTrackingPoints", () => {
         },
         userDevice: {
           findMany: mock(async () => []),
+          updateMany: mock(async () => ({ count: 0 })),
         },
       },
       groupId: "group-1",
@@ -309,6 +319,8 @@ describe("getLatestGroupTrackingPoints", () => {
     expect(sqlText).not.toContain("DISTINCT ON");
     expect(sqlText).toContain('FROM "GroupMember" AS "member"');
     expect(sqlText).toContain("CROSS JOIN LATERAL");
+    expect(sqlText).toContain('"device"."revokedAt" IS NULL');
+    expect(sqlText).toContain('"point"."senderDeviceId" = "device"."id"');
     expect(sqlText).toContain('ORDER BY "point"."createdAt" DESC, "point"."id" DESC');
     expect(sqlText).toContain("LIMIT 1");
   });

@@ -29,6 +29,7 @@ import {
 import { authClient } from "../../../../lib/auth-client.ts";
 import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
 import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses.ts";
+import { deviceIconFor } from "../../../../lib/deviceIcons.ts";
 import { buildRemoveGroupMemberInput, submitEpochChange } from "../../../../lib/groupEncryption.ts";
 import { forgetHiddenMapGroup } from "../../../../lib/hiddenMapGroups.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
@@ -74,7 +75,12 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
   });
   const nicknames = nicknameQuery.data ?? {};
   const livePositions = useGroupLivePositions(groupId);
+  const memberDevices = useQuery({
+    ...trpc.groupMembership.listMemberDevices.queryOptions({ groupId }),
+    subscribed: isFocused,
+  });
   const memberStatuses = buildMemberLiveStatuses({
+    memberDevices: memberDevices.data ?? [],
     members: (members ?? []).map((member) => ({
       ...member,
       nickname: nicknames[member.id]?.name ?? null,
@@ -169,9 +175,8 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
             <DialogTitle>Set nickname for {nicknameMember?.name}</DialogTitle>
           </DialogHeader>
           <Text>
-            Only you can see this nickname. It’s encrypted before it leaves this phone. With a
-            recovery phrase, your other phones can read it too. Leave it blank to use their profile
-            name.
+            Only you can see this nickname. It’s encrypted before it leaves this phone, and your
+            other phones can read it too. Leave it blank to use their profile name.
           </Text>
           {nicknameQuery.isError && (
             <Text>Unable to load nicknames. Try again before making changes.</Text>
@@ -417,7 +422,35 @@ const MemberCard = ({ member }: { member: ReturnType<typeof buildMemberLiveStatu
               )}
             </View>
           </View>
-          {member.battery && batteryVisual ? (
+          {member.activeDeviceCount >= 2 && member.devices.length > 0 ? (
+            member.devices.map((device) => {
+              const deviceBattery = getBatteryVisual({
+                batteryLevel: device.battery.level,
+                charging: device.battery.charging,
+              });
+              const updated = timeSince(device.timestamp);
+              return (
+                <View
+                  key={device.deviceId}
+                  accessible
+                  accessibilityLabel={`${device.name ?? "Device"}, updated ${updated}, battery ${device.battery.level}%`}
+                  className="flex-row items-center gap-2"
+                >
+                  <Icon
+                    as={deviceIconFor(device.icon ?? "phone", device.platform).icon}
+                    className="text-muted-foreground size-4"
+                  />
+                  <Text className="text-muted shrink text-sm" numberOfLines={1}>
+                    {device.name ?? "Device"} · {updated}
+                  </Text>
+                  <Icon as={deviceBattery.icon} size={16} className={deviceBattery.colorClass} />
+                  <Text className={`${deviceBattery.colorClass} text-sm`}>
+                    {device.battery.level}%
+                  </Text>
+                </View>
+              );
+            })
+          ) : member.battery && batteryVisual ? (
             <View className="flex-row items-center gap-2">
               <Icon as={batteryVisual.icon} size={20} className={batteryVisual.colorClass} />
               <Text className={`${batteryVisual.colorClass} text-sm`}>

@@ -9,6 +9,9 @@ import { Alert } from "../lib/alert.ts";
 import { trpc } from "../lib/api.ts";
 import { isNativeGoogleSignInConfigured, signInWithGoogle } from "../lib/auth.ts";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
+import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
+import { isDeviceRemovedError } from "../lib/deviceRemovedError.ts";
+import { isSessionLinkRefused, signOutAfterRefusedSessionLink } from "../lib/sessionLink.ts";
 import { LoadingIndicator } from "./LoadingIndicator.tsx";
 import { Button } from "./ui/Button.tsx";
 import { Input } from "./ui/Input.tsx";
@@ -59,7 +62,20 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
       return;
     }
     await tryCatch(authClient.revokeSession({ token: previous.token }));
+    const linked = await tryCatch(ensureDeviceKeyRegistration({ linkSession: true }));
     setPending(false);
+    if (isDeviceRemovedError(linked.error)) return;
+    if (isSessionLinkRefused(linked.error)) {
+      await signOutAfterRefusedSessionLink();
+      return;
+    }
+    if (linked.error) {
+      Alert.alert(
+        "Unable to confirm it’s you",
+        "This phone couldn’t confirm it’s yours. Check your connection and try again.",
+      );
+      return;
+    }
     onConfirmed();
   };
 

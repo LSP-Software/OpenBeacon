@@ -2,16 +2,16 @@ import { useRef, useState } from "react";
 import { Platform } from "react-native";
 
 export const useLiveMapSelection = ({
-  selectedUserId,
-  onSelectUserId,
+  selectedDeviceId,
+  onSelectDeviceId,
   isMarkerReplaced,
 }: {
-  selectedUserId: string | null;
-  onSelectUserId: ((userId: string | null) => void) | undefined;
-  isMarkerReplaced: (userId: string) => boolean;
+  selectedDeviceId: string | null;
+  onSelectDeviceId: ((deviceId: string | null) => void) | undefined;
+  isMarkerReplaced: (deviceId: string) => boolean;
 }) => {
-  const selectedUserIdRef = useRef(selectedUserId);
-  selectedUserIdRef.current = selectedUserId;
+  const selectedDeviceIdRef = useRef(selectedDeviceId);
+  selectedDeviceIdRef.current = selectedDeviceId;
   const pendingDeselectClearRef = useRef(false);
   const [annotationRemountTokens, setAnnotationRemountTokens] = useState<Record<string, number>>(
     {},
@@ -19,29 +19,29 @@ export const useLiveMapSelection = ({
 
   const clearSelectionFromReact = () => {
     pendingDeselectClearRef.current = false;
-    const previouslySelectedUserId = selectedUserIdRef.current;
-    if (Platform.OS !== "android" && previouslySelectedUserId !== null) {
+    const previouslySelectedDeviceId = selectedDeviceIdRef.current;
+    if (Platform.OS !== "android" && previouslySelectedDeviceId !== null) {
       setAnnotationRemountTokens((tokens) => ({
         ...tokens,
-        [previouslySelectedUserId]: (tokens[previouslySelectedUserId] ?? 0) + 1,
+        [previouslySelectedDeviceId]: (tokens[previouslySelectedDeviceId] ?? 0) + 1,
       }));
     }
-    onSelectUserId?.(null);
+    onSelectDeviceId?.(null);
   };
-  const handleAnnotationDeselected = (userId: string) => {
-    if (isMarkerReplaced(userId)) return;
+  const handleAnnotationDeselected = (deviceId: string) => {
+    if (isMarkerReplaced(deviceId)) return;
     pendingDeselectClearRef.current = true;
     queueMicrotask(() => {
       if (!pendingDeselectClearRef.current) {
         return;
       }
       pendingDeselectClearRef.current = false;
-      if (!isMarkerReplaced(userId)) onSelectUserId?.(null);
+      if (!isMarkerReplaced(deviceId)) onSelectDeviceId?.(null);
     });
   };
-  const handleAnnotationSelected = (userId: string) => {
+  const handleAnnotationSelected = (deviceId: string) => {
     pendingDeselectClearRef.current = false;
-    onSelectUserId?.(userId);
+    onSelectDeviceId?.(deviceId);
   };
 
   return {

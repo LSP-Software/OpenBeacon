@@ -3,7 +3,12 @@ import { Prisma } from "@openbeacon/database";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { APIError, createAuthMiddleware, isAPIError } from "better-auth/api";
+import {
+  APIError,
+  createAuthMiddleware,
+  getAuthoritativeSessionFromCtx,
+  isAPIError,
+} from "better-auth/api";
 import { db } from "./db.ts";
 import { type EmailCodes, normalizeEmail } from "./emailCode.ts";
 import { emailCodePlugin } from "./emailCodePlugin.ts";
@@ -29,15 +34,35 @@ export const createAuth = ({
       "/request-password-reset",
       ...(emailCodes ? [] : ["/reset-password"]),
       "/change-email",
+      "/update-user",
       "/revoke-other-sessions",
       "/revoke-sessions",
       "/list-sessions",
       "/delete-user",
       "/delete-user/callback",
+      "/account-info",
+      "/get-access-token",
+      "/link-social",
+      "/refresh-token",
+      "/unlink-account",
+      "/update-session",
+      "/verify-password",
     ],
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         if (ctx.path === "/reset-password/:token") throw new APIError("NOT_FOUND");
+        if (ctx.path === "/change-password") {
+          const session = await getAuthoritativeSessionFromCtx(ctx);
+          const linked =
+            session &&
+            (await db.session.findUnique({
+              where: { id: session.session.id },
+              select: { device: { select: { activatedAt: true, revokedAt: true } } },
+            }));
+          if (session && (!linked?.device?.activatedAt || linked.device.revokedAt)) {
+            throw new APIError("FORBIDDEN", { message: "Finish setting up this phone first." });
+          }
+        }
         if (ctx.path === "/sign-up/email" && emailCodes) {
           const { email, signUpToken } = ctx.body ?? {};
           const verified =

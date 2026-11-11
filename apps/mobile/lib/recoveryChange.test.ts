@@ -20,6 +20,7 @@ import {
 import { expectNoSecretsIn } from "../test/secretLeaks.testUtil.ts";
 import {
   changeRecoveryPhraseSchema,
+  createAccountHistoryKeySchema,
   resetAccountRecoverySchema,
   setupAccountRecoverySchema,
 } from "@openbeacon/schemas";
@@ -49,7 +50,7 @@ type ServerEpoch = {
 };
 
 type ServerHistoryKey = {
-  escrow: HistoryKeyEscrow;
+  escrow: HistoryKeyEscrow | null;
   id: string;
   publicKey: string;
   version: number;
@@ -72,6 +73,11 @@ const trpcError = (code: string, jsonRpcCode: number) =>
 
 const currentHistoryKey = () => historyKeys.at(-1) ?? null;
 
+const escrowOf = (row: ServerHistoryKey) => {
+  if (!row.escrow) throw new Error(`v${row.version} has no escrow`);
+  return row.escrow;
+};
+
 const statusMock = mock(async (input?: unknown) => {
   serverInputs.push(input);
   const current = currentHistoryKey();
@@ -81,6 +87,7 @@ const statusMock = mock(async (input?: unknown) => {
       publicKey: current.publicKey,
       version: current.version,
     },
+    historyKeys: historyKeys.map(({ publicKey, version }) => ({ publicKey, version })),
     historyKeyVersions: historyKeys.map(({ version }) => version),
     recoveryKey,
   };
@@ -88,15 +95,30 @@ const statusMock = mock(async (input?: unknown) => {
 
 const escrowsMock = mock(async (input?: unknown) => {
   serverInputs.push(input);
-  return historyKeys.map((row) => ({ ...row, userId }));
+  return historyKeys.flatMap(({ escrow, ...row }) => (escrow ? [{ ...row, escrow, userId }] : []));
+});
+
+const createHistoryKeyMock = mock(async (input: unknown) => {
+  serverInputs.push(input);
+  const parsed = createAccountHistoryKeySchema.parse(input);
+  if (historyKeys.length > 0) throw trpcError("CONFLICT", -32009);
+  historyKeys = [{ escrow: null, id: parsed.id, publicKey: parsed.publicKey, version: 1 }];
+  return { historyKeyVersion: 1 };
 });
 
 const setupMock = mock(async (input: unknown) => {
   serverInputs.push(input);
   const parsed = setupAccountRecoverySchema.parse(input);
+  const escrowVersions = parsed.escrows.map(({ version }) => version).sort((a, b) => a - b);
+  if (recoveryKey || escrowVersions.join() !== historyKeys.map(({ version }) => version).join()) {
+    throw trpcError("CONFLICT", -32009);
+  }
   recoveryKey = parsed.recoveryKey;
-  historyKeys = [parsed.historyKey];
-  return { historyKeyVersion: parsed.historyKey.version };
+  for (const { version, ...escrow } of parsed.escrows) {
+    const row = historyKeys.find((historyKey) => historyKey.version === version);
+    if (row) row.escrow = escrow;
+  }
+  return { historyKeyVersions: escrowVersions };
 });
 
 const changePhraseMock = mock(async (input: unknown) => {
@@ -122,7 +144,6 @@ const resetMock = mock(async (input: unknown) => {
   if (!sessionFresh) throw trpcError("FORBIDDEN", -32003);
   const parsed = resetAccountRecoverySchema.parse(input);
   beforeRecoveryWrite?.();
-  if (!recoveryKey) throw trpcError("NOT_FOUND", -32004);
   if (parsed.historyKey.version !== (currentHistoryKey()?.version ?? 0) + 1) {
     throw trpcError("CONFLICT", -32009);
   }
@@ -184,6 +205,7 @@ const listGroupsMock = mock(async (input?: unknown) => {
 
 mock.module("./api.ts", () => ({
   trpcClient: {
+    accountHistory: { create: { mutate: createHistoryKeyMock } },
     accountRecovery: {
       changePhrase: { mutate: changePhraseMock },
       escrows: { query: escrowsMock },
@@ -207,6 +229,19 @@ mock.module("./deviceKeys.ts", () => ({
   }),
 }));
 
+const storageValues = new Map<string, string>();
+mock.module("./storage.ts", () => ({
+  storage: {
+    getString: (key: string) => storageValues.get(key),
+    remove: (key: string) => storageValues.delete(key),
+    set: (key: string, value: string) => {
+      storageValues.set(key, value);
+    },
+  },
+}));
+
+mock.module("./savedDeviceLink.ts", () => ({ deleteSavedDeviceLink: async () => {} }));
+
 mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async (input: { userId: string; version: number }) => {
     if (input.version === failingReadVersion) throw new Error("SecureStore unavailable");
@@ -223,13 +258,17 @@ mock.module("./historyKeys.ts", () => ({
     }
     phone.secureStore.set(`${input.userId}.${input.version}`, input.privateKey);
   },
+  deleteStoredHistoryKeys: async (input: { userId: string; upToVersion: number }) => {
+    for (let version = 1; version <= input.upToVersion; version += 1) {
+      phone.secureStore.delete(`${input.userId}.${version}`);
+    }
+  },
 }));
 
 const {
   backfillEveryGroup,
   backfillHistoryWraps,
   changeRecoveryPhrase,
-  findMissingHistoryKey,
   HISTORY_KEYS_MISMATCH_MESSAGE,
   MISSING_HISTORY_KEYS_MESSAGE,
   PHRASE_MISMATCH_MESSAGE,
@@ -240,6 +279,7 @@ const {
 } = await import("./recovery.ts");
 const { unwrapEpochKeyFromWraps } = await import("./epochKeys.ts");
 const { checkGroupKeyAccess } = await import("./groupKeyAccess.ts");
+const { getCurrentHistoryKeyState } = await import("./currentHistoryKey.ts");
 
 const createEpoch = ({
   epochNumber,
@@ -399,7 +439,7 @@ describe("changeRecoveryPhrase", () => {
       publicKey,
       version,
     }));
-    const escrowsBefore = historyKeys.map(({ escrow }) => escrow.enc);
+    const escrowsBefore = historyKeys.map((row) => escrowOf(row).enc);
     const newPhrase = generateRecoveryPhrase();
 
     expect(await changeRecoveryPhrase(newPhrase)).toEqual({ status: "changed", versions: [1, 2] });
@@ -409,16 +449,16 @@ describe("changeRecoveryPhrase", () => {
       keysBefore,
     );
     for (const [index, row] of historyKeys.entries()) {
-      expect(row.escrow.enc).not.toBe(escrowsBefore[index]);
+      expect(escrowOf(row).enc).not.toBe(escrowsBefore[index]);
       const opened = openHistoryKeyEscrow({
-        escrow: row.escrow,
+        escrow: escrowOf(row),
         historyKey: { publicKey: row.publicKey, userId, version: row.version },
         recoveryPrivateKey: deriveRecoveryKeyPair(newPhrase).privateKey,
       });
       expect(encodeBase64(opened.expose())).toBe(storedKey(enrolledPhone, row.version));
       expect(() =>
         openHistoryKeyEscrow({
-          escrow: row.escrow,
+          escrow: escrowOf(row),
           historyKey: { publicKey: row.publicKey, userId, version: row.version },
           recoveryPrivateKey: deriveRecoveryKeyPair(oldPhrase).privateKey,
         }),
@@ -558,7 +598,7 @@ describe("resetRecoveryPhrase", () => {
     expect(historyKeys.map(({ version }) => version)).toEqual([3]);
     const [row] = historyKeys as [ServerHistoryKey];
     const opened = openHistoryKeyEscrow({
-      escrow: row.escrow,
+      escrow: escrowOf(row),
       historyKey: { publicKey: row.publicKey, userId, version: 3 },
       recoveryPrivateKey: deriveRecoveryKeyPair(newPhrase).privateKey,
     });
@@ -612,7 +652,7 @@ describe("resetRecoveryPhrase", () => {
     phone = createPhone("device-3");
     await expect(restoreFromRecoveryPhrase(oldPhrase)).rejects.toThrow(PHRASE_MISMATCH_MESSAGE);
     phone = enrolledPhone;
-    expect(await findMissingHistoryKey()).toEqual({ userId, version: 3 });
+    expect(await getCurrentHistoryKeyState(userId)).toEqual({ status: "missing", version: 3 });
     for (const epoch of enrolledOnly) {
       expect(await readThroughHistoryWraps(enrolledPhone, epoch)).toBeNull();
       expect(await readThroughDeviceWrap(enrolledPhone, epoch)).toBe(keyOf(epoch));
@@ -650,11 +690,13 @@ describe("resetRecoveryPhrase", () => {
     expect(resettingPhone.secureStore.size).toBe(0);
   });
 
-  test("an account without a phrase sends no reset", async () => {
-    await expect(resetRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow(
-      RECOVERY_CHANGED_MESSAGE,
-    );
-    expect(resetMock).not.toHaveBeenCalled();
+  test("an account without a phrase can start fresh with v(N+1) and a new phrase", async () => {
+    const newPhrase = generateRecoveryPhrase();
+    const result = await resetRecoveryPhrase(newPhrase);
+
+    expect(result).toMatchObject({ status: "reset", version: 1 });
+    expect(recoveryKey?.publicKey).toBe(deriveRecoveryKeyPair(newPhrase).publicKey);
+    expect(historyKeys.map(({ version }) => version)).toEqual([1]);
   });
 
   test("a phone that can't save the new key is sent to restore, which then stores it", async () => {
@@ -665,10 +707,10 @@ describe("resetRecoveryPhrase", () => {
     expect((await resetRecoveryPhrase(newPhrase)).status).toBe("unsaved");
     expect(historyKeys.map(({ version }) => version)).toEqual([3]);
     expect(resettingPhone.secureStore.size).toBe(0);
-    expect(await findMissingHistoryKey()).toEqual({ userId, version: 3 });
+    expect(await getCurrentHistoryKeyState(userId)).toEqual({ status: "missing", version: 3 });
 
     expect(await restoreFromRecoveryPhrase(newPhrase)).toEqual({ userId, versions: [3] });
-    expect(await findMissingHistoryKey()).toBeNull();
+    expect(await getCurrentHistoryKeyState(userId)).toMatchObject({ status: "held" });
   });
 });
 

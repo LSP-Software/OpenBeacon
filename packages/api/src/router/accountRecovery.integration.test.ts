@@ -16,11 +16,19 @@ import {
   sealHistoryKeyEscrow,
   wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
+import { tryCatch } from "@openbeacon/shared";
 import { holdRowLock } from "../lib/databaseLocks.testUtil.ts";
+import { DeviceRemovedError } from "../lib/deviceRemoved.ts";
+import { DeviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
+import { accountHistoryRouter } from "./accountHistoryRouter.ts";
 import { accountRecoveryRouter } from "./accountRecoveryRouter.ts";
+import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
 
-const router = createTRPCRouter({ accountRecovery: accountRecoveryRouter });
+const router = createTRPCRouter({
+  accountHistory: accountHistoryRouter,
+  accountRecovery: accountRecoveryRouter,
+});
 const cache = createIntegrationTestCache(() => 0);
 const prefix = `recovery-${crypto.randomUUID()}`;
 const users = [
@@ -42,6 +50,11 @@ const users = [
   "emailOff",
   "emailKeyOwner",
   "emailExpired",
+  "create",
+  "createRace",
+  "unescrowed",
+  "partialSetup",
+  "removedReset",
 ].map((name) => `${prefix}-${name}`);
 const [
   setupUser,
@@ -62,7 +75,17 @@ const [
   emailOffUser,
   emailKeyOwnerUser,
   emailExpiredUser,
+  createUser,
+  createRaceUser,
+  unescrowedUser,
+  partialSetupUser,
+  removedResetUser,
 ] = users as [
+  string,
+  string,
+  string,
+  string,
+  string,
   string,
   string,
   string,
@@ -99,16 +122,19 @@ const emailCodes = createEmailCodes({
 });
 
 const caller = (userId: string, sessionCreatedAt = new Date(), codes: EmailCodes | null = null) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    emailCodes: codes,
-    clientIp: `ip-${userId}`,
-    session: {
-      user: { id: userId },
-      session: { id: `${userId}-session`, createdAt: sessionCreatedAt },
-    },
-  } as Parameters<typeof router.createCaller>[0]);
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      emailCodes: codes,
+      clientIp: `ip-${userId}`,
+      deviceId: `${userId}-device`,
+      session: {
+        user: { id: userId },
+        session: { id: `${userId}-session`, createdAt: sessionCreatedAt },
+      },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 
 const recoveryKeyInput = (phrase: RecoveryPhrase) => {
   const { algorithm, derivationVersion, publicKey } = deriveRecoveryKeyPair(phrase);
@@ -178,11 +204,41 @@ const insertHistoryKey = async ({
   return { id: input.id, privateKey, publicKey: input.publicKey };
 };
 
-const setUpRecovery = async (userId: string) => {
-  const phrase = generateRecoveryPhrase();
-  const historyKey = newHistoryKey({ phrase, userId, version: 1 });
+const createHistoryKey = async (userId: string) => {
+  const historyKey = createHistoryKeyPair();
+  const input = {
+    algorithm: historyKey.algorithm,
+    id: crypto.randomUUID(),
+    publicKey: historyKey.publicKey,
+  };
+  await caller(userId).accountHistory.create(input);
+  return { input, privateKey: historyKey.privateKey };
+};
+
+const escrowFor = ({
+  phrase,
+  privateKey,
+  userId,
+  version,
+}: {
+  phrase: RecoveryPhrase;
+  privateKey: HistoryPrivateKeyMaterial;
+  userId: string;
+  version: number;
+}) => ({
+  ...sealHistoryKeyEscrow({
+    historyPrivateKey: privateKey,
+    recoveryPrivateKey: deriveRecoveryKeyPair(phrase).privateKey,
+    userId,
+    version,
+  }),
+  version,
+});
+
+const setUpRecovery = async (userId: string, phrase = generateRecoveryPhrase()) => {
+  const historyKey = await createHistoryKey(userId);
   await caller(userId).accountRecovery.setup({
-    historyKey: historyKey.input,
+    escrows: [escrowFor({ phrase, privateKey: historyKey.privateKey, userId, version: 1 })],
     recoveryKey: recoveryKeyInput(phrase),
   });
   return historyKey;
@@ -226,6 +282,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.user.createMany({
         data: users.map((id) => ({ id, name: id, email: `${id}@example.test` })),
       });
+      await prisma.userDevice.createMany({
+        data: users.map((id) => ({
+          activatedAt: new Date(),
+          icon: "phone" as const,
+          id: `${id}-device`,
+          name: "Phone",
+          publicKey: createDeviceKeyPair().publicKey,
+          publicKeyAlgorithm: "X25519",
+          userId: id,
+        })),
+      });
     });
 
     afterAll(async () => {
@@ -242,23 +309,86 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
-    test("setup stores only public keys and an escrow the phrase can open", async () => {
+    test("create makes history key v1 with no escrow, and only once", async () => {
+      const account = caller(createUser);
+      const first = await createHistoryKey(createUser);
+
+      expect(await prisma.accountHistoryKey.findMany({ where: { userId: createUser } })).toEqual([
+        expect.objectContaining({
+          escrowAlgorithm: null,
+          escrowCiphertext: null,
+          escrowEnc: null,
+          id: first.input.id,
+          publicKey: first.input.publicKey,
+          version: 1,
+        }),
+      ]);
+      expect(await account.accountRecovery.status()).toMatchObject({
+        currentHistoryKey: { id: first.input.id, publicKey: first.input.publicKey, version: 1 },
+        historyKeys: [{ publicKey: first.input.publicKey, version: 1 }],
+        historyKeyVersions: [1],
+        recoveryKey: null,
+      });
+      await expect(createHistoryKey(createUser)).rejects.toMatchObject({ code: "CONFLICT" });
+      await expect(
+        account.accountHistory.create({
+          ...first.input,
+          id: crypto.randomUUID(),
+          privateKey: encodeBase64(first.privateKey.expose()),
+        } as Parameters<typeof account.accountHistory.create>[0]),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(await historyKeyIds(createUser)).toEqual([first.input.id]);
+    });
+
+    test("two devices racing to create v1 leave one key, and the other gets CONFLICT", async () => {
+      const attempts = [createHistoryKeyPair(), createHistoryKeyPair()].map((historyKey) => ({
+        algorithm: historyKey.algorithm,
+        id: crypto.randomUUID(),
+        publicKey: historyKey.publicKey,
+      }));
+      const lock = await holdRowLock({ db: prisma, id: createRaceUser, table: "User" });
+      const pending = attempts.map((attempt) =>
+        caller(createRaceUser).accountHistory.create(attempt),
+      );
+      await lock.waitForWaiters(2);
+      await lock.release();
+      const results = await Promise.allSettled(pending);
+
+      expect(results.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+      expect(
+        results.find((result): result is PromiseRejectedResult => result.status === "rejected")
+          ?.reason,
+      ).toMatchObject({ code: "CONFLICT" });
+      const winner = attempts[results.findIndex(({ status }) => status === "fulfilled")]!;
+      expect(await historyKeyIds(createRaceUser)).toEqual([winner.id]);
+    });
+
+    test("escrows leaves out versions with no escrow, so restore never offers them", async () => {
+      await createHistoryKey(unescrowedUser);
+
+      expect(await caller(unescrowedUser).accountRecovery.escrows()).toEqual([]);
+
+      const phrase = generateRecoveryPhrase();
+      await insertHistoryKey({ phrase, userId: unescrowedUser, version: 2 });
+      expect(
+        (await caller(unescrowedUser).accountRecovery.escrows()).map(({ version }) => version),
+      ).toEqual([2]);
+    });
+
+    test("setup escrows the existing history key and stores only public keys and the escrow", async () => {
       const phrase = generateRecoveryPhrase();
       const recoveryKey = deriveRecoveryKeyPair(phrase);
-      const historyKey = newHistoryKey({ phrase, userId: setupUser, version: 1 });
       const account = caller(setupUser);
 
       expect(await account.accountRecovery.status()).toEqual({
         currentHistoryKey: null,
         freshForMs: expect.any(Number),
+        historyKeys: [],
         historyKeyVersions: [],
         recoveryKey: null,
         sessionFresh: true,
       });
-      await account.accountRecovery.setup({
-        historyKey: historyKey.input,
-        recoveryKey: recoveryKeyInput(phrase),
-      });
+      const historyKey = await setUpRecovery(setupUser, phrase);
 
       expect(await account.accountRecovery.status()).toEqual({
         currentHistoryKey: {
@@ -267,6 +397,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           version: 1,
         },
         freshForMs: expect.any(Number),
+        historyKeys: [{ publicKey: historyKey.input.publicKey, version: 1 }],
         historyKeyVersions: [1],
         recoveryKey: {
           algorithm: "X25519",
@@ -276,13 +407,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         sessionFresh: true,
       });
       expect(await restoreHistoryKeys(setupUser, phrase)).toEqual([historyKey.privateKey.expose()]);
-      expect(() =>
-        openHistoryKeyEscrow({
-          escrow: historyKey.input.escrow,
-          historyKey: { ...historyKey.input, userId: setupUser },
-          recoveryPrivateKey: deriveRecoveryKeyPair(generateRecoveryPhrase()).privateKey,
-        }),
-      ).toThrow();
+      await expect(restoreHistoryKeys(setupUser, generateRecoveryPhrase())).rejects.toThrow();
 
       const stored = JSON.stringify([
         await prisma.recoveryKey.findMany({ where: { userId: setupUser } }),
@@ -301,9 +426,56 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
     });
 
+    test("setup needs escrows for exactly the existing versions and creates none", async () => {
+      const phrase = generateRecoveryPhrase();
+      const account = caller(partialSetupUser);
+      const setupWith = (escrows: ReturnType<typeof escrowFor>[]) =>
+        account.accountRecovery.setup({ escrows, recoveryKey: recoveryKeyInput(phrase) });
+      const escrowOf = (privateKey: HistoryPrivateKeyMaterial, version: number) =>
+        escrowFor({ phrase, privateKey, userId: partialSetupUser, version });
+      const unrelated = createHistoryKeyPair().privateKey;
+
+      await expect(setupWith([escrowOf(unrelated, 1)])).rejects.toMatchObject({
+        code: "CONFLICT",
+      });
+      expect(await prisma.accountHistoryKey.count({ where: { userId: partialSetupUser } })).toBe(0);
+
+      const first = await createHistoryKey(partialSetupUser);
+      const second = createHistoryKeyPair();
+      await prisma.accountHistoryKey.create({
+        data: {
+          algorithm: second.algorithm,
+          id: crypto.randomUUID(),
+          publicKey: second.publicKey,
+          userId: partialSetupUser,
+          version: 2,
+        },
+      });
+      const escrows = [escrowOf(first.privateKey, 1), escrowOf(second.privateKey, 2)];
+      for (const invalid of [
+        [escrows[0]!],
+        [escrows[1]!],
+        [...escrows, escrowOf(second.privateKey, 3)],
+        [escrows[0]!, escrows[0]!],
+      ]) {
+        await expect(setupWith(invalid)).rejects.toMatchObject({ code: "CONFLICT" });
+      }
+      expect(await prisma.recoveryKey.count({ where: { userId: partialSetupUser } })).toBe(0);
+      expect(await account.accountRecovery.escrows()).toEqual([]);
+
+      await setupWith(escrows);
+      expect(await restoreHistoryKeys(partialSetupUser, phrase)).toEqual(
+        exposeAll([first.privateKey, second.privateKey]),
+      );
+      expect(await prisma.accountHistoryKey.count({ where: { userId: partialSetupUser } })).toBe(2);
+    });
+
     test("concurrent setup calls create one recovery key and the other gets CONFLICT", async () => {
+      const historyKey = await createHistoryKey(raceUser);
       const attempts = [generateRecoveryPhrase(), generateRecoveryPhrase()].map((phrase) => ({
-        historyKey: newHistoryKey({ phrase, userId: raceUser, version: 1 }).input,
+        escrows: [
+          escrowFor({ phrase, privateKey: historyKey.privateKey, userId: raceUser, version: 1 }),
+        ],
         recoveryKey: recoveryKeyInput(phrase),
       }));
       const lock = await holdRowLock({ db: prisma, id: raceUser, table: "User" });
@@ -323,14 +495,20 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ]);
       expect(
         await prisma.accountHistoryKey.findMany({ where: { userId: raceUser } }),
-      ).toMatchObject([{ id: winner.historyKey.id, version: 1 }]);
+      ).toMatchObject([{ escrowEnc: winner.escrows[0]!.enc, id: historyKey.input.id, version: 1 }]);
     });
 
-    test("setup rejects private key material, malformed escrows and non-v1 history keys", async () => {
+    test("setup rejects private key material and malformed escrows", async () => {
       const phrase = generateRecoveryPhrase();
       const recoveryKey = deriveRecoveryKeyPair(phrase);
-      const historyKey = newHistoryKey({ phrase, userId: strictUser, version: 1 });
-      const input = { historyKey: historyKey.input, recoveryKey: recoveryKeyInput(phrase) };
+      const historyKey = await createHistoryKey(strictUser);
+      const escrow = escrowFor({
+        phrase,
+        privateKey: historyKey.privateKey,
+        userId: strictUser,
+        version: 1,
+      });
+      const input = { escrows: [escrow], recoveryKey: recoveryKeyInput(phrase) };
       const account = caller(strictUser);
       const privateHistoryKey = encodeBase64(historyKey.privateKey.expose());
 
@@ -342,21 +520,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             privateKey: encodeBase64(recoveryKey.privateKey.expose()),
           },
         },
-        { ...input, historyKey: { ...input.historyKey, privateKey: privateHistoryKey } },
-        {
-          ...input,
-          historyKey: {
-            ...input.historyKey,
-            escrow: { ...input.historyKey.escrow, ciphertext: privateHistoryKey },
-          },
-        },
+        { ...input, escrows: [{ ...escrow, privateKey: privateHistoryKey }] },
+        { ...input, escrows: [{ ...escrow, ciphertext: privateHistoryKey }] },
+        { ...input, escrows: [{ ...escrow, enc: encodeBase64(new Uint8Array(32)) }] },
+        { ...input, escrows: [] },
         { ...input, phrase: phrase.words().join(" ") },
-        { ...input, historyKey: { ...input.historyKey, id: privateHistoryKey } },
-        {
-          ...input,
-          historyKey: { ...input.historyKey, publicKey: encodeBase64(new Uint8Array(32)) },
-        },
-        { ...input, historyKey: newHistoryKey({ phrase, userId: strictUser, version: 2 }).input },
       ]) {
         await expect(
           account.accountRecovery.setup(
@@ -365,29 +533,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         ).rejects.toMatchObject({ code: "BAD_REQUEST" });
       }
       expect(await prisma.recoveryKey.count({ where: { userId: strictUser } })).toBe(0);
-      expect(await prisma.accountHistoryKey.count({ where: { userId: strictUser } })).toBe(0);
+      expect(await account.accountRecovery.escrows()).toEqual([]);
     });
 
     test("changePhrase needs a fresh session and re-seals exactly the existing versions", async () => {
       const oldPhrase = generateRecoveryPhrase();
-      const first = newHistoryKey({ phrase: oldPhrase, userId: changeUser, version: 1 });
-      await caller(changeUser).accountRecovery.setup({
-        historyKey: first.input,
-        recoveryKey: recoveryKeyInput(oldPhrase),
-      });
+      const first = await setUpRecovery(changeUser, oldPhrase);
       const second = await insertHistoryKey({ phrase: oldPhrase, userId: changeUser, version: 2 });
       const newPhrase = generateRecoveryPhrase();
       const newRecoveryKey = recoveryKeyInput(newPhrase);
-      const escrowFor = (privateKey: HistoryPrivateKeyMaterial, version: number) => ({
-        ...sealHistoryKeyEscrow({
-          historyPrivateKey: privateKey,
-          recoveryPrivateKey: deriveRecoveryKeyPair(newPhrase).privateKey,
-          userId: changeUser,
-          version,
-        }),
-        version,
-      });
-      const escrows = [escrowFor(first.privateKey, 1), escrowFor(second.privateKey, 2)];
+      const escrowWith = (privateKey: HistoryPrivateKeyMaterial, version: number) =>
+        escrowFor({ phrase: newPhrase, privateKey, userId: changeUser, version });
+      const escrows = [escrowWith(first.privateKey, 1), escrowWith(second.privateKey, 2)];
 
       await expect(
         caller(changeUser, staleSessionCreatedAt).accountRecovery.changePhrase({
@@ -397,10 +554,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
       for (const invalid of [
         [escrows[0]!],
-        [...escrows, escrowFor(second.privateKey, 3)],
+        [...escrows, escrowWith(second.privateKey, 3)],
         [escrows[0]!, escrows[0]!],
         [...escrows, escrows[1]!],
-        [escrows[0]!, escrowFor(second.privateKey, 3)],
+        [escrows[0]!, escrowWith(second.privateKey, 3)],
       ]) {
         await expect(
           caller(changeUser).accountRecovery.changePhrase({
@@ -424,28 +581,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         exposeAll([first.privateKey, second.privateKey]),
       );
       await expect(restoreHistoryKeys(changeUser, oldPhrase)).rejects.toThrow();
-      expect(
-        (await prisma.accountHistoryKey.findMany({ where: { userId: changeUser } })).map(
-          ({ id }) => id,
-        ),
-      ).toEqual(expect.arrayContaining([first.input.id, second.id]));
+      expect(await historyKeyIds(changeUser)).toEqual(
+        expect.arrayContaining([first.input.id, second.id]),
+      );
     }, 20_000);
 
     test("reset needs a fresh session and confirmation, then replaces every key with v(N+1)", async () => {
       const oldPhrase = generateRecoveryPhrase();
-      const first = newHistoryKey({ phrase: oldPhrase, userId: resetUser, version: 1 });
       const newPhrase = generateRecoveryPhrase();
-      await expect(
-        caller(resetUser).accountRecovery.reset({
-          confirmReset: true,
-          historyKey: newHistoryKey({ phrase: newPhrase, userId: resetUser, version: 1 }).input,
-          recoveryKey: recoveryKeyInput(newPhrase),
-        }),
-      ).rejects.toMatchObject({ code: "NOT_FOUND" });
-      await caller(resetUser).accountRecovery.setup({
-        historyKey: first.input,
-        recoveryKey: recoveryKeyInput(oldPhrase),
-      });
+      await setUpRecovery(resetUser, oldPhrase);
       const second = await insertHistoryKey({ phrase: oldPhrase, userId: resetUser, version: 2 });
 
       const device = createDeviceKeyPair();
@@ -454,6 +598,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           id: `${prefix}-device`,
           publicKey: device.publicKey,
           publicKeyAlgorithm: device.algorithm,
+          name: "Phone",
+          icon: "phone",
+          activatedAt: new Date(),
           userId: resetUser,
         },
       });
@@ -498,12 +645,44 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(
         caller(resetUser, staleSessionCreatedAt).accountRecovery.reset(resetInput),
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
-      await expect(
+      const unconfirmed = await tryCatch(
         caller(resetUser).accountRecovery.reset({
           ...resetInput,
           confirmReset: false,
         } as unknown as typeof resetInput),
-      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      );
+      expect(unconfirmed.error).toMatchObject({
+        code: "BAD_REQUEST",
+        cause: { issues: [expect.objectContaining({ path: ["confirmReset"] })] },
+      });
+      for (const [device, refusal] of [
+        [{ deviceId: null, unverifiedDeviceId: `${resetUser}-device` }, DeviceUnverifiedError],
+        [{ deviceId: null, unverifiedDeviceId: null }, null],
+      ] as const) {
+        const { error } = await tryCatch(
+          router
+            .createCaller(
+              withDeviceActive({
+                cache,
+                db: prisma,
+                emailCodes: null,
+                clientIp: `ip-${resetUser}`,
+                ...device,
+                session: {
+                  user: { id: resetUser },
+                  session: { id: `${resetUser}-session`, createdAt: new Date() },
+                },
+              }) as Parameters<typeof router.createCaller>[0],
+            )
+            .accountRecovery.reset(resetInput),
+        );
+        expect(error).toMatchObject(
+          refusal
+            ? { code: "FORBIDDEN" }
+            : { code: "BAD_REQUEST", message: "This phone isn't registered yet." },
+        );
+        if (refusal) expect((error as { cause?: unknown }).cause).toBeInstanceOf(refusal);
+      }
       for (const version of [2, 4]) {
         await expect(
           caller(resetUser).accountRecovery.reset({
@@ -532,12 +711,60 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(restoreHistoryKeys(resetUser, oldPhrase)).rejects.toThrow();
     }, 20_000);
 
+    test("reset is refused and keeps every key when the phone is removed while it waits", async () => {
+      await setUpRecovery(removedResetUser);
+      await prisma.userDevice.update({
+        where: { id: `${removedResetUser}-device` },
+        data: { activatedAt: null },
+      });
+      const keysBefore = await prisma.accountHistoryKey.findMany({
+        where: { userId: removedResetUser },
+      });
+      const recoveryKeyBefore = await prisma.recoveryKey.findUniqueOrThrow({
+        where: { userId: removedResetUser },
+      });
+      const lock = await holdRowLock({
+        db: prisma,
+        id: removedResetUser,
+        table: "User",
+        beforeCommit: async (tx) => {
+          await tx.userDevice.update({
+            where: { id: `${removedResetUser}-device` },
+            data: { revokedAt: new Date() },
+          });
+          await tx.session.deleteMany({ where: { deviceId: `${removedResetUser}-device` } });
+        },
+      });
+      const resetting = tryCatch(
+        caller(removedResetUser).accountRecovery.reset(resetInputFor(removedResetUser, 2)),
+      );
+      await lock.waitForWaiters(1);
+      await lock.release();
+      const { error } = await resetting;
+
+      expect(error).toMatchObject({ code: "UNAUTHORIZED" });
+      expect((error as { cause?: unknown }).cause).toBeInstanceOf(DeviceRemovedError);
+      expect(
+        await prisma.accountHistoryKey.findMany({ where: { userId: removedResetUser } }),
+      ).toEqual(keysBefore);
+      expect(
+        await prisma.recoveryKey.findUniqueOrThrow({ where: { userId: removedResetUser } }),
+      ).toEqual(recoveryKeyBefore);
+    });
+
     test("a session from more than 30 minutes ago cannot set up a phrase and status reports it", async () => {
       const phrase = generateRecoveryPhrase();
       const stale = caller(staleSetupUser, staleSessionCreatedAt);
       await expect(
         stale.accountRecovery.setup({
-          historyKey: newHistoryKey({ phrase, userId: staleSetupUser, version: 1 }).input,
+          escrows: [
+            escrowFor({
+              phrase,
+              privateKey: createHistoryKeyPair().privateKey,
+              userId: staleSetupUser,
+              version: 1,
+            }),
+          ],
           recoveryKey: recoveryKeyInput(phrase),
         }),
       ).rejects.toMatchObject({ code: "FORBIDDEN", message: "Sign in again to continue." });
@@ -566,14 +793,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     test("a session from more than 30 minutes ago cannot change or reset the phrase", async () => {
       const phrase = generateRecoveryPhrase();
-      const historyKey = newHistoryKey({ phrase, userId: staleUser, version: 1 });
-      await caller(staleUser).accountRecovery.setup({
-        historyKey: historyKey.input,
-        recoveryKey: recoveryKeyInput(phrase),
-      });
+      const historyKey = await setUpRecovery(staleUser, phrase);
       const nearlyStale = new Date(Date.now() - 29 * 60 * 1000);
       await caller(staleUser, nearlyStale).accountRecovery.changePhrase({
-        escrows: [{ ...historyKey.input.escrow, version: 1 }],
+        escrows: [
+          escrowFor({ phrase, privateKey: historyKey.privateKey, userId: staleUser, version: 1 }),
+        ],
         recoveryKey: recoveryKeyInput(phrase),
       });
       await expect(
@@ -600,35 +825,24 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await prisma.recoveryKey.count({ where: { userId: unsetUser } })).toBe(0);
     });
 
-    test("setup and reset reject a history key id that another user already holds", async () => {
+    test("create and reset reject a history key id that another user already holds", async () => {
       const taken = await insertHistoryKey({
         phrase: generateRecoveryPhrase(),
         userId: keyOwnerUser,
         version: 1,
       });
-      const conflict = {
-        code: "CONFLICT",
-        message: "That history key ID is already in use.",
-      };
-      const setupPhrase = generateRecoveryPhrase();
+      const conflict = { code: "CONFLICT", message: "This account already has a history key." };
       await expect(
-        caller(setupClashUser).accountRecovery.setup({
-          historyKey: {
-            ...newHistoryKey({ phrase: setupPhrase, userId: setupClashUser, version: 1 }).input,
-            id: taken.id,
-          },
-          recoveryKey: recoveryKeyInput(setupPhrase),
+        caller(setupClashUser).accountHistory.create({
+          algorithm: "X25519",
+          id: taken.id,
+          publicKey: createHistoryKeyPair().publicKey,
         }),
       ).rejects.toMatchObject(conflict);
-      expect(await prisma.recoveryKey.count({ where: { userId: setupClashUser } })).toBe(0);
       expect(await prisma.accountHistoryKey.count({ where: { userId: setupClashUser } })).toBe(0);
 
       const resetPhrase = generateRecoveryPhrase();
-      const first = newHistoryKey({ phrase: resetPhrase, userId: resetClashUser, version: 1 });
-      await caller(resetClashUser).accountRecovery.setup({
-        historyKey: first.input,
-        recoveryKey: recoveryKeyInput(resetPhrase),
-      });
+      const first = await setUpRecovery(resetClashUser, resetPhrase);
       const newPhrase = generateRecoveryPhrase();
       await expect(
         caller(resetClashUser).accountRecovery.reset({
@@ -639,7 +853,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           },
           recoveryKey: recoveryKeyInput(newPhrase),
         }),
-      ).rejects.toMatchObject(conflict);
+      ).rejects.toMatchObject({
+        code: "CONFLICT",
+        message: "That history key ID is already in use.",
+      });
       expect(
         await prisma.accountHistoryKey.findMany({ where: { userId: resetClashUser } }),
       ).toMatchObject([{ id: first.input.id, version: 1 }]);

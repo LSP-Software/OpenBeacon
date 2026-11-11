@@ -10,10 +10,15 @@ import {
   type HistoryPrivateKeyMaterial,
   type RecoveryPhrase,
   sealHistoryKeyEscrow,
+  sealPersonalData,
   sealPersonalDataForHistoryKey,
 } from "@openbeacon/encryption";
 import { expectNoSecretsIn } from "../test/secretLeaks.testUtil.ts";
-import { resetAccountRecoverySchema, setupAccountRecoverySchema } from "@openbeacon/schemas";
+import {
+  createAccountHistoryKeySchema,
+  resetAccountRecoverySchema,
+  setupAccountRecoverySchema,
+} from "@openbeacon/schemas";
 import { TRPCClientError } from "@trpc/client";
 
 const userId = "user-1";
@@ -33,7 +38,7 @@ type Phone = ReturnType<typeof createPhone>;
 let phone: Phone;
 let recoveryKey: { algorithm: string; derivationVersion: number; publicKey: string } | null;
 let historyKeys: {
-  escrow: HistoryKeyEscrow;
+  escrow: HistoryKeyEscrow | null;
   id: string;
   publicKey: string;
   version: number;
@@ -62,6 +67,7 @@ const statusMock = mock(async () => {
           version: current.version,
         }
       : null,
+    historyKeys: historyKeys.map(({ publicKey, version }) => ({ publicKey, version })),
     historyKeyVersions: historyKeys.map(({ version }) => version),
     recoveryKey,
   };
@@ -105,11 +111,24 @@ const updateNicknameMock = mock(
 
 mock.module("./api.ts", () => ({
   trpcClient: {
+    accountHistory: {
+      create: {
+        mutate: async (input: unknown) => {
+          serverInputs.push(input);
+          const parsed = createAccountHistoryKeySchema.parse(input);
+          if (historyKeys.length > 0) throw conflict();
+          historyKeys = [{ escrow: null, id: parsed.id, publicKey: parsed.publicKey, version: 1 }];
+          return { historyKeyVersion: 1 };
+        },
+      },
+    },
     accountRecovery: {
       escrows: {
         query: async () => {
           serverInputs.push(undefined);
-          return historyKeys.map((row) => ({ ...row, userId }));
+          return historyKeys.flatMap(({ escrow, ...row }) =>
+            escrow ? [{ ...row, escrow, userId }] : [],
+          );
         },
       },
       reset: {
@@ -125,9 +144,13 @@ mock.module("./api.ts", () => ({
         mutate: async (input: unknown) => {
           serverInputs.push(input);
           const parsed = setupAccountRecoverySchema.parse(input);
+          if (recoveryKey) throw conflict();
           recoveryKey = parsed.recoveryKey;
-          historyKeys = [parsed.historyKey];
-          return { historyKeyVersion: parsed.historyKey.version };
+          for (const { version, ...escrow } of parsed.escrows) {
+            const row = historyKeys.find((historyKey) => historyKey.version === version);
+            if (row) row.escrow = escrow;
+          }
+          return { historyKeyVersions: parsed.escrows.map(({ version }) => version) };
         },
       },
       status: { query: statusMock },
@@ -168,7 +191,6 @@ const deviceContext = () => ({
 
 mock.module("./deviceKeys.ts", () => ({
   ensureDeviceKeyRegistration: async () => deviceContext(),
-  getOrCreateDeviceKeyContext: async () => deviceContext(),
   getStoredDeviceKeyContext: async () => deviceContext(),
 }));
 
@@ -182,7 +204,14 @@ mock.module("./historyKeys.ts", () => ({
   }) => {
     phone.secureStore.set(`${input.userId}.${input.version}`, input.privateKey);
   },
+  deleteStoredHistoryKeys: async (input: { userId: string; upToVersion: number }) => {
+    for (let version = 1; version <= input.upToVersion; version += 1) {
+      phone.secureStore.delete(`${input.userId}.${version}`);
+    }
+  },
 }));
+
+mock.module("./savedDeviceLink.ts", () => ({ deleteSavedDeviceLink: async () => {} }));
 
 mock.module("./storage.ts", () => ({
   storage: {
@@ -195,14 +224,20 @@ mock.module("./storage.ts", () => ({
   },
 }));
 
-const { PERSONAL_DATA_KEY_MISMATCH_MESSAGE, PERSONAL_DATA_LOCKED_MESSAGE, sealForSelf } =
-  await import("./personalData.ts");
+const {
+  PERSONAL_DATA_KEY_MISMATCH_MESSAGE,
+  PERSONAL_DATA_LOCKED_MESSAGE,
+  PERSONAL_DATA_NO_HISTORY_KEY_MESSAGE,
+  PERSONAL_DATA_ON_OTHER_DEVICE_MESSAGE,
+  sealForSelf,
+} = await import("./personalData.ts");
 const { encryptPersonalNickname, loadPersonalNicknames } = await import("./personalNicknames.ts");
 const { saveGroupColor, syncGroupColors } = await import("./groupColorSync.ts");
 const { resealPersonalData } = await import("./resealPersonalData.ts");
 const { getGroupColor, GROUP_COLOR_PALETTE } = await import("./groupColor.ts");
 const { resetRecoveryPhrase, restoreFromRecoveryPhrase, setUpRecoveryPhrase } =
   await import("./recovery.ts");
+const { createHistoryKeyIfMissing } = await import("./createHistoryKey.ts");
 
 const addHistoryKeyVersion = (phrase: RecoveryPhrase, enrolled: Phone[]) => {
   const version = (historyKeys.at(-1)?.version ?? 0) + 1;
@@ -245,6 +280,32 @@ const readAs = async (reader: Phone, groupId: string) => {
   return Object.fromEntries(Object.entries(loaded).map(([memberId, { name }]) => [memberId, name]));
 };
 
+const seedV2Nickname = (groupId: string, memberId: string, nickname: string) => {
+  const group = nicknames.get(groupId) ?? new Map<string, string>();
+  nicknames.set(groupId, group);
+  group.set(
+    memberId,
+    sealPersonalData({
+      privateKey: phone.device.privateKey,
+      purpose: "nickname",
+      binding: [userId, groupId, memberId],
+      plaintext: nickname,
+    }),
+  );
+};
+
+const seedV2Color = (groupId: string, color: string) => {
+  colors.set(
+    groupId,
+    sealPersonalData({
+      privateKey: phone.device.privateKey,
+      purpose: "group-color",
+      binding: [userId, groupId],
+      plaintext: color,
+    }),
+  );
+};
+
 const versionsOnServer = () => [
   ...[...colors.values()].map(getPersonalDataHistoryKeyVersion),
   ...[...nicknames.values()].flatMap((group) =>
@@ -272,12 +333,12 @@ beforeEach(() => {
   updateNicknameMock.mockClear();
 });
 
-const writeV2Records = async () => {
-  await saveGroupColor({ userId, groupId: "household", color: GROUP_COLOR_PALETTE[3] });
-  await saveGroupColor({ userId, groupId: "friends", color: GROUP_COLOR_PALETTE[5] });
-  await saveNickname("household", "gran", "Grandma");
-  await saveNickname("household", "papa", "Papa Bear");
-  await saveNickname("friends", "sam", "Sammy");
+const writeV2Records = () => {
+  seedV2Color("household", GROUP_COLOR_PALETTE[3]);
+  seedV2Color("friends", GROUP_COLOR_PALETTE[5]);
+  seedV2Nickname("household", "gran", "Grandma");
+  seedV2Nickname("household", "papa", "Papa Bear");
+  seedV2Nickname("friends", "sam", "Sammy");
   expect(versionsOnServer()).toStrictEqual([null, null, null, null, null]);
 };
 
@@ -297,14 +358,43 @@ describe("sealing", () => {
     expect(await readAs(otherPhone, "household")).toStrictEqual({ gran: "Grandma" });
   });
 
-  test("an account without a phrase keeps sealing to the device key", async () => {
-    await saveNickname("household", "gran", "Grandma");
-    await saveGroupColor({ userId, groupId: "household", color: GROUP_COLOR_PALETTE[2] });
+  test("an account without a history key refuses to seal instead of using the device key", async () => {
+    await expect(
+      saveGroupColor({ userId, groupId: "household", color: GROUP_COLOR_PALETTE[2] }),
+    ).rejects.toThrow(PERSONAL_DATA_NO_HISTORY_KEY_MESSAGE);
+    await expect(saveNickname("household", "gran", "Grandma")).rejects.toThrow(
+      PERSONAL_DATA_NO_HISTORY_KEY_MESSAGE,
+    );
 
-    expect(versionsOnServer()).toStrictEqual([null, null]);
-    expect(await readAs(setupPhone, "household")).toStrictEqual({ gran: "Grandma" });
-    const reinstalled = createPhone("reinstalled");
-    expect(await readAs(reinstalled, "household")).toStrictEqual({ gran: null });
+    expect(writes()).toBe(0);
+    expect(versionsOnServer()).toStrictEqual([]);
+    expect(getGroupColor("household")).toBe(GROUP_COLOR_PALETTE[0]);
+  });
+
+  test("an account whose history key has no phrase seals v3 on the phone that created it", async () => {
+    expect(await createHistoryKeyIfMissing(userId)).toBe(true);
+
+    await saveGroupColor({ userId, groupId: "household", color: GROUP_COLOR_PALETTE[2] });
+    await saveNickname("household", "gran", "Grandma");
+
+    expect(recoveryKey).toBeNull();
+    expect(versionsOnServer()).toStrictEqual([1, 1]);
+  });
+
+  test("a phone whose history key is only on another phone refuses to seal instead of using its device key", async () => {
+    expect(await createHistoryKeyIfMissing(userId)).toBe(true);
+    phone = createPhone("handset-b");
+    expect(await createHistoryKeyIfMissing(userId)).toBe(false);
+
+    await expect(
+      saveGroupColor({ userId, groupId: "household", color: GROUP_COLOR_PALETTE[2] }),
+    ).rejects.toThrow(PERSONAL_DATA_ON_OTHER_DEVICE_MESSAGE);
+    await expect(saveNickname("household", "gran", "Grandma")).rejects.toThrow(
+      PERSONAL_DATA_ON_OTHER_DEVICE_MESSAGE,
+    );
+
+    expect(writes()).toBe(0);
+    expect(versionsOnServer()).toStrictEqual([]);
   });
 
   test("a phone without the current history key refuses to seal on an account with a phrase", async () => {
@@ -324,7 +414,7 @@ describe("sealing", () => {
   });
 
   test("a published key that doesn't match the stored key is never sealed to", async () => {
-    await writeV2Records();
+    writeV2Records();
     updateColorMock.mockClear();
     updateNicknameMock.mockClear();
     addHistoryKeyVersion(generateRecoveryPhrase(), [setupPhone]);
@@ -344,7 +434,7 @@ describe("sealing", () => {
 
 describe("opening", () => {
   test("a record sealed under v1 still opens after v2 exists, alongside v2 and device records", async () => {
-    await saveNickname("household", "papa", "Papa Bear");
+    seedV2Nickname("household", "papa", "Papa Bear");
     const phrase = generateRecoveryPhrase();
     addHistoryKeyVersion(phrase, [setupPhone]);
     await saveNickname("household", "gran", "Grandma");
@@ -365,7 +455,7 @@ describe("opening", () => {
   test("a version this phone doesn't hold is unreadable without breaking the rest", async () => {
     const phrase = generateRecoveryPhrase();
     const enrolled = createPhone("enrolled");
-    await saveNickname("household", "papa", "Papa Bear");
+    seedV2Nickname("household", "papa", "Papa Bear");
     addHistoryKeyVersion(phrase, [setupPhone, enrolled]);
     addHistoryKeyVersion(phrase, [enrolled]);
     phone = enrolled;
@@ -398,8 +488,23 @@ describe("opening", () => {
 });
 
 describe("migration", () => {
+  test("v2 records re-seal to v3 once an account without a phrase gets its history key", async () => {
+    writeV2Records();
+    expect(await createHistoryKeyIfMissing(userId)).toBe(true);
+
+    await resealPersonalData(userId);
+
+    expect(versionsOnServer()).toStrictEqual([1, 1, 1, 1, 1]);
+    const otherPhone = createPhone("handset-b");
+    otherPhone.secureStore = new Map(setupPhone.secureStore);
+    expect(await readAs(otherPhone, "household")).toStrictEqual({
+      gran: "Grandma",
+      papa: "Papa Bear",
+    });
+  });
+
   test("readable v2 records are re-sealed to the current version once", async () => {
-    await writeV2Records();
+    writeV2Records();
     const before = writes();
     addHistoryKeyVersion(generateRecoveryPhrase(), [setupPhone]);
 
@@ -426,7 +531,7 @@ describe("migration", () => {
   });
 
   test("a failure part-way leaves the rest for the next run", async () => {
-    await writeV2Records();
+    writeV2Records();
     addHistoryKeyVersion(generateRecoveryPhrase(), [setupPhone]);
     failWrite = (input) =>
       input.memberId === "gran" || (input.groupId === "household" && input.memberId === undefined);
@@ -442,7 +547,7 @@ describe("migration", () => {
   });
 
   test("records this phone can't open are left alone", async () => {
-    await writeV2Records();
+    writeV2Records();
     const otherPhone = createPhone("handset-b");
     addHistoryKeyVersion(generateRecoveryPhrase(), [otherPhone]);
     const snapshot = JSON.stringify([[...colors], [...nicknames].map(([id, g]) => [id, [...g]])]);
@@ -451,14 +556,14 @@ describe("migration", () => {
     await resealPersonalData(userId);
     expect(await readAs(otherPhone, "household")).toStrictEqual({ papa: null, gran: null });
 
-    expect(writes()).toBe(5);
+    expect(writes()).toBe(0);
     expect(JSON.stringify([[...colors], [...nicknames].map(([id, g]) => [id, [...g]])])).toBe(
       snapshot,
     );
   });
 
   test("a newer value written by another phone mid-migration is never replaced", async () => {
-    await writeV2Records();
+    writeV2Records();
     addHistoryKeyVersion(generateRecoveryPhrase(), [setupPhone]);
     const newerColor = await sealForSelf({
       userId,
@@ -491,7 +596,7 @@ describe("migration", () => {
   });
 
   test("loading nicknames returns the re-sealed ciphertext so edits don't conflict", async () => {
-    await saveNickname("household", "gran", "Grandma");
+    seedV2Nickname("household", "gran", "Grandma");
     addHistoryKeyVersion(generateRecoveryPhrase(), [setupPhone]);
 
     const loaded = await loadPersonalNicknames("household", userId);
@@ -535,7 +640,7 @@ describe("migration", () => {
 
 describe("end to end", () => {
   test("the setup phone migrates, then a fresh phone restores the phrase and reads every record", async () => {
-    await writeV2Records();
+    writeV2Records();
     const phrase = generateRecoveryPhrase();
     const setup = await setUpRecoveryPhrase(phrase);
     expect(setup.status).toBe("created");
@@ -559,7 +664,7 @@ describe("end to end", () => {
 
 describe("secrets", () => {
   test("sealing and migration send no plaintext, key bytes or phrase words", async () => {
-    await writeV2Records();
+    writeV2Records();
     const phrase = generateRecoveryPhrase();
     await setUpRecoveryPhrase(phrase);
     await resealPersonalData(userId);

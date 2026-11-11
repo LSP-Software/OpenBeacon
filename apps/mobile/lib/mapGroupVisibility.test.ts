@@ -23,6 +23,7 @@ const gran = { id: "gran", name: "Grandparents", members: [member("me"), member(
 
 const marker = (userId: string, ringColors: string[], isSelf = false): LiveMapMarker => ({
   battery: null,
+  deviceId: `${userId}-phone`,
   image: null,
   initials: userId.slice(0, 2),
   isSelf,
@@ -236,7 +237,7 @@ describe("shownMapGroups", () => {
         connection: "ok",
         groups: { family: "loaded", gran: "loaded" },
         membership: "loaded",
-        undecryptable: [{ groupId: "club", userId: "mum" }],
+        undecryptable: [{ deviceId: "mum-phone", groupId: "club", userId: "mum" }],
       },
     });
 

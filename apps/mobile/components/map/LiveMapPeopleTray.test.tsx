@@ -45,6 +45,7 @@ const person = (userId: string, name: string): MapPerson => ({
 
 const marker = (userId: string, name: string, minutesAgo: number): LiveMapMarker => ({
   battery: null,
+  deviceId: `${userId}-phone`,
   image: null,
   initials: name.slice(0, 2),
   isSelf: false,

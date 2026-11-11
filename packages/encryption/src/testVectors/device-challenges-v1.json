@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "description": "Session link and device activation challenge vectors. HPKE Base mode, DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, ChaCha20-Poly1305, empty AAD. The server seals and the phone opens, possibly on different builds, so changing any output breaks linking and activation.",
+  "userId": "user_vector_1",
+  "deviceId": "device_vector_new",
+  "challengeHex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+  "ephemeralPrivateKeyHex": "8088888888888888888888888888888888888888888888888888888888888898",
+  "sessionLink": {
+    "infoJson": "[\"openbeacon.session-link.v1\",\"user_vector_1\",\"device_vector_new\"]",
+    "recipientPrivateKeyHex": "6066666666666666666666666666666666666666666666666666666666666676",
+    "recipientPublicKeyBase64": "nBtXJBZYFuW2ogaAMeS6+pvyVArSBV7jdVT8QKOltEI=",
+    "encBase64": "aDXTjEg7erdppC6gYYX+o10QU8FJ6TjQIn9uBYY60BU=",
+    "ciphertextBase64": "36sLSuf6Nmc8NRVH5Z4n+ip4UHvsvqyb+YYSWPwKiOk7pWZKRZdLAgHa2X3ncO5a"
+  },
+  "deviceActivation": {
+    "infoJson": "[\"openbeacon.device-activation.v1\",\"user_vector_1\",\"device_vector_new\"]",
+    "recipientPrivateKeyHex": "7077777777777777777777777777777777777777777777777777777777777787",
+    "recipientPublicKeyBase64": "uAyrQgX+02vlUDpRzCJA/knx9c+yAjeXyj3T5PlrHz4=",
+    "encBase64": "aDXTjEg7erdppC6gYYX+o10QU8FJ6TjQIn9uBYY60BU=",
+    "ciphertextBase64": "9lpwMK/BMaq0EtcIX8LRK6kNuoY2ydw2UAUnJOSFITEchElJ+lVe7rIQcFWC3c4f"
+  }
+}

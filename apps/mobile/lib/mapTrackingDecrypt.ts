@@ -118,6 +118,7 @@ export const createMapTrackingDecryptPoint = ({
           status: "ok",
           entry: {
             battery: trackingPoint.battery,
+            deviceId: point.senderDeviceId,
             latitude: trackingPoint.latitude,
             longitude: trackingPoint.longitude,
             serverCreatedAt: point.createdAt,

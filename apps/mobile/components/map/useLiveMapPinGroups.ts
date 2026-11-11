@@ -36,21 +36,21 @@ export const useLiveMapPinGroups = (markers: readonly LiveMapMarker[]) => {
         ? computed.groups
         : groupLiveMapPins({ markers, zoom, previous: previous.groups });
     const transition = liveMapPinTransition({ next: groups, previous: previous.groups, zoom });
-    const stackedUserIds = new Set(
+    const stackedDeviceIds = new Set(
       groups.flatMap((group) =>
-        group.members.length > 1 ? group.members.map((member) => member.userId) : [],
+        group.members.length > 1 ? group.members.map((member) => member.deviceId) : [],
       ),
     );
     const untilMs = Date.now() + LIVE_MAP_PIN_GATHER_MS;
-    const newlyGathering = new Set(transition.gathering.map(({ marker }) => marker.userId));
+    const newlyGathering = new Set(transition.gathering.map(({ marker }) => marker.deviceId));
     viewRef.current = {
       arrivals: transition.arrivals,
       gathering: [
         ...previous.gathering.filter(
           (pin) =>
             pin.untilMs > Date.now() &&
-            stackedUserIds.has(pin.marker.userId) &&
-            !newlyGathering.has(pin.marker.userId),
+            stackedDeviceIds.has(pin.marker.deviceId) &&
+            !newlyGathering.has(pin.marker.deviceId),
         ),
         ...transition.gathering.map((pin) => ({ ...pin, untilMs })),
       ],

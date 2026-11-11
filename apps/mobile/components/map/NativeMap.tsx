@@ -22,9 +22,10 @@ import {
   type LiveMapPinGroup,
   type LiveMapPinOffset,
   liveMapStackExpansionZoom,
+  mergeSamePersonDevices,
 } from "../../lib/liveMapPinGroups.ts";
 import { cn } from "../../lib/cn.ts";
-import type { MapGroupOption, MapPeople } from "../../lib/mapPeopleTypes.ts";
+import type { MapGroupOption, MapMemberDevice, MapPeople } from "../../lib/mapPeopleTypes.ts";
 import { getSymbolVisibility } from "../../lib/protomaps-style.ts";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
@@ -43,46 +44,57 @@ import { useLiveMapSelection } from "./useLiveMapSelection.ts";
 import { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
 export const NativeMap = ({
+  devices = [],
   groupOptions = null,
   markers = [],
   now = 0,
   onPeopleTrayOpenChange,
   onSetGroupHidden,
-  onSelectUserId,
+  onSelectDeviceId,
   people = null,
   peopleTrayOpen = false,
-  selectedUserId = null,
+  selectedDeviceId = null,
 }: {
+  devices?: readonly (MapMemberDevice & { unreadable: boolean })[];
   groupOptions?: readonly MapGroupOption[] | null;
   markers?: readonly LiveMapMarker[];
   now?: number;
   onPeopleTrayOpenChange?: (open: boolean) => void;
   onSetGroupHidden?: (groupId: string, hidden: boolean) => void;
-  onSelectUserId?: (userId: string | null) => void;
+  onSelectDeviceId?: (deviceId: string | null) => void;
   people?: MapPeople | null;
   peopleTrayOpen?: boolean;
-  selectedUserId?: string | null;
+  selectedDeviceId?: string | null;
 } = {}) => {
   const insets = useSafeAreaInsets();
   const map = useNativeMapStyle();
   const { mapStyle, pmtilesUrl, showSymbols } = map;
-  const selectedMarker = markers.find((marker) => marker.userId === selectedUserId) ?? null;
-  const pins = useLiveMapPinGroups(markers);
+  const selectedMarker = markers.find((marker) => marker.deviceId === selectedDeviceId) ?? null;
+  const pinMarkers = useMemo(() => mergeSamePersonDevices(markers), [markers]);
+  const pins = useLiveMapPinGroups(pinMarkers);
   const edgeSubjects = useMemo(
     () =>
       pins.groups.map((group) => ({
         latitude: group.latitude,
         longitude: group.longitude,
-        memberUserIds: group.members.map((member) => member.userId),
+        memberDeviceIds: group.members.map((member) => member.deviceId),
         userId: group.id,
       })),
     [pins.groups],
   );
   const lastMarkerPressRef = useRef<{ atMs: number; x: number; y: number } | null>(null);
-  const [stackSheetUserIds, setStackSheetUserIds] = useState<readonly string[] | null>(null);
-  const stackSheetMembers = (stackSheetUserIds ?? []).flatMap((userId) =>
-    markers.filter((marker) => marker.userId === userId),
+  const [stackSheetDeviceIds, setStackSheetDeviceIds] = useState<readonly string[] | null>(null);
+  const stackSheetMembers = (stackSheetDeviceIds ?? []).flatMap((deviceId) =>
+    pinMarkers.filter((marker) => marker.deviceId === deviceId),
   );
+  const selectedPersonDevices = selectedMarker
+    ? devices
+        .filter((device) => device.userId === selectedMarker.userId)
+        .map((device) => ({
+          ...device,
+          marker: markers.find((marker) => marker.deviceId === device.deviceId) ?? null,
+        }))
+    : [];
   const isStackSheetOpen = stackSheetMembers.length > 1;
   const [missingUserId, setMissingUserId] = useState<string | null>(null);
   const missingPerson =
@@ -123,16 +135,16 @@ export const NativeMap = ({
   const showAttentionCount =
     people !== null && people.finding.length === 0 && needsAttentionCount > 0;
   useEffect(() => {
-    if (stackSheetUserIds === null) return;
+    if (stackSheetDeviceIds === null) return;
     const stillTogether =
-      selectedUserId === null &&
+      selectedDeviceId === null &&
       pins.groups.some((group) =>
-        stackSheetUserIds.every((userId) =>
-          group.members.some((member) => member.userId === userId),
+        stackSheetDeviceIds.every((deviceId) =>
+          group.members.some((member) => member.deviceId === deviceId),
         ),
       );
-    if (!stillTogether) setStackSheetUserIds(null);
-  }, [pins.groups, selectedUserId, stackSheetUserIds]);
+    if (!stillTogether) setStackSheetDeviceIds(null);
+  }, [pins.groups, selectedDeviceId, stackSheetDeviceIds]);
   const edge = useLiveMapEdgeMarkers({
     markers: edgeSubjects,
     mapRevision: map.mapRevision,
@@ -149,17 +161,17 @@ export const NativeMap = ({
   });
   const { edgeMarkers, mapRef } = edge;
   const selection = useLiveMapSelection({
-    selectedUserId,
-    onSelectUserId,
-    isMarkerReplaced: (userId) => {
+    selectedDeviceId,
+    onSelectDeviceId,
+    isMarkerReplaced: (deviceId) => {
       const group = pins.groups.find((item) =>
-        item.members.some((member) => member.userId === userId),
+        item.members.some((member) => member.deviceId === deviceId),
       );
       return group !== undefined && (group.members.length > 1 || edge.isEdgeMarker(group.id));
     },
   });
   const closeSheets = () => {
-    setStackSheetUserIds(null);
+    setStackSheetDeviceIds(null);
     setMissingUserId(null);
     setGroupMenuOpen(false);
     selection.clearSelectionFromReact();
@@ -177,10 +189,10 @@ export const NativeMap = ({
     mapRevision: map.mapRevision,
     markers,
     onClearSelection: closeSheets,
-    onSelectUser: selection.handleAnnotationSelected,
+    onSelectDevice: selection.handleAnnotationSelected,
     pmtilesUrl,
     selectedMarker,
-    selectedUserId,
+    selectedDeviceId,
     topInset: insets.top,
   });
   const {
@@ -189,7 +201,7 @@ export const NativeMap = ({
     fitEdgeGroup,
     fitEveryoneInFrame,
     goToCurrentLocation,
-    goToPerson,
+    goToDevice,
     maybeSuspendFollowFromRegionChange,
     zoomIntoStack,
   } = camera;
@@ -202,7 +214,8 @@ export const NativeMap = ({
   const displayOrder = (members: readonly LiveMapMarker[]) =>
     [...members].sort(
       (first, second) =>
-        Number(second.userId === selectedUserId) - Number(first.userId === selectedUserId) ||
+        Number(second.deviceId === selectedDeviceId) -
+          Number(first.deviceId === selectedDeviceId) ||
         Number(first.isSelf) - Number(second.isSelf) ||
         first.name.localeCompare(second.name),
     );
@@ -236,8 +249,9 @@ export const NativeMap = ({
     const hasMarker = markers.some((marker) => marker.userId === missingUserId);
     if (!hasMarker && missingPerson !== null) return;
     setMissingUserId(null);
-    if (hasMarker) goToPerson(missingUserId);
-  }, [goToPerson, markers, missingPerson, missingUserId]);
+    const pinDeviceId = personPinDeviceId({ markers, people, pinMarkers, userId: missingUserId });
+    if (pinDeviceId) goToDevice(pinDeviceId);
+  }, [goToDevice, markers, missingPerson, missingUserId, people, pinMarkers]);
 
   const edgeGroupIds = new Set(edgeMarkers.flatMap((chip) => chip.memberIds));
 
@@ -252,29 +266,29 @@ export const NativeMap = ({
 
   const pressStack = (group: LiveMapPinGroup, event?: GestureResponderEvent) => {
     rememberMarkerPress(event);
-    setStackSheetUserIds(null);
+    setStackSheetDeviceIds(null);
     setGroupMenuOpen(false);
     const zoomLevel = liveMapStackExpansionZoom({ group, zoom: pins.getZoom() });
     if (zoomLevel === null) {
       clearSelectionFromReact();
-      setStackSheetUserIds(group.members.map((member) => member.userId));
+      setStackSheetDeviceIds(group.members.map((member) => member.deviceId));
       return;
     }
     zoomIntoStack({ latitude: group.latitude, longitude: group.longitude, zoomLevel });
   };
 
   const pressEdgeChip = (chip: (typeof edgeMarkers)[number]) => {
-    setStackSheetUserIds(null);
+    setStackSheetDeviceIds(null);
     setGroupMenuOpen(false);
-    const userIds = pins.groups
+    const deviceIds = pins.groups
       .filter((group) => chip.memberIds.includes(group.id))
-      .flatMap((group) => group.members.map((member) => member.userId));
-    const [onlyUserId] = userIds;
-    if (userIds.length === 1 && onlyUserId !== undefined) {
-      goToPerson(onlyUserId);
+      .flatMap((group) => group.members.map((member) => member.deviceId));
+    const [onlyDeviceId] = deviceIds;
+    if (deviceIds.length === 1 && onlyDeviceId !== undefined) {
+      goToDevice(onlyDeviceId);
       return;
     }
-    fitEdgeGroup(userIds);
+    fitEdgeGroup(deviceIds);
   };
 
   const renderPerson = (
@@ -285,16 +299,16 @@ export const NativeMap = ({
       ...motion,
       marker,
       onDeselected: () => {
-        handleAnnotationDeselected(marker.userId);
+        handleAnnotationDeselected(marker.deviceId);
       },
       onSelected: (event?: GestureResponderEvent) => {
         rememberMarkerPress(event);
-        setStackSheetUserIds(null);
+        setStackSheetDeviceIds(null);
         setGroupMenuOpen(false);
-        handleAnnotationSelected(marker.userId);
+        handleAnnotationSelected(marker.deviceId);
       },
     };
-    const key = `${marker.userId}:${annotationRemountTokens[marker.userId] ?? 0}`;
+    const key = `${marker.deviceId}:${annotationRemountTokens[marker.deviceId] ?? 0}`;
     return marker.isSelf ? (
       <SelfLiveMapPointAnnotation key={key} {...annotationProps} />
     ) : (
@@ -590,6 +604,20 @@ export const NativeMap = ({
         <LiveMapPersonSheet
           key={selectedMarker.userId}
           battery={selectedMarker.battery}
+          devices={
+            selectedPersonDevices.length >= 2
+              ? selectedPersonDevices.map((device) => ({
+                  battery: device.marker?.battery ?? null,
+                  deviceId: device.deviceId,
+                  icon: device.icon,
+                  isThisDevice: device.marker?.isSelf ?? false,
+                  name: device.name,
+                  platform: device.platform,
+                  timestamp: device.marker?.timestamp ?? null,
+                  unreadable: device.unreadable || device.marker?.unreadableGroup !== undefined,
+                }))
+              : undefined
+          }
           image={selectedMarker.image}
           initials={selectedMarker.initials}
           isSelf={selectedMarker.isSelf}
@@ -601,19 +629,24 @@ export const NativeMap = ({
             edge.onSheetHeightChange(height);
           }}
           onDismiss={clearSelectionFromReact}
+          onSelectDevice={(deviceId) => {
+            if (markers.some((marker) => marker.deviceId === deviceId)) {
+              goToDevice(deviceId);
+            }
+          }}
         />
       ) : isStackSheetOpen ? (
         <LiveMapStackSheet
           members={displayOrder(stackSheetMembers)}
           onDismiss={() => {
-            setStackSheetUserIds(null);
+            setStackSheetDeviceIds(null);
           }}
           onHeightChange={(height) => {
             edge.onSheetHeightChange(height);
           }}
-          onSelectUser={(userId) => {
-            setStackSheetUserIds(null);
-            handleAnnotationSelected(userId);
+          onSelectDevice={(deviceId) => {
+            setStackSheetDeviceIds(null);
+            handleAnnotationSelected(deviceId);
           }}
         />
       ) : missingPerson ? (
@@ -640,8 +673,9 @@ export const NativeMap = ({
           }}
           onSelectPerson={(userId) => {
             setGroupMenuOpen(false);
-            if (markers.some((marker) => marker.userId === userId)) {
-              goToPerson(userId);
+            const pinDeviceId = personPinDeviceId({ markers, people, pinMarkers, userId });
+            if (pinDeviceId) {
+              goToDevice(pinDeviceId);
               return;
             }
             setMissingUserId(userId);
@@ -649,5 +683,27 @@ export const NativeMap = ({
         />
       ) : null}
     </View>
+  );
+};
+
+const personPinDeviceId = ({
+  markers,
+  people,
+  pinMarkers,
+  userId,
+}: {
+  markers: readonly LiveMapMarker[];
+  people: MapPeople | null;
+  pinMarkers: readonly LiveMapMarker[];
+  userId: string;
+}) => {
+  const best =
+    [...(people?.upToDate ?? []), ...(people?.outOfDate ?? [])].find(
+      (marker) => marker.userId === userId,
+    ) ?? markers.find((marker) => marker.userId === userId);
+  if (!best) return null;
+  return (
+    pinMarkers.find((pin) => pin.mergedDeviceIds?.includes(best.deviceId))?.deviceId ??
+    best.deviceId
   );
 };

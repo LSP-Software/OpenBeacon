@@ -25,6 +25,8 @@ let keyAccessChangePending = false;
 let flushCalls = 0;
 let flushModes: boolean[] = [];
 let revokeCalls = 0;
+let revokeInputs: Array<{ keepDeviceRegistration: boolean }> = [];
+let sessionLossChecks = 0;
 let isReadyForSharing = true;
 let failFlush = false;
 let failReconcile = false;
@@ -35,6 +37,7 @@ let failRecoveryCheck = false;
 let alertButtons: Array<{ text: string; onPress?: () => void }> = [];
 let recovered: Array<{ deviceIds: string[]; userId: string }> = [];
 let root: Root | null = null;
+let thisDeviceState: "unregistered" | "registered" | "active" = "active";
 const invalidateQueries = mock(async (_input: { queryKey: string[] }) => {});
 const queryClient = { invalidateQueries };
 const trackingService = {
@@ -55,8 +58,12 @@ const trackingService = {
     flushModes.push(force);
     if (failFlush) throw new Error("offline");
   },
-  revokeTrackingAccess: async () => {
+  revokeTrackingAccess: async (input: { keepDeviceRegistration: boolean }) => {
     revokeCalls += 1;
+    revokeInputs.push(input);
+  },
+  checkThisPhoneAfterSessionLoss: async () => {
+    sessionLossChecks += 1;
   },
   resumeTracking: async () => {},
   getUnassignedTrackingPoints: async () => {
@@ -101,6 +108,10 @@ mock.module("../lib/auth-client.ts", () => ({
   authClient: {
     useSession: () => sessionState,
   },
+}));
+
+mock.module("../lib/deviceActivation.ts", () => ({
+  useThisDeviceState: () => thisDeviceState,
 }));
 
 mock.module("@tanstack/react-query", () => ({
@@ -153,6 +164,8 @@ describe("TrackingProvider", () => {
     flushCalls = 0;
     flushModes = [];
     revokeCalls = 0;
+    revokeInputs = [];
+    sessionLossChecks = 0;
     isReadyForSharing = true;
     failFlush = false;
     failReconcile = false;
@@ -162,6 +175,7 @@ describe("TrackingProvider", () => {
     alertButtons = [];
     recovered = [];
     root = null;
+    thisDeviceState = "active";
     invalidateQueries.mockClear();
   });
 
@@ -180,6 +194,46 @@ describe("TrackingProvider", () => {
     expect(reconcileCalls).toEqual([{ startCapture: true, force: true }]);
     expect(flushCalls).toBe(1);
     expect(flushModes).toEqual([true]);
+    expect(revokeCalls).toBe(0);
+  });
+
+  test("a phone that isn't set up yet doesn't contact the server until it's active", async () => {
+    thisDeviceState = "registered";
+    await renderProvider();
+    requestTrackingSync();
+    appStateListener?.("background");
+    appStateListener?.("active");
+    await flushEffects();
+
+    expect(reconcileCalls).toEqual([]);
+    expect(flushCalls).toBe(0);
+
+    thisDeviceState = "active";
+    await act(async () => {
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(reconcileCalls).toEqual([{ startCapture: true, force: true }]);
+    expect(flushModes).toEqual([true]);
+  });
+
+  test("stops background checks when the server says this phone isn't set up", async () => {
+    await renderProvider();
+    reconcileCalls = [];
+    flushCalls = 0;
+    thisDeviceState = "registered";
+    await act(async () => {
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      await Promise.resolve();
+    });
+    requestTrackingSync();
+    await flushEffects();
+
+    expect(reconcileCalls).toEqual([]);
+    expect(flushCalls).toBe(0);
     expect(revokeCalls).toBe(0);
   });
 
@@ -360,6 +414,45 @@ describe("TrackingProvider", () => {
     });
 
     expect(revokeCalls).toBe(1);
+  });
+
+  test("losing the session keeps this phone's registration and checks whether it was removed", async () => {
+    await renderProvider();
+    sessionState = { data: null, isPending: false };
+
+    await act(async () => {
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(revokeInputs).toEqual([{ keepDeviceRegistration: true }]);
+    expect(sessionLossChecks).toBe(1);
+  });
+
+  test("a signed-out launch checks whether this phone was removed", async () => {
+    sessionState = { data: null, isPending: false };
+    await renderProvider();
+    await flushEffects();
+
+    expect(revokeInputs).toEqual([{ keepDeviceRegistration: true }]);
+    expect(sessionLossChecks).toBe(1);
+  });
+
+  test("switching straight to another account doesn't check the old phone registration", async () => {
+    await renderProvider();
+    sessionState = { data: { user: { id: "user-2" } }, isPending: false };
+
+    await act(async () => {
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(revokeInputs).toEqual([{ keepDeviceRegistration: false }]);
+    expect(sessionLossChecks).toBe(0);
   });
 
   test("OPE-231: signing in after being signed out doesn't revoke tracking access", async () => {

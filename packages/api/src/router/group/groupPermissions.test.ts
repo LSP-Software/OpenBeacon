@@ -51,6 +51,8 @@ const createCaller = (
         ...db,
         $transaction: async (callback: (tx: typeof db) => Promise<unknown>) => callback(db),
       },
+      deviceId: "actor-device",
+      deviceActive: true,
       session: { user: { id: actor.userId } },
     } as unknown as Parameters<typeof router.createCaller>[0]),
   };

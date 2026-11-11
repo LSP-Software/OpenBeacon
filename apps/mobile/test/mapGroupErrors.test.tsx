@@ -79,6 +79,7 @@ mock.module("../components/map/NativeMap.tsx", () => ({
     return null;
   },
 }));
+mock.module("../components/NewSignInBanner.tsx", () => ({ NewSignInBanner: () => null }));
 mock.module("../components/ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) =>
     React.createElement("text", null, children),
@@ -86,13 +87,22 @@ mock.module("../components/ui/Text.tsx", () => ({
 mock.module("../hooks/useGroupColorRevision.ts", () => ({ useGroupColorRevision: () => 0 }));
 mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useCurrentGroupKeyAccess: () => access }));
 mock.module("../hooks/useMapLivePositions.ts", () => ({
-  useMapLivePositions: () => ({ positions: [], status: trackingStatus }),
+  useMapLivePositions: () => ({
+    dropRemovedDevices: () => {},
+    positions: [],
+    status: trackingStatus,
+  }),
 }));
 mock.module("../hooks/useMembershipSnapshot.ts", () => ({ useMembershipSnapshot: () => groups }));
 mock.module("../hooks/useTrackingUploadTime.ts", () => ({ useTrackingUploadTime: () => null }));
 mock.module("../hooks/useSelfDeviceLocation.ts", () => ({ useSelfDeviceLocation: () => null }));
 mock.module("../lib/api.ts", () => ({
-  trpc: { groupMembership: { list: { queryOptions: () => ({}) } } },
+  trpc: {
+    groupMembership: {
+      list: { queryOptions: () => ({}) },
+      listMemberDevices: { queryOptions: () => ({}) },
+    },
+  },
 }));
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: sessionUser ? { user: sessionUser } : null }) },
@@ -104,6 +114,7 @@ mock.module("../lib/applySelfDeviceLocation.ts", () => ({ applySelfDeviceLocatio
 mock.module("../lib/buildLiveMapMarkers.ts", () => ({
   buildLiveMapMarkers: () => [],
   initialsFromName: () => "??",
+  labelDeviceIcons: ({ markers }: { markers: unknown[] }) => markers,
 }));
 mock.module("../lib/personalNicknames.ts", () => ({ loadPersonalNicknames: async () => ({}) }));
 mock.module("../lib/groupColor.ts", () => ({ getGroupColor: () => "red" }));
