@@ -53,9 +53,9 @@ afterAll(() => {
 const listGroups = (timeoutMs: number) =>
   trpcClient.groupMembership.list.query(undefined, { context: { timeoutMs } });
 
-const failedAfter = async (request: Promise<unknown>) => {
+const failedAfter = async (request: () => Promise<unknown>) => {
   const start = performance.now();
-  const error = await request.then(
+  const error = await request().then(
     () => null,
     (cause: unknown) => cause,
   );
@@ -69,7 +69,7 @@ const waitUntil = async (condition: () => boolean) => {
 };
 
 test("a call the server never answers gives up at its own limit", async () => {
-  const { elapsed, error } = await failedAfter(listGroups(100));
+  const { elapsed, error } = await failedAfter(() => listGroups(100));
 
   expect(error).toHaveProperty("message", SERVER_UNREACHABLE_MESSAGE);
   expect(elapsed).toBeGreaterThanOrEqual(95);
@@ -77,8 +77,8 @@ test("a call the server never answers gives up at its own limit", async () => {
 });
 
 test("batched calls each give up at their own limit and close the connection after the last", async () => {
-  const short = failedAfter(listGroups(100));
-  const long = failedAfter(
+  const short = failedAfter(() => listGroups(100));
+  const long = failedAfter(() =>
     trpcClient.groupTracking.getLatest.query(
       { groupId: "group" },
       { context: { timeoutMs: 1_500 } },
@@ -99,7 +99,7 @@ test("batched calls each give up at their own limit and close the connection aft
 
 test("a caller's abort ends the call at once and closes the connection", async () => {
   const controller = new AbortController();
-  const request = failedAfter(
+  const request = failedAfter(() =>
     trpcClient.groupMembership.list.query(undefined, { signal: controller.signal }),
   );
   expect(await waitUntil(() => openConnections === 1)).toBe(true);
@@ -117,7 +117,7 @@ test("a query that timed out is not retried", async () => {
     trpc: { context: { timeoutMs: 100 } },
   });
 
-  const { error } = await failedAfter(queryClient.fetchQuery(options));
+  const { error } = await failedAfter(() => queryClient.fetchQuery(options));
 
   expect(error).toHaveProperty("message", SERVER_UNREACHABLE_MESSAGE);
   expect(queryClient.getQueryState(options.queryKey)?.fetchFailureCount).toBe(1);
@@ -155,7 +155,7 @@ test("a query the server refused is not retried", () => {
 });
 
 test("calls work again once the server answers", async () => {
-  const { error } = await failedAfter(listGroups(100));
+  const { error } = await failedAfter(() => listGroups(100));
   expect(error).toHaveProperty("message", SERVER_UNREACHABLE_MESSAGE);
 
   answering = true;

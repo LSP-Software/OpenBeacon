@@ -31,7 +31,9 @@ Set the required environment variables in the root `.env.example`, including
 the R2 variables, in Coolify. Set `BETTER_AUTH_URL` to
 `https://api.openbeacon.net` and `SELF_HOSTED` to `false`. `SELF_HOSTED` defaults
 to `true`, so self-hosted backends never accept app feedback; the app always
-sends feedback to the hosted API. Optional variables may be added when needed; leave
+sends feedback to the hosted API. Set `DISCORD_FEEDBACK_WEBHOOK_URL` on the hosted
+API to get a Discord alert for each new feedback; the alert holds only the
+feedback ID and whether a contact email was given. Optional variables may be added when needed; leave
 them absent to use their defaults. The Coolify deployment declares
 `TRUSTED_PROXY_PROVIDER` without a value to prevent startup until it is set.
 For the hosted API, set `TRUSTED_PROXY_PROVIDER` to `cloudflare-authenticated`
