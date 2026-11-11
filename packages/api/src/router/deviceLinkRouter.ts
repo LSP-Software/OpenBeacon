@@ -65,7 +65,9 @@ export const deviceLinkRouter = createTRPCRouter({
     .mutation(async ({ ctx }) => {
       const userId = ctx.session.user.id;
       return ctx.db.$transaction(async (tx) => {
-        await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
+        );
         const device = await tx.userDevice.findFirst({
           select: { activatedAt: true },
           where: { id: ctx.deviceId, userId, revokedAt: null },
@@ -121,7 +123,9 @@ export const deviceLinkRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       return ctx.db.$transaction(async (tx) => {
-        await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
+        );
         const approver = await tx.userDevice.findFirst({
           select: { id: true },
           where: { id: ctx.deviceId, userId, activatedAt: { not: null }, revokedAt: null },
@@ -152,7 +156,12 @@ export const deviceLinkRouter = createTRPCRouter({
         where: { id: input.linkId, userId, completedAt: null, device: { activatedAt: null } },
         select: { deviceId: true },
       });
-      if (!link) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!link) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "This code is no longer valid. Scan the new one.",
+        });
+      }
       const device = await removeUserDevice({
         db: ctx.db,
         deviceId: link.deviceId,

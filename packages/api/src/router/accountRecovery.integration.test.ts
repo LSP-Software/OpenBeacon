@@ -18,6 +18,7 @@ import {
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { holdRowLock } from "../lib/databaseLocks.testUtil.ts";
+import { DeviceRemovedError } from "../lib/deviceRemoved.ts";
 import { DeviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 import { accountHistoryRouter } from "./accountHistoryRouter.ts";
@@ -52,6 +53,7 @@ const users = [
   "createRace",
   "unescrowed",
   "partialSetup",
+  "removedReset",
 ].map((name) => `${prefix}-${name}`);
 const [
   setupUser,
@@ -76,7 +78,9 @@ const [
   createRaceUser,
   unescrowedUser,
   partialSetupUser,
+  removedResetUser,
 ] = users as [
+  string,
   string,
   string,
   string,
@@ -701,6 +705,47 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ]);
       await expect(restoreHistoryKeys(resetUser, oldPhrase)).rejects.toThrow();
     }, 20_000);
+
+    test("reset is refused and keeps every key when the phone is removed while it waits", async () => {
+      await setUpRecovery(removedResetUser);
+      await prisma.userDevice.update({
+        where: { id: `${removedResetUser}-device` },
+        data: { activatedAt: null },
+      });
+      const keysBefore = await prisma.accountHistoryKey.findMany({
+        where: { userId: removedResetUser },
+      });
+      const recoveryKeyBefore = await prisma.recoveryKey.findUniqueOrThrow({
+        where: { userId: removedResetUser },
+      });
+      const lock = await holdRowLock({
+        db: prisma,
+        id: removedResetUser,
+        table: "User",
+        beforeCommit: async (tx) => {
+          await tx.userDevice.update({
+            where: { id: `${removedResetUser}-device` },
+            data: { revokedAt: new Date() },
+          });
+          await tx.session.deleteMany({ where: { deviceId: `${removedResetUser}-device` } });
+        },
+      });
+      const resetting = tryCatch(
+        caller(removedResetUser).accountRecovery.reset(resetInputFor(removedResetUser, 2)),
+      );
+      await lock.waitForWaiters(1);
+      await lock.release();
+      const { error } = await resetting;
+
+      expect(error).toMatchObject({ code: "UNAUTHORIZED" });
+      expect((error as { cause?: unknown }).cause).toBeInstanceOf(DeviceRemovedError);
+      expect(
+        await prisma.accountHistoryKey.findMany({ where: { userId: removedResetUser } }),
+      ).toEqual(keysBefore);
+      expect(
+        await prisma.recoveryKey.findUniqueOrThrow({ where: { userId: removedResetUser } }),
+      ).toEqual(recoveryKeyBefore);
+    });
 
     test("a session from more than 30 minutes ago cannot set up a phrase and status reports it", async () => {
       const phrase = generateRecoveryPhrase();

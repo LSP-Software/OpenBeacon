@@ -3,6 +3,7 @@ import { createSecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
 import { prisma } from "@openbeacon/database";
 import type { SecurityAlert } from "@openbeacon/email";
 import { deleteAccountRecords } from "./account-deletion.ts";
+import { holdRowLock } from "./databaseLocks.testUtil.ts";
 
 const prefix = `account-deletion-${crypto.randomUUID()}`;
 const deletedUser = `${prefix}-deleted`;
@@ -411,6 +412,89 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         await prisma.accountDeletionCleanup.deleteMany({
           where: { userId: { in: [first, second] } },
         });
+      }
+    });
+
+    test("waits for an upload from another of the account's phones", async () => {
+      const id = `${prefix}-uploading`;
+      const partner = `${prefix}-uploading-partner`;
+      const uploadGroup = `${prefix}-uploading-group`;
+      const device = `${prefix}-uploading-device`;
+      await prisma.user.createMany({
+        data: [
+          { id, name: "Uploading", email: `${id}@example.test` },
+          { id: partner, name: "Partner", email: `${partner}@example.test` },
+        ],
+      });
+      await prisma.userDevice.create({
+        data: {
+          id: device,
+          userId: id,
+          publicKey: "u",
+          publicKeyAlgorithm: "X25519",
+          name: "Phone",
+          icon: "phone",
+        },
+      });
+      await prisma.group.create({
+        data: {
+          id: uploadGroup,
+          name: "Uploads",
+          groupMembers: {
+            create: [
+              { userId: id, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: partner, role: "OWNER", joinedEpochNumber: 1 },
+            ],
+          },
+        },
+      });
+      const epoch = await prisma.groupEpoch.create({
+        data: {
+          id: `${uploadGroup}-epoch`,
+          groupId: uploadGroup,
+          epochNumber: 1,
+          senderPublicKey: "u",
+        },
+      });
+      try {
+        const upload = await holdRowLock({
+          db: prisma,
+          id: uploadGroup,
+          table: "Group",
+          beforeCommit: (tx) =>
+            tx.groupEncryptedPayload.create({
+              data: {
+                groupId: uploadGroup,
+                epochId: epoch.id,
+                senderDeviceId: device,
+                senderUserId: id,
+                kind: "location",
+                algorithm: "a",
+                nonce: "u",
+                ciphertext: "u",
+                clientPointId: "u",
+              },
+            }),
+        });
+        const deleting = deleteAccountRecords({
+          db: prisma,
+          userId: id,
+          mode: "immediate",
+          imageUrlPrefix: "https://cdn.example/bucket",
+          securityAlerts: null,
+        });
+        await upload.waitForWaiters(1);
+        await upload.release();
+
+        expect(await deleting).toBe(true);
+        expect(await prisma.user.findUnique({ where: { id } })).toBeNull();
+        expect(await prisma.groupEncryptedPayload.count({ where: { groupId: uploadGroup } })).toBe(
+          0,
+        );
+      } finally {
+        await prisma.group.deleteMany({ where: { id: uploadGroup } });
+        await prisma.user.deleteMany({ where: { id: { in: [id, partner] } } });
+        await prisma.accountDeletionCleanup.deleteMany({ where: { userId: id } });
       }
     });
 

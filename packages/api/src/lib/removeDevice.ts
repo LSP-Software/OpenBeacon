@@ -30,7 +30,7 @@ export const removeUserDevice = async ({
   pendingOnly?: boolean;
 }) =>
   db.$transaction(async (tx) => {
-    await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`);
     await lockUserGroups(tx, userId);
     const device = await tx.userDevice.findFirst({
       where: { id: deviceId, userId, revokedAt: null },
@@ -40,7 +40,9 @@ export const removeUserDevice = async ({
       where: { id: currentSessionId, userId },
       select: { deviceId: true },
     });
-    if (!device || !currentSession) throw new TRPCError({ code: "NOT_FOUND" });
+    if (!device || !currentSession) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "This device has already been removed." });
+    }
     if (pendingOnly && device.activatedAt) {
       throw new TRPCError({
         code: "CONFLICT",

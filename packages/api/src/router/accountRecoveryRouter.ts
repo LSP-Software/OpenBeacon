@@ -16,7 +16,7 @@ import {
   sessionFreshForMs,
 } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
-import { activateDevice } from "../lib/deviceActivation.ts";
+import { activateDevice, devicePendingError, lockThisDevice } from "../lib/deviceActivation.ts";
 
 const emailCodeProcedure = freshSessionProcedure.use(({ ctx, next }) => {
   if (!ctx.emailCodes) {
@@ -24,9 +24,6 @@ const emailCodeProcedure = freshSessionProcedure.use(({ ctx, next }) => {
   }
   return next({ ctx: { emailCodes: ctx.emailCodes } });
 });
-
-const lockUser = (tx: Prisma.TransactionClient, userId: string) =>
-  tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
 
 const createHistoryKey = async (
   tx: Prisma.TransactionClient,
@@ -143,7 +140,12 @@ export const accountRecoveryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       await ctx.db.$transaction(async (tx) => {
-        await lockUser(tx, userId);
+        const thisDevice = await lockThisDevice({
+          db: tx,
+          deviceId: ctx.deviceId,
+          userId,
+        });
+        if (!thisDevice.active) throw devicePendingError();
         if (await tx.recoveryKey.findUnique({ where: { userId } })) {
           throw new TRPCError({
             code: "CONFLICT",
@@ -161,7 +163,12 @@ export const accountRecoveryRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       await ctx.db.$transaction(async (tx) => {
-        await lockUser(tx, userId);
+        const thisDevice = await lockThisDevice({
+          db: tx,
+          deviceId: ctx.deviceId,
+          userId,
+        });
+        if (!thisDevice.active) throw devicePendingError();
         if (!(await tx.recoveryKey.findUnique({ where: { userId } }))) {
           throw new TRPCError({ code: "NOT_FOUND", message: "No recovery phrase is set up." });
         }
@@ -223,7 +230,11 @@ export const accountRecoveryRouter = createTRPCRouter({
         });
       }
       await ctx.db.$transaction(async (tx) => {
-        await lockUser(tx, userId);
+        const thisDevice = await lockThisDevice({
+          db: tx,
+          deviceId,
+          userId,
+        });
         const latestHistoryKey = await tx.accountHistoryKey.findFirst({
           orderBy: { version: "desc" },
           select: { version: true },
@@ -250,7 +261,12 @@ export const accountRecoveryRouter = createTRPCRouter({
             message: "Your email confirmation has expired. Confirm a new code.",
           });
         }
-        await activateDevice({ activatedBy: "reset", db: tx, deviceId, userId });
+        if (
+          !(await activateDevice({ activatedBy: "reset", db: tx, deviceId, userId })) &&
+          !thisDevice.active
+        ) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "This phone isn't registered yet." });
+        }
         await tx.accountHistoryKey.deleteMany({ where: { userId } });
         await tx.recoveryKey.deleteMany({ where: { userId } });
         await tx.recoveryKey.create({ data: { ...input.recoveryKey, userId } });

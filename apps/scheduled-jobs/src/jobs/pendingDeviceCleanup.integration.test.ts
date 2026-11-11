@@ -18,6 +18,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
       data: [
         { name: "oldPending", createdAt: ago(8), activatedAt: null },
         { name: "newPending", createdAt: ago(6), activatedAt: null },
+        { name: "justOverAWeekPending", createdAt: ago(7 + 1 / 24), activatedAt: null },
+        { name: "justUnderAWeekPending", createdAt: ago(7 - 1 / 24), activatedAt: null },
         { name: "oldActive", createdAt: ago(30), activatedAt: ago(30) },
         { name: "removedPending", createdAt: ago(9), activatedAt: null, revokedAt: ago(8) },
         { name: "recentlyRemovedPending", createdAt: ago(9), activatedAt: null, revokedAt: ago(6) },
@@ -87,6 +89,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Pending device c
       orderBy: { name: "asc" },
     });
     expect(devices.map(({ name }) => name)).toEqual([
+      "justUnderAWeekPending",
       "longAgoLinked",
       "newPending",
       "oldActive",

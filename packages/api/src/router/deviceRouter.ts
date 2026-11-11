@@ -153,7 +153,9 @@ export const deviceRouter = createTRPCRouter({
       await ctx.db.deviceChallenge.deleteMany({ where: { deviceId, purpose: "activation" } });
       const answered = await isCorrectAnswer({ answer: input.answer, challenge: stored });
       return ctx.db.$transaction(async (tx) => {
-        await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
+        );
         const currentHistoryKey = await tx.accountHistoryKey.findFirst({
           orderBy: { version: "desc" },
           select: { version: true },

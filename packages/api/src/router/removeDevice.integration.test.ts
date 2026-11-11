@@ -142,15 +142,37 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
 
   test("waits for an upload holding the group before touching the removed phone", async () => {
     const account = await createAccount();
+    const epoch = await prisma.groupEpoch.create({
+      data: {
+        id: `${prefix}-epoch-${crypto.randomUUID()}`,
+        groupId: account.groupId,
+        epochNumber: 1,
+        senderPublicKey: "sender-key",
+      },
+    });
     const upload = await holdRowLock({
       db: prisma,
       id: account.groupId,
       table: "Group",
-      beforeCommit: (tx) =>
-        tx.userDevice.update({
+      beforeCommit: async (tx) => {
+        await tx.groupEncryptedPayload.create({
+          data: {
+            algorithm: "test",
+            ciphertext: "ciphertext",
+            clientPointId: crypto.randomUUID(),
+            epochId: epoch.id,
+            groupId: account.groupId,
+            kind: "location",
+            nonce: "nonce",
+            senderDeviceId: account.lostPhone.id,
+            senderUserId: account.userId,
+          },
+        });
+        await tx.userDevice.update({
           where: { id: account.lostPhone.id },
           data: { lastLocationAt: new Date() },
-        }),
+        });
+      },
     });
     const removing = callerFor(account).account.removeDevice({ deviceId: account.lostPhone.id });
     await upload.waitForWaiters(1);
@@ -158,6 +180,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
     await removing;
 
     expect(await revokedAt(account.lostPhone.id)).toBeInstanceOf(Date);
+    expect(
+      await prisma.groupEncryptedPayload.count({ where: { senderUserId: account.userId } }),
+    ).toBe(1);
   });
 
   test("sends the always-on device removed alert", async () => {

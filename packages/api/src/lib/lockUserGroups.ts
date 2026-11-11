@@ -14,4 +14,5 @@ export const lockUserGroups = async (
       Prisma.sql`SELECT id FROM "Group" WHERE id IN (${Prisma.join(groupIds)}) ORDER BY id FOR UPDATE`,
     );
   }
+  return groupIds;
 };

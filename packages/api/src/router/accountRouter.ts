@@ -25,6 +25,7 @@ import {
 } from "../lib/image-upload.ts";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
+import { lockUserGroups } from "../lib/lockUserGroups.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
 import {
   activeDeviceProcedure,
@@ -129,7 +130,9 @@ export const accountRouter = {
         googleSubject = verification.data;
       }
       const result = await ctx.db.$transaction(async (tx) => {
-        await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
+        );
         const session = await tx.session.findFirst({
           where: { id: ctx.session.session.id, userId },
         });
@@ -176,15 +179,8 @@ export const accountRouter = {
               message: "Google verification expired. Please try again.",
             });
         }
-        const memberships = await tx.groupMember.findMany({
-          where: { userId },
-          select: { groupId: true },
-        });
-        const groupIds = memberships.map(({ groupId }) => groupId).sort();
+        const groupIds = await lockUserGroups(tx, userId);
         if (groupIds.length) {
-          await tx.$queryRaw(
-            Prisma.sql`SELECT id FROM "Group" WHERE id IN (${Prisma.join(groupIds)}) ORDER BY id FOR UPDATE`,
-          );
           const soleOwner = await tx.groupMember.findFirst({
             where: {
               userId,
@@ -260,7 +256,9 @@ export const accountRouter = {
       const others = { userId, id: { not: ctx.session.session.id } };
       const now = new Date();
       const { signedOut, device } = await ctx.db.$transaction(async (tx) => {
-        await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
+        );
         const live = await tx.session.deleteMany({ where: { ...others, expiresAt: { gt: now } } });
         await tx.session.deleteMany({ where: { ...others, expiresAt: { lte: now } } });
         const current = await tx.session.findUnique({
@@ -284,7 +282,7 @@ export const accountRouter = {
     return { cancelled: user.deletionCancellationPending };
   }),
   acknowledgeDeletionCancellation: protectedProcedure
-    .input(z.object({ userId: z.string().min(1) }))
+    .input(z.object({ userId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       if (input.userId !== ctx.session.user.id) throw new TRPCError({ code: "FORBIDDEN" });
       await ctx.db.user.updateMany({

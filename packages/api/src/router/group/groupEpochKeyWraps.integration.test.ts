@@ -12,6 +12,7 @@ import {
   unwrapHistoryEpochKey,
   wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
+import { DevicePendingError } from "../../lib/deviceActivation.ts";
 import { getGroupJoinContext, getGroupRemovalContext } from "../../lib/groupEpochs.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { accountRecoveryRouter } from "../accountRecoveryRouter.ts";
@@ -404,7 +405,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             ],
           }),
       ]) {
-        await expect(request()).rejects.toMatchObject({ code: "FORBIDDEN" });
+        await expect(request()).rejects.toMatchObject({
+          code: "FORBIDDEN",
+          cause: expect.any(DevicePendingError),
+        });
       }
 
       const recipientIds = (recipients: { deviceId: string }[]) =>

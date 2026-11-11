@@ -2,6 +2,7 @@ import { Prisma } from "@openbeacon/database";
 import { createAccountHistoryKeySchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
+import { devicePendingError, lockThisDevice } from "../lib/deviceActivation.ts";
 import { activeDeviceProcedure } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 
@@ -15,7 +16,12 @@ export const accountHistoryRouter = createTRPCRouter({
       const userId = ctx.session.user.id;
       const result = await tryCatch(
         ctx.db.$transaction(async (tx) => {
-          await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
+          const thisDevice = await lockThisDevice({
+            db: tx,
+            deviceId: ctx.deviceId,
+            userId,
+          });
+          if (!thisDevice.active) throw devicePendingError();
           if (await tx.accountHistoryKey.findFirst({ select: { id: true }, where: { userId } })) {
             throw alreadyExists();
           }

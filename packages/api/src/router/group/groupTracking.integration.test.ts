@@ -9,6 +9,7 @@ import {
   generateGroupEpochKey,
 } from "@openbeacon/encryption";
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
+import { DevicePendingError } from "../../lib/deviceActivation.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { authRouter } from "../authRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
@@ -276,8 +277,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     );
 
     const pending = caller(ownerId, ownerPendingId).groupTracking;
-    await expect(pending.getLatest({ groupId })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    await expect(pending.poll({ groupId })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const devicePending = { code: "FORBIDDEN", cause: expect.any(DevicePendingError) };
+    await expect(pending.getLatest({ groupId })).rejects.toMatchObject(devicePending);
+    await expect(pending.poll({ groupId })).rejects.toMatchObject(devicePending);
     await expect(
       pending.uploadBatch({
         groupId,
@@ -295,7 +297,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
           },
         ],
       }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    ).rejects.toMatchObject(devicePending);
     expect(
       await prisma.groupEncryptedPayload.count({
         where: { clientPointId: `${prefix}-pending-upload` },

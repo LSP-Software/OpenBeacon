@@ -21,11 +21,15 @@ export const holdRowLock = async ({
   const locked = new Promise<void>((resolve) => {
     markLocked = resolve;
   });
+  let holderPid = 0;
   const holder = db.$transaction(
     async (tx) => {
       await tx.$queryRaw(
         Prisma.sql`SELECT id FROM ${Prisma.raw(`"${table}"`)} WHERE id = ${id} ${Prisma.raw(mode)}`,
       );
+      const [backend] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
+      if (!backend) throw new Error("Unable to read the lock holder's backend pid.");
+      holderPid = backend.pid;
       markLocked();
       await released;
       await beforeCommit?.(tx);
@@ -42,8 +46,17 @@ export const holdRowLock = async ({
     waitForWaiters: async (count: number) => {
       for (let attempt = 0; attempt < 500; attempt += 1) {
         const [row] = await db.$queryRaw<Array<{ waiting: number }>>`
-          SELECT count(*)::int AS waiting FROM pg_stat_activity
-          WHERE datname = current_database() AND wait_event_type = 'Lock'
+          WITH RECURSIVE blocked(pid) AS (
+            SELECT pid FROM pg_stat_activity
+            WHERE datname = current_database()
+              AND pid <> ${holderPid}
+              AND pg_blocking_pids(pid) @> ARRAY[${holderPid}::int]
+            UNION
+            SELECT activity.pid FROM pg_stat_activity activity
+            JOIN blocked ON pg_blocking_pids(activity.pid) @> ARRAY[blocked.pid]
+            WHERE activity.datname = current_database() AND activity.pid <> ${holderPid}
+          )
+          SELECT count(*)::int AS waiting FROM blocked
         `;
         if ((row?.waiting ?? 0) >= count) return;
         await Bun.sleep(10);

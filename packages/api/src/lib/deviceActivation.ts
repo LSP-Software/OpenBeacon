@@ -1,6 +1,7 @@
-import type { DeviceActivation, Prisma } from "@openbeacon/database";
+import { type DeviceActivation, Prisma } from "@openbeacon/database";
 import { devicePendingCause } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
+import { deviceRemovedError } from "./deviceRemoved.ts";
 import { lockUserGroups } from "./lockUserGroups.ts";
 
 export class DevicePendingError extends Error {
@@ -39,4 +40,25 @@ export const activateDevice = async ({
     where: { groupMembers: { some: { userId } } },
   });
   return true;
+};
+
+export const lockThisDevice = async ({
+  db,
+  deviceId,
+  userId,
+}: {
+  db: Pick<Prisma.TransactionClient, "$queryRaw" | "userDevice">;
+  deviceId: string;
+  userId: string;
+}) => {
+  await db.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`);
+  const device = await db.userDevice.findFirst({
+    select: { activatedAt: true, revokedAt: true },
+    where: { id: deviceId, userId },
+  });
+  if (!device) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "This phone isn't registered yet." });
+  }
+  if (device.revokedAt) throw deviceRemovedError();
+  return { active: device.activatedAt !== null };
 };
