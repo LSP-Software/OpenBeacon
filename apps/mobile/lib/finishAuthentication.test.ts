@@ -5,12 +5,30 @@ const storageValues = new Map<string, number>();
 let missingHistoryKey: { userId: string; version: number } | null = null;
 let findMissingHistoryKeyError: Error | null = null;
 let findMissingHistoryKeyCalls = 0;
+let createHistoryKeyError: Error | null = null;
+const events: string[] = [];
 
 mock.module("expo-router", () => ({
   router: {
     replace: (target: unknown) => {
+      events.push("navigate");
       replacements.push(target);
     },
+  },
+}));
+
+mock.module("./deviceKeys.ts", () => ({
+  ensureDeviceKeyRegistration: async () => {
+    events.push("register");
+    return { userId: "user-1" };
+  },
+}));
+
+mock.module("./createHistoryKey.ts", () => ({
+  createHistoryKeyIfMissing: async (userId: string) => {
+    events.push(`createHistoryKey:${userId}`);
+    if (createHistoryKeyError) throw createHistoryKeyError;
+    return true;
   },
 }));
 
@@ -40,6 +58,27 @@ describe("finishing authentication", () => {
     missingHistoryKey = null;
     findMissingHistoryKeyError = null;
     findMissingHistoryKeyCalls = 0;
+    createHistoryKeyError = null;
+    events.length = 0;
+  });
+
+  test("a new account creates its history key after the device registers and before leaving", async () => {
+    await finishAuthentication({ joinCode: "ABC123", newAccount: true });
+
+    expect(events).toEqual(["register", "createHistoryKey:user-1", "navigate"]);
+  });
+
+  test("a new account still goes home when creating the history key fails", async () => {
+    createHistoryKeyError = new Error("offline");
+    await finishAuthentication({ joinCode: undefined, newAccount: true });
+
+    expect(replacements).toEqual(["/"]);
+  });
+
+  test("signing in to an existing account doesn't create a history key", async () => {
+    await finishAuthentication({ joinCode: undefined });
+
+    expect(events).toEqual(["navigate"]);
   });
 
   test("a join code goes to the join screen without checking for a missing history key", async () => {

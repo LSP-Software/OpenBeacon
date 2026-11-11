@@ -14,6 +14,7 @@ import {
   refreshApiCompatibilityInBackground,
 } from "./apiCompatibility.ts";
 import { baseUrl } from "./base-url.ts";
+import { createHistoryKey } from "./createHistoryKey.ts";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
 import {
@@ -26,6 +27,7 @@ import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
 import { backfillHistoryWraps } from "./recovery.ts";
+import { resealPersonalData } from "./resealPersonalData.ts";
 import { hasCustomServerUrl } from "./server-url.ts";
 import {
   clearTrackingKeyCheck,
@@ -126,10 +128,24 @@ const checkHistoryBackfill = async (userId: string) => {
   }
   const current = await tryCatch(getCurrentHistoryKeyState(userId));
   if (getErrorCode(current.error) === "UNAUTHORIZED") throw current.error;
+  if (current.data?.status === "none") {
+    const created = await tryCatch(createHistoryKey(userId));
+    if (getErrorCode(created.error) === "UNAUTHORIZED") throw created.error;
+    return {
+      canBackfill: created.data === true,
+      completed: !created.error,
+      createdKey: created.data === true,
+      missingVersion: created.data === false ? 1 : null,
+    };
+  }
   return {
     canBackfill: current.data?.status === "held",
     completed: !current.error,
-    missingVersion: current.data?.status === "missing" ? current.data.version : null,
+    createdKey: false,
+    missingVersion:
+      current.data?.status === "missing" || current.data?.status === "onOtherDevice"
+        ? current.data.version
+        : null,
   };
 };
 
@@ -213,6 +229,9 @@ const reconcileTrackingKeysInternal = async ({
     );
     const unauthorized = results.flat().find(({ error }) => getErrorCode(error) === "UNAUTHORIZED");
     if (unauthorized?.error) throw unauthorized.error;
+    if (device.data && backfillCheck?.createdKey && isCurrent()) {
+      await resealPersonalData(device.data.userId);
+    }
     const membership = getMembershipSignature(groups);
     const changed =
       hasMembershipChanged(membership) ||
@@ -365,6 +384,7 @@ const reconcileTrackingKeysInternal = async ({
     : [];
   const unauthorized = backfills.find(({ error }) => getErrorCode(error) === "UNAUTHORIZED");
   if (unauthorized?.error) throw unauthorized.error;
+  if (backfillCheck?.createdKey && isCurrent()) await resealPersonalData(deviceKeyContext.userId);
   if (backfillCheck) {
     recordCleanBackfill({ backfills, check: backfillCheck, userId: deviceKeyContext.userId });
   }

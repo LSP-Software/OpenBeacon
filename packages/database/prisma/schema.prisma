@@ -337,9 +337,9 @@ model AccountHistoryKey {
   version          Int
   publicKey        String
   algorithm        String
-  escrowEnc        String
-  escrowCiphertext String
-  escrowAlgorithm  String
+  escrowEnc        String?
+  escrowCiphertext String?
+  escrowAlgorithm  String?
   createdAt        DateTime                @default(now())
   historyWraps     GroupEpochHistoryWrap[]
 

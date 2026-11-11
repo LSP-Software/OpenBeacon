@@ -105,7 +105,12 @@ const newHistoryKey = (target: Account, version: number) => {
 
 const setupPhrase = async (target: Account) => {
   const next = newHistoryKey(target, 1);
-  await caller(target.userId).accountRecovery.setup(next.input);
+  const { escrow, ...historyKey } = next.input.historyKey;
+  await prisma.accountHistoryKey.create({ data: { ...historyKey, userId: target.userId } });
+  await caller(target.userId).accountRecovery.setup({
+    escrows: [{ ...escrow, version: historyKey.version }],
+    recoveryKey: next.input.recoveryKey,
+  });
   next.apply();
 };
 

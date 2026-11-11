@@ -115,7 +115,19 @@ const recoveryKeyInput = (phrase: ReturnType<typeof generateRecoveryPhrase>) => 
 const setUpRecovery = async ({ caller, userId }: Awaited<ReturnType<typeof createAccount>>) => {
   const phrase = generateRecoveryPhrase();
   const historyKey = historyKeyInput(phrase, userId);
-  await caller.accountRecovery.setup({ historyKey, recoveryKey: recoveryKeyInput(phrase) });
+  await prisma.accountHistoryKey.create({
+    data: {
+      algorithm: historyKey.algorithm,
+      id: historyKey.id,
+      publicKey: historyKey.publicKey,
+      userId,
+      version: historyKey.version,
+    },
+  });
+  await caller.accountRecovery.setup({
+    escrows: [{ ...historyKey.escrow, version: historyKey.version }],
+    recoveryKey: recoveryKeyInput(phrase),
+  });
   return historyKey;
 };
 

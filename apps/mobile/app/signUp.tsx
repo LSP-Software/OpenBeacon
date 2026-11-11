@@ -24,7 +24,7 @@ import { signUpFormSchema } from "../lib/signUpSchema.ts";
 
 const SignUp = () => {
   const { joinCode } = useLocalSearchParams<{ joinCode?: string }>();
-  const finishSignUp = () => finishAuthentication({ joinCode });
+  const finishSignUp = () => finishAuthentication({ joinCode, newAccount: true });
   const [emailLoading, setEmailLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const {

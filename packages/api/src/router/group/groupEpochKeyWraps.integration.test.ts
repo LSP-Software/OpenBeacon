@@ -6,11 +6,8 @@ import {
   createHistoryKeyPair,
   createInitialGroupEpoch,
   createNextGroupEpoch,
-  deriveRecoveryKeyPair,
-  generateRecoveryPhrase,
   type HistoryPrivateKeyMaterial,
   type HistoryPublicKey,
-  sealHistoryKeyEscrow,
   unwrapEpochKey,
   unwrapHistoryEpochKey,
   wrapEpochKeyForHistoryKey,
@@ -209,30 +206,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       epochs.first = await createGroup(groupId);
       epochs.second = await join(groupId, member);
       for (const item of accounts) {
-        const recoveryKey = deriveRecoveryKeyPair(generateRecoveryPhrase());
         const historyKey = createHistoryKeyPair();
         item.historyKey = {
           id: crypto.randomUUID(),
           privateKey: historyKey.privateKey,
           publicKey: historyKey.publicKey,
         };
-        await caller(item.userId).accountRecovery.setup({
-          historyKey: {
+        await prisma.accountHistoryKey.create({
+          data: {
             algorithm: historyKey.algorithm,
-            escrow: sealHistoryKeyEscrow({
-              historyPrivateKey: historyKey.privateKey,
-              recoveryPrivateKey: recoveryKey.privateKey,
-              userId: item.userId,
-              version: 1,
-            }),
             id: item.historyKey.id,
             publicKey: historyKey.publicKey,
+            userId: item.userId,
             version: 1,
-          },
-          recoveryKey: {
-            algorithm: recoveryKey.algorithm,
-            derivationVersion: recoveryKey.derivationVersion,
-            publicKey: recoveryKey.publicKey,
           },
         });
       }

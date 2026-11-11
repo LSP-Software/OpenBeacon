@@ -22,6 +22,7 @@ import {
 import { holdRowLock } from "../../lib/databaseLocks.testUtil.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { accountRecoveryRouter } from "../accountRecoveryRouter.ts";
+import { accountHistoryRouter } from "../accountHistoryRouter.ts";
 import { authRouter } from "../authRouter.ts";
 import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
@@ -31,6 +32,7 @@ import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 setDefaultTimeout(60_000);
 
 const router = createTRPCRouter({
+  accountHistory: accountHistoryRouter,
   accountRecovery: accountRecoveryRouter,
   auth: authRouter,
   groupEpoch: groupEpochRouter,
@@ -236,27 +238,32 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       epochs.other = await join(otherGroupId, member);
       await createGroup(soloGroupId, owner);
       for (const item of accounts) {
-        const phrase = generateRecoveryPhrase();
-        const recoveryKey = deriveRecoveryKeyPair(phrase);
         const historyKey = createHistoryKeyPair();
         item.historyKey = {
           id: crypto.randomUUID(),
           privateKey: historyKey.privateKey,
           publicKey: historyKey.publicKey,
         };
+        await caller(item.userId).accountHistory.create({
+          algorithm: historyKey.algorithm,
+          id: item.historyKey.id,
+          publicKey: historyKey.publicKey,
+        });
+      }
+      for (const item of [member, other]) {
+        const recoveryKey = deriveRecoveryKeyPair(generateRecoveryPhrase());
         await caller(item.userId).accountRecovery.setup({
-          historyKey: {
-            algorithm: historyKey.algorithm,
-            escrow: sealHistoryKeyEscrow({
-              historyPrivateKey: historyKey.privateKey,
-              recoveryPrivateKey: recoveryKey.privateKey,
-              userId: item.userId,
+          escrows: [
+            {
+              ...sealHistoryKeyEscrow({
+                historyPrivateKey: item.historyKey.privateKey,
+                recoveryPrivateKey: recoveryKey.privateKey,
+                userId: item.userId,
+                version: 1,
+              }),
               version: 1,
-            }),
-            id: item.historyKey.id,
-            publicKey: historyKey.publicKey,
-            version: 1,
-          },
+            },
+          ],
           recoveryKey: {
             algorithm: recoveryKey.algorithm,
             derivationVersion: recoveryKey.derivationVersion,
@@ -284,7 +291,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       );
     });
 
-    test("backfill offers only entitled epochs and wraps are stored idempotently", async () => {
+    test("backfill offers only entitled epochs and wraps are stored idempotently, with or without an escrow", async () => {
+      expect(
+        await prisma.accountHistoryKey.findMany({
+          select: { escrowCiphertext: true, userId: true },
+          where: { userId: { in: [owner.userId, member.userId] } },
+        }),
+      ).toEqual(
+        expect.arrayContaining([
+          { escrowCiphertext: null, userId: owner.userId },
+          { escrowCiphertext: expect.any(String), userId: member.userId },
+        ]),
+      );
       expect(await backfillEpochNumbers(owner)).toEqual([1, 2, 3]);
       expect(await backfillEpochNumbers(owner, groupId, 1)).toEqual([2, 3]);
       expect(await backfillEpochNumbers(member)).toEqual([2, 3]);

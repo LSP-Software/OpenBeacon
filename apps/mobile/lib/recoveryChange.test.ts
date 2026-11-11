@@ -20,6 +20,7 @@ import {
 import { expectNoSecretsIn } from "../test/secretLeaks.testUtil.ts";
 import {
   changeRecoveryPhraseSchema,
+  createAccountHistoryKeySchema,
   resetAccountRecoverySchema,
   setupAccountRecoverySchema,
 } from "@openbeacon/schemas";
@@ -49,7 +50,7 @@ type ServerEpoch = {
 };
 
 type ServerHistoryKey = {
-  escrow: HistoryKeyEscrow;
+  escrow: HistoryKeyEscrow | null;
   id: string;
   publicKey: string;
   version: number;
@@ -72,6 +73,11 @@ const trpcError = (code: string, jsonRpcCode: number) =>
 
 const currentHistoryKey = () => historyKeys.at(-1) ?? null;
 
+const escrowOf = (row: ServerHistoryKey) => {
+  if (!row.escrow) throw new Error(`v${row.version} has no escrow`);
+  return row.escrow;
+};
+
 const statusMock = mock(async (input?: unknown) => {
   serverInputs.push(input);
   const current = currentHistoryKey();
@@ -81,6 +87,7 @@ const statusMock = mock(async (input?: unknown) => {
       publicKey: current.publicKey,
       version: current.version,
     },
+    historyKeys: historyKeys.map(({ publicKey, version }) => ({ publicKey, version })),
     historyKeyVersions: historyKeys.map(({ version }) => version),
     recoveryKey,
   };
@@ -88,15 +95,30 @@ const statusMock = mock(async (input?: unknown) => {
 
 const escrowsMock = mock(async (input?: unknown) => {
   serverInputs.push(input);
-  return historyKeys.map((row) => ({ ...row, userId }));
+  return historyKeys.flatMap(({ escrow, ...row }) => (escrow ? [{ ...row, escrow, userId }] : []));
+});
+
+const createHistoryKeyMock = mock(async (input: unknown) => {
+  serverInputs.push(input);
+  const parsed = createAccountHistoryKeySchema.parse(input);
+  if (historyKeys.length > 0) throw trpcError("CONFLICT", -32009);
+  historyKeys = [{ escrow: null, id: parsed.id, publicKey: parsed.publicKey, version: 1 }];
+  return { historyKeyVersion: 1 };
 });
 
 const setupMock = mock(async (input: unknown) => {
   serverInputs.push(input);
   const parsed = setupAccountRecoverySchema.parse(input);
+  const escrowVersions = parsed.escrows.map(({ version }) => version).sort((a, b) => a - b);
+  if (recoveryKey || escrowVersions.join() !== historyKeys.map(({ version }) => version).join()) {
+    throw trpcError("CONFLICT", -32009);
+  }
   recoveryKey = parsed.recoveryKey;
-  historyKeys = [parsed.historyKey];
-  return { historyKeyVersion: parsed.historyKey.version };
+  for (const { version, ...escrow } of parsed.escrows) {
+    const row = historyKeys.find((historyKey) => historyKey.version === version);
+    if (row) row.escrow = escrow;
+  }
+  return { historyKeyVersions: escrowVersions };
 });
 
 const changePhraseMock = mock(async (input: unknown) => {
@@ -184,6 +206,7 @@ const listGroupsMock = mock(async (input?: unknown) => {
 
 mock.module("./api.ts", () => ({
   trpcClient: {
+    accountHistory: { create: { mutate: createHistoryKeyMock } },
     accountRecovery: {
       changePhrase: { mutate: changePhraseMock },
       escrows: { query: escrowsMock },
@@ -222,6 +245,11 @@ mock.module("./historyKeys.ts", () => ({
       throw new Error("SecureStore unavailable");
     }
     phone.secureStore.set(`${input.userId}.${input.version}`, input.privateKey);
+  },
+  deleteStoredHistoryKeys: async (input: { userId: string; upToVersion: number }) => {
+    for (let version = 1; version <= input.upToVersion; version += 1) {
+      phone.secureStore.delete(`${input.userId}.${version}`);
+    }
   },
 }));
 
@@ -399,7 +427,7 @@ describe("changeRecoveryPhrase", () => {
       publicKey,
       version,
     }));
-    const escrowsBefore = historyKeys.map(({ escrow }) => escrow.enc);
+    const escrowsBefore = historyKeys.map((row) => escrowOf(row).enc);
     const newPhrase = generateRecoveryPhrase();
 
     expect(await changeRecoveryPhrase(newPhrase)).toEqual({ status: "changed", versions: [1, 2] });
@@ -409,16 +437,16 @@ describe("changeRecoveryPhrase", () => {
       keysBefore,
     );
     for (const [index, row] of historyKeys.entries()) {
-      expect(row.escrow.enc).not.toBe(escrowsBefore[index]);
+      expect(escrowOf(row).enc).not.toBe(escrowsBefore[index]);
       const opened = openHistoryKeyEscrow({
-        escrow: row.escrow,
+        escrow: escrowOf(row),
         historyKey: { publicKey: row.publicKey, userId, version: row.version },
         recoveryPrivateKey: deriveRecoveryKeyPair(newPhrase).privateKey,
       });
       expect(encodeBase64(opened.expose())).toBe(storedKey(enrolledPhone, row.version));
       expect(() =>
         openHistoryKeyEscrow({
-          escrow: row.escrow,
+          escrow: escrowOf(row),
           historyKey: { publicKey: row.publicKey, userId, version: row.version },
           recoveryPrivateKey: deriveRecoveryKeyPair(oldPhrase).privateKey,
         }),
@@ -558,7 +586,7 @@ describe("resetRecoveryPhrase", () => {
     expect(historyKeys.map(({ version }) => version)).toEqual([3]);
     const [row] = historyKeys as [ServerHistoryKey];
     const opened = openHistoryKeyEscrow({
-      escrow: row.escrow,
+      escrow: escrowOf(row),
       historyKey: { publicKey: row.publicKey, userId, version: 3 },
       recoveryPrivateKey: deriveRecoveryKeyPair(newPhrase).privateKey,
     });

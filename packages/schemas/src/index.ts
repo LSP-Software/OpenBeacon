@@ -14,6 +14,7 @@ import { signUpSchema } from "./schemas/account/signUp.ts";
 import {
   addHistoryWrapsSchema,
   changeRecoveryPhraseSchema,
+  createAccountHistoryKeySchema,
   resetAccountRecoverySchema,
   setupAccountRecoverySchema,
 } from "./schemas/auth/accountRecovery.ts";
@@ -50,6 +51,7 @@ export {
   addHistoryWrapsSchema,
   changePasswordSchema,
   changeRecoveryPhraseSchema,
+  createAccountHistoryKeySchema,
   createGroupSchema,
   emailCodeSchema,
   FEEDBACK_MESSAGE_MAX_LENGTH,

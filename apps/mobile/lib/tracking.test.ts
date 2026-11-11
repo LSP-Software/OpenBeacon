@@ -93,6 +93,9 @@ let recoveryStatus: {
 let recoveryStatusError: Error | null = null;
 let recoveryStatusCalls = 0;
 const storedHistoryKeyVersions = new Set([1]);
+let createHistoryKeyResult: boolean | Error = true;
+let createHistoryKeyCalls = 0;
+const resealedUsers: string[] = [];
 let backfillErrors = new Map<string, Error>();
 let missingHistoryWraps = new Map<string, string[]>();
 const backfillQueries: string[] = [];
@@ -163,6 +166,31 @@ mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async ({ userId, version }: { userId: string; version: number }) =>
     userId === "user-1" && storedHistoryKeyVersions.has(version) ? historyKeyPair.privateKey : null,
   storeHistoryKey: async () => {},
+}));
+
+mock.module("./createHistoryKey.ts", () => ({
+  KEY_NOT_SAVED_MESSAGE: "Unable to save your keys on this phone.",
+  createHistoryKey: async () => {
+    createHistoryKeyCalls += 1;
+    if (createHistoryKeyResult instanceof Error) throw createHistoryKeyResult;
+    if (createHistoryKeyResult) storedHistoryKeyVersions.add(1);
+    recoveryStatus = {
+      currentHistoryKey: {
+        publicKey: createHistoryKeyResult
+          ? historyKeyPair.publicKey
+          : createHistoryKeyPair().publicKey,
+        version: 1,
+      },
+      recoveryKey: null,
+    };
+    return createHistoryKeyResult;
+  },
+}));
+
+mock.module("./resealPersonalData.ts", () => ({
+  resealPersonalData: async (userId: string) => {
+    resealedUsers.push(userId);
+  },
 }));
 
 mock.module("./base-url.ts", () => ({ baseUrl: "https://api.example.test" }));
@@ -490,6 +518,9 @@ describe("tracking service", () => {
     compatibilityNoticeClears = 0;
     storedHistoryKeyVersions.clear();
     storedHistoryKeyVersions.add(1);
+    createHistoryKeyResult = true;
+    createHistoryKeyCalls = 0;
+    resealedUsers.length = 0;
     ownerContextCalls = 0;
     ownerQueryGate = null;
     unassignedCount = 0;
@@ -979,13 +1010,70 @@ describe("tracking service", () => {
     expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
   });
 
-  test("skips every backfill call when the account has no recovery phrase", async () => {
+  test("an account with no history key gets v1 from this phone, which backfills and re-seals", async () => {
     recoveryStatus = { currentHistoryKey: null, recoveryKey: null };
+    storedHistoryKeyVersions.clear();
+    missingHistoryWraps.set("group-1", ["epoch-1"]);
+
     await reconcileTrackingKeys({ startCapture: true });
+
+    expect(createHistoryKeyCalls).toBe(1);
+    expect(startCaptureCalls).toBe(1);
+    const wrap = historyWrapUploads[0]?.wraps[0];
+    if (!wrap) throw new Error("Missing history wrap");
+    expect(
+      encodeBase64(
+        unwrapHistoryEpochKey({
+          epochId: "epoch-1",
+          historyKeyVersion: 1,
+          historyPrivateKey: historyKeyPair.privateKey,
+          userId: "user-1",
+          wrappedEpochKey: wrap,
+        }).expose(),
+      ),
+    ).toBe(encodeBase64(epochKey1.expose()));
+    expect(resealedUsers).toEqual(["user-1"]);
+  });
+
+  test("without capture, a phone with no history key on the account still creates it", async () => {
+    recoveryStatus = { currentHistoryKey: null, recoveryKey: null };
+    storedHistoryKeyVersions.clear();
+
     await reconcileTrackingKeys({ startCapture: false });
 
-    expect(backfillQueries).toEqual([]);
+    expect(createHistoryKeyCalls).toBe(1);
+    expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
+    expect(resealedUsers).toEqual(["user-1"]);
+  });
+
+  test("a phone that loses the race to create the history key keeps sharing without it", async () => {
+    recoveryStatus = { currentHistoryKey: null, recoveryKey: null };
+    storedHistoryKeyVersions.clear();
+    createHistoryKeyResult = false;
+
+    await reconcileTrackingKeys({ startCapture: true });
     expect(startCaptureCalls).toBe(1);
+    await reconcileTrackingKeys({ startCapture: true, force: true });
+
+    expect(createHistoryKeyCalls).toBe(1);
+    expect(backfillQueries).toEqual([]);
+    expect(resealedUsers).toEqual([]);
+  });
+
+  test("a failed history key create keeps sharing and is retried on the next reconcile", async () => {
+    recoveryStatus = { currentHistoryKey: null, recoveryKey: null };
+    storedHistoryKeyVersions.clear();
+    createHistoryKeyResult = new Error("offline");
+
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(startCaptureCalls).toBe(1);
+    expect(backfillQueries).toEqual([]);
+
+    createHistoryKeyResult = true;
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(createHistoryKeyCalls).toBe(2);
+    expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
   });
 
   test("skips every backfill call when this phone doesn't hold the current history key", async () => {

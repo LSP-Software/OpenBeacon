@@ -9,11 +9,12 @@ import {
   sealHistoryKeyEscrow,
   wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
-import type { setupAccountRecoverySchema } from "@openbeacon/schemas";
+import type { resetAccountRecoverySchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
 import type z from "zod";
 import { trpcClient } from "./api.ts";
+import { createHistoryKey, KEY_NOT_SAVED_MESSAGE } from "./createHistoryKey.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { type EpochKeyDevice, unwrapDeviceWrap } from "./epochKeys.ts";
@@ -46,6 +47,13 @@ export const confirmsRecoveryPhrase = ({
 const hasTrpcCode = (error: unknown, code: string) =>
   error instanceof TRPCClientError && error.data?.code === code;
 
+const recoveryKeyInput = (recoveryKey: ReturnType<typeof deriveRecoveryKeyPair>) =>
+  ({
+    algorithm: recoveryKey.algorithm,
+    derivationVersion: RECOVERY_KEY_DERIVATION_VERSION,
+    publicKey: recoveryKey.publicKey,
+  }) as const;
+
 const createRecoveryKeys = ({
   phrase,
   userId,
@@ -57,7 +65,7 @@ const createRecoveryKeys = ({
 }) => {
   const recoveryKey = deriveRecoveryKeyPair(phrase);
   const historyKey = createHistoryKeyPair();
-  const input: z.infer<typeof setupAccountRecoverySchema> = {
+  const input: Pick<z.infer<typeof resetAccountRecoverySchema>, "historyKey" | "recoveryKey"> = {
     historyKey: {
       algorithm: historyKey.algorithm,
       escrow: sealHistoryKeyEscrow({
@@ -70,38 +78,86 @@ const createRecoveryKeys = ({
       publicKey: historyKey.publicKey,
       version,
     },
-    recoveryKey: {
-      algorithm: recoveryKey.algorithm,
-      derivationVersion: RECOVERY_KEY_DERIVATION_VERSION,
-      publicKey: recoveryKey.publicKey,
-    },
+    recoveryKey: recoveryKeyInput(recoveryKey),
   };
   return { historyPrivateKey: historyKey.privateKey, input };
 };
 
+export const HISTORY_KEY_ON_OTHER_DEVICE_MESSAGE =
+  "This phone doesn't have your account's history key yet. Set up your recovery phrase on your other phone.";
+export const SETUP_KEYS_MISMATCH_MESSAGE =
+  "This phone's saved keys don't match your account, so your phrase wasn't set up.";
+
+const sealEscrowsForHeldKeys = async ({
+  historyKeys,
+  messages,
+  recoveryKey,
+  userId,
+}: {
+  historyKeys: { publicKey: string; version: number }[];
+  messages: { missing: string; mismatch: string };
+  recoveryKey: ReturnType<typeof deriveRecoveryKeyPair>;
+  userId: string;
+}) => {
+  const escrows = [];
+  for (const { publicKey, version } of historyKeys) {
+    const historyPrivateKey = await getStoredHistoryKey({ userId, version });
+    if (!historyPrivateKey) throw new Error(messages.missing);
+    if (getHistoryPublicKey(historyPrivateKey) !== publicKey) throw new Error(messages.mismatch);
+    escrows.push({
+      ...sealHistoryKeyEscrow({
+        historyPrivateKey,
+        recoveryPrivateKey: recoveryKey.privateKey,
+        userId,
+        version,
+      }),
+      version,
+    });
+  }
+  return escrows;
+};
+
 export const setUpRecoveryPhrase = async (phrase: RecoveryPhrase) => {
   const device = await ensureDeviceKeyRegistration();
-  const version = 1;
-  const { historyPrivateKey, input } = createRecoveryKeys({
-    phrase,
+  const recoveryKey = deriveRecoveryKeyPair(phrase);
+  let status = await trpcClient.accountRecovery.status.query();
+  if (!status.recoveryKey && status.historyKeys.length === 0) {
+    await createHistoryKey(device.userId);
+    status = await trpcClient.accountRecovery.status.query();
+  }
+  if (status.recoveryKey) {
+    if (status.recoveryKey.publicKey !== recoveryKey.publicKey) {
+      return { status: "conflict" as const };
+    }
+    await restoreFromRecoveryPhrase(phrase);
+    return { device, status: "created" as const };
+  }
+  const escrows = await sealEscrowsForHeldKeys({
+    historyKeys: status.historyKeys,
+    messages: {
+      mismatch: SETUP_KEYS_MISMATCH_MESSAGE,
+      missing: HISTORY_KEY_ON_OTHER_DEVICE_MESSAGE,
+    },
+    recoveryKey,
     userId: device.userId,
-    version,
   });
-  const result = await tryCatch(trpcClient.accountRecovery.setup.mutate(input));
+  const result = await tryCatch(
+    trpcClient.accountRecovery.setup.mutate({
+      escrows,
+      recoveryKey: recoveryKeyInput(recoveryKey),
+    }),
+  );
   if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };
   if (hasTrpcCode(result.error, "CONFLICT")) {
-    const status = await trpcClient.accountRecovery.status.query();
-    if (status.recoveryKey?.publicKey !== input.recoveryKey.publicKey) {
+    const latest = await trpcClient.accountRecovery.status.query();
+    if (!latest.recoveryKey) throw new Error(RECOVERY_CHANGED_MESSAGE);
+    if (latest.recoveryKey.publicKey !== recoveryKey.publicKey) {
       return { status: "conflict" as const };
     }
     await restoreFromRecoveryPhrase(phrase);
     return { device, status: "created" as const };
   }
   if (result.error) throw result.error;
-  const stored = await tryCatch(
-    storeHistoryKey({ privateKey: historyPrivateKey, userId: device.userId, version }),
-  );
-  if (stored.error) return { device, status: "unsaved" as const };
   return { device, status: "created" as const };
 };
 
@@ -206,9 +262,7 @@ export const restoreFromRecoveryPhrase = async (phrase: RecoveryPhrase) => {
       ),
     ),
   );
-  if (stored.error) {
-    throw new Error("Unable to save your keys on this phone. Unlock your phone and try again.");
-  }
+  if (stored.error) throw new Error(KEY_NOT_SAVED_MESSAGE);
   return { userId: device.userId, versions };
 };
 
@@ -224,31 +278,16 @@ export const changeRecoveryPhrase = async (phrase: RecoveryPhrase) => {
   const currentEscrows = await trpcClient.accountRecovery.escrows.query();
   if (currentEscrows.length === 0) throw new Error(RECOVERY_CHANGED_MESSAGE);
   const recoveryKey = deriveRecoveryKeyPair(phrase);
-  const escrows = [];
-  for (const { publicKey, version } of currentEscrows) {
-    const historyPrivateKey = await getStoredHistoryKey({ userId: device.userId, version });
-    if (!historyPrivateKey) throw new Error(MISSING_HISTORY_KEYS_MESSAGE);
-    if (getHistoryPublicKey(historyPrivateKey) !== publicKey) {
-      throw new Error(HISTORY_KEYS_MISMATCH_MESSAGE);
-    }
-    escrows.push({
-      ...sealHistoryKeyEscrow({
-        historyPrivateKey,
-        recoveryPrivateKey: recoveryKey.privateKey,
-        userId: device.userId,
-        version,
-      }),
-      version,
-    });
-  }
+  const escrows = await sealEscrowsForHeldKeys({
+    historyKeys: currentEscrows,
+    messages: { mismatch: HISTORY_KEYS_MISMATCH_MESSAGE, missing: MISSING_HISTORY_KEYS_MESSAGE },
+    recoveryKey,
+    userId: device.userId,
+  });
   const result = await tryCatch(
     trpcClient.accountRecovery.changePhrase.mutate({
       escrows,
-      recoveryKey: {
-        algorithm: recoveryKey.algorithm,
-        derivationVersion: RECOVERY_KEY_DERIVATION_VERSION,
-        publicKey: recoveryKey.publicKey,
-      },
+      recoveryKey: recoveryKeyInput(recoveryKey),
     }),
   );
   if (hasTrpcCode(result.error, "FORBIDDEN")) return { status: "reauthenticate" as const };

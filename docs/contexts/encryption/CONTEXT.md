@@ -37,15 +37,15 @@ The key pair derived from the Recovery phrase. It only protects Recovery escrows
 _Avoid_: Account key, master key, seed key
 
 **History key**:
-A random key pair per account that protects History wraps and personal data. An account can hold several numbered versions; the highest is the current one.
+A random key pair per account that protects History wraps and personal data. Every account gets one when it's created, whether or not it has a Recovery phrase. An account can hold several numbered versions; the highest is the current one.
 _Avoid_: Account key, account private key, recovery key, archive key
 
 **Recovery escrow**:
-One History key version's private key encrypted to and authenticated by the Recovery key, and stored on the server.
+One History key version's private key encrypted to and authenticated by the Recovery key, and stored on the server. Only accounts with a Recovery phrase have them. A History key version without one can't be Restored.
 _Avoid_: Backup, key backup, escrowed key, recovery blob
 
 **Enrolled device**:
-A device that holds the account's current History key.
+A device that holds the account's current History key, because it created that key or Restored it.
 _Avoid_: Trusted device, approved device, verified device, primary device
 
 **Backfill**:
@@ -53,7 +53,7 @@ An Enrolled device adding History wraps, to the current History key it holds, fo
 _Avoid_: Sync, migration, re-wrap
 
 **Restore**:
-Getting every History key version onto a device by entering the Recovery phrase.
+Getting every History key version that has a Recovery escrow onto a device by entering the Recovery phrase.
 _Avoid_: Recover, import, sync
 
 **Phrase change**:
@@ -75,3 +75,4 @@ _Avoid_: Private data, profile data, settings
 - User-facing text says "phone" (or "device") for a device and "the group's encryption key" for an Epoch key.
 - "Identity key" is reserved for the phrase-derived signing key planned in OPE-213. Don't use it for Device keys or the Recovery key.
 - See [ADR 0001](../../adr/0001-random-history-key-separate-from-recovery-key.md) for why the History key is random rather than derived from the Recovery phrase.
+- See [ADR 0002](../../adr/0002-every-account-has-a-history-key.md) for why every account has a History key, and the Recovery phrase is an optional escrow of it.
