@@ -29,7 +29,8 @@ const alerts: { title: string; message: string; buttons: AlertButton[] }[] = [];
 
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("expo-router", () => ({
-  Link: View,
+  Link: ({ children, href }: { children?: React.ReactNode; href: unknown }) =>
+    React.createElement("mock-link", { href }, children),
   router: { replace },
   useFocusEffect: (callback: () => void) => useEffect(() => callback(), [callback]),
 }));
@@ -39,12 +40,24 @@ mock.module("@tanstack/react-query", () => ({
       ? { ...deviceStatus, isPending: !deviceStatus.data, refetch: refetchDeviceStatus }
       : { data: { recoveryKey }, isError: false, isPending: false },
 }));
-mock.module("react-native", () => ({ ScrollView: View, View }));
+mock.module("react-native", () => ({
+  Pressable: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) =>
+    React.createElement("mock-pressable", { onPress }, children),
+  ScrollView: View,
+  View,
+}));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
 mock.module("../components/ui/Button.tsx", () => ({
-  Button: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) =>
-    React.createElement("mock-button", { onPress }, children),
+  Button: ({
+    children,
+    disabled,
+    onPress,
+  }: {
+    children?: React.ReactNode;
+    disabled?: boolean;
+    onPress?: () => void;
+  }) => React.createElement("mock-button", { disabled, onPress }, children),
 }));
 mock.module("../components/ui/Text.tsx", () => ({ Text: View }));
 mock.module("../lib/api.ts", () => ({
@@ -107,9 +120,19 @@ const cancelSetup = async () => {
   await pressAlertButton("Cancel and remove");
 };
 
+const findByText = (type: string, text: string) => {
+  const item = root?.container
+    .queryAll((candidate) => candidate.type === type)
+    .find((candidate) => JSON.stringify(candidate.children).includes(text));
+  if (!item) throw new Error(`Missing ${type} ${text}`);
+  return item;
+};
+
+const continueHref = () => findByText("mock-link", "Continue").props["href"];
+
 const shownText = () => JSON.stringify(root?.container.toJSON() ?? null);
 
-const linkOptions = ["Yes, link with your other device", "Create a phrase on your other device"];
+const linkOptions = ["Link with your other device", "Create a phrase on your other device"];
 
 beforeEach(() => {
   deviceActive = false;
@@ -256,7 +279,7 @@ test("setup no longer offers a plain sign out", async () => {
 test("hides linking when no other phone on the account is active", async () => {
   deviceStatus = { data: { accountHasActiveDevice: false }, isError: false };
   await render();
-  expect(shownText()).not.toContain("Yes, link with your other device");
+  expect(shownText()).not.toContain("Link with your other device");
   expect(shownText()).toContain("None of your other devices are signed in");
   expect(shownText()).toContain("Enter your recovery phrase");
   expect(shownText()).toContain("I’ve lost my phrase");
@@ -307,4 +330,39 @@ test("an invite isn't forgotten when the server can't be reached to cancel", asy
   await render();
   await cancelSetup();
   expect(clearPendingJoinCodes).not.toHaveBeenCalled();
+});
+
+test("with a phrase and another active phone, offers linking, the phrase, and losing it", async () => {
+  await render();
+  expect(shownText()).toContain("Link with your other device");
+  expect(shownText()).toContain("Enter your recovery phrase");
+  expect(shownText()).toContain("I’ve lost my phrase");
+  expect(shownText()).not.toContain("Create a phrase on your other device");
+});
+
+test("Continue goes to the first option until another is chosen", async () => {
+  await render();
+  expect(continueHref()).toBe("/setup/link");
+  const reset = findByText("mock-pressable", "I’ve lost my phrase");
+  await act(async () => (reset.props as { onPress: () => void }).onPress());
+  expect(continueHref()).toEqual({
+    pathname: "/account/recovery-reset",
+    params: { setup: "true" },
+  });
+});
+
+test("Continue can't be pressed while cancelling", async () => {
+  let finish = () => {};
+  signOutGate = new Promise((resolve) => {
+    finish = resolve;
+  });
+  await render();
+  expect(findByText("mock-button", "Continue").props["disabled"]).toBe(false);
+  await pressCancel();
+  const confirm = alerts.at(-1)?.buttons.find(({ text }) => text === "Cancel and remove");
+  await act(async () => {
+    confirm?.onPress?.();
+  });
+  expect(findByText("mock-button", "Continue").props["disabled"]).toBe(true);
+  await act(async () => finish());
 });

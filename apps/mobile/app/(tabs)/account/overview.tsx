@@ -6,10 +6,10 @@ import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, router } from "expo-router";
 import {
-  AlertCircleIcon,
   BellIcon,
   CameraIcon,
   HelpCircleIcon,
+  HistoryIcon,
   InfoIcon,
   KeyRoundIcon,
   LockIcon,
@@ -18,6 +18,7 @@ import {
   SmartphoneIcon,
   SunIcon,
   Trash2Icon,
+  type LucideIcon,
 } from "lucide-react-native";
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -121,6 +122,42 @@ const categories = [
 ];
 
 const schema = z.object({ name: accountNameSchema });
+
+const PromptCard = ({
+  icon,
+  tone,
+  title,
+  description,
+  children,
+}: {
+  icon: LucideIcon;
+  tone: "primary" | "warning";
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) => (
+  <Card>
+    <CardHeader className="flex flex-row items-start gap-3">
+      <View
+        className={`size-10 items-center justify-center rounded-full ${tone === "warning" ? "bg-warning-accent/15" : "bg-primary/10"}`}
+      >
+        <Icon
+          as={icon}
+          className={`size-5 ${tone === "warning" ? "text-warning-accent" : "text-primary"}`}
+        />
+      </View>
+      <View className="flex-1 gap-1.5">
+        <CardTitle>
+          <Text>{title}</Text>
+        </CardTitle>
+        <CardDescription>
+          <Text className="text-muted-foreground">{description}</Text>
+        </CardDescription>
+      </View>
+    </CardHeader>
+    <CardContent className="flex flex-row gap-3">{children}</CardContent>
+  </Card>
+);
 
 const AccountScreen = () => {
   const { data: session, refetch } = authClient.useSession();
@@ -353,106 +390,75 @@ const AccountScreen = () => {
           </View>
         </View>
         {permissionState?.shouldShowAccountWarning && (
-          <Card variant="warning">
-            <CardHeader className="flex flex-row items-start gap-2">
-              <Icon as={AlertCircleIcon} className="text-warning-accent size-6" />
-              <View>
-                <CardTitle>
-                  <Text className="text-primary-foreground">
-                    {getLocationPermissionWarningTitle(permissionState)}
-                  </Text>
-                </CardTitle>
-                <CardDescription>
-                  <Text className="text-muted">
-                    {getLocationPermissionWarningDescription(permissionState)}
-                  </Text>
-                </CardDescription>
-              </View>
-            </CardHeader>
-            <CardContent>
-              <Button size="sm" onPress={openLocationPermissionSettings}>
-                <Icon as={MapPinIcon} className="size-5 text-white" />
-                <Text>Grant Location Permissions</Text>
-              </Button>
-            </CardContent>
-          </Card>
+          <PromptCard
+            icon={MapPinIcon}
+            tone="warning"
+            title={getLocationPermissionWarningTitle(permissionState)}
+            description={getLocationPermissionWarningDescription(permissionState)}
+          >
+            <Button size="sm" onPress={openLocationPermissionSettings}>
+              <Text>Grant permissions</Text>
+            </Button>
+          </PromptCard>
         )}
 
         {showRecoveryPrompt && (
-          <Card>
-            <CardHeader className="flex flex-row items-start gap-2">
-              <Icon as={KeyRoundIcon} className="text-primary size-6" />
-              <View className="flex-1">
-                <CardTitle>
-                  <Text>Protect your location history</Text>
-                </CardTitle>
-                <CardDescription>
-                  <Text className="text-muted-foreground">
-                    Create a recovery phrase so you can read your history on a new phone.
-                  </Text>
-                </CardDescription>
-              </View>
-            </CardHeader>
-            <CardContent className="flex flex-row gap-3">
-              <Link href="/account/recovery-setup" asChild>
-                <Button size="sm">
-                  <Text>Create phrase</Text>
-                </Button>
-              </Link>
-              <Button
-                size="sm"
-                variant="outline"
-                onPress={() => {
-                  storage.set(recoveryPromptKey, true);
-                  setRecoveryPromptDismissed(true);
-                }}
-              >
-                <Text>Dismiss</Text>
+          <PromptCard
+            icon={KeyRoundIcon}
+            tone="primary"
+            title="Protect your location history"
+            description="Create a recovery phrase so you can read your history on a new phone."
+          >
+            <Link href="/account/recovery-setup" asChild>
+              <Button size="sm">
+                <Text>Create phrase</Text>
               </Button>
-            </CardContent>
-          </Card>
+            </Link>
+            <Button
+              size="sm"
+              variant="outline"
+              onPress={() => {
+                storage.set(recoveryPromptKey, true);
+                setRecoveryPromptDismissed(true);
+              }}
+            >
+              <Text>Dismiss</Text>
+            </Button>
+          </PromptCard>
         )}
 
         {showRestoreBanner && (
-          <Card>
-            <CardHeader className="flex flex-row items-start gap-2">
-              <Icon as={KeyRoundIcon} className="text-primary size-6" />
-              <View className="flex-1">
-                <CardTitle>
-                  <Text>Restore your history</Text>
-                </CardTitle>
-                <CardDescription>
-                  <Text className="text-muted-foreground">
-                    {heldHistoryKeyVersions.data?.length
-                      ? "Your recovery phrase was reset on another phone. Enter the new phrase to keep reading new history here."
-                      : "Enter your recovery phrase to read your location history on this phone."}
-                  </Text>
-                </CardDescription>
-              </View>
-            </CardHeader>
-            <CardContent className="flex flex-row gap-3">
-              <Link href="/account/recovery-restore" asChild>
-                <Button size="sm">
-                  <Text>Restore</Text>
-                </Button>
-              </Link>
-              <Button
-                size="sm"
-                variant="outline"
-                onPress={() => {
-                  if (session?.user.id) {
-                    dismissRestoreCard({
-                      userId: session.user.id,
-                      version: currentHistoryKeyVersion,
-                    });
-                  }
-                  setRestoreBannerDismissed(true);
-                }}
-              >
-                <Text>Dismiss</Text>
+          <PromptCard
+            icon={HistoryIcon}
+            tone="primary"
+            title="Restore your history"
+            description={
+              heldHistoryKeyVersions.data?.length
+                ? "Your recovery phrase was reset on another phone. Enter the new phrase to keep reading new history here."
+                : "Enter your recovery phrase to read your location history on this phone."
+            }
+          >
+            <Link href="/account/recovery-restore" asChild>
+              <Button size="sm">
+                <Text>Restore</Text>
               </Button>
-            </CardContent>
-          </Card>
+            </Link>
+            <Button
+              size="sm"
+              variant="outline"
+              onPress={() => {
+                if (session?.user.id) {
+                  dismissRestoreCard({
+                    userId: session.user.id,
+                    version: currentHistoryKeyVersion,
+                  });
+                }
+                setRestoreBannerDismissed(true);
+              }}
+            >
+              <Text>Dismiss</Text>
+            </Button>
+          </PromptCard>
         )}
 
         <SettingsContainer
