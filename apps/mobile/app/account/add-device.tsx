@@ -1,5 +1,6 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useQueryClient } from "@tanstack/react-query";
+import { TRPCClientError } from "@trpc/client";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
 import { useRef, useState } from "react";
@@ -45,10 +46,21 @@ const AddDeviceScreen = () => {
     setStep("scan");
   };
 
+  const codeNoLongerValid = (error: Error) =>
+    error instanceof TRPCClientError &&
+    (error.data?.code === "BAD_REQUEST" ||
+      error.data?.code === "NOT_FOUND" ||
+      error.data?.code === "CONFLICT");
+
   const approve = async () => {
     if (!link) return;
     setStep("approving");
     const result = await tryCatch(approveDeviceLink(link));
+    if (result.error && codeNoLongerValid(result.error)) {
+      scanAgain();
+      setProblem(result.error.message);
+      return;
+    }
     if (result.error) {
       setStep("confirm");
       Alert.alert(`Unable to add ${link.device.name}`, result.error.message);
@@ -62,6 +74,11 @@ const AddDeviceScreen = () => {
     if (!link) return;
     setStep("approving");
     const result = await tryCatch(trpcClient.deviceLink.decline.mutate({ linkId: link.linkId }));
+    if (result.error && codeNoLongerValid(result.error)) {
+      scanAgain();
+      setProblem(result.error.message);
+      return;
+    }
     if (result.error) {
       setStep("confirm");
       Alert.alert(`Unable to remove ${link.device.name}`, result.error.message);

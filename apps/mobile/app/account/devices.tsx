@@ -122,7 +122,7 @@ const DevicesScreen = () => {
       ) : devices.isError ? (
         <View className="flex-1 items-center justify-center gap-4 px-6">
           <Text className="text-muted-foreground text-center">
-            We couldn't load your devices. Check your connection and try again.
+            We couldn’t load your devices. Check your connection and try again.
           </Text>
           <Button variant="outline" onPress={() => devices.refetch()}>
             <Text>Try again</Text>

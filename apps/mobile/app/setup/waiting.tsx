@@ -55,7 +55,7 @@ const WaitingForPhraseScreen = () => {
           className="text-muted-foreground text-base leading-6"
         >
           {status.isError
-            ? "We can’t reach your server right now. We’ll keep trying."
+            ? "We can’t reach the server right now. We’ll keep trying."
             : "Waiting for your phrase. This phone moves on as soon as it’s ready."}
         </Text>
         <Link href={{ pathname: "/account/recovery-reset", params: { setup: "true" } }} asChild>

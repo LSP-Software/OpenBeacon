@@ -1,6 +1,6 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { router, Stack, useFocusEffect } from "expo-router";
+import { Link, router, Stack, useFocusEffect } from "expo-router";
 import { CheckIcon } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import { BackHandler, Pressable, ScrollView, View } from "react-native";
@@ -134,9 +134,11 @@ const RemoveOldDevicesScreen = () => {
         >
           <Text>{removing ? "Removing…" : "Remove ticked devices"}</Text>
         </Button>
-        <Button variant="outline" onPress={() => router.replace("/setup/name")} disabled={removing}>
-          <Text>Keep them all</Text>
-        </Button>
+        <Link href="/setup/name" replace asChild>
+          <Button variant="outline" disabled={removing}>
+            <Text>Keep them all</Text>
+          </Button>
+        </Link>
       </ScrollView>
     </SafeAreaView>
   );

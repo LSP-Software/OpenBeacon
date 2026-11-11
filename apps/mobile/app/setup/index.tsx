@@ -62,7 +62,7 @@ const SetUpPhoneScreen = () => {
         {status.isError && (
           <View className="gap-4">
             <Text className="text-muted-foreground text-base leading-6">
-              We couldn’t reach your server. Check your connection and try again.
+              We couldn’t reach the server. Check your connection and try again.
             </Text>
             <Button variant="outline" onPress={() => status.refetch()}>
               <Text>Try again</Text>

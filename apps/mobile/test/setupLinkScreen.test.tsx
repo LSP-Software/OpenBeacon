@@ -43,6 +43,12 @@ const finishDeviceLink = mock(
   }),
 );
 
+const ensureDeviceKeyRegistration = mock(async () => ({
+  deviceId: "device-new",
+  publicKey: "device-public-key",
+  userId: "user-1",
+}));
+
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("expo-router", () => ({
   Link: ({ children, href }: { children: React.ReactElement; href: string }) =>
@@ -121,13 +127,7 @@ mock.module("../lib/api.ts", () => ({
     },
   },
 }));
-mock.module("../lib/deviceKeys.ts", () => ({
-  ensureDeviceKeyRegistration: async () => ({
-    deviceId: "device-new",
-    publicKey: "device-public-key",
-    userId: "user-1",
-  }),
-}));
+mock.module("../lib/deviceKeys.ts", () => ({ ensureDeviceKeyRegistration }));
 mock.module("../lib/deviceActivation.ts", () => ({
   isThisDeviceActive: async () => deviceActive,
 }));
@@ -175,6 +175,7 @@ beforeEach(() => {
   replace.mockClear();
   createLink.mockClear();
   finishDeviceLink.mockClear();
+  ensureDeviceKeyRegistration.mockClear();
 });
 
 afterEach(async () => {
@@ -200,7 +201,7 @@ test("a network error after approval offers Try again with the same handover", a
   statusData = approvedStatus;
   await render();
 
-  expect(rendered()).toContain("We couldn’t reach your server");
+  expect(rendered()).toContain("We couldn’t reach the server");
   expect(rendered()).toContain("Try again");
   expect(rendered()).not.toContain("Continue");
   expect(queryOptions.enabled).toBe(false);
@@ -238,7 +239,7 @@ test("a phone that's already set up is told so instead of being told the server 
   await render();
 
   expect(rendered()).toContain("This phone is already set up.");
-  expect(rendered()).not.toContain("couldn’t reach your server");
+  expect(rendered()).not.toContain("couldn’t reach the server");
   await pressButton("Continue");
   expect(replace.mock.calls).toEqual([["/"]]);
 });
@@ -366,7 +367,7 @@ test("back is blocked only while the handover is being finished", async () => {
   expect(gestureEnabled).toBe(false);
 
   await act(async () => fail());
-  expect(rendered()).toContain("We couldn’t reach your server");
+  expect(rendered()).toContain("We couldn’t reach the server");
   expect(pressHardwareBack()).toBe(false);
   expect(gestureEnabled).toBe(true);
   expect(replace).not.toHaveBeenCalled();
@@ -409,7 +410,7 @@ test("a Pending phone that can't reach the server keeps showing its saved code",
   await relaunch();
 
   expect(shownCodes.at(-1)?.linkId).toBe("link-1");
-  expect(rendered()).toContain("We can’t reach your server right now. We’ll keep trying.");
+  expect(rendered()).toContain("We can’t reach the server right now. We’ll keep trying.");
 });
 
 test("no other signed-in phone shows the server's reason and goes back to the setup options", async () => {
@@ -422,7 +423,7 @@ test("no other signed-in phone shows the server's reason and goes back to the se
   await render();
 
   expect(rendered()).toContain(message);
-  expect(rendered()).not.toContain("couldn’t reach your server");
+  expect(rendered()).not.toContain("couldn’t reach the server");
   expect(rendered()).not.toContain("Try again");
   await pressButton("See other ways to set up");
   expect(replace.mock.calls).toEqual([["/setup"]]);
@@ -437,7 +438,7 @@ test("a server failure to create a code doesn't show the server's raw error", as
   await render();
 
   expect(rendered()).not.toContain("Server broke");
-  expect(rendered()).toContain("Something went wrong on your server. Try again.");
+  expect(rendered()).toContain("Something went wrong on the server. Try again.");
   await pressButton("Try again");
   expect(shownCodes.at(-1)?.linkId).toBe("link-2");
 });
@@ -463,5 +464,39 @@ test("a failure to create a code with no answer says the server can't be reached
   });
   await render();
 
-  expect(rendered()).toContain("We couldn’t reach your server");
+  expect(rendered()).toContain("We couldn’t reach the server");
+});
+
+test("a refused registration shows a server problem instead of saying the server can't be reached", async () => {
+  ensureDeviceKeyRegistration.mockImplementationOnce(async () => {
+    throw TRPCClientError.from({
+      error: { code: -32001, data: { code: "UNAUTHORIZED" }, message: "UNAUTHORIZED" },
+    });
+  });
+  await render();
+
+  expect(rendered()).not.toContain("couldn’t reach the server");
+  expect(rendered()).toContain("Something went wrong on the server. Try again.");
+});
+
+test("a registration with no answer says the server can't be reached", async () => {
+  ensureDeviceKeyRegistration.mockImplementationOnce(async () => {
+    throw new TRPCClientError("Network request failed");
+  });
+  await render();
+
+  expect(rendered()).toContain("We couldn’t reach the server");
+  await pressButton("Try again");
+  expect(shownCodes.at(-1)?.linkId).toBe("link-1");
+});
+
+test("a Pending phone whose status check is refused shows the reason, not that the server is unreachable", async () => {
+  await render();
+  statusError = TRPCClientError.from({
+    error: { code: -32029, data: { code: "TOO_MANY_REQUESTS" }, message: "Slow down." },
+  });
+  await relaunch();
+
+  expect(rendered()).toContain("Slow down.");
+  expect(rendered()).not.toContain("can’t reach the server");
 });

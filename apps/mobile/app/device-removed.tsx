@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { Link } from "expo-router";
 import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../components/ui/Button.tsx";
@@ -15,9 +15,11 @@ const DeviceRemovedScreen = () => (
         again, sign in and set it up. It’ll be added as a new device.
       </Text>
     </View>
-    <Button className="mb-8" onPress={() => router.replace("/")}>
-      <Text>Continue</Text>
-    </Button>
+    <Link href="/" replace asChild>
+      <Button className="mb-8">
+        <Text>Continue</Text>
+      </Button>
+    </Link>
   </SafeAreaView>
 );
 

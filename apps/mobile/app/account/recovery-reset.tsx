@@ -2,7 +2,7 @@ import { Alert } from "../../lib/alert.ts";
 import type { RecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { Link, router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
@@ -240,7 +240,7 @@ const RecoveryPhraseResetScreen = () => {
                   void refetchProviders();
                   Alert.alert(
                     "Unable to continue",
-                    "We couldn’t reach your server. Check your connection and try again.",
+                    "We couldn’t reach the server. Check your connection and try again.",
                   );
                 }}
                 disabled={!isResetConfirmed(confirmation) || providersPending}
@@ -302,17 +302,19 @@ const RecoveryPhraseResetScreen = () => {
                 Your new phrase is set up, but this phone couldn’t save its key. Restore with the
                 phrase you just wrote down.
               </Text>
-              <Button
-                onPress={() =>
-                  router.replace(
-                    setup
-                      ? { pathname: "/account/recovery-restore", params: { setup: "true" } }
-                      : "/account/recovery-restore",
-                  )
+              <Link
+                href={
+                  setup
+                    ? { pathname: "/account/recovery-restore", params: { setup: "true" } }
+                    : "/account/recovery-restore"
                 }
+                replace
+                asChild
               >
-                <Text>Restore with recovery phrase</Text>
-              </Button>
+                <Button>
+                  <Text>Restore with recovery phrase</Text>
+                </Button>
+              </Link>
             </View>
           )}
 

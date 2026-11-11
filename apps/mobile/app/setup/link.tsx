@@ -30,11 +30,9 @@ import {
 } from "../../lib/savedDeviceLink.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 
-const UNREACHABLE_MESSAGE = "We couldn’t reach your server. Check your connection and try again.";
-
 const problemMessage = (error: Error) => {
   if (!(error instanceof TRPCClientError)) return error.message;
-  if (!error.data) return UNREACHABLE_MESSAGE;
+  if (!error.data) return "We couldn’t reach the server. Check your connection and try again.";
   return [
     "BAD_REQUEST",
     "CONFLICT",
@@ -43,7 +41,7 @@ const problemMessage = (error: Error) => {
     "TOO_MANY_REQUESTS",
   ].includes(error.data.code)
     ? error.message
-    : "Something went wrong on your server. Try again.";
+    : "Something went wrong on the server. Try again.";
 };
 
 type Handover = Omit<Parameters<typeof finishDeviceLink>[0], "linkId" | "psk">;
@@ -119,7 +117,7 @@ const LinkWithOtherPhoneScreen = () => {
     setProblem(null);
     const device = await tryCatch(ensureDeviceKeyRegistration());
     if (device.error) {
-      setProblem({ message: UNREACHABLE_MESSAGE, action: "start" });
+      setProblem({ message: problemMessage(device.error), action: "start" });
       return;
     }
     const saved = await tryCatch(readSavedDeviceLink(device.data));
@@ -297,8 +295,9 @@ const LinkWithOtherPhoneScreen = () => {
         ) : link?.active && unreachable ? (
           <View className="gap-4">
             <Text className="text-muted-foreground text-base leading-6">
-              We can’t reach your server right now. This phone is already set up, so you can carry
-              on and we’ll finish linking next time you open the app.
+              {status.error instanceof TRPCClientError && status.error.data
+                ? "We couldn’t finish linking. This phone is already set up, so you can carry on."
+                : "We can’t reach the server right now. This phone is already set up, so you can carry on and we’ll finish linking next time you open the app."}
             </Text>
             <Link href="/(tabs)/map" replace asChild>
               <Button>
@@ -327,9 +326,11 @@ const LinkWithOtherPhoneScreen = () => {
               accessibilityLiveRegion="polite"
               className="text-muted-foreground text-center text-base leading-6"
             >
-              {status.isError
-                ? "We can’t reach your server right now. We’ll keep trying."
-                : "Waiting for your other phone. This screen moves on by itself once you tap Add on it."}
+              {status.error instanceof TRPCClientError && status.error.data
+                ? problemMessage(status.error)
+                : status.isError
+                  ? "We can’t reach the server right now. We’ll keep trying."
+                  : "Waiting for your other phone. This screen moves on by itself once you tap Add on it."}
             </Text>
           </View>
         ) : (

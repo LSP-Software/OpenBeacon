@@ -19,7 +19,7 @@ import {
   SunIcon,
   Trash2Icon,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -137,6 +137,7 @@ const AccountScreen = () => {
   const devices = useQuery({ ...trpc.account.listDevices.queryOptions(), subscribed: isFocused });
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
+  const signingOut = useRef(false);
   const recoveryStatus = useQuery({
     ...trpc.accountRecovery.status.queryOptions(),
     subscribed: isFocused,
@@ -177,7 +178,8 @@ const AccountScreen = () => {
   };
 
   const signOut = async ({ removeThisPhone }: { removeThisPhone: boolean }) => {
-    if (signOutPhase) return;
+    if (signingOut.current) return;
+    signingOut.current = true;
     setSignOutPhase("uploading");
     const { signOutOfThisPhone } = await import("../../../lib/signOut.ts");
     const { status } = await signOutOfThisPhone({
@@ -185,6 +187,7 @@ const AccountScreen = () => {
       removeThisPhone,
       sessionTokenToRevoke: session?.session?.token ?? null,
     });
+    signingOut.current = false;
     setSignOutPhase(null);
     if (status === "serverUnreachable") {
       Alert.alert(
@@ -468,7 +471,7 @@ const AccountScreen = () => {
             <Text accessibilityLiveRegion="polite" className="text-muted">
               {signOutPhase === "uploading"
                 ? "Uploading saved locations before signing out. This may take up to 10 seconds; any remaining locations will be saved for your next sign-in."
-                : "Contacting your server to sign out."}
+                : "Contacting the server to sign out."}
             </Text>
           )}
           <Button onPress={confirmSignOut} disabled={!!signOutPhase}>

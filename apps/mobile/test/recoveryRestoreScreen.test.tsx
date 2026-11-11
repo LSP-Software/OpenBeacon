@@ -163,7 +163,7 @@ test("when setting up fails after the phrase is restored, Try again only retries
   await press("Restore");
 
   const rendered = JSON.stringify(root.container.toJSON());
-  expect(rendered).toContain("We couldn’t reach your server");
+  expect(rendered).toContain("We couldn’t reach the server");
   expect(rendered).not.toContain("Restore your history");
   expect(replace).not.toHaveBeenCalled();
 

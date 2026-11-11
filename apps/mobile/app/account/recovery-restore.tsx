@@ -118,7 +118,7 @@ const RecoveryRestoreScreen = () => {
       if (activated.error) {
         setActivationProblem(
           activated.error instanceof TRPCClientError && !activated.error.data
-            ? "We couldn’t reach your server. Check your connection and try again."
+            ? "We couldn’t reach the server. Check your connection and try again."
             : activated.error.message,
         );
         setStep("activationFailed");
