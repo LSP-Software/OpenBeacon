@@ -20,7 +20,7 @@ describe("renderAlertsTurnedOffEmail", () => {
     expect(email.text).toContain(
       "Email alerts turned off\n\nThis email alert was turned off:\n\n * Account deletion scheduled\n\nTurned off at\nThursday, 9 July 2026 at 14:32 BST (13:32 UTC)\n",
     );
-    expect(email.text).not.toContain("New device added");
+    expect(email.text).not.toContain("New sign-in");
     expect(email.html.match(/<li\b/g)).toHaveLength(1);
     expect(email.text).toContain(
       "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs out every other device. Then turn this alert back on in Account → Notifications → Email alerts.",
@@ -30,7 +30,7 @@ describe("renderAlertsTurnedOffEmail", () => {
   test("several alerts are listed one per line", async () => {
     const email = await render(["new-device", "deletion-scheduled"]);
     expect(email.text).toContain(
-      "These email alerts were turned off:\n\n * New device added\n * Account deletion scheduled\n",
+      "These email alerts were turned off:\n\n * New sign-in\n * Account deletion scheduled\n",
     );
     expect(email.html.match(/<li\b/g)).toHaveLength(2);
     expect(email.text).toContain(

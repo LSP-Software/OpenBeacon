@@ -2,14 +2,14 @@ import { Prisma } from "@openbeacon/database";
 import { createAccountHistoryKeySchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
-import { protectedProcedure } from "../procedures/auth/runtime.ts";
+import { activeDeviceProcedure } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 
 const alreadyExists = () =>
   new TRPCError({ code: "CONFLICT", message: "This account already has a history key." });
 
 export const accountHistoryRouter = createTRPCRouter({
-  create: protectedProcedure
+  create: activeDeviceProcedure
     .input(createAccountHistoryKeySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;

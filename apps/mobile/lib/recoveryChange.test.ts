@@ -144,7 +144,6 @@ const resetMock = mock(async (input: unknown) => {
   if (!sessionFresh) throw trpcError("FORBIDDEN", -32003);
   const parsed = resetAccountRecoverySchema.parse(input);
   beforeRecoveryWrite?.();
-  if (!recoveryKey) throw trpcError("NOT_FOUND", -32004);
   if (parsed.historyKey.version !== (currentHistoryKey()?.version ?? 0) + 1) {
     throw trpcError("CONFLICT", -32009);
   }
@@ -678,11 +677,13 @@ describe("resetRecoveryPhrase", () => {
     expect(resettingPhone.secureStore.size).toBe(0);
   });
 
-  test("an account without a phrase sends no reset", async () => {
-    await expect(resetRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow(
-      RECOVERY_CHANGED_MESSAGE,
-    );
-    expect(resetMock).not.toHaveBeenCalled();
+  test("an account without a phrase can start fresh with v(N+1) and a new phrase", async () => {
+    const newPhrase = generateRecoveryPhrase();
+    const result = await resetRecoveryPhrase(newPhrase);
+
+    expect(result).toMatchObject({ status: "reset", version: 1 });
+    expect(recoveryKey?.publicKey).toBe(deriveRecoveryKeyPair(newPhrase).publicKey);
+    expect(historyKeys.map(({ version }) => version)).toEqual([1]);
   });
 
   test("a phone that can't save the new key is sent to restore, which then stores it", async () => {

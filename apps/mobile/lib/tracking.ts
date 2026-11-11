@@ -16,6 +16,7 @@ import {
 import { baseUrl } from "./base-url.ts";
 import { createHistoryKey } from "./createHistoryKey.ts";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
+import { isThisDeviceActive } from "./deviceActivation.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
 import {
   cancelDeviceKeyRegistrations,
@@ -188,6 +189,12 @@ const applyCaptureState = async ({
   }
 };
 
+const isPending = async () => {
+  const active = await tryCatch(isThisDeviceActive());
+  if (getErrorCode(active.error) === "UNAUTHORIZED") throw active.error;
+  return active.data === false;
+};
+
 const reconcileTrackingKeysInternal = async ({
   startCapture,
   onlyIfRunning = false,
@@ -218,6 +225,8 @@ const reconcileTrackingKeysInternal = async ({
     ]);
     if (!isCurrent()) return false;
     if (getErrorCode(device.error) === "UNAUTHORIZED") throw device.error;
+    if (device.data && (await isPending())) return false;
+    if (!isCurrent()) return false;
     const backfillCheck = device.data ? await checkHistoryBackfill(device.data.userId) : null;
     if (!isCurrent()) return false;
     const results = await Promise.all(
@@ -265,6 +274,11 @@ const reconcileTrackingKeysInternal = async ({
     ensureDeviceKeyRegistration({ checkOwner: force }),
     trpcClient.groupMembership.list.query(),
   ]);
+  if (!isCurrent()) return false;
+  if (await isPending()) {
+    if (trackingModule.isCaptureRunning()) await trackingModule.stopCapture();
+    return false;
+  }
   if (!isCurrent()) return false;
   const owner = getOwner(deviceKeyContext.userId);
   trackingModule.setQueueOwner(owner);

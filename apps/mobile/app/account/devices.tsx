@@ -171,6 +171,13 @@ const DevicesScreen = () => {
                           <Text className="text-primary text-xs font-medium">This phone</Text>
                         </View>
                       )}
+                      {!device.activatedAt && (
+                        <View className="rounded-full bg-muted px-2 py-0.5">
+                          <Text className="text-muted-foreground text-xs font-medium">
+                            Waiting for setup
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     <Text className="text-muted-foreground text-sm">
                       {[
@@ -186,18 +193,20 @@ const DevicesScreen = () => {
                         : `Last active ${lastActive} ago`}
                     </Text>
                     <Text className="text-muted-foreground text-sm">
-                      {groups.data?.length === 0
-                        ? "Not sharing with any group"
-                        : [
-                            lastLocation === null
-                              ? "No location shared yet"
-                              : lastLocation === "now"
-                                ? "Location updated now"
-                                : `Location updated ${lastLocation} ago`,
-                            position ? `Battery ${position.battery.level}%` : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
+                      {!device.activatedAt
+                        ? "Can’t see anyone’s location until it’s set up"
+                        : groups.data?.length === 0
+                          ? "Not sharing with any group"
+                          : [
+                              lastLocation === null
+                                ? "No location shared yet"
+                                : lastLocation === "now"
+                                  ? "Location updated now"
+                                  : `Location updated ${lastLocation} ago`,
+                              position ? `Battery ${position.battery.level}%` : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
                     </Text>
                   </View>
                 </Pressable>

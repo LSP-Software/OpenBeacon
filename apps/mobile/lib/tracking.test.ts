@@ -94,6 +94,7 @@ let recoveryStatusError: Error | null = null;
 let recoveryStatusCalls = 0;
 const storedHistoryKeyVersions = new Set([1]);
 let createHistoryKeyResult: boolean | Error = true;
+let thisDeviceActive = true;
 let createHistoryKeyCalls = 0;
 const resealedUsers: string[] = [];
 let backfillErrors = new Map<string, Error>();
@@ -166,6 +167,10 @@ mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async ({ userId, version }: { userId: string; version: number }) =>
     userId === "user-1" && storedHistoryKeyVersions.has(version) ? historyKeyPair.privateKey : null,
   storeHistoryKey: async () => {},
+}));
+
+mock.module("./deviceActivation.ts", () => ({
+  isThisDeviceActive: async () => thisDeviceActive,
 }));
 
 mock.module("./createHistoryKey.ts", () => ({
@@ -520,6 +525,7 @@ describe("tracking service", () => {
     storedHistoryKeyVersions.add(1);
     createHistoryKeyResult = true;
     createHistoryKeyCalls = 0;
+    thisDeviceActive = true;
     resealedUsers.length = 0;
     ownerContextCalls = 0;
     ownerQueryGate = null;
@@ -1033,6 +1039,21 @@ describe("tracking service", () => {
       ),
     ).toBe(encodeBase64(epochKey1.expose()));
     expect(resealedUsers).toEqual(["user-1"]);
+  });
+
+  test("a Pending device doesn't capture, rotate, backfill or create a history key", async () => {
+    recoveryStatus = { currentHistoryKey: null, recoveryKey: null };
+    storedHistoryKeyVersions.clear();
+    thisDeviceActive = false;
+
+    await reconcileTrackingKeys({ startCapture: true });
+    await reconcileTrackingKeys({ startCapture: false, force: true });
+
+    expect(startCaptureCalls).toBe(0);
+    expect(provisionCalls).toEqual([]);
+    expect(rotationChecks).toEqual([]);
+    expect(createHistoryKeyCalls).toBe(0);
+    expect(backfillQueries).toEqual([]);
   });
 
   test("without capture, a phone with no history key on the account still creates it", async () => {

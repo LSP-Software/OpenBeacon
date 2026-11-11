@@ -14,6 +14,7 @@ import {
   sessionFreshForMs,
 } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
+import { activateDevice } from "../lib/deviceActivation.ts";
 
 const emailCodeProcedure = freshSessionProcedure.use(({ ctx, next }) => {
   if (!ctx.emailCodes) {
@@ -218,9 +219,6 @@ export const accountRecoveryRouter = createTRPCRouter({
       }
       await ctx.db.$transaction(async (tx) => {
         await lockUser(tx, userId);
-        if (!(await tx.recoveryKey.findUnique({ where: { userId } }))) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "No recovery phrase is set up." });
-        }
         const latestHistoryKey = await tx.accountHistoryKey.findFirst({
           orderBy: { version: "desc" },
           select: { version: true },
@@ -248,9 +246,12 @@ export const accountRecoveryRouter = createTRPCRouter({
           });
         }
         await tx.accountHistoryKey.deleteMany({ where: { userId } });
-        await tx.recoveryKey.delete({ where: { userId } });
+        await tx.recoveryKey.deleteMany({ where: { userId } });
         await tx.recoveryKey.create({ data: { ...input.recoveryKey, userId } });
         await createHistoryKey(tx, userId, input.historyKey);
+        if (ctx.deviceId) {
+          await activateDevice({ activatedBy: "reset", db: tx, deviceId: ctx.deviceId, userId });
+        }
       });
       ctx.securityAlerts?.send(userId, { type: "recovery-phrase-reset" });
       return { historyKeyVersion: input.historyKey.version };

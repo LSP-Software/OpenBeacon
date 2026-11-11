@@ -6,7 +6,7 @@ import { createRoot } from "test-renderer";
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-let searchParams: { afterSignIn?: string; missingVersion?: string } = {};
+let searchParams: { setup?: string } = {};
 let heldVersions: number[] = [];
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("expo-router", () => ({
@@ -52,7 +52,7 @@ mock.module("../hooks/useHeldHistoryKeyVersions.ts", () => ({
   useHeldHistoryKeyVersions: () => ({ data: heldVersions }),
 }));
 mock.module("../lib/recovery.ts", () => ({ restoreFromRecoveryPhrase: async () => {} }));
-mock.module("../lib/restoreReminders.ts", () => ({ skipRestorePrompt: () => {} }));
+mock.module("../lib/deviceActivation.ts", () => ({ activateWithHistoryKey: async () => {} }));
 mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("../lib/resealPersonalData.ts", () => ({ resealPersonalData: async () => {} }));
 mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
@@ -77,19 +77,18 @@ beforeEach(() => {
   heldVersions = [1];
 });
 
-test("after sign in without the current key, offers both skipping and resetting", async () => {
-  searchParams = { afterSignIn: "true", missingVersion: "2" };
+test("setting up a new phone without the current key offers resetting and never skipping", async () => {
+  searchParams = { setup: "true" };
   const { rendered, resetLink } = await renderScreen();
-  expect(rendered).toContain("Skip for now");
+  expect(rendered).not.toContain("Skip for now");
   expect(rendered).toContain("I’ve lost my phrase");
   expect(JSON.parse(resetLink.href)).toEqual({
     pathname: "/account/recovery-reset",
-    params: { afterSignIn: "true" },
+    params: { setup: "true" },
   });
-  expect(resetLink.replace).toBe(false);
 });
 
-test("reached from elsewhere without the current key, offers resetting but not skipping", async () => {
+test("reached from Account without the current key, offers resetting", async () => {
   const { rendered, resetLink } = await renderScreen();
   expect(rendered).not.toContain("Skip for now");
   expect(rendered).toContain("I’ve lost my phrase");
@@ -97,12 +96,11 @@ test("reached from elsewhere without the current key, offers resetting but not s
   expect(resetLink.replace).toBe(true);
 });
 
-test("offers neither when the phone already holds the current key", async () => {
+test("doesn't offer resetting when the phone already holds the current key", async () => {
   heldVersions = [2];
-  for (const params of [{}, { afterSignIn: "true" }]) {
+  for (const params of [{}, { setup: "true" }]) {
     searchParams = params;
     const { rendered } = await renderScreen();
-    expect(rendered).not.toContain("Skip for now");
     expect(rendered).not.toContain("I’ve lost my phrase");
   }
 });

@@ -1,5 +1,6 @@
 import { auth } from "@openbeacon/auth";
 import { TRPCError } from "@trpc/server";
+import { devicePendingError } from "../../lib/deviceActivation.ts";
 import { t } from "../../trpcRuntime.ts";
 import { createAuthProcedures } from "./base.ts";
 
@@ -21,3 +22,18 @@ export const freshSessionProcedure = protectedProcedure.use(async ({ ctx, next }
   }
   return next();
 });
+
+export const requireActiveDevice = t.middleware(async ({ ctx, next }) => {
+  const userId = ctx.session?.user.id;
+  const device =
+    ctx.deviceId && userId
+      ? await ctx.db.userDevice.findFirst({
+          select: { id: true },
+          where: { id: ctx.deviceId, userId, activatedAt: { not: null }, revokedAt: null },
+        })
+      : null;
+  if (!device) throw devicePendingError();
+  return next({ ctx: { deviceId: device.id } });
+});
+
+export const activeDeviceProcedure = protectedProcedure.use(requireActiveDevice);

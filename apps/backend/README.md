@@ -56,7 +56,7 @@ request came from Cloudflare, so only use it when the origin is reachable solely
 through Cloudflare, for example via Cloudflare Tunnel or a firewall that only
 allows Cloudflare's IP ranges. Otherwise use `cloudflare-authenticated`.
 
-The `Deploy backend` GitHub Actions workflow also builds and deploys the separate scheduled job runner. Every installation needs the runner: besides account deletion, it deletes expired email codes and verification tokens every hour. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
+The `Deploy backend` GitHub Actions workflow also builds and deploys the separate scheduled job runner. Every installation needs the runner: besides account deletion, it deletes expired email codes and verification tokens every hour, and deletes new devices that weren't set up within 7 days. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
 
 To deploy, dispatch the `Deploy backend` GitHub Actions workflow from `main`.
 It waits for approval in the `production` GitHub environment, which holds the
@@ -81,9 +81,9 @@ workflow release is in progress.
 
 ## Email
 
-Email is optional. Without it the backend starts normally, sends nothing, and reports `email: false` from `auth.providers`. The app then hides the sign-up code, Forgot password, the recovery reset code and Account → Notifications → Email alerts. Users can't reset a forgotten password, and a recovery phrase reset needs only a fresh sign-in and typing `RESET`.
+Email is optional. Without it the backend starts normally, sends nothing, and reports `email: false` from `auth.providers`. The app then hides the sign-up code, Forgot password, the recovery reset code and Account → Notifications → Email alerts. Users can't reset a forgotten password, and a recovery phrase reset needs only a fresh sign-in and typing `RESET`. That includes "Start fresh" when setting up a new phone: with email off, the account password alone is enough to set up a new phone without the recovery phrase. It deletes the account's encrypted history, and the new phone can see the family's locations from then on.
 
-With email on, the backend sends codes for sign-up, email verification, password reset and recovery phrase reset, an "already have an account" email when someone signs up with a registered address, a "sign in with Google" email when someone asks to reset the password of an account that only uses Google, and security alerts. The alerts are always on for a password or recovery phrase change or reset, for other sessions being signed out, for a device being removed, for email alerts being turned off, and for account deletion. Users can turn off the new device and deletion scheduled alerts in Account → Notifications → Email alerts.
+With email on, the backend sends codes for sign-up, email verification, password reset and recovery phrase reset, an "already have an account" email when someone signs up with a registered address, a "sign in with Google" email when someone asks to reset the password of an account that only uses Google, and security alerts. The alerts are always on for a password or recovery phrase change or reset, for other sessions being signed out, for a device being removed, for email alerts being turned off, and for account deletion. Users can turn off the new sign-in and deletion scheduled alerts in Account → Notifications → Email alerts.
 
 To switch email on, configure one provider and a sender address in the root `.env`:
 
@@ -98,7 +98,7 @@ At startup the backend checks the email settings without sending anything. For S
 
 Each address can request 3 codes of each kind every 15 minutes. `EMAIL_CODE_IP_LIMIT=true` also limits each IP address to 20 code requests an hour across all addresses, which slows down someone sending codes to many addresses from one machine. It is off by default because it can block users who share an IP address, such as phones behind carrier NAT or a household on one connection.
 
-Each account can trigger at most 20 emails an hour. Over that cap, the new device, deletion scheduled, "already have an account" and "sign in with Google" emails are dropped. Codes and the always-on alerts are still sent. The backend never logs email addresses or codes, except in the development console mode below.
+Each account can trigger at most 20 emails an hour. Over that cap, the new sign-in, deletion scheduled, "already have an account" and "sign in with Google" emails are dropped. Codes and the always-on alerts are still sent. The backend never logs email addresses or codes, except in the development console mode below.
 
 For local development, set `EMAIL_CONSOLE=true` instead of a provider to print a one-line summary of each email to the log instead of sending it, for example `[email] to=alice@example.com type=password-reset code=123456`. It is refused unless `NODE_ENV` is `development` or `test`; the backend and runner `bun run dev` scripts set `NODE_ENV=development`.
 

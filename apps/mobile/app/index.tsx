@@ -1,3 +1,4 @@
+import { tryCatch } from "@openbeacon/shared";
 import { router, useFocusEffect, useRootNavigationState } from "expo-router";
 import { useCallback, useEffect, useRef } from "react";
 import { Animated, Dimensions, Easing, Pressable, ScrollView, View } from "react-native";
@@ -6,6 +7,7 @@ import { BeaconIcon } from "../components/BeaconIcon.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
+import { isThisDeviceActive } from "../lib/deviceActivation.ts";
 import { useColors } from "../lib/theme.ts";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -70,7 +72,10 @@ export default function HomeScreen() {
         return;
       }
 
-      router.replace("/(tabs)/map");
+      void (async () => {
+        const active = await tryCatch(isThisDeviceActive());
+        router.replace(active.data === false ? "/setup" : "/(tabs)/map");
+      })();
     }, [rootNavigationState?.key, session, isPending]),
   );
 

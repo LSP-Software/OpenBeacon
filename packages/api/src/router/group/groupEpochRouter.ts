@@ -4,7 +4,7 @@ import { addHistoryWrapsSchema, groupEpochBundleSchema } from "@openbeacon/schem
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { getGroupJoinContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
-import { groupMemberProcedure } from "../../procedures/auth/group.ts";
+import { activeGroupMemberProcedure } from "../../procedures/auth/group.ts";
 
 const selectEpochKeyWraps = ({ deviceId, userId }: { deviceId: string; userId: string }) =>
   ({
@@ -29,7 +29,10 @@ const selectEpochKeyWraps = ({ deviceId, userId }: { deviceId: string; userId: s
         recipientDeviceId: true,
         wrappedKey: true,
       },
-      where: { recipientDeviceId: deviceId, recipientDevice: { revokedAt: null, userId } },
+      where: {
+        recipientDeviceId: deviceId,
+        recipientDevice: { revokedAt: null, activatedAt: { not: null }, userId },
+      },
     },
     senderPublicKey: true,
   }) satisfies Prisma.GroupEpochSelect;
@@ -54,11 +57,11 @@ const toEpochKeyWraps = ({
 };
 
 export const groupEpochRouter = {
-  rotationContext: groupMemberProcedure.query(async ({ ctx, input }) => {
+  rotationContext: activeGroupMemberProcedure.query(async ({ ctx, input }) => {
     if (!ctx.group?.epochRotationRequired) return null;
     return getGroupJoinContext({ db: ctx.db, groupId: input.groupId, userId: ctx.session.user.id });
   }),
-  rotate: groupMemberProcedure
+  rotate: activeGroupMemberProcedure
     .input(z.object({ groupId: z.string(), nextEpoch: groupEpochBundleSchema }))
     .mutation(async ({ ctx, input }) => {
       return ctx.db.$transaction(async (tx) => {
@@ -80,7 +83,7 @@ export const groupEpochRouter = {
         return { rotated: true };
       });
     }),
-  getLatest: groupMemberProcedure
+  getLatest: activeGroupMemberProcedure
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .query(async ({ ctx, input }) => {
       const latestEpoch = await ctx.db.groupEpoch.findFirst({
@@ -111,7 +114,7 @@ export const groupEpochRouter = {
         groupId: latestEpoch.groupId,
       };
     }),
-  listRecipientPublicKeys: groupMemberProcedure.query(async ({ ctx, input }) => {
+  listRecipientPublicKeys: activeGroupMemberProcedure.query(async ({ ctx, input }) => {
     return await ctx.db.userDevice.findMany({
       orderBy: {
         id: "asc",
@@ -126,6 +129,7 @@ export const groupEpochRouter = {
       },
       where: {
         revokedAt: null,
+        activatedAt: { not: null },
         user: {
           groupMembers: {
             some: {
@@ -136,7 +140,7 @@ export const groupEpochRouter = {
       },
     });
   }),
-  getEpochKeyWraps: groupMemberProcedure
+  getEpochKeyWraps: activeGroupMemberProcedure
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .input(
       z.object({
@@ -157,7 +161,7 @@ export const groupEpochRouter = {
       });
       return epoch ? toEpochKeyWraps({ epoch, userId }) : { deviceWrap: null, historyWraps: [] };
     }),
-  listEpochKeyWraps: groupMemberProcedure
+  listEpochKeyWraps: activeGroupMemberProcedure
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .input(
       z.object({
@@ -197,7 +201,7 @@ export const groupEpochRouter = {
         nextCursor: epochs.length > pageSize ? (page.at(-1)?.epochNumber ?? null) : null,
       };
     }),
-  listHistoryBackfill: groupMemberProcedure
+  listHistoryBackfill: activeGroupMemberProcedure
     .input(
       z.object({
         cursor: z.number().int().nonnegative().nullish(),
@@ -208,7 +212,7 @@ export const groupEpochRouter = {
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const device = await ctx.db.userDevice.findFirst({
-        where: { id: input.deviceId, revokedAt: null, userId },
+        where: { id: input.deviceId, revokedAt: null, activatedAt: { not: null }, userId },
       });
       if (!device) {
         throw new TRPCError({ code: "FORBIDDEN", message: "The active device is not registered." });
@@ -261,7 +265,7 @@ export const groupEpochRouter = {
         nextCursor: epochs.length > pageSize ? (page.at(-1)?.epochNumber ?? null) : null,
       };
     }),
-  addHistoryWraps: groupMemberProcedure
+  addHistoryWraps: activeGroupMemberProcedure
     .input(addHistoryWrapsSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -314,7 +318,7 @@ export const groupEpochRouter = {
         }
         const device = await tx.userDevice.findFirst({
           select: { publicKey: true },
-          where: { id: input.deviceId, revokedAt: null, userId },
+          where: { id: input.deviceId, revokedAt: null, activatedAt: { not: null }, userId },
         });
         if (!device) {
           throw new TRPCError({
@@ -333,7 +337,9 @@ export const groupEpochRouter = {
             epochNumber: { gte: member.joinedEpochNumber },
             groupId: input.groupId,
             id: { in: [...epochIds] },
-            recipientKeys: { some: { recipientDevice: { revokedAt: null, userId } } },
+            recipientKeys: {
+              some: { recipientDevice: { revokedAt: null, activatedAt: { not: null }, userId } },
+            },
           },
         });
         if (entitledEpochs !== epochIds.size) {

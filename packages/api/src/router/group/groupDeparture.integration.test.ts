@@ -36,15 +36,16 @@ const ownerEmail = `${ownerId}@example.test`;
 const memberEmail = `${memberId}@example.test`;
 const ownerKey = createDeviceKeyPair();
 const memberKey = createDeviceKeyPair();
-const caller = (userId: string) =>
+const caller = (userId: string, deviceId: string) =>
   router.createCaller({
     cache,
     db: prisma,
     clientIp: "127.0.0.1",
+    deviceId,
     session: { user: { id: userId }, session: { id: `${userId}-session` } },
   } as Parameters<typeof router.createCaller>[0]);
-const owner = caller(ownerId);
-const member = caller(memberId);
+const owner = caller(ownerId, ownerDevice);
+const member = caller(memberId, memberDevice);
 const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
   createdByDeviceId: result.epoch.createdByDeviceId,
   epochId: result.epoch.epochId,
@@ -83,6 +84,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             publicKeyAlgorithm: key.algorithm,
             name: "Phone",
             icon: "phone",
+            activatedAt: new Date(),
           },
         });
       }

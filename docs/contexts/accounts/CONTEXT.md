@@ -25,7 +25,7 @@ Taking a lost or stolen device off the account in Account → Devices. It needs 
 _Avoid_: Revoking, deleting a device, unlinking
 
 **Security alert**:
-An email telling the owner that something important happened to their account, such as a password change, a new device or a deletion.
+An email telling the owner that something important happened to their account, such as a password change, a new sign-in or a deletion.
 _Avoid_: Email alert, notice, notification, Place Alert
 
 **Always-on alert**:
@@ -33,5 +33,5 @@ A Security alert the owner can't turn off: password changed or reset, Recovery p
 _Avoid_: Mandatory alert, required alert
 
 **Optional alert**:
-A Security alert the owner can turn off: new device added and account deletion scheduled.
+A Security alert the owner can turn off: new sign-in (sent when a Pending device registers) and account deletion scheduled.
 _Avoid_: Opt-out alert, preference

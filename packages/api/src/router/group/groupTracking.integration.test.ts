@@ -21,6 +21,7 @@ const ownerId = `${prefix}-owner`;
 const memberId = `${prefix}-member`;
 const outsiderId = `${prefix}-outsider`;
 const ownerDeviceId = `${prefix}-owner-device`;
+const memberDeviceId = `${prefix}-member-device`;
 const deviceKey = createDeviceKeyPair();
 const epochKey = generateGroupEpochKey();
 const cache = createIntegrationTestCache(() => 0);
@@ -29,11 +30,12 @@ const router = createTRPCRouter({
   groupMembership: groupMembershipRouter,
   groupTracking: groupTrackingRouter,
 });
-const caller = (userId: string) =>
+const caller = (userId: string, deviceId: string | null = null) =>
   router.createCaller({
     cache,
     db: prisma,
     clientIp: "127.0.0.1",
+    deviceId,
     session: { user: { id: userId } },
   } as Parameters<typeof router.createCaller>[0]);
 
@@ -54,6 +56,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
         publicKeyAlgorithm: "X25519",
         name: "Phone",
         icon: "phone",
+        activatedAt: new Date(),
+      },
+    });
+    await prisma.userDevice.create({
+      data: {
+        id: memberDeviceId,
+        userId: memberId,
+        publicKey: createDeviceKeyPair().publicKey,
+        publicKeyAlgorithm: "X25519",
+        name: "Phone",
+        icon: "phone",
+        activatedAt: new Date(),
       },
     });
     await prisma.group.create({
@@ -123,12 +137,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
         senderDeviceId: ownerDeviceId,
       });
     const point = { ...encrypt(), clientPointId: `${prefix}-point` };
-    const accepted = await caller(ownerId).groupTracking.uploadBatch({ groupId, points: [point] });
+    const accepted = await caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
+      groupId,
+      points: [point],
+    });
     expect(accepted.accepted).toEqual([point.clientPointId]);
     expect(
       (await prisma.userDevice.findUniqueOrThrow({ where: { id: ownerDeviceId } })).lastLocationAt,
     ).toBeInstanceOf(Date);
-    const duplicate = await caller(ownerId).groupTracking.uploadBatch({
+    const duplicate = await caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
       groupId,
       points: [{ ...encrypt(), clientPointId: point.clientPointId }],
     });
@@ -139,7 +156,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     expect(
       Buffer.from(stored[0]!.ciphertext, "base64").includes(Buffer.from(JSON.stringify(payload))),
     ).toBe(false);
-    const received = await caller(memberId).groupTracking.poll({ groupId });
+    const received = await caller(memberId, memberDeviceId).groupTracking.poll({ groupId });
     expect(received.points).toHaveLength(1);
     expect(received.points[0]!.ciphertext).toBe(stored[0]!.ciphertext);
     expect(
@@ -161,7 +178,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       ),
     ).toEqual(payload);
     await expect(
-      caller(memberId).groupTracking.uploadBatch({
+      caller(memberId, memberDeviceId).groupTracking.uploadBatch({
         groupId,
         points: [{ ...point, clientPointId: `${prefix}-forged` }],
       }),
@@ -175,7 +192,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       { ...point, clientPointId: "x".repeat(200_000) },
     ]) {
       await expect(
-        caller(ownerId).groupTracking.uploadBatch({
+        caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
           groupId,
           points: [input],
         }),
@@ -184,14 +201,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     expect(await prisma.groupEncryptedPayload.count({ where: { groupId } })).toBe(1);
   });
 
-  test("getLatest returns each device's newest point and skips devices with none", async () => {
-    const memberDeviceId = `${prefix}-member-device`;
+  test("getLatest returns each active device's newest point and skips devices with none", async () => {
     const ownerTabletId = `${prefix}-owner-tablet`;
     const ownerRemovedId = `${prefix}-owner-removed`;
     const ownerSilentId = `${prefix}-owner-silent`;
+    const ownerPendingId = `${prefix}-owner-pending`;
     await prisma.userDevice.createMany({
       data: [
-        { id: memberDeviceId, userId: memberId, name: "Phone", icon: "phone" as const },
         { id: ownerTabletId, userId: ownerId, name: "Tablet", icon: "tablet" as const },
         {
           id: ownerRemovedId,
@@ -203,9 +219,20 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
         { id: ownerSilentId, userId: ownerId, name: "Watch", icon: "watch" as const },
       ].map((device) => ({
         ...device,
+        activatedAt: new Date(),
         publicKey: createDeviceKeyPair().publicKey,
         publicKeyAlgorithm: "X25519",
       })),
+    });
+    await prisma.userDevice.create({
+      data: {
+        id: ownerPendingId,
+        userId: ownerId,
+        name: "New phone",
+        icon: "phone",
+        publicKey: createDeviceKeyPair().publicKey,
+        publicKeyAlgorithm: "X25519",
+      },
     });
     const storePoint = (id: string, senderUserId: string, senderDeviceId: string, at: string) =>
       prisma.groupEncryptedPayload.create({
@@ -224,11 +251,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
         },
       });
     const latest = async () =>
-      (await caller(memberId).groupTracking.getLatest({ groupId })).points.map((point) => [
-        point.senderUserId,
-        point.senderDeviceId,
-        point.id,
-      ]);
+      (await caller(memberId, memberDeviceId).groupTracking.getLatest({ groupId })).points.map(
+        (point) => [point.senderUserId, point.senderDeviceId, point.id],
+      );
 
     await storePoint(`${prefix}-owner-old`, ownerId, ownerDeviceId, "2030-01-01T10:00:00.000Z");
     await storePoint(`${prefix}-owner-tie-a`, ownerId, ownerDeviceId, "2030-01-01T12:00:00.000Z");
@@ -237,6 +262,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
 
     await storePoint(`${prefix}-tablet-old`, ownerId, ownerTabletId, "2030-01-01T08:00:00.000Z");
     await storePoint(`${prefix}-removed-new`, ownerId, ownerRemovedId, "2030-01-01T13:00:00.000Z");
+    await storePoint(`${prefix}-pending-new`, ownerId, ownerPendingId, "2030-01-01T14:00:00.000Z");
     await storePoint(`${prefix}-member-new`, memberId, memberDeviceId, "2030-01-01T11:00:00.000Z");
     await storePoint(`${prefix}-member-old`, memberId, memberDeviceId, "2030-01-01T09:00:00.000Z");
     expect(
@@ -249,21 +275,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       ].sort((first, second) => first.join().localeCompare(second.join())),
     );
 
+    await expect(
+      caller(ownerId, ownerPendingId).groupTracking.getLatest({ groupId }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
     const devices = await caller(memberId).groupMembership.listMemberDevices({ groupId });
     expect(
       devices
         .filter((device) => device.deviceId.startsWith(prefix))
         .map((device) => device.deviceId)
         .sort(),
-    ).toEqual(
-      [
-        ownerDeviceId,
-        ownerTabletId,
-        ownerSilentId,
-        memberDeviceId,
-        `${prefix}-registration-race`,
-      ].sort(),
-    );
+    ).toEqual([ownerDeviceId, ownerTabletId, ownerSilentId, memberDeviceId].sort());
     expect(devices.find((device) => device.deviceId === ownerTabletId)).toEqual({
       deviceId: ownerTabletId,
       userId: ownerId,

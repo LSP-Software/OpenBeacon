@@ -107,7 +107,11 @@ const createCaller = async ({
       groupEpoch: {
         findFirst: epochFindFirstMock,
       },
+      userDevice: {
+        findFirst: mock(async () => ({ id: "device-1" })),
+      },
     },
+    deviceId: "device-1",
     session: {
       user: {
         id: "user-1",

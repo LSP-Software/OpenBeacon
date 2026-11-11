@@ -20,6 +20,7 @@ import {
   wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
 import { holdRowLock } from "../../lib/databaseLocks.testUtil.ts";
+import { activateDevice } from "../../lib/deviceActivation.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { accountRecoveryRouter } from "../accountRecoveryRouter.ts";
 import { accountHistoryRouter } from "../accountHistoryRouter.ts";
@@ -65,11 +66,15 @@ const member = account("member");
 const other = account("other");
 const accounts = [owner, member, other];
 
-const caller = (userId: string) =>
+const caller = (
+  userId: string,
+  deviceId = accounts.find((item) => item.userId === userId)?.deviceId ?? null,
+) =>
   router.createCaller({
     cache,
     db: prisma,
     clientIp: "127.0.0.1",
+    deviceId,
     session: {
       user: { id: userId },
       session: { id: `${userId}-session`, createdAt: new Date() },
@@ -227,6 +232,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             publicKeyAlgorithm: item.key.algorithm,
             name: "Phone",
             icon: "phone",
+            activatedAt: new Date(),
             userId: item.userId,
           },
         });
@@ -475,6 +481,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           publicKeyAlgorithm: "X25519",
           name: "Phone",
           icon: "phone",
+          activatedAt: new Date(),
           revokedAt: new Date(),
           userId: other.userId,
         },
@@ -660,7 +667,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toBe(ownerWrapsBefore + 1);
     });
 
-    test("registering a new device flags the user's groups for rotation but re-registering doesn't", async () => {
+    test("a new device is Pending and only flags the user's groups for rotation once it's activated", async () => {
       await prisma.group.updateMany({
         data: { epochRotationRequired: false },
         where: { id: { in: [groupId, otherGroupId, soloGroupId] } },
@@ -687,12 +694,28 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         [soloGroupId]: false,
       });
 
-      await caller(member.userId).auth.registerDeviceKey({
+      const newDeviceId = `${prefix}-member-new-device`;
+      const registered = await caller(member.userId).auth.registerDeviceKey({
         algorithm: "X25519",
-        deviceId: `${prefix}-member-new-device`,
+        deviceId: newDeviceId,
         expectedUserId: member.userId,
         publicKey: createDeviceKeyPair().publicKey,
       });
+      expect(registered.activatedAt).toBeNull();
+      expect(await flags()).toEqual({
+        [groupId]: false,
+        [otherGroupId]: false,
+        [soloGroupId]: false,
+      });
+
+      expect(
+        await activateDevice({
+          activatedBy: "phrase",
+          db: prisma,
+          deviceId: newDeviceId,
+          userId: member.userId,
+        }),
+      ).toBe(true);
       expect(await flags()).toEqual({
         [groupId]: false,
         [otherGroupId]: true,

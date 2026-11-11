@@ -62,11 +62,15 @@ const sharer = account("sharer");
 const outsider = account("outsider");
 const accounts = [owner, member, late, sharer, outsider];
 
-const caller = (userId: string) =>
+const caller = (
+  userId: string,
+  deviceId = accounts.find((item) => item.userId === userId)?.deviceId ?? null,
+) =>
   router.createCaller({
     cache,
     db: prisma,
     clientIp: "127.0.0.1",
+    deviceId,
     session: {
       user: { id: userId },
       session: { id: `${userId}-session`, createdAt: new Date() },
@@ -249,6 +253,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             publicKeyAlgorithm: item.key.algorithm,
             name: "Phone",
             icon: "phone",
+            activatedAt: new Date(),
             userId: item.userId,
           },
         });

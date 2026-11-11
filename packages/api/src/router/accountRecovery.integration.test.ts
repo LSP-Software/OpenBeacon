@@ -120,6 +120,7 @@ const caller = (userId: string, sessionCreatedAt = new Date(), codes: EmailCodes
     db: prisma,
     emailCodes: codes,
     clientIp: `ip-${userId}`,
+    deviceId: `${userId}-device`,
     session: {
       user: { id: userId },
       session: { id: `${userId}-session`, createdAt: sessionCreatedAt },
@@ -271,6 +272,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     beforeAll(async () => {
       await prisma.user.createMany({
         data: users.map((id) => ({ id, name: id, email: `${id}@example.test` })),
+      });
+      await prisma.userDevice.createMany({
+        data: users.map((id) => ({
+          activatedAt: new Date(),
+          icon: "phone" as const,
+          id: `${id}-device`,
+          name: "Phone",
+          publicKey: createDeviceKeyPair().publicKey,
+          publicKeyAlgorithm: "X25519",
+          userId: id,
+        })),
       });
     });
 
@@ -568,13 +580,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("reset needs a fresh session and confirmation, then replaces every key with v(N+1)", async () => {
       const oldPhrase = generateRecoveryPhrase();
       const newPhrase = generateRecoveryPhrase();
-      await expect(
-        caller(resetUser).accountRecovery.reset({
-          confirmReset: true,
-          historyKey: newHistoryKey({ phrase: newPhrase, userId: resetUser, version: 1 }).input,
-          recoveryKey: recoveryKeyInput(newPhrase),
-        }),
-      ).rejects.toMatchObject({ code: "NOT_FOUND" });
       await setUpRecovery(resetUser, oldPhrase);
       const second = await insertHistoryKey({ phrase: oldPhrase, userId: resetUser, version: 2 });
 
@@ -586,6 +591,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           publicKeyAlgorithm: device.algorithm,
           name: "Phone",
           icon: "phone",
+          activatedAt: new Date(),
           userId: resetUser,
         },
       });

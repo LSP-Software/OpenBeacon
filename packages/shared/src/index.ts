@@ -10,4 +10,4 @@ export {
   parseApiCompatibilityLevel,
 } from "./apiCompatibilityLevel.ts";
 export { deviceIdHeader } from "./deviceIdHeader.ts";
-export { deviceRemovedCause } from "./deviceRemoved.ts";
+export { devicePendingCause, deviceRemovedCause } from "./deviceRemoved.ts";

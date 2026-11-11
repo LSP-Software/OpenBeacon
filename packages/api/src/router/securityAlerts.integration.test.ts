@@ -216,11 +216,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
         historyKey: { ...historyKeyInput(phrase, account.userId), version: 2 },
         recoveryKey: recoveryKeyInput(phrase),
       }),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    ).rejects.toMatchObject({ code: "CONFLICT" });
     expect(await sentAlerts()).toEqual([]);
   });
 
-  test("the first device sends no alert and each later new device sends one", async () => {
+  test("the first device sends no alert and each later Pending device sends one", async () => {
     const account = await createAccount();
 
     await registerDevice(account, { platform: "android", model: "Pixel 8" });

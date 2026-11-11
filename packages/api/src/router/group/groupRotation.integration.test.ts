@@ -28,6 +28,7 @@ const caller = router.createCaller({
   cache,
   db: prisma,
   clientIp: "127.0.0.1",
+  deviceId,
   session: { user: { id: userId } },
 } as Parameters<typeof router.createCaller>[0]);
 
@@ -46,6 +47,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           publicKeyAlgorithm: "X25519",
           name: "Phone",
           icon: "phone",
+          activatedAt: new Date(),
         },
       });
       await prisma.group.create({
@@ -169,6 +171,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           publicKeyAlgorithm: "X25519",
           name: "Phone",
           icon: "phone",
+          activatedAt: new Date(),
         },
       });
       await prisma.group.create({

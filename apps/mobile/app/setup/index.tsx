@@ -1,0 +1,99 @@
+import { tryCatch } from "@openbeacon/shared";
+import { useQuery } from "@tanstack/react-query";
+import { Link, router } from "expo-router";
+import { useState } from "react";
+import { ScrollView, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
+import { Button } from "../../components/ui/Button.tsx";
+import { Text } from "../../components/ui/Text.tsx";
+import { trpc } from "../../lib/api.ts";
+import { authClient } from "../../lib/auth-client.ts";
+
+const SetUpPhoneScreen = () => {
+  const status = useQuery(trpc.accountRecovery.status.queryOptions());
+  const [signingOut, setSigningOut] = useState(false);
+
+  const signOut = async () => {
+    setSigningOut(true);
+    await tryCatch(authClient.signOut());
+    setSigningOut(false);
+    router.replace("/");
+  };
+
+  return (
+    <SafeAreaView className="flex-1 bg-background">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="gap-6 px-6 py-6 pb-16"
+        showsVerticalScrollIndicator={false}
+      >
+        <View className="gap-4">
+          <Text className="text-foreground text-3xl font-bold">Set up this phone</Text>
+          <Text className="text-muted-foreground text-base leading-6">
+            You’re signed in, but this phone can’t see anyone’s location until it’s set up. That
+            keeps your family’s locations safe if someone else learns your password.
+          </Text>
+        </View>
+
+        {status.isPending && <LoadingIndicator />}
+        {status.isError && (
+          <View className="gap-4">
+            <Text className="text-muted-foreground text-base leading-6">
+              We couldn’t reach your server. Check your connection and try again.
+            </Text>
+            <Button variant="outline" onPress={() => status.refetch()}>
+              <Text>Try again</Text>
+            </Button>
+          </View>
+        )}
+
+        {status.data?.recoveryKey && (
+          <View className="gap-4">
+            <Text className="text-muted-foreground text-base leading-6">
+              Enter your recovery phrase. This phone then gets your full location history.
+            </Text>
+            <Link
+              href={{ pathname: "/account/recovery-restore", params: { setup: "true" } }}
+              asChild
+            >
+              <Button>
+                <Text>Enter your recovery phrase</Text>
+              </Button>
+            </Link>
+            <Link href={{ pathname: "/account/recovery-reset", params: { setup: "true" } }} asChild>
+              <Button variant="ghost">
+                <Text>I’ve lost my phrase</Text>
+              </Button>
+            </Link>
+          </View>
+        )}
+
+        {status.data && !status.data.recoveryKey && (
+          <View className="gap-4">
+            <Text className="text-muted-foreground text-base leading-6">
+              Your account doesn’t have a recovery phrase yet, so this phone can’t read the history
+              on your other phones. Create a phrase on a phone you still have, then enter it here.
+            </Text>
+            <Link href="/setup/waiting" asChild>
+              <Button>
+                <Text>Create a phrase on your other phone</Text>
+              </Button>
+            </Link>
+            <Link href={{ pathname: "/account/recovery-reset", params: { setup: "true" } }} asChild>
+              <Button variant="ghost">
+                <Text>I don’t have another phone</Text>
+              </Button>
+            </Link>
+          </View>
+        )}
+
+        <Button variant="outline" onPress={signOut} disabled={signingOut}>
+          <Text>{signingOut ? "Signing out…" : "Sign out"}</Text>
+        </Button>
+      </ScrollView>
+    </SafeAreaView>
+  );
+};
+
+export default SetUpPhoneScreen;

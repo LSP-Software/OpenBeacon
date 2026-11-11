@@ -72,6 +72,7 @@ type GroupTrackingDb = {
       where: {
         id: { in: string[] };
         revokedAt: null;
+        activatedAt: { not: null };
         userId: string;
       };
     }) => Promise<Array<{ id: string; userId: string }>>;
@@ -124,6 +125,7 @@ export const uploadGroupTrackingBatch = async ({
       where: {
         id: { in: senderDeviceIds },
         revokedAt: null,
+        activatedAt: { not: null },
         userId,
       },
     }),
@@ -266,6 +268,7 @@ export const getLatestGroupTrackingPoints = async ({
     JOIN "UserDevice" AS "device"
       ON "device"."userId" = "member"."userId"
       AND "device"."revokedAt" IS NULL
+      AND "device"."activatedAt" IS NOT NULL
     CROSS JOIN LATERAL (
       SELECT *
       FROM "GroupEncryptedPayload" AS "point"

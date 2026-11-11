@@ -12,6 +12,7 @@ import {
   unwrapHistoryEpochKey,
   wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
+import { getGroupJoinContext, getGroupRemovalContext } from "../../lib/groupEpochs.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { accountRecoveryRouter } from "../accountRecoveryRouter.ts";
 import { authRouter } from "../authRouter.ts";
@@ -51,11 +52,15 @@ const member = account("member");
 const outsider = account("outsider");
 const accounts = [owner, member, outsider];
 
-const caller = (userId: string) =>
+const caller = (
+  userId: string,
+  deviceId = accounts.find((item) => item.userId === userId)?.deviceId ?? null,
+) =>
   router.createCaller({
     cache,
     db: prisma,
     clientIp: "127.0.0.1",
+    deviceId,
     session: {
       user: { id: userId },
       session: { id: `${userId}-session`, createdAt: new Date() },
@@ -199,6 +204,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             publicKeyAlgorithm: item.key.algorithm,
             name: "Phone",
             icon: "phone",
+            activatedAt: new Date(),
             userId: item.userId,
           },
         });
@@ -322,9 +328,25 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: { revokedAt: new Date() },
       });
 
-      const page = await list(member, {});
+      await expect(list(member, {})).rejects.toMatchObject({ code: "FORBIDDEN" });
+      const tabletId = `${prefix}-member-tablet`;
+      await prisma.userDevice.create({
+        data: {
+          activatedAt: new Date(),
+          icon: "tablet",
+          id: tabletId,
+          name: "Tablet",
+          publicKey: createDeviceKeyPair().publicKey,
+          publicKeyAlgorithm: "X25519",
+          userId: member.userId,
+        },
+      });
+      const page = await caller(member.userId, tabletId).groupEpoch.listEpochKeyWraps({
+        deviceId: member.deviceId,
+        groupId,
+      });
       expect(page.epochs.map(({ deviceWrap }) => deviceWrap)).toEqual([null]);
-      const single = await caller(member.userId).groupEpoch.getEpochKeyWraps({
+      const single = await caller(member.userId, tabletId).groupEpoch.getEpochKeyWraps({
         deviceId: member.deviceId,
         epochId: epochs.second.epoch.epochId,
         groupId,
@@ -334,6 +356,76 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(JSON.stringify(recipients)).not.toContain(member.deviceId);
 
       await prisma.userDevice.update({ where: { id: member.deviceId }, data: { revokedAt: null } });
+      await prisma.userDevice.delete({ where: { id: tabletId } });
+    });
+
+    test("leaves a Pending device out of every recipient set and refuses its wrap requests", async () => {
+      const pendingId = `${prefix}-member-pending`;
+      const pendingKey = createDeviceKeyPair();
+      await prisma.userDevice.create({
+        data: {
+          icon: "phone",
+          id: pendingId,
+          name: "New phone",
+          publicKey: pendingKey.publicKey,
+          publicKeyAlgorithm: "X25519",
+          userId: member.userId,
+        },
+      });
+      const pending = caller(member.userId, pendingId);
+      for (const request of [
+        () => pending.groupEpoch.getLatest({ groupId }),
+        () => pending.groupEpoch.rotationContext({ groupId }),
+        () => pending.groupEpoch.listRecipientPublicKeys({ groupId }),
+        () => pending.groupEpoch.listEpochKeyWraps({ deviceId: pendingId, groupId }),
+        () =>
+          pending.groupEpoch.getEpochKeyWraps({
+            deviceId: pendingId,
+            epochId: epochs.second.epoch.epochId,
+            groupId,
+          }),
+        () => pending.groupEpoch.listHistoryBackfill({ deviceId: pendingId, groupId }),
+        () =>
+          pending.groupEpoch.addHistoryWraps({
+            deviceId: pendingId,
+            groupId,
+            historyKeyId: member.historyKey.id,
+            wraps: [
+              wrapEpochKeyForHistoryKey({
+                epochId: epochs.second.epoch.epochId,
+                epochKey: epochs.second.epochKey,
+                historyKey: {
+                  publicKey: member.historyKey.publicKey,
+                  userId: member.userId,
+                  version: 1,
+                },
+                senderPrivateKey: pendingKey.privateKey,
+              }),
+            ],
+          }),
+      ]) {
+        await expect(request()).rejects.toMatchObject({ code: "FORBIDDEN" });
+      }
+
+      const recipientIds = (recipients: { deviceId: string }[]) =>
+        recipients.map(({ deviceId }) => deviceId);
+      const listed = await caller(owner.userId).groupEpoch.listRecipientPublicKeys({ groupId });
+      expect(listed.map(({ id }) => id)).not.toContain(pendingId);
+      const join = await getGroupJoinContext({ db: prisma, groupId, userId: member.userId });
+      expect(recipientIds(join.recipients)).toEqual(
+        [owner.deviceId, member.deviceId].sort((a, b) => a.localeCompare(b)),
+      );
+      const ownerMember = await prisma.groupMember.findFirstOrThrow({
+        where: { groupId, userId: owner.userId },
+      });
+      const removal = await getGroupRemovalContext({
+        db: prisma,
+        groupId,
+        memberId: ownerMember.id,
+      });
+      expect(recipientIds(removal.recipients)).toEqual([member.deviceId]);
+
+      await prisma.userDevice.delete({ where: { id: pendingId } });
     });
 
     test("rejects limits outside 1 to 100", async () => {

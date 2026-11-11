@@ -59,6 +59,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             publicKeyAlgorithm: keys[i]!.algorithm,
             name: "Phone",
             icon: "phone",
+            activatedAt: new Date(),
           },
         });
       }

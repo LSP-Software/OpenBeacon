@@ -20,18 +20,15 @@ import { Text } from "../../components/ui/Text.tsx";
 import { useHeldHistoryKeyVersions } from "../../hooks/useHeldHistoryKeyVersions.ts";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
+import { activateWithHistoryKey } from "../../lib/deviceActivation.ts";
 import { restoreFromRecoveryPhrase } from "../../lib/recovery.ts";
-import { skipRestorePrompt } from "../../lib/restoreReminders.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 
 const emptyWords = () => Array.from({ length: 12 }, () => "");
 
 const RecoveryRestoreScreen = () => {
-  const { afterSignIn, missingVersion } = useLocalSearchParams<{
-    afterSignIn?: string;
-    missingVersion?: string;
-  }>();
+  const { setup } = useLocalSearchParams<{ setup?: string }>();
   const { data: session } = authClient.useSession();
   const queryClient = useQueryClient();
   const status = useQuery(trpc.accountRecovery.status.queryOptions());
@@ -97,27 +94,29 @@ const RecoveryRestoreScreen = () => {
     void queryClient.invalidateQueries({ queryKey: trpc.accountRecovery.status.queryKey() });
     void queryClient.invalidateQueries({ queryKey: ["historyKeyHeld", result.data.userId] });
     void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", result.data.userId] });
+    if (setup) {
+      const activated = await tryCatch(activateWithHistoryKey());
+      if (activated.error) {
+        setStep("enter");
+        Alert.alert("Unable to set up this phone", activated.error.message);
+        return;
+      }
+    }
     requestTrackingSync();
     await resealPersonalData(result.data.userId);
     await queryClient.invalidateQueries({ queryKey: ["personalNicknames"] });
-    setStep("done");
-  };
-
-  const skip = () => {
-    const version = missingVersion
-      ? Number(missingVersion)
-      : status.data?.currentHistoryKey?.version;
-    if (session?.user.id && version) {
-      skipRestorePrompt({ userId: session.user.id, version });
+    if (setup) {
+      router.replace("/setup/name");
+      return;
     }
-    router.replace("/");
+    setStep("done");
   };
 
   return (
     <View className="flex-1 bg-background">
       <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
         <View className="flex-row items-center justify-between">
-          {afterSignIn || step === "restoring" ? <View className="w-10" /> : <BackButton />}
+          {step === "restoring" ? <View className="w-10" /> : <BackButton />}
           <Text className="text-foreground text-2xl font-bold">Restore</Text>
           <View className="w-10" />
         </View>
@@ -137,8 +136,9 @@ const RecoveryRestoreScreen = () => {
             <View className="gap-4">
               <Text className="text-foreground text-3xl font-bold">Restore your history</Text>
               <Text className="text-muted-foreground text-base leading-6">
-                Your account has a recovery phrase. Enter its 12 words to read your groups’ location
-                history on this phone.
+                {setup
+                  ? "Enter the 12 words of your recovery phrase to set up this phone. It then gets your groups’ location history too."
+                  : "Your account has a recovery phrase. Enter its 12 words to read your groups’ location history on this phone."}
               </Text>
               <RecoveryPhraseGrid
                 words={words}
@@ -157,32 +157,19 @@ const RecoveryRestoreScreen = () => {
                 <Text>{step === "restoring" ? "Restoring…" : "Restore"}</Text>
               </Button>
               {!holdsCurrent && (
-                <View className="gap-2">
-                  {afterSignIn && (
-                    <Button variant="outline" onPress={skip} disabled={step === "restoring"}>
-                      <Text>Skip for now</Text>
-                    </Button>
-                  )}
-                  <Link
-                    href={
-                      afterSignIn
-                        ? { pathname: "/account/recovery-reset", params: { afterSignIn: "true" } }
-                        : "/account/recovery-reset"
-                    }
-                    replace={!afterSignIn}
-                    asChild
-                  >
-                    <Button variant="ghost" disabled={step === "restoring"}>
-                      <Text>I’ve lost my phrase</Text>
-                    </Button>
-                  </Link>
-                  {afterSignIn && (
-                    <Text className="text-muted-foreground text-sm leading-5">
-                      If you skip, live location still works on this phone, but older history won’t
-                      show here. You can restore later from Account › Recovery phrase.
-                    </Text>
-                  )}
-                </View>
+                <Link
+                  href={
+                    setup
+                      ? { pathname: "/account/recovery-reset", params: { setup: "true" } }
+                      : "/account/recovery-reset"
+                  }
+                  replace
+                  asChild
+                >
+                  <Button variant="ghost" disabled={step === "restoring"}>
+                    <Text>I’ve lost my phrase</Text>
+                  </Button>
+                </Link>
               )}
             </View>
           )}
@@ -194,7 +181,7 @@ const RecoveryRestoreScreen = () => {
                 This phone can now read the history your recovery phrase protects.
               </Text>
               <RecoveryCoverage userId={userId} />
-              <Button onPress={() => (afterSignIn ? router.replace("/") : router.back())}>
+              <Button onPress={() => router.back()}>
                 <Text>Continue</Text>
               </Button>
             </View>

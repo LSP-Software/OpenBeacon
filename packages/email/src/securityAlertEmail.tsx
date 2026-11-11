@@ -107,12 +107,14 @@ const alertCopy = (
           ? `${alert.device.model} (${platform})`
           : (alert.device.model ?? (platform ? `${platform} device` : null));
       return {
-        subject: "A new device was added to your OpenBeacon account",
-        title: "New device added",
-        happened: "A new device was added to your OpenBeacon account.",
+        subject: "New sign-in to your OpenBeacon account",
+        title: "New sign-in",
+        happened: `New sign-in on ${
+          device ?? "a phone or tablet"
+        }. It can’t see anyone’s location until it’s set up.`,
         details: [
           ...(device ? [{ label: "Device", value: device }] : []),
-          { label: "Added at", value: happenedAt },
+          { label: "Signed in at", value: happenedAt },
         ],
         ifNotYou: `Someone else is signed in to your account. In the OpenBeacon app, open Account → Devices, tap ${
           alert.device.model ?? "the device you don’t know"

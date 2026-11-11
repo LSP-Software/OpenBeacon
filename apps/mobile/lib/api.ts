@@ -8,7 +8,7 @@ import {
   TRPCClientError,
 } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
-import { deviceIdHeader } from "@openbeacon/shared";
+import { devicePendingCause, deviceIdHeader } from "@openbeacon/shared";
 import { observable } from "@trpc/server/observable";
 import { AppState } from "react-native";
 import superjson from "superjson";
@@ -54,6 +54,11 @@ const deviceRemovedLink: TRPCLink<AppRouter> =
           if (isDeviceRemovedError(error)) {
             void import("./deviceRemoved.ts").then(({ handleDeviceRemoved }) =>
               handleDeviceRemoved(),
+            );
+          }
+          if (error.data?.cause === devicePendingCause) {
+            void import("./deviceActivation.ts").then(({ handleDevicePending }) =>
+              handleDevicePending(),
             );
           }
           observer.error(error);

@@ -316,14 +316,13 @@ export const verifyRecoveryResetCode = async (code: string) => {
 export const resetRecoveryPhrase = async (phrase: RecoveryPhrase, resetToken?: string) => {
   const device = await ensureDeviceKeyRegistration();
   const status = await trpcClient.accountRecovery.status.query();
-  if (!status.recoveryKey) throw new Error(RECOVERY_CHANGED_MESSAGE);
   const version = (status.currentHistoryKey?.version ?? 0) + 1;
   const { historyPrivateKey, input } = createRecoveryKeys({
     phrase,
     userId: device.userId,
     version,
   });
-  if (status.recoveryKey.publicKey === input.recoveryKey.publicKey) {
+  if (status.recoveryKey?.publicKey === input.recoveryKey.publicKey) {
     const restored = await tryCatch(restoreFromRecoveryPhrase(phrase));
     if (restored.error) return { device, status: "unsaved" as const };
     return { device, status: "reset" as const, version: version - 1 };

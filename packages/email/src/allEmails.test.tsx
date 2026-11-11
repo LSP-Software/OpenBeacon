@@ -83,7 +83,7 @@ describe("every email", () => {
       })
       .map(({ subject }) => subject);
     expect([...new Set(subjects)].toSorted()).toEqual([
-      "A new device was added to your OpenBeacon account",
+      "New sign-in to your OpenBeacon account",
       "Your OpenBeacon account is scheduled for deletion",
     ]);
   });

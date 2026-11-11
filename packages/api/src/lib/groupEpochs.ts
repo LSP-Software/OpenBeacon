@@ -142,6 +142,7 @@ export const listUserRecipientPublicKeys = async ({
     },
     where: {
       revokedAt: null,
+      activatedAt: { not: null },
       userId,
     },
   });
@@ -216,6 +217,7 @@ export const getGroupJoinContext = async ({
     },
     where: {
       revokedAt: null,
+      activatedAt: { not: null },
       OR: [
         {
           user: {
@@ -306,6 +308,7 @@ export const getGroupRemovalContext = async ({
     },
     where: {
       revokedAt: null,
+      activatedAt: { not: null },
       user: {
         groupMembers: {
           some: {
@@ -383,6 +386,7 @@ export const persistGroupEpoch = async ({
     where: {
       id: epoch.createdByDeviceId,
       revokedAt: null,
+      activatedAt: { not: null },
       userId,
     },
   });
@@ -449,6 +453,7 @@ export const persistGroupEpoch = async ({
     },
     where: {
       revokedAt: null,
+      activatedAt: { not: null },
       ...(excludedUserId ? { userId: { not: excludedUserId } } : {}),
       user: {
         groupMembers: {
@@ -612,37 +617,42 @@ export const upsertUserDevice = async ({
   const createResult = await tryCatch(
     db.$transaction(async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`);
-      const firstDevice = (await tx.userDevice.count({ where: { userId } })) === 0;
+      const pending =
+        (await tx.userDevice.count({
+          where: { userId, activatedAt: { not: null }, revokedAt: null },
+        })) > 0;
       const device = await tx.userDevice.create({
         data: {
           id: input.deviceId,
           model: input.model ?? null,
           name: input.name ?? input.model ?? "Phone",
           icon: input.icon ?? defaultDeviceIcon(input.model),
-          activatedAt: new Date(),
-          activatedBy: firstDevice ? "firstDevice" : "existing",
+          activatedAt: pending ? null : new Date(),
+          activatedBy: pending ? null : "firstDevice",
           platform: input.platform ?? null,
           publicKey: input.publicKey,
           publicKeyAlgorithm: input.algorithm,
           userId,
         },
       });
-      await tx.group.updateMany({
-        data: { epochRotationRequired: true },
-        where: { groupMembers: { some: { userId } } },
-      });
-      return { device, firstDevice };
+      if (!pending) {
+        await tx.group.updateMany({
+          data: { epochRotationRequired: true },
+          where: { groupMembers: { some: { userId } } },
+        });
+      }
+      return device;
     }),
   );
 
   if (!createResult.error) {
-    if (!createResult.data.firstDevice) {
+    if (createResult.data.activatedAt === null) {
       securityAlerts?.send(userId, {
         type: "new-device",
         device: { model: input.model ?? null, platform: input.platform ?? null },
       });
     }
-    return createResult.data.device;
+    return createResult.data;
   }
 
   const error = createResult.error;

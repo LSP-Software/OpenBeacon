@@ -1,10 +1,16 @@
 import { auth, emailCodes, securityAlerts } from "@openbeacon/auth";
 import type { OpenBeaconCache } from "@openbeacon/cache";
 import type { PrismaClient } from "@openbeacon/database";
-import { deviceIdHeader, deviceRemovedCause, tryCatch } from "@openbeacon/shared";
+import {
+  deviceIdHeader,
+  devicePendingCause,
+  deviceRemovedCause,
+  tryCatch,
+} from "@openbeacon/shared";
 import { initTRPC } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError, z } from "zod";
+import { DevicePendingError } from "./lib/deviceActivation.ts";
 import { DeviceRemovedError, deviceRemovedError } from "./lib/deviceRemoved.ts";
 import { linkRequestDevice } from "./lib/requestDevice.ts";
 import { RateLimitContextError } from "./middlewares/rateLimit.ts";
@@ -91,7 +97,12 @@ export const createTRPCComponents = () => {
           ...shape,
           data: {
             ...shape.data,
-            cause: error.cause instanceof DeviceRemovedError ? deviceRemovedCause : null,
+            cause:
+              error.cause instanceof DeviceRemovedError
+                ? deviceRemovedCause
+                : error.cause instanceof DevicePendingError
+                  ? devicePendingCause
+                  : null,
             zodError:
               error.cause instanceof ZodError
                 ? z.flattenError(error.cause as ZodError<Record<string, unknown>>)

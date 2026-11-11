@@ -26,6 +26,20 @@ _Avoid_: Wrapped key, recipient key, device envelope
 An Epoch key encrypted to one account's History key, for one History key version.
 _Avoid_: Account wrap, backup wrap, recovery wrap
 
+### Devices
+
+**Active device**:
+A device that has been set up, so it's in its account's Epochs and can send and see locations. The first device on an account is active as soon as it registers.
+_Avoid_: Approved device, trusted device, verified device
+
+**Pending device**:
+A device signed in to an account that already has an Active device, and not yet set up. It gets no Device wraps, can't upload or see locations, and can't create a History key. The server deletes it if it isn't set up within 7 days.
+_Avoid_: Unapproved device, untrusted device, new device
+
+**Activation**:
+A Pending device becoming an Active device. It happens when the device proves it holds the current History key after a Restore, or after a Recovery reset on that device. QR linking will be a third way. Activation flags the account's Groups for a new Epoch, so the next one includes the device.
+_Avoid_: Approval, verification, enrolment
+
 ### Recovery
 
 **Recovery phrase**:
@@ -61,7 +75,7 @@ Replacing the Recovery phrase from an Enrolled device. The History key versions 
 _Avoid_: Rotation, re-key, reset
 
 **Recovery reset**:
-Replacing the Recovery phrase when it's lost and no Enrolled device is left. It deletes every History key version and starts a new one.
+Replacing the Recovery phrase when it's lost and no Enrolled device is left, or making a new one when the account never had one. It deletes every History key version and starts a new one with a Recovery escrow. On a Pending device it's the "Start fresh" option, and the device's Activation.
 _Avoid_: Start over, wipe, phrase change
 
 ### Personal data

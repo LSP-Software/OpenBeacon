@@ -87,7 +87,6 @@ describe("group epoch helpers", () => {
     expect(await register({ model: "Pixel 9" })).toMatchObject({
       name: "Pixel 9",
       icon: "phone",
-      activatedBy: "existing",
     });
     expect(await register({ model: "iPad Air" })).toMatchObject({
       name: "iPad Air",
@@ -97,6 +96,45 @@ describe("group epoch helpers", () => {
     expect(await register({ model: "iPad Air", name: "Car tablet", icon: "car" })).toMatchObject({
       name: "Car tablet",
       icon: "car",
+    });
+  });
+
+  test("a device on an account that already has an active device is Pending", async () => {
+    const create = mock(async ({ data }: { data: Record<string, unknown> }) => data);
+    const updateMany = mock(async () => ({ count: 1 }));
+    const count = mock(async (_args: unknown) => 1);
+    const send = mock(() => {});
+    await upsertUserDevice({
+      db: {
+        $transaction: async (run: (tx: object) => Promise<unknown>) =>
+          run({
+            $queryRaw: async () => [],
+            group: { updateMany },
+            userDevice: { count, create },
+          }),
+        userDevice: { findUnique: async () => null },
+      } as unknown as Parameters<typeof upsertUserDevice>[0]["db"],
+      securityAlerts: { send } as unknown as Parameters<
+        typeof upsertUserDevice
+      >[0]["securityAlerts"],
+      input: {
+        algorithm: DEVICE_KEY_ALGORITHM,
+        deviceId: "device-b",
+        model: "Pixel 9",
+        platform: "android",
+        publicKey: "public-key",
+      },
+      userId: "user-a",
+    });
+
+    expect(count).toHaveBeenCalledWith({
+      where: { userId: "user-a", activatedAt: { not: null }, revokedAt: null },
+    });
+    expect(create.mock.calls[0]?.[0].data).toMatchObject({ activatedAt: null, activatedBy: null });
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith("user-a", {
+      type: "new-device",
+      device: { model: "Pixel 9", platform: "android" },
     });
   });
 
@@ -401,6 +439,7 @@ describe("group epoch helpers", () => {
           },
         ],
         revokedAt: null,
+        activatedAt: { not: null },
       },
     });
     expect(result.latestEpoch?.epochNumber).toBe(1);
@@ -540,6 +579,7 @@ describe("group epoch helpers", () => {
       where: {
         id: "device-a",
         revokedAt: null,
+        activatedAt: { not: null },
         userId: "user-a",
       },
     });
@@ -557,6 +597,7 @@ describe("group epoch helpers", () => {
       },
       where: {
         revokedAt: null,
+        activatedAt: { not: null },
         user: {
           groupMembers: {
             some: {

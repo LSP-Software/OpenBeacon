@@ -98,6 +98,7 @@ export const groupMembershipRouter = {
     const devices = await ctx.db.userDevice.findMany({
       where: {
         revokedAt: null,
+        activatedAt: { not: null },
         user: { groupMembers: { some: { groupId: input.groupId } } },
       },
       orderBy: { createdAt: "asc" },

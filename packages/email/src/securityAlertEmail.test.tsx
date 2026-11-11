@@ -98,24 +98,26 @@ describe("renderSecurityAlertEmail", () => {
     }
   });
 
-  test("a new device alert names the phone's model and platform", async () => {
+  test("a new sign-in alert names the phone and says it can't see locations yet", async () => {
     const email = await render({
       type: "new-device",
       device: { model: "Pixel 8", platform: "android" },
     });
-    expect(email.subject).toBe("A new device was added to your OpenBeacon account");
-    expect(email.text).toContain("New device added\n\nA new device was added");
+    expect(email.subject).toBe("New sign-in to your OpenBeacon account");
+    expect(email.text).toContain(
+      "New sign-in\n\nNew sign-in on Pixel 8 (Android). It can’t see anyone’s location until it’s set up.",
+    );
     expect(email.text).toContain("Device\nPixel 8 (Android)\n");
   });
 
-  test("a new device alert still reads well without the model or platform", async () => {
+  test("a new sign-in alert still reads well without the model or platform", async () => {
     const platformOnly = await render({
       type: "new-device",
       device: { model: null, platform: "ios" },
     });
     expect(platformOnly.text).toContain("Device\niOS device\n");
     const unknown = await render({ type: "new-device", device: { model: null, platform: null } });
-    expect(unknown.text).toContain("A new device was added to your OpenBeacon account.\n");
+    expect(unknown.text).toContain("New sign-in on a phone or tablet.");
     expect(unknown.text).not.toContain("Device\n");
     expect(unknown.text).not.toContain("a device");
   });
@@ -178,7 +180,7 @@ describe("renderSecurityAlertEmail", () => {
     }
   });
 
-  test("a new device alert tells the owner what to do if someone else signed in", async () => {
+  test("a new sign-in alert tells the owner what to do if someone else signed in", async () => {
     const device = { model: "Pixel 8", platform: "android" } as const;
     const withPassword = await render({ type: "new-device", device });
     expect(withPassword.text).toContain(

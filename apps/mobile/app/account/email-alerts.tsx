@@ -22,8 +22,8 @@ const alerts = [
     description: "Always on. Sent when your recovery phrase is changed or reset.",
   },
   {
-    label: "New device added",
-    description: "When a new device is set up on your account.",
+    label: "New sign-in",
+    description: "When a new phone or tablet signs in to your account.",
     setting: "alertNewDevice",
   },
   {

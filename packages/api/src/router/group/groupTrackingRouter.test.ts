@@ -49,6 +49,7 @@ const createCaller = async ({
   groupFindUniqueMock,
   queryRawMock,
   now = () => 0,
+  pending = false,
 }: {
   createManyMock?: ReturnType<typeof mock>;
   findManyDevicesMock?: ReturnType<typeof mock>;
@@ -58,6 +59,7 @@ const createCaller = async ({
   groupFindUniqueMock: ReturnType<typeof createGroupFindUniqueMock>;
   queryRawMock?: ReturnType<typeof mock>;
   now?: () => number;
+  pending?: boolean;
 }) => {
   const [{ createTRPCRouter }, { groupTrackingRouter }] = await Promise.all([
     import("../../trpcRuntime.ts"),
@@ -86,10 +88,12 @@ const createCaller = async ({
     userDevice: {
       findMany: findManyDevicesMock ?? mock(async () => [{ id: "device-1", userId: "user-1" }]),
       updateMany: mock(async () => ({ count: 1 })),
+      findFirst: mock(async () => (pending ? null : { id: "device-1" })),
     },
   };
   const context = {
     cache,
+    deviceId: "device-1",
     clientIp: "203.0.113.10",
     db: {
       ...db,
@@ -322,6 +326,38 @@ describe("groupTrackingRouter", () => {
       rotated.caller.groupTracking.uploadBatch({ groupId: "group-1", points: [point] }),
     ).resolves.toBeDefined();
     expect(createManyMock).toHaveBeenCalled();
+  });
+
+  test("refuses a Pending device on upload, poll and getLatest without reading points", async () => {
+    const createManyMock = mock(async () => ({ count: 0 }));
+    const findManyPayloadsMock = mock(async () => []);
+    const queryRawMock = mock(async () => []);
+    const { caller } = await createCaller({
+      createManyMock,
+      findManyPayloadsMock,
+      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      pending: true,
+      queryRawMock,
+    });
+    const point = {
+      algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+      ciphertext: "ciphertext",
+      clientPointId: "point-1",
+      epochId: "epoch-1",
+      kind: TRACKING_POINT_KIND,
+      nonce: validNonce,
+      senderDeviceId: "device-1",
+    };
+    for (const request of [
+      () => caller.groupTracking.uploadBatch({ groupId: "group-1", points: [point] }),
+      () => caller.groupTracking.poll({ groupId: "group-1" }),
+      () => caller.groupTracking.getLatest({ groupId: "group-1" }),
+    ]) {
+      await expect(request()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    }
+    expect(createManyMock).not.toHaveBeenCalled();
+    expect(findManyPayloadsMock).not.toHaveBeenCalled();
+    expect(queryRawMock).not.toHaveBeenCalled();
   });
 
   test("poll returns points for members", async () => {

@@ -29,7 +29,7 @@ import {
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 
 const RecoveryPhraseResetScreen = () => {
-  const { afterSignIn } = useLocalSearchParams<{ afterSignIn?: string }>();
+  const { setup } = useLocalSearchParams<{ setup?: string }>();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<
     "warn" | "verify" | "code" | "phrase" | "saving" | "protecting" | "unsaved" | "done"
@@ -137,6 +137,10 @@ const RecoveryPhraseResetScreen = () => {
     void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", device.userId] });
     void queryClient.invalidateQueries({ queryKey: ["personalNicknames"] });
     requestTrackingSync();
+    if (setup) {
+      router.replace("/setup/remove-devices");
+      return;
+    }
     setStep("done");
   };
 
@@ -145,7 +149,9 @@ const RecoveryPhraseResetScreen = () => {
       <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
         <View className="flex-row items-center justify-between">
           {step === "saving" || step === "protecting" ? <View className="w-10" /> : <BackButton />}
-          <Text className="text-foreground text-2xl font-bold">Reset phrase</Text>
+          <Text className="text-foreground text-2xl font-bold">
+            {setup ? "Start fresh" : "Reset phrase"}
+          </Text>
           <View className="w-10" />
         </View>
       </SafeAreaView>
@@ -160,7 +166,23 @@ const RecoveryPhraseResetScreen = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {step === "warn" && (
+          {step === "warn" && setup && (
+            <View className="gap-4">
+              <Text className="text-foreground text-3xl font-bold">Start fresh on this phone?</Text>
+              <View className="gap-2 rounded-lg border border-destructive bg-destructive/10 p-4">
+                <Text className="font-semibold">
+                  Your location history from before today will be deleted for good.
+                </Text>
+                <Text className="text-muted-foreground leading-6">
+                  Your groups and members stay. You’ll get a new recovery phrase, and this phone is
+                  set up straight away. Your other phones keep working but will need the new phrase
+                  to read history.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {step === "warn" && !setup && (
             <View className="gap-4">
               <Text className="text-foreground text-3xl font-bold">
                 Reset your recovery phrase?
@@ -181,6 +203,11 @@ const RecoveryPhraseResetScreen = () => {
               <Text className="text-muted-foreground text-base leading-6">
                 Your groups and live location sharing aren’t affected.
               </Text>
+            </View>
+          )}
+
+          {step === "warn" && (
+            <View className="gap-4">
               {providers?.email && (
                 <Text className="text-muted-foreground text-base leading-6">
                   To make sure it’s you, we’ll email you a code before you get your new phrase.
@@ -269,8 +296,8 @@ const RecoveryPhraseResetScreen = () => {
               <Button
                 onPress={() =>
                   router.replace(
-                    afterSignIn
-                      ? { pathname: "/account/recovery-restore", params: { afterSignIn: "true" } }
+                    setup
+                      ? { pathname: "/account/recovery-restore", params: { setup: "true" } }
                       : "/account/recovery-restore",
                   )
                 }
@@ -293,7 +320,7 @@ const RecoveryPhraseResetScreen = () => {
                 </Text>
               )}
               <RecoveryCoverage userId={userId} />
-              <Button onPress={() => (afterSignIn ? router.replace("/") : router.back())}>
+              <Button onPress={() => router.back()}>
                 <Text>Done</Text>
               </Button>
             </View>
