@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { devicePendingCause } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 
 let deleted = false;
 mock.module("expo-file-system", () => ({
@@ -66,5 +68,26 @@ describe("uploadImageFromUri", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  test("shows the server's reason when it refuses the upload", async () => {
+    const confirm = mock(async () => ({ imageUrl: "https://cdn.example/image" }));
+    expect(
+      await uploadImageFromUri({
+        uri: "file://image",
+        requestImageUpload: async () => {
+          throw TRPCClientError.from({
+            error: {
+              code: -32003,
+              data: { cause: devicePendingCause, code: "FORBIDDEN", httpStatus: 403 },
+              message: "Finish setting up this phone first.",
+            },
+          });
+        },
+        confirmImageUpload: confirm,
+      }),
+    ).toEqual({ error: "Finish setting up this phone first." });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(deleted).toBe(true);
   });
 });

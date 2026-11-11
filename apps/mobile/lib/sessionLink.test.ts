@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { createDeviceKeyPair, sealSessionLinkChallenge } from "@openbeacon/encryption";
+import { deviceRemovedCause } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 
 const deviceKey = createDeviceKeyPair();
 const otherKey = createDeviceKeyPair();
@@ -9,12 +11,16 @@ let sealedTo = deviceKey.publicKey;
 let alreadyLinked = false;
 let registered: typeof device | null = device;
 let release: () => void = () => {};
+let challengeError: Error | null = null;
+let now = 0;
+const alerts: string[] = [];
 
 const sessionChallenge = mock(async ({ deviceId }: { deviceId: string }) => {
   calls.push(`challenge:${deviceId}`);
   await new Promise<void>((resolve) => {
     release = resolve;
   });
+  if (challengeError) throw challengeError;
   if (alreadyLinked) return { linked: true as const };
   return {
     linked: false as const,
@@ -48,6 +54,37 @@ mock.module("./deviceKeys.ts", () => ({
   getRegisteredDeviceKey: async () => registered,
 }));
 
+mock.module("./auth-client.ts", () => ({
+  authClient: { getSession: async () => ({ data: { session: { token: "token-1" } } }) },
+}));
+
+const signOutOfThisPhone = mock(
+  async (input: { removeThisPhone: boolean; sessionTokenToRevoke: string | null }) => {
+    calls.push(`signOut:${input.removeThisPhone}:${input.sessionTokenToRevoke}`);
+    return { status: "signedOut" as const };
+  },
+);
+mock.module("./signOut.ts", () => ({ signOutOfThisPhone }));
+
+mock.module("expo-router", () => ({
+  router: { replace: (target: string) => calls.push(`navigate:${target}`) },
+}));
+
+mock.module("./alert.ts", () => ({
+  Alert: { alert: (title: string, message: string) => alerts.push(`${title}|${message}`) },
+}));
+
+Date.now = () => now;
+
+const refusal = (code: string, cause: string | null = null) =>
+  TRPCClientError.from({
+    error: {
+      code: -32003,
+      data: { cause, code, httpStatus: code === "NOT_FOUND" ? 404 : 403 },
+      message: "Refused",
+    },
+  });
+
 const { handleDeviceUnverified, linkSessionToDevice } = await import("./sessionLink.ts");
 
 const settle = async () => {
@@ -57,9 +94,12 @@ const settle = async () => {
 describe("linking this sign-in to the phone", () => {
   beforeEach(() => {
     calls.length = 0;
+    alerts.length = 0;
     sealedTo = deviceKey.publicKey;
     alreadyLinked = false;
+    challengeError = null;
     registered = device;
+    now += 60_000;
   });
 
   test("answers the challenge with the phone's key", async () => {
@@ -119,5 +159,64 @@ describe("linking this sign-in to the phone", () => {
     await handleDeviceUnverified();
 
     expect(calls).toEqual([]);
+  });
+
+  test("a refused link signs out of this phone once and asks to sign in again", async () => {
+    challengeError = refusal("FORBIDDEN");
+    const burst = [handleDeviceUnverified(), handleDeviceUnverified(), handleDeviceUnverified()];
+    await settle();
+    release();
+    await Promise.all(burst);
+    now += 20_000;
+    challengeError = null;
+    const next = handleDeviceUnverified();
+    await settle();
+    release();
+    await next;
+
+    expect(calls.slice(0, 3)).toEqual([
+      "challenge:device-1",
+      "signOut:false:token-1",
+      "navigate:/",
+    ]);
+    expect(calls.filter((call) => call.startsWith("signOut"))).toHaveLength(1);
+    expect(alerts).toEqual(["You’ve been signed out|Sign in again to keep using this phone."]);
+  });
+
+  test("a network failure doesn't sign out and retries only after the back-off", async () => {
+    challengeError = TRPCClientError.from(new TypeError("Network request failed"));
+    const first = handleDeviceUnverified();
+    await settle();
+    release();
+    await first;
+    now += 5_000;
+    await handleDeviceUnverified();
+    expect(calls).toEqual(["challenge:device-1"]);
+
+    challengeError = null;
+    now += 6_000;
+    const retry = handleDeviceUnverified();
+    await settle();
+    release();
+    await retry;
+
+    expect(calls).toEqual([
+      "challenge:device-1",
+      "challenge:device-1",
+      "link:device-1:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+      "invalidate",
+    ]);
+    expect(alerts).toEqual([]);
+  });
+
+  test("a removed phone is left to the wipe instead of signing out here", async () => {
+    challengeError = refusal("FORBIDDEN", deviceRemovedCause);
+    const handling = handleDeviceUnverified();
+    await settle();
+    release();
+    await handling;
+
+    expect(calls).toEqual(["challenge:device-1"]);
+    expect(alerts).toEqual([]);
   });
 });

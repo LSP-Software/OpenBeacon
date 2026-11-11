@@ -180,18 +180,30 @@ const AccountScreen = () => {
     if (signOutPhase) return;
     setSignOutPhase("uploading");
     const { signOutOfThisPhone } = await import("../../../lib/signOut.ts");
-    const { phoneRemoved } = await signOutOfThisPhone({
+    const { status } = await signOutOfThisPhone({
       onSigningOut: () => setSignOutPhase("signingOut"),
       removeThisPhone,
       sessionTokenToRevoke: session?.session?.token ?? null,
     });
-    if (removeThisPhone && !phoneRemoved) {
+    setSignOutPhase(null);
+    if (status === "serverUnreachable") {
+      Alert.alert(
+        "Couldn’t reach the server",
+        "This phone may not have been removed. Try again, or sign out without removing this phone.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign out without removing", onPress: () => signOut({ removeThisPhone: false }) },
+          { text: "Try again", onPress: () => signOut({ removeThisPhone: true }) },
+        ],
+      );
+      return;
+    }
+    if (removeThisPhone && status === "signedOut") {
       Alert.alert(
         "This phone is still in Devices",
         "You’ve been signed out, but we couldn’t remove this phone. Remove it from another device in Account → Devices.",
       );
     }
-    setSignOutPhase(null);
     router.replace("/");
   };
 

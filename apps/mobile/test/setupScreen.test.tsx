@@ -18,7 +18,7 @@ const replace = mock((_route: string) => {});
 const signOutOfThisPhone = mock(
   async (_input: { removeThisPhone: boolean; sessionTokenToRevoke: string | null }) => {
     if (signOutError) throw signOutError;
-    return { phoneRemoved: false };
+    return { status: "signedOut" as const };
   },
 );
 

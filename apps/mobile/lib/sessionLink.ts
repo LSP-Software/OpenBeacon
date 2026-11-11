@@ -1,6 +1,9 @@
 import { type DevicePrivateKeyMaterial, openSessionLinkChallenge } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
+import { Alert } from "./alert.ts";
 import { queryClient, trpcClient } from "./api.ts";
+import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 
 const proveDevice = async ({
   deviceId,
@@ -46,11 +49,33 @@ const recoverUnverifiedSession = async () => {
   const device = await getRegisteredDeviceKey();
   if (!device) return;
   const linked = await tryCatch(linkSessionToDevice(device));
-  if (linked.error) {
-    lastFailure = Date.now();
+  if (!linked.error) {
+    await queryClient.invalidateQueries();
     return;
   }
-  await queryClient.invalidateQueries();
+  lastFailure = Date.now();
+  const refused =
+    linked.error instanceof TRPCClientError &&
+    !!linked.error.data &&
+    linked.error.data.httpStatus < 500 &&
+    linked.error.data.code !== "TOO_MANY_REQUESTS" &&
+    !isDeviceRemovedError(linked.error);
+  if (!refused) return;
+  const [{ authClient }, { signOutOfThisPhone }, { router }] = await Promise.all([
+    import("./auth-client.ts"),
+    import("./signOut.ts"),
+    import("expo-router"),
+  ]);
+  const session = await tryCatch(authClient.getSession());
+  await tryCatch(
+    signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: false,
+      sessionTokenToRevoke: session.data?.data?.session.token ?? null,
+    }),
+  );
+  await tryCatch(Promise.resolve().then(() => router.replace("/")));
+  Alert.alert("You’ve been signed out", "Sign in again to keep using this phone.");
 };
 
 export const handleDeviceUnverified = () => {

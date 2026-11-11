@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { deviceRemovedCause } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 
 const secureStoreValues = new Map<string, string>();
 const storageValues = new Map<string, string | boolean>();
@@ -94,6 +96,9 @@ mock.module("./tracking.ts", () => ({
   prepareTrackingSignOut: async () => {
     events.push(`prepare:${await readHeaderDeviceId()}`);
   },
+  resumeTracking: () => {
+    events.push("resumeTracking");
+  },
   revokeTrackingAccess: async () => {},
 }));
 
@@ -101,11 +106,13 @@ mock.module("./groupColor.ts", () => ({ clearGroupColors: () => {} }));
 mock.module("./trackingKeyCheck.ts", () => ({ clearTrackingKeyCheck: () => {} }));
 mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => {} }));
 
-const { ensureDeviceKeyRegistration } = await import("./deviceKeys.ts");
+const { cancelDeviceKeyRegistrations, ensureDeviceKeyRegistration } =
+  await import("./deviceKeys.ts");
 const { signOutOfThisPhone } = await import("./signOut.ts");
 
 describe("signing out of this phone", () => {
   beforeEach(() => {
+    cancelDeviceKeyRegistrations();
     secureStoreValues.clear();
     storageValues.clear();
     events.length = 0;
@@ -125,7 +132,7 @@ describe("signing out of this phone", () => {
       sessionTokenToRevoke: null,
     });
 
-    expect(result).toEqual({ phoneRemoved: true });
+    expect(result).toEqual({ status: "phoneRemoved" });
     expect(removalHeaders).toEqual([device.deviceId]);
     expect(events).toEqual([
       `prepare:${device.deviceId}`,
@@ -149,16 +156,37 @@ describe("signing out of this phone", () => {
       sessionTokenToRevoke: null,
     });
 
-    expect(result).toEqual({ phoneRemoved: true });
+    expect(result).toEqual({ status: "phoneRemoved" });
     expect(events.filter((event) => event === "signOut")).toHaveLength(1);
     expect(events.filter((event) => event === "deleteQueue")).toHaveLength(1);
     expect(events.some((event) => event.startsWith("navigate:"))).toBe(false);
     expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(false);
   });
 
-  test("a failed removal still signs out but keeps the keys for the next sign-in", async () => {
+  test("a removal that never reaches the server doesn't sign out or wipe anything", async () => {
     const device = await ensureDeviceKeyRegistration();
-    removalError = new Error("offline");
+    secureStoreValues.set("encryption.history.user-a.1", "history-1");
+    removalError = TRPCClientError.from(new TypeError("Network request failed"));
+
+    const result = await signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: true,
+      sessionTokenToRevoke: "token-1",
+    });
+
+    expect(result).toEqual({ status: "serverUnreachable" });
+    expect(events).toEqual([`prepare:${device.deviceId}`, "removeThisDevice", "resumeTracking"]);
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(true);
+    expect(secureStoreValues.get("encryption.history.user-a.1")).toBe("history-1");
+    expect(secureStoreValues.has("sessionTokenToRevokeOnNextLogin")).toBe(false);
+    expect(storageValues.get("encryption.device.registered")).toBeDefined();
+  });
+
+  test("a removal the server refuses still signs out but keeps the keys for the next sign-in", async () => {
+    const device = await ensureDeviceKeyRegistration();
+    removalError = TRPCClientError.from({
+      error: { code: -32004, data: { code: "NOT_FOUND", httpStatus: 404 }, message: "Not found" },
+    });
 
     const result = await signOutOfThisPhone({
       onSigningOut: () => {},
@@ -166,11 +194,33 @@ describe("signing out of this phone", () => {
       sessionTokenToRevoke: null,
     });
 
-    expect(result).toEqual({ phoneRemoved: false });
+    expect(result).toEqual({ status: "signedOut" });
     expect(removalHeaders).toEqual([device.deviceId]);
     expect(events).toEqual([`prepare:${device.deviceId}`, "removeThisDevice", "signOut"]);
     expect(storageValues.get("encryption.device.id.user-a")).toBe(device.deviceId);
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(true);
     expect(storageValues.has("encryption.device.registered")).toBe(false);
+  });
+
+  test("a retry after the phone was already removed wipes it as removed", async () => {
+    await ensureDeviceKeyRegistration();
+    removalError = TRPCClientError.from({
+      error: {
+        code: -32003,
+        data: { cause: deviceRemovedCause, code: "FORBIDDEN", httpStatus: 403 },
+        message: "This device was removed.",
+      },
+    });
+
+    const result = await signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: true,
+      sessionTokenToRevoke: null,
+    });
+
+    expect(result).toEqual({ status: "phoneRemoved" });
+    expect(events.some((event) => event.startsWith("navigate:"))).toBe(false);
+    expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(false);
   });
 
   test("a plain sign-out forgets the registration only after signing out", async () => {
