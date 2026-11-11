@@ -102,6 +102,10 @@ const SignUp = () => {
     const sessionSetupResult = signInResult?.error
       ? null
       : await completeAuthenticatedSessionSetup();
+    if (sessionSetupResult?.deviceRemoved) {
+      setEmailLoading(false);
+      return;
+    }
     if (signInResult?.error || sessionSetupResult?.error) {
       setEmailLoading(false);
       Alert.alert("Account created", "Your account has been created. Sign in to continue.");

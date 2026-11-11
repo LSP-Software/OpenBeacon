@@ -1,9 +1,16 @@
 import { type DevicePrivateKeyMaterial, openSessionLinkChallenge } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
+import { AppState } from "react-native";
 import { Alert } from "./alert.ts";
 import { queryClient, trpcClient } from "./api.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
+
+export class SessionLinkChallengeUnopenableError extends Error {
+  constructor() {
+    super("This phone couldn't confirm it's yours. Sign in again.");
+  }
+}
 
 const proveDevice = async ({
   deviceId,
@@ -26,7 +33,7 @@ const proveDevice = async ({
       }),
     ),
   );
-  if (answer.error) throw new Error("This phone couldn't confirm it's yours. Sign in again.");
+  if (answer.error) throw new SessionLinkChallengeUnopenableError();
   await trpcClient.device.linkSession.mutate({ answer: answer.data, deviceId });
 };
 
@@ -34,9 +41,13 @@ let pendingLink: Promise<void> | null = null;
 
 export const linkSessionToDevice = (device: Parameters<typeof proveDevice>[0]) => {
   if (pendingLink) return pendingLink;
-  const task = proveDevice(device).finally(() => {
-    pendingLink = null;
-  });
+  const task = proveDevice(device)
+    .then(() => {
+      failedRecoveries = 0;
+    })
+    .finally(() => {
+      pendingLink = null;
+    });
   pendingLink = task;
   return task;
 };
@@ -44,13 +55,24 @@ export const linkSessionToDevice = (device: Parameters<typeof proveDevice>[0]) =
 let pendingRecovery: Promise<void> | null = null;
 let pendingSignOut: Promise<void> | null = null;
 let lastFailure = 0;
+let failedRecoveries = 0;
+
+AppState.addEventListener("change", (state) => {
+  if (state === "active") failedRecoveries = 0;
+});
+
+export const resetSessionLinkRetries = () => {
+  failedRecoveries = 0;
+  lastFailure = 0;
+};
 
 export const isSessionLinkRefused = (error: unknown) =>
-  error instanceof TRPCClientError &&
-  !!error.data &&
-  error.data.httpStatus < 500 &&
-  error.data.code !== "TOO_MANY_REQUESTS" &&
-  !isDeviceRemovedError(error);
+  error instanceof SessionLinkChallengeUnopenableError ||
+  (error instanceof TRPCClientError &&
+    !!error.data &&
+    error.data.httpStatus < 500 &&
+    error.data.code !== "TOO_MANY_REQUESTS" &&
+    !isDeviceRemovedError(error));
 
 export const signOutAfterRefusedSessionLink = () => {
   pendingSignOut ??= (async () => {
@@ -85,12 +107,13 @@ const recoverUnverifiedSession = async () => {
     return;
   }
   lastFailure = Date.now();
+  failedRecoveries++;
   if (isSessionLinkRefused(linked.error)) await signOutAfterRefusedSessionLink();
 };
 
 export const handleDeviceUnverified = () => {
   if (pendingRecovery) return pendingRecovery;
-  if (Date.now() - lastFailure < 10_000) return Promise.resolve();
+  if (failedRecoveries >= 5 || Date.now() - lastFailure < 10_000) return Promise.resolve();
   const task = recoverUnverifiedSession().finally(() => {
     pendingRecovery = null;
   });

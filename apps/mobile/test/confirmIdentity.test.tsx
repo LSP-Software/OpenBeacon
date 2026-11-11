@@ -13,7 +13,10 @@ const events: string[] = [];
 let linkError: Error | null = null;
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 
-mock.module("react-native", () => ({ View }));
+mock.module("react-native", () => ({
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  View,
+}));
 mock.module("expo-router", () => ({
   router: { replace: (target: string) => events.push(`navigate:${target}`) },
 }));
@@ -68,6 +71,7 @@ mock.module("../lib/signOut.ts", () => ({
 }));
 
 const { ConfirmIdentity } = await import("../components/ConfirmIdentity.tsx");
+const { SessionLinkChallengeUnopenableError } = await import("../lib/sessionLink.ts");
 
 const serverError = (code: string, httpStatus: number, cause: string | null = null) =>
   TRPCClientError.from({
@@ -119,6 +123,15 @@ test("a link that can't reach the server asks to check the connection", async ()
 
 test("a link the server refuses signs out once with the session-link message", async () => {
   linkError = serverError("CONFLICT", 409);
+
+  await confirm();
+
+  expect(events).toEqual(["signOut", "navigate:/"]);
+  expect(alerts).toEqual(["You’ve been signed out|Sign in again to keep using this phone."]);
+});
+
+test("a challenge this phone can't open signs out once instead of blaming the connection", async () => {
+  linkError = new SessionLinkChallengeUnopenableError();
 
   await confirm();
 

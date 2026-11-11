@@ -8,6 +8,8 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "./auth-client.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
+import { isDeviceRemovedError } from "./deviceRemovedError.ts";
+import { resetSessionLinkRetries } from "./sessionLink.ts";
 
 const GOOGLE_WEB_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID";
 const GOOGLE_IOS_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID";
@@ -91,8 +93,12 @@ export const revokePendingSessionToken = async () => {
 
 export const completeAuthenticatedSessionSetup = async () => {
   await revokePendingSessionToken();
+  resetSessionLinkRetries();
 
   const { error, data } = await tryCatch(ensureDeviceKeyRegistration({ linkSession: true }));
+  if (isDeviceRemovedError(error)) {
+    return { data: null, deviceRemoved: true as const, error: null };
+  }
   if (error) {
     return {
       data: null,

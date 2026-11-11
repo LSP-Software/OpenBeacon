@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { createDeviceKeyPair, sealSessionLinkChallenge } from "@openbeacon/encryption";
 import { deviceRemovedCause } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
+import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 const deviceKey = createDeviceKeyPair();
 const otherKey = createDeviceKeyPair();
@@ -39,6 +40,19 @@ const linkSession = mock(async ({ answer, deviceId }: { answer: string; deviceId
 const invalidateQueries = mock(async () => {
   calls.push("invalidate");
 });
+
+const appStateListeners = new Set<(state: string) => void>();
+mock.module("react-native", () =>
+  createReactNativeTestModule({
+    appState: {
+      currentState: "active",
+      addEventListener: (_event, listener) => {
+        appStateListeners.add(listener);
+        return { remove: () => appStateListeners.delete(listener) };
+      },
+    },
+  }),
+);
 
 mock.module("./api.ts", () => ({
   queryClient: { invalidateQueries },
@@ -94,12 +108,27 @@ const refusal = (code: string, cause: string | null = null) =>
     },
   });
 
-const { handleDeviceUnverified, linkSessionToDevice, signOutAfterRefusedSessionLink } =
-  await import("./sessionLink.ts");
+const {
+  handleDeviceUnverified,
+  isSessionLinkRefused,
+  linkSessionToDevice,
+  resetSessionLinkRetries,
+  signOutAfterRefusedSessionLink,
+} = await import("./sessionLink.ts");
 
 const settle = async () => {
   for (let index = 0; index < 20; index++) await Promise.resolve();
 };
+
+const attemptAfterBackOff = async () => {
+  now += 11_000;
+  const handling = handleDeviceUnverified();
+  await settle();
+  release();
+  await handling;
+};
+
+const challengeCount = () => calls.filter((call) => call.startsWith("challenge")).length;
 
 describe("linking this sign-in to the phone", () => {
   beforeEach(() => {
@@ -110,6 +139,7 @@ describe("linking this sign-in to the phone", () => {
     challengeError = null;
     registered = device;
     now += 60_000;
+    resetSessionLinkRetries();
   });
 
   test("answers the challenge with the phone's key", async () => {
@@ -154,21 +184,78 @@ describe("linking this sign-in to the phone", () => {
     expect(calls).toEqual([]);
   });
 
-  test("a challenge sealed to another key fails without sending an answer, and waits before retrying", async () => {
+  test("a challenge this phone can't open signs out once and asks to sign in again", async () => {
     sealedTo = otherKey.publicKey;
-    const linking = linkSessionToDevice(device);
+    const direct = linkSessionToDevice(device).catch((error) =>
+      isSessionLinkRefused(error) ? signOutAfterRefusedSessionLink() : undefined,
+    );
+    const burst = [handleDeviceUnverified(), handleDeviceUnverified(), handleDeviceUnverified()];
     await settle();
     release();
-    await expect(linking).rejects.toThrow("couldn't confirm");
+    await Promise.all([direct, ...burst]);
 
-    const handling = handleDeviceUnverified();
-    await settle();
-    release();
-    await handling;
-    calls.length = 0;
-    await handleDeviceUnverified();
+    expect(calls).toEqual(["challenge:device-1", "signOut:false:token-1", "navigate:/"]);
+    expect(alerts).toEqual(["You’ve been signed out|Sign in again to keep using this phone."]);
+  });
 
-    expect(calls).toEqual([]);
+  test("stops retrying after five failed attempts in a row", async () => {
+    challengeError = TRPCClientError.from(new TypeError("Network request failed"));
+    for (let index = 0; index < 5; index++) await attemptAfterBackOff();
+    expect(challengeCount()).toBe(5);
+
+    challengeError = null;
+    await attemptAfterBackOff();
+
+    expect(challengeCount()).toBe(5);
+    expect(calls.filter((call) => call.startsWith("signOut"))).toEqual([]);
+    expect(alerts).toEqual([]);
+  });
+
+  test("returning to the foreground allows retrying again", async () => {
+    challengeError = refusal("SERVICE_UNAVAILABLE");
+    for (let index = 0; index < 5; index++) await attemptAfterBackOff();
+    for (const listener of appStateListeners) listener("background");
+    await attemptAfterBackOff();
+    expect(challengeCount()).toBe(5);
+
+    for (const listener of appStateListeners) listener("active");
+    challengeError = null;
+    await attemptAfterBackOff();
+
+    expect(challengeCount()).toBe(6);
+    expect(calls.at(-1)).toBe("invalidate");
+  });
+
+  test("a successful link starts the count of failed attempts again", async () => {
+    challengeError = refusal("TOO_MANY_REQUESTS");
+    for (let index = 0; index < 4; index++) await attemptAfterBackOff();
+    challengeError = null;
+    await attemptAfterBackOff();
+    challengeError = refusal("TOO_MANY_REQUESTS");
+    for (let index = 0; index < 5; index++) await attemptAfterBackOff();
+    expect(challengeCount()).toBe(10);
+
+    await attemptAfterBackOff();
+
+    expect(challengeCount()).toBe(10);
+  });
+
+  test("a challenge this phone can't open signs out from the background retry alone", async () => {
+    sealedTo = otherKey.publicKey;
+    await attemptAfterBackOff();
+
+    expect(calls).toEqual(["challenge:device-1", "signOut:false:token-1", "navigate:/"]);
+    expect(alerts).toEqual(["You’ve been signed out|Sign in again to keep using this phone."]);
+  });
+
+  test("signing in again allows retrying again", async () => {
+    challengeError = refusal("INTERNAL_SERVER_ERROR");
+    for (let index = 0; index < 5; index++) await attemptAfterBackOff();
+    resetSessionLinkRetries();
+    challengeError = null;
+    await attemptAfterBackOff();
+
+    expect(challengeCount()).toBe(6);
   });
 
   test("a refused link signs out of this phone once and asks to sign in again", async () => {
