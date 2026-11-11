@@ -21,23 +21,31 @@ export const feedbackRouter = {
         },
         select: { id: true },
       });
-      if (!ctx.feedbackWebhookUrl) return;
+      const webhookUrl = ctx.feedbackWebhookUrl;
+      if (!webhookUrl) return;
 
-      const alert = await tryCatch(
-        fetch(ctx.feedbackWebhookUrl, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            content: `New feedback \`${feedback.id}\` (${input.email ? "contact email included" : "no contact email"})`,
-            allowed_mentions: { parse: [] },
+      void (async () => {
+        const alert = await tryCatch(
+          fetch(webhookUrl, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              content: `New feedback \`${feedback.id}\` (${input.email ? "contact email included" : "no contact email"})`,
+              allowed_mentions: { parse: [] },
+            }),
+            redirect: "error",
+            signal: AbortSignal.timeout(5_000),
           }),
-          signal: AbortSignal.timeout(5_000),
-        }),
-      );
-      if (alert.error || !alert.data.ok) {
-        console.error("[feedback] Discord alert failed", {
-          status: alert.data?.status ?? null,
-        });
-      }
+        );
+        if (!alert.data?.ok) {
+          console.error("[feedback] Discord feedback webhook failed", {
+            feedbackId: feedback.id,
+            status: alert.data?.status ?? null,
+            error: alert.error instanceof Error ? alert.error.name : null,
+          });
+          return;
+        }
+        console.log("[feedback] Discord feedback webhook called", { feedbackId: feedback.id });
+      })();
     }),
 } satisfies TRPCRouterRecord;

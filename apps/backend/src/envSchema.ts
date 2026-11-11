@@ -33,7 +33,25 @@ export const envSchema = {
     .default("none"),
   DISCORD_FEEDBACK_WEBHOOK_URL: z.preprocess(
     (value) => (value === "" ? undefined : value),
-    z.url({ protocol: /^https$/ }).optional(),
+    z
+      .url({
+        protocol: /^https$/,
+        hostname: /^(discord\.com|discordapp\.com|ptb\.discord\.com|canary\.discord\.com)$/,
+      })
+      .refine(
+        (value) => {
+          const url = URL.parse(value);
+          return (
+            url !== null &&
+            url.port === "" &&
+            url.username === "" &&
+            url.password === "" &&
+            url.pathname.startsWith("/api/webhooks/")
+          );
+        },
+        { message: "DISCORD_FEEDBACK_WEBHOOK_URL must be a Discord webhook URL" },
+      )
+      .optional(),
   ),
   CLOUDFLARE_ORIGIN_SECRET: z.preprocess(
     (value) => (value === "" ? undefined : value),
