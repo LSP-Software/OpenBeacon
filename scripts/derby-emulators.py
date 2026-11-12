@@ -90,11 +90,8 @@ def image_updates(listing, packages):
             table = tables.get(line.strip())
             continue
         cells = [cell.strip() for cell in line.split("|")]
-        if table is not None and len(cells) > 1 and cells[0] in packages:
-            try:
-                table[cells[0]] = max(table.get(cells[0], ()), tuple(int(part) for part in cells[1].split(".")))
-            except ValueError:
-                pass
+        if table is not None and len(cells) > 1 and cells[0] in packages and all(part.isdigit() for part in cells[1].split(".")):
+            table[cells[0]] = max(table.get(cells[0], ()), tuple(int(part) for part in cells[1].split(".")))
     installed, available = tables.values()
     return {package: (".".join(map(str, installed[package])), ".".join(map(str, available[package]))) for package in packages if package in installed and package in available and available[package] > installed[package]}
 
