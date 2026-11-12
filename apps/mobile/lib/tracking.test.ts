@@ -496,6 +496,7 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
 
 const {
   dismissTrackingQueueEviction,
+  flushForegroundTrackingPoints,
   flushPendingTrackingPoints,
   getTrackingQueueEviction,
   getUnassignedTrackingPoints,
@@ -1508,6 +1509,19 @@ describe("tracking service", () => {
     missingWrappedGroup = null;
     await reconcileTrackingKeys({ startCapture: true });
     expect(provisionedKeys.map(({ epochId }) => epochId).sort()).toEqual(["epoch-1", "epoch-2"]);
+  });
+
+  test("the open app leaves routine uploads to running capture", async () => {
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    captureRunning = true;
+    await flushForegroundTrackingPoints();
+    expect(uploadCalls).toEqual([]);
+    await flushForegroundTrackingPoints(true);
+    expect(uploadCalls).toHaveLength(1);
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-2", groupId: "group-1", id: 2 })];
+    captureRunning = false;
+    await flushForegroundTrackingPoints();
+    expect(uploadCalls).toHaveLength(2);
   });
 
   test("a background upload with fresh keys doesn't fetch the sharing state", async () => {

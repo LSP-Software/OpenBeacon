@@ -229,6 +229,7 @@ class TrackingCaptureServiceTest {
     assertEquals(null, shadowOf(application).peekNextStartedService())
 
     queue.insertAll(listOf(CiphertextQueueRow(owner = "test-owner", clientPointId = "point", captureId = "capture", groupId = "group", epochId = "epoch", senderDeviceId = "tablet", kind = "trackingPoint", algorithm = "algorithm", nonce = "nonce", ciphertext = "ciphertext", queuedAt = 1)))
+    TrackingRuntime.captureCommands.stop()
     connectivity.networkCallbacks.single().onAvailable(ShadowNetwork.newInstance(1))
     connectivity.networkCallbacks.single().onAvailable(ShadowNetwork.newInstance(2))
     val deadline = System.currentTimeMillis() + 5_000L

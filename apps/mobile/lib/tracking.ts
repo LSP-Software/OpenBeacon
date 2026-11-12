@@ -804,6 +804,11 @@ export const flushPendingTrackingPoints = (force = false): Promise<void> => {
   return current;
 };
 
+export const flushForegroundTrackingPoints = async (force = false) => {
+  if (!force && (await loadTrackingModule())?.isCaptureRunning()) return;
+  await flushPendingTrackingPoints(force);
+};
+
 const showApiCompatibilityNotice = async () => {
   const compatibility = getApiCompatibility();
   if (!compatibility || compatibility.notified) return;

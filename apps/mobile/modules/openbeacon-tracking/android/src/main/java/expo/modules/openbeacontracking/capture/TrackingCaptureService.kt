@@ -235,10 +235,9 @@ class TrackingCaptureService : Service() {
   private fun watchConnectivity() {
     val connectivity = getSystemService(ConnectivityManager::class.java) ?: return
     networkCallback?.let { connectivity.unregisterNetworkCallback(it) }
-    val generation = TrackingRuntime.captureCommands.current()
     val callback = object : ConnectivityManager.NetworkCallback() {
       override fun onAvailable(network: Network) {
-        captureScope.launch { requestUploadIfDue(generation) }
+        captureScope.launch { requestUploadIfDue(TrackingRuntime.captureCommands.current()) }
       }
     }
     try {
