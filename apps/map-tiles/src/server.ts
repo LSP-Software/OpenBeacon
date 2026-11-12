@@ -1,10 +1,11 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { tryCatch } from "@openbeacon/shared";
 import { z } from "zod";
 import type { PublishResult } from "./commands.ts";
 import type { MapStatus, UpdateRun } from "./status.ts";
 
-const digest = (value: string) => createHash("sha256").update(value).digest();
+const digestKey = randomBytes(32);
+const digest = (value: string) => createHmac("sha256", digestKey).update(value).digest();
 
 const updateRequestSchema = z.object({ force: z.boolean().default(false) });
 
