@@ -58,32 +58,38 @@ request came from Cloudflare, so only use it when the origin is reachable solely
 through Cloudflare, for example via Cloudflare Tunnel or a firewall that only
 allows Cloudflare's IP ranges. Otherwise use `cloudflare-authenticated`.
 
-The `Deploy backend` GitHub Actions workflow also builds and deploys the separate scheduled job runner. Every installation needs the runner: besides account deletion, it deletes expired email codes and verification tokens every hour, deletes new devices that weren't set up within 7 days or were removed more than 7 days ago, and deletes old device links and expired device challenges. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
+The `Deploy backend` GitHub Actions workflow also deploys the separate scheduled job runner. Every installation needs the runner: besides account deletion, it deletes expired email codes and verification tokens every hour, deletes new devices that weren't set up within 7 days or were removed more than 7 days ago, and deletes old device links and expired device challenges. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
 
-To deploy, dispatch the `Deploy backend` GitHub Actions workflow from `main`.
-It waits for approval in the `production` GitHub environment, which holds the
-`DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `COOLIFY_ENDPOINT` and `COOLIFY_TOKEN`
-secrets. It then builds the backend, runner and map tiles images, pushes them to
-`lspsoftware/openbeacon-backend`, `lspsoftware/openbeacon-scheduled-jobs` and
-`lspsoftware/openbeacon-map-tiles` tagged with `serverVersion` from
-`src/version.ts` and `latest-stable`. With
-"Trigger the Coolify deployment" ticked, it then asks Coolify to deploy
-`latest-stable` to the `OpenBeacon Backend` and `OpenBeacon Scheduled Jobs`
-applications; leave it unticked to deploy from Coolify yourself later. It never
-redeploys `OpenBeacon Map Tiles`, because a restart interrupts a map upload that
-can take hours: deploy it from Coolify when `map-tiles status` shows no update
-running. The workflow fails if that version was
-already released from a different commit, so bump `serverVersion` for every
-release. Re-running a failed deploy is safe: images this commit already pushed
-are reused instead of rebuilt.
+Building and deploying are separate workflows. Both use the `DOCKERHUB_USERNAME`
+and `DOCKERHUB_TOKEN` secrets in the `production` GitHub environment.
 
-For the first deployment, apply the Coolify infrastructure plan and populate its
-environment variables before dispatching the workflow. To roll back, point
-Coolify at an earlier version tag and redeploy; restore `latest-stable` before
-the next normal deployment. The workflow waits for Coolify to report the
-deployment result. If polling fails or times out, check the deployment in
-Coolify before retrying. Avoid starting other deployments manually while a
-workflow release is in progress.
+The `Build images` workflow runs on every push to `main` that changes server
+code, and can be dispatched from `main` by hand. It builds the backend, runner
+and map tiles images and pushes them to `lspsoftware/openbeacon-backend`,
+`lspsoftware/openbeacon-scheduled-jobs` and `lspsoftware/openbeacon-map-tiles`,
+tagged with `serverVersion` from `src/version.ts`. It never moves
+`latest-stable` and never deploys. An image already published for that version
+is left alone: a re-run of the same commit skips it, and a different commit
+gets a warning to bump `serverVersion`.
+
+To release, dispatch the `Deploy backend` workflow from `main`. It releases
+`serverVersion` from `main` unless you enter another version, and fails if the
+three images for that version aren't published yet. It points `latest-stable`
+at that version for all three images. With "Trigger the Coolify deployment"
+ticked, it then asks Coolify to deploy `latest-stable` to the
+`OpenBeacon Backend` and `OpenBeacon Scheduled Jobs` applications, using the
+`COOLIFY_ENDPOINT` and `COOLIFY_TOKEN` secrets; leave it unticked to deploy
+from Coolify yourself later. It never redeploys `OpenBeacon Map Tiles`, because
+a restart interrupts a map upload that can take hours: deploy it from Coolify
+when `map-tiles status` shows no update running.
+
+To roll back, dispatch `Deploy backend` with the earlier version and the
+Coolify deployment ticked. For the first deployment, apply the Coolify
+infrastructure plan and populate its environment variables before dispatching
+the workflow. The workflow waits for Coolify to report the deployment result.
+If polling fails or times out, check the deployment in Coolify before retrying.
+Avoid starting other deployments manually while a workflow release is in
+progress.
 
 ## Email
 
