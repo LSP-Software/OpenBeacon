@@ -101,11 +101,11 @@ class TrackingCaptureService : Service() {
         return START_NOT_STICKY
       }
       ACTION_REFRESH -> {
-        if (TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis())) return START_STICKY
         if (!TrackingRuntime.isCaptureRunning) {
           stopSelf()
           return START_NOT_STICKY
         }
+        if (TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis())) return START_STICKY
         val generation = synchronized(captureStateLock) {
           refreshState.request()
           TrackingRuntime.captureCommands.current()
@@ -125,7 +125,7 @@ class TrackingCaptureService : Service() {
             stopSelf()
             return START_NOT_STICKY
           }
-          if (intent?.action == ACTION_START && !TrackingRuntime.captureCommands.isCurrent(intent.getLongExtra(EXTRA_COMMAND_GENERATION, -1L))) {
+          if (intent?.action == ACTION_START && !TrackingRuntime.captureCommands.isCurrent(intent.getLongExtra(EXTRA_COMMAND_GENERATION, -1L)) && !TrackingRuntime.isCaptureEnabled(this)) {
             if (!TrackingRuntime.isCaptureRunning) stopSelf()
             return START_NOT_STICKY
           }
@@ -181,6 +181,10 @@ class TrackingCaptureService : Service() {
       updateSharing()
     } catch (error: SecurityException) {
       Log.e(TAG, "Failed to start location capture.", error)
+      stopCapture()
+      stopSelf()
+    } catch (error: IllegalStateException) {
+      Log.e(TAG, "Android didn't allow location capture to start in the background.", error)
       stopCapture()
       stopSelf()
     }
@@ -244,8 +248,10 @@ class TrackingCaptureService : Service() {
     getSystemService(AlarmManager::class.java)?.cancel(resumeSharingIntent)
     val sharing = TrackingRuntime.sharingState(this)
     if (sharing.isPaused(System.currentTimeMillis())) {
-      locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
-      locationCallback = null
+      synchronized(captureStateLock) {
+        locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
+        locationCallback = null
+      }
       sharingHandler.postDelayed(syncPausedSharing, 30_000L)
       val nextCheck = minOf(sharing.pausedUntil ?: Long.MAX_VALUE, System.currentTimeMillis() + 300_000L)
       getSystemService(AlarmManager::class.java)?.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextCheck, resumeSharingIntent)
@@ -260,7 +266,9 @@ class TrackingCaptureService : Service() {
           refreshState.request()
         }
         minimumFixElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
-        requestLocationUpdates(currentIntervalMs)
+        synchronized(captureStateLock) {
+          requestLocationUpdates(currentIntervalMs)
+        }
       } catch (error: SecurityException) {
         Log.e(TAG, "Failed to resume location sharing.", error)
         stopCapture()
@@ -413,7 +421,7 @@ class TrackingCaptureService : Service() {
     NotificationCompat
       .Builder(this, CHANNEL_ID)
       .setContentTitle(getString(R.string.openbeacon_tracking_notification_title))
-      .setContentText(if (TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis())) "Location sharing paused. You can still view your groups." else getString(R.string.openbeacon_tracking_notification_body))
+      .setContentText(getString(if (TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis())) R.string.openbeacon_tracking_notification_paused_body else R.string.openbeacon_tracking_notification_body))
       .setSmallIcon(android.R.drawable.ic_menu_mylocation)
       .setOngoing(true)
       .setOnlyAlertOnce(true)

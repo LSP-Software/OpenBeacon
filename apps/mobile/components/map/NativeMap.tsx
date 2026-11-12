@@ -55,7 +55,7 @@ export const NativeMap = ({
   peopleTrayOpen = false,
   selectedDeviceId = null,
 }: {
-  devices?: readonly (MapMemberDevice & { unreadable: boolean })[];
+  devices?: readonly (MapMemberDevice & { paused: boolean; unreadable: boolean })[];
   groupOptions?: readonly MapGroupOption[] | null;
   markers?: readonly LiveMapMarker[];
   now?: number;

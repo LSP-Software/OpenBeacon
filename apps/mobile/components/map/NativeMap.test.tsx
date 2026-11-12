@@ -2412,6 +2412,7 @@ describe("NativeMap integration harness", () => {
       finding: [],
       hidden: [],
       outOfDate: [],
+      paused: [],
       upToDate: [],
       waiting: [],
     };
@@ -2605,6 +2606,7 @@ describe("NativeMap integration harness", () => {
       finding: [],
       hidden: [],
       outOfDate: [],
+      paused: [],
       upToDate: [],
       waiting: [],
       ...overrides,

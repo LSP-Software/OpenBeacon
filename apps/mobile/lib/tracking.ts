@@ -40,7 +40,7 @@ import {
 } from "./trackingKeyCheck.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
-import { syncLocationSharing } from "./locationSharing.ts";
+import { hasPendingSharingPause, syncLocationSharing } from "./locationSharing.ts";
 
 let reconcilePromise: Promise<boolean> | null = null;
 const cancelReconciliations = new Set<() => void>();
@@ -190,6 +190,11 @@ const applyCaptureState = async ({
   }
 };
 
+const syncSharingPreference = async () => {
+  const result = await tryCatch(syncLocationSharing());
+  if (getErrorCode(result.error) === "UNAUTHORIZED") throw result.error;
+};
+
 const isPending = async () => {
   const active = await tryCatch(isThisDeviceActive());
   if (getErrorCode(active.error) === "UNAUTHORIZED") throw active.error;
@@ -229,7 +234,7 @@ const reconcileTrackingKeysInternal = async ({
     if (device.data && (await isPending())) return false;
     if (!isCurrent()) return false;
     if (device.data) {
-      await syncLocationSharing();
+      await syncSharingPreference();
       if (!isCurrent()) return false;
     }
     const backfillCheck = device.data ? await checkHistoryBackfill(device.data.userId) : null;
@@ -265,7 +270,7 @@ const reconcileTrackingKeysInternal = async ({
 
   if (!force && (await hasFreshKeyCheck(true))) {
     if (!isCurrent()) return false;
-    await syncLocationSharing();
+    await syncSharingPreference();
     if (!isCurrent()) return false;
     await applyCaptureState({
       hasKeys: trackingModule.listProvisionedEpochKeys().length > 0,
@@ -289,7 +294,7 @@ const reconcileTrackingKeysInternal = async ({
   if (!isCurrent()) return false;
   const owner = getOwner(deviceKeyContext.userId);
   trackingModule.setQueueOwner(owner, deviceKeyContext.deviceId);
-  await syncLocationSharing();
+  await syncSharingPreference();
   if (!isCurrent()) return false;
   const preserveGroupIds = new Set<string>();
   let rotated = false;
@@ -707,6 +712,8 @@ const flushPendingTrackingPointsInternal = async (
   }
 
   if (signal.aborted) return;
+  const device = await getRegisteredDeviceKey();
+  if (device && hasPendingSharingPause(device.userId)) return;
   const owner = await getQueueOwner(signal);
   let afterId = 0;
   let failed = false;

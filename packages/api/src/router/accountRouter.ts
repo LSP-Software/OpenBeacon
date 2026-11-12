@@ -25,6 +25,7 @@ import {
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
+import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { lockUserGroups } from "../lib/lockUserGroups.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
@@ -36,26 +37,25 @@ import {
 
 export const accountRouter = {
   locationSharing: protectedProcedure.query(async ({ ctx }) => {
-    if (!ctx.deviceId) throw new TRPCError({ code: "BAD_REQUEST" });
-    const account = await ctx.db.user.findUniqueOrThrow({ where: { id: ctx.session.user.id } });
-    const device = await ctx.db.userDevice.findFirstOrThrow({
-      where: { id: ctx.deviceId, userId: account.id, revokedAt: null },
-    });
+    const select = {
+      sharingPaused: true,
+      sharingPausedUntil: true,
+      sharingChangedAt: true,
+      sharingRevision: true,
+    } as const;
+    const [account, device] = await Promise.all([
+      ctx.db.user.findUniqueOrThrow({ where: { id: ctx.session.user.id }, select }),
+      ctx.db.userDevice.findFirst({
+        where: { id: ctx.deviceId, userId: ctx.session.user.id, revokedAt: null },
+        select,
+      }),
+    ]);
+    if (!device) throw deviceRemovedError();
     return {
-      account: {
-        sharingPaused: account.sharingPaused,
-        sharingPausedUntil: account.sharingPausedUntil,
-        sharingChangedAt: account.sharingChangedAt,
-        sharingRevision: account.sharingRevision,
-      },
-      device: {
-        sharingPaused: device.sharingPaused,
-        sharingPausedUntil: device.sharingPausedUntil,
-        sharingChangedAt: device.sharingChangedAt,
-        sharingRevision: device.sharingRevision,
-      },
-      deviceId: device.id,
-      userId: account.id,
+      account,
+      device,
+      deviceId: ctx.deviceId,
+      userId: ctx.session.user.id,
       ...resolveLocationSharing(account, device),
     };
   }),

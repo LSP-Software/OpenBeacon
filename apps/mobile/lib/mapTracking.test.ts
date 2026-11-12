@@ -2077,3 +2077,58 @@ test("fetches latest after a full scanned page even when paused points were filt
   expect(session.getLivePositions()[0]?.timestamp).toBe(latest.createdAt.toISOString());
   session.destroy();
 });
+
+test("a slower group's stale snapshot cannot bring back a pin another group reported paused", async () => {
+  const sharing = {
+    deviceId: "tablet",
+    userId: "alex",
+    paused: false,
+    pausedUntil: null,
+    resumeAfter: null as Date | null,
+    revisionPrefix: "",
+  };
+  const tabletPoint = (id: string, createdAt: Date) =>
+    point({ createdAt, id, senderDeviceId: "tablet", senderUserId: "alex" });
+  let pausedReported = () => {};
+  const pauseSeen = new Promise<void>((resolve) => {
+    pausedReported = resolve;
+  });
+  const { session } = createSession({
+    listGroups: async () => [{ id: "group-1" }, { id: "group-2" }],
+    getLatest: async () => ({
+      points: [tabletPoint("before", new Date("2026-11-12T10:00:00Z"))],
+      sharing: [sharing],
+    }),
+    poll: async ({ groupId }) => {
+      if (groupId === "group-1") {
+        return {
+          points: [],
+          cursor: { createdAt: new Date("2026-11-12T10:05:00Z"), id: "discarded" },
+          sharing: [
+            {
+              ...sharing,
+              paused: true,
+              resumeAfter: new Date("2026-11-12T10:04:00Z"),
+              revisionPrefix: "s0.1:",
+            },
+          ],
+        };
+      }
+      await pauseSeen;
+      return {
+        points: [tabletPoint("stale", new Date("2026-11-12T10:03:00Z"))],
+        sharing: [sharing],
+      };
+    },
+  });
+  session.subscribe(() => {
+    if (session.getStatus().sharing?.some((device) => device.paused)) pausedReported();
+  });
+  session.setActive(true);
+  await session.tick();
+  expect(session.getLivePositions()).toHaveLength(1);
+  await session.tick();
+  expect(session.getStatus().sharing?.[0]?.paused).toBe(true);
+  expect(session.getLivePositions()).toEqual([]);
+  session.destroy();
+});

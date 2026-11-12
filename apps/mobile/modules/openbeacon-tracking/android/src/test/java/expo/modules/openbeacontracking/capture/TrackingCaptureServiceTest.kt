@@ -153,6 +153,59 @@ class TrackingCaptureServiceTest {
     assertNotNull(refresh.pending())
   }
 
+  @Test
+  fun aStartRequestedBeforeASharingChangeStillStartsCapture() {
+    val generation = TrackingRuntime.captureCommands.start()
+    assertTrue(TrackingRuntime.applySharingState(application, "test-owner", "tablet", SharingCaptureState(revisionPrefix = "s0.2:")))
+    val service = createService()
+    val result = service.onStartCommand(startIntent(generation), 0, 1)
+
+    assertEquals(Service.START_STICKY, result)
+    assertTrue(TrackingRuntime.isCaptureRunning)
+  }
+
+  @Test
+  fun aStartRequestedBeforeStopIsIgnored() {
+    val generation = TrackingRuntime.captureCommands.start()
+    TrackingRuntime.captureCommands.stop()
+    TrackingRuntime.setCaptureEnabled(application, false)
+    val service = createService()
+
+    assertEquals(Service.START_NOT_STICKY, service.onStartCommand(startIntent(generation), 0, 1))
+    assertFalse(TrackingRuntime.isCaptureRunning)
+  }
+
+  @Test
+  fun aRefreshWhilePausedAndStoppedDoesNotKeepTheServiceAlive() {
+    val service = createService()
+    val result = service.onStartCommand(Intent(application, TrackingCaptureService::class.java).apply {
+      action = TrackingCaptureService.ACTION_REFRESH
+    }, 0, 1)
+
+    assertEquals(Service.START_NOT_STICKY, result)
+    assertFalse(TrackingRuntime.isCaptureRunning)
+  }
+
+  @Test
+  fun thePausedNotificationSaysSharingIsPaused() {
+    val service = createService()
+    service.onStartCommand(Intent(application, TrackingCaptureService::class.java).apply {
+      action = TrackingCaptureService.ACTION_CHECK_SHARING
+    }, 0, 1)
+    val notification = shadowOf(service).lastForegroundNotification
+
+    assertEquals(
+      application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_paused_body),
+      notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
+    )
+  }
+
+  private fun startIntent(generation: Long) =
+    Intent(application, TrackingCaptureService::class.java).apply {
+      action = TrackingCaptureService.ACTION_START
+      putExtra(TrackingCaptureService.EXTRA_COMMAND_GENERATION, generation)
+    }
+
   private fun createService(): TrackingCaptureService {
     val created = Robolectric.buildService(TrackingCaptureService::class.java).create()
     controller = created

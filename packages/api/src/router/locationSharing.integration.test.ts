@@ -289,6 +289,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             durationMinutes: null,
           }),
         ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        await expect(authenticatedBeforeRemoval.account.locationSharing()).rejects.toMatchObject({
+          code: "UNAUTHORIZED",
+          message: "This phone was removed from your account.",
+        });
         expect((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).sharingPaused).toBe(
           true,
         );

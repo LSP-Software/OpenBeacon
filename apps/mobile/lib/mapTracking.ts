@@ -204,14 +204,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       live = reduceLivePositions(live, [...groupEntries.values()]);
     }
     for (const [deviceId, entry] of live) {
-      const state = status.sharing?.find((device) => device.deviceId === deviceId);
-      if (
-        state &&
-        (state.paused ||
-          (state.resumeAfter !== null &&
-            Date.parse(entry.timestamp) <= state.resumeAfter.getTime()))
-      )
-        live.delete(deviceId);
+      if (!canShowSharedLocation(entry, status.sharing)) live.delete(deviceId);
     }
     return live;
   };

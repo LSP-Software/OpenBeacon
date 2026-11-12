@@ -6,6 +6,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import androidx.core.content.ContextCompat
 import expo.modules.openbeacontracking.capture.CapturePipeline
 import expo.modules.openbeacontracking.capture.CaptureCommandState
@@ -101,9 +102,13 @@ object TrackingRuntime {
       changed
     }
     if (changed && isCaptureRunning) {
-      context.startService(Intent(context, TrackingCaptureService::class.java).apply {
-        action = TrackingCaptureService.ACTION_SHARING_CHANGED
-      })
+      try {
+        context.startService(Intent(context, TrackingCaptureService::class.java).apply {
+          action = TrackingCaptureService.ACTION_SHARING_CHANGED
+        })
+      } catch (error: IllegalStateException) {
+        Log.e("TrackingRuntime", "Failed to deliver the location sharing change to capture.", error)
+      }
     }
     return true
   }

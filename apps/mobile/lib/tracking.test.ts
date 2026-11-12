@@ -104,6 +104,7 @@ let missingHistoryWraps = new Map<string, string[]>();
 const backfillQueries: string[] = [];
 const captureStateSeenByBackfill: Array<{ provisions: number; starts: number }> = [];
 const historyWrapUploads: Array<{ groupId: string; wraps: WrappedHistoryEpochKey[] }> = [];
+let locationSharingError: Error | null = null;
 let registrationWait: Promise<void> | null = null;
 let onRegistration: (() => void) | null = null;
 let uploadGroup = async ({
@@ -239,14 +240,17 @@ mock.module("./api.ts", () => ({
   trpcClient: {
     account: {
       locationSharing: {
-        query: async () => ({
-          userId: currentUserId,
-          deviceId: "device-1",
-          paused: false,
-          pausedUntil: null,
-          resumeAfter: null,
-          revisionPrefix: "",
-        }),
+        query: async () => {
+          if (locationSharingError) throw locationSharingError;
+          return {
+            userId: currentUserId,
+            deviceId: "device-1",
+            paused: false,
+            pausedUntil: null,
+            resumeAfter: null,
+            revisionPrefix: "",
+          };
+        },
       },
     },
     auth: {
@@ -581,6 +585,7 @@ describe("tracking service", () => {
     historyWrapUploads.length = 0;
     registrationWait = null;
     onRegistration = null;
+    locationSharingError = null;
     uploadGroup = async ({ points }) => ({
       accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
       duplicates: [],
@@ -605,6 +610,38 @@ describe("tracking service", () => {
     await flushPendingTrackingPoints();
     expect(requestedOwners).toEqual([JSON.stringify(["https://api.example.test", "user-1"])]);
     expect(deleted).toEqual([[1]]);
+  });
+
+  test("holds pre-pause points while a local pause hasn't reached the server", async () => {
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    const pauseKey = `locationSharing.pending.${JSON.stringify(["https://api.example.test", "user-1", "device"])}`;
+    const input = {
+      scope: "device",
+      deviceId: "device-1",
+      expectedUserId: "user-1",
+      paused: true,
+      durationMinutes: null,
+    };
+    storageValues.set(pauseKey, JSON.stringify({ requestId: "sharing-1", input }));
+    pendingCiphertexts = [
+      createQueueItem({ clientPointId: "before-pause", groupId: "group-1", id: 1 }),
+    ];
+    await flushPendingTrackingPoints();
+    expect(markedInFlight).toEqual([]);
+    expect(uploadCalls).toEqual([]);
+    storageValues.delete(pauseKey);
+    await flushPendingTrackingPoints();
+    expect(deleted).toEqual([[1]]);
+  });
+
+  test("an unreachable sharing preference doesn't stop capture from starting", async () => {
+    locationSharingError = new Error("offline");
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(startCaptureCalls).toBe(1);
   });
 
   test("only assigns legacy points after confirmation for the same account", async () => {

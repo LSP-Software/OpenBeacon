@@ -12,6 +12,7 @@ import type { changeLocationSharing } from "../lib/locationSharing.ts";
 let root: Root | null = null;
 let locallyPaused = false;
 let mutationError: Error | null = null;
+let pauseLocallyBeforeFailing = false;
 let sharingData: { account: SharingPreference; device: SharingPreference };
 let pendingAccount: z.infer<typeof setLocationSharingSchema> | null = null;
 const changes: Parameters<typeof changeLocationSharing>[0][] = [];
@@ -33,12 +34,22 @@ mock.module("react-native", () => ({
 }));
 mock.module("lucide-react-native", () => ({ MapPinIcon: () => null, PauseIcon: () => null }));
 mock.module("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
+mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("@tanstack/react-query", () => ({
   useQuery: () => ({ data: sharingData, isPending: false, isError: false }),
   useQueryClient: () => ({ invalidateQueries: async () => {} }),
   useMutation: () => ({
     isPending: false,
     mutateAsync: async (input: Parameters<typeof changeLocationSharing>[0]) => {
+      if (pauseLocallyBeforeFailing) {
+        locallyPaused = true;
+        pendingAccount = {
+          expectedUserId: "alex",
+          scope: "account",
+          paused: true,
+          durationMinutes: input.durationMinutes,
+        };
+      }
       if (mutationError) throw mutationError;
       changes.push(input);
     },
@@ -63,7 +74,7 @@ mock.module("../lib/locationSharing.ts", () => ({
 }));
 mock.module("./ui/Button.tsx", () => ({
   Button: ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
-    React.createElement("button", props, children),
+    React.createElement("mock-button", props, children),
 }));
 mock.module("./ui/Card.tsx", () => ({
   Card: Host,
@@ -81,7 +92,7 @@ const render = async () => {
 };
 const press = async (label: string) => {
   const button = root?.container
-    .queryAll((node) => node.type === "button")
+    .queryAll((node) => node.type === "mock-button")
     .findLast((node) => JSON.stringify(node.children).includes(label));
   const onPress = button?.props["onPress"];
   if (typeof onPress !== "function") throw new Error(`Missing button ${label}`);
@@ -102,6 +113,7 @@ beforeEach(() => {
   pendingAccount = null;
   locallyPaused = false;
   mutationError = null;
+  pauseLocallyBeforeFailing = false;
   changes.length = 0;
 });
 afterEach(async () => {
@@ -188,6 +200,20 @@ test("does not claim capture stopped when the local pause failed", async () => {
   await press("Pause sharing");
   await press("Pause sharing");
   const output = JSON.stringify(root?.container.toJSON());
-  expect(output).toContain("Couldn't update location sharing");
-  expect(output).not.toContain("Sharing stopped on this device");
+  expect(output).toContain("Couldn’t pause location sharing");
+  expect(output).not.toContain("Sharing stopped on this phone");
+});
+
+test("an offline pause closes the sheet and explains that only this phone has stopped", async () => {
+  mutationError = new Error("Network request failed");
+  pauseLocallyBeforeFailing = true;
+  await render();
+  await press("Pause sharing");
+  await press("Pause sharing");
+  const output = JSON.stringify(root?.container.toJSON());
+  expect(output).not.toContain("Pause on");
+  expect(output).toContain(
+    "Sharing stopped on this phone. We couldn’t update your groups or other devices. Retrying.",
+  );
+  expect(output).toContain("Resume");
 });

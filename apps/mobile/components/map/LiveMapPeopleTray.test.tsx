@@ -66,6 +66,7 @@ const emptyPeople: MapPeople = {
   finding: [],
   hidden: [],
   outOfDate: [],
+  paused: [],
   upToDate: [],
   waiting: [],
 };

@@ -23,9 +23,9 @@ export const LiveMapPeopleTray = ({
   const scrollRef = useRef<ScrollView>(null);
   const sectionXRef = useRef<Record<string, number>>({});
   const sections = [
-    { key: "paused", label: "Paused", people: people.paused ?? [], status: "paused" as const },
     { key: "upToDate", label: "Up to date", people: people.upToDate, status: null },
     { key: "outOfDate", label: "Out of date", people: people.outOfDate, status: null },
+    { key: "paused", label: "Paused", people: people.paused, status: "paused" as const },
     {
       key: "cantLocate",
       label: "Can’t locate",

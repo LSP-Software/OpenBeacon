@@ -405,7 +405,7 @@ test("paused members have their own ribbon status even when an old pin or missin
       ],
     },
   });
-  expect(people.paused?.map((person) => person.userId)).toEqual(["mum"]);
+  expect(people.paused.map((person) => person.userId)).toEqual(["mum"]);
   expect(people.upToDate).toEqual([]);
   expect(people.cantRead).toEqual([]);
 });

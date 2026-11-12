@@ -8,10 +8,6 @@ datasource db {
 }
 
 model User {
-  sharingPaused Boolean @default(false)
-  sharingPausedUntil DateTime?
-  sharingChangedAt DateTime?
-  sharingRevision Int @default(0)
   id             String          @id
   name           String
   email          String          @unique
@@ -26,6 +22,10 @@ model User {
   timezone       String?
   alertNewSignIn Boolean         @default(true)
   alertDeletionScheduled Boolean @default(true)
+  sharingPaused  Boolean         @default(false)
+  sharingPausedUntil DateTime?
+  sharingChangedAt DateTime?
+  sharingRevision Int            @default(0)
   sessions       Session[]
   accounts       Account[]
   pendingUploads PendingUpload[]
@@ -209,6 +209,7 @@ model GroupMember {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, groupId])
+  @@index([groupId])
 }
 
 model PersonalGroupNickname {
@@ -228,10 +229,6 @@ model PersonalGroupColor {
 }
 
 model UserDevice {
-  sharingPaused Boolean @default(false)
-  sharingPausedUntil DateTime?
-  sharingChangedAt DateTime?
-  sharingRevision Int @default(0)
   id                     String                   @id
   userId                 String
   user                   User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -247,6 +244,10 @@ model UserDevice {
   activatedAt            DateTime?
   activatedBy            DeviceActivation?
   revokedAt              DateTime?
+  sharingPaused          Boolean                  @default(false)
+  sharingPausedUntil     DateTime?
+  sharingChangedAt       DateTime?
+  sharingRevision        Int                      @default(0)
   sessions               Session[]
   createdGroupEpochs     GroupEpoch[]             @relation("GroupEpochCreatedByDevice")
   recipientEpochKeys     GroupEpochRecipientKey[] @relation("GroupEpochRecipientDevice")

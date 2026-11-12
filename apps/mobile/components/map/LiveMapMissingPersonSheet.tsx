@@ -1,7 +1,12 @@
 import { Link } from "expo-router";
 import { EyeIcon } from "lucide-react-native";
 import { Pressable, View } from "react-native";
-import type { MapHiddenPerson, MapPerson, MapUnreadablePerson } from "../../lib/mapPeopleTypes.ts";
+import type {
+  MapHiddenPerson,
+  MapPausedPerson,
+  MapPerson,
+  MapUnreadablePerson,
+} from "../../lib/mapPeopleTypes.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
@@ -17,8 +22,9 @@ export const LiveMapMissingPersonSheet = ({
   onDismiss: () => void;
   onHeightChange: (height: number) => void;
   onShowGroup: (groupId: string) => void;
-  person: MapPerson | MapUnreadablePerson | MapHiddenPerson;
+  person: MapPerson | MapUnreadablePerson | MapHiddenPerson | MapPausedPerson;
 }) => {
+  const paused = "sharingPaused" in person;
   const unreadable = "reason" in person ? person : null;
   const hidden = "hiddenGroups" in person ? person : null;
   const hiddenGroupNames = hidden?.hiddenGroups.map((group) => group.name) ?? [];
@@ -40,7 +46,7 @@ export const LiveMapMissingPersonSheet = ({
           <View className="min-w-0 flex-1 gap-1">
             <Text className="text-foreground text-xl font-bold">{name}</Text>
             <Text className="text-muted dark:text-muted-foreground text-sm">
-              {person.sharingPaused
+              {paused
                 ? "Location sharing paused"
                 : hidden
                   ? "Hidden on this phone"
@@ -52,11 +58,11 @@ export const LiveMapMissingPersonSheet = ({
         </View>
       }
     >
-      {person.sharingPaused ? (
+      {paused ? (
         <View className="mt-3 rounded-xl bg-background p-3">
           <Text className="text-sm">
             {person.isSelf
-              ? "You've paused location sharing on all your devices."
+              ? "You’ve paused location sharing on all your devices."
               : `${person.name} has paused location sharing.`}
           </Text>
           {person.isSelf ? (

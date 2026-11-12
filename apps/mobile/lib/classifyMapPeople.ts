@@ -20,13 +20,13 @@ export const classifyMapPeople = ({
   status: MapTrackingStatus;
 }): MapPeople => {
   const people: MapPeople = {
-    paused: [],
     cantLocate: [],
     cantRead: [],
     connectionLost: status.connection === "failing",
     finding: [],
     hidden: [],
     outOfDate: [],
+    paused: [],
     upToDate: [],
     waiting: [],
   };
@@ -74,7 +74,7 @@ export const classifyMapPeople = ({
       };
       const devices = status.sharing?.filter((device) => device.userId === member.userId) ?? [];
       if (devices.length > 0 && devices.every((device) => device.paused)) {
-        people.paused?.push({ ...person, sharingPaused: true });
+        people.paused.push({ ...person, sharingPaused: true });
         continue;
       }
 
@@ -124,6 +124,7 @@ export const classifyMapPeople = ({
   people.cantRead.sort(selfFirstThenByName);
   people.finding.sort(selfFirstThenByName);
   people.waiting.sort(selfFirstThenByName);
+  people.paused.sort(selfFirstThenByName);
 
   return people;
 };

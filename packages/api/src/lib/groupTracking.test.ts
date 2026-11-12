@@ -235,7 +235,7 @@ describe("uploadGroupTrackingBatch", () => {
       userId: "user-1",
     });
 
-    expect(result).toEqual({ accepted: ["new"], duplicates: [], expired: ["old"] });
+    expect(result).toEqual({ accepted: ["new"], discarded: [], duplicates: [], expired: ["old"] });
     expect(countEpochs).toHaveBeenCalledWith({ where: { id: { in: ["deleted-epoch"] } } });
     expect(createMany.mock.calls[0]?.[0]).toMatchObject({
       data: [{ clientPointId: "new", epochId: "epoch-2" }],
@@ -253,7 +253,7 @@ describe("uploadGroupTrackingBatch", () => {
       userId: "user-1",
     });
 
-    expect(result).toEqual({ accepted: [], duplicates: [], expired: ["point-1"] });
+    expect(result).toEqual({ accepted: [], discarded: [], duplicates: [], expired: ["point-1"] });
     expect(createMany).not.toHaveBeenCalled();
     expect(updateManyDevices).not.toHaveBeenCalled();
   });

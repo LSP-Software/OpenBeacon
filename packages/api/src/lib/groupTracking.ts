@@ -1,5 +1,6 @@
 import { Prisma } from "@openbeacon/database";
 import type { groupTrackingPointSchema } from "@openbeacon/schemas";
+import type { DeviceSharingState } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type z from "zod";
 import { getGroupSharingStates } from "./locationSharing.ts";
@@ -270,15 +271,7 @@ export const pollGroupTrackingPoints = async ({
   const sharing = await getGroupSharingStates(db, groupId);
   const last = points.at(-1);
   return {
-    points: (points as GroupEncryptedPayloadRow[]).filter((point) =>
-      sharing.some(
-        (device) =>
-          device.deviceId === point.senderDeviceId &&
-          device.userId === point.senderUserId &&
-          !device.paused &&
-          point.clientPointId.startsWith(device.revisionPrefix),
-      ),
-    ),
+    points: filterSharedPoints(points as GroupEncryptedPayloadRow[], sharing),
     sharing,
     cursor: last?.createdAt && last.id ? { createdAt: last.createdAt, id: last.id } : null,
     hasMore: points.length === limit,
@@ -323,16 +316,16 @@ export const getLatestGroupTrackingPoints = async ({
   `);
 
   const sharing = await getGroupSharingStates(db, groupId);
-  return {
-    points: points.filter((point) =>
-      sharing.some(
-        (device) =>
-          device.deviceId === point.senderDeviceId &&
-          device.userId === point.senderUserId &&
-          !device.paused &&
-          point.clientPointId.startsWith(device.revisionPrefix),
-      ),
-    ),
-    sharing,
-  };
+  return { points: filterSharedPoints(points, sharing), sharing };
 };
+
+const filterSharedPoints = (points: GroupEncryptedPayloadRow[], sharing: DeviceSharingState[]) =>
+  points.filter((point) =>
+    sharing.some(
+      (device) =>
+        device.deviceId === point.senderDeviceId &&
+        device.userId === point.senderUserId &&
+        !device.paused &&
+        point.clientPointId.startsWith(device.revisionPrefix),
+    ),
+  );

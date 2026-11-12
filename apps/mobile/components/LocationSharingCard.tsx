@@ -4,6 +4,7 @@ import {
   tryCatch,
   type SharingPreference,
 } from "@openbeacon/shared";
+import { useIsFocused } from "@react-navigation/native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MapPinIcon, PauseIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
@@ -31,9 +32,11 @@ export const LocationSharingCard = ({
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const { data: session } = authClient.useSession();
+  const isFocused = useIsFocused();
   const sharing = useQuery({
     ...trpc.account.locationSharing.queryOptions(),
     refetchInterval: 15_000,
+    subscribed: isFocused,
   });
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<"device" | "account">("device");
@@ -47,9 +50,6 @@ export const LocationSharingCard = ({
     hasPendingSharingPause(session.user.id) &&
     hasLocallyPausedSharing(session.user.id),
   );
-  useEffect(() => {
-    if (!stoppedLocally) setMessage(null);
-  }, [stoppedLocally]);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(timer);
@@ -121,10 +121,14 @@ export const LocationSharingCard = ({
       (!device || device.isCurrent || selectedScope === "account") &&
       session?.user.id &&
       hasLocallyPausedSharing(session.user.id);
+    if (localPause) {
+      setOpen(false);
+      return;
+    }
     setMessage(
-      localPause
-        ? "Sharing stopped on this device. We couldn't update your groups or other devices. We'll retry when connected."
-        : "Couldn't update location sharing. Check your connection and try again.",
+      pause
+        ? "Couldn’t pause location sharing. Check your connection and try again."
+        : "Couldn’t resume location sharing. Check your connection and try again.",
     );
   };
 
@@ -137,14 +141,14 @@ export const LocationSharingCard = ({
         <View className="flex-1 gap-1">
           <CardTitle>Location sharing{paused ? " paused" : ""}</CardTitle>
           <Text className="text-sm text-muted-foreground">
-            {sharing.isPending
-              ? "Checking sharing status…"
-              : sharing.isError
-                ? "Couldn't check sharing status"
-                : accountPaused
-                  ? "Paused on all your devices"
-                  : paused
-                    ? `Paused on ${target}`
+            {accountPaused
+              ? "Paused on all your devices"
+              : paused
+                ? `Paused on ${target}`
+                : sharing.isPending
+                  ? "Checking sharing status…"
+                  : sharing.isError
+                    ? "Couldn’t check sharing status"
                     : `Sharing enabled on ${target}`}
           </Text>
         </View>
@@ -153,11 +157,14 @@ export const LocationSharingCard = ({
         {paused ? (
           <Text className="text-sm text-muted-foreground">
             {stoppedLocally
-              ? "Waiting for confirmation from the server"
-              : until && until.getTime() > now
-                ? `Resumes ${until.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
-                : "Until you turn it back on"}
-            . You can still see your groups' locations.
+              ? update.isPending
+                ? "Pausing…"
+                : "Sharing stopped on this phone. We couldn’t update your groups or other devices. Retrying."
+              : `${
+                  until && until.getTime() > now
+                    ? `Resumes ${until.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+                    : "Until you turn it back on"
+                }. You can still see your groups’ locations.`}
           </Text>
         ) : null}
         {message ? (
@@ -187,6 +194,7 @@ export const LocationSharingCard = ({
             disabled={update.isPending}
             onPress={() => {
               selectScope(resumeAccount ? "account" : "device");
+              setMessage(null);
               setOpen(true);
             }}
           >
@@ -226,7 +234,9 @@ export const LocationSharingCard = ({
             style={{ paddingBottom: Math.max(insets.bottom, 20) }}
           >
             <View className="flex-row items-center justify-between gap-3">
-              <Text className="flex-1 text-xl font-semibold">Pause location sharing</Text>
+              <Text accessibilityRole="header" className="flex-1 text-xl font-semibold">
+                Pause location sharing
+              </Text>
               <Button
                 size="sm"
                 variant="ghost"
@@ -238,7 +248,7 @@ export const LocationSharingCard = ({
             </View>
             <ScrollView contentContainerClassName="gap-4" style={{ maxHeight: 480, flexShrink: 1 }}>
               <Text className="text-sm text-muted-foreground">
-                Paused devices disappear from your groups' maps. Members can see that sharing is
+                Paused devices disappear from your groups’ maps. Members can see that sharing is
                 paused. You can still see their locations.
               </Text>
               {!device ? (

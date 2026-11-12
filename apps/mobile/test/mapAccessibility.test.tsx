@@ -127,6 +127,7 @@ test("a device row without a location on the map isn't a button", async () => {
     battery: null,
     icon: "phone" as const,
     isThisDevice: false,
+    paused: false,
     platform: null,
     unreadable: false,
   };
@@ -168,6 +169,7 @@ test("someone with several devices still gets a way to open the group whose key 
     battery: null,
     icon: "phone" as const,
     isThisDevice: false,
+    paused: false,
     platform: null,
     timestamp: null,
   };

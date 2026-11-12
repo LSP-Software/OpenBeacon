@@ -10,12 +10,12 @@ import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
 
 type PersonDevice = {
-  paused?: boolean | undefined;
   battery: { charging: boolean; level: number } | null;
   deviceId: string;
   icon: DeviceIcon;
   isThisDevice: boolean;
   name: string;
+  paused: boolean;
   platform: string | null;
   timestamp: string | null;
   unreadable: boolean;
@@ -171,7 +171,9 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
           {label}
         </Text>
         <Text
-          className={device.unreadable ? "text-destructive text-sm" : "text-muted text-sm"}
+          className={
+            device.unreadable && !device.paused ? "text-destructive text-sm" : "text-muted text-sm"
+          }
           numberOfLines={1}
         >
           {updated}

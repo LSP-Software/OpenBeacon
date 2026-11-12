@@ -2,7 +2,6 @@ import type { LiveMapMarker } from "./buildLiveMapMarkers.ts";
 import type { DeviceIcon } from "./deviceIcons.ts";
 
 export type MapPerson = {
-  sharingPaused?: boolean;
   groupNames: string[];
   image: string | null;
   initials: string;
@@ -23,14 +22,16 @@ export type MapHiddenPerson = MapPerson & {
   hiddenGroups: { id: string; name: string }[];
 };
 
+export type MapPausedPerson = MapPerson & { sharingPaused: true };
+
 export type MapPeople = {
-  paused?: MapPerson[];
   cantLocate: MapPerson[];
   connectionLost: boolean;
   cantRead: MapUnreadablePerson[];
   finding: MapPerson[];
   hidden: MapHiddenPerson[];
   outOfDate: LiveMapMarker[];
+  paused: MapPausedPerson[];
   upToDate: LiveMapMarker[];
   waiting: MapPerson[];
 };
@@ -44,7 +45,6 @@ export type MapGroupOption = {
 };
 
 export type MapMemberDevice = {
-  paused?: boolean;
   deviceId: string;
   icon: DeviceIcon;
   name: string;
