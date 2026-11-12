@@ -40,6 +40,7 @@ import {
 } from "./trackingKeyCheck.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
+import { hasPendingSharingPause, syncLocationSharing } from "./locationSharing.ts";
 
 let reconcilePromise: Promise<boolean> | null = null;
 const cancelReconciliations = new Set<() => void>();
@@ -189,6 +190,11 @@ const applyCaptureState = async ({
   }
 };
 
+const syncSharingPreference = async () => {
+  const result = await tryCatch(syncLocationSharing());
+  if (getErrorCode(result.error) === "UNAUTHORIZED") throw result.error;
+};
+
 const isPending = async () => {
   const active = await tryCatch(isThisDeviceActive());
   if (getErrorCode(active.error) === "UNAUTHORIZED") throw active.error;
@@ -227,6 +233,10 @@ const reconcileTrackingKeysInternal = async ({
     if (getErrorCode(device.error) === "UNAUTHORIZED") throw device.error;
     if (device.data && (await isPending())) return false;
     if (!isCurrent()) return false;
+    if (device.data) {
+      await syncSharingPreference();
+      if (!isCurrent()) return false;
+    }
     const backfillCheck = device.data ? await checkHistoryBackfill(device.data.userId) : null;
     if (!isCurrent()) return false;
     const results = await Promise.all(
@@ -260,6 +270,8 @@ const reconcileTrackingKeysInternal = async ({
 
   if (!force && (await hasFreshKeyCheck(true))) {
     if (!isCurrent()) return false;
+    await syncSharingPreference();
+    if (!isCurrent()) return false;
     await applyCaptureState({
       hasKeys: trackingModule.listProvisionedEpochKeys().length > 0,
       isCurrent,
@@ -281,7 +293,9 @@ const reconcileTrackingKeysInternal = async ({
   }
   if (!isCurrent()) return false;
   const owner = getOwner(deviceKeyContext.userId);
-  trackingModule.setQueueOwner(owner);
+  trackingModule.setQueueOwner(owner, deviceKeyContext.deviceId);
+  await syncSharingPreference();
+  if (!isCurrent()) return false;
   const preserveGroupIds = new Set<string>();
   let rotated = false;
   let rotationFailed = false;
@@ -610,8 +624,14 @@ const uploadClaimedItems = async (
   const {
     accepted,
     duplicates,
+    discarded = [],
     expired = [],
-  }: { accepted: string[]; duplicates: string[]; expired?: string[] } = uploadResult.data;
+  }: {
+    accepted: string[];
+    discarded?: string[];
+    duplicates: string[];
+    expired?: string[];
+  } = uploadResult.data;
 
   if (accepted.length > 0 && items[0]) {
     const { senderDeviceId, groupId } = items[0];
@@ -625,7 +645,7 @@ const uploadClaimedItems = async (
     uploadRejectedKeys = true;
   }
 
-  const completedClientPointIds = new Set([...accepted, ...duplicates, ...expired]);
+  const completedClientPointIds = new Set([...accepted, ...duplicates, ...expired, ...discarded]);
   const completedIds = items
     .filter(({ clientPointId }) => completedClientPointIds.has(clientPointId))
     .map(({ id }) => id);
@@ -692,6 +712,8 @@ const flushPendingTrackingPointsInternal = async (
   }
 
   if (signal.aborted) return;
+  const device = await getRegisteredDeviceKey();
+  if (device && hasPendingSharingPause(device.userId)) return;
   const owner = await getQueueOwner(signal);
   let afterId = 0;
   let failed = false;

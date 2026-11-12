@@ -55,7 +55,7 @@ export const NativeMap = ({
   peopleTrayOpen = false,
   selectedDeviceId = null,
 }: {
-  devices?: readonly (MapMemberDevice & { unreadable: boolean })[];
+  devices?: readonly (MapMemberDevice & { paused: boolean; unreadable: boolean })[];
   groupOptions?: readonly MapGroupOption[] | null;
   markers?: readonly LiveMapMarker[];
   now?: number;
@@ -98,9 +98,13 @@ export const NativeMap = ({
   const isStackSheetOpen = stackSheetMembers.length > 1;
   const [missingUserId, setMissingUserId] = useState<string | null>(null);
   const missingPerson =
-    [...(people?.cantLocate ?? []), ...(people?.cantRead ?? []), ...(people?.hidden ?? [])].find(
-      (person) => person.userId === missingUserId,
-    ) ?? null;
+    [
+      ...(people?.paused ?? []),
+      ...(people?.waitingForLocation ?? []),
+      ...(people?.cantLocate ?? []),
+      ...(people?.cantRead ?? []),
+      ...(people?.hidden ?? []),
+    ].find((person) => person.userId === missingUserId) ?? null;
   const isTrayOpen =
     peopleTrayOpen && selectedMarker === null && !isStackSheetOpen && missingUserId === null;
   const trayPeople = isTrayOpen ? people : null;
@@ -627,6 +631,7 @@ export const NativeMap = ({
                   isThisDevice: device.marker?.isSelf ?? false,
                   name: device.name,
                   platform: device.platform,
+                  paused: device.paused,
                   timestamp: device.marker?.timestamp ?? null,
                   unreadable: device.unreadable || device.marker?.unreadableGroup !== undefined,
                 }))
@@ -666,6 +671,7 @@ export const NativeMap = ({
       ) : missingPerson ? (
         <LiveMapMissingPersonSheet
           key={missingPerson.userId}
+          devices={devices.filter((device) => device.userId === missingPerson.userId)}
           person={missingPerson}
           onDismiss={() => {
             setMissingUserId(null);

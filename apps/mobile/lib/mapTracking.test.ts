@@ -1897,3 +1897,307 @@ describe("createMapTrackingSession removed devices", () => {
     expect(notifications).toBe(1);
   });
 });
+
+describe("paused map devices", () => {
+  test("removes cached tablet pins on an empty poll and rejects older sharing snapshots", async () => {
+    const old = point({
+      createdAt: new Date("2026-11-12T10:00:00Z"),
+      id: "old",
+      senderDeviceId: "tablet",
+      senderUserId: "alex",
+    });
+    const resumedAt = new Date("2026-11-12T12:00:00Z");
+    let sharing = [
+      {
+        deviceId: "tablet",
+        userId: "alex",
+        paused: false,
+        revisionPrefix: "",
+      },
+    ];
+    let points: MapTrackingEncryptedPoint[] = [];
+    const { session } = createSession({
+      getLatest: async () => ({ points: [old], sharing }),
+      poll: async () => ({ points, sharing }),
+      decryptPoint: async ({ groupId, point: row }) => ({
+        status: "ok",
+        entry: liveEntry({
+          deviceId: row.senderDeviceId,
+          userId: row.senderUserId,
+          sourceGroupId: groupId,
+          serverCreatedAt: row.createdAt,
+          serverId: row.id,
+          timestamp: row.id === "old" ? "2030-01-01T00:00:00.000Z" : row.createdAt.toISOString(),
+        }),
+      }),
+    });
+    session.setActive(true);
+    await session.tick();
+    expect(session.getLivePositions()).toHaveLength(1);
+    sharing = [{ ...sharing[0]!, paused: true, revisionPrefix: "s0.1:" }];
+    await session.tick();
+    expect(session.getLivePositions()).toEqual([]);
+    expect(session.getStatus().sharing?.[0]?.paused).toBe(true);
+    sharing = [{ ...sharing[0]!, paused: false, revisionPrefix: "" }];
+    await session.tick();
+    expect(session.getLivePositions()).toEqual([]);
+    sharing = [{ ...sharing[0]!, paused: false, revisionPrefix: "s0.2:" }];
+    await session.tick();
+    expect(session.getLivePositions()).toEqual([]);
+    points = [
+      point({
+        createdAt: new Date(resumedAt.getTime() + 1),
+        id: "fresh",
+        senderDeviceId: "tablet",
+        senderUserId: "alex",
+      }),
+    ];
+    points[0]!.clientPointId = "s0.2:fresh";
+    await session.tick();
+    expect(session.getLivePositions()).toHaveLength(1);
+    expect(session.getLivePositions()[0]?.timestamp).toBe(points[0]!.createdAt.toISOString());
+    session.destroy();
+  });
+
+  test("a revision change forgets an unreadable point from before it", async () => {
+    let sharing = [{ deviceId: "tablet", userId: "alex", paused: false, revisionPrefix: "" }];
+    const { session } = createSession({
+      getLatest: async () => ({
+        points: [
+          point({
+            createdAt: new Date("2026-11-12T10:00:00Z"),
+            id: "unreadable",
+            senderDeviceId: "tablet",
+            senderUserId: "alex",
+          }),
+        ],
+        sharing,
+      }),
+      poll: async () => ({ points: [], sharing }),
+      decryptPoint: async () => ({ status: "undecryptable" }),
+    });
+    session.setActive(true);
+    await session.tick();
+    expect(session.getStatus().undecryptable).toEqual([
+      { deviceId: "tablet", groupId: "group-1", userId: "alex" },
+    ]);
+    sharing = [{ ...sharing[0]!, revisionPrefix: "s0.2:" }];
+    await session.tick();
+    expect(session.getStatus().undecryptable).toEqual([]);
+    session.destroy();
+  });
+
+  test("shows a resumed sender with a slow clock but never its pin from before the pause", async () => {
+    const sharing = [
+      {
+        deviceId: "tablet",
+        userId: "alex",
+        paused: false,
+        revisionPrefix: "s0.2:",
+      },
+    ];
+    const beforePause = point({
+      createdAt: new Date("2026-11-12T11:00:00Z"),
+      id: "before-pause",
+      senderDeviceId: "tablet",
+      senderUserId: "alex",
+    });
+    beforePause.clientPointId = "s0.1:before-pause";
+    const slowClock = point({
+      createdAt: new Date("2026-11-12T12:00:05Z"),
+      id: "slow-clock",
+      senderDeviceId: "tablet",
+      senderUserId: "alex",
+    });
+    slowClock.clientPointId = "s0.2:slow-clock";
+    const livePositionsFrom = async (latest: MapTrackingEncryptedPoint[]) => {
+      const { session } = createSession({
+        getLatest: async () => ({ points: latest, sharing }),
+        poll: async () => ({ points: [], sharing }),
+        decryptPoint: async ({ groupId, point: row }) => ({
+          status: "ok",
+          entry: liveEntry({
+            deviceId: row.senderDeviceId,
+            userId: row.senderUserId,
+            sourceGroupId: groupId,
+            serverCreatedAt: row.createdAt,
+            serverId: row.id,
+            timestamp:
+              row.id === "before-pause" ? "2030-01-01T00:00:00.000Z" : "2026-11-12T11:50:00.000Z",
+          }),
+        }),
+      });
+      session.setActive(true);
+      await session.tick();
+      const positions = session.getLivePositions().map((location) => location.deviceId);
+      session.destroy();
+      return positions;
+    };
+    expect(await livePositionsFrom([beforePause])).toEqual([]);
+    expect(await livePositionsFrom([slowClock])).toEqual(["tablet"]);
+  });
+
+  test("advances past discarded points even when a page has no visible locations", async () => {
+    const initial = point({
+      createdAt: new Date("2026-11-12T10:00:00Z"),
+      id: "first",
+      senderUserId: "alex",
+    });
+    const cursor = { createdAt: new Date("2026-11-12T11:00:00Z"), id: "discarded" };
+    const { session, pollCalls } = createSession({
+      getLatest: async () => ({ points: [initial] }),
+      poll: async () => ({ points: [], cursor }),
+    });
+    session.setActive(true);
+    await session.tick();
+    await session.tick();
+    await session.tick();
+    expect(pollCalls.at(-1)?.cursor).toEqual(cursor);
+    session.destroy();
+  });
+});
+
+test("does not commit an earlier decrypted pin after another group reports a resume revision", async () => {
+  const tablet = point({
+    createdAt: new Date("2026-11-12T10:00:00Z"),
+    id: "tablet-old",
+    senderDeviceId: "tablet",
+    senderUserId: "alex",
+  });
+  const slow = point({
+    createdAt: new Date("2026-11-12T10:00:01Z"),
+    id: "slow",
+    senderUserId: "other",
+  });
+  const sharing = {
+    deviceId: "tablet",
+    userId: "alex",
+    paused: false,
+    revisionPrefix: "",
+  };
+  let blocked = () => {};
+  let resume = () => {};
+  const decryptBlocked = new Promise<void>((resolve) => {
+    blocked = resolve;
+  });
+  const resumeApplied = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const { session } = createSession({
+    listGroups: async () => [{ id: "group-1" }, { id: "group-2" }],
+    getLatest: async (groupId) => {
+      if (groupId === "group-1") return { points: [tablet, slow], sharing: [sharing] };
+      await decryptBlocked;
+      return {
+        points: [],
+        sharing: [{ ...sharing, revisionPrefix: "s0.2:" }],
+      };
+    },
+    decryptPoint: async ({ groupId, point: row }) => {
+      if (row.id === "slow") {
+        blocked();
+        await resumeApplied;
+      }
+      return {
+        status: "ok",
+        entry: liveEntry({
+          deviceId: row.senderDeviceId,
+          userId: row.senderUserId,
+          sourceGroupId: groupId,
+          serverId: row.id,
+          serverCreatedAt: row.createdAt,
+          timestamp:
+            row.id === "tablet-old" ? "2030-01-01T00:00:00.000Z" : row.createdAt.toISOString(),
+        }),
+      };
+    },
+  });
+  session.subscribe(() => {
+    if (session.getStatus().sharing?.some((device) => device.revisionPrefix === "s0.2:")) resume();
+  });
+  session.setActive(true);
+  await session.tick();
+  expect(session.getLivePositions().map((location) => location.deviceId)).toEqual(["device-other"]);
+  session.destroy();
+});
+
+test("fetches latest after a full scanned page even when paused points were filtered out", async () => {
+  const first = point({
+    createdAt: new Date("2026-11-12T10:00:00Z"),
+    id: "first",
+    senderUserId: "alex",
+  });
+  const latest = point({
+    createdAt: new Date("2026-11-12T12:00:00Z"),
+    id: "latest",
+    senderUserId: "alex",
+  });
+  let latestPoint = first;
+  const { session, getLatestCalls } = createSession({
+    getLatest: async () => ({ points: [latestPoint] }),
+    poll: async () => ({
+      points: [],
+      cursor: { createdAt: new Date("2026-11-12T11:00:00Z"), id: "filtered" },
+      hasMore: true,
+    }),
+  });
+  session.setActive(true);
+  await session.tick();
+  latestPoint = latest;
+  await session.tick();
+  expect(getLatestCalls).toHaveLength(2);
+  expect(session.getLivePositions()[0]?.timestamp).toBe(latest.createdAt.toISOString());
+  session.destroy();
+});
+
+test("a slower group's stale snapshot cannot bring back a pin another group reported paused", async () => {
+  const sharing = {
+    deviceId: "tablet",
+    userId: "alex",
+    paused: false,
+    revisionPrefix: "",
+  };
+  const tabletPoint = (id: string, createdAt: Date) =>
+    point({ createdAt, id, senderDeviceId: "tablet", senderUserId: "alex" });
+  let pausedReported = () => {};
+  const pauseSeen = new Promise<void>((resolve) => {
+    pausedReported = resolve;
+  });
+  const { session } = createSession({
+    listGroups: async () => [{ id: "group-1" }, { id: "group-2" }],
+    getLatest: async () => ({
+      points: [tabletPoint("before", new Date("2026-11-12T10:00:00Z"))],
+      sharing: [sharing],
+    }),
+    poll: async ({ groupId }) => {
+      if (groupId === "group-1") {
+        return {
+          points: [],
+          cursor: { createdAt: new Date("2026-11-12T10:05:00Z"), id: "discarded" },
+          sharing: [
+            {
+              ...sharing,
+              paused: true,
+              revisionPrefix: "s0.1:",
+            },
+          ],
+        };
+      }
+      await pauseSeen;
+      return {
+        points: [tabletPoint("stale", new Date("2026-11-12T10:03:00Z"))],
+        sharing: [sharing],
+      };
+    },
+  });
+  session.subscribe(() => {
+    if (session.getStatus().sharing?.some((device) => device.paused)) pausedReported();
+  });
+  session.setActive(true);
+  await session.tick();
+  expect(session.getLivePositions()).toHaveLength(1);
+  await session.tick();
+  expect(session.getStatus().sharing?.[0]?.paused).toBe(true);
+  expect(session.getLivePositions()).toEqual([]);
+  session.destroy();
+});

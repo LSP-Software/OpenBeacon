@@ -56,6 +56,8 @@ mock.module("react-native-svg", () => ({
 }));
 mock.module("lucide-react-native", () => ({
   ClockIcon: () => null,
+  PauseIcon: () => null,
+  HourglassIcon: () => null,
   EyeOffIcon: () => null,
   BackpackIcon: () => null,
   Flower2Icon: () => null,

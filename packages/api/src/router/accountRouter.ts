@@ -6,10 +6,11 @@ import {
   createGoogleDeletionAuthorization,
   verifyGoogleDeletionCode,
 } from "@openbeacon/auth";
-import { tryCatch } from "@openbeacon/shared";
+import { isSharingPaused, resolveLocationSharing, tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import {
   accountNameSchema,
+  setLocationSharingSchema,
   removeDeviceSchema,
   requestImageUploadInputSchema,
   updateDeviceSchema,
@@ -24,6 +25,7 @@ import {
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
+import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { lockUserGroups } from "../lib/lockUserGroups.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
@@ -34,6 +36,128 @@ import {
 } from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
+  locationSharing: protectedProcedure.query(async ({ ctx }) => {
+    const select = {
+      sharingPaused: true,
+      sharingPausedUntil: true,
+      sharingChangedAt: true,
+      sharingRevision: true,
+    } as const;
+    const [account, device] = await Promise.all([
+      ctx.db.user.findUniqueOrThrow({ where: { id: ctx.session.user.id }, select }),
+      ctx.db.userDevice.findFirst({
+        where: { id: ctx.deviceId, userId: ctx.session.user.id, revokedAt: null },
+        select,
+      }),
+    ]);
+    if (!device) throw deviceRemovedError();
+    return {
+      account,
+      device,
+      deviceId: ctx.deviceId,
+      userId: ctx.session.user.id,
+      serverTime: new Date(),
+      ...resolveLocationSharing(account, device),
+    };
+  }),
+  setLocationSharing: protectedProcedure
+    .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
+    .input(setLocationSharingSchema)
+    .mutation(async ({ ctx, input }) => {
+      if (input.expectedUserId !== ctx.session.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "The sharing account has changed." });
+      }
+      const status = await ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "User" WHERE id = ${ctx.session.user.id} FOR NO KEY UPDATE`,
+        );
+        const now = new Date();
+        const session = await tx.session.findFirst({
+          where: {
+            id: ctx.session.session.id,
+            userId: ctx.session.user.id,
+            deviceId: ctx.deviceId,
+            expiresAt: { gt: now },
+            device: {
+              is: { userId: ctx.session.user.id, revokedAt: null, activatedAt: { not: null } },
+            },
+          },
+          select: { id: true },
+        });
+        if (!session) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Sign in again to change location sharing.",
+          });
+        }
+        const select = {
+          sharingPaused: true,
+          sharingPausedUntil: true,
+          sharingChangedAt: true,
+          sharingRevision: true,
+          sharingRequestId: true,
+        } as const;
+        const current =
+          input.scope === "account"
+            ? await tx.user.findUniqueOrThrow({
+                where: { id: ctx.session.user.id },
+                select,
+              })
+            : await tx.userDevice.findFirst({
+                where: {
+                  id: input.deviceId,
+                  userId: ctx.session.user.id,
+                  revokedAt: null,
+                  activatedAt: { not: null },
+                },
+                select,
+              });
+        if (!current) throw new TRPCError({ code: "NOT_FOUND" });
+        if (current.sharingRequestId === input.requestId) return "applied" as const;
+        const matchesBase =
+          input.expectedRevision === null
+            ? input.paused
+            : current.sharingRevision === input.expectedRevision;
+        if (
+          !matchesBase &&
+          (input.replacesRequestId === null || current.sharingRequestId !== input.replacesRequestId)
+        ) {
+          return "superseded" as const;
+        }
+        const pausedUntil =
+          input.pausedUntil && input.durationMinutes !== null
+            ? new Date(
+                Math.min(
+                  input.pausedUntil.getTime(),
+                  now.getTime() + input.durationMinutes * 60_000,
+                ),
+              )
+            : null;
+        const expired = pausedUntil !== null && pausedUntil.getTime() <= now.getTime();
+        const currentlyPaused = isSharingPaused(current, now.getTime());
+        const unchanged = input.paused
+          ? !expired &&
+            currentlyPaused &&
+            current.sharingPausedUntil?.getTime() === pausedUntil?.getTime()
+          : !currentlyPaused;
+        const data = unchanged
+          ? { sharingRequestId: input.requestId }
+          : {
+              sharingPaused: input.paused && !expired,
+              sharingPausedUntil: expired ? null : pausedUntil,
+              sharingChangedAt: now,
+              sharingRevision: { increment: 1 },
+              sharingRequestId: input.requestId,
+            };
+        if (input.scope === "account") {
+          await tx.user.update({ where: { id: ctx.session.user.id }, data });
+        } else {
+          await tx.userDevice.update({ where: { id: input.deviceId }, data });
+        }
+        return expired ? ("expired" as const) : ("applied" as const);
+      });
+      return { status };
+    }),
   deletionVerificationMethods: setupProcedure.query(async ({ ctx }) => {
     const accounts = await ctx.db.account.findMany({
       where: { userId: ctx.session.user.id },
@@ -311,6 +435,10 @@ export const accountRouter = {
         lastSeenAt: true,
         lastLocationAt: true,
         activatedAt: true,
+        sharingPaused: true,
+        sharingPausedUntil: true,
+        sharingChangedAt: true,
+        sharingRevision: true,
       },
     });
     return devices.map((device) => ({ ...device, isCurrent: device.id === ctx.deviceId }));

@@ -2463,8 +2463,10 @@ describe("NativeMap integration harness", () => {
       finding: [],
       hidden: [],
       outOfDate: [],
+      paused: [],
       upToDate: [],
       waiting: [],
+      waitingForLocation: [],
     };
     const findOne = (type: string) =>
       root?.container.queryAll((instance) => instance.type === type)[0];
@@ -2656,8 +2658,10 @@ describe("NativeMap integration harness", () => {
       finding: [],
       hidden: [],
       outOfDate: [],
+      paused: [],
       upToDate: [],
       waiting: [],
+      waitingForLocation: [],
       ...overrides,
     });
     const peopleButton = () =>
@@ -2726,7 +2730,12 @@ describe("NativeMap integration harness", () => {
       });
       expect(peopleButton()?.props["accessibilityLabel"]).toBe("People");
 
-      await renderNativeMap({ people: createPeople(needsAttention) });
+      await renderNativeMap({
+        people: createPeople({
+          ...needsAttention,
+          waitingForLocation: [{ ...person("fred", "Fred"), waitingForLocation: true }],
+        }),
+      });
       expect(peopleButton()?.props["accessibilityLabel"]).toBe("People, 2 need attention");
 
       const erin = createLiveMapMarkerFixture({

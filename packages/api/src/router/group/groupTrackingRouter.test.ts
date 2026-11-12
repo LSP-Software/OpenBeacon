@@ -11,6 +11,8 @@ class TestOpenBeaconCache extends OpenBeaconCache {
   }
 }
 
+import { sharingDeviceRow } from "../../lib/locationSharing.testUtil.ts";
+
 const validNonce = Buffer.alloc(24, 1).toString("base64");
 
 const createGroupFindUniqueMock = (
@@ -73,9 +75,13 @@ const createCaller = async ({
     now,
   });
   const db = {
-    $queryRaw:
-      queryRawMock ??
-      mock(async () => [{ id: "group-member-1", createdAt: new Date("2026-01-01") }]),
+    $queryRaw: async (query: { strings: string[] }) => {
+      if (query.strings.join("").includes('JOIN "User" AS "account"')) return [sharingDeviceRow];
+      if (query.strings.join("").includes("FOR SHARE")) return [];
+      return queryRawMock
+        ? queryRawMock(query)
+        : [{ id: "group-member-1", createdAt: new Date("2026-01-01") }];
+    },
     group: { findUnique: groupFindUniqueMock },
     groupEncryptedPayload: {
       createMany: createManyMock ?? mock(async () => ({ count: 0 })),
@@ -263,6 +269,7 @@ describe("groupTrackingRouter", () => {
       }),
     ).resolves.toEqual({
       accepted: ["point-1"],
+      discarded: [],
       duplicates: [],
       expired: [],
     });
@@ -380,7 +387,7 @@ describe("groupTrackingRouter", () => {
       groupFindUniqueMock: createGroupFindUniqueMock(true),
     });
 
-    await expect(caller.groupTracking.poll({ groupId: "group-1" })).resolves.toEqual({
+    await expect(caller.groupTracking.poll({ groupId: "group-1" })).resolves.toMatchObject({
       points: [point],
     });
   });
@@ -404,7 +411,7 @@ describe("groupTrackingRouter", () => {
       queryRawMock,
     });
 
-    await expect(caller.groupTracking.getLatest({ groupId: "group-1" })).resolves.toEqual({
+    await expect(caller.groupTracking.getLatest({ groupId: "group-1" })).resolves.toMatchObject({
       points: [point],
     });
     expect(queryRawMock).toHaveBeenCalled();

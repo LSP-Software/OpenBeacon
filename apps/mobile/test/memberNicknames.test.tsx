@@ -101,8 +101,8 @@ mock.module("../components/dialogs/InviteMemberToGroupDialog.tsx", () => ({
   InviteMemberToGroupDialog: () => null,
 }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
-mock.module("../hooks/useGroupLivePositions.ts", () => ({
-  useGroupLivePositions: () => positions,
+mock.module("../hooks/useLiveTrackingPositions.ts", () => ({
+  useLiveTrackingPositions: () => ({ positions, status: { undecryptable: [] } }),
 }));
 mock.module("../lib/api.ts", () => ({
   trpc: {

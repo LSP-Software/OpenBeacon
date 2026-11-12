@@ -80,6 +80,9 @@ mock.module("../components/map/NativeMap.tsx", () => ({
   },
 }));
 mock.module("../components/NewSignInBanner.tsx", () => ({ NewSignInBanner: () => null }));
+mock.module("../components/map/LocationSharingPausedBanner.tsx", () => ({
+  LocationSharingPausedBanner: () => null,
+}));
 mock.module("../components/ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) =>
     React.createElement("text", null, children),

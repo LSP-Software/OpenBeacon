@@ -20,7 +20,7 @@ import {
 import { Icon } from "../../../../components/ui/Icon.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
 import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
-import { useGroupLivePositions } from "../../../../hooks/useGroupLivePositions.ts";
+import { useLiveTrackingPositions } from "../../../../hooks/useLiveTrackingPositions.ts";
 import { trpc } from "../../../../lib/api.ts";
 import {
   loadPersonalNicknames,
@@ -74,7 +74,7 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
     queryFn: () => loadPersonalNicknames(groupId, session!.user.id),
   });
   const nicknames = nicknameQuery.data ?? {};
-  const livePositions = useGroupLivePositions(groupId);
+  const { positions: livePositions, status: liveStatus } = useLiveTrackingPositions({ groupId });
   const memberDevices = useQuery({
     ...trpc.groupMembership.listMemberDevices.queryOptions({ groupId }),
     subscribed: isFocused,
@@ -286,7 +286,15 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
       </View>
       {memberStatuses.map((member) => (
         <View key={member.id} className="gap-3 rounded-2xl border border-border bg-card p-4">
-          <MemberCard member={member} />
+          <MemberCard
+            member={member}
+            sharingPaused={
+              liveStatus.sharing?.some((device) => device.userId === member.user.id) === true &&
+              liveStatus.sharing.every(
+                (device) => device.userId !== member.user.id || device.paused,
+              )
+            }
+          />
           {self?.role === "OWNER" && member.id !== self.id && (
             <View
               className="flex-row rounded-2xl bg-secondary p-1"
@@ -386,7 +394,13 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
   );
 };
 
-const MemberCard = ({ member }: { member: ReturnType<typeof buildMemberLiveStatuses>[number] }) => {
+const MemberCard = ({
+  member,
+  sharingPaused,
+}: {
+  member: ReturnType<typeof buildMemberLiveStatuses>[number];
+  sharingPaused: boolean;
+}) => {
   const batteryVisual = member.battery
     ? getBatteryVisual({
         batteryLevel: member.battery.level,
@@ -413,7 +427,9 @@ const MemberCard = ({ member }: { member: ReturnType<typeof buildMemberLiveStatu
           <View className="flex-row items-start gap-1">
             <Icon as={MapPinIcon} className="text-secondary mt-1 size-4" />
             <View className="flex-col items-start">
-              {member.timestamp ? (
+              {sharingPaused ? (
+                <Text className="text-md text-muted">Location sharing paused</Text>
+              ) : member.timestamp ? (
                 <Text className="text-md text-muted">
                   Location updated {timeSince(member.timestamp)}
                 </Text>
@@ -450,7 +466,7 @@ const MemberCard = ({ member }: { member: ReturnType<typeof buildMemberLiveStatu
                 </View>
               );
             })
-          ) : member.battery && batteryVisual ? (
+          ) : sharingPaused ? null : member.battery && batteryVisual ? (
             <View className="flex-row items-center gap-2">
               <Icon as={batteryVisual.icon} size={20} className={batteryVisual.colorClass} />
               <Text className={`${batteryVisual.colorClass} text-sm`}>

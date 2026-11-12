@@ -39,6 +39,7 @@ mock.module("expo-secure-store", () => ({
 
 mock.module("./storage.ts", () => ({
   storage: {
+    getAllKeys: () => [...storageValues.keys()],
     getBoolean: (key: string) => storageValues.get(key) === true,
     getString: (key: string) => {
       const value = storageValues.get(key);
@@ -167,10 +168,12 @@ describe("wiping a removed phone", () => {
     storageValues.set(`encryption.device.active.${device.deviceId}`, true);
     secureStoreValues.set("encryption.history.user-a.3", "history-3");
     secureStoreValues.set(`encryption.deviceLink.user-a.${device.deviceId}`, "saved-link");
+    storageValues.set("locationSharing.pending.queued-pause", "pause");
 
     await wipeThisPhone();
 
     expectWiped(device.deviceId);
+    expect(storageValues.has("locationSharing.pending.queued-pause")).toBe(false);
     expect(storageValues.has("encryption.device.registered")).toBe(false);
     expect(queueDeletions).toEqual([{ deviceId: device.deviceId, userId: "user-a" }]);
     expect(signOuts).toBe(1);

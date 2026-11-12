@@ -104,6 +104,8 @@ let missingHistoryWraps = new Map<string, string[]>();
 const backfillQueries: string[] = [];
 const captureStateSeenByBackfill: Array<{ provisions: number; starts: number }> = [];
 const historyWrapUploads: Array<{ groupId: string; wraps: WrappedHistoryEpochKey[] }> = [];
+let locationSharingError: Error | null = null;
+const sharingStates: { owner: string; deviceId: string; prefix: string; paused: boolean }[] = [];
 let registrationWait: Promise<void> | null = null;
 let onRegistration: (() => void) | null = null;
 let uploadGroup = async ({
@@ -140,6 +142,7 @@ mock.module("./storage.ts", () => ({
 }));
 
 mock.module("./deviceKeys.ts", () => ({
+  getStoredDeviceId: () => registeredDevice?.deviceId,
   cancelDeviceKeyRegistrations: () => {
     registeredDevice = null;
   },
@@ -236,6 +239,30 @@ mock.module("./server-url.ts", () => ({ hasCustomServerUrl: () => false }));
 
 mock.module("./api.ts", () => ({
   trpcClient: {
+    account: {
+      locationSharing: {
+        query: async () => {
+          if (locationSharingError) throw locationSharingError;
+          const preference = {
+            sharingPaused: false,
+            sharingPausedUntil: null,
+            sharingChangedAt: null,
+            sharingRevision: 0,
+          };
+          return {
+            account: preference,
+            device: preference,
+            userId: currentUserId,
+            deviceId: "device-1",
+            serverTime: new Date(),
+            paused: false,
+            pausedUntil: null,
+            resumeAfter: null,
+            revisionPrefix: "",
+          };
+        },
+      },
+    },
     auth: {
       deviceKeyContext: {
         query: async () => {
@@ -392,6 +419,10 @@ mock.module("./api.ts", () => ({
 
 mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   default: {
+    setSharingState: (owner: string, deviceId: string, prefix: string, paused: boolean) => {
+      sharingStates.push({ owner, deviceId, prefix, paused });
+      return true;
+    },
     setQueueOwner: () => {},
     countUnassignedCiphertexts: async () => unassignedCount,
     assignUnassignedCiphertexts: async (deviceId: string, owner: string) => {
@@ -567,6 +598,8 @@ describe("tracking service", () => {
     historyWrapUploads.length = 0;
     registrationWait = null;
     onRegistration = null;
+    locationSharingError = null;
+    sharingStates.length = 0;
     uploadGroup = async ({ points }) => ({
       accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
       duplicates: [],
@@ -591,6 +624,51 @@ describe("tracking service", () => {
     await flushPendingTrackingPoints();
     expect(requestedOwners).toEqual([JSON.stringify(["https://api.example.test", "user-1"])]);
     expect(deleted).toEqual([[1]]);
+  });
+
+  test("holds pre-pause points while a local pause hasn't reached the server", async () => {
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    const pauseKey = `locationSharing.pending.${JSON.stringify(["https://api.example.test", "user-1", "device"])}`;
+    const input = {
+      scope: "device",
+      deviceId: "device-1",
+      expectedUserId: "user-1",
+      paused: true,
+      durationMinutes: null,
+    };
+    storageValues.set(pauseKey, JSON.stringify({ requestId: "sharing-1", input }));
+    pendingCiphertexts = [
+      createQueueItem({ clientPointId: "before-pause", groupId: "group-1", id: 1 }),
+    ];
+    await flushPendingTrackingPoints();
+    expect(markedInFlight).toEqual([]);
+    expect(uploadCalls).toEqual([]);
+    storageValues.delete(pauseKey);
+    await flushPendingTrackingPoints();
+    expect(deleted).toEqual([[1]]);
+  });
+
+  test("starting capture applies the server's sharing preference to the capture runtime", async () => {
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(startCaptureCalls).toBe(1);
+    expect(sharingStates).toEqual([
+      {
+        owner: JSON.stringify(["https://api.example.test", "user-1"]),
+        deviceId: "device-1",
+        prefix: "",
+        paused: false,
+      },
+    ]);
+  });
+
+  test("an unreachable sharing preference doesn't stop capture from starting", async () => {
+    locationSharingError = new Error("offline");
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(startCaptureCalls).toBe(1);
   });
 
   test("only assigns legacy points after confirmation for the same account", async () => {

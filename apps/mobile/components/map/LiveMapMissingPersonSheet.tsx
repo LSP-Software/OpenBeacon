@@ -1,7 +1,15 @@
 import { Link } from "expo-router";
 import { EyeIcon } from "lucide-react-native";
 import { Pressable, View } from "react-native";
-import type { MapHiddenPerson, MapPerson, MapUnreadablePerson } from "../../lib/mapPeopleTypes.ts";
+import { deviceIconFor } from "../../lib/deviceIcons.ts";
+import type {
+  MapHiddenPerson,
+  MapMemberDevice,
+  MapPausedPerson,
+  MapPerson,
+  MapUnreadablePerson,
+  MapWaitingForLocationPerson,
+} from "../../lib/mapPeopleTypes.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
@@ -9,16 +17,25 @@ import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
 
 export const LiveMapMissingPersonSheet = ({
+  devices,
   onDismiss,
   onHeightChange,
   onShowGroup,
   person,
 }: {
+  devices: readonly (MapMemberDevice & { paused: boolean })[];
   onDismiss: () => void;
   onHeightChange: (height: number) => void;
   onShowGroup: (groupId: string) => void;
-  person: MapPerson | MapUnreadablePerson | MapHiddenPerson;
+  person:
+    | MapPerson
+    | MapUnreadablePerson
+    | MapHiddenPerson
+    | MapPausedPerson
+    | MapWaitingForLocationPerson;
 }) => {
+  const paused = "sharingPaused" in person;
+  const waitingForLocation = "waitingForLocation" in person;
   const unreadable = "reason" in person ? person : null;
   const hidden = "hiddenGroups" in person ? person : null;
   const hiddenGroupNames = hidden?.hiddenGroups.map((group) => group.name) ?? [];
@@ -40,17 +57,69 @@ export const LiveMapMissingPersonSheet = ({
           <View className="min-w-0 flex-1 gap-1">
             <Text className="text-foreground text-xl font-bold">{name}</Text>
             <Text className="text-muted dark:text-muted-foreground text-sm">
-              {hidden
-                ? "Hidden on this phone"
-                : unreadable
-                  ? "Can’t read their location"
-                  : "Location unknown"}
+              {paused
+                ? "Location sharing paused"
+                : waitingForLocation
+                  ? "Waiting for location"
+                  : hidden
+                    ? "Hidden on this phone"
+                    : unreadable
+                      ? "Can’t read their location"
+                      : "Location unknown"}
             </Text>
           </View>
         </View>
       }
     >
-      {hidden ? (
+      {paused ? (
+        <View className="mt-3 rounded-xl bg-background p-3">
+          <Text className="text-sm">
+            {person.isSelf
+              ? "You’ve paused location sharing on all your devices."
+              : `${person.name} has paused location sharing.`}
+          </Text>
+          {person.isSelf ? (
+            <Link href="/(tabs)/account/overview" asChild>
+              <Button variant="outline" className="mt-3">
+                <Text>Manage sharing</Text>
+              </Button>
+            </Link>
+          ) : null}
+        </View>
+      ) : waitingForLocation ? (
+        <View className="mt-3 gap-3">
+          <View className="rounded-xl bg-background p-3">
+            <Text className="text-sm">
+              {person.isSelf
+                ? "You’ve turned location sharing back on. Your location will show when one of your devices sends an update."
+                : `${person.name} has turned location sharing back on. Their location will show when one of their devices sends an update.`}
+            </Text>
+          </View>
+          {devices.length > 0 ? (
+            <View className="gap-1">
+              {devices.map((device) => (
+                <View key={device.deviceId} className="min-h-11 flex-row items-center gap-3 py-1.5">
+                  <View className="size-9 items-center justify-center rounded-xl border border-border bg-background">
+                    <Icon
+                      as={deviceIconFor(device.icon, device.platform).icon}
+                      size={18}
+                      className="text-foreground"
+                    />
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <Text className="text-foreground font-semibold" numberOfLines={1}>
+                      {device.name}
+                    </Text>
+                    <Text className="text-muted text-sm" numberOfLines={1}>
+                      {device.paused ? "Location sharing paused" : "Waiting for location"}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : hidden ? (
         <View className="mt-3 gap-3">
           <View className="rounded-xl bg-background p-3">
             <Text className="text-sm">

@@ -17,6 +17,7 @@ class CapturePipeline(
   private val canQueue: (Long) -> Boolean = { true },
   private val queueOwner: () -> String? = { null },
   private val bootId: String? = null,
+  private val sharingState: () -> SharingCaptureState = { SharingCaptureState() },
 ) {
   private val lastFixByKey = mutableMapOf<List<String>, Long>()
 
@@ -41,6 +42,9 @@ class CapturePipeline(
 
     val captureId = newId()
     val queuedAt = nowMillis()
+    val sharing = synchronized(captureLock) { sharingState() }
+    val timestamp = java.time.Instant.parse(timestampIso).toEpochMilli()
+    if (!sharing.canCapture(timestamp, queuedAt)) return 0
     val plaintext =
       GroupPayloadEncrypt
         .encodeTrackingPointV1Json(
@@ -90,7 +94,8 @@ class CapturePipeline(
     return synchronized(captureLock) {
       if (!canQueue(captureGeneration)) return@synchronized 0
       if (queueOwner() != owner) return@synchronized 0
-      val scopedRows = rows.map { it.copy(owner = owner) }
+      if (sharingState() != sharing || !sharing.canCapture(timestamp, nowMillis())) return@synchronized 0
+      val scopedRows = rows.map { it.copy(owner = owner, clientPointId = sharing.revisionPrefix + it.clientPointId) }
       lastFixByKey.keys.retainAll(scopedRows.map { row ->
         listOf(owner, row.groupId, row.epochId, row.senderDeviceId, row.kind)
       }.toSet())

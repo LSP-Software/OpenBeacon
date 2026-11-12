@@ -229,6 +229,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     });
     expect(result).toEqual({
       accepted: [`${prefix}-current`],
+      discarded: [],
       duplicates: [],
       expired: [`${prefix}-expired`],
     });

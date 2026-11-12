@@ -1,7 +1,9 @@
 import { Prisma } from "@openbeacon/database";
 import type { groupTrackingPointSchema } from "@openbeacon/schemas";
+import type { GroupDeviceSharingState } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type z from "zod";
+import { getGroupSharingStates } from "./locationSharing.ts";
 
 type GroupTrackingDb = {
   $queryRaw: <T>(query: Prisma.Sql) => Promise<T>;
@@ -171,8 +173,22 @@ export const uploadGroupTrackingBatch = async ({
   }
 
   const existingClientPointIds = new Set(existingRows.map((row) => row.clientPointId));
+  const sharing = await getGroupSharingStates(db, groupId);
+  const discarded = points.filter((point) => {
+    if (existingClientPointIds.has(point.clientPointId) || !foundEpochIds.has(point.epochId)) {
+      return false;
+    }
+    const state = sharing.find(
+      (device) => device.deviceId === point.senderDeviceId && device.userId === userId,
+    );
+    return !state || state.paused || !point.clientPointId.startsWith(state.revisionPrefix);
+  });
+  const discardedIds = new Set(discarded.map((point) => point.clientPointId));
   const pointsToInsert = points.filter(
-    (point) => foundEpochIds.has(point.epochId) && !existingClientPointIds.has(point.clientPointId),
+    (point) =>
+      foundEpochIds.has(point.epochId) &&
+      !existingClientPointIds.has(point.clientPointId) &&
+      !discardedIds.has(point.clientPointId),
   );
 
   if (pointsToInsert.length > 0) {
@@ -201,6 +217,7 @@ export const uploadGroupTrackingBatch = async ({
 
   return {
     accepted: pointsToInsert.map((point) => point.clientPointId),
+    discarded: [...discardedIds],
     duplicates: points
       .filter((point) => existingClientPointIds.has(point.clientPointId))
       .map((point) => point.clientPointId),
@@ -251,8 +268,13 @@ export const pollGroupTrackingPoints = async ({
     },
   });
 
+  const sharing = await getGroupSharingStates(db, groupId);
+  const last = points.at(-1);
   return {
-    points: points as GroupEncryptedPayloadRow[],
+    points: filterSharedPoints(points as GroupEncryptedPayloadRow[], sharing),
+    sharing,
+    cursor: last?.createdAt && last.id ? { createdAt: last.createdAt, id: last.id } : null,
+    hasMore: points.length === limit,
   };
 };
 
@@ -293,5 +315,20 @@ export const getLatestGroupTrackingPoints = async ({
     ORDER BY "latest"."senderUserId" ASC, "latest"."senderDeviceId" ASC
   `);
 
-  return { points };
+  const sharing = await getGroupSharingStates(db, groupId);
+  return { points: filterSharedPoints(points, sharing), sharing };
 };
+
+const filterSharedPoints = (
+  points: GroupEncryptedPayloadRow[],
+  sharing: GroupDeviceSharingState[],
+) =>
+  points.filter((point) =>
+    sharing.some(
+      (device) =>
+        device.deviceId === point.senderDeviceId &&
+        device.userId === point.senderUserId &&
+        !device.paused &&
+        point.clientPointId.startsWith(device.revisionPrefix),
+    ),
+  );

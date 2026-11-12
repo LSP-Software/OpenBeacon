@@ -22,6 +22,11 @@ model User {
   timezone       String?
   alertNewSignIn Boolean         @default(true)
   alertDeletionScheduled Boolean @default(true)
+  sharingPaused  Boolean         @default(false)
+  sharingPausedUntil DateTime?
+  sharingChangedAt DateTime?
+  sharingRevision Int            @default(0)
+  sharingRequestId String?
   sessions       Session[]
   accounts       Account[]
   pendingUploads PendingUpload[]
@@ -205,6 +210,7 @@ model GroupMember {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, groupId])
+  @@index([groupId])
 }
 
 model PersonalGroupNickname {
@@ -239,6 +245,11 @@ model UserDevice {
   activatedAt            DateTime?
   activatedBy            DeviceActivation?
   revokedAt              DateTime?
+  sharingPaused          Boolean                  @default(false)
+  sharingPausedUntil     DateTime?
+  sharingChangedAt       DateTime?
+  sharingRevision        Int                      @default(0)
+  sharingRequestId       String?
   sessions               Session[]
   createdGroupEpochs     GroupEpoch[]             @relation("GroupEpochCreatedByDevice")
   recipientEpochKeys     GroupEpochRecipientKey[] @relation("GroupEpochRecipientDevice")

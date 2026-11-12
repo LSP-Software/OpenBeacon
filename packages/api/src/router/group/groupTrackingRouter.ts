@@ -27,6 +27,9 @@ export const groupTrackingRouter = {
     .mutation(async ({ ctx, input }) => {
       return await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "User" WHERE id = ${ctx.session.user.id} FOR SHARE`,
+        );
+        await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
         );
         const group = await tx.group.findUnique({ where: { id: input.groupId } });

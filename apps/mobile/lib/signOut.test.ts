@@ -11,8 +11,26 @@ let removalErrors: Error[] = [];
 let challengeError: Error | null = null;
 let signOutError: Error | null = null;
 let removedErrorDuringRemoval = false;
+let pendingSharingPause = false;
+let deleteQueueError: Error | null = null;
+const sharingEvents: string[] = [];
 
 mock.module("./pendingJoinCode.ts", () => ({ clearPendingJoinCodes: () => {} }));
+mock.module("./locationSharing.ts", () => ({
+  syncLocationSharing: async () => {
+    sharingEvents.push("sync");
+  },
+  abandonLocationSharingChanges: () => {
+    sharingEvents.push("abandon");
+  },
+  getPendingSharingChanges: () => ({
+    device: pendingSharingPause ? { paused: true } : null,
+    account: null,
+  }),
+  clearPendingSharingChanges: () => {
+    sharingEvents.push(`clear:${events.includes("signOut") ? "after" : "before"} sign-out`);
+  },
+}));
 mock.module("expo-router", () => ({
   router: {
     replace: (target: unknown) => {
@@ -106,6 +124,7 @@ mock.module("./auth-client.ts", () => ({
 mock.module("./tracking.ts", () => ({
   deleteQueuedTrackingPoints: async () => {
     events.push("deleteQueue");
+    if (deleteQueueError) throw deleteQueueError;
   },
   prepareTrackingSignOut: async () => {
     events.push(`prepare:${await readHeaderDeviceId()}`);
@@ -142,6 +161,9 @@ describe("signing out of this phone", () => {
     challengeError = null;
     signOutError = null;
     removedErrorDuringRemoval = false;
+    pendingSharingPause = false;
+    deleteQueueError = null;
+    sharingEvents.length = 0;
   });
 
   test("removing this phone sends its device id, then wipes its keys and signs out", async () => {
@@ -389,6 +411,35 @@ describe("signing out of this phone", () => {
     expect(events).toEqual([`prepare:${device.deviceId}`, "signOut"]);
     expect(storageValues.has("encryption.device.registered")).toBe(false);
     expect(storageValues.get("encryption.device.id.user-a")).toBe(device.deviceId);
+  });
+
+  test("a sign-out drops a queued pause and the points it was holding back", async () => {
+    const device = await ensureDeviceKeyRegistration();
+    pendingSharingPause = true;
+
+    await signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: false,
+      sessionTokenToRevoke: null,
+    });
+
+    expect(events).toEqual([`prepare:${device.deviceId}`, "deleteQueue", "signOut"]);
+    expect(sharingEvents).toEqual(["sync", "abandon", "clear:before sign-out"]);
+  });
+
+  test("a sign-out keeps a queued pause when the points it holds back couldn't be deleted", async () => {
+    const device = await ensureDeviceKeyRegistration();
+    pendingSharingPause = true;
+    deleteQueueError = new Error("Native queue unavailable");
+
+    await signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: false,
+      sessionTokenToRevoke: null,
+    });
+
+    expect(events).toEqual([`prepare:${device.deviceId}`, "deleteQueue", "signOut"]);
+    expect(sharingEvents).toEqual(["sync", "abandon"]);
   });
 
   test("a sign-out that throws keeps the session token to revoke on the next sign-in", async () => {

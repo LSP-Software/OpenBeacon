@@ -1,4 +1,5 @@
 import { optionalEnvString, serverNameSchema } from "./env.ts";
+export { setLocationSharingSchema } from "./schemas/account/locationSharing.ts";
 import {
   approveDeviceLinkSchema,
   deviceIconSchema,

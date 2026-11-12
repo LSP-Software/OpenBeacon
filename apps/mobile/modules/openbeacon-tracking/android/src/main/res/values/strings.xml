@@ -4,5 +4,8 @@
   <string name="openbeacon_tracking_notification_channel_description">Shown while Open Beacon privately shares your location with your family.</string>
   <string name="openbeacon_tracking_notification_title">Open Beacon</string>
   <string name="openbeacon_tracking_notification_body">Private location sharing is active.</string>
+  <string name="openbeacon_tracking_notification_paused_body">Location sharing paused. You can still view your groups.</string>
+  <string name="openbeacon_tracking_resumed_notice_body">Location sharing was turned back on from another device. Tap to start sharing from this device again.</string>
+  <string name="openbeacon_tracking_changed_notice_body">Location sharing was changed from another device. Tap to update this device.</string>
   <string name="openbeacon_compatibility_notification_channel">App and server updates</string>
 </resources>

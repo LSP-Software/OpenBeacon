@@ -8,6 +8,8 @@ import {
   uploadGroupTrackingBatch,
 } from "./groupTracking.ts";
 
+import { sharingDeviceRow } from "./locationSharing.testUtil.ts";
+
 const validNonce = Buffer.alloc(24, 1).toString("base64");
 
 const createPoint = (
@@ -44,7 +46,7 @@ describe("uploadGroupTrackingBatch", () => {
   });
 
   const createDb = () => ({
-    $queryRaw: mock(async () => []),
+    $queryRaw: mock(async () => [sharingDeviceRow]),
     groupEncryptedPayload: {
       createMany,
       findMany: findManyPayloads,
@@ -69,6 +71,7 @@ describe("uploadGroupTrackingBatch", () => {
 
     expect(result).toEqual({
       accepted: ["point-1"],
+      discarded: [],
       duplicates: [],
       expired: [],
     });
@@ -126,6 +129,7 @@ describe("uploadGroupTrackingBatch", () => {
 
     expect(result).toEqual({
       accepted: [],
+      discarded: [],
       duplicates: ["point-1"],
       expired: [],
     });
@@ -148,6 +152,7 @@ describe("uploadGroupTrackingBatch", () => {
 
     expect(result).toEqual({
       accepted: ["point-2"],
+      discarded: [],
       duplicates: ["point-1"],
       expired: [],
     });
@@ -230,7 +235,7 @@ describe("uploadGroupTrackingBatch", () => {
       userId: "user-1",
     });
 
-    expect(result).toEqual({ accepted: ["new"], duplicates: [], expired: ["old"] });
+    expect(result).toEqual({ accepted: ["new"], discarded: [], duplicates: [], expired: ["old"] });
     expect(countEpochs).toHaveBeenCalledWith({ where: { id: { in: ["deleted-epoch"] } } });
     expect(createMany.mock.calls[0]?.[0]).toMatchObject({
       data: [{ clientPointId: "new", epochId: "epoch-2" }],
@@ -248,13 +253,47 @@ describe("uploadGroupTrackingBatch", () => {
       userId: "user-1",
     });
 
-    expect(result).toEqual({ accepted: [], duplicates: [], expired: ["point-1"] });
+    expect(result).toEqual({ accepted: [], discarded: [], duplicates: [], expired: ["point-1"] });
     expect(createMany).not.toHaveBeenCalled();
     expect(updateManyDevices).not.toHaveBeenCalled();
   });
 });
 
 describe("pollGroupTrackingPoints", () => {
+  test("a full filtered page still signals a backlog and advances its scan cursor", async () => {
+    const rows = ["first", "second"].map((id) => ({
+      algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+      ciphertext: "ciphertext",
+      clientPointId: id,
+      createdAt: new Date("2026-07-13T18:00:00.000Z"),
+      epochId: "epoch-1",
+      id,
+      kind: TRACKING_POINT_KIND,
+      nonce: validNonce,
+      senderDeviceId: "device-1",
+      senderUserId: "user-1",
+    }));
+    const result = await pollGroupTrackingPoints({
+      db: {
+        $queryRaw: mock(async () => [{ ...sharingDeviceRow, sharingPaused: true }]),
+        groupEncryptedPayload: {
+          createMany: mock(async () => ({ count: 0 })),
+          findMany: mock(async () => rows),
+        },
+        groupEpoch: { findMany: mock(async () => []) },
+        userDevice: {
+          findMany: mock(async () => []),
+          updateMany: mock(async () => ({ count: 0 })),
+        },
+      },
+      groupId: "group-1",
+      limit: 2,
+    });
+    expect(result.points).toEqual([]);
+    expect(result.hasMore).toBe(true);
+    expect(result.cursor).toEqual({ id: "second", createdAt: rows[1]!.createdAt });
+  });
+
   test("queries with exclusive cursor ordering", async () => {
     const createdAt = new Date("2026-07-13T18:00:00.000Z");
     const findMany = mock(async () => [
@@ -275,7 +314,7 @@ describe("pollGroupTrackingPoints", () => {
     const result = await pollGroupTrackingPoints({
       cursor: { createdAt, id: "id-1" },
       db: {
-        $queryRaw: mock(async () => []),
+        $queryRaw: mock(async () => [sharingDeviceRow]),
         groupEncryptedPayload: {
           createMany: mock(async () => ({ count: 0 })),
           findMany,
@@ -323,7 +362,7 @@ describe("pollGroupTrackingPoints", () => {
 
 describe("getLatestGroupTrackingPoints", () => {
   test("looks up the newest point of each member's devices instead of sorting the whole group", async () => {
-    const queryRaw = mock(async () => [
+    const queryRaw = mock(async (_query?: { strings: string[] }) => [
       {
         algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
         ciphertext: "ciphertext",
@@ -340,7 +379,11 @@ describe("getLatestGroupTrackingPoints", () => {
 
     const result = await getLatestGroupTrackingPoints({
       db: {
-        $queryRaw: queryRaw,
+        $queryRaw: mock(async (query: { strings: string[] }) =>
+          query.strings.join("").includes('JOIN "User" AS "account"')
+            ? [sharingDeviceRow]
+            : queryRaw(query),
+        ),
         groupEncryptedPayload: {
           createMany: mock(async () => ({ count: 0 })),
           findMany: mock(async () => []),
