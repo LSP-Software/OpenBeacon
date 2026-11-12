@@ -22,6 +22,7 @@ const group = {
 const passthrough = ({ children }: { children?: ReactNode }) =>
   React.createElement(React.Fragment, null, children);
 mock.module("@tanstack/react-query", () => ({
+  skipToken: Symbol("skipToken"),
   useMutation: () => ({ mutateAsync: mutate, isPending: false }),
   useQueryClient: () => ({ invalidateQueries: async () => {} }),
   useQuery: (options: { queryKey?: unknown[]; select?: (groups: unknown[]) => unknown }) =>

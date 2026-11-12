@@ -1,5 +1,6 @@
 import { afterEach, expect, mock, test } from "bun:test";
-import React, { act } from "react";
+import type React from "react";
+import { act } from "react";
 import { createRoot, type Root } from "test-renderer";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 

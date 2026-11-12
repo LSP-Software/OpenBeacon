@@ -4,7 +4,7 @@ export const getSwipeTabsIndex = <T extends string>(
 ): number => {
   const nextIndex = tabs.findIndex((tab) => tab.value === value);
 
-  return nextIndex >= 0 ? nextIndex : 0;
+  return Math.max(nextIndex, 0);
 };
 
 export const getSceneIndexFromOffset = ({

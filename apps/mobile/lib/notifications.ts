@@ -1,5 +1,6 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useEffect } from "react";
+// biome-ignore lint/correctness/useReactNativePlatformComponents: imports must end in .ts, so Metro cannot pick a .android.ts file; the Android call is guarded by Platform.OS
 import { AppState, PermissionsAndroid, Platform } from "react-native";
 import type { NoticeSlot } from "../modules/openbeacon-tracking/index.ts";
 import type { ApiCompatibilityProblem } from "./apiCompatibility.ts";

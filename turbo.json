@@ -34,6 +34,7 @@
     "JAVA_HOME",
     "ANDROID_HOME",
     "ANDROID_SDK_ROOT",
+    "OPENBEACON_INTEGRATION",
     "CI"
   ],
   "tasks": {

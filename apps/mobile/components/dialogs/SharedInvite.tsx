@@ -54,7 +54,7 @@ export const SharedInvite = ({
   const currentStatus = statuses.data?.find((item) => item.id === inviteId)?.status;
   const used = currentStatus === "used";
   useEffect(() => {
-    if (expiresInMs === undefined) return;
+    if (inviteId === undefined || expiresInMs === undefined) return;
     setExpired(false);
     const timeout = setTimeout(() => setExpired(true), expiresInMs);
     return () => clearTimeout(timeout);

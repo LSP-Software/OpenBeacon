@@ -91,30 +91,27 @@ const computeLiveMapFitBounds = (markers: readonly LiveMapMarker[]) => {
 
 const shortestLongitudeBounds = (longitudes: readonly number[]) => {
   const sorted = [...new Set(longitudes)].sort((left, right) => left - right);
-  if (sorted.length === 1) {
-    return { east: sorted[0]!, west: sorted[0]! };
-  }
+  const [first = 0] = sorted;
+  const last = sorted.at(-1) ?? first;
 
   let largestGap = Number.NEGATIVE_INFINITY;
-  let indexBeforeLargestGap = 0;
+  let bounds = { east: first, west: first };
+  let previous = first;
 
-  for (let index = 0; index < sorted.length - 1; index += 1) {
-    const gap = sorted[index + 1]! - sorted[index]!;
+  for (const longitude of sorted) {
+    const gap = longitude - previous;
     if (gap > largestGap) {
       largestGap = gap;
-      indexBeforeLargestGap = index;
+      bounds = { east: previous, west: longitude };
     }
+    previous = longitude;
   }
 
-  const wrapGap = sorted[0]! + 360 - sorted[sorted.length - 1]!;
-  if (wrapGap > largestGap) {
-    return { east: sorted[sorted.length - 1]!, west: sorted[0]! };
+  if (first + 360 - last > largestGap) {
+    return { east: last, west: first };
   }
 
-  return {
-    east: sorted[indexBeforeLargestGap]!,
-    west: sorted[indexBeforeLargestGap + 1]!,
-  };
+  return bounds;
 };
 
 const longitudeSpan = (west: number, east: number) =>

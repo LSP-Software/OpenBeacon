@@ -31,7 +31,7 @@ export const RecoveryPhraseGrid = ({
       <View className="flex-row flex-wrap gap-2">
         {words.map((word, index) => (
           <View
-            key={index}
+            key={numberOf(index)}
             className="w-[48%] flex-row gap-2 rounded-lg border border-border bg-card px-3 py-2"
           >
             <Text className="text-muted-foreground w-6">{numberOf(index)}</Text>
@@ -57,7 +57,7 @@ export const RecoveryPhraseGrid = ({
           const last = index === words.length - 1;
           return (
             <Pressable
-              key={index}
+              key={numberOf(index)}
               onPress={() => inputs.current[index]?.focus()}
               className={cn(
                 "w-[48%] flex-row items-center gap-2 rounded-lg border border-border bg-card px-3",

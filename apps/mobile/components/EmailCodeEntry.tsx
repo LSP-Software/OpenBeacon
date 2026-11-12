@@ -26,10 +26,10 @@ export const EmailCodeEntry = ({
   resentMessage = "We've sent a new code. Earlier codes no longer work.",
   repeatedInvalidCodeHint = "If new codes keep being rejected, wait a few hours and try again.",
   description = (
-    <>
+    <Text className="text-muted">
       We sent a 6-digit code to <Text className="font-semibold">{email}</Text>. It expires in 10
       minutes. If it hasn't arrived, check your spam folder.
-    </>
+    </Text>
   ),
 }: {
   email: string;
@@ -93,7 +93,7 @@ export const EmailCodeEntry = ({
 
   return (
     <View className="gap-4">
-      <Text className="text-muted">{description}</Text>
+      {description}
       <Input
         control={form.control}
         name="code"

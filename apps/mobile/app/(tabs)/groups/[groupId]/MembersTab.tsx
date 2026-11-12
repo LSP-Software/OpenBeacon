@@ -2,7 +2,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { Alert } from "../../../../lib/alert.ts";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { MapPinIcon, PlusCircleIcon } from "lucide-react-native";
 import { useMemo, useState } from "react";
@@ -67,11 +67,11 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
       })),
     [group],
   );
+  const userId = session?.user.id;
   const nicknameQuery = useQuery({
-    queryKey: ["personalNicknames", groupId, session?.user.id],
-    enabled: !!session?.user.id,
+    queryKey: ["personalNicknames", groupId, userId],
     subscribed: isFocused,
-    queryFn: () => loadPersonalNicknames(groupId, session!.user.id),
+    queryFn: userId ? () => loadPersonalNicknames(groupId, userId) : skipToken,
   });
   const nicknames = nicknameQuery.data ?? {};
   const { positions: livePositions, status: liveStatus } = useLiveTrackingPositions({ groupId });

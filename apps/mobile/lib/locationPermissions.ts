@@ -74,7 +74,7 @@ const getCanRequestBackgroundInApp = ({
     return false;
   }
 
-  return !foregroundPermission.ios || foregroundPermission.ios.scope !== "whenInUse";
+  return foregroundPermission.ios?.scope !== "whenInUse";
 };
 
 const normalizeLocationPermissionState = ({

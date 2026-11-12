@@ -1,5 +1,6 @@
 import { afterEach, expect, jest, mock, test } from "bun:test";
-import React, { act, useEffect } from "react";
+import type React from "react";
+import { act, useEffect } from "react";
 import { createRoot, type Root } from "test-renderer";
 
 (

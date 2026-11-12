@@ -476,7 +476,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
 
   const liveTick = async (groupId: string, runId: number) => {
     const state = groupStates.get(groupId);
-    if (!state || state.mode !== "live" || !state.cursor) {
+    if (state?.mode !== "live" || !state.cursor) {
       return;
     }
 

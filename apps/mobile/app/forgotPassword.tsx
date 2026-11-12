@@ -149,14 +149,14 @@ const ForgotPassword = () => {
                     notice={step.notice}
                     resentMessage="If this address has an account with a password, we've sent it a new code. Earlier codes no longer work."
                     description={
-                      <>
+                      <Text className="text-muted">
                         If <Text className="font-semibold">{step.email}</Text> has an OpenBeacon
                         account with a password, we've sent it a 6-digit code. It expires in 10
                         minutes.
                         {isGoogleEnabled
                           ? " If you sign in with Google, use Continue with Google instead."
                           : null}
-                      </>
+                      </Text>
                     }
                     submitLabel="Continue"
                     onSubmit={async (code) => {

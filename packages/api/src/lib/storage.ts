@@ -69,7 +69,7 @@ const deleteImageVersions = async (bucketName: string, key: string, exact: boole
       }),
     );
     for (const object of [...(response.Versions ?? []), ...(response.DeleteMarkers ?? [])]) {
-      if (!object.Key || !object.Key.startsWith(key) || !object.VersionId) {
+      if (!object.Key?.startsWith(key) || !object.VersionId) {
         throw new Error("Storage returned an invalid image version.");
       }
       if (!exact || object.Key === key)

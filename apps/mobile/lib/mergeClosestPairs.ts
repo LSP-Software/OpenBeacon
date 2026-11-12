@@ -12,20 +12,25 @@ export const mergeClosestPairs = <TCluster>({
   const merged = [...clusters];
 
   while (merged.length > 1) {
-    let closest: { first: number; second: number; distance: number } | null = null;
-    for (let first = 0; first < merged.length; first += 1) {
-      for (let second = first + 1; second < merged.length; second += 1) {
-        const a = merged[first]!;
-        const b = merged[second]!;
+    let closest: {
+      first: number;
+      second: number;
+      distance: number;
+      a: TCluster;
+      b: TCluster;
+    } | null = null;
+    for (const [first, a] of merged.entries()) {
+      for (const [second, b] of merged.entries()) {
+        if (second <= first) continue;
         const distance = distanceBetween(a, b);
         if (distance < mergeDistanceFor(a, b) && (!closest || distance < closest.distance)) {
-          closest = { first, second, distance };
+          closest = { first, second, distance, a, b };
         }
       }
     }
     if (!closest) break;
 
-    merged[closest.first] = merge(merged[closest.first]!, merged[closest.second]!);
+    merged[closest.first] = merge(closest.a, closest.b);
     merged.splice(closest.second, 1);
   }
 

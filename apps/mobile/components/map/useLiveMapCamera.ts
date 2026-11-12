@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import type { CameraRef } from "@maplibre/maplibre-react-native";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
 import { fitLiveMapMarkers } from "../../lib/fitLiveMapMarkers.ts";
 import {
@@ -44,7 +45,10 @@ export const useLiveMapCamera = ({
   selectedDeviceId: string | null;
   topInset: number;
 }) => {
-  const { cameraRef, scheduleRelease, setCamera } = useLiveMapCameraCommands();
+  const cameraRef = useRef<CameraRef>(null);
+  const { scheduleRelease, setCamera } = useLiveMapCameraCommands(cameraRef);
+  const scheduleCameraRelease = useEffectEvent(scheduleRelease);
+  const moveCamera = useEffectEvent(setCamera);
   const initialFitStateRef = useRef(createLiveMapInitialFitState());
   const initialFitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [styleLoadedRevision, setStyleLoadedRevision] = useState<number | null>(null);
@@ -300,7 +304,8 @@ export const useLiveMapCamera = ({
   }, []);
 
   useEffect(() => {
-    if (!mapStyle || !isStyleLoaded || !cameraRef.current) {
+    const camera = cameraRef.current;
+    if (!mapStyle || !isStyleLoaded || !camera) {
       return;
     }
 
@@ -314,12 +319,12 @@ export const useLiveMapCamera = ({
     if (result.shouldFit) {
       suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, 600);
       const animationDuration = fitLiveMapMarkers({
-        camera: cameraRef.current,
+        camera,
         markers,
         padding: cameraPadding,
       });
       if (animationDuration !== null) {
-        scheduleRelease(animationDuration);
+        scheduleCameraRelease(animationDuration);
       }
       preservedCameraRef.current = mapCameraAfterFittingMarkers({
         markers,
@@ -372,7 +377,7 @@ export const useLiveMapCamera = ({
       longitude: selectedLongitude,
     };
     suppressUserCameraControlFor(suppressUserCameraControlUntilMsRef, stop.animationDuration);
-    setCamera(stop);
+    moveCamera(stop);
     preservedCameraRef.current = mapCameraFromRegionChange({
       latitude: selectedLatitude,
       longitude: selectedLongitude,
