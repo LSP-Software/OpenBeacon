@@ -34,17 +34,29 @@ mock.module("./mapTrackingDecrypt.ts", () => ({
 
 const { createDefaultMapTrackingDeps }: typeof import("./createDefaultMapTrackingDeps.ts") =
   await import("./createDefaultMapTrackingDeps.ts");
-const { getMembershipSignature, isTrackingKeyCheckDue, recordTrackingKeyCheck } =
-  await import("./trackingKeyCheck.ts");
+const {
+  getMembershipSignature,
+  getTrackingKeyCheckGeneration,
+  isTrackingKeyCheckDue,
+  recordTrackingKeyCheck,
+} = await import("./trackingKeyCheck.ts");
 
 test("a membership change in the fetched group list makes the tracking key check due", async () => {
   const deps = createDefaultMapTrackingDeps();
-  recordTrackingKeyCheck({ membership: getMembershipSignature(groups), scope: "scope" });
+  recordTrackingKeyCheck({
+    generation: getTrackingKeyCheckGeneration(),
+    membership: getMembershipSignature(groups),
+    scope: "scope",
+  });
 
   await deps.listGroups(new AbortController().signal);
   expect(isTrackingKeyCheckDue("scope")).toBe(false);
 
-  recordTrackingKeyCheck({ membership: getMembershipSignature([]), scope: "scope" });
+  recordTrackingKeyCheck({
+    generation: getTrackingKeyCheckGeneration(),
+    membership: getMembershipSignature([]),
+    scope: "scope",
+  });
   await deps.listGroups(new AbortController().signal);
   expect(isTrackingKeyCheckDue("scope")).toBe(true);
 });
@@ -52,7 +64,11 @@ test("a membership change in the fetched group list makes the tracking key check
 test("a group moving to a new epoch makes the tracking key check due, the first epoch seen doesn't", async () => {
   status = "ok";
   const deps = createDefaultMapTrackingDeps();
-  recordTrackingKeyCheck({ membership: getMembershipSignature(groups), scope: "scope" });
+  recordTrackingKeyCheck({
+    generation: getTrackingKeyCheckGeneration(),
+    membership: getMembershipSignature(groups),
+    scope: "scope",
+  });
 
   await deps.decryptPoint({
     groupId: "group",

@@ -9,6 +9,7 @@ import {
   getPendingSharingChanges,
   hasLocallyPausedSharing,
   serverNow,
+  syncLocationSharing,
 } from "../../lib/locationSharing.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
@@ -30,26 +31,33 @@ export const LocationSharingPausedBanner = ({
     refetchInterval: polled ? false : 15_000,
     subscribed,
   });
-  const polledRevision = polled?.revisionPrefix;
-  const seenRevision = useRef(polledRevision);
+  const polledState = polled ? `${polled.paused}:${polled.revisionPrefix}` : undefined;
+  const seenPolledState = useRef(polledState);
   useEffect(() => {
-    const previous = seenRevision.current;
-    seenRevision.current = polledRevision;
-    if (previous === undefined || polledRevision === undefined || previous === polledRevision)
-      return;
-    void queryClient.invalidateQueries({ queryKey: trpc.account.locationSharing.queryKey() });
-  }, [polledRevision, queryClient]);
+    const previous = seenPolledState.current;
+    seenPolledState.current = polledState;
+    if (previous === undefined || polledState === undefined || previous === polledState) return;
+    void tryCatch(syncLocationSharing()).then((synced) => {
+      if (synced.data) {
+        queryClient.setQueryData(trpc.account.locationSharing.queryKey(), synced.data);
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: trpc.account.locationSharing.queryKey() });
+    });
+  }, [polledState, queryClient]);
   const [failure, setFailure] = useState<string | null>(null);
   const resume = useMutation({
     mutationFn: async () => {
+      const fresh = await tryCatch(
+        queryClient.fetchQuery({ ...trpc.account.locationSharing.queryOptions(), staleTime: 0 }),
+      );
+      const current = fresh.data ?? sharing.data;
       const pending = getPendingSharingChanges(userId);
       const now = serverNow();
       const accountPaused =
-        pending.account?.paused ??
-        (sharing.data ? isSharingPaused(sharing.data.account, now) : false);
+        pending.account?.paused ?? (current ? isSharingPaused(current.account, now) : false);
       const devicePaused =
-        pending.device?.paused ??
-        (sharing.data ? isSharingPaused(sharing.data.device, now) : false);
+        pending.device?.paused ?? (current ? isSharingPaused(current.device, now) : false);
       const results = [];
       if (accountPaused) {
         results.push(
@@ -57,7 +65,7 @@ export const LocationSharingPausedBanner = ({
             scope: "account",
             paused: false,
             durationMinutes: null,
-            ...(sharing.data ? { expectedRevision: sharing.data.account.sharingRevision } : {}),
+            ...(current ? { expectedRevision: current.account.sharingRevision } : {}),
           }),
         );
       }
@@ -67,7 +75,7 @@ export const LocationSharingPausedBanner = ({
             scope: "device",
             paused: false,
             durationMinutes: null,
-            ...(sharing.data ? { expectedRevision: sharing.data.device.sharingRevision } : {}),
+            ...(current ? { expectedRevision: current.device.sharingRevision } : {}),
           }),
         );
       }
@@ -83,7 +91,7 @@ export const LocationSharingPausedBanner = ({
   const paused =
     userId.length > 0 &&
     (hasLocallyPausedSharing(userId) ||
-      (!pending?.account && !pending?.device && (polled?.paused ?? sharing.data?.paused) === true));
+      (!pending?.account && !pending?.device && sharing.data?.paused === true));
   if (!paused) return null;
 
   return (

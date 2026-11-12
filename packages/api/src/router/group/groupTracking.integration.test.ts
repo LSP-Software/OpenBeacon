@@ -245,6 +245,28 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       data: { sharingRevision: { decrement: 1 } },
     });
     expect(await upload(`${prefix}-state-5`)).toBe(first);
+    const joined = await prisma.groupMember.create({
+      data: { groupId, userId: outsiderId, role: "MEMBER", joinedEpochNumber: 1 },
+    });
+    const afterJoin = await upload(`${prefix}-state-6`);
+    expect(afterJoin).not.toBe(first);
+    await prisma.groupMember.delete({ where: { id: joined.id } });
+    expect(await upload(`${prefix}-state-7`)).toBe(first);
+    const newEpochId = `${prefix}-state-epoch`;
+    await prisma.groupEpoch.create({
+      data: {
+        id: newEpochId,
+        groupId,
+        epochNumber: 2,
+        createdByDeviceId: ownerDeviceId,
+        senderPublicKey: deviceKey.publicKey,
+      },
+    });
+    const afterEpoch = await upload(`${prefix}-state-8`);
+    expect(afterEpoch).not.toBe(first);
+    expect(afterEpoch).not.toBe(afterJoin);
+    await prisma.groupEpoch.delete({ where: { id: newEpochId } });
+    expect(await upload(`${prefix}-state-9`)).toBe(first);
     await prisma.groupEncryptedPayload.deleteMany({
       where: { clientPointId: { startsWith: `${prefix}-state-` } },
     });

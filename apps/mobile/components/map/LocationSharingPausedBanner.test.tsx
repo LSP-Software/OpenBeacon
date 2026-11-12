@@ -16,6 +16,8 @@ let sharingData: {
 };
 const changes: Parameters<typeof changeLocationSharing>[0][] = [];
 let invalidations = 0;
+let syncs = 0;
+let fetched: typeof sharingData | null = null;
 const preference = (paused: boolean): SharingPreference => ({
   sharingPaused: paused,
   sharingPausedUntil: null,
@@ -32,6 +34,10 @@ mock.module("@tanstack/react-query", () => ({
     invalidateQueries: async () => {
       invalidations += 1;
     },
+    setQueryData: (_key: unknown, data: typeof sharingData) => {
+      sharingData = data;
+    },
+    fetchQuery: async () => fetched ?? sharingData,
   }),
   useMutation: ({ mutationFn }: { mutationFn: () => Promise<boolean> }) => ({
     isPending: false,
@@ -54,6 +60,10 @@ mock.module("../../lib/locationSharing.ts", () => ({
   getPendingSharingChanges: () => ({ device: null, account: null }),
   hasLocallyPausedSharing: () => locallyPaused,
   serverNow: () => Date.now(),
+  syncLocationSharing: async () => {
+    syncs += 1;
+    return sharingData;
+  },
 }));
 mock.module("../ui/Button.tsx", () => ({
   Button: ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
@@ -87,6 +97,8 @@ beforeEach(() => {
   locallyPaused = false;
   changes.length = 0;
   invalidations = 0;
+  syncs = 0;
+  fetched = null;
 });
 afterEach(async () => {
   await act(async () => root?.unmount());
@@ -144,13 +156,25 @@ test("resuming an account pause leaves other devices' own pauses alone", async (
   ]);
 });
 
-test("follows the map poll's sharing state for this device", async () => {
+test("re-syncs the sharing state when the map poll shows it changed", async () => {
+  sharingData = { account: preference(false), device: preference(true), paused: true };
   expect(await render({ paused: true, revisionPrefix: "s0.1:" })).toContain(
     "Your location sharing is paused",
   );
-  expect(invalidations).toBe(0);
-  expect(await render({ paused: false, revisionPrefix: "s0.2:" })).not.toContain("paused");
-  expect(invalidations).toBe(1);
+  expect(syncs).toBe(0);
+  sharingData = { account: preference(false), device: preference(false), paused: false };
   await render({ paused: false, revisionPrefix: "s0.2:" });
-  expect(invalidations).toBe(1);
+  expect(syncs).toBe(1);
+  expect(await render({ paused: false, revisionPrefix: "s0.2:" })).not.toContain("paused");
+  expect(syncs).toBe(1);
+  await render({ paused: true, revisionPrefix: "s0.2:" });
+  expect(syncs).toBe(2);
+});
+
+test("resuming reads the latest sharing state first", async () => {
+  sharingData = { account: preference(false), device: preference(true), paused: true };
+  fetched = { account: preference(true), device: preference(false), paused: true };
+  await render();
+  await pressResume();
+  expect(changes.map(({ scope }) => scope)).toEqual(["account"]);
 });

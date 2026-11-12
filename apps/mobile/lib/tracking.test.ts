@@ -1520,6 +1520,25 @@ describe("tracking service", () => {
     expect(requests).not.toContain("groupMembership.list");
   });
 
+  test("the open app keeps checking for a remote resume while this phone is paused", async () => {
+    captureRunning = true;
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    await reconcileTrackingKeys({ startCapture: true });
+    const callsAfterKeyCheck = locationSharingCalls;
+    storageValues.set(
+      `locationSharing.localPause.${JSON.stringify(["https://api.example.test", "user-1", "device-1"])}`,
+      "true",
+    );
+    requests.length = 0;
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(locationSharingCalls).toBe(callsAfterKeyCheck + 1);
+    expect(requests).toEqual([]);
+  });
+
   test("a sharing alarm fetches the sharing state even when keys are fresh", async () => {
     captureRunning = true;
     await reconcileTrackingKeys({ startCapture: true });

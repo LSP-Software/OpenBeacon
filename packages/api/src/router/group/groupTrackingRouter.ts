@@ -5,6 +5,7 @@ import {
 } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
 import { Prisma } from "@openbeacon/database";
+import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import {
   getLatestGroupTrackingPoints,
@@ -52,12 +53,15 @@ export const groupTrackingRouter = {
           userId: ctx.session.user.id,
         });
       });
-      const keyState = await getTrackingKeyState({
-        db: ctx.db,
-        deviceId: ctx.deviceId,
-        userId: ctx.session.user.id,
-      });
-      return { ...result, keyState };
+      const keyState = await tryCatch(
+        getTrackingKeyState({
+          db: ctx.db,
+          deviceId: ctx.deviceId,
+          userId: ctx.session.user.id,
+        }),
+      );
+      if (keyState.error) return { ...result };
+      return { ...result, keyState: keyState.data };
     }),
   poll: groupMemberProcedure
     .meta({ rateLimit: { limit: 480, windowMs: 60_000 } })

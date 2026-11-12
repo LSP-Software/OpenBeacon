@@ -53,6 +53,9 @@ const DevicesScreen = () => {
       return;
     }
     await queryClient.invalidateQueries({ queryKey: trpc.account.listDevices.queryKey() });
+    void queryClient.invalidateQueries({
+      queryKey: trpc.groupMembership.listMemberDevices.pathKey(),
+    });
     setEditing(null);
   };
 

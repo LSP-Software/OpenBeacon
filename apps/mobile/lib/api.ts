@@ -148,6 +148,7 @@ for (const queryKey of [
 
 for (const queryKey of [
   trpc.accountRecovery.status.queryKey(),
+  trpc.account.listDevices.queryKey(),
   trpc.device.status.queryKey(),
   trpc.deviceLink.status.queryKey(),
 ]) {

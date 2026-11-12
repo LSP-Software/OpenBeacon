@@ -33,6 +33,7 @@ import { hasCustomServerUrl } from "./server-url.ts";
 import {
   clearTrackingKeyCheck,
   getMembershipSignature,
+  getTrackingKeyCheckGeneration,
   hasMembershipChanged,
   isTrackingKeyCheckDue,
   markTrackingKeysStale,
@@ -41,7 +42,11 @@ import {
 } from "./trackingKeyCheck.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
-import { hasPendingSharingPause, syncLocationSharing } from "./locationSharing.ts";
+import {
+  hasLocallyPausedSharing,
+  hasPendingSharingPause,
+  syncLocationSharing,
+} from "./locationSharing.ts";
 
 let reconcilePromise: Promise<boolean> | null = null;
 const cancelReconciliations = new Set<() => void>();
@@ -213,6 +218,7 @@ const reconcileTrackingKeysInternal = async ({
   force: boolean;
   isCurrent: () => boolean;
 }): Promise<boolean> => {
+  const generation = getTrackingKeyCheckGeneration();
   const trackingModule = await loadTrackingModule();
   if (!isCurrent() || (onlyIfRunning && (!trackingModule || !trackingModule.isCaptureRunning()))) {
     return false;
@@ -261,6 +267,7 @@ const reconcileTrackingKeysInternal = async ({
       recordCleanBackfill({ backfills, check: backfillCheck, userId: device.data.userId });
       if (backfillCheck?.completed !== false && results.flat().every(({ error }) => !error)) {
         recordTrackingKeyCheck({
+          generation,
           membership,
           scope: getKeyCheckScope(device.data.userId, false),
         });
@@ -272,7 +279,10 @@ const reconcileTrackingKeysInternal = async ({
   if (!force && (await hasFreshKeyCheck(true))) {
     if (!isCurrent()) return false;
     const registered = await getRegisteredDeviceKey();
-    if (registered && hasPendingSharingPause(registered.userId)) {
+    if (
+      registered &&
+      (hasPendingSharingPause(registered.userId) || hasLocallyPausedSharing(registered.userId))
+    ) {
       await syncSharingPreference();
       if (!isCurrent()) return false;
     }
@@ -286,11 +296,9 @@ const reconcileTrackingKeysInternal = async ({
   }
   if (!isCurrent()) return false;
 
-  const wasRegistered = Boolean(await getRegisteredDeviceKey());
-  const [deviceKeyContext, groups, earlySharingSync] = await Promise.all([
+  const [deviceKeyContext, groups] = await Promise.all([
     ensureDeviceKeyRegistration({ checkOwner: force }),
     trpcClient.groupMembership.list.query(),
-    wasRegistered ? tryCatch(syncSharingPreference()) : null,
   ]);
   if (!isCurrent()) return false;
   if (await isPending()) {
@@ -300,8 +308,7 @@ const reconcileTrackingKeysInternal = async ({
   if (!isCurrent()) return false;
   const owner = getOwner(deviceKeyContext.userId);
   trackingModule.setQueueOwner(owner, deviceKeyContext.deviceId);
-  if (earlySharingSync?.error) throw earlySharingSync.error;
-  if (!earlySharingSync) await syncSharingPreference();
+  await syncSharingPreference();
   if (!isCurrent()) return false;
   const preserveGroupIds = new Set<string>();
   let rotated = false;
@@ -452,6 +459,7 @@ const reconcileTrackingKeysInternal = async ({
     backfills.every(({ error }) => !error)
   ) {
     recordTrackingKeyCheck({
+      generation,
       membership,
       scope: getKeyCheckScope(deviceKeyContext.userId, true),
     });
@@ -833,7 +841,8 @@ export const syncBackgroundTracking = async (
     return;
   }
   if (reason === "sharing" && (await hasFreshKeyCheck(true))) {
-    await tryCatch(syncSharingPreference());
+    const device = await getRegisteredDeviceKey();
+    if (!device || !hasLocallyPausedSharing(device.userId)) await tryCatch(syncSharingPreference());
   }
   const reconciliation = await tryCatch(
     reconcileTrackingKeys({ startCapture: true, onlyIfRunning: true }),

@@ -7,6 +7,7 @@ const WATCHED_KEY_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 const KEY_STATE_FRESH_MS = 10 * 60 * 1000;
 
 let checkedMembership: string | null = null;
+let staleGeneration = 0;
 
 type GroupMembers = { id: string; members: { id: string }[] }[];
 
@@ -48,30 +49,37 @@ export const isTrackingKeyCheckDue = (scope: string) => {
 export const noteTrackingKeyState = (keyState: string) => {
   const previous = readStamped(KEY_STATE_KEY);
   storage.set(KEY_STATE_KEY, `${Date.now()} ${keyState}`);
-  if (!previous || previous.value === keyState) return false;
+  if (previous?.value === keyState) return false;
   markTrackingKeysStale();
   return true;
 };
 
+export const getTrackingKeyCheckGeneration = () => staleGeneration;
+
 export const recordTrackingKeyCheck = ({
+  generation,
   membership,
   scope,
 }: {
+  generation: number;
   membership: string;
   scope: string;
 }) => {
-  storage.set(KEY_CHECK_KEY, `${Date.now()} ${scope}`);
   checkedMembership = membership;
+  if (generation !== staleGeneration) return;
+  storage.set(KEY_CHECK_KEY, `${Date.now()} ${scope}`);
 };
 
 export const hasMembershipChanged = (membership: string) =>
   checkedMembership !== null && checkedMembership !== membership;
 
 export const markTrackingKeysStale = () => {
+  staleGeneration += 1;
   storage.remove(KEY_CHECK_KEY);
 };
 
 export const clearTrackingKeyCheck = () => {
+  staleGeneration += 1;
   storage.remove(KEY_CHECK_KEY);
   storage.remove(KEY_STATE_KEY);
   checkedMembership = null;
