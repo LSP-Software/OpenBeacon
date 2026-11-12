@@ -39,7 +39,9 @@ The service reads `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` an
 
 ## Running the service
 
-Build the image from the repository root:
+The `Deploy backend` workflow publishes `lspsoftware/openbeacon-map-tiles`, tagged with `serverVersion` and `latest-stable`, but never redeploys the service. Deploy it from Coolify when `map-tiles status` shows no update running.
+
+To build the image yourself, run this from the repository root:
 
 ```bash
 docker build -f apps/map-tiles/Dockerfile -t openbeacon-map-tiles .

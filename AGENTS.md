@@ -46,7 +46,7 @@ console.log(result.data);
 12. When adding a link to another page make sure to use expo link component
 13. Every PR that changes shipped code must bump the matching version. Test files and Markdown don't count.
     a. Client (`apps/mobile`, `packages/encryption`, `packages/schemas`, `packages/shared`): raise `expo.version` in `apps/mobile/app.json` and increment both `ios.buildNumber` and `android.versionCode`.
-    b. Server (`apps/backend`, `apps/scheduled-jobs`, and `packages/*` except `tsconfig`): raise `serverVersion` in `apps/backend/src/version.ts`.
+    b. Server (`apps/backend`, `apps/scheduled-jobs`, `apps/map-tiles`, and `packages/*` except `tsconfig`): raise `serverVersion` in `apps/backend/src/version.ts`.
     c. Use patch for fixes, minor for features or database migrations. CI enforces this; check locally with `bun scripts/check-version-bump.ts origin/main`.
 14. API compatibility levels live in `packages/shared/src/apiCompatibilityLevel.ts`. Change them only when:
     a. The app calls something older servers don't have: raise `apiCompatibilityLevel` and set `minServerApiCompatibilityLevel` to it.

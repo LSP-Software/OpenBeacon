@@ -50,7 +50,13 @@ const clientEnvSchema = z.object({
 });
 
 export const parseClientEnv = (source: Record<string, string | undefined>) => {
-  const env = clientEnvSchema.parse(source);
+  const result = clientEnvSchema.safeParse(source);
+
+  if (!result.success) {
+    throw new Error(`The map-tiles command needs:\n${z.prettifyError(result.error)}`);
+  }
+
+  const env = result.data;
 
   return {
     apiKey: env.MAP_TILES_API_KEY,

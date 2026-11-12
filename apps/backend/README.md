@@ -63,12 +63,16 @@ The `Deploy backend` GitHub Actions workflow also builds and deploys the separat
 To deploy, dispatch the `Deploy backend` GitHub Actions workflow from `main`.
 It waits for approval in the `production` GitHub environment, which holds the
 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `COOLIFY_ENDPOINT` and `COOLIFY_TOKEN`
-secrets. It then builds both images, pushes them to
-`lspsoftware/openbeacon-backend` and `lspsoftware/openbeacon-scheduled-jobs`
-tagged with `serverVersion` from `src/version.ts` and `latest-stable`. With
+secrets. It then builds the backend, runner and map tiles images, pushes them to
+`lspsoftware/openbeacon-backend`, `lspsoftware/openbeacon-scheduled-jobs` and
+`lspsoftware/openbeacon-map-tiles` tagged with `serverVersion` from
+`src/version.ts` and `latest-stable`. With
 "Trigger the Coolify deployment" ticked, it then asks Coolify to deploy
 `latest-stable` to the `OpenBeacon Backend` and `OpenBeacon Scheduled Jobs`
-applications; leave it unticked to deploy from Coolify yourself later. The workflow fails if that version was
+applications; leave it unticked to deploy from Coolify yourself later. It never
+redeploys `OpenBeacon Map Tiles`, because a restart interrupts a map upload that
+can take hours: deploy it from Coolify when `map-tiles status` shows no update
+running. The workflow fails if that version was
 already released from a different commit, so bump `serverVersion` for every
 release. Re-running a failed deploy is safe: images this commit already pushed
 are reused instead of rebuilt.
