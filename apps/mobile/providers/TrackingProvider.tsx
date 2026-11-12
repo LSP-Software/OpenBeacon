@@ -213,7 +213,7 @@ export const TrackingProvider = ({
       if (appStateRef.current === "active") {
         void runTrackingCycle();
       }
-    }, 30_000);
+    }, 60_000);
 
     return () => {
       clearInterval(interval);

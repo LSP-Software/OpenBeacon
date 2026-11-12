@@ -272,6 +272,7 @@ describe("groupTrackingRouter", () => {
       discarded: [],
       duplicates: [],
       expired: [],
+      keyState: expect.any(String),
     });
     expect(createManyMock).toHaveBeenCalled();
   });

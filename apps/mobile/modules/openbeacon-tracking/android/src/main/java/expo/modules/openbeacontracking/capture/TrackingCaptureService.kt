@@ -9,6 +9,8 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.location.Location
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
@@ -53,12 +55,6 @@ class TrackingCaptureService : Service() {
   private var minimumFixElapsedRealtimeNanos = 0L
   private val sharingHandler = Handler(Looper.getMainLooper())
   private val resumeSharing = Runnable { updateSharing() }
-  private val syncPausedSharing = Runnable {
-    if (TrackingRuntime.isCaptureRunning) {
-      requestSharingSync()
-      updateSharing()
-    }
-  }
   private val resumeSharingIntent by lazy {
     PendingIntent.getService(this, 7261, Intent(this, TrackingCaptureService::class.java).apply {
       action = ACTION_CHECK_SHARING
@@ -224,11 +220,11 @@ class TrackingCaptureService : Service() {
           enqueueEncryptedFix(location, generation)
           val nowMs = System.currentTimeMillis()
           val uploadDue = synchronized(captureStateLock) { nowMs - lastUploadRequestMs >= currentUploadIntervalMs }
-          if (!uploadDue || !hasPendingUploads()) return@launch
+          if (!uploadDue || !hasPendingUploads() || !isOnline()) return@launch
           synchronized(captureStateLock) {
             if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && nowMs - lastUploadRequestMs >= currentUploadIntervalMs) {
               try {
-                startService(Intent(this@TrackingCaptureService, TrackingUploadService::class.java))
+                startService(Intent(this@TrackingCaptureService, TrackingUploadService::class.java).putExtra(TrackingUploadService.EXTRA_REASON, "upload"))
                 lastUploadRequestMs = nowMs
               } catch (error: Exception) {
                 Log.e(TAG, "Failed to start background tracking sync.", error)
@@ -247,7 +243,6 @@ class TrackingCaptureService : Service() {
 
   private fun stopCapture() {
     sharingHandler.removeCallbacks(resumeSharing)
-    sharingHandler.removeCallbacks(syncPausedSharing)
     getSystemService(AlarmManager::class.java)?.cancel(resumeSharingIntent)
     locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
     locationCallback = null
@@ -261,7 +256,6 @@ class TrackingCaptureService : Service() {
 
   private fun updateSharing() {
     sharingHandler.removeCallbacks(resumeSharing)
-    sharingHandler.removeCallbacks(syncPausedSharing)
     getSystemService(AlarmManager::class.java)?.cancel(resumeSharingIntent)
     val sharing = TrackingRuntime.sharingState(this)
     if (sharing.isConfirmedIndefinitePause()) {
@@ -274,7 +268,6 @@ class TrackingCaptureService : Service() {
         locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
         locationCallback = null
       }
-      sharingHandler.postDelayed(syncPausedSharing, 30_000L)
       val nextCheck = minOf(sharing.pausedUntil ?: Long.MAX_VALUE, System.currentTimeMillis() + 300_000L)
       getSystemService(AlarmManager::class.java)?.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextCheck, resumeSharingIntent)
       sharing.pausedUntil?.let {
@@ -302,7 +295,7 @@ class TrackingCaptureService : Service() {
 
   private fun requestSharingSync() {
     try {
-      startService(Intent(this, TrackingUploadService::class.java))
+      startService(Intent(this, TrackingUploadService::class.java).putExtra(TrackingUploadService.EXTRA_REASON, "sharing"))
     } catch (error: Exception) {
       Log.e(TAG, "Failed to check location sharing preferences.", error)
     }
@@ -371,9 +364,8 @@ class TrackingCaptureService : Service() {
         fixId = location.elapsedRealtimeNanos.takeIf { it > 0 },
       )
       synchronized(captureStateLock) {
-        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && queuedCount > 0 && (decision.forceUpload || nowMs - lastUploadRequestMs >= decision.uploadIntervalMs)) {
-          val uploadIntent = Intent(this, TrackingUploadService::class.java)
-          startService(uploadIntent)
+        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && queuedCount > 0 && (decision.forceUpload || nowMs - lastUploadRequestMs >= decision.uploadIntervalMs) && isOnline()) {
+          startService(Intent(this, TrackingUploadService::class.java).putExtra(TrackingUploadService.EXTRA_REASON, "upload"))
           lastUploadRequestMs = nowMs
         }
       }
@@ -403,6 +395,12 @@ class TrackingCaptureService : Service() {
       Log.e(TAG, "Failed to check for pending uploads.", error)
       false
     }
+
+  private fun isOnline(): Boolean {
+    val connectivity = getSystemService(ConnectivityManager::class.java) ?: return false
+    val network = connectivity.activeNetwork ?: return false
+    return connectivity.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+  }
 
   private fun distanceMeters(
     fromLatitude: Double,

@@ -6,6 +6,7 @@ import { createPersonalDataOpener, resealForSelf, sealForSelf } from "./personal
 export const groupColorSyncQueryOptions = (userId: string | undefined) => ({
   queryKey: ["personalGroupColors", userId],
   enabled: !!userId,
+  staleTime: 5 * 60_000,
   queryFn: () => (userId ? syncGroupColors(userId) : null),
 });
 

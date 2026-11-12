@@ -37,7 +37,7 @@ export const LocationSharingCard = ({
   const isFocused = useIsFocused();
   const sharing = useQuery({
     ...trpc.account.locationSharing.queryOptions(),
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
     subscribed: isFocused,
   });
   const [open, setOpen] = useState(false);

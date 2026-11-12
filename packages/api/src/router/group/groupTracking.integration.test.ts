@@ -208,6 +208,48 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     expect(await prisma.groupEncryptedPayload.count({ where: { groupId } })).toBe(1);
   });
 
+  test("upload responses carry a key state that changes when tracking keys need checking", async () => {
+    const upload = async (clientPointId: string) =>
+      (
+        await caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
+          groupId,
+          points: [
+            {
+              ...encryptGroupPayload({
+                epochId,
+                epochKey,
+                groupId,
+                kind: TRACKING_POINT_KIND,
+                payload: { latitude: 1, longitude: 2 },
+                senderDeviceId: ownerDeviceId,
+              }),
+              clientPointId,
+            },
+          ],
+        })
+      ).keyState;
+    const first = await upload(`${prefix}-state-1`);
+    expect(await upload(`${prefix}-state-2`)).toBe(first);
+    await prisma.userDevice.update({
+      where: { id: ownerDeviceId },
+      data: { sharingRevision: { increment: 1 } },
+    });
+    const afterSharing = await upload(`${prefix}-state-3`);
+    expect(afterSharing).not.toBe(first);
+    await prisma.group.update({ where: { id: groupId }, data: { epochRotationRequired: true } });
+    const afterRotation = await upload(`${prefix}-state-4`);
+    expect(afterRotation).not.toBe(afterSharing);
+    await prisma.group.update({ where: { id: groupId }, data: { epochRotationRequired: false } });
+    await prisma.userDevice.update({
+      where: { id: ownerDeviceId },
+      data: { sharingRevision: { decrement: 1 } },
+    });
+    expect(await upload(`${prefix}-state-5`)).toBe(first);
+    await prisma.groupEncryptedPayload.deleteMany({
+      where: { clientPointId: { startsWith: `${prefix}-state-` } },
+    });
+  }, 30_000);
+
   test("reports points for a deleted epoch as expired but rejects another group's epoch", async () => {
     const encrypt = (forEpochId: string, clientPointId: string) => ({
       ...encryptGroupPayload({
@@ -232,6 +274,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       discarded: [],
       duplicates: [],
       expired: [`${prefix}-expired`],
+      keyState: expect.any(String),
     });
     const otherGroupId = `${prefix}-other-group`;
     await prisma.group.create({

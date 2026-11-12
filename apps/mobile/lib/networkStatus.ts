@@ -31,7 +31,7 @@ export const useOfflineStatus = () => {
       if (nextOffline === lastState) return;
       lastState = nextOffline;
       if (timer !== undefined) clearTimeout(timer);
-      onlineManager.setOnline(!nextOffline);
+      if (nextOffline || AppState.currentState === "active") onlineManager.setOnline(!nextOffline);
       timer = setTimeout(() => setOffline(nextOffline), 5_000);
     };
     const refresh = () => {
@@ -44,7 +44,9 @@ export const useOfflineStatus = () => {
     };
     const network = addNetworkStateListener(update);
     const appState = AppState.addEventListener("change", (state) => {
-      if (state === "active") refresh();
+      if (state !== "active") return;
+      if (lastState === false) onlineManager.setOnline(true);
+      refresh();
     });
     refresh();
     return () => {

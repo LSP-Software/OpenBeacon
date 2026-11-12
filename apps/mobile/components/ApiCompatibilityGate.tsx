@@ -2,7 +2,12 @@ import { Link, usePathname } from "expo-router";
 import { useEffect, useState } from "react";
 import { AccessibilityInfo, AppState, BackHandler, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { refreshApiCompatibility, useApiCompatibility } from "../lib/apiCompatibility.ts";
+import {
+  getApiCompatibility,
+  refreshApiCompatibility,
+  refreshApiCompatibilityInBackground,
+  useApiCompatibility,
+} from "../lib/apiCompatibility.ts";
 import { baseUrl, getBaseUrl } from "../lib/base-url.ts";
 import { hasCustomServerUrl } from "../lib/server-url.ts";
 import { clearApiCompatibilityNotice } from "../lib/tracking.ts";
@@ -36,7 +41,9 @@ export const ApiCompatibilityGate = () => {
   useEffect(() => {
     void refreshApiCompatibility({ userRequested: false });
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") void refreshApiCompatibility({ userRequested: false });
+      if (state !== "active") return;
+      if (getApiCompatibility()) void refreshApiCompatibility({ userRequested: false });
+      else void refreshApiCompatibilityInBackground();
     });
     return () => subscription.remove();
   }, []);

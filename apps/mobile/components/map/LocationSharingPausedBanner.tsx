@@ -1,7 +1,7 @@
 import { isSharingPaused, tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PauseIcon } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { trpc } from "../../lib/api.ts";
 import {
@@ -15,9 +15,11 @@ import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 
 export const LocationSharingPausedBanner = ({
+  polled,
   subscribed,
   userId,
 }: {
+  polled: { paused: boolean; revisionPrefix: string } | null;
   subscribed: boolean;
   userId: string;
 }) => {
@@ -25,9 +27,18 @@ export const LocationSharingPausedBanner = ({
   const sharing = useQuery({
     ...trpc.account.locationSharing.queryOptions(),
     enabled: userId.length > 0,
-    refetchInterval: 15_000,
+    refetchInterval: polled ? false : 15_000,
     subscribed,
   });
+  const polledRevision = polled?.revisionPrefix;
+  const seenRevision = useRef(polledRevision);
+  useEffect(() => {
+    const previous = seenRevision.current;
+    seenRevision.current = polledRevision;
+    if (previous === undefined || polledRevision === undefined || previous === polledRevision)
+      return;
+    void queryClient.invalidateQueries({ queryKey: trpc.account.locationSharing.queryKey() });
+  }, [polledRevision, queryClient]);
   const [failure, setFailure] = useState<string | null>(null);
   const resume = useMutation({
     mutationFn: async () => {
@@ -72,7 +83,7 @@ export const LocationSharingPausedBanner = ({
   const paused =
     userId.length > 0 &&
     (hasLocallyPausedSharing(userId) ||
-      (!pending?.account && !pending?.device && sharing.data?.paused === true));
+      (!pending?.account && !pending?.device && (polled?.paused ?? sharing.data?.paused) === true));
   if (!paused) return null;
 
   return (

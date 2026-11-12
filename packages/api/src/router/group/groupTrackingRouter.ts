@@ -11,6 +11,7 @@ import {
   pollGroupTrackingPoints,
   uploadGroupTrackingBatch,
 } from "../../lib/groupTracking.ts";
+import { getTrackingKeyState } from "../../lib/trackingKeyState.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 
 const DEFAULT_POLL_LIMIT = 100;
@@ -25,7 +26,7 @@ export const groupTrackingRouter = {
     })
     .input(groupTrackingUploadBatchSchema)
     .mutation(async ({ ctx, input }) => {
-      return await ctx.db.$transaction(async (tx) => {
+      const result = await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "User" WHERE id = ${ctx.session.user.id} FOR SHARE`,
         );
@@ -51,6 +52,12 @@ export const groupTrackingRouter = {
           userId: ctx.session.user.id,
         });
       });
+      const keyState = await getTrackingKeyState({
+        db: ctx.db,
+        deviceId: ctx.deviceId,
+        userId: ctx.session.user.id,
+      });
+      return { ...result, keyState };
     }),
   poll: groupMemberProcedure
     .meta({ rateLimit: { limit: 480, windowMs: 60_000 } })

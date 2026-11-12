@@ -77,7 +77,7 @@ class SharingResumeWorker(
           tasks.addTaskEventListener(listener)
           continuation.invokeOnCancellation { tasks.removeTaskEventListener(listener) }
           try {
-            taskId = tasks.startTask(HeadlessJsTaskConfig(TASK_NAME, Arguments.createMap(), TASK_TIMEOUT_MS, true))
+            taskId = tasks.startTask(HeadlessJsTaskConfig(TASK_NAME, Arguments.createMap().apply { putString("reason", "parked") }, TASK_TIMEOUT_MS, true))
           } catch (error: RuntimeException) {
             Log.e(TAG, "Failed to check location sharing preferences.", error)
             tasks.removeTaskEventListener(listener)

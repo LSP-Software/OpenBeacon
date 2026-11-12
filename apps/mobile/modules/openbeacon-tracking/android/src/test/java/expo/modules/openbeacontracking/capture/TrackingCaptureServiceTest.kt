@@ -98,7 +98,7 @@ class TrackingCaptureServiceTest {
     assertEquals(Service.START_STICKY, result)
     assertTrue(TrackingRuntime.isCaptureRunning)
     assertTrue(TrackingRuntime.sharingState(application).isPaused(System.currentTimeMillis()))
-    assertNotNull(shadowOf(application).nextStartedService)
+    assertEquals("sharing", shadowOf(application).nextStartedService.getStringExtra(TrackingUploadService.EXTRA_REASON))
     assertNotNull(shadowOf(service).lastForegroundNotification)
   }
 

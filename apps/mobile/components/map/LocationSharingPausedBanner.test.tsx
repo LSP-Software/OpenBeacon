@@ -9,8 +9,13 @@ import type { changeLocationSharing } from "../../lib/locationSharing.ts";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root | null = null;
 let locallyPaused = false;
-let sharingData: { account: SharingPreference; device: SharingPreference; paused: boolean };
+let sharingData: {
+  account: SharingPreference;
+  device: SharingPreference;
+  paused: boolean;
+};
 const changes: Parameters<typeof changeLocationSharing>[0][] = [];
+let invalidations = 0;
 const preference = (paused: boolean): SharingPreference => ({
   sharingPaused: paused,
   sharingPausedUntil: null,
@@ -23,7 +28,11 @@ mock.module("react-native", () => ({ View: Host }));
 mock.module("lucide-react-native", () => ({ PauseIcon: () => null }));
 mock.module("@tanstack/react-query", () => ({
   useQuery: () => ({ data: sharingData }),
-  useQueryClient: () => ({ invalidateQueries: async () => {} }),
+  useQueryClient: () => ({
+    invalidateQueries: async () => {
+      invalidations += 1;
+    },
+  }),
   useMutation: ({ mutationFn }: { mutationFn: () => Promise<boolean> }) => ({
     isPending: false,
     mutateAsync: mutationFn,
@@ -54,9 +63,11 @@ mock.module("../ui/Text.tsx", () => ({ Text: Host }));
 mock.module("../ui/Icon.tsx", () => ({ Icon: () => null }));
 const { LocationSharingPausedBanner } = await import("./LocationSharingPausedBanner.tsx");
 
-const render = async () => {
-  root = createRoot();
-  await act(async () => root?.render(<LocationSharingPausedBanner subscribed userId="alex" />));
+const render = async (polled: { paused: boolean; revisionPrefix: string } | null = null) => {
+  root ??= createRoot();
+  await act(async () =>
+    root?.render(<LocationSharingPausedBanner polled={polled} subscribed userId="alex" />),
+  );
   return JSON.stringify(root.container.toJSON());
 };
 const pressResume = async () => {
@@ -68,9 +79,14 @@ const pressResume = async () => {
 };
 
 beforeEach(() => {
-  sharingData = { account: preference(false), device: preference(false), paused: false };
+  sharingData = {
+    account: preference(false),
+    device: preference(false),
+    paused: false,
+  };
   locallyPaused = false;
   changes.length = 0;
+  invalidations = 0;
 });
 afterEach(async () => {
   await act(async () => root?.unmount());
@@ -87,7 +103,11 @@ test("shows when capture stopped locally before the server knows", async () => {
 });
 
 test("resuming clears both the account pause and this device's own pause", async () => {
-  sharingData = { account: preference(true), device: preference(true), paused: true };
+  sharingData = {
+    account: preference(true),
+    device: preference(true),
+    paused: true,
+  };
   await render();
   await pressResume();
   expect(changes).toEqual([
@@ -107,7 +127,11 @@ test("resuming clears both the account pause and this device's own pause", async
 });
 
 test("resuming an account pause leaves other devices' own pauses alone", async () => {
-  sharingData = { account: preference(true), device: preference(false), paused: true };
+  sharingData = {
+    account: preference(true),
+    device: preference(false),
+    paused: true,
+  };
   await render();
   await pressResume();
   expect(changes).toEqual([
@@ -118,4 +142,15 @@ test("resuming an account pause leaves other devices' own pauses alone", async (
       expectedRevision: 1,
     },
   ]);
+});
+
+test("follows the map poll's sharing state for this device", async () => {
+  expect(await render({ paused: true, revisionPrefix: "s0.1:" })).toContain(
+    "Your location sharing is paused",
+  );
+  expect(invalidations).toBe(0);
+  expect(await render({ paused: false, revisionPrefix: "s0.2:" })).not.toContain("paused");
+  expect(invalidations).toBe(1);
+  await render({ paused: false, revisionPrefix: "s0.2:" });
+  expect(invalidations).toBe(1);
 });
