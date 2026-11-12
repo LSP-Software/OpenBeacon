@@ -100,6 +100,7 @@ export const NativeMap = ({
   const missingPerson =
     [
       ...(people?.paused ?? []),
+      ...(people?.waitingForLocation ?? []),
       ...(people?.cantLocate ?? []),
       ...(people?.cantRead ?? []),
       ...(people?.hidden ?? []),
@@ -656,6 +657,7 @@ export const NativeMap = ({
       ) : missingPerson ? (
         <LiveMapMissingPersonSheet
           key={missingPerson.userId}
+          devices={devices.filter((device) => device.userId === missingPerson.userId)}
           person={missingPerson}
           onDismiss={() => {
             setMissingUserId(null);

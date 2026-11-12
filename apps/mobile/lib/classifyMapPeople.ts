@@ -29,6 +29,7 @@ export const classifyMapPeople = ({
     paused: [],
     upToDate: [],
     waiting: [],
+    waitingForLocation: [],
   };
 
   const bestByUserId = new Map<string, { isOutOfDate: boolean; marker: LiveMapMarker }>();
@@ -110,6 +111,11 @@ export const classifyMapPeople = ({
         continue;
       }
 
+      if (devices.some((device) => !device.paused && device.revisionPrefix !== "")) {
+        people.waitingForLocation.push({ ...person, waitingForLocation: true });
+        continue;
+      }
+
       people.cantLocate.push(person);
     }
   }
@@ -125,6 +131,7 @@ export const classifyMapPeople = ({
   people.finding.sort(selfFirstThenByName);
   people.waiting.sort(selfFirstThenByName);
   people.paused.sort(selfFirstThenByName);
+  people.waitingForLocation.sort(selfFirstThenByName);
 
   return people;
 };

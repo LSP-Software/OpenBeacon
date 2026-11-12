@@ -10,7 +10,8 @@ export type MapPerson = {
   userId: string;
 };
 
-export type MapPersonStatus = "cantLocate" | "cantRead" | "hidden" | "paused";
+export type MapPersonStatus =
+  "cantLocate" | "cantRead" | "hidden" | "paused" | "waitingForLocation";
 
 export type MapUnreadablePerson = MapPerson & {
   groupId: string;
@@ -24,6 +25,8 @@ export type MapHiddenPerson = MapPerson & {
 
 export type MapPausedPerson = MapPerson & { sharingPaused: true };
 
+export type MapWaitingForLocationPerson = MapPerson & { waitingForLocation: true };
+
 export type MapPeople = {
   cantLocate: MapPerson[];
   connectionLost: boolean;
@@ -34,6 +37,7 @@ export type MapPeople = {
   paused: MapPausedPerson[];
   upToDate: LiveMapMarker[];
   waiting: MapPerson[];
+  waitingForLocation: MapWaitingForLocationPerson[];
 };
 
 export type MapGroupOption = {

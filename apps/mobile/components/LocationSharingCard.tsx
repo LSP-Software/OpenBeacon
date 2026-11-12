@@ -19,6 +19,7 @@ import {
   toDeviceClock,
 } from "../lib/locationSharing.ts";
 import { authClient } from "../lib/auth-client.ts";
+import { formatResumeTime } from "../lib/formatResumeTime.ts";
 import { Button } from "./ui/Button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card.tsx";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -170,9 +171,9 @@ export const LocationSharingCard = ({
                 : "Sharing stopped on this phone. We couldn’t update your groups or other devices. Retrying."
               : `${
                   until && until.getTime() > now
-                    ? `Resumes ${toDeviceClock(until).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+                    ? formatResumeTime(toDeviceClock(until), toDeviceClock(new Date(now)))
                     : "Until you turn it back on"
-                }. You can still see your groups’ locations.`}
+                }.${thisDevice ? " You can still see your groups’ locations." : ""}`}
           </Text>
         ) : pendingHere && thisDevice && !update.isPending ? (
           <Text className="text-sm text-muted-foreground">
@@ -342,12 +343,10 @@ export const LocationSharingCard = ({
               </View>
               {duration !== null ? (
                 <Text className="text-sm text-muted-foreground">
-                  Resumes{" "}
-                  {toDeviceClock(new Date(now + duration * 60_000)).toLocaleString(undefined, {
-                    weekday: "short",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
+                  {formatResumeTime(
+                    toDeviceClock(new Date(now + duration * 60_000)),
+                    toDeviceClock(new Date(now)),
+                  )}
                 </Text>
               ) : null}
               {message ? (

@@ -436,3 +436,72 @@ test("pausing a tablet leaves a member in the normal ribbon section when their p
   expect(people.paused).toEqual([]);
   expect(people.upToDate.map((person) => person.deviceId)).toEqual(["mum-phone"]);
 });
+
+describe("waiting for location after resuming", () => {
+  const classifyMum = (sharing: MapTrackingStatus["sharing"], markers: LiveMapMarker[] = []) =>
+    classifyMapPeople({
+      groups: [family],
+      keyAccess: available,
+      markers,
+      now: NOW,
+      selfUserId: "me",
+      status: { ...loaded, ...(sharing ? { sharing } : {}) },
+    });
+
+  test("a resumed device with no new point waits instead of counting as unlocatable", () => {
+    const people = classifyMum([
+      { userId: "mum", deviceId: "mum-phone", paused: true, revisionPrefix: "s0.1:" },
+      { userId: "mum", deviceId: "mum-tablet", paused: false, revisionPrefix: "s0.2:" },
+    ]);
+
+    expect(people.waitingForLocation).toEqual([
+      expect.objectContaining({ userId: "mum", waitingForLocation: true }),
+    ]);
+    expect(people.cantLocate.map((person) => person.userId)).toEqual(["me"]);
+    expect(people.paused).toEqual([]);
+  });
+
+  test("a resumed account waits for any of the member's devices", () => {
+    const people = classifyMum([
+      { userId: "mum", deviceId: "mum-phone", paused: false, revisionPrefix: "s2.0:" },
+    ]);
+
+    expect(people.waitingForLocation.map((person) => person.userId)).toEqual(["mum"]);
+  });
+
+  test("a member who has never paused keeps the unknown location status", () => {
+    const people = classifyMum([
+      { userId: "mum", deviceId: "mum-phone", paused: false, revisionPrefix: "" },
+    ]);
+
+    expect(people.waitingForLocation).toEqual([]);
+    expect(people.cantLocate.map((person) => person.userId)).toEqual(["me", "mum"]);
+  });
+
+  test("a member without sharing information keeps the unknown location status", () => {
+    const people = classifyMum(undefined);
+
+    expect(people.waitingForLocation).toEqual([]);
+    expect(people.cantLocate.map((person) => person.userId)).toEqual(["me", "mum"]);
+  });
+
+  test("a fresh point from the resumed device shows the member as located", () => {
+    const people = classifyMum(
+      [{ userId: "mum", deviceId: "mum-phone", paused: false, revisionPrefix: "s0.2:" }],
+      [marker("mum", 0)],
+    );
+
+    expect(people.waitingForLocation).toEqual([]);
+    expect(people.upToDate.map((person) => person.userId)).toEqual(["mum"]);
+  });
+
+  test("a member whose devices are all paused stays paused", () => {
+    const people = classifyMum([
+      { userId: "mum", deviceId: "mum-phone", paused: true, revisionPrefix: "s0.1:" },
+      { userId: "mum", deviceId: "mum-tablet", paused: true, revisionPrefix: "s0.3:" },
+    ]);
+
+    expect(people.waitingForLocation).toEqual([]);
+    expect(people.paused.map((person) => person.userId)).toEqual(["mum"]);
+  });
+});

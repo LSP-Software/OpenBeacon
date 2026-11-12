@@ -342,7 +342,7 @@ const MapScreen = () => {
       />
       <ScrollView
         pointerEvents="box-none"
-        className="absolute left-4 right-4"
+        className="absolute left-4 right-16"
         style={{ top: insets.top + 8, maxHeight: "65%" }}
       >
         <NewSignInBanner subscribed={isFocused} />

@@ -97,9 +97,13 @@ mock.module("./ui/Card.tsx", () => ({
 mock.module("./ui/Text.tsx", () => ({ Text: Host }));
 mock.module("./ui/Icon.tsx", () => ({ Icon: () => null }));
 const { LocationSharingCard } = await import("./LocationSharingCard.tsx");
-const render = async () => {
+const { formatResumeTime } = await import("../lib/formatResumeTime.ts");
+const render = async (
+  device?: SharingPreference & { id: string; name: string; isCurrent: boolean },
+) => {
+  await act(async () => root?.unmount());
   root = createRoot();
-  await act(async () => root?.render(<LocationSharingCard />));
+  await act(async () => root?.render(<LocationSharingCard {...(device ? { device } : {})} />));
   return JSON.stringify(root.container.toJSON());
 };
 const press = async (label: string) => {
@@ -167,9 +171,21 @@ test("shows the later device deadline when the account pause ends sooner", async
     sharingChangedAt: new Date(now),
     sharingRevision: 1,
   });
-  expect(await render()).toContain(
-    `Resumes ${deviceDeadline.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`,
-  );
+  expect(await render()).toContain(formatResumeTime(deviceDeadline, new Date(now)));
+});
+
+test("only mentions seeing your groups’ locations for this phone", async () => {
+  const paused = preference({
+    sharingPaused: true,
+    sharingChangedAt: new Date(),
+    sharingRevision: 1,
+  });
+  sharingData.device = paused;
+  expect(await render()).toContain("You can still see your groups’ locations.");
+
+  const tablet = await render({ ...paused, id: "tablet", name: "Alex’s tablet", isCurrent: false });
+  expect(tablet).toContain("Until you turn it back on.");
+  expect(tablet).not.toContain("You can still see your groups’ locations.");
 });
 
 test("editing a permanent pause preserves its duration selection", async () => {

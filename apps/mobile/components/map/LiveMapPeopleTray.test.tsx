@@ -69,6 +69,7 @@ const emptyPeople: MapPeople = {
   paused: [],
   upToDate: [],
   waiting: [],
+  waitingForLocation: [],
 };
 
 const renderTray = async (people: Partial<MapPeople>) => {

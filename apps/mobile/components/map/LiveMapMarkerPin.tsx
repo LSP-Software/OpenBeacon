@@ -1,4 +1,4 @@
-import { ClockIcon, EyeOffIcon, PauseIcon } from "lucide-react-native";
+import { ClockIcon, EyeOffIcon, HourglassIcon, PauseIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { AppState, View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
@@ -227,6 +227,10 @@ export const LiveMapMarkerPin = ({
         ) : status === "hidden" ? (
           <StatusBadge label="Hidden on the map">
             <Icon as={EyeOffIcon} size={12} className="text-foreground" />
+          </StatusBadge>
+        ) : status === "waitingForLocation" ? (
+          <StatusBadge label="Waiting for location">
+            <Icon as={HourglassIcon} size={12} className="text-foreground" />
           </StatusBadge>
         ) : status === "cantLocate" ? (
           <StatusBadge label="Location unknown">
