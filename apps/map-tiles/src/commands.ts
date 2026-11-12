@@ -233,6 +233,7 @@ const createProgressReporter = (totalBytes: number) => {
       doneBytes = completedBytes;
       startedBytes = completedBytes;
       startedAt = performance.now();
+      console.log("Download starting; progress updates every 60 seconds until it completes");
       timer = setInterval(log, 60_000);
     },
     stop: ({ succeeded }: { succeeded: boolean }) => {
