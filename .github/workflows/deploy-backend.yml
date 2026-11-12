@@ -3,8 +3,12 @@ name: Deploy backend
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: Server version to release. Leave empty for serverVersion on main; set an older one to roll back.
+        type: string
+        required: false
       deploy:
-        description: Trigger the Coolify deployment after publishing
+        description: Trigger the Coolify deployment after pointing latest-stable at this version
         type: boolean
         default: false
 
@@ -22,7 +26,7 @@ defaults:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
     environment: production
     steps:
       - name: Require main branch
@@ -33,12 +37,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Read backend version
+      - name: Choose the version
         id: version
+        env:
+          REQUESTED: ${{ inputs.version }}
         run: |
-          version=$(sed -nE 's/^export const serverVersion = "([0-9]+\.[0-9]+\.[0-9]+)";$/\1/p' apps/backend/src/version.ts)
-          if [ -z "$version" ]; then
-            echo 'Could not read the backend version.' >&2
+          version="${REQUESTED:-$(sed -nE 's/^export const serverVersion = "([0-9]+\.[0-9]+\.[0-9]+)";$/\1/p' apps/backend/src/version.ts)}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "\"${version}\" is not a major.minor.patch version." >&2
             exit 1
           fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
@@ -74,75 +80,33 @@ jobs:
               echo "runner_uuid=${uuid}" >> "$GITHUB_OUTPUT"
             fi
           done
-      - name: Require an unreleased version or a re-run of this commit's release
-        id: release_check
+      - name: Require all three images for this version from the same commit
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          COMMIT: ${{ github.sha }}
         run: |
-          errors=$(mktemp)
-          reused=()
+          revisions=()
           for image in openbeacon-backend openbeacon-scheduled-jobs openbeacon-map-tiles; do
             ref="docker.io/lspsoftware/${image}:${VERSION}"
-            if ! revision=$(docker buildx imagetools inspect "$ref" --format '{{index .Image.Config.Labels "org.opencontainers.image.revision"}}' 2> "$errors"); then
-              if ! grep -qxF "ERROR: ${ref}: not found" "$errors" && ! grep -qF "repository does not exist" "$errors"; then
-                echo "Could not check whether ${ref} exists:" >&2
-                cat "$errors" >&2
-                exit 1
-              fi
-              continue
-            fi
-            if [ "$revision" != "$COMMIT" ]; then
-              echo "${ref} already exists from another commit. Bump serverVersion in apps/backend/src/version.ts before deploying." >&2
+            revision=$(docker buildx imagetools inspect "$ref" --format '{{index .Image.Config.Labels "org.opencontainers.image.revision"}}') || {
+              echo "${ref} is not published. Run the Publish images to Docker Hub workflow for this version first." >&2
+              exit 1
+            }
+            if [ -z "$revision" ]; then
+              echo "${ref} has no revision label, so it can't be matched with the other images." >&2
               exit 1
             fi
-            echo "${ref} was built from this commit; skipping its build."
-            reused+=("$image")
+            echo "${ref} was built from ${revision}."
+            revisions+=("$revision")
           done
-          echo "reused=${reused[*]}" >> "$GITHUB_OUTPUT"
-      - if: ${{ !contains(steps.release_check.outputs.reused, 'openbeacon-backend') }}
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          push: true
-          labels: org.opencontainers.image.revision=${{ github.sha }}
-          tags: |
-            docker.io/lspsoftware/openbeacon-backend:${{ steps.version.outputs.version }}
-            docker.io/lspsoftware/openbeacon-backend:latest-stable
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
-      - if: ${{ !contains(steps.release_check.outputs.reused, 'openbeacon-scheduled-jobs') }}
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: apps/scheduled-jobs/Dockerfile
-          push: true
-          labels: org.opencontainers.image.revision=${{ github.sha }}
-          tags: |
-            docker.io/lspsoftware/openbeacon-scheduled-jobs:${{ steps.version.outputs.version }}
-            docker.io/lspsoftware/openbeacon-scheduled-jobs:latest-stable
-          cache-from: type=gha,scope=scheduled-jobs
-          cache-to: type=gha,mode=max,scope=scheduled-jobs
-      - if: ${{ !contains(steps.release_check.outputs.reused, 'openbeacon-map-tiles') }}
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: apps/map-tiles/Dockerfile
-          push: true
-          labels: org.opencontainers.image.revision=${{ github.sha }}
-          tags: |
-            docker.io/lspsoftware/openbeacon-map-tiles:${{ steps.version.outputs.version }}
-            docker.io/lspsoftware/openbeacon-map-tiles:latest-stable
-          cache-from: type=gha,scope=map-tiles
-          cache-to: type=gha,mode=max,scope=map-tiles
-      - name: Point latest-stable at reused images
-        if: steps.release_check.outputs.reused != ''
+          if [ "$(printf '%s\n' "${revisions[@]}" | sort -u | wc -l)" -ne 1 ]; then
+            echo "The ${VERSION} images were built from different commits. Bump serverVersion and publish all three images again." >&2
+            exit 1
+          fi
+      - name: Point latest-stable at this version
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          REUSED: ${{ steps.release_check.outputs.reused }}
         run: |
-          read -ra images <<< "$REUSED"
-          for image in "${images[@]}"; do
+          for image in openbeacon-backend openbeacon-scheduled-jobs openbeacon-map-tiles; do
             docker buildx imagetools create \
               --tag "docker.io/lspsoftware/${image}:latest-stable" \
               "docker.io/lspsoftware/${image}:${VERSION}"
