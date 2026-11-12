@@ -310,6 +310,25 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account devices"
     expect(device).toMatchObject({ name: "Car tablet", icon: "car" });
   });
 
+  test("persists the new device identifiers and returns them in the device list", async () => {
+    const account = await createAccount();
+    await activate(account);
+    const caller = callerFor(account);
+
+    for (const icon of [
+      "phoneClassic",
+      "tabletPortrait",
+      "star",
+      "heart",
+      "flower",
+      "sun",
+    ] as const) {
+      await caller.account.updateDevice({ deviceId: account.deviceId, icon });
+      const devices = await caller.account.listDevices();
+      expect(devices.find(({ id }) => id === account.deviceId)?.icon).toBe(icon);
+    }
+  });
+
   test("rejects another account's device", async () => {
     const account = await createAccount();
     const other = await createAccount();

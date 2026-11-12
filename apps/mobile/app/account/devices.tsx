@@ -20,7 +20,7 @@ import { Alert } from "../../lib/alert.ts";
 import { type RouterOutputs, trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { cn } from "../../lib/cn.ts";
-import { deviceIconFor } from "../../lib/deviceIcons.ts";
+import { deviceIconFor, selectableDeviceIcons } from "../../lib/deviceIcons.ts";
 import { shortTimeSince } from "../../lib/timeSince.ts";
 
 const schema = z.object({ name: deviceNameSchema, icon: deviceIconSchema });
@@ -69,7 +69,7 @@ const DevicesScreen = () => {
           </DialogHeader>
           <Input control={form.control} name="name" label="Name" maxLength={40} />
           <View accessibilityRole="radiogroup" className="flex-row flex-wrap gap-3">
-            {deviceIconSchema.options.map((icon) => {
+            {selectableDeviceIcons.map((icon) => {
               const selected = selectedIcon === icon;
               const option = deviceIconFor(icon, editing?.platform);
               return (

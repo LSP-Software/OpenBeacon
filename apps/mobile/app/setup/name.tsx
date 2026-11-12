@@ -16,7 +16,7 @@ import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
 import { cn } from "../../lib/cn.ts";
-import { deviceIconFor } from "../../lib/deviceIcons.ts";
+import { deviceIconFor, selectableDeviceIcons } from "../../lib/deviceIcons.ts";
 import { openAppAfterSetup } from "../../lib/pendingJoinCode.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
@@ -97,7 +97,7 @@ const NameThisPhoneScreen = () => {
           <View className="gap-4">
             <Input control={form.control} name="name" label="Name" maxLength={40} />
             <View accessibilityRole="radiogroup" className="flex-row flex-wrap gap-3">
-              {deviceIconSchema.options.map((icon) => {
+              {selectableDeviceIcons.map((icon) => {
                 const selected = selectedIcon === icon;
                 return (
                   <Pressable

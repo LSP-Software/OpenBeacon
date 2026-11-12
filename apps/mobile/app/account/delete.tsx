@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { BackButton } from "../../components/headers/BackButton.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Input } from "../../components/ui/Input.tsx";
 import { RadioCardGroup } from "../../components/ui/RadioCardGroup.tsx";
@@ -96,9 +97,15 @@ const DeleteAccountScreen = () => {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
+      <SafeAreaView edges={["top"]} className="border-b border-border bg-background px-6 py-4">
+        <View className="flex-row items-center justify-between">
+          <BackButton />
+          <Text className="text-foreground text-2xl font-bold">Delete account</Text>
+          <View className="w-10" />
+        </View>
+      </SafeAreaView>
       <ScrollView contentContainerClassName="gap-4 p-6">
-        <Text className="text-2xl font-bold">Delete account</Text>
         <Text>
           You will be signed out on all devices. Your account and its data will be permanently
           deleted and cannot be recovered after deletion.
