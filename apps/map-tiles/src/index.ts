@@ -1,56 +1,62 @@
+import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { tryCatch } from "@openbeacon/shared";
-import { adopt, type Context, publish, rollback, status } from "./commands.ts";
-import { parseEnv } from "./env.ts";
+import { createMapTilesClient, formatStatus } from "./client.ts";
+import { publish, readMapStatus, rollback } from "./commands.ts";
+import { parseClientEnv, parseEnv } from "./env.ts";
 import { createR2Clients } from "./r2.ts";
 import { createMapTilesHandler } from "./server.ts";
 
-const usage = `Usage: bun run map-tiles <command> [options]
+const usage = `Usage: map-tiles <command> [options]
 
 Commands:
-  status                    Show both map slots, untracked archives and resumable uploads
-  publish [--date YYYYMMDD] Replace the standby slot with a Protomaps build and switch to it
-  adopt <key>               Create the first manifest for an archive already in R2
-  rollback                  Switch back to the map in the standby slot
-  serve                     Run the update service the scheduled job runner calls
+  status     Show which map slot is in use, both slots and the last update
+  update     Start an update now, ignoring the update interval
+  rollback   Switch back to the map in the other slot
+  serve      Run the map tiles service
 
 Options:
-  --bucket <name>  Required for changes; must match R2_BUCKET
-  --dry-run        Show what would happen without writing to R2
-  --yes            Skip confirmation prompts`;
+  --yes      Skip the rollback confirmation`;
 
-export const assertWriteTarget = ({
-  bucket,
-  configuredBucket,
-}: {
-  bucket: string | undefined;
-  configuredBucket: string;
-}) => {
-  if (bucket !== configuredBucket) {
-    throw new Error(
-      `Refusing to write: pass --bucket ${configuredBucket} to confirm the target bucket`,
-    );
+const confirm = async ({ question, yes }: { question: string; yes: boolean }) => {
+  if (yes) {
+    return;
+  }
+
+  if (!process.stdin.isTTY) {
+    throw new Error("Pass --yes to run without an interactive confirmation");
+  }
+
+  const readline = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  const answer = await readline.question(`${question} [y/N] `);
+  readline.close();
+
+  if (answer.trim().toLowerCase() !== "y") {
+    throw new Error("Cancelled");
   }
 };
 
-const serve = (context: Context) => {
-  const apiKey = context.env.MAP_TILES_API_KEY;
+const serve = () => {
+  const env = parseEnv(process.env);
+  const apiKey = env.MAP_TILES_API_KEY;
 
   if (!apiKey) {
     throw new Error("serve needs MAP_TILES_API_KEY (at least 32 characters)");
   }
 
+  const context = { ...createR2Clients(env), env };
   const handler = createMapTilesHandler({
     apiKey,
-    runUpdate: () =>
-      publish(
-        { ...context, dryRun: false, yes: true },
-        { date: undefined, minIntervalMs: context.env.updateIntervalMs },
-      ),
+    readMapStatus: () => readMapStatus(context),
+    rollback: () => rollback(context),
+    runUpdate: (options) => publish(context, options),
   });
-  Bun.serve({ fetch: handler.fetch, port: context.env.MAP_TILES_PORT });
+  Bun.serve({ fetch: handler.fetch, port: env.MAP_TILES_PORT });
   console.log(
-    `Map tiles service listening on port ${context.env.MAP_TILES_PORT} for bucket ${context.env.R2_BUCKET}`,
+    `Map tiles service listening on port ${env.MAP_TILES_PORT} for bucket ${env.R2_BUCKET}`,
   );
 };
 
@@ -58,55 +64,53 @@ const run = async () => {
   const { positionals, values } = parseArgs({
     allowPositionals: true,
     options: {
-      bucket: { type: "string" },
-      date: { type: "string" },
-      "dry-run": { type: "boolean", default: false },
       help: { type: "boolean", default: false },
       yes: { type: "boolean", default: false },
     },
   });
-  const [command, argument] = positionals;
+  const [command] = positionals;
 
   if (values.help || !command) {
     console.log(usage);
     return;
   }
 
-  if (values.date !== undefined && !/^\d{8}$/.test(values.date)) {
-    throw new Error("--date must be YYYYMMDD");
-  }
-
-  const env = parseEnv(process.env);
-  const context = {
-    ...createR2Clients(env),
-    dryRun: values["dry-run"],
-    env,
-    yes: values.yes,
-  };
-
   if (command === "serve") {
-    return serve(context);
+    return serve();
   }
 
-  if (command !== "status" && !context.dryRun) {
-    assertWriteTarget({ bucket: values.bucket, configuredBucket: env.R2_BUCKET });
-  }
+  const client = createMapTilesClient(parseClientEnv(process.env));
 
   switch (command) {
     case "status":
-      return status(context);
-    case "publish": {
-      const result = await publish(context, { date: values.date });
-      console.log(result.message);
+      console.log(formatStatus({ now: Date.now(), status: await client.status() }));
+      return;
+    case "update": {
+      const result = await client.update();
+      console.log(
+        result.alreadyRunning
+          ? `An update has been running since ${result.startedAt}`
+          : "Update started. Follow it with `map-tiles status` or the service logs.",
+      );
       return;
     }
-    case "adopt":
-      if (!argument) {
-        throw new Error("adopt needs the key of the archive in R2");
+    case "rollback": {
+      const { map } = await client.status();
+      const from = map.current;
+      const to = from === "a" ? "b" : "a";
+      const target = map.slots[to];
+
+      if (!from || !target) {
+        throw new Error("There is no map in the other slot to roll back to");
       }
-      return adopt(context, argument, values.date);
-    case "rollback":
-      return rollback(context);
+
+      await confirm({
+        question: `Switch from slot ${from.toUpperCase()} to slot ${to.toUpperCase()} (Protomaps build ${target.build})?`,
+        yes: values.yes,
+      });
+      console.log(await client.rollback());
+      return;
+    }
     default:
       throw new Error(`Unknown command ${command}\n\n${usage}`);
   }

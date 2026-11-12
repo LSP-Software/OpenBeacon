@@ -64,8 +64,18 @@ const createCache = ({
 const createSigner = (url: string, expiresAt: string) =>
   mock(async (_key: string) => ({ expiresAt, url }));
 
-const oldArchive = { build: "20261001", id: "a-20261001", key: "planet-a.pmtiles" };
-const currentArchive = { build: "20261101", id: "b-20261101", key: "planet-b.pmtiles" };
+const oldArchive = {
+  build: "20261001",
+  id: "a-20261001",
+  key: "planet-a.pmtiles",
+  slot: "a" as const,
+};
+const currentArchive = {
+  build: "20261101",
+  id: "b-20261101",
+  key: "planet-b.pmtiles",
+  slot: "b" as const,
+};
 
 const importPmtilesUrl = async (): Promise<typeof import("./pmtilesUrl.ts")> =>
   import(`./pmtilesUrl.ts?test=${Math.random().toString(36).slice(2)}`);
@@ -120,6 +130,7 @@ describe("pmtilesUrl", () => {
       expiresAt,
       key: "planet-a.pmtiles",
       mapBuild: "20261001",
+      mapSlot: "a",
       refreshAt: "2026-03-31T12:00:00.001Z",
       source: "cached",
       url: "https://cached.example/pmtiles",
@@ -189,6 +200,7 @@ describe("pmtilesUrl", () => {
       expiresAt: "2026-03-31T12:10:00.000Z",
       key: "planet-b.pmtiles",
       mapBuild: "20261101",
+      mapSlot: "b",
       refreshAt: "2026-03-31T12:09:00.000Z",
       source: "generated",
       url: "https://replacement.example/pmtiles",
@@ -207,11 +219,16 @@ describe("pmtilesUrl", () => {
         build: null,
         id: "pmtiles/test.pmtiles",
         key: "pmtiles/test.pmtiles",
+        slot: null,
       }),
       userId: "user-1",
     });
 
-    expect(result).toMatchObject({ archiveId: "pmtiles/test.pmtiles", mapBuild: null });
+    expect(result).toMatchObject({
+      archiveId: "pmtiles/test.pmtiles",
+      mapBuild: null,
+      mapSlot: null,
+    });
   });
 
   test("force refresh signs the current archive and overwrites the cached value", async () => {

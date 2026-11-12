@@ -66,10 +66,10 @@ export const resolveArchive = ({
     requestedId === getArchiveId({ archive: standby, slot: standbySlot }) &&
     now < Date.parse(standby.servedUntil)
   ) {
-    return { archive: standby, id: requestedId };
+    return { archive: standby, id: requestedId, slot: standbySlot };
   }
 
-  return { archive: current.archive, id: getArchiveId(current) };
+  return { archive: current.archive, id: getArchiveId(current), slot: current.slot };
 };
 
 export const getStandbyReuseAt = (manifest: MapTilesManifest) => {

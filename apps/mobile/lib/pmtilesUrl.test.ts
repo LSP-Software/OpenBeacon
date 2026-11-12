@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatMapVersion, getPmtilesSource, hasPmtilesArchiveChanged } from "./pmtilesUrl.ts";
+import { describeMapVersion, getPmtilesSource, hasPmtilesArchiveChanged } from "./pmtilesUrl.ts";
 
 describe("hasPmtilesArchiveChanged", () => {
   test("does not remount for the first archive or a refreshed url for the same archive", () => {
@@ -39,11 +39,16 @@ describe("getPmtilesSource", () => {
   });
 });
 
-describe("formatMapVersion", () => {
-  test("shows the build date, or the archive when the backend has no manifest", () => {
-    expect(formatMapVersion({ archiveId: "b-20261101", mapBuild: "20261101" })).toBe("2026-11-01");
-    expect(formatMapVersion({ archiveId: "planet.pmtiles", mapBuild: null })).toBe(
-      "planet.pmtiles",
-    );
+describe("describeMapVersion", () => {
+  test("shows the slot in use and the Protomaps build date", () => {
+    expect(
+      describeMapVersion({ archiveId: "b-20261101", mapBuild: "20261101", mapSlot: "b" }),
+    ).toEqual({ date: "2026-11-01", slot: "B", summary: "Map B, 2026-11-01" });
+  });
+
+  test("falls back to the archive when the backend has no manifest", () => {
+    expect(
+      describeMapVersion({ archiveId: "planet.pmtiles", mapBuild: null, mapSlot: null }),
+    ).toEqual({ date: null, slot: null, summary: "planet.pmtiles" });
   });
 });

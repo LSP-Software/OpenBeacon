@@ -41,6 +41,7 @@ describe("resolveArchive", () => {
     expect(resolveArchive({ manifest, now, requestedId: undefined })).toEqual({
       archive: manifest.slots.b as MapTilesArchive,
       id: "b-20261101",
+      slot: "b",
     });
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseEnv } from "./env.ts";
+import { parseClientEnv, parseEnv } from "./env.ts";
 
 const required = {
   R2_ACCOUNT_ID: "account",
@@ -45,5 +45,33 @@ describe("parseEnv", () => {
   test("requires a long service key when one is set", () => {
     expect(parseEnv({ ...required, MAP_TILES_API_KEY: "" }).MAP_TILES_API_KEY).toBeUndefined();
     expect(() => parseEnv({ ...required, MAP_TILES_API_KEY: "short" })).toThrow();
+  });
+});
+
+describe("parseClientEnv", () => {
+  const apiKey = "k".repeat(40);
+
+  test("talks to the service in the same container by default", () => {
+    expect(parseClientEnv({ MAP_TILES_API_KEY: apiKey })).toEqual({
+      apiKey,
+      serviceUrl: "http://127.0.0.1:8080",
+    });
+    expect(parseClientEnv({ MAP_TILES_API_KEY: apiKey, MAP_TILES_PORT: "9000" }).serviceUrl).toBe(
+      "http://127.0.0.1:9000",
+    );
+  });
+
+  test("can reach a service elsewhere", () => {
+    expect(
+      parseClientEnv({
+        MAP_TILES_API_KEY: apiKey,
+        MAP_TILES_SERVICE_URL: "https://maps.example",
+      }).serviceUrl,
+    ).toBe("https://maps.example");
+  });
+
+  test("needs the service key", () => {
+    expect(() => parseClientEnv({})).toThrow();
+    expect(() => parseClientEnv({ MAP_TILES_API_KEY: "short" })).toThrow();
   });
 });

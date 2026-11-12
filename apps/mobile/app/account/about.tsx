@@ -12,6 +12,7 @@ const AboutScreen = () => {
   const server = useQuery(trpc.account.version.queryOptions());
   const serverName = useQuery(trpc.account.serverName.queryOptions());
   const mapVersion = useMapVersion();
+  const mapNotLoaded = "Open the map to load it";
 
   return (
     <View className="flex-1 bg-background">
@@ -35,7 +36,17 @@ const AboutScreen = () => {
         <Text className="text-xl font-semibold">Versions</Text>
         <Text>OpenBeacon: {appVersion}</Text>
         <Text>MapLibre React Native: {maplibreVersion}</Text>
-        <Text>Map data: {mapVersion ?? "Open the map to load it"}</Text>
+        <Text>
+          Map in use:{" "}
+          {mapVersion
+            ? mapVersion.slot
+              ? `Map ${mapVersion.slot}`
+              : "Server default"
+            : mapNotLoaded}
+        </Text>
+        <Text>
+          Map date (Protomaps build): {mapVersion ? (mapVersion.date ?? "Unknown") : mapNotLoaded}
+        </Text>
         <Text>Server API: {server.data ?? (server.isPending ? "Loading…" : "Unavailable")}</Text>
         {Platform.OS === "android" && <Text>Android: {Platform.constants.Release}</Text>}
         <Text className="text-xl font-semibold">Licences and attribution</Text>

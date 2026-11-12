@@ -1,25 +1,29 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { tryCatch } from "@openbeacon/shared";
+import { z } from "zod";
 import type { PublishResult } from "./commands.ts";
+import type { MapStatus, UpdateRun } from "./status.ts";
 
 const digest = (value: string) => createHash("sha256").update(value).digest();
+
+const updateRequestSchema = z.object({ force: z.boolean().default(false) });
 
 export const createMapTilesHandler = ({
   apiKey,
   now = Date.now,
+  readMapStatus,
+  rollback,
   runUpdate,
 }: {
   apiKey: string;
   now?: () => number;
-  runUpdate: () => Promise<PublishResult>;
+  readMapStatus: () => Promise<MapStatus>;
+  rollback: () => Promise<string>;
+  runUpdate: (options: { ignoreInterval: boolean }) => Promise<PublishResult>;
 }) => {
   const expected = digest(apiKey);
   let running: { startedAt: string; task: Promise<void> } | null = null;
-  let last: {
-    finishedAt: string;
-    outcome: "published" | "skipped" | "failed";
-    message: string;
-  } | null = null;
+  let last: UpdateRun["last"] = null;
 
   const isAuthorized = (request: Request) => {
     const header = request.headers.get("authorization") ?? "";
@@ -27,15 +31,15 @@ export const createMapTilesHandler = ({
     return supplied.length > 0 && timingSafeEqual(digest(supplied), expected);
   };
 
-  const describe = () => ({
+  const describe = (): UpdateRun => ({
     running: running !== null,
     startedAt: running?.startedAt ?? null,
     last,
   });
 
-  const start = () => {
+  const start = (ignoreInterval: boolean) => {
     const task = (async () => {
-      const result = await tryCatch(runUpdate());
+      const result = await tryCatch(runUpdate({ ignoreInterval }));
       const finishedAt = new Date(now()).toISOString();
 
       if (result.error) {
@@ -55,6 +59,13 @@ export const createMapTilesHandler = ({
     return task;
   };
 
+  const readUpdateRequest = async (request: Request) => {
+    const body = await tryCatch(
+      request.text().then((text): unknown => (text.trim() === "" ? {} : JSON.parse(text))),
+    );
+    return updateRequestSchema.safeParse(body.error ? null : body.data);
+  };
+
   return {
     fetch: async (request: Request) => {
       const { pathname } = new URL(request.url);
@@ -63,7 +74,7 @@ export const createMapTilesHandler = ({
         return new Response("ok");
       }
 
-      if (pathname !== "/status" && pathname !== "/update") {
+      if (!["/status", "/update", "/rollback"].includes(pathname)) {
         return new Response("Not found", { status: 404 });
       }
 
@@ -72,15 +83,42 @@ export const createMapTilesHandler = ({
       }
 
       if (pathname === "/status" && request.method === "GET") {
-        return Response.json(describe());
+        const map = await tryCatch(readMapStatus());
+        if (map.error) {
+          return Response.json(
+            { error: `Could not read the map from R2: ${map.error.message}` },
+            { status: 502 },
+          );
+        }
+        return Response.json({ ...describe(), map: map.data });
       }
 
       if (pathname === "/update" && request.method === "POST") {
+        const body = await readUpdateRequest(request);
+        if (!body.success) {
+          return Response.json({ error: 'Send {} or {"force": true}' }, { status: 400 });
+        }
         const alreadyRunning = running !== null;
         if (!alreadyRunning) {
-          void start();
+          void start(body.data.force);
         }
         return Response.json({ ...describe(), alreadyRunning }, { status: 202 });
+      }
+
+      if (pathname === "/rollback" && request.method === "POST") {
+        if (running) {
+          return Response.json(
+            {
+              error: `An update has been running since ${running.startedAt}; roll back after it finishes`,
+            },
+            { status: 409 },
+          );
+        }
+        const result = await tryCatch(rollback());
+        if (result.error) {
+          return Response.json({ error: result.error.message }, { status: 409 });
+        }
+        return Response.json({ message: result.data });
       }
 
       return new Response("Method not allowed", { status: 405 });

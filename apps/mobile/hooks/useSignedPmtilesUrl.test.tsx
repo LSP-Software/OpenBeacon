@@ -42,6 +42,7 @@ mock.module("../lib/api.ts", () => ({
           return {
             archiveId: "a-20261107",
             mapBuild: "20261107",
+            mapSlot: "a" as const,
             expiresAt: new Date(Date.now() + 90_000).toISOString(),
             refreshAt: new Date(Date.now() + 30_000).toISOString(),
             url: `https://example.com/map.pmtiles?signature=${fetches}`,

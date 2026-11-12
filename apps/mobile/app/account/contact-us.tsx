@@ -37,7 +37,7 @@ const ContactUsScreen = () => {
         email: includeEmail ? session?.user.email : undefined,
         appVersion,
         maplibreVersion,
-        mapVersion,
+        mapVersion: mapVersion?.summary,
         serverVersion: serverVersion.data,
         androidVersion: Platform.OS === "android" ? Platform.constants.Release : undefined,
       }),

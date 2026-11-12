@@ -40,11 +40,19 @@ export const getPmtilesSource = ({
   };
 };
 
-export const formatMapVersion = ({
+export const describeMapVersion = ({
   archiveId,
   mapBuild,
+  mapSlot,
 }: {
   archiveId: string;
   mapBuild: string | null;
-}) =>
-  mapBuild ? `${mapBuild.slice(0, 4)}-${mapBuild.slice(4, 6)}-${mapBuild.slice(6, 8)}` : archiveId;
+  mapSlot: "a" | "b" | null;
+}) => {
+  const date = mapBuild
+    ? `${mapBuild.slice(0, 4)}-${mapBuild.slice(4, 6)}-${mapBuild.slice(6, 8)}`
+    : null;
+  const slot = mapSlot ? mapSlot.toUpperCase() : null;
+
+  return { date, slot, summary: date && slot ? `Map ${slot}, ${date}` : archiveId };
+};

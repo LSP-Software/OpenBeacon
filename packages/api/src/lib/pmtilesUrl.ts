@@ -25,6 +25,7 @@ const buildPmtilesUrlPayload = ({
     archiveId: archive.id,
     expiresAt,
     mapBuild: archive.build,
+    mapSlot: archive.slot,
     refreshAt: new Date(expiresAtTimestamp - PM_TILES_URL_REFRESH_WINDOW_MS).toISOString(),
     url,
   };

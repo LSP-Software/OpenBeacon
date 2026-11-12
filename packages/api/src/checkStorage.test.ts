@@ -9,6 +9,7 @@ const resolvePmtilesArchive = mock(async (_requestedId: string | undefined) => (
   build: "20261101",
   id: "b-20261101",
   key: "planet-b.pmtiles",
+  slot: "b" as const,
 }));
 
 mock.module("./r2.ts", () => ({ r2Client: { send: r2Send }, resolvePmtilesArchive }));

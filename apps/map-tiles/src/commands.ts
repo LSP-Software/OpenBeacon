@@ -1,7 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { createInterface } from "node:readline/promises";
-import { DeleteObjectCommand, ListObjectsV2Command, type S3Client } from "@aws-sdk/client-s3";
+import { ListObjectsV2Command, type S3Client } from "@aws-sdk/client-s3";
 import {
   clearStandbySlot,
   getArchiveId,
@@ -10,7 +9,6 @@ import {
   getSlotKey,
   getStandbyReuseAt,
   type MapTilesArchive,
-  type MapTilesSlot,
   publishToStandby,
   readManifest,
   rollbackToStandby,
@@ -28,6 +26,7 @@ import {
   listProtomapsBuilds,
   pickProtomapsBuild,
 } from "./source.ts";
+import type { MapStatus } from "./status.ts";
 import {
   createProgressTracker,
   createRateLimiter,
@@ -39,28 +38,8 @@ import { PART_SIZE, planParts, uploadArchive } from "./upload.ts";
 
 export type Context = {
   client: S3Client;
-  dryRun: boolean;
   env: MapTilesEnv;
   partClient: S3Client;
-  yes: boolean;
-};
-
-const confirm = async ({ question, yes }: { question: string; yes: boolean }) => {
-  if (yes) {
-    return;
-  }
-
-  if (!process.stdin.isTTY) {
-    throw new Error("Pass --yes to run without an interactive confirmation");
-  }
-
-  const readline = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await readline.question(`${question} [y/N] `);
-  readline.close();
-
-  if (answer.trim().toLowerCase() !== "y") {
-    throw new Error("Cancelled");
-  }
 };
 
 const readR2ArchiveInfo = ({
@@ -76,128 +55,65 @@ const readR2ArchiveInfo = ({
     readObjectRange({ bucket: env.R2_BUCKET, client, key, length, start }),
   );
 
-const describeSlot = ({
-  archive,
-  now,
-  slot,
-}: {
-  archive: MapTilesArchive | null;
-  now: number;
-  slot: MapTilesSlot;
-}) => {
-  if (!archive) {
-    return `  ${slot}: empty`;
-  }
+const describeSlot = (archive: MapTilesArchive | null) =>
+  archive
+    ? {
+        build: archive.build,
+        publishedAt: archive.publishedAt,
+        schemaVersion: archive.schemaVersion,
+        servedUntil: archive.servedUntil ?? null,
+        size: archive.size,
+      }
+    : null;
 
-  const description = `  ${slot}: ${archive.key} build ${archive.build} (${archive.schemaVersion}, ${formatBytes(archive.size)})`;
-
-  if (!archive.servedUntil) {
-    return `${description} current, published ${archive.publishedAt}`;
-  }
-
-  return now < Date.parse(archive.servedUntil)
-    ? `${description} served to open maps until ${archive.servedUntil}`
-    : `${description} kept for rollback`;
-};
-
-export const status = async ({ client, env }: Context) => {
-  const manifest = await readManifest({ bucket: env.R2_BUCKET, client });
-  const now = Date.now();
-
-  console.log(`Bucket: ${env.R2_BUCKET}`);
-  if (!manifest) {
-    console.log("No manifest: the API serves R2_PM_TILES_KEY. Run adopt or publish to create one.");
-  } else {
-    console.log(`Current slot: ${manifest.manifest.current}`);
-    for (const slot of ["a", "b"] as const) {
-      console.log(describeSlot({ archive: manifest.manifest.slots[slot], now, slot }));
-    }
-    const reuseAt = getStandbyReuseAt(manifest.manifest);
-    if (reuseAt !== null) {
-      console.log(
-        reuseAt === Infinity
-          ? "The standby slot has no end date; roll back or clear it by hand"
-          : `The standby slot can be replaced from ${new Date(reuseAt).toISOString()}`,
-      );
-    }
-  }
-
+export const readMapStatus = async ({ client, env }: Context): Promise<MapStatus> => {
+  const manifest = (await readManifest({ bucket: env.R2_BUCKET, client }))?.manifest ?? null;
+  const reuseAt = manifest ? getStandbyReuseAt(manifest) : null;
+  const current = manifest ? getCurrentArchive(manifest) : null;
+  const dueAt = current
+    ? Math.max(
+        Date.parse(current.archive.publishedAt) + env.updateIntervalMs,
+        reuseAt !== null && reuseAt !== Infinity ? reuseAt : 0,
+      )
+    : null;
   const tracked = new Set(
     manifest
-      ? Object.values(manifest.manifest.slots).flatMap((archive) => (archive ? [archive.key] : []))
+      ? Object.values(manifest.slots).flatMap((archive) => (archive ? [archive.key] : []))
       : [],
   );
   const listed = await client.send(new ListObjectsV2Command({ Bucket: env.R2_BUCKET }));
-  const untracked = (listed.Contents ?? []).filter(
-    (object) => object.Key?.endsWith(".pmtiles") && !tracked.has(object.Key),
-  );
-
-  for (const object of untracked) {
-    console.log(`Untracked archive: ${object.Key} (${formatBytes(object.Size ?? 0)})`);
-  }
-
   const pendingUploads = await tryCatch(readdir(join(env.MAP_TILES_STATE_DIR, env.R2_BUCKET)));
-  for (const file of pendingUploads.data ?? []) {
-    console.log(`Resumable upload: ${file.replace(/\.json$/, "")}`);
-  }
-};
 
-export const adopt = async (context: Context, key: string, date: string | undefined) => {
-  const { client, dryRun, env } = context;
-
-  if (await readManifest({ bucket: env.R2_BUCKET, client })) {
-    throw new Error("A manifest already exists; adopt only creates the first one");
-  }
-
-  const build = date ?? key.match(/\d{8}/)?.[0];
-
-  if (!build) {
-    throw new Error(`Pass --date YYYYMMDD with the build date of ${key}`);
-  }
-
-  const object = await headObject({ bucket: env.R2_BUCKET, client, key });
-
-  if (!object) {
-    throw new Error(`${key} does not exist in ${env.R2_BUCKET}`);
-  }
-
-  const info = await readR2ArchiveInfo({ client, env, key });
-  console.log(
-    `Adopting ${key} build ${build} (${info.schemaVersion}, ${formatBytes(object.size)}) into slot a`,
-  );
-
-  if (dryRun) {
-    return;
-  }
-
-  await writeManifest({
+  return {
     bucket: env.R2_BUCKET,
-    client,
-    etag: null,
-    manifest: publishToStandby({
-      archive: {
-        build,
-        key,
-        publishedAt: new Date().toISOString(),
-        schemaVersion: info.schemaVersion,
-        size: object.size,
-      },
-      manifest: null,
-      now: Date.now(),
-    }),
-  });
-  console.log("Manifest created");
+    current: manifest?.current ?? null,
+    slots: {
+      a: describeSlot(manifest?.slots.a ?? null),
+      b: describeSlot(manifest?.slots.b ?? null),
+    },
+    standbyReplaceableFrom:
+      reuseAt === null ? null : reuseAt === Infinity ? "never" : new Date(reuseAt).toISOString(),
+    nextUpdateDueAt: dueAt === null ? null : new Date(dueAt).toISOString(),
+    untrackedArchives: (listed.Contents ?? []).flatMap((object) =>
+      object.Key?.endsWith(".pmtiles") && !tracked.has(object.Key)
+        ? [{ key: object.Key, size: object.Size ?? 0 }]
+        : [],
+    ),
+    resumableUploads: (pendingUploads.data ?? []).map((file) => file.replace(/\.json$/, "")),
+  };
 };
 
-export const rollback = async (context: Context) => {
-  const { client, dryRun, env, yes } = context;
+export const rollback = async ({ client, env }: Context) => {
   const manifest = await readManifest({ bucket: env.R2_BUCKET, client });
 
   if (!manifest) {
-    throw new Error("There is no manifest to roll back");
+    throw new Error("There is no map to roll back from yet");
   }
 
-  const next = rollbackToStandby({ manifest: manifest.manifest, now: Date.now() });
+  const next = rollbackToStandby({
+    manifest: manifest.manifest,
+    now: Date.now(),
+  });
   const from = getCurrentArchive(manifest.manifest);
   const to = getCurrentArchive(next);
 
@@ -205,17 +121,16 @@ export const rollback = async (context: Context) => {
     throw new Error(`${to.archive.key} is missing from R2`);
   }
 
-  console.log(
-    `Rolling back from ${getArchiveId(from)} to ${getArchiveId(to)}. Open maps on ${getArchiveId(from)} switch on their next URL refresh.`,
-  );
+  await writeManifest({
+    bucket: env.R2_BUCKET,
+    client,
+    etag: manifest.etag,
+    manifest: next,
+  });
 
-  if (dryRun) {
-    return;
-  }
-
-  await confirm({ question: "Roll back?", yes });
-  await writeManifest({ bucket: env.R2_BUCKET, client, etag: manifest.etag, manifest: next });
-  console.log("Rolled back");
+  const message = `Rolled back from ${getArchiveId(from)} to ${getArchiveId(to)}. Open maps on ${getArchiveId(from)} switch on their next URL refresh.`;
+  console.log(message);
+  return message;
 };
 
 const createProgressReporter = (totalBytes: number) => {
@@ -266,11 +181,10 @@ const createProgressReporter = (totalBytes: number) => {
 export type PublishResult = { published: boolean; message: string };
 
 export const publish = async (
-  context: Context,
-  { date, minIntervalMs }: { date: string | undefined; minIntervalMs?: number },
+  { client, env, partClient }: Context,
+  { ignoreInterval }: { ignoreInterval: boolean },
 ): Promise<PublishResult> => {
-  const { client, dryRun, env, partClient, yes } = context;
-  const build = pickProtomapsBuild({ builds: await listProtomapsBuilds(), date });
+  const build = pickProtomapsBuild({ builds: await listProtomapsBuilds(), date: undefined });
   const buildDate = getBuildDate(build);
   const url = getProtomapsBuildUrl(build);
   const initialManifest = await readManifest({ bucket: env.R2_BUCKET, client });
@@ -281,28 +195,20 @@ export const publish = async (
     return { published: false, message: `Build ${buildDate} is already current` };
   }
 
-  if (current && !date && buildDate < current.archive.build) {
+  if (current && buildDate < current.archive.build) {
     return {
       published: false,
       message: `The newest Protomaps build ${buildDate} is older than the current build ${current.archive.build}`,
     };
   }
 
-  if (current && minIntervalMs !== undefined) {
-    const dueAt = Date.parse(current.archive.publishedAt) + minIntervalMs;
+  if (current && !ignoreInterval) {
+    const dueAt = Date.parse(current.archive.publishedAt) + env.updateIntervalMs;
     if (now < dueAt) {
       return {
         published: false,
         message: `The next map update is due from ${new Date(dueAt).toISOString()}`,
       };
-    }
-  }
-
-  if (!initialManifest && env.R2_PM_TILES_KEY) {
-    if (await headObject({ bucket: env.R2_BUCKET, client, key: env.R2_PM_TILES_KEY })) {
-      throw new Error(
-        `${env.R2_PM_TILES_KEY} is already in ${env.R2_BUCKET}; run adopt first so the bucket keeps two maps`,
-      );
     }
   }
 
@@ -340,18 +246,12 @@ export const publish = async (
       `Size: ${formatBytes(source.size)} in ${planParts({ partSize: PART_SIZE, size: source.size }).length} parts`,
       `Target: ${env.R2_BUCKET}/${key} (slot ${slot})`,
       `Replaces: ${replaced ? `${replaced.key} build ${replaced.build}` : "nothing"}`,
-      `Current: ${current ? `${current.archive.key} build ${current.archive.build}` : "no manifest"}`,
+      `Current: ${current ? `${current.archive.key} build ${current.archive.build}` : "none yet"}`,
       env.maxBytesPerSecond === null
         ? "Bandwidth: unlimited (set MAP_TILES_MAX_MBPS to cap it); the ETA appears once the speed is measured"
         : `Bandwidth: capped at ${formatMbps(env.maxBytesPerSecond)}, about ${formatDuration(source.size / env.maxBytesPerSecond)} for a full upload`,
     ].join("\n"),
   );
-
-  if (dryRun) {
-    return { published: false, message: "Dry run; nothing was written" };
-  }
-
-  await confirm({ question: `Replace slot ${slot} with build ${buildDate}?`, yes });
 
   if (initialManifest && replaced) {
     await writeManifest({
@@ -361,11 +261,6 @@ export const publish = async (
       manifest: clearStandbySlot({ manifest: initialManifest.manifest, now }),
     });
     console.log(`Cleared slot ${slot}; it can no longer be rolled back to`);
-
-    if (replaced.key !== key) {
-      await client.send(new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key: replaced.key }));
-      console.log(`Deleted ${replaced.key}`);
-    }
   }
 
   const matchesSource = async () => {
@@ -406,12 +301,12 @@ export const publish = async (
     reporter.stop();
 
     if (result.error) {
-      throw new Error(`Upload stopped: ${result.error.message}. Rerun the same command to resume.`);
+      throw new Error(`Upload stopped: ${result.error.message}. The next update resumes it.`);
     }
 
     if (!(await matchesSource())) {
       throw new Error(
-        `${key} in R2 does not match build ${buildDate}, so it was not published. Rerun to upload it again.`,
+        `${key} in R2 does not match build ${buildDate}, so it was not published. The next update uploads it again.`,
       );
     }
   }

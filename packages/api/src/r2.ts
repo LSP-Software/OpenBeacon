@@ -63,11 +63,11 @@ export const resolvePmtilesArchive = async (requestedId: string | undefined) => 
   const manifest = await getMapTilesManifest();
 
   if (!manifest) {
-    return { build: null, id: env.R2_PM_TILES_KEY, key: env.R2_PM_TILES_KEY };
+    return { build: null, id: env.R2_PM_TILES_KEY, key: env.R2_PM_TILES_KEY, slot: null };
   }
 
-  const { archive, id } = resolveArchive({ manifest, now: Date.now(), requestedId });
-  return { build: archive.build, id, key: archive.key };
+  const { archive, id, slot } = resolveArchive({ manifest, now: Date.now(), requestedId });
+  return { build: archive.build, id, key: archive.key, slot };
 };
 
 export const createSignedPmtilesUrl = async (key: string) => {

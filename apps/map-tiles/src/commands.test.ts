@@ -18,7 +18,7 @@ import {
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { MAP_TILES_MANIFEST_KEY, type MapTilesManifest } from "@openbeacon/map-tiles";
-import { adopt, publish, rollback } from "./commands.ts";
+import { publish, readMapStatus, rollback } from "./commands.ts";
 import { parseEnv } from "./env.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -186,23 +186,20 @@ describe("map tiles commands", () => {
     await rm(stateDir, { force: true, recursive: true });
   });
 
-  const context = (
-    r2: ReturnType<typeof createFakeR2>,
-    overrides: { dryRun?: boolean; env?: Record<string, string> } = {},
-  ) => ({
+  const context = (r2: ReturnType<typeof createFakeR2>) => ({
     client: r2.client,
-    dryRun: overrides.dryRun ?? false,
     env: parseEnv({
       R2_ACCESS_KEY_ID: "key",
       R2_ACCOUNT_ID: "account",
       R2_BUCKET: "bucket",
       R2_SECRET_ACCESS_KEY: "secret",
       MAP_TILES_STATE_DIR: stateDir,
-      ...overrides.env,
     }),
     partClient: r2.client,
-    yes: true,
   });
+
+  const update = { ignoreInterval: true };
+  const scheduledUpdate = { ignoreInterval: false };
 
   test("replaces the standby slot, switches to it and keeps the old map for rollback", async () => {
     const r2 = createFakeR2();
@@ -220,7 +217,7 @@ describe("map tiles commands", () => {
       },
     });
 
-    const result = await publish(context(r2), { date: undefined });
+    const result = await publish(context(r2), update);
 
     const manifest = r2.manifest();
     expect(result.published).toBe(true);
@@ -249,7 +246,7 @@ describe("map tiles commands", () => {
       },
     });
 
-    await publish(context(r2), { date: undefined });
+    await publish(context(r2), update);
 
     expect(r2.writes.slice(0, 2)).toEqual([
       `put:${MAP_TILES_MANIFEST_KEY}`,
@@ -271,7 +268,7 @@ describe("map tiles commands", () => {
       },
     });
 
-    const result = await publish(context(r2), { date: undefined });
+    const result = await publish(context(r2), update);
 
     expect(result).toMatchObject({ published: false, message: expect.stringContaining("in use") });
     expect(r2.writes).toEqual([]);
@@ -284,7 +281,7 @@ describe("map tiles commands", () => {
       slots: { a: archive("planet-a.pmtiles", "20261007", Date.now() - 10 * DAY_MS), b: null },
     });
 
-    const result = await publish(context(r2), { date: undefined, minIntervalMs: 30 * DAY_MS });
+    const result = await publish(context(r2), scheduledUpdate);
 
     expect(result).toMatchObject({ published: false, message: expect.stringContaining("due") });
     expect(r2.writes).toEqual([]);
@@ -297,41 +294,7 @@ describe("map tiles commands", () => {
       slots: { a: archive("planet-a.pmtiles", "20261107", Date.now() - 40 * DAY_MS), b: null },
     });
 
-    expect((await publish(context(r2), { date: undefined })).published).toBe(false);
-    expect(r2.writes).toEqual([]);
-  });
-
-  test("deletes an adopted archive when its slot is replaced so the bucket keeps two maps", async () => {
-    const r2 = createFakeR2();
-    const now = Date.now();
-    r2.putArchive("planet-20260315.pmtiles", otherBuild());
-    r2.putArchive("planet-b.pmtiles", otherBuild());
-    r2.putManifest({
-      current: "b",
-      slots: {
-        a: {
-          ...archive("planet-20260315.pmtiles", "20260315", now - 61 * DAY_MS),
-          servedUntil: new Date(now - 24 * DAY_MS).toISOString(),
-        },
-        b: archive("planet-b.pmtiles", "20261007", now - 31 * DAY_MS),
-      },
-    });
-
-    await publish(context(r2), { date: undefined });
-
-    expect(r2.objects.has("planet-20260315.pmtiles")).toBe(false);
-    expect(r2.manifest()?.slots.a?.key).toBe("planet-a.pmtiles");
-  });
-
-  test("asks for adopt before publishing next to an archive the manifest does not know", async () => {
-    const r2 = createFakeR2();
-    r2.putArchive("planet-20260315.pmtiles");
-
-    await expect(
-      publish(context(r2, { env: { R2_PM_TILES_KEY: "planet-20260315.pmtiles" } }), {
-        date: undefined,
-      }),
-    ).rejects.toThrow("run adopt first");
+    expect((await publish(context(r2), update)).published).toBe(false);
     expect(r2.writes).toEqual([]);
   });
 
@@ -343,42 +306,68 @@ describe("map tiles commands", () => {
     };
     r2.putManifest(manifest);
 
-    await expect(publish(context(r2), { date: undefined })).rejects.toThrow("not published");
+    await expect(publish(context(r2), update)).rejects.toThrow("not published");
 
     expect(r2.manifest()).toEqual(manifest);
+  });
+
+  test("downloads the first map into slot a straight away", async () => {
+    const r2 = createFakeR2();
+
+    const result = await publish(context(r2), scheduledUpdate);
+
+    expect(result.published).toBe(true);
+    expect(r2.manifest()).toMatchObject({
+      current: "a",
+      slots: { a: { build: "20261107" }, b: null },
+    });
+    expect(r2.objects.get("planet-a.pmtiles")?.body).toEqual(source);
+  });
+
+  test("fills the empty slot b at the next scheduled update", async () => {
+    const r2 = createFakeR2();
+    r2.putArchive("planet-a.pmtiles", otherBuild());
+    r2.putManifest({
+      current: "a",
+      slots: {
+        a: archive("planet-a.pmtiles", "20261007", Date.now() - 31 * DAY_MS),
+        b: null,
+      },
+    });
+
+    const result = await publish(context(r2), scheduledUpdate);
+
+    expect(result.published).toBe(true);
+    expect(r2.manifest()).toMatchObject({
+      current: "b",
+      slots: { a: { build: "20261007" }, b: { build: "20261107" } },
+    });
+  });
+
+  test("a manual update ignores the update interval", async () => {
+    const r2 = createFakeR2();
+    const now = Date.now();
+    r2.putArchive("planet-a.pmtiles", otherBuild());
+    r2.putManifest({
+      current: "a",
+      slots: {
+        a: archive("planet-a.pmtiles", "20261007", now - 2 * DAY_MS),
+        b: null,
+      },
+    });
+
+    expect((await publish(context(r2), scheduledUpdate)).published).toBe(false);
+    expect((await publish(context(r2), update)).published).toBe(true);
   });
 
   test("skips the upload when the slot already holds the build", async () => {
     const r2 = createFakeR2();
     r2.putArchive("planet-a.pmtiles");
 
-    await publish(context(r2), { date: undefined });
+    await publish(context(r2), update);
 
     expect(r2.writes).toEqual([`put:${MAP_TILES_MANIFEST_KEY}`]);
     expect(r2.manifest()?.slots.a?.build).toBe("20261107");
-  });
-
-  test("writes nothing on a dry run", async () => {
-    const r2 = createFakeR2();
-
-    await publish(context(r2, { dryRun: true }), { date: undefined });
-
-    expect(r2.writes).toEqual([]);
-  });
-
-  test("adopt puts an existing archive in slot a and only creates the first manifest", async () => {
-    const r2 = createFakeR2();
-    r2.putArchive("planet-20260315.pmtiles");
-
-    await adopt(context(r2), "planet-20260315.pmtiles", undefined);
-    expect(r2.manifest()).toMatchObject({
-      current: "a",
-      slots: { a: { key: "planet-20260315.pmtiles", build: "20260315" }, b: null },
-    });
-
-    await expect(adopt(context(r2), "planet-20260315.pmtiles", undefined)).rejects.toThrow(
-      "already exists",
-    );
   });
 
   test("rollback switches back to the standby slot", async () => {
@@ -396,7 +385,7 @@ describe("map tiles commands", () => {
       },
     });
 
-    await rollback(context(r2));
+    expect(await rollback(context(r2))).toContain("a-20261007");
 
     expect(r2.manifest()?.current).toBe("a");
     expect(r2.manifest()?.slots.a?.servedUntil).toBeUndefined();
@@ -419,5 +408,44 @@ describe("map tiles commands", () => {
 
     await expect(rollback(context(r2))).rejects.toThrow("missing from R2");
     expect(r2.manifest()).toEqual(manifest);
+  });
+
+  test("status reports both slots, when the next update is due and stray archives", async () => {
+    const r2 = createFakeR2();
+    const now = Date.now();
+    r2.putArchive("planet-20260315.pmtiles");
+    r2.putManifest({
+      current: "b",
+      slots: {
+        a: {
+          ...archive("planet-a.pmtiles", "20261007", now - 40 * DAY_MS),
+          servedUntil: new Date(now + 2 * DAY_MS).toISOString(),
+        },
+        b: archive("planet-b.pmtiles", "20261107", now - 5 * DAY_MS),
+      },
+    });
+
+    const status = await readMapStatus(context(r2));
+
+    expect(status).toMatchObject({
+      bucket: "bucket",
+      current: "b",
+      slots: {
+        a: { build: "20261007" },
+        b: { build: "20261107", servedUntil: null },
+      },
+      standbyReplaceableFrom: new Date(now + 3 * DAY_MS).toISOString(),
+      nextUpdateDueAt: new Date(now + 25 * DAY_MS).toISOString(),
+      untrackedArchives: [{ key: "planet-20260315.pmtiles", size: source.byteLength }],
+    });
+  });
+
+  test("status reports an empty bucket", async () => {
+    expect(await readMapStatus(context(createFakeR2()))).toMatchObject({
+      current: null,
+      slots: { a: null, b: null },
+      nextUpdateDueAt: null,
+      standbyReplaceableFrom: null,
+    });
   });
 });

@@ -30,6 +30,7 @@ export const mapsRouter = {
         archiveId: signedUrl.archiveId,
         expiresAt: signedUrl.expiresAt,
         mapBuild: signedUrl.mapBuild,
+        mapSlot: signedUrl.mapSlot,
         refreshAt: signedUrl.refreshAt,
         url: signedUrl.url,
       };
@@ -55,6 +56,7 @@ export const mapsRouter = {
         archiveId: signedUrl.archiveId,
         expiresAt: signedUrl.expiresAt,
         mapBuild: signedUrl.mapBuild,
+        mapSlot: signedUrl.mapSlot,
         refreshAt: signedUrl.refreshAt,
         url: signedUrl.url,
       };
