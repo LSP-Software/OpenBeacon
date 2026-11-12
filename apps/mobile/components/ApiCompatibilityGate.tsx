@@ -9,8 +9,8 @@ import {
   useApiCompatibility,
 } from "../lib/apiCompatibility.ts";
 import { baseUrl, getBaseUrl } from "../lib/base-url.ts";
+import { dismissNotice } from "../lib/notifications.ts";
 import { hasCustomServerUrl } from "../lib/server-url.ts";
-import { clearApiCompatibilityNotice } from "../lib/tracking.ts";
 import { appVersion } from "../lib/versions.ts";
 import { Button } from "./ui/Button.tsx";
 import { Text } from "./ui/Text.tsx";
@@ -50,7 +50,7 @@ export const ApiCompatibilityGate = () => {
 
   useEffect(() => {
     setUnreachable(false);
-    if (!problem) void clearApiCompatibilityNotice();
+    if (!problem) void dismissNotice("compatibility");
   }, [problem]);
 
   useEffect(() => {

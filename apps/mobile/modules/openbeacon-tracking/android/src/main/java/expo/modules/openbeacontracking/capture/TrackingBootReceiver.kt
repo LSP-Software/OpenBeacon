@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.content.ContextCompat
+import expo.modules.openbeacontracking.Notice
+import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.TrackingRuntime
 
 class TrackingBootReceiver : BroadcastReceiver() {
@@ -18,7 +20,10 @@ class TrackingBootReceiver : BroadcastReceiver() {
       synchronized(TrackingRuntime.captureLock) {
         TrackingRuntime.shouldRestoreCapture(context)
       }
-    if (!shouldRestart) return
+    if (!shouldRestart) {
+      if (TrackingRuntime.hasLostLocationPermission(context)) Notices.show(context, Notice.LOCATION_PERMISSION)
+      return
+    }
     if (TrackingRuntime.isCaptureParked(context)) {
       SharingResumeWorker.schedule(context)
       return

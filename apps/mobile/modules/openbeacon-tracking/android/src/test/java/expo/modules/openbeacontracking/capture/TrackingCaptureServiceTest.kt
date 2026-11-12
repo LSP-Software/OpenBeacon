@@ -2,15 +2,20 @@ package expo.modules.openbeacontracking.capture
 
 import android.Manifest
 import android.app.Application
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
+import android.text.format.DateFormat
+import android.text.format.DateUtils
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
+import expo.modules.openbeacontracking.Notice
+import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.TrackingRuntime
 import expo.modules.openbeacontracking.keys.InMemoryEpochKeyStore
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
@@ -30,6 +35,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowNetwork
+import java.util.Calendar
+import java.util.Date
 
 @RunWith(RobolectricTestRunner::class)
 class TrackingCaptureServiceTest {
@@ -49,7 +56,7 @@ class TrackingCaptureServiceTest {
     val keys = InMemoryEpochKeyStore()
     keys.replaceAll(listOf(ProvisionedEpochKey("group", "epoch", ByteArray(32), "tablet", "trackingPoint")))
     keysField.set(null, keys)
-    shadowOf(application).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    shadowOf(application).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_BACKGROUND_LOCATION, Manifest.permission.POST_NOTIFICATIONS)
   }
 
   @After
@@ -199,7 +206,7 @@ class TrackingCaptureServiceTest {
   }
 
   @Test
-  fun thePausedNotificationSaysSharingIsPaused() {
+  fun aTimedPauseSaysWhenSharingStartsAgain() {
     val service = createService()
     service.onStartCommand(Intent(application, TrackingCaptureService::class.java).apply {
       action = TrackingCaptureService.ACTION_CHECK_SHARING
@@ -207,8 +214,25 @@ class TrackingCaptureServiceTest {
     val notification = shadowOf(service).lastForegroundNotification
 
     assertEquals(
-      application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_paused_body),
-      notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
+      application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_paused_title),
+      notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE).toString(),
+    )
+    assertTrue(notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString().startsWith("Sharing starts again at "))
+  }
+
+  @Test
+  fun aTimedPauseEndingTomorrowSaysTomorrow() {
+    val until = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }.timeInMillis
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.1:", paused = true, pausedUntil = until))
+    val service = createService()
+    service.onStartCommand(startIntent(TrackingRuntime.captureCommands.start()), 0, 1)
+
+    assertEquals(
+      application.getString(
+        expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_paused_until_tomorrow_body,
+        DateFormat.getTimeFormat(application).format(Date(until)),
+      ),
+      shadowOf(service).lastForegroundNotification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
     )
   }
 
@@ -244,6 +268,83 @@ class TrackingCaptureServiceTest {
     }, 0, 3)
     assertTrue(connectivity.networkCallbacks.isEmpty())
   }
+
+  @Test
+  fun aTimedPauseEndingOnAnotherDaySaysWhichDay() {
+    val until = System.currentTimeMillis() + 2 * 86_400_000L
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.1:", paused = true, pausedUntil = until))
+    val service = createService()
+    service.onStartCommand(startIntent(TrackingRuntime.captureCommands.start()), 0, 1)
+
+    assertEquals(
+      application.getString(
+        expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_paused_until_day_body,
+        DateUtils.formatDateTime(application, until, DateUtils.FORMAT_SHOW_WEEKDAY or DateUtils.FORMAT_SHOW_DATE),
+        DateFormat.getTimeFormat(application).format(Date(until)),
+      ),
+      shadowOf(service).lastForegroundNotification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
+    )
+  }
+
+  @Test
+  fun turningSharingOffClearsStaleSharingAlerts() {
+    Notices.show(application, Notice.LOCATION_PERMISSION)
+    Notices.show(application, Notice.SHARING_CHANGED)
+    TrackingRuntime.setCaptureEnabled(application, false)
+
+    assertTrue(shadowOf(application.getSystemService(NotificationManager::class.java)).allNotifications.isEmpty())
+  }
+
+  @Test
+  fun aPauseWithoutAnEndSaysGroupsCantSeeThePhone() {
+    TrackingRuntime.setSharingState(application, SharingCaptureState(paused = true))
+    val service = createService()
+    service.onStartCommand(startIntent(TrackingRuntime.captureCommands.start()), 0, 1)
+
+    assertEquals(
+      application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_paused_body),
+      shadowOf(service).lastForegroundNotification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
+    )
+  }
+
+  @Test
+  fun sharingShowsTheBrandedStatusNotification() {
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.2:"))
+    val service = createService()
+    service.onStartCommand(startIntent(TrackingRuntime.captureCommands.start()), 0, 1)
+    val notification = shadowOf(service).lastForegroundNotification
+
+    assertEquals(
+      application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_title),
+      notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE).toString(),
+    )
+    assertEquals(expo.modules.openbeacontracking.R.drawable.openbeacon_notification_icon, notification.smallIcon.resId)
+  }
+
+  @Test
+  fun aStickyRestartAfterLocationAccessIsRemovedTellsTheOwner() {
+    shadowOf(application).denyPermissions(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    val service = createService()
+
+    assertEquals(Service.START_NOT_STICKY, service.onStartCommand(null, 0, 1))
+    assertFalse(TrackingRuntime.isCaptureRunning)
+    assertTrue(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_location_permission_body))
+  }
+
+  @Test
+  fun aStickyRestartAfterSharingWasTurnedOffSaysNothing() {
+    TrackingRuntime.setCaptureEnabled(application, false)
+    shadowOf(application).denyPermissions(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    val service = createService()
+
+    assertEquals(Service.START_NOT_STICKY, service.onStartCommand(null, 0, 1))
+    assertFalse(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_location_permission_body))
+  }
+
+  private fun hasNotice(body: Int) =
+    shadowOf(application.getSystemService(NotificationManager::class.java)).allNotifications.any {
+      it.extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString() == application.getString(body)
+    }
 
   private fun startIntent(generation: Long) =
     Intent(application, TrackingCaptureService::class.java).apply {

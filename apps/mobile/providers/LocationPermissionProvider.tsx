@@ -22,7 +22,7 @@ import {
   requestBackgroundLocationPermissions,
   requestLocationPermissionsForLaunch,
 } from "../lib/locationPermissions.ts";
-import { requestNotificationPermissionsForLaunch } from "../lib/notificationPermissions.ts";
+import { dismissNotice, requestNotificationPermissions } from "../lib/notifications.ts";
 
 const LocationPermissionContext = createContext<{
   permissionState: LocationPermissionState | null;
@@ -112,7 +112,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
     setIsLaunchingLocationSetup(true);
     let cancelled = false;
     void (async () => {
-      await tryCatch(requestNotificationPermissionsForLaunch());
+      await tryCatch(requestNotificationPermissions());
       if (cancelled) return;
       await syncLocationPermissions("launchRequest");
       if (cancelled) return;
@@ -142,6 +142,10 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
       subscription.remove();
     };
   }, [syncLocationPermissions]);
+
+  useEffect(() => {
+    if (permissionState?.isReadyForSharing) void dismissNotice("locationPermission");
+  }, [permissionState?.isReadyForSharing]);
 
   const refreshLocationPermissionState = async (): Promise<LocationPermissionState | null> =>
     syncLocationPermissions("refresh");

@@ -149,19 +149,33 @@ object TrackingRuntime {
       captureEnabled = isCaptureEnabled(context),
       hasQueueOwner = queueOwner(context) != null,
       hasEpochKeys = epochKeyStore(context).list().isNotEmpty(),
-      hasLocationPermission =
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-          ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED,
-      hasBackgroundLocationPermission =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
-          ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED,
+      hasLocationPermission = hasLocationPermission(context),
+      hasBackgroundLocationPermission = hasBackgroundLocationPermission(context),
     )
+
+  fun hasLostLocationPermission(context: Context): Boolean =
+    isCaptureEnabled(context) &&
+      queueOwner(context) != null &&
+      epochKeyStore(context).list().isNotEmpty() &&
+      !(hasLocationPermission(context) && hasBackgroundLocationPermission(context))
+
+  private fun hasLocationPermission(context: Context): Boolean =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+      ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+  private fun hasBackgroundLocationPermission(context: Context): Boolean =
+    Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+      ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
 
   fun setCaptureEnabled(
     context: Context,
     enabled: Boolean,
   ) {
     check(context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).edit().putBoolean("enabled", enabled).commit())
-    if (!enabled) SharingResumeWorker.cancel(context)
+    if (!enabled) {
+      SharingResumeWorker.cancel(context)
+      Notices.dismiss(context, NoticeSlot.LOCATION_PERMISSION)
+      Notices.dismiss(context, NoticeSlot.SHARING_CHANGED)
+    }
   }
 }

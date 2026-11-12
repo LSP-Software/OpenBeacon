@@ -221,9 +221,20 @@ let apiCompatibility: {
 } | null = null;
 let apiCompatibilityRefreshClears = false;
 let apiCompatibilityRefreshes = 0;
-const compatibilityNotices: { title: string; body: string }[] = [];
-let compatibilityNoticeAllowed = true;
-let compatibilityNoticeClears = 0;
+const notices: Record<string, unknown>[] = [];
+let noticeAllowed = true;
+const dismissedNotices: string[] = [];
+
+mock.module("./notifications.ts", () => ({
+  showNotice: async (notice: Record<string, unknown>) => {
+    if (!noticeAllowed) return false;
+    notices.push(notice);
+    return true;
+  },
+  dismissNotice: async (slot: string) => {
+    dismissedNotices.push(slot);
+  },
+}));
 
 mock.module("./apiCompatibility.ts", () => ({
   getApiCompatibility: () => apiCompatibility,
@@ -235,10 +246,6 @@ mock.module("./apiCompatibility.ts", () => ({
   markApiCompatibilityNotified: () => {
     if (apiCompatibility) apiCompatibility = { ...apiCompatibility, notified: true };
   },
-  apiCompatibilityNotice: ({ problem }: { problem: string }) => ({
-    title: problem,
-    body: `${problem} body`,
-  }),
 }));
 
 mock.module("./server-url.ts", () => ({ hasCustomServerUrl: () => false }));
@@ -483,14 +490,6 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
     requeueCiphertexts: async (ids: number[], error?: string | null) => {
       requeued.push({ ids, error });
     },
-    showCompatibilityNotice: (title: string, body: string) => {
-      if (!compatibilityNoticeAllowed) return false;
-      compatibilityNotices.push({ title, body });
-      return true;
-    },
-    clearCompatibilityNotice: () => {
-      compatibilityNoticeClears += 1;
-    },
   },
 }));
 
@@ -562,9 +561,9 @@ describe("tracking service", () => {
     apiCompatibility = null;
     apiCompatibilityRefreshClears = false;
     apiCompatibilityRefreshes = 0;
-    compatibilityNotices.length = 0;
-    compatibilityNoticeAllowed = true;
-    compatibilityNoticeClears = 0;
+    notices.length = 0;
+    noticeAllowed = true;
+    dismissedNotices.length = 0;
     storedHistoryKeyVersions.clear();
     storedHistoryKeyVersions.add(1);
     createHistoryKeyResult = true;
@@ -1733,7 +1732,7 @@ describe("tracking service", () => {
     expect(markedInFlight).toEqual([]);
     expect(deleted).toEqual([]);
     expect(provisionCalls).toHaveLength(0);
-    expect(compatibilityNotices).toEqual([{ title: "appTooOld", body: "appTooOld body" }]);
+    expect(notices).toEqual([{ kind: "compatibility", problem: "appTooOld", selfHosted: false }]);
   });
 
   test("background sync uploads again once a fresh check shows the server was updated", async () => {
@@ -1746,22 +1745,24 @@ describe("tracking service", () => {
 
     expect(uploadCalls).toHaveLength(1);
     expect(deleted).toEqual([[1]]);
-    expect(compatibilityNotices).toEqual([]);
-    expect(compatibilityNoticeClears).toBe(1);
+    expect(notices).toEqual([]);
+    expect(dismissedNotices).toEqual(["compatibility"]);
   });
 
   test("background sync tries the notice again when Android didn't show it", async () => {
     captureRunning = true;
     apiCompatibility = { problem: "serverTooOld", serverVersion: "0.1.0", notified: false };
-    compatibilityNoticeAllowed = false;
+    noticeAllowed = false;
 
     await syncBackgroundTracking();
     expect(apiCompatibility.notified).toBe(false);
 
-    compatibilityNoticeAllowed = true;
+    noticeAllowed = true;
     await syncBackgroundTracking();
     expect(apiCompatibility.notified).toBe(true);
-    expect(compatibilityNotices).toEqual([{ title: "serverTooOld", body: "serverTooOld body" }]);
+    expect(notices).toEqual([
+      { kind: "compatibility", problem: "serverTooOld", selfHosted: false },
+    ]);
   });
 
   test("an upload rejected for compatibility keeps its points and notifies without failing the task", async () => {
@@ -1776,7 +1777,7 @@ describe("tracking service", () => {
 
     expect(deleted).toEqual([]);
     expect(requeued.map(({ ids }) => ids)).toEqual([[1]]);
-    expect(compatibilityNotices).toEqual([{ title: "appTooOld", body: "appTooOld body" }]);
+    expect(notices).toEqual([{ kind: "compatibility", problem: "appTooOld", selfHosted: false }]);
   });
 
   test("foreground flushes skip uploading while the app and server don't match", async () => {
@@ -1799,6 +1800,16 @@ describe("tracking service", () => {
     expect(revokedGroups).toEqual([undefined]);
     expect(captureRunning).toBe(false);
     expect(deviceKeyPair.privateKey.expose()).toBeDefined();
+    expect(notices).toEqual([{ kind: "signedOut" }]);
+  });
+
+  test("a revoked session doesn't notify when this phone wasn't sharing", async () => {
+    captureRunning = false;
+    registrationError = Object.assign(new Error("Session revoked"), {
+      data: { code: "UNAUTHORIZED" },
+    });
+    await syncBackgroundTracking();
+    expect(notices).toEqual([]);
   });
 
   test("stops capture and retains queued points when upload reports a revoked session", async () => {
@@ -1812,6 +1823,7 @@ describe("tracking service", () => {
     expect(revokedGroups).toEqual([undefined]);
     expect(deleted).toEqual([]);
     expect(requeued).toHaveLength(1);
+    expect(notices).toEqual([{ kind: "signedOut" }]);
   });
 
   test("an upload refused because this phone was removed keeps the registration for the wipe", async () => {
@@ -1828,6 +1840,7 @@ describe("tracking service", () => {
     await expect(syncBackgroundTracking()).rejects.toThrow();
     expect(stopCaptureCalls).toBe(1);
     expect(registeredDevice?.deviceId).toBe("device-1");
+    expect(notices).toEqual([{ kind: "deviceRemoved" }]);
   });
 
   test("a key check refused because this phone was removed keeps the registration for the wipe", async () => {
@@ -2098,6 +2111,36 @@ describe("tracking service", () => {
 
     expect(revokedGroups).toEqual([undefined]);
     expect(stopCaptureCalls).toBe(1);
+  });
+
+  test("a notice asked for during a revoke that's already running is shown once", async () => {
+    captureRunning = true;
+
+    await Promise.all([
+      revokeTrackingAccess(),
+      revokeTrackingAccess({ notice: "signedOut" }),
+      revokeTrackingAccess({ notice: "signedOut" }),
+    ]);
+
+    expect(stopCaptureCalls).toBe(1);
+    expect(notices).toEqual([{ kind: "signedOut" }]);
+  });
+
+  test("a concurrent revoke doesn't notify when this phone wasn't sharing", async () => {
+    captureRunning = false;
+
+    await Promise.all([revokeTrackingAccess(), revokeTrackingAccess({ notice: "deviceRemoved" })]);
+
+    expect(notices).toEqual([]);
+  });
+
+  test("a notice from one revoke isn't carried into the next", async () => {
+    captureRunning = true;
+    await revokeTrackingAccess({ notice: "signedOut" });
+    captureRunning = true;
+    await revokeTrackingAccess();
+
+    expect(notices).toEqual([{ kind: "signedOut" }]);
   });
 
   test("stops capture when native key removal fails", async () => {

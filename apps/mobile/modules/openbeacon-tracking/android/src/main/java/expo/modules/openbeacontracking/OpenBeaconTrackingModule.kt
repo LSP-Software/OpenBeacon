@@ -17,6 +17,10 @@ class OpenBeaconTrackingModule : Module() {
     ModuleDefinition {
       Name("OpenBeaconTracking")
 
+      OnCreate {
+        Notices.removeOldChannels(requireContext())
+      }
+
       Function("setSharingState") { owner: String, deviceId: String, prefix: String, paused: Boolean, until: Double?, after: Double? ->
         TrackingRuntime.applySharingState(requireContext(), owner, deviceId, SharingCaptureState(prefix, paused, until?.toLong(), after?.toLong() ?: 0L))
       }
@@ -110,6 +114,18 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.isCaptureRunning || TrackingRuntime.isCaptureParked(requireContext())
       }
 
+      Function("areNotificationsEnabled") {
+        Notices.areEnabled(requireContext())
+      }
+
+      Function("showNotice") { kind: String ->
+        Notices.show(requireContext(), Notice.of(kind))
+      }
+
+      Function("dismissNotice") { slot: String ->
+        Notices.dismiss(requireContext(), NoticeSlot.of(slot))
+      }
+
       AsyncFunction("countUnassignedCiphertexts") { senderDeviceId: String ->
         CiphertextQueueDatabase.getInstance(requireContext()).ciphertextQueueDao().countUnassigned(senderDeviceId)
       }
@@ -156,14 +172,6 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime
           .ciphertextQueue(requireContext())
           .requeue(ids.map { it.toLong() }, System.currentTimeMillis(), error)
-      }
-
-      Function("showCompatibilityNotice") { title: String, body: String ->
-        CompatibilityNotice.show(requireContext(), title, body)
-      }
-
-      Function("clearCompatibilityNotice") {
-        CompatibilityNotice.clear(requireContext())
       }
     }
 

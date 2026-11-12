@@ -4,11 +4,9 @@ import {
   TRACKING_POINT_KIND,
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
-import { Platform } from "react-native";
 import type { CiphertextQueueItem } from "../modules/openbeacon-tracking/index.ts";
 import { trpcClient } from "./api.ts";
 import {
-  apiCompatibilityNotice,
   getApiCompatibility,
   markApiCompatibilityNotified,
   refreshApiCompatibilityInBackground,
@@ -27,6 +25,7 @@ import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
+import { dismissNotice, showNotice } from "./notifications.ts";
 import { backfillHistoryWraps } from "./recovery.ts";
 import { resealPersonalData } from "./resealPersonalData.ts";
 import { hasCustomServerUrl } from "./server-url.ts";
@@ -40,6 +39,7 @@ import {
   noteTrackingKeyState,
   recordTrackingKeyCheck,
 } from "./trackingKeyCheck.ts";
+import { loadTrackingModule } from "./trackingModule.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
 import {
@@ -57,6 +57,8 @@ let flushPromise: Promise<void> | null = null;
 let flushWork: Promise<void> | null = null;
 let flushController: AbortController | null = null;
 let revokePromise: Promise<void> | null = null;
+type RevokeNotice = Exclude<Parameters<typeof showNotice>[0]["kind"], "compatibility">;
+let revokeNotice: RevokeNotice | null = null;
 let captureRefreshPending = false;
 let trackingPaused = false;
 let uploadRejectedKeys = false;
@@ -82,14 +84,6 @@ const getKeyCheckScope = (userId: string, startCapture: boolean) =>
 const hasFreshKeyCheck = async (startCapture: boolean) => {
   const device = await getRegisteredDeviceKey();
   return Boolean(device && !isTrackingKeyCheckDue(getKeyCheckScope(device.userId, startCapture)));
-};
-
-const loadTrackingModule = async () => {
-  if (Platform.OS !== "android") {
-    return null;
-  }
-
-  return (await import("../modules/openbeacon-tracking/index.ts")).default;
 };
 
 const getProvisionedKeyIdentity = ({
@@ -516,7 +510,7 @@ export const reconcileTrackingKeys = ({
     );
     if (result.error) {
       if (version === reconcileVersion && getErrorCode(result.error) === "UNAUTHORIZED")
-        await revokeTrackingAccess({ keepDeviceRegistration: isDeviceRemovedError(result.error) });
+        await revokeUnauthorizedTrackingAccess(result.error);
       throw result.error;
     }
     if (result.data) keyAccessChangePending = true;
@@ -635,10 +629,7 @@ const uploadClaimedItems = async (
       }
     }
     if (getErrorCode(uploadResult.error) === "UNAUTHORIZED") {
-      await revokeTrackingAccess({
-        cancelFlush: false,
-        keepDeviceRegistration: isDeviceRemovedError(uploadResult.error),
-      });
+      await revokeUnauthorizedTrackingAccess(uploadResult.error, false);
       await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
       throw uploadResult.error;
     }
@@ -812,22 +803,12 @@ export const flushForegroundTrackingPoints = async (force = false) => {
 const showApiCompatibilityNotice = async () => {
   const compatibility = getApiCompatibility();
   if (!compatibility || compatibility.notified) return;
-  const trackingModule = await loadTrackingModule();
-  if (!trackingModule) return;
-  const { title, body } = apiCompatibilityNotice({
+  const shown = await showNotice({
+    kind: "compatibility",
     problem: compatibility.problem,
     selfHosted: hasCustomServerUrl(),
   });
-  const shown = await tryCatch(
-    Promise.resolve().then(() => trackingModule.showCompatibilityNotice(title, body)),
-  );
-  if (shown.data) markApiCompatibilityNotified();
-};
-
-export const clearApiCompatibilityNotice = async () => {
-  const trackingModule = await loadTrackingModule();
-  if (!trackingModule) return;
-  await tryCatch(Promise.resolve().then(() => trackingModule.clearCompatibilityNotice()));
+  if (shown) markApiCompatibilityNotified();
 };
 
 export const syncBackgroundTracking = async (
@@ -835,7 +816,7 @@ export const syncBackgroundTracking = async (
 ) => {
   if (getApiCompatibility()) {
     await refreshApiCompatibilityInBackground();
-    if (!getApiCompatibility()) await clearApiCompatibilityNotice();
+    if (!getApiCompatibility()) await dismissNotice("compatibility");
   }
   if (getApiCompatibility()) {
     await showApiCompatibilityNotice();
@@ -881,17 +862,24 @@ const revokeTrackingAccessInternal = async (): Promise<void> => {
     return;
   }
 
+  const wasSharing = trackingModule.isCaptureRunning();
   try {
     trackingModule.revokeEpochKeys();
   } finally {
     await trackingModule.stopCapture();
   }
+  if (revokeNotice && wasSharing) await showNotice({ kind: revokeNotice });
 };
 
 export const revokeTrackingAccess = ({
   cancelFlush = true,
   keepDeviceRegistration = false,
-}: { cancelFlush?: boolean; keepDeviceRegistration?: boolean } = {}): Promise<void> => {
+  notice,
+}: {
+  cancelFlush?: boolean;
+  keepDeviceRegistration?: boolean;
+  notice?: RevokeNotice;
+} = {}): Promise<void> => {
   if (!keepDeviceRegistration) cancelDeviceKeyRegistrations();
   if (cancelFlush) {
     flushController?.abort();
@@ -899,14 +887,25 @@ export const revokeTrackingAccess = ({
     flushWork = null;
     flushController = null;
   }
+  if (notice) revokeNotice = notice;
   if (revokePromise) {
     return revokePromise;
   }
 
   revokePromise = revokeTrackingAccessInternal().finally(() => {
     revokePromise = null;
+    revokeNotice = null;
   });
   return revokePromise;
+};
+
+const revokeUnauthorizedTrackingAccess = (error: unknown, cancelFlush = true) => {
+  const deviceRemoved = isDeviceRemovedError(error);
+  return revokeTrackingAccess({
+    cancelFlush,
+    keepDeviceRegistration: deviceRemoved,
+    notice: deviceRemoved ? "deviceRemoved" : "signedOut",
+  });
 };
 
 export const prepareTrackingSignOut = async (): Promise<void> => {

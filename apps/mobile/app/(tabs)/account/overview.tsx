@@ -22,7 +22,7 @@ import {
 } from "lucide-react-native";
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Pressable, ScrollView, View } from "react-native";
+import { Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
 import { SettingsContainer } from "../../../components/containers/settingsContainer.tsx";
@@ -67,7 +67,7 @@ const categories = [
         label: "Notifications",
         icon: BellIcon,
         href: "/account/notifications",
-        requiresEmail: true,
+        requiresEmailOnIos: true,
       },
       {
         label: "Devices",
@@ -467,7 +467,7 @@ const AccountScreen = () => {
           categories={categories.map((category) => ({
             ...category,
             settings: category.settings.map((setting) =>
-              "requiresEmail" in setting && !providers?.email
+              "requiresEmailOnIos" in setting && Platform.OS !== "android" && !providers?.email
                 ? { label: setting.label, icon: setting.icon }
                 : setting,
             ),

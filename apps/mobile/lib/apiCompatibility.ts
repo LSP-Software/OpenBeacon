@@ -13,7 +13,7 @@ import { storage } from "./storage.ts";
 
 const problemSchema = z.enum(["appTooOld", "serverTooOld", "outOfSync"]);
 
-type ApiCompatibilityProblem = z.infer<typeof problemSchema>;
+export type ApiCompatibilityProblem = z.infer<typeof problemSchema>;
 
 const appLevels = { apiCompatibilityLevel, minServerApiCompatibilityLevel };
 
@@ -252,30 +252,3 @@ export const useApiCompatibility = () =>
     },
     () => state,
   );
-
-export const apiCompatibilityNotice = ({
-  problem,
-  selfHosted,
-}: {
-  problem: ApiCompatibilityProblem;
-  selfHosted: boolean;
-}) => {
-  if (problem === "appTooOld") {
-    return {
-      title: "Update Open Beacon",
-      body: "Open Beacon has stopped sharing your location. Update the app to start again.",
-    };
-  }
-  if (problem === "serverTooOld") {
-    return {
-      title: "Location sharing paused",
-      body: selfHosted
-        ? "Your server needs updating before Open Beacon can share your location again."
-        : "We're updating Open Beacon's servers. Sharing will start again shortly.",
-    };
-  }
-  return {
-    title: "Location sharing paused",
-    body: "The app and your server don't match. Open Open Beacon for details.",
-  };
-};
