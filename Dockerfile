@@ -8,6 +8,7 @@ COPY packages/cache/package.json packages/cache/
 COPY packages/database/package.json packages/database/
 COPY packages/email/package.json packages/email/
 COPY packages/encryption/package.json packages/encryption/
+COPY packages/map-tiles/package.json packages/map-tiles/
 COPY packages/schemas/package.json packages/schemas/
 COPY packages/shared/package.json packages/shared/
 COPY packages/tsconfig/package.json packages/tsconfig/

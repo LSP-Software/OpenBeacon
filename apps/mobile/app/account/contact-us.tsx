@@ -10,6 +10,7 @@ import { BackButton } from "../../components/headers/BackButton.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Icon } from "../../components/ui/Icon.tsx";
 import { Text } from "../../components/ui/Text.tsx";
+import { useMapVersion } from "../../hooks/useMapVersion.ts";
 import { appVersion, maplibreVersion } from "../../lib/versions.ts";
 import { feedbackClient, trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
@@ -22,6 +23,7 @@ const ContactUsScreen = () => {
   const [status, setStatus] = useState<"success" | "error" | "rateLimited" | null>(null);
   const { data: session } = authClient.useSession();
   const serverVersion = useQuery(trpc.account.version.queryOptions());
+  const mapVersion = useMapVersion();
   const selfHosted = hasCustomServerUrl();
   const canSubmit = message.trim() !== "" && !submitting && (!includeEmail || !!session);
 
@@ -35,6 +37,7 @@ const ContactUsScreen = () => {
         email: includeEmail ? session?.user.email : undefined,
         appVersion,
         maplibreVersion,
+        mapVersion,
         serverVersion: serverVersion.data,
         androidVersion: Platform.OS === "android" ? Platform.constants.Release : undefined,
       }),

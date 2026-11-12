@@ -22,7 +22,6 @@ import { adopt, publish, rollback } from "./commands.ts";
 import { parseEnv } from "./env.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const NEW_KEY = "planet-20261107.pmtiles";
 
 const createArchive = () => {
   const metadata = gzipSync(new TextEncoder().encode(JSON.stringify({ version: "4.15.2" })));
@@ -142,12 +141,19 @@ const createFakeR2 = ({ corruptOnComplete = false }: { corruptOnComplete?: boole
   };
 };
 
-const archive = (key: string, publishedAt: number) => ({
+const archive = (key: string, build: string, publishedAt: number) => ({
+  build,
   key,
   publishedAt: new Date(publishedAt).toISOString(),
   schemaVersion: "4.15.2",
   size: source.byteLength,
 });
+
+const otherBuild = () => {
+  const body = source.slice();
+  body[200] = (body[200] ?? 0) + 1;
+  return body;
+};
 
 describe("map tiles commands", () => {
   let stateDir = "";
@@ -198,104 +204,220 @@ describe("map tiles commands", () => {
     yes: true,
   });
 
-  test("publishes a verified build, keeps the replaced build and prunes expired builds", async () => {
+  test("replaces the standby slot, switches to it and keeps the old map for rollback", async () => {
     const r2 = createFakeR2();
     const now = Date.now();
-    r2.putArchive("planet-current.pmtiles");
-    r2.putArchive("planet-expired.pmtiles");
+    r2.putArchive("planet-a.pmtiles", otherBuild());
+    r2.putArchive("planet-b.pmtiles", otherBuild());
     r2.putManifest({
-      current: archive("planet-current.pmtiles", now - 30 * DAY_MS),
-      previous: [
-        {
-          ...archive("planet-expired.pmtiles", now - 60 * DAY_MS),
-          servedUntil: new Date(now - 10 * DAY_MS).toISOString(),
+      current: "a",
+      slots: {
+        a: archive("planet-a.pmtiles", "20261007", now - 31 * DAY_MS),
+        b: {
+          ...archive("planet-b.pmtiles", "20260907", now - 61 * DAY_MS),
+          servedUntil: new Date(now - 24 * DAY_MS).toISOString(),
         },
-      ],
+      },
     });
 
-    await publish(context(r2), undefined);
+    const result = await publish(context(r2), { date: undefined });
 
     const manifest = r2.manifest();
-    expect(manifest?.current.key).toBe(NEW_KEY);
-    expect(manifest?.previous.map((previous) => previous.key)).toEqual(["planet-current.pmtiles"]);
-    expect(r2.objects.get(NEW_KEY)?.body).toEqual(source);
-    expect(r2.objects.has("planet-current.pmtiles")).toBe(true);
-    expect(r2.objects.has("planet-expired.pmtiles")).toBe(false);
+    expect(result.published).toBe(true);
+    expect(manifest?.current).toBe("b");
+    expect(manifest?.slots.b?.build).toBe("20261107");
+    expect(manifest?.slots.a?.build).toBe("20261007");
+    expect(r2.objects.get("planet-b.pmtiles")?.body).toEqual(source);
+    expect([...r2.objects.keys()].filter((key) => key.endsWith(".pmtiles")).sort()).toEqual([
+      "planet-a.pmtiles",
+      "planet-b.pmtiles",
+    ]);
   });
 
-  test("never prunes the archive R2_PM_TILES_KEY points to", async () => {
+  test("clears the standby slot in the manifest before overwriting it", async () => {
     const r2 = createFakeR2();
     const now = Date.now();
-    r2.putArchive("planet-fallback.pmtiles");
+    r2.putArchive("planet-a.pmtiles", otherBuild());
     r2.putManifest({
-      current: archive("planet-current.pmtiles", now),
-      previous: [
-        {
-          ...archive("planet-fallback.pmtiles", now - 60 * DAY_MS),
-          servedUntil: new Date(now - 10 * DAY_MS).toISOString(),
+      current: "b",
+      slots: {
+        a: {
+          ...archive("planet-a.pmtiles", "20260907", now - 61 * DAY_MS),
+          servedUntil: new Date(now - 24 * DAY_MS).toISOString(),
         },
-      ],
+        b: archive("planet-b.pmtiles", "20261007", now - 31 * DAY_MS),
+      },
     });
 
-    await publish(context(r2, { env: { R2_PM_TILES_KEY: "planet-fallback.pmtiles" } }), undefined);
+    await publish(context(r2), { date: undefined });
 
-    expect(r2.objects.has("planet-fallback.pmtiles")).toBe(true);
-    expect(r2.writes).not.toContain("delete:planet-fallback.pmtiles");
+    expect(r2.writes.slice(0, 2)).toEqual([
+      `put:${MAP_TILES_MANIFEST_KEY}`,
+      "create:planet-a.pmtiles",
+    ]);
   });
 
-  test("deletes an upload that fails verification and leaves the manifest unchanged", async () => {
+  test("leaves a standby slot alone while open maps may still use it", async () => {
+    const r2 = createFakeR2();
+    const now = Date.now();
+    r2.putManifest({
+      current: "b",
+      slots: {
+        a: {
+          ...archive("planet-a.pmtiles", "20260907", now - 3 * DAY_MS),
+          servedUntil: new Date(now + 4 * DAY_MS).toISOString(),
+        },
+        b: archive("planet-b.pmtiles", "20261007", now - 3 * DAY_MS),
+      },
+    });
+
+    const result = await publish(context(r2), { date: undefined });
+
+    expect(result).toMatchObject({ published: false, message: expect.stringContaining("in use") });
+    expect(r2.writes).toEqual([]);
+  });
+
+  test("waits for the update interval before replacing the map", async () => {
+    const r2 = createFakeR2();
+    r2.putManifest({
+      current: "a",
+      slots: { a: archive("planet-a.pmtiles", "20261007", Date.now() - 10 * DAY_MS), b: null },
+    });
+
+    const result = await publish(context(r2), { date: undefined, minIntervalMs: 30 * DAY_MS });
+
+    expect(result).toMatchObject({ published: false, message: expect.stringContaining("due") });
+    expect(r2.writes).toEqual([]);
+  });
+
+  test("does nothing when the newest build is already current", async () => {
+    const r2 = createFakeR2();
+    r2.putManifest({
+      current: "a",
+      slots: { a: archive("planet-a.pmtiles", "20261107", Date.now() - 40 * DAY_MS), b: null },
+    });
+
+    expect((await publish(context(r2), { date: undefined })).published).toBe(false);
+    expect(r2.writes).toEqual([]);
+  });
+
+  test("deletes an adopted archive when its slot is replaced so the bucket keeps two maps", async () => {
+    const r2 = createFakeR2();
+    const now = Date.now();
+    r2.putArchive("planet-20260315.pmtiles", otherBuild());
+    r2.putArchive("planet-b.pmtiles", otherBuild());
+    r2.putManifest({
+      current: "b",
+      slots: {
+        a: {
+          ...archive("planet-20260315.pmtiles", "20260315", now - 61 * DAY_MS),
+          servedUntil: new Date(now - 24 * DAY_MS).toISOString(),
+        },
+        b: archive("planet-b.pmtiles", "20261007", now - 31 * DAY_MS),
+      },
+    });
+
+    await publish(context(r2), { date: undefined });
+
+    expect(r2.objects.has("planet-20260315.pmtiles")).toBe(false);
+    expect(r2.manifest()?.slots.a?.key).toBe("planet-a.pmtiles");
+  });
+
+  test("asks for adopt before publishing next to an archive the manifest does not know", async () => {
+    const r2 = createFakeR2();
+    r2.putArchive("planet-20260315.pmtiles");
+
+    await expect(
+      publish(context(r2, { env: { R2_PM_TILES_KEY: "planet-20260315.pmtiles" } }), {
+        date: undefined,
+      }),
+    ).rejects.toThrow("run adopt first");
+    expect(r2.writes).toEqual([]);
+  });
+
+  test("does not switch to an upload that fails verification", async () => {
     const r2 = createFakeR2({ corruptOnComplete: true });
-    const manifest = { current: archive("planet-current.pmtiles", Date.now()), previous: [] };
+    const manifest = {
+      current: "a" as const,
+      slots: { a: archive("planet-a.pmtiles", "20261007", Date.now() - 40 * DAY_MS), b: null },
+    };
     r2.putManifest(manifest);
 
-    await expect(publish(context(r2), undefined)).rejects.toThrow("it was deleted");
+    await expect(publish(context(r2), { date: undefined })).rejects.toThrow("not published");
 
-    expect(r2.objects.has(NEW_KEY)).toBe(false);
     expect(r2.manifest()).toEqual(manifest);
   });
 
-  test("never overwrites an existing archive with a different size", async () => {
+  test("skips the upload when the slot already holds the build", async () => {
     const r2 = createFakeR2();
-    r2.putArchive(NEW_KEY, new Uint8Array(10));
+    r2.putArchive("planet-a.pmtiles");
 
-    await expect(publish(context(r2), undefined)).rejects.toThrow("never overwritten");
+    await publish(context(r2), { date: undefined });
 
-    expect(r2.writes).toEqual([]);
+    expect(r2.writes).toEqual([`put:${MAP_TILES_MANIFEST_KEY}`]);
+    expect(r2.manifest()?.slots.a?.build).toBe("20261107");
   });
 
   test("writes nothing on a dry run", async () => {
     const r2 = createFakeR2();
 
-    await publish(context(r2, { dryRun: true }), undefined);
+    await publish(context(r2, { dryRun: true }), { date: undefined });
 
     expect(r2.writes).toEqual([]);
   });
 
-  test("adopt only creates the first manifest", async () => {
+  test("adopt puts an existing archive in slot a and only creates the first manifest", async () => {
     const r2 = createFakeR2();
     r2.putArchive("planet-20260315.pmtiles");
 
-    await adopt(context(r2), "planet-20260315.pmtiles");
-    expect(r2.manifest()?.current.key).toBe("planet-20260315.pmtiles");
+    await adopt(context(r2), "planet-20260315.pmtiles", undefined);
+    expect(r2.manifest()).toMatchObject({
+      current: "a",
+      slots: { a: { key: "planet-20260315.pmtiles", build: "20260315" }, b: null },
+    });
 
-    await expect(adopt(context(r2), "planet-20260315.pmtiles")).rejects.toThrow("already exists");
+    await expect(adopt(context(r2), "planet-20260315.pmtiles", undefined)).rejects.toThrow(
+      "already exists",
+    );
   });
 
-  test("rollback refuses when the previous archive was deleted", async () => {
+  test("rollback switches back to the standby slot", async () => {
+    const r2 = createFakeR2();
+    const now = Date.now();
+    r2.putArchive("planet-a.pmtiles");
+    r2.putManifest({
+      current: "b",
+      slots: {
+        a: {
+          ...archive("planet-a.pmtiles", "20261007", now - DAY_MS),
+          servedUntil: new Date(now + 6 * DAY_MS).toISOString(),
+        },
+        b: archive("planet-b.pmtiles", "20261107", now - DAY_MS),
+      },
+    });
+
+    await rollback(context(r2));
+
+    expect(r2.manifest()?.current).toBe("a");
+    expect(r2.manifest()?.slots.a?.servedUntil).toBeUndefined();
+  });
+
+  test("rollback refuses when the standby map is missing from R2", async () => {
     const r2 = createFakeR2();
     const now = Date.now();
     const manifest = {
-      current: archive("planet-current.pmtiles", now),
-      previous: [
-        {
-          ...archive("planet-gone.pmtiles", now - DAY_MS),
+      current: "b" as const,
+      slots: {
+        a: {
+          ...archive("planet-a.pmtiles", "20261007", now - DAY_MS),
           servedUntil: new Date(now + DAY_MS).toISOString(),
         },
-      ],
+        b: archive("planet-b.pmtiles", "20261107", now),
+      },
     };
     r2.putManifest(manifest);
 
-    await expect(rollback(context(r2))).rejects.toThrow("already been deleted");
+    await expect(rollback(context(r2))).rejects.toThrow("missing from R2");
     expect(r2.manifest()).toEqual(manifest);
   });
 });

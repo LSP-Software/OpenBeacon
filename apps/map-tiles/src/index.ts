@@ -1,17 +1,18 @@
 import { parseArgs } from "node:util";
 import { tryCatch } from "@openbeacon/shared";
-import { adopt, prune, publish, rollback, status } from "./commands.ts";
+import { adopt, type Context, publish, rollback, status } from "./commands.ts";
 import { parseEnv } from "./env.ts";
 import { createR2Clients } from "./r2.ts";
+import { createMapTilesHandler } from "./server.ts";
 
 const usage = `Usage: bun run map-tiles <command> [options]
 
 Commands:
-  status                    Show the manifest, untracked archives and resumable uploads
-  publish [--date YYYYMMDD] Upload a Protomaps build and make it the current archive
+  status                    Show both map slots, untracked archives and resumable uploads
+  publish [--date YYYYMMDD] Replace the standby slot with a Protomaps build and switch to it
   adopt <key>               Create the first manifest for an archive already in R2
-  rollback                  Make the previous archive current again
-  prune                     Delete archives that are no longer served
+  rollback                  Switch back to the map in the standby slot
+  serve                     Run the update service the scheduled job runner calls
 
 Options:
   --bucket <name>  Required for changes; must match R2_BUCKET
@@ -30,6 +31,27 @@ export const assertWriteTarget = ({
       `Refusing to write: pass --bucket ${configuredBucket} to confirm the target bucket`,
     );
   }
+};
+
+const serve = (context: Context) => {
+  const apiKey = context.env.MAP_TILES_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("serve needs MAP_TILES_API_KEY (at least 32 characters)");
+  }
+
+  const handler = createMapTilesHandler({
+    apiKey,
+    runUpdate: () =>
+      publish(
+        { ...context, dryRun: false, yes: true },
+        { date: undefined, minIntervalMs: context.env.updateIntervalMs },
+      ),
+  });
+  Bun.serve({ fetch: handler.fetch, port: context.env.MAP_TILES_PORT });
+  console.log(
+    `Map tiles service listening on port ${context.env.MAP_TILES_PORT} for bucket ${context.env.R2_BUCKET}`,
+  );
 };
 
 const run = async () => {
@@ -62,6 +84,10 @@ const run = async () => {
     yes: values.yes,
   };
 
+  if (command === "serve") {
+    return serve(context);
+  }
+
   if (command !== "status" && !context.dryRun) {
     assertWriteTarget({ bucket: values.bucket, configuredBucket: env.R2_BUCKET });
   }
@@ -69,17 +95,18 @@ const run = async () => {
   switch (command) {
     case "status":
       return status(context);
-    case "publish":
-      return publish(context, values.date);
+    case "publish": {
+      const result = await publish(context, { date: values.date });
+      console.log(result.message);
+      return;
+    }
     case "adopt":
       if (!argument) {
         throw new Error("adopt needs the key of the archive in R2");
       }
-      return adopt(context, argument);
+      return adopt(context, argument, values.date);
     case "rollback":
       return rollback(context);
-    case "prune":
-      return prune(context);
     default:
       throw new Error(`Unknown command ${command}\n\n${usage}`);
   }

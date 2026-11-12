@@ -11,7 +11,7 @@ export const useSignedPmtilesUrl = () => {
     ...queryOptions,
     queryFn: ({ signal }) =>
       trpcClient.maps.getSignedPmtilesUrl.query(
-        { archiveKey: queryClient.getQueryData(queryOptions.queryKey)?.archiveKey },
+        { archiveId: queryClient.getQueryData(queryOptions.queryKey)?.archiveId },
         { signal },
       ),
     subscribed: isFocused,

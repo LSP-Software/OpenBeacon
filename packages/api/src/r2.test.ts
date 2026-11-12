@@ -4,13 +4,17 @@ import type { MapTilesManifest } from "@openbeacon/map-tiles";
 const { createManifestCache, MAP_TILES_MANIFEST_CACHE_MS } = await import("./r2.ts");
 
 const manifest = (key: string): MapTilesManifest => ({
-  current: {
-    key,
-    publishedAt: "2026-11-01T00:00:00.000Z",
-    schemaVersion: "4.15.2",
-    size: 1,
+  current: "a",
+  slots: {
+    a: {
+      build: "20261101",
+      key,
+      publishedAt: "2026-11-01T00:00:00.000Z",
+      schemaVersion: "4.15.2",
+      size: 1,
+    },
+    b: null,
   },
-  previous: [],
 });
 
 describe("createManifestCache", () => {
@@ -19,11 +23,11 @@ describe("createManifestCache", () => {
     const read = mock(async () => manifest(`planet-${time}.pmtiles`));
     const getManifest = createManifestCache({ now: () => time, read });
 
-    expect((await getManifest())?.current.key).toBe("planet-0.pmtiles");
+    expect((await getManifest())?.slots.a?.key).toBe("planet-0.pmtiles");
     time = MAP_TILES_MANIFEST_CACHE_MS - 1;
-    expect((await getManifest())?.current.key).toBe("planet-0.pmtiles");
+    expect((await getManifest())?.slots.a?.key).toBe("planet-0.pmtiles");
     time = MAP_TILES_MANIFEST_CACHE_MS;
-    expect((await getManifest())?.current.key).toBe(
+    expect((await getManifest())?.slots.a?.key).toBe(
       `planet-${MAP_TILES_MANIFEST_CACHE_MS}.pmtiles`,
     );
     expect(read).toHaveBeenCalledTimes(2);
@@ -42,7 +46,7 @@ describe("createManifestCache", () => {
     const requests = [getManifest(), getManifest(), getManifest()];
     resolveRead(manifest("planet-a.pmtiles"));
 
-    expect((await Promise.all(requests)).map((result) => result?.current.key)).toEqual([
+    expect((await Promise.all(requests)).map((result) => result?.slots.a?.key)).toEqual([
       "planet-a.pmtiles",
       "planet-a.pmtiles",
       "planet-a.pmtiles",
@@ -68,7 +72,7 @@ describe("createManifestCache", () => {
     read.mockRejectedValueOnce(new Error("R2 unavailable"));
     time = MAP_TILES_MANIFEST_CACHE_MS;
 
-    expect((await getManifest())?.current.key).toBe("planet-a.pmtiles");
+    expect((await getManifest())?.slots.a?.key).toBe("planet-a.pmtiles");
   });
 
   test("fails when the first read fails", async () => {

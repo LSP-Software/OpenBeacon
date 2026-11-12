@@ -17,6 +17,7 @@ export const feedbackRouter = {
           androidVersion: input.androidVersion ?? null,
           appVersion: input.appVersion ?? null,
           maplibreVersion: input.maplibreVersion ?? null,
+          mapVersion: input.mapVersion ?? null,
           serverVersion: input.serverVersion ?? null,
         },
         select: { id: true },

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const pmtilesSignedUrlInputSchema = z
   .object({
-    archiveKey: z.string().min(1),
+    archiveId: z.string().min(1),
     userId: z.string().min(1),
   })
   .strict();

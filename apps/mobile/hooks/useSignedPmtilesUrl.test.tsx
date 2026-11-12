@@ -14,7 +14,7 @@ import { createRoot, type Root } from "test-renderer";
 
 let fetches = 0;
 let screenFocused = true;
-let requestedArchiveKeys: (string | undefined)[] = [];
+let requestedArchiveIds: (string | undefined)[] = [];
 
 mock.module("@react-navigation/native", () => ({
   useIsFocused: () => screenFocused,
@@ -36,11 +36,12 @@ mock.module("../lib/api.ts", () => ({
   trpcClient: {
     maps: {
       getSignedPmtilesUrl: {
-        query: async (input: { archiveKey: string | undefined }) => {
+        query: async (input: { archiveId: string | undefined }) => {
           fetches += 1;
-          requestedArchiveKeys.push(input.archiveKey);
+          requestedArchiveIds.push(input.archiveId);
           return {
-            archiveKey: "a:20261107",
+            archiveId: "a-20261107",
+            mapBuild: "20261107",
             expiresAt: new Date(Date.now() + 90_000).toISOString(),
             refreshAt: new Date(Date.now() + 30_000).toISOString(),
             url: `https://example.com/map.pmtiles?signature=${fetches}`,
@@ -91,7 +92,7 @@ describe("useSignedPmtilesUrl", () => {
     jest.useFakeTimers();
     environmentManager.setIsServer(() => false);
     fetches = 0;
-    requestedArchiveKeys = [];
+    requestedArchiveIds = [];
     screenFocused = true;
     focusManager.setFocused(true);
     queryClient = new QueryClient();
@@ -168,6 +169,6 @@ describe("useSignedPmtilesUrl", () => {
     await render();
     await advance(30_000);
 
-    expect(requestedArchiveKeys).toEqual([undefined, "a:20261107"]);
+    expect(requestedArchiveIds).toEqual([undefined, "a-20261107"]);
   });
 });

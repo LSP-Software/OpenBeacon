@@ -1,213 +1,174 @@
 import { describe, expect, test } from "bun:test";
 import {
-  ARCHIVE_DELETE_MARGIN_MS,
   ARCHIVE_GRACE_PERIOD_MS,
-  getPrunableArchives,
+  clearStandbySlot,
+  getStandbyReuseAt,
   type MapTilesArchive,
   type MapTilesManifest,
   mapTilesManifestSchema,
-  publishArchive,
-  removeArchives,
-  resolveArchiveKey,
-  rollbackArchive,
+  publishToStandby,
+  resolveArchive,
+  rollbackToStandby,
+  SLOT_REUSE_MARGIN_MS,
 } from "./manifest.ts";
 
-const publishedAt = Date.parse("2026-11-01T00:00:00.000Z");
+const now = Date.parse("2026-11-01T00:00:00.000Z");
 
-const archive = (key: string): MapTilesArchive => ({
+const archive = (key: string, build: string): MapTilesArchive => ({
+  build,
   key,
-  publishedAt: new Date(publishedAt).toISOString(),
+  publishedAt: new Date(now).toISOString(),
   schemaVersion: "4.15.2",
   size: 1000,
 });
 
-const manifestWithPrevious = (servedUntil: number): MapTilesManifest => ({
-  current: archive("planet-new.pmtiles"),
-  previous: [
-    { ...archive("planet-old.pmtiles"), servedUntil: new Date(servedUntil).toISOString() },
-  ],
+const swapped = (servedUntil: number): MapTilesManifest => ({
+  current: "b",
+  slots: {
+    a: {
+      ...archive("planet-a.pmtiles", "20261001"),
+      servedUntil: new Date(servedUntil).toISOString(),
+    },
+    b: archive("planet-b.pmtiles", "20261101"),
+  },
 });
 
-describe("resolveArchiveKey", () => {
-  const servedUntil = publishedAt + ARCHIVE_GRACE_PERIOD_MS;
-  const manifest = manifestWithPrevious(servedUntil);
+describe("resolveArchive", () => {
+  const servedUntil = now + ARCHIVE_GRACE_PERIOD_MS;
+  const manifest = swapped(servedUntil);
 
-  test("serves the current archive when no archive is requested", () => {
-    expect(resolveArchiveKey({ manifest, now: publishedAt, requestedKey: undefined })).toBe(
-      "planet-new.pmtiles",
-    );
-  });
-
-  test("keeps serving a previous archive until it stops being served", () => {
-    expect(
-      resolveArchiveKey({ manifest, now: servedUntil - 1, requestedKey: "planet-old.pmtiles" }),
-    ).toBe("planet-old.pmtiles");
-  });
-
-  test("moves clients to the current archive once a previous archive stops being served", () => {
-    expect(
-      resolveArchiveKey({ manifest, now: servedUntil, requestedKey: "planet-old.pmtiles" }),
-    ).toBe("planet-new.pmtiles");
-  });
-
-  test("serves the current archive for unknown requested keys", () => {
-    expect(resolveArchiveKey({ manifest, now: publishedAt, requestedKey: "../other-object" })).toBe(
-      "planet-new.pmtiles",
-    );
-  });
-});
-
-describe("publishArchive", () => {
-  test("creates a manifest when there is none", () => {
-    expect(publishArchive({ archive: archive("a"), manifest: null, now: publishedAt })).toEqual({
-      current: archive("a"),
-      previous: [],
+  test("serves the current slot when no archive is requested", () => {
+    expect(resolveArchive({ manifest, now, requestedId: undefined })).toEqual({
+      archive: manifest.slots.b as MapTilesArchive,
+      id: "b-20261101",
     });
   });
 
-  test("serves the replaced archive for the grace period", () => {
-    const next = publishArchive({
-      archive: archive("b"),
-      manifest: { current: archive("a"), previous: [] },
-      now: publishedAt,
-    });
-
-    expect(next.current).toEqual(archive("b"));
-    expect(next.previous).toEqual([
-      {
-        ...archive("a"),
-        servedUntil: new Date(publishedAt + ARCHIVE_GRACE_PERIOD_MS).toISOString(),
-      },
-    ]);
-    expect(ARCHIVE_GRACE_PERIOD_MS).toBe(8 * 24 * 60 * 60 * 1000);
+  test("keeps a client on the replaced slot until its grace period ends", () => {
+    expect(resolveArchive({ manifest, now: servedUntil - 1, requestedId: "a-20261001" }).id).toBe(
+      "a-20261001",
+    );
+    expect(resolveArchive({ manifest, now: servedUntil, requestedId: "a-20261001" }).id).toBe(
+      "b-20261101",
+    );
   });
 
-  test("removes a republished archive from the previous list", () => {
-    const next = publishArchive({
-      archive: archive("planet-old.pmtiles"),
-      manifest: manifestWithPrevious(publishedAt),
-      now: publishedAt,
-    });
-
-    expect(next.current.key).toBe("planet-old.pmtiles");
-    expect(next.previous.map((previous) => previous.key)).toEqual(["planet-new.pmtiles"]);
+  test("moves a client to the current slot when its build was overwritten", () => {
+    expect(resolveArchive({ manifest, now, requestedId: "a-20260901" }).id).toBe("b-20261101");
   });
 
-  test("refuses to republish the current archive", () => {
-    expect(() =>
-      publishArchive({
-        archive: archive("a"),
-        manifest: { current: archive("a"), previous: [] },
-        now: publishedAt,
-      }),
-    ).toThrow("already the current archive");
+  test("serves the current slot for unknown ids", () => {
+    expect(resolveArchive({ manifest, now, requestedId: "../other-object" }).id).toBe("b-20261101");
   });
 });
 
-describe("rollbackArchive", () => {
-  test("restores the latest previous archive and stops serving the rolled back archive", () => {
-    const now = publishedAt + 1000;
-    const next = rollbackArchive({ manifest: manifestWithPrevious(publishedAt), now });
-
-    expect(next.current).toEqual(archive("planet-old.pmtiles"));
-    expect(next.previous).toEqual([
-      {
-        ...archive("planet-new.pmtiles"),
-        servedUntil: new Date(now).toISOString(),
-        withdrawnAt: new Date(now).toISOString(),
-      },
-    ]);
-    expect(resolveArchiveKey({ manifest: next, now, requestedKey: "planet-new.pmtiles" })).toBe(
-      "planet-old.pmtiles",
-    );
-  });
-
-  test("rolling back twice skips the withdrawn archive and goes further back", () => {
-    const published = publishArchive({
-      archive: archive("c"),
-      manifest: publishArchive({
-        archive: archive("b"),
-        manifest: { current: archive("a"), previous: [] },
-        now: publishedAt,
-      }),
-      now: publishedAt,
+describe("tick tock publishing", () => {
+  test("the first publish fills slot a", () => {
+    const first = publishToStandby({
+      archive: archive("planet-a.pmtiles", "20261001"),
+      manifest: null,
+      now,
     });
-    const once = rollbackArchive({ manifest: published, now: publishedAt + 1 });
-    const twice = rollbackArchive({ manifest: once, now: publishedAt + 2 });
 
-    expect(once.current.key).toBe("b");
-    expect(twice.current.key).toBe("a");
-    expect(twice.previous.map((previous) => [previous.key, Boolean(previous.withdrawnAt)])).toEqual(
-      [
-        ["b", true],
-        ["c", true],
-      ],
-    );
+    expect(first).toEqual({
+      current: "a",
+      slots: { a: archive("planet-a.pmtiles", "20261001"), b: null },
+    });
   });
 
-  test("fails when only withdrawn archives remain", () => {
-    const once = rollbackArchive({ manifest: manifestWithPrevious(publishedAt), now: publishedAt });
-
-    expect(() => rollbackArchive({ manifest: once, now: publishedAt })).toThrow(
-      "no previous archive",
-    );
-  });
-
-  test("fails when there is nothing to roll back to", () => {
-    expect(() =>
-      rollbackArchive({ manifest: { current: archive("a"), previous: [] }, now: publishedAt }),
-    ).toThrow("no previous archive");
-  });
-});
-
-describe("getPrunableArchives", () => {
-  test("only prunes archives after they stop being served plus the delete margin", () => {
-    const servedUntil = publishedAt + ARCHIVE_GRACE_PERIOD_MS;
-    const manifest = manifestWithPrevious(servedUntil);
-
-    expect(
-      getPrunableArchives({ manifest, now: servedUntil + ARCHIVE_DELETE_MARGIN_MS - 1 }),
-    ).toEqual([]);
-    expect(
-      getPrunableArchives({ manifest, now: servedUntil + ARCHIVE_DELETE_MARGIN_MS }).map(
-        (previous) => previous.key,
-      ),
-    ).toEqual(["planet-old.pmtiles"]);
-  });
-
-  test("never prunes the current archive", () => {
+  test("publishes into the standby slot and keeps the replaced slot for rollback", () => {
     const manifest: MapTilesManifest = {
-      current: archive("a"),
-      previous: [{ ...archive("a"), servedUntil: new Date(0).toISOString() }],
+      current: "a",
+      slots: { a: archive("planet-a.pmtiles", "20261001"), b: null },
     };
+    const next = publishToStandby({
+      archive: archive("planet-b.pmtiles", "20261101"),
+      manifest,
+      now,
+    });
 
-    expect(getPrunableArchives({ manifest, now: publishedAt })).toEqual([]);
+    expect(next.current).toBe("b");
+    expect(next.slots.b?.build).toBe("20261101");
+    expect(next.slots.a?.servedUntil).toBe(new Date(now + ARCHIVE_GRACE_PERIOD_MS).toISOString());
   });
 
-  test("removeArchives drops pruned archives and keeps the current archive", () => {
-    const manifest = manifestWithPrevious(publishedAt);
+  test("never overwrites a standby slot clients may still be using", () => {
+    const servedUntil = now + ARCHIVE_GRACE_PERIOD_MS;
+    const manifest = swapped(servedUntil);
 
-    expect(removeArchives({ keys: ["planet-old.pmtiles"], manifest })).toEqual({
-      current: manifest.current,
-      previous: [],
+    expect(getStandbyReuseAt(manifest)).toBe(servedUntil + SLOT_REUSE_MARGIN_MS);
+    expect(() => clearStandbySlot({ manifest, now: servedUntil })).toThrow(/still be in use/);
+    expect(
+      clearStandbySlot({ manifest, now: servedUntil + SLOT_REUSE_MARGIN_MS }).slots.a,
+    ).toBeNull();
+  });
+
+  test("refuses to publish over a standby slot that was not cleared", () => {
+    expect(() =>
+      publishToStandby({
+        archive: archive("planet-a.pmtiles", "20261201"),
+        manifest: swapped(now),
+        now,
+      }),
+    ).toThrow(/must be cleared/);
+  });
+
+  test("alternates between the two slots", () => {
+    let manifest = publishToStandby({
+      archive: archive("planet-a.pmtiles", "20261001"),
+      manifest: null,
+      now,
     });
+    const slots: string[] = [manifest.current];
+
+    for (const [index, build] of ["20261101", "20261201", "20270101"].entries()) {
+      const at = now + (index + 1) * 30 * 24 * 60 * 60 * 1000;
+      manifest = clearStandbySlot({ manifest, now: at });
+      manifest = publishToStandby({
+        archive: archive(`planet-${manifest.current === "a" ? "b" : "a"}.pmtiles`, build),
+        manifest,
+        now: at,
+      });
+      slots.push(manifest.current);
+    }
+
+    expect(slots).toEqual(["a", "b", "a", "b"]);
+    expect(Object.values(manifest.slots).filter(Boolean)).toHaveLength(2);
+  });
+});
+
+describe("rollbackToStandby", () => {
+  test("restores the standby slot and moves clients off the bad one at once", () => {
+    const manifest = swapped(now + ARCHIVE_GRACE_PERIOD_MS);
+    const next = rollbackToStandby({ manifest, now });
+
+    expect(next.current).toBe("a");
+    expect(next.slots.a?.servedUntil).toBeUndefined();
+    expect(next.slots.b?.servedUntil).toBe(new Date(now).toISOString());
+    expect(resolveArchive({ manifest: next, now, requestedId: "b-20261101" }).id).toBe(
+      "a-20261001",
+    );
+  });
+
+  test("fails without a standby map", () => {
+    expect(() =>
+      rollbackToStandby({
+        manifest: { current: "a", slots: { a: archive("planet-a.pmtiles", "20261001"), b: null } },
+        now,
+      }),
+    ).toThrow(/no previous map/);
   });
 });
 
 describe("mapTilesManifestSchema", () => {
-  test("keeps fields written by newer tools so older readers neither fail nor drop them", () => {
-    const parsed = mapTilesManifestSchema.parse({
-      current: { ...archive("a"), md5: "abc" },
-      previous: [],
-      writtenBy: "newer-cli",
-    });
-
-    expect(parsed).toMatchObject({ current: { md5: "abc" }, writtenBy: "newer-cli" });
+  test("keeps unknown fields so older readers neither fail nor drop them", () => {
+    const parsed = mapTilesManifestSchema.parse({ ...swapped(now), note: "kept" });
+    expect(parsed).toMatchObject({ note: "kept" });
   });
 
-  test("rejects manifests missing required fields", () => {
-    expect(mapTilesManifestSchema.safeParse({ current: { key: "a" }, previous: [] }).success).toBe(
-      false,
-    );
+  test("rejects a manifest whose current slot is empty", () => {
+    expect(
+      mapTilesManifestSchema.safeParse({ current: "b", slots: { a: null, b: null } }).success,
+    ).toBe(false);
   });
 });

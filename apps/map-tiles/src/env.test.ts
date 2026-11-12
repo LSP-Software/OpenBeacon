@@ -33,4 +33,17 @@ describe("parseEnv", () => {
       "/state",
     );
   });
+
+  test("only allows update intervals longer than a replaced map stays in use", () => {
+    expect(parseEnv(required).updateIntervalMs).toBe(30 * 24 * 60 * 60 * 1000);
+    expect(() => parseEnv({ ...required, MAP_TILES_UPDATE_INTERVAL_DAYS: "8" })).toThrow();
+    expect(parseEnv({ ...required, MAP_TILES_UPDATE_INTERVAL_DAYS: "9" }).updateIntervalMs).toBe(
+      9 * 24 * 60 * 60 * 1000,
+    );
+  });
+
+  test("requires a long service key when one is set", () => {
+    expect(parseEnv({ ...required, MAP_TILES_API_KEY: "" }).MAP_TILES_API_KEY).toBeUndefined();
+    expect(() => parseEnv({ ...required, MAP_TILES_API_KEY: "short" })).toThrow();
+  });
 });

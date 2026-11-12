@@ -133,15 +133,21 @@ Profile and group images are stored in an S3-compatible bucket. The backend and 
 
 ### Map tiles (R2)
 
-The map is served from a PMTiles file in a Cloudflare R2 bucket. The backend hands the app short-lived signed URLs to it.
+The map is served from a PMTiles file in a Cloudflare R2 bucket. The backend hands the app short-lived signed URLs to it. The bucket holds two maps, slot A and slot B, and the map tiles service refreshes them in turn; see `apps/map-tiles/README.md`.
 
-| Variable               | Containers      | Required | Default | Example                            | What it does                                                       |
-| ---------------------- | --------------- | -------- | ------- | ---------------------------------- | ------------------------------------------------------------------ |
-| `R2_ACCOUNT_ID`        | Backend, Runner | Yes      | None    | `0123456789abcdef0123456789abcdef` | Cloudflare account ID that owns the bucket.                        |
-| `R2_ACCESS_KEY_ID`     | Backend, Runner | Yes      | None    | `abcdef0123456789abcdef0123456789` | R2 access key ID.                                                  |
-| `R2_SECRET_ACCESS_KEY` | Backend, Runner | Yes      | None    | `0123456789abcdef...`              | R2 secret key.                                                     |
-| `R2_BUCKET`            | Backend, Runner | Yes      | None    | `openbeacon-maps`                  | Bucket that holds the PMTiles file.                                |
-| `R2_PM_TILES_KEY`      | Backend, Runner | Yes      | None    | `planet.pmtiles`                   | Object key of the PMTiles file. Startup fails if it doesn't exist. |
+| Variable                         | Containers        | Required                  | Default                           | Example                            | What it does                                                                                                                                 |
+| -------------------------------- | ----------------- | ------------------------- | --------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `R2_ACCOUNT_ID`                  | Backend, Runner   | Yes                       | None                              | `0123456789abcdef0123456789abcdef` | Cloudflare account ID that owns the bucket.                                                                                                  |
+| `R2_ACCESS_KEY_ID`               | Backend, Runner   | Yes                       | None                              | `abcdef0123456789abcdef0123456789` | R2 access key ID.                                                                                                                            |
+| `R2_SECRET_ACCESS_KEY`           | Backend, Runner   | Yes                       | None                              | `0123456789abcdef...`              | R2 secret key.                                                                                                                               |
+| `R2_BUCKET`                      | Backend, Runner   | Yes                       | None                              | `openbeacon-maps`                  | Bucket that holds the PMTiles file.                                                                                                          |
+| `R2_PM_TILES_KEY`                | Backend, Runner   | Yes                       | None                              | `planet.pmtiles`                   | Object key of the PMTiles file, served only until the map tiles service creates its manifest. Startup fails if the served map doesn't exist. |
+| `MAP_TILES_SERVICE_URL`          | Runner            | No                        | None                              | `http://map-tiles:8080`            | Map tiles service the runner asks once a day to refresh the map. Set with `MAP_TILES_API_KEY`, or leave both unset to refresh by hand.       |
+| `MAP_TILES_API_KEY`              | Runner, Map tiles | For the map tiles service | None                              | 32 or more random characters       | Shared key the runner sends to the map tiles service. Use the same value in both.                                                            |
+| `MAP_TILES_UPDATE_INTERVAL_DAYS` | Map tiles         | No                        | `30`                              | `30`                               | Days between map refreshes. Must be more than 8, the time a replaced map stays in use.                                                       |
+| `MAP_TILES_PORT`                 | Map tiles         | No                        | `8080`                            | `8080`                             | Port the map tiles service listens on.                                                                                                       |
+| `MAP_TILES_MAX_MBPS`             | Map tiles         | No                        | None                              | `100`                              | Upload and download cap in megabits per second.                                                                                              |
+| `MAP_TILES_STATE_DIR`            | Map tiles         | No                        | `.map-tiles` (`/state` in Docker) | `/state`                           | Resumable upload state. Keep it on a volume.                                                                                                 |
 
 ### Mobile app
 

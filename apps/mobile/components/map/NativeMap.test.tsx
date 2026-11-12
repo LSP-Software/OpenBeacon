@@ -46,7 +46,7 @@ import {
 
 let currentSignedPmtilesUrlQuery: {
   data?: {
-    archiveKey?: string;
+    archiveId?: string;
     expiresAt: string;
     refreshAt: string;
     url: string;
@@ -2346,27 +2346,51 @@ describe("NativeMap integration harness", () => {
   });
 
   test("remounts on a new archive and keeps signing the old archive until the old map unmounts", async () => {
-    const oldUrl = "https://tiles.example.com/planet-old.pmtiles";
-    const newUrl = "https://tiles.example.com/planet-new.pmtiles";
+    const oldUrl = "https://tiles.example.com/planet-a.pmtiles";
+    const newUrl = "https://tiles.example.com/planet-b.pmtiles";
     currentSignedPmtilesUrlQuery = {
       ...currentSignedPmtilesUrlQuery,
-      data: { ...defaultSignedUrl, archiveKey: "planet-old.pmtiles", url: `${oldUrl}?sig=1` },
+      data: { ...defaultSignedUrl, archiveId: "a-20261001", url: `${oldUrl}?sig=1` },
     };
     await renderNativeMap();
     await flushEffects();
 
     currentSignedPmtilesUrlQuery = {
       ...currentSignedPmtilesUrlQuery,
-      data: { ...defaultSignedUrl, archiveKey: "planet-new.pmtiles", url: `${newUrl}?sig=2` },
+      data: { ...defaultSignedUrl, archiveId: "b-20261101", url: `${newUrl}?sig=2` },
     };
     await renderNativeMap();
     await flushEffects();
 
     expect(getNativeMapViewMountCount()).toBe(2);
     expect(getNativeMapUrlTransformEvents()).toEqual([
-      `add:openbeacon-pmtiles:${oldUrl}`,
-      `add:openbeacon-pmtiles:${newUrl}`,
-      `remove:openbeacon-pmtiles:${oldUrl}:liveMaps=0`,
+      `add:openbeacon-pmtiles:${oldUrl}?archive=a-20261001`,
+      `add:openbeacon-pmtiles:${newUrl}?archive=b-20261101`,
+      `remove:openbeacon-pmtiles:${oldUrl}?archive=a-20261001:liveMaps=0`,
+    ]);
+  });
+
+  test("treats a new build in the same slot as a new source", async () => {
+    const slotUrl = "https://tiles.example.com/planet-b.pmtiles";
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: { ...defaultSignedUrl, archiveId: "b-20261001", url: `${slotUrl}?sig=1` },
+    };
+    await renderNativeMap();
+    await flushEffects();
+
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: { ...defaultSignedUrl, archiveId: "b-20261201", url: `${slotUrl}?sig=2` },
+    };
+    await renderNativeMap();
+    await flushEffects();
+
+    expect(getNativeMapViewMountCount()).toBe(2);
+    expect(getNativeMapUrlTransformEvents()).toEqual([
+      `add:openbeacon-pmtiles:${slotUrl}?archive=b-20261001`,
+      `add:openbeacon-pmtiles:${slotUrl}?archive=b-20261201`,
+      `remove:openbeacon-pmtiles:${slotUrl}?archive=b-20261001:liveMaps=0`,
     ]);
   });
 

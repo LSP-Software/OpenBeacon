@@ -1,28 +1,59 @@
-# Map tiles CLI
+# Map tiles service and CLI
 
-Publishes [Protomaps](https://docs.protomaps.com/basemaps/downloads) daily planet builds to the R2 bucket the backend signs map URLs for. Run it from a dev machine, or as a one-off Docker container. It is not part of the scheduled job runner.
+Keeps the [Protomaps](https://docs.protomaps.com/basemaps/downloads) planet basemap in the R2 bucket current. It runs as a small service that the scheduled job runner calls once a day, and the same image works as a CLI for manual runs.
 
-A planet build is about 130 GiB. Protomaps publishes no diffs, so every refresh downloads and uploads the whole archive. The CLI streams it in 64 MiB parts without storing it on disk.
+A planet build is about 130 GiB. Protomaps publishes no diffs, so every refresh downloads and uploads the whole archive. It streams 64 MiB parts and does not store the archive on disk.
 
-## How a cutover works
+## Two slots, used in turn
 
-Every build is stored under its own key (`planet-YYYYMMDD.pmtiles`) and keys are never overwritten. `pmtiles-manifest.json` in the bucket records the current archive and the archives it replaced.
+The bucket only ever holds two maps: slot A (`planet-a.pmtiles`) and slot B (`planet-b.pmtiles`). `pmtiles-manifest.json` in the bucket records which slot is current and which build each slot holds.
 
-- The API reads the manifest (cached for a minute) and signs the archive the app asks for: the current archive, or a replaced archive for 8 days after it was replaced. Unknown or expired archives get the current archive.
-- The app asks for the archive it is already using whenever it refreshes its signed URL, so an open map never mixes tiles from two builds. It moves to the newest archive when the app restarts or the map recovers from a load failure. If the server moves it to another archive, the map remounts instead of swapping the source in place.
-- `publish` and `prune` delete replaced archives once they have not been served for a day. The archive `R2_PM_TILES_KEY` points to is never deleted, so the API fallback keeps working.
+If the app is using slot A, a refresh:
+
+1. Checks that nobody can still be using slot B (see below), then removes slot B from the manifest so the API never signs it while it is being replaced.
+2. Uploads the new build over `planet-b.pmtiles`.
+3. Checks the upload against the Protomaps source.
+4. Switches the manifest to slot B. Slot A stays untouched as the rollback copy.
+
+The next refresh replaces slot A, and so on.
+
+- The API reads the manifest (cached for a minute) and signs the map the app asks for. A map that was just replaced is still served for 7 days to apps that already had it open; everything else gets the current slot.
+- The app asks for the map it already uses whenever it refreshes its signed URL, so an open map never mixes tiles from two builds. It moves to the new map when the app restarts, when the map recovers from a load failure, or when the 7 days are up, in which case the map remounts.
+- Each build gets its own source URL in the app (`planet-b.pmtiles?archive=b-20261201`), so tiles cached from an older build in the same slot are never reused.
+- A slot can be replaced 1 day after it stops being served, so 8 days after it was replaced or rolled back from. The refresh interval must be longer than that.
 - Without a manifest the API serves `R2_PM_TILES_KEY`.
 
 ## Configuration
 
-The CLI reads `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` and, if set, `R2_PM_TILES_KEY` from the root `.env`. The credentials need to read, write, list and delete objects and multipart uploads in the bucket.
+Both the service and the CLI read `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` and, if set, `R2_PM_TILES_KEY`. The credentials need to read, write, list and delete objects and multipart uploads in the bucket.
 
-- `MAP_TILES_MAX_MBPS` caps the upload and the download, each at that many megabits per second. Unset means no cap.
-- `MAP_TILES_STATE_DIR` holds resumable upload state. It defaults to `.map-tiles` in the working directory.
+| Variable                         | Default                           | What it does                                                                     |
+| -------------------------------- | --------------------------------- | -------------------------------------------------------------------------------- |
+| `MAP_TILES_API_KEY`              | None                              | Shared key the scheduled job runner sends. Required for `serve`, 32+ characters. |
+| `MAP_TILES_UPDATE_INTERVAL_DAYS` | `30`                              | Days between refreshes. Must be more than 8.                                     |
+| `MAP_TILES_PORT`                 | `8080`                            | Port `serve` listens on.                                                         |
+| `MAP_TILES_MAX_MBPS`             | None                              | Caps the upload and the download, each at this many megabits per second.         |
+| `MAP_TILES_STATE_DIR`            | `.map-tiles` (`/state` in Docker) | Resumable upload state. Keep it on a volume.                                     |
 
-Commands that change R2 refuse to run unless `--bucket` matches `R2_BUCKET`. Use `--dry-run` to see what would happen without writing anything.
+## The service
 
-## Commands
+`serve` starts an HTTP server:
+
+| Request        | Key needed | Effect                                                                                                |
+| -------------- | ---------- | ----------------------------------------------------------------------------------------------------- |
+| `GET /health`  | No         | Returns `ok`.                                                                                         |
+| `POST /update` | Yes        | Starts a refresh in the background unless one is running, and returns `202` with the status.          |
+| `GET /status`  | Yes        | Returns whether a refresh is running and how the last one ended (`published`, `skipped` or `failed`). |
+
+Send the key as `Authorization: Bearer <MAP_TILES_API_KEY>`.
+
+A refresh does nothing unless all of these hold: Protomaps has a newer build with basemap schema 4, the current map is at least `MAP_TILES_UPDATE_INTERVAL_DAYS` old, and the standby slot is free to replace. So the runner can call it daily and the map changes roughly monthly.
+
+Give the scheduled job runner `MAP_TILES_SERVICE_URL` (for example `http://map-tiles:8080`) and the same `MAP_TILES_API_KEY`. It calls `POST /update` once a day, logs `MAP_TILES_HTTP_<status>` if the service refuses, and `MAP_TILES_UPDATE_FAILED` if the previous refresh failed. The service logs progress and the reason for every skip or failure.
+
+If the service restarts in the middle of an upload, the next daily call resumes it from the parts already in R2. R2 deletes unfinished multipart uploads after 7 days by default, after which the upload starts again.
+
+## CLI
 
 Run from the repository root:
 
@@ -30,39 +61,31 @@ Run from the repository root:
 bun run map-tiles status
 ```
 
-```bash
-bun run map-tiles publish --bucket <bucket>
-```
+| Command                     | Effect                                                                                                                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`                    | Shows both slots, when the standby slot can be replaced, archives in the bucket that the manifest does not track, and local resumable uploads. Read-only.           |
+| `publish [--date YYYYMMDD]` | Replaces the standby slot with the newest supported build (or the given date) and switches to it, ignoring the update interval. Asks for confirmation first.        |
+| `adopt <key> [--date …]`    | Creates the first manifest for an archive already in the bucket, in slot A, without uploading it again. The build date is read from the key unless `--date` is set. |
+| `rollback`                  | Switches back to the standby slot. Apps using the current slot move off it on their next URL refresh.                                                               |
+| `serve`                     | Runs the service described above.                                                                                                                                   |
 
-| Command                     | Effect                                                                                                                                                                                                          |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`                    | Shows the manifest, archives in the bucket that the manifest does not track, and local resumable uploads. Read-only.                                                                                            |
-| `publish [--date YYYYMMDD]` | Picks the newest build with a supported basemap schema (or the given date), shows its size and an estimated time, asks for confirmation, uploads it, verifies it, makes it current and prunes expired archives. |
-| `adopt <key>`               | Creates the first manifest for an archive already in the bucket, without uploading it again.                                                                                                                    |
-| `rollback`                  | Makes the most recent archive that was not itself rolled back current again. Clients using the rolled back archive move off it on their next URL refresh. Rolling back again goes further back.                 |
-| `prune`                     | Deletes archives that stopped being served more than a day ago, except the one `R2_PM_TILES_KEY` points to. `publish` runs this too.                                                                            |
+Commands that change R2 refuse to run unless `--bucket` matches `R2_BUCKET`. `--dry-run` writes nothing and `--yes` skips confirmation (required without a terminal). Don't run `publish` by hand while the service is refreshing the same bucket.
 
-Options: `--bucket <name>` confirms the target bucket for changes, `--dry-run` writes nothing, and `--yes` skips confirmation prompts (required without a terminal).
+Before switching to a new map, `publish` checks that the uploaded size matches the build, compares the first 16 KiB (header and root directory) with the Protomaps source, and checks that the metadata reports basemap schema major version 4, which the app's `@protomaps/basemaps` style expects. Each part is uploaded with its MD5 so R2 rejects corrupted parts. If the check fails, nothing is switched; the next run uploads the slot again.
 
-### First run
+### First run on the hosted bucket
 
-The hosted bucket already holds `planet-20260315.pmtiles`. Before the first publish, deploy the backend and app changes, then run:
+The hosted bucket already holds `planet-20260315.pmtiles`. Deploy the backend and app changes first, then:
 
 ```bash
 bun run map-tiles adopt planet-20260315.pmtiles --bucket <bucket>
 ```
 
-App builds released before archive pinning do not send their archive, so they switch archives once mid-session after the first publish.
+That puts the existing map in slot A. The first refresh fills slot B. The refresh after that replaces slot A: it deletes `planet-20260315.pmtiles` and uploads `planet-a.pmtiles`, so the bucket goes back to two maps. Once that has happened, point `R2_PM_TILES_KEY` at `planet-a.pmtiles` or `planet-b.pmtiles`.
 
-### Publishing
+`publish` refuses to run without a manifest if `R2_PM_TILES_KEY` already exists, so it can't add a third map.
 
-`publish` prints progress with the transferred size, the speed over the last minute and an ETA that follows the measured speed. In a terminal it updates one line every second; without a terminal it logs a line every 30 seconds.
-
-If the upload stops, rerun the same command. Finished parts are kept in R2 and only the missing parts are uploaded. R2 deletes unfinished multipart uploads after 7 days by default, after which the upload starts again. If the saved state file is unreadable, the command stops and names the file to delete.
-
-Before making an archive current, `publish` checks that the uploaded size matches the build, compares the first 16 KiB (header and root directory) with the Protomaps source, and checks that the metadata reports basemap schema major version 4, which the app's `@protomaps/basemaps` style expects. Each part is uploaded with its MD5 so R2 rejects corrupted parts. If the uploaded archive fails these checks it is deleted and nothing is published; rerun to upload it again.
-
-The API serves a newly published archive to newly opened maps within about a minute. No backend change or redeploy is needed.
+App builds released before archive pinning do not send their archive, so they switch maps once mid-session after the first refresh.
 
 ### Rolling back
 
@@ -70,7 +93,7 @@ The API serves a newly published archive to newly opened maps within about a min
 bun run map-tiles rollback --bucket <bucket>
 ```
 
-Rollback needs the previous archive to still exist. It is pruned on the first `publish` or `prune` at least 9 days after it was replaced.
+Rollback works until the standby slot is replaced, which is at least 8 days after the switch and normally a full update interval later. After a rollback the bad map becomes the standby slot, and the next refresh replaces it.
 
 ## Docker
 
@@ -80,14 +103,18 @@ Build from the repository root:
 docker build -f apps/map-tiles/Dockerfile -t openbeacon-map-tiles .
 ```
 
-Pass the R2 variables and keep `/state` on a volume so an interrupted upload can resume:
+The image runs `serve` by default. Keep `/state` on a volume:
 
 ```bash
-docker run --rm -it --env-file .env -v openbeacon-map-tiles-state:/state openbeacon-map-tiles publish --bucket <bucket>
+docker run -d --env-file .env -p 8080:8080 -v openbeacon-map-tiles-state:/state openbeacon-map-tiles
 ```
 
-Without `-it`, add `--yes`.
+Run a CLI command in the same image:
+
+```bash
+docker run --rm -it --env-file .env -v openbeacon-map-tiles-state:/state openbeacon-map-tiles status
+```
 
 ## Self-hosting
 
-Self-hosted backends can use their own R2 bucket: set the R2 variables, then run `publish` to upload the first archive and create the manifest. `R2_PM_TILES_KEY` must still be set for the backend to start, but it is only served until a manifest exists.
+Self-hosted backends can use their own R2 bucket: set the R2 variables, then run `publish` to upload the first map into slot A and create the manifest, or run the service and let the scheduled job runner call it. `R2_PM_TILES_KEY` must still be set for the backend to start, but it is only served until a manifest exists.

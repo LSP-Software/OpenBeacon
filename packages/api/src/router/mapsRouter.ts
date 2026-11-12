@@ -14,21 +14,22 @@ export const mapsRouter = {
         windowMs: 60_000,
       },
     })
-    .input(z.object({ archiveKey: z.string().min(1).max(1024).optional() }).optional())
+    .input(z.object({ archiveId: z.string().min(1).max(1024).optional() }).optional())
     .query(async ({ ctx, input }) => {
       const signedUrl = await getSignedPmtilesUrlForUser({
         cache: ctx.cache,
-        requestedArchiveKey: input?.archiveKey,
+        requestedArchiveId: input?.archiveId,
         userId: ctx.session.user.id,
       });
 
       console.info(
-        `[maps.getSignedPmtilesUrl] userId=${ctx.session.user.id} key=${signedUrl.archiveKey} expiresAt=${signedUrl.expiresAt} source=${signedUrl.source}`,
+        `[maps.getSignedPmtilesUrl] userId=${ctx.session.user.id} key=${signedUrl.key} archive=${signedUrl.archiveId} expiresAt=${signedUrl.expiresAt} source=${signedUrl.source}`,
       );
 
       return {
-        archiveKey: signedUrl.archiveKey,
+        archiveId: signedUrl.archiveId,
         expiresAt: signedUrl.expiresAt,
+        mapBuild: signedUrl.mapBuild,
         refreshAt: signedUrl.refreshAt,
         url: signedUrl.url,
       };
@@ -47,12 +48,13 @@ export const mapsRouter = {
       });
 
       console.info(
-        `[maps.forceRefreshSignedPmtilesUrl] userId=${ctx.session.user.id} key=${signedUrl.archiveKey} expiresAt=${signedUrl.expiresAt} source=${signedUrl.source}`,
+        `[maps.forceRefreshSignedPmtilesUrl] userId=${ctx.session.user.id} key=${signedUrl.key} archive=${signedUrl.archiveId} expiresAt=${signedUrl.expiresAt} source=${signedUrl.source}`,
       );
 
       return {
-        archiveKey: signedUrl.archiveKey,
+        archiveId: signedUrl.archiveId,
         expiresAt: signedUrl.expiresAt,
+        mapBuild: signedUrl.mapBuild,
         refreshAt: signedUrl.refreshAt,
         url: signedUrl.url,
       };

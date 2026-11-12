@@ -5,11 +5,13 @@ const s3Send = mock(async (_command: unknown, _options: unknown) => ({}));
 const r2Send = mock(async (_command: unknown, _options: unknown) => ({}));
 
 mock.module("./s3client.ts", () => ({ s3Client: { send: s3Send } }));
-const resolvePmtilesArchiveKey = mock(
-  async (_requestedKey: string | undefined) => "planet-current.pmtiles",
-);
+const resolvePmtilesArchive = mock(async (_requestedId: string | undefined) => ({
+  build: "20261101",
+  id: "b-20261101",
+  key: "planet-b.pmtiles",
+}));
 
-mock.module("./r2.ts", () => ({ r2Client: { send: r2Send }, resolvePmtilesArchiveKey }));
+mock.module("./r2.ts", () => ({ r2Client: { send: r2Send }, resolvePmtilesArchive }));
 
 const { checkS3, checkR2 } = await import("./checkStorage.ts");
 const { env } = await import("./env.ts");
@@ -30,12 +32,12 @@ describe("storage startup checks", () => {
 
   test("checks the current map tiles archive", async () => {
     await checkR2();
-    expect(resolvePmtilesArchiveKey).toHaveBeenCalledWith(undefined);
+    expect(resolvePmtilesArchive).toHaveBeenCalledWith(undefined);
     const [command, options] = r2Send.mock.calls[0] ?? [];
     expect(command).toBeInstanceOf(HeadObjectCommand);
     expect((command as HeadObjectCommand).input).toEqual({
       Bucket: env.R2_BUCKET,
-      Key: "planet-current.pmtiles",
+      Key: "planet-b.pmtiles",
     });
     expect(options).toHaveProperty("abortSignal");
   });

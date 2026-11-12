@@ -203,12 +203,12 @@ describe("OpenBeaconCache rateLimits", () => {
       });
 
       await expect(
-        cache.pmtilesSignedUrls.get({ archiveKey: "planet-a.pmtiles", userId: "user-1" }),
+        cache.pmtilesSignedUrls.get({ archiveId: "a-20261001", userId: "user-1" }),
       ).resolves.toBeNull();
 
       await expect(
         cache.pmtilesSignedUrls.set({
-          archiveKey: "planet-a.pmtiles",
+          archiveId: "a-20261001",
           expiresAt: new Date(10_000).toISOString(),
           url: "https://example.com/pmtiles-a",
           userId: "user-1",
@@ -216,7 +216,7 @@ describe("OpenBeaconCache rateLimits", () => {
       ).resolves.toBeUndefined();
 
       await expect(
-        cache.pmtilesSignedUrls.get({ archiveKey: "planet-a.pmtiles", userId: "user-1" }),
+        cache.pmtilesSignedUrls.get({ archiveId: "a-20261001", userId: "user-1" }),
       ).resolves.toEqual({
         expiresAt: new Date(10_000).toISOString(),
         url: "https://example.com/pmtiles-a",
@@ -224,7 +224,7 @@ describe("OpenBeaconCache rateLimits", () => {
 
       await expect(
         cache.pmtilesSignedUrls.set({
-          archiveKey: "planet-a.pmtiles",
+          archiveId: "a-20261001",
           expiresAt: new Date(20_000).toISOString(),
           url: "https://example.com/pmtiles-b",
           userId: "user-1",
@@ -232,21 +232,21 @@ describe("OpenBeaconCache rateLimits", () => {
       ).resolves.toBeUndefined();
 
       await expect(
-        cache.pmtilesSignedUrls.get({ archiveKey: "planet-a.pmtiles", userId: "user-1" }),
+        cache.pmtilesSignedUrls.get({ archiveId: "a-20261001", userId: "user-1" }),
       ).resolves.toEqual({
         expiresAt: new Date(20_000).toISOString(),
         url: "https://example.com/pmtiles-b",
       });
 
       await cache.pmtilesSignedUrls.set({
-        archiveKey: "planet-b.pmtiles",
+        archiveId: "b-20261101",
         expiresAt: new Date(20_000).toISOString(),
         url: "https://example.com/pmtiles-other-archive",
         userId: "user-1",
       });
 
       await expect(
-        cache.pmtilesSignedUrls.get({ archiveKey: "planet-a.pmtiles", userId: "user-1" }),
+        cache.pmtilesSignedUrls.get({ archiveId: "a-20261001", userId: "user-1" }),
       ).resolves.toEqual({
         expiresAt: new Date(20_000).toISOString(),
         url: "https://example.com/pmtiles-b",
@@ -255,7 +255,7 @@ describe("OpenBeaconCache rateLimits", () => {
       nowMs = 25_000;
 
       await expect(
-        cache.pmtilesSignedUrls.get({ archiveKey: "planet-a.pmtiles", userId: "user-1" }),
+        cache.pmtilesSignedUrls.get({ archiveId: "a-20261001", userId: "user-1" }),
       ).resolves.toBeNull();
     } finally {
       Date.now = originalDateNow;
