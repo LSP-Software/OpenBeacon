@@ -22,7 +22,7 @@ migrations before starting the server. Configure
 existing Redis-compatible service. The database user needs permission to apply
 migrations. Back up an existing database before applying schema changes and
 ensure migrations remain compatible with the previous release during rollout.
-Before accepting requests, the backend also checks PostgreSQL and Redis connectivity, lists S3 object versions, checks that the configured R2 PMTiles object exists, and checks the email provider when one is configured. These read-only checks require the corresponding credentials and permissions. If a check or migration fails, the new container does not start. Rolling back an image does
+Before accepting requests, the backend also checks PostgreSQL and Redis connectivity, lists S3 object versions, reads the map tiles manifest from R2 and checks that the current PMTiles archive exists (with no manifest yet it starts anyway, the app shows that the map isn't ready, and the backend logs every 5 minutes until the map tiles service publishes the first map), and checks the email provider when one is configured. See `apps/map-tiles/README.md` for publishing new map data. These read-only checks require the corresponding credentials and permissions. If a check or migration fails, the new container does not start. Rolling back an image does
 not reverse migrations.
 
 For Google account deletion verification, add `<BETTER_AUTH_URL>/api/auth/google-deletion-callback` as an authorized redirect URI on the Google web OAuth client configured by `GOOGLE_CLIENT_ID`. For the hosted API this is `https://api.openbeacon.net/api/auth/google-deletion-callback`; each self-hosted backend needs its own exact public callback URI registered with its Google client. The Google account chooser may reuse an existing Google browser session and does not guarantee a fresh password prompt.
@@ -63,12 +63,16 @@ The `Deploy backend` GitHub Actions workflow also builds and deploys the separat
 To deploy, dispatch the `Deploy backend` GitHub Actions workflow from `main`.
 It waits for approval in the `production` GitHub environment, which holds the
 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `COOLIFY_ENDPOINT` and `COOLIFY_TOKEN`
-secrets. It then builds both images, pushes them to
-`lspsoftware/openbeacon-backend` and `lspsoftware/openbeacon-scheduled-jobs`
-tagged with `serverVersion` from `src/version.ts` and `latest-stable`. With
+secrets. It then builds the backend, runner and map tiles images, pushes them to
+`lspsoftware/openbeacon-backend`, `lspsoftware/openbeacon-scheduled-jobs` and
+`lspsoftware/openbeacon-map-tiles` tagged with `serverVersion` from
+`src/version.ts` and `latest-stable`. With
 "Trigger the Coolify deployment" ticked, it then asks Coolify to deploy
 `latest-stable` to the `OpenBeacon Backend` and `OpenBeacon Scheduled Jobs`
-applications; leave it unticked to deploy from Coolify yourself later. The workflow fails if that version was
+applications; leave it unticked to deploy from Coolify yourself later. It never
+redeploys `OpenBeacon Map Tiles`, because a restart interrupts a map upload that
+can take hours: deploy it from Coolify when `map-tiles status` shows no update
+running. The workflow fails if that version was
 already released from a different commit, so bump `serverVersion` for every
 release. Re-running a failed deploy is safe: images this commit already pushed
 are reused instead of rebuilt.

@@ -82,6 +82,7 @@ describe("findMissingVersionBumps", () => {
       "Dockerfile",
       ".dockerignore",
       "apps/scheduled-jobs/.dockerignore",
+      "apps/map-tiles/Dockerfile",
       "bun.lock",
       "bunfig.toml",
     ]) {

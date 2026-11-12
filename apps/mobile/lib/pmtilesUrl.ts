@@ -13,3 +13,46 @@ export const getPmtilesUrlRefreshDelayMs = ({
 
   return Math.max(refreshAtTimestamp - now(), 0);
 };
+
+export const hasPmtilesArchiveChanged = ({
+  appliedArchiveId,
+  archiveId,
+}: {
+  appliedArchiveId: string | null;
+  archiveId: string | null;
+}) => appliedArchiveId !== null && archiveId !== null && appliedArchiveId !== archiveId;
+
+export const getPmtilesSource = ({
+  archiveId,
+  signedUrl,
+}: {
+  archiveId: string | null;
+  signedUrl: string;
+}) => {
+  const unsignedUrl = signedUrl.split("?")[0] ?? "";
+  const sourceUrl = archiveId
+    ? `${unsignedUrl}?archive=${encodeURIComponent(archiveId)}`
+    : unsignedUrl;
+
+  return {
+    find: `^${sourceUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${archiveId ? "$" : "(?:\\?.*)?$"}`,
+    sourceUrl,
+  };
+};
+
+export const describeMapVersion = ({
+  archiveId,
+  mapBuild,
+  mapSlot,
+}: {
+  archiveId: string;
+  mapBuild: string | null;
+  mapSlot: "a" | "b" | null;
+}) => {
+  const date = mapBuild
+    ? `${mapBuild.slice(0, 4)}-${mapBuild.slice(4, 6)}-${mapBuild.slice(6, 8)}`
+    : null;
+  const slot = mapSlot ? mapSlot.toUpperCase() : null;
+
+  return { date, slot, summary: date && slot ? `Map ${slot}, ${date}` : archiveId };
+};

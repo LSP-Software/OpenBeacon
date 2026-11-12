@@ -25,6 +25,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback with Po
       androidVersion: " 17 ",
       appVersion: " 1.0.0 ",
       maplibreVersion: " 10.4.2 ",
+      mapVersion: " 2026-11-01 (b) ",
       serverVersion: "0.1.1",
     });
     await caller.feedback.submit({
@@ -39,6 +40,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback with Po
       androidVersion: "17",
       appVersion: "1.0.0",
       maplibreVersion: "10.4.2",
+      mapVersion: "2026-11-01 (b)",
       serverVersion: "0.1.1",
     });
     expect(records.find((record) => record.message === `${prefix}-contact`)).toMatchObject({
@@ -47,6 +49,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("feedback with Po
       androidVersion: null,
       appVersion: null,
       maplibreVersion: null,
+      mapVersion: null,
       serverVersion: null,
     });
   });

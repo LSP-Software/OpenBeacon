@@ -7,7 +7,6 @@ let originalNodeEnv: string | undefined;
 let originalR2AccessKeyId: string | undefined;
 let originalR2AccountId: string | undefined;
 let originalR2Bucket: string | undefined;
-let originalR2PmTilesKey: string | undefined;
 let originalR2SecretAccessKey: string | undefined;
 let originalS3AccessKey: string | undefined;
 let originalS3AccessKeyId: string | undefined;
@@ -26,7 +25,6 @@ describe("mapsRouter", () => {
     originalR2AccessKeyId = process.env.R2_ACCESS_KEY_ID;
     originalR2SecretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
     originalR2Bucket = process.env.R2_BUCKET;
-    originalR2PmTilesKey = process.env.R2_PM_TILES_KEY;
     process.env.BETTER_AUTH_URL = "http://localhost:3000";
     process.env.BETTER_AUTH_SECRET = "test-secret-000000000000000000000000";
     process.env.DATABASE_URL = "postgresql://localhost:5432/openbeacon";
@@ -38,7 +36,6 @@ describe("mapsRouter", () => {
     process.env.R2_ACCESS_KEY_ID = "test-r2-access-key-id";
     process.env.R2_SECRET_ACCESS_KEY = "test-r2-secret-access-key";
     process.env.R2_BUCKET = "test-r2-bucket";
-    process.env.R2_PM_TILES_KEY = "pmtiles/test.pmtiles";
   });
 
   afterEach(() => {
@@ -106,12 +103,6 @@ describe("mapsRouter", () => {
       delete process.env.R2_BUCKET;
     } else {
       process.env.R2_BUCKET = originalR2Bucket;
-    }
-
-    if (originalR2PmTilesKey === undefined) {
-      delete process.env.R2_PM_TILES_KEY;
-    } else {
-      process.env.R2_PM_TILES_KEY = originalR2PmTilesKey;
     }
   });
 

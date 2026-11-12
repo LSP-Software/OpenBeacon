@@ -11,6 +11,7 @@ import {
   nextMapLoadFailureState,
   shouldForceRefreshAfterMapLoadFailure,
 } from "../../lib/mapPmtilesLoadFailure.ts";
+import { getPmtilesSource, hasPmtilesArchiveChanged } from "../../lib/pmtilesUrl.ts";
 import { getProtomapsMapStyle, getSymbolLayerIds } from "../../lib/protomaps-style.ts";
 import { storage } from "../../lib/storage.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
@@ -22,6 +23,7 @@ export const useNativeMapStyle = () => {
   const retryAfterUrlFetchRef = useRef(false);
   const mountedRef = useRef(false);
   const failedSourceRevisionRef = useRef<number | null>(null);
+  const appliedArchiveIdRef = useRef<string | null>(null);
   const showRecoverableErrorRef = useRef(false);
   const [showRecoverableError, setShowRecoverableError] = useState(false);
   const [archiveUrl, setArchiveUrl] = useState<string | null>(null);
@@ -41,16 +43,15 @@ export const useNativeMapStyle = () => {
     showRecoverableErrorRef.current = next.showRecoverableError;
     setShowRecoverableError(next.showRecoverableError);
   };
-  const applySignedUrl = (url: string) => {
-    const unsignedUrl = url.split("?")[0];
-    if (!unsignedUrl) return;
-    const escapedUrl = unsignedUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const applySignedUrl = ({ archiveId, url }: { archiveId: string | null; url: string }) => {
+    const { find, sourceUrl } = getPmtilesSource({ archiveId, signedUrl: url });
+    if (!sourceUrl) return;
     TransformRequestManager.addUrlTransform({
-      id: "openbeacon-pmtiles",
-      find: `^${escapedUrl}(?:\\?.*)?$`,
+      id: `openbeacon-pmtiles:${sourceUrl}`,
+      find,
       replace: url,
     });
-    setArchiveUrl(unsignedUrl);
+    setArchiveUrl(sourceUrl);
   };
   useEffect(() => {
     mountedRef.current = true;
@@ -62,7 +63,8 @@ export const useNativeMapStyle = () => {
     ...trpc.maps.forceRefreshSignedPmtilesUrl.mutationOptions(),
     onSuccess: (signedPmtilesUrl) => {
       if (!mountedRef.current) return;
-      applySignedUrl(signedPmtilesUrl.url);
+      appliedArchiveIdRef.current = signedPmtilesUrl.archiveId ?? null;
+      applySignedUrl({ archiveId: appliedArchiveIdRef.current, url: signedPmtilesUrl.url });
       queryClient.setQueryData(trpc.maps.getSignedPmtilesUrl.queryKey(), signedPmtilesUrl);
       setMapRevision((revision) => revision + 1);
     },
@@ -100,10 +102,21 @@ export const useNativeMapStyle = () => {
   }, []);
   const rootNavigationState = useRootNavigationState();
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
+  const pmtilesArchiveId = signedPmtilesUrlQuery.data?.archiveId ?? null;
   useEffect(() => {
-    if (pmtilesUrl) applySignedUrl(pmtilesUrl);
+    if (!pmtilesUrl) return;
+    const archiveChanged = hasPmtilesArchiveChanged({
+      appliedArchiveId: appliedArchiveIdRef.current,
+      archiveId: pmtilesArchiveId,
+    });
+    appliedArchiveIdRef.current = pmtilesArchiveId;
+    applySignedUrl({ archiveId: pmtilesArchiveId, url: pmtilesUrl });
+    if (archiveChanged) setMapRevision((revision) => revision + 1);
   }, [pmtilesUrl]);
-  useEffect(() => () => TransformRequestManager.removeUrlTransform("openbeacon-pmtiles"), []);
+  useEffect(() => {
+    if (!archiveUrl) return;
+    return () => TransformRequestManager.removeUrlTransform(`openbeacon-pmtiles:${archiveUrl}`);
+  }, [archiveUrl]);
   const mapStyle = useMemo(() => {
     if (!archiveUrl) {
       return null;
@@ -219,6 +232,7 @@ export const useNativeMapStyle = () => {
     showRecoverableError,
     isLoading: signedPmtilesUrlQuery.isLoading,
     isError: signedPmtilesUrlQuery.isError,
+    isMapNotReady: signedPmtilesUrlQuery.failureReason?.data?.code === "SERVICE_UNAVAILABLE",
     isRefreshing: forceRefreshSignedPmtilesUrlMutation.isPending,
     retryUrl: () => {
       void signedPmtilesUrlQuery.refetch();

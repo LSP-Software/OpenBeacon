@@ -84,16 +84,20 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("OpenBeaconCache 
       url: "https://tiles.example.com/map.pmtiles?signature=second",
     };
 
-    expect(await store.get({ userId: "user-1" })).toBeNull();
-    await store.set({ userId: "user-1", ...first });
-    expect(await store.get({ userId: "user-1" })).toEqual(first);
-    await store.set({ userId: "user-1", ...second });
-    expect(await store.get({ userId: "user-1" })).toEqual(second);
-    expect(await store.get({ userId: "user-2" })).toBeNull();
+    const mapA = { userId: "user-1", archiveId: "a" };
+    const mapB = { userId: "user-1", archiveId: "b" };
 
-    expect(await store.reset({ userId: "user-1" })).toBe(1);
-    expect(await store.get({ userId: "user-1" })).toBeNull();
-    expect(await store.reset({ userId: "user-1" })).toBe(0);
+    expect(await store.get(mapA)).toBeNull();
+    await store.set({ ...mapA, ...first });
+    expect(await store.get(mapA)).toEqual(first);
+    await store.set({ ...mapA, ...second });
+    expect(await store.get(mapA)).toEqual(second);
+    expect(await store.get(mapB)).toBeNull();
+    expect(await store.get({ userId: "user-2", archiveId: "a" })).toBeNull();
+
+    expect(await store.reset(mapA)).toBe(1);
+    expect(await store.get(mapA)).toBeNull();
+    expect(await store.reset(mapA)).toBe(0);
   });
 
   test.each(caches)(

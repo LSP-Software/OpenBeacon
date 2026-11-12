@@ -1,13 +1,19 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
-import { trpc } from "../lib/api.ts";
+import { queryClient, trpc, trpcClient } from "../lib/api.ts";
 import { getPmtilesUrlRefreshDelayMs } from "../lib/pmtilesUrl.ts";
 
 export const useSignedPmtilesUrl = () => {
   const isFocused = useIsFocused();
+  const queryOptions = trpc.maps.getSignedPmtilesUrl.queryOptions();
 
   return useQuery({
-    ...trpc.maps.getSignedPmtilesUrl.queryOptions(),
+    ...queryOptions,
+    queryFn: ({ signal }) =>
+      trpcClient.maps.getSignedPmtilesUrl.query(
+        { archiveId: queryClient.getQueryData(queryOptions.queryKey)?.archiveId },
+        { signal },
+      ),
     subscribed: isFocused,
     staleTime: ({ state }) =>
       state.data ? getPmtilesUrlRefreshDelayMs({ refreshAt: state.data.refreshAt }) : 0,

@@ -11,5 +11,6 @@ export const submitFeedbackSchema = z.object({
   androidVersion: versionSchema,
   appVersion: versionSchema,
   maplibreVersion: versionSchema,
+  mapVersion: versionSchema,
   serverVersion: versionSchema,
 });

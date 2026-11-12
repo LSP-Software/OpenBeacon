@@ -437,6 +437,7 @@ model Feedback {
   androidVersion String?
   appVersion String?
   maplibreVersion String?
+  mapVersion String?
   serverVersion String?
   createdAt DateTime @default(now())
 }

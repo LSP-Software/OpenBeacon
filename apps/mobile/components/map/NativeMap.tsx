@@ -316,6 +316,20 @@ export const NativeMap = ({
     );
   };
 
+  if (!mapStyle && map.isMapNotReady) {
+    return (
+      <View
+        className="flex-1 items-center justify-center gap-3 bg-background px-8"
+        accessibilityLiveRegion="polite"
+      >
+        <ActivityIndicator />
+        <Text className="text-center text-muted-foreground">
+          The server is still preparing the map. It will appear here when it's ready.
+        </Text>
+      </View>
+    );
+  }
+
   if (!mapStyle) {
     return (
       <View
