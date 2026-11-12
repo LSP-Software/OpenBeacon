@@ -35,7 +35,6 @@ const pmtilesUrlTestEnvKeys = [
   "R2_ACCESS_KEY_ID",
   "R2_SECRET_ACCESS_KEY",
   "R2_BUCKET",
-  "R2_PM_TILES_KEY",
 ] as const;
 
 const createCache = ({
@@ -92,7 +91,6 @@ describe("pmtilesUrl", () => {
     process.env.R2_ACCESS_KEY_ID = "test-r2-access-key-id";
     process.env.R2_SECRET_ACCESS_KEY = "test-r2-secret-access-key";
     process.env.R2_BUCKET = "test-r2-bucket";
-    process.env.R2_PM_TILES_KEY = "pmtiles/test.pmtiles";
   });
 
   afterEach(() => {
@@ -204,30 +202,6 @@ describe("pmtilesUrl", () => {
       refreshAt: "2026-03-31T12:09:00.000Z",
       source: "generated",
       url: "https://replacement.example/pmtiles",
-    });
-  });
-
-  test("reports no map build when the backend has no manifest", async () => {
-    const { getSignedPmtilesUrlForUser } = await importPmtilesUrl();
-    const { cache } = createCache();
-
-    const result = await getSignedPmtilesUrlForUser({
-      cache,
-      createSignedPmtilesUrl: createSigner("https://legacy.example", "2026-03-31T12:10:00.000Z"),
-      requestedArchiveId: undefined,
-      resolvePmtilesArchive: async () => ({
-        build: null,
-        id: "pmtiles/test.pmtiles",
-        key: "pmtiles/test.pmtiles",
-        slot: null,
-      }),
-      userId: "user-1",
-    });
-
-    expect(result).toMatchObject({
-      archiveId: "pmtiles/test.pmtiles",
-      mapBuild: null,
-      mapSlot: null,
     });
   });
 

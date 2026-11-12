@@ -1,7 +1,11 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterAll, describe, expect, mock, test } from "bun:test";
 import type { MapTilesManifest } from "@openbeacon/map-tiles";
 
-const { createManifestCache, MAP_TILES_MANIFEST_CACHE_MS } = await import("./r2.ts");
+const mapTiles = await import("@openbeacon/map-tiles");
+mock.module("@openbeacon/map-tiles", () => ({ ...mapTiles, readManifest: async () => null }));
+
+const { createManifestCache, MAP_TILES_MANIFEST_CACHE_MS, resolvePmtilesArchive } =
+  await import("./r2.ts");
 
 const manifest = (key: string): MapTilesManifest => ({
   current: "a",
@@ -84,5 +88,15 @@ describe("createManifestCache", () => {
     });
 
     await expect(getManifest()).rejects.toThrow("R2 unavailable");
+  });
+});
+
+describe("resolvePmtilesArchive", () => {
+  afterAll(() => mock.restore());
+
+  test("reports that the map isn't ready while R2 has no manifest", async () => {
+    await expect(resolvePmtilesArchive(undefined)).rejects.toMatchObject({
+      code: "SERVICE_UNAVAILABLE",
+    });
   });
 });

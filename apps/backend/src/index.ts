@@ -1,6 +1,8 @@
 import "./validateEnv.ts";
 import "./validateServices.ts";
+import { getMapTilesManifest } from "@openbeacon/api/r2.ts";
 import { securityAlerts } from "@openbeacon/auth";
+import { tryCatch } from "@openbeacon/shared";
 import { app } from "./app.ts";
 import { cache } from "./cache.ts";
 import { db } from "./db.ts";
@@ -11,6 +13,28 @@ if (securityAlerts) {
   securityAlerts.schedulePendingAlertsTurnedOff();
   setInterval(securityAlerts.schedulePendingAlertsTurnedOff, 60_000);
 }
+
+const watchForFirstMap = async (waiting: boolean) => {
+  const manifest = await tryCatch(getMapTilesManifest());
+
+  if (manifest.data) {
+    if (waiting) {
+      console.log("The map tiles service has published the first map; maps are now available");
+    }
+    return;
+  }
+
+  if (manifest.error) {
+    console.error(`Could not check R2 for the map: ${manifest.error.message}`);
+  } else {
+    console.warn(
+      "There is no map in R2 yet, so the app shows that the map isn't ready. Check the map tiles container logs or run `map-tiles status` in it to follow the first download.",
+    );
+  }
+  setTimeout(() => void watchForFirstMap(true), 5 * 60_000);
+};
+
+void watchForFirstMap(false);
 
 export default {
   fetch(request: Request, server: Bun.Server<unknown>) {

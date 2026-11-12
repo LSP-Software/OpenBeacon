@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { createMapTilesUpdate } from "./mapTilesUpdate.ts";
+import { checkMapTiles, createMapTilesUpdate } from "./mapTilesUpdate.ts";
 
 const apiKey = "k".repeat(40);
 
@@ -51,5 +51,53 @@ describe("map tiles update job", () => {
     });
 
     await expect(run?.()).rejects.toMatchObject({ code: "MAP_TILES_UPDATE_FAILED" });
+  });
+});
+
+describe("map tiles startup check", () => {
+  test("reads the service status with the shared key", async () => {
+    const fetch = respond(200, {});
+
+    await checkMapTiles({
+      apiKey,
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      url: "http://map-tiles:8080",
+    });
+
+    const [input, init] = fetch.mock.calls[0] ?? [];
+    expect(String(input)).toBe("http://map-tiles:8080/status");
+    expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${apiKey}`);
+  });
+
+  test("fails when the service rejects the key or can't read R2", async () => {
+    const error = mock(() => {});
+    const original = console.error;
+    console.error = error;
+    try {
+      for (const status of [401, 502]) {
+        await expect(
+          checkMapTiles({
+            apiKey,
+            fetch: respond(status, {}) as unknown as typeof globalThis.fetch,
+            url: "http://map-tiles:8080",
+          }),
+        ).rejects.toThrow(`The map tiles service answered ${status}`);
+      }
+      expect(error).toHaveBeenCalledTimes(1);
+    } finally {
+      console.error = original;
+    }
+  });
+
+  test("fails when the service can't be reached", async () => {
+    await expect(
+      checkMapTiles({
+        apiKey,
+        fetch: mock(async () => {
+          throw new TypeError("Unable to connect");
+        }) as unknown as typeof globalThis.fetch,
+        url: "http://map-tiles:8080",
+      }),
+    ).rejects.toThrow("Unable to connect");
   });
 });

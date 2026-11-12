@@ -49,3 +49,25 @@ export const createMapTilesUpdate = ({
     }
   };
 };
+
+export const checkMapTiles = async ({
+  apiKey,
+  fetch = globalThis.fetch,
+  url,
+}: {
+  apiKey: string;
+  fetch?: typeof globalThis.fetch;
+  url: string;
+}) => {
+  const response = await fetch(new URL("/status", url), {
+    headers: { authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (response.status === 401) {
+    console.error("  Map tiles: the service rejected MAP_TILES_API_KEY");
+  }
+  if (!response.ok) {
+    throw new Error(`The map tiles service answered ${response.status}`);
+  }
+};

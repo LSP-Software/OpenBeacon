@@ -22,7 +22,7 @@ The next update replaces slot A, and so on.
 - Each build gets its own source URL in the app (`planet-b.pmtiles?archive=b-20261201`), so tiles cached from an older build in the same slot are never reused.
 - A slot can be replaced 1 day after it stops being served, so 8 days after it was replaced or rolled back from. The update interval must be longer than that.
 - The app's About screen shows the slot in use and the date of its Protomaps build. Feedback sent from the app includes both.
-- Until the first update finishes there is no manifest, and the API serves `R2_PM_TILES_KEY`.
+- Until the first update finishes there is no manifest. The backend and runner still start, the app shows that the server is still preparing the map, and the backend logs a reminder every 5 minutes to check this container for progress.
 
 ## Configuration
 
@@ -53,7 +53,7 @@ Run it with `/state` on a volume:
 docker run -d --name map-tiles --env-file .env -p 8080:8080 -v openbeacon-map-tiles-state:/state openbeacon-map-tiles
 ```
 
-Give the scheduled job runner `MAP_TILES_SERVICE_URL` (for example `http://map-tiles:8080`) and the same `MAP_TILES_API_KEY`. It asks the service to update once a day. It logs `MAP_TILES_HTTP_<status>` if the service refuses, and `MAP_TILES_UPDATE_FAILED` if the previous update failed. The service logs progress and the reason for every skip or failure.
+Give the scheduled job runner `MAP_TILES_SERVICE_URL` (for example `http://map-tiles:8080`) and the same `MAP_TILES_API_KEY`. It asks the service to update once a day. The runner checks it can reach the service with the key when it starts, and won't start if it can't. It logs `MAP_TILES_HTTP_<status>` if the service refuses an update, and `MAP_TILES_UPDATE_FAILED` if the previous update failed. The service logs progress and the reason for every skip or failure.
 
 A scheduled update does nothing unless all of these hold:
 
@@ -127,4 +127,6 @@ bun run map-tiles status
 
 ## Self-hosting
 
-Self-hosted backends can use their own R2 bucket: run the service against it and either let the scheduled job runner call it or run `map-tiles update` once. The first update fills slot A and creates the manifest. `R2_PM_TILES_KEY` must still be set for the backend to start, but it is only served until that first update finishes.
+Self-hosted backends can use their own R2 bucket: run the service against it and either let the scheduled job runner call it or run `map-tiles update` once. The first update fills slot A and creates the manifest; the app shows that the map isn't ready until then.
+
+Backends that served a map from `R2_PM_TILES_KEY` before the map tiles service existed have no manifest, so the map stops showing when they upgrade. Deploy this service and finish its first update (`map-tiles update`, then `map-tiles status` until it's done) before upgrading the backend.

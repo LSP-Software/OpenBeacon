@@ -2,6 +2,7 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { type MapTilesManifest, readManifest, resolveArchive } from "@openbeacon/map-tiles";
 import { tryCatch } from "@openbeacon/shared";
+import { TRPCError } from "@trpc/server";
 import { env } from "./env.ts";
 
 export const r2Client = new S3Client({
@@ -54,7 +55,7 @@ export const createManifestCache = ({
   };
 };
 
-const getMapTilesManifest = createManifestCache({
+export const getMapTilesManifest = createManifestCache({
   read: async () =>
     (await readManifest({ bucket: env.R2_BUCKET, client: r2Client }))?.manifest ?? null,
 });
@@ -63,7 +64,10 @@ export const resolvePmtilesArchive = async (requestedId: string | undefined) => 
   const manifest = await getMapTilesManifest();
 
   if (!manifest) {
-    return { build: null, id: env.R2_PM_TILES_KEY, key: env.R2_PM_TILES_KEY, slot: null };
+    throw new TRPCError({
+      code: "SERVICE_UNAVAILABLE",
+      message: "The server is still preparing the map",
+    });
   }
 
   const { archive, id, slot } = resolveArchive({ manifest, now: Date.now(), requestedId });

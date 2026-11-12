@@ -144,6 +144,7 @@
         "@openbeacon/database": "workspace:*",
         "@openbeacon/email": "workspace:*",
         "@openbeacon/encryption": "workspace:*",
+        "@openbeacon/map-tiles": "workspace:*",
         "@openbeacon/schemas": "workspace:*",
         "@openbeacon/shared": "workspace:*",
         "@t3-oss/env-core": "^0.13.10",
