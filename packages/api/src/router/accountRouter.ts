@@ -116,7 +116,9 @@ export const accountRouter = {
         if (current.sharingRequestId === input.requestId) return "applied" as const;
         const matchesBase =
           input.expectedRevision === null
-            ? input.paused
+            ? input.paused &&
+              (current.sharingChangedAt === null ||
+                current.sharingChangedAt.getTime() <= input.requestedAt.getTime() + 5_000)
             : current.sharingRevision === input.expectedRevision;
         if (
           !matchesBase &&
