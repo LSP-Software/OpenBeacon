@@ -1,6 +1,6 @@
 import { Prisma } from "@openbeacon/database";
 import type { groupTrackingPointSchema } from "@openbeacon/schemas";
-import type { DeviceSharingState } from "@openbeacon/shared";
+import type { GroupDeviceSharingState } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type z from "zod";
 import { getGroupSharingStates } from "./locationSharing.ts";
@@ -319,7 +319,10 @@ export const getLatestGroupTrackingPoints = async ({
   return { points: filterSharedPoints(points, sharing), sharing };
 };
 
-const filterSharedPoints = (points: GroupEncryptedPayloadRow[], sharing: DeviceSharingState[]) =>
+const filterSharedPoints = (
+  points: GroupEncryptedPayloadRow[],
+  sharing: GroupDeviceSharingState[],
+) =>
   points.filter((point) =>
     sharing.some(
       (device) =>

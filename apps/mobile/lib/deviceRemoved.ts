@@ -10,6 +10,7 @@ import {
 } from "./deviceKeys.ts";
 import { clearGroupColors } from "./groupColor.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
+import { clearPendingSharingChanges } from "./locationSharing.ts";
 import { deleteStoredHistoryKeys } from "./historyKeys.ts";
 import { clearPendingJoinCodes } from "./pendingJoinCode.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
@@ -39,6 +40,7 @@ export const wipeThisPhone = async () => {
   }
   forgetDeviceKeyRegistration();
   clearPendingJoinCodes();
+  clearPendingSharingChanges();
   queryClient.clear();
   clearGroupColors();
   clearTrackingUploadTimes();

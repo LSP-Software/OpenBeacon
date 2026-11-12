@@ -26,6 +26,7 @@ model User {
   sharingPausedUntil DateTime?
   sharingChangedAt DateTime?
   sharingRevision Int            @default(0)
+  sharingRequestId String?
   sessions       Session[]
   accounts       Account[]
   pendingUploads PendingUpload[]
@@ -248,6 +249,7 @@ model UserDevice {
   sharingPausedUntil     DateTime?
   sharingChangedAt       DateTime?
   sharingRevision        Int                      @default(0)
+  sharingRequestId       String?
   sessions               Session[]
   createdGroupEpochs     GroupEpoch[]             @relation("GroupEpochCreatedByDevice")
   recipientEpochKeys     GroupEpochRecipientKey[] @relation("GroupEpochRecipientDevice")

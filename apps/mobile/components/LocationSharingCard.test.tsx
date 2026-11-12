@@ -12,6 +12,7 @@ import type { changeLocationSharing } from "../lib/locationSharing.ts";
 let root: Root | null = null;
 let locallyPaused = false;
 let mutationError: Error | null = null;
+let mutationStatus: Awaited<ReturnType<typeof changeLocationSharing>> = "applied";
 let pauseLocallyBeforeFailing = false;
 let sharingData: { account: SharingPreference; device: SharingPreference };
 let pendingAccount: z.infer<typeof setLocationSharingSchema> | null = null;
@@ -22,6 +23,18 @@ const preference = (overrides: Partial<SharingPreference> = {}): SharingPreferen
   sharingChangedAt: null,
   sharingRevision: 0,
   ...overrides,
+});
+const pendingPause = (
+  durationMinutes: 15 | 60 | 480 | 1440 | null,
+): z.infer<typeof setLocationSharingSchema> => ({
+  expectedUserId: "alex",
+  requestId: "sharing-1",
+  expectedRevision: 0,
+  replacesRequestId: null,
+  scope: "account",
+  paused: true,
+  durationMinutes,
+  pausedUntil: durationMinutes === null ? null : new Date(Date.now() + durationMinutes * 60_000),
 });
 const Host = ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
   React.createElement("host", props, children);
@@ -43,15 +56,12 @@ mock.module("@tanstack/react-query", () => ({
     mutateAsync: async (input: Parameters<typeof changeLocationSharing>[0]) => {
       if (pauseLocallyBeforeFailing) {
         locallyPaused = true;
-        pendingAccount = {
-          expectedUserId: "alex",
-          scope: "account",
-          paused: true,
-          durationMinutes: input.durationMinutes,
-        };
+        pendingAccount = pendingPause(input.durationMinutes);
+        return "queued";
       }
       if (mutationError) throw mutationError;
       changes.push(input);
+      return mutationStatus;
     },
   }),
 }));
@@ -71,6 +81,8 @@ mock.module("../lib/locationSharing.ts", () => ({
   hasPendingSharingPause: () => pendingAccount !== null,
   getPendingSharingChanges: () => ({ device: null, account: pendingAccount }),
   hasLocallyPausedSharing: () => locallyPaused,
+  serverNow: () => Date.now(),
+  toDeviceClock: (serverTime: Date) => serverTime,
 }));
 mock.module("./ui/Button.tsx", () => ({
   Button: ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
@@ -113,6 +125,7 @@ beforeEach(() => {
   pendingAccount = null;
   locallyPaused = false;
   mutationError = null;
+  mutationStatus = "applied";
   pauseLocallyBeforeFailing = false;
   changes.length = 0;
 });
@@ -187,11 +200,50 @@ test("editing a timed pause selects its original duration", async () => {
 });
 
 test("resuming a pending account pause targets the account instead of the device", async () => {
-  pendingAccount = { expectedUserId: "alex", scope: "account", paused: true, durationMinutes: 60 };
+  pendingAccount = pendingPause(60);
   locallyPaused = true;
   await render();
   await press("Resume all devices");
-  expect(changes).toEqual([{ scope: "account", paused: false, durationMinutes: null }]);
+  expect(changes).toEqual([
+    {
+      scope: "account",
+      paused: false,
+      durationMinutes: null,
+      expectedRevision: 0,
+    },
+  ]);
+});
+
+test("a change is based on the revision shown when it was tapped", async () => {
+  sharingData.device = preference({
+    sharingPaused: true,
+    sharingChangedAt: new Date(),
+    sharingRevision: 4,
+  });
+  await render();
+  await press("Resume sharing");
+  expect(changes).toEqual([
+    {
+      scope: "device",
+      paused: false,
+      durationMinutes: null,
+      expectedRevision: 4,
+    },
+  ]);
+});
+
+test("explains when another device changed sharing before a resume", async () => {
+  mutationStatus = "superseded";
+  sharingData.device = preference({
+    sharingPaused: true,
+    sharingChangedAt: new Date(),
+    sharingRevision: 1,
+  });
+  await render();
+  await press("Resume sharing");
+  expect(JSON.stringify(root?.container.toJSON())).toContain(
+    "Location sharing was just changed on another device",
+  );
 });
 
 test("does not claim capture stopped when the local pause failed", async () => {

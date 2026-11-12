@@ -24,7 +24,7 @@ mock.module("lucide-react-native", () => ({ PauseIcon: () => null }));
 mock.module("@tanstack/react-query", () => ({
   useQuery: () => ({ data: sharingData }),
   useQueryClient: () => ({ invalidateQueries: async () => {} }),
-  useMutation: ({ mutationFn }: { mutationFn: () => Promise<void> }) => ({
+  useMutation: ({ mutationFn }: { mutationFn: () => Promise<boolean> }) => ({
     isPending: false,
     mutateAsync: mutationFn,
   }),
@@ -40,9 +40,11 @@ mock.module("../../lib/api.ts", () => ({
 mock.module("../../lib/locationSharing.ts", () => ({
   changeLocationSharing: async (input: Parameters<typeof changeLocationSharing>[0]) => {
     changes.push(input);
+    return "applied";
   },
   getPendingSharingChanges: () => ({ device: null, account: null }),
   hasLocallyPausedSharing: () => locallyPaused,
+  serverNow: () => Date.now(),
 }));
 mock.module("../ui/Button.tsx", () => ({
   Button: ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
@@ -89,8 +91,18 @@ test("resuming clears both the account pause and this device's own pause", async
   await render();
   await pressResume();
   expect(changes).toEqual([
-    { scope: "account", paused: false, durationMinutes: null },
-    { scope: "device", paused: false, durationMinutes: null },
+    {
+      scope: "account",
+      paused: false,
+      durationMinutes: null,
+      expectedRevision: 1,
+    },
+    {
+      scope: "device",
+      paused: false,
+      durationMinutes: null,
+      expectedRevision: 1,
+    },
   ]);
 });
 
@@ -98,5 +110,12 @@ test("resuming an account pause leaves other devices' own pauses alone", async (
   sharingData = { account: preference(true), device: preference(false), paused: true };
   await render();
   await pressResume();
-  expect(changes).toEqual([{ scope: "account", paused: false, durationMinutes: null }]);
+  expect(changes).toEqual([
+    {
+      scope: "account",
+      paused: false,
+      durationMinutes: null,
+      expectedRevision: 1,
+    },
+  ]);
 });

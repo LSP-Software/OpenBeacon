@@ -1906,14 +1906,12 @@ describe("paused map devices", () => {
       senderDeviceId: "tablet",
       senderUserId: "alex",
     });
-    const cutoff = new Date("2026-11-12T12:00:00Z");
+    const resumedAt = new Date("2026-11-12T12:00:00Z");
     let sharing = [
       {
         deviceId: "tablet",
         userId: "alex",
         paused: false,
-        pausedUntil: null,
-        resumeAfter: null as Date | null,
         revisionPrefix: "",
       },
     ];
@@ -1936,19 +1934,19 @@ describe("paused map devices", () => {
     session.setActive(true);
     await session.tick();
     expect(session.getLivePositions()).toHaveLength(1);
-    sharing = [{ ...sharing[0]!, paused: true, resumeAfter: cutoff, revisionPrefix: "s0.1:" }];
+    sharing = [{ ...sharing[0]!, paused: true, revisionPrefix: "s0.1:" }];
     await session.tick();
     expect(session.getLivePositions()).toEqual([]);
     expect(session.getStatus().sharing?.[0]?.paused).toBe(true);
-    sharing = [{ ...sharing[0]!, paused: false, resumeAfter: null, revisionPrefix: "" }];
+    sharing = [{ ...sharing[0]!, paused: false, revisionPrefix: "" }];
     await session.tick();
     expect(session.getLivePositions()).toEqual([]);
-    sharing = [{ ...sharing[0]!, paused: false, resumeAfter: cutoff, revisionPrefix: "s0.2:" }];
+    sharing = [{ ...sharing[0]!, paused: false, revisionPrefix: "s0.2:" }];
     await session.tick();
     expect(session.getLivePositions()).toEqual([]);
     points = [
       point({
-        createdAt: new Date(cutoff.getTime() + 1),
+        createdAt: new Date(resumedAt.getTime() + 1),
         id: "fresh",
         senderDeviceId: "tablet",
         senderUserId: "alex",
@@ -1959,6 +1957,56 @@ describe("paused map devices", () => {
     expect(session.getLivePositions()).toHaveLength(1);
     expect(session.getLivePositions()[0]?.timestamp).toBe(points[0]!.createdAt.toISOString());
     session.destroy();
+  });
+
+  test("shows a resumed sender with a slow clock but never its pin from before the pause", async () => {
+    const sharing = [
+      {
+        deviceId: "tablet",
+        userId: "alex",
+        paused: false,
+        revisionPrefix: "s0.2:",
+      },
+    ];
+    const beforePause = point({
+      createdAt: new Date("2026-11-12T11:00:00Z"),
+      id: "before-pause",
+      senderDeviceId: "tablet",
+      senderUserId: "alex",
+    });
+    beforePause.clientPointId = "s0.1:before-pause";
+    const slowClock = point({
+      createdAt: new Date("2026-11-12T12:00:05Z"),
+      id: "slow-clock",
+      senderDeviceId: "tablet",
+      senderUserId: "alex",
+    });
+    slowClock.clientPointId = "s0.2:slow-clock";
+    const livePositionsFrom = async (latest: MapTrackingEncryptedPoint[]) => {
+      const { session } = createSession({
+        getLatest: async () => ({ points: latest, sharing }),
+        poll: async () => ({ points: [], sharing }),
+        decryptPoint: async ({ groupId, point: row }) => ({
+          status: "ok",
+          entry: liveEntry({
+            deviceId: row.senderDeviceId,
+            userId: row.senderUserId,
+            sourceGroupId: groupId,
+            serverCreatedAt: row.createdAt,
+            serverId: row.id,
+            timestamp:
+              row.id === "before-pause" ? "2030-01-01T00:00:00.000Z" : "2026-11-12T11:50:00.000Z",
+          }),
+        }),
+      });
+      session.setActive(true);
+      await session.tick();
+      const positions = session.getLivePositions().map((location) => location.deviceId);
+      session.destroy();
+      return positions;
+    };
+    expect(await livePositionsFrom([beforePause])).toEqual([]);
+    expect(await livePositionsFrom([slowClock])).toEqual(["tablet"]);
   });
 
   test("advances past discarded points even when a page has no visible locations", async () => {
@@ -1997,8 +2045,6 @@ test("does not commit an earlier decrypted pin after another group reports a res
     deviceId: "tablet",
     userId: "alex",
     paused: false,
-    pausedUntil: null,
-    resumeAfter: null,
     revisionPrefix: "",
   };
   let blocked = () => {};
@@ -2016,9 +2062,7 @@ test("does not commit an earlier decrypted pin after another group reports a res
       await decryptBlocked;
       return {
         points: [],
-        sharing: [
-          { ...sharing, revisionPrefix: "s0.2:", resumeAfter: new Date("2026-11-12T12:00:00Z") },
-        ],
+        sharing: [{ ...sharing, revisionPrefix: "s0.2:" }],
       };
     },
     decryptPoint: async ({ groupId, point: row }) => {
@@ -2083,8 +2127,6 @@ test("a slower group's stale snapshot cannot bring back a pin another group repo
     deviceId: "tablet",
     userId: "alex",
     paused: false,
-    pausedUntil: null,
-    resumeAfter: null as Date | null,
     revisionPrefix: "",
   };
   const tabletPoint = (id: string, createdAt: Date) =>
@@ -2108,7 +2150,6 @@ test("a slower group's stale snapshot cannot bring back a pin another group repo
             {
               ...sharing,
               paused: true,
-              resumeAfter: new Date("2026-11-12T10:04:00Z"),
               revisionPrefix: "s0.1:",
             },
           ],

@@ -6,7 +6,8 @@ import {
   encryptGroupPayload,
   generateGroupEpochKey,
 } from "@openbeacon/encryption";
-import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
+import { TRACKING_POINT_KIND, type setLocationSharingSchema } from "@openbeacon/schemas";
+import type { z } from "zod";
 import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 import { accountRouter } from "./accountRouter.ts";
@@ -45,12 +46,36 @@ const point = (deviceId: string, revisionPrefix = "") => ({
   }),
   clientPointId: `${revisionPrefix}${crypto.randomUUID()}`,
 });
+const setSharing = async (
+  change: Partial<
+    Omit<z.input<typeof setLocationSharingSchema>, "scope" | "deviceId" | "paused">
+  > & { paused: boolean } & ({ scope: "account" } | { scope: "device"; deviceId: string }),
+  sharingCaller: ReturnType<typeof caller> = caller(),
+) => {
+  const current =
+    change.scope === "account"
+      ? await prisma.user.findUnique({ where: { id: userId } })
+      : await prisma.userDevice.findUnique({ where: { id: change.deviceId } });
+  const durationMinutes = change.durationMinutes ?? null;
+  return sharingCaller.account.setLocationSharing({
+    expectedUserId: userId,
+    requestId: crypto.randomUUID(),
+    expectedRevision: current?.sharingRevision ?? 0,
+    replacesRequestId: null,
+    durationMinutes,
+    pausedUntil: durationMinutes === null ? null : new Date(Date.now() + durationMinutes * 60_000),
+    ...change,
+  });
+};
+const revisionOf = async (deviceId: string) =>
+  (await prisma.userDevice.findUniqueOrThrow({ where: { id: deviceId } })).sharingRevision;
 const reset = async () => {
   const data = {
     sharingPaused: false,
     sharingPausedUntil: null,
     sharingChangedAt: null,
     sharingRevision: 0,
+    sharingRequestId: null,
   };
   await prisma.groupEncryptedPayload.deleteMany({ where: { groupId } });
   await prisma.user.update({ where: { id: userId }, data });
@@ -123,8 +148,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         groupId,
         points: [point(phoneId), point(tabletId)],
       });
-      await caller().account.setLocationSharing({
-        expectedUserId: userId,
+      await setSharing({
         scope: "device",
         deviceId: tabletId,
         paused: true,
@@ -142,8 +166,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await reset();
       const delayed = point(tabletId);
       await caller().groupTracking.uploadBatch({ groupId, points: [point(tabletId)] });
-      await caller().account.setLocationSharing({
-        expectedUserId: userId,
+      await setSharing({
         scope: "device",
         deviceId: tabletId,
         paused: true,
@@ -152,8 +175,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(
         (await caller().groupTracking.uploadBatch({ groupId, points: [delayed] })).discarded,
       ).toEqual([delayed.clientPointId]);
-      await caller().account.setLocationSharing({
-        expectedUserId: userId,
+      await setSharing({
         scope: "device",
         deviceId: tabletId,
         paused: false,
@@ -177,15 +199,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     test("an account pause overrides all devices and preserves their own pauses", async () => {
       await reset();
-      await caller().account.setLocationSharing({
-        expectedUserId: userId,
+      await setSharing({
         scope: "device",
         deviceId: tabletId,
         paused: true,
         durationMinutes: null,
       });
-      await caller().account.setLocationSharing({
-        expectedUserId: userId,
+      await setSharing({
         scope: "account",
         paused: true,
         durationMinutes: 60,
@@ -204,8 +224,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         },
       });
       expect((await caller(userId, newDeviceId).account.locationSharing()).paused).toBe(true);
-      await caller().account.setLocationSharing({
-        expectedUserId: userId,
+      await setSharing({
         scope: "account",
         paused: false,
         durationMinutes: null,
@@ -219,8 +238,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await reset();
       const old = point(phoneId);
       await caller().groupTracking.uploadBatch({ groupId, points: [old] });
-      await caller().account.setLocationSharing({
-        expectedUserId: userId,
+      await setSharing({
         scope: "device",
         deviceId: phoneId,
         paused: true,
@@ -229,7 +247,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const preference = await prisma.userDevice.findUniqueOrThrow({ where: { id: phoneId } });
       expect(
         preference.sharingPausedUntil!.getTime() - preference.sharingChangedAt!.getTime(),
-      ).toBe(15 * 60_000);
+      ).toBeWithin(15 * 60_000 - 5_000, 15 * 60_000 + 1);
       await prisma.userDevice.update({
         where: { id: phoneId },
         data: { sharingPausedUntil: new Date(Date.now() - 1) },
@@ -252,8 +270,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     test("cannot change another account's device", async () => {
       await expect(
-        caller().account.setLocationSharing({
-          expectedUserId: userId,
+        setSharing({
           scope: "device",
           deviceId: otherDeviceId,
           paused: true,
@@ -265,8 +282,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     test("a phone revoked after authentication cannot resume the account", async () => {
       await reset();
-      await caller().account.setLocationSharing({
-        expectedUserId: userId,
+      await setSharing({
         scope: "account",
         paused: true,
         durationMinutes: null,
@@ -282,12 +298,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.userDevice.update({ where: { id: phoneId }, data: { revokedAt: new Date() } });
       try {
         await expect(
-          authenticatedBeforeRemoval.account.setLocationSharing({
-            expectedUserId: userId,
-            scope: "account",
-            paused: false,
-            durationMinutes: null,
-          }),
+          setSharing({ scope: "account", paused: false }, authenticatedBeforeRemoval),
         ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
         await expect(authenticatedBeforeRemoval.account.locationSharing()).rejects.toMatchObject({
           code: "UNAUTHORIZED",
@@ -305,17 +316,162 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await reset();
       await Promise.all([
         caller().groupTracking.uploadBatch({ groupId, points: [point(phoneId)] }),
-        caller().account.setLocationSharing({
-          expectedUserId: userId,
-          scope: "device",
-          deviceId: phoneId,
-          paused: true,
-          durationMinutes: null,
-        }),
+        setSharing({ scope: "device", deviceId: phoneId, paused: true }),
       ]);
       expect(
         (await caller(otherId, otherDeviceId).groupTracking.getLatest({ groupId })).points,
       ).toEqual([]);
+    });
+
+    test("a retried pause whose reply was lost does not restart its timer", async () => {
+      await reset();
+      const request = {
+        scope: "device" as const,
+        deviceId: tabletId,
+        paused: true,
+        durationMinutes: 15 as const,
+        requestId: crypto.randomUUID(),
+        expectedRevision: 0,
+        pausedUntil: new Date(Date.now() + 15 * 60_000),
+      };
+      expect(await setSharing(request)).toEqual({ status: "applied" });
+      const first = await prisma.userDevice.findUniqueOrThrow({
+        where: { id: tabletId },
+      });
+      expect(await setSharing(request)).toEqual({ status: "applied" });
+      const retried = await prisma.userDevice.findUniqueOrThrow({
+        where: { id: tabletId },
+      });
+      expect(retried.sharingRevision).toBe(1);
+      expect(retried.sharingPausedUntil).toEqual(first.sharingPausedUntil);
+      expect(retried.sharingChangedAt).toEqual(first.sharingChangedAt);
+    });
+
+    test("a replayed pause cannot undo a resume made on another phone", async () => {
+      await reset();
+      await setSharing({ scope: "device", deviceId: tabletId, paused: true });
+      const queuedPause = {
+        scope: "device" as const,
+        deviceId: tabletId,
+        expectedRevision: 1,
+      };
+      await setSharing({ scope: "device", deviceId: tabletId, paused: false });
+      expect(await setSharing({ ...queuedPause, paused: true })).toEqual({
+        status: "superseded",
+      });
+      expect((await caller(userId, tabletId).account.locationSharing()).paused).toBe(false);
+      expect(await revisionOf(tabletId)).toBe(2);
+      expect(await setSharing({ ...queuedPause, paused: true, expectedRevision: null })).toEqual({
+        status: "applied",
+      });
+      expect((await caller(userId, tabletId).account.locationSharing()).paused).toBe(true);
+    });
+
+    test("a resume replacing a queued pause still resumes after the pause reached the server", async () => {
+      await reset();
+      const pauseId = crypto.randomUUID();
+      await setSharing({
+        scope: "device",
+        deviceId: tabletId,
+        paused: true,
+        requestId: pauseId,
+        expectedRevision: 0,
+      });
+      expect(
+        await setSharing({
+          scope: "device",
+          deviceId: tabletId,
+          paused: false,
+          expectedRevision: 0,
+          replacesRequestId: pauseId,
+        }),
+      ).toEqual({ status: "applied" });
+      expect((await caller(userId, tabletId).account.locationSharing()).paused).toBe(false);
+      expect(
+        await setSharing({
+          scope: "device",
+          deviceId: tabletId,
+          paused: false,
+          expectedRevision: 0,
+          replacesRequestId: crypto.randomUUID(),
+        }),
+      ).toEqual({ status: "superseded" });
+    });
+
+    test("an offline pause ends at the time chosen when it was tapped", async () => {
+      await reset();
+      const tappedAt = Date.now() - 10 * 60_000;
+      await setSharing({
+        scope: "device",
+        deviceId: tabletId,
+        paused: true,
+        durationMinutes: 15,
+        pausedUntil: new Date(tappedAt + 15 * 60_000),
+      });
+      expect(
+        (await prisma.userDevice.findUniqueOrThrow({ where: { id: tabletId } })).sharingPausedUntil,
+      ).toEqual(new Date(tappedAt + 15 * 60_000));
+      await setSharing({
+        scope: "device",
+        deviceId: tabletId,
+        paused: true,
+        durationMinutes: 15,
+        pausedUntil: new Date(Date.now() + 24 * 60 * 60_000),
+      });
+      const clamped = await prisma.userDevice.findUniqueOrThrow({
+        where: { id: tabletId },
+      });
+      expect(clamped.sharingPausedUntil!.getTime()).toBeLessThanOrEqual(
+        clamped.sharingChangedAt!.getTime() + 15 * 60_000,
+      );
+    });
+
+    test("a pause that already ended pauses nothing but still discards points from before it", async () => {
+      await reset();
+      const delayed = point(tabletId);
+      expect(
+        await setSharing({
+          scope: "device",
+          deviceId: tabletId,
+          paused: true,
+          durationMinutes: 15,
+          pausedUntil: new Date(Date.now() - 60_000),
+        }),
+      ).toEqual({ status: "expired" });
+      const sharing = await caller(userId, tabletId).account.locationSharing();
+      expect(sharing.paused).toBe(false);
+      expect(sharing.device.sharingRevision).toBe(1);
+      expect(
+        (
+          await caller().groupTracking.uploadBatch({
+            groupId,
+            points: [delayed],
+          })
+        ).discarded,
+      ).toEqual([delayed.clientPointId]);
+    });
+
+    test("changes that alter nothing keep the revision", async () => {
+      await reset();
+      expect(
+        await setSharing({
+          scope: "device",
+          deviceId: tabletId,
+          paused: false,
+        }),
+      ).toEqual({
+        status: "applied",
+      });
+      expect(await revisionOf(tabletId)).toBe(0);
+      await setSharing({ scope: "device", deviceId: tabletId, paused: true });
+      await setSharing({ scope: "device", deviceId: tabletId, paused: true });
+      expect(await revisionOf(tabletId)).toBe(1);
+    });
+
+    test("reports the server time so phones can correct their clocks", async () => {
+      const before = Date.now();
+      const { serverTime } = await caller().account.locationSharing();
+      expect(serverTime.getTime()).toBeWithin(before, Date.now() + 1);
     });
   },
 );

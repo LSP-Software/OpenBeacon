@@ -13,3 +13,8 @@ export type DeviceSharingState = {
   resumeAfter: Date | null;
   revisionPrefix: string;
 };
+
+export type GroupDeviceSharingState = Pick<
+  DeviceSharingState,
+  "deviceId" | "userId" | "paused" | "revisionPrefix"
+>;

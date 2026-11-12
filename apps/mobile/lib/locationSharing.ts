@@ -1,6 +1,12 @@
 import { setLocationSharingSchema } from "@openbeacon/schemas";
-import { tryCatch, type DeviceSharingState } from "@openbeacon/shared";
+import {
+  resolveLocationSharing,
+  tryCatch,
+  type DeviceSharingState,
+  type SharingPreference,
+} from "@openbeacon/shared";
 import { Platform } from "react-native";
+import superjson from "superjson";
 import { z } from "zod";
 import { trpcClient } from "./api.ts";
 import { baseUrl } from "./base-url.ts";
@@ -9,11 +15,24 @@ import { getRegisteredDeviceKey, getStoredDeviceId } from "./deviceKeys.ts";
 import { storage } from "./storage.ts";
 import { requestTrackingSync } from "./trackingEvents.ts";
 
+const pendingPrefix = "locationSharing.pending.";
 const pendingKey = (userId: string, scope: "device" | "account") =>
-  `locationSharing.pending.${JSON.stringify([baseUrl, userId, scope])}`;
+  `${pendingPrefix}${JSON.stringify([baseUrl, userId, scope])}`;
 const localPauseKey = (userId: string, deviceId: string) =>
   `locationSharing.localPause.${JSON.stringify([baseUrl, userId, deviceId])}`;
-const pendingChangeSchema = z.object({ requestId: z.string(), input: setLocationSharingSchema });
+const syncedKey = (userId: string, deviceId: string) =>
+  `locationSharing.synced.${JSON.stringify([baseUrl, userId, deviceId])}`;
+const clockOffsetKey = () => `locationSharing.clockOffset.${JSON.stringify(baseUrl)}`;
+const preferenceSchema = z.object({
+  sharingPaused: z.boolean(),
+  sharingPausedUntil: z.date().nullable(),
+  sharingChangedAt: z.date().nullable(),
+  sharingRevision: z.number().int().min(0),
+});
+const syncedSchema = z.object({
+  account: preferenceSchema,
+  device: preferenceSchema,
+});
 const scheduledChanges = new Set<string>();
 let changeRevision = 0;
 let operationQueue: Promise<unknown> = Promise.resolve();
@@ -27,10 +46,37 @@ const queueOperation = <T>(operation: () => Promise<T>) => {
   return task;
 };
 
-const readPendingChange = (userId: string, scope: "device" | "account") => {
-  const stored = storage.getString(pendingKey(userId, scope));
-  return stored ? { stored, ...pendingChangeSchema.parse(JSON.parse(stored)) } : null;
+const parseStored = <T>(schema: z.ZodType<T>, stored: string) => {
+  try {
+    const result = schema.safeParse(superjson.parse(stored));
+    return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
 };
+
+const readPendingChange = (userId: string, scope: "device" | "account") => {
+  const key = pendingKey(userId, scope);
+  const stored = storage.getString(key);
+  if (!stored) return null;
+  const input = parseStored(setLocationSharingSchema, stored);
+  if (!input) storage.remove(key);
+  return input ? { stored, input } : null;
+};
+
+const readSyncedPreferences = (userId: string, deviceId: string) => {
+  const stored = storage.getString(syncedKey(userId, deviceId));
+  return stored ? parseStored(syncedSchema, stored) : null;
+};
+
+const clockOffset = () => {
+  const offset = Number(storage.getString(clockOffsetKey()));
+  return Number.isFinite(offset) ? offset : 0;
+};
+
+export const serverNow = () => Date.now() + clockOffset();
+
+export const toDeviceClock = (serverTime: Date) => new Date(serverTime.getTime() - clockOffset());
 
 export const getPendingSharingChanges = (userId: string) => ({
   device: readPendingChange(userId, "device")?.input ?? null,
@@ -41,29 +87,73 @@ export const hasPendingSharingPause = (userId: string) =>
   storage.getString(pendingKey(userId, "device")) !== undefined ||
   storage.getString(pendingKey(userId, "account")) !== undefined;
 
+export const clearPendingSharingChanges = () => {
+  for (const key of storage.getAllKeys()) {
+    if (key.startsWith(pendingPrefix)) storage.remove(key);
+  }
+};
+
 export const hasLocallyPausedSharing = (userId: string) => {
   const deviceId = getStoredDeviceId(userId);
-  return Boolean(deviceId && storage.getString(localPauseKey(userId, deviceId)) === "true");
+  const stored = deviceId ? storage.getString(localPauseKey(userId, deviceId)) : undefined;
+  return stored === "true" || Number(stored) > Date.now();
 };
 
 const applyNativeSharingState = async (state: DeviceSharingState, isCurrent: () => boolean) => {
   if (Platform.OS !== "android") return false;
   const module = (await import("../modules/openbeacon-tracking/index.ts")).default;
   if (!isCurrent()) return false;
+  const pausedUntil = state.pausedUntil ? toDeviceClock(state.pausedUntil).getTime() : null;
   const applied = module.setSharingState(
     JSON.stringify([baseUrl, state.userId]),
     state.deviceId,
     state.revisionPrefix,
     state.paused,
-    state.pausedUntil?.getTime() ?? null,
-    state.resumeAfter?.getTime() ?? null,
+    pausedUntil,
+    state.resumeAfter ? toDeviceClock(state.resumeAfter).getTime() : null,
   );
   if (applied) {
     const key = localPauseKey(state.userId, state.deviceId);
-    if (state.paused) storage.set(key, "true");
+    if (state.paused) storage.set(key, pausedUntil === null ? "true" : String(pausedUntil));
     else storage.remove(key);
   }
   return applied;
+};
+
+const applyLocalSharingState = (
+  device: { userId: string; deviceId: string },
+  isCurrent: () => boolean,
+) => {
+  const synced = readSyncedPreferences(device.userId, device.deviceId);
+  const preference = (scope: "device" | "account"): SharingPreference => {
+    const known = synced?.[scope] ?? {
+      sharingPaused: false,
+      sharingPausedUntil: null,
+      sharingChangedAt: null,
+      sharingRevision: 0,
+    };
+    const pending = readPendingChange(device.userId, scope)?.input;
+    if (!pending || (pending.scope === "device" && pending.deviceId !== device.deviceId))
+      return known;
+    return {
+      sharingPaused: pending.paused,
+      sharingPausedUntil: pending.pausedUntil,
+      sharingChangedAt: null,
+      sharingRevision: known.sharingRevision,
+    };
+  };
+  const now = serverNow();
+  const effective = resolveLocationSharing(preference("account"), preference("device"), now);
+  return applyNativeSharingState(
+    {
+      ...device,
+      paused: effective.paused,
+      pausedUntil: effective.pausedUntil,
+      resumeAfter: new Date(now),
+      revisionPrefix: effective.revisionPrefix,
+    },
+    isCurrent,
+  );
 };
 
 const synchronizeSharing = async () => {
@@ -72,7 +162,7 @@ const synchronizeSharing = async () => {
   if (!device) return;
   for (const scope of ["device", "account"] as const) {
     const pending = readPendingChange(device.userId, scope);
-    if (!pending || scheduledChanges.has(pending.requestId)) continue;
+    if (!pending || scheduledChanges.has(pending.input.requestId)) continue;
     const key = pendingKey(device.userId, scope);
     if (pending.input.scope === "device" && pending.input.deviceId !== device.deviceId) {
       if (storage.getString(key) === pending.stored) storage.remove(key);
@@ -81,8 +171,17 @@ const synchronizeSharing = async () => {
     await trpcClient.account.setLocationSharing.mutate(pending.input);
     if (storage.getString(key) === pending.stored) storage.remove(key);
   }
+  const requestedAt = Date.now();
   const state = await trpcClient.account.locationSharing.query();
+  storage.set(
+    clockOffsetKey(),
+    String(Math.round(state.serverTime.getTime() - (requestedAt + Date.now()) / 2)),
+  );
   if (state.deviceId !== device.deviceId || state.userId !== device.userId) return;
+  storage.set(
+    syncedKey(device.userId, device.deviceId),
+    superjson.stringify({ account: state.account, device: state.device }),
+  );
   const isCurrent = () => !hasPendingSharingPause(device.userId) && changeRevision === revision;
   await applyNativeSharingState(state, isCurrent);
   return state;
@@ -90,48 +189,61 @@ const synchronizeSharing = async () => {
 
 export const syncLocationSharing = () => queueOperation(synchronizeSharing);
 
-export const changeLocationSharing = async (
-  input: Omit<z.infer<typeof setLocationSharingSchema>, "expectedUserId" | "deviceId"> & {
-    deviceId?: string;
-  },
-) => {
+export const changeLocationSharing = async (input: {
+  scope: "device" | "account";
+  deviceId?: string;
+  paused: boolean;
+  durationMinutes: 15 | 60 | 480 | 1440 | null;
+  expectedRevision?: number;
+}) => {
   const revision = ++changeRevision;
   const device = await getRegisteredDeviceKey();
   if (!device) throw new Error("This device isn't registered yet.");
+  const deviceId = input.deviceId ?? device.deviceId;
+  const affectsThisDevice = input.scope === "account" || deviceId === device.deviceId;
+  const key = pendingKey(device.userId, input.scope);
+  const queued = affectsThisDevice ? readPendingChange(device.userId, input.scope) : null;
+  const synced = affectsThisDevice
+    ? readSyncedPreferences(device.userId, device.deviceId)?.[input.scope]
+    : null;
+  const durationMinutes = input.paused ? input.durationMinutes : null;
   const change = setLocationSharingSchema.parse({
-    ...input,
+    scope: input.scope,
+    ...(input.scope === "device" ? { deviceId } : {}),
     expectedUserId: device.userId,
-    ...(input.scope === "device" ? { deviceId: input.deviceId ?? device.deviceId } : {}),
+    requestId: createSecureId("sharing"),
+    expectedRevision:
+      input.expectedRevision ?? queued?.input.expectedRevision ?? synced?.sharingRevision ?? null,
+    replacesRequestId: queued?.input.requestId ?? null,
+    paused: input.paused,
+    durationMinutes,
+    pausedUntil: durationMinutes === null ? null : new Date(serverNow() + durationMinutes * 60_000),
   });
-  const key = pendingKey(device.userId, change.scope);
-  const affectsThisDevice = change.scope === "account" || change.deviceId === device.deviceId;
-  const requestId = createSecureId("sharing");
-  const stored = JSON.stringify({ requestId, input: change });
-  const previous = storage.getString(key);
-  scheduledChanges.add(requestId);
+  const stored = superjson.stringify(change);
+  const isCurrent = () => revision === changeRevision;
+  scheduledChanges.add(change.requestId);
   try {
-    if (change.paused && affectsThisDevice) {
+    if (affectsThisDevice) {
       storage.set(key, stored);
-      await applyNativeSharingState(
-        {
-          deviceId: device.deviceId,
-          userId: device.userId,
-          paused: true,
-          pausedUntil: null,
-          resumeAfter: null,
-          revisionPrefix: "",
-        },
-        () => revision === changeRevision,
-      );
+      if (change.paused) await applyLocalSharingState(device, isCurrent);
     }
-    await queueOperation(async () => {
-      await trpcClient.account.setLocationSharing.mutate(change);
-      const pending = storage.getString(key);
-      if (affectsThisDevice && pending === (change.paused ? stored : previous)) storage.remove(key);
-      await tryCatch(synchronizeSharing());
-    });
+    const result = await tryCatch(
+      queueOperation(async () => {
+        const { status } = await trpcClient.account.setLocationSharing.mutate(
+          change.paused ? { ...change, expectedRevision: null } : change,
+        );
+        if (storage.getString(key) === stored) storage.remove(key);
+        await tryCatch(synchronizeSharing());
+        return status;
+      }),
+    );
+    if (!result.error) return result.data;
+    if (!affectsThisDevice || storage.getString(key) !== stored) throw result.error;
+    if (!change.paused) await applyLocalSharingState(device, isCurrent);
+    if (change.paused && !hasLocallyPausedSharing(device.userId)) throw result.error;
+    return "queued" as const;
   } finally {
-    scheduledChanges.delete(requestId);
+    scheduledChanges.delete(change.requestId);
     requestTrackingSync();
   }
 };

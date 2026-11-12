@@ -22,6 +22,10 @@ test("a delayed sharing change cannot mutate the newly signed-in account", async
       expectedUserId: "previous-account",
       paused: true,
       durationMinutes: null,
+      pausedUntil: null,
+      requestId: "sharing-1",
+      expectedRevision: 0,
+      replacesRequestId: null,
     }),
   ).rejects.toMatchObject({ code: "FORBIDDEN" });
   await expect(
@@ -31,6 +35,10 @@ test("a delayed sharing change cannot mutate the newly signed-in account", async
       deviceId: "previous-phone",
       paused: false,
       durationMinutes: null,
+      pausedUntil: null,
+      requestId: "sharing-1",
+      expectedRevision: 0,
+      replacesRequestId: null,
     }),
   ).rejects.toMatchObject({ code: "FORBIDDEN" });
   expect(transaction).not.toHaveBeenCalled();
@@ -59,6 +67,10 @@ test("an authenticated request whose linked session ended cannot resume sharing"
       expectedUserId: "alex",
       paused: false,
       durationMinutes: null,
+      pausedUntil: null,
+      requestId: "sharing-1",
+      expectedRevision: 0,
+      replacesRequestId: null,
     }),
   ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   expect(findSession).toHaveBeenCalledWith({

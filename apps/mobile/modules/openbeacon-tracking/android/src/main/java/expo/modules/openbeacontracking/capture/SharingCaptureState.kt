@@ -8,6 +8,8 @@ data class SharingCaptureState(
 ) {
   fun isPaused(now: Long): Boolean = paused && (pausedUntil == null || pausedUntil > now)
 
+  fun isConfirmedIndefinitePause(): Boolean = paused && pausedUntil == null && revisionPrefix.isNotEmpty()
+
   fun canCapture(timestamp: Long, now: Long): Boolean = !isPaused(now) && timestamp > resumeAfter
 
   fun isAtLeastAsRecentAs(current: SharingCaptureState): Boolean {

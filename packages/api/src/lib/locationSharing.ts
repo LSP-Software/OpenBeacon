@@ -1,14 +1,14 @@
 import { Prisma } from "@openbeacon/database";
 import {
   resolveLocationSharing,
-  type DeviceSharingState,
+  type GroupDeviceSharingState,
   type SharingPreference,
 } from "@openbeacon/shared";
 
 export const getGroupSharingStates = async (
   db: { $queryRaw: <T>(query: Prisma.Sql) => Promise<T> },
   groupId: string,
-): Promise<DeviceSharingState[]> => {
+): Promise<GroupDeviceSharingState[]> => {
   const devices = await db.$queryRaw<
     (SharingPreference & {
       deviceId: string;
@@ -47,8 +47,8 @@ export const getGroupSharingStates = async (
     return {
       deviceId: device.deviceId,
       userId: device.userId,
-      ...sharing,
-      ...(sharing.paused ? { pausedUntil: null, resumeAfter: null } : {}),
+      paused: sharing.paused,
+      revisionPrefix: sharing.revisionPrefix,
     };
   });
 };

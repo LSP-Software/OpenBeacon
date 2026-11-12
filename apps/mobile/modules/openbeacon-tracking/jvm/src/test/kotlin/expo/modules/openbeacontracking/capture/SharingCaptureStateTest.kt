@@ -21,6 +21,14 @@ class SharingCaptureStateTest {
   }
 
   @Test
+  fun onlyAServerConfirmedPauseWithoutAnEndCountsAsIndefinite() {
+    assertTrue(SharingCaptureState(revisionPrefix = "s1.1:", paused = true).isConfirmedIndefinitePause())
+    assertFalse(SharingCaptureState(paused = true).isConfirmedIndefinitePause())
+    assertFalse(SharingCaptureState(revisionPrefix = "s1.1:", paused = true, pausedUntil = 1000L).isConfirmedIndefinitePause())
+    assertFalse(SharingCaptureState(revisionPrefix = "s1.1:").isConfirmedIndefinitePause())
+  }
+
+  @Test
   fun timedPauseResumesOnlyWithAFixAfterTheDeadline() {
     val state = SharingCaptureState(paused = true, pausedUntil = 1000L, resumeAfter = 1000L)
     assertFalse(state.canCapture(500L, 999L))

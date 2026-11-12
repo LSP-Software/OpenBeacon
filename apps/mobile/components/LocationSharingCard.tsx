@@ -15,7 +15,8 @@ import {
   changeLocationSharing,
   getPendingSharingChanges,
   hasLocallyPausedSharing,
-  hasPendingSharingPause,
+  serverNow,
+  toDeviceClock,
 } from "../lib/locationSharing.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { Button } from "./ui/Button.tsx";
@@ -41,41 +42,46 @@ export const LocationSharingCard = ({
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<"device" | "account">("device");
   const [duration, setDuration] = useState<15 | 60 | 480 | 1440 | null>(60);
-  const [now, setNow] = useState(Date.now);
+  const [now, setNow] = useState(serverNow);
   const [message, setMessage] = useState<string | null>(null);
+  const thisDevice = !device || device.isCurrent;
   const pending = session?.user.id ? getPendingSharingChanges(session.user.id) : null;
+  const pendingDevice = thisDevice ? (pending?.device ?? null) : null;
+  const pendingHere = Boolean(pending?.account || pendingDevice);
   const stoppedLocally = Boolean(
-    session?.user.id &&
-    (!device || device.isCurrent) &&
-    hasPendingSharingPause(session.user.id) &&
-    hasLocallyPausedSharing(session.user.id),
+    session?.user.id && thisDevice && pendingHere && hasLocallyPausedSharing(session.user.id),
   );
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    const timer = setInterval(() => setNow(serverNow()), 15_000);
     return () => clearInterval(timer);
   }, []);
-  const accountPaused = sharing.data ? isSharingPaused(sharing.data.account, now) : false;
+  const pendingPaused = (change: { paused: boolean; pausedUntil: Date | null }) =>
+    change.paused && (change.pausedUntil === null || change.pausedUntil.getTime() > now);
+  const accountPaused = pending?.account
+    ? pendingPaused(pending.account)
+    : sharing.data
+      ? isSharingPaused(sharing.data.account, now)
+      : false;
   const devicePreference = device ?? sharing.data?.device;
-  const devicePaused = devicePreference ? isSharingPaused(devicePreference, now) : false;
+  const devicePaused = pendingDevice
+    ? pendingPaused(pendingDevice)
+    : devicePreference
+      ? isSharingPaused(devicePreference, now)
+      : false;
   const paused = accountPaused || devicePaused || stoppedLocally;
   const effective =
     sharing.data && devicePreference
       ? resolveLocationSharing(sharing.data.account, devicePreference, now)
       : null;
   const until = effective ? effective.pausedUntil : devicePreference?.sharingPausedUntil;
-  const resumeAccount = !device && (accountPaused || Boolean(pending?.account));
+  const resumeAccount = !device && accountPaused;
   const target = device && !device.isCurrent ? device.name : "this device";
   const selectScope = (selectedScope: "device" | "account") => {
-    const selectedAt = Date.now();
+    const selectedAt = serverNow();
     setNow(selectedAt);
     setScope(selectedScope);
-    const pendingChange =
-      selectedScope === "account"
-        ? pending?.account
-        : !device || device.isCurrent
-          ? pending?.device
-          : null;
-    if (pendingChange) {
+    const pendingChange = selectedScope === "account" ? pending?.account : pendingDevice;
+    if (pendingChange?.paused) {
       setDuration(pendingChange.durationMinutes);
       return;
     }
@@ -95,10 +101,6 @@ export const LocationSharingCard = ({
   };
   const update = useMutation({
     mutationFn: changeLocationSharing,
-    onSuccess: () => {
-      setOpen(false);
-      setMessage(null);
-    },
     onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: trpc.account.locationSharing.queryKey() }),
@@ -107,22 +109,28 @@ export const LocationSharingCard = ({
     },
   });
   const save = async (pause: boolean, selectedScope = scope) => {
+    const expectedRevision =
+      selectedScope === "account"
+        ? sharing.data?.account.sharingRevision
+        : devicePreference?.sharingRevision;
     const result = await tryCatch(
       update.mutateAsync({
         scope: selectedScope,
         ...(device ? { deviceId: device.id } : {}),
         paused: pause,
         durationMinutes: pause ? duration : null,
+        ...(expectedRevision === undefined ? {} : { expectedRevision }),
       }),
     );
-    if (!result.error) return;
-    const localPause =
-      pause &&
-      (!device || device.isCurrent || selectedScope === "account") &&
-      session?.user.id &&
-      hasLocallyPausedSharing(session.user.id);
-    if (localPause) {
+    if (result.data === "superseded") {
+      setMessage(
+        "Location sharing was just changed on another device. Check the current setting and try again.",
+      );
+      return;
+    }
+    if (!result.error) {
       setOpen(false);
+      setMessage(null);
       return;
     }
     setMessage(
@@ -162,9 +170,13 @@ export const LocationSharingCard = ({
                 : "Sharing stopped on this phone. We couldn’t update your groups or other devices. Retrying."
               : `${
                   until && until.getTime() > now
-                    ? `Resumes ${until.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+                    ? `Resumes ${toDeviceClock(until).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`
                     : "Until you turn it back on"
                 }. You can still see your groups’ locations.`}
+          </Text>
+        ) : pendingHere && thisDevice && !update.isPending ? (
+          <Text className="text-sm text-muted-foreground">
+            Sharing resumed on this phone. We’ll update your groups when you’re back online.
           </Text>
         ) : null}
         {message ? (
@@ -331,7 +343,7 @@ export const LocationSharingCard = ({
               {duration !== null ? (
                 <Text className="text-sm text-muted-foreground">
                   Resumes{" "}
-                  {new Date(now + duration * 60_000).toLocaleString(undefined, {
+                  {toDeviceClock(new Date(now + duration * 60_000)).toLocaleString(undefined, {
                     weekday: "short",
                     hour: "numeric",
                     minute: "2-digit",

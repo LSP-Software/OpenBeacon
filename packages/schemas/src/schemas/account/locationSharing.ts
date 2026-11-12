@@ -2,16 +2,32 @@ import { z } from "zod";
 
 const locationSharingChangeSchema = z.object({
   expectedUserId: z.string().min(1).max(128),
+  requestId: z.string().min(1).max(128),
+  expectedRevision: z.number().int().min(0).nullable(),
+  replacesRequestId: z.string().min(1).max(128).nullable(),
   paused: z.boolean(),
   durationMinutes: z
     .union([z.literal(15), z.literal(60), z.literal(480), z.literal(1440)])
     .nullable(),
+  pausedUntil: z.date().nullable(),
 });
 
-export const setLocationSharingSchema = z.discriminatedUnion("scope", [
-  locationSharingChangeSchema.extend({
-    scope: z.literal("device"),
-    deviceId: z.string().min(1).max(128),
-  }),
-  locationSharingChangeSchema.extend({ scope: z.literal("account") }),
-]);
+export const setLocationSharingSchema = z
+  .discriminatedUnion("scope", [
+    locationSharingChangeSchema.extend({
+      scope: z.literal("device"),
+      deviceId: z.string().min(1).max(128),
+    }),
+    locationSharingChangeSchema.extend({ scope: z.literal("account") }),
+  ])
+  .refine(
+    (change) =>
+      change.paused
+        ? (change.durationMinutes === null) === (change.pausedUntil === null)
+        : change.durationMinutes === null &&
+          change.pausedUntil === null &&
+          (change.expectedRevision !== null || change.replacesRequestId !== null),
+    {
+      message: "A timed pause needs an end time, and a resume must say what it replaces.",
+    },
+  );

@@ -134,7 +134,7 @@ class TrackingCaptureService : Service() {
       }
     }
 
-    return START_STICKY
+    return if (TrackingRuntime.isCaptureRunning) START_STICKY else START_NOT_STICKY
   }
 
   override fun onDestroy() {
@@ -177,6 +177,8 @@ class TrackingCaptureService : Service() {
       synchronized(captureStateLock) {
         TrackingRuntime.isCaptureRunning = true
       }
+      SharingResumeWorker.cancel(this)
+      SharingResumeWorker.clearNotice(this)
       currentIntervalMs = intervalMs
       updateSharing()
     } catch (error: SecurityException) {
@@ -247,6 +249,12 @@ class TrackingCaptureService : Service() {
     sharingHandler.removeCallbacks(syncPausedSharing)
     getSystemService(AlarmManager::class.java)?.cancel(resumeSharingIntent)
     val sharing = TrackingRuntime.sharingState(this)
+    if (sharing.isConfirmedIndefinitePause()) {
+      SharingResumeWorker.schedule(this)
+      stopCapture()
+      stopSelf()
+      return
+    }
     if (sharing.isPaused(System.currentTimeMillis())) {
       synchronized(captureStateLock) {
         locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }

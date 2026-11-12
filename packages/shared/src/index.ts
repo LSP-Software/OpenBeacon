@@ -1,6 +1,10 @@
 export { tryCatch } from "./utils/tryCatch.ts";
 export { isSharingPaused, resolveLocationSharing } from "./locationSharing.ts";
-export type { DeviceSharingState, SharingPreference } from "./locationSharingTypes.ts";
+export type {
+  DeviceSharingState,
+  GroupDeviceSharingState,
+  SharingPreference,
+} from "./locationSharingTypes.ts";
 export { logRateLimit } from "./utils/logRateLimit.ts";
 export { checkServices } from "./utils/checkServices.ts";
 export {

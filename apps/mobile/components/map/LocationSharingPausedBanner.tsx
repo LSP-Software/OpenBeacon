@@ -8,6 +8,7 @@ import {
   changeLocationSharing,
   getPendingSharingChanges,
   hasLocallyPausedSharing,
+  serverNow,
 } from "../../lib/locationSharing.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
@@ -27,20 +28,39 @@ export const LocationSharingPausedBanner = ({
     refetchInterval: 15_000,
     subscribed,
   });
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   const resume = useMutation({
     mutationFn: async () => {
       const pending = getPendingSharingChanges(userId);
+      const now = serverNow();
       const accountPaused =
-        pending.account?.paused ?? (sharing.data ? isSharingPaused(sharing.data.account) : false);
+        pending.account?.paused ??
+        (sharing.data ? isSharingPaused(sharing.data.account, now) : false);
       const devicePaused =
-        pending.device?.paused ?? (sharing.data ? isSharingPaused(sharing.data.device) : false);
+        pending.device?.paused ??
+        (sharing.data ? isSharingPaused(sharing.data.device, now) : false);
+      const results = [];
       if (accountPaused) {
-        await changeLocationSharing({ scope: "account", paused: false, durationMinutes: null });
+        results.push(
+          await changeLocationSharing({
+            scope: "account",
+            paused: false,
+            durationMinutes: null,
+            ...(sharing.data ? { expectedRevision: sharing.data.account.sharingRevision } : {}),
+          }),
+        );
       }
       if (devicePaused || !accountPaused) {
-        await changeLocationSharing({ scope: "device", paused: false, durationMinutes: null });
+        results.push(
+          await changeLocationSharing({
+            scope: "device",
+            paused: false,
+            durationMinutes: null,
+            ...(sharing.data ? { expectedRevision: sharing.data.device.sharingRevision } : {}),
+          }),
+        );
       }
+      return results.includes("superseded");
     },
     onSettled: () =>
       Promise.all([
@@ -48,8 +68,11 @@ export const LocationSharingPausedBanner = ({
         queryClient.invalidateQueries({ queryKey: trpc.account.listDevices.queryKey() }),
       ]),
   });
+  const pending = userId.length > 0 ? getPendingSharingChanges(userId) : null;
   const paused =
-    userId.length > 0 && (hasLocallyPausedSharing(userId) || sharing.data?.paused === true);
+    userId.length > 0 &&
+    (hasLocallyPausedSharing(userId) ||
+      (!pending?.account && !pending?.device && sharing.data?.paused === true));
   if (!paused) return null;
 
   return (
@@ -65,19 +88,21 @@ export const LocationSharingPausedBanner = ({
           variant="outline"
           loading={resume.isPending}
           onPress={async () => {
-            setFailed(false);
+            setFailure(null);
             const result = await tryCatch(resume.mutateAsync());
-            setFailed(result.error !== null);
+            setFailure(
+              result.error
+                ? "Couldn’t resume sharing. Check your connection and try again."
+                : result.data
+                  ? "Location sharing was just changed on another device. Check it and try again."
+                  : null,
+            );
           }}
         >
           <Text>Resume</Text>
         </Button>
       </View>
-      {failed ? (
-        <Text className="text-sm text-muted-foreground">
-          Couldn’t resume sharing. Check your connection and try again.
-        </Text>
-      ) : null}
+      {failure ? <Text className="text-sm text-muted-foreground">{failure}</Text> : null}
     </View>
   );
 };

@@ -6,6 +6,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.Configuration
+import androidx.work.testing.SynchronousExecutor
+import androidx.work.testing.WorkManagerTestInitHelper
 import expo.modules.openbeacontracking.TrackingRuntime
 import expo.modules.openbeacontracking.keys.InMemoryEpochKeyStore
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
@@ -30,11 +33,12 @@ class TrackingCaptureServiceTest {
 
   @Before
   fun setUp() {
+    WorkManagerTestInitHelper.initializeTestWorkManager(application, Configuration.Builder().setExecutor(SynchronousExecutor()).build())
     TrackingRuntime.isCaptureRunning = false
     TrackingRuntime.captureCommands.stop()
     application.getSharedPreferences("openbeacon_tracking_queue", Context.MODE_PRIVATE).edit().putString("owner", "test-owner").putString("deviceId", "tablet").commit()
     TrackingRuntime.setCaptureEnabled(application, true)
-    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.1:", paused = true))
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.1:", paused = true, pausedUntil = System.currentTimeMillis() + 3_600_000L))
     val keys = InMemoryEpochKeyStore()
     keys.replaceAll(listOf(ProvisionedEpochKey("group", "epoch", ByteArray(32), "tablet", "trackingPoint")))
     keysField.set(null, keys)

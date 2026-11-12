@@ -1,5 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
-import type { DeviceSharingState } from "@openbeacon/shared";
+import type { GroupDeviceSharingState } from "@openbeacon/shared";
 import { canShowSharedLocation } from "./locationSharingVisibility.ts";
 import { dropInactiveDevices, type LiveMapEntry, reduceLivePositions } from "./liveMapReducer.ts";
 import type {
@@ -86,7 +86,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
   >();
   const positionsByGroup = new Map<string, ReadonlyMap<string, LiveMapEntry>>();
-  const sharingByGroup = new Map<string, readonly DeviceSharingState[]>();
+  const sharingByGroup = new Map<string, readonly GroupDeviceSharingState[]>();
   const listeners = new Set<() => void>();
   const groupLoadStatus = new Map<string, "loaded" | "failed">();
   const undecryptableByGroup = new Map<string, Map<string, { deviceId: string; userId: string }>>();

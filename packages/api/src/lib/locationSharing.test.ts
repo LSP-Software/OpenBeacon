@@ -22,14 +22,12 @@ test("group members learn a device is paused without learning its planned resume
       deviceId: "device-1",
       userId: "user-1",
       paused: true,
-      pausedUntil: null,
-      resumeAfter: null,
       revisionPrefix: "s0.1:",
     },
   ]);
 });
 
-test("resumed group snapshots retain the cutoff needed to suppress previous locations", async () => {
+test("an ended pause shows the device sharing under the pause revision without its timings", async () => {
   const deadline = new Date(Date.now() - 1);
   const states = await getGroupSharingStates(
     {
@@ -45,5 +43,13 @@ test("resumed group snapshots retain the cutoff needed to suppress previous loca
     },
     "group-1",
   );
-  expect(states[0]).toMatchObject({ paused: false, pausedUntil: null, resumeAfter: deadline });
+  expect(states).toEqual([
+    { deviceId: "device-1", userId: "user-1", paused: false, revisionPrefix: "s0.1:" },
+  ]);
+  expect(Object.keys(states[0]!).sort()).toEqual([
+    "deviceId",
+    "paused",
+    "revisionPrefix",
+    "userId",
+  ]);
 });

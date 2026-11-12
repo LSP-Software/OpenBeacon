@@ -6,7 +6,7 @@ import {
   createGoogleDeletionAuthorization,
   verifyGoogleDeletionCode,
 } from "@openbeacon/auth";
-import { resolveLocationSharing, tryCatch } from "@openbeacon/shared";
+import { isSharingPaused, resolveLocationSharing, tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import {
   accountNameSchema,
@@ -56,6 +56,7 @@ export const accountRouter = {
       device,
       deviceId: ctx.deviceId,
       userId: ctx.session.user.id,
+      serverTime: new Date(),
       ...resolveLocationSharing(account, device),
     };
   }),
@@ -66,7 +67,7 @@ export const accountRouter = {
       if (input.expectedUserId !== ctx.session.user.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "The sharing account has changed." });
       }
-      await ctx.db.$transaction(async (tx) => {
+      const status = await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "User" WHERE id = ${ctx.session.user.id} FOR NO KEY UPDATE`,
         );
@@ -89,30 +90,73 @@ export const accountRouter = {
             message: "Sign in again to change location sharing.",
           });
         }
-        const data = {
-          sharingPaused: input.paused,
-          sharingPausedUntil:
-            input.paused && input.durationMinutes !== null
-              ? new Date(now.getTime() + input.durationMinutes * 60_000)
-              : null,
-          sharingChangedAt: now,
-          sharingRevision: { increment: 1 },
-        };
+        const select = {
+          sharingPaused: true,
+          sharingPausedUntil: true,
+          sharingChangedAt: true,
+          sharingRevision: true,
+          sharingRequestId: true,
+        } as const;
+        const current =
+          input.scope === "account"
+            ? await tx.user.findUniqueOrThrow({
+                where: { id: ctx.session.user.id },
+                select,
+              })
+            : await tx.userDevice.findFirst({
+                where: {
+                  id: input.deviceId,
+                  userId: ctx.session.user.id,
+                  revokedAt: null,
+                  activatedAt: { not: null },
+                },
+                select,
+              });
+        if (!current) throw new TRPCError({ code: "NOT_FOUND" });
+        if (current.sharingRequestId === input.requestId) return "applied" as const;
+        const matchesBase =
+          input.expectedRevision === null
+            ? input.paused
+            : current.sharingRevision === input.expectedRevision;
+        if (
+          !matchesBase &&
+          (input.replacesRequestId === null || current.sharingRequestId !== input.replacesRequestId)
+        ) {
+          return "superseded" as const;
+        }
+        const pausedUntil =
+          input.pausedUntil && input.durationMinutes !== null
+            ? new Date(
+                Math.min(
+                  input.pausedUntil.getTime(),
+                  now.getTime() + input.durationMinutes * 60_000,
+                ),
+              )
+            : null;
+        const expired = pausedUntil !== null && pausedUntil.getTime() <= now.getTime();
+        const currentlyPaused = isSharingPaused(current, now.getTime());
+        const unchanged = input.paused
+          ? !expired &&
+            currentlyPaused &&
+            current.sharingPausedUntil?.getTime() === pausedUntil?.getTime()
+          : !currentlyPaused;
+        const data = unchanged
+          ? { sharingRequestId: input.requestId }
+          : {
+              sharingPaused: input.paused && !expired,
+              sharingPausedUntil: expired ? null : pausedUntil,
+              sharingChangedAt: now,
+              sharingRevision: { increment: 1 },
+              sharingRequestId: input.requestId,
+            };
         if (input.scope === "account") {
           await tx.user.update({ where: { id: ctx.session.user.id }, data });
-          return;
+        } else {
+          await tx.userDevice.update({ where: { id: input.deviceId }, data });
         }
-        const updated = await tx.userDevice.updateMany({
-          where: {
-            id: input.deviceId,
-            userId: ctx.session.user.id,
-            revokedAt: null,
-            activatedAt: { not: null },
-          },
-          data,
-        });
-        if (updated.count !== 1) throw new TRPCError({ code: "NOT_FOUND" });
+        return expired ? ("expired" as const) : ("applied" as const);
       });
+      return { status };
     }),
   deletionVerificationMethods: setupProcedure.query(async ({ ctx }) => {
     const accounts = await ctx.db.account.findMany({

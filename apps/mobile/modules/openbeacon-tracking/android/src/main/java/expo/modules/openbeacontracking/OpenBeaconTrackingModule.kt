@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.capture.SharingCaptureState
+import expo.modules.openbeacontracking.capture.SharingResumeWorker
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
@@ -63,11 +64,15 @@ class OpenBeaconTrackingModule : Module() {
       }
 
       AsyncFunction("startCapture") { intervalMs: Double? ->
-        val generation =
+        val (generation, parked) =
           synchronized(TrackingRuntime.captureLock) {
             TrackingRuntime.setCaptureEnabled(requireContext(), true)
-            TrackingRuntime.captureCommands.start()
+            TrackingRuntime.captureCommands.start() to TrackingRuntime.isCaptureParked(requireContext())
           }
+        if (parked) {
+          SharingResumeWorker.schedule(requireContext())
+          return@AsyncFunction Unit
+        }
         val intent =
           Intent(requireContext(), TrackingCaptureService::class.java).apply {
             action = TrackingCaptureService.ACTION_START
@@ -81,6 +86,7 @@ class OpenBeaconTrackingModule : Module() {
       }
 
       AsyncFunction("refreshCapture") {
+        if (!TrackingRuntime.isCaptureRunning) return@AsyncFunction Unit
         val intent =
           Intent(requireContext(), TrackingCaptureService::class.java).apply {
             action = TrackingCaptureService.ACTION_REFRESH
@@ -101,7 +107,7 @@ class OpenBeaconTrackingModule : Module() {
       }
 
       Function("isCaptureRunning") {
-        TrackingRuntime.isCaptureRunning
+        TrackingRuntime.isCaptureRunning || TrackingRuntime.isCaptureParked(requireContext())
       }
 
       AsyncFunction("countUnassignedCiphertexts") { senderDeviceId: String ->

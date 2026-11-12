@@ -19,6 +19,10 @@ class TrackingBootReceiver : BroadcastReceiver() {
         TrackingRuntime.shouldRestoreCapture(context)
       }
     if (!shouldRestart) return
+    if (TrackingRuntime.isCaptureParked(context)) {
+      SharingResumeWorker.schedule(context)
+      return
+    }
 
     try {
       ContextCompat.startForegroundService(context, Intent(context, TrackingCaptureService::class.java))

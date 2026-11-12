@@ -12,6 +12,7 @@ import expo.modules.openbeacontracking.capture.CapturePipeline
 import expo.modules.openbeacontracking.capture.CaptureCommandState
 import expo.modules.openbeacontracking.capture.SharingCaptureState
 import expo.modules.openbeacontracking.capture.BootRestartPolicy
+import expo.modules.openbeacontracking.capture.SharingResumeWorker
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.keys.EpochKeyStore
 import expo.modules.openbeacontracking.keys.SecureEpochKeyStore
@@ -140,6 +141,9 @@ object TrackingRuntime {
   fun isCaptureEnabled(context: Context): Boolean =
     context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).getBoolean("enabled", false)
 
+  fun isCaptureParked(context: Context): Boolean =
+    isCaptureEnabled(context) && sharingState(context).isConfirmedIndefinitePause()
+
   fun shouldRestoreCapture(context: Context): Boolean =
     BootRestartPolicy.shouldRestart(
       captureEnabled = isCaptureEnabled(context),
@@ -158,5 +162,6 @@ object TrackingRuntime {
     enabled: Boolean,
   ) {
     check(context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).edit().putBoolean("enabled", enabled).commit())
+    if (!enabled) SharingResumeWorker.cancel(context)
   }
 }
