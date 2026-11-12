@@ -1,11 +1,8 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 import { tryCatch } from "@openbeacon/shared";
 import { z } from "zod";
 import type { PublishResult } from "./commands.ts";
 import type { MapStatus, UpdateRun } from "./status.ts";
-
-const digestKey = randomBytes(32);
-const digest = (value: string) => createHmac("sha256", digestKey).update(value).digest();
 
 const updateRequestSchema = z.object({ force: z.boolean().default(false) });
 
@@ -22,14 +19,15 @@ export const createMapTilesHandler = ({
   rollback: () => Promise<string>;
   runUpdate: (options: { ignoreInterval: boolean }) => Promise<PublishResult>;
 }) => {
-  const expected = digest(apiKey);
+  const expected = Buffer.from(apiKey);
   let running: { startedAt: string; task: Promise<void> } | null = null;
   let last: UpdateRun["last"] = null;
 
   const isAuthorized = (request: Request) => {
     const header = request.headers.get("authorization") ?? "";
     const supplied = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
-    return supplied.length > 0 && timingSafeEqual(digest(supplied), expected);
+    const suppliedBytes = Buffer.from(supplied);
+    return suppliedBytes.length === expected.length && timingSafeEqual(suppliedBytes, expected);
   };
 
   const describe = (): UpdateRun => ({
