@@ -1,16 +1,18 @@
 import { Prisma, type PrismaClient } from "@openbeacon/database";
 
 export const holdRowLock = async ({
+  afterLock,
   beforeCommit,
   db,
   id,
   mode = "FOR UPDATE",
   table,
 }: {
+  afterLock?: (tx: Prisma.TransactionClient) => Promise<unknown>;
   beforeCommit?: (tx: Prisma.TransactionClient) => Promise<unknown>;
   db: PrismaClient;
   id: string;
-  mode?: "FOR NO KEY UPDATE" | "FOR UPDATE";
+  mode?: "FOR NO KEY UPDATE" | "FOR SHARE" | "FOR UPDATE";
   table: "AccountHistoryKey" | "Group" | "User";
 }) => {
   let release = () => {};
@@ -30,13 +32,14 @@ export const holdRowLock = async ({
       const [backend] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
       if (!backend) throw new Error("Unable to read the lock holder's backend pid.");
       holderPid = backend.pid;
+      await afterLock?.(tx);
       markLocked();
       await released;
       await beforeCommit?.(tx);
     },
     { timeout: 20_000 },
   );
-  await locked;
+  await Promise.race([locked, holder]);
 
   return {
     release: async () => {

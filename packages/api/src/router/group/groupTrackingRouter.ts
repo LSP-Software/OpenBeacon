@@ -32,13 +32,13 @@ export const groupTrackingRouter = {
           Prisma.sql`SELECT id FROM "User" WHERE id = ${ctx.session.user.id} FOR SHARE`,
         );
         const groups = await tx.$queryRaw<Array<{ id: string }>>(
-          Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
+          Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR SHARE`,
         );
         if (!groups.length) throw new TRPCError({ code: "FORBIDDEN" });
         const members = await tx.$queryRaw<Array<{ id: string; createdAt: Date }>>(Prisma.sql`
           SELECT id, "createdAt" FROM "GroupMember"
           WHERE "groupId" = ${input.groupId} AND "userId" = ${ctx.session.user.id}
-          FOR UPDATE
+          FOR SHARE
         `);
         const member = members[0];
         if (!member) {
