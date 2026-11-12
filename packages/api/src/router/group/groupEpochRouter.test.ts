@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { FakeRedis, testRedisHashSecret } from "@openbeacon/cache/testing";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { TRPCError } from "@trpc/server";
 
@@ -69,6 +69,7 @@ const createCaller = async ({
   });
   const cache = new TestOpenBeaconCache({
     redisUrl: "redis://localhost:6379",
+    hashSecret: testRedisHashSecret,
     now: () => 0,
   });
   const context = {

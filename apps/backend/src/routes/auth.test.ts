@@ -1,10 +1,12 @@
 import { expect, spyOn, test } from "bun:test";
 import { Hono } from "hono";
 import type { AppEnv } from "../types/AppEnv.ts";
+import { testRedisHashSecret } from "@openbeacon/cache/testing";
 
 test("logs authentication rate limits without request details", async () => {
   process.env["DATABASE_URL"] ??= "postgresql://localhost:5432/openbeacon";
   process.env["BETTER_AUTH_SECRET"] ??= "test-secret-with-at-least-32-characters";
+  process.env["REDIS_HASH_SECRET"] ??= testRedisHashSecret;
   process.env["BETTER_AUTH_URL"] ??= "http://localhost:3000";
   const { auth } = await import("@openbeacon/auth");
   const { default: router } = await import("./auth.ts");
@@ -25,6 +27,7 @@ test("logs authentication rate limits without request details", async () => {
 test("passes only the server's client IP to authentication", async () => {
   process.env["DATABASE_URL"] ??= "postgresql://localhost:5432/openbeacon";
   process.env["BETTER_AUTH_SECRET"] ??= "test-secret-with-at-least-32-characters";
+  process.env["REDIS_HASH_SECRET"] ??= testRedisHashSecret;
   process.env["BETTER_AUTH_URL"] ??= "http://localhost:3000";
   const { auth, clientIpHeader } = await import("@openbeacon/auth");
   const { default: router } = await import("./auth.ts");

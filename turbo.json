@@ -3,6 +3,7 @@
   "globalPassThroughEnv": [
     "DATABASE_URL",
     "REDIS_URL",
+    "REDIS_HASH_SECRET",
     "BETTER_AUTH_SECRET",
     "BETTER_AUTH_URL",
     "S3_ENDPOINT",

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { FakeRedis, testRedisHashSecret } from "@openbeacon/cache/testing";
 import { tryCatch } from "@openbeacon/shared";
 import { type AnyRouter, TRPCError } from "@trpc/server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
@@ -99,6 +99,7 @@ describe("rateLimitMiddleware", () => {
   test("applies the default limit independently per path and falls back to client IP for public routes", async () => {
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
       now: () => 0,
     });
     const { createTRPCRouter, publicProcedure } = createModules();
@@ -133,6 +134,7 @@ describe("rateLimitMiddleware", () => {
   test("uses stricter route overrides and keeps user-id and IP buckets separate on the same public path", async () => {
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
       now: () => 0,
     });
     const { createTRPCRouter, publicProcedure } = createModules();
@@ -186,6 +188,7 @@ describe("rateLimitMiddleware", () => {
   test("uses user ids across IP changes and hides rate limit details from clients", async () => {
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
       now: () => 0,
     });
     const { createTRPCRouter, protectedProcedure, t } = createModules();
@@ -253,7 +256,11 @@ describe("rateLimitMiddleware", () => {
   });
 
   test("returns a generic HTTP rate-limit response without internal details", async () => {
-    const cache = new TestOpenBeaconCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+    const cache = new TestOpenBeaconCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => 0,
+    });
     const { createTRPCRouter, protectedProcedure } = createModules();
     const router = createTRPCRouter({
       lookup: protectedProcedure
@@ -296,7 +303,11 @@ describe("rateLimitMiddleware", () => {
   });
 
   test("does not expose missing-IP diagnostics in the HTTP response", async () => {
-    const cache = new TestOpenBeaconCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+    const cache = new TestOpenBeaconCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => 0,
+    });
     const { createTRPCRouter, protectedProcedure } = createModules();
     const router = createTRPCRouter({
       lookup: protectedProcedure
@@ -326,6 +337,7 @@ describe("rateLimitMiddleware", () => {
   test("rejects anonymous requests without a client IP", async () => {
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
       now: () => 0,
     });
     const { createTRPCRouter, publicProcedure } = createModules();
@@ -345,7 +357,11 @@ describe("rateLimitMiddleware", () => {
   });
   test("supports sixteen joins per account and sixty-four people sharing an IP", async () => {
     const { groupInvitesRouter } = await import("../router/group/groupInvitesRouter.ts");
-    const cache = new TestOpenBeaconCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+    const cache = new TestOpenBeaconCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => 0,
+    });
     const { createTRPCRouter, protectedProcedure } = createModules();
     const router = createTRPCRouter({
       lookup: protectedProcedure
@@ -373,7 +389,11 @@ describe("rateLimitMiddleware", () => {
   });
 
   test("shares a budget across join endpoints and limits accounts sharing an IP", async () => {
-    const cache = new TestOpenBeaconCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+    const cache = new TestOpenBeaconCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => 0,
+    });
     const { createTRPCRouter, protectedProcedure } = createModules();
     const procedure = protectedProcedure.meta({
       rateLimit: { namespace: "join", limit: 2, ipLimit: 3, windowMs: 60_000 },

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { FakeRedis, testRedisHashSecret } from "@openbeacon/cache/testing";
 import { tryCatch } from "@openbeacon/shared";
 import { DevicePendingError } from "../lib/deviceActivation.ts";
 import { DeviceUnverifiedError } from "../lib/deviceUnverified.ts";
@@ -41,7 +41,11 @@ const callEach = async (
   paths: string[],
 ) => {
   const caller = appRouter.createCaller({
-    cache: new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
+    cache: new TestCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => 0,
+    }),
     clientIp: "203.0.113.10",
     db: new Proxy(
       {},

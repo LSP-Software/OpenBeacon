@@ -65,9 +65,12 @@ export const redisUrlSchema = z.url().refine(
   { message: "redisUrl must use redis:// or rediss://" },
 );
 
+export const redisHashSecretSchema = z.string().trim().min(32);
+
 export const openBeaconCacheOptionsSchema = z
   .object({
     redisUrl: redisUrlSchema,
+    hashSecret: redisHashSecretSchema.optional(),
     keyPrefix: z.string().min(1).optional(),
     redisOptions: redisOptionsSchema.optional(),
     now: z

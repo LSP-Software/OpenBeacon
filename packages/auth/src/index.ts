@@ -25,7 +25,10 @@ export const authCapabilities = getAuthCapabilities({
 });
 
 const cache = emailEnabled
-  ? new OpenBeaconCache({ redisUrl: redisUrlSchema.parse(process.env["REDIS_URL"]) })
+  ? new OpenBeaconCache({
+      redisUrl: redisUrlSchema.parse(process.env["REDIS_URL"]),
+      hashSecret: env.REDIS_HASH_SECRET,
+    })
   : null;
 
 export const emailCodes = cache

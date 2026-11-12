@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { FakeRedis, testRedisHashSecret } from "@openbeacon/cache/testing";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 
@@ -18,7 +18,11 @@ test("nicknames are scoped to the caller's membership and targets in the same gr
   const findFirst = mock(async () => ({ id: "target" }));
   const router = createTRPCRouter({ groupMembership: groupMembershipRouter });
   const caller = router.createCaller({
-    cache: new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
+    cache: new TestCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => 0,
+    }),
     clientIp: "127.0.0.1",
     session: { user: { id: "user" } },
     deviceId: "device",
@@ -97,7 +101,11 @@ test("group colors are scoped to the caller's own memberships", async () => {
   const updateMany = mock(async () => ({ count: 1 }));
   const router = createTRPCRouter({ groupMembership: groupMembershipRouter });
   const caller = router.createCaller({
-    cache: new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
+    cache: new TestCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => 0,
+    }),
     clientIp: "127.0.0.1",
     session: { user: { id: "user" } },
     deviceId: "device",

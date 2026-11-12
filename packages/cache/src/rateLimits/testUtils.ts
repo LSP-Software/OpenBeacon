@@ -6,6 +6,8 @@
  */
 import { alertsTurnedOffScripts } from "../alertsTurnedOff/alertsTurnedOff.ts";
 
+export const testRedisHashSecret = "test-redis-hash-secret-000000000000";
+
 export type BucketState = {
   expiresAt: number;
   lastMs: number;

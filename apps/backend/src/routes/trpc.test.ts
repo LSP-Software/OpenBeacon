@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { apiCompatibilityLevel } from "@openbeacon/shared";
 import { Hono } from "hono";
+import { testRedisHashSecret } from "@openbeacon/cache/testing";
 
 describe("tRPC route", () => {
   test("answers a call to a procedure this server doesn't have with the frozen 404 body", async () => {
     Object.assign(process.env, {
       DATABASE_URL: "postgresql://localhost:5432/openbeacon",
       REDIS_URL: "redis://localhost:6379",
+      REDIS_HASH_SECRET: testRedisHashSecret,
       BETTER_AUTH_SECRET: "test-secret-with-at-least-32-characters",
       BETTER_AUTH_URL: "http://localhost:3000",
       S3_ACCESS_KEY_ID: "12345678901234567890",

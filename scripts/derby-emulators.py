@@ -249,15 +249,17 @@ def main():
     if not external_backend:
         if not env_file.exists():
             template = (ROOT / ".env.example").read_text()
-            env_file.write_text(template.replace("BETTER_AUTH_SECRET=                    # Min 32 chars, generate with: openssl rand -base64 32", f"BETTER_AUTH_SECRET={secrets.token_urlsafe(32)}"))
+            template = template.replace("BETTER_AUTH_SECRET=                    # Min 32 chars, generate with: openssl rand -base64 32", f"BETTER_AUTH_SECRET={secrets.token_urlsafe(32)}")
+            template = template.replace("REDIS_HASH_SECRET=                     # Min 32 chars, generate with: openssl rand -base64 32", f"REDIS_HASH_SECRET={secrets.token_urlsafe(32)}")
+            env_file.write_text(template)
             env_file.chmod(0o600)
-            print("Created .env with a generated authentication secret.", flush=True)
+            print("Created .env with generated authentication and rate limit secrets.", flush=True)
         values = {}
         for line in env_file.read_text().splitlines():
             if "=" in line and not line.lstrip().startswith("#"):
                 key, value = line.split("=", 1)
                 values[key.strip()] = value.split(" #", 1)[0].strip().strip("\"'")
-        required = ("BETTER_AUTH_SECRET", "S3_ACCESS_KEY_ID", "S3_ACCESS_KEY", "S3_BUCKET_NAME", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET")
+        required = ("BETTER_AUTH_SECRET", "REDIS_HASH_SECRET", "S3_ACCESS_KEY_ID", "S3_ACCESS_KEY", "S3_BUCKET_NAME", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET")
         missing = [key for key in required if not values.get(key)]
         if missing:
             parser.error(f"set these required values in {env_file}: {', '.join(missing)}")

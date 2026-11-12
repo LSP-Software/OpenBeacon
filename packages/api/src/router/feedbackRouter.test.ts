@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { FakeRedis, testRedisHashSecret } from "@openbeacon/cache/testing";
 import { FEEDBACK_MESSAGE_MAX_LENGTH } from "@openbeacon/schemas";
 import { appRouter } from "../root.ts";
 
@@ -15,7 +15,11 @@ const createCaller = ({
   session,
   selfHosted = false,
   feedbackWebhookUrl = null,
-  cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
+  cache = new TestCache({
+    redisUrl: "redis://localhost:6379",
+    hashSecret: testRedisHashSecret,
+    now: () => 0,
+  }),
 }: {
   create: ReturnType<typeof mock>;
   session: { user: { id: string; email: string } } | null;
@@ -171,7 +175,11 @@ describe("feedback", () => {
 
   test("shares the IP limit between requests with and without a session", async () => {
     const create = mock(async () => ({}));
-    const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+    const cache = new TestCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => 0,
+    });
     const signedIn = createCaller({
       create,
       session: { user: { id: "user-1", email: "user@example.com" } },

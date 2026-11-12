@@ -93,7 +93,7 @@ export const createEmailCodes = ({
         namespace: `emailCode.request.${purpose}`,
         identifier: {
           type: "email",
-          value: hashEmail(email),
+          value: normalizeEmail(email),
         },
         ...emailCodeRequestLimits.perAddress,
       });
@@ -146,7 +146,7 @@ export const createEmailCodes = ({
         identifier:
           purpose === "recovery-reset"
             ? { type: "userId" as const, value: subject }
-            : { type: "email" as const, value: hashEmail(subject) },
+            : { type: "email" as const, value: normalizeEmail(subject) },
         ...emailCodeWrongGuessLimit,
       };
       return db.$transaction(async (tx) => {
@@ -208,9 +208,6 @@ export const createEmailCodes = ({
 };
 
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
-
-const hashEmail = (email: string) =>
-  createHash("sha256").update(normalizeEmail(email)).digest("hex");
 
 const tokenIdentifier = (purpose: TokenTarget["purpose"], token: string) =>
   createHash("sha256").update(`${emailCodeTokens[purpose].prefix}:${token}`).digest("base64url");
