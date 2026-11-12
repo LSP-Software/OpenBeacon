@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 import { checkServices, tryCatch, validateEnv } from "@openbeacon/shared";
 import { createMapTilesClient, formatStatus } from "./client.ts";
 import { publish, readMapStatus, repairManifest, rollback } from "./commands.ts";
-import { DAY_MS, envSchema, parseClientEnv, parseEnv } from "./env.ts";
+import { DAY_MS, envSchema, getServiceUrl, parseEnv } from "./env.ts";
 import { checkBucketAccess, createR2Clients } from "./r2.ts";
 import { createMapTilesHandler } from "./server.ts";
 
@@ -54,7 +54,6 @@ const serve = async () => {
   });
 
   const handler = createMapTilesHandler({
-    apiKey: env.MAP_TILES_API_KEY,
     readMapStatus: () => readMapStatus(context),
     rollback: () => rollback(context),
     runUpdate: async (options) => {
@@ -67,10 +66,13 @@ const serve = async () => {
   });
   const server = Bun.serve({
     fetch: handler.fetch,
+    hostname: "127.0.0.1",
     idleTimeout: 30,
     port: env.MAP_TILES_PORT,
   });
-  console.log(`Map tiles API listening on port ${env.MAP_TILES_PORT}`);
+  console.log(
+    `Map tiles API listening on 127.0.0.1:${env.MAP_TILES_PORT} for the map-tiles command`,
+  );
   console.log(`Checking for a map update now and every 24 hours in R2 bucket ${env.R2_BUCKET}`);
   const stopUpdates = handler.scheduleUpdates(DAY_MS);
 
@@ -103,7 +105,7 @@ const run = async () => {
     return serve();
   }
 
-  const client = createMapTilesClient(parseClientEnv(process.env));
+  const client = createMapTilesClient({ serviceUrl: getServiceUrl(process.env) });
 
   switch (command) {
     case "status":

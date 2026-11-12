@@ -28,14 +28,12 @@ The next update replaces slot A, and so on.
 
 The service reads `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET`. The credentials need to read, write, delete and list objects and multipart uploads in the bucket (Cloudflare's "Object Read & Write" permission).
 
-| Variable                         | Default                            | What it does                                                                        |
-| -------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------- |
-| `MAP_TILES_API_KEY`              | None (required)                    | Key for the service's API, used by the `map-tiles` command. 32+ characters.         |
-| `MAP_TILES_UPDATE_INTERVAL_DAYS` | `30`                               | Days between scheduled updates. Must be more than 8.                                |
-| `MAP_TILES_PORT`                 | `8080`                             | Port the service listens on.                                                        |
-| `MAP_TILES_SERVICE_URL`          | `http://127.0.0.1:$MAP_TILES_PORT` | Where the `map-tiles` command finds the service. Only needed outside its container. |
-| `MAP_TILES_MAX_MBPS`             | None                               | Caps the upload and the download, each at this many megabits per second.            |
-| `MAP_TILES_STATE_DIR`            | `.map-tiles` (`/state` in Docker)  | Resumable upload state. Keep it on a volume.                                        |
+| Variable                         | Default                           | What it does                                                             |
+| -------------------------------- | --------------------------------- | ------------------------------------------------------------------------ |
+| `MAP_TILES_UPDATE_INTERVAL_DAYS` | `30`                              | Days between scheduled updates. Must be more than 8.                     |
+| `MAP_TILES_PORT`                 | `8080`                            | Port the service listens on, inside the container only (`127.0.0.1`).    |
+| `MAP_TILES_MAX_MBPS`             | None                              | Caps the upload and the download, each at this many megabits per second. |
+| `MAP_TILES_STATE_DIR`            | `.map-tiles` (`/state` in Docker) | Resumable upload state. Keep it on a volume.                             |
 
 ## Running the service
 
@@ -50,7 +48,7 @@ docker build -f apps/map-tiles/Dockerfile -t openbeacon-map-tiles .
 Run it with `/state` on a volume:
 
 ```bash
-docker run -d --name map-tiles --env-file .env -p 8080:8080 -v openbeacon-map-tiles-state:/state openbeacon-map-tiles
+docker run -d --name map-tiles --env-file .env -v openbeacon-map-tiles-state:/state openbeacon-map-tiles
 ```
 
 On start the service checks its settings, the same way the backend does. It then checks that its R2 credentials can list the bucket and write and delete a small `map-tiles-access-check` object, and that it can write to its state directory. It exits if any check fails, naming the error code (for example `R2: failed (AccessDenied)`):
@@ -64,7 +62,7 @@ Environment configuration valid
 Service connectivity:
   State directory: valid
   R2: valid
-Map tiles API listening on port 8080
+Map tiles API listening on 127.0.0.1:8080 for the map-tiles command
 Checking for a map update now and every 24 hours in R2 bucket openbeacon-maps
 ```
 
@@ -100,7 +98,7 @@ Run it inside the service's container:
 docker exec map-tiles map-tiles status
 ```
 
-The command talks to the running service using `MAP_TILES_API_KEY`, so it only works while the service is up, and it never races an update the service is running.
+The command talks to the running service, so it only works while the service is up, and it never races an update the service is running. The service listens on `127.0.0.1` only, so nothing outside its container can reach it and it needs no key. Don't publish its port.
 
 | Command    | What it does                                                                                                                                                                                                        |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -145,7 +143,7 @@ Apps using the bad map move off it on their next URL refresh, within about 10 mi
 
 ### Outside the container
 
-From the repository root, with `MAP_TILES_API_KEY` and `MAP_TILES_SERVICE_URL` pointing at a running service:
+From the repository root, while the service runs on the same machine (for example `bun run map-tiles serve` in another terminal):
 
 ```bash
 bun run map-tiles status

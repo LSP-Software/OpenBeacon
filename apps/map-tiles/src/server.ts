@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { tryCatch } from "@openbeacon/shared";
 import { z } from "zod";
 import type { PublishResult } from "./commands.ts";
@@ -7,28 +6,18 @@ import type { MapStatus, UpdateRun } from "./status.ts";
 const updateRequestSchema = z.object({ force: z.boolean().default(false) });
 
 export const createMapTilesHandler = ({
-  apiKey,
   now = Date.now,
   readMapStatus,
   rollback,
   runUpdate,
 }: {
-  apiKey: string;
   now?: () => number;
   readMapStatus: () => Promise<MapStatus>;
   rollback: () => Promise<string>;
   runUpdate: (options: { ignoreInterval: boolean }) => Promise<PublishResult>;
 }) => {
-  const expected = Buffer.from(apiKey);
   let running: { startedAt: string; task: Promise<void> } | null = null;
   let last: UpdateRun["last"] = null;
-
-  const isAuthorized = (request: Request) => {
-    const header = request.headers.get("authorization") ?? "";
-    const supplied = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
-    const suppliedBytes = Buffer.from(supplied);
-    return suppliedBytes.length === expected.length && timingSafeEqual(suppliedBytes, expected);
-  };
 
   const describe = (): UpdateRun => ({
     running: running !== null,
@@ -83,10 +72,6 @@ export const createMapTilesHandler = ({
 
       if (!["/status", "/update", "/rollback"].includes(pathname)) {
         return new Response("Not found", { status: 404 });
-      }
-
-      if (!isAuthorized(request)) {
-        return new Response("Unauthorized", { status: 401 });
       }
 
       if (pathname === "/status" && request.method === "GET") {

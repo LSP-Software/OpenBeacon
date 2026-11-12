@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { parseClientEnv, parseEnv } from "./env.ts";
+import { getServiceUrl, parseEnv } from "./env.ts";
 
 const required = {
   R2_ACCOUNT_ID: "account",
   R2_ACCESS_KEY_ID: "key",
   R2_SECRET_ACCESS_KEY: "secret",
   R2_BUCKET: "bucket",
-  MAP_TILES_API_KEY: "k".repeat(32),
 };
 
 describe("parseEnv", () => {
@@ -42,37 +41,15 @@ describe("parseEnv", () => {
       9 * 24 * 60 * 60 * 1000,
     );
   });
-
-  test("requires a long service key", () => {
-    expect(() => parseEnv({ ...required, MAP_TILES_API_KEY: "" })).toThrow();
-    expect(() => parseEnv({ ...required, MAP_TILES_API_KEY: "short" })).toThrow();
-  });
 });
 
-describe("parseClientEnv", () => {
-  const apiKey = "k".repeat(40);
-
-  test("talks to the service in the same container by default", () => {
-    expect(parseClientEnv({ MAP_TILES_API_KEY: apiKey })).toEqual({
-      apiKey,
-      serviceUrl: "http://127.0.0.1:8080",
-    });
-    expect(parseClientEnv({ MAP_TILES_API_KEY: apiKey, MAP_TILES_PORT: "9000" }).serviceUrl).toBe(
-      "http://127.0.0.1:9000",
-    );
+describe("getServiceUrl", () => {
+  test("talks to the service in the same container", () => {
+    expect(getServiceUrl({})).toBe("http://127.0.0.1:8080");
+    expect(getServiceUrl({ MAP_TILES_PORT: "9000" })).toBe("http://127.0.0.1:9000");
   });
 
-  test("can reach a service elsewhere", () => {
-    expect(
-      parseClientEnv({
-        MAP_TILES_API_KEY: apiKey,
-        MAP_TILES_SERVICE_URL: "https://maps.example",
-      }).serviceUrl,
-    ).toBe("https://maps.example");
-  });
-
-  test("needs the service key", () => {
-    expect(() => parseClientEnv({})).toThrow();
-    expect(() => parseClientEnv({ MAP_TILES_API_KEY: "short" })).toThrow();
+  test("rejects a port that isn't a number", () => {
+    expect(() => getServiceUrl({ MAP_TILES_PORT: "web" })).toThrow("MAP_TILES_PORT");
   });
 });

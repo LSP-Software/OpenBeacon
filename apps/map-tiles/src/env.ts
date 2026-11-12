@@ -15,7 +15,6 @@ export const envSchema = {
   ...r2EnvSchema,
   MAP_TILES_MAX_MBPS: z.preprocess(blankAsUndefined, z.coerce.number().positive().optional()),
   MAP_TILES_STATE_DIR: z.preprocess(blankAsUndefined, z.string().trim().default(".map-tiles")),
-  MAP_TILES_API_KEY: z.string().min(32),
   MAP_TILES_PORT: portSchema,
   MAP_TILES_UPDATE_INTERVAL_DAYS: z.preprocess(
     blankAsUndefined,
@@ -40,25 +39,14 @@ export const parseEnv = (source: Record<string, string | undefined>) => {
   };
 };
 
-const clientEnvSchema = z.object({
-  MAP_TILES_API_KEY: z.string().min(32),
-  MAP_TILES_PORT: portSchema,
-  MAP_TILES_SERVICE_URL: z.preprocess(blankAsUndefined, z.url({ protocol: /^https?$/ }).optional()),
-});
+export const getServiceUrl = (source: Record<string, string | undefined>) => {
+  const port = portSchema.safeParse(source["MAP_TILES_PORT"]);
 
-export const parseClientEnv = (source: Record<string, string | undefined>) => {
-  const result = clientEnvSchema.safeParse(source);
-
-  if (!result.success) {
-    throw new Error(`The map-tiles command needs:\n${z.prettifyError(result.error)}`);
+  if (!port.success) {
+    throw new Error("MAP_TILES_PORT must be a port number");
   }
 
-  const env = result.data;
-
-  return {
-    apiKey: env.MAP_TILES_API_KEY,
-    serviceUrl: env.MAP_TILES_SERVICE_URL ?? `http://127.0.0.1:${env.MAP_TILES_PORT}`,
-  };
+  return `http://127.0.0.1:${port.data}`;
 };
 
 export type MapTilesEnv = ReturnType<typeof parseEnv>;

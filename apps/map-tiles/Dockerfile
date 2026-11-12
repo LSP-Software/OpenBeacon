@@ -20,7 +20,6 @@ USER bun
 ENV NODE_ENV=production
 ENV MAP_TILES_STATE_DIR=/state
 VOLUME /state
-EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["bun", "-e", "const r = await fetch(`http://127.0.0.1:${process.env.MAP_TILES_PORT || 8080}/health`, { signal: AbortSignal.timeout(3000) }); process.exit(r.ok ? 0 : 1);"]
 ENTRYPOINT ["map-tiles"]

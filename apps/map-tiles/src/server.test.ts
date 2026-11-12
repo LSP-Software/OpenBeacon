@@ -3,8 +3,6 @@ import type { PublishResult } from "./commands.ts";
 import { createMapTilesHandler } from "./server.ts";
 import type { MapStatus } from "./status.ts";
 
-const apiKey = "k".repeat(40);
-
 const map: MapStatus = {
   bucket: "bucket",
   current: "a",
@@ -25,13 +23,9 @@ const map: MapStatus = {
   resumableUploads: [],
 };
 
-const request = (
-  path: string,
-  { body, key, method = "GET" }: { body?: string; key?: string; method?: string } = {},
-) =>
+const request = (path: string, { body, method = "GET" }: { body?: string; method?: string } = {}) =>
   new Request(`http://map-tiles${path}`, {
     method,
-    headers: key === undefined ? {} : { authorization: `Bearer ${key}` },
     ...(body === undefined ? {} : { body }),
   });
 
@@ -43,7 +37,6 @@ const createHandler = ({
   runUpdate?: (options: { ignoreInterval: boolean }) => Promise<PublishResult>;
 } = {}) =>
   createMapTilesHandler({
-    apiKey,
     now: () => 0,
     readMapStatus: async () => map,
     rollback,
@@ -55,16 +48,14 @@ describe("map tiles service", () => {
     expect((await createHandler().fetch(request("/health"))).status).toBe(200);
   });
 
-  test("rejects requests without the right key", async () => {
+  test("answers unknown paths and methods without running anything", async () => {
     const runUpdate = mock(async (): Promise<PublishResult> => ({ published: false, message: "" }));
     const rollback = mock(async () => "");
     const handler = createHandler({ rollback, runUpdate });
 
-    for (const key of [undefined, "", "wrong", `${apiKey}x`]) {
-      expect((await handler.fetch(request("/update", { key, method: "POST" }))).status).toBe(401);
-      expect((await handler.fetch(request("/rollback", { key, method: "POST" }))).status).toBe(401);
-      expect((await handler.fetch(request("/status", { key }))).status).toBe(401);
-    }
+    expect((await handler.fetch(request("/nope"))).status).toBe(404);
+    expect((await handler.fetch(request("/update"))).status).toBe(405);
+    expect((await handler.fetch(request("/rollback"))).status).toBe(405);
     expect(runUpdate).not.toHaveBeenCalled();
     expect(rollback).not.toHaveBeenCalled();
   });
@@ -79,8 +70,8 @@ describe("map tiles service", () => {
     );
     const handler = createHandler({ runUpdate });
 
-    const first = await handler.fetch(request("/update", { key: apiKey, method: "POST" }));
-    const second = await handler.fetch(request("/update", { key: apiKey, method: "POST" }));
+    const first = await handler.fetch(request("/update", { method: "POST" }));
+    const second = await handler.fetch(request("/update", { method: "POST" }));
 
     expect(first.status).toBe(202);
     expect(await second.json()).toMatchObject({
@@ -93,7 +84,7 @@ describe("map tiles service", () => {
     finish({ published: true, message: "Published build 20261201 to slot b." });
     await handler.idle();
 
-    expect(await (await handler.fetch(request("/status", { key: apiKey }))).json()).toEqual({
+    expect(await (await handler.fetch(request("/status"))).json()).toEqual({
       running: false,
       startedAt: null,
       last: {
@@ -112,17 +103,15 @@ describe("map tiles service", () => {
     await handler.fetch(
       request("/update", {
         body: '{"force":true}',
-        key: apiKey,
         method: "POST",
       }),
     );
     await handler.idle();
 
     expect(runUpdate).toHaveBeenCalledWith({ ignoreInterval: true });
-    expect(
-      (await handler.fetch(request("/update", { body: "nope", key: apiKey, method: "POST" })))
-        .status,
-    ).toBe(400);
+    expect((await handler.fetch(request("/update", { body: "nope", method: "POST" }))).status).toBe(
+      400,
+    );
   });
 
   test("records a failed update and allows another attempt", async () => {
@@ -131,10 +120,10 @@ describe("map tiles service", () => {
     });
     const handler = createHandler({ runUpdate });
 
-    await handler.fetch(request("/update", { key: apiKey, method: "POST" }));
+    await handler.fetch(request("/update", { method: "POST" }));
     await handler.idle();
-    const status = await (await handler.fetch(request("/status", { key: apiKey }))).json();
-    await handler.fetch(request("/update", { key: apiKey, method: "POST" }));
+    const status = await (await handler.fetch(request("/status"))).json();
+    await handler.fetch(request("/update", { method: "POST" }));
     await handler.idle();
 
     expect(status).toMatchObject({
@@ -154,15 +143,13 @@ describe("map tiles service", () => {
         }),
     });
 
-    await handler.fetch(request("/update", { key: apiKey, method: "POST" }));
-    expect(
-      (await handler.fetch(request("/rollback", { key: apiKey, method: "POST" }))).status,
-    ).toBe(409);
+    await handler.fetch(request("/update", { method: "POST" }));
+    expect((await handler.fetch(request("/rollback", { method: "POST" }))).status).toBe(409);
     expect(rollback).not.toHaveBeenCalled();
 
     finish({ published: false, message: "" });
     await handler.idle();
-    const response = await handler.fetch(request("/rollback", { key: apiKey, method: "POST" }));
+    const response = await handler.fetch(request("/rollback", { method: "POST" }));
 
     expect(await response.json()).toEqual({
       message: "Rolled back from b-20261201 to a-20261107.",
@@ -193,7 +180,7 @@ describe("map tiles service", () => {
     expect(runUpdate).toHaveBeenLastCalledWith({ ignoreInterval: false });
 
     tick();
-    const manual = await handler.fetch(request("/update", { key: apiKey, method: "POST" }));
+    const manual = await handler.fetch(request("/update", { method: "POST" }));
     expect(await manual.json()).toMatchObject({ alreadyRunning: true });
     expect(runUpdate).toHaveBeenCalledTimes(1);
 
@@ -218,7 +205,7 @@ describe("map tiles service", () => {
       },
     });
 
-    const response = await handler.fetch(request("/rollback", { key: apiKey, method: "POST" }));
+    const response = await handler.fetch(request("/rollback", { method: "POST" }));
 
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({

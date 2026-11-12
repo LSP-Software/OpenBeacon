@@ -2,7 +2,6 @@ import { describe, expect, mock, test } from "bun:test";
 import { createMapTilesClient, formatStatus } from "./client.ts";
 import type { ServiceStatus } from "./status.ts";
 
-const apiKey = "k".repeat(40);
 const now = Date.parse("2026-12-03T00:00:00.000Z");
 
 const status: ServiceStatus = {
@@ -82,7 +81,7 @@ describe("formatStatus", () => {
 });
 
 describe("createMapTilesClient", () => {
-  test("asks the service for a forced update with the key", async () => {
+  test("asks the service for a forced update", async () => {
     const fetch = mock(async (_input: string | URL | Request, _init?: RequestInit) =>
       Response.json(
         { alreadyRunning: false, running: true, startedAt: null, last: null },
@@ -92,7 +91,6 @@ describe("createMapTilesClient", () => {
       ),
     );
     const client = createMapTilesClient({
-      apiKey,
       fetch: fetch as unknown as typeof globalThis.fetch,
       serviceUrl: "http://127.0.0.1:8080",
     });
@@ -101,13 +99,11 @@ describe("createMapTilesClient", () => {
 
     const [input, init] = fetch.mock.calls[0] ?? [];
     expect(String(input)).toBe("http://127.0.0.1:8080/update");
-    expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${apiKey}`);
     expect(init?.body).toBe('{"force":true}');
   });
 
   test("shows the service's reason when it refuses", async () => {
     const client = createMapTilesClient({
-      apiKey,
       fetch: (async () =>
         Response.json(
           { error: "An update is running" },
@@ -121,7 +117,6 @@ describe("createMapTilesClient", () => {
 
   test("says when the service cannot be reached", async () => {
     const client = createMapTilesClient({
-      apiKey,
       fetch: (async () => {
         throw new Error("Connection refused");
       }) as unknown as typeof globalThis.fetch,
