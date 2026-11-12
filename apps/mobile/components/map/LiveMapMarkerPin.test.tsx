@@ -58,6 +58,11 @@ mock.module("lucide-react-native", () => ({
   ClockIcon: () => null,
   EyeOffIcon: () => null,
   BackpackIcon: () => null,
+  Flower2Icon: () => null,
+  HeartIcon: () => null,
+  StarIcon: () => null,
+  SunIcon: () => null,
+  TabletIcon: () => null,
   CarIcon: () => null,
   createLucideIcon: () => () => null,
   HouseIcon: () => null,
@@ -231,6 +236,6 @@ describe("LiveMapMarkerPin", () => {
     expect(await badge("phone", "ios")).toContain('"iPhone"');
     expect(await badge("phone", "android")).toContain('"Android phone"');
     expect(await badge("phone", null)).toContain('"Phone"');
-    expect(await badge("tablet", "ios")).toContain('"Tablet"');
+    expect(await badge("tablet", "ios")).toContain('"Landscape tablet"');
   });
 });

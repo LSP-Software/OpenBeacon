@@ -17,7 +17,7 @@ The name the owner gives a device, such as "Pixel 9" or "Car tablet". A new devi
 _Avoid_: Device label, nickname
 
 **Device icon**:
-One of a fixed set of pictures the owner picks for a device: phone, tablet, watch, car, laptop, bag, tag or home. A new device gets tablet if its model contains "iPad" or "Tab", and phone otherwise.
+One of a fixed set of pictures the owner picks for a device: phone and tablet variants, star, heart, flower or sun. A new device gets tablet if its model contains "iPad" or "Tab", and phone otherwise.
 _Avoid_: Device type, avatar
 
 **Removing a device**:

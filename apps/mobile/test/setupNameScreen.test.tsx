@@ -51,6 +51,7 @@ mock.module("../lib/api.ts", () => ({
   },
 }));
 mock.module("../lib/deviceIcons.ts", () => ({
+  selectableDeviceIcons: ["phone", "tablet"],
   deviceIconFor: () => ({ icon: () => null, label: "Icon" }),
 }));
 mock.module("../lib/trackingEvents.ts", () => ({

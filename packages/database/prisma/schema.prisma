@@ -298,6 +298,12 @@ enum DeviceIcon {
   bag
   tag
   home
+  phoneClassic
+  tabletPortrait
+  star
+  heart
+  flower
+  sun
 }
 
 enum DeviceActivation {

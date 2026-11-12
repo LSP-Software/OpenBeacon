@@ -2,16 +2,15 @@ import { describe, expect, mock, test } from "bun:test";
 
 const lucideIcon = (name: string) => Object.assign(() => null, { displayName: name });
 mock.module("lucide-react-native", () => ({
-  BackpackIcon: lucideIcon("Backpack"),
-  CarIcon: lucideIcon("Car"),
   createLucideIcon: lucideIcon,
-  HouseIcon: lucideIcon("House"),
-  LaptopIcon: lucideIcon("Laptop"),
+  Flower2Icon: lucideIcon("Flower"),
+  HeartIcon: lucideIcon("Heart"),
   SmartphoneIcon: lucideIcon("Smartphone"),
-  TagIcon: lucideIcon("Tag"),
-  WatchIcon: lucideIcon("Watch"),
+  StarIcon: lucideIcon("Star"),
+  SunIcon: lucideIcon("Sun"),
+  TabletIcon: lucideIcon("Tablet"),
 }));
-const { deviceIconFor, deviceIcons } = await import("./deviceIcons.ts");
+const { deviceIconFor, deviceIcons, selectableDeviceIcons } = await import("./deviceIcons.ts");
 
 describe("deviceIconFor", () => {
   test("draws phones by platform and falls back to a generic phone", () => {
@@ -25,9 +24,30 @@ describe("deviceIconFor", () => {
     expect(deviceIconFor("phone", "windows")).toBe(deviceIcons.phone);
   });
 
-  test("keeps every other icon whatever the platform", () => {
-    expect(deviceIconFor("tablet", "ios")).toBe(deviceIcons.tablet);
-    expect(deviceIconFor("watch", "android")).toBe(deviceIcons.watch);
-    expect(deviceIcons.tablet.icon).not.toBe(deviceIcons.phone.icon);
+  test("keeps selectable identifiers distinct and independent of platform", () => {
+    expect(selectableDeviceIcons).toEqual([
+      "phone",
+      "phoneClassic",
+      "tablet",
+      "tabletPortrait",
+      "star",
+      "heart",
+      "flower",
+      "sun",
+    ]);
+    for (const icon of selectableDeviceIcons) {
+      if (icon === "phone") continue;
+      expect(deviceIconFor(icon, "ios")).toBe(deviceIcons[icon]);
+      expect(deviceIconFor(icon, "android")).toBe(deviceIcons[icon]);
+    }
+    expect(new Set(Object.values(deviceIcons).map(({ icon }) => icon)).size).toBe(8);
+  });
+
+  test("shows a phone for retired icons without offering them in the picker", () => {
+    for (const icon of ["watch", "car", "laptop", "bag", "tag", "home"] as const) {
+      for (const platform of ["ios", "android", null]) {
+        expect(deviceIconFor(icon, platform)).toEqual(deviceIconFor("phone", platform));
+      }
+    }
   });
 });

@@ -1,14 +1,13 @@
 import type { deviceIconSchema } from "@openbeacon/schemas";
 import {
-  BackpackIcon,
-  CarIcon,
   createLucideIcon,
-  HouseIcon,
-  LaptopIcon,
+  Flower2Icon,
+  HeartIcon,
   type LucideIcon,
   SmartphoneIcon,
-  TagIcon,
-  WatchIcon,
+  StarIcon,
+  SunIcon,
+  TabletIcon,
 } from "lucide-react-native";
 import type { z } from "zod";
 
@@ -29,16 +28,24 @@ const WideTabletIcon = createLucideIcon("WideTablet", [
   ["path", { d: "M12 7h.01", key: "camera" }],
 ]);
 
+const ClassicPhoneIcon = createLucideIcon("ClassicPhone", [
+  ["rect", { width: "12", height: "20", x: "6", y: "2", rx: "2", key: "body" }],
+  ["path", { d: "M6 6h12M6 17h12", key: "screen" }],
+  ["path", { d: "M12 19.5h.01", key: "button" }],
+]);
+
 export const deviceIcons = {
   phone: { icon: SmartphoneIcon, label: "Phone" },
-  tablet: { icon: WideTabletIcon, label: "Tablet" },
-  watch: { icon: WatchIcon, label: "Watch" },
-  car: { icon: CarIcon, label: "Car" },
-  laptop: { icon: LaptopIcon, label: "Laptop" },
-  bag: { icon: BackpackIcon, label: "Bag" },
-  tag: { icon: TagIcon, label: "Tag" },
-  home: { icon: HouseIcon, label: "Home" },
-} satisfies Record<DeviceIcon, { icon: LucideIcon; label: string }>;
+  phoneClassic: { icon: ClassicPhoneIcon, label: "Classic phone" },
+  tablet: { icon: WideTabletIcon, label: "Landscape tablet" },
+  tabletPortrait: { icon: TabletIcon, label: "Portrait tablet" },
+  star: { icon: StarIcon, label: "Star" },
+  heart: { icon: HeartIcon, label: "Heart" },
+  flower: { icon: Flower2Icon, label: "Flower" },
+  sun: { icon: SunIcon, label: "Sun" },
+} satisfies Partial<Record<DeviceIcon, { icon: LucideIcon; label: string }>>;
+
+export const selectableDeviceIcons = Object.keys(deviceIcons) as (keyof typeof deviceIcons)[];
 
 export const deviceIconFor = (
   icon: DeviceIcon,
@@ -48,5 +55,6 @@ export const deviceIconFor = (
   if (icon === "phone" && platform === "android") {
     return { icon: AndroidPhoneIcon, label: "Android phone" };
   }
-  return deviceIcons[icon];
+  if (icon in deviceIcons) return deviceIcons[icon as keyof typeof deviceIcons];
+  return deviceIconFor("phone", platform);
 };

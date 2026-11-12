@@ -44,6 +44,12 @@ describe("deviceIconSchema", () => {
       "bag",
       "tag",
       "home",
+      "phoneClassic",
+      "tabletPortrait",
+      "star",
+      "heart",
+      "flower",
+      "sun",
     ]);
     expect(deviceIconSchema.safeParse("rocket").success).toBe(false);
   });
