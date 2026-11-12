@@ -10,12 +10,10 @@ const locationSharingChangeSchema = z.object({
     .union([z.literal(15), z.literal(60), z.literal(480), z.literal(1440)])
     .nullable(),
   pausedUntil: z.date().nullable(),
-  requestedAt: z.date().refine((date) => date.getTime() <= Date.now() + 24 * 60 * 60_000, {
-    message: "A sharing change can't be requested in the future.",
-  }),
+  requestedAt: z.date(),
 });
 
-export const setLocationSharingSchema = z
+export const locationSharingChangeInputSchema = z
   .discriminatedUnion("scope", [
     locationSharingChangeSchema.extend({
       scope: z.literal("device"),
@@ -34,3 +32,8 @@ export const setLocationSharingSchema = z
       message: "A timed pause needs an end time, and a resume must say what it replaces.",
     },
   );
+
+export const setLocationSharingSchema = locationSharingChangeInputSchema.refine(
+  (change) => change.requestedAt.getTime() <= Date.now() + 24 * 60 * 60_000,
+  { message: "A sharing change can't be requested in the future." },
+);

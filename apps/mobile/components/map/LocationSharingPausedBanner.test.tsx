@@ -18,6 +18,7 @@ const changes: Parameters<typeof changeLocationSharing>[0][] = [];
 let invalidations = 0;
 let syncs = 0;
 let fetched: typeof sharingData | null = null;
+let synced: typeof sharingData | null = null;
 const preference = (paused: boolean): SharingPreference => ({
   sharingPaused: paused,
   sharingPausedUntil: null,
@@ -62,7 +63,7 @@ mock.module("../../lib/locationSharing.ts", () => ({
   serverNow: () => Date.now(),
   syncLocationSharing: async () => {
     syncs += 1;
-    return sharingData;
+    return synced ?? sharingData;
   },
 }));
 mock.module("../ui/Button.tsx", () => ({
@@ -99,6 +100,7 @@ beforeEach(() => {
   invalidations = 0;
   syncs = 0;
   fetched = null;
+  synced = null;
 });
 afterEach(async () => {
   await act(async () => root?.unmount());
@@ -169,6 +171,23 @@ test("re-syncs the sharing state when the map poll shows it changed", async () =
   expect(syncs).toBe(1);
   await render({ paused: true, revisionPrefix: "s0.2:" });
   expect(syncs).toBe(2);
+});
+
+test("syncs when the first poll disagrees with the loaded sharing state", async () => {
+  expect(await render(null)).not.toContain("paused");
+  synced = { account: preference(true), device: preference(false), paused: true };
+  await render({ paused: true, revisionPrefix: "s1.0:" });
+  expect(syncs).toBe(1);
+  expect(await render({ paused: true, revisionPrefix: "s1.0:" })).toContain(
+    "Your location sharing is paused",
+  );
+  expect(syncs).toBe(1);
+});
+
+test("doesn't sync when the first poll agrees with the loaded sharing state", async () => {
+  await render(null);
+  await render({ paused: false, revisionPrefix: "" });
+  expect(syncs).toBe(0);
 });
 
 test("resuming reads the latest sharing state first", async () => {

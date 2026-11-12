@@ -409,6 +409,17 @@ test("converts server deadlines to the phone's clock before handing them to capt
   ).toBeWithin(-50, 50);
 });
 
+test("a phone clock days behind the server can still pause and resume", async () => {
+  serverClockAhead = 3 * 24 * 60 * 60_000;
+  await syncLocationSharing();
+  expect(
+    await changeLocationSharing({ scope: "device", paused: true, durationMinutes: null }),
+  ).not.toBe("queued");
+  expect(changes.at(-1)?.paused).toBe(true);
+  await changeLocationSharing({ scope: "device", paused: false, durationMinutes: null });
+  expect(changes.at(-1)?.paused).toBe(false);
+});
+
 test("signing out forgets queued changes so they aren't replayed later", async () => {
   offline = true;
   await changeLocationSharing({

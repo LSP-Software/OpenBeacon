@@ -53,14 +53,21 @@ export const groupTrackingRouter = {
           userId: ctx.session.user.id,
         });
       });
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const keyState = await tryCatch(
-        getTrackingKeyState({
-          db: ctx.db,
-          deviceId: ctx.deviceId,
-          userId: ctx.session.user.id,
-        }),
+        Promise.race([
+          getTrackingKeyState({
+            db: ctx.db,
+            deviceId: ctx.deviceId,
+            userId: ctx.session.user.id,
+          }),
+          new Promise<null>((resolve) => {
+            timer = setTimeout(() => resolve(null), 2_000);
+          }),
+        ]),
       );
-      if (keyState.error) return { ...result };
+      clearTimeout(timer);
+      if (keyState.error || keyState.data === null) return { ...result };
       return { ...result, keyState: keyState.data };
     }),
   poll: groupMemberProcedure

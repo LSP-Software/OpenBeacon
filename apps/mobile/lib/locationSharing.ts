@@ -1,4 +1,4 @@
-import { setLocationSharingSchema } from "@openbeacon/schemas";
+import { locationSharingChangeInputSchema } from "@openbeacon/schemas";
 import {
   resolveLocationSharing,
   tryCatch,
@@ -60,7 +60,7 @@ const readPendingChange = (userId: string, scope: "device" | "account") => {
   const key = pendingKey(userId, scope);
   const stored = storage.getString(key);
   if (!stored) return null;
-  const input = parseStored(setLocationSharingSchema, stored);
+  const input = parseStored(locationSharingChangeInputSchema, stored);
   if (!input) storage.remove(key);
   return input ? { stored, input } : null;
 };
@@ -223,7 +223,7 @@ export const changeLocationSharing = async (input: {
     : null;
   const durationMinutes = input.paused ? input.durationMinutes : null;
   const requestedAt = new Date(serverNow());
-  const change = setLocationSharingSchema.parse({
+  const change = locationSharingChangeInputSchema.parse({
     scope: input.scope,
     ...(input.scope === "device" ? { deviceId } : {}),
     expectedUserId: device.userId,

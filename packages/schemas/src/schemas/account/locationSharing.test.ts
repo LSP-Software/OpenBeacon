@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { setLocationSharingSchema } from "./locationSharing.ts";
+import { locationSharingChangeInputSchema, setLocationSharingSchema } from "./locationSharing.ts";
 
 const change = {
   requestId: "sharing-1",
@@ -111,4 +111,15 @@ test("a sharing change carries when it was tapped, which can't be far in the fut
       requestedAt: new Date(Date.now() + 25 * 60 * 60_000),
     }).success,
   ).toBe(false);
+});
+
+test("only the server rejects a change requested more than a day ahead of its clock", () => {
+  const ahead = {
+    ...change,
+    scope: "account",
+    expectedUserId: "alex",
+    requestedAt: new Date(Date.now() + 2 * 24 * 60 * 60_000),
+  };
+  expect(setLocationSharingSchema.safeParse(ahead).success).toBe(false);
+  expect(locationSharingChangeInputSchema.safeParse(ahead).success).toBe(true);
 });

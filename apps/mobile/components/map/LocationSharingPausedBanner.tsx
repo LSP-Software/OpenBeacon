@@ -32,11 +32,18 @@ export const LocationSharingPausedBanner = ({
     subscribed,
   });
   const polledState = polled ? `${polled.paused}:${polled.revisionPrefix}` : undefined;
+  const polledPaused = polled?.paused;
+  const loadedPaused = sharing.data?.paused;
   const seenPolledState = useRef(polledState);
+  const syncedPolledState = useRef<string | undefined>(undefined);
   useEffect(() => {
     const previous = seenPolledState.current;
     seenPolledState.current = polledState;
-    if (previous === undefined || polledState === undefined || previous === polledState) return;
+    if (polledState === undefined || syncedPolledState.current === polledState) return;
+    const changed = previous !== undefined && previous !== polledState;
+    const disagrees = loadedPaused !== undefined && loadedPaused !== polledPaused;
+    if (!changed && !disagrees) return;
+    syncedPolledState.current = polledState;
     void tryCatch(syncLocationSharing()).then((synced) => {
       if (synced.data) {
         queryClient.setQueryData(trpc.account.locationSharing.queryKey(), synced.data);
@@ -44,7 +51,7 @@ export const LocationSharingPausedBanner = ({
       }
       void queryClient.invalidateQueries({ queryKey: trpc.account.locationSharing.queryKey() });
     });
-  }, [polledState, queryClient]);
+  }, [loadedPaused, polledPaused, polledState, queryClient]);
   const [failure, setFailure] = useState<string | null>(null);
   const resume = useMutation({
     mutationFn: async () => {
