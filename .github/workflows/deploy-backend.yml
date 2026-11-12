@@ -49,6 +49,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Find Coolify applications and check for an active deployment
         id: coolify_application
+        if: inputs.deploy
         env:
           COOLIFY_ENDPOINT: ${{ secrets.COOLIFY_ENDPOINT }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
@@ -58,25 +59,21 @@ jobs:
           applications=$(curl --fail-with-body --silent --show-error \
             --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
             "${api}/applications")
-          application=$(jq -cer 'if type != "array" then error("Expected an application list from Coolify") else [.[] | select(.name == "OpenBeacon Backend" and (.deleted_at == null))] | if length != 1 then error("Expected one active OpenBeacon Backend application; found \(length). Check the Coolify endpoint and token access.") elif (.[0].id | type != "number") then error("Backend application has no numeric id") elif (.[0].uuid | type != "string" or length == 0) then error("Backend application has no UUID") else .[0] | {id, uuid} end end' <<< "$applications")
-          application_id=$(jq -er '.id | tostring' <<< "$application")
-          application_uuid=$(jq -er '.uuid' <<< "$application")
-          curl --fail-with-body --silent --show-error \
-            --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
-            "${api}/deployments" | \
-            jq -e --arg app "$application_id" 'if type != "array" then error("Unexpected deployments response") else all(.[]; (.application_id | tostring) != $app or (.status != "queued" and .status != "in_progress")) end' > /dev/null || {
-              echo 'Unable to confirm that no backend deployment is active. Check Coolify before releasing.' >&2
-              exit 1
-            }
-          runner=$(jq -cer 'if type != "array" then error("Expected an application list") else [.[] | select(.name == "OpenBeacon Scheduled Jobs" and (.deleted_at == null))] | if length != 1 then error("Expected one OpenBeacon Scheduled Jobs application") else .[0] | {id, uuid} end end' <<< "$applications")
-          runner_id=$(jq -er '.id | numbers | tostring' <<< "$runner")
-          runner_uuid=$(jq -er '.uuid | strings | select(length > 0)' <<< "$runner")
-          curl --fail-with-body --silent --show-error \
-            --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
-            "${api}/deployments" | \
-            jq -e --arg app "$runner_id" 'if type != "array" then error("Unexpected deployments response") else all(.[]; (.application_id | tostring) != $app or (.status != "queued" and .status != "in_progress")) end' > /dev/null
-          echo "uuid=${application_uuid}" >> "$GITHUB_OUTPUT"
-          echo "runner_uuid=${runner_uuid}" >> "$GITHUB_OUTPUT"
+          for name in "OpenBeacon Backend" "OpenBeacon Scheduled Jobs"; do
+            uuid=$(jq -er --arg name "$name" 'if type != "array" then error("Expected an application list from Coolify") else [.[] | select(.name == $name and .deleted_at == null)] | if length != 1 then error("Expected one active \($name) application; found \(length). Check the Coolify endpoint and token access.") else .[0].uuid | strings | select(length > 0) end end' <<< "$applications")
+            curl --fail-with-body --silent --show-error \
+              --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
+              "${api}/deployments/applications/${uuid}" | \
+              jq -e '(if type == "array" then . else .deployments end) | if type != "array" then error("Unexpected deployments response") else all(.[]; .status != "queued" and .status != "in_progress") end' > /dev/null || {
+                echo "Unable to confirm that no ${name} deployment is active. Check Coolify before releasing." >&2
+                exit 1
+              }
+            if [ "$name" = "OpenBeacon Backend" ]; then
+              echo "uuid=${uuid}" >> "$GITHUB_OUTPUT"
+            else
+              echo "runner_uuid=${uuid}" >> "$GITHUB_OUTPUT"
+            fi
+          done
       - name: Require an unreleased version or a re-run of this commit's release
         id: release_check
         env:
