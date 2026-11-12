@@ -18,6 +18,7 @@ export const createMapTilesHandler = ({
 }) => {
   let running: { startedAt: string; task: Promise<void> } | null = null;
   let last: UpdateRun["last"] = null;
+  let rollingBack: Promise<unknown> | null = null;
 
   const describe = (): UpdateRun => ({
     running: running !== null,
@@ -27,6 +28,9 @@ export const createMapTilesHandler = ({
 
   const start = (ignoreInterval: boolean) => {
     const task = (async () => {
+      if (rollingBack) {
+        await rollingBack;
+      }
       const result = await tryCatch(runUpdate({ ignoreInterval }));
       const finishedAt = new Date(now()).toISOString();
 
@@ -104,7 +108,13 @@ export const createMapTilesHandler = ({
             { status: 409 },
           );
         }
-        const result = await tryCatch(rollback());
+        if (rollingBack) {
+          return Response.json({ error: "A rollback is already running" }, { status: 409 });
+        }
+        const pending = tryCatch(rollback());
+        rollingBack = pending;
+        const result = await pending;
+        rollingBack = null;
         if (result.error) {
           return Response.json({ error: result.error.message }, { status: 409 });
         }

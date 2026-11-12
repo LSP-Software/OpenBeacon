@@ -198,6 +198,31 @@ describe("map tiles service", () => {
     clearIntervalSpy.mockRestore();
   });
 
+  test("an update waits for a running rollback, and a second rollback is refused", async () => {
+    let finishRollback: (message: string) => void = () => {};
+    const rollback = mock(
+      () =>
+        new Promise<string>((resolve) => {
+          finishRollback = resolve;
+        }),
+    );
+    const runUpdate = mock(async (): Promise<PublishResult> => ({ published: false, message: "" }));
+    const handler = createHandler({ rollback, runUpdate });
+
+    const rolling = handler.fetch(request("/rollback", { method: "POST" }));
+    await Bun.sleep(0);
+    expect((await handler.fetch(request("/rollback", { method: "POST" }))).status).toBe(409);
+    expect((await handler.fetch(request("/update", { method: "POST" }))).status).toBe(202);
+    await Bun.sleep(0);
+    expect(runUpdate).not.toHaveBeenCalled();
+
+    finishRollback("Rolled back");
+    expect((await rolling).status).toBe(200);
+    await handler.idle();
+    expect(runUpdate).toHaveBeenCalledTimes(1);
+    expect(rollback).toHaveBeenCalledTimes(1);
+  });
+
   test("reports why a rollback failed", async () => {
     const handler = createHandler({
       rollback: async () => {
