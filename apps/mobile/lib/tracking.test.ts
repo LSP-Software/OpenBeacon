@@ -236,6 +236,18 @@ mock.module("./server-url.ts", () => ({ hasCustomServerUrl: () => false }));
 
 mock.module("./api.ts", () => ({
   trpcClient: {
+    account: {
+      locationSharing: {
+        query: async () => ({
+          userId: currentUserId,
+          deviceId: "device-1",
+          paused: false,
+          pausedUntil: null,
+          resumeAfter: null,
+          revisionPrefix: "",
+        }),
+      },
+    },
     auth: {
       deviceKeyContext: {
         query: async () => {
@@ -392,6 +404,7 @@ mock.module("./api.ts", () => ({
 
 mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   default: {
+    setSharingState: () => {},
     setQueueOwner: () => {},
     countUnassignedCiphertexts: async () => unassignedCount,
     assignUnassignedCiphertexts: async (deviceId: string, owner: string) => {

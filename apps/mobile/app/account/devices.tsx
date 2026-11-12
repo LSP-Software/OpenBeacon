@@ -9,6 +9,8 @@ import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
 import { BackButton } from "../../components/headers/BackButton.tsx";
+import { LocationSharingCard } from "../../components/LocationSharingCard.tsx";
+import { isSharingPaused } from "@openbeacon/shared";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/Dialog.tsx";
@@ -28,6 +30,7 @@ const schema = z.object({ name: deviceNameSchema, icon: deviceIconSchema });
 const DevicesScreen = () => {
   const queryClient = useQueryClient();
   const devices = useQuery(trpc.account.listDevices.queryOptions());
+  const sharing = useQuery(trpc.account.locationSharing.queryOptions());
   const { data: session } = authClient.useSession();
   const groups = useQuery(trpc.groupMembership.list.queryOptions());
   const { positions } = useLiveTrackingPositions();
@@ -95,6 +98,11 @@ const DevicesScreen = () => {
           <Button onPress={form.handleSubmit(save)} loading={updateDevice.isPending}>
             <Text>Save</Text>
           </Button>
+          {editing?.activatedAt ? (
+            <LocationSharingCard
+              device={devices.data?.find((device) => device.id === editing.id) ?? editing}
+            />
+          ) : null}
           {editing?.isCurrent ? (
             <Text className="text-muted-foreground text-sm leading-5">
               To remove this phone, sign out on the Account tab and choose to remove it.
@@ -199,18 +207,21 @@ const DevicesScreen = () => {
                     <Text className="text-muted-foreground text-sm">
                       {!device.activatedAt
                         ? "Can’t see anyone’s location until it’s set up"
-                        : groups.data?.length === 0
-                          ? "Not sharing with any group"
-                          : [
-                              lastLocation === null
-                                ? "No location shared yet"
-                                : lastLocation === "now"
-                                  ? "Location updated now"
-                                  : `Location updated ${lastLocation} ago`,
-                              position ? `Battery ${position.battery.level}%` : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
+                        : isSharingPaused(device) ||
+                            (sharing.data && isSharingPaused(sharing.data.account))
+                          ? "Location sharing paused"
+                          : groups.data?.length === 0
+                            ? "Not sharing with any group"
+                            : [
+                                lastLocation === null
+                                  ? "No location shared yet"
+                                  : lastLocation === "now"
+                                    ? "Location updated now"
+                                    : `Location updated ${lastLocation} ago`,
+                                position ? `Battery ${position.battery.level}%` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
                     </Text>
                   </View>
                 </Pressable>

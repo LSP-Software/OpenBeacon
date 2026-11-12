@@ -16,6 +16,37 @@ import kotlin.test.assertTrue
 
 class CapturePipelineTest {
   @Test
+  fun sharingRevisionTravelsWithTheCapturedPointAndOldFixesAreSkipped() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey("group", "epoch", ByteArray(32), "tablet", "trackingPoint")))
+    val queue = InMemoryCiphertextQueue()
+    val cutoff = java.time.Instant.parse("2026-07-13T18:45:00.000Z").toEpochMilli()
+    var state = SharingCaptureState(revisionPrefix = "s1.2:", resumeAfter = cutoff)
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, sharingState = { state })
+    assertEquals(0, pipeline.onFix(51.5, 0.0, "2026-07-13T18:45:00.000Z", null, 80, false))
+    assertEquals(1, pipeline.onFix(51.5, 0.0, "2026-07-13T18:45:01.000Z", null, 80, false))
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).single().clientPointId.startsWith("s1.2:"))
+    state = state.copy(paused = true)
+    assertEquals(0, pipeline.onFix(51.5, 0.0, "2026-07-13T18:45:02.000Z", null, 80, false))
+  }
+
+  @Test
+  fun pausingDuringEncryptionPreventsQueueingTheFix() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey("group", "epoch", ByteArray(32), "tablet", "trackingPoint")))
+    val queue = InMemoryCiphertextQueue()
+    var state = SharingCaptureState()
+    var ids = 0
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, sharingState = { state }, newId = {
+      ids += 1
+      if (ids == 2) state = SharingCaptureState(paused = true, revisionPrefix = "s0.1:")
+      "point-$ids"
+    })
+    assertEquals(0, pipeline.onFix(51.5, 0.0, "2026-07-13T18:45:00.000Z", null, 80, false))
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).isEmpty())
+  }
+
+  @Test
   fun fixIdentityIsStableAcrossRestartsAndOutOfOrderRedelivery() {
     val keys = InMemoryEpochKeyStore()
     keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))

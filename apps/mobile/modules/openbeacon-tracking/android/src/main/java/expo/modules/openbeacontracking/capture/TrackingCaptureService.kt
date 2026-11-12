@@ -4,12 +4,16 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.location.Location
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
+import android.os.Handler
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -45,6 +49,21 @@ class TrackingCaptureService : Service() {
   private val refreshState = CaptureRefreshState()
 
   private var locationCallback: LocationCallback? = null
+  @Volatile
+  private var minimumFixElapsedRealtimeNanos = 0L
+  private val sharingHandler = Handler(Looper.getMainLooper())
+  private val resumeSharing = Runnable { updateSharing() }
+  private val syncPausedSharing = Runnable {
+    if (TrackingRuntime.isCaptureRunning) {
+      requestSharingSync()
+      updateSharing()
+    }
+  }
+  private val resumeSharingIntent by lazy {
+    PendingIntent.getService(this, 7261, Intent(this, TrackingCaptureService::class.java).apply {
+      action = ACTION_CHECK_SHARING
+    }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+  }
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -54,12 +73,23 @@ class TrackingCaptureService : Service() {
     startId: Int,
   ): Int {
     when (intent?.action) {
+      ACTION_CHECK_SHARING -> {
+        if (TrackingRuntime.isCaptureRunning) {
+          requestSharingSync()
+          updateSharing()
+        } else stopSelf()
+      }
+      ACTION_SHARING_CHANGED -> {
+        if (TrackingRuntime.isCaptureRunning) updateSharing()
+        else stopSelf()
+      }
       ACTION_STOP -> {
         stopCapture()
         stopSelf()
         return START_NOT_STICKY
       }
       ACTION_REFRESH -> {
+        if (TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis())) return START_STICKY
         if (!TrackingRuntime.isCaptureRunning) {
           stopSelf()
           return START_NOT_STICKY
@@ -128,10 +158,11 @@ class TrackingCaptureService : Service() {
         notification,
         ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
       )
-      requestLocationUpdates(intervalMs)
       synchronized(captureStateLock) {
         TrackingRuntime.isCaptureRunning = true
       }
+      currentIntervalMs = intervalMs
+      updateSharing()
     } catch (error: SecurityException) {
       Log.e(TAG, "Failed to start location capture.", error)
       stopCapture()
@@ -178,6 +209,9 @@ class TrackingCaptureService : Service() {
   }
 
   private fun stopCapture() {
+    sharingHandler.removeCallbacks(resumeSharing)
+    sharingHandler.removeCallbacks(syncPausedSharing)
+    getSystemService(AlarmManager::class.java)?.cancel(resumeSharingIntent)
     locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
     locationCallback = null
     synchronized(captureStateLock) {
@@ -188,7 +222,43 @@ class TrackingCaptureService : Service() {
     stopForeground(STOP_FOREGROUND_REMOVE)
   }
 
+  private fun updateSharing() {
+    sharingHandler.removeCallbacks(resumeSharing)
+    sharingHandler.removeCallbacks(syncPausedSharing)
+    getSystemService(AlarmManager::class.java)?.cancel(resumeSharingIntent)
+    val sharing = TrackingRuntime.sharingState(this)
+    if (sharing.isPaused(System.currentTimeMillis())) {
+      locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
+      locationCallback = null
+      sharingHandler.postDelayed(syncPausedSharing, 30_000L)
+      val nextCheck = minOf(sharing.pausedUntil ?: Long.MAX_VALUE, System.currentTimeMillis() + 300_000L)
+      getSystemService(AlarmManager::class.java)?.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextCheck, resumeSharingIntent)
+      sharing.pausedUntil?.let {
+        sharingHandler.postDelayed(resumeSharing, (it - System.currentTimeMillis()).coerceAtLeast(1L))
+      }
+    } else {
+      try {
+        minimumFixElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+        requestLocationUpdates(currentIntervalMs)
+      } catch (error: SecurityException) {
+        Log.e(TAG, "Failed to resume location sharing.", error)
+        stopCapture()
+        stopSelf()
+      }
+    }
+    getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, buildNotification())
+  }
+
+  private fun requestSharingSync() {
+    try {
+      startService(Intent(this, TrackingUploadService::class.java))
+    } catch (error: Exception) {
+      Log.e(TAG, "Failed to check location sharing preferences.", error)
+    }
+  }
+
   private fun enqueueEncryptedFix(location: Location, generation: Long) {
+    if (location.elapsedRealtimeNanos <= minimumFixElapsedRealtimeNanos) return
     val battery = BatteryReader.read(this)
     val speed =
       if (location.hasSpeed()) {
@@ -322,7 +392,7 @@ class TrackingCaptureService : Service() {
     NotificationCompat
       .Builder(this, CHANNEL_ID)
       .setContentTitle(getString(R.string.openbeacon_tracking_notification_title))
-      .setContentText(getString(R.string.openbeacon_tracking_notification_body))
+      .setContentText(if (TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis())) "Location sharing paused. You can still view your groups." else getString(R.string.openbeacon_tracking_notification_body))
       .setSmallIcon(android.R.drawable.ic_menu_mylocation)
       .setOngoing(true)
       .setOnlyAlertOnce(true)
@@ -339,6 +409,8 @@ class TrackingCaptureService : Service() {
   companion object {
     const val ACTION_START = "expo.modules.openbeacontracking.action.START"
     const val ACTION_REFRESH = "expo.modules.openbeacontracking.action.REFRESH"
+    const val ACTION_SHARING_CHANGED = "expo.modules.openbeacontracking.action.SHARING_CHANGED"
+    const val ACTION_CHECK_SHARING = "expo.modules.openbeacontracking.action.CHECK_SHARING"
     const val ACTION_STOP = "expo.modules.openbeacontracking.action.STOP"
     const val EXTRA_INTERVAL_MS = "intervalMs"
     const val EXTRA_COMMAND_GENERATION = "captureCommandGeneration"

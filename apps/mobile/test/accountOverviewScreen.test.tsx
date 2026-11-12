@@ -20,6 +20,8 @@ const signOutOfThisPhone = mock(
   }),
 );
 
+mock.module("../components/LocationSharingCard.tsx", () => ({ LocationSharingCard: () => null }));
+
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 const query = { data: undefined, isError: false };
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));

@@ -2,6 +2,7 @@ import { initialsFromName, type LiveMapMarker } from "./buildLiveMapMarkers.ts";
 import { locationStaleAt } from "./locationStaleAt.ts";
 import type { MapGroup, MapPeople } from "./mapPeopleTypes.ts";
 import type { MapTrackingStatus } from "./mapTrackingTypes.ts";
+import { canShowSharedLocation } from "./locationSharingVisibility.ts";
 
 export const classifyMapPeople = ({
   groups,
@@ -19,6 +20,7 @@ export const classifyMapPeople = ({
   status: MapTrackingStatus;
 }): MapPeople => {
   const people: MapPeople = {
+    paused: [],
     cantLocate: [],
     cantRead: [],
     connectionLost: status.connection === "failing",
@@ -31,6 +33,7 @@ export const classifyMapPeople = ({
 
   const bestByUserId = new Map<string, { isOutOfDate: boolean; marker: LiveMapMarker }>();
   for (const marker of markers) {
+    if (!canShowSharedLocation(marker, status.sharing)) continue;
     const isOutOfDate = marker.timestamp !== null && now >= locationStaleAt(marker.timestamp);
     const best = bestByUserId.get(marker.userId);
     const comparison = best
@@ -51,7 +54,7 @@ export const classifyMapPeople = ({
   );
   const loadStatus = (groupId: string) =>
     status.groups[groupId] ?? (status.membership === "failed" ? "failed" : "loading");
-  const handled = new Set(markers.map((marker) => marker.userId));
+  const handled = new Set(bestByUserId.keys());
 
   for (const group of groups) {
     for (const member of group.members) {
@@ -69,6 +72,11 @@ export const classifyMapPeople = ({
         name: member.name,
         userId: member.userId,
       };
+      const devices = status.sharing?.filter((device) => device.userId === member.userId) ?? [];
+      if (devices.length > 0 && devices.every((device) => device.paused)) {
+        people.paused?.push({ ...person, sharingPaused: true });
+        continue;
+      }
 
       if (
         memberGroups.some((item) => loadStatus(item.id) === "loading" || !keyAccess.has(item.id))

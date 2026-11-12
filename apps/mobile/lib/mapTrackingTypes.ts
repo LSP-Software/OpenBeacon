@@ -1,4 +1,5 @@
 import type { LiveMapEntry } from "./liveMapReducer.ts";
+import type { DeviceSharingState } from "@openbeacon/shared";
 
 export type MapTrackingEncryptedPoint = {
   algorithm: string;
@@ -31,7 +32,7 @@ export type MapTrackingDeps = {
   getLatest: (
     groupId: string,
     signal: AbortSignal,
-  ) => Promise<{ points: MapTrackingEncryptedPoint[] }>;
+  ) => Promise<{ points: MapTrackingEncryptedPoint[]; sharing?: DeviceSharingState[] }>;
   listGroups: (signal: AbortSignal) => Promise<Array<{ id: string }>>;
   now: () => number;
   poll: (
@@ -41,11 +42,16 @@ export type MapTrackingDeps = {
       limit: number;
     },
     signal: AbortSignal,
-  ) => Promise<{ points: MapTrackingEncryptedPoint[] }>;
+  ) => Promise<{
+    points: MapTrackingEncryptedPoint[];
+    sharing?: DeviceSharingState[];
+    cursor?: MapTrackingCursor | null;
+  }>;
   schedule: (callback: () => void, delayMs: number) => { cancel: () => void };
 };
 
 export type MapTrackingStatus = {
+  sharing?: readonly DeviceSharingState[];
   connection: "ok" | "failing";
   groups: Readonly<Record<string, "loaded" | "failed">>;
   membership: "loading" | "loaded" | "failed";

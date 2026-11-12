@@ -6,10 +6,11 @@ import {
   createGoogleDeletionAuthorization,
   verifyGoogleDeletionCode,
 } from "@openbeacon/auth";
-import { tryCatch } from "@openbeacon/shared";
+import { resolveLocationSharing, tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import {
   accountNameSchema,
+  setLocationSharingSchema,
   removeDeviceSchema,
   requestImageUploadInputSchema,
   updateDeviceSchema,
@@ -34,6 +35,66 @@ import {
 } from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
+  locationSharing: protectedProcedure.query(async ({ ctx }) => {
+    if (!ctx.deviceId) throw new TRPCError({ code: "BAD_REQUEST" });
+    const account = await ctx.db.user.findUniqueOrThrow({ where: { id: ctx.session.user.id } });
+    const device = await ctx.db.userDevice.findFirstOrThrow({
+      where: { id: ctx.deviceId, userId: account.id, revokedAt: null },
+    });
+    return {
+      account: {
+        sharingPaused: account.sharingPaused,
+        sharingPausedUntil: account.sharingPausedUntil,
+        sharingChangedAt: account.sharingChangedAt,
+        sharingRevision: account.sharingRevision,
+      },
+      device: {
+        sharingPaused: device.sharingPaused,
+        sharingPausedUntil: device.sharingPausedUntil,
+        sharingChangedAt: device.sharingChangedAt,
+        sharingRevision: device.sharingRevision,
+      },
+      deviceId: device.id,
+      userId: account.id,
+      ...resolveLocationSharing(account, device),
+    };
+  }),
+  setLocationSharing: protectedProcedure
+    .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
+    .input(setLocationSharingSchema)
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "User" WHERE id = ${ctx.session.user.id} FOR NO KEY UPDATE`,
+        );
+        const now = new Date();
+        const data = {
+          sharingPaused: input.paused,
+          sharingPausedUntil:
+            input.paused && input.durationMinutes !== null
+              ? new Date(now.getTime() + input.durationMinutes * 60_000)
+              : null,
+          sharingChangedAt: now,
+          sharingRevision: { increment: 1 },
+        };
+        if (input.scope === "account") {
+          await tx.user.update({ where: { id: ctx.session.user.id }, data });
+          return;
+        }
+        const deviceId = input.deviceId ?? ctx.deviceId;
+        if (!deviceId) throw new TRPCError({ code: "BAD_REQUEST" });
+        const updated = await tx.userDevice.updateMany({
+          where: {
+            id: deviceId,
+            userId: ctx.session.user.id,
+            revokedAt: null,
+            activatedAt: { not: null },
+          },
+          data,
+        });
+        if (updated.count !== 1) throw new TRPCError({ code: "NOT_FOUND" });
+      });
+    }),
   deletionVerificationMethods: setupProcedure.query(async ({ ctx }) => {
     const accounts = await ctx.db.account.findMany({
       where: { userId: ctx.session.user.id },
@@ -311,6 +372,10 @@ export const accountRouter = {
         lastSeenAt: true,
         lastLocationAt: true,
         activatedAt: true,
+        sharingPaused: true,
+        sharingPausedUntil: true,
+        sharingChangedAt: true,
+        sharingRevision: true,
       },
     });
     return devices.map((device) => ({ ...device, isCurrent: device.id === ctx.deviceId }));

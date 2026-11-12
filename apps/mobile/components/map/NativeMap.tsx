@@ -98,9 +98,12 @@ export const NativeMap = ({
   const isStackSheetOpen = stackSheetMembers.length > 1;
   const [missingUserId, setMissingUserId] = useState<string | null>(null);
   const missingPerson =
-    [...(people?.cantLocate ?? []), ...(people?.cantRead ?? []), ...(people?.hidden ?? [])].find(
-      (person) => person.userId === missingUserId,
-    ) ?? null;
+    [
+      ...(people?.paused ?? []),
+      ...(people?.cantLocate ?? []),
+      ...(people?.cantRead ?? []),
+      ...(people?.hidden ?? []),
+    ].find((person) => person.userId === missingUserId) ?? null;
   const isTrayOpen =
     peopleTrayOpen && selectedMarker === null && !isStackSheetOpen && missingUserId === null;
   const trayPeople = isTrayOpen ? people : null;
@@ -613,6 +616,7 @@ export const NativeMap = ({
                   isThisDevice: device.marker?.isSelf ?? false,
                   name: device.name,
                   platform: device.platform,
+                  paused: device.paused,
                   timestamp: device.marker?.timestamp ?? null,
                   unreadable: device.unreadable || device.marker?.unreadableGroup !== undefined,
                 }))

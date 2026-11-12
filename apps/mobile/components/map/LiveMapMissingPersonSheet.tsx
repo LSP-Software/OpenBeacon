@@ -40,17 +40,34 @@ export const LiveMapMissingPersonSheet = ({
           <View className="min-w-0 flex-1 gap-1">
             <Text className="text-foreground text-xl font-bold">{name}</Text>
             <Text className="text-muted dark:text-muted-foreground text-sm">
-              {hidden
-                ? "Hidden on this phone"
-                : unreadable
-                  ? "Can’t read their location"
-                  : "Location unknown"}
+              {person.sharingPaused
+                ? "Location sharing paused"
+                : hidden
+                  ? "Hidden on this phone"
+                  : unreadable
+                    ? "Can’t read their location"
+                    : "Location unknown"}
             </Text>
           </View>
         </View>
       }
     >
-      {hidden ? (
+      {person.sharingPaused ? (
+        <View className="mt-3 rounded-xl bg-background p-3">
+          <Text className="text-sm">
+            {person.isSelf
+              ? "You've paused location sharing on all your devices."
+              : `${person.name} has paused location sharing.`}
+          </Text>
+          {person.isSelf ? (
+            <Link href="/(tabs)/account/overview" asChild>
+              <Button variant="outline" className="mt-3">
+                <Text>Manage sharing</Text>
+              </Button>
+            </Link>
+          ) : null}
+        </View>
+      ) : hidden ? (
         <View className="mt-3 gap-3">
           <View className="rounded-xl bg-background p-3">
             <Text className="text-sm">

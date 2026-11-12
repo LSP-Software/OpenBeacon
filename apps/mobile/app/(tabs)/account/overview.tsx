@@ -26,6 +26,7 @@ import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
 import { SettingsContainer } from "../../../components/containers/settingsContainer.tsx";
+import { LocationSharingCard } from "../../../components/LocationSharingCard.tsx";
 import { ProfileImage } from "../../../components/image/ProfileImage.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
 import {
@@ -389,6 +390,7 @@ const AccountScreen = () => {
             </View>
           </View>
         </View>
+        <LocationSharingCard />
         {permissionState?.shouldShowAccountWarning && (
           <PromptCard
             icon={MapPinIcon}

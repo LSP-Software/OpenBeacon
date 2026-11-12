@@ -40,6 +40,7 @@ import {
 } from "./trackingKeyCheck.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
+import { syncLocationSharing } from "./locationSharing.ts";
 
 let reconcilePromise: Promise<boolean> | null = null;
 const cancelReconciliations = new Set<() => void>();
@@ -227,6 +228,10 @@ const reconcileTrackingKeysInternal = async ({
     if (getErrorCode(device.error) === "UNAUTHORIZED") throw device.error;
     if (device.data && (await isPending())) return false;
     if (!isCurrent()) return false;
+    if (device.data) {
+      await syncLocationSharing();
+      if (!isCurrent()) return false;
+    }
     const backfillCheck = device.data ? await checkHistoryBackfill(device.data.userId) : null;
     if (!isCurrent()) return false;
     const results = await Promise.all(
@@ -260,6 +265,8 @@ const reconcileTrackingKeysInternal = async ({
 
   if (!force && (await hasFreshKeyCheck(true))) {
     if (!isCurrent()) return false;
+    await syncLocationSharing();
+    if (!isCurrent()) return false;
     await applyCaptureState({
       hasKeys: trackingModule.listProvisionedEpochKeys().length > 0,
       isCurrent,
@@ -282,6 +289,8 @@ const reconcileTrackingKeysInternal = async ({
   if (!isCurrent()) return false;
   const owner = getOwner(deviceKeyContext.userId);
   trackingModule.setQueueOwner(owner);
+  await syncLocationSharing();
+  if (!isCurrent()) return false;
   const preserveGroupIds = new Set<string>();
   let rotated = false;
   let rotationFailed = false;
@@ -617,6 +626,7 @@ const uploadClaimedItems = async (
   const completedClientPointIds = new Set([
     ...uploadResult.data.accepted,
     ...uploadResult.data.duplicates,
+    ...(uploadResult.data.discarded ?? []),
   ]);
   const completedIds = items
     .filter(({ clientPointId }) => completedClientPointIds.has(clientPointId))

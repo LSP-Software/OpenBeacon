@@ -1897,3 +1897,86 @@ describe("createMapTrackingSession removed devices", () => {
     expect(notifications).toBe(1);
   });
 });
+
+describe("paused map devices", () => {
+  test("removes cached tablet pins on an empty poll and rejects older sharing snapshots", async () => {
+    const old = point({
+      createdAt: new Date("2026-11-12T10:00:00Z"),
+      id: "old",
+      senderDeviceId: "tablet",
+      senderUserId: "alex",
+    });
+    const cutoff = new Date("2026-11-12T12:00:00Z");
+    let sharing = [
+      {
+        deviceId: "tablet",
+        userId: "alex",
+        paused: false,
+        pausedUntil: null,
+        resumeAfter: null as Date | null,
+        revisionPrefix: "",
+      },
+    ];
+    let points: MapTrackingEncryptedPoint[] = [];
+    const { session } = createSession({
+      getLatest: async () => ({ points: [old], sharing }),
+      poll: async () => ({ points, sharing }),
+      decryptPoint: async ({ groupId, point: row }) => ({
+        status: "ok",
+        entry: liveEntry({
+          deviceId: row.senderDeviceId,
+          userId: row.senderUserId,
+          sourceGroupId: groupId,
+          serverCreatedAt: row.createdAt,
+          serverId: row.id,
+          timestamp: row.id === "old" ? "2030-01-01T00:00:00.000Z" : row.createdAt.toISOString(),
+        }),
+      }),
+    });
+    session.setActive(true);
+    await session.tick();
+    expect(session.getLivePositions()).toHaveLength(1);
+    sharing = [{ ...sharing[0]!, paused: true, resumeAfter: cutoff, revisionPrefix: "s0.1:" }];
+    await session.tick();
+    expect(session.getLivePositions()).toEqual([]);
+    expect(session.getStatus().sharing?.[0]?.paused).toBe(true);
+    sharing = [{ ...sharing[0]!, paused: false, resumeAfter: null, revisionPrefix: "" }];
+    await session.tick();
+    expect(session.getLivePositions()).toEqual([]);
+    sharing = [{ ...sharing[0]!, paused: false, resumeAfter: cutoff, revisionPrefix: "s0.2:" }];
+    await session.tick();
+    expect(session.getLivePositions()).toEqual([]);
+    points = [
+      point({
+        createdAt: new Date(cutoff.getTime() + 1),
+        id: "fresh",
+        senderDeviceId: "tablet",
+        senderUserId: "alex",
+      }),
+    ];
+    points[0]!.clientPointId = "s0.2:fresh";
+    await session.tick();
+    expect(session.getLivePositions()).toHaveLength(1);
+    expect(session.getLivePositions()[0]?.timestamp).toBe(points[0]!.createdAt.toISOString());
+    session.destroy();
+  });
+
+  test("advances past discarded points even when a page has no visible locations", async () => {
+    const initial = point({
+      createdAt: new Date("2026-11-12T10:00:00Z"),
+      id: "first",
+      senderUserId: "alex",
+    });
+    const cursor = { createdAt: new Date("2026-11-12T11:00:00Z"), id: "discarded" };
+    const { session, pollCalls } = createSession({
+      getLatest: async () => ({ points: [initial] }),
+      poll: async () => ({ points: [], cursor }),
+    });
+    session.setActive(true);
+    await session.tick();
+    await session.tick();
+    await session.tick();
+    expect(pollCalls.at(-1)?.cursor).toEqual(cursor);
+    session.destroy();
+  });
+});

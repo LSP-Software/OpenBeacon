@@ -8,6 +8,10 @@ datasource db {
 }
 
 model User {
+  sharingPaused Boolean @default(false)
+  sharingPausedUntil DateTime?
+  sharingChangedAt DateTime?
+  sharingRevision Int @default(0)
   id             String          @id
   name           String
   email          String          @unique
@@ -222,6 +226,10 @@ model PersonalGroupColor {
 }
 
 model UserDevice {
+  sharingPaused Boolean @default(false)
+  sharingPausedUntil DateTime?
+  sharingChangedAt DateTime?
+  sharingRevision Int @default(0)
   id                     String                   @id
   userId                 String
   user                   User                     @relation(fields: [userId], references: [id], onDelete: Cascade)

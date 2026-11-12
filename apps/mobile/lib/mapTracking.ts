@@ -1,4 +1,6 @@
 import { tryCatch } from "@openbeacon/shared";
+import type { DeviceSharingState } from "@openbeacon/shared";
+import { canShowSharedLocation } from "./locationSharingVisibility.ts";
 import { dropInactiveDevices, type LiveMapEntry, reduceLivePositions } from "./liveMapReducer.ts";
 import type {
   LiveMapPosition,
@@ -84,6 +86,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
   >();
   const positionsByGroup = new Map<string, ReadonlyMap<string, LiveMapEntry>>();
+  const sharingByGroup = new Map<string, readonly DeviceSharingState[]>();
   const listeners = new Set<() => void>();
   const groupLoadStatus = new Map<string, "loaded" | "failed">();
   const undecryptableByGroup = new Map<string, Map<string, { deviceId: string; userId: string }>>();
@@ -119,7 +122,45 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     membershipFailing || failingGroups.size > 0 ? "failing" : "ok";
 
   const refreshStatus = () => {
+    const previousSharing = new Map(
+      (status.sharing ?? []).map((device) => [device.deviceId, device]),
+    );
+    const devices = [...sharingByGroup.values()].flat();
+    const sharing = new Map(
+      (status.sharing ?? [])
+        .filter((device) => devices.some((current) => current.deviceId === device.deviceId))
+        .map((device) => [device.deviceId, device]),
+    );
+    for (const device of devices) {
+      const previous = sharing.get(device.deviceId);
+      const revisions = (prefix: string) =>
+        prefix ? prefix.slice(1, -1).split(".").map(Number) : [0, 0];
+      const nextRevision = revisions(device.revisionPrefix);
+      const previousRevision = revisions(previous?.revisionPrefix ?? "");
+      if (
+        !previous ||
+        (nextRevision.every((value, index) => value >= (previousRevision[index] ?? 0)) &&
+          !(device.revisionPrefix === previous.revisionPrefix && !previous.paused && device.paused))
+      )
+        sharing.set(device.deviceId, device);
+    }
+    const hiddenDeviceIds = new Set(
+      [...sharing.values()]
+        .filter(
+          (device) =>
+            device.paused ||
+            previousSharing.get(device.deviceId)?.revisionPrefix !== device.revisionPrefix,
+        )
+        .map((device) => device.deviceId),
+    );
+    for (const [groupId, entries] of positionsByGroup) {
+      positionsByGroup.set(
+        groupId,
+        new Map([...entries].filter(([deviceId]) => !hiddenDeviceIds.has(deviceId))),
+      );
+    }
     status = {
+      ...(sharingByGroup.size > 0 ? { sharing: [...sharing.values()] } : {}),
       connection: currentConnection(),
       groups: Object.fromEntries(groupLoadStatus),
       membership: membershipStatus,
@@ -161,6 +202,16 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     let live = new Map<string, LiveMapEntry>();
     for (const groupEntries of positionsByGroup.values()) {
       live = reduceLivePositions(live, [...groupEntries.values()]);
+    }
+    for (const [deviceId, entry] of live) {
+      const state = status.sharing?.find((device) => device.deviceId === deviceId);
+      if (
+        state &&
+        (state.paused ||
+          (state.resumeAfter !== null &&
+            Date.parse(entry.timestamp) <= state.resumeAfter.getTime()))
+      )
+        live.delete(deviceId);
     }
     return live;
   };
@@ -210,6 +261,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
     groupStates.delete(groupId);
     positionsByGroup.delete(groupId);
+    sharingByGroup.delete(groupId);
     groupLoadStatus.delete(groupId);
     failingGroups.delete(groupId);
     undecryptableByGroup.delete(groupId);
@@ -289,9 +341,13 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       if (!isCurrent(groupId, runId)) {
         return;
       }
+      const sharing = status.sharing?.find((device) => device.deviceId === point.senderDeviceId);
+      if (sharing && (sharing.paused || !point.clientPointId.startsWith(sharing.revisionPrefix)))
+        continue;
 
       const deviceKey = `${point.senderUserId}:${point.senderDeviceId}`;
       if (result.status === "ok") {
+        if (!canShowSharedLocation(result.entry, status.sharing)) continue;
         entries.push(result.entry);
         undecryptableChanged = undecryptable.delete(deviceKey) || undecryptableChanged;
       } else if (result.status === "undecryptable" && !undecryptable.has(deviceKey)) {
@@ -377,9 +433,14 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
 
   const loadLatest = async (groupId: string, runId: number) => {
     const seenAtRequest = snapshotGroup(groupId);
-    const { points } = await withTimeout((signal) => deps.getLatest(groupId, signal));
+    const { points, sharing } = await withTimeout((signal) => deps.getLatest(groupId, signal));
     if (!isCurrent(groupId, runId)) {
       return [];
+    }
+    if (sharing) {
+      sharingByGroup.set(groupId, sharing);
+      refreshStatus();
+      notify();
     }
 
     dropRemovedDevices({
@@ -411,14 +472,21 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
 
     const cursor = state.cursor;
-    const { points } = await withTimeout((signal) =>
-      deps.poll({ cursor, groupId, limit: POLL_LIMIT }, signal),
-    );
+    const {
+      points,
+      sharing,
+      cursor: responseCursor,
+    } = await withTimeout((signal) => deps.poll({ cursor, groupId, limit: POLL_LIMIT }, signal));
     if (!isCurrent(groupId, runId)) {
       return;
     }
+    if (sharing) {
+      sharingByGroup.set(groupId, sharing);
+      refreshStatus();
+      notify();
+    }
 
-    const nextCursor = maxCursor(points);
+    const nextCursor = responseCursor ?? maxCursor(points);
     if (!nextCursor || !isCursorAfter(nextCursor, cursor)) {
       return;
     }

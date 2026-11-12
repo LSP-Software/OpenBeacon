@@ -4,6 +4,7 @@ import android.content.Context
 import android.provider.Settings
 import expo.modules.openbeacontracking.capture.CapturePipeline
 import expo.modules.openbeacontracking.capture.CaptureCommandState
+import expo.modules.openbeacontracking.capture.SharingCaptureState
 import expo.modules.openbeacontracking.keys.EpochKeyStore
 import expo.modules.openbeacontracking.keys.SecureEpochKeyStore
 import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
@@ -51,7 +52,30 @@ object TrackingRuntime {
       canQueue = { generation -> isCaptureRunning && captureCommands.isCurrent(generation) },
       queueOwner = { queueOwner(context) },
       bootId = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1).takeIf { it >= 0 }?.toString(),
+      sharingState = { sharingState(context) },
     )
+
+  fun sharingState(context: Context): SharingCaptureState {
+    val preferences = context.getSharedPreferences("openbeacon_tracking_sharing", Context.MODE_PRIVATE)
+    val owner = queueOwner(context) ?: return SharingCaptureState(paused = true)
+    return SharingCaptureState(
+      revisionPrefix = preferences.getString("$owner.prefix", "") ?: "",
+      paused = preferences.getBoolean("$owner.paused", false),
+      pausedUntil = preferences.getLong("$owner.until", 0L).takeIf { it > 0L },
+      resumeAfter = preferences.getLong("$owner.after", 0L),
+    )
+  }
+
+  fun setSharingState(context: Context, state: SharingCaptureState) {
+    val owner = queueOwner(context) ?: return
+    val preferences = context.getSharedPreferences("openbeacon_tracking_sharing", Context.MODE_PRIVATE)
+    check(preferences.edit()
+      .putString("$owner.prefix", state.revisionPrefix)
+      .putBoolean("$owner.paused", state.paused)
+      .putLong("$owner.until", state.pausedUntil ?: 0L)
+      .putLong("$owner.after", state.resumeAfter)
+      .commit())
+  }
 
   fun queueOwner(context: Context): String? =
     context.getSharedPreferences("openbeacon_tracking_queue", Context.MODE_PRIVATE).getString("owner", null)

@@ -383,3 +383,62 @@ describe("classifyMapPeople with several devices", () => {
     ]);
   });
 });
+
+test("paused members have their own ribbon status even when an old pin or missing key exists", () => {
+  const people = classifyMapPeople({
+    groups: [family],
+    keyAccess: new Map(),
+    markers: [marker("mum", 0)],
+    now: NOW,
+    selfUserId: "me",
+    status: {
+      ...loaded,
+      sharing: [
+        {
+          userId: "mum",
+          deviceId: "mum-phone",
+          paused: true,
+          pausedUntil: null,
+          resumeAfter: null,
+          revisionPrefix: "s0.1:",
+        },
+      ],
+    },
+  });
+  expect(people.paused?.map((person) => person.userId)).toEqual(["mum"]);
+  expect(people.upToDate).toEqual([]);
+  expect(people.cantRead).toEqual([]);
+});
+
+test("pausing a tablet leaves a member in the normal ribbon section when their phone shares", () => {
+  const people = classifyMapPeople({
+    groups: [family],
+    keyAccess: available,
+    markers: [marker("mum", 0), marker("mum", 0, false, "mum-tablet")],
+    now: NOW,
+    selfUserId: "me",
+    status: {
+      ...loaded,
+      sharing: [
+        {
+          userId: "mum",
+          deviceId: "mum-phone",
+          paused: false,
+          pausedUntil: null,
+          resumeAfter: null,
+          revisionPrefix: "",
+        },
+        {
+          userId: "mum",
+          deviceId: "mum-tablet",
+          paused: true,
+          pausedUntil: null,
+          resumeAfter: null,
+          revisionPrefix: "s0.1:",
+        },
+      ],
+    },
+  });
+  expect(people.paused).toEqual([]);
+  expect(people.upToDate.map((person) => person.deviceId)).toEqual(["mum-phone"]);
+});

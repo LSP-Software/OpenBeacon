@@ -10,6 +10,7 @@ import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
 
 type PersonDevice = {
+  paused?: boolean | undefined;
   battery: { charging: boolean; level: number } | null;
   deviceId: string;
   icon: DeviceIcon;
@@ -147,11 +148,13 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
     ? getBatteryVisual({ batteryLevel: device.battery.level, charging: device.battery.charging })
     : null;
   const label = device.isThisDevice ? `${device.name} (this phone)` : device.name;
-  const updated = device.unreadable
-    ? "Newer location can’t be read"
-    : updatedAge === null
-      ? "No location yet"
-      : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`;
+  const updated = device.paused
+    ? "Location sharing paused"
+    : device.unreadable
+      ? "Newer location can’t be read"
+      : updatedAge === null
+        ? "No location yet"
+        : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`;
   const batteryLevel = device.battery && batteryVisual ? `${device.battery.level}%` : null;
 
   const content = (

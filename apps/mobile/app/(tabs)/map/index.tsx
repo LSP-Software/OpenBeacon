@@ -21,6 +21,7 @@ import { authClient } from "../../../lib/auth-client.ts";
 import { buildLiveMapMarkers, labelDeviceIcons } from "../../../lib/buildLiveMapMarkers.ts";
 import { classifyMapPeople, flagUnreadableMarkers } from "../../../lib/classifyMapPeople.ts";
 import { loadPersonalNicknames } from "../../../lib/personalNicknames.ts";
+import { canShowSharedLocation } from "../../../lib/locationSharingVisibility.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { setMapGroupHidden } from "../../../lib/hiddenMapGroups.ts";
 import {
@@ -236,7 +237,7 @@ const MapScreen = () => {
         status: trackingStatus,
       }),
       memberDevices,
-    });
+    }).filter((marker) => canShowSharedLocation(marker, trackingStatus.sharing));
   }, [
     groupColorRevision,
     groupsWithNicknames,
@@ -313,6 +314,9 @@ const MapScreen = () => {
       <NativeMap
         devices={memberDevices.map((device) => ({
           ...device,
+          paused:
+            trackingStatus.sharing?.find((state) => state.deviceId === device.deviceId)?.paused ??
+            false,
           unreadable: trackingStatus.undecryptable.some(
             (item) => item.deviceId === device.deviceId && item.userId === device.userId,
           ),
@@ -341,6 +345,18 @@ const MapScreen = () => {
         style={{ top: insets.top + 8, maxHeight: "65%" }}
       >
         <NewSignInBanner subscribed={isFocused} />
+        {trackingStatus.sharing?.some(
+          (device) => device.deviceId === selfDeviceId && device.paused,
+        ) ? (
+          <View className="mb-2 flex-row items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
+            <Text className="flex-1 text-sm">Location sharing is paused on this device.</Text>
+            <Link href="/(tabs)/account/overview" asChild>
+              <Button variant="outline" size="sm">
+                <Text>Manage</Text>
+              </Button>
+            </Link>
+          </View>
+        ) : null}
         {queueEviction && (
           <View className="mb-2 gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4">
             <Text className="font-semibold text-amber-700 dark:text-amber-400">

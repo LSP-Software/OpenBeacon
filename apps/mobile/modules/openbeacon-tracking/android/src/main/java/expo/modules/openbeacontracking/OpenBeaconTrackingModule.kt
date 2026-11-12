@@ -3,6 +3,7 @@ package expo.modules.openbeacontracking
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
+import expo.modules.openbeacontracking.capture.SharingCaptureState
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
@@ -14,6 +15,26 @@ class OpenBeaconTrackingModule : Module() {
   override fun definition() =
     ModuleDefinition {
       Name("OpenBeaconTracking")
+
+      Function("setSharingState") { owner: String, prefix: String, paused: Boolean, until: Double?, after: Double? ->
+        val changed = synchronized(TrackingRuntime.captureLock) {
+          if (TrackingRuntime.queueOwner(requireContext()) != owner) return@Function
+          val state = SharingCaptureState(prefix, paused, until?.toLong(), after?.toLong() ?: 0L)
+          val current = TrackingRuntime.sharingState(requireContext())
+          if (!(prefix.isEmpty() && paused) && !state.isAtLeastAsRecentAs(current)) return@Function
+          val changed = current != state
+          if (changed) {
+            TrackingRuntime.captureCommands.stop()
+            TrackingRuntime.setSharingState(requireContext(), state)
+          }
+          changed
+        }
+        if (changed && TrackingRuntime.isCaptureRunning) {
+          requireContext().startService(Intent(requireContext(), TrackingCaptureService::class.java).apply {
+            action = TrackingCaptureService.ACTION_SHARING_CHANGED
+          })
+        }
+      }
 
       Function("setQueueOwner") { owner: String ->
         synchronized(TrackingRuntime.captureLock) {
