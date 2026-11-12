@@ -2,6 +2,7 @@ import { Alert } from "../../../lib/alert.ts";
 import { useIsFocused } from "@react-navigation/native";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { TRPCClientError } from "@trpc/client";
 import { Link } from "expo-router";
 import { ChevronRightIcon, PlusIcon, ShieldIcon } from "lucide-react-native";
 import { useState } from "react";
@@ -129,6 +130,12 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
   const declineInviteMutation = useMutation(trpc.groupInvites.decline.mutationOptions());
   const acceptInviteSubmission = useSingleFlight<string>();
 
+  const removeInvite = (inviteId: string) => {
+    queryClient.setQueryData(trpc.groupInvites.list.queryKey(), (previous) =>
+      (previous ?? []).filter((invite) => invite.id !== inviteId),
+    );
+  };
+
   const handleAcceptInvite = async (inviteId: string) => {
     if (declineInviteMutation.isPending) return;
 
@@ -140,12 +147,7 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
             submit: acceptInviteMutation.mutateAsync,
           });
 
-          queryClient.setQueryData(trpc.groupInvites.list.queryKey(), (previous) => {
-            if (!previous) {
-              return [];
-            }
-            return previous.filter((invite) => invite.id !== inviteId);
-          });
+          removeInvite(inviteId);
 
           queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
             return [
@@ -160,6 +162,11 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
         })(),
       );
 
+      if (isNotFound(result.error)) {
+        removeInvite(inviteId);
+        Alert.alert("Invite no longer available", "This invite has expired or was withdrawn.");
+        return;
+      }
       if (result.error) {
         Alert.alert(
           "Unable to accept invite",
@@ -169,19 +176,15 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
     });
   };
   const handleDeclineInvite = async (inviteId: string) => {
-    await declineInviteMutation.mutateAsync(
-      { inviteId },
-      {
-        onSuccess: () => {
-          queryClient.setQueryData(trpc.groupInvites.list.queryKey(), (previous) => {
-            if (!previous) {
-              return [];
-            }
-            return previous.filter((invite) => invite.id !== inviteId);
-          });
-        },
-      },
-    );
+    const result = await tryCatch(declineInviteMutation.mutateAsync({ inviteId }));
+    if (result.error && !isNotFound(result.error)) {
+      Alert.alert(
+        "Unable to decline invite",
+        result.error instanceof Error ? result.error.message : "Something went wrong.",
+      );
+      return;
+    }
+    removeInvite(inviteId);
   };
 
   if (!groupInvites?.length) {
@@ -230,6 +233,9 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
     </View>
   );
 };
+
+const isNotFound = (error: unknown) =>
+  error instanceof TRPCClientError && error.data?.code === "NOT_FOUND";
 
 interface GroupListProps {
   groupList: RouterOutputs["groupMembership"]["list"];

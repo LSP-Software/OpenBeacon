@@ -39,7 +39,13 @@ export const removeGroupMemberWithOwnerGuard = async ({
           target_member.role <> ${GroupRole.OWNER}
           OR (SELECT COUNT(*) FROM owner_rows WHERE id <> target_member.id) > 0
         )
-      RETURNING member.id
+      RETURNING member.id, member."userId"
+    ),
+    deleted_invites AS (
+      DELETE FROM "GroupMemberInvite" AS invite
+      USING deleted_member
+      WHERE invite."groupId" = ${groupId}
+        AND invite."inviterId" = deleted_member."userId"
     )
     SELECT
       EXISTS (SELECT 1 FROM target_member) AS "memberExists",

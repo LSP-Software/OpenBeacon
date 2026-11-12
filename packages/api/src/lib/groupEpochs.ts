@@ -19,6 +19,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type { z } from "zod";
 import { deviceRemovedError } from "./deviceRemoved.ts";
+import { emailInviteCreatedAfter } from "./emailInvites.ts";
 
 type DeviceRecord = {
   createdAt: Date;
@@ -166,6 +167,7 @@ export const getInviteAcceptanceContext = async ({
     where: {
       id: inviteId,
       recipientId: userId,
+      createdAt: { gt: emailInviteCreatedAfter() },
     },
   });
 

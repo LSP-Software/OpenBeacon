@@ -264,6 +264,7 @@ describe("groupTrackingRouter", () => {
     ).resolves.toEqual({
       accepted: ["point-1"],
       duplicates: [],
+      expired: [],
     });
     expect(createManyMock).toHaveBeenCalled();
   });

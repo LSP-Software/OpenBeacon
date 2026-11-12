@@ -156,6 +156,8 @@ model GroupMemberInvite {
   updatedAt DateTime @updatedAt
 
   @@unique([recipientId, groupId])
+  @@index([groupId, inviterId])
+  @@index([inviterId])
 }
 
 model GroupSharedInvite {
@@ -329,6 +331,7 @@ model GroupEpoch {
 
   @@unique([groupId, epochNumber])
   @@index([groupId, createdAt])
+  @@index([createdAt, id])
   @@index([createdByDeviceId])
 }
 
@@ -351,6 +354,7 @@ model GroupEncryptedPayload {
 
   @@unique([groupId, clientPointId])
   @@index([groupId, createdAt, id])
+  @@index([kind, createdAt])
   @@index([groupId, senderUserId, createdAt])
   @@index([groupId, senderDeviceId, createdAt])
   @@index([epochId])

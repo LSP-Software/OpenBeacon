@@ -1,4 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
+import { errorCode } from "./errorCode.ts";
 
 export const startScheduler = (
   jobs: { name: string; delay: number; run: () => Promise<void> }[],
@@ -25,7 +26,14 @@ export const startScheduler = (
     const execute = () => {
       const task = (async () => {
         const result = await tryCatch(Promise.resolve().then(job.run));
-        if (result.error) console.error(`Scheduled job ${job.name} failed`, result.error);
+        if (result.error) {
+          const code =
+            errorCode(result.error) ??
+            (result.error instanceof Error && result.error.name !== "Error"
+              ? result.error.name
+              : null);
+          console.error(`Scheduled job ${job.name} failed${code ? ` (${code})` : ""}`);
+        }
         if (!stopped) {
           const timer = setTimeout(() => {
             timers.delete(timer);

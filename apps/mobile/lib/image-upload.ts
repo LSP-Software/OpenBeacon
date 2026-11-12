@@ -63,6 +63,9 @@ export const uploadImageFromUri = async ({
     return { data: confirmData.imageUrl };
   } catch (error) {
     console.error(error);
+    if (error instanceof TRPCClientError && error.data?.code === "PRECONDITION_FAILED") {
+      return { error: "That upload expired. Please choose the image again." };
+    }
     if (error instanceof TRPCClientError && error.data && error.data.httpStatus < 500) {
       return { error: error.message };
     }

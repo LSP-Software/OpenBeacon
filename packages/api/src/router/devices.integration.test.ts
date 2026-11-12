@@ -1,4 +1,5 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { auth } from "@openbeacon/auth";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
@@ -6,9 +7,12 @@ import { createDeviceKeyPair, DEVICE_KEY_ALGORITHM } from "@openbeacon/encryptio
 import { tryCatch } from "@openbeacon/shared";
 import { DevicePendingError } from "../lib/deviceActivation.ts";
 import { DeviceUnverifiedError } from "../lib/deviceUnverified.ts";
+import { buildUserAvatarPath, setPendingImageUploadForUser } from "../lib/image-upload.ts";
 import { linkRequestDevice } from "../lib/requestDevice.ts";
 import { appRouter } from "../root.ts";
+import { s3Client } from "../s3client.ts";
 import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
+import { env } from "../env.ts";
 
 const prefix = `devices-${crypto.randomUUID()}`;
 const password = "testing-password-123";
@@ -432,5 +436,41 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account profile"
     expect(
       await prisma.pendingUpload.findFirst({ where: { userId: account.userId } }),
     ).not.toBeNull();
+  });
+
+  test("a newer upload request racing a confirm keeps the older file off the profile", async () => {
+    const account = await createAccount();
+    await activate(account);
+    const pendingUpload = (fileName: string) =>
+      setPendingImageUploadForUser({
+        db: prisma,
+        userId: account.userId,
+        uploadType: "userAvatar",
+        fileName,
+        bucketName: env.S3_BUCKET_NAME,
+        currentImagePath: buildUserAvatarPath(account.userId),
+      });
+    await pendingUpload("old.webp");
+    const send = spyOn(s3Client, "send").mockImplementation(async (command) => {
+      if (!(command instanceof HeadObjectCommand)) return { $metadata: {} };
+      await pendingUpload("new.webp");
+      return { $metadata: {}, ContentLength: 3 };
+    });
+    try {
+      await expect(callerFor(account).account.confirmProfileImageUpload()).rejects.toMatchObject({
+        code: "PRECONDITION_FAILED",
+        message: "No pending profile image upload to confirm.",
+      });
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: account.userId } })).image,
+      ).toBeNull();
+      expect(
+        (await prisma.pendingUpload.findMany({ where: { userId: account.userId } })).map(
+          ({ fileName }) => fileName,
+        ),
+      ).toEqual(["new.webp"]);
+    } finally {
+      send.mockRestore();
+    }
   });
 });

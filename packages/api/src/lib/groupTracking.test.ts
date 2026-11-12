@@ -30,6 +30,7 @@ describe("uploadGroupTrackingBatch", () => {
   let createMany: ReturnType<typeof mock>;
   let findManyPayloads: ReturnType<typeof mock>;
   let findManyEpochs: ReturnType<typeof mock>;
+  let countEpochs: ReturnType<typeof mock>;
   let findManyDevices: ReturnType<typeof mock>;
   let updateManyDevices: ReturnType<typeof mock>;
 
@@ -37,6 +38,7 @@ describe("uploadGroupTrackingBatch", () => {
     createMany = mock(async () => ({ count: 1 }));
     findManyPayloads = mock(async () => []);
     findManyEpochs = mock(async () => [{ id: "epoch-1" }]);
+    countEpochs = mock(async () => 1);
     findManyDevices = mock(async () => [{ id: "device-1", userId: "user-1" }]);
     updateManyDevices = mock(async () => ({ count: 1 }));
   });
@@ -48,6 +50,7 @@ describe("uploadGroupTrackingBatch", () => {
       findMany: findManyPayloads,
     },
     groupEpoch: {
+      count: countEpochs,
       findMany: findManyEpochs,
     },
     userDevice: {
@@ -67,6 +70,7 @@ describe("uploadGroupTrackingBatch", () => {
     expect(result).toEqual({
       accepted: ["point-1"],
       duplicates: [],
+      expired: [],
     });
     expect(createMany).toHaveBeenCalledWith({
       data: [
@@ -123,6 +127,7 @@ describe("uploadGroupTrackingBatch", () => {
     expect(result).toEqual({
       accepted: [],
       duplicates: ["point-1"],
+      expired: [],
     });
     expect(createMany).not.toHaveBeenCalled();
     expect(updateManyDevices).not.toHaveBeenCalled();
@@ -144,6 +149,7 @@ describe("uploadGroupTrackingBatch", () => {
     expect(result).toEqual({
       accepted: ["point-2"],
       duplicates: ["point-1"],
+      expired: [],
     });
     expect(createMany).toHaveBeenCalledWith({
       data: [
@@ -207,6 +213,44 @@ describe("uploadGroupTrackingBatch", () => {
       code: "BAD_REQUEST",
       message: "Epoch does not belong to this group.",
     } satisfies Partial<TRPCError>);
+    expect(countEpochs).toHaveBeenCalledWith({ where: { id: { in: ["epoch-1"] } } });
+  });
+
+  test("reports points for deleted epochs as expired and stores the rest", async () => {
+    findManyEpochs = mock(async () => [{ id: "epoch-2" }]);
+    countEpochs = mock(async () => 0);
+
+    const result = await uploadGroupTrackingBatch({
+      db: createDb(),
+      groupId: "group-1",
+      points: [
+        createPoint({ clientPointId: "old", epochId: "deleted-epoch" }),
+        createPoint({ clientPointId: "new", epochId: "epoch-2" }),
+      ],
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({ accepted: ["new"], duplicates: [], expired: ["old"] });
+    expect(countEpochs).toHaveBeenCalledWith({ where: { id: { in: ["deleted-epoch"] } } });
+    expect(createMany.mock.calls[0]?.[0]).toMatchObject({
+      data: [{ clientPointId: "new", epochId: "epoch-2" }],
+    });
+  });
+
+  test("stores nothing when every point's epoch was deleted", async () => {
+    findManyEpochs = mock(async () => []);
+    countEpochs = mock(async () => 0);
+
+    const result = await uploadGroupTrackingBatch({
+      db: createDb(),
+      groupId: "group-1",
+      points: [createPoint()],
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({ accepted: [], duplicates: [], expired: ["point-1"] });
+    expect(createMany).not.toHaveBeenCalled();
+    expect(updateManyDevices).not.toHaveBeenCalled();
   });
 });
 

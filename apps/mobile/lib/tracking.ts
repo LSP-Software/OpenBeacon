@@ -607,17 +607,25 @@ const uploadClaimedItems = async (
     throw new Error("Tracking upload failed");
   }
 
-  if (uploadResult.data.accepted.length > 0 && items[0]) {
+  const {
+    accepted,
+    duplicates,
+    expired = [],
+  }: { accepted: string[]; duplicates: string[]; expired?: string[] } = uploadResult.data;
+
+  if (accepted.length > 0 && items[0]) {
     const { senderDeviceId, groupId } = items[0];
     await tryCatch(
       Promise.resolve().then(() => recordTrackingUpload(senderDeviceId, groupId, sentAt)),
     );
   }
 
-  const completedClientPointIds = new Set([
-    ...uploadResult.data.accepted,
-    ...uploadResult.data.duplicates,
-  ]);
+  if (expired.length > 0) {
+    markTrackingKeysStale();
+    uploadRejectedKeys = true;
+  }
+
+  const completedClientPointIds = new Set([...accepted, ...duplicates, ...expired]);
   const completedIds = items
     .filter(({ clientPointId }) => completedClientPointIds.has(clientPointId))
     .map(({ id }) => id);
