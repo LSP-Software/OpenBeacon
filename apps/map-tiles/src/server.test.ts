@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import type { PublishResult } from "./commands.ts";
 import { createMapTilesHandler } from "./server.ts";
 import type { MapStatus } from "./status.ts";
@@ -170,6 +170,14 @@ describe("map tiles service", () => {
   });
 
   test("checks for an update on start and then on every interval, one at a time", async () => {
+    let tick: () => void = () => {};
+    const setIntervalSpy = spyOn(globalThis, "setInterval").mockImplementation(((
+      callback: () => void,
+    ) => {
+      tick = callback;
+      return 1;
+    }) as unknown as typeof setInterval);
+    const clearIntervalSpy = spyOn(globalThis, "clearInterval").mockImplementation(() => {});
     let finish: (result: PublishResult) => void = () => {};
     const runUpdate = mock(
       (_options: { ignoreInterval: boolean }) =>
@@ -179,26 +187,28 @@ describe("map tiles service", () => {
     );
     const handler = createHandler({ runUpdate });
 
-    const stop = handler.scheduleUpdates(10);
+    const stop = handler.scheduleUpdates(86_400_000);
+    expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 86_400_000);
     expect(runUpdate).toHaveBeenCalledTimes(1);
-    expect(runUpdate).toHaveBeenCalledWith({ ignoreInterval: false });
+    expect(runUpdate).toHaveBeenLastCalledWith({ ignoreInterval: false });
 
-    await Bun.sleep(35);
+    tick();
     const manual = await handler.fetch(request("/update", { key: apiKey, method: "POST" }));
     expect(await manual.json()).toMatchObject({ alreadyRunning: true });
     expect(runUpdate).toHaveBeenCalledTimes(1);
 
     finish({ published: false, message: "Build 20261107 is already current" });
     await handler.idle();
-    await Bun.sleep(25);
+    tick();
+    expect(runUpdate).toHaveBeenCalledTimes(2);
+    expect(runUpdate).toHaveBeenLastCalledWith({ ignoreInterval: false });
+
     stop();
+    expect(clearIntervalSpy).toHaveBeenCalledWith(1);
     finish({ published: false, message: "" });
     await handler.idle();
-    const calls = runUpdate.mock.calls.length;
-    await Bun.sleep(25);
-
-    expect(calls).toBe(2);
-    expect(runUpdate).toHaveBeenCalledTimes(2);
+    setIntervalSpy.mockRestore();
+    clearIntervalSpy.mockRestore();
   });
 
   test("reports why a rollback failed", async () => {

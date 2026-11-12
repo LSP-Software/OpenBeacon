@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { ListObjectsV2Command, type S3Client } from "@aws-sdk/client-s3";
 import {
@@ -34,7 +34,7 @@ import {
   formatDuration,
   formatMbps,
 } from "./transfer.ts";
-import { PART_SIZE, planParts, uploadArchive } from "./upload.ts";
+import { getUploadStatePath, PART_SIZE, planParts, uploadArchive } from "./upload.ts";
 
 export type Context = {
   client: S3Client;
@@ -203,7 +203,16 @@ export const publish = async (
     };
   }
 
-  if (current && !ignoreInterval) {
+  const slot = initialManifest ? getOtherSlot(initialManifest.manifest.current) : "a";
+  const key = getSlotKey(slot);
+  const statePath = getUploadStatePath({
+    bucket: env.R2_BUCKET,
+    key,
+    stateDir: env.MAP_TILES_STATE_DIR,
+  });
+  const resuming = await Bun.file(statePath).exists();
+
+  if (current && !ignoreInterval && !resuming) {
     const dueAt = Date.parse(current.archive.publishedAt) + env.updateIntervalMs;
     if (now < dueAt) {
       return {
@@ -225,8 +234,6 @@ export const publish = async (
     };
   }
 
-  const slot = initialManifest ? getOtherSlot(initialManifest.manifest.current) : "a";
-  const key = getSlotKey(slot);
   const replaced = initialManifest?.manifest.slots[slot] ?? null;
   const source = await headSource(url);
 
@@ -278,6 +285,7 @@ export const publish = async (
 
   if (await matchesSource()) {
     console.log(`${key} already holds build ${buildDate}; verifying it`);
+    await rm(statePath, { force: true });
   } else {
     const reporter = createProgressReporter(source.size);
     const result = await tryCatch(

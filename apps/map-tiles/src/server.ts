@@ -58,7 +58,7 @@ export const createMapTilesHandler = ({
     return task;
   };
 
-  const requestUpdate = (ignoreInterval: boolean) => {
+  const requestUpdate = ({ ignoreInterval }: { ignoreInterval: boolean }) => {
     const alreadyRunning = running !== null;
     if (!alreadyRunning) {
       void start(ignoreInterval);
@@ -105,7 +105,9 @@ export const createMapTilesHandler = ({
         if (!body.success) {
           return Response.json({ error: 'Send {} or {"force": true}' }, { status: 400 });
         }
-        return Response.json(requestUpdate(body.data.force), { status: 202 });
+        return Response.json(requestUpdate({ ignoreInterval: body.data.force }), {
+          status: 202,
+        });
       }
 
       if (pathname === "/rollback" && request.method === "POST") {
@@ -128,8 +130,8 @@ export const createMapTilesHandler = ({
     },
     idle: () => running?.task ?? Promise.resolve(),
     scheduleUpdates: (intervalMs: number) => {
-      requestUpdate(false);
-      const timer = setInterval(() => requestUpdate(false), intervalMs);
+      requestUpdate({ ignoreInterval: false });
+      const timer = setInterval(() => requestUpdate({ ignoreInterval: false }), intervalMs);
       return () => clearInterval(timer);
     },
   };

@@ -70,18 +70,13 @@ const readUploadState = async (path: string) => {
     throw new Error(`Could not read upload state ${path}: ${result.error.message}`);
   }
 
-  let json: unknown;
+  const json = await tryCatch((async (): Promise<unknown> => JSON.parse(result.data))());
+  const parsed = json.error ? null : uploadStateSchema.safeParse(json.data);
 
-  try {
-    json = JSON.parse(result.data);
-  } catch {
-    throw new Error(`Upload state ${path} is not valid JSON; delete it to start the upload again`);
-  }
-
-  const parsed = uploadStateSchema.safeParse(json);
-
-  if (!parsed.success) {
-    throw new Error(`Upload state ${path} is not valid; delete it to start the upload again`);
+  if (!parsed?.success) {
+    console.warn(`Ignored the unreadable upload state ${path}; the upload starts again`);
+    await rm(path, { force: true });
+    return null;
   }
 
   return parsed.data;

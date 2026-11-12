@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -223,13 +223,23 @@ describe("uploadArchive", () => {
     expect(r2.calls.slice(0, 2)).toEqual(["list:missing", "create"]);
   });
 
-  test("refuses to guess when the saved state is corrupt", async () => {
+  test.each([
+    ["truncated", "{ not json"],
+    ["empty", ""],
+    ["incomplete", JSON.stringify({ bucket: "bucket" })],
+  ])("starts the upload again when the saved state is %s", async (_, contents) => {
     await mkdir(dirname(statePath()), { recursive: true });
-    await writeFile(statePath(), "{ not json");
+    await writeFile(statePath(), contents);
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
     const r2 = createFakeR2();
 
-    await expect(run(r2)).rejects.toThrow("delete it to start the upload again");
-    expect(r2.calls).toEqual([]);
+    await run(r2);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(r2.calls[0]).toBe("create");
+    expect(r2.calls).toContain("complete");
+    expect(await Bun.file(statePath()).exists()).toBe(false);
+    warn.mockRestore();
   });
 
   test("retries a failed part and keeps the progress total correct", async () => {

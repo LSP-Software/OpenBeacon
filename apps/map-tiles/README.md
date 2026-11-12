@@ -80,7 +80,7 @@ A scheduled update does nothing unless all of these hold:
 
 So the daily check is cheap and the map changes roughly monthly.
 
-If the service restarts in the middle of an upload, it resumes from the parts already in R2 when it starts again. R2 deletes unfinished multipart uploads after 7 days by default, after which the upload starts again.
+If the service restarts in the middle of an upload, it resumes from the parts already in R2 when it starts again. This includes an upload started with `map-tiles update` before the next update was due. An unreadable upload state file is ignored and the upload starts again. R2 deletes unfinished multipart uploads after 7 days by default, after which the upload starts again.
 
 Before switching to a new map, the service checks that the uploaded size matches the build, compares the first 16 KiB (header and root directory) with the Protomaps source, and checks that the metadata reports basemap schema major version 4, which the app's `@protomaps/basemaps` style expects. Each part is uploaded with its MD5 so R2 rejects corrupted parts. If a check fails, nothing is switched and the next update uploads the slot again.
 

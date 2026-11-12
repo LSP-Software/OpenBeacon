@@ -1,7 +1,7 @@
 import { ARCHIVE_GRACE_PERIOD_MS, r2EnvSchema, SLOT_REUSE_MARGIN_MS } from "@openbeacon/map-tiles";
 import { z } from "zod";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+export const DAY_MS = 24 * 60 * 60 * 1000;
 
 const blankAsUndefined = (value: unknown) =>
   typeof value === "string" && value.trim() === "" ? undefined : value;
