@@ -1,33 +1,37 @@
 import type { OpenBeaconCache } from "@openbeacon/cache";
-import { createSignedPmtilesUrl } from "../r2.ts";
+import { createSignedPmtilesUrl, resolvePmtilesArchive } from "../r2.ts";
 
-type CreateSignedPmtilesUrlFn = typeof createSignedPmtilesUrl;
+type ArchiveDependencies = {
+  createSignedPmtilesUrl?: typeof createSignedPmtilesUrl;
+  resolvePmtilesArchive?: typeof resolvePmtilesArchive;
+};
+
+type ResolvedArchive = Awaited<ReturnType<typeof resolvePmtilesArchive>>;
 
 export const PM_TILES_URL_REFRESH_WINDOW_MS = 60_000;
 
-const buildPmtilesUrlPayload = ({ expiresAt, url }: { expiresAt: string; url: string }) => {
+const buildPmtilesUrlPayload = ({
+  archive,
+  expiresAt,
+  url,
+}: {
+  archive: ResolvedArchive;
+  expiresAt: string;
+  url: string;
+}) => {
   const expiresAtTimestamp = new Date(expiresAt).getTime();
 
   return {
+    archiveId: archive.id,
     expiresAt,
+    mapBuild: archive.build,
+    mapSlot: archive.slot,
     refreshAt: new Date(expiresAtTimestamp - PM_TILES_URL_REFRESH_WINDOW_MS).toISOString(),
     url,
   };
 };
 
-const canReusePmtilesSignedUrl = ({
-  expiresAt,
-  now,
-  url,
-}: {
-  expiresAt: string | null;
-  now: number;
-  url: string | null;
-}) => {
-  if (!url || !expiresAt) {
-    return false;
-  }
-
+const canReusePmtilesSignedUrl = ({ expiresAt, now }: { expiresAt: string; now: number }) => {
   const expiresAtTimestamp = new Date(expiresAt).getTime();
 
   if (Number.isNaN(expiresAtTimestamp)) {
@@ -38,30 +42,31 @@ const canReusePmtilesSignedUrl = ({
 };
 
 const createAndCacheSignedPmtilesUrlForUser = async ({
+  archive,
   cache,
   createSignedPmtilesUrl: createSignedPmtilesUrlOverride,
   source,
   userId,
 }: {
+  archive: ResolvedArchive;
   cache: OpenBeaconCache;
-  createSignedPmtilesUrl: CreateSignedPmtilesUrlFn | undefined;
+  createSignedPmtilesUrl: typeof createSignedPmtilesUrl | undefined;
   source: "forced" | "generated";
   userId: string;
 }) => {
   const signer = createSignedPmtilesUrlOverride ?? createSignedPmtilesUrl;
-  const signedPmtilesUrl = await signer();
+  const signedPmtilesUrl = await signer(archive.key);
 
   await cache.pmtilesSignedUrls.set({
+    archiveId: archive.id,
     expiresAt: signedPmtilesUrl.expiresAt,
     url: signedPmtilesUrl.url,
     userId,
   });
 
   return {
-    ...buildPmtilesUrlPayload({
-      expiresAt: signedPmtilesUrl.expiresAt,
-      url: signedPmtilesUrl.url,
-    }),
+    ...buildPmtilesUrlPayload({ ...signedPmtilesUrl, archive }),
+    key: archive.key,
     source,
   };
 };
@@ -70,35 +75,36 @@ export const getSignedPmtilesUrlForUser = async ({
   cache,
   createSignedPmtilesUrl: createSignedPmtilesUrlOverride,
   now = Date.now,
+  requestedArchiveId,
+  resolvePmtilesArchive: resolvePmtilesArchiveOverride,
   userId,
-}: {
+}: ArchiveDependencies & {
   cache: OpenBeaconCache;
-  createSignedPmtilesUrl?: typeof createSignedPmtilesUrl;
   now?: () => number;
+  requestedArchiveId: string | undefined;
   userId: string;
 }) => {
-  const cachedSignedPmtilesUrl = await cache.pmtilesSignedUrls.get({ userId });
+  const archive = await (resolvePmtilesArchiveOverride ?? resolvePmtilesArchive)(
+    requestedArchiveId,
+  );
+  const cachedSignedPmtilesUrl = await cache.pmtilesSignedUrls.get({
+    archiveId: archive.id,
+    userId,
+  });
 
   if (
-    canReusePmtilesSignedUrl({
-      expiresAt: cachedSignedPmtilesUrl?.expiresAt ?? null,
-      now: now(),
-      url: cachedSignedPmtilesUrl?.url ?? null,
-    })
+    cachedSignedPmtilesUrl &&
+    canReusePmtilesSignedUrl({ expiresAt: cachedSignedPmtilesUrl.expiresAt, now: now() })
   ) {
-    const expiresAt = cachedSignedPmtilesUrl?.expiresAt as string;
-    const url = cachedSignedPmtilesUrl?.url as string;
-
     return {
-      ...buildPmtilesUrlPayload({
-        expiresAt,
-        url,
-      }),
+      ...buildPmtilesUrlPayload({ ...cachedSignedPmtilesUrl, archive }),
+      key: archive.key,
       source: "cached" as const,
     };
   }
 
   return createAndCacheSignedPmtilesUrlForUser({
+    archive,
     cache,
     createSignedPmtilesUrl: createSignedPmtilesUrlOverride,
     source: "generated",
@@ -109,16 +115,16 @@ export const getSignedPmtilesUrlForUser = async ({
 export const forceRefreshSignedPmtilesUrlForUser = async ({
   cache,
   createSignedPmtilesUrl: createSignedPmtilesUrlOverride,
+  resolvePmtilesArchive: resolvePmtilesArchiveOverride,
   userId,
-}: {
+}: ArchiveDependencies & {
   cache: OpenBeaconCache;
-  createSignedPmtilesUrl?: typeof createSignedPmtilesUrl;
   userId: string;
-}) => {
-  return createAndCacheSignedPmtilesUrlForUser({
+}) =>
+  createAndCacheSignedPmtilesUrlForUser({
+    archive: await (resolvePmtilesArchiveOverride ?? resolvePmtilesArchive)(undefined),
     cache,
     createSignedPmtilesUrl: createSignedPmtilesUrlOverride,
     source: "forced",
     userId,
   });
-};

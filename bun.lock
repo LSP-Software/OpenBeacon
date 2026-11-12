@@ -34,6 +34,15 @@
         "typescript": "^5.9.3",
       },
     },
+    "apps/map-tiles": {
+      "name": "@openbeacon/map-tiles-cli",
+      "dependencies": {
+        "@aws-sdk/client-s3": "^3.1164.0",
+        "@openbeacon/map-tiles": "workspace:*",
+        "@openbeacon/shared": "workspace:*",
+        "zod": "^4.6.7",
+      },
+    },
     "apps/mobile": {
       "name": "@openbeacon/mobile",
       "dependencies": {
@@ -121,6 +130,7 @@
         "@openbeacon/email": "workspace:*",
         "@openbeacon/schemas": "workspace:*",
         "@openbeacon/shared": "workspace:*",
+        "zod": "^4.6.7",
       },
     },
     "packages/api": {
@@ -134,6 +144,7 @@
         "@openbeacon/database": "workspace:*",
         "@openbeacon/email": "workspace:*",
         "@openbeacon/encryption": "workspace:*",
+        "@openbeacon/map-tiles": "workspace:*",
         "@openbeacon/schemas": "workspace:*",
         "@openbeacon/shared": "workspace:*",
         "@t3-oss/env-core": "^0.13.10",
@@ -207,6 +218,15 @@
         "@noble/curves": "^2.0.1",
         "@noble/hashes": "^2.0.1",
         "@scure/bip39": "^2.4.0",
+        "zod": "^4.6.7",
+      },
+    },
+    "packages/map-tiles": {
+      "name": "@openbeacon/map-tiles",
+      "version": "0.0.0",
+      "dependencies": {
+        "@aws-sdk/client-s3": "^3.1164.0",
+        "@openbeacon/shared": "workspace:*",
         "zod": "^4.6.7",
       },
     },
@@ -647,6 +667,10 @@
     "@openbeacon/email": ["@openbeacon/email@workspace:packages/email"],
 
     "@openbeacon/encryption": ["@openbeacon/encryption@workspace:packages/encryption"],
+
+    "@openbeacon/map-tiles": ["@openbeacon/map-tiles@workspace:packages/map-tiles"],
+
+    "@openbeacon/map-tiles-cli": ["@openbeacon/map-tiles-cli@workspace:apps/map-tiles"],
 
     "@openbeacon/mobile": ["@openbeacon/mobile@workspace:apps/mobile"],
 
@@ -2231,6 +2255,12 @@
     "@openbeacon/email/@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 
     "@openbeacon/encryption/zod": ["zod@4.6.7", "", {}, "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="],
+
+    "@openbeacon/map-tiles/zod": ["zod@4.6.7", "", {}, "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="],
+
+    "@openbeacon/map-tiles-cli/zod": ["zod@4.6.7", "", {}, "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="],
+
+    "@openbeacon/scheduled-jobs/zod": ["zod@4.6.7", "", {}, "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="],
 
     "@prisma/engines/@prisma/get-platform": ["@prisma/get-platform@7.10.1", "", { "dependencies": { "@prisma/debug": "7.10.1" } }, "sha512-iVnghHne5vcaobBjPVCMEjh5r/1UCj394EIGTUclasFRatpR/MQwcM2veLv5kgoFSyYP54nch/lNFCQRYcDxvg=="],
 

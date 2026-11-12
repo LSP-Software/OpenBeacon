@@ -14,26 +14,40 @@ import { createRoot, type Root } from "test-renderer";
 
 let fetches = 0;
 let screenFocused = true;
+let requestedArchiveIds: (string | undefined)[] = [];
 
 mock.module("@react-navigation/native", () => ({
   useIsFocused: () => screenFocused,
 }));
 
 mock.module("../lib/api.ts", () => ({
+  queryClient: {
+    getQueryData: (queryKey: unknown[]) => queryClient.getQueryData(queryKey),
+  },
   trpc: {
     maps: {
       getSignedPmtilesUrl: {
         queryOptions: () => ({
           queryKey: [["maps", "getSignedPmtilesUrl"], { type: "query" }],
-          queryFn: async () => {
-            fetches += 1;
-            return {
-              expiresAt: new Date(Date.now() + 90_000).toISOString(),
-              refreshAt: new Date(Date.now() + 30_000).toISOString(),
-              url: `https://example.com/map.pmtiles?signature=${fetches}`,
-            };
-          },
         }),
+      },
+    },
+  },
+  trpcClient: {
+    maps: {
+      getSignedPmtilesUrl: {
+        query: async (input: { archiveId: string | undefined }) => {
+          fetches += 1;
+          requestedArchiveIds.push(input.archiveId);
+          return {
+            archiveId: "a-20261107",
+            mapBuild: "20261107",
+            mapSlot: "a" as const,
+            expiresAt: new Date(Date.now() + 90_000).toISOString(),
+            refreshAt: new Date(Date.now() + 30_000).toISOString(),
+            url: `https://example.com/map.pmtiles?signature=${fetches}`,
+          };
+        },
       },
     },
   },
@@ -79,6 +93,7 @@ describe("useSignedPmtilesUrl", () => {
     jest.useFakeTimers();
     environmentManager.setIsServer(() => false);
     fetches = 0;
+    requestedArchiveIds = [];
     screenFocused = true;
     focusManager.setFocused(true);
     queryClient = new QueryClient();
@@ -149,5 +164,12 @@ describe("useSignedPmtilesUrl", () => {
     await settle();
 
     expect(fetches).toBe(1);
+  });
+
+  test("requests the archive the map already uses so refreshes never switch archives", async () => {
+    await render();
+    await advance(30_000);
+
+    expect(requestedArchiveIds).toEqual([undefined, "a-20261107"]);
   });
 });

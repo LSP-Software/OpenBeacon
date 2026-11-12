@@ -68,6 +68,7 @@ class AndroidVersionsTest(unittest.TestCase):
             (avd_home / "OpenBeacon_API_30.avd").mkdir()
             commands = self.create_version_avds(sdk, avd_home, [24, 30])
             self.assertEqual(commands, [
+                [str(tools / "sdkmanager"), "--list"],
                 [str(tools / "sdkmanager"), "--install", "system-images;android-30;google_apis;x86_64"],
                 [str(tools / "avdmanager"), "create", "avd", "--force", "--name", "OpenBeacon_API_30", "--package", "system-images;android-30;google_apis;x86_64", "--device", "pixel_6"],
             ])
@@ -77,12 +78,54 @@ class AndroidVersionsTest(unittest.TestCase):
         with self.android_sdk() as (sdk, tools, avd_home):
             image = sdk / "system-images" / "android-30" / "google_apis" / "x86_64"
             image.mkdir(parents=True)
-            (image / "package.xml").touch()
             (image / "system.img").touch()
             self.create_avd(avd_home, 30)
             commands = self.create_version_avds(sdk, avd_home, [30])
             self.assertFalse(image.exists())
             self.assertEqual(commands, [[str(tools / "sdkmanager"), "--install", "system-images;android-30;google_apis;x86_64"]])
+
+    def test_keeps_image_without_userdata(self):
+        with self.android_sdk() as (sdk, tools, avd_home):
+            image = sdk / "system-images" / "android-35" / "google_apis" / "x86_64"
+            image.mkdir(parents=True)
+            (image / "package.xml").touch()
+            (image / "system.img").touch()
+            self.create_avd(avd_home, 35)
+            self.assertEqual(self.create_version_avds(sdk, avd_home, [35]), [[str(tools / "sdkmanager"), "--list"]])
+            self.assertTrue(image.exists())
+
+    def test_updates_outdated_installed_image(self):
+        with self.android_sdk() as (sdk, tools, avd_home):
+            self.install_image(sdk, 35)
+            self.create_avd(avd_home, 35)
+            listing = self.listing(installed=[("system-images;android-35;google_apis;x86_64", "9")], available=[("system-images;android-35;google_apis;x86_64", "10")])
+            commands = self.create_version_avds(sdk, avd_home, [35], listing)
+            self.assertEqual(commands, [[str(tools / "sdkmanager"), "--list"], [str(tools / "sdkmanager"), "--install", "system-images;android-35;google_apis;x86_64"]])
+
+    def test_keeps_installed_image_when_update_check_fails(self):
+        with self.android_sdk() as (sdk, tools, avd_home):
+            self.install_image(sdk, 35)
+            self.create_avd(avd_home, 35)
+            listing = self.listing(installed=[("system-images;android-35;google_apis;x86_64", "9")], available=[("system-images;android-35;google_apis;x86_64", "10")])
+            commands = self.create_version_avds(sdk, avd_home, [35], listing, returncode=1)
+            self.assertEqual(commands, [[str(tools / "sdkmanager"), "--list"]])
+
+    def test_finds_only_newer_revisions_of_requested_images(self):
+        packages = ["system-images;android-34;google_apis;x86_64", "system-images;android-35;google_apis;x86_64", "system-images;android-36;google_apis;x86_64"]
+        listing = self.listing(
+            installed=[(packages[0], "14"), (packages[1], "9"), ("platforms;android-35", "2")],
+            available=[(packages[0], "14"), (packages[1], "8"), (packages[1], "10"), (packages[2], "7"), ("platforms;android-35", "3")],
+        )
+        self.assertEqual(simulation.image_updates(listing, packages), {packages[1]: ("9", "10")})
+
+    def test_repeated_version_runs_several_emulators_from_one_avd(self):
+        devices = simulation.version_devices([36, 36, 36], None)
+        self.assertEqual([avd for avd, _, _, _ in devices], ["OpenBeacon_API_36"] * 3)
+        self.assertEqual([route[0] for _, _, _, route in devices], ["stationary", "walking", "jogging"])
+        with self.android_sdk() as (sdk, tools, avd_home):
+            (avd_home / "OpenBeacon_API_36.avd").mkdir()
+            commands = self.create_version_avds(sdk, avd_home, [36, 36, 36])
+            self.assertEqual([command[1] for command in commands], ["--install", "create"])
 
     def test_recreates_avd_left_by_failed_creation(self):
         with self.android_sdk() as (sdk, tools, avd_home):
@@ -90,7 +133,7 @@ class AndroidVersionsTest(unittest.TestCase):
             (avd_home / "OpenBeacon_API_30.avd").mkdir(parents=True)
             (avd_home / "OpenBeacon_API_30.avd" / "config.ini").write_text("hw.keyboard=no\n")
             commands = self.create_version_avds(sdk, avd_home, [30])
-            self.assertEqual(commands, [[str(tools / "avdmanager"), "create", "avd", "--force", "--name", "OpenBeacon_API_30", "--package", "system-images;android-30;google_apis;x86_64", "--device", "pixel_6"]])
+            self.assertEqual(commands, [[str(tools / "sdkmanager"), "--list"], [str(tools / "avdmanager"), "create", "avd", "--force", "--name", "OpenBeacon_API_30", "--package", "system-images;android-30;google_apis;x86_64", "--device", "pixel_6"]])
 
     @contextmanager
     def android_sdk(self):
@@ -113,8 +156,12 @@ class AndroidVersionsTest(unittest.TestCase):
         (avd_home / f"OpenBeacon_API_{api}.avd").mkdir()
         (avd_home / f"OpenBeacon_API_{api}.avd" / "config.ini").write_text("hw.keyboard=no\ndisk.dataPartition.size=6G\nhw.keyboard=yes\n")
 
-    def create_version_avds(self, sdk, avd_home, api_levels):
-        with patch.dict(simulation.os.environ, {"ANDROID_AVD_HOME": str(avd_home)}), patch.object(simulation.subprocess, "run") as run, patch("builtins.print"):
+    def listing(self, installed, available):
+        rows = lambda packages: "".join(f"  {path} | {version} | Description\n" for path, version in packages)
+        return f"Installed packages:\n  Path | Version | Description\n  ------- | ------- | -------\n{rows(installed)}\nAvailable Packages:\n  Path | Version | Description\n  ------- | ------- | -------\n{rows(available)}\nAvailable Updates:\n  ID | Installed | Available\n  ------- | ------- | -------\n  emulator | 1 | 2\n"
+
+    def create_version_avds(self, sdk, avd_home, api_levels, listing="", returncode=0):
+        with patch.dict(simulation.os.environ, {"ANDROID_AVD_HOME": str(avd_home)}), patch.object(simulation.subprocess, "run", return_value=SimpleNamespace(returncode=returncode, stdout=listing, stderr="")) as run, patch("builtins.print"):
             simulation.create_version_avds(sdk, api_levels, "x86_64")
         return [call.args[0] for call in run.call_args_list]
 

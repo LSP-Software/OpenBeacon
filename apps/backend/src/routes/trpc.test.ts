@@ -16,7 +16,6 @@ describe("tRPC route", () => {
       R2_ACCESS_KEY_ID: "test-access-key-id",
       R2_SECRET_ACCESS_KEY: "test-secret-access-key",
       R2_BUCKET: "test-bucket",
-      R2_PM_TILES_KEY: "pmtiles/test.pmtiles",
     });
     const { default: trpc } = await import("./trpc.ts");
     const app = new Hono().basePath("/api").route("/", trpc);

@@ -66,6 +66,7 @@ describe("feedback", () => {
       androidVersion: " 15 ",
       appVersion: " 1.2.3 ",
       maplibreVersion: " 10.4.2 ",
+      mapVersion: " 2026-11-01 (b) ",
       serverVersion: " 0.1.1 ",
     });
     await caller.feedback.submit({ message: "follow up", email: "user@example.com" });
@@ -79,6 +80,7 @@ describe("feedback", () => {
             androidVersion: "15",
             appVersion: "1.2.3",
             maplibreVersion: "10.4.2",
+            mapVersion: "2026-11-01 (b)",
             serverVersion: "0.1.1",
           },
           select: { id: true },
@@ -92,6 +94,7 @@ describe("feedback", () => {
             androidVersion: null,
             appVersion: null,
             maplibreVersion: null,
+            mapVersion: null,
             serverVersion: null,
           },
           select: { id: true },
@@ -118,6 +121,7 @@ describe("feedback", () => {
             androidVersion: null,
             appVersion: null,
             maplibreVersion: null,
+            mapVersion: null,
             serverVersion: null,
           },
           select: { id: true },

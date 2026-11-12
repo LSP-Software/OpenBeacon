@@ -13,7 +13,6 @@ Object.assign(process.env, {
   R2_ACCESS_KEY_ID: "test-access-key-id",
   R2_SECRET_ACCESS_KEY: "test-secret-access-key",
   R2_BUCKET: "test-bucket",
-  R2_PM_TILES_KEY: "pmtiles/test.pmtiles",
 });
 const { app } = await import("./app.ts");
 

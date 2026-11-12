@@ -31,6 +31,8 @@ export const emitNativeMapLog = (log: {
 const annotationRefreshCalls: string[] = [];
 const urlTransforms: Array<{ id: string; find: string; replace: string }> = [];
 export const getNativeMapUrlTransforms = () => urlTransforms;
+const urlTransformEvents: string[] = [];
+export const getNativeMapUrlTransformEvents = () => urlTransformEvents;
 const annotationMountCounts = new Map<string, number>();
 const annotationSelectedProps = new Map<string, boolean | undefined>();
 const annotationHandlersById = new Map<
@@ -66,6 +68,7 @@ let mapViewHandlers: {
   }) => void;
 } = {};
 let mapViewMountCount = 0;
+let liveMapViewCount = 0;
 let latestMapStyle: unknown = null;
 let latestCameraDefaultSettings: {
   centerCoordinate?: [number, number];
@@ -101,6 +104,7 @@ export const resetNativeMapHarness = () => {
   cameraCommands.length = 0;
   mapLogHandler = null;
   urlTransforms.length = 0;
+  urlTransformEvents.length = 0;
   annotationRefreshCalls.length = 0;
   annotationMountCounts.clear();
   annotationSelectedProps.clear();
@@ -109,6 +113,7 @@ export const resetNativeMapHarness = () => {
   removedAnnotationDeselectionHandlers.clear();
   mapViewHandlers = {};
   mapViewMountCount = 0;
+  liveMapViewCount = 0;
   latestMapStyle = null;
   latestCameraDefaultSettings = null;
   selfHeadingDegrees = null;
@@ -438,7 +443,11 @@ export const createMapLibreMockModule = () => {
 
       useEffect(() => {
         mapViewMountCount += 1;
+        liveMapViewCount += 1;
         onDidFinishLoadingMap?.();
+        return () => {
+          liveMapViewCount -= 1;
+        };
       }, []);
 
       return React.createElement(
@@ -521,9 +530,12 @@ export const createMapLibreMockModule = () => {
     TransformRequestManager: {
       addUrlTransform: (transform: { id: string; find: string; replace: string }) => {
         urlTransforms.push(transform);
+        urlTransformEvents.push(`add:${transform.id}`);
         return transform.id;
       },
-      removeUrlTransform: () => {},
+      removeUrlTransform: (id: string) => {
+        urlTransformEvents.push(`remove:${id}:liveMaps=${liveMapViewCount}`);
+      },
     },
     Marker: ({ children, lngLat }: { children?: ReactNode; lngLat: number[] }) =>
       React.createElement("marker-view", { coordinate: lngLat, allowOverlap: true }, children),

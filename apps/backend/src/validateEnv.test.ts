@@ -18,7 +18,6 @@ describe("production environment validation", () => {
     R2_ACCESS_KEY_ID: "test-key",
     R2_SECRET_ACCESS_KEY: "test-secret",
     R2_BUCKET: "test-bucket",
-    R2_PM_TILES_KEY: "test.pmtiles",
   };
 
   test("accepts valid runtime configuration", () => {
@@ -90,7 +89,7 @@ describe("production environment validation", () => {
       });
       expect(result.exitCode).not.toBe(0);
       expect(result.stderr.toString()).toContain("Environment configuration validation failed");
-      expect(result.stdout.toString()).toContain("R2_PM_TILES_KEY: valid");
+      expect(result.stdout.toString()).toContain("R2_SECRET_ACCESS_KEY: valid");
     }
   }, 30_000);
 

@@ -6,6 +6,7 @@ import { createSecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
 import { prisma } from "@openbeacon/database";
 import { checkEmail, emailEnabled, sendSecurityAlertEmail } from "@openbeacon/email";
 import { checkServices as checkConnections } from "@openbeacon/shared";
+import { checkMapTiles } from "./jobs/mapTilesUpdate.ts";
 
 const pendingAlerts = new Set<Promise<unknown>>();
 
@@ -30,11 +31,16 @@ export const waitForSecurityAlerts = async () => {
 };
 
 export const checkServices = async () => {
+  const mapTilesApiKey = process.env["MAP_TILES_API_KEY"];
+  const mapTilesUrl = process.env["MAP_TILES_SERVICE_URL"];
   const checks = {
     PostgreSQL: () => services.db.$queryRaw`SELECT 1`,
     S3: checkS3,
     R2: checkR2,
     ...(emailEnabled ? { Email: checkEmail } : {}),
+    ...(mapTilesApiKey && mapTilesUrl
+      ? { "Map tiles": () => checkMapTiles({ apiKey: mapTilesApiKey, url: mapTilesUrl }) }
+      : {}),
   };
   await checkConnections(checks);
 };

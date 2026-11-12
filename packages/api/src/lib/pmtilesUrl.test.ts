@@ -35,18 +35,17 @@ const pmtilesUrlTestEnvKeys = [
   "R2_ACCESS_KEY_ID",
   "R2_SECRET_ACCESS_KEY",
   "R2_BUCKET",
-  "R2_PM_TILES_KEY",
 ] as const;
 
 const createCache = ({
-  cachedSignedPmtilesUrl = null,
+  cachedSignedPmtilesUrls = {},
 }: {
-  cachedSignedPmtilesUrl?: {
-    expiresAt: string;
-    url: string;
-  } | null;
+  cachedSignedPmtilesUrls?: Record<string, { expiresAt: string; url: string }>;
 } = {}) => {
-  const get = mock(async () => cachedSignedPmtilesUrl);
+  const get = mock(
+    async ({ archiveId }: { archiveId: string; userId: string }) =>
+      cachedSignedPmtilesUrls[archiveId] ?? null,
+  );
   const set = mock(async () => undefined);
   const pmtilesSignedUrls = {
     get,
@@ -61,6 +60,25 @@ const createCache = ({
   };
 };
 
+const createSigner = (url: string, expiresAt: string) =>
+  mock(async (_key: string) => ({ expiresAt, url }));
+
+const oldArchive = {
+  build: "20261001",
+  id: "a-20261001",
+  key: "planet-a.pmtiles",
+  slot: "a" as const,
+};
+const currentArchive = {
+  build: "20261101",
+  id: "b-20261101",
+  key: "planet-b.pmtiles",
+  slot: "b" as const,
+};
+
+const importPmtilesUrl = async (): Promise<typeof import("./pmtilesUrl.ts")> =>
+  import(`./pmtilesUrl.ts?test=${Math.random().toString(36).slice(2)}`);
+
 describe("pmtilesUrl", () => {
   const envSnapshot = withEnvSnapshot(pmtilesUrlTestEnvKeys);
 
@@ -73,139 +91,143 @@ describe("pmtilesUrl", () => {
     process.env.R2_ACCESS_KEY_ID = "test-r2-access-key-id";
     process.env.R2_SECRET_ACCESS_KEY = "test-r2-secret-access-key";
     process.env.R2_BUCKET = "test-r2-bucket";
-    process.env.R2_PM_TILES_KEY = "pmtiles/test.pmtiles";
   });
 
   afterEach(() => {
     envSnapshot.restore();
   });
 
-  test("returns a cached url when more than a minute remains", async () => {
-    const { getSignedPmtilesUrlForUser }: typeof import("./pmtilesUrl.ts") = await import(
-      `./pmtilesUrl.ts?test=${Math.random().toString(36).slice(2)}`
-    );
+  test("returns a cached url for the same archive when more than a minute remains", async () => {
+    const { getSignedPmtilesUrlForUser } = await importPmtilesUrl();
     const now = new Date("2026-03-31T12:00:00.000Z");
     const expiresAt = new Date(now.getTime() + 60_001).toISOString();
     const { cache, get, set } = createCache({
-      cachedSignedPmtilesUrl: {
-        expiresAt,
-        url: "https://cached.example/pmtiles",
+      cachedSignedPmtilesUrls: {
+        "a-20261001": { expiresAt, url: "https://cached.example/pmtiles" },
       },
     });
-    const createSignedUrl = mock(async () => {
+    const createSignedUrl = mock(async (_key: string) => {
       throw new Error("createSignedPmtilesUrl should not be called");
     });
+    const resolve = mock(async (_requestedId: string | undefined) => oldArchive);
 
     const result = await getSignedPmtilesUrlForUser({
       cache,
       createSignedPmtilesUrl: createSignedUrl,
       now: () => now.getTime(),
+      requestedArchiveId: "a-20261001",
+      resolvePmtilesArchive: resolve,
       userId: "user-1",
     });
 
-    expect(get).toHaveBeenCalledWith({
-      userId: "user-1",
-    });
+    expect(resolve).toHaveBeenCalledWith("a-20261001");
+    expect(get).toHaveBeenCalledWith({ archiveId: "a-20261001", userId: "user-1" });
     expect(set).not.toHaveBeenCalled();
     expect(result).toEqual({
+      archiveId: "a-20261001",
       expiresAt,
+      key: "planet-a.pmtiles",
+      mapBuild: "20261001",
+      mapSlot: "a",
       refreshAt: "2026-03-31T12:00:00.001Z",
       source: "cached",
       url: "https://cached.example/pmtiles",
     });
   });
 
-  test("generates and persists a new url when no cached value exists", async () => {
-    const { getSignedPmtilesUrlForUser }: typeof import("./pmtilesUrl.ts") = await import(
-      `./pmtilesUrl.ts?test=${Math.random().toString(36).slice(2)}`
-    );
-    const { cache, set } = createCache();
-    const expiresAt = "2026-03-31T12:10:00.000Z";
-    const createSignedUrl = mock(async () => ({
-      expiresAt,
-      url: "https://generated.example/pmtiles",
-    }));
-
-    const result = await getSignedPmtilesUrlForUser({
-      cache,
-      createSignedPmtilesUrl: createSignedUrl,
-      userId: "user-1",
-    });
-
-    expect(createSignedUrl).toHaveBeenCalledTimes(1);
-    expect(set).toHaveBeenCalledWith({
-      expiresAt,
-      url: "https://generated.example/pmtiles",
-      userId: "user-1",
-    });
-    expect(result).toEqual({
-      expiresAt,
-      refreshAt: "2026-03-31T12:09:00.000Z",
-      source: "generated",
-      url: "https://generated.example/pmtiles",
-    });
-  });
-
-  test("generates and persists a new url when a cached value has one minute or less remaining", async () => {
-    const { getSignedPmtilesUrlForUser }: typeof import("./pmtilesUrl.ts") = await import(
-      `./pmtilesUrl.ts?test=${Math.random().toString(36).slice(2)}`
-    );
+  test("never reuses a url signed for an earlier build of the same slot", async () => {
+    const { getSignedPmtilesUrlForUser } = await importPmtilesUrl();
     const now = new Date("2026-03-31T12:00:00.000Z");
     const { cache, set } = createCache({
-      cachedSignedPmtilesUrl: {
-        expiresAt: new Date(now.getTime() + 60_000).toISOString(),
-        url: "https://cached.example/pmtiles",
+      cachedSignedPmtilesUrls: {
+        "b-20260901": {
+          expiresAt: new Date(now.getTime() + 300_000).toISOString(),
+          url: "https://cached.example/old",
+        },
       },
     });
-    const createSignedUrl = mock(async () => ({
-      expiresAt: "2026-03-31T12:10:00.000Z",
-      url: "https://replacement.example/pmtiles",
-    }));
+    const createSignedUrl = createSigner("https://signed.example/new", "2026-03-31T12:10:00.000Z");
 
     const result = await getSignedPmtilesUrlForUser({
       cache,
       createSignedPmtilesUrl: createSignedUrl,
       now: () => now.getTime(),
+      requestedArchiveId: "b-20260901",
+      resolvePmtilesArchive: async () => currentArchive,
       userId: "user-1",
     });
 
-    expect(createSignedUrl).toHaveBeenCalledTimes(1);
+    expect(createSignedUrl).toHaveBeenCalledWith("planet-b.pmtiles");
+    expect(set).toHaveBeenCalledWith({
+      archiveId: "b-20261101",
+      expiresAt: "2026-03-31T12:10:00.000Z",
+      url: "https://signed.example/new",
+      userId: "user-1",
+    });
+    expect(result).toMatchObject({ archiveId: "b-20261101", source: "generated" });
+  });
+
+  test("generates a new url when a cached value has one minute or less remaining", async () => {
+    const { getSignedPmtilesUrlForUser } = await importPmtilesUrl();
+    const now = new Date("2026-03-31T12:00:00.000Z");
+    const { cache, set } = createCache({
+      cachedSignedPmtilesUrls: {
+        "b-20261101": {
+          expiresAt: new Date(now.getTime() + 60_000).toISOString(),
+          url: "https://cached.example/pmtiles",
+        },
+      },
+    });
+    const createSignedUrl = createSigner(
+      "https://replacement.example/pmtiles",
+      "2026-03-31T12:10:00.000Z",
+    );
+
+    const result = await getSignedPmtilesUrlForUser({
+      cache,
+      createSignedPmtilesUrl: createSignedUrl,
+      now: () => now.getTime(),
+      requestedArchiveId: "b-20261101",
+      resolvePmtilesArchive: async () => currentArchive,
+      userId: "user-1",
+    });
+
     expect(set).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
+      archiveId: "b-20261101",
       expiresAt: "2026-03-31T12:10:00.000Z",
+      key: "planet-b.pmtiles",
+      mapBuild: "20261101",
+      mapSlot: "b",
       refreshAt: "2026-03-31T12:09:00.000Z",
       source: "generated",
       url: "https://replacement.example/pmtiles",
     });
   });
 
-  test("force refresh always regenerates and overwrites the cached value", async () => {
-    const { forceRefreshSignedPmtilesUrlForUser }: typeof import("./pmtilesUrl.ts") = await import(
-      `./pmtilesUrl.ts?test=${Math.random().toString(36).slice(2)}`
-    );
+  test("force refresh signs the current archive and overwrites the cached value", async () => {
+    const { forceRefreshSignedPmtilesUrlForUser } = await importPmtilesUrl();
     const { cache, set } = createCache();
-    const createSignedUrl = mock(async () => ({
-      expiresAt: "2026-03-31T12:10:00.000Z",
-      url: "https://forced.example/pmtiles",
-    }));
+    const createSignedUrl = createSigner(
+      "https://forced.example/pmtiles",
+      "2026-03-31T12:10:00.000Z",
+    );
+    const resolve = mock(async (_requestedId: string | undefined) => currentArchive);
 
     const result = await forceRefreshSignedPmtilesUrlForUser({
       cache,
       createSignedPmtilesUrl: createSignedUrl,
+      resolvePmtilesArchive: resolve,
       userId: "user-1",
     });
 
-    expect(createSignedUrl).toHaveBeenCalledTimes(1);
+    expect(resolve).toHaveBeenCalledWith(undefined);
     expect(set).toHaveBeenCalledWith({
+      archiveId: "b-20261101",
       expiresAt: "2026-03-31T12:10:00.000Z",
       url: "https://forced.example/pmtiles",
       userId: "user-1",
     });
-    expect(result).toEqual({
-      expiresAt: "2026-03-31T12:10:00.000Z",
-      refreshAt: "2026-03-31T12:09:00.000Z",
-      source: "forced",
-      url: "https://forced.example/pmtiles",
-    });
+    expect(result).toMatchObject({ archiveId: "b-20261101", source: "forced" });
   });
 });

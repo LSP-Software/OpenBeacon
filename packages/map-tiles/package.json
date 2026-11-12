@@ -1,0 +1,22 @@
+{
+  "name": "@openbeacon/map-tiles",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "format": "bun fmt",
+    "format:check": "bun fmt --check",
+    "lint": "biome lint .",
+    "typecheck": "bun check",
+    "test": "bun test --isolate"
+  },
+  "dependencies": {
+    "@openbeacon/shared": "workspace:*",
+    "@aws-sdk/client-s3": "^3.1164.0",
+    "zod": "^4.6.7"
+  }
+}
