@@ -470,8 +470,10 @@ class TrackingCaptureService : Service() {
       when {
         !paused -> getString(R.string.openbeacon_tracking_notification_body)
         pausedUntil == null -> getString(R.string.openbeacon_tracking_notification_paused_body)
-        isToday(pausedUntil) ->
+        isOnDay(pausedUntil, 0) ->
           getString(R.string.openbeacon_tracking_notification_paused_until_body, DateFormat.getTimeFormat(this).format(Date(pausedUntil)))
+        isOnDay(pausedUntil, 1) ->
+          getString(R.string.openbeacon_tracking_notification_paused_until_tomorrow_body, DateFormat.getTimeFormat(this).format(Date(pausedUntil)))
         else ->
           getString(
             R.string.openbeacon_tracking_notification_paused_until_day_body,
@@ -483,6 +485,7 @@ class TrackingCaptureService : Service() {
       .Builder(this, CHANNEL_ID)
       .setContentTitle(getString(if (paused) R.string.openbeacon_tracking_notification_paused_title else R.string.openbeacon_tracking_notification_title))
       .setContentText(body)
+      .setStyle(NotificationCompat.BigTextStyle().bigText(body))
       .setSmallIcon(R.drawable.openbeacon_notification_icon)
       .setColor(ContextCompat.getColor(this, R.color.openbeacon_notification_color))
       .setContentIntent(openAppIntent)
@@ -494,10 +497,13 @@ class TrackingCaptureService : Service() {
       .build()
   }
 
-  private fun isToday(epochMillis: Long): Boolean {
+  private fun isOnDay(
+    epochMillis: Long,
+    daysAhead: Int,
+  ): Boolean {
     val day = Calendar.getInstance().apply { timeInMillis = epochMillis }
-    val today = Calendar.getInstance()
-    return day.get(Calendar.YEAR) == today.get(Calendar.YEAR) && day.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR)
+    val target = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, daysAhead) }
+    return day.get(Calendar.YEAR) == target.get(Calendar.YEAR) && day.get(Calendar.DAY_OF_YEAR) == target.get(Calendar.DAY_OF_YEAR)
   }
 
   private data class LastQueuedFix(

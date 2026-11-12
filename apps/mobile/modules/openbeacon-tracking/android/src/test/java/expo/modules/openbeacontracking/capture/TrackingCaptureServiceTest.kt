@@ -29,6 +29,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
+import java.util.Calendar
 import java.util.Date
 
 @RunWith(RobolectricTestRunner::class)
@@ -209,6 +210,22 @@ class TrackingCaptureServiceTest {
       notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE).toString(),
     )
     assertTrue(notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString().startsWith("Sharing starts again at "))
+  }
+
+  @Test
+  fun aTimedPauseEndingTomorrowSaysTomorrow() {
+    val until = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }.timeInMillis
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.1:", paused = true, pausedUntil = until))
+    val service = createService()
+    service.onStartCommand(startIntent(TrackingRuntime.captureCommands.start()), 0, 1)
+
+    assertEquals(
+      application.getString(
+        expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_paused_until_tomorrow_body,
+        DateFormat.getTimeFormat(application).format(Date(until)),
+      ),
+      shadowOf(service).lastForegroundNotification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
+    )
   }
 
   @Test
