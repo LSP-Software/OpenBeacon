@@ -26,7 +26,7 @@ defaults:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     environment: production
     steps:
       - name: Require main branch
@@ -80,17 +80,28 @@ jobs:
               echo "runner_uuid=${uuid}" >> "$GITHUB_OUTPUT"
             fi
           done
-      - name: Require published images for this version
+      - name: Require all three images for this version from the same commit
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          revisions=()
           for image in openbeacon-backend openbeacon-scheduled-jobs openbeacon-map-tiles; do
             ref="docker.io/lspsoftware/${image}:${VERSION}"
-            docker buildx imagetools inspect "$ref" > /dev/null || {
+            revision=$(docker buildx imagetools inspect "$ref" --format '{{index .Image.Config.Labels "org.opencontainers.image.revision"}}') || {
               echo "${ref} is not published. Run the Publish images to Docker Hub workflow for this version first." >&2
               exit 1
             }
+            if [ -z "$revision" ]; then
+              echo "${ref} has no revision label, so it can't be matched with the other images." >&2
+              exit 1
+            fi
+            echo "${ref} was built from ${revision}."
+            revisions+=("$revision")
           done
+          if [ "$(printf '%s\n' "${revisions[@]}" | sort -u | wc -l)" -ne 1 ]; then
+            echo "The ${VERSION} images were built from different commits. Bump serverVersion and publish all three images again." >&2
+            exit 1
+          fi
       - name: Point latest-stable at this version
         env:
           VERSION: ${{ steps.version.outputs.version }}
