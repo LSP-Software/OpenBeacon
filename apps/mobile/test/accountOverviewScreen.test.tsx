@@ -56,7 +56,12 @@ mock.module("lucide-react-native", () =>
     ].map((name) => [name, () => null]),
   ),
 );
-mock.module("react-native", () => ({ Pressable: View, ScrollView: View, View }));
+mock.module("react-native", () => ({
+  Platform: { OS: "android" },
+  Pressable: View,
+  ScrollView: View,
+  View,
+}));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
 mock.module("../components/containers/settingsContainer.tsx", () => ({
   SettingsContainer: () => null,

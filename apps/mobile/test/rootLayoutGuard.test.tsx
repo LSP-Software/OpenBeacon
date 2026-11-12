@@ -33,6 +33,7 @@ mock.module("../components/ui/Alert.tsx", () => ({ AlertHost: () => null }));
 mock.module("../components/OfflineBanner.tsx", () => ({ OfflineBanner: () => null }));
 mock.module("../lib/api.ts", () => ({ queryClient: {} }));
 mock.module("../lib/auth-client.ts", () => ({ authClient: { useSession: () => session } }));
+mock.module("../lib/notifications.ts", () => ({ useDismissNoticesWhenOpened: () => {} }));
 mock.module("../lib/deviceActivation.ts", () => ({
   useThisDeviceState: () => thisDeviceState,
 }));

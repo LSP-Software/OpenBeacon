@@ -115,8 +115,9 @@ mock.module("../lib/locationPermissions.ts", () => ({
   },
 }));
 
-mock.module("../lib/notificationPermissions.ts", () => ({
-  requestNotificationPermissionsForLaunch: async () => {
+mock.module("../lib/notifications.ts", () => ({
+  dismissNotice: async () => {},
+  requestNotificationPermissions: async () => {
     notificationRequestCalls += 1;
     permissionRequestOrder.push("notification");
     await notificationGate;

@@ -12,6 +12,7 @@ import { OfflineBanner } from "../components/OfflineBanner.tsx";
 import { queryClient } from "../lib/api.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { useThisDeviceState } from "../lib/deviceActivation.ts";
+import { useDismissNoticesWhenOpened } from "../lib/notifications.ts";
 import { DeletionCancellationNotice } from "../providers/DeletionCancellationNotice.tsx";
 import { LocationPermissionProvider } from "../providers/LocationPermissionProvider.tsx";
 import { SessionDataCleanup } from "../providers/SessionDataCleanup.tsx";
@@ -22,6 +23,7 @@ const RootLayout = () => {
   const compatibilityGateShown = useApiCompatibilityGateShown();
   const { data: session, isPending } = authClient.useSession();
   const thisDevice = useThisDeviceState();
+  useDismissNoticesWhenOpened();
 
   return (
     <QueryClientProvider client={queryClient}>

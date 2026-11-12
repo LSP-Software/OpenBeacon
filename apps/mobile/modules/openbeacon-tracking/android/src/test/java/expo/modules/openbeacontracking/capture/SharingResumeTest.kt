@@ -163,7 +163,7 @@ class SharingResumeTest {
     runWorker()
 
     assertEquals(ComponentName(application, TrackingCaptureService::class.java), shadowOf(application).nextStartedService.component)
-    assertNull(notice())
+    assertFalse(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_sharing_resumed_body))
     assertEquals(WorkInfo.State.ENQUEUED, checkState())
     val service = createService()
     service.onStartCommand(null, 0, 1)
@@ -183,10 +183,7 @@ class SharingResumeTest {
     assertEquals(Service.START_NOT_STICKY, service.onStartCommand(started, 0, 1))
     assertFalse(TrackingRuntime.isCaptureRunning)
     assertTrue(shadowOf(service).isStoppedBySelf)
-    assertEquals(
-      application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_resumed_notice_body),
-      notice()?.extras?.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
-    )
+    assertTrue(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_sharing_resumed_body))
     assertEquals(WorkInfo.State.ENQUEUED, checkState())
   }
 
@@ -215,24 +212,34 @@ class SharingResumeTest {
     SharingResumeWorker.restoreCapture(blocked)
 
     assertNull(shadowOf(application).nextStartedService)
-    assertEquals(
-      application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_resumed_notice_body),
-      notice()?.extras?.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
-    )
+    assertTrue(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_sharing_resumed_body))
     assertEquals(WorkInfo.State.CANCELLED, checkState())
-    startRunningService()
-    assertNull(notice())
   }
 
   @Test
-  fun withoutBackgroundLocationTheResumeWaitsForTheAppToOpen() {
+  fun whenAndroidBlocksTheRestartDuringATimedPauseTheOwnerIsAskedToUpdateThePhone() {
+    park()
+    val timed = SharingCaptureState(revisionPrefix = "s0.3:", paused = true, pausedUntil = System.currentTimeMillis() + 900_000L)
+    assertTrue(TrackingRuntime.applySharingState(application, "test-owner", "tablet", timed))
+    val blocked =
+      object : ContextWrapper(application) {
+        override fun startForegroundService(service: Intent) = throw IllegalStateException("startForegroundService() not allowed")
+      }
+    SharingResumeWorker.restoreCapture(blocked)
+
+    assertTrue(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_sharing_changed_body))
+    assertFalse(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_sharing_resumed_body))
+  }
+
+  @Test
+  fun withoutBackgroundLocationTheResumeAsksForLocationAccess() {
     park()
     assertTrue(TrackingRuntime.applySharingState(application, "test-owner", "tablet", SharingCaptureState(revisionPrefix = "s0.3:")))
     shadowOf(application).denyPermissions(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
     runWorker()
 
     assertNull(shadowOf(application).nextStartedService)
-    assertNotNull(notice())
+    assertTrue(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_location_permission_body))
     assertEquals(WorkInfo.State.CANCELLED, checkState())
   }
 
@@ -262,7 +269,26 @@ class SharingResumeTest {
     runWorker()
 
     assertNull(shadowOf(application).nextStartedService)
-    assertNull(notice())
+    assertFalse(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_sharing_resumed_body))
+    assertFalse(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_sharing_changed_body))
+  }
+
+  @Test
+  fun afterARebootWithoutLocationAccessTheOwnerIsTold() {
+    shadowOf(application).denyPermissions(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    TrackingBootReceiver().onReceive(application, Intent(Intent.ACTION_BOOT_COMPLETED))
+
+    assertNull(shadowOf(application).nextStartedService)
+    assertTrue(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_location_permission_body))
+  }
+
+  @Test
+  fun afterARebootWithSharingOffNothingIsSaid() {
+    TrackingRuntime.setCaptureEnabled(application, false)
+    shadowOf(application).denyPermissions(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    TrackingBootReceiver().onReceive(application, Intent(Intent.ACTION_BOOT_COMPLETED))
+
+    assertFalse(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_location_permission_body))
   }
 
   @Test
@@ -296,8 +322,10 @@ class SharingResumeTest {
   private fun checkState(): WorkInfo.State? =
     WorkManager.getInstance(application).getWorkInfosForUniqueWork(SharingResumeWorker.WORK_NAME).get().firstOrNull()?.state
 
-  private fun notice() =
-    shadowOf(application.getSystemService(NotificationManager::class.java)).getNotification(SharingResumeWorker.NOTICE_ID)
+  private fun hasNotice(body: Int) =
+    shadowOf(application.getSystemService(NotificationManager::class.java)).allNotifications.any {
+      it.extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString() == application.getString(body)
+    }
 
   private fun action(name: String) = Intent(application, TrackingCaptureService::class.java).apply { action = name }
 
