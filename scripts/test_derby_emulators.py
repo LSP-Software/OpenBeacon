@@ -106,7 +106,8 @@ class AndroidVersionsTest(unittest.TestCase):
         with self.android_sdk() as (sdk, tools, avd_home):
             self.install_image(sdk, 35)
             self.create_avd(avd_home, 35)
-            commands = self.create_version_avds(sdk, avd_home, [35], "Warning: Failed to download any source lists!\n", returncode=1)
+            listing = self.listing(installed=[("system-images;android-35;google_apis;x86_64", "9")], available=[("system-images;android-35;google_apis;x86_64", "10")])
+            commands = self.create_version_avds(sdk, avd_home, [35], listing, returncode=1)
             self.assertEqual(commands, [[str(tools / "sdkmanager"), "--list"]])
 
     def test_finds_only_newer_revisions_of_requested_images(self):

@@ -109,8 +109,9 @@ def create_version_avds(sdk, api_levels, abi):
         print("Checking for system image updates", flush=True)
         try:
             listing = subprocess.run([str(tools / "sdkmanager"), "--list"], capture_output=True, text=True, timeout=120)
-            updates = image_updates(listing.stdout, complete)
-            if listing.returncode != 0:
+            if listing.returncode == 0:
+                updates = image_updates(listing.stdout, complete)
+            else:
                 print("Could not check for system image updates; using the installed images.", flush=True)
         except (OSError, subprocess.TimeoutExpired):
             print("Could not check for system image updates; using the installed images.", flush=True)
