@@ -1,5 +1,11 @@
 import { useIsFocused } from "@react-navigation/native";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  skipToken,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, ScrollView, View } from "react-native";
@@ -50,6 +56,7 @@ const MapScreen = () => {
     status: trackingStatus,
   } = useMapLivePositions();
   const { data: session } = authClient.useSession();
+  const userId = session?.user.id;
   const isFocused = useIsFocused();
   const { data: groupsQueryData } = useQuery({
     ...trpc.groupMembership.list.queryOptions(),
@@ -58,9 +65,8 @@ const MapScreen = () => {
   const groups = useMembershipSnapshot(groupsQueryData);
   const nicknames = useQueries({
     queries: (groups ?? []).map((group) => ({
-      queryKey: ["personalNicknames", group.id, session?.user.id],
-      enabled: !!session?.user.id,
-      queryFn: () => loadPersonalNicknames(group.id, session!.user.id),
+      queryKey: ["personalNicknames", group.id, userId],
+      queryFn: userId ? () => loadPersonalNicknames(group.id, userId) : skipToken,
     })),
     combine: (results) => results.map((result) => result.data),
     subscribed: isFocused,

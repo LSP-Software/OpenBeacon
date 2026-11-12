@@ -214,7 +214,7 @@ const reconcileTrackingKeysInternal = async ({
 }): Promise<boolean> => {
   const generation = getTrackingKeyCheckGeneration();
   const trackingModule = await loadTrackingModule();
-  if (!isCurrent() || (onlyIfRunning && (!trackingModule || !trackingModule.isCaptureRunning()))) {
+  if (!isCurrent() || (onlyIfRunning && !trackingModule?.isCaptureRunning())) {
     return false;
   }
 

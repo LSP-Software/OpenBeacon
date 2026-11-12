@@ -15,7 +15,6 @@ let sharingData: {
   paused: boolean;
 };
 const changes: Parameters<typeof changeLocationSharing>[0][] = [];
-let invalidations = 0;
 let syncs = 0;
 let fetched: typeof sharingData | null = null;
 let synced: typeof sharingData | null = null;
@@ -32,9 +31,7 @@ mock.module("lucide-react-native", () => ({ PauseIcon: () => null }));
 mock.module("@tanstack/react-query", () => ({
   useQuery: () => ({ data: sharingData }),
   useQueryClient: () => ({
-    invalidateQueries: async () => {
-      invalidations += 1;
-    },
+    invalidateQueries: async () => {},
     setQueryData: (_key: unknown, data: typeof sharingData) => {
       sharingData = data;
     },
@@ -97,7 +94,6 @@ beforeEach(() => {
   };
   locallyPaused = false;
   changes.length = 0;
-  invalidations = 0;
   syncs = 0;
   fetched = null;
   synced = null;

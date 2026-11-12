@@ -81,7 +81,8 @@ export const buildLiveMapMarkers = ({
         userId: livePosition.userId,
       }),
       ringColor:
-        ringColors.length === 1 ? ringColors[0]! : getGroupColor(livePosition.sourceGroupId),
+        (ringColors.length === 1 ? ringColors[0] : undefined) ??
+        getGroupColor(livePosition.sourceGroupId),
       ...(ringColors.length > 1 ? { ringColors } : {}),
       sourceGroupId: livePosition.sourceGroupId,
       timestamp: livePosition.timestamp,

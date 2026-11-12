@@ -40,6 +40,7 @@ let queueEviction: {
 } | null = null;
 const dismissedEvictions: unknown[] = [];
 mock.module("@tanstack/react-query", () => ({
+  skipToken: Symbol("skipToken"),
   useQuery: ({ queryKey }: { queryKey?: unknown[] }) => ({
     data: queryKey?.[0] === "trackingQueueEviction" ? queueEviction : groups,
   }),

@@ -9,7 +9,7 @@ import {
   enableAppSwitcherProtectionAsync,
   preventScreenCaptureAsync,
 } from "expo-screen-capture";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { BackHandler, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BrandedQrCode } from "../../components/BrandedQrCode.tsx";
@@ -171,8 +171,12 @@ const LinkWithOtherPhoneScreen = () => {
     router.replace("/setup/name");
   };
 
+  const startEvent = useEffectEvent(start);
+  const finishEvent = useEffectEvent(finish);
+  const showNewCodeEvent = useEffectEvent(showNewCode);
+
   useEffect(() => {
-    void start();
+    void startEvent();
   }, []);
 
   useFocusEffect(
@@ -205,7 +209,7 @@ const LinkWithOtherPhoneScreen = () => {
       enc: data.enc,
     };
     setHandover(approved);
-    void finish(approved, link);
+    void finishEvent(approved, link);
   }, [link, handover, status.data]);
 
   useEffect(() => {
@@ -220,7 +224,7 @@ const LinkWithOtherPhoneScreen = () => {
         openAppAfterSetup("/");
         return;
       }
-      if (gone) await showNewCode();
+      if (gone) await showNewCodeEvent();
     })();
   }, [link, handover, status.data, status.error]);
 

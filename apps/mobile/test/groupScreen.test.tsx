@@ -25,6 +25,7 @@ const fetchQuery = mock(() => fetchGroups());
 const queryClient = { fetchQuery };
 const router = { replace };
 mock.module("@tanstack/react-query", () => ({
+  skipToken: Symbol("skipToken"),
   useQuery: ({ select }: { select?: (data: unknown) => unknown }) => ({
     ...queryResult,
     data: select && queryResult.data !== undefined ? select(queryResult.data) : queryResult.data,

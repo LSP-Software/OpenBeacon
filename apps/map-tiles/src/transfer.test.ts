@@ -46,7 +46,7 @@ describe("createRateLimiter", () => {
   });
 
   test("shares the rate between concurrent transfers", async () => {
-    let time = 0;
+    const time = 0;
     const waits: number[] = [];
     const limiter = createRateLimiter({
       bytesPerSecond: 1000,

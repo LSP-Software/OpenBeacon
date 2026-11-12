@@ -144,6 +144,7 @@ export const TrackingProvider = ({
     [queryClient, service],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: startCapture reruns the cycle once sharing is allowed; the cycle reads it through startCaptureRef
   useEffect(() => {
     if (isPending) {
       return;

@@ -3,7 +3,7 @@ import { deviceIconSchema, deviceNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Stack, useFocusEffect } from "expo-router";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useEffectEvent } from "react";
 import { useForm } from "react-hook-form";
 import { BackHandler, Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -47,9 +47,14 @@ const NameThisPhoneScreen = () => {
     }, []),
   );
 
-  useEffect(() => {
+  const thisPhoneId = thisPhone?.id;
+  const resetToThisPhone = useEffectEvent(() => {
     if (thisPhone) form.reset({ name: thisPhone.name, icon: thisPhone.icon });
-  }, [thisPhone?.id]);
+  });
+
+  useEffect(() => {
+    if (thisPhoneId) resetToThisPhone();
+  }, [thisPhoneId]);
 
   const save = async ({ name, icon }: z.infer<typeof schema>) => {
     if (!thisPhone) {

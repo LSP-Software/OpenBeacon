@@ -2,7 +2,7 @@ import { LogManager, TransformRequestManager } from "@maplibre/maplibre-react-na
 import { useMutation } from "@tanstack/react-query";
 import { Paths } from "expo-file-system";
 import { router, useRootNavigationState } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
 import { queryClient, trpc } from "../../lib/api.ts";
@@ -78,6 +78,7 @@ export const useNativeMapStyle = () => {
       );
     },
   });
+  const applyMapLoadFailureStateEvent = useEffectEvent(applyMapLoadFailureState);
   useEffect(() => {
     LogManager.onLog((log) => {
       if (
@@ -89,7 +90,7 @@ export const useNativeMapStyle = () => {
 
       failedSourceRevisionRef.current = mapRevisionRef.current;
       if (!showRecoverableErrorRef.current) {
-        applyMapLoadFailureState(
+        applyMapLoadFailureStateEvent(
           nextMapLoadFailureState({
             autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
             event: "force_refresh_failed",
@@ -103,6 +104,7 @@ export const useNativeMapStyle = () => {
   const rootNavigationState = useRootNavigationState();
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
   const pmtilesArchiveId = signedPmtilesUrlQuery.data?.archiveId ?? null;
+  const applySignedUrlEvent = useEffectEvent(applySignedUrl);
   useEffect(() => {
     if (!pmtilesUrl) return;
     const archiveChanged = hasPmtilesArchiveChanged({
@@ -110,9 +112,9 @@ export const useNativeMapStyle = () => {
       archiveId: pmtilesArchiveId,
     });
     appliedArchiveIdRef.current = pmtilesArchiveId;
-    applySignedUrl({ archiveId: pmtilesArchiveId, url: pmtilesUrl });
+    applySignedUrlEvent({ archiveId: pmtilesArchiveId, url: pmtilesUrl });
     if (archiveChanged) setMapRevision((revision) => revision + 1);
-  }, [pmtilesUrl]);
+  }, [pmtilesUrl, pmtilesArchiveId]);
   useEffect(() => {
     if (!archiveUrl) return;
     return () => TransformRequestManager.removeUrlTransform(`openbeacon-pmtiles:${archiveUrl}`);
@@ -192,10 +194,13 @@ export const useNativeMapStyle = () => {
     forceRefreshSignedPmtilesUrlMutation.mutate();
   };
 
+  const onMapLoadFailureEvent = useEffectEvent(onMapLoadFailure);
+  const retryMapLoadEvent = useEffectEvent(retryMapLoad);
+
   useEffect(() => {
     if (signedPmtilesUrlQuery.isFetching || !retryAfterUrlFetchRef.current) return;
     retryAfterUrlFetchRef.current = false;
-    onMapLoadFailure();
+    onMapLoadFailureEvent();
   }, [signedPmtilesUrlQuery.isFetching]);
 
   useEffect(() => {
@@ -207,7 +212,7 @@ export const useNativeMapStyle = () => {
       return;
     }
 
-    const timer = setTimeout(retryMapLoad, 5_000);
+    const timer = setTimeout(() => retryMapLoadEvent(), 5_000);
     return () => clearTimeout(timer);
   }, [
     showRecoverableError,

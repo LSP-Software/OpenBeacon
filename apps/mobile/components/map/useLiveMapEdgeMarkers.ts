@@ -1,4 +1,4 @@
-import { type MapRef } from "@maplibre/maplibre-react-native";
+import type { MapRef } from "@maplibre/maplibre-react-native";
 import { tryCatch } from "@openbeacon/shared";
 import { useEffect, useRef, useState } from "react";
 import type { LayoutRectangle } from "react-native";
@@ -229,9 +229,11 @@ export const useLiveMapEdgeMarkers = ({
     [],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: updateEdgeMarkers reads markers through a ref, so it reruns when they change
   useEffect(() => {
     updateEdgeMarkers();
   }, [markers]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the sheet layout is measured through refs, so this reruns when the sheet changes
   useEffect(() => {
     sheetHeightRef.current = null;
     edgeLayoutRevisionRef.current += 1;

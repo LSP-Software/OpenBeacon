@@ -122,7 +122,7 @@ export const confirmImageUpload = async ({
   bucketName: string;
   imagePath: string;
   pendingFileName: string | null;
-  commitImageUpload: (imageUrl: string) => Promise<string | null | void>;
+  commitImageUpload: (imageUrl: string) => Promise<string | null | undefined>;
   currentImageUrl: string | null;
   noPendingImageUploadMessage: string;
 }): Promise<{ imageUrl: string }> => {

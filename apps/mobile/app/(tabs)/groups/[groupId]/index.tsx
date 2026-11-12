@@ -81,6 +81,7 @@ const GroupScreen = () => {
     !!heldHistoryKeyVersions.data &&
     !heldHistoryKeyVersions.data.includes(currentHistoryKeyVersion);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: verifyAttempt reruns the check when the user taps retry
   useEffect(() => {
     if (!isFocused || !isMissing) return;
     let active = true;

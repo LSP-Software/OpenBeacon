@@ -51,8 +51,8 @@ export const LiveMapPointAnnotation = ({
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Android PointAnnotation bitmaps need an explicit refresh when chrome or heading changes
   useEffect(() => {
-    // Android PointAnnotation bitmaps need an explicit refresh when chrome or heading changes
     annotationRef.current?.refresh();
   }, [
     headingDegrees,

@@ -1,4 +1,4 @@
-import { emailAlertSettingsSchema } from "@openbeacon/schemas";
+import type { emailAlertSettingsSchema } from "@openbeacon/schemas";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";

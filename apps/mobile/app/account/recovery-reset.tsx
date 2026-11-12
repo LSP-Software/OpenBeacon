@@ -3,7 +3,7 @@ import type { RecoveryPhrase } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -110,9 +110,11 @@ const RecoveryPhraseResetScreen = () => {
     return undefined;
   };
 
+  const continueAfterIdentityEvent = useEffectEvent(continueAfterIdentity);
+
   useEffect(() => {
     if (step === "verify" && gate.decision === "ready") {
-      void continueAfterIdentity();
+      void continueAfterIdentityEvent();
     }
   }, [step, gate.decision]);
   const [progress, setProgress] = useState({ done: 0, failed: 0, total: 0 });

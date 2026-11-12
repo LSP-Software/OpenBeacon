@@ -15,15 +15,15 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "complexity": {
         "useLiteralKeys": "off"
       },
       "correctness": {
-        "noComponentHookFactories": "warn",
-        "noReactNativeRawText": "warn",
+        "noComponentHookFactories": "off",
+        "noReactNativeRawText": "off",
         "useExhaustiveDependencies": "warn",
-        "useReactNativePlatformComponents": "warn",
+        "useReactNativePlatformComponents": "off",
         "useImportExtensions": "error"
       },
       "suspicious": {
@@ -32,6 +32,16 @@
     }
   },
   "overrides": [
+    {
+      "includes": ["apps/mobile/**", "packages/email/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noComponentHookFactories": "warn"
+          }
+        }
+      }
+    },
     {
       "includes": ["apps/mobile/**"],
       "linter": {
@@ -48,6 +58,22 @@
                 }
               }
             }
+          },
+          "correctness": {
+            "noReactNativeRawText": {
+              "level": "warn",
+              "options": {
+                "skip": [
+                  "button",
+                  "CardDescription",
+                  "CardTitle",
+                  "DialogDescription",
+                  "DialogTitle",
+                  "Link"
+                ]
+              }
+            },
+            "useReactNativePlatformComponents": "warn"
           }
         }
       }
@@ -58,6 +84,25 @@
         "rules": {
           "style": {
             "noRestrictedImports": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "apps/mobile/test/**",
+        "apps/mobile/components/map/nativeMapTestHarness.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noComponentHookFactories": "off",
+            "useExhaustiveDependencies": "off"
+          },
+          "style": {
+            "noNonNullAssertion": "off"
           }
         }
       }

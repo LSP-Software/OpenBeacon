@@ -101,6 +101,7 @@ export const LiveMapMarkerPin = ({
     };
   }, [staleAt]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Android marker bitmaps need an explicit refresh when the pin's look changes
   useEffect(() => {
     onBitmapContentChange?.();
   }, [hasUnreadableUpdate, isStale, onBitmapContentChange]);
