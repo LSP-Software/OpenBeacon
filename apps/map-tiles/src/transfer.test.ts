@@ -84,6 +84,7 @@ describe("createProgressTracker", () => {
       bytesPerSecond: null,
       etaSeconds: null,
       percent: 10,
+      stalled: false,
     });
   });
 
@@ -100,6 +101,7 @@ describe("createProgressTracker", () => {
       bytesPerSecond: 1000,
       etaSeconds: 90,
       percent: 10,
+      stalled: false,
     });
   });
 
@@ -120,6 +122,61 @@ describe("createProgressTracker", () => {
       bytesPerSecond: 4000,
       etaSeconds: 10,
       percent: 60,
+      stalled: false,
+    });
+  });
+
+  test("does not count bytes that had to be sent again", () => {
+    const clock = createClock();
+    const tracker = createProgressTracker({ now: clock.now });
+
+    for (let second = 0; second < 10; second += 1) {
+      clock.advance(1000);
+      tracker.transferred(1000);
+    }
+    tracker.transferred(-5000);
+
+    expect(tracker.snapshot({ doneBytes: 5000, totalBytes: 10_000 })).toEqual({
+      bytesPerSecond: 500,
+      etaSeconds: 10,
+      percent: 50,
+      stalled: false,
+    });
+  });
+
+  test("has no speed when every recent byte was sent again", () => {
+    const clock = createClock();
+    const tracker = createProgressTracker({ now: clock.now });
+
+    clock.advance(10_000);
+    tracker.transferred(1000);
+    clock.advance(1000);
+    tracker.transferred(-1000);
+
+    expect(tracker.snapshot({ doneBytes: 0, totalBytes: 10_000 })).toMatchObject({
+      bytesPerSecond: null,
+      etaSeconds: null,
+    });
+  });
+
+  test("reports a stall only after a full window without progress", () => {
+    const clock = createClock();
+    const tracker = createProgressTracker({ now: clock.now, windowMs: 10_000 });
+
+    clock.advance(9000);
+    expect(tracker.snapshot({ doneBytes: 0, totalBytes: 10_000 }).stalled).toBe(false);
+
+    clock.advance(1000);
+    expect(tracker.snapshot({ doneBytes: 0, totalBytes: 10_000 }).stalled).toBe(true);
+
+    tracker.transferred(1000);
+    clock.advance(9000);
+    expect(tracker.snapshot({ doneBytes: 1000, totalBytes: 10_000 }).stalled).toBe(false);
+
+    clock.advance(1000);
+    expect(tracker.snapshot({ doneBytes: 1000, totalBytes: 10_000 })).toMatchObject({
+      bytesPerSecond: null,
+      stalled: true,
     });
   });
 });

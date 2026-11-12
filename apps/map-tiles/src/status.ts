@@ -13,6 +13,7 @@ const slotStatusSchema = z
 export const updateRunSchema = z.object({
   running: z.boolean(),
   startedAt: z.string().nullable(),
+  nextCheckAt: z.string().nullable(),
   last: z
     .object({
       finishedAt: z.string(),
@@ -28,6 +29,7 @@ export const mapStatusSchema = z.object({
   slots: z.object({ a: slotStatusSchema, b: slotStatusSchema }),
   standbyReplaceableFrom: z.string().nullable(),
   nextUpdateDueAt: z.string().nullable(),
+  rejectedBuild: z.string().nullable(),
   speedLimitMbps: z.number().nullable(),
   untrackedArchives: z.array(z.object({ key: z.string(), size: z.number() })),
   resumableUploads: z.array(z.string()),

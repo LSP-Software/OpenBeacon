@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 import { checkServices, tryCatch, validateEnv } from "@openbeacon/shared";
 import { createMapTilesClient, formatStatus } from "./client.ts";
 import { publish, readMapStatus, repairManifest, rollback } from "./commands.ts";
-import { DAY_MS, envSchema, getServiceUrl, parseEnv } from "./env.ts";
+import { envSchema, getServiceUrl, parseEnv } from "./env.ts";
 import { checkBucketAccess, createR2Clients } from "./r2.ts";
 import { createMapTilesHandler } from "./server.ts";
 
@@ -73,8 +73,10 @@ const serve = async () => {
   console.log(
     `Map tiles API listening on 127.0.0.1:${env.MAP_TILES_PORT} for the map-tiles command`,
   );
-  console.log(`Checking for a map update now and every 24 hours in R2 bucket ${env.R2_BUCKET}`);
-  const stopUpdates = handler.scheduleUpdates(DAY_MS);
+  console.log(
+    `Checking for a map update in R2 bucket ${env.R2_BUCKET} now and whenever the map is ${env.MAP_TILES_UPDATE_INTERVAL_DAYS} days old`,
+  );
+  const stopUpdates = handler.scheduleUpdates(env.updateIntervalMs);
 
   const shutdown = async () => {
     stopUpdates();

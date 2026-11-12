@@ -35,7 +35,13 @@ import {
   formatDuration,
   formatMbps,
 } from "./transfer.ts";
-import { getUploadStatePath, PART_SIZE, planParts, uploadArchive } from "./upload.ts";
+import {
+  getUploadStatePath,
+  PART_SIZE,
+  planParts,
+  readUploadState,
+  uploadArchive,
+} from "./upload.ts";
 
 export type Context = {
   client: S3Client;
@@ -67,13 +73,18 @@ const describeSlot = (archive: MapTilesArchive | null) =>
       }
     : null;
 
+const getUpdateDueAt = ({ archive, env }: { archive: MapTilesArchive; env: MapTilesEnv }) =>
+  Date.parse(
+    `${archive.build.slice(0, 4)}-${archive.build.slice(4, 6)}-${archive.build.slice(6, 8)}T00:00:00.000Z`,
+  ) + env.updateIntervalMs;
+
 export const readMapStatus = async ({ client, env }: Context): Promise<MapStatus> => {
   const manifest = (await readManifest({ bucket: env.R2_BUCKET, client }))?.manifest ?? null;
   const reuseAt = manifest ? getStandbyReuseAt(manifest) : null;
   const current = manifest ? getCurrentArchive(manifest) : null;
   const dueAt = current
     ? Math.max(
-        Date.parse(current.archive.publishedAt) + env.updateIntervalMs,
+        getUpdateDueAt({ archive: current.archive, env }),
         reuseAt !== null && reuseAt !== Infinity ? reuseAt : 0,
       )
     : null;
@@ -95,6 +106,7 @@ export const readMapStatus = async ({ client, env }: Context): Promise<MapStatus
     standbyReplaceableFrom:
       reuseAt === null ? null : reuseAt === Infinity ? "never" : new Date(reuseAt).toISOString(),
     nextUpdateDueAt: dueAt === null ? null : new Date(dueAt).toISOString(),
+    rejectedBuild: manifest?.rejectedBuild ?? null,
     speedLimitMbps: env.MAP_TILES_MAX_MBPS ?? null,
     untrackedArchives: (listed.Contents ?? []).flatMap((object) =>
       object.Key?.endsWith(".pmtiles") && !tracked.has(object.Key)
@@ -192,44 +204,46 @@ export const rollback = async ({ client, env }: Context) => {
 
 const createProgressReporter = (totalBytes: number) => {
   const tracker = createProgressTracker();
-  const interactive = process.stdout.isTTY === true;
   let doneBytes = 0;
+  let startedBytes = 0;
+  let startedAt = 0;
   let timer: ReturnType<typeof setInterval> | null = null;
 
-  const render = () => {
+  const log = () => {
     const snapshot = tracker.snapshot({ doneBytes, totalBytes });
-    const line = [
-      `${formatBytes(doneBytes)} / ${formatBytes(totalBytes)} (${snapshot.percent.toFixed(1)}%)`,
-      snapshot.bytesPerSecond === null ? "measuring speed" : formatMbps(snapshot.bytesPerSecond),
-      snapshot.etaSeconds === null ? "ETA pending" : `ETA ${formatDuration(snapshot.etaSeconds)}`,
-    ].join("  ");
+    const progress = `Transferred ${formatBytes(doneBytes)} of ${formatBytes(totalBytes)} (${snapshot.percent.toFixed(1)}%)`;
 
-    if (interactive) {
-      process.stdout.write(`\r\x1b[K${line}`);
+    if (snapshot.stalled) {
+      console.log(`${progress}, no progress in the last minute`);
+    } else if (snapshot.bytesPerSecond === null || snapshot.etaSeconds === null) {
+      console.log(`${progress}, measuring speed`);
     } else {
-      console.log(line);
+      console.log(
+        `${progress}, at ${formatMbps(snapshot.bytesPerSecond)}, about ${formatDuration(snapshot.etaSeconds)} left (done around ${new Date(Date.now() + snapshot.etaSeconds * 1000).toISOString()})`,
+      );
     }
   };
 
   return {
     onProgress: (bytesDelta: number) => {
       doneBytes += bytesDelta;
-      if (bytesDelta > 0) {
-        tracker.transferred(bytesDelta);
-      }
+      tracker.transferred(bytesDelta);
     },
     start: (completedBytes: number) => {
       doneBytes = completedBytes;
-      timer = setInterval(render, interactive ? 1000 : 30_000);
+      startedBytes = completedBytes;
+      startedAt = performance.now();
+      timer = setInterval(log, 60_000);
     },
-    stop: () => {
+    stop: ({ succeeded }: { succeeded: boolean }) => {
       if (!timer) {
         return;
       }
       clearInterval(timer);
-      render();
-      if (interactive) {
-        process.stdout.write("\n");
+      if (succeeded) {
+        console.log(
+          `Transferred ${formatBytes(doneBytes - startedBytes)} in ${formatDuration((performance.now() - startedAt) / 1000)}`,
+        );
       }
     },
   };
@@ -239,7 +253,7 @@ export type PublishResult = { published: boolean; message: string };
 
 export const publish = async (
   { client, env, partClient }: Context,
-  { ignoreInterval }: { ignoreInterval: boolean },
+  { manual }: { manual: boolean },
 ): Promise<PublishResult> => {
   const build = pickProtomapsBuild({ builds: await listProtomapsBuilds(), date: undefined });
   const buildDate = getBuildDate(build);
@@ -266,10 +280,19 @@ export const publish = async (
     key,
     stateDir: env.MAP_TILES_STATE_DIR,
   });
-  const resuming = await Bun.file(statePath).exists();
+  const resuming = (await readUploadState(statePath))?.sourceUrl === url;
 
-  if (current && !ignoreInterval && !resuming) {
-    const dueAt = Date.parse(current.archive.publishedAt) + env.updateIntervalMs;
+  const rejectedBuild = initialManifest?.manifest.rejectedBuild;
+
+  if (!manual && !resuming && rejectedBuild && buildDate <= rejectedBuild) {
+    return {
+      published: false,
+      message: `Build ${rejectedBuild} was rolled back, so it is skipped until Protomaps publishes a newer build`,
+    };
+  }
+
+  if (current && !manual && !resuming) {
+    const dueAt = getUpdateDueAt({ archive: current.archive, env });
     if (now < dueAt) {
       return {
         published: false,
@@ -363,7 +386,7 @@ export const publish = async (
         uploadLimiter: createRateLimiter({ bytesPerSecond: env.maxBytesPerSecond }),
       }),
     );
-    reporter.stop();
+    reporter.stop({ succeeded: !result.error });
 
     if (result.error) {
       throw new Error(`Upload stopped: ${result.error.message}. The next update resumes it.`);

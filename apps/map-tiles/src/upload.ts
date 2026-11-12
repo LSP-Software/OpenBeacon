@@ -6,6 +6,7 @@ import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
+  ListMultipartUploadsCommand,
   ListPartsCommand,
   type S3Client,
   UploadPartCommand,
@@ -60,7 +61,7 @@ export const getUploadStatePath = ({
   stateDir: string;
 }) => join(stateDir, bucket, `${key}.json`);
 
-const readUploadState = async (path: string) => {
+export const readUploadState = async (path: string) => {
   const result = await tryCatch<string, NodeJS.ErrnoException>(readFile(path, "utf8"));
 
   if (result.error) {
@@ -112,6 +113,58 @@ const listUploadedParts = async ({ client, state }: { client: S3Client; state: U
   } while (marker);
 
   return parts;
+};
+
+const abortOtherUploads = async ({
+  bucket,
+  client,
+  keep,
+  key,
+}: {
+  bucket: string;
+  client: S3Client;
+  keep: string | null;
+  key: string;
+}) => {
+  const uploadIds: string[] = [];
+  let markers: { KeyMarker?: string; UploadIdMarker?: string } = {};
+
+  do {
+    const response = await client.send(
+      new ListMultipartUploadsCommand({
+        Bucket: bucket,
+        Prefix: key,
+        ...markers,
+      }),
+    );
+
+    for (const upload of response.Uploads ?? []) {
+      if (upload.Key === key && upload.UploadId && upload.UploadId !== keep) {
+        uploadIds.push(upload.UploadId);
+      }
+    }
+
+    markers = response.IsTruncated
+      ? {
+          ...(response.NextKeyMarker ? { KeyMarker: response.NextKeyMarker } : {}),
+          ...(response.NextUploadIdMarker ? { UploadIdMarker: response.NextUploadIdMarker } : {}),
+        }
+      : {};
+  } while (markers.KeyMarker || markers.UploadIdMarker);
+
+  for (const uploadId of uploadIds) {
+    await client.send(
+      new AbortMultipartUploadCommand({
+        Bucket: bucket,
+        Key: key,
+        UploadId: uploadId,
+      }),
+    );
+  }
+
+  if (uploadIds.length > 0) {
+    console.log(`Aborted ${uploadIds.length} stale multipart upload(s) for ${key}`);
+  }
 };
 
 const downloadPart = async ({
@@ -237,6 +290,7 @@ export const uploadArchive = async ({
         }),
       ),
     );
+    console.log(`Discarded the saved upload of ${state.sourceUrl}; it does not match this build`);
     state = null;
   }
 
@@ -251,6 +305,14 @@ export const uploadArchive = async ({
     } else {
       uploaded = listed.data;
     }
+  }
+
+  const cleaned = await tryCatch(
+    abortOtherUploads({ bucket, client, keep: state?.uploadId ?? null, key }),
+  );
+
+  if (cleaned.error) {
+    console.warn(`Could not remove stale multipart uploads for ${key}: ${cleaned.error.message}`);
   }
 
   if (!state) {
@@ -342,7 +404,7 @@ export const uploadArchive = async ({
       }
 
       console.warn(
-        `\nPart ${part.partNumber} failed (attempt ${attempt} of ${PART_ATTEMPTS}): ${result.error.message}`,
+        `Part ${part.partNumber} failed (attempt ${attempt} of ${PART_ATTEMPTS}): ${result.error.message}`,
       );
       await sleep(2 ** attempt * 1000);
     }

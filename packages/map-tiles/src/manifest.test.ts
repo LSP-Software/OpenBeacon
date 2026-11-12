@@ -104,6 +104,21 @@ describe("tick tock publishing", () => {
     ).toBeNull();
   });
 
+  test("publishing any build stops skipping a rolled-back build", () => {
+    const next = publishToStandby({
+      archive: archive("planet-b.pmtiles", "20261201"),
+      manifest: {
+        current: "a",
+        rejectedBuild: "20261201",
+        slots: { a: archive("planet-a.pmtiles", "20261001"), b: null },
+      },
+      now,
+    });
+
+    expect(next.rejectedBuild).toBeUndefined();
+    expect(next.current).toBe("b");
+  });
+
   test("refuses to publish over a standby slot that was not cleared", () => {
     expect(() =>
       publishToStandby({
@@ -144,6 +159,7 @@ describe("rollbackToStandby", () => {
     const next = rollbackToStandby({ manifest, now });
 
     expect(next.current).toBe("a");
+    expect(next.rejectedBuild).toBe("20261101");
     expect(next.slots.a?.servedUntil).toBeUndefined();
     expect(next.slots.b?.servedUntil).toBe(new Date(now).toISOString());
     expect(resolveArchive({ manifest: next, now, requestedId: "b-20261101" }).id).toBe(
