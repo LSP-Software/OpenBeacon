@@ -54,7 +54,17 @@ export const LiveMapPointAnnotation = ({
   useEffect(() => {
     // Android PointAnnotation bitmaps need an explicit refresh when chrome or heading changes
     annotationRef.current?.refresh();
-  }, [headingDegrees, marker.image, marker.initials, marker.ringColor, marker.ringColors]);
+  }, [
+    headingDegrees,
+    marker.deviceIcon,
+    marker.devicePlatform,
+    marker.mergedDeviceIds?.length,
+    marker.image,
+    marker.initials,
+    marker.ringColor,
+    marker.ringColors,
+    marker.unreadableGroup,
+  ]);
 
   if (Platform.OS === "android") {
     return (
@@ -62,11 +72,21 @@ export const LiveMapPointAnnotation = ({
         <Pressable
           onPress={onSelected}
           accessibilityRole="button"
-          accessibilityLabel={marker.name}
+          accessibilityLabel={
+            marker.mergedDeviceIds && marker.mergedDeviceIds.length > 1
+              ? `${marker.name}, ${marker.mergedDeviceIds.length} devices here`
+              : marker.deviceName
+                ? `${marker.name}, ${marker.deviceName}`
+                : marker.name
+          }
           style={{ alignSelf: "flex-start" }}
         >
           <LiveMapPinMotion arrival={arrival} gatherTo={gatherTo}>
             <LiveMapMarkerPin
+              deviceCount={marker.mergedDeviceIds?.length}
+              deviceIcon={marker.deviceIcon}
+              devicePlatform={marker.devicePlatform}
+              hasUnreadableUpdate={marker.unreadableGroup !== undefined}
               headingDegrees={headingDegrees}
               image={marker.image}
               initials={marker.initials}
@@ -84,7 +104,7 @@ export const LiveMapPointAnnotation = ({
   return (
     <ViewAnnotation
       ref={annotationRef}
-      id={marker.userId}
+      id={marker.deviceId}
       lngLat={[marker.longitude, marker.latitude]}
       anchor="center"
       onDeselect={onDeselected}
@@ -92,6 +112,10 @@ export const LiveMapPointAnnotation = ({
     >
       <LiveMapPinMotion arrival={arrival} gatherTo={gatherTo}>
         <LiveMapMarkerPin
+          deviceCount={marker.mergedDeviceIds?.length}
+          deviceIcon={marker.deviceIcon}
+          devicePlatform={marker.devicePlatform}
+          hasUnreadableUpdate={marker.unreadableGroup !== undefined}
           headingDegrees={headingDegrees}
           image={marker.image}
           initials={marker.initials}

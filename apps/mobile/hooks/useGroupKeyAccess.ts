@@ -1,7 +1,6 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { AppState } from "react-native";
 import { type RouterOutputs, trpcClient } from "../lib/api.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
 import { createHistoryKeyReader, unwrapEpochKeyFromWraps } from "../lib/epochKeys.ts";
@@ -65,13 +64,9 @@ const useGroupKeyAccessQueries = <Result>({
     const unsubscribeEpoch = subscribeToGroupEpochChanges((groupId) => {
       void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess", userId, groupId] });
     });
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") refresh();
-    });
     return () => {
       unsubscribe();
       unsubscribeEpoch();
-      subscription.remove();
     };
   }, [isFocused, queryClient, userId]);
 
@@ -79,6 +74,7 @@ const useGroupKeyAccessQueries = <Result>({
     queries: groupIds.map((groupId) => ({
       queryKey: ["groupKeyAccess", userId, groupId, scope],
       enabled: Boolean(userId && isFocused),
+      staleTime: 5 * 60 * 1000,
       queryFn: async () => {
         if (!userId) throw new Error("User is unavailable");
         const device = await ensureDeviceKeyRegistration();

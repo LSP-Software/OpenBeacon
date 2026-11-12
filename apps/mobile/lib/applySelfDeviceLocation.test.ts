@@ -6,6 +6,7 @@ const marker = (
   overrides: Partial<LiveMapMarker> & Pick<LiveMapMarker, "userId">,
 ): LiveMapMarker => ({
   battery: { charging: false, level: 80 },
+  deviceId: `${overrides.userId}-phone`,
   image: null,
   initials: "Al",
   isSelf: false,
@@ -42,6 +43,7 @@ describe("applySelfDeviceLocation", () => {
           ringColor: "#2A9D8F",
           sourceGroupId: "family",
         },
+        selfDeviceId: "alice-phone",
         selfUserId: "alice",
       }),
     ).toEqual([bob]);
@@ -75,12 +77,14 @@ describe("applySelfDeviceLocation", () => {
           ringColors: ["#2A9D8F", "#E85D4C"],
           sourceGroupId: "family",
         },
+        selfDeviceId: "alice-phone",
         selfUserId: "alice",
       }),
     ).toEqual([
       bob,
       {
         battery: null,
+        deviceId: "alice-phone",
         image: "https://example.com/a.png",
         initials: "Al",
         isSelf: true,
@@ -123,6 +127,7 @@ describe("applySelfDeviceLocation", () => {
         timestamp: "2026-07-17T12:01:00.000Z",
       },
       selfFallback,
+      selfDeviceId: "alice-phone",
       selfUserId: "alice",
     });
 
@@ -134,6 +139,7 @@ describe("applySelfDeviceLocation", () => {
         markers: [aliceFromApi, bob],
         selfDeviceLocation: null,
         selfFallback,
+        selfDeviceId: "alice-phone",
         selfUserId: "alice",
       }),
     ).toEqual([bob]);
@@ -166,12 +172,14 @@ describe("applySelfDeviceLocation", () => {
           ringColor: "#2A9D8F",
           sourceGroupId: "family",
         },
+        selfDeviceId: "alice-phone",
         selfUserId: "alice",
       }),
     ).toEqual([
       bob,
       {
         battery: null,
+        deviceId: "alice-phone",
         image: null,
         initials: "Al",
         isSelf: true,
@@ -200,6 +208,7 @@ describe("applySelfDeviceLocation", () => {
           timestamp: "2026-07-17T12:01:00.000Z",
         },
         selfFallback: null,
+        selfDeviceId: "alice-phone",
         selfUserId: "alice",
       }),
     ).toEqual([bob]);
@@ -224,8 +233,65 @@ describe("applySelfDeviceLocation", () => {
           ringColor: "#2A9D8F",
           sourceGroupId: "family",
         },
+        selfDeviceId: "",
         selfUserId: "",
       }),
     ).toEqual([bob]);
   });
+
+  test("only replaces this device and keeps the user's other devices", () => {
+    const thisPhoneFromApi = marker({ userId: "alice", isSelf: true });
+    const tablet = marker({
+      deviceId: "alice-tablet",
+      latitude: 52.2,
+      longitude: 0.12,
+      userId: "alice",
+    });
+    const bob = marker({ userId: "bob", initials: "Bo", name: "Bob" });
+
+    const markers = applySelfDeviceLocation({
+      lastSentAt: "2026-07-17T12:00:00.000Z",
+      markers: [thisPhoneFromApi, tablet, bob],
+      selfDeviceId: "alice-phone",
+      selfDeviceLocation: {
+        latitude: 50.8,
+        longitude: -1.1,
+        timestamp: "2026-07-17T12:01:00.000Z",
+      },
+      selfFallback: {
+        image: null,
+        name: "Alice",
+        otherSharedGroupNames: [],
+        ringColor: "#2A9D8F",
+        sourceGroupId: "family",
+      },
+      selfUserId: "alice",
+    });
+
+    expect(
+      markers.map(({ deviceId, isSelf, latitude }) => ({ deviceId, isSelf, latitude })),
+    ).toEqual([
+      { deviceId: "alice-tablet", isSelf: false, latitude: 52.2 },
+      { deviceId: "bob-phone", isSelf: false, latitude: 51.5 },
+      { deviceId: "alice-phone", isSelf: true, latitude: 50.8 },
+    ]);
+  });
+});
+
+test.each(["1", "A"])("preserves the one-character self name %j on the local GPS pin", (name) => {
+  const markers = applySelfDeviceLocation({
+    lastSentAt: null,
+    markers: [],
+    selfDeviceLocation: { latitude: 51.5, longitude: -0.12, timestamp: "2026-07-17T12:00:00.000Z" },
+    selfFallback: {
+      image: null,
+      name,
+      otherSharedGroupNames: [],
+      ringColor: "red",
+      sourceGroupId: "family",
+    },
+    selfDeviceId: "self-phone",
+    selfUserId: "self",
+  });
+  expect(markers[0]?.initials).toBe(name);
 });

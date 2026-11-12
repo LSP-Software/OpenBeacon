@@ -1,7 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import type { EmailCodePurpose, SecurityAlert } from "@openbeacon/email";
 import { z } from "zod";
@@ -15,12 +14,6 @@ import {
   emailCodeWrongGuessLimit,
 } from "./emailCode.ts";
 import { createSecurityAlerts } from "./securityAlerts.ts";
-
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
 
 const prefix = `email-code-${crypto.randomUUID()}`;
 const password = "correct horse battery";
@@ -37,7 +30,7 @@ let alertFailure: Error | null = null;
 const codes = createEmailCodes({
   db: prisma,
   secret: "integration-email-code-secret-000000000000",
-  rateLimits: new TestCache({ redisUrl: "redis://localhost:6379", now: () => clockMs }).rateLimits,
+  rateLimits: createIntegrationTestCache(() => clockMs).rateLimits,
   limitRequestsPerIp: true,
   sendCodeEmail: async (email) => {
     if (sendFailure) throw sendFailure;
@@ -552,8 +545,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email code rate 
     const unlimitedCodes = createEmailCodes({
       db: prisma,
       secret: "integration-email-code-secret-000000000000",
-      rateLimits: new TestCache({ redisUrl: "redis://localhost:6379", now: () => clockMs })
-        .rateLimits,
+      rateLimits: createIntegrationTestCache(() => clockMs).rateLimits,
       limitRequestsPerIp: false,
       sendCodeEmail: async () => {},
       sendAccountExistsEmail: async () => {},
@@ -926,6 +918,23 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email routes", (
     ]);
     expect(await signsInWith(email, password)).toBe(true);
   });
+
+  test("better-auth routes that list or sign out other sessions without a fresh sign-in are switched off", async () => {
+    const responses = await Promise.all([
+      request("/revoke-other-sessions", { body: {}, ip: nextIp() }),
+      request("/revoke-sessions", { body: {}, ip: nextIp() }),
+      request("/list-sessions", { method: "GET", ip: nextIp() }),
+    ]);
+    expect(responses.map((response) => response.status)).toEqual([404, 404, 404]);
+  });
+
+  test("better-auth's update-user route is switched off so profile edits go through the device gate", async () => {
+    const response = await request("/update-user", {
+      body: { name: "Changed", image: "https://example.com/a.png" },
+      ip: nextIp(),
+    });
+    expect(response.status).toBe(404);
+  });
 });
 
 const requestSignUpCode = (email: string, ip = nextIp()) =>
@@ -1178,7 +1187,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("unverified accou
 });
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts", () => {
-  const signIn = async (email: string) => {
+  const signIn = async (email: string, device: "active" | "pending" | "none" = "active") => {
     const response = await auth.handler(
       new Request("http://localhost:3000/api/auth/sign-in/email", {
         method: "POST",
@@ -1186,14 +1195,38 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts"
         body: JSON.stringify({ email, password }),
       }),
     );
-    return response.headers.get("set-cookie")?.split(";")[0] ?? "";
+    const cookie = response.headers.get("set-cookie")?.split(";")[0] ?? "";
+    const { token } = z.object({ token: z.string() }).parse(await response.json());
+    if (device === "none") return cookie;
+    const session = await prisma.session.findUniqueOrThrow({ where: { token } });
+    await prisma.userDevice.create({
+      data: {
+        id: `${session.id}-device`,
+        userId: session.userId,
+        publicKey: "public-key",
+        publicKeyAlgorithm: "x25519",
+        name: "Phone",
+        icon: "phone",
+        activatedAt: device === "active" ? new Date() : null,
+      },
+    });
+    await prisma.session.update({
+      where: { id: session.id },
+      data: { deviceId: `${session.id}-device` },
+    });
+    return cookie;
   };
 
   const changePassword = async (cookie: string, currentPassword: string) => {
     const response = await auth.handler(
       new Request("http://localhost:3000/api/auth/change-password", {
         method: "POST",
-        headers: { "content-type": "application/json", cookie, [clientIpHeader]: nextIp() },
+        headers: {
+          "content-type": "application/json",
+          cookie,
+          origin: "http://localhost:3000",
+          [clientIpHeader]: nextIp(),
+        },
         body: JSON.stringify({ currentPassword, newPassword: "a brand new passphrase" }),
       }),
     );
@@ -1205,7 +1238,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts"
     const { email, userId } = await createPasswordAccount("reset-alert");
     await prisma.user.update({
       where: { id: userId },
-      data: { alertNewDevice: false, alertDeletionScheduled: false },
+      data: { alertNewSignIn: false, alertDeletionScheduled: false },
     });
 
     expect((await resetPassword(await resetTokenFor(email), "a brand new passphrase")).status).toBe(
@@ -1226,6 +1259,60 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts"
 
     expect(await changePassword(await signIn(email), "not the password")).toBe(400);
     expect(alerts).toEqual([]);
+  });
+
+  test("a phone that isn't set up can't change the password", async () => {
+    const { email } = await createPasswordAccount("change-pending");
+
+    for (const device of ["pending", "none"] as const) {
+      const cookie = await signIn(email, device);
+      const response = await auth.handler(
+        new Request("http://localhost:3000/api/auth/change-password", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie,
+            origin: "http://localhost:3000",
+            [clientIpHeader]: nextIp(),
+          },
+          body: JSON.stringify({
+            currentPassword: password,
+            newPassword: "a brand new passphrase",
+          }),
+        }),
+      );
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({
+        message: "Finish setting up this phone first.",
+      });
+    }
+    expect(alerts).toEqual([]);
+    expect(await signsInWith(email, password)).toBe(true);
+  });
+
+  test("routes the app doesn't use are switched off", async () => {
+    const { email } = await createPasswordAccount("disabled-routes");
+    const cookie = await signIn(email);
+    for (const [path, method] of [
+      ["/account-info", "GET"],
+      ["/get-access-token", "POST"],
+      ["/link-social", "POST"],
+      ["/refresh-token", "POST"],
+      ["/unlink-account", "POST"],
+      ["/update-session", "POST"],
+      ["/verify-password", "POST"],
+    ] as const) {
+      const response = await auth.handler(
+        new Request(`http://localhost:3000/api/auth${path}`, {
+          method,
+          headers: { "content-type": "application/json", cookie, [clientIpHeader]: nextIp() },
+          ...(method === "POST"
+            ? { body: JSON.stringify({ password, providerId: "google" }) }
+            : {}),
+        }),
+      );
+      expect([path, response.status]).toEqual([path, 404]);
+    }
   });
 
   test("a failed alert doesn't fail the change or the reset", async () => {

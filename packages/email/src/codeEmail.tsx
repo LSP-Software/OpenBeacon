@@ -81,5 +81,5 @@ export const renderCodeEmail = async ({
       </>
     ),
   });
-  return { subject, ...rendered };
+  return { subject, summary: { type: purpose, code }, ...rendered };
 };

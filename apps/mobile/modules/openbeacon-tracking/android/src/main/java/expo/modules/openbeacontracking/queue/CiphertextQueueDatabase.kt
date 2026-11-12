@@ -41,6 +41,8 @@ abstract class CiphertextQueueDatabase : RoomDatabase() {
       }
     }
 
+    val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+
     val BOUND_WAL = object : Callback() {
       override fun onOpen(db: SupportSQLiteDatabase) {
         db.query("PRAGMA journal_size_limit = $MAX_WAL_BYTES").use { it.moveToFirst() }
@@ -60,7 +62,7 @@ abstract class CiphertextQueueDatabase : RoomDatabase() {
                 context.applicationContext,
                 CiphertextQueueDatabase::class.java,
                 DATABASE_NAME,
-              ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+              ).addMigrations(*MIGRATIONS)
               .addCallback(BOUND_WAL)
               .build()
               .also { instance = it }

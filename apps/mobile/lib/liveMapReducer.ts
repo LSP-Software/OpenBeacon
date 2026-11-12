@@ -3,6 +3,7 @@ export type LiveMapEntry = {
     charging: boolean;
     level: number;
   };
+  deviceId: string;
   latitude: number;
   longitude: number;
   serverCreatedAt: Date;
@@ -36,11 +37,30 @@ export const reduceLivePositions = (
   const next = new Map(current);
 
   for (const candidate of candidates) {
-    const existing = next.get(candidate.userId);
+    const existing = next.get(candidate.deviceId);
     if (!existing || isNewerThan(candidate, existing)) {
-      next.set(candidate.userId, candidate);
+      next.set(candidate.deviceId, candidate);
     }
   }
 
   return next;
+};
+
+export const dropInactiveDevices = (
+  current: ReadonlyMap<string, LiveMapEntry>,
+  {
+    activeDeviceIds,
+    seenAtRequest,
+  }: {
+    activeDeviceIds: ReadonlySet<string>;
+    seenAtRequest: ReadonlyMap<string, LiveMapEntry>;
+  },
+) => {
+  const next = new Map(current);
+  for (const [deviceId, entry] of current) {
+    if (!activeDeviceIds.has(deviceId) && seenAtRequest.get(deviceId) === entry) {
+      next.delete(deviceId);
+    }
+  }
+  return next.size === current.size ? current : next;
 };

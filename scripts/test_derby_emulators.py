@@ -147,10 +147,52 @@ class LaunchTest(unittest.TestCase):
         self.assertEqual(run.call_count, 2)
 
 
+class MemoryCheckTest(unittest.TestCase):
+    def test_reads_available_memory_on_linux(self):
+        with tempfile.TemporaryDirectory() as directory:
+            meminfo = Path(directory) / "meminfo"
+            meminfo.write_text("MemTotal:       32768000 kB\nMemFree:         1024000 kB\nMemAvailable:   16384000 kB\n")
+            self.assertEqual(simulation.available_memory_mb("Linux", meminfo), 16000)
+
+    def test_counts_free_inactive_and_speculative_pages_on_macos(self):
+        vm_stat = "Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free:                               1000.\nPages active:                             9000.\nPages inactive:                           2596.\nPages speculative:                         500.\nPages wired down:                         3000.\nPages purgeable:                           596.\n"
+        with patch.object(simulation.subprocess, "check_output", return_value=vm_stat):
+            self.assertEqual(simulation.available_memory_mb("Darwin"), 64)
+
+    def test_unknown_platform_has_no_reading(self):
+        self.assertIsNone(simulation.available_memory_mb("Windows"))
+
+    def test_unreadable_memory_has_no_reading(self):
+        self.assertIsNone(simulation.available_memory_mb("Linux", Path("/nonexistent/meminfo")))
+        with patch.object(simulation.subprocess, "check_output", side_effect=simulation.subprocess.CalledProcessError(1, ["vm_stat"])):
+            self.assertIsNone(simulation.available_memory_mb("Darwin"))
+        with patch.object(simulation.subprocess, "check_output", side_effect=FileNotFoundError):
+            self.assertIsNone(simulation.available_memory_mb("Darwin"))
+
+    def test_needs_every_emulator_plus_headroom(self):
+        devices = simulation.version_devices([24, 36], None)
+        self.assertIsNone(simulation.memory_error(devices, 3072 + 8192 + 2048))
+        error = simulation.memory_error(devices, 3072 + 8192 + 2047)
+        self.assertIn("2 emulators need about 13312 MiB", error)
+        self.assertIn("only 13311 MiB is available", error)
+        self.assertIn("--memory-mb", error)
+        self.assertIn("--skip-memory-check", error)
+
+    def test_unknown_available_memory_does_not_block(self):
+        self.assertIsNone(simulation.memory_error(simulation.version_devices([36], None), None))
+
+    def test_refuses_to_start_without_enough_memory(self):
+        with patch("sys.argv", ["derby-emulators.py", "--external-backend"]), patch.object(simulation.shutil, "which", return_value="/bin/true"), patch.object(simulation.subprocess, "check_output", return_value="test-avd\n"), patch.object(simulation, "available_memory_mb", return_value=4096), patch.object(simulation.subprocess, "run") as run, patch.object(simulation.subprocess, "Popen") as popen, patch("sys.stderr"), self.assertRaises(SystemExit) as exit:
+            simulation.main()
+        self.assertEqual(exit.exception.code, 2)
+        self.assertNotIn(["bun", "install", "--frozen-lockfile"], [call.args[0] for call in run.call_args_list])
+        popen.assert_not_called()
+
+
 class ShutdownTest(unittest.TestCase):
     def test_repeated_interrupt_does_not_interrupt_shutdown(self):
         previous_sigint = signal.getsignal(signal.SIGINT)
-        with patch("sys.argv", ["derby-emulators.py", "--external-backend"]), patch.object(simulation.shutil, "which", return_value="/bin/true"), patch.object(simulation.subprocess, "check_output", side_effect=["test-avd\n", "List of devices attached\n"]), patch.object(simulation.subprocess, "run", side_effect=lambda *args, **kwargs: signal.raise_signal(signal.SIGINT)), patch.object(Path, "is_file", return_value=False), patch("builtins.print", side_effect=lambda *args, **kwargs: signal.raise_signal(signal.SIGINT)):
+        with patch("sys.argv", ["derby-emulators.py", "--external-backend", "--skip-memory-check"]), patch.object(simulation.shutil, "which", return_value="/bin/true"), patch.object(simulation.subprocess, "check_output", side_effect=["test-avd\n", "List of devices attached\n"]), patch.object(simulation.subprocess, "run", side_effect=lambda *args, **kwargs: signal.raise_signal(signal.SIGINT)), patch.object(Path, "is_file", return_value=False), patch("builtins.print", side_effect=lambda *args, **kwargs: signal.raise_signal(signal.SIGINT)):
             simulation.main()
         self.assertEqual(signal.getsignal(signal.SIGINT), previous_sigint)
 

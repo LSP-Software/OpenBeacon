@@ -8,7 +8,12 @@ import {
 } from "@openbeacon/auth";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
-import { accountNameSchema, requestImageUploadInputSchema } from "@openbeacon/schemas";
+import {
+  accountNameSchema,
+  removeDeviceSchema,
+  requestImageUploadInputSchema,
+  updateDeviceSchema,
+} from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod";
 import { env } from "../env.ts";
@@ -19,10 +24,17 @@ import {
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
-import { protectedProcedure } from "../procedures/auth/runtime.ts";
+import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
+import { lockUserGroups } from "../lib/lockUserGroups.ts";
+import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
+import {
+  freshSessionProcedure,
+  protectedProcedure,
+  setupProcedure,
+} from "../procedures/auth/runtime.ts";
 
 export const accountRouter = {
-  deletionVerificationMethods: protectedProcedure.query(async ({ ctx }) => {
+  deletionVerificationMethods: setupProcedure.query(async ({ ctx }) => {
     const accounts = await ctx.db.account.findMany({
       where: { userId: ctx.session.user.id },
       select: { providerId: true, password: true },
@@ -116,7 +128,9 @@ export const accountRouter = {
         googleSubject = verification.data;
       }
       const result = await ctx.db.$transaction(async (tx) => {
-        await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
+        );
         const session = await tx.session.findFirst({
           where: { id: ctx.session.session.id, userId },
         });
@@ -163,15 +177,8 @@ export const accountRouter = {
               message: "Google verification expired. Please try again.",
             });
         }
-        const memberships = await tx.groupMember.findMany({
-          where: { userId },
-          select: { groupId: true },
-        });
-        const groupIds = memberships.map(({ groupId }) => groupId).sort();
+        const groupIds = await lockUserGroups(tx, userId);
         if (groupIds.length) {
-          await tx.$queryRaw(
-            Prisma.sql`SELECT id FROM "Group" WHERE id IN (${Prisma.join(groupIds)}) ORDER BY id FOR UPDATE`,
-          );
           const soleOwner = await tx.groupMember.findFirst({
             where: {
               userId,
@@ -240,6 +247,31 @@ export const accountRouter = {
       }
       return result;
     }),
+  signOutOtherSessions: freshSessionProcedure
+    .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
+    .mutation(async ({ ctx }) => {
+      const userId = ctx.session.user.id;
+      const others = { userId, id: { not: ctx.session.session.id } };
+      const now = new Date();
+      const { signedOut, device } = await ctx.db.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
+        );
+        const live = await tx.session.deleteMany({ where: { ...others, expiresAt: { gt: now } } });
+        await tx.session.deleteMany({ where: { ...others, expiresAt: { lte: now } } });
+        const current = await tx.session.findUnique({
+          where: { id: ctx.session.session.id },
+          select: { device: { select: { name: true, model: true, platform: true } } },
+        });
+        return {
+          signedOut: live.count,
+          device: current?.device ? toAlertDevice(current.device) : null,
+        };
+      });
+      if (signedOut > 0)
+        ctx.securityAlerts?.send(userId, { type: "other-sessions-signed-out", device });
+      return { signedOut };
+    }),
   deletionCancellationNotice: protectedProcedure.query(async ({ ctx }) => {
     const user = await ctx.db.user.findUniqueOrThrow({
       where: { id: ctx.session.user.id },
@@ -248,7 +280,7 @@ export const accountRouter = {
     return { cancelled: user.deletionCancellationPending };
   }),
   acknowledgeDeletionCancellation: protectedProcedure
-    .input(z.object({ userId: z.string().min(1) }))
+    .input(z.object({ userId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       if (input.userId !== ctx.session.user.id) throw new TRPCError({ code: "FORBIDDEN" });
       await ctx.db.user.updateMany({
@@ -265,7 +297,67 @@ export const accountRouter = {
         select: { name: true },
       });
     }),
-  version: protectedProcedure.query(({ ctx }) => ctx.serverVersion),
+  listDevices: protectedProcedure.query(async ({ ctx }) => {
+    const devices = await ctx.db.userDevice.findMany({
+      where: { userId: ctx.session.user.id, revokedAt: null },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        name: true,
+        icon: true,
+        platform: true,
+        model: true,
+        createdAt: true,
+        lastSeenAt: true,
+        lastLocationAt: true,
+        activatedAt: true,
+      },
+    });
+    return devices.map((device) => ({ ...device, isCurrent: device.id === ctx.deviceId }));
+  }),
+  updateDevice: protectedProcedure
+    .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
+    .input(updateDeviceSchema)
+    .mutation(async ({ ctx, input }) => {
+      const updated = await ctx.db.userDevice.updateMany({
+        where: { id: input.deviceId, userId: ctx.session.user.id, revokedAt: null },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.icon !== undefined ? { icon: input.icon } : {}),
+        },
+      });
+      if (updated.count === 0) throw new TRPCError({ code: "NOT_FOUND" });
+    }),
+  removeDevice: freshSessionProcedure
+    .meta({ rateLimit: { limit: 10, windowMs: 60_000 } })
+    .input(removeDeviceSchema)
+    .mutation(async ({ ctx, input }) => {
+      const device = await removeUserDevice({
+        db: ctx.db,
+        deviceId: input.deviceId,
+        userId: ctx.session.user.id,
+        currentSessionId: ctx.session.session.id,
+        current: false,
+      });
+      ctx.securityAlerts?.send(ctx.session.user.id, { type: "device-removed", device });
+    }),
+  removeThisDevice: setupProcedure
+    .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
+    .mutation(async ({ ctx }) => {
+      if (!ctx.deviceId) {
+        if (ctx.unverifiedDeviceId) throw deviceUnverifiedError();
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+      const device = await removeUserDevice({
+        db: ctx.db,
+        deviceId: ctx.deviceId,
+        userId: ctx.session.user.id,
+        currentSessionId: ctx.session.session.id,
+        current: true,
+      });
+      ctx.securityAlerts?.send(ctx.session.user.id, { type: "device-removed", device });
+    }),
+  version: setupProcedure.query(({ ctx }) => ctx.serverVersion),
   serverName: protectedProcedure.query(({ ctx }) => ctx.serverName),
   requestProfileImageUpload: protectedProcedure
     .meta({
@@ -334,14 +426,23 @@ export const accountRouter = {
         noPendingImageUploadMessage: "No pending profile image upload to confirm.",
         commitImageUpload: async (imageUrl) => {
           await ctx.db.$transaction(async (tx) => {
+            const deleted = await tx.pendingUpload.deleteMany({
+              where: {
+                userId,
+                uploadType: "userAvatar",
+                groupId: "",
+                fileName: pendingUpload?.fileName ?? "",
+              },
+            });
+            if (deleted.count !== 1) {
+              throw new TRPCError({
+                code: "PRECONDITION_FAILED",
+                message: "No pending profile image upload to confirm.",
+              });
+            }
             await tx.user.update({
               where: { id: userId },
               data: { image: imageUrl },
-            });
-            await tx.pendingUpload.delete({
-              where: {
-                userId_uploadType_groupId: { userId, uploadType: "userAvatar", groupId: "" },
-              },
             });
           });
         },

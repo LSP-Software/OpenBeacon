@@ -6,6 +6,7 @@ export type EmailMessage = {
   subject: string;
   html: string;
   text: string;
+  summary: { type: string; code?: string };
   attachments: { filename: string; content: Buffer; contentId: string }[];
 };
 
@@ -32,11 +33,17 @@ export type EmailCodePurpose =
   "sign-up" | "email-verification" | "password-reset" | "recovery-reset";
 
 export const optionalSecurityAlerts = {
-  "new-device": "alertNewDevice",
+  "new-sign-in": "alertNewSignIn",
   "deletion-scheduled": "alertDeletionScheduled",
 } as const;
 
 export type OptionalSecurityAlert = keyof typeof optionalSecurityAlerts;
+
+export type AlertDevice = {
+  name: string;
+  model: string | null;
+  platform: z.infer<typeof devicePlatformSchema> | null;
+};
 
 export type SecurityAlert =
   | {
@@ -47,8 +54,10 @@ export type SecurityAlert =
         | "recovery-phrase-reset"
         | "account-deleted";
     }
+  | { type: "other-sessions-signed-out"; device: AlertDevice | null }
+  | { type: "device-removed"; device: AlertDevice }
   | {
-      type: "new-device";
+      type: "new-sign-in";
       device: { model: string | null; platform: z.infer<typeof devicePlatformSchema> | null };
     }
   | { type: "deletion-scheduled"; deletionDate: Date }

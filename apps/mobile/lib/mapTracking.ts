@@ -1,10 +1,11 @@
 import { tryCatch } from "@openbeacon/shared";
-import { type LiveMapEntry, reduceLivePositions } from "./liveMapReducer.ts";
+import { dropInactiveDevices, type LiveMapEntry, reduceLivePositions } from "./liveMapReducer.ts";
 import type {
   LiveMapPosition,
   MapTrackingCursor,
   MapTrackingDeps,
   MapTrackingEncryptedPoint,
+  MapTrackingStatus,
 } from "./mapTrackingTypes.ts";
 
 export type {
@@ -12,12 +13,15 @@ export type {
   MapTrackingCursor,
   MapTrackingDeps,
   MapTrackingEncryptedPoint,
+  MapTrackingStatus,
 } from "./mapTrackingTypes.ts";
 
 const STEADY_INTERVAL_MS = 5_000;
 const MAX_BACKOFF_MS = 60_000;
 const RECONCILE_INTERVAL_MS = 5 * 60_000;
 const POLL_LIMIT = 100;
+export const REQUEST_TIMEOUT_MS = 15_000;
+const DUE_WINDOW_MS = 1_000;
 
 const maxCursor = (points: readonly MapTrackingEncryptedPoint[]): MapTrackingCursor | null => {
   let cursor: MapTrackingCursor | null = null;
@@ -35,12 +39,13 @@ const maxCursor = (points: readonly MapTrackingEncryptedPoint[]): MapTrackingCur
   return cursor;
 };
 
-const isCursorAfter = (candidate: MapTrackingCursor, current: MapTrackingCursor) =>
+export const isCursorAfter = (candidate: MapTrackingCursor, current: MapTrackingCursor) =>
   candidate.createdAt.getTime() > current.createdAt.getTime() ||
   (candidate.createdAt.getTime() === current.createdAt.getTime() && candidate.id > current.id);
 
 const toLiveMapPosition = ({
   battery,
+  deviceId,
   latitude,
   longitude,
   sourceGroupId,
@@ -49,6 +54,7 @@ const toLiveMapPosition = ({
   userId,
 }: LiveMapEntry): LiveMapPosition => ({
   battery,
+  deviceId,
   latitude,
   longitude,
   sourceGroupId,
@@ -59,6 +65,8 @@ const toLiveMapPosition = ({
 
 export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   let active = false;
+  let activation = 0;
+  let lastRunId = 0;
   let scheduled: { cancel: () => void } | null = null;
   let tickPromise: Promise<void> | null = null;
   let tickPhase: "idle" | "listing" | "groups" = "idle";
@@ -75,8 +83,73 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       runId: number;
     }
   >();
-  const positionsByGroup = new Map<string, Map<string, LiveMapEntry>>();
+  const positionsByGroup = new Map<string, ReadonlyMap<string, LiveMapEntry>>();
   const listeners = new Set<() => void>();
+  const groupLoadStatus = new Map<string, "loaded" | "failed">();
+  const undecryptableByGroup = new Map<string, Map<string, { deviceId: string; userId: string }>>();
+  let membershipStatus: MapTrackingStatus["membership"] = "loading";
+  let membershipFailing = false;
+  const failingGroups = new Set<string>();
+  let status: MapTrackingStatus = {
+    connection: "ok",
+    groups: {},
+    membership: "loading",
+    undecryptable: [],
+  };
+
+  const pendingRequests = new Set<AbortController>();
+
+  const withTimeout = async <T>(request: (signal: AbortSignal) => Promise<T>) => {
+    const controller = new AbortController();
+    const response = request(controller.signal);
+    const aborted = new Promise<never>((_, reject) => {
+      controller.signal.addEventListener("abort", () => {
+        reject(new Error("Map tracking request aborted"));
+      });
+    });
+    const timer = deps.schedule(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    pendingRequests.add(controller);
+    return Promise.race([response, aborted]).finally(() => {
+      timer.cancel();
+      pendingRequests.delete(controller);
+    });
+  };
+
+  const currentConnection = (): MapTrackingStatus["connection"] =>
+    membershipFailing || failingGroups.size > 0 ? "failing" : "ok";
+
+  const refreshStatus = () => {
+    status = {
+      connection: currentConnection(),
+      groups: Object.fromEntries(groupLoadStatus),
+      membership: membershipStatus,
+      undecryptable: [...undecryptableByGroup].flatMap(([groupId, devices]) =>
+        [...devices.values()].map((device) => ({ groupId, ...device })),
+      ),
+    };
+  };
+
+  const publishStatus = (loadChanged: boolean) => {
+    if (!loadChanged && currentConnection() === status.connection) {
+      return;
+    }
+    refreshStatus();
+    notify();
+  };
+
+  const recordGroupResult = (groupId: string, outcome: "loaded" | "failed") => {
+    const current = groupLoadStatus.get(groupId);
+    const loadChanged = current !== outcome && current !== "loaded";
+    if (loadChanged) {
+      groupLoadStatus.set(groupId, outcome);
+    }
+    if (outcome === "failed") {
+      failingGroups.add(groupId);
+    } else {
+      failingGroups.delete(groupId);
+    }
+    publishStatus(loadChanged);
+  };
 
   const notify = () => {
     for (const listener of listeners) {
@@ -95,6 +168,11 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   const clearSchedule = () => {
     scheduled?.cancel();
     scheduled = null;
+  };
+
+  const nextRunId = () => {
+    lastRunId += 1;
+    return lastRunId;
   };
 
   const isCurrent = (groupId: string, runId: number) => {
@@ -118,7 +196,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       lastReconcileAt: deps.now(),
       mode: "cold" as const,
       nextDueAt: deps.now(),
-      runId: 0,
+      runId: nextRunId(),
     };
     groupStates.set(groupId, created);
     return created;
@@ -127,11 +205,15 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
   const removeGroup = (groupId: string, { clearKeys = true }: { clearKeys?: boolean } = {}) => {
     const state = groupStates.get(groupId);
     if (state) {
-      state.runId += 1;
+      state.runId = nextRunId();
       state.inFlight = false;
     }
     groupStates.delete(groupId);
     positionsByGroup.delete(groupId);
+    groupLoadStatus.delete(groupId);
+    failingGroups.delete(groupId);
+    undecryptableByGroup.delete(groupId);
+    refreshStatus();
     if (clearKeys) {
       deps.clearEpochKeys(groupId);
     }
@@ -163,13 +245,17 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     );
   };
 
-  const markGroupSuccess = (groupId: string, runId: number) => {
+  const markGroupSuccess = (groupId: string, runId: number, tickStartedAt: number) => {
     const state = groupStates.get(groupId);
     if (!state || state.runId !== runId || !active) {
       return;
     }
     state.backoffMs = STEADY_INTERVAL_MS;
-    state.nextDueAt = deps.now() + STEADY_INTERVAL_MS;
+    const now = deps.now();
+    state.nextDueAt =
+      tickStartedAt + STEADY_INTERVAL_MS > now
+        ? tickStartedAt + STEADY_INTERVAL_MS
+        : now + STEADY_INTERVAL_MS;
   };
 
   const markGroupFailure = (groupId: string, runId: number) => {
@@ -191,6 +277,8 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     runId: number;
   }) => {
     const entries: LiveMapEntry[] = [];
+    const undecryptable = new Map(undecryptableByGroup.get(groupId));
+    let undecryptableChanged = false;
 
     for (const point of points) {
       if (!isCurrent(groupId, runId)) {
@@ -202,8 +290,28 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         return;
       }
 
+      const deviceKey = `${point.senderUserId}:${point.senderDeviceId}`;
       if (result.status === "ok") {
         entries.push(result.entry);
+        undecryptableChanged = undecryptable.delete(deviceKey) || undecryptableChanged;
+      } else if (result.status === "undecryptable" && !undecryptable.has(deviceKey)) {
+        undecryptable.set(deviceKey, {
+          deviceId: point.senderDeviceId,
+          userId: point.senderUserId,
+        });
+        undecryptableChanged = true;
+      }
+    }
+
+    if (undecryptableChanged) {
+      if (undecryptable.size > 0) {
+        undecryptableByGroup.set(groupId, undecryptable);
+      } else {
+        undecryptableByGroup.delete(groupId);
+      }
+      refreshStatus();
+      if (entries.length === 0) {
+        notify();
       }
     }
 
@@ -216,19 +324,79 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     notify();
   };
 
+  const snapshotGroup = (groupId: string) => ({
+    positions: positionsByGroup.get(groupId) ?? new Map<string, LiveMapEntry>(),
+    undecryptable: undecryptableByGroup.get(groupId) ?? new Map<string, never>(),
+  });
+
+  const dropRemovedDevices = ({
+    activeDeviceIds,
+    groupId,
+    seenAtRequest = snapshotGroup(groupId),
+  }: {
+    activeDeviceIds: ReadonlySet<string>;
+    groupId: string;
+    seenAtRequest?: ReturnType<typeof snapshotGroup>;
+  }) => {
+    let changed = false;
+    const positions = positionsByGroup.get(groupId);
+    if (positions) {
+      const kept = dropInactiveDevices(positions, {
+        activeDeviceIds,
+        seenAtRequest: seenAtRequest.positions,
+      });
+      if (kept !== positions) {
+        positionsByGroup.set(groupId, kept);
+        changed = true;
+      }
+    }
+
+    const undecryptable = undecryptableByGroup.get(groupId);
+    if (undecryptable) {
+      const kept = new Map(
+        [...undecryptable].filter(
+          ([key, device]) =>
+            activeDeviceIds.has(device.deviceId) || seenAtRequest.undecryptable.get(key) !== device,
+        ),
+      );
+      if (kept.size !== undecryptable.size) {
+        if (kept.size > 0) {
+          undecryptableByGroup.set(groupId, kept);
+        } else {
+          undecryptableByGroup.delete(groupId);
+        }
+        refreshStatus();
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      notify();
+    }
+  };
+
+  const loadLatest = async (groupId: string, runId: number) => {
+    const seenAtRequest = snapshotGroup(groupId);
+    const { points } = await withTimeout((signal) => deps.getLatest(groupId, signal));
+    if (!isCurrent(groupId, runId)) {
+      return [];
+    }
+
+    dropRemovedDevices({
+      activeDeviceIds: new Set(points.map(({ senderDeviceId }) => senderDeviceId)),
+      groupId,
+      seenAtRequest,
+    });
+    if (points.length > 0) {
+      await mergeDecrypted({ groupId, points, runId });
+    }
+    return points;
+  };
+
   const coldTick = async (groupId: string, runId: number) => {
-    const { points } = await deps.getLatest(groupId);
-    if (!isCurrent(groupId, runId)) {
-      return;
-    }
-
+    const points = await loadLatest(groupId, runId);
     const state = groupStates.get(groupId);
-    if (!state || points.length === 0) {
-      return;
-    }
-
-    await mergeDecrypted({ groupId, points, runId });
-    if (!isCurrent(groupId, runId)) {
+    if (!state || points.length === 0 || !isCurrent(groupId, runId)) {
       return;
     }
 
@@ -242,57 +410,36 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       return;
     }
 
-    let cursor = state.cursor;
-
-    for (;;) {
-      if (!isCurrent(groupId, runId)) {
-        return;
-      }
-
-      const { points } = await deps.poll({
-        cursor,
-        groupId,
-        limit: POLL_LIMIT,
-      });
-
-      if (!isCurrent(groupId, runId)) {
-        return;
-      }
-
-      if (points.length === 0) {
-        break;
-      }
-
-      const nextCursor = maxCursor(points);
-      if (!nextCursor || !isCursorAfter(nextCursor, cursor)) {
-        break;
-      }
-
-      await mergeDecrypted({ groupId, points, runId });
-      if (!isCurrent(groupId, runId)) {
-        return;
-      }
-
-      cursor = nextCursor;
-      state.cursor = cursor;
-      state.mode = "live";
-
-      if (points.length < POLL_LIMIT) {
-        break;
-      }
+    const cursor = state.cursor;
+    const { points } = await withTimeout((signal) =>
+      deps.poll({ cursor, groupId, limit: POLL_LIMIT }, signal),
+    );
+    if (!isCurrent(groupId, runId)) {
+      return;
     }
-  };
 
-  const reconcileTick = async (groupId: string, runId: number) => {
-    const { points } = await deps.getLatest(groupId);
-    if (!isCurrent(groupId, runId) || points.length === 0) {
+    const nextCursor = maxCursor(points);
+    if (!nextCursor || !isCursorAfter(nextCursor, cursor)) {
+      return;
+    }
+
+    if (points.length === POLL_LIMIT) {
+      await coldTick(groupId, runId);
+      if (isCurrent(groupId, runId) && !isCursorAfter(state.cursor, nextCursor)) {
+        state.cursor = nextCursor;
+      }
       return;
     }
 
     await mergeDecrypted({ groupId, points, runId });
+    if (!isCurrent(groupId, runId)) {
+      return;
+    }
+
+    state.cursor = nextCursor;
   };
 
-  const tickGroup = async (groupId: string) => {
+  const tickGroup = async (groupId: string, tickStartedAt: number) => {
     const state = groupStates.get(groupId);
     if (!state || !active || state.inFlight) {
       return;
@@ -308,14 +455,20 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
           return;
         }
 
-        if (deps.now() - state.lastReconcileAt >= RECONCILE_INTERVAL_MS) {
-          await reconcileTick(groupId, runId);
-          if (isCurrent(groupId, runId)) {
-            state.lastReconcileAt = deps.now();
-          }
-        }
-
-        await liveTick(groupId, runId);
+        const reconcile =
+          deps.now() - state.lastReconcileAt >= RECONCILE_INTERVAL_MS
+            ? loadLatest(groupId, runId).then(() => {
+                if (isCurrent(groupId, runId)) {
+                  state.lastReconcileAt = deps.now();
+                }
+              })
+            : null;
+        const [reconciled, polled] = await Promise.allSettled([
+          reconcile,
+          liveTick(groupId, runId),
+        ]);
+        if (reconciled.status === "rejected") throw reconciled.reason;
+        if (polled.status === "rejected") throw polled.reason;
       })(),
     );
 
@@ -330,19 +483,32 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
 
     if (result.error) {
       markGroupFailure(groupId, runId);
+      recordGroupResult(groupId, "failed");
       return;
     }
 
-    markGroupSuccess(groupId, runId);
+    markGroupSuccess(groupId, runId, tickStartedAt);
+    recordGroupResult(groupId, "loaded");
+  };
+
+  const recordMembershipResult = (outcome: "loaded" | "failed") => {
+    const loadChanged = membershipStatus !== outcome && membershipStatus !== "loaded";
+    if (loadChanged) {
+      membershipStatus = outcome;
+    }
+    membershipFailing = outcome === "failed";
+    publishStatus(loadChanged);
   };
 
   const syncMembership = async () => {
-    const groupsResult = await tryCatch(deps.listGroups());
-    if (!active) {
+    const startedIn = activation;
+    const groupsResult = await tryCatch(withTimeout(deps.listGroups));
+    if (activation !== startedIn) {
       return null;
     }
 
     if (groupsResult.error) {
+      recordMembershipResult("failed");
       return null;
     }
 
@@ -364,20 +530,35 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     for (const { id: groupId } of groups) {
       ensureGroupState(groupId);
     }
+    recordMembershipResult("loaded");
 
     return groups;
   };
 
   const tickInternal = async ({ force }: { force: boolean }) => {
+    const startedIn = activation;
     tickPhase = "listing";
-    const groups = await syncMembership();
-    if (!active) {
-      tickPhase = "idle";
+    const now = deps.now();
+    const isDue = (groupId: string) => {
+      const state = groupStates.get(groupId);
+      return state !== undefined && (force || state.nextDueAt <= now + DUE_WINDOW_MS);
+    };
+    const knownGroupIds = new Set(groupStates.keys());
+    const membership = syncMembership();
+    const knownGroupTicks = [...knownGroupIds]
+      .filter(isDue)
+      .map((groupId) => tickGroup(groupId, now));
+    const groups = await membership;
+    if (activation !== startedIn) {
       return;
     }
 
+    tickPhase = "groups";
     if (!groups) {
-      tickPhase = "idle";
+      await Promise.all(knownGroupTicks);
+      if (activation !== startedIn) {
+        return;
+      }
       clearSchedule();
       scheduled = deps.schedule(() => {
         void tick({ force: false });
@@ -387,24 +568,12 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
 
     membershipBackoffMs = STEADY_INTERVAL_MS;
-    tickPhase = "groups";
-    const now = deps.now();
+    await Promise.all([
+      ...knownGroupTicks,
+      ...groups.filter(({ id }) => !knownGroupIds.has(id)).map(({ id }) => tickGroup(id, now)),
+    ]);
 
-    await Promise.all(
-      groups.map(async ({ id: groupId }) => {
-        const state = groupStates.get(groupId);
-        if (!state) {
-          return;
-        }
-        if (!force && state.nextDueAt > now) {
-          return;
-        }
-        await tickGroup(groupId);
-      }),
-    );
-
-    tickPhase = "idle";
-    if (active) {
+    if (activation === startedIn) {
       scheduleWake();
     }
   };
@@ -422,18 +591,31 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       return;
     }
 
-    tickPromise = tickInternal({ force }).finally(() => {
-      tickPromise = null;
-      tickPhase = "idle";
+    const run = tickInternal({ force }).finally(() => {
+      if (tickPromise === run) {
+        tickPromise = null;
+        tickPhase = "idle";
+      }
     });
+    tickPromise = run;
 
-    await tickPromise;
+    await run;
+  };
+
+  const deactivate = () => {
+    active = false;
+    activation += 1;
+    tickPromise = null;
+    tickPhase = "idle";
+    clearSchedule();
+    for (const controller of pendingRequests) {
+      controller.abort();
+    }
   };
 
   return {
     destroy: () => {
-      active = false;
-      clearSchedule();
+      deactivate();
       listeners.clear();
       for (const groupId of [...groupStates.keys()]) {
         removeGroup(groupId, { clearKeys: false });
@@ -441,7 +623,15 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       positionsByGroup.clear();
       deps.clearEpochKeys();
     },
+    dropRemovedDevices: ({
+      activeDeviceIds,
+      groupId,
+    }: {
+      activeDeviceIds: ReadonlySet<string>;
+      groupId: string;
+    }) => dropRemovedDevices({ activeDeviceIds, groupId }),
     getLivePositions: () => [...getLiveMap().values()].map(toLiveMapPosition),
+    getStatus: () => status,
     setActive: (nextActive: boolean) => {
       if (active === nextActive) {
         if (nextActive) {
@@ -450,16 +640,16 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         return;
       }
 
-      active = nextActive;
-      if (!active) {
-        clearSchedule();
+      if (!nextActive) {
+        deactivate();
         for (const state of groupStates.values()) {
-          state.runId += 1;
+          state.runId = nextRunId();
           state.inFlight = false;
         }
         return;
       }
 
+      active = true;
       for (const state of groupStates.values()) {
         state.nextDueAt = deps.now();
       }

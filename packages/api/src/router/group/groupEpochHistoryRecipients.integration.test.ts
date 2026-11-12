@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
@@ -28,14 +27,9 @@ import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 setDefaultTimeout(60_000);
-
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
 
 const router = createTRPCRouter({
   accountRecovery: accountRecoveryRouter,
@@ -45,7 +39,7 @@ const router = createTRPCRouter({
   groupLifecycle: groupLifecycleRouter,
   groupMembership: groupMembershipRouter,
 });
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+const cache = createIntegrationTestCache(() => 0);
 const prefix = `epoch-history-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 
@@ -69,16 +63,22 @@ const sharer = account("sharer");
 const outsider = account("outsider");
 const accounts = [owner, member, late, sharer, outsider];
 
-const caller = (userId: string) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    session: {
-      user: { id: userId },
-      session: { id: `${userId}-session`, createdAt: new Date() },
-    },
-  } as Parameters<typeof router.createCaller>[0]);
+const caller = (
+  userId: string,
+  deviceId = accounts.find((item) => item.userId === userId)?.deviceId ?? null,
+) =>
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId,
+      session: {
+        user: { id: userId },
+        session: { id: `${userId}-session`, createdAt: new Date() },
+      },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 
 const newHistoryKey = (target: Account, version: number) => {
   const recoveryKey = deriveRecoveryKeyPair(generateRecoveryPhrase());
@@ -112,7 +112,12 @@ const newHistoryKey = (target: Account, version: number) => {
 
 const setupPhrase = async (target: Account) => {
   const next = newHistoryKey(target, 1);
-  await caller(target.userId).accountRecovery.setup(next.input);
+  const { escrow, ...historyKey } = next.input.historyKey;
+  await prisma.accountHistoryKey.create({ data: { ...historyKey, userId: target.userId } });
+  await caller(target.userId).accountRecovery.setup({
+    escrows: [{ ...escrow, version: historyKey.version }],
+    recoveryKey: next.input.recoveryKey,
+  });
   next.apply();
 };
 
@@ -249,6 +254,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             id: item.deviceId,
             publicKey: item.key.publicKey,
             publicKeyAlgorithm: item.key.algorithm,
+            name: "Phone",
+            icon: "phone",
+            activatedAt: new Date(),
             userId: item.userId,
           },
         });
@@ -481,15 +489,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expectReadable([late], retry.epochId, retry.epochKey);
     });
 
-    test("a reset racing epoch creation is rejected as a version mismatch and the rebuilt epoch succeeds", async () => {
+    test("an epoch built before a reset is rejected as a version mismatch and the rebuilt epoch succeeds", async () => {
       const first = await buildRotation(owner);
-      const lock = await holdRowLock({ db: prisma, id: groupId, table: "Group" });
-      const rotation = rotate(owner, first.bundle);
-      await lock.waitForWaiters(1);
       await resetPhrase(member);
       expect(member.history!.version).toBe(3);
-      await lock.release();
-      await rejectsWith(rotation, HISTORY_RECIPIENT_MISMATCH_MESSAGE);
+      await rejectsWith(rotate(owner, first.bundle), HISTORY_RECIPIENT_MISMATCH_MESSAGE);
 
       const retry = await buildRotation(owner);
       expect(
@@ -500,6 +504,24 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         expectedOwners(owner, member, late, sharer),
       );
       await expectReadable([member], retry.epochId, retry.epochKey);
+    });
+
+    test("a reset waits for epoch creation already holding the group", async () => {
+      const versionBefore = member.history!.version;
+      const first = await buildRotation(owner);
+      const lock = await holdRowLock({ db: prisma, id: groupId, table: "Group" });
+      const rotation = rotate(owner, first.bundle);
+      await lock.waitForWaiters(1);
+      const reset = resetPhrase(member);
+      await lock.waitForWaiters(2);
+      await lock.release();
+      await expect(rotation).resolves.toEqual({ rotated: true });
+      await reset;
+      expect(member.history!.version).toBe(versionBefore + 1);
+
+      const next = await buildRotation(owner);
+      await expect(rotate(owner, next.bundle)).resolves.toEqual({ rotated: true });
+      await expectReadable([member], next.epochId, next.epochKey);
     });
 
     test("epoch creation holds the history keys it wraps to until it commits", async () => {

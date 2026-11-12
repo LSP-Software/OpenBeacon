@@ -73,6 +73,10 @@ const SignIn = () => {
     }
 
     const sessionSetupResult = await completeAuthenticatedSessionSetup();
+    if (sessionSetupResult.deviceRemoved) {
+      setEmailLoading(false);
+      return;
+    }
     if (sessionSetupResult.error) {
       Alert.alert("Unable to finish sign in", sessionSetupResult.error.message);
       setEmailLoading(false);

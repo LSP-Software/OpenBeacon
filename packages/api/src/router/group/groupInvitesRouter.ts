@@ -9,6 +9,7 @@ import {
   getInviteAcceptanceContext,
   persistGroupEpoch,
 } from "../../lib/groupEpochs.ts";
+import { emailInviteCreatedAfter } from "../../lib/emailInvites.ts";
 import { createGroupJoinAlerts } from "../../lib/groupJoinAlerts.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
@@ -27,7 +28,7 @@ export const groupInvitesRouter = {
     }),
   ),
   dismissJoinAlert: protectedProcedure
-    .input(z.object({ id: z.string().min(1) }))
+    .input(z.object({ id: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.groupJoinAlert.deleteMany({
         where: { id: input.id, recipientId: ctx.session.user.id },
@@ -35,7 +36,7 @@ export const groupInvitesRouter = {
     }),
   createShared: groupAdminProcedure
     .meta({ rateLimit: { limit: 32, windowMs: 60_000 } })
-    .input(z.object({ groupId: z.string().min(1) }))
+    .input(z.object({ groupId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       const code = randomBytes(16).toString("hex").toUpperCase();
       const expiresAt = new Date(Date.now() + 300_000);
@@ -71,8 +72,8 @@ export const groupInvitesRouter = {
   sharedStatuses: groupAdminProcedure
     .input(
       z.object({
-        groupId: z.string().min(1),
-        inviteIds: z.array(z.string().min(1)).min(1).max(500),
+        groupId: z.string().min(1).max(128),
+        inviteIds: z.array(z.string().min(1).max(128)).min(1).max(500),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -152,6 +153,7 @@ export const groupInvitesRouter = {
         });
         await persistGroupEpoch({
           db: tx,
+          deviceId: ctx.deviceId,
           epoch: input.nextEpoch,
           groupId: invite.groupId,
           userId: ctx.session.user.id,
@@ -165,7 +167,7 @@ export const groupInvitesRouter = {
       return { message: "Invite accepted." };
     }),
   acceptanceContext: protectedProcedure
-    .input(z.object({ inviteId: z.string().min(1) }))
+    .input(z.object({ inviteId: z.string().min(1).max(128) }))
     .query(async ({ ctx, input }) =>
       getInviteAcceptanceContext({
         db: ctx.db,
@@ -182,7 +184,7 @@ export const groupInvitesRouter = {
     })
     .input(
       z.object({
-        inviteId: z.string().min(1),
+        inviteId: z.string().min(1).max(128),
         nextEpoch: groupEpochBundleSchema,
       }),
     )
@@ -190,7 +192,11 @@ export const groupInvitesRouter = {
       const member = await ctx.db.$transaction(async (tx) => {
         await assertAccountCanJoinGroup(tx, ctx.session.user.id);
         const invite = await tx.groupMemberInvite.findFirst({
-          where: { id: input.inviteId, recipientId: ctx.session.user.id },
+          where: {
+            id: input.inviteId,
+            recipientId: ctx.session.user.id,
+            createdAt: { gt: emailInviteCreatedAfter() },
+          },
         });
 
         if (!invite) {
@@ -202,7 +208,11 @@ export const groupInvitesRouter = {
         );
 
         const currentInvite = await tx.groupMemberInvite.findFirst({
-          where: { id: input.inviteId, recipientId: ctx.session.user.id },
+          where: {
+            id: input.inviteId,
+            recipientId: ctx.session.user.id,
+            createdAt: { gt: emailInviteCreatedAfter() },
+          },
         });
         if (!currentInvite) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
@@ -261,12 +271,16 @@ export const groupInvitesRouter = {
           });
         }
 
-        await tx.groupMemberInvite.delete({
-          where: { id: input.inviteId },
+        const deletedInvite = await tx.groupMemberInvite.deleteMany({
+          where: { id: input.inviteId, recipientId: ctx.session.user.id },
         });
+        if (deletedInvite.count !== 1) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
+        }
 
         await persistGroupEpoch({
           db: tx,
+          deviceId: ctx.deviceId,
           epoch: input.nextEpoch,
           groupId: invite.groupId,
           userId: ctx.session.user.id,
@@ -303,7 +317,7 @@ export const groupInvitesRouter = {
         windowMs: 60_000,
       },
     })
-    .input(z.object({ inviteId: z.string() }))
+    .input(z.object({ inviteId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       await ctx.db.$transaction(async (tx) => {
         const invite = await tx.groupMemberInvite.findFirst({
@@ -367,6 +381,9 @@ export const groupInvitesRouter = {
         ) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Only owners can invite admins." });
         }
+        await tx.groupMemberInvite.deleteMany({
+          where: { groupId: input.groupId, createdAt: { lte: emailInviteCreatedAfter() } },
+        });
         const users = await tx.user.findMany({
           where: {
             email: {
@@ -393,7 +410,7 @@ export const groupInvitesRouter = {
 
         const existingMemberIds = new Set(existingMembers.map((member) => member.userId));
 
-        const invitesToCreate = users
+        const invitesToSend = users
           .map((user) => {
             if (user.id === ctx.session.user.id) return undefined;
 
@@ -402,21 +419,33 @@ export const groupInvitesRouter = {
             const invite = input.invites.find((invite) => invite.email === user.email);
             if (!invite) return undefined;
 
-            if (user.receivedGroupMemberInvites.find((invite) => invite.groupId === input.groupId))
-              return undefined;
-
             return {
-              inviterId: ctx.session.user.id,
+              existingInviteId: user.receivedGroupMemberInvites[0]?.id,
               recipientId: user.id,
-              groupId: input.groupId,
               role: invite.role,
             };
           })
           .filter((invite) => invite !== undefined);
 
-        await tx.groupMemberInvite.createMany({
-          data: invitesToCreate,
-        });
+        const now = new Date();
+        const invitesToCreate = [];
+        for (const invite of invitesToSend) {
+          const refreshed = invite.existingInviteId
+            ? await tx.groupMemberInvite.updateMany({
+                where: { id: invite.existingInviteId },
+                data: { createdAt: now, inviterId: ctx.session.user.id, role: invite.role },
+              })
+            : undefined;
+          if (refreshed?.count === 1) continue;
+          invitesToCreate.push({
+            inviterId: ctx.session.user.id,
+            recipientId: invite.recipientId,
+            groupId: input.groupId,
+            role: invite.role,
+          });
+        }
+
+        await tx.groupMemberInvite.createMany({ data: invitesToCreate });
       });
 
       return {
@@ -428,6 +457,7 @@ export const groupInvitesRouter = {
     const invites = await ctx.db.groupMemberInvite.findMany({
       where: {
         recipientId: ctx.session.user.id,
+        createdAt: { gt: emailInviteCreatedAfter() },
       },
       include: {
         inviter: {
@@ -465,7 +495,7 @@ export const groupInvitesRouter = {
 
 const assertAccountCanJoinGroup = async (tx: Prisma.TransactionClient, userId: string) => {
   const [user] = await tx.$queryRaw<Array<{ pendingDeletion: boolean }>>(
-    Prisma.sql`SELECT "pendingDeletion" FROM "User" WHERE id = ${userId} FOR UPDATE`,
+    Prisma.sql`SELECT "pendingDeletion" FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
   );
   if (!user || user.pendingDeletion) {
     throw new TRPCError({

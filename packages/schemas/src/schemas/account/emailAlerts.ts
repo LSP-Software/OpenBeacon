@@ -14,6 +14,6 @@ export const timezoneSchema = z
   }, "Unknown timezone.");
 
 export const emailAlertSettingsSchema = z.object({
-  alertNewDevice: z.boolean(),
+  alertNewSignIn: z.boolean(),
   alertDeletionScheduled: z.boolean(),
 });

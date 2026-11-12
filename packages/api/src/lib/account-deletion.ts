@@ -1,6 +1,7 @@
 import { findAlertRecipient, type SecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
 import { GroupRole, Prisma, type PrismaClient } from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
+import { lockUserGroups } from "./lockUserGroups.ts";
 
 export const deleteAccountRecords = async ({
   db,
@@ -16,7 +17,7 @@ export const deleteAccountRecords = async ({
   securityAlerts: SecurityAlerts | null;
 }) => {
   const recipient = await db.$transaction(async (tx) => {
-    await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`);
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`);
     const user = await findAlertRecipient(tx, userId);
     if (!user) return null;
     if (mode === "scheduled") {
@@ -26,16 +27,9 @@ export const deleteAccountRecords = async ({
       if (!status?.due) return null;
     }
 
-    const memberships = await tx.groupMember.findMany({
-      where: { userId },
-      select: { groupId: true },
-    });
-    const groupIds = memberships.map(({ groupId }) => groupId).sort();
+    const groupIds = await lockUserGroups(tx, userId);
     const imageKeys: string[] = [];
     if (groupIds.length) {
-      await tx.$queryRaw(
-        Prisma.sql`SELECT id FROM "Group" WHERE id IN (${Prisma.join(groupIds)}) ORDER BY id FOR UPDATE`,
-      );
       const soleOwner = await tx.groupMember.findFirst({
         where: {
           userId,

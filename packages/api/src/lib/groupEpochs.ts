@@ -10,10 +10,16 @@ import {
   type WrappedEpochKey,
   type WrappedHistoryEpochKey,
 } from "@openbeacon/encryption";
-import { type devicePlatformSchema, HISTORY_RECIPIENT_MISMATCH_MESSAGE } from "@openbeacon/schemas";
+import {
+  type deviceIconSchema,
+  type devicePlatformSchema,
+  HISTORY_RECIPIENT_MISMATCH_MESSAGE,
+} from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type { z } from "zod";
+import { deviceRemovedError } from "./deviceRemoved.ts";
+import { emailInviteCreatedAfter } from "./emailInvites.ts";
 
 type DeviceRecord = {
   createdAt: Date;
@@ -137,6 +143,7 @@ export const listUserRecipientPublicKeys = async ({
     },
     where: {
       revokedAt: null,
+      activatedAt: { not: null },
       userId,
     },
   });
@@ -160,6 +167,7 @@ export const getInviteAcceptanceContext = async ({
     where: {
       id: inviteId,
       recipientId: userId,
+      createdAt: { gt: emailInviteCreatedAfter() },
     },
   });
 
@@ -211,6 +219,7 @@ export const getGroupJoinContext = async ({
     },
     where: {
       revokedAt: null,
+      activatedAt: { not: null },
       OR: [
         {
           user: {
@@ -301,6 +310,7 @@ export const getGroupRemovalContext = async ({
     },
     where: {
       revokedAt: null,
+      activatedAt: { not: null },
       user: {
         groupMembers: {
           some: {
@@ -339,12 +349,14 @@ export const getGroupRemovalContext = async ({
 
 export const persistGroupEpoch = async ({
   db,
+  deviceId,
   epoch,
   excludedUserId,
   groupId,
   userId,
 }: {
   db: GroupEpochPersistenceDb;
+  deviceId: string;
   epoch: {
     createdByDeviceId: string;
     epochId: string;
@@ -356,6 +368,13 @@ export const persistGroupEpoch = async ({
   groupId: string;
   userId: string;
 }) => {
+  if (epoch.createdByDeviceId !== deviceId) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Group keys must be created by this phone.",
+    });
+  }
+
   const actingMember = await db.groupMember.findFirst({
     select: {
       id: true,
@@ -378,6 +397,7 @@ export const persistGroupEpoch = async ({
     where: {
       id: epoch.createdByDeviceId,
       revokedAt: null,
+      activatedAt: { not: null },
       userId,
     },
   });
@@ -444,6 +464,7 @@ export const persistGroupEpoch = async ({
     },
     where: {
       revokedAt: null,
+      activatedAt: { not: null },
       ...(excludedUserId ? { userId: { not: excludedUserId } } : {}),
       user: {
         groupMembers: {
@@ -535,10 +556,14 @@ export const persistGroupEpoch = async ({
   });
 };
 
+export const defaultDeviceIcon = (model: string | undefined) =>
+  model && /iPad|Tab/.test(model) ? "tablet" : "phone";
+
 export const upsertUserDevice = async ({
   db,
   input,
   securityAlerts,
+  sessionId,
   userId,
 }: {
   db: Pick<PrismaClient, "$transaction" | "userDevice">;
@@ -548,8 +573,11 @@ export const upsertUserDevice = async ({
     publicKey: string;
     platform?: z.infer<typeof devicePlatformSchema> | undefined;
     model?: string | undefined;
+    name?: string | undefined;
+    icon?: z.infer<typeof deviceIconSchema> | undefined;
   };
   securityAlerts: SecurityAlerts | null;
+  sessionId: string | null;
   userId: string;
 }) => {
   if (input.algorithm !== DEVICE_KEY_ALGORITHM) {
@@ -557,11 +585,6 @@ export const upsertUserDevice = async ({
   }
 
   const existingDevice = await db.userDevice.findUnique({
-    select: {
-      publicKey: true,
-      publicKeyAlgorithm: true,
-      userId: true,
-    },
     where: {
       id: input.deviceId,
     },
@@ -575,6 +598,7 @@ export const upsertUserDevice = async ({
   }
 
   if (existingDevice) {
+    if (existingDevice.revokedAt) throw deviceRemovedError();
     if (
       existingDevice.publicKey !== input.publicKey ||
       existingDevice.publicKeyAlgorithm !== input.algorithm
@@ -585,46 +609,52 @@ export const upsertUserDevice = async ({
       });
     }
 
-    return db.userDevice.update({
-      data: {
-        lastSeenAt: new Date(),
-        revokedAt: null,
-      },
-      where: {
-        id: input.deviceId,
-      },
-    });
+    return existingDevice;
   }
 
   const createResult = await tryCatch(
     db.$transaction(async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`);
+      const pending =
+        (await tx.userDevice.count({ where: { userId, activatedAt: { not: null } } })) > 0;
       const device = await tx.userDevice.create({
         data: {
           id: input.deviceId,
           model: input.model ?? null,
+          name: input.name ?? input.model ?? "Phone",
+          icon: input.icon ?? defaultDeviceIcon(input.model),
+          activatedAt: pending ? null : new Date(),
+          activatedBy: pending ? null : "firstDevice",
           platform: input.platform ?? null,
           publicKey: input.publicKey,
           publicKeyAlgorithm: input.algorithm,
           userId,
         },
       });
-      await tx.group.updateMany({
-        data: { epochRotationRequired: true },
-        where: { groupMembers: { some: { userId } } },
-      });
-      return { device, firstDevice: (await tx.userDevice.count({ where: { userId } })) === 1 };
+      if (sessionId) {
+        await tx.session.updateMany({
+          data: { deviceId: device.id },
+          where: { id: sessionId, userId },
+        });
+      }
+      if (!pending) {
+        await tx.group.updateMany({
+          data: { epochRotationRequired: true },
+          where: { groupMembers: { some: { userId } } },
+        });
+      }
+      return device;
     }),
   );
 
   if (!createResult.error) {
-    if (!createResult.data.firstDevice) {
+    if (createResult.data.activatedAt === null) {
       securityAlerts?.send(userId, {
-        type: "new-device",
+        type: "new-sign-in",
         device: { model: input.model ?? null, platform: input.platform ?? null },
       });
     }
-    return createResult.data.device;
+    return createResult.data;
   }
 
   const error = createResult.error;
@@ -646,11 +676,6 @@ export const upsertUserDevice = async ({
   }
 
   const conflictingDevice = await db.userDevice.findUnique({
-    select: {
-      publicKey: true,
-      publicKeyAlgorithm: true,
-      userId: true,
-    },
     where: {
       id: input.deviceId,
     },
@@ -668,15 +693,8 @@ export const upsertUserDevice = async ({
     conflictingDevice.publicKey === input.publicKey &&
     conflictingDevice.publicKeyAlgorithm === input.algorithm
   ) {
-    return db.userDevice.update({
-      data: {
-        lastSeenAt: new Date(),
-        revokedAt: null,
-      },
-      where: {
-        id: input.deviceId,
-      },
-    });
+    if (conflictingDevice.revokedAt) throw deviceRemovedError();
+    return conflictingDevice;
   }
 
   if (conflictingDevice) {

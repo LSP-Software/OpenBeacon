@@ -1,6 +1,9 @@
+import { accountHistoryRouter } from "./router/accountHistoryRouter.ts";
 import { accountRecoveryRouter } from "./router/accountRecoveryRouter.ts";
 import { accountRouter } from "./router/accountRouter.ts";
 import { authRouter } from "./router/authRouter.ts";
+import { deviceLinkRouter } from "./router/deviceLinkRouter.ts";
+import { deviceRouter } from "./router/deviceRouter.ts";
 import { emailAlertsRouter } from "./router/emailAlertsRouter.ts";
 import { feedbackRouter } from "./router/feedbackRouter.ts";
 import { groupEpochRouter } from "./router/group/groupEpochRouter.ts";
@@ -14,6 +17,7 @@ import { createTRPCRouter } from "./trpcRuntime.ts";
 
 export const appRouter = createTRPCRouter({
   account: accountRouter,
+  accountHistory: accountHistoryRouter,
   accountRecovery: accountRecoveryRouter,
   groupSettings: groupSettingsRouter,
   groupLifecycle: groupLifecycleRouter,
@@ -22,6 +26,8 @@ export const appRouter = createTRPCRouter({
   groupMembership: groupMembershipRouter,
   groupTracking: groupTrackingRouter,
   auth: authRouter,
+  device: deviceRouter,
+  deviceLink: deviceLinkRouter,
   emailAlerts: emailAlertsRouter,
   feedback: feedbackRouter,
   maps: mapsRouter,

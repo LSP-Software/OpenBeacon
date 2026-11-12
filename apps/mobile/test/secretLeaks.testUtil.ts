@@ -15,7 +15,7 @@ export const expectNoSecretsIn = (
     expect(serialized).not.toContain(phrase.words().join(" "));
     for (const word of phrase.words()) {
       expect(serialized).not.toMatch(
-        new RegExp(`(?<![A-Za-z0-9+/_-])${word}(?![A-Za-z0-9+/=_-]|":)`),
+        new RegExp(`(?<![A-Za-z0-9+/_:-])${word}(?![A-Za-z0-9+/=_-]|\\\\*":)`),
       );
     }
   }

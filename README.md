@@ -8,6 +8,7 @@ This repo is a Bun monorepo: a React Native (Expo) app under `apps/mobile`, an A
 
 - [Bun](https://bun.sh) (see `packageManager` in the root `package.json` for the version this repo expects)
 - **Java 17** — needed for Android builds
+- **Android SDK** — needed for the offline tracking queue tests in `bun run ci`; they're skipped with a warning without it (set `ANDROID_HOME` if it isn't in `~/Android/Sdk`)
 - **PostgreSQL** and **Redis** — the backend expects them; URLs are set in `.env`
 
 ## Development Enviroment Setup
@@ -30,6 +31,21 @@ Apply database migrations (from the repo root):
 cd ./packages/database
 bun run db:migrate
 ```
+
+## Run the integration tests
+
+`bun run ci` skips the integration tests. They need PostgreSQL and Redis running at the URLs in `.env.ci`; `docker compose up -d db redis` starts both. The tests use a separate `openbeacon_test` database so they never touch your development data. The first command below creates it and applies the migrations:
+
+```sh
+bun run test:integration:migrate
+bun run test:integration
+```
+
+Both commands take their settings from `.env.ci`, and its values win over variables exported in your shell. Pass `--env-file=<path>` to use another env file.
+
+`bun run test:integration` runs every `*.integration.test.ts` under `apps/` and `packages/` with `OPENBEACON_INTEGRATION=1`. Pass directories to run only their tests, such as `bun run test:integration packages/cache`. Other `bun test` flags are passed through and must use the `--flag=value` form.
+
+Every test cache uses a random Redis key prefix, so several runs can share one Redis.
 
 ## Run the backend
 
@@ -57,15 +73,16 @@ Leave an optional variable out rather than setting it to an empty value. Some, s
 
 ### Core
 
-| Variable             | Containers      | Required                                    | Default                           | Example                                                        | What it does                                                                                                                                                                                                           |
-| -------------------- | --------------- | ------------------------------------------- | --------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`       | Backend, Runner | Yes                                         | None                              | `postgresql://openbeacon:openbeacon@localhost:5432/openbeacon` | PostgreSQL connection string. Must use `postgres://` or `postgresql://`. The backend applies migrations to this database on startup, so its user needs permission to change the schema.                                |
-| `REDIS_URL`          | Backend, Runner | Backend: yes. Runner: only when email is on | None                              | `redis://localhost:6379`                                       | Redis-compatible cache used for rate limits and signed map URLs. Must use `redis://` or `rediss://`. The runner uses it to apply the per-account email limit.                                                          |
-| `BETTER_AUTH_SECRET` | Backend         | Yes                                         | None                              | Output of `openssl rand -base64 32`                            | Secret that signs sessions and tokens. At least 32 characters. Changing it signs everyone out.                                                                                                                         |
-| `BETTER_AUTH_URL`    | Backend         | Yes                                         | None                              | `https://api.example.com`                                      | Public URL of the backend, used for auth callbacks. Must be `http` or `https`.                                                                                                                                         |
-| `SERVER_NAME`        | Backend, Runner | No                                          | `OpenBeacon`                      | `Smith Family`                                                 | Server name shown by `GET /health`, in the app, and in the footer of emails.                                                                                                                                           |
-| `SELF_HOSTED`        | Backend         | No                                          | `true`                            | `true`                                                         | When `true` the backend refuses app feedback. Only the hosted API sets `false`; set it locally to test feedback.                                                                                                       |
-| `NODE_ENV`           | Backend, Runner | No                                          | `production` in the Docker images | `production`                                                   | Runtime mode. The backend's `bun run dev` sets `development`; the runner's doesn't. `EMAIL_CONSOLE` only works in `development` or `test`, so to use it with the runner set `NODE_ENV=development` in the root `.env`. |
+| Variable                       | Containers      | Required                                    | Default                           | Example                                                        | What it does                                                                                                                                                                                                                                 |
+| ------------------------------ | --------------- | ------------------------------------------- | --------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                 | Backend, Runner | Yes                                         | None                              | `postgresql://openbeacon:openbeacon@localhost:5432/openbeacon` | PostgreSQL connection string. Must use `postgres://` or `postgresql://`. The backend applies migrations to this database on startup, so its user needs permission to change the schema.                                                      |
+| `REDIS_URL`                    | Backend, Runner | Backend: yes. Runner: only when email is on | None                              | `redis://localhost:6379`                                       | Redis-compatible cache used for rate limits and signed map URLs. Must use `redis://` or `rediss://`. The runner uses it to apply the per-account email limit.                                                                                |
+| `BETTER_AUTH_SECRET`           | Backend         | Yes                                         | None                              | Output of `openssl rand -base64 32`                            | Secret that signs sessions and tokens. At least 32 characters. Changing it signs everyone out.                                                                                                                                               |
+| `BETTER_AUTH_URL`              | Backend         | Yes                                         | None                              | `https://api.example.com`                                      | Public URL of the backend, used for auth callbacks. Must be `http` or `https`.                                                                                                                                                               |
+| `SERVER_NAME`                  | Backend, Runner | No                                          | `OpenBeacon`                      | `Smith Family`                                                 | Server name shown by `GET /health`, in the app, and in the footer of emails.                                                                                                                                                                 |
+| `SELF_HOSTED`                  | Backend         | No                                          | `true`                            | `true`                                                         | When `true` the backend refuses app feedback. Only the hosted API sets `false`; set it locally to test feedback.                                                                                                                             |
+| `DISCORD_FEEDBACK_WEBHOOK_URL` | Backend         | No                                          | None                              | `https://discord.com/api/webhooks/…`                           | Hosted API only. HTTPS Discord webhook that is told when new feedback arrives. The alert carries the feedback ID and whether a contact email was given, never the message or email. Self-hosted backends refuse feedback, so leave it unset. |
+| `NODE_ENV`                     | Backend, Runner | No                                          | `production` in the Docker images | `production`                                                   | Runtime mode. The backend's and runner's `bun run dev` scripts set `development`. `EMAIL_CONSOLE` only works in `development` or `test`.                                                                                                     |
 
 ### Network
 
@@ -87,18 +104,18 @@ Leave an optional variable out rather than setting it to an empty value. Some, s
 
 Email is optional. Configure Resend or SMTP, not both, or leave both unset to turn email off. Give the runner the same email settings as the backend so it can send the account deleted email. See [the backend guide](apps/backend/README.md#email) for what is sent.
 
-| Variable              | Containers      | Required             | Default                                        | Example               | What it does                                                                                                                                                                           |
-| --------------------- | --------------- | -------------------- | ---------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RESEND_API_KEY`      | Backend, Runner | No                   | None                                           | `re_123...`           | Sends email through Resend. A sending-only key works.                                                                                                                                  |
-| `SMTP_HOST`           | Backend, Runner | No                   | None                                           | `smtp.example.com`    | Sends email through this SMTP server. Every other `SMTP_*` setting needs it.                                                                                                           |
-| `SMTP_PORT`           | Backend, Runner | No                   | `465` when `SMTP_SECURE=true`, otherwise `587` | `587`                 | SMTP port. Setting `465` also turns on implicit TLS unless `SMTP_SECURE` is set.                                                                                                       |
-| `SMTP_SECURE`         | Backend, Runner | No                   | `true` on port 465, otherwise `false`          | `true`                | Connect with implicit TLS.                                                                                                                                                             |
-| `SMTP_REQUIRE_TLS`    | Backend, Runner | No                   | `true`                                         | `false`               | Refuse to log in or send unless STARTTLS succeeds. Set `false` only for a local plaintext relay.                                                                                       |
-| `SMTP_USER`           | Backend, Runner | With `SMTP_PASSWORD` | None                                           | `noreply@example.com` | SMTP username.                                                                                                                                                                         |
-| `SMTP_PASSWORD`       | Backend, Runner | With `SMTP_USER`     | None                                           | `app-password`        | SMTP password.                                                                                                                                                                         |
-| `EMAIL_FROM`          | Backend, Runner | With Resend or SMTP  | None                                           | `noreply@example.com` | Sender address. Emails come from `OpenBeacon <EMAIL_FROM>`.                                                                                                                            |
-| `EMAIL_CONSOLE`       | Backend, Runner | No                   | `false`                                        | `true`                | Development only: prints emails, including codes, to the log instead of sending them. Refused unless `NODE_ENV` is `development` or `test`, and can't be combined with Resend or SMTP. |
-| `EMAIL_CODE_IP_LIMIT` | Backend         | No                   | `false`                                        | `true`                | Also limits each IP address to 20 code requests an hour. Off by default because it can block users who share an IP, such as phones behind carrier NAT.                                 |
+| Variable              | Containers      | Required             | Default                                        | Example               | What it does                                                                                                                                                                                                                |
+| --------------------- | --------------- | -------------------- | ---------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RESEND_API_KEY`      | Backend, Runner | No                   | None                                           | `re_123...`           | Sends email through Resend. A sending-only key works.                                                                                                                                                                       |
+| `SMTP_HOST`           | Backend, Runner | No                   | None                                           | `smtp.example.com`    | Sends email through this SMTP server. Every other `SMTP_*` setting needs it.                                                                                                                                                |
+| `SMTP_PORT`           | Backend, Runner | No                   | `465` when `SMTP_SECURE=true`, otherwise `587` | `587`                 | SMTP port. Setting `465` also turns on implicit TLS unless `SMTP_SECURE` is set.                                                                                                                                            |
+| `SMTP_SECURE`         | Backend, Runner | No                   | `true` on port 465, otherwise `false`          | `true`                | Connect with implicit TLS.                                                                                                                                                                                                  |
+| `SMTP_REQUIRE_TLS`    | Backend, Runner | No                   | `true`                                         | `false`               | Refuse to log in or send unless STARTTLS succeeds. Set `false` only for a local plaintext relay.                                                                                                                            |
+| `SMTP_USER`           | Backend, Runner | With `SMTP_PASSWORD` | None                                           | `noreply@example.com` | SMTP username.                                                                                                                                                                                                              |
+| `SMTP_PASSWORD`       | Backend, Runner | With `SMTP_USER`     | None                                           | `app-password`        | SMTP password.                                                                                                                                                                                                              |
+| `EMAIL_FROM`          | Backend, Runner | With Resend or SMTP  | None                                           | `noreply@example.com` | Sender address. Emails come from `OpenBeacon <EMAIL_FROM>`.                                                                                                                                                                 |
+| `EMAIL_CONSOLE`       | Backend, Runner | No                   | `false`                                        | `true`                | Development only: prints a one-line summary of each email (recipient, type and any code) to the log instead of sending it. Refused unless `NODE_ENV` is `development` or `test`, and can't be combined with Resend or SMTP. |
+| `EMAIL_CODE_IP_LIMIT` | Backend         | No                   | `false`                                        | `true`                | Also limits each IP address to 20 code requests an hour. Off by default because it can block users who share an IP, such as phones behind carrier NAT.                                                                      |
 
 ### Image storage (S3)
 
@@ -139,10 +156,10 @@ Set these in `apps/mobile/.env`.
 
 ### Development only
 
-| Variable                 | Used by      | Required | Default | Example                                                               | What it does                                                        |
-| ------------------------ | ------------ | -------- | ------- | --------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `SHADOW_DATABASE_URL`    | `db:migrate` | No       | None    | `postgresql://openbeacon:openbeacon@localhost:5432/openbeacon_shadow` | Shadow database Prisma uses when creating migrations.               |
-| `OPENBEACON_INTEGRATION` | Tests        | No       | Unset   | `1`                                                                   | Set to `1` to run integration tests against the database and cache. |
+| Variable                 | Used by      | Required | Default | Example                                                               | What it does                                                         |
+| ------------------------ | ------------ | -------- | ------- | --------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `SHADOW_DATABASE_URL`    | `db:migrate` | No       | None    | `postgresql://openbeacon:openbeacon@localhost:5432/openbeacon_shadow` | Shadow database Prisma uses when creating migrations.                |
+| `OPENBEACON_INTEGRATION` | Tests        | No       | Unset   | `1`                                                                   | Set to `1` to run integration tests. They need PostgreSQL and Redis. |
 
 ## Scheduled job runner
 
@@ -195,7 +212,7 @@ bun run emulators
 
 The command installs dependencies, starts PostgreSQL and Redis, applies database migrations, starts the backend, builds the Android development APK, and launches Metro and four emulators. On first run it creates `.env` if needed and tells you which required storage settings to fill in. Configure `S3_ACCESS_KEY_ID`, `S3_ACCESS_KEY`, `S3_BUCKET_NAME`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, and `R2_PM_TILES_KEY` there; real storage credentials and a PMTiles object are needed for storage and map features. Map data is published with the map tiles CLI; see `apps/map-tiles/README.md`. Configure native Google sign-in values in `apps/mobile/.env` if needed. Existing `.env` files are preserved.
 
-The first available AVD is used by default. Each emulator is allocated 6 GiB RAM (24 GiB across four devices); the host also needs memory for the operating system and build tools. To change the allocation, select an AVD, or use an already running backend instead of starting the local one:
+The first available AVD is used by default. Each emulator is allocated 6 GiB RAM (24 GiB across four devices); the host also needs memory for the operating system and build tools. Before building, the script checks that the available RAM covers every emulator plus 2 GiB and stops if it doesn't; pass `--skip-memory-check` to start anyway. To change the allocation, select an AVD, or use an already running backend instead of starting the local one:
 
 ```sh
 bun run emulators --avd Medium_Phone

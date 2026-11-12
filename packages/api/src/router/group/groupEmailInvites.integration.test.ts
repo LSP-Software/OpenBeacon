@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
@@ -10,30 +9,31 @@ import {
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
-
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
+import { groupMembershipRouter } from "./groupMembershipRouter.ts";
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
+import { removeGroupMemberWithOwnerGuard } from "./assertGroupMemberCanBeRemoved.ts";
 
 const router = createTRPCRouter({
   groupInvites: groupInvitesRouter,
   groupLifecycle: groupLifecycleRouter,
+  groupMembership: groupMembershipRouter,
 });
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+const cache = createIntegrationTestCache(() => 0);
 const prefix = `email-invite-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const users = [0, 1, 2, 3].map((i) => `${prefix}-${i}`);
 const keys = users.map(() => createDeviceKeyPair());
 const email = (userId: string) => `${userId}@example.test`;
 const caller = (userId: string) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    session: { user: { id: userId }, session: { id: `${userId}-session` } },
-  } as Parameters<typeof router.createCaller>[0]);
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId: `${userId}-device`,
+      session: { user: { id: userId }, session: { id: `${userId}-session` } },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
   createdByDeviceId: result.epoch.createdByDeviceId,
   epochId: result.epoch.epochId,
@@ -62,6 +62,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             userId,
             publicKey: keys[i]!.publicKey,
             publicKeyAlgorithm: keys[i]!.algorithm,
+            name: "Phone",
+            icon: "phone",
+            activatedAt: new Date(),
           },
         });
       }
@@ -90,8 +93,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     });
 
     afterAll(async () => {
-      await prisma.group.deleteMany({ where: { id: groupId } });
-      await prisma.user.deleteMany({ where: { id: { in: users } } });
+      await prisma.group.deleteMany({ where: { id: { startsWith: prefix } } });
+      await prisma.user.deleteMany({ where: { id: { startsWith: prefix } } });
       await prisma.$disconnect();
     });
 
@@ -250,5 +253,179 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await prisma.groupEpoch.count({ where: { groupId } })).toBe(accepted ? 4 : 3);
       expect(await outsider.groupInvites.list()).toHaveLength(0);
     }, 30_000);
+
+    test("expires invites after 30 days and drops them when the inviter leaves", async () => {
+      const otherGroupId = `${prefix}-expiry-group`;
+      await prisma.group.create({
+        data: {
+          id: otherGroupId,
+          name: "Expiry",
+          groupMembers: {
+            create: [
+              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: users[1]!, role: "ADMIN", joinedEpochNumber: 1 },
+            ],
+          },
+        },
+      });
+      const invitesFor = async (userId: string) =>
+        (await caller(userId).groupInvites.list()).filter(
+          (invite) => invite.group.id === otherGroupId,
+        );
+      const stale = await prisma.groupMemberInvite.create({
+        data: {
+          inviterId: users[0]!,
+          recipientId: users[2]!,
+          groupId: otherGroupId,
+          role: "MEMBER",
+          createdAt: new Date(Date.now() - 30 * 24 * 60 * 60_000 - 60_000),
+        },
+      });
+      expect(await invitesFor(users[2]!)).toHaveLength(0);
+      await expect(
+        caller(users[2]!).groupInvites.acceptanceContext({ inviteId: stale.id }),
+      ).rejects.toThrow("Invite not found");
+      await caller(users[0]!).groupInvites.send({
+        groupId: otherGroupId,
+        invites: [{ email: email(users[2]!), role: "MEMBER" }],
+      });
+      const [renewed] = await invitesFor(users[2]!);
+      expect(renewed?.id).not.toBe(stale.id);
+
+      await caller(users[1]!).groupInvites.send({
+        groupId: otherGroupId,
+        invites: [{ email: email(users[3]!), role: "MEMBER" }],
+      });
+      expect(await invitesFor(users[3]!)).toHaveLength(1);
+      const admin = await prisma.groupMember.findUniqueOrThrow({
+        where: { userId_groupId: { userId: users[1]!, groupId: otherGroupId } },
+      });
+      await removeGroupMemberWithOwnerGuard({
+        db: prisma,
+        groupId: otherGroupId,
+        memberId: admin.id,
+      });
+      expect(await invitesFor(users[3]!)).toHaveLength(0);
+      expect((await invitesFor(users[2]!)).map(({ id }) => id)).toEqual([renewed!.id]);
+    });
+
+    test("re-sending an invite refreshes it for the latest sender and role", async () => {
+      const refreshGroupId = `${prefix}-refresh-group`;
+      await prisma.group.create({
+        data: {
+          id: refreshGroupId,
+          name: "Refresh",
+          groupMembers: {
+            create: [
+              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: users[1]!, role: "ADMIN", joinedEpochNumber: 1 },
+            ],
+          },
+        },
+      });
+      const inviteFor = () =>
+        prisma.groupMemberInvite.findMany({
+          where: { groupId: refreshGroupId, recipientId: users[2]! },
+        });
+      await caller(users[0]!).groupInvites.send({
+        groupId: refreshGroupId,
+        invites: [{ email: email(users[2]!), role: "MEMBER" }],
+      });
+      const [original] = await inviteFor();
+      const nearlyExpired = new Date(Date.now() - 29 * 24 * 60 * 60_000);
+      await prisma.groupMemberInvite.update({
+        where: { id: original!.id },
+        data: { createdAt: nearlyExpired },
+      });
+
+      const sentAt = Date.now();
+      await caller(users[1]!).groupInvites.send({
+        groupId: refreshGroupId,
+        invites: [{ email: email(users[2]!), role: "MEMBER" }],
+      });
+      const [refreshed, ...others] = await inviteFor();
+      expect(others).toHaveLength(0);
+      expect(refreshed!.id).toBe(original!.id);
+      expect(refreshed!.inviterId).toBe(users[1]!);
+      expect(refreshed!.createdAt.getTime()).toBeGreaterThanOrEqual(sentAt - 1_000);
+
+      await caller(users[0]!).groupInvites.send({
+        groupId: refreshGroupId,
+        invites: [{ email: email(users[2]!), role: "ADMIN" }],
+      });
+      const [promoted, ...duplicates] = await inviteFor();
+      expect(duplicates).toHaveLength(0);
+      expect(promoted).toMatchObject({ id: original!.id, inviterId: users[0]!, role: "ADMIN" });
+    });
+
+    test("demoting an inviter drops the invites their new role could not send", async () => {
+      const demotionGroupId = `${prefix}-demotion-group`;
+      const recipients = [0, 1, 2, 3].map((i) => `${prefix}-recipient-${i}`);
+      await prisma.user.createMany({
+        data: recipients.map((id) => ({ id, name: id, email: email(id) })),
+      });
+      const group = await prisma.group.create({
+        data: {
+          id: demotionGroupId,
+          name: "Demotion",
+          groupMembers: {
+            create: [
+              { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: users[1]!, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: users[2]!, role: "ADMIN", joinedEpochNumber: 1 },
+            ],
+          },
+        },
+        include: { groupMembers: true },
+      });
+      const memberId = (userId: string) =>
+        group.groupMembers.find((member) => member.userId === userId)!.id;
+      const remaining = async () =>
+        (
+          await prisma.groupMemberInvite.findMany({
+            where: { groupId: demotionGroupId },
+            select: { recipientId: true },
+          })
+        )
+          .map(({ recipientId }) => recipientId)
+          .sort();
+      await caller(users[1]!).groupInvites.send({
+        groupId: demotionGroupId,
+        invites: [
+          { email: email(recipients[0]!), role: "ADMIN" },
+          { email: email(recipients[1]!), role: "MEMBER" },
+        ],
+      });
+      await caller(users[2]!).groupInvites.send({
+        groupId: demotionGroupId,
+        invites: [{ email: email(recipients[2]!), role: "MEMBER" }],
+      });
+      await caller(users[0]!).groupInvites.send({
+        groupId: demotionGroupId,
+        invites: [{ email: email(recipients[3]!), role: "ADMIN" }],
+      });
+      expect(await remaining()).toEqual(recipients);
+
+      await caller(users[0]!).groupMembership.updateRole({
+        groupId: demotionGroupId,
+        memberId: memberId(users[1]!),
+        role: "ADMIN",
+      });
+      expect(await remaining()).toEqual([recipients[1]!, recipients[2]!, recipients[3]!]);
+
+      await caller(users[0]!).groupMembership.updateRole({
+        groupId: demotionGroupId,
+        memberId: memberId(users[2]!),
+        role: "MEMBER",
+      });
+      expect(await remaining()).toEqual([recipients[1]!, recipients[3]!]);
+
+      await caller(users[0]!).groupMembership.updateRole({
+        groupId: demotionGroupId,
+        memberId: memberId(users[1]!),
+        role: "MEMBER",
+      });
+      expect(await remaining()).toEqual([recipients[3]!]);
+    });
   },
 );

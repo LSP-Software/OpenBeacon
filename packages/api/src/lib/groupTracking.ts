@@ -57,17 +57,23 @@ type GroupTrackingDb = {
     >;
   };
   groupEpoch: {
+    count: (args: { where: { id: { in: string[] } } }) => Promise<number>;
     findMany: (args: {
       select: { id: true };
       where: { groupId: string; id: { in: string[] }; createdAt?: { gte: Date } };
     }) => Promise<Array<{ id: string }>>;
   };
   userDevice: {
+    updateMany: (args: {
+      data: { lastLocationAt: Date };
+      where: { id: { in: string[] }; userId: string };
+    }) => Promise<{ count: number }>;
     findMany: (args: {
       select: { id: true; userId: true };
       where: {
         id: { in: string[] };
         revokedAt: null;
+        activatedAt: { not: null };
         userId: string;
       };
     }) => Promise<Array<{ id: string; userId: string }>>;
@@ -120,6 +126,7 @@ export const uploadGroupTrackingBatch = async ({
       where: {
         id: { in: senderDeviceIds },
         revokedAt: null,
+        activatedAt: { not: null },
         userId,
       },
     }),
@@ -151,7 +158,12 @@ export const uploadGroupTrackingBatch = async ({
     });
   }
 
-  if (epochs.length !== epochIds.length) {
+  const foundEpochIds = new Set(epochs.map((epoch) => epoch.id));
+  const missingEpochIds = epochIds.filter((epochId) => !foundEpochIds.has(epochId));
+  if (
+    missingEpochIds.length > 0 &&
+    (await db.groupEpoch.count({ where: { id: { in: missingEpochIds } } })) > 0
+  ) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Epoch does not belong to this group.",
@@ -159,7 +171,9 @@ export const uploadGroupTrackingBatch = async ({
   }
 
   const existingClientPointIds = new Set(existingRows.map((row) => row.clientPointId));
-  const pointsToInsert = points.filter((point) => !existingClientPointIds.has(point.clientPointId));
+  const pointsToInsert = points.filter(
+    (point) => foundEpochIds.has(point.epochId) && !existingClientPointIds.has(point.clientPointId),
+  );
 
   if (pointsToInsert.length > 0) {
     await db.groupEncryptedPayload.createMany({
@@ -176,12 +190,22 @@ export const uploadGroupTrackingBatch = async ({
       })),
       skipDuplicates: true,
     });
+    await db.userDevice.updateMany({
+      data: { lastLocationAt: new Date() },
+      where: {
+        id: { in: [...new Set(pointsToInsert.map((point) => point.senderDeviceId))] },
+        userId,
+      },
+    });
   }
 
   return {
     accepted: pointsToInsert.map((point) => point.clientPointId),
     duplicates: points
       .filter((point) => existingClientPointIds.has(point.clientPointId))
+      .map((point) => point.clientPointId),
+    expired: points
+      .filter((point) => !foundEpochIds.has(point.epochId))
       .map((point) => point.clientPointId),
   };
 };
@@ -240,20 +264,33 @@ export const getLatestGroupTrackingPoints = async ({
   groupId: string;
 }) => {
   const points = await db.$queryRaw<GroupEncryptedPayloadRow[]>(Prisma.sql`
-    SELECT DISTINCT ON ("senderUserId")
-      "id",
-      "epochId",
-      "senderDeviceId",
-      "senderUserId",
-      "kind",
-      "algorithm",
-      "nonce",
-      "ciphertext",
-      "clientPointId",
-      "createdAt"
-    FROM "GroupEncryptedPayload"
-    WHERE "groupId" = ${groupId}
-    ORDER BY "senderUserId" ASC, "createdAt" DESC, "id" DESC
+    SELECT
+      "latest"."id",
+      "latest"."epochId",
+      "latest"."senderDeviceId",
+      "latest"."senderUserId",
+      "latest"."kind",
+      "latest"."algorithm",
+      "latest"."nonce",
+      "latest"."ciphertext",
+      "latest"."clientPointId",
+      "latest"."createdAt"
+    FROM "GroupMember" AS "member"
+    JOIN "UserDevice" AS "device"
+      ON "device"."userId" = "member"."userId"
+      AND "device"."revokedAt" IS NULL
+      AND "device"."activatedAt" IS NOT NULL
+    CROSS JOIN LATERAL (
+      SELECT *
+      FROM "GroupEncryptedPayload" AS "point"
+      WHERE "point"."groupId" = "member"."groupId"
+        AND "point"."senderDeviceId" = "device"."id"
+        AND "point"."senderUserId" = "member"."userId"
+      ORDER BY "point"."createdAt" DESC, "point"."id" DESC
+      LIMIT 1
+    ) AS "latest"
+    WHERE "member"."groupId" = ${groupId}
+    ORDER BY "latest"."senderUserId" ASC, "latest"."senderDeviceId" ASC
   `);
 
   return { points };

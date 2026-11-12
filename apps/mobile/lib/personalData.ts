@@ -2,18 +2,21 @@ import {
   getPersonalDataHistoryKeyVersion,
   openPersonalData,
   type PersonalDataPurpose,
-  sealPersonalData,
   sealPersonalDataForHistoryKey,
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
-import { getOrCreateDeviceKeyContext, getStoredDeviceKeyContext } from "./deviceKeys.ts";
+import { getStoredDeviceKeyContext } from "./deviceKeys.ts";
 import { createHistoryKeyReader } from "./epochKeys.ts";
 
 export const PERSONAL_DATA_LOCKED_MESSAGE =
   "Restore your recovery phrase on this phone to change nicknames and colors.";
 export const PERSONAL_DATA_KEY_MISMATCH_MESSAGE =
   "The server's history key doesn't match this phone, so nothing was saved.";
+export const PERSONAL_DATA_ON_OTHER_DEVICE_MESSAGE =
+  "This phone doesn't have your account's history key yet. Set up your recovery phrase on your other phone, then restore it here to change nicknames and colors.";
+export const PERSONAL_DATA_NO_HISTORY_KEY_MESSAGE =
+  "Your account's history key isn't set up yet, so nothing was saved. Try again in a minute.";
 
 export const sealForSelf = async ({
   userId,
@@ -27,8 +30,6 @@ export const sealForSelf = async ({
   plaintext: string;
 }) => {
   const current = await getCurrentHistoryKeyState(userId);
-  if (current.status === "missing") throw new Error(PERSONAL_DATA_LOCKED_MESSAGE);
-  if (current.status === "mismatch") throw new Error(PERSONAL_DATA_KEY_MISMATCH_MESSAGE);
   if (current.status === "held") {
     return sealPersonalDataForHistoryKey({
       historyKey: current.historyKey,
@@ -37,8 +38,14 @@ export const sealForSelf = async ({
       plaintext,
     });
   }
-  const device = await getOrCreateDeviceKeyContext(userId);
-  return sealPersonalData({ privateKey: device.privateKey, purpose, binding, plaintext });
+  throw new Error(
+    {
+      missing: PERSONAL_DATA_LOCKED_MESSAGE,
+      mismatch: PERSONAL_DATA_KEY_MISMATCH_MESSAGE,
+      none: PERSONAL_DATA_NO_HISTORY_KEY_MESSAGE,
+      onOtherDevice: PERSONAL_DATA_ON_OTHER_DEVICE_MESSAGE,
+    }[current.status],
+  );
 };
 
 export const createPersonalDataOpener = (userId: string) => {

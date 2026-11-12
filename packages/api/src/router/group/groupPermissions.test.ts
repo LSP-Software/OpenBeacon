@@ -40,7 +40,7 @@ const createCaller = (
         { id: "target-user", email: "target@example.test", receivedGroupMemberInvites: [] },
       ]),
     },
-    groupMemberInvite: { createMany },
+    groupMemberInvite: { createMany, deleteMany: async () => ({ count: 0 }) },
   };
   return {
     createMany,
@@ -51,6 +51,8 @@ const createCaller = (
         ...db,
         $transaction: async (callback: (tx: typeof db) => Promise<unknown>) => callback(db),
       },
+      deviceId: "actor-device",
+      deviceActive: true,
       session: { user: { id: actor.userId } },
     } as unknown as Parameters<typeof router.createCaller>[0]),
   };

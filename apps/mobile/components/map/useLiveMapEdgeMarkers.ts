@@ -18,7 +18,7 @@ export const useLiveMapEdgeMarkers = ({
   markers: readonly {
     latitude: number;
     longitude: number;
-    memberUserIds: readonly string[];
+    memberDeviceIds: readonly string[];
     userId: string;
   }[];
   mapRevision: number;
@@ -47,7 +47,7 @@ export const useLiveMapEdgeMarkers = ({
   const edgeInFlightRef = useRef(false);
   const edgeDirtyRef = useRef(false);
   const edgeControlsRef = useRef<LayoutRectangle | null>(null);
-  const edgeSuppressedUserIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const edgeSuppressedDeviceIdsRef = useRef<ReadonlySet<string>>(new Set());
   const edgeSuppressionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [edgeMarkers, setEdgeMarkers] = useState<Array<MapEdgeCandidate & { memberIds: string[] }>>(
     [],
@@ -57,8 +57,8 @@ export const useLiveMapEdgeMarkers = ({
   const markersRef = useRef(markers);
   markersRef.current = markers;
 
-  const isSuppressed = (memberUserIds: readonly string[]) =>
-    memberUserIds.some((userId) => edgeSuppressedUserIdsRef.current.has(userId));
+  const isSuppressed = (memberDeviceIds: readonly string[]) =>
+    memberDeviceIds.some((deviceId) => edgeSuppressedDeviceIdsRef.current.has(deviceId));
 
   const edgeViewportHeight = () =>
     Math.max(
@@ -127,7 +127,7 @@ export const useLiveMapEdgeMarkers = ({
         });
         if (!point) continue;
         const edge = edgePointBelowStatusBar(point, width);
-        if (edge && !isSuppressed(marker.memberUserIds)) {
+        if (edge && !isSuppressed(marker.memberDeviceIds)) {
           next.push({ userId: marker.userId, ...edge });
         } else {
           occupied.push({ x: point[0], y: point[1] });
@@ -156,7 +156,12 @@ export const useLiveMapEdgeMarkers = ({
             markersRef.current.map(async (marker) => {
               const point = await map.project([marker.longitude, marker.latitude]);
               const edge = edgePointBelowStatusBar(point, width);
-              return { memberUserIds: marker.memberUserIds, userId: marker.userId, point, edge };
+              return {
+                memberDeviceIds: marker.memberDeviceIds,
+                userId: marker.userId,
+                point,
+                edge,
+              };
             }),
           ),
         );
@@ -173,7 +178,7 @@ export const useLiveMapEdgeMarkers = ({
           const next: MapEdgeCandidate[] = [];
           const occupied: Array<{ x: number; y: number }> = [];
           for (const marker of result.data) {
-            if (marker.edge && !isSuppressed(marker.memberUserIds)) {
+            if (marker.edge && !isSuppressed(marker.memberDeviceIds)) {
               next.push({ userId: marker.userId, ...marker.edge });
             } else {
               occupied.push({ x: marker.point[0], y: marker.point[1] });
@@ -186,12 +191,12 @@ export const useLiveMapEdgeMarkers = ({
     }, 16);
   };
 
-  const suppress = (userIds: readonly string[]) => {
-    edgeSuppressedUserIdsRef.current = new Set(userIds);
+  const suppress = (deviceIds: readonly string[]) => {
+    edgeSuppressedDeviceIdsRef.current = new Set(deviceIds);
     edgeSelectionRevisionRef.current += 1;
     if (edgeSuppressionTimerRef.current !== null) clearTimeout(edgeSuppressionTimerRef.current);
     const suppressedSubjectIds = markersRef.current
-      .filter((marker) => isSuppressed(marker.memberUserIds))
+      .filter((marker) => isSuppressed(marker.memberDeviceIds))
       .map((marker) => marker.userId);
     setEdgeMarkers((current) =>
       current.filter((edge) => !edge.memberIds.some((id) => suppressedSubjectIds.includes(id))),
@@ -199,8 +204,8 @@ export const useLiveMapEdgeMarkers = ({
   };
 
   const release = () => {
-    if (edgeSuppressedUserIdsRef.current.size === 0) return;
-    edgeSuppressedUserIdsRef.current = new Set();
+    if (edgeSuppressedDeviceIdsRef.current.size === 0) return;
+    edgeSuppressedDeviceIdsRef.current = new Set();
     edgeSelectionRevisionRef.current += 1;
     if (edgeSuppressionTimerRef.current !== null) clearTimeout(edgeSuppressionTimerRef.current);
     edgeSuppressionTimerRef.current = null;

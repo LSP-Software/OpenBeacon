@@ -1,7 +1,8 @@
 import { Alert } from "../../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
@@ -13,6 +14,8 @@ import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { authClient } from "../../lib/auth-client.ts";
 import { changePasswordFormSchema } from "../../lib/changePasswordSchema.ts";
+import { ensureDeviceKeyRegistration } from "../../lib/deviceKeys.ts";
+import { isSessionLinkRefused, signOutAfterRefusedSessionLink } from "../../lib/sessionLink.ts";
 
 const PasswordScreen = () => {
   const [saving, setSaving] = useState(false);
@@ -41,12 +44,18 @@ const PasswordScreen = () => {
       newPassword,
       revokeOtherSessions: true,
     });
-    setSaving(false);
     if (result.error) {
+      setSaving(false);
       Alert.alert("Unable to change password", result.error.message);
       return;
     }
     form.reset();
+    const linked = await tryCatch(ensureDeviceKeyRegistration({ linkSession: true }));
+    setSaving(false);
+    if (isSessionLinkRefused(linked.error)) {
+      await signOutAfterRefusedSessionLink();
+      return;
+    }
     Alert.alert(
       "Password changed",
       "Your other devices have been signed out. Use your new password next time you sign in.",
@@ -74,18 +83,21 @@ const PasswordScreen = () => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View className="gap-2">
-            <Text className="text-foreground text-3xl font-bold">Change password</Text>
-            <Text className="text-muted-foreground text-base leading-6">
-              Enter your current password, then choose a new one.
-            </Text>
-          </View>
+          {hasPassword && (
+            <View className="gap-2">
+              <Text className="text-foreground text-3xl font-bold">Change password</Text>
+              <Text className="text-muted-foreground text-base leading-6">
+                Enter your current password, then choose a new one.
+              </Text>
+            </View>
+          )}
 
           {accounts.isError && <Text>Unable to load your sign-in methods. Please try again.</Text>}
           {accounts.data && !hasPassword && (
             <Text>
-              Your account does not use a password. Sign in with the provider you used to create
-              your account.
+              Your account uses Google to sign in, so it doesn’t have a password. If you think
+              someone else is using your Google account, change your Google password, then sign out
+              of all other sessions.
             </Text>
           )}
           {hasPassword && (
@@ -127,6 +139,18 @@ const PasswordScreen = () => {
               </Button>
             </View>
           )}
+          <View className="gap-4">
+            {hasPassword && (
+              <Text className="text-muted-foreground text-base leading-6">
+                Lost a phone or tablet? Sign out everywhere else without changing your password.
+              </Text>
+            )}
+            <Link href="/account/sign-out-others" replace asChild>
+              <Button variant="outline">
+                <Text>Sign out of all other sessions</Text>
+              </Button>
+            </Link>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

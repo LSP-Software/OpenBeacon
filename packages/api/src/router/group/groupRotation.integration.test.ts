@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
@@ -14,29 +13,27 @@ import { deleteAccountRecords } from "../../lib/account-deletion.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
-
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 const prefix = `rotation-${crypto.randomUUID()}`;
 const userId = `${prefix}-user`;
 const deviceId = `${prefix}-device`;
 const groupId = `${prefix}-group`;
 const key = createDeviceKeyPair();
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+const cache = createIntegrationTestCache(() => 0);
 const router = createTRPCRouter({
   groupEpoch: groupEpochRouter,
   groupTracking: groupTrackingRouter,
 });
-const caller = router.createCaller({
-  cache,
-  db: prisma,
-  clientIp: "127.0.0.1",
-  session: { user: { id: userId } },
-} as Parameters<typeof router.createCaller>[0]);
+const caller = router.createCaller(
+  withDeviceActive({
+    cache,
+    db: prisma,
+    clientIp: "127.0.0.1",
+    deviceId,
+    session: { user: { id: userId } },
+  }) as Parameters<typeof router.createCaller>[0],
+);
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "group rotation with PostgreSQL",
@@ -46,7 +43,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: { id: userId, name: "User", email: `${userId}@example.test` },
       });
       await prisma.userDevice.create({
-        data: { id: deviceId, userId, publicKey: key.publicKey, publicKeyAlgorithm: "X25519" },
+        data: {
+          id: deviceId,
+          userId,
+          publicKey: key.publicKey,
+          publicKeyAlgorithm: "X25519",
+          name: "Phone",
+          icon: "phone",
+          activatedAt: new Date(),
+        },
       });
       await prisma.group.create({
         data: {
@@ -78,8 +83,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         cache,
         db: prisma,
         clientIp: "127.0.0.1",
+        deviceId: `${prefix}-outsider-device`,
+        deviceActive: true,
         session: { user: { id: `${prefix}-outsider` } },
-      } as Parameters<typeof router.createCaller>[0]);
+      } as unknown as Parameters<typeof router.createCaller>[0]);
       await expect(outsider.groupEpoch.rotationContext({ groupId })).rejects.toThrow(
         "not a member",
       );
@@ -167,6 +174,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           userId: departing,
           publicKey: departingKey.publicKey,
           publicKeyAlgorithm: "X25519",
+          name: "Phone",
+          icon: "phone",
+          activatedAt: new Date(),
         },
       });
       await prisma.group.create({

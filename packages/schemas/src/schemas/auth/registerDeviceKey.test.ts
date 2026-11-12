@@ -9,6 +9,7 @@ import {
 } from "@openbeacon/encryption";
 import {
   groupEpochBundleSchema,
+  historyKeyVersionSchema,
   registerDeviceKeySchema,
   wrappedEpochKeySchema,
 } from "./registerDeviceKey.ts";
@@ -221,5 +222,64 @@ describe("groupEpochBundleSchema", () => {
         recipientKeys: [recipientKey],
       }).success,
     ).toBe(false);
+  });
+
+  test("caps epoch numbers and history key versions at the database integer limit", () => {
+    expect(historyKeyVersionSchema.safeParse(2_147_483_647).success).toBe(true);
+    expect(historyKeyVersionSchema.safeParse(2_147_483_648).success).toBe(false);
+    const bundle = {
+      createdByDeviceId: "device-a",
+      epochId: "epoch-1",
+      historyKeys: [],
+      recipientKeys: [
+        {
+          algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+          createdAt: new Date(),
+          ephemeralPublicKey: createDeviceKeyPair().publicKey,
+          epochId: "epoch-1",
+          recipientDeviceId: "device-a",
+          senderPublicKey: createDeviceKeyPair().publicKey,
+          wrappedKey: encodeBase64(new Uint8Array(48)),
+        },
+      ],
+    };
+    expect(
+      groupEpochBundleSchema.safeParse({ ...bundle, epochNumber: 2_147_483_647 }).success,
+    ).toBe(true);
+    expect(
+      groupEpochBundleSchema.safeParse({ ...bundle, epochNumber: 2_147_483_648 }).success,
+    ).toBe(false);
+  });
+
+  test("limits how many keys one bundle can carry", () => {
+    const recipientKey = {
+      algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+      createdAt: new Date(),
+      ephemeralPublicKey: createDeviceKeyPair().publicKey,
+      epochId: "epoch-1",
+      recipientDeviceId: "device-a",
+      senderPublicKey: createDeviceKeyPair().publicKey,
+      wrappedKey: encodeBase64(new Uint8Array(48)),
+    };
+    const historyKey = {
+      algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+      ephemeralPublicKey: recipientKey.ephemeralPublicKey,
+      epochId: "epoch-1",
+      historyKeyVersion: 1,
+      senderPublicKey: recipientKey.senderPublicKey,
+      userId: "user-a",
+      wrappedKey: recipientKey.wrappedKey,
+    };
+    const bundleWith = (recipients: number, histories: number) =>
+      groupEpochBundleSchema.safeParse({
+        createdByDeviceId: "device-a",
+        epochId: "epoch-1",
+        epochNumber: 1,
+        historyKeys: Array.from({ length: histories }, () => historyKey),
+        recipientKeys: Array.from({ length: recipients }, () => recipientKey),
+      }).success;
+    expect(bundleWith(5000, 1000)).toBe(true);
+    expect(bundleWith(5001, 1)).toBe(false);
+    expect(bundleWith(1, 1001)).toBe(false);
   });
 });

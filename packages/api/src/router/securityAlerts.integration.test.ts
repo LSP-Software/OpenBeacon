@@ -1,7 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { auth, createSecurityAlerts } from "@openbeacon/auth";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { type Prisma, prisma } from "@openbeacon/database";
 import type { SecurityAlert } from "@openbeacon/email";
 import {
@@ -15,16 +14,11 @@ import {
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
 import { upsertUserDevice } from "../lib/groupEpochs.ts";
 import { appRouter } from "../root.ts";
-
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
+import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
 
 const prefix = `alerts-${crypto.randomUUID()}`;
 const password = "testing-password-123";
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+const cache = createIntegrationTestCache(() => 0);
 const sent: {
   to: string;
   userId: string;
@@ -75,15 +69,33 @@ const createAccount = async () => {
   const email = `${prefix}-${accountCounter}@example.test`;
   const { user } = await auth.api.signUpEmail({ body: { email, password, name: "Alert Test" } });
   const session = await prisma.session.findFirstOrThrow({ where: { userId: user.id } });
-  const caller = appRouter.createCaller({
-    cache,
-    db: prisma,
-    emailCodes: null,
-    securityAlerts,
-    clientIp: `ip-${user.id}`,
-    session: { user: { id: user.id }, session: { id: session.id, createdAt: new Date() } },
-  } as Parameters<typeof appRouter.createCaller>[0]);
-  return { caller, email, userId: user.id };
+  const callerWith = (deviceId: string | null) =>
+    appRouter.createCaller(
+      withDeviceActive({
+        cache,
+        db: prisma,
+        emailCodes: null,
+        securityAlerts,
+        clientIp: `ip-${user.id}`,
+        deviceId,
+        session: { user: { id: user.id }, session: { id: session.id, createdAt: new Date() } },
+      }) as Parameters<typeof appRouter.createCaller>[0],
+    );
+  const activeCaller = async () => {
+    const device = await prisma.userDevice.create({
+      data: {
+        activatedAt: new Date(),
+        icon: "phone",
+        id: `${user.id}-${crypto.randomUUID()}`,
+        name: "Phone",
+        publicKey: createDeviceKeyPair().publicKey,
+        publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
+        userId: user.id,
+      },
+    });
+    return callerWith(device.id);
+  };
+  return { activeCaller, caller: callerWith(null), email, userId: user.id };
 };
 
 const registerDevice = (
@@ -119,10 +131,27 @@ const recoveryKeyInput = (phrase: ReturnType<typeof generateRecoveryPhrase>) => 
   return { algorithm, derivationVersion, publicKey };
 };
 
-const setUpRecovery = async ({ caller, userId }: Awaited<ReturnType<typeof createAccount>>) => {
+const setUpRecovery = async ({
+  activeCaller,
+  userId,
+}: Awaited<ReturnType<typeof createAccount>>) => {
   const phrase = generateRecoveryPhrase();
   const historyKey = historyKeyInput(phrase, userId);
-  await caller.accountRecovery.setup({ historyKey, recoveryKey: recoveryKeyInput(phrase) });
+  await prisma.accountHistoryKey.create({
+    data: {
+      algorithm: historyKey.algorithm,
+      id: historyKey.id,
+      publicKey: historyKey.publicKey,
+      userId,
+      version: historyKey.version,
+    },
+  });
+  await (
+    await activeCaller()
+  ).accountRecovery.setup({
+    escrows: [{ ...historyKey.escrow, version: historyKey.version }],
+    recoveryKey: recoveryKeyInput(phrase),
+  });
   return historyKey;
 };
 
@@ -131,7 +160,7 @@ const changePhrase = async (account: Awaited<ReturnType<typeof createAccount>>) 
   await sentAlerts();
   sent.length = 0;
   const phrase = generateRecoveryPhrase();
-  return account.caller.accountRecovery.changePhrase({
+  return (await account.activeCaller()).accountRecovery.changePhrase({
     escrows: [{ ...historyKeyInput(phrase, account.userId).escrow, version: historyKey.version }],
     recoveryKey: recoveryKeyInput(phrase),
   });
@@ -140,7 +169,7 @@ const changePhrase = async (account: Awaited<ReturnType<typeof createAccount>>) 
 const turnOffOptionalAlerts = (userId: string) =>
   prisma.user.update({
     where: { id: userId },
-    data: { alertNewDevice: false, alertDeletionScheduled: false },
+    data: { alertNewSignIn: false, alertDeletionScheduled: false },
   });
 
 beforeEach(async () => {
@@ -184,7 +213,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     sent.length = 0;
     const phrase = generateRecoveryPhrase();
 
-    await account.caller.accountRecovery.reset({
+    await (
+      await account.activeCaller()
+    ).accountRecovery.reset({
       confirmReset: true,
       historyKey: { ...historyKeyInput(phrase, account.userId), version: 2 },
       recoveryKey: recoveryKeyInput(phrase),
@@ -200,22 +231,22 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     const phrase = generateRecoveryPhrase();
 
     await expect(
-      account.caller.accountRecovery.changePhrase({
+      (await account.activeCaller()).accountRecovery.changePhrase({
         escrows: [{ ...historyKeyInput(phrase, account.userId).escrow, version: 1 }],
         recoveryKey: recoveryKeyInput(phrase),
       }),
     ).rejects.toThrow("No recovery phrase is set up.");
     await expect(
-      account.caller.accountRecovery.reset({
+      (await account.activeCaller()).accountRecovery.reset({
         confirmReset: true,
         historyKey: { ...historyKeyInput(phrase, account.userId), version: 2 },
         recoveryKey: recoveryKeyInput(phrase),
       }),
-    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    ).rejects.toMatchObject({ code: "CONFLICT" });
     expect(await sentAlerts()).toEqual([]);
   });
 
-  test("the first device sends no alert and each later new device sends one", async () => {
+  test("the first device sends no alert and each later Pending device sends one", async () => {
     const account = await createAccount();
 
     await registerDevice(account, { platform: "android", model: "Pixel 8" });
@@ -223,7 +254,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
     await registerDevice(account, { platform: "ios", model: "iPhone 15" });
     expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
-      { type: "new-device", device: { model: "iPhone 15", platform: "ios" } },
+      { type: "new-sign-in", device: { model: "iPhone 15", platform: "ios" } },
     ]);
   });
 
@@ -285,7 +316,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
     expect(await prisma.userDevice.count({ where: { userId: account.userId } })).toBe(2);
     expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
-      { type: "new-device", device: { model: null, platform: "ios" } },
+      { type: "new-sign-in", device: { model: null, platform: "ios" } },
     ]);
   });
 
@@ -310,8 +341,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
   test("new device alerts can be turned off", async () => {
     const account = await createAccount();
     await registerDevice(account);
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: false,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
     await sentAlerts();
@@ -335,15 +368,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
       platform: "android",
     });
     expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
-      { type: "new-device", device: { model: null, platform: "android" } },
+      { type: "new-sign-in", device: { model: null, platform: "android" } },
     ]);
   });
 
   test("scheduling deletion sends one alert with the deletion date", async () => {
     const account = await createAccount();
-    await account.caller.emailAlerts.setTimezone({ timezone: "Europe/London" });
+    await (await account.activeCaller()).emailAlerts.setTimezone({ timezone: "Europe/London" });
 
-    const { deletionDate } = await account.caller.account.requestDeletion({ password });
+    const { deletionDate } = await (
+      await account.activeCaller()
+    ).account.requestDeletion({ password });
 
     expect(await sentAlerts()).toEqual([
       {
@@ -358,14 +393,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
   test("deletion alerts can be turned off", async () => {
     const account = await createAccount();
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: true,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: true,
       alertDeletionScheduled: false,
     });
     await sentAlerts();
     sent.length = 0;
 
-    await account.caller.account.requestDeletion({ password });
+    await (await account.activeCaller()).account.requestDeletion({ password });
 
     expect(await sentAlerts()).toEqual([]);
   });
@@ -374,8 +411,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     const account = await createAccount();
     const turnedOffAt = now();
 
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: true,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: true,
       alertDeletionScheduled: false,
     });
 
@@ -395,13 +434,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
   test("turning both alerts off at once sends one alert naming both", async () => {
     const account = await createAccount();
 
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: false,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: false,
       alertDeletionScheduled: false,
     });
 
     expect((await waitSeconds(60)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device", "deletion-scheduled"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in", "deletion-scheduled"] },
     ]);
   });
 
@@ -409,20 +450,24 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     const account = await createAccount();
     const firstAt = now();
 
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: false,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
     await waitSeconds(30);
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: false,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: false,
       alertDeletionScheduled: false,
     });
 
     expect(await waitSeconds(30)).toHaveLength(1);
     expect(await waitSeconds(60)).toHaveLength(1);
     expect(sent.map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device", "deletion-scheduled"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in", "deletion-scheduled"] },
     ]);
     expect(Math.abs((sentAt[0]?.getTime() ?? 0) - firstAt.getTime())).toBeLessThan(1000);
   });
@@ -430,43 +475,53 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
   test("turning an alert back on within the minute still sends the alert", async () => {
     const account = await createAccount();
 
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: false,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
     await waitSeconds(10);
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: true,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: true,
       alertDeletionScheduled: true,
     });
 
     expect((await waitSeconds(50)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in"] },
     ]);
   });
 
   test("an alert turned off after the batch was sent starts a new batch", async () => {
     const account = await createAccount();
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: false,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
     await waitSeconds(60);
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: false,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: false,
       alertDeletionScheduled: false,
     });
 
     expect((await waitSeconds(60)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in"] },
       { type: "alerts-turned-off", alerts: ["deletion-scheduled"] },
     ]);
   });
 
   test("a restarted server sends the alerts another server was holding", async () => {
     const account = await createAccount();
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: false,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: false,
       alertDeletionScheduled: false,
     });
     await sentAlerts();
@@ -477,14 +532,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
     expect(await waitSeconds(29)).toEqual([]);
     expect((await waitSeconds(1)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device", "deletion-scheduled"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in", "deletion-scheduled"] },
     ]);
   });
 
   test("a server that starts after the minute is up sends the held alert straight away", async () => {
     const account = await createAccount();
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: false,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
     await sentAlerts();
@@ -494,14 +551,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     createAlerts().schedulePendingAlertsTurnedOff();
 
     expect((await waitSeconds(0)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in"] },
     ]);
   });
 
   test("two servers holding the same alerts send it once", async () => {
     const account = await createAccount();
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: false,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: false,
       alertDeletionScheduled: false,
     });
     await sentAlerts();
@@ -515,40 +574,56 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     sendFailure = new Error("SMTP is down");
 
     expect(
-      await account.caller.emailAlerts.updateSettings({
-        alertNewDevice: false,
+      await (
+        await account.activeCaller()
+      ).emailAlerts.updateSettings({
+        alertNewSignIn: false,
         alertDeletionScheduled: false,
       }),
-    ).toEqual({ alertNewDevice: false, alertDeletionScheduled: false });
+    ).toEqual({ alertNewSignIn: false, alertDeletionScheduled: false });
     expect(await waitSeconds(60)).toEqual([]);
   });
 
   test("the alert is sent straight away when it can't be held", async () => {
     const account = await createAccount();
-    const caller = appRouter.createCaller({
-      cache,
-      db: prisma,
-      emailCodes: null,
-      securityAlerts: createAlerts({
-        ...cache.alertsTurnedOff,
-        add: async () => {
-          throw new Error("Redis is down");
-        },
-      }),
-      clientIp: `ip-${account.userId}`,
-      session: {
-        user: { id: account.userId },
-        session: { id: "held", createdAt: new Date() },
+    const device = await prisma.userDevice.create({
+      data: {
+        activatedAt: new Date(),
+        icon: "phone",
+        id: `${account.userId}-held`,
+        name: "Phone",
+        publicKey: createDeviceKeyPair().publicKey,
+        publicKeyAlgorithm: DEVICE_KEY_ALGORITHM,
+        userId: account.userId,
       },
-    } as Parameters<typeof appRouter.createCaller>[0]);
+    });
+    const caller = appRouter.createCaller(
+      withDeviceActive({
+        cache,
+        db: prisma,
+        emailCodes: null,
+        securityAlerts: createAlerts({
+          ...cache.alertsTurnedOff,
+          add: async () => {
+            throw new Error("Redis is down");
+          },
+        }),
+        clientIp: `ip-${account.userId}`,
+        deviceId: device.id,
+        session: {
+          user: { id: account.userId },
+          session: { id: "held", createdAt: new Date() },
+        },
+      }) as Parameters<typeof appRouter.createCaller>[0],
+    );
 
     await caller.emailAlerts.updateSettings({
-      alertNewDevice: false,
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
 
     expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-device"] },
+      { type: "alerts-turned-off", alerts: ["new-sign-in"] },
     ]);
   });
 
@@ -556,16 +631,22 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     const account = await createAccount();
     await turnOffOptionalAlerts(account.userId);
 
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: true,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: true,
       alertDeletionScheduled: false,
     });
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: true,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: true,
       alertDeletionScheduled: false,
     });
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: true,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: true,
       alertDeletionScheduled: true,
     });
 
@@ -576,7 +657,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     const account = await createAccount();
     await turnOffOptionalAlerts(account.userId);
 
-    await account.caller.account.requestDeletion({ password, immediate: true });
+    await (await account.activeCaller()).account.requestDeletion({ password, immediate: true });
 
     expect(await prisma.user.findUnique({ where: { id: account.userId } })).toBeNull();
     expect(await sentAlerts()).toEqual([
@@ -592,7 +673,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
   test("a scheduled deletion sends the account deleted alert only when it runs", async () => {
     const account = await createAccount();
-    await account.caller.account.requestDeletion({ password });
+    await (await account.activeCaller()).account.requestDeletion({ password });
     expect((await sentAlerts()).map(({ alert }) => alert.type)).toEqual(["deletion-scheduled"]);
     sent.length = 0;
     await prisma.$executeRaw`UPDATE "User" SET "deletionDate" = (clock_timestamp() AT TIME ZONE 'UTC') - interval '1 second' WHERE id = ${account.userId}`;
@@ -635,11 +716,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     sendGate = promise;
 
     await registerDevice(account, { platform: "ios" });
-    await account.caller.account.requestDeletion({ password });
+    await (await account.activeCaller()).account.requestDeletion({ password });
     resolve();
 
     expect((await sentAlerts()).map(({ alert }) => alert.type)).toEqual([
-      "new-device",
+      "new-sign-in",
       "deletion-scheduled",
     ]);
   });
@@ -651,7 +732,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
     await changePhrase(account);
     const device = await registerDevice(account);
-    await account.caller.account.requestDeletion({ password });
+    await (await account.activeCaller()).account.requestDeletion({ password });
 
     expect(await prisma.userDevice.count({ where: { id: device.id } })).toBe(1);
     expect(
@@ -667,16 +748,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email alert sett
   test("both optional alerts start on and can be changed", async () => {
     const account = await createAccount();
 
-    expect(await account.caller.emailAlerts.settings()).toEqual({
-      alertNewDevice: true,
+    expect(await (await account.activeCaller()).emailAlerts.settings()).toEqual({
+      alertNewSignIn: true,
       alertDeletionScheduled: true,
     });
-    await account.caller.emailAlerts.updateSettings({
-      alertNewDevice: false,
+    await (
+      await account.activeCaller()
+    ).emailAlerts.updateSettings({
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
-    expect(await account.caller.emailAlerts.settings()).toEqual({
-      alertNewDevice: false,
+    expect(await (await account.activeCaller()).emailAlerts.settings()).toEqual({
+      alertNewSignIn: false,
       alertDeletionScheduled: true,
     });
   });
@@ -685,7 +768,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email alert sett
     const account = await createAccount();
 
     await expect(
-      account.caller.emailAlerts.setTimezone({ timezone: "Mars/Olympus" }),
+      (await account.activeCaller()).emailAlerts.setTimezone({ timezone: "Mars/Olympus" }),
     ).rejects.toThrow("Unknown timezone.");
     expect(
       await prisma.user.findUniqueOrThrow({

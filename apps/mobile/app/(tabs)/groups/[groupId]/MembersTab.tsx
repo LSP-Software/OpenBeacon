@@ -1,10 +1,11 @@
+import { useIsFocused } from "@react-navigation/native";
 import { Alert } from "../../../../lib/alert.ts";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { MapPinIcon, PlusCircleIcon } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from "react-native";
 import { InviteMemberToGroupDialog } from "../../../../components/dialogs/InviteMemberToGroupDialog.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
@@ -18,6 +19,7 @@ import {
 } from "../../../../components/ui/Dialog.tsx";
 import { Icon } from "../../../../components/ui/Icon.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
+import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
 import { useGroupLivePositions } from "../../../../hooks/useGroupLivePositions.ts";
 import { trpc } from "../../../../lib/api.ts";
 import {
@@ -27,7 +29,9 @@ import {
 import { authClient } from "../../../../lib/auth-client.ts";
 import { getBatteryVisual } from "../../../../lib/batteryVisual.ts";
 import { buildMemberLiveStatuses } from "../../../../lib/buildMemberLiveStatuses.ts";
+import { deviceIconFor } from "../../../../lib/deviceIcons.ts";
 import { buildRemoveGroupMemberInput, submitEpochChange } from "../../../../lib/groupEncryption.ts";
+import { forgetHiddenMapGroup } from "../../../../lib/hiddenMapGroups.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
 import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
 
@@ -47,23 +51,36 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
   const [successorDialogOpen, setSuccessorDialogOpen] = useState(false);
   const [successorMemberId, setSuccessorMemberId] = useState<string | null>(null);
   const { data: session } = authClient.useSession();
+  const isFocused = useIsFocused();
   const queryClient = useQueryClient();
   const router = useRouter();
   const removeMember = useMutation(trpc.groupMembership.remove.mutationOptions());
   const deleteGroup = useMutation(trpc.groupLifecycle.delete.mutationOptions());
   const updateRole = useMutation(trpc.groupMembership.updateRole.mutationOptions());
-  const { data: members, isPending: isFetchingMembers } = useQuery({
-    ...trpc.groupMembership.members.queryOptions({ groupId }),
-    refetchInterval: 10_000,
-  });
+  const { group, isPending: isFetchingMembers } = useCachedGroup(groupId);
+  const members = useMemo(
+    () =>
+      group?.members.map((member) => ({
+        id: member.id,
+        role: member.role,
+        user: { id: member.userId, image: member.image, name: member.name },
+      })),
+    [group],
+  );
   const nicknameQuery = useQuery({
     queryKey: ["personalNicknames", groupId, session?.user.id],
     enabled: !!session?.user.id,
+    subscribed: isFocused,
     queryFn: () => loadPersonalNicknames(groupId, session!.user.id),
   });
   const nicknames = nicknameQuery.data ?? {};
   const livePositions = useGroupLivePositions(groupId);
+  const memberDevices = useQuery({
+    ...trpc.groupMembership.listMemberDevices.queryOptions({ groupId }),
+    subscribed: isFocused,
+  });
   const memberStatuses = buildMemberLiveStatuses({
+    memberDevices: memberDevices.data ?? [],
     members: (members ?? []).map((member) => ({
       ...member,
       nickname: nicknames[member.id]?.name ?? null,
@@ -113,18 +130,13 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                       }),
                   });
                 }
+                if (isSelf) {
+                  forgetHiddenMapGroup({ groupId, userId: member.user.id });
+                  router.replace("/(tabs)/groups/list");
+                }
                 await queryClient.invalidateQueries({
                   queryKey: trpc.groupMembership.list.queryKey(),
                 });
-                if (isSelf) {
-                  router.replace("/(tabs)/groups/list");
-                } else {
-                  await queryClient.invalidateQueries({
-                    queryKey: trpc.groupMembership.members.queryKey({
-                      groupId,
-                    }),
-                  });
-                }
                 requestTrackingSync();
               })(),
             );
@@ -163,9 +175,8 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
             <DialogTitle>Set nickname for {nicknameMember?.name}</DialogTitle>
           </DialogHeader>
           <Text>
-            Only you can see this nickname. It’s encrypted before it leaves this phone. With a
-            recovery phrase, your other phones can read it too. Leave it blank to use their profile
-            name.
+            Only you can see this nickname. It’s encrypted before it leaves this phone, and your
+            other phones can read it too. Leave it blank to use their profile name.
           </Text>
           {nicknameQuery.isError && (
             <Text>Unable to load nicknames. Try again before making changes.</Text>
@@ -216,14 +227,9 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                 Alert.alert("Unable to save nickname", result.error.message);
                 return;
               }
-              await Promise.all([
-                queryClient.invalidateQueries({
-                  queryKey: trpc.groupMembership.members.queryKey({ groupId }),
-                }),
-                queryClient.invalidateQueries({
-                  queryKey: ["personalNicknames", groupId, session?.user.id],
-                }),
-              ]);
+              await queryClient.invalidateQueries({
+                queryKey: ["personalNicknames", groupId, session?.user.id],
+              });
               setNicknameMember(null);
             }}
           >
@@ -316,19 +322,9 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                             Alert.alert("Unable to change role", result.error.message);
                             return;
                           }
-                          await Promise.all([
-                            queryClient.invalidateQueries({
-                              queryKey: trpc.groupMembership.members.queryKey({ groupId }),
-                            }),
-                            queryClient.invalidateQueries({
-                              queryKey: trpc.groupMembership.get.queryKey({
-                                groupId,
-                              }),
-                            }),
-                            queryClient.invalidateQueries({
-                              queryKey: trpc.groupMembership.list.queryKey(),
-                            }),
-                          ]);
+                          await queryClient.invalidateQueries({
+                            queryKey: trpc.groupMembership.list.queryKey(),
+                          });
                           setChangingRole(null);
                         },
                       },
@@ -426,7 +422,35 @@ const MemberCard = ({ member }: { member: ReturnType<typeof buildMemberLiveStatu
               )}
             </View>
           </View>
-          {member.battery && batteryVisual ? (
+          {member.activeDeviceCount >= 2 && member.devices.length > 0 ? (
+            member.devices.map((device) => {
+              const deviceBattery = getBatteryVisual({
+                batteryLevel: device.battery.level,
+                charging: device.battery.charging,
+              });
+              const updated = timeSince(device.timestamp);
+              return (
+                <View
+                  key={device.deviceId}
+                  accessible
+                  accessibilityLabel={`${device.name ?? "Device"}, updated ${updated}, battery ${device.battery.level}%`}
+                  className="flex-row items-center gap-2"
+                >
+                  <Icon
+                    as={deviceIconFor(device.icon ?? "phone", device.platform).icon}
+                    className="text-muted-foreground size-4"
+                  />
+                  <Text className="text-muted shrink text-sm" numberOfLines={1}>
+                    {device.name ?? "Device"} · {updated}
+                  </Text>
+                  <Icon as={deviceBattery.icon} size={16} className={deviceBattery.colorClass} />
+                  <Text className={`${deviceBattery.colorClass} text-sm`}>
+                    {device.battery.level}%
+                  </Text>
+                </View>
+              );
+            })
+          ) : member.battery && batteryVisual ? (
             <View className="flex-row items-center gap-2">
               <Icon as={batteryVisual.icon} size={20} className={batteryVisual.colorClass} />
               <Text className={`${batteryVisual.colorClass} text-sm`}>

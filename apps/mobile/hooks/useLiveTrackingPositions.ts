@@ -1,31 +1,42 @@
 import { useIsFocused } from "@react-navigation/native";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { createDefaultMapTrackingDeps } from "../lib/createDefaultMapTrackingDeps.ts";
 import { createMapTrackingSession } from "../lib/mapTracking.ts";
-import type { LiveMapPosition } from "../lib/mapTrackingTypes.ts";
+import type { LiveMapPosition, MapTrackingStatus } from "../lib/mapTrackingTypes.ts";
+
+const INITIAL_STATUS: MapTrackingStatus = {
+  connection: "ok",
+  groups: {},
+  membership: "loading",
+  undecryptable: [],
+};
 
 export const useLiveTrackingPositions = ({ groupId }: { groupId?: string } = {}) => {
   const isFocused = useIsFocused();
-  const [livePositions, setLivePositions] = useState<LiveMapPosition[]>([]);
+  const [tracking, setTracking] = useState<{
+    positions: LiveMapPosition[];
+    status: MapTrackingStatus;
+  }>(() => ({ positions: [], status: INITIAL_STATUS }));
   const sessionRef = useRef<ReturnType<typeof createMapTrackingSession> | null>(null);
   const isFocusedRef = useRef(isFocused);
   isFocusedRef.current = isFocused;
 
   useEffect(() => {
-    setLivePositions([]);
+    setTracking({ positions: [], status: INITIAL_STATUS });
     const deps = createDefaultMapTrackingDeps();
     const session = createMapTrackingSession(
       groupId
         ? {
             ...deps,
-            listGroups: async () => [{ id: groupId }],
+            listGroups: async (signal) =>
+              (await deps.listGroups(signal)).filter(({ id }) => id === groupId),
           }
         : deps,
     );
     sessionRef.current = session;
     const unsubscribe = session.subscribe(() => {
-      setLivePositions(session.getLivePositions());
+      setTracking({ positions: session.getLivePositions(), status: session.getStatus() });
     });
     session.setActive(isFocusedRef.current && AppState.currentState === "active");
 
@@ -54,5 +65,12 @@ export const useLiveTrackingPositions = ({ groupId }: { groupId?: string } = {})
     };
   }, [isFocused]);
 
-  return livePositions;
+  const dropRemovedDevices = useCallback(
+    (input: { activeDeviceIds: ReadonlySet<string>; groupId: string }) => {
+      sessionRef.current?.dropRemovedDevices(input);
+    },
+    [],
+  );
+
+  return { ...tracking, dropRemovedDevices };
 };

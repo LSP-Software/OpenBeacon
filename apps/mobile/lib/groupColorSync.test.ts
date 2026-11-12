@@ -1,9 +1,15 @@
 import { beforeEach, expect, jest, mock, test } from "bun:test";
-import { createDeviceKeyPair, DEVICE_KEY_ALGORITHM } from "@openbeacon/encryption";
+import {
+  createDeviceKeyPair,
+  createHistoryKeyPair,
+  DEVICE_KEY_ALGORITHM,
+  getPersonalDataHistoryKeyVersion,
+} from "@openbeacon/encryption";
 
 type ColorRecord = { groupId: string; ciphertext: string };
 
 const keyPair = createDeviceKeyPair();
+const historyKey = createHistoryKeyPair();
 const device = {
   deviceId: "device",
   privateKey: keyPair.privateKey,
@@ -26,16 +32,23 @@ mock.module("./storage.ts", () => ({
 }));
 mock.module("./deviceKeys.ts", () => ({
   ensureDeviceKeyRegistration: async () => device,
-  getOrCreateDeviceKeyContext: async () => device,
   getStoredDeviceKeyContext: async () => device,
 }));
 mock.module("./historyKeys.ts", () => ({
-  getStoredHistoryKey: async () => null,
+  getStoredHistoryKey: async () => historyKey.privateKey,
   storeHistoryKey: async () => {},
+  deleteStoredHistoryKeys: async () => {},
 }));
 mock.module("./api.ts", () => ({
   trpcClient: {
-    accountRecovery: { status: { query: async () => ({ currentHistoryKey: null }) } },
+    accountRecovery: {
+      status: {
+        query: async () => ({
+          currentHistoryKey: { publicKey: historyKey.publicKey, version: 1 },
+          recoveryKey: null,
+        }),
+      },
+    },
     groupMembership: {
       updateColor: { mutate: updateColor },
       colors: { query: async () => uploaded },
@@ -56,6 +69,7 @@ test("restores encrypted group colors from the server and ignores unreadable one
   const color = GROUP_COLOR_PALETTE[3];
   await saveGroupColor({ userId: "owner", groupId: "family", color });
   expect(uploaded[0]?.ciphertext).not.toContain(color);
+  expect(getPersonalDataHistoryKeyVersion(uploaded[0]?.ciphertext ?? "")).toBe(1);
   uploaded.push(
     { groupId: "friends", ciphertext: uploaded[0]?.ciphertext ?? "" },
     { groupId: "broken", ciphertext: "invalid" },

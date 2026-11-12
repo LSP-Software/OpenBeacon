@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { devicePendingCause } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 
 let deleted = false;
 mock.module("expo-file-system", () => ({
@@ -62,6 +64,53 @@ describe("uploadImageFromUri", () => {
         }),
       ).toEqual({ error: "Unable to upload image. Check your connection and try again." });
       expect(confirm).not.toHaveBeenCalled();
+      expect(deleted).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("shows the server's reason when it refuses the upload", async () => {
+    const confirm = mock(async () => ({ imageUrl: "https://cdn.example/image" }));
+    expect(
+      await uploadImageFromUri({
+        uri: "file://image",
+        requestImageUpload: async () => {
+          throw TRPCClientError.from({
+            error: {
+              code: -32003,
+              data: { cause: devicePendingCause, code: "FORBIDDEN", httpStatus: 403 },
+              message: "Finish setting up this phone first.",
+            },
+          });
+        },
+        confirmImageUpload: confirm,
+      }),
+    ).toEqual({ error: "Finish setting up this phone first." });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(deleted).toBe(true);
+  });
+  test("asks for the image again when the pending upload has expired", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock(
+      async () => new Response(null, { status: 200 }),
+    ) as unknown as typeof fetch;
+    try {
+      expect(
+        await uploadImageFromUri({
+          uri: "file://image",
+          requestImageUpload: async () => ({ presignedUrl: "https://upload.example/image" }),
+          confirmImageUpload: async () => {
+            throw TRPCClientError.from({
+              error: {
+                code: -32012,
+                data: { code: "PRECONDITION_FAILED", httpStatus: 412 },
+                message: "No pending profile image upload to confirm.",
+              },
+            });
+          },
+        }),
+      ).toEqual({ error: "That upload expired. Please choose the image again." });
       expect(deleted).toBe(true);
     } finally {
       globalThis.fetch = originalFetch;

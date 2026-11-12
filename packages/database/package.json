@@ -17,10 +17,7 @@
   },
   "types": "./src/index.ts",
   "scripts": {
-    "format": "bun fmt",
-    "format:check": "bun fmt --check",
-    "lint": "biome lint .",
-    "typecheck": "DATABASE_URL=postgresql://localhost:5432/openbeacon prisma generate && bun check",
+    "typecheck": "bun check",
     "test": "bun test --pass-with-no-tests --isolate",
     "db:generate": "bun run --env-file=../../.env prisma generate",
     "db:push": "bun run --env-file=../../.env prisma db push",
@@ -30,13 +27,13 @@
     "db:studio": "bun run --env-file=../../.env prisma studio"
   },
   "dependencies": {
-    "@prisma/client": "^7.4.2",
-    "@prisma/adapter-pg": "^7.4.2",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
     "pg": "^8.20.0"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",
     "@types/node": "^25.0.10",
-    "prisma": "^7.4.2"
+    "prisma": "^7.10.1"
   }
 }

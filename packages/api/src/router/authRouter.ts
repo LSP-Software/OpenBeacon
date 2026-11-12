@@ -7,12 +7,12 @@ import {
   listUserRecipientPublicKeys,
   upsertUserDevice,
 } from "../lib/groupEpochs.ts";
-import { protectedProcedure, publicProcedure } from "../procedures/auth/runtime.ts";
+import { protectedProcedure, publicProcedure, setupProcedure } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 
 export const authRouter = createTRPCRouter({
   providers: publicProcedure.query(() => authCapabilities),
-  deviceKeyContext: protectedProcedure
+  deviceKeyContext: setupProcedure
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
     .query(async ({ ctx }) => ({
       historyRecipients: await listHistoryRecipients({
@@ -25,24 +25,30 @@ export const authRouter = createTRPCRouter({
       }),
       userId: ctx.session.user.id,
     })),
-  registerDeviceKey: protectedProcedure
+  registerDeviceKey: setupProcedure
     .meta({
       rateLimit: {
         limit: 120,
         windowMs: 60_000,
       },
     })
-    .input(registerDeviceKeySchema.extend({ expectedUserId: z.string().min(1) }))
+    .input(registerDeviceKeySchema.extend({ expectedUserId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       if (input.expectedUserId !== ctx.session.user.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "The active account has changed." });
       }
-      return upsertUserDevice({
+      const device = await upsertUserDevice({
         db: ctx.db,
         input,
         securityAlerts: ctx.securityAlerts,
+        sessionId: ctx.session.session.id,
         userId: ctx.session.user.id,
       });
+      const session = await ctx.db.session.findUnique({
+        select: { deviceId: true },
+        where: { id: ctx.session.session.id },
+      });
+      return { ...device, sessionLinked: session?.deviceId === device.id };
     }),
   listMyDeviceKeys: protectedProcedure.query(async ({ ctx }) =>
     ctx.db.userDevice.findMany({

@@ -1,18 +1,11 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { appRouter } from "../root.ts";
 
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
-
 const prefix = `feedback-test-${crypto.randomUUID()}`;
 const caller = appRouter.createCaller({
-  cache: new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 }),
+  cache: createIntegrationTestCache(() => 0),
   clientIp: "127.0.0.1",
   db: prisma,
   serverVersion: "9.9.9",

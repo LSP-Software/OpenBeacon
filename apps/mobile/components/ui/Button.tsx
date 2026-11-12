@@ -53,6 +53,15 @@ const buttonTextVariants = cva("text-white text-base font-semibold rounded-lg", 
   },
 });
 
+const spinnerColors = {
+  default: "text-white",
+  destructive: "text-destructive-foreground",
+  outline: "text-primary-text",
+  secondary: "text-secondary-foreground",
+  ghost: "text-foreground",
+  link: "text-primary-text",
+} as const;
+
 type ButtonProps = React.ComponentProps<typeof Pressable> &
   React.RefAttributes<typeof Pressable> &
   VariantProps<typeof buttonVariants> & {
@@ -72,7 +81,11 @@ function Button({ className, variant, size, loading, disabled, ...props }: Butto
         disabled={loading || disabled}
         {...props}
       >
-        {loading ? <ActivityIndicator size="small" color="white" /> : props.children}
+        {loading ? (
+          <ActivityIndicator size="small" className={spinnerColors[variant ?? "default"]} />
+        ) : (
+          props.children
+        )}
       </Pressable>
     </TextClassContext.Provider>
   );

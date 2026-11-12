@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
@@ -21,23 +20,21 @@ import {
   wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
 import { holdRowLock } from "../../lib/databaseLocks.testUtil.ts";
+import { activateDevice } from "../../lib/deviceActivation.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { accountRecoveryRouter } from "../accountRecoveryRouter.ts";
+import { accountHistoryRouter } from "../accountHistoryRouter.ts";
 import { authRouter } from "../authRouter.ts";
 import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 setDefaultTimeout(60_000);
 
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
-
 const router = createTRPCRouter({
+  accountHistory: accountHistoryRouter,
   accountRecovery: accountRecoveryRouter,
   auth: authRouter,
   groupEpoch: groupEpochRouter,
@@ -45,7 +42,7 @@ const router = createTRPCRouter({
   groupLifecycle: groupLifecycleRouter,
   groupMembership: groupMembershipRouter,
 });
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+const cache = createIntegrationTestCache(() => 0);
 const prefix = `history-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const otherGroupId = `${prefix}-other-group`;
@@ -70,16 +67,22 @@ const member = account("member");
 const other = account("other");
 const accounts = [owner, member, other];
 
-const caller = (userId: string) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    session: {
-      user: { id: userId },
-      session: { id: `${userId}-session`, createdAt: new Date() },
-    },
-  } as Parameters<typeof router.createCaller>[0]);
+const caller = (
+  userId: string,
+  deviceId = accounts.find((item) => item.userId === userId)?.deviceId ?? null,
+) =>
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId,
+      session: {
+        user: { id: userId },
+        session: { id: `${userId}-session`, createdAt: new Date() },
+      },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 
 const bundle = ({
   creator,
@@ -230,6 +233,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             id: item.deviceId,
             publicKey: item.key.publicKey,
             publicKeyAlgorithm: item.key.algorithm,
+            name: "Phone",
+            icon: "phone",
+            activatedAt: new Date(),
             userId: item.userId,
           },
         });
@@ -241,27 +247,32 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       epochs.other = await join(otherGroupId, member);
       await createGroup(soloGroupId, owner);
       for (const item of accounts) {
-        const phrase = generateRecoveryPhrase();
-        const recoveryKey = deriveRecoveryKeyPair(phrase);
         const historyKey = createHistoryKeyPair();
         item.historyKey = {
           id: crypto.randomUUID(),
           privateKey: historyKey.privateKey,
           publicKey: historyKey.publicKey,
         };
+        await caller(item.userId).accountHistory.create({
+          algorithm: historyKey.algorithm,
+          id: item.historyKey.id,
+          publicKey: historyKey.publicKey,
+        });
+      }
+      for (const item of [member, other]) {
+        const recoveryKey = deriveRecoveryKeyPair(generateRecoveryPhrase());
         await caller(item.userId).accountRecovery.setup({
-          historyKey: {
-            algorithm: historyKey.algorithm,
-            escrow: sealHistoryKeyEscrow({
-              historyPrivateKey: historyKey.privateKey,
-              recoveryPrivateKey: recoveryKey.privateKey,
-              userId: item.userId,
+          escrows: [
+            {
+              ...sealHistoryKeyEscrow({
+                historyPrivateKey: item.historyKey.privateKey,
+                recoveryPrivateKey: recoveryKey.privateKey,
+                userId: item.userId,
+                version: 1,
+              }),
               version: 1,
-            }),
-            id: item.historyKey.id,
-            publicKey: historyKey.publicKey,
-            version: 1,
-          },
+            },
+          ],
           recoveryKey: {
             algorithm: recoveryKey.algorithm,
             derivationVersion: recoveryKey.derivationVersion,
@@ -289,7 +300,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       );
     });
 
-    test("backfill offers only entitled epochs and wraps are stored idempotently", async () => {
+    test("backfill offers only entitled epochs and wraps are stored idempotently, with or without an escrow", async () => {
+      expect(
+        await prisma.accountHistoryKey.findMany({
+          select: { escrowCiphertext: true, userId: true },
+          where: { userId: { in: [owner.userId, member.userId] } },
+        }),
+      ).toEqual(
+        expect.arrayContaining([
+          { escrowCiphertext: null, userId: owner.userId },
+          { escrowCiphertext: expect.any(String), userId: member.userId },
+        ]),
+      );
       expect(await backfillEpochNumbers(owner)).toEqual([1, 2, 3]);
       expect(await backfillEpochNumbers(owner, groupId, 1)).toEqual([2, 3]);
       expect(await backfillEpochNumbers(member)).toEqual([2, 3]);
@@ -460,6 +482,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           id: revokedDeviceId,
           publicKey: createDeviceKeyPair().publicKey,
           publicKeyAlgorithm: "X25519",
+          name: "Phone",
+          icon: "phone",
+          activatedAt: new Date(),
           revokedAt: new Date(),
           userId: other.userId,
         },
@@ -645,7 +670,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toBe(ownerWrapsBefore + 1);
     });
 
-    test("registering a new device flags the user's groups for rotation but re-registering doesn't", async () => {
+    test("a new device is Pending and only flags the user's groups for rotation once it's activated", async () => {
       await prisma.group.updateMany({
         data: { epochRotationRequired: false },
         where: { id: { in: [groupId, otherGroupId, soloGroupId] } },
@@ -672,12 +697,28 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         [soloGroupId]: false,
       });
 
-      await caller(member.userId).auth.registerDeviceKey({
+      const newDeviceId = `${prefix}-member-new-device`;
+      const registered = await caller(member.userId).auth.registerDeviceKey({
         algorithm: "X25519",
-        deviceId: `${prefix}-member-new-device`,
+        deviceId: newDeviceId,
         expectedUserId: member.userId,
         publicKey: createDeviceKeyPair().publicKey,
       });
+      expect(registered.activatedAt).toBeNull();
+      expect(await flags()).toEqual({
+        [groupId]: false,
+        [otherGroupId]: false,
+        [soloGroupId]: false,
+      });
+
+      expect(
+        await activateDevice({
+          activatedBy: "phrase",
+          db: prisma,
+          deviceId: newDeviceId,
+          userId: member.userId,
+        }),
+      ).toBe(true);
       expect(await flags()).toEqual({
         [groupId]: false,
         [otherGroupId]: true,
@@ -821,31 +862,56 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toEqual({ added: 0 });
     });
 
-    test("listHistoryBackfill rejects another member's device and a revoked device", async () => {
-      const backfillWith = (deviceId: string) =>
-        caller(other.userId).groupEpoch.listHistoryBackfill({
-          deviceId,
-          groupId,
-        });
-      await expect(backfillWith(owner.deviceId)).rejects.toMatchObject({
-        code: "FORBIDDEN",
+    test("history backfill and wraps only accept the calling phone's own device", async () => {
+      const secondPhone = await prisma.userDevice.create({
+        data: {
+          activatedAt: new Date(),
+          icon: "phone",
+          id: `${prefix}-other-second-device`,
+          name: "Second phone",
+          publicKey: createDeviceKeyPair().publicKey,
+          publicKeyAlgorithm: "X25519",
+          userId: other.userId,
+        },
       });
+      const fromSecondPhone = caller(other.userId, secondPhone.id);
+      const refused = { code: "FORBIDDEN", message: "That device ID isn't this phone." };
+      const backfillWith = (deviceId: string) =>
+        fromSecondPhone.groupEpoch.listHistoryBackfill({ deviceId, groupId });
+
+      await expect(backfillWith(owner.deviceId)).rejects.toMatchObject(refused);
+      await expect(backfillWith(other.deviceId)).rejects.toMatchObject(refused);
+      await expect(
+        fromSecondPhone.groupEpoch.addHistoryWraps({
+          deviceId: other.deviceId,
+          groupId,
+          historyKeyId: other.historyKey.id,
+          wraps: [
+            wrapFor({
+              account: other,
+              epochId: epochs.third.epoch.epochId,
+              epochKey: epochs.third.epochKey,
+            }),
+          ],
+        }),
+      ).rejects.toMatchObject(refused);
 
       await prisma.userDevice.update({
         data: { revokedAt: new Date() },
         where: { id: other.deviceId },
       });
       try {
-        await expect(backfillWith(other.deviceId)).rejects.toMatchObject({
-          code: "FORBIDDEN",
-        });
+        await expect(backfillWith(other.deviceId)).rejects.toMatchObject(refused);
       } finally {
         await prisma.userDevice.update({
           data: { revokedAt: null },
           where: { id: other.deviceId },
         });
+        await prisma.userDevice.delete({ where: { id: secondPhone.id } });
       }
-      await expect(backfillWith(other.deviceId)).resolves.toHaveProperty("epochs");
+      await expect(
+        caller(other.userId).groupEpoch.listHistoryBackfill({ deviceId: other.deviceId, groupId }),
+      ).resolves.toHaveProperty("epochs");
     });
   },
 );

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { startScheduler } from "./scheduler.ts";
 
 describe("scheduled jobs", () => {
@@ -37,26 +37,29 @@ describe("scheduled jobs", () => {
     expect(calls).toBe(1);
   });
 
-  it("continues after a failed run", async () => {
+  it("continues after a failed run and logs only the job name and error code", async () => {
     let calls = 0;
-    const original = console.error;
-    console.error = () => {};
-    try {
-      const stop = startScheduler([
-        {
-          name: "test",
-          delay: 1,
-          run: async () => {
-            calls++;
-            if (calls === 1) throw new Error("failure");
-          },
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    const stop = startScheduler([
+      {
+        name: "test",
+        delay: 1,
+        run: async () => {
+          calls++;
+          if (calls === 1) throw Object.assign(new Error("secret user-1"), { code: "P2002" });
+          if (calls === 2) throw Object.assign(new Error("secret user-2"), { name: "NoSuchKey" });
+          if (calls === 3) throw new Error("secret user-3");
         },
-      ]);
-      await Bun.sleep(20);
-      await stop();
-      expect(calls).toBeGreaterThan(1);
-    } finally {
-      console.error = original;
-    }
+      },
+    ]);
+    await Bun.sleep(20);
+    await stop();
+    expect(calls).toBeGreaterThan(3);
+    expect(error.mock.calls).toEqual([
+      ["Scheduled job test failed (P2002)"],
+      ["Scheduled job test failed (NoSuchKey)"],
+      ["Scheduled job test failed"],
+    ]);
+    error.mockRestore();
   });
 });

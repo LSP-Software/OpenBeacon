@@ -1,5 +1,6 @@
 const appConfigPath = "apps/mobile/app.json";
 const serverVersionPath = "apps/backend/src/version.ts";
+const apiCompatibilityPath = "packages/shared/src/apiCompatibilityLevel.ts";
 
 const clientPaths = [
   "apps/mobile/",
@@ -8,10 +9,20 @@ const clientPaths = [
   "packages/shared/",
 ];
 const serverPaths = ["apps/backend/", "apps/scheduled-jobs/", "packages/"];
+const serverFiles = ["Dockerfile", "bun.lock", "bunfig.toml"];
+
+const isServerFile = (file: string) =>
+  serverFiles.includes(file) ||
+  file === ".dockerignore" ||
+  file.endsWith("/.dockerignore") ||
+  (serverPaths.some((path) => file.startsWith(path)) && !file.startsWith("packages/tsconfig/"));
+
+type ApiCompatibilityLevels = { level: number; minClient: number; minServer: number };
 
 type Versions = {
   client: { version: string; buildNumber: number; versionCode: number };
   server: string;
+  apiCompatibility: ApiCompatibilityLevels | null;
 };
 
 const isShippedFile = (file: string) =>
@@ -33,6 +44,74 @@ const isSemverGreater = (next: string, previous: string) => {
   const b = parseSemver(previous);
   const index = a.findIndex((part, i) => part !== b[i]);
   return index !== -1 && (a[index] ?? 0) > (b[index] ?? 0);
+};
+
+const isMinorBumpOrMore = (next: string, previous: string) => {
+  const [nextMajor = 0, nextMinor = 0] = parseSemver(next);
+  const [previousMajor = 0, previousMinor = 0] = parseSemver(previous);
+  return nextMajor > previousMajor || (nextMajor === previousMajor && nextMinor > previousMinor);
+};
+
+export const parseApiCompatibilityLevels = (source: string): ApiCompatibilityLevels => {
+  const read = (name: string) => {
+    const value = new RegExp(`export const ${name} = (\\d+);`).exec(source)?.[1];
+    if (value === undefined) {
+      throw new Error(`${apiCompatibilityPath} must export ${name} as a whole number`);
+    }
+    return Number(value);
+  };
+  return {
+    level: read("apiCompatibilityLevel"),
+    minClient: read("minClientApiCompatibilityLevel"),
+    minServer: read("minServerApiCompatibilityLevel"),
+  };
+};
+
+const findApiCompatibilityProblems = ({ base, head }: { base: Versions; head: Versions }) => {
+  const levels = head.apiCompatibility;
+  if (!levels) return [];
+  const problems: string[] = [];
+  if (levels.minClient > levels.level) {
+    problems.push(
+      `minClientApiCompatibilityLevel (${levels.minClient}) can't be above apiCompatibilityLevel (${levels.level}).`,
+    );
+  }
+  if (levels.minServer > levels.level) {
+    problems.push(
+      `minServerApiCompatibilityLevel (${levels.minServer}) can't be above apiCompatibilityLevel (${levels.level}).`,
+    );
+  }
+  const previous = base.apiCompatibility;
+  if (!previous) return problems;
+  const names = {
+    level: "apiCompatibilityLevel",
+    minClient: "minClientApiCompatibilityLevel",
+    minServer: "minServerApiCompatibilityLevel",
+  } as const;
+  for (const key of ["level", "minClient", "minServer"] as const) {
+    if (levels[key] < previous[key]) {
+      problems.push(`${names[key]} can't go down (was ${previous[key]}, now ${levels[key]}).`);
+    }
+  }
+  if (levels.level > previous.level + 1) {
+    problems.push(
+      `apiCompatibilityLevel can only go up by 1 per change (was ${previous.level}, now ${levels.level}).`,
+    );
+  }
+  const changed = (["level", "minClient", "minServer"] as const).some(
+    (key) => levels[key] !== previous[key],
+  );
+  if (changed && !isMinorBumpOrMore(head.client.version, base.client.version)) {
+    problems.push(
+      `API compatibility levels changed: raise expo.version in ${appConfigPath} by at least a minor version above ${base.client.version}.`,
+    );
+  }
+  if (changed && !isMinorBumpOrMore(head.server, base.server)) {
+    problems.push(
+      `API compatibility levels changed: raise serverVersion in ${serverVersionPath} by at least a minor version above ${base.server}.`,
+    );
+  }
+  return problems;
 };
 
 export const parseClientVersion = (appJson: string): Versions["client"] => {
@@ -98,19 +177,13 @@ export const findMissingVersionBumps = ({
     }
   }
 
-  if (
-    shipped.some(
-      (file) =>
-        serverPaths.some((path) => file.startsWith(path)) && !file.startsWith("packages/tsconfig/"),
-    ) &&
-    !isSemverGreater(head.server, base.server)
-  ) {
+  if (shipped.some(isServerFile) && !isSemverGreater(head.server, base.server)) {
     problems.push(
       `Server code changed: raise serverVersion in ${serverVersionPath} above ${base.server}.`,
     );
   }
 
-  return problems;
+  return [...problems, ...findApiCompatibilityProblems({ base, head })];
 };
 
 if (import.meta.main) {
@@ -122,6 +195,10 @@ if (import.meta.main) {
   const readVersions = async (ref: string): Promise<Versions> => ({
     client: parseClientVersion(await Bun.$`git show ${ref}:${appConfigPath}`.text()),
     server: parseServerVersion(await Bun.$`git show ${ref}:${serverVersionPath}`.text()),
+    apiCompatibility: await (async () => {
+      const source = await Bun.$`git show ${ref}:${apiCompatibilityPath}`.quiet().nothrow();
+      return source.exitCode === 0 ? parseApiCompatibilityLevels(source.text()) : null;
+    })(),
   });
 
   const problems = findMissingVersionBumps({

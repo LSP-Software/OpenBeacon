@@ -1,56 +1,51 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, mock, test } from "bun:test";
+import {
+  environmentManager,
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { act } from "react";
-import { createRoot } from "test-renderer";
+import { createRoot, type Root } from "test-renderer";
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-let currentQuery: {
-  data?: {
-    expiresAt: string;
-    refreshAt: string;
-    url: string;
-  };
-  refetch: () => Promise<void>;
-};
-let lastQueryOptions: { queryFn?: (context: { signal: AbortSignal }) => Promise<unknown> } = {};
-let cachedArchiveKey: string | undefined;
-const getSignedPmtilesUrlQuery = mock(
-  async (_input: { archiveKey: string | undefined }, _options: { signal: AbortSignal }) => ({}),
-);
-let lastTimeoutCallback: (() => void) | null = null;
-let lastTimeoutDelay: number | null = null;
-let originalClearTimeout: typeof clearTimeout;
-let originalSetTimeout: typeof setTimeout;
+let fetches = 0;
+let screenFocused = true;
+let requestedArchiveKeys: (string | undefined)[] = [];
 
-mock.module("@tanstack/react-query", () => ({
-  useQuery: (options: { queryFn?: (context: { signal: AbortSignal }) => Promise<unknown> }) => {
-    lastQueryOptions = options;
-    return currentQuery;
-  },
-  useMutation: () => ({
-    isPending: false,
-    mutate: () => {},
-  }),
+mock.module("@react-navigation/native", () => ({
+  useIsFocused: () => screenFocused,
 }));
 
 mock.module("../lib/api.ts", () => ({
   queryClient: {
-    getQueryData: () => (cachedArchiveKey ? { archiveKey: cachedArchiveKey } : undefined),
-    setQueryData: () => {},
+    getQueryData: (queryKey: unknown[]) => queryClient.getQueryData(queryKey),
   },
   trpc: {
     maps: {
       getSignedPmtilesUrl: {
-        queryOptions: () => ({ queryKey: ["maps", "getSignedPmtilesUrl"] }),
+        queryOptions: () => ({
+          queryKey: [["maps", "getSignedPmtilesUrl"], { type: "query" }],
+        }),
       },
     },
   },
   trpcClient: {
     maps: {
       getSignedPmtilesUrl: {
-        query: getSignedPmtilesUrlQuery,
+        query: async (input: { archiveKey: string | undefined }) => {
+          fetches += 1;
+          requestedArchiveKeys.push(input.archiveKey);
+          return {
+            archiveKey: "a:20261107",
+            expiresAt: new Date(Date.now() + 90_000).toISOString(),
+            refreshAt: new Date(Date.now() + 30_000).toISOString(),
+            url: `https://example.com/map.pmtiles?signature=${fetches}`,
+          };
+        },
       },
     },
   },
@@ -59,107 +54,120 @@ mock.module("../lib/api.ts", () => ({
 const { useSignedPmtilesUrl }: typeof import("./useSignedPmtilesUrl.ts") =
   await import("./useSignedPmtilesUrl.ts");
 
-const renderHookHarness = async () => {
-  const Harness = () => {
-    useSignedPmtilesUrl();
-    return null;
-  };
+let root: Root | null = null;
+let queryClient: QueryClient;
 
-  const root = createRoot();
+const Harness = () => {
+  useSignedPmtilesUrl();
+  return null;
+};
 
+const render = async () => {
   await act(async () => {
-    root.render(<Harness />);
-    await Promise.resolve();
+    root?.render(
+      <QueryClientProvider client={queryClient}>
+        <Harness />
+      </QueryClientProvider>,
+    );
   });
+  await settle();
+};
 
-  return root;
+const settle = async () => {
+  await act(async () => {
+    for (let index = 0; index < 10; index++) await Promise.resolve();
+  });
+};
+
+const advance = async (ms: number) => {
+  await act(async () => {
+    jest.advanceTimersByTime(ms);
+  });
+  await settle();
 };
 
 describe("useSignedPmtilesUrl", () => {
   beforeEach(() => {
-    originalSetTimeout = globalThis.setTimeout;
-    originalClearTimeout = globalThis.clearTimeout;
-    lastTimeoutCallback = null;
-    lastTimeoutDelay = null;
-    globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
-      lastTimeoutCallback = callback as () => void;
-      lastTimeoutDelay = delay ?? 0;
-      return 1 as unknown as ReturnType<typeof setTimeout>;
-    }) as unknown as typeof setTimeout;
-    globalThis.clearTimeout = ((
-      _timer: ReturnType<typeof setTimeout>,
-    ) => {}) as typeof clearTimeout;
+    jest.useFakeTimers();
+    environmentManager.setIsServer(() => false);
+    fetches = 0;
+    requestedArchiveKeys = [];
+    screenFocused = true;
+    focusManager.setFocused(true);
+    queryClient = new QueryClient();
+    root = createRoot();
   });
 
-  afterEach(() => {
-    globalThis.setTimeout = originalSetTimeout;
-    globalThis.clearTimeout = originalClearTimeout;
+  afterEach(async () => {
+    await act(async () => {
+      root?.unmount();
+    });
+    queryClient.clear();
+    focusManager.setFocused(undefined);
+    environmentManager.setIsServer(() => typeof window === "undefined");
+    jest.useRealTimers();
   });
 
-  test("schedules the next refetch from refreshAt", async () => {
-    const refetch = mock(async () => {});
-    currentQuery = {
-      data: {
-        expiresAt: "2026-03-31T12:10:00.000Z",
-        refreshAt: "2026-03-31T12:09:00.000Z",
-        url: "https://example.com/pmtiles",
-      },
-      refetch,
-    };
+  test("refreshes the URL when refreshAt arrives while the map is open", async () => {
+    await render();
+    expect(fetches).toBe(1);
 
-    const now = new Date("2026-03-31T12:08:30.000Z").getTime();
-    const originalNow = Date.now;
-    Date.now = () => now;
+    await advance(29_000);
+    expect(fetches).toBe(1);
+    await advance(1_000);
 
-    try {
-      await renderHookHarness();
-
-      expect(lastTimeoutDelay).toBe(30_000);
-      expect(refetch).not.toHaveBeenCalled();
-      lastTimeoutCallback?.();
-      expect(refetch).toHaveBeenCalledTimes(1);
-    } finally {
-      Date.now = originalNow;
-    }
+    expect(fetches).toBe(2);
   });
 
-  test("refetches immediately when refreshAt is already due", async () => {
-    const refetch = mock(async () => {});
-    currentQuery = {
-      data: {
-        expiresAt: "2026-03-31T12:10:00.000Z",
-        refreshAt: "2026-03-31T12:09:00.000Z",
-        url: "https://example.com/pmtiles",
-      },
-      refetch,
-    };
-    const now = new Date("2026-03-31T12:09:00.000Z").getTime();
-    const originalNow = Date.now;
-    Date.now = () => now;
+  test("doesn't refresh in the background, and refreshes once on return", async () => {
+    await render();
+    await act(async () => {
+      focusManager.setFocused(false);
+    });
 
-    try {
-      await renderHookHarness();
+    await advance(120_000);
+    expect(fetches).toBe(1);
 
-      expect(refetch).toHaveBeenCalledTimes(1);
-      expect(lastTimeoutDelay).toBeNull();
-    } finally {
-      Date.now = originalNow;
-    }
+    await act(async () => {
+      focusManager.setFocused(true);
+    });
+    await settle();
+
+    expect(fetches).toBe(2);
+  });
+
+  test("doesn't refresh while the map tab is hidden, and refreshes once it's shown again", async () => {
+    await render();
+    screenFocused = false;
+    await render();
+
+    await advance(120_000);
+    expect(fetches).toBe(1);
+
+    screenFocused = true;
+    await render();
+
+    expect(fetches).toBe(2);
+  });
+
+  test("returning before refreshAt doesn't fetch again", async () => {
+    await render();
+    await act(async () => {
+      focusManager.setFocused(false);
+    });
+    await advance(10_000);
+    await act(async () => {
+      focusManager.setFocused(true);
+    });
+    await settle();
+
+    expect(fetches).toBe(1);
   });
 
   test("requests the archive the map already uses so refreshes never switch archives", async () => {
-    currentQuery = { refetch: mock(async () => {}) };
-    await renderHookHarness();
+    await render();
+    await advance(30_000);
 
-    const { signal } = new AbortController();
-    cachedArchiveKey = undefined;
-    await lastQueryOptions.queryFn?.({ signal });
-    cachedArchiveKey = "planet-20261107.pmtiles";
-    await lastQueryOptions.queryFn?.({ signal });
-
-    expect(getSignedPmtilesUrlQuery.mock.calls).toEqual([
-      [{ archiveKey: undefined }, { signal }],
-      [{ archiveKey: "planet-20261107.pmtiles" }, { signal }],
-    ]);
+    expect(requestedArchiveKeys).toEqual([undefined, "a:20261107"]);
   });
 });

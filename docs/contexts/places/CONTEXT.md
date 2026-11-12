@@ -31,3 +31,7 @@ _Avoid_: Notification setting, silence, block, filter, preference
 **Dwell**:
 The time a member must remain inside or outside a Place before a Place Transition is recorded.
 _Avoid_: Hysteresis, debounce, delay, timeout, grace period
+
+## Multiple devices
+
+A member can have more than one Active device. When Places work starts, work out Place Transitions per device and send Place Alerts per member, so a member with a phone and a tablet doesn't trigger two alerts.

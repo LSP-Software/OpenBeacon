@@ -1,5 +1,5 @@
 import { GroupRole, Prisma } from "@openbeacon/database";
-import { removeGroupMemberSchema } from "@openbeacon/schemas";
+import { devicePlatformSchema, removeGroupMemberSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
@@ -94,6 +94,24 @@ export const groupMembershipRouter = {
         },
       });
     }),
+  listMemberDevices: groupMemberProcedure.query(async ({ ctx, input }) => {
+    const devices = await ctx.db.userDevice.findMany({
+      where: {
+        revokedAt: null,
+        activatedAt: { not: null },
+        user: { groupMembers: { some: { groupId: input.groupId } } },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, userId: true, name: true, icon: true, platform: true },
+    });
+    return devices.map((device) => ({
+      deviceId: device.id,
+      userId: device.userId,
+      name: device.name,
+      icon: device.icon,
+      platform: devicePlatformSchema.safeParse(device.platform).data ?? null,
+    }));
+  }),
   nicknames: groupMemberProcedure.query(async ({ ctx }) =>
     ctx.db.personalGroupNickname.findMany({
       where: { ownerId: ctx.groupMember.id },
@@ -274,6 +292,7 @@ export const groupMembershipRouter = {
 
         await persistGroupEpoch({
           db: tx,
+          deviceId: ctx.deviceId,
           epoch: input.nextEpoch,
           excludedUserId: member.userId,
           groupId: input.groupId,
@@ -362,6 +381,15 @@ export const groupMembershipRouter = {
               message: "The group must have at least one owner.",
             });
           }
+        }
+        if (input.role !== GroupRole.OWNER) {
+          await tx.groupMemberInvite.deleteMany({
+            where: {
+              groupId: input.groupId,
+              inviterId: member.userId,
+              ...(input.role === GroupRole.ADMIN ? { role: GroupRole.ADMIN } : {}),
+            },
+          });
         }
         return tx.groupMember.update({
           where: { id: member.id },

@@ -75,6 +75,7 @@ export const groupLifecycleRouter = {
             }
             await deleteFile(image.bucketName, image.path, image.fileName);
           }
+          await tx.pendingUpload.deleteMany({ where: { groupId: input.groupId } });
           await tx.group.delete({ where: { id: input.groupId } });
         },
         { timeout: 15_000 },
@@ -97,7 +98,7 @@ export const groupLifecycleRouter = {
     .mutation(async ({ ctx, input }) => {
       const group = await ctx.db.$transaction(async (tx) => {
         const [user] = await tx.$queryRaw<Array<{ pendingDeletion: boolean }>>(
-          Prisma.sql`SELECT "pendingDeletion" FROM "User" WHERE id = ${ctx.session.user.id} FOR UPDATE`,
+          Prisma.sql`SELECT "pendingDeletion" FROM "User" WHERE id = ${ctx.session.user.id} FOR NO KEY UPDATE`,
         );
         const session = await tx.session.findFirst({
           where: { id: ctx.session.session.id, userId: ctx.session.user.id },
@@ -135,6 +136,7 @@ export const groupLifecycleRouter = {
 
         await persistGroupEpoch({
           db: tx,
+          deviceId: ctx.deviceId,
           epoch: input.initialEpoch,
           groupId: input.groupId,
           userId: ctx.session.user.id,

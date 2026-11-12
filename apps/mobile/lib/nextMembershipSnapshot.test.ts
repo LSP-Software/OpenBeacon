@@ -7,6 +7,7 @@ const position = (
   overrides: Partial<LiveMapPosition> & Pick<LiveMapPosition, "userId" | "sourceGroupId">,
 ): LiveMapPosition => ({
   battery: { charging: false, level: 80 },
+  deviceId: `${overrides.userId}-phone`,
   latitude: 51.5,
   longitude: -0.12,
   speed: null,
@@ -78,7 +79,7 @@ describe("nextMembershipSnapshot", () => {
         getGroupColor: () => "#E9C46A",
         groups: groups ?? [],
         positions: [position({ sourceGroupId: "ghost", userId: "mystery" })],
-        selfUserId: "alice",
+        selfDeviceId: "alice-phone",
       }),
     ).toEqual([]);
   });
@@ -106,7 +107,7 @@ describe("nextMembershipSnapshot", () => {
           position({ sourceGroupId: "family", userId: "alice" }),
           position({ sourceGroupId: "family", userId: "bob" }),
         ],
-        selfUserId: "alice",
+        selfDeviceId: "alice-phone",
       }).map((marker) => marker.userId),
     ).toEqual(["alice", "bob"]);
   });

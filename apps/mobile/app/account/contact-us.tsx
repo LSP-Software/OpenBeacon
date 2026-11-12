@@ -64,8 +64,8 @@ const ContactUsScreen = () => {
       </SafeAreaView>
       <ScrollView contentContainerClassName="gap-5 px-6 py-6">
         <Text className="font-semibold text-foreground">
-          Feedback goes directly to the OpenBeacon team at api.openbeacon.net
-          {selfHosted ? ", not to the operator of your self-hosted server." : "."}
+          Your feedback is sent directly to the developers of OpenBeacon
+          {selfHosted ? ", rather than to the operator of your self-hosted server." : "."}
         </Text>
         <Text className="text-muted-foreground">
           Feedback is not linked to your account. Please do not include personal information unless

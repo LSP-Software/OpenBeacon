@@ -30,9 +30,15 @@
     "check:fix": "bun run format:fix && bun run lint:fix",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
-    "test:room": "bash scripts/test-tracking-room.sh",
-    "ci": "bun run typecheck && bun run check && bun run test && bash scripts/test-tracking-room.sh --if-changed && bun test scripts && bun scripts/warn-skipped-integration-tests.ts",
-    "map-tiles": "bun apps/map-tiles/src/index.ts"
+    "benchmark:offline-queue-storage": "bash scripts/benchmark-offline-queue-storage.sh",
+    "test:integration": "bun scripts/run-integration-tests.ts",
+    "test:integration:migrate": "bun scripts/migrate-integration-database.ts",
+    "map-tiles": "bun apps/map-tiles/src/index.ts",
+    "ci": "bun run audit && bun run check && bun run typecheck && bun run test && bun test scripts && python3 -B -m unittest discover -s scripts && bun scripts/warn-skipped-integration-tests.ts",
+    "audit": "bun audit --audit-level=high --ignore=GHSA-qr28-fpjm-wq7f --ignore=GHSA-5p2g-fcmc-qvqq --ignore=GHSA-w3rx-r6r6-pgpr --ignore=GHSA-mrhx-c7xc-m3w5"
+  },
+  "overrides": {
+    "postcss": "^8.5.23"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.4",

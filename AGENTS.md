@@ -11,7 +11,7 @@ The core concept of this app is to be privacy focused so if users pay for us to 
 3. Before committing, run `bun install --frozen-lockfile`; if it fails due to lockfile changes, run `bun install`, commit `bun.lock`, then re-run the frozen install.
 4. After making changes, always run the ci script (`bun run ci`) to ensure your changes haven't broken anything.
 5. We need strong types to ensure high quality code so AI tools don't introduce errors, anything added must use strict types, try to reuse types where possible but if not introduce types.
-6. When making database changes make sure to create a migration with the db:generate script in the database package.
+6. When making database changes make sure to create a migration with the db:migrate script in the database package. db:generate only regenerates the Prisma client.
 7. All TypeScript import paths must end with `.ts`, not `.js`.
 8. Try to use our custom try catch function instead of the standard try catch implementation. When awaiting many calls in one go this can get lengthy so feel free to use the old try catch to keep it simple.
 
@@ -48,6 +48,12 @@ console.log(result.data);
     a. Client (`apps/mobile`, `packages/encryption`, `packages/schemas`, `packages/shared`): raise `expo.version` in `apps/mobile/app.json` and increment both `ios.buildNumber` and `android.versionCode`.
     b. Server (`apps/backend`, `apps/scheduled-jobs`, and `packages/*` except `tsconfig`): raise `serverVersion` in `apps/backend/src/version.ts`.
     c. Use patch for fixes, minor for features or database migrations. CI enforces this; check locally with `bun scripts/check-version-bump.ts origin/main`.
+14. API compatibility levels live in `packages/shared/src/apiCompatibilityLevel.ts`. Change them only when:
+    a. The app calls something older servers don't have: raise `apiCompatibilityLevel` and set `minServerApiCompatibilityLevel` to it.
+    b. You remove or narrow something supported apps use: raise `apiCompatibilityLevel` and set `minClientApiCompatibilityLevel` to it.
+    c. You change an encrypted format or what a field means: raise the minimum for whichever side can't cope.
+    d. Any level change needs at least a minor version bump of both the app and the server. Anything else needs no level change. See `docs/development/api-compatibility.md`.
+    e. Every PR body contains either `API compatibility: unchanged` or `API compatibility: raised because …`.
 
 # Testing
 

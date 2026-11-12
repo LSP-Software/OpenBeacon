@@ -20,17 +20,17 @@ describe("renderAlertsTurnedOffEmail", () => {
     expect(email.text).toContain(
       "Email alerts turned off\n\nThis email alert was turned off:\n\n * Account deletion scheduled\n\nTurned off at\nThursday, 9 July 2026 at 14:32 BST (13:32 UTC)\n",
     );
-    expect(email.text).not.toContain("New device added");
+    expect(email.text).not.toContain("New sign-in");
     expect(email.html.match(/<li\b/g)).toHaveLength(1);
     expect(email.text).toContain(
-      "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device. Then turn this alert back on in Account → Notifications → Email alerts.",
+      "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs out every other device. Then turn this alert back on in Account → Notifications → Email alerts.",
     );
   });
 
   test("several alerts are listed one per line", async () => {
-    const email = await render(["new-device", "deletion-scheduled"]);
+    const email = await render(["new-sign-in", "deletion-scheduled"]);
     expect(email.text).toContain(
-      "These email alerts were turned off:\n\n * New device added\n * Account deletion scheduled\n",
+      "These email alerts were turned off:\n\n * New sign-in\n * Account deletion scheduled\n",
     );
     expect(email.html.match(/<li\b/g)).toHaveLength(2);
     expect(email.text).toContain(
@@ -38,10 +38,10 @@ describe("renderAlertsTurnedOffEmail", () => {
     );
   });
 
-  test("accounts without a password are told to secure Google instead", async () => {
-    const email = await render(["new-device"], false);
+  test("accounts without a password are told to change their Google password, then sign out other sessions", async () => {
+    const email = await render(["new-sign-in"], false);
     expect(email.text).toContain(
-      "If this wasn't you\n\nSomeone else is signed in to your account. Secure your Google account, because someone may have used it to sign in.",
+      `If this wasn't you\n\nSomeone else is signed in to your account. Change your Google password, because someone may have used your Google account to sign in. After that, in the OpenBeacon app, open Account → Password and Security and tap "Sign out of all other sessions". Then turn this alert back on`,
     );
     expect(email.text).not.toContain("change your password");
   });

@@ -31,5 +31,9 @@ export const renderAccountExistsEmail = async ({
       </>
     ),
   });
-  return { subject: "You already have an OpenBeacon account", ...rendered };
+  return {
+    subject: "You already have an OpenBeacon account",
+    summary: { type: "account-exists" },
+    ...rendered,
+  };
 };

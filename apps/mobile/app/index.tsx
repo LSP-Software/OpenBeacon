@@ -1,3 +1,4 @@
+import { tryCatch } from "@openbeacon/shared";
 import { router, useFocusEffect, useRootNavigationState } from "expo-router";
 import { useCallback, useEffect, useRef } from "react";
 import { Animated, Dimensions, Easing, Pressable, ScrollView, View } from "react-native";
@@ -6,6 +7,9 @@ import { BeaconIcon } from "../components/BeaconIcon.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
+import { isThisDeviceActive } from "../lib/deviceActivation.ts";
+import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
+import { readSavedDeviceLink } from "../lib/savedDeviceLink.ts";
 import { useColors } from "../lib/theme.ts";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -70,7 +74,28 @@ export default function HomeScreen() {
         return;
       }
 
-      router.replace("/(tabs)/map");
+      let cancelled = false;
+      let retry: ReturnType<typeof setTimeout> | undefined;
+      const route = async () => {
+        const savedLink = await tryCatch(ensureDeviceKeyRegistration().then(readSavedDeviceLink));
+        if (cancelled) return;
+        if (savedLink.data) {
+          router.replace("/setup/link");
+          return;
+        }
+        const active = await tryCatch(isThisDeviceActive());
+        if (cancelled) return;
+        if (active.error) {
+          retry = setTimeout(() => void route(), 5_000);
+          return;
+        }
+        router.replace(active.data ? "/(tabs)/map" : "/setup");
+      };
+      void route();
+      return () => {
+        cancelled = true;
+        clearTimeout(retry);
+      };
     }, [rootNavigationState?.key, session, isPending]),
   );
 

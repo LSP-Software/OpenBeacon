@@ -4,6 +4,7 @@ const alertMock = mock(() => {});
 const completeAuthenticatedSessionSetupMock = mock(
   async (): Promise<{
     data: null | undefined;
+    deviceRemoved?: true;
     error: null | { message: string };
   }> => ({ data: undefined, error: null }),
 );
@@ -104,6 +105,31 @@ describe("performGoogleAuth", () => {
       "Google sign in failed",
       "Unable to register this device.",
     );
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  test("a removed phone stops without an alert or finishing sign-in", async () => {
+    completeAuthenticatedSessionSetupMock.mockImplementationOnce(async () => ({
+      data: null,
+      deviceRemoved: true,
+      error: null,
+    }));
+
+    const loadingStates: boolean[] = [];
+    const onSuccess = mock(async () => {});
+    const { performGoogleAuth } = await importGoogleAuthModule();
+
+    await performGoogleAuth({
+      setLoading: (loading) => {
+        loadingStates.push(loading);
+      },
+      failureTitle: "Google sign in failed",
+      onSuccess,
+      alert: alertMock,
+    });
+
+    expect(loadingStates).toEqual([true, false]);
+    expect(alertMock).not.toHaveBeenCalled();
     expect(onSuccess).not.toHaveBeenCalled();
   });
 });

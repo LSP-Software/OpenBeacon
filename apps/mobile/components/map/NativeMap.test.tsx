@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import React, { act } from "react";
 import { createRoot, type Root } from "test-renderer";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
+import type { MapPeople, MapPerson } from "../../lib/mapPeopleTypes.ts";
 import { nextMapMarkerSelection } from "../../lib/mapMarkerSelection.ts";
 import { createReactNativeTestModule } from "../../test/reactNativeTestModule.ts";
 import {
@@ -71,11 +72,26 @@ const routerReplace = mock(() => {});
 let root: Root | null = null;
 const testPlatform = { OS: "ios" as "ios" | "android" };
 let mapAssetUrls: { glyphs: string; sprites: string } | null = null;
+const backPressListeners = new Set<() => boolean>();
+const accessibilityAnnouncements: string[] = [];
 
 mock.module("react-native", () => {
   const reactNative = createReactNativeTestModule({ platformOS: "android" });
   return {
     ...reactNative,
+    AccessibilityInfo: {
+      addEventListener: () => ({ remove: () => {} }),
+      announceForAccessibility: (message: string) => {
+        accessibilityAnnouncements.push(message);
+      },
+      isScreenReaderEnabled: async () => false,
+    },
+    BackHandler: {
+      addEventListener: (_event: "hardwareBackPress", listener: () => boolean) => {
+        backPressListeners.add(listener);
+        return { remove: () => backPressListeners.delete(listener) };
+      },
+    },
     Platform: testPlatform,
     ActivityIndicator: () => React.createElement("activity-indicator"),
     Animated: {
@@ -125,9 +141,24 @@ mock.module("react-native", () => {
 
 mock.module("lucide-react-native", () => ({
   ArrowUpIcon: () => React.createElement("arrow-up-icon"),
+  BackpackIcon: () => React.createElement("device-icon"),
+  Flower2Icon: () => null,
+  HeartIcon: () => null,
+  StarIcon: () => null,
+  SunIcon: () => null,
+  TabletIcon: () => null,
+  CarIcon: () => React.createElement("device-icon"),
+  HouseIcon: () => React.createElement("device-icon"),
+  LaptopIcon: () => React.createElement("device-icon"),
+  SmartphoneIcon: () => React.createElement("device-icon"),
+  TagIcon: () => React.createElement("device-icon"),
+  WatchIcon: () => React.createElement("device-icon"),
+  EyeOffIcon: () => React.createElement("eye-off-icon"),
+  LayersIcon: () => React.createElement("layers-icon"),
   LocateFixedIcon: () => React.createElement("locate-fixed-icon"),
   MapPinIcon: () => React.createElement("map-pin-icon"),
   ScanIcon: () => React.createElement("scan-icon"),
+  UsersIcon: () => React.createElement("users-icon"),
 }));
 
 mock.module("../ui/Icon.tsx", () => ({
@@ -252,6 +283,34 @@ mock.module("./LiveMapPersonSheet.tsx", () => ({
     React.createElement("live-map-person-sheet", { name }),
 }));
 
+mock.module("./LiveMapPeopleTray.tsx", () => ({
+  LiveMapPeopleTray: ({ onSelectPerson }: { onSelectPerson: (userId: string) => void }) =>
+    React.createElement("live-map-people-tray", { onSelectPerson }),
+}));
+
+mock.module("./LiveMapMissingPersonSheet.tsx", () => ({
+  LiveMapMissingPersonSheet: ({
+    onShowGroup,
+    person,
+  }: {
+    onShowGroup: (groupId: string) => void;
+    person: { name: string };
+  }) => React.createElement("live-map-missing-person-sheet", { name: person.name, onShowGroup }),
+}));
+
+mock.module("./LiveMapGroupVisibility.tsx", () => ({
+  LiveMapGroupMenu: ({
+    onSetHidden,
+  }: {
+    onSetHidden: (groupId: string, hidden: boolean) => void;
+  }) => React.createElement("live-map-group-menu", { onSetHidden }),
+  LiveMapHiddenGroupsNotice: (props: {
+    onOpenMenu: () => void;
+    onUndo: () => void;
+    toastGroupNames: readonly string[];
+  }) => React.createElement("live-map-hidden-groups-notice", props),
+}));
+
 mock.module("./LiveMapStackSheet.tsx", () => ({
   LiveMapStackSheet: ({ members }: { members: readonly LiveMapMarker[] }) =>
     React.createElement("live-map-stack-sheet", { count: members.length }),
@@ -300,13 +359,7 @@ const emitUserPanAfterProgrammaticCamera = () => {
   }
 };
 
-const renderNativeMap = async (
-  props: {
-    markers?: readonly LiveMapMarker[];
-    onSelectUserId?: (userId: string | null) => void;
-    selectedUserId?: string | null;
-  } = {},
-) => {
+const renderNativeMap = async (props: React.ComponentProps<typeof NativeMap> = {}) => {
   if (!root) {
     root = createRoot();
   }
@@ -349,18 +402,18 @@ const renderSelectableNativeMap = async (
   }
 
   const SelectableNativeMap = () => {
-    const [selectedUserId, setSelectedUserId] = React.useState<string | null>(null);
-    const selectedUserIdRef = React.useRef<string | null>(null);
+    const [selectedDeviceId, setSelectedDeviceId] = React.useState<string | null>(null);
+    const selectedDeviceIdRef = React.useRef<string | null>(null);
 
     return (
       <NativeMap
         markers={markers}
-        selectedUserId={selectedUserId}
-        onSelectUserId={(userId) => {
-          const next = nextMapMarkerSelection(selectedUserIdRef.current, userId);
-          selectedUserIdRef.current = next;
+        selectedDeviceId={selectedDeviceId}
+        onSelectDeviceId={(userId) => {
+          const next = nextMapMarkerSelection(selectedDeviceIdRef.current, userId);
+          selectedDeviceIdRef.current = next;
           selectionHistory.push(next);
-          setSelectedUserId(next);
+          setSelectedDeviceId(next);
         }}
       />
     );
@@ -383,6 +436,8 @@ describe("NativeMap integration harness", () => {
   beforeEach(() => {
     testPlatform.OS = "ios";
     mapAssetUrls = null;
+    backPressListeners.clear();
+    accessibilityAnnouncements.length = 0;
     resetNativeMapHarness();
     currentSignedPmtilesUrlQuery = {
       data: defaultSignedUrl,
@@ -505,8 +560,8 @@ describe("NativeMap integration harness", () => {
     setNativeMapProjectedPoint([-10, 300]);
     await renderNativeMap({
       markers: [marker],
-      selectedUserId: "alice",
-      onSelectUserId: (id) => selections.push(id),
+      selectedDeviceId: "alice",
+      onSelectDeviceId: (id) => selections.push(id),
     });
     const views =
       root?.container.queryAll(
@@ -613,7 +668,7 @@ describe("NativeMap integration harness", () => {
     setNativeMapProjectedPoint([200, 570]);
     await renderNativeMap({
       markers: [createLiveMapMarkerFixture({ userId: "alice" })],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     const views =
       root?.container.queryAll(
@@ -961,7 +1016,7 @@ describe("NativeMap integration harness", () => {
   test("restores selected person padding when retrying the same archive", async () => {
     const alice = createLiveMapMarkerFixture({ userId: "alice", latitude: 51.5, longitude: -0.12 });
     forceRefreshUrl = "https://cached.example/pmtiles-1?signature=new";
-    await renderNativeMap({ markers: [alice], selectedUserId: "alice" });
+    await renderNativeMap({ markers: [alice], selectedDeviceId: "alice" });
     await flushEffects();
     await failMapLoad();
     await finishLoadingStyle();
@@ -1178,6 +1233,7 @@ describe("NativeMap integration harness", () => {
     });
 
     await renderNativeMap({ markers: [alice, bob] });
+    await finishLoadingStyle();
     await flushEffects();
 
     const fitCountBeforeRefresh = getNativeMapCameraCommands().filter(
@@ -1230,7 +1286,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice, bob],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1249,7 +1305,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice, bob],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
     await finishLoadingStyle();
@@ -1271,6 +1327,24 @@ describe("NativeMap integration harness", () => {
     ).toBe(true);
   });
 
+  test("waits for the map style to load before the first fit", async () => {
+    const alice = createLiveMapMarkerFixture({
+      latitude: 51.5,
+      longitude: -0.12,
+      userId: "alice",
+    });
+
+    await renderNativeMap({ markers: [alice] });
+    await flushEffects();
+    expect(getNativeMapCameraCommands()).toEqual([]);
+
+    await finishLoadingStyle();
+    await flushEffects();
+    expect(
+      getNativeMapCameraCommands().filter((command) => command.type === "setCamera"),
+    ).toHaveLength(1);
+  });
+
   test("preserves programmatic fit camera across remount without region events", async () => {
     const alice = createLiveMapMarkerFixture({
       latitude: 51.5,
@@ -1279,6 +1353,7 @@ describe("NativeMap integration harness", () => {
     });
 
     await renderNativeMap({ markers: [alice] });
+    await finishLoadingStyle();
     await flushEffects();
 
     currentSignedPmtilesUrlQuery = {
@@ -1342,6 +1417,7 @@ describe("NativeMap integration harness", () => {
     });
 
     await renderNativeMap({ markers: [self] });
+    await finishLoadingStyle();
     await flushEffects();
 
     expect(
@@ -1376,7 +1452,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1395,7 +1471,7 @@ describe("NativeMap integration harness", () => {
     const commandsAfterFocus = getNativeMapCameraCommands().length;
     await renderNativeMap({
       markers: [aliceMoved],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1425,14 +1501,14 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
     const commandsAfterFocus = getNativeMapCameraCommands().length;
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1453,7 +1529,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1462,7 +1538,7 @@ describe("NativeMap integration harness", () => {
     const commandsAfterPan = getNativeMapCameraCommands().length;
     await renderNativeMap({
       markers: [aliceMoved],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1470,12 +1546,12 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [aliceMoved],
-      selectedUserId: null,
+      selectedDeviceId: null,
     });
     await flushEffects();
     await renderNativeMap({
       markers: [aliceMoved],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1505,7 +1581,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1527,7 +1603,7 @@ describe("NativeMap integration harness", () => {
     const commandsAfterPan = getNativeMapCameraCommands().length;
     await renderNativeMap({
       markers: [aliceMoved],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1548,7 +1624,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1557,7 +1633,7 @@ describe("NativeMap integration harness", () => {
     const commandsAfterQuirk = getNativeMapCameraCommands().length;
     await renderNativeMap({
       markers: [aliceMoved],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1584,7 +1660,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1603,7 +1679,7 @@ describe("NativeMap integration harness", () => {
     setNativeMapSelfHeadingDegrees(90);
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1673,14 +1749,14 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [self],
-      selectedUserId: "self",
+      selectedDeviceId: "self",
     });
     await flushEffects();
 
     const commandsAfterSelection = getNativeMapCameraCommands().length;
     await renderNativeMap({
       markers: [self, alice],
-      selectedUserId: "self",
+      selectedDeviceId: "self",
     });
     await flushEffects();
 
@@ -1708,10 +1784,10 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice, bob],
-      onSelectUserId: (userId) => {
+      onSelectDeviceId: (userId) => {
         selections.push(userId);
       },
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
     await flushEffects();
 
@@ -1744,7 +1820,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [self, alice],
-      onSelectUserId: (userId) => {
+      onSelectDeviceId: (userId) => {
         selections.push(userId);
       },
     });
@@ -1804,10 +1880,10 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [self],
-      onSelectUserId: (userId) => {
+      onSelectDeviceId: (userId) => {
         selections.push(userId);
       },
-      selectedUserId: "self",
+      selectedDeviceId: "self",
     });
     await flushEffects();
 
@@ -1850,7 +1926,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice, bob],
-      onSelectUserId: (userId) => {
+      onSelectDeviceId: (userId) => {
         selections.push(userId);
       },
     });
@@ -1970,10 +2046,10 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      onSelectUserId: (userId) => {
+      onSelectDeviceId: (userId) => {
         selections.push(userId);
       },
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
 
     emitNativeMapAnnotationDeselected("alice");
@@ -2058,7 +2134,7 @@ describe("NativeMap integration harness", () => {
 
     await renderNativeMap({
       markers: [alice],
-      selectedUserId: "alice",
+      selectedDeviceId: "alice",
     });
 
     expect(getNativeMapAnnotationSelectedProp("alice")).toBeUndefined();
@@ -2345,5 +2421,340 @@ describe("NativeMap integration harness", () => {
           (command.stop as { zoomLevel?: number }).zoomLevel === 14,
       ),
     ).toBe(true);
+  });
+
+  describe("groups on the map", () => {
+    const family = {
+      color: "#FF1464",
+      hidden: false,
+      id: "family",
+      memberCount: 3,
+      name: "Family",
+    };
+    const club = { color: "#2A9D8F", hidden: false, id: "club", memberCount: 4, name: "Club" };
+    const emptyPeople: MapPeople = {
+      cantLocate: [],
+      cantRead: [],
+      connectionLost: false,
+      finding: [],
+      hidden: [],
+      outOfDate: [],
+      upToDate: [],
+      waiting: [],
+    };
+    const findOne = (type: string) =>
+      root?.container.queryAll((instance) => instance.type === type)[0];
+    const groupsButton = () =>
+      root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" &&
+          String(instance.props["accessibilityLabel"]).startsWith("Groups on the map"),
+      )[0];
+    const press = async (
+      instance: { props: Record<string, unknown> } | undefined,
+      key = "onPress",
+    ) => act(async () => (instance?.props[key] as (() => void) | undefined)?.());
+
+    test("only shows the groups button for people in two or more groups", async () => {
+      await renderNativeMap({ groupOptions: [family] });
+      expect(groupsButton()).toBeUndefined();
+
+      await renderNativeMap({ groupOptions: [family, club] });
+      expect(groupsButton()?.props["accessibilityLabel"]).toBe("Groups on the map");
+
+      await renderNativeMap({ groupOptions: [family, { ...club, hidden: true }] });
+      expect(groupsButton()?.props["accessibilityLabel"]).toBe("Groups on the map, 1 hidden");
+    });
+
+    test("hides a group from the menu, then undoes it from the toast", async () => {
+      const changes: Array<[string, boolean]> = [];
+      const onSetGroupHidden = (groupId: string, hidden: boolean) => {
+        changes.push([groupId, hidden]);
+      };
+      await renderNativeMap({ groupOptions: [family, club], onSetGroupHidden });
+
+      await press(groupsButton());
+      await act(async () =>
+        (
+          findOne("live-map-group-menu")?.props["onSetHidden"] as
+            ((groupId: string, hidden: boolean) => void) | undefined
+        )?.("club", true),
+      );
+      expect(changes).toEqual([["club", true]]);
+      expect(findOne("live-map-hidden-groups-notice")?.props["toastGroupNames"]).toEqual(["Club"]);
+      expect(accessibilityAnnouncements).toEqual([
+        "Club hidden. You’re still sharing your location with them.",
+      ]);
+
+      await press(findOne("live-map-hidden-groups-notice"), "onUndo");
+      expect(changes).toEqual([
+        ["club", true],
+        ["club", false],
+      ]);
+      expect(findOne("live-map-hidden-groups-notice")).toBeUndefined();
+    });
+
+    test("collects groups hidden in a row into one toast and undoes them all", async () => {
+      const school = { ...club, id: "school", name: "School" };
+      const changes: Array<[string, boolean]> = [];
+      await renderNativeMap({
+        groupOptions: [family, club, school],
+        onSetGroupHidden: (groupId, hidden) => {
+          changes.push([groupId, hidden]);
+        },
+      });
+
+      await press(groupsButton());
+      const setHidden = (groupId: string) =>
+        act(async () =>
+          (
+            findOne("live-map-group-menu")?.props["onSetHidden"] as
+              ((groupId: string, hidden: boolean) => void) | undefined
+          )?.(groupId, true),
+        );
+      await setHidden("club");
+      await setHidden("school");
+      expect(findOne("live-map-hidden-groups-notice")?.props["toastGroupNames"]).toEqual([
+        "Club",
+        "School",
+      ]);
+
+      await press(findOne("live-map-hidden-groups-notice"), "onUndo");
+      expect(changes).toEqual([
+        ["club", true],
+        ["school", true],
+        ["club", false],
+        ["school", false],
+      ]);
+    });
+
+    test("closes the menu when a person or stack is tapped", async () => {
+      const alice = createLiveMapMarkerFixture({ userId: "alice", name: "Alice" });
+      await renderNativeMap({ groupOptions: [family, club], markers: [alice] });
+
+      await press(groupsButton());
+      expect(findOne("live-map-group-menu")).toBeDefined();
+      await act(async () => emitNativeMapAnnotationSelected("alice"));
+      expect(findOne("live-map-group-menu")).toBeUndefined();
+
+      testPlatform.OS = "android";
+      await renderNativeMap({
+        groupOptions: [family, club],
+        markers: [alice, createLiveMapMarkerFixture({ userId: "bob", name: "Bob" })],
+      });
+      await press(groupsButton());
+      expect(findOne("live-map-group-menu")).toBeDefined();
+      const stack = root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" &&
+          instance.props["accessibilityLabel"] === "2 people: Alice, Bob",
+      )[0];
+      await press(stack);
+      expect(findOne("live-map-group-menu")).toBeUndefined();
+    });
+
+    test("closes the menu with the Android back button only while it is open", async () => {
+      await renderNativeMap({ groupOptions: [family, club] });
+      expect(backPressListeners.size).toBe(0);
+
+      await press(groupsButton());
+      const [onBackPress] = backPressListeners;
+      let handled = false;
+      await act(async () => {
+        handled = onBackPress?.() ?? false;
+      });
+      expect(handled).toBe(true);
+      expect(findOne("live-map-group-menu")).toBeUndefined();
+      expect(backPressListeners.size).toBe(0);
+    });
+
+    test("opens the menu from the hidden groups pill and closes it when the map is tapped", async () => {
+      await renderNativeMap({ groupOptions: [family, { ...club, hidden: true }] });
+      expect(findOne("live-map-group-menu")).toBeUndefined();
+
+      await press(findOne("live-map-hidden-groups-notice"), "onOpenMenu");
+      expect(findOne("live-map-group-menu")).toBeDefined();
+      expect(findOne("live-map-hidden-groups-notice")).toBeUndefined();
+
+      await act(async () => emitNativeMapPress());
+      expect(findOne("live-map-group-menu")).toBeUndefined();
+    });
+
+    test("shows a hidden person's group again from their sheet", async () => {
+      const changes: Array<[string, boolean]> = [];
+      const tom = {
+        groupNames: ["Club"],
+        hiddenGroups: [{ id: "club", name: "Club" }],
+        image: null,
+        initials: "To",
+        isSelf: false,
+        name: "Tom",
+        userId: "tom",
+      };
+      await renderNativeMap({
+        groupOptions: [family, { ...club, hidden: true }],
+        onSetGroupHidden: (groupId, hidden) => {
+          changes.push([groupId, hidden]);
+        },
+        people: { ...emptyPeople, hidden: [tom] },
+        peopleTrayOpen: true,
+      });
+
+      await act(async () =>
+        (
+          findOne("live-map-people-tray")?.props["onSelectPerson"] as
+            ((userId: string) => void) | undefined
+        )?.("tom"),
+      );
+      const sheet = findOne("live-map-missing-person-sheet");
+      expect(sheet?.props["name"]).toBe("Tom");
+
+      await act(async () =>
+        (sheet?.props["onShowGroup"] as ((groupId: string) => void) | undefined)?.("club"),
+      );
+      expect(changes).toEqual([["club", false]]);
+    });
+  });
+
+  describe("people tray", () => {
+    const person = (userId: string, name: string): MapPerson => ({
+      groupNames: ["Family"],
+      image: null,
+      initials: name.slice(0, 2).toUpperCase(),
+      isSelf: false,
+      name,
+      userId,
+    });
+    const createPeople = (overrides: Partial<MapPeople> = {}): MapPeople => ({
+      cantLocate: [],
+      cantRead: [],
+      connectionLost: false,
+      finding: [],
+      hidden: [],
+      outOfDate: [],
+      upToDate: [],
+      waiting: [],
+      ...overrides,
+    });
+    const peopleButton = () =>
+      root?.container.queryAll(
+        (instance) =>
+          instance.type === "pressable" &&
+          String(instance.props["accessibilityLabel"]).startsWith("People"),
+      )[0];
+    const trays = () =>
+      root?.container.queryAll((instance) => instance.type === "live-map-people-tray") ?? [];
+
+    test("shows the people button before membership has loaded", async () => {
+      await renderNativeMap();
+
+      expect(peopleButton()?.props["accessibilityLabel"]).toBe("People");
+    });
+
+    test("opens the tray from the people button once people are known", async () => {
+      const openChanges: boolean[] = [];
+      const onPeopleTrayOpenChange = (open: boolean) => {
+        openChanges.push(open);
+      };
+      await renderNativeMap({ onPeopleTrayOpenChange });
+
+      await act(async () => (peopleButton()?.props["onPress"] as (() => void) | undefined)?.());
+      expect(openChanges).toEqual([true]);
+
+      await renderNativeMap({ onPeopleTrayOpenChange, peopleTrayOpen: true });
+      expect(trays()).toHaveLength(0);
+
+      await renderNativeMap({
+        onPeopleTrayOpenChange,
+        people: createPeople({ cantLocate: [person("bob", "Bob")] }),
+        peopleTrayOpen: true,
+      });
+      expect(trays()).toHaveLength(1);
+
+      await act(async () => (peopleButton()?.props["onPress"] as (() => void) | undefined)?.());
+      expect(openChanges).toEqual([true, false]);
+    });
+
+    test("hides the tray while a person sheet is open", async () => {
+      const alice = createLiveMapMarkerFixture({ userId: "alice" });
+      await renderNativeMap({
+        markers: [alice],
+        people: createPeople({ upToDate: [alice] }),
+        peopleTrayOpen: true,
+        selectedDeviceId: "alice",
+      });
+
+      expect(trays()).toHaveLength(0);
+      expect(
+        root?.container.queryAll((instance) => instance.type === "live-map-person-sheet"),
+      ).toHaveLength(1);
+    });
+
+    test("counts people who can't be located or read once nobody is still being found", async () => {
+      const unreadable = { ...person("carol", "Carol"), groupId: "g1", groupName: "Family" };
+      const needsAttention = {
+        cantLocate: [person("bob", "Bob")],
+        cantRead: [{ ...unreadable, reason: "groupKey" as const }],
+      };
+
+      await renderNativeMap({
+        people: createPeople({ ...needsAttention, finding: [person("dan", "Dan")] }),
+      });
+      expect(peopleButton()?.props["accessibilityLabel"]).toBe("People");
+
+      await renderNativeMap({ people: createPeople(needsAttention) });
+      expect(peopleButton()?.props["accessibilityLabel"]).toBe("People, 2 need attention");
+
+      const erin = createLiveMapMarkerFixture({
+        unreadableGroup: { id: "g1", name: "Family" },
+        userId: "erin",
+      });
+      await renderNativeMap({
+        markers: [erin],
+        people: createPeople({ outOfDate: [erin] }),
+      });
+      expect(peopleButton()?.props["accessibilityLabel"]).toBe("People, 1 need attention");
+    });
+
+    test("swaps the missing-person sheet for the person sheet when they get a location", async () => {
+      const selections: Array<string | null> = [];
+      const onSelectDeviceId = (userId: string | null) => {
+        selections.push(userId);
+      };
+      const bob = person("bob", "Bob");
+      await renderNativeMap({
+        onSelectDeviceId,
+        people: createPeople({ cantLocate: [bob] }),
+        peopleTrayOpen: true,
+      });
+      await act(async () =>
+        (trays()[0]?.props["onSelectPerson"] as ((userId: string) => void) | undefined)?.("bob"),
+      );
+      const missingSheets = () =>
+        root?.container.queryAll((instance) => instance.type === "live-map-missing-person-sheet") ??
+        [];
+      expect(missingSheets()).toHaveLength(1);
+      expect(trays()).toHaveLength(0);
+
+      const bobMarker = createLiveMapMarkerFixture({ userId: "bob", name: "Bob" });
+      await renderNativeMap({
+        markers: [bobMarker],
+        onSelectDeviceId,
+        people: createPeople({ upToDate: [bobMarker] }),
+        peopleTrayOpen: true,
+      });
+      await flushEffects();
+
+      expect(missingSheets()).toHaveLength(0);
+      expect(selections.at(-1)).toBe("bob");
+      expect(
+        getNativeMapCameraCommands().some(
+          (command) =>
+            command.type === "setCamera" &&
+            (command.stop as { centerCoordinate?: [number, number] }).centerCoordinate?.[0] ===
+              bobMarker.longitude,
+        ),
+      ).toBe(true);
+    });
   });
 });

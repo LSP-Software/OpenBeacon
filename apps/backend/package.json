@@ -8,12 +8,8 @@
   },
   "scripts": {
     "dev": "NODE_ENV=development bun run --cwd ../.. --env-file=.env --hot apps/backend/src/index.ts",
-    "format": "bun fmt",
-    "format:check": "bun fmt --check",
-    "lint": "biome lint .",
     "typecheck": "bun check",
-    "test": "bun test --isolate",
-    "ci": "bun run typecheck && bun run format:check && bun run lint"
+    "test": "bun test --isolate"
   },
   "dependencies": {
     "@better-auth/expo": "^1.7.14",
@@ -24,7 +20,7 @@
     "@openbeacon/email": "workspace:*",
     "@openbeacon/schemas": "workspace:*",
     "@openbeacon/shared": "workspace:*",
-    "@prisma/adapter-pg": "^7.4.2",
+    "@prisma/adapter-pg": "^7.10.1",
     "@t3-oss/env-core": "^0.13.10",
     "@trpc/server": "^11.12.0",
     "better-auth": "^1.7.14",

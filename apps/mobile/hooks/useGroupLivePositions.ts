@@ -1,3 +1,4 @@
 import { useLiveTrackingPositions } from "./useLiveTrackingPositions.ts";
 
-export const useGroupLivePositions = (groupId: string) => useLiveTrackingPositions({ groupId });
+export const useGroupLivePositions = (groupId: string) =>
+  useLiveTrackingPositions({ groupId }).positions;

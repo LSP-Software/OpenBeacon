@@ -3,18 +3,36 @@ import { Text } from "@react-email/components";
 import { renderAlertsTurnedOffEmail } from "./alertsTurnedOffEmail.tsx";
 import { EmailDetails, EmailSubheading, renderEmailLayout } from "./layout.tsx";
 import type { createSendEmail } from "./sender.ts";
-import { type EmailMessage, isOptionalSecurityAlert, type SecurityAlert } from "./types.ts";
+import {
+  type AlertDevice,
+  type EmailMessage,
+  isOptionalSecurityAlert,
+  type SecurityAlert,
+} from "./types.ts";
 
 const secureGoogleAdvice =
-  "Secure your Google account, because someone may have used it to sign in.";
+  "Change your Google password, because someone may have used your Google account to sign in.";
+
+const signOutOthersAdvice =
+  'open Account → Password and Security and tap "Sign out of all other sessions".';
 
 const secureAccountAdvice = (hasPassword: boolean) =>
   hasPassword
-    ? "In the OpenBeacon app, change your password in Account → Password and Security. That signs you out on every other device."
-    : secureGoogleAdvice;
+    ? "In the OpenBeacon app, change your password in Account → Password and Security. That signs out every other device."
+    : `${secureGoogleAdvice} After that, in the OpenBeacon app, ${signOutOthersAdvice}`;
 
 const signedInAdvice = (hasPassword: boolean) =>
   `Someone else is signed in to your account. ${secureAccountAdvice(hasPassword)}`;
+
+const platformNames = { android: "Android", ios: "iOS" } as const;
+
+const describeDevice = (device: AlertDevice) => {
+  const extra = [
+    device.model && device.model !== device.name ? device.model : null,
+    device.platform && platformNames[device.platform],
+  ].filter(Boolean);
+  return extra.length ? `${device.name} (${extra.join(", ")})` : device.name;
+};
 
 const alertCopy = (
   alert: Exclude<SecurityAlert, { type: "alerts-turned-off" }>,
@@ -36,7 +54,7 @@ const alertCopy = (
         happened: "Your OpenBeacon password was changed.",
         details: [{ label: "Changed at", value: happenedAt }],
         ifNotYou:
-          'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs you out on every other device.',
+          'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs out every other device.',
       };
     case "password-reset":
       return {
@@ -63,24 +81,57 @@ const alertCopy = (
         details: [{ label: "Reset at", value: happenedAt }],
         ifNotYou: `${signedInAdvice(hasPassword)} Then open Account → Recovery phrase and tap "I’ve lost my phrase" to set a new one.`,
       };
-    case "new-device": {
-      const platform =
-        alert.device.platform && { android: "Android", ios: "iOS" }[alert.device.platform];
+    case "other-sessions-signed-out":
+      return {
+        subject: "Your other OpenBeacon sessions were signed out",
+        title: "Other sessions signed out",
+        happened: `Every other session on your OpenBeacon account was signed out. Only ${
+          alert.device ? alert.device.name : "the phone or tablet that did this"
+        } is still signed in.`,
+        details: [
+          ...(alert.device
+            ? [{ label: "Signed out by", value: describeDevice(alert.device) }]
+            : []),
+          { label: "Signed out at", value: happenedAt },
+        ],
+        ifNotYou: `Someone else is signed in to your account and may have signed you out. ${
+          hasPassword
+            ? 'Use "Forgot password" on the app\'s sign-in screen to choose a new password. That signs out every other device, including theirs.'
+            : `${secureGoogleAdvice} After that, sign in to the OpenBeacon app, then ${signOutOthersAdvice}`
+        }`,
+      };
+    case "new-sign-in": {
+      const platform = alert.device.platform && platformNames[alert.device.platform];
       const device =
         alert.device.model && platform
           ? `${alert.device.model} (${platform})`
           : (alert.device.model ?? (platform ? `${platform} device` : null));
       return {
-        subject: "A new device was added to your OpenBeacon account",
-        title: "New device added",
-        happened: "A new device was added to your OpenBeacon account.",
+        subject: "New sign-in to your OpenBeacon account",
+        title: "New sign-in",
+        happened: `New sign-in on ${
+          device ?? "a phone or tablet"
+        }. It can’t see anyone’s location until it’s set up.`,
         details: [
           ...(device ? [{ label: "Device", value: device }] : []),
-          { label: "Added at", value: happenedAt },
+          { label: "Signed in at", value: happenedAt },
         ],
-        ifNotYou: signedInAdvice(hasPassword),
+        ifNotYou: `Someone else is signed in to your account. In the OpenBeacon app, open Account → Devices, tap ${
+          alert.device.model ?? "the device you don’t know"
+        } and tap Remove device. ${secureAccountAdvice(hasPassword)}`,
       };
     }
+    case "device-removed":
+      return {
+        subject: "A device was removed from your OpenBeacon account",
+        title: "Device removed",
+        happened: `${alert.device.name} was removed from your OpenBeacon account. It was signed out and won’t receive new locations.`,
+        details: [
+          { label: "Device", value: describeDevice(alert.device) },
+          { label: "Removed at", value: happenedAt },
+        ],
+        ifNotYou: `${signedInAdvice(hasPassword)} To use the removed device again, sign in on it and set it up again.`,
+      };
     case "deletion-scheduled":
       return {
         subject: "Your OpenBeacon account is scheduled for deletion",
@@ -157,7 +208,7 @@ export const renderSecurityAlertEmail = async ({
         }
       : {}),
   });
-  return { subject, ...rendered, canTurnOff };
+  return { subject, summary: { type: `alert:${alert.type}` }, ...rendered, canTurnOff };
 };
 
 export const createSendSecurityAlertEmail =

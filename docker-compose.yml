@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16
+    image: postgres:16.15
     environment:
       POSTGRES_DB: openbeacon
       POSTGRES_USER: openbeacon
@@ -16,7 +16,7 @@ services:
       retries: 10
     restart: always
   redis:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.31.2
     ports:
       - "6379:6379"
     restart: always

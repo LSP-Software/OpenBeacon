@@ -14,6 +14,7 @@ import { Button } from "../../../../components/ui/Button.tsx";
 import { SwipeTabs, type SwipeTabsItem } from "../../../../components/ui/SwipeTabs.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
 import { useGroupKeyHistoryAccess } from "../../../../hooks/useGroupKeyAccess.ts";
+import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
 import { useHeldHistoryKeyVersions } from "../../../../hooks/useHeldHistoryKeyVersions.ts";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
@@ -54,20 +55,18 @@ const GroupScreen = () => {
   const [historyWarningDismissedFrom, setHistoryWarningDismissedFrom] = useState<number | null>(
     null,
   );
-  const recoveryStatus = useQuery(trpc.accountRecovery.status.queryOptions());
+  const recoveryStatus = useQuery({
+    ...trpc.accountRecovery.status.queryOptions(),
+    subscribed: isFocused,
+  });
   const currentHistoryKeyVersion = recoveryStatus.data?.currentHistoryKey?.version ?? 0;
   const heldHistoryKeyVersions = useHeldHistoryKeyVersions(
     session?.user.id,
     recoveryStatus.data?.currentHistoryKey ?? undefined,
   );
-  const {
-    data: group,
-    error,
-    isPending: isFetchingGroup,
-  } = useQuery({
-    ...trpc.groupMembership.get.queryOptions({ groupId }),
-    refetchInterval: 10_000,
-  });
+  const { group, isPending, isMissing } = useCachedGroup(groupId);
+  const [verifyFailedFor, setVerifyFailedFor] = useState<string | null>(null);
+  const [verifyAttempt, setVerifyAttempt] = useState(0);
   const historyPartialFrom =
     keyAccess?.data && keyAccess.data.history !== "complete"
       ? keyAccess.data.history.partialFrom
@@ -83,7 +82,7 @@ const GroupScreen = () => {
     !heldHistoryKeyVersions.data.includes(currentHistoryKeyVersion);
 
   useEffect(() => {
-    if (!isFocused || error?.data?.code !== "FORBIDDEN") return;
+    if (!isFocused || !isMissing) return;
     let active = true;
     void (async () => {
       const result = await tryCatch(
@@ -92,21 +91,38 @@ const GroupScreen = () => {
           staleTime: 0,
         }),
       );
-      if (active && !result.error && !result.data.some((item) => item.id === groupId)) {
+      if (!active) return;
+      if (result.error) {
+        setVerifyFailedFor(groupId);
+        return;
+      }
+      if (!result.data.some((item) => item.id === groupId)) {
         router.replace("/(tabs)/groups/list");
       }
     })();
     return () => {
       active = false;
     };
-  }, [error, groupId, isFocused, queryClient, router]);
+  }, [groupId, isFocused, isMissing, queryClient, router, verifyAttempt]);
 
-  if (isFetchingGroup) {
+  if (isPending || (isMissing && verifyFailedFor !== groupId)) {
     return <LoadingIndicator />;
   }
 
   if (!group) {
-    return <Text>Group not found</Text>;
+    return (
+      <View className="flex-1 items-center justify-center gap-4 bg-background px-6">
+        <Text>Group not found</Text>
+        <Button
+          onPress={() => {
+            setVerifyFailedFor(null);
+            setVerifyAttempt((attempt) => attempt + 1);
+          }}
+        >
+          <Text>Try again</Text>
+        </Button>
+      </View>
+    );
   }
 
   return (
@@ -114,7 +130,7 @@ const GroupScreen = () => {
       <SafeAreaView edges={["top", "bottom"]} className="flex-1 bg-background px-4 pt-5 pb-32">
         <View className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-5">
           <View className="gap-5">
-            <GroupHeader group={group} />
+            <GroupHeader group={group} userId={session?.user.id} />
             {keyAccess?.data?.current === "missing" && (
               <View className="gap-2 rounded-xl border border-destructive bg-card p-4">
                 <Text className="font-semibold text-destructive">
@@ -182,11 +198,13 @@ const GroupScreen = () => {
 
 const GroupHeader = ({
   group,
+  userId,
 }: {
-  group: NonNullable<RouterOutputs["groupMembership"]["get"]>;
+  group: RouterOutputs["groupMembership"]["list"][number];
+  userId: string | undefined;
 }) => {
-  const canEditGroupImage = group.groupMembers.some(
-    (member) => member.role === "OWNER" || member.role === "ADMIN",
+  const canEditGroupImage = group.members.some(
+    (member) => member.userId === userId && (member.role === "OWNER" || member.role === "ADMIN"),
   );
 
   return (

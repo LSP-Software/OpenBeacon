@@ -30,13 +30,17 @@ describe("uploadGroupTrackingBatch", () => {
   let createMany: ReturnType<typeof mock>;
   let findManyPayloads: ReturnType<typeof mock>;
   let findManyEpochs: ReturnType<typeof mock>;
+  let countEpochs: ReturnType<typeof mock>;
   let findManyDevices: ReturnType<typeof mock>;
+  let updateManyDevices: ReturnType<typeof mock>;
 
   beforeEach(() => {
     createMany = mock(async () => ({ count: 1 }));
     findManyPayloads = mock(async () => []);
     findManyEpochs = mock(async () => [{ id: "epoch-1" }]);
+    countEpochs = mock(async () => 1);
     findManyDevices = mock(async () => [{ id: "device-1", userId: "user-1" }]);
+    updateManyDevices = mock(async () => ({ count: 1 }));
   });
 
   const createDb = () => ({
@@ -46,10 +50,12 @@ describe("uploadGroupTrackingBatch", () => {
       findMany: findManyPayloads,
     },
     groupEpoch: {
+      count: countEpochs,
       findMany: findManyEpochs,
     },
     userDevice: {
       findMany: findManyDevices,
+      updateMany: updateManyDevices,
     },
   });
 
@@ -64,6 +70,7 @@ describe("uploadGroupTrackingBatch", () => {
     expect(result).toEqual({
       accepted: ["point-1"],
       duplicates: [],
+      expired: [],
     });
     expect(createMany).toHaveBeenCalledWith({
       data: [
@@ -80,6 +87,10 @@ describe("uploadGroupTrackingBatch", () => {
         },
       ],
       skipDuplicates: true,
+    });
+    expect(updateManyDevices).toHaveBeenCalledWith({
+      data: { lastLocationAt: expect.any(Date) },
+      where: { id: { in: ["device-1"] }, userId: "user-1" },
     });
   });
 
@@ -116,8 +127,10 @@ describe("uploadGroupTrackingBatch", () => {
     expect(result).toEqual({
       accepted: [],
       duplicates: ["point-1"],
+      expired: [],
     });
     expect(createMany).not.toHaveBeenCalled();
+    expect(updateManyDevices).not.toHaveBeenCalled();
   });
 
   test("partitions mixed accepted and duplicate clientPointIds in one batch", async () => {
@@ -136,6 +149,7 @@ describe("uploadGroupTrackingBatch", () => {
     expect(result).toEqual({
       accepted: ["point-2"],
       duplicates: ["point-1"],
+      expired: [],
     });
     expect(createMany).toHaveBeenCalledWith({
       data: [
@@ -199,6 +213,44 @@ describe("uploadGroupTrackingBatch", () => {
       code: "BAD_REQUEST",
       message: "Epoch does not belong to this group.",
     } satisfies Partial<TRPCError>);
+    expect(countEpochs).toHaveBeenCalledWith({ where: { id: { in: ["epoch-1"] } } });
+  });
+
+  test("reports points for deleted epochs as expired and stores the rest", async () => {
+    findManyEpochs = mock(async () => [{ id: "epoch-2" }]);
+    countEpochs = mock(async () => 0);
+
+    const result = await uploadGroupTrackingBatch({
+      db: createDb(),
+      groupId: "group-1",
+      points: [
+        createPoint({ clientPointId: "old", epochId: "deleted-epoch" }),
+        createPoint({ clientPointId: "new", epochId: "epoch-2" }),
+      ],
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({ accepted: ["new"], duplicates: [], expired: ["old"] });
+    expect(countEpochs).toHaveBeenCalledWith({ where: { id: { in: ["deleted-epoch"] } } });
+    expect(createMany.mock.calls[0]?.[0]).toMatchObject({
+      data: [{ clientPointId: "new", epochId: "epoch-2" }],
+    });
+  });
+
+  test("stores nothing when every point's epoch was deleted", async () => {
+    findManyEpochs = mock(async () => []);
+    countEpochs = mock(async () => 0);
+
+    const result = await uploadGroupTrackingBatch({
+      db: createDb(),
+      groupId: "group-1",
+      points: [createPoint()],
+      userId: "user-1",
+    });
+
+    expect(result).toEqual({ accepted: [], duplicates: [], expired: ["point-1"] });
+    expect(createMany).not.toHaveBeenCalled();
+    expect(updateManyDevices).not.toHaveBeenCalled();
   });
 });
 
@@ -233,6 +285,7 @@ describe("pollGroupTrackingPoints", () => {
         },
         userDevice: {
           findMany: mock(async () => []),
+          updateMany: mock(async () => ({ count: 0 })),
         },
       },
       groupId: "group-1",
@@ -269,7 +322,7 @@ describe("pollGroupTrackingPoints", () => {
 });
 
 describe("getLatestGroupTrackingPoints", () => {
-  test("uses DISTINCT ON senderUserId ordering", async () => {
+  test("looks up the newest point of each member's devices instead of sorting the whole group", async () => {
     const queryRaw = mock(async () => [
       {
         algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
@@ -297,6 +350,7 @@ describe("getLatestGroupTrackingPoints", () => {
         },
         userDevice: {
           findMany: mock(async () => []),
+          updateMany: mock(async () => ({ count: 0 })),
         },
       },
       groupId: "group-1",
@@ -306,7 +360,12 @@ describe("getLatestGroupTrackingPoints", () => {
     expect(queryRaw).toHaveBeenCalled();
     const sql = queryRaw.mock.calls[0]?.[0] as { strings: string[] };
     const sqlText = sql.strings.join("?");
-    expect(sqlText).toContain('DISTINCT ON ("senderUserId")');
-    expect(sqlText).toContain('ORDER BY "senderUserId" ASC, "createdAt" DESC, "id" DESC');
+    expect(sqlText).not.toContain("DISTINCT ON");
+    expect(sqlText).toContain('FROM "GroupMember" AS "member"');
+    expect(sqlText).toContain("CROSS JOIN LATERAL");
+    expect(sqlText).toContain('"device"."revokedAt" IS NULL');
+    expect(sqlText).toContain('"point"."senderDeviceId" = "device"."id"');
+    expect(sqlText).toContain('ORDER BY "point"."createdAt" DESC, "point"."id" DESC');
+    expect(sqlText).toContain("LIMIT 1");
   });
 });

@@ -1,9 +1,12 @@
+import type { MapMemberDevice } from "./mapPeopleTypes.ts";
 import type { LiveMapPosition } from "./mapTrackingTypes.ts";
 
 export const buildMemberLiveStatuses = ({
+  memberDevices = [],
   members,
   positions,
 }: {
+  memberDevices?: readonly MapMemberDevice[];
   members: readonly {
     id: string;
     role: string;
@@ -15,19 +18,32 @@ export const buildMemberLiveStatuses = ({
     };
   }[];
   positions: readonly LiveMapPosition[];
-}) => {
-  const positionByUserId = new Map(positions.map((position) => [position.userId, position]));
-
-  return members.map((member) => {
-    const live = positionByUserId.get(member.user.id);
+}) =>
+  members.map((member) => {
+    const devices = positions
+      .filter((position) => position.userId === member.user.id)
+      .sort((first, second) => second.timestamp.localeCompare(first.timestamp))
+      .map((position) => {
+        const device = memberDevices.find((item) => item.deviceId === position.deviceId);
+        return {
+          battery: position.battery,
+          deviceId: position.deviceId,
+          icon: device?.icon ?? null,
+          name: device?.name ?? null,
+          platform: device?.platform ?? null,
+          timestamp: position.timestamp,
+        };
+      });
+    const newest = devices[0];
 
     return {
-      battery: live?.battery ?? null,
+      activeDeviceCount: memberDevices.filter((device) => device.userId === member.user.id).length,
+      battery: newest?.battery ?? null,
+      devices,
       id: member.id,
       role: member.role,
       nickname: member.nickname ?? null,
-      timestamp: live?.timestamp ?? null,
+      timestamp: newest?.timestamp ?? null,
       user: member.user,
     };
   });
-};

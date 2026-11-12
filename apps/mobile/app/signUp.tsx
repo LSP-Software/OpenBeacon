@@ -24,7 +24,7 @@ import { signUpFormSchema } from "../lib/signUpSchema.ts";
 
 const SignUp = () => {
   const { joinCode } = useLocalSearchParams<{ joinCode?: string }>();
-  const finishSignUp = () => finishAuthentication({ joinCode });
+  const finishSignUp = () => finishAuthentication({ joinCode, newAccount: true });
   const [emailLoading, setEmailLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const {
@@ -102,6 +102,10 @@ const SignUp = () => {
     const sessionSetupResult = signInResult?.error
       ? null
       : await completeAuthenticatedSessionSetup();
+    if (sessionSetupResult?.deviceRemoved) {
+      setEmailLoading(false);
+      return;
+    }
     if (signInResult?.error || sessionSetupResult?.error) {
       setEmailLoading(false);
       Alert.alert("Account created", "Your account has been created. Sign in to continue.");

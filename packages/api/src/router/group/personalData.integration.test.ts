@@ -1,29 +1,26 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
-
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 const router = createTRPCRouter({ groupMembership: groupMembershipRouter });
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+const cache = createIntegrationTestCache(() => 0);
 const prefix = `personal-data-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const users = [0, 1].map((n) => `${prefix}-${n}`);
 const [owner = "", other = ""] = users;
 const caller = (userId: string) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    session: { user: { id: userId } },
-  } as Parameters<typeof router.createCaller>[0]);
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId: `${userId}-device`,
+      session: { user: { id: userId } },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 const storedColor = async (userId: string) =>
   (
     await prisma.personalGroupColor.findFirst({
@@ -38,6 +35,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     beforeAll(async () => {
       await prisma.user.createMany({
         data: users.map((id) => ({ id, name: id, email: `${id}@example.test` })),
+      });
+      await prisma.userDevice.createMany({
+        data: users.map((userId) => ({
+          activatedAt: new Date(),
+          icon: "phone" as const,
+          id: `${userId}-device`,
+          name: "Phone",
+          publicKey: "public-key",
+          publicKeyAlgorithm: "X25519",
+          userId,
+        })),
       });
       await prisma.group.create({
         data: {

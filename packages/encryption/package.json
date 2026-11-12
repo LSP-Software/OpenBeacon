@@ -8,9 +8,6 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "format": "bun fmt",
-    "format:check": "bun fmt --check",
-    "lint": "biome lint .",
     "typecheck": "bun check",
     "test": "bun test --isolate"
   },

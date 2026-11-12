@@ -10,6 +10,7 @@ import { Button } from "../components/ui/Button.tsx";
 import { Input } from "../components/ui/Input.tsx";
 import { Separator } from "../components/ui/Separator.tsx";
 import { Text } from "../components/ui/Text.tsx";
+import { checkServerCompatibility } from "../lib/apiCompatibility.ts";
 import { getServerUrl, hasCustomServerUrl, setServerUrl } from "../lib/server-url.ts";
 
 const serverUrlSchema = z.object({
@@ -26,7 +27,7 @@ export default function ServerUrl() {
     shouldFocusError: true,
   });
 
-  const handleSave = (data: z.infer<typeof serverUrlSchema>) => {
+  const handleSave = async (data: z.infer<typeof serverUrlSchema>) => {
     const { url } = data;
     try {
       const parsed = new URL(url);
@@ -39,13 +40,37 @@ export default function ServerUrl() {
       return;
     }
 
-    setServerUrl(url);
+    const save = () => {
+      setServerUrl(url);
+      Alert.alert(
+        url ? "Server saved" : "Using default server",
+        url
+          ? "Restart the app to connect to your custom server."
+          : "Restart the app to switch back to the default server.",
+        [{ text: "OK", onPress: () => router.back() }],
+      );
+    };
+
+    const { verdict, serverVersion } = await checkServerCompatibility(url);
+    if (verdict === "ok") {
+      save();
+      return;
+    }
     Alert.alert(
-      url ? "Server saved" : "Using default server",
-      url
-        ? "Restart the app to connect to your custom server."
-        : "Restart the app to switch back to the default server.",
-      [{ text: "OK", onPress: () => router.back() }],
+      verdict === null
+        ? "Couldn't reach this server"
+        : verdict === "appTooOld"
+          ? "Update the app first"
+          : "This server needs updating",
+      verdict === null
+        ? "Check the address and that the server is running."
+        : verdict === "appTooOld"
+          ? "This server needs a newer version of Open Beacon. Update the app before using it."
+          : `This server is running version ${serverVersion}, which is too old for this app. Ask whoever runs it to update it. You won't be able to share your location until it's updated.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Save anyway", onPress: save },
+      ],
     );
   };
 
@@ -88,7 +113,9 @@ export default function ServerUrl() {
               autoComplete="off"
               textContentType="URL"
               returnKeyType="done"
-              onSubmitEditing={form.handleSubmit(handleSave)}
+              onSubmitEditing={() => {
+                if (!form.formState.isSubmitting) void form.handleSubmit(handleSave)();
+              }}
             />
 
             <View className="bg-primary/10 rounded-lg p-4 border border-primary/15">
@@ -98,7 +125,11 @@ export default function ServerUrl() {
               </Text>
             </View>
 
-            <Button onPress={form.handleSubmit(handleSave)} disabled={!form.formState.isDirty}>
+            <Button
+              onPress={form.handleSubmit(handleSave)}
+              disabled={!form.formState.isDirty}
+              loading={form.formState.isSubmitting}
+            >
               <Text>Save</Text>
             </Button>
             {hasCustomServerUrl() && (

@@ -16,6 +16,8 @@ test("reports the server version and name", async () => {
     serverVersion: "0.1.1",
     serverName: "Family server",
     db: {},
+    deviceId: "device-1",
+    deviceActive: true,
     session: { user: { id: "user-1", email: "user@example.com" } },
   } as unknown as Parameters<typeof appRouter.createCaller>[0]);
 

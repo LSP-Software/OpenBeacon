@@ -1,30 +1,39 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { auth } from "@openbeacon/auth";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { Prisma, prisma } from "@openbeacon/database";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
 import { appRouter } from "../root.ts";
-
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
+import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
 
 const email = `deletion-${crypto.randomUUID()}@example.test`;
 const password = "testing-password-123";
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+const cache = createIntegrationTestCache(() => 0);
 let userId = "";
+const addActiveDevice = (id: string) =>
+  prisma.userDevice.create({
+    data: {
+      activatedAt: new Date(),
+      icon: "phone",
+      id: `${id}-device`,
+      name: "Phone",
+      publicKey: "public-key",
+      publicKeyAlgorithm: "X25519",
+      userId: id,
+    },
+  });
 const caller = (sessionId: string) =>
-  appRouter.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    session: { user: { id: userId, email }, session: { id: sessionId } },
-  } as Parameters<typeof appRouter.createCaller>[0]);
+  appRouter.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId: `${userId}-device`,
+      session: { user: { id: userId, email }, session: { id: sessionId } },
+    }) as Parameters<typeof appRouter.createCaller>[0],
+  );
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "account deletion request with PostgreSQL",
@@ -34,6 +43,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         body: { email, password, name: "Deletion Test" },
       });
       userId = result.user.id;
+      await addActiveDevice(userId);
     });
     afterAll(async () => {
       await prisma.group.deleteMany({ where: { groupMembers: { some: { userId } } } });
@@ -85,7 +95,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       const inviteeId = `${userId}-invitee`;
       await prisma.user.create({
-        data: { id: inviteeId, name: "Invitee", email: `${inviteeId}@example.test` },
+        data: {
+          id: inviteeId,
+          name: "Invitee",
+          email: `${inviteeId}@example.test`,
+          devices: {
+            create: {
+              activatedAt: new Date(),
+              icon: "phone",
+              id: `${inviteeId}-device`,
+              name: "Phone",
+              publicKey: "public-key",
+              publicKeyAlgorithm: "X25519",
+            },
+          },
+        },
       });
       const invite = await prisma.groupMemberInvite.create({
         data: { inviterId: userId, recipientId: inviteeId, groupId: soloGroup.id, role: "MEMBER" },
@@ -105,15 +129,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const scheduled = await caller(initialSession.id).account.requestDeletion({ password });
       expect(await prisma.groupMemberInvite.count({ where: { groupId: soloGroup.id } })).toBe(0);
       expect(await prisma.groupSharedInvite.count({ where: { groupId: soloGroup.id } })).toBe(0);
-      const invitee = appRouter.createCaller({
-        cache,
-        db: prisma,
-        clientIp: "127.0.0.1",
-        session: {
-          user: { id: inviteeId, email: `${inviteeId}@example.test` },
-          session: { id: "invitee-session" },
-        },
-      } as Parameters<typeof appRouter.createCaller>[0]);
+      const invitee = appRouter.createCaller(
+        withDeviceActive({
+          cache,
+          db: prisma,
+          clientIp: "127.0.0.1",
+          deviceId: `${inviteeId}-device`,
+          session: {
+            user: { id: inviteeId, email: `${inviteeId}@example.test` },
+            session: { id: "invitee-session" },
+          },
+        }) as Parameters<typeof appRouter.createCaller>[0],
+      );
       const nextEpoch = {
         createdByDeviceId: "device",
         epochId: "epoch",
@@ -237,14 +264,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           },
         },
       });
+      await addActiveDevice(first.user.id);
+      await addActiveDevice(second.user.id);
       const request = (id: string, accountEmail: string, sessionId: string) =>
         appRouter
-          .createCaller({
-            cache,
-            db: prisma,
-            clientIp: "127.0.0.1",
-            session: { user: { id, email: accountEmail }, session: { id: sessionId } },
-          } as Parameters<typeof appRouter.createCaller>[0])
+          .createCaller(
+            withDeviceActive({
+              cache,
+              db: prisma,
+              clientIp: "127.0.0.1",
+              deviceId: `${id}-device`,
+              session: { user: { id, email: accountEmail }, session: { id: sessionId } },
+            }) as Parameters<typeof appRouter.createCaller>[0],
+          )
           .account.requestDeletion({ password });
       try {
         const results = await Promise.allSettled([
@@ -270,6 +302,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       const id = account.user.id;
       const session = await prisma.session.findFirstOrThrow({ where: { userId: id } });
+      const device = await prisma.userDevice.create({
+        data: {
+          activatedAt: new Date(),
+          icon: "phone",
+          id: `${id}-device`,
+          name: "Phone",
+          publicKey: "public-key",
+          publicKeyAlgorithm: "X25519",
+          userId: id,
+        },
+      });
       const groupId = `group-${crypto.randomUUID()}`;
       let unlock: () => void = () => {};
       let locked: () => void = () => {};
@@ -291,12 +334,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       try {
         await acquired;
-        const caller = appRouter.createCaller({
-          cache,
-          db: prisma,
-          clientIp: "127.0.0.1",
-          session: { user: { id, email: accountEmail }, session: { id: session.id } },
-        } as Parameters<typeof appRouter.createCaller>[0]);
+        const caller = appRouter.createCaller(
+          withDeviceActive({
+            cache,
+            db: prisma,
+            clientIp: "127.0.0.1",
+            deviceId: device.id,
+            session: { user: { id, email: accountEmail }, session: { id: session.id } },
+          }) as Parameters<typeof appRouter.createCaller>[0],
+        );
         const creation = caller.groupLifecycle.create({
           groupId,
           name: "Family",
@@ -320,7 +366,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         });
         unlock();
         await deletion;
-        await expect(creation).rejects.toThrow();
+        await expect(creation).rejects.toMatchObject({ code: "UNAUTHORIZED" });
         expect(await prisma.group.findUnique({ where: { id: groupId } })).toBeNull();
       } finally {
         unlock();
@@ -377,15 +423,19 @@ test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     const immediateUserId = signup.user.id;
     try {
       const session = await prisma.session.findFirstOrThrow({ where: { userId: immediateUserId } });
-      const immediateCaller = appRouter.createCaller({
-        cache,
-        db: prisma,
-        clientIp: "127.0.0.1",
-        session: {
-          user: { id: immediateUserId, email: immediateEmail },
-          session: { id: session.id },
-        },
-      } as Parameters<typeof appRouter.createCaller>[0]);
+      await addActiveDevice(immediateUserId);
+      const immediateCaller = appRouter.createCaller(
+        withDeviceActive({
+          cache,
+          db: prisma,
+          clientIp: "127.0.0.1",
+          deviceId: `${immediateUserId}-device`,
+          session: {
+            user: { id: immediateUserId, email: immediateEmail },
+            session: { id: session.id },
+          },
+        }) as Parameters<typeof appRouter.createCaller>[0],
+      );
       await expect(
         immediateCaller.account.requestDeletion({ password: "wrong", immediate: true }),
       ).rejects.toThrow("Password is incorrect");

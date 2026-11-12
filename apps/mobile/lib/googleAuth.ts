@@ -22,6 +22,10 @@ export const performGoogleAuth = async ({
   }
 
   const sessionSetupResult = await completeAuthenticatedSessionSetup();
+  if (sessionSetupResult.deviceRemoved) {
+    setLoading(false);
+    return;
+  }
   if (sessionSetupResult.error) {
     alert(failureTitle, sessionSetupResult.error.message);
     setLoading(false);

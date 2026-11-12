@@ -17,7 +17,7 @@ export const renderAlertsTurnedOffEmail = async ({
   const labels = alerts.map(
     (type) =>
       ({
-        "new-device": "New device added",
+        "new-sign-in": "New sign-in",
         "deletion-scheduled": "Account deletion scheduled",
       })[type],
   );
@@ -47,5 +47,9 @@ export const renderAlertsTurnedOffEmail = async ({
       </>
     ),
   });
-  return { subject: "Email alerts were turned off on your OpenBeacon account", ...rendered };
+  return {
+    subject: "Email alerts were turned off on your OpenBeacon account",
+    summary: { type: "alert:alerts-turned-off" },
+    ...rendered,
+  };
 };

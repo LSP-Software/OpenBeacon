@@ -5,6 +5,7 @@ import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { AppState } from "react-native";
 import { authClient } from "../lib/auth-client.ts";
+import { useThisDeviceState } from "../lib/deviceActivation.ts";
 import { subscribeToTrackingSync } from "../lib/trackingEvents.ts";
 import { useLocationPermissions } from "./LocationPermissionProvider.tsx";
 
@@ -16,9 +17,13 @@ const trackingService = {
     (await import("../lib/tracking.ts")).getUnassignedTrackingPoints(),
   recoverUnassignedTrackingPoints: async (input: { deviceIds: string[]; userId: string }) =>
     (await import("../lib/tracking.ts")).recoverUnassignedTrackingPoints(input),
-  reconcileTrackingKeys: async (input: { startCapture: boolean }) =>
+  reconcileTrackingKeys: async (input: { startCapture: boolean; force: boolean }) =>
     (await import("../lib/tracking.ts")).reconcileTrackingKeys(input),
-  revokeTrackingAccess: async () => (await import("../lib/tracking.ts")).revokeTrackingAccess(),
+  revokeTrackingAccess: async (input: { keepDeviceRegistration: boolean }) =>
+    (await import("../lib/tracking.ts")).revokeTrackingAccess(input),
+  checkThisPhoneAfterSessionLoss: async () =>
+    (await import("../lib/deviceRemoved.ts")).checkThisPhoneAfterSessionLoss(),
+  takeKeyAccessChange: async () => (await import("../lib/tracking.ts")).takeKeyAccessChange(),
 };
 
 export const TrackingProvider = ({
@@ -31,14 +36,17 @@ export const TrackingProvider = ({
   const { data: session, isPending } = authClient.useSession();
   const queryClient = useQueryClient();
   const { permissionState } = useLocationPermissions();
+  const thisDeviceActive = useThisDeviceState() === "active";
   const activeCycleRef = useRef<Promise<void> | null>(null);
   const cycleVersionRef = useRef(0);
   const sessionReadyRef = useRef(false);
+  const startingVersionRef = useRef<number | null>(null);
   const appStateRef = useRef(AppState.currentState);
   const completedCycleRef = useRef(0);
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
   const requestedCycleRef = useRef(0);
   const forceFlushRef = useRef(false);
+  const forceKeyCheckRef = useRef(false);
   const recoveryCheckedUserRef = useRef<string | null>(null);
   const startCaptureRef = useRef(permissionState?.isReadyForSharing ?? false);
   const userId = session?.user.id ?? null;
@@ -46,9 +54,13 @@ export const TrackingProvider = ({
   startCaptureRef.current = startCapture;
 
   const runTrackingCycle = useCallback(
-    (force = false) => {
+    ({
+      forceFlush = false,
+      forceKeyCheck = false,
+    }: { forceFlush?: boolean; forceKeyCheck?: boolean } = {}) => {
       if (!sessionReadyRef.current) return Promise.resolve();
-      forceFlushRef.current ||= force;
+      forceFlushRef.current ||= forceFlush;
+      forceKeyCheckRef.current ||= forceKeyCheck;
       requestedCycleRef.current += 1;
 
       if (activeCycleRef.current) {
@@ -63,13 +75,19 @@ export const TrackingProvider = ({
         ) {
           const cycle = requestedCycleRef.current;
           const forceFlush = forceFlushRef.current;
+          const forceKeyCheck = forceKeyCheckRef.current;
           forceFlushRef.current = false;
+          forceKeyCheckRef.current = false;
           await tryCatch(
             service.reconcileTrackingKeys({
               startCapture: startCaptureRef.current,
+              force: forceKeyCheck,
             }),
           );
           if (version !== cycleVersionRef.current) return;
+          if (appStateRef.current === "active" && (await service.takeKeyAccessChange())) {
+            void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
+          }
           await tryCatch(service.flushPendingTrackingPoints(forceFlush));
           if (version !== cycleVersionRef.current) return;
           const userId = previousUserIdRef.current;
@@ -114,9 +132,6 @@ export const TrackingProvider = ({
               );
             }
           }
-          if (appStateRef.current === "active") {
-            void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
-          }
           completedCycleRef.current = cycle;
         }
       })().finally(() => {
@@ -143,23 +158,33 @@ export const TrackingProvider = ({
       requestedCycleRef.current = 0;
       completedCycleRef.current = 0;
       forceFlushRef.current = false;
+      forceKeyCheckRef.current = false;
       recoveryCheckedUserRef.current = null;
       previousUserIdRef.current = userId;
+    } else if (!thisDeviceActive && sessionReadyRef.current) {
+      cycleVersionRef.current += 1;
+      sessionReadyRef.current = false;
+      activeCycleRef.current = null;
     }
     const version = cycleVersionRef.current;
     void (async () => {
       if (changed && (typeof previousUserId === "string" || !userId)) {
-        await tryCatch(service.revokeTrackingAccess());
+        await tryCatch(service.revokeTrackingAccess({ keepDeviceRegistration: !userId }));
+        if (!userId && version === cycleVersionRef.current)
+          await tryCatch(service.checkThisPhoneAfterSessionLoss());
       }
-      if (version !== cycleVersionRef.current || !userId) return;
-      if (changed) {
+      if (version !== cycleVersionRef.current || !userId || !thisDeviceActive) return;
+      const starting = !sessionReadyRef.current;
+      if (starting) {
+        if (startingVersionRef.current === version) return;
+        startingVersionRef.current = version;
         await service.resumeTracking();
         if (version !== cycleVersionRef.current) return;
         sessionReadyRef.current = true;
       }
-      await runTrackingCycle(changed);
+      await runTrackingCycle({ forceFlush: starting, forceKeyCheck: starting });
     })();
-  }, [isPending, runTrackingCycle, service, startCapture, userId]);
+  }, [isPending, runTrackingCycle, service, startCapture, thisDeviceActive, userId]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState) => {
@@ -170,7 +195,7 @@ export const TrackingProvider = ({
       appStateRef.current = nextAppState;
 
       if (appBecameActive && userId) {
-        void runTrackingCycle();
+        void runTrackingCycle({ forceKeyCheck: true });
       }
     });
 
@@ -201,7 +226,7 @@ export const TrackingProvider = ({
     }
 
     return subscribeToTrackingSync(() => {
-      void runTrackingCycle();
+      void runTrackingCycle({ forceKeyCheck: true });
     });
   }, [runTrackingCycle, userId]);
 

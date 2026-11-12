@@ -9,9 +9,6 @@
     "./config.ts": "./src/config.ts"
   },
   "scripts": {
-    "format": "bun fmt",
-    "format:check": "bun fmt --check",
-    "lint": "biome lint .",
     "typecheck": "bun check",
     "test": "bun test --isolate"
   },

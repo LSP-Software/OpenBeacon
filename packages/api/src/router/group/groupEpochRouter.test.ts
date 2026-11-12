@@ -108,6 +108,8 @@ const createCaller = async ({
         findFirst: epochFindFirstMock,
       },
     },
+    deviceId: "device-1",
+    deviceActive: true,
     session: {
       user: {
         id: "user-1",

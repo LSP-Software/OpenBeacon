@@ -31,7 +31,9 @@ Set the required environment variables in the root `.env.example`, including
 the R2 variables, in Coolify. Set `BETTER_AUTH_URL` to
 `https://api.openbeacon.net` and `SELF_HOSTED` to `false`. `SELF_HOSTED` defaults
 to `true`, so self-hosted backends never accept app feedback; the app always
-sends feedback to the hosted API. Optional variables may be added when needed; leave
+sends feedback to the hosted API. Set `DISCORD_FEEDBACK_WEBHOOK_URL` on the hosted
+API to get a Discord alert for each new feedback; the alert holds only the
+feedback ID and whether a contact email was given. Optional variables may be added when needed; leave
 them absent to use their defaults. The Coolify deployment declares
 `TRUSTED_PROXY_PROVIDER` without a value to prevent startup until it is set.
 For the hosted API, set `TRUSTED_PROXY_PROVIDER` to `cloudflare-authenticated`
@@ -56,33 +58,34 @@ request came from Cloudflare, so only use it when the origin is reachable solely
 through Cloudflare, for example via Cloudflare Tunnel or a firewall that only
 allows Cloudflare's IP ranges. Otherwise use `cloudflare-authenticated`.
 
-The `Deploy backend` GitHub Actions workflow also builds and deploys the separate scheduled job runner. Every installation needs the runner: besides account deletion, it deletes expired email codes and verification tokens every hour. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
+The `Deploy backend` GitHub Actions workflow also builds and deploys the separate scheduled job runner. Every installation needs the runner: besides account deletion, it deletes expired email codes and verification tokens every hour, deletes new devices that weren't set up within 7 days or were removed more than 7 days ago, and deletes old device links and expired device challenges. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
 
-The `Deploy backend` GitHub Actions workflow is manually dispatched on `main`.
-Configure
-repository secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `COOLIFY_ENDPOINT`,
-and `COOLIFY_TOKEN`. The deployment finds the Coolify application by its unique
-name, `OpenBeacon Backend`. The Docker Hub account must be able
-to push `lspsoftware/openbeacon-backend`. Each build publishes the commit SHA,
-the backend version with a branch suffix, and a moving `branch-` tag. Branch
-names are converted to lowercase Docker tags; non-main branches also receive a
-hash suffix to distinguish similar names. A main build additionally publishes
-the version without a suffix and updates `latest-stable`. Version tags are
-updated if the same version is built again. Selecting the deploy option on main
-also asks Coolify to deploy `latest-stable`. For the first deployment, apply the
-Coolify infrastructure plan, populate its environment variables, and dispatch the
-workflow with the deploy option. To roll back, point
-Coolify at the desired commit SHA and redeploy;
-restore `latest-stable` before the next normal deployment.
-The workflow waits for Coolify to report the deployment result. If polling fails
-or times out, check the deployment in Coolify before retrying. Avoid starting
-other deployments manually while a workflow release is in progress.
+To deploy, dispatch the `Deploy backend` GitHub Actions workflow from `main`.
+It waits for approval in the `production` GitHub environment, which holds the
+`DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `COOLIFY_ENDPOINT` and `COOLIFY_TOKEN`
+secrets. It then builds both images, pushes them to
+`lspsoftware/openbeacon-backend` and `lspsoftware/openbeacon-scheduled-jobs`
+tagged with `serverVersion` from `src/version.ts` and `latest-stable`. With
+"Trigger the Coolify deployment" ticked, it then asks Coolify to deploy
+`latest-stable` to the `OpenBeacon Backend` and `OpenBeacon Scheduled Jobs`
+applications; leave it unticked to deploy from Coolify yourself later. The workflow fails if that version was
+already released from a different commit, so bump `serverVersion` for every
+release. Re-running a failed deploy is safe: images this commit already pushed
+are reused instead of rebuilt.
+
+For the first deployment, apply the Coolify infrastructure plan and populate its
+environment variables before dispatching the workflow. To roll back, point
+Coolify at an earlier version tag and redeploy; restore `latest-stable` before
+the next normal deployment. The workflow waits for Coolify to report the
+deployment result. If polling fails or times out, check the deployment in
+Coolify before retrying. Avoid starting other deployments manually while a
+workflow release is in progress.
 
 ## Email
 
-Email is optional. Without it the backend starts normally, sends nothing, and reports `email: false` from `auth.providers`. The app then hides the sign-up code, Forgot password, the recovery reset code and Account → Notifications → Email alerts. Users can't reset a forgotten password, and a recovery phrase reset needs only a fresh sign-in and typing `RESET`.
+Email is optional. Without it the backend starts normally, sends nothing, and reports `email: false` from `auth.providers`. The app then hides the sign-up code, Forgot password, the recovery reset code and Account → Notifications → Email alerts. Users can't reset a forgotten password, and a recovery phrase reset needs only a fresh sign-in, a session linked to this phone, and typing `RESET`. That includes "Start fresh" when setting up a new phone: with email off, the account password is enough to set up a new phone without the recovery phrase. For an account that only uses Google, signing in with Google is enough. It deletes the account's encrypted history, and the new phone can see the family's locations from then on.
 
-With email on, the backend sends codes for sign-up, email verification, password reset and recovery phrase reset, an "already have an account" email when someone signs up with a registered address, a "sign in with Google" email when someone asks to reset the password of an account that only uses Google, and security alerts. The alerts are always on for a password or recovery phrase change or reset, for email alerts being turned off, and for account deletion. Users can turn off the new device and deletion scheduled alerts in Account → Notifications → Email alerts.
+With email on, the backend sends codes for sign-up, email verification, password reset and recovery phrase reset, an "already have an account" email when someone signs up with a registered address, a "sign in with Google" email when someone asks to reset the password of an account that only uses Google, and security alerts. The alerts are always on for a password or recovery phrase change or reset, for other sessions being signed out, for a device being removed, for email alerts being turned off, and for account deletion. Users can turn off the new sign-in and deletion scheduled alerts in Account → Notifications → Email alerts.
 
 To switch email on, configure one provider and a sender address in the root `.env`:
 
@@ -97,9 +100,9 @@ At startup the backend checks the email settings without sending anything. For S
 
 Each address can request 3 codes of each kind every 15 minutes. `EMAIL_CODE_IP_LIMIT=true` also limits each IP address to 20 code requests an hour across all addresses, which slows down someone sending codes to many addresses from one machine. It is off by default because it can block users who share an IP address, such as phones behind carrier NAT or a household on one connection.
 
-Each account can trigger at most 20 emails an hour. Over that cap, the new device, deletion scheduled, "already have an account" and "sign in with Google" emails are dropped. Codes and the always-on alerts are still sent. The backend never logs email addresses, and only the development console mode below prints codes.
+Each account can trigger at most 20 emails an hour. Over that cap, the new sign-in, deletion scheduled, "already have an account" and "sign in with Google" emails are dropped. Codes and the always-on alerts are still sent. The backend never logs email addresses or codes, except in the development console mode below.
 
-For local development, set `EMAIL_CONSOLE=true` instead of a provider to print the plain-text part of each email, including codes, to the backend log. It is refused unless `NODE_ENV` is `development` or `test`; `bun run dev` sets `NODE_ENV=development`.
+For local development, set `EMAIL_CONSOLE=true` instead of a provider to print a one-line summary of each email to the log instead of sending it, for example `[email] to=alice@example.com type=password-reset code=123456`. It is refused unless `NODE_ENV` is `development` or `test`; the backend and runner `bun run dev` scripts set `NODE_ENV=development`.
 
 Give the scheduled job runner the same email settings and `REDIS_URL`, so it can send the account deleted email at the end of the grace period. See [the runner guide](../scheduled-jobs/README.md).
 

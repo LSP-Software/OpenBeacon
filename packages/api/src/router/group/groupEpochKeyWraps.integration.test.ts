@@ -1,35 +1,28 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
   createHistoryKeyPair,
   createInitialGroupEpoch,
   createNextGroupEpoch,
-  deriveRecoveryKeyPair,
-  generateRecoveryPhrase,
   type HistoryPrivateKeyMaterial,
   type HistoryPublicKey,
-  sealHistoryKeyEscrow,
   unwrapEpochKey,
   unwrapHistoryEpochKey,
   wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
+import { DevicePendingError } from "../../lib/deviceActivation.ts";
+import { getGroupJoinContext, getGroupRemovalContext } from "../../lib/groupEpochs.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { accountRecoveryRouter } from "../accountRecoveryRouter.ts";
 import { authRouter } from "../authRouter.ts";
 import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
+import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 
 setDefaultTimeout(60_000);
-
-class TestCache extends OpenBeaconCache {
-  protected override createRedisClient(): FakeRedis {
-    return new FakeRedis();
-  }
-}
 
 const router = createTRPCRouter({
   accountRecovery: accountRecoveryRouter,
@@ -38,7 +31,7 @@ const router = createTRPCRouter({
   groupInvites: groupInvitesRouter,
   groupLifecycle: groupLifecycleRouter,
 });
-const cache = new TestCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+const cache = createIntegrationTestCache(() => 0);
 const prefix = `epoch-wraps-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const pagedGroupId = `${prefix}-paged-group`;
@@ -61,16 +54,22 @@ const member = account("member");
 const outsider = account("outsider");
 const accounts = [owner, member, outsider];
 
-const caller = (userId: string) =>
-  router.createCaller({
-    cache,
-    db: prisma,
-    clientIp: "127.0.0.1",
-    session: {
-      user: { id: userId },
-      session: { id: `${userId}-session`, createdAt: new Date() },
-    },
-  } as Parameters<typeof router.createCaller>[0]);
+const caller = (
+  userId: string,
+  deviceId = accounts.find((item) => item.userId === userId)?.deviceId ?? null,
+) =>
+  router.createCaller(
+    withDeviceActive({
+      cache,
+      db: prisma,
+      clientIp: "127.0.0.1",
+      deviceId,
+      session: {
+        user: { id: userId },
+        session: { id: `${userId}-session`, createdAt: new Date() },
+      },
+    }) as Parameters<typeof router.createCaller>[0],
+  );
 
 const bundle = ({
   creator,
@@ -207,6 +206,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             id: item.deviceId,
             publicKey: item.key.publicKey,
             publicKeyAlgorithm: item.key.algorithm,
+            name: "Phone",
+            icon: "phone",
+            activatedAt: new Date(),
             userId: item.userId,
           },
         });
@@ -214,30 +216,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       epochs.first = await createGroup(groupId);
       epochs.second = await join(groupId, member);
       for (const item of accounts) {
-        const recoveryKey = deriveRecoveryKeyPair(generateRecoveryPhrase());
         const historyKey = createHistoryKeyPair();
         item.historyKey = {
           id: crypto.randomUUID(),
           privateKey: historyKey.privateKey,
           publicKey: historyKey.publicKey,
         };
-        await caller(item.userId).accountRecovery.setup({
-          historyKey: {
+        await prisma.accountHistoryKey.create({
+          data: {
             algorithm: historyKey.algorithm,
-            escrow: sealHistoryKeyEscrow({
-              historyPrivateKey: historyKey.privateKey,
-              recoveryPrivateKey: recoveryKey.privateKey,
-              userId: item.userId,
-              version: 1,
-            }),
             id: item.historyKey.id,
             publicKey: historyKey.publicKey,
+            userId: item.userId,
             version: 1,
-          },
-          recoveryKey: {
-            algorithm: recoveryKey.algorithm,
-            derivationVersion: recoveryKey.derivationVersion,
-            publicKey: recoveryKey.publicKey,
           },
         });
       }
@@ -333,6 +324,115 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const whole = await list(owner, { limit: 5 });
       expect(whole.epochs.map(({ epochNumber }) => epochNumber)).toEqual([2, 1]);
       expect(whole.nextCursor).toBeNull();
+    });
+
+    test("leaves a removed device out of wraps and recipients", async () => {
+      await prisma.userDevice.update({
+        where: { id: member.deviceId },
+        data: { revokedAt: new Date() },
+      });
+
+      await expect(list(member, {})).rejects.toMatchObject({ code: "FORBIDDEN" });
+      const tabletId = `${prefix}-member-tablet`;
+      await prisma.userDevice.create({
+        data: {
+          activatedAt: new Date(),
+          icon: "tablet",
+          id: tabletId,
+          name: "Tablet",
+          publicKey: createDeviceKeyPair().publicKey,
+          publicKeyAlgorithm: "X25519",
+          userId: member.userId,
+        },
+      });
+      const page = await caller(member.userId, tabletId).groupEpoch.listEpochKeyWraps({
+        deviceId: member.deviceId,
+        groupId,
+      });
+      expect(page.epochs.map(({ deviceWrap }) => deviceWrap)).toEqual([null]);
+      const single = await caller(member.userId, tabletId).groupEpoch.getEpochKeyWraps({
+        deviceId: member.deviceId,
+        epochId: epochs.second.epoch.epochId,
+        groupId,
+      });
+      expect(single.deviceWrap).toBeNull();
+      const recipients = await caller(owner.userId).groupEpoch.listRecipientPublicKeys({ groupId });
+      expect(JSON.stringify(recipients)).not.toContain(member.deviceId);
+
+      await prisma.userDevice.update({ where: { id: member.deviceId }, data: { revokedAt: null } });
+      await prisma.userDevice.delete({ where: { id: tabletId } });
+    });
+
+    test("leaves a Pending device out of every recipient set and refuses its wrap requests", async () => {
+      const pendingId = `${prefix}-member-pending`;
+      const pendingKey = createDeviceKeyPair();
+      await prisma.userDevice.create({
+        data: {
+          icon: "phone",
+          id: pendingId,
+          name: "New phone",
+          publicKey: pendingKey.publicKey,
+          publicKeyAlgorithm: "X25519",
+          userId: member.userId,
+        },
+      });
+      const pending = caller(member.userId, pendingId);
+      for (const request of [
+        () => pending.groupEpoch.getLatest({ groupId }),
+        () => pending.groupEpoch.rotationContext({ groupId }),
+        () => pending.groupEpoch.listRecipientPublicKeys({ groupId }),
+        () => pending.groupEpoch.listEpochKeyWraps({ deviceId: pendingId, groupId }),
+        () =>
+          pending.groupEpoch.getEpochKeyWraps({
+            deviceId: pendingId,
+            epochId: epochs.second.epoch.epochId,
+            groupId,
+          }),
+        () => pending.groupEpoch.listHistoryBackfill({ deviceId: pendingId, groupId }),
+        () =>
+          pending.groupEpoch.addHistoryWraps({
+            deviceId: pendingId,
+            groupId,
+            historyKeyId: member.historyKey.id,
+            wraps: [
+              wrapEpochKeyForHistoryKey({
+                epochId: epochs.second.epoch.epochId,
+                epochKey: epochs.second.epochKey,
+                historyKey: {
+                  publicKey: member.historyKey.publicKey,
+                  userId: member.userId,
+                  version: 1,
+                },
+                senderPrivateKey: pendingKey.privateKey,
+              }),
+            ],
+          }),
+      ]) {
+        await expect(request()).rejects.toMatchObject({
+          code: "FORBIDDEN",
+          cause: expect.any(DevicePendingError),
+        });
+      }
+
+      const recipientIds = (recipients: { deviceId: string }[]) =>
+        recipients.map(({ deviceId }) => deviceId);
+      const listed = await caller(owner.userId).groupEpoch.listRecipientPublicKeys({ groupId });
+      expect(listed.map(({ id }) => id)).not.toContain(pendingId);
+      const join = await getGroupJoinContext({ db: prisma, groupId, userId: member.userId });
+      expect(recipientIds(join.recipients)).toEqual(
+        [owner.deviceId, member.deviceId].sort((a, b) => a.localeCompare(b)),
+      );
+      const ownerMember = await prisma.groupMember.findFirstOrThrow({
+        where: { groupId, userId: owner.userId },
+      });
+      const removal = await getGroupRemovalContext({
+        db: prisma,
+        groupId,
+        memberId: ownerMember.id,
+      });
+      expect(recipientIds(removal.recipients)).toEqual([member.deviceId]);
+
+      await prisma.userDevice.delete({ where: { id: pendingId } });
     });
 
     test("rejects limits outside 1 to 100", async () => {
