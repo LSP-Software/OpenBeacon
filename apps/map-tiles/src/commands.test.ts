@@ -18,7 +18,7 @@ import {
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { MAP_TILES_MANIFEST_KEY, type MapTilesManifest } from "@openbeacon/map-tiles";
-import { publish, readMapStatus, rollback } from "./commands.ts";
+import { publish, readMapStatus, repairManifest, rollback } from "./commands.ts";
 import { parseEnv } from "./env.ts";
 import { getUploadStatePath } from "./upload.ts";
 
@@ -494,6 +494,62 @@ describe("map tiles commands", () => {
       slots: { a: null, b: null },
       nextUpdateDueAt: null,
       standbyReplaceableFrom: null,
+    });
+  });
+
+  describe("repairManifest", () => {
+    const now = Date.now();
+    const twoSlots = (): MapTilesManifest => ({
+      current: "b",
+      slots: {
+        a: {
+          ...archive("planet-a.pmtiles", "20261007", now - 40 * DAY_MS),
+          servedUntil: new Date(now + 2 * DAY_MS).toISOString(),
+        },
+        b: archive("planet-b.pmtiles", "20261107", now - 5 * DAY_MS),
+      },
+    });
+
+    test("leaves a manifest whose maps are all in R2 alone", async () => {
+      const r2 = createFakeR2();
+      r2.putManifest(twoSlots());
+      r2.putArchive("planet-a.pmtiles");
+      r2.putArchive("planet-b.pmtiles");
+
+      expect(await repairManifest(context(r2))).toBeNull();
+      expect(await repairManifest(context(createFakeR2()))).toBeNull();
+      expect(r2.writes).toEqual([]);
+    });
+
+    test("drops a missing standby map so it is never served or rolled back to", async () => {
+      const r2 = createFakeR2();
+      r2.putManifest(twoSlots());
+      r2.putArchive("planet-b.pmtiles");
+
+      expect(await repairManifest(context(r2))).toContain("slot a was removed");
+      expect(r2.manifest()).toEqual({ ...twoSlots(), slots: { ...twoSlots().slots, a: null } });
+    });
+
+    test("rolls back when the map in use is missing", async () => {
+      const r2 = createFakeR2();
+      r2.putManifest(twoSlots());
+      r2.putArchive("planet-a.pmtiles");
+
+      expect(await repairManifest(context(r2))).toContain("rolled back to slot a");
+      const { servedUntil: _servedUntil, ...restored } = twoSlots().slots.a ?? {};
+      expect(r2.manifest()).toEqual({ current: "a", slots: { a: restored, b: null } });
+    });
+
+    test("removes the manifest when none of its maps are in R2, so the next update starts over", async () => {
+      const r2 = createFakeR2();
+      r2.putManifest(twoSlots());
+
+      expect(await repairManifest(context(r2))).toContain("manifest was removed");
+      expect(r2.manifest()).toBeNull();
+
+      const result = await publish(context(r2), { ignoreInterval: false });
+      expect(result.published).toBe(true);
+      expect(r2.manifest()).toMatchObject({ current: "a", slots: { b: null } });
     });
   });
 });

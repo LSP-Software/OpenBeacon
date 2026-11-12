@@ -26,7 +26,7 @@ The next update replaces slot A, and so on.
 
 ## Configuration
 
-The service reads `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET`. The credentials need to read, write and list objects and multipart uploads in the bucket.
+The service reads `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET`. The credentials need to read, write, delete and list objects and multipart uploads in the bucket (Cloudflare's "Object Read & Write" permission).
 
 | Variable                         | Default                            | What it does                                                                        |
 | -------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------- |
@@ -53,7 +53,7 @@ Run it with `/state` on a volume:
 docker run -d --name map-tiles --env-file .env -p 8080:8080 -v openbeacon-map-tiles-state:/state openbeacon-map-tiles
 ```
 
-On start the service checks its settings and that it can reach R2 and write to its state directory, the same way the backend does, and exits if any check fails:
+On start the service checks its settings, the same way the backend does. It then checks that its R2 credentials can list the bucket and write and delete a small `map-tiles-access-check` object, and that it can write to its state directory. It exits if any check fails, naming the error code (for example `R2: failed (AccessDenied)`):
 
 ```text
 Environment configuration:
@@ -68,7 +68,15 @@ Map tiles API listening on port 8080
 Checking for a map update now and every 24 hours in R2 bucket openbeacon-maps
 ```
 
-It then checks for an update straight away and every 24 hours after that. It logs progress and the reason for every skip or failure. On `SIGTERM` it stops at once; an unfinished upload resumes on the next start.
+It then checks for an update straight away and every 24 hours after that. The service owns the manifest, so each check first makes sure the maps it lists are in R2:
+
+- If the map in use is missing and the other slot's map is there, it switches to the other slot.
+- If the other slot's map is missing, it removes that slot from the manifest so nothing is served from it or rolled back to.
+- If neither map is there, it removes the manifest and downloads the map again into slot A.
+
+A manifest that can't be read (not valid JSON, or not in the expected format) is never overwritten. The check fails and logs why until the file is fixed or deleted by hand.
+
+After that the update check runs as normal. It logs progress and the reason for every skip or failure. On `SIGTERM` it stops at once; an unfinished upload resumes on the next start.
 
 The image includes `curl`, so Coolify's health check against `http://127.0.0.1:8080/health` works. The Docker `HEALTHCHECK` calls the same endpoint.
 

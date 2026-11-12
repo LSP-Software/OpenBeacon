@@ -1,6 +1,6 @@
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { ListObjectsV2Command, type S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, ListObjectsV2Command, type S3Client } from "@aws-sdk/client-s3";
 import {
   clearStandbySlot,
   getArchiveId,
@@ -8,6 +8,7 @@ import {
   getOtherSlot,
   getSlotKey,
   getStandbyReuseAt,
+  MAP_TILES_MANIFEST_KEY,
   type MapTilesArchive,
   publishToStandby,
   readManifest,
@@ -102,6 +103,57 @@ export const readMapStatus = async ({ client, env }: Context): Promise<MapStatus
     ),
     resumableUploads: (pendingUploads.data ?? []).map((file) => file.replace(/\.json$/, "")),
   };
+};
+
+export const repairManifest = async ({ client, env }: Context) => {
+  const stored = await readManifest({ bucket: env.R2_BUCKET, client });
+
+  if (!stored) {
+    return null;
+  }
+
+  const { etag, manifest } = stored;
+  const standbySlot = getOtherSlot(manifest.current);
+  const current = getCurrentArchive(manifest).archive;
+  const standby = manifest.slots[standbySlot];
+  const currentExists = await headObject({ bucket: env.R2_BUCKET, client, key: current.key });
+  const standbyExists = standby
+    ? await headObject({ bucket: env.R2_BUCKET, client, key: standby.key })
+    : null;
+
+  if (currentExists && (!standby || standbyExists)) {
+    return null;
+  }
+
+  if (currentExists && standby) {
+    await writeManifest({
+      bucket: env.R2_BUCKET,
+      client,
+      etag,
+      manifest: { ...manifest, slots: { ...manifest.slots, [standbySlot]: null } },
+    });
+    return `${standby.key} is missing from R2, so slot ${standbySlot} was removed from the manifest`;
+  }
+
+  if (standby && standbyExists) {
+    const { servedUntil: _servedUntil, ...restored } = standby;
+    await writeManifest({
+      bucket: env.R2_BUCKET,
+      client,
+      etag,
+      manifest: {
+        ...manifest,
+        current: standbySlot,
+        slots: { ...manifest.slots, [standbySlot]: restored, [manifest.current]: null },
+      },
+    });
+    return `${current.key} is missing from R2, so the map rolled back to slot ${standbySlot} (Protomaps build ${standby.build})`;
+  }
+
+  await client.send(
+    new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key: MAP_TILES_MANIFEST_KEY }),
+  );
+  return "No map in the manifest is in R2, so the manifest was removed and the map is downloaded again";
 };
 
 export const rollback = async ({ client, env }: Context) => {

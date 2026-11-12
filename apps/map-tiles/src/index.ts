@@ -1,12 +1,11 @@
 import { access, constants, mkdir } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
-import { checkMapArchive } from "@openbeacon/map-tiles";
 import { checkServices, tryCatch, validateEnv } from "@openbeacon/shared";
 import { createMapTilesClient, formatStatus } from "./client.ts";
-import { publish, readMapStatus, rollback } from "./commands.ts";
+import { publish, readMapStatus, repairManifest, rollback } from "./commands.ts";
 import { DAY_MS, envSchema, parseClientEnv, parseEnv } from "./env.ts";
-import { createR2Clients } from "./r2.ts";
+import { checkBucketAccess, createR2Clients } from "./r2.ts";
 import { createMapTilesHandler } from "./server.ts";
 
 const usage = `Usage: map-tiles <command> [options]
@@ -47,7 +46,7 @@ const serve = async () => {
   const context = { ...createR2Clients(env), env };
 
   await checkServices({
-    R2: () => checkMapArchive({ bucket: env.R2_BUCKET, client: context.client }),
+    R2: () => checkBucketAccess({ bucket: env.R2_BUCKET, client: context.client }),
     "State directory": async () => {
       await mkdir(env.MAP_TILES_STATE_DIR, { recursive: true });
       await access(env.MAP_TILES_STATE_DIR, constants.W_OK);
@@ -58,7 +57,13 @@ const serve = async () => {
     apiKey: env.MAP_TILES_API_KEY,
     readMapStatus: () => readMapStatus(context),
     rollback: () => rollback(context),
-    runUpdate: (options) => publish(context, options),
+    runUpdate: async (options) => {
+      const repaired = await repairManifest(context);
+      if (repaired) {
+        console.log(repaired);
+      }
+      return publish(context, options);
+    },
   });
   const server = Bun.serve({
     fetch: handler.fetch,

@@ -1,4 +1,5 @@
 import { redisHashSecretSchema, redisUrlSchema } from "@openbeacon/cache";
+import { databaseUrlSchema } from "@openbeacon/database/databaseUrlSchema.ts";
 import { optionalEnvString, serverNameSchema } from "@openbeacon/schemas";
 import { z } from "zod";
 
@@ -7,15 +8,7 @@ export const envSchema = {
   BETTER_AUTH_URL: z.url({ protocol: /^https?$/ }),
   GOOGLE_CLIENT_ID: optionalEnvString,
   GOOGLE_CLIENT_SECRET: optionalEnvString,
-  DATABASE_URL: z
-    .url()
-    .refine(
-      (value) =>
-        URL.canParse(value) && ["postgres:", "postgresql:"].includes(new URL(value).protocol),
-      {
-        message: "DATABASE_URL must use postgres:// or postgresql://",
-      },
-    ),
+  DATABASE_URL: databaseUrlSchema,
   REDIS_URL: redisUrlSchema,
   REDIS_HASH_SECRET: redisHashSecretSchema,
   SERVER_NAME: serverNameSchema,
