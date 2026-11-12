@@ -46,6 +46,7 @@ export type MapTrackingDeps = {
     points: MapTrackingEncryptedPoint[];
     sharing?: DeviceSharingState[];
     cursor?: MapTrackingCursor | null;
+    hasMore?: boolean;
   }>;
   schedule: (callback: () => void, delayMs: number) => { cancel: () => void };
 };

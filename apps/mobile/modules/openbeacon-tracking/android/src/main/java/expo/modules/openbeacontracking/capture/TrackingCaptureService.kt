@@ -74,14 +74,26 @@ class TrackingCaptureService : Service() {
   ): Int {
     when (intent?.action) {
       ACTION_CHECK_SHARING -> {
+        if (!TrackingRuntime.isCaptureRunning && TrackingRuntime.shouldRestoreCapture(this)) {
+          startCapture(resolveStartIntervalMs(intent))
+        }
         if (TrackingRuntime.isCaptureRunning) {
           requestSharingSync()
           updateSharing()
-        } else stopSelf()
+        } else {
+          stopSelf()
+          return START_NOT_STICKY
+        }
       }
       ACTION_SHARING_CHANGED -> {
+        if (!TrackingRuntime.isCaptureRunning && TrackingRuntime.shouldRestoreCapture(this)) {
+          startCapture(resolveStartIntervalMs(intent))
+        }
         if (TrackingRuntime.isCaptureRunning) updateSharing()
-        else stopSelf()
+        else {
+          stopSelf()
+          return START_NOT_STICKY
+        }
       }
       ACTION_STOP -> {
         stopCapture()
@@ -109,6 +121,10 @@ class TrackingCaptureService : Service() {
       }
       else -> {
         synchronized(captureStateLock) {
+          if (intent?.action != ACTION_START && !TrackingRuntime.shouldRestoreCapture(this)) {
+            stopSelf()
+            return START_NOT_STICKY
+          }
           if (intent?.action == ACTION_START && !TrackingRuntime.captureCommands.isCurrent(intent.getLongExtra(EXTRA_COMMAND_GENERATION, -1L))) {
             if (!TrackingRuntime.isCaptureRunning) stopSelf()
             return START_NOT_STICKY
@@ -238,6 +254,11 @@ class TrackingCaptureService : Service() {
       }
     } else {
       try {
+        synchronized(captureStateLock) {
+          lastQueued = null
+          lastUploadRequestMs = 0L
+          refreshState.request()
+        }
         minimumFixElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
         requestLocationUpdates(currentIntervalMs)
       } catch (error: SecurityException) {

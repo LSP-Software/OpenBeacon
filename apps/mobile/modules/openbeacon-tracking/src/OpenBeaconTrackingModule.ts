@@ -43,12 +43,13 @@ export type CiphertextQueueEviction = {
 declare class OpenBeaconTrackingModule extends NativeModule {
   setSharingState(
     owner: string,
+    deviceId: string,
     revisionPrefix: string,
     paused: boolean,
     pausedUntil: number | null,
     resumeAfter: number | null,
-  ): void;
-  setQueueOwner(owner: string): void;
+  ): boolean;
+  setQueueOwner(owner: string, deviceId: string): void;
   provisionEpochKeys(keys: ProvisionedEpochKeyInput[], preserveGroupIds?: string[]): void;
   revokeEpochKeys(groupIds?: string[] | null): void;
   listProvisionedEpochKeys(): ProvisionedEpochKeyInfo[];

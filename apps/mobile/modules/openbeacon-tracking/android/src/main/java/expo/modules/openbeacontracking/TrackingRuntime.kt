@@ -1,10 +1,17 @@
 package expo.modules.openbeacontracking
 
 import android.content.Context
+import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.provider.Settings
+import androidx.core.content.ContextCompat
 import expo.modules.openbeacontracking.capture.CapturePipeline
 import expo.modules.openbeacontracking.capture.CaptureCommandState
 import expo.modules.openbeacontracking.capture.SharingCaptureState
+import expo.modules.openbeacontracking.capture.BootRestartPolicy
+import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.keys.EpochKeyStore
 import expo.modules.openbeacontracking.keys.SecureEpochKeyStore
 import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
@@ -58,30 +65,88 @@ object TrackingRuntime {
   fun sharingState(context: Context): SharingCaptureState {
     val preferences = context.getSharedPreferences("openbeacon_tracking_sharing", Context.MODE_PRIVATE)
     val owner = queueOwner(context) ?: return SharingCaptureState(paused = true)
+    val deviceId = queueDeviceId(context) ?: return SharingCaptureState(paused = true)
+    val scope = org.json.JSONArray(listOf(owner, deviceId)).toString()
     return SharingCaptureState(
-      revisionPrefix = preferences.getString("$owner.prefix", "") ?: "",
-      paused = preferences.getBoolean("$owner.paused", false),
-      pausedUntil = preferences.getLong("$owner.until", 0L).takeIf { it > 0L },
-      resumeAfter = preferences.getLong("$owner.after", 0L),
+      revisionPrefix = preferences.getString("$scope.prefix", "") ?: "",
+      paused = preferences.getBoolean("$scope.paused", true),
+      pausedUntil = preferences.getLong("$scope.until", 0L).takeIf { it > 0L },
+      resumeAfter = preferences.getLong("$scope.after", 0L),
     )
   }
 
   fun setSharingState(context: Context, state: SharingCaptureState) {
     val owner = queueOwner(context) ?: return
+    val deviceId = queueDeviceId(context) ?: return
+    val scope = org.json.JSONArray(listOf(owner, deviceId)).toString()
     val preferences = context.getSharedPreferences("openbeacon_tracking_sharing", Context.MODE_PRIVATE)
     check(preferences.edit()
-      .putString("$owner.prefix", state.revisionPrefix)
-      .putBoolean("$owner.paused", state.paused)
-      .putLong("$owner.until", state.pausedUntil ?: 0L)
-      .putLong("$owner.after", state.resumeAfter)
+      .putString("$scope.prefix", state.revisionPrefix)
+      .putBoolean("$scope.paused", state.paused)
+      .putLong("$scope.until", state.pausedUntil ?: 0L)
+      .putLong("$scope.after", state.resumeAfter)
       .commit())
+  }
+
+  fun applySharingState(context: Context, owner: String, deviceId: String, state: SharingCaptureState): Boolean {
+    val changed = synchronized(captureLock) {
+      if (queueOwner(context) != owner || queueDeviceId(context) != deviceId) return false
+      val current = sharingState(context)
+      if (!(state.revisionPrefix.isEmpty() && state.paused) && !state.isAtLeastAsRecentAs(current)) return false
+      val changed = current != state
+      if (changed) {
+        captureCommands.stop()
+        setSharingState(context, state)
+      }
+      changed
+    }
+    if (changed && isCaptureRunning) {
+      context.startService(Intent(context, TrackingCaptureService::class.java).apply {
+        action = TrackingCaptureService.ACTION_SHARING_CHANGED
+      })
+    }
+    return true
   }
 
   fun queueOwner(context: Context): String? =
     context.getSharedPreferences("openbeacon_tracking_queue", Context.MODE_PRIVATE).getString("owner", null)
 
+  fun queueDeviceId(context: Context): String? =
+    context.getSharedPreferences("openbeacon_tracking_queue", Context.MODE_PRIVATE).getString("deviceId", null)
+
+  fun setQueueOwner(context: Context, owner: String, deviceId: String) {
+    synchronized(captureLock) {
+      val preferences = context.getSharedPreferences("openbeacon_tracking_queue", Context.MODE_PRIVATE)
+      val previousOwner = preferences.getString("owner", null)
+      val previousDeviceId = preferences.getString("deviceId", null)
+      if (previousOwner != owner || (previousDeviceId != null && previousDeviceId != deviceId)) {
+        captureCommands.stop()
+        isCaptureRunning = false
+        setCaptureEnabled(context, false)
+        context.stopService(Intent(context, TrackingCaptureService::class.java))
+        epochKeyStore(context).revoke(null)
+      }
+      if (previousOwner != owner || previousDeviceId != deviceId) {
+        check(preferences.edit().putString("owner", owner).putString("deviceId", deviceId).commit())
+      }
+    }
+  }
+
   fun isCaptureEnabled(context: Context): Boolean =
     context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).getBoolean("enabled", false)
+
+  fun shouldRestoreCapture(context: Context): Boolean =
+    BootRestartPolicy.shouldRestart(
+      captureEnabled = isCaptureEnabled(context),
+      hasQueueOwner = queueOwner(context) != null,
+      hasEpochKeys = epochKeyStore(context).list().isNotEmpty(),
+      hasLocationPermission =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+          ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED,
+      hasBackgroundLocationPermission =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+          ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED,
+    )
 
   fun setCaptureEnabled(
     context: Context,

@@ -216,6 +216,40 @@ describe("uploadGroupTrackingBatch", () => {
 });
 
 describe("pollGroupTrackingPoints", () => {
+  test("a full filtered page still signals a backlog and advances its scan cursor", async () => {
+    const rows = ["first", "second"].map((id) => ({
+      algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+      ciphertext: "ciphertext",
+      clientPointId: id,
+      createdAt: new Date("2026-07-13T18:00:00.000Z"),
+      epochId: "epoch-1",
+      id,
+      kind: TRACKING_POINT_KIND,
+      nonce: validNonce,
+      senderDeviceId: "device-1",
+      senderUserId: "user-1",
+    }));
+    const result = await pollGroupTrackingPoints({
+      db: {
+        $queryRaw: mock(async () => [{ ...sharingDeviceRow, sharingPaused: true }]),
+        groupEncryptedPayload: {
+          createMany: mock(async () => ({ count: 0 })),
+          findMany: mock(async () => rows),
+        },
+        groupEpoch: { findMany: mock(async () => []) },
+        userDevice: {
+          findMany: mock(async () => []),
+          updateMany: mock(async () => ({ count: 0 })),
+        },
+      },
+      groupId: "group-1",
+      limit: 2,
+    });
+    expect(result.points).toEqual([]);
+    expect(result.hasMore).toBe(true);
+    expect(result.cursor).toEqual({ id: "second", createdAt: rows[1]!.createdAt });
+  });
+
   test("queries with exclusive cursor ordering", async () => {
     const createdAt = new Date("2026-07-13T18:00:00.000Z");
     const findMany = mock(async () => [

@@ -29,10 +29,8 @@ export const getGroupSharingStates = async (
       AND "device"."revokedAt" IS NULL AND "device"."activatedAt" IS NOT NULL
   `);
   const now = Date.now();
-  return devices.map((device) => ({
-    deviceId: device.deviceId,
-    userId: device.userId,
-    ...resolveLocationSharing(
+  return devices.map((device) => {
+    const sharing = resolveLocationSharing(
       {
         sharingPaused: device.accountPaused,
         sharingPausedUntil: device.accountPausedUntil,
@@ -41,6 +39,12 @@ export const getGroupSharingStates = async (
       },
       device,
       now,
-    ),
-  }));
+    );
+    return {
+      deviceId: device.deviceId,
+      userId: device.userId,
+      ...sharing,
+      ...(sharing.paused ? { pausedUntil: null, resumeAfter: null } : {}),
+    };
+  });
 };

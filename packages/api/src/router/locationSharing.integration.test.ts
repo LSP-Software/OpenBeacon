@@ -78,6 +78,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           activatedAt: new Date(),
         })),
       });
+      await prisma.session.createMany({
+        data: [
+          { userId, deviceId: phoneId },
+          { userId: otherId, deviceId: otherDeviceId },
+        ].map((session) => ({
+          ...session,
+          id: `${session.userId}-session`,
+          token: `${session.userId}-token`,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
+        })),
+      });
       await prisma.group.create({
         data: {
           id: groupId,
@@ -113,6 +124,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         points: [point(phoneId), point(tabletId)],
       });
       await caller().account.setLocationSharing({
+        expectedUserId: userId,
         scope: "device",
         deviceId: tabletId,
         paused: true,
@@ -131,6 +143,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const delayed = point(tabletId);
       await caller().groupTracking.uploadBatch({ groupId, points: [point(tabletId)] });
       await caller().account.setLocationSharing({
+        expectedUserId: userId,
         scope: "device",
         deviceId: tabletId,
         paused: true,
@@ -140,6 +153,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         (await caller().groupTracking.uploadBatch({ groupId, points: [delayed] })).discarded,
       ).toEqual([delayed.clientPointId]);
       await caller().account.setLocationSharing({
+        expectedUserId: userId,
         scope: "device",
         deviceId: tabletId,
         paused: false,
@@ -164,12 +178,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("an account pause overrides all devices and preserves their own pauses", async () => {
       await reset();
       await caller().account.setLocationSharing({
+        expectedUserId: userId,
         scope: "device",
         deviceId: tabletId,
         paused: true,
         durationMinutes: null,
       });
       await caller().account.setLocationSharing({
+        expectedUserId: userId,
         scope: "account",
         paused: true,
         durationMinutes: 60,
@@ -189,6 +205,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       expect((await caller(userId, newDeviceId).account.locationSharing()).paused).toBe(true);
       await caller().account.setLocationSharing({
+        expectedUserId: userId,
         scope: "account",
         paused: false,
         durationMinutes: null,
@@ -203,7 +220,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const old = point(phoneId);
       await caller().groupTracking.uploadBatch({ groupId, points: [old] });
       await caller().account.setLocationSharing({
+        expectedUserId: userId,
         scope: "device",
+        deviceId: phoneId,
         paused: true,
         durationMinutes: 15,
       });
@@ -234,6 +253,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("cannot change another account's device", async () => {
       await expect(
         caller().account.setLocationSharing({
+          expectedUserId: userId,
           scope: "device",
           deviceId: otherDeviceId,
           paused: true,
@@ -243,12 +263,48 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect((await caller(otherId, otherDeviceId).account.locationSharing()).paused).toBe(false);
     });
 
+    test("a phone revoked after authentication cannot resume the account", async () => {
+      await reset();
+      await caller().account.setLocationSharing({
+        expectedUserId: userId,
+        scope: "account",
+        paused: true,
+        durationMinutes: null,
+      });
+      const authenticatedBeforeRemoval = router.createCaller({
+        cache,
+        db: prisma,
+        clientIp: "127.0.0.1",
+        deviceId: phoneId,
+        deviceActive: true,
+        session: { user: { id: userId }, session: { id: `${userId}-session` } },
+      } as Parameters<typeof router.createCaller>[0]);
+      await prisma.userDevice.update({ where: { id: phoneId }, data: { revokedAt: new Date() } });
+      try {
+        await expect(
+          authenticatedBeforeRemoval.account.setLocationSharing({
+            expectedUserId: userId,
+            scope: "account",
+            paused: false,
+            durationMinutes: null,
+          }),
+        ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        expect((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).sharingPaused).toBe(
+          true,
+        );
+      } finally {
+        await prisma.userDevice.update({ where: { id: phoneId }, data: { revokedAt: null } });
+      }
+    });
+
     test("a pause wins against an upload racing it", async () => {
       await reset();
       await Promise.all([
         caller().groupTracking.uploadBatch({ groupId, points: [point(phoneId)] }),
         caller().account.setLocationSharing({
+          expectedUserId: userId,
           scope: "device",
+          deviceId: phoneId,
           paused: true,
           durationMinutes: null,
         }),

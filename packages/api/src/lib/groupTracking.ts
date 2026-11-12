@@ -268,6 +268,7 @@ export const pollGroupTrackingPoints = async ({
     ),
     sharing,
     cursor: last?.createdAt && last.id ? { createdAt: last.createdAt, id: last.id } : null,
+    hasMore: points.length === limit,
   };
 };
 

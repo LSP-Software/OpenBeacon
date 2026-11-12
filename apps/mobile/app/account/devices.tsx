@@ -66,63 +66,70 @@ const DevicesScreen = () => {
       </SafeAreaView>
 
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit device</DialogTitle>
-          </DialogHeader>
-          <Input control={form.control} name="name" label="Name" maxLength={40} />
-          <View accessibilityRole="radiogroup" className="flex-row flex-wrap gap-3">
-            {selectableDeviceIcons.map((icon) => {
-              const selected = selectedIcon === icon;
-              const option = deviceIconFor(icon, editing?.platform);
-              return (
-                <Pressable
-                  key={icon}
-                  accessibilityRole="radio"
-                  accessibilityLabel={option.label}
-                  accessibilityState={{ checked: selected }}
-                  onPress={() => form.setValue("icon", icon)}
-                  className={cn(
-                    "size-12 items-center justify-center rounded-2xl border",
-                    selected ? "border-primary bg-primary/10" : "border-border bg-background",
-                  )}
+        <DialogContent className="max-h-[90%]">
+          <ScrollView
+            style={{ flexShrink: 1 }}
+            contentContainerClassName="gap-4"
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
+            <DialogHeader>
+              <DialogTitle>Edit device</DialogTitle>
+            </DialogHeader>
+            <Input control={form.control} name="name" label="Name" maxLength={40} />
+            <View accessibilityRole="radiogroup" className="flex-row flex-wrap gap-3">
+              {selectableDeviceIcons.map((icon) => {
+                const selected = selectedIcon === icon;
+                const option = deviceIconFor(icon, editing?.platform);
+                return (
+                  <Pressable
+                    key={icon}
+                    accessibilityRole="radio"
+                    accessibilityLabel={option.label}
+                    accessibilityState={{ checked: selected }}
+                    onPress={() => form.setValue("icon", icon)}
+                    className={cn(
+                      "size-12 items-center justify-center rounded-2xl border",
+                      selected ? "border-primary bg-primary/10" : "border-border bg-background",
+                    )}
+                  >
+                    <Icon
+                      as={option.icon}
+                      className={selected ? "text-primary size-6" : "text-muted-foreground size-6"}
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Button onPress={form.handleSubmit(save)} loading={updateDevice.isPending}>
+              <Text>Save</Text>
+            </Button>
+            {editing?.activatedAt ? (
+              <LocationSharingCard
+                device={devices.data?.find((device) => device.id === editing.id) ?? editing}
+              />
+            ) : null}
+            {editing?.isCurrent ? (
+              <Text className="text-muted-foreground text-sm leading-5">
+                To remove this phone, sign out on the Account tab and choose to remove it.
+              </Text>
+            ) : (
+              editing && (
+                <Link
+                  href={{
+                    pathname: "/account/remove-device",
+                    params: { deviceId: editing.id, name: editing.name },
+                  }}
+                  onPress={() => setEditing(null)}
+                  asChild
                 >
-                  <Icon
-                    as={option.icon}
-                    className={selected ? "text-primary size-6" : "text-muted-foreground size-6"}
-                  />
-                </Pressable>
-              );
-            })}
-          </View>
-          <Button onPress={form.handleSubmit(save)} loading={updateDevice.isPending}>
-            <Text>Save</Text>
-          </Button>
-          {editing?.activatedAt ? (
-            <LocationSharingCard
-              device={devices.data?.find((device) => device.id === editing.id) ?? editing}
-            />
-          ) : null}
-          {editing?.isCurrent ? (
-            <Text className="text-muted-foreground text-sm leading-5">
-              To remove this phone, sign out on the Account tab and choose to remove it.
-            </Text>
-          ) : (
-            editing && (
-              <Link
-                href={{
-                  pathname: "/account/remove-device",
-                  params: { deviceId: editing.id, name: editing.name },
-                }}
-                onPress={() => setEditing(null)}
-                asChild
-              >
-                <Button variant="destructive">
-                  <Text>Remove device</Text>
-                </Button>
-              </Link>
-            )
-          )}
+                  <Button variant="destructive">
+                    <Text>Remove device</Text>
+                  </Button>
+                </Link>
+              )
+            )}
+          </ScrollView>
         </DialogContent>
       </Dialog>
 
@@ -144,8 +151,8 @@ const DevicesScreen = () => {
           showsVerticalScrollIndicator={false}
         >
           <Text className="text-muted-foreground text-base leading-6">
-            Phones and tablets signed in to your account. Tap one to rename it, change its icon or
-            remove it.
+            Phones and tablets signed in to your account. Tap one to manage location sharing, rename
+            it, change its icon or remove it.
           </Text>
           <View className="overflow-hidden rounded-3xl border border-border bg-card">
             {devices.data.map((device, index) => {
@@ -159,7 +166,7 @@ const DevicesScreen = () => {
                 <Pressable
                   key={device.id}
                   accessibilityRole="button"
-                  accessibilityHint="Edit name and icon, or remove it"
+                  accessibilityHint="Manage location sharing, edit name and icon, or remove it"
                   className={cn(
                     "flex-row items-center gap-4 px-5 py-4",
                     index < devices.data.length - 1 && "border-b border-border/50",

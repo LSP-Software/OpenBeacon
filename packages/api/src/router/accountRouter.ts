@@ -63,11 +63,32 @@ export const accountRouter = {
     .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
     .input(setLocationSharingSchema)
     .mutation(async ({ ctx, input }) => {
+      if (input.expectedUserId !== ctx.session.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "The sharing account has changed." });
+      }
       await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "User" WHERE id = ${ctx.session.user.id} FOR NO KEY UPDATE`,
         );
         const now = new Date();
+        const session = await tx.session.findFirst({
+          where: {
+            id: ctx.session.session.id,
+            userId: ctx.session.user.id,
+            deviceId: ctx.deviceId,
+            expiresAt: { gt: now },
+            device: {
+              is: { userId: ctx.session.user.id, revokedAt: null, activatedAt: { not: null } },
+            },
+          },
+          select: { id: true },
+        });
+        if (!session) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Sign in again to change location sharing.",
+          });
+        }
         const data = {
           sharingPaused: input.paused,
           sharingPausedUntil:
@@ -81,11 +102,9 @@ export const accountRouter = {
           await tx.user.update({ where: { id: ctx.session.user.id }, data });
           return;
         }
-        const deviceId = input.deviceId ?? ctx.deviceId;
-        if (!deviceId) throw new TRPCError({ code: "BAD_REQUEST" });
         const updated = await tx.userDevice.updateMany({
           where: {
-            id: deviceId,
+            id: input.deviceId,
             userId: ctx.session.user.id,
             revokedAt: null,
             activatedAt: { not: null },

@@ -328,7 +328,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     points: readonly MapTrackingEncryptedPoint[];
     runId: number;
   }) => {
-    const entries: LiveMapEntry[] = [];
+    const entries: { entry: LiveMapEntry; clientPointId: string }[] = [];
     const undecryptable = new Map(undecryptableByGroup.get(groupId));
     let undecryptableChanged = false;
 
@@ -348,7 +348,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       const deviceKey = `${point.senderUserId}:${point.senderDeviceId}`;
       if (result.status === "ok") {
         if (!canShowSharedLocation(result.entry, status.sharing)) continue;
-        entries.push(result.entry);
+        entries.push({ entry: result.entry, clientPointId: point.clientPointId });
         undecryptableChanged = undecryptable.delete(deviceKey) || undecryptableChanged;
       } else if (result.status === "undecryptable" && !undecryptable.has(deviceKey)) {
         undecryptable.set(deviceKey, {
@@ -376,7 +376,16 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
 
     const groupEntries = positionsByGroup.get(groupId) ?? new Map<string, LiveMapEntry>();
-    positionsByGroup.set(groupId, reduceLivePositions(groupEntries, entries));
+    const currentEntries = entries
+      .filter(({ entry, clientPointId }) => {
+        const sharing = status.sharing?.find((device) => device.deviceId === entry.deviceId);
+        return (
+          (!sharing || clientPointId.startsWith(sharing.revisionPrefix)) &&
+          canShowSharedLocation(entry, status.sharing)
+        );
+      })
+      .map(({ entry }) => entry);
+    positionsByGroup.set(groupId, reduceLivePositions(groupEntries, currentEntries));
     notify();
   };
 
@@ -476,6 +485,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       points,
       sharing,
       cursor: responseCursor,
+      hasMore,
     } = await withTimeout((signal) => deps.poll({ cursor, groupId, limit: POLL_LIMIT }, signal));
     if (!isCurrent(groupId, runId)) {
       return;
@@ -491,7 +501,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       return;
     }
 
-    if (points.length === POLL_LIMIT) {
+    if (hasMore ?? points.length === POLL_LIMIT) {
       await coldTick(groupId, runId);
       if (isCurrent(groupId, runId) && !isCursorAfter(state.cursor, nextCursor)) {
         state.cursor = nextCursor;

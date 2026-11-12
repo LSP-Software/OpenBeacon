@@ -140,6 +140,7 @@ mock.module("./storage.ts", () => ({
 }));
 
 mock.module("./deviceKeys.ts", () => ({
+  getStoredDeviceId: () => registeredDevice?.deviceId,
   cancelDeviceKeyRegistrations: () => {
     registeredDevice = null;
   },
@@ -404,7 +405,7 @@ mock.module("./api.ts", () => ({
 
 mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   default: {
-    setSharingState: () => {},
+    setSharingState: () => true,
     setQueueOwner: () => {},
     countUnassignedCiphertexts: async () => unassignedCount,
     assignUnassignedCiphertexts: async (deviceId: string, owner: string) => {

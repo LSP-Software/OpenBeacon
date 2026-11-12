@@ -1,11 +1,21 @@
-import { isSharingPaused, tryCatch, type SharingPreference } from "@openbeacon/shared";
+import {
+  isSharingPaused,
+  resolveLocationSharing,
+  tryCatch,
+  type SharingPreference,
+} from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MapPinIcon, PauseIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";
 import { trpc } from "../lib/api.ts";
 import { cn } from "../lib/cn.ts";
-import { changeLocationSharing, hasPendingSharingPause } from "../lib/locationSharing.ts";
+import {
+  changeLocationSharing,
+  getPendingSharingChanges,
+  hasLocallyPausedSharing,
+  hasPendingSharingPause,
+} from "../lib/locationSharing.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { Button } from "./ui/Button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card.tsx";
@@ -30,8 +40,12 @@ export const LocationSharingCard = ({
   const [duration, setDuration] = useState<15 | 60 | 480 | 1440 | null>(60);
   const [now, setNow] = useState(Date.now);
   const [message, setMessage] = useState<string | null>(null);
+  const pending = session?.user.id ? getPendingSharingChanges(session.user.id) : null;
   const stoppedLocally = Boolean(
-    session?.user.id && (!device || device.isCurrent) && hasPendingSharingPause(session.user.id),
+    session?.user.id &&
+    (!device || device.isCurrent) &&
+    hasPendingSharingPause(session.user.id) &&
+    hasLocallyPausedSharing(session.user.id),
   );
   useEffect(() => {
     if (!stoppedLocally) setMessage(null);
@@ -44,10 +58,41 @@ export const LocationSharingCard = ({
   const devicePreference = device ?? sharing.data?.device;
   const devicePaused = devicePreference ? isSharingPaused(devicePreference, now) : false;
   const paused = accountPaused || devicePaused || stoppedLocally;
-  const until = accountPaused
-    ? sharing.data?.account.sharingPausedUntil
-    : devicePreference?.sharingPausedUntil;
+  const effective =
+    sharing.data && devicePreference
+      ? resolveLocationSharing(sharing.data.account, devicePreference, now)
+      : null;
+  const until = effective ? effective.pausedUntil : devicePreference?.sharingPausedUntil;
+  const resumeAccount = !device && (accountPaused || Boolean(pending?.account));
   const target = device && !device.isCurrent ? device.name : "this device";
+  const selectScope = (selectedScope: "device" | "account") => {
+    const selectedAt = Date.now();
+    setNow(selectedAt);
+    setScope(selectedScope);
+    const pendingChange =
+      selectedScope === "account"
+        ? pending?.account
+        : !device || device.isCurrent
+          ? pending?.device
+          : null;
+    if (pendingChange) {
+      setDuration(pendingChange.durationMinutes);
+      return;
+    }
+    const preference = selectedScope === "account" ? sharing.data?.account : devicePreference;
+    if (!preference || !isSharingPaused(preference, selectedAt)) {
+      setDuration(60);
+      return;
+    }
+    if (preference.sharingPausedUntil === null) {
+      setDuration(null);
+      return;
+    }
+    const minutes = preference.sharingChangedAt
+      ? (preference.sharingPausedUntil.getTime() - preference.sharingChangedAt.getTime()) / 60_000
+      : null;
+    setDuration(([15, 60, 480, 1440] as const).find((option) => option === minutes) ?? 60);
+  };
   const update = useMutation({
     mutationFn: changeLocationSharing,
     onSuccess: () => {
@@ -71,7 +116,11 @@ export const LocationSharingCard = ({
       }),
     );
     if (!result.error) return;
-    const localPause = pause && (!device || device.isCurrent || selectedScope === "account");
+    const localPause =
+      pause &&
+      (!device || device.isCurrent || selectedScope === "account") &&
+      session?.user.id &&
+      hasLocallyPausedSharing(session.user.id);
     setMessage(
       localPause
         ? "Sharing stopped on this device. We couldn't update your groups or other devices. We'll retry when connected."
@@ -121,12 +170,12 @@ export const LocationSharingCard = ({
             <Button
               size="sm"
               loading={update.isPending}
-              onPress={() => save(false, !device && accountPaused ? "account" : "device")}
+              onPress={() => save(false, resumeAccount ? "account" : "device")}
             >
               <Text>
                 {device && accountPaused
                   ? "Remove device pause"
-                  : accountPaused
+                  : resumeAccount
                     ? "Resume all devices"
                     : "Resume sharing"}
               </Text>
@@ -137,7 +186,7 @@ export const LocationSharingCard = ({
             size="sm"
             disabled={update.isPending}
             onPress={() => {
-              setScope(!device && accountPaused ? "account" : "device");
+              selectScope(resumeAccount ? "account" : "device");
               setOpen(true);
             }}
           >
@@ -168,6 +217,7 @@ export const LocationSharingCard = ({
             className="absolute inset-0"
             accessibilityRole="button"
             accessibilityLabel="Cancel pause"
+            disabled={update.isPending}
             onPress={() => !update.isPending && setOpen(false)}
           />
           <View
@@ -186,7 +236,7 @@ export const LocationSharingCard = ({
                 <Text>Cancel</Text>
               </Button>
             </View>
-            <ScrollView contentContainerClassName="gap-4" style={{ maxHeight: 480 }}>
+            <ScrollView contentContainerClassName="gap-4" style={{ maxHeight: 480, flexShrink: 1 }}>
               <Text className="text-sm text-muted-foreground">
                 Paused devices disappear from your groups' maps. Members can see that sharing is
                 paused. You can still see their locations.
@@ -194,13 +244,21 @@ export const LocationSharingCard = ({
               {!device ? (
                 <View className="gap-2">
                   <Text className="font-semibold">Pause on</Text>
-                  <View accessibilityRole="radiogroup" className="flex-row gap-2">
+                  <View
+                    accessibilityRole="radiogroup"
+                    accessibilityLabel="Devices to pause"
+                    className="flex-row gap-2"
+                  >
                     {(["device", "account"] as const).map((option) => (
                       <Pressable
                         key={option}
                         accessibilityRole="radio"
-                        accessibilityState={{ checked: scope === option }}
-                        onPress={() => setScope(option)}
+                        accessibilityState={{
+                          checked: scope === option,
+                          disabled: update.isPending,
+                        }}
+                        disabled={update.isPending}
+                        onPress={() => selectScope(option)}
                         className={cn(
                           "min-h-11 flex-1 items-center justify-center rounded-lg border px-3",
                           scope === option ? "border-primary bg-primary/10" : "border-border",
@@ -219,7 +277,11 @@ export const LocationSharingCard = ({
                   when the account resumes.
                 </Text>
               ) : null}
-              <View accessibilityRole="radiogroup" className="gap-2">
+              <View
+                accessibilityRole="radiogroup"
+                accessibilityLabel="Pause duration"
+                className="gap-2"
+              >
                 <Text className="font-semibold">For</Text>
                 {(
                   [
@@ -233,7 +295,11 @@ export const LocationSharingCard = ({
                   <Pressable
                     key={option.label}
                     accessibilityRole="radio"
-                    accessibilityState={{ checked: duration === option.minutes }}
+                    accessibilityState={{
+                      checked: duration === option.minutes,
+                      disabled: update.isPending,
+                    }}
+                    disabled={update.isPending}
                     onPress={() => setDuration(option.minutes)}
                     className={cn(
                       "min-h-11 flex-row items-center justify-between rounded-lg border px-3 py-2",

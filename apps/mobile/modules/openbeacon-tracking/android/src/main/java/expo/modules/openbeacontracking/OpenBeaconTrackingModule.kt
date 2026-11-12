@@ -16,38 +16,12 @@ class OpenBeaconTrackingModule : Module() {
     ModuleDefinition {
       Name("OpenBeaconTracking")
 
-      Function("setSharingState") { owner: String, prefix: String, paused: Boolean, until: Double?, after: Double? ->
-        val changed = synchronized(TrackingRuntime.captureLock) {
-          if (TrackingRuntime.queueOwner(requireContext()) != owner) return@Function
-          val state = SharingCaptureState(prefix, paused, until?.toLong(), after?.toLong() ?: 0L)
-          val current = TrackingRuntime.sharingState(requireContext())
-          if (!(prefix.isEmpty() && paused) && !state.isAtLeastAsRecentAs(current)) return@Function
-          val changed = current != state
-          if (changed) {
-            TrackingRuntime.captureCommands.stop()
-            TrackingRuntime.setSharingState(requireContext(), state)
-          }
-          changed
-        }
-        if (changed && TrackingRuntime.isCaptureRunning) {
-          requireContext().startService(Intent(requireContext(), TrackingCaptureService::class.java).apply {
-            action = TrackingCaptureService.ACTION_SHARING_CHANGED
-          })
-        }
+      Function("setSharingState") { owner: String, deviceId: String, prefix: String, paused: Boolean, until: Double?, after: Double? ->
+        TrackingRuntime.applySharingState(requireContext(), owner, deviceId, SharingCaptureState(prefix, paused, until?.toLong(), after?.toLong() ?: 0L))
       }
 
-      Function("setQueueOwner") { owner: String ->
-        synchronized(TrackingRuntime.captureLock) {
-          val preferences = requireContext().getSharedPreferences("openbeacon_tracking_queue", android.content.Context.MODE_PRIVATE)
-          if (preferences.getString("owner", null) != owner) {
-            TrackingRuntime.captureCommands.stop()
-            TrackingRuntime.isCaptureRunning = false
-            TrackingRuntime.setCaptureEnabled(requireContext(), false)
-            requireContext().stopService(Intent(requireContext(), TrackingCaptureService::class.java))
-            TrackingRuntime.epochKeyStore(requireContext()).revoke(null)
-            check(preferences.edit().putString("owner", owner).commit())
-          }
-        }
+      Function("setQueueOwner") { owner: String, deviceId: String ->
+        TrackingRuntime.setQueueOwner(requireContext(), owner, deviceId)
       }
 
       Function("provisionEpochKeys") { keys: List<Map<String, Any?>>, preserveGroupIds: List<String>? ->

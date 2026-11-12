@@ -1980,3 +1980,100 @@ describe("paused map devices", () => {
     session.destroy();
   });
 });
+
+test("does not commit an earlier decrypted pin after another group reports a resume revision", async () => {
+  const tablet = point({
+    createdAt: new Date("2026-11-12T10:00:00Z"),
+    id: "tablet-old",
+    senderDeviceId: "tablet",
+    senderUserId: "alex",
+  });
+  const slow = point({
+    createdAt: new Date("2026-11-12T10:00:01Z"),
+    id: "slow",
+    senderUserId: "other",
+  });
+  const sharing = {
+    deviceId: "tablet",
+    userId: "alex",
+    paused: false,
+    pausedUntil: null,
+    resumeAfter: null,
+    revisionPrefix: "",
+  };
+  let blocked = () => {};
+  let resume = () => {};
+  const decryptBlocked = new Promise<void>((resolve) => {
+    blocked = resolve;
+  });
+  const resumeApplied = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const { session } = createSession({
+    listGroups: async () => [{ id: "group-1" }, { id: "group-2" }],
+    getLatest: async (groupId) => {
+      if (groupId === "group-1") return { points: [tablet, slow], sharing: [sharing] };
+      await decryptBlocked;
+      return {
+        points: [],
+        sharing: [
+          { ...sharing, revisionPrefix: "s0.2:", resumeAfter: new Date("2026-11-12T12:00:00Z") },
+        ],
+      };
+    },
+    decryptPoint: async ({ groupId, point: row }) => {
+      if (row.id === "slow") {
+        blocked();
+        await resumeApplied;
+      }
+      return {
+        status: "ok",
+        entry: liveEntry({
+          deviceId: row.senderDeviceId,
+          userId: row.senderUserId,
+          sourceGroupId: groupId,
+          serverId: row.id,
+          serverCreatedAt: row.createdAt,
+          timestamp:
+            row.id === "tablet-old" ? "2030-01-01T00:00:00.000Z" : row.createdAt.toISOString(),
+        }),
+      };
+    },
+  });
+  session.subscribe(() => {
+    if (session.getStatus().sharing?.some((device) => device.revisionPrefix === "s0.2:")) resume();
+  });
+  session.setActive(true);
+  await session.tick();
+  expect(session.getLivePositions().map((location) => location.deviceId)).toEqual(["device-other"]);
+  session.destroy();
+});
+
+test("fetches latest after a full scanned page even when paused points were filtered out", async () => {
+  const first = point({
+    createdAt: new Date("2026-11-12T10:00:00Z"),
+    id: "first",
+    senderUserId: "alex",
+  });
+  const latest = point({
+    createdAt: new Date("2026-11-12T12:00:00Z"),
+    id: "latest",
+    senderUserId: "alex",
+  });
+  let latestPoint = first;
+  const { session, getLatestCalls } = createSession({
+    getLatest: async () => ({ points: [latestPoint] }),
+    poll: async () => ({
+      points: [],
+      cursor: { createdAt: new Date("2026-11-12T11:00:00Z"), id: "filtered" },
+      hasMore: true,
+    }),
+  });
+  session.setActive(true);
+  await session.tick();
+  latestPoint = latest;
+  await session.tick();
+  expect(getLatestCalls).toHaveLength(2);
+  expect(session.getLivePositions()[0]?.timestamp).toBe(latest.createdAt.toISOString());
+  session.destroy();
+});

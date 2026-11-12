@@ -288,7 +288,7 @@ const reconcileTrackingKeysInternal = async ({
   }
   if (!isCurrent()) return false;
   const owner = getOwner(deviceKeyContext.userId);
-  trackingModule.setQueueOwner(owner);
+  trackingModule.setQueueOwner(owner, deviceKeyContext.deviceId);
   await syncLocationSharing();
   if (!isCurrent()) return false;
   const preserveGroupIds = new Set<string>();
