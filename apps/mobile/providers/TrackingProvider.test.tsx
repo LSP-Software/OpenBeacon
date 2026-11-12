@@ -311,12 +311,12 @@ describe("TrackingProvider", () => {
     expect(keyAccessChangePending).toBe(false);
   });
 
-  test("the 30-second cycle doesn't force a key check", async () => {
+  test("the 60-second cycle doesn't force a key check", async () => {
     jest.useFakeTimers();
     try {
       await renderProvider();
 
-      jest.advanceTimersByTime(30_000);
+      jest.advanceTimersByTime(60_000);
       await flushEffects();
 
       expect(reconcileCalls).toEqual([

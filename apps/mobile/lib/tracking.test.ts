@@ -105,6 +105,7 @@ const backfillQueries: string[] = [];
 const captureStateSeenByBackfill: Array<{ provisions: number; starts: number }> = [];
 const historyWrapUploads: Array<{ groupId: string; wraps: WrappedHistoryEpochKey[] }> = [];
 let locationSharingError: Error | null = null;
+let locationSharingCalls = 0;
 const sharingStates: { owner: string; deviceId: string; prefix: string; paused: boolean }[] = [];
 let registrationWait: Promise<void> | null = null;
 let onRegistration: (() => void) | null = null;
@@ -113,7 +114,12 @@ let uploadGroup = async ({
 }: {
   groupId: string;
   points: unknown[];
-}): Promise<{ accepted: string[]; duplicates: string[]; expired?: string[] }> => ({
+}): Promise<{
+  accepted: string[];
+  duplicates: string[];
+  expired?: string[];
+  keyState?: string;
+}> => ({
   accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
   duplicates: [],
 });
@@ -249,6 +255,7 @@ mock.module("./api.ts", () => ({
     account: {
       locationSharing: {
         query: async () => {
+          locationSharingCalls += 1;
           if (locationSharingError) throw locationSharingError;
           const preference = {
             sharingPaused: false,
@@ -488,6 +495,7 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
 
 const {
   dismissTrackingQueueEviction,
+  flushForegroundTrackingPoints,
   flushPendingTrackingPoints,
   getTrackingQueueEviction,
   getUnassignedTrackingPoints,
@@ -598,6 +606,7 @@ describe("tracking service", () => {
     registrationWait = null;
     onRegistration = null;
     locationSharingError = null;
+    locationSharingCalls = 0;
     sharingStates.length = 0;
     uploadGroup = async ({ points }) => ({
       accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
@@ -1477,10 +1486,10 @@ describe("tracking service", () => {
       kind: "trackingPoint",
     });
     await reconcileTrackingKeys({ startCapture: true });
-    expect(provisionedKeys.map(({ epochId }) => epochId)).toEqual(["old", "epoch-2"]);
+    expect(provisionedKeys.map(({ epochId }) => epochId).sort()).toEqual(["epoch-2", "old"]);
     failedWrappedGroup = null;
     await reconcileTrackingKeys({ startCapture: true });
-    expect(provisionedKeys.map(({ epochId }) => epochId)).toEqual(["epoch-1", "epoch-2"]);
+    expect(provisionedKeys.map(({ epochId }) => epochId).sort()).toEqual(["epoch-1", "epoch-2"]);
     expect(stopCaptureCalls).toBe(0);
   });
 
@@ -1494,11 +1503,107 @@ describe("tracking service", () => {
       kind: "trackingPoint",
     });
     await reconcileTrackingKeys({ startCapture: true });
-    expect(provisionedKeys.map(({ epochId }) => epochId)).toEqual(["old", "epoch-2"]);
+    expect(provisionedKeys.map(({ epochId }) => epochId).sort()).toEqual(["epoch-2", "old"]);
     expect(stopCaptureCalls).toBe(0);
     missingWrappedGroup = null;
     await reconcileTrackingKeys({ startCapture: true });
-    expect(provisionedKeys.map(({ epochId }) => epochId)).toEqual(["epoch-1", "epoch-2"]);
+    expect(provisionedKeys.map(({ epochId }) => epochId).sort()).toEqual(["epoch-1", "epoch-2"]);
+  });
+
+  test("the open app leaves routine uploads to running capture", async () => {
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    captureRunning = true;
+    await flushForegroundTrackingPoints();
+    expect(uploadCalls).toEqual([]);
+    await flushForegroundTrackingPoints(true);
+    expect(uploadCalls).toHaveLength(1);
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-2", groupId: "group-1", id: 2 })];
+    captureRunning = false;
+    await flushForegroundTrackingPoints();
+    expect(uploadCalls).toHaveLength(2);
+  });
+
+  test("a background upload with fresh keys doesn't fetch the sharing state", async () => {
+    captureRunning = true;
+    await reconcileTrackingKeys({ startCapture: true });
+    const callsAfterKeyCheck = locationSharingCalls;
+    requests.length = 0;
+    await syncBackgroundTracking();
+    expect(locationSharingCalls).toBe(callsAfterKeyCheck);
+    expect(requests).not.toContain("groupMembership.list");
+  });
+
+  test("the open app keeps checking for a remote resume while this phone is paused", async () => {
+    captureRunning = true;
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    await reconcileTrackingKeys({ startCapture: true });
+    const callsAfterKeyCheck = locationSharingCalls;
+    storageValues.set(
+      `locationSharing.localPause.${JSON.stringify(["https://api.example.test", "user-1", "device-1"])}`,
+      "true",
+    );
+    requests.length = 0;
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(locationSharingCalls).toBe(callsAfterKeyCheck + 1);
+    expect(requests).toEqual([]);
+  });
+
+  test("a sharing alarm fetches the sharing state even when keys are fresh", async () => {
+    captureRunning = true;
+    await reconcileTrackingKeys({ startCapture: true });
+    const callsAfterKeyCheck = locationSharingCalls;
+    await syncBackgroundTracking("sharing");
+    expect(locationSharingCalls).toBe(callsAfterKeyCheck + 1);
+  });
+
+  test("a parked sharing check only fetches the sharing state", async () => {
+    captureRunning = true;
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    await syncBackgroundTracking("parked");
+    expect(locationSharingCalls).toBe(1);
+    expect(requests).toEqual([]);
+    expect(provisionCalls).toHaveLength(0);
+  });
+
+  test("a key check reuses provisioned keys whose epoch hasn't changed", async () => {
+    captureRunning = true;
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(requests.filter((request) => request === "groupEpoch.getEpochKeyWraps")).toHaveLength(2);
+    requests.length = 0;
+    await reconcileTrackingKeys({ startCapture: true, force: true });
+    expect(requests).toContain("groupEpoch.getLatest");
+    expect(requests).not.toContain("groupEpoch.getEpochKeyWraps");
+    expect(provisionedKeys.map(({ epochId }) => epochId).sort()).toEqual(["epoch-1", "epoch-2"]);
+  });
+
+  test("an upload reporting a changed key state runs a key check", async () => {
+    captureRunning = true;
+    await reconcileTrackingKeys({ startCapture: true });
+    let keyState = "state-1";
+    uploadGroup = async ({ points }) => ({
+      accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
+      duplicates: [],
+      keyState,
+    });
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    await syncBackgroundTracking();
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-2", groupId: "group-1", id: 2 })];
+    requests.length = 0;
+    await syncBackgroundTracking();
+    expect(requests).not.toContain("groupMembership.list");
+    keyState = "state-2";
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-3", groupId: "group-1", id: 3 })];
+    requests.length = 0;
+    await syncBackgroundTracking();
+    expect(requests).toContain("groupMembership.list");
   });
 
   test("does not start a stopped capture in the background", async () => {

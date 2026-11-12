@@ -30,6 +30,7 @@ focusManager.setEventListener((handleFocus) => {
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      staleTime: 30_000,
       retry: (failureCount, error) =>
         failureCount < 3 &&
         !(
@@ -90,7 +91,7 @@ export const trpcClient = createTRPCClient<AppRouter>({
     httpBatchLink({
       transformer: superjson,
       url: `${baseUrl}/api/trpc`,
-      maxURLLength: 2048,
+      maxURLLength: 6000,
       fetch: (url, options) =>
         apiCompatibilityFetch(url, { ...options, signal: options?.signal ?? null }),
       async headers() {
@@ -143,6 +144,15 @@ for (const queryKey of [
   trpc.account.deletionVerificationMethods.queryKey(),
 ]) {
   queryClient.setQueryDefaults(queryKey, { staleTime: Infinity });
+}
+
+for (const queryKey of [
+  trpc.accountRecovery.status.queryKey(),
+  trpc.account.listDevices.queryKey(),
+  trpc.device.status.queryKey(),
+  trpc.deviceLink.status.queryKey(),
+]) {
+  queryClient.setQueryDefaults(queryKey, { staleTime: 0 });
 }
 
 export type { RouterInputs, RouterOutputs } from "@openbeacon/api";

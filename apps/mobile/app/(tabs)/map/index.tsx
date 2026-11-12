@@ -346,7 +346,11 @@ const MapScreen = () => {
         style={{ top: insets.top + 8, maxHeight: "65%" }}
       >
         <NewSignInBanner subscribed={isFocused} />
-        <LocationSharingPausedBanner subscribed={isFocused} userId={selfUserId} />
+        <LocationSharingPausedBanner
+          polled={trackingStatus.sharing?.find((state) => state.deviceId === selfDeviceId) ?? null}
+          subscribed={isFocused}
+          userId={selfUserId}
+        />
         {queueEviction && (
           <View className="mb-2 gap-2 rounded-xl border border-amber-600 dark:border-amber-400 bg-card p-4">
             <Text className="font-semibold text-amber-700 dark:text-amber-400">

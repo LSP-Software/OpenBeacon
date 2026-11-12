@@ -1,4 +1,4 @@
-import { beforeEach, expect, mock, test } from "bun:test";
+import { beforeEach, expect, mock, setSystemTime, test } from "bun:test";
 import type { setLocationSharingSchema } from "@openbeacon/schemas";
 import { resolveLocationSharing, type SharingPreference } from "@openbeacon/shared";
 import type { z } from "zod";
@@ -46,7 +46,9 @@ const applyChange = (change: Change) => {
   if (current.requestId === change.requestId) return "applied";
   const matchesBase =
     change.expectedRevision === null
-      ? change.paused
+      ? change.paused &&
+        (current.sharingChangedAt === null ||
+          current.sharingChangedAt.getTime() <= change.requestedAt.getTime() + 5_000)
       : change.expectedRevision === current.sharingRevision;
   if (!matchesBase && change.replacesRequestId !== current.requestId) return "superseded";
   const expired = change.pausedUntil !== null && change.pausedUntil.getTime() <= serverTime();
@@ -64,6 +66,7 @@ const changeFromAnotherPhone = (scopeName: "device" | "account", paused: boolean
     ...server[scopeName],
     sharingPaused: paused,
     sharingPausedUntil: null,
+    sharingChangedAt: new Date(serverTime()),
     sharingRevision: server[scopeName].sharingRevision + 1,
     requestId: "other-phone",
   };
@@ -130,6 +133,7 @@ const {
 } = await import("./locationSharing.ts");
 
 beforeEach(() => {
+  setSystemTime();
   stored.clear();
   nextRequestId = 0;
   nativeStates.length = 0;
@@ -405,6 +409,17 @@ test("converts server deadlines to the phone's clock before handing them to capt
   ).toBeWithin(-50, 50);
 });
 
+test("a phone clock days behind the server can still pause and resume", async () => {
+  serverClockAhead = 3 * 24 * 60 * 60_000;
+  await syncLocationSharing();
+  expect(
+    await changeLocationSharing({ scope: "device", paused: true, durationMinutes: null }),
+  ).not.toBe("queued");
+  expect(changes.at(-1)?.paused).toBe(true);
+  await changeLocationSharing({ scope: "device", paused: false, durationMinutes: null });
+  expect(changes.at(-1)?.paused).toBe(false);
+});
+
 test("signing out forgets queued changes so they aren't replayed later", async () => {
   offline = true;
   await changeLocationSharing({
@@ -589,18 +604,25 @@ test("a sync still running at sign-out neither stores nor applies its late respo
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
+  let started = () => {};
+  const queried = new Promise<void>((resolve) => {
+    started = resolve;
+  });
   changeFromAnotherPhone("device", true);
   query = async () => {
+    started();
     await gate;
     return sharingState();
   };
   const sync = syncLocationSharing();
+  await queried;
   abandonLocationSharingChanges();
   clearPendingSharingChanges();
+  const storedAtSignOut = new Map(stored);
   release();
   await sync;
+  expect(stored).toEqual(storedAtSignOut);
   expect(nativeStates).toEqual([]);
-  expect([...stored.keys()].some((key) => key.startsWith("locationSharing.synced."))).toBe(false);
 });
 
 test("a change answered after sign-out doesn't refresh or touch capture", async () => {
@@ -654,6 +676,31 @@ test("a replayed pause whose reply was lost cannot undo a resume made on another
   changeFromAnotherPhone("device", false);
   await syncLocationSharing();
   expect(changes.at(-1)).toMatchObject({ requestId: "request-1", expectedRevision: 0 });
+  expect(server.device).toMatchObject({ sharingPaused: false, sharingRevision: 2 });
+  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(nativeStates.at(-1)).toMatchObject({ paused: false, prefix: "s0.2:" });
+});
+
+test("a pause tapped before sharing loaded is replayed with its tap time and can't undo a later resume", async () => {
+  loseReply = true;
+  expect(
+    await changeLocationSharing({
+      scope: "device",
+      paused: true,
+      durationMinutes: null,
+    }),
+  ).toBe("queued");
+  loseReply = false;
+  const tappedAt = changes[0]?.requestedAt ?? new Date(0);
+  expect(getPendingSharingChanges("alex").device).toMatchObject({
+    expectedRevision: null,
+    requestedAt: tappedAt,
+  });
+  setSystemTime(new Date(Date.now() + 60_000));
+  changeFromAnotherPhone("device", false);
+  await syncLocationSharing();
+  expect(changes.map((change) => change.requestedAt)).toEqual([tappedAt, tappedAt]);
+  expect(changes.at(-1)).toMatchObject({ requestId: "request-1", expectedRevision: null });
   expect(server.device).toMatchObject({ sharingPaused: false, sharingRevision: 2 });
   expect(hasPendingSharingPause("alex")).toBe(false);
   expect(nativeStates.at(-1)).toMatchObject({ paused: false, prefix: "s0.2:" });

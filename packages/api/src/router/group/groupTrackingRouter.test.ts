@@ -272,9 +272,72 @@ describe("groupTrackingRouter", () => {
       discarded: [],
       duplicates: [],
       expired: [],
+      keyState: expect.any(String),
     });
     expect(createManyMock).toHaveBeenCalled();
   });
+
+  test("uploadBatch still succeeds without a key state when the key-state query fails", async () => {
+    const createManyMock = mock(async () => ({ count: 1 }));
+    const { caller } = await createCaller({
+      createManyMock,
+      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      queryRawMock: mock(async (query: { strings: string[] }) => {
+        if (query.strings.join("").includes("AccountHistoryKey")) {
+          throw new Error("key state query failed");
+        }
+        return [{ id: "group-member-1", createdAt: new Date("2026-01-01") }];
+      }),
+    });
+
+    const result = await caller.groupTracking.uploadBatch({
+      groupId: "group-1",
+      points: [
+        {
+          algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+          ciphertext: "ciphertext",
+          clientPointId: "point-1",
+          epochId: "epoch-1",
+          kind: TRACKING_POINT_KIND,
+          nonce: validNonce,
+          senderDeviceId: "device-1",
+        },
+      ],
+    });
+    expect(result).toEqual({ accepted: ["point-1"], discarded: [], duplicates: [], expired: [] });
+    expect(result).not.toHaveProperty("keyState");
+    expect(createManyMock).toHaveBeenCalled();
+  });
+
+  test("uploadBatch answers without a key state when the key-state query stalls", async () => {
+    const createManyMock = mock(async () => ({ count: 1 }));
+    const { caller } = await createCaller({
+      createManyMock,
+      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      queryRawMock: mock(async (query: { strings: string[] }) => {
+        if (query.strings.join("").includes("AccountHistoryKey")) return new Promise(() => {});
+        return [{ id: "group-member-1", createdAt: new Date("2026-01-01") }];
+      }),
+    });
+
+    const started = Date.now();
+    const result = await caller.groupTracking.uploadBatch({
+      groupId: "group-1",
+      points: [
+        {
+          algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+          ciphertext: "ciphertext",
+          clientPointId: "point-1",
+          epochId: "epoch-1",
+          kind: TRACKING_POINT_KIND,
+          nonce: validNonce,
+          senderDeviceId: "device-1",
+        },
+      ],
+    });
+    expect(Date.now() - started).toBeLessThan(4_000);
+    expect(result).toEqual({ accepted: ["point-1"], discarded: [], duplicates: [], expired: [] });
+  }, 10_000);
 
   test("rejects an upload if membership was removed after authorization", async () => {
     const createManyMock = mock(async () => ({ count: 1 }));

@@ -1,4 +1,4 @@
-import { setLocationSharingSchema } from "@openbeacon/schemas";
+import { locationSharingChangeInputSchema } from "@openbeacon/schemas";
 import {
   resolveLocationSharing,
   tryCatch,
@@ -60,7 +60,7 @@ const readPendingChange = (userId: string, scope: "device" | "account") => {
   const key = pendingKey(userId, scope);
   const stored = storage.getString(key);
   if (!stored) return null;
-  const input = parseStored(setLocationSharingSchema, stored);
+  const input = parseStored(locationSharingChangeInputSchema, stored);
   if (!input) storage.remove(key);
   return input ? { stored, input } : null;
 };
@@ -222,7 +222,8 @@ export const changeLocationSharing = async (input: {
     ? readSyncedPreferences(device.userId, device.deviceId)?.[input.scope]
     : null;
   const durationMinutes = input.paused ? input.durationMinutes : null;
-  const change = setLocationSharingSchema.parse({
+  const requestedAt = new Date(serverNow());
+  const change = locationSharingChangeInputSchema.parse({
     scope: input.scope,
     ...(input.scope === "device" ? { deviceId } : {}),
     expectedUserId: device.userId,
@@ -232,7 +233,9 @@ export const changeLocationSharing = async (input: {
     replacesRequestId: queued?.input.requestId ?? null,
     paused: input.paused,
     durationMinutes,
-    pausedUntil: durationMinutes === null ? null : new Date(serverNow() + durationMinutes * 60_000),
+    pausedUntil:
+      durationMinutes === null ? null : new Date(requestedAt.getTime() + durationMinutes * 60_000),
+    requestedAt,
   });
   const stored = superjson.stringify(change);
   const isCurrent = () => revision === changeRevision && generation === requestedGeneration;

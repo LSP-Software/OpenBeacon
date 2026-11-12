@@ -6,8 +6,10 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
 import android.text.format.DateFormat
 import android.text.format.DateUtils
+import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.testing.SynchronousExecutor
@@ -17,6 +19,9 @@ import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.TrackingRuntime
 import expo.modules.openbeacontracking.keys.InMemoryEpochKeyStore
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
+import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
+import expo.modules.openbeacontracking.queue.CiphertextQueueRow
+import expo.modules.openbeacontracking.queue.RoomCiphertextQueue
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -29,6 +34,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
+import org.robolectric.shadows.ShadowNetwork
 import java.util.Calendar
 import java.util.Date
 
@@ -37,6 +43,7 @@ class TrackingCaptureServiceTest {
   private val application: Application = ApplicationProvider.getApplicationContext()
   private var controller: ServiceController<TrackingCaptureService>? = null
   private val keysField = TrackingRuntime::class.java.getDeclaredField("epochKeyStore").apply { isAccessible = true }
+  private val queueField = TrackingRuntime::class.java.getDeclaredField("ciphertextQueue").apply { isAccessible = true }
 
   @Before
   fun setUp() {
@@ -58,6 +65,7 @@ class TrackingCaptureServiceTest {
     TrackingRuntime.isCaptureRunning = false
     TrackingRuntime.setCaptureEnabled(application, false)
     keysField.set(null, null)
+    queueField.set(null, null)
   }
 
   @Test
@@ -105,7 +113,7 @@ class TrackingCaptureServiceTest {
     assertEquals(Service.START_STICKY, result)
     assertTrue(TrackingRuntime.isCaptureRunning)
     assertTrue(TrackingRuntime.sharingState(application).isPaused(System.currentTimeMillis()))
-    assertNotNull(shadowOf(application).nextStartedService)
+    assertEquals("sharing", shadowOf(application).nextStartedService.getStringExtra(TrackingUploadService.EXTRA_REASON))
     assertNotNull(shadowOf(service).lastForegroundNotification)
   }
 
@@ -226,6 +234,39 @@ class TrackingCaptureServiceTest {
       ),
       shadowOf(service).lastForegroundNotification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
     )
+  }
+
+  @Test
+  fun reconnectingUploadsPendingFixesWithoutWaitingForTheNextFix() {
+    val queue = RoomCiphertextQueue(Room.inMemoryDatabaseBuilder(application, CiphertextQueueDatabase::class.java).allowMainThreadQueries().build())
+    queueField.set(null, queue)
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.2:"))
+    val generation = TrackingRuntime.captureCommands.start()
+    val service = createService()
+    service.onStartCommand(startIntent(generation), 0, 1)
+    service.onStartCommand(startIntent(generation), 0, 2)
+    val connectivity = shadowOf(application.getSystemService(ConnectivityManager::class.java))
+
+    assertEquals(1, connectivity.networkCallbacks.size)
+    connectivity.networkCallbacks.single().onAvailable(ShadowNetwork.newInstance(1))
+    Thread.sleep(500)
+    assertEquals(null, shadowOf(application).peekNextStartedService())
+
+    queue.insertAll(listOf(CiphertextQueueRow(owner = "test-owner", clientPointId = "point", captureId = "capture", groupId = "group", epochId = "epoch", senderDeviceId = "tablet", kind = "trackingPoint", algorithm = "algorithm", nonce = "nonce", ciphertext = "ciphertext", queuedAt = 1)))
+    TrackingRuntime.captureCommands.stop()
+    connectivity.networkCallbacks.single().onAvailable(ShadowNetwork.newInstance(1))
+    connectivity.networkCallbacks.single().onAvailable(ShadowNetwork.newInstance(2))
+    val deadline = System.currentTimeMillis() + 5_000L
+    while (shadowOf(application).peekNextStartedService() == null && System.currentTimeMillis() < deadline) Thread.sleep(10)
+    Thread.sleep(200)
+
+    assertEquals("upload", shadowOf(application).nextStartedService.getStringExtra(TrackingUploadService.EXTRA_REASON))
+    assertEquals(null, shadowOf(application).nextStartedService)
+
+    service.onStartCommand(Intent(application, TrackingCaptureService::class.java).apply {
+      action = TrackingCaptureService.ACTION_STOP
+    }, 0, 3)
+    assertTrue(connectivity.networkCallbacks.isEmpty())
   }
 
   @Test

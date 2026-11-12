@@ -35,6 +35,7 @@ const pendingPause = (
   paused: true,
   durationMinutes,
   pausedUntil: durationMinutes === null ? null : new Date(Date.now() + durationMinutes * 60_000),
+  requestedAt: new Date(),
 });
 const Host = ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
   React.createElement("host", props, children);

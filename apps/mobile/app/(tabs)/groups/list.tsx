@@ -46,7 +46,7 @@ export default function GroupsScreen() {
       trpc.groupInvites.list.queryKey(),
       trpc.groupInvites.joinAlerts.queryKey(),
     ],
-    10_000,
+    30_000,
   );
 
   if (isFetchingGroupList || isFetchingGroupInvites) {

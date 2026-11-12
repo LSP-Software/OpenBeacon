@@ -11,7 +11,7 @@ import { useLocationPermissions } from "./LocationPermissionProvider.tsx";
 
 const trackingService = {
   flushPendingTrackingPoints: async (force = false) =>
-    (await import("../lib/tracking.ts")).flushPendingTrackingPoints(force),
+    (await import("../lib/tracking.ts")).flushForegroundTrackingPoints(force),
   resumeTracking: async () => (await import("../lib/tracking.ts")).resumeTracking(),
   getUnassignedTrackingPoints: async () =>
     (await import("../lib/tracking.ts")).getUnassignedTrackingPoints(),
@@ -213,7 +213,7 @@ export const TrackingProvider = ({
       if (appStateRef.current === "active") {
         void runTrackingCycle();
       }
-    }, 30_000);
+    }, 60_000);
 
     return () => {
       clearInterval(interval);

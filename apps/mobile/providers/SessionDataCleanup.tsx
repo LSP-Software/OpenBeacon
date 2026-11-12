@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect, useRef } from "react";
+import { AppState } from "react-native";
 import { authClient } from "../lib/auth-client.ts";
 import { clearGroupColors } from "../lib/groupColor.ts";
 import { clearTrackingUploadTimes } from "../lib/trackingUploadTime.ts";
@@ -10,6 +11,7 @@ export const SessionDataCleanup = () => {
   const queryClient = useQueryClient();
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
   const lastSessionCheckRef = useRef(0);
+  const lastResumeCheckRef = useRef(Date.now());
   const userId = session?.user.id ?? null;
   const userIdRef = useRef(userId);
 
@@ -51,6 +53,16 @@ export const SessionDataCleanup = () => {
       unsubscribeMutations();
     };
   }, [queryClient]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || !userIdRef.current) return;
+      if (Date.now() - lastResumeCheckRef.current < 60 * 60_000) return;
+      lastResumeCheckRef.current = Date.now();
+      authClient.$store.notify("$sessionSignal");
+    });
+    return () => subscription.remove();
+  }, []);
 
   return null;
 };

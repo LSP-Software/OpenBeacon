@@ -5,12 +5,14 @@ import {
 } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
 import { Prisma } from "@openbeacon/database";
+import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import {
   getLatestGroupTrackingPoints,
   pollGroupTrackingPoints,
   uploadGroupTrackingBatch,
 } from "../../lib/groupTracking.ts";
+import { getTrackingKeyState } from "../../lib/trackingKeyState.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 
 const DEFAULT_POLL_LIMIT = 100;
@@ -25,7 +27,7 @@ export const groupTrackingRouter = {
     })
     .input(groupTrackingUploadBatchSchema)
     .mutation(async ({ ctx, input }) => {
-      return await ctx.db.$transaction(async (tx) => {
+      const result = await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "User" WHERE id = ${ctx.session.user.id} FOR SHARE`,
         );
@@ -51,6 +53,22 @@ export const groupTrackingRouter = {
           userId: ctx.session.user.id,
         });
       });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const keyState = await tryCatch(
+        Promise.race([
+          getTrackingKeyState({
+            db: ctx.db,
+            deviceId: ctx.deviceId,
+            userId: ctx.session.user.id,
+          }),
+          new Promise<null>((resolve) => {
+            timer = setTimeout(() => resolve(null), 2_000);
+          }),
+        ]),
+      );
+      clearTimeout(timer);
+      if (keyState.error || keyState.data === null) return { ...result };
+      return { ...result, keyState: keyState.data };
     }),
   poll: groupMemberProcedure
     .meta({ rateLimit: { limit: 480, windowMs: 60_000 } })

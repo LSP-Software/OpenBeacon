@@ -1,7 +1,7 @@
 import { isSharingPaused, tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PauseIcon } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { trpc } from "../../lib/api.ts";
 import {
@@ -9,15 +9,18 @@ import {
   getPendingSharingChanges,
   hasLocallyPausedSharing,
   serverNow,
+  syncLocationSharing,
 } from "../../lib/locationSharing.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 
 export const LocationSharingPausedBanner = ({
+  polled,
   subscribed,
   userId,
 }: {
+  polled: { paused: boolean; revisionPrefix: string } | null;
   subscribed: boolean;
   userId: string;
 }) => {
@@ -25,20 +28,43 @@ export const LocationSharingPausedBanner = ({
   const sharing = useQuery({
     ...trpc.account.locationSharing.queryOptions(),
     enabled: userId.length > 0,
-    refetchInterval: 15_000,
+    refetchInterval: polled ? false : 15_000,
     subscribed,
   });
+  const polledState = polled ? `${polled.paused}:${polled.revisionPrefix}` : undefined;
+  const polledPaused = polled?.paused;
+  const loadedPaused = sharing.data?.paused;
+  const seenPolledState = useRef(polledState);
+  const syncedPolledState = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const previous = seenPolledState.current;
+    seenPolledState.current = polledState;
+    if (polledState === undefined || syncedPolledState.current === polledState) return;
+    const changed = previous !== undefined && previous !== polledState;
+    const disagrees = loadedPaused !== undefined && loadedPaused !== polledPaused;
+    if (!changed && !disagrees) return;
+    syncedPolledState.current = polledState;
+    void tryCatch(syncLocationSharing()).then((synced) => {
+      if (synced.data) {
+        queryClient.setQueryData(trpc.account.locationSharing.queryKey(), synced.data);
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: trpc.account.locationSharing.queryKey() });
+    });
+  }, [loadedPaused, polledPaused, polledState, queryClient]);
   const [failure, setFailure] = useState<string | null>(null);
   const resume = useMutation({
     mutationFn: async () => {
+      const fresh = await tryCatch(
+        queryClient.fetchQuery({ ...trpc.account.locationSharing.queryOptions(), staleTime: 0 }),
+      );
+      const current = fresh.data ?? sharing.data;
       const pending = getPendingSharingChanges(userId);
       const now = serverNow();
       const accountPaused =
-        pending.account?.paused ??
-        (sharing.data ? isSharingPaused(sharing.data.account, now) : false);
+        pending.account?.paused ?? (current ? isSharingPaused(current.account, now) : false);
       const devicePaused =
-        pending.device?.paused ??
-        (sharing.data ? isSharingPaused(sharing.data.device, now) : false);
+        pending.device?.paused ?? (current ? isSharingPaused(current.device, now) : false);
       const results = [];
       if (accountPaused) {
         results.push(
@@ -46,7 +72,7 @@ export const LocationSharingPausedBanner = ({
             scope: "account",
             paused: false,
             durationMinutes: null,
-            ...(sharing.data ? { expectedRevision: sharing.data.account.sharingRevision } : {}),
+            ...(current ? { expectedRevision: current.account.sharingRevision } : {}),
           }),
         );
       }
@@ -56,7 +82,7 @@ export const LocationSharingPausedBanner = ({
             scope: "device",
             paused: false,
             durationMinutes: null,
-            ...(sharing.data ? { expectedRevision: sharing.data.device.sharingRevision } : {}),
+            ...(current ? { expectedRevision: current.device.sharingRevision } : {}),
           }),
         );
       }

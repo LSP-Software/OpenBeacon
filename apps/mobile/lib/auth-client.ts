@@ -10,6 +10,7 @@ export const SESSION_TOKEN_TO_REVOKE_KEY = "sessionTokenToRevokeOnNextLogin";
 
 export const authClient = createAuthClient({
   baseURL: baseUrl,
+  sessionOptions: { refetchOnWindowFocus: false },
   fetchOptions: {
     timeout: 30_000,
     // better-fetch throws on timeouts and network failures instead of returning `{ error }`,
