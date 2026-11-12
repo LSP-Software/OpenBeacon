@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { PublishResult } from "./commands.ts";
 import type { MapStatus, UpdateRun } from "./status.ts";
 
+export const MAX_TIMEOUT_MS = 2 ** 31 - 1;
+
 const updateRequestSchema = z.object({ force: z.boolean().default(false) });
 
 export const createMapTilesHandler = ({
@@ -14,24 +16,26 @@ export const createMapTilesHandler = ({
   now?: () => number;
   readMapStatus: () => Promise<MapStatus>;
   rollback: () => Promise<string>;
-  runUpdate: (options: { ignoreInterval: boolean }) => Promise<PublishResult>;
+  runUpdate: (options: { manual: boolean }) => Promise<PublishResult>;
 }) => {
   let running: { startedAt: string; task: Promise<void> } | null = null;
   let last: UpdateRun["last"] = null;
   let rollingBack: Promise<unknown> | null = null;
+  let nextCheckAt: string | null = null;
 
   const describe = (): UpdateRun => ({
     running: running !== null,
     startedAt: running?.startedAt ?? null,
+    nextCheckAt,
     last,
   });
 
-  const start = (ignoreInterval: boolean) => {
+  const start = (manual: boolean) => {
     const task = (async () => {
       if (rollingBack) {
         await rollingBack;
       }
-      const result = await tryCatch(runUpdate({ ignoreInterval }));
+      const result = await tryCatch(runUpdate({ manual }));
       const finishedAt = new Date(now()).toISOString();
 
       if (result.error) {
@@ -51,10 +55,10 @@ export const createMapTilesHandler = ({
     return task;
   };
 
-  const requestUpdate = ({ ignoreInterval }: { ignoreInterval: boolean }) => {
+  const requestUpdate = ({ manual }: { manual: boolean }) => {
     const alreadyRunning = running !== null;
     if (!alreadyRunning) {
-      void start(ignoreInterval);
+      void start(manual);
     }
     return { ...describe(), alreadyRunning };
   };
@@ -94,7 +98,7 @@ export const createMapTilesHandler = ({
         if (!body.success) {
           return Response.json({ error: 'Send {} or {"force": true}' }, { status: 400 });
         }
-        return Response.json(requestUpdate({ ignoreInterval: body.data.force }), {
+        return Response.json(requestUpdate({ manual: body.data.force }), {
           status: 202,
         });
       }
@@ -125,9 +129,50 @@ export const createMapTilesHandler = ({
     },
     idle: () => running?.task ?? Promise.resolve(),
     scheduleUpdates: (intervalMs: number) => {
-      requestUpdate({ ignoreInterval: false });
-      const timer = setInterval(() => requestUpdate({ ignoreInterval: false }), intervalMs);
-      return () => clearInterval(timer);
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let stopped = false;
+      let retries = 0;
+
+      const waitUntil = (at: number) => {
+        const delay = at - now();
+        timer = setTimeout(
+          () => (delay > MAX_TIMEOUT_MS ? waitUntil(at) : void check()),
+          Math.min(Math.max(delay, 0), MAX_TIMEOUT_MS),
+        );
+      };
+
+      const check = async () => {
+        nextCheckAt = null;
+        requestUpdate({ manual: false });
+        await running?.task;
+        const map = await tryCatch(readMapStatus());
+        if (stopped) {
+          return;
+        }
+        if (map.error) {
+          console.error(`Could not read the map from R2: ${map.error.message}`);
+        }
+        const dueAt = map.data?.nextUpdateDueAt ? Date.parse(map.data.nextUpdateDueAt) : null;
+        const retry = dueAt === null || last?.outcome === "failed";
+        retries = retry ? retries + 1 : 0;
+        const at = retry
+          ? now() + Math.min(3_600_000 * 2 ** (retries - 1), 86_400_000)
+          : dueAt > now()
+            ? dueAt
+            : now() + intervalMs;
+        nextCheckAt = new Date(at).toISOString();
+        console.log(`Next map update check at ${nextCheckAt}`);
+        waitUntil(at);
+      };
+
+      void check();
+      return () => {
+        stopped = true;
+        nextCheckAt = null;
+        if (timer) {
+          clearTimeout(timer);
+        }
+      };
     },
   };
 };

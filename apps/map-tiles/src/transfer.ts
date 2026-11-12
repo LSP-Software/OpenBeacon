@@ -65,6 +65,7 @@ export const createProgressTracker = ({
 
       return {
         bytesPerSecond,
+        stalled: elapsedMs >= windowMs && windowBytes <= 0,
         etaSeconds:
           bytesPerSecond === null ? null : Math.max(totalBytes - doneBytes, 0) / bytesPerSecond,
         percent: totalBytes === 0 ? 100 : (doneBytes / totalBytes) * 100,

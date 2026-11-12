@@ -93,9 +93,19 @@ export const formatStatus = ({ now, status }: { now: number; status: ServiceStat
   }
 
   if (map.nextUpdateDueAt) {
+    lines.push(`Map due for update: from ${map.nextUpdateDueAt}, if Protomaps has a newer build`);
+  }
+
+  if (map.rejectedBuild) {
     lines.push(
-      `Next scheduled update: from ${map.nextUpdateDueAt}, if Protomaps has a newer build`,
+      `Rolled-back build ${formatBuild(map.rejectedBuild)} is skipped until Protomaps publishes a newer one`,
     );
+  }
+
+  if (status.nextCheckAt) {
+    lines.push(`Next check: ${status.nextCheckAt}`);
+  } else if (status.running) {
+    lines.push("Next check: after the running update finishes");
   }
 
   lines.push(

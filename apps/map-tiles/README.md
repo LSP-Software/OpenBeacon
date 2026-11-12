@@ -1,6 +1,6 @@
 # Map tiles service
 
-Keeps the [Protomaps](https://docs.protomaps.com/basemaps/downloads) planet basemap in the R2 bucket current. It runs as a standalone service that checks for a new map when it starts and then once a day. The same image has a `map-tiles` command for checking the service, rolling back and starting an update by hand.
+Keeps the [Protomaps](https://docs.protomaps.com/basemaps/downloads) planet basemap in the R2 bucket current. It runs as a standalone service that checks for a new map when it starts and again whenever the map in use reaches `MAP_TILES_UPDATE_INTERVAL_DAYS` old (30 days by default). A map's age counts from its Protomaps build date, not from when it was uploaded. The same image has a `map-tiles` command for checking the service, rolling back and starting an update by hand.
 
 A planet build is about 130 GiB. Protomaps publishes no diffs, so every update downloads and uploads the whole archive. It streams 64 MiB parts and does not store the archive on disk.
 
@@ -63,10 +63,10 @@ Service connectivity:
   State directory: valid
   R2: valid
 Map tiles API listening on 127.0.0.1:8080 for the map-tiles command
-Checking for a map update now and every 24 hours in R2 bucket openbeacon-maps
+Checking for a map update in R2 bucket openbeacon-maps now and whenever the map is 30 days old
 ```
 
-It then checks for an update straight away and every 24 hours after that. The service owns the manifest, so each check first makes sure the maps it lists are in R2:
+It then checks for an update straight away. When a check finishes, which can take hours if it downloads a map, it logs when the next one runs (`Next map update check at …`). Normally that is when the map in use is `MAP_TILES_UPDATE_INTERVAL_DAYS` old, counted from its Protomaps build date, or when the standby slot can be replaced if that is later. A timer doesn't survive a restart, so every start checks the map's age instead. If the map is due but Protomaps has nothing newer, it waits a full interval. If the update fails, the map can't be read from R2, or there is no map yet, it tries again after 1 hour, doubling the wait after each failure up to 24 hours. Run `map-tiles update` to try sooner. The service owns the manifest, so each check first makes sure the maps it lists are in R2:
 
 - If the map in use is missing and the other slot's map is there, it switches to the other slot.
 - If the other slot's map is missing, it removes that slot from the manifest so nothing is served from it or rolled back to.
@@ -74,17 +74,25 @@ It then checks for an update straight away and every 24 hours after that. The se
 
 A manifest that can't be read (not valid JSON, or not in the expected format) is never overwritten. The check fails and logs why until the file is fixed or deleted by hand.
 
-After that the update check runs as normal. It logs progress and the reason for every skip or failure. On `SIGTERM` it stops at once; an unfinished upload resumes on the next start.
+After that the update check runs as normal. It logs the reason for every skip or failure. While copying the map into R2 it logs a progress line once a minute, with the speed over the last minute and the estimated time left:
+
+```text
+Transferred 12.4 GiB of 121.0 GiB (10.2%), at 95.3 Mbps, about 2h 43m left (done around 2026-12-02T05:55:00.000Z)
+```
+
+In the first minute the line ends with `measuring speed`, and if nothing reached R2 in the last minute it ends with `no progress in the last minute`. When the copy finishes it logs how much it sent and how long that took, such as `Transferred 121.0 GiB in 3h 12m`.
+
+On `SIGTERM` it stops at once; an unfinished upload resumes on the next start.
 
 The image includes `curl`, so Coolify's health check against `http://127.0.0.1:8080/health` works. The Docker `HEALTHCHECK` calls the same endpoint.
 
 A scheduled update does nothing unless all of these hold:
 
 - the bucket has no map yet, or the map in use is at least `MAP_TILES_UPDATE_INTERVAL_DAYS` old,
-- Protomaps has a newer build with basemap schema 4,
+- Protomaps has a newer build with basemap schema 4, and it is newer than any build that was rolled back,
 - the other slot is empty or free to replace.
 
-So the daily check is cheap and the map changes roughly monthly.
+So the map changes roughly monthly.
 
 If the service restarts in the middle of an upload, it resumes from the parts already in R2 when it starts again. This includes an upload started with `map-tiles update` before the next update was due. An unreadable upload state file is ignored and the upload starts again. R2 deletes unfinished multipart uploads after 7 days by default, after which the upload starts again.
 
@@ -100,12 +108,12 @@ docker exec map-tiles map-tiles status
 
 The command talks to the running service, so it only works while the service is up, and it never races an update the service is running. The service listens on `127.0.0.1` only, so nothing outside its container can reach it and it needs no key. Don't publish its port.
 
-| Command    | What it does                                                                                                                                                                                                        |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`   | Shows which slot is in use, the Protomaps build in each slot, when the other slot can be replaced, when the next scheduled update is due, the speed limit, whether an update is running and how the last one ended. |
-| `update`   | Starts an update now, ignoring `MAP_TILES_UPDATE_INTERVAL_DAYS`. It still skips when Protomaps has nothing newer or the other slot may still be in use. Returns straight away.                                      |
-| `rollback` | Switches back to the map in the other slot after asking for confirmation. Refused while an update is running.                                                                                                       |
-| `serve`    | Runs the service. This is what the container runs by default.                                                                                                                                                       |
+| Command    | What it does                                                                                                                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `status`   | Shows which slot is in use, the Protomaps build in each slot, when the other slot can be replaced, when the map is due for update, when the service checks next, the speed limit, whether an update is running and how the last one ended. |
+| `update`   | Starts an update now, ignoring `MAP_TILES_UPDATE_INTERVAL_DAYS` and any rolled-back build. It still skips when Protomaps has nothing newer or the other slot may still be in use. Returns straight away.                                   |
+| `rollback` | Switches back to the map in the other slot after asking for confirmation. Refused while an update is running.                                                                                                                              |
+| `serve`    | Runs the service. This is what the container runs by default.                                                                                                                                                                              |
 
 `--yes` skips the rollback confirmation, which is needed without a terminal (`docker exec` without `-it`). `--help` lists the commands.
 
@@ -117,7 +125,8 @@ Map in use: slot B
 Slot A: Protomaps build 2026-11-01 (schema 4.15.2, 120.3 GiB, published 2026-11-02T03:12:44.000Z), still served to open maps until 2026-12-09T03:00:00.000Z
 Slot B: Protomaps build 2026-12-01 (schema 4.15.2, 121.0 GiB, published 2026-12-02T03:00:00.000Z), in use
 The standby slot can be replaced from 2026-12-10T03:00:00.000Z
-Next scheduled update: from 2027-01-01T03:00:00.000Z, if Protomaps has a newer build
+Map due for update: from 2026-12-31T00:00:00.000Z, if Protomaps has a newer build
+Next check: 2026-12-31T00:00:00.000Z
 Speed limit: 100 Mbps each way (MAP_TILES_MAX_MBPS)
 Update: not running
 Last update: published at 2026-12-02T03:00:00.000Z: Published build 20261201 to slot b. Newly opened maps use it within about a minute.
@@ -139,7 +148,7 @@ Then follow it with `map-tiles status` or `docker logs -f map-tiles`. A full upl
 docker exec -it map-tiles map-tiles rollback
 ```
 
-Apps using the bad map move off it on their next URL refresh, within about 10 minutes. Rollback works until the other slot is replaced, which is at least 8 days after the switch and normally a full update interval later. After a rollback the bad map is in the other slot, and the next update replaces it.
+Apps using the bad map move off it on their next URL refresh, within about 10 minutes. Rollback works until the other slot is replaced, which is at least 8 days after the switch and normally a full update interval later. After a rollback the bad map is in the other slot. The manifest records its build as rolled back, so scheduled updates skip it until Protomaps publishes a newer build, and `status` says so. `map-tiles update` installs it anyway. Publishing any build clears the record. The service's own switch to the other slot, when the map in use is missing from R2, does not record anything.
 
 ### Outside the container
 

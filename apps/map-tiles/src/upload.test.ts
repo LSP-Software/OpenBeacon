@@ -8,6 +8,7 @@ import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
+  ListMultipartUploadsCommand,
   ListPartsCommand,
   type S3Client,
   UploadPartCommand,
@@ -32,13 +33,18 @@ const readBody = async (body: Readable) => {
 const createFakeR2 = ({
   existingParts = [],
   failUploads = new Map<number, number>(),
+  inProgress = [],
 }: {
   existingParts?: { partNumber: number; size: number }[];
   failUploads?: Map<number, number>;
+  inProgress?: { key: string; uploadId: string }[];
 } = {}) => {
   const stored = new Map<number, Buffer>();
   const calls: string[] = [];
-  let completedParts: { ETag?: string | undefined; PartNumber?: number | undefined }[] = [];
+  let completedParts: {
+    ETag?: string | undefined;
+    PartNumber?: number | undefined;
+  }[] = [];
   let uploadCounter = 0;
 
   const send = async (command: unknown) => {
@@ -49,7 +55,15 @@ const createFakeR2 = ({
     }
     if (command instanceof AbortMultipartUploadCommand) {
       calls.push(`abort:${command.input.UploadId}`);
+      inProgress = inProgress.filter((upload) => upload.uploadId !== command.input.UploadId);
       return {};
+    }
+    if (command instanceof ListMultipartUploadsCommand) {
+      return {
+        Uploads: inProgress
+          .filter((upload) => upload.key.startsWith(command.input.Prefix ?? ""))
+          .map((upload) => ({ Key: upload.key, UploadId: upload.uploadId })),
+      };
     }
     if (command instanceof ListPartsCommand) {
       calls.push(`list:${command.input.UploadId}`);
@@ -132,13 +146,21 @@ describe("uploadArchive", () => {
       partClient: r2.client,
       partSize: PART_SIZE,
       sleep: async () => {},
-      source: { etag: '"source-etag"', size: source.byteLength, url: sourceUrl },
+      source: {
+        etag: '"source-etag"',
+        size: source.byteLength,
+        url: sourceUrl,
+      },
       stateDir,
       uploadLimiter: unlimited,
     });
 
   const statePath = () =>
-    getUploadStatePath({ bucket: "bucket", key: "planet-20261107.pmtiles", stateDir });
+    getUploadStatePath({
+      bucket: "bucket",
+      key: "planet-20261107.pmtiles",
+      stateDir,
+    });
 
   const writeState = async (overrides: Record<string, unknown>) => {
     await mkdir(dirname(statePath()), { recursive: true });
@@ -167,7 +189,10 @@ describe("uploadArchive", () => {
       Buffer.concat([1, 2, 3, 4].map((part) => r2.stored.get(part) ?? Buffer.alloc(0))),
     ).toEqual(Buffer.from(source));
     expect(r2.completedParts()).toEqual(
-      [1, 2, 3, 4].map((part) => ({ ETag: `"etag-${part}"`, PartNumber: part })),
+      [1, 2, 3, 4].map((part) => ({
+        ETag: `"etag-${part}"`,
+        PartNumber: part,
+      })),
     );
     expect(events.reduce((sum, bytes) => sum + bytes, 0)).toBe(source.byteLength);
     expect(await Bun.file(statePath()).exists()).toBe(false);
@@ -193,7 +218,11 @@ describe("uploadArchive", () => {
       partClient: r2.client,
       partSize: PART_SIZE,
       sleep: async () => {},
-      source: { etag: '"source-etag"', size: source.byteLength, url: sourceUrl },
+      source: {
+        etag: '"source-etag"',
+        size: source.byteLength,
+        url: sourceUrl,
+      },
       stateDir,
       uploadLimiter: unlimited,
     });
@@ -202,16 +231,32 @@ describe("uploadArchive", () => {
     expect(r2.calls).not.toContain("upload:1");
     expect(r2.calls).toContain("upload:2");
     expect(started).toEqual([PART_SIZE, 1]);
-    expect(r2.completedParts()[0]).toEqual({ ETag: '"existing-1"', PartNumber: 1 });
+    expect(r2.completedParts()[0]).toEqual({
+      ETag: '"existing-1"',
+      PartNumber: 1,
+    });
   });
 
-  test("starts a new upload when the source build changed", async () => {
-    await writeState({ sourceEtag: '"older-etag"' });
-    const r2 = createFakeR2();
+  test.each([
+    ["ETag", { sourceEtag: '"older-etag"' }],
+    ["build URL", { sourceUrl: "https://build.example/20261031.pmtiles" }],
+  ])("starts afresh without reusing parts when the saved %s differs", async (_, overrides) => {
+    await writeState(overrides);
+    const log = spyOn(console, "log").mockImplementation(() => {});
+    const r2 = createFakeR2({
+      existingParts: [{ partNumber: 1, size: PART_SIZE }],
+    });
 
     await run(r2);
 
     expect(r2.calls.slice(0, 2)).toEqual(["abort:upload-existing", "create"]);
+    expect(r2.calls).not.toContain("list:upload-existing");
+    expect(r2.calls).toContain("upload:1");
+    expect(r2.completedParts()[0]).toEqual({
+      ETag: '"etag-1"',
+      PartNumber: 1,
+    });
+    log.mockRestore();
   });
 
   test("starts a new upload when R2 no longer has the saved upload", async () => {
@@ -221,6 +266,40 @@ describe("uploadArchive", () => {
     await run(r2);
 
     expect(r2.calls.slice(0, 2)).toEqual(["list:missing", "create"]);
+    expect(r2.calls).toContain("upload:1");
+  });
+
+  test("aborts other in-progress uploads for the key but keeps the resumed one", async () => {
+    await writeState({});
+    const log = spyOn(console, "log").mockImplementation(() => {});
+    const r2 = createFakeR2({
+      inProgress: [
+        { key: "planet-20261107.pmtiles", uploadId: "upload-existing" },
+        { key: "planet-20261107.pmtiles", uploadId: "orphan" },
+        { key: "planet-20261107.pmtiles.bak", uploadId: "other-key" },
+      ],
+    });
+
+    await run(r2);
+
+    expect(r2.calls.filter((call) => call.startsWith("abort:"))).toEqual(["abort:orphan"]);
+    expect(r2.calls).not.toContain("create");
+    expect(log).toHaveBeenCalledWith(
+      "Aborted 1 stale multipart upload(s) for planet-20261107.pmtiles",
+    );
+    log.mockRestore();
+  });
+
+  test("aborts orphaned uploads for the key when there is no saved state", async () => {
+    const log = spyOn(console, "log").mockImplementation(() => {});
+    const r2 = createFakeR2({
+      inProgress: [{ key: "planet-20261107.pmtiles", uploadId: "orphan" }],
+    });
+
+    await run(r2);
+
+    expect(r2.calls.slice(0, 2)).toEqual(["abort:orphan", "create"]);
+    log.mockRestore();
   });
 
   test.each([

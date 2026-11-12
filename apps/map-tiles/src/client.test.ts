@@ -7,6 +7,7 @@ const now = Date.parse("2026-12-03T00:00:00.000Z");
 const status: ServiceStatus = {
   running: false,
   startedAt: null,
+  nextCheckAt: "2027-01-01T03:00:00.000Z",
   last: {
     finishedAt: "2026-12-02T03:00:00.000Z",
     outcome: "published",
@@ -33,6 +34,7 @@ const status: ServiceStatus = {
     },
     standbyReplaceableFrom: "2026-12-10T03:00:00.000Z",
     nextUpdateDueAt: "2027-01-01T03:00:00.000Z",
+    rejectedBuild: null,
     speedLimitMbps: null,
     untrackedArchives: [],
     resumableUploads: [],
@@ -48,6 +50,30 @@ describe("formatStatus", () => {
     expect(text).toContain("still served to open maps until 2026-12-09T03:00:00.000Z");
     expect(text).toContain("Slot B: Protomaps build 2026-12-01");
     expect(text).toContain("Last update: published");
+  });
+
+  test("shows when the map is due and when the service checks next", () => {
+    const text = formatStatus({ now, status });
+
+    expect(text).toContain(
+      "Map due for update: from 2027-01-01T03:00:00.000Z, if Protomaps has a newer build",
+    );
+    expect(text).toContain("Next check: 2027-01-01T03:00:00.000Z");
+    expect(
+      formatStatus({
+        now,
+        status: { ...status, nextCheckAt: null, running: true, startedAt: "2026-12-03T00:00:00Z" },
+      }),
+    ).toContain("Next check: after the running update finishes");
+  });
+
+  test("shows a rolled-back build that updates skip", () => {
+    expect(
+      formatStatus({
+        now,
+        status: { ...status, map: { ...status.map, rejectedBuild: "20261201" } },
+      }),
+    ).toContain("Rolled-back build 2026-12-01 is skipped until Protomaps publishes a newer one");
   });
 
   test("shows the speed limit", () => {
@@ -84,7 +110,7 @@ describe("createMapTilesClient", () => {
   test("asks the service for a forced update", async () => {
     const fetch = mock(async (_input: string | URL | Request, _init?: RequestInit) =>
       Response.json(
-        { alreadyRunning: false, running: true, startedAt: null, last: null },
+        { alreadyRunning: false, running: true, startedAt: null, nextCheckAt: null, last: null },
         {
           status: 202,
         },

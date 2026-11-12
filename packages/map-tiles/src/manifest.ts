@@ -21,6 +21,10 @@ export const mapTilesManifestSchema = z
   .object({
     current: slotSchema,
     slots: z.object({ a: archiveSchema.nullable(), b: archiveSchema.nullable() }),
+    rejectedBuild: z
+      .string()
+      .regex(/^\d{8}$/)
+      .optional(),
   })
   .loose()
   .refine((manifest) => manifest.slots[manifest.current] !== null, {
@@ -122,9 +126,10 @@ export const publishToStandby = ({
   }
 
   const { archive: current } = getCurrentArchive(manifest);
+  const { rejectedBuild: _rejectedBuild, ...kept } = manifest;
 
   return {
-    ...manifest,
+    ...kept,
     current: standbySlot,
     slots: {
       ...manifest.slots,
@@ -157,6 +162,7 @@ export const rollbackToStandby = ({
   return {
     ...manifest,
     current: standbySlot,
+    rejectedBuild: current.build,
     slots: {
       ...manifest.slots,
       [standbySlot]: restored,

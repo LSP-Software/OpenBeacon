@@ -207,6 +207,13 @@ class TrackingCaptureServiceTest {
 
   @Test
   fun aTimedPauseSaysWhenSharingStartsAgain() {
+    val until = Calendar.getInstance().apply {
+      set(Calendar.HOUR_OF_DAY, 23)
+      set(Calendar.MINUTE, 59)
+      set(Calendar.SECOND, 59)
+      set(Calendar.MILLISECOND, 999)
+    }.timeInMillis
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.1:", paused = true, pausedUntil = until))
     val service = createService()
     service.onStartCommand(Intent(application, TrackingCaptureService::class.java).apply {
       action = TrackingCaptureService.ACTION_CHECK_SHARING
@@ -217,7 +224,13 @@ class TrackingCaptureServiceTest {
       application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_paused_title),
       notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE).toString(),
     )
-    assertTrue(notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString().startsWith("Sharing starts again at "))
+    assertEquals(
+      application.getString(
+        expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_paused_until_body,
+        DateFormat.getTimeFormat(application).format(Date(until)),
+      ),
+      notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
+    )
   }
 
   @Test
