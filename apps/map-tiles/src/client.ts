@@ -10,11 +10,9 @@ import {
 import { formatBytes } from "./transfer.ts";
 
 export const createMapTilesClient = ({
-  apiKey,
   fetch = globalThis.fetch,
   serviceUrl,
 }: {
-  apiKey: string;
   fetch?: typeof globalThis.fetch;
   serviceUrl: string;
 }) => {
@@ -22,10 +20,7 @@ export const createMapTilesClient = ({
     const response = await tryCatch(
       fetch(new URL(path, serviceUrl), {
         method: init.method,
-        headers: {
-          authorization: `Bearer ${apiKey}`,
-          "content-type": "application/json",
-        },
+        headers: { "content-type": "application/json" },
         ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
         signal: AbortSignal.timeout(30_000),
       }),
@@ -35,10 +30,6 @@ export const createMapTilesClient = ({
       throw new Error(
         `Could not reach the map tiles service at ${serviceUrl}: ${response.error.message}`,
       );
-    }
-
-    if (response.data.status === 401) {
-      throw new Error("The map tiles service rejected MAP_TILES_API_KEY");
     }
 
     const body = await tryCatch(response.data.json() as Promise<unknown>);
@@ -106,6 +97,12 @@ export const formatStatus = ({ now, status }: { now: number; status: ServiceStat
       `Next scheduled update: from ${map.nextUpdateDueAt}, if Protomaps has a newer build`,
     );
   }
+
+  lines.push(
+    map.speedLimitMbps === null
+      ? "Speed limit: none (set MAP_TILES_MAX_MBPS to cap it)"
+      : `Speed limit: ${map.speedLimitMbps} Mbps each way (MAP_TILES_MAX_MBPS)`,
+  );
 
   lines.push(status.running ? `Update: running since ${status.startedAt}` : "Update: not running");
 

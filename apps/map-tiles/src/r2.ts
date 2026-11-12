@@ -1,4 +1,11 @@
-import { GetObjectCommand, HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { tryCatch } from "@openbeacon/shared";
 import type { MapTilesEnv } from "./env.ts";
 
@@ -69,4 +76,19 @@ export const readObjectRange = async ({
   }
 
   return response.Body.transformToByteArray();
+};
+
+export const checkBucketAccess = async ({
+  bucket,
+  client,
+}: {
+  bucket: string;
+  client: S3Client;
+}) => {
+  const options = { abortSignal: AbortSignal.timeout(10_000) };
+  const key = "map-tiles-access-check";
+
+  await client.send(new ListObjectsV2Command({ Bucket: bucket, MaxKeys: 1 }), options);
+  await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: "ok" }), options);
+  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }), options);
 };

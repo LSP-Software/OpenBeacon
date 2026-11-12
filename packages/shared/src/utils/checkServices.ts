@@ -1,5 +1,15 @@
 import { tryCatch } from "./tryCatch.ts";
 
+const failureCode = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+  if ("code" in error && typeof error.code === "string" && /^[\w.-]{1,64}$/.test(error.code)) {
+    return error.code;
+  }
+  return error.name !== "Error" && /^\w{1,64}$/.test(error.name) ? error.name : null;
+};
+
 export const checkServices = async (checks: Record<string, () => Promise<unknown>>) => {
   console.log("Service connectivity:");
   const results = await Promise.all(
@@ -15,7 +25,8 @@ export const checkServices = async (checks: Record<string, () => Promise<unknown
       );
       clearTimeout(timer);
       if (result.error) {
-        console.error(`  ${name}: failed`);
+        const code = failureCode(result.error);
+        console.error(`  ${name}: failed${code ? ` (${code})` : ""}`);
         return false;
       }
       console.log(`  ${name}: valid`);

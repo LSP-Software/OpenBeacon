@@ -7,6 +7,7 @@ export type {
 } from "./locationSharingTypes.ts";
 export { logRateLimit } from "./utils/logRateLimit.ts";
 export { checkServices } from "./utils/checkServices.ts";
+export { validateEnv } from "./utils/validateEnv.ts";
 export {
   apiCompatibilityLevel,
   apiCompatibilityLevelHeader,

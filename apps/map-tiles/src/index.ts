@@ -1,10 +1,11 @@
+import { access, constants, mkdir } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
-import { tryCatch } from "@openbeacon/shared";
+import { checkServices, tryCatch, validateEnv } from "@openbeacon/shared";
 import { createMapTilesClient, formatStatus } from "./client.ts";
-import { publish, readMapStatus, rollback } from "./commands.ts";
-import { parseClientEnv, parseEnv } from "./env.ts";
-import { createR2Clients } from "./r2.ts";
+import { publish, readMapStatus, repairManifest, rollback } from "./commands.ts";
+import { DAY_MS, envSchema, getServiceUrl, parseEnv } from "./env.ts";
+import { checkBucketAccess, createR2Clients } from "./r2.ts";
 import { createMapTilesHandler } from "./server.ts";
 
 const usage = `Usage: map-tiles <command> [options]
@@ -39,25 +40,50 @@ const confirm = async ({ question, yes }: { question: string; yes: boolean }) =>
   }
 };
 
-const serve = () => {
+const serve = async () => {
+  validateEnv({ schemas: envSchema, source: process.env });
   const env = parseEnv(process.env);
-  const apiKey = env.MAP_TILES_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("serve needs MAP_TILES_API_KEY (at least 32 characters)");
-  }
-
   const context = { ...createR2Clients(env), env };
+
+  await checkServices({
+    R2: () => checkBucketAccess({ bucket: env.R2_BUCKET, client: context.client }),
+    "State directory": async () => {
+      await mkdir(env.MAP_TILES_STATE_DIR, { recursive: true });
+      await access(env.MAP_TILES_STATE_DIR, constants.W_OK);
+    },
+  });
+
   const handler = createMapTilesHandler({
-    apiKey,
     readMapStatus: () => readMapStatus(context),
     rollback: () => rollback(context),
-    runUpdate: (options) => publish(context, options),
+    runUpdate: async (options) => {
+      const repaired = await repairManifest(context);
+      if (repaired) {
+        console.log(repaired);
+      }
+      return publish(context, options);
+    },
   });
-  Bun.serve({ fetch: handler.fetch, port: env.MAP_TILES_PORT });
+  const server = Bun.serve({
+    fetch: handler.fetch,
+    hostname: "127.0.0.1",
+    idleTimeout: 30,
+    port: env.MAP_TILES_PORT,
+  });
   console.log(
-    `Map tiles service listening on port ${env.MAP_TILES_PORT} for bucket ${env.R2_BUCKET}`,
+    `Map tiles API listening on 127.0.0.1:${env.MAP_TILES_PORT} for the map-tiles command`,
   );
+  console.log(`Checking for a map update now and every 24 hours in R2 bucket ${env.R2_BUCKET}`);
+  const stopUpdates = handler.scheduleUpdates(DAY_MS);
+
+  const shutdown = async () => {
+    stopUpdates();
+    await server.stop(true);
+    console.log("Map tiles service stopped; an unfinished upload resumes on the next start");
+    process.exit(0);
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 };
 
 const run = async () => {
@@ -79,7 +105,7 @@ const run = async () => {
     return serve();
   }
 
-  const client = createMapTilesClient(parseClientEnv(process.env));
+  const client = createMapTilesClient({ serviceUrl: getServiceUrl(process.env) });
 
   switch (command) {
     case "status":

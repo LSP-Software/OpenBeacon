@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { tryCatch } from "@openbeacon/shared";
 import { z } from "zod";
 import type { PublishResult } from "./commands.ts";
@@ -7,28 +6,19 @@ import type { MapStatus, UpdateRun } from "./status.ts";
 const updateRequestSchema = z.object({ force: z.boolean().default(false) });
 
 export const createMapTilesHandler = ({
-  apiKey,
   now = Date.now,
   readMapStatus,
   rollback,
   runUpdate,
 }: {
-  apiKey: string;
   now?: () => number;
   readMapStatus: () => Promise<MapStatus>;
   rollback: () => Promise<string>;
   runUpdate: (options: { ignoreInterval: boolean }) => Promise<PublishResult>;
 }) => {
-  const expected = Buffer.from(apiKey);
   let running: { startedAt: string; task: Promise<void> } | null = null;
   let last: UpdateRun["last"] = null;
-
-  const isAuthorized = (request: Request) => {
-    const header = request.headers.get("authorization") ?? "";
-    const supplied = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
-    const suppliedBytes = Buffer.from(supplied);
-    return suppliedBytes.length === expected.length && timingSafeEqual(suppliedBytes, expected);
-  };
+  let rollingBack: Promise<unknown> | null = null;
 
   const describe = (): UpdateRun => ({
     running: running !== null,
@@ -38,6 +28,9 @@ export const createMapTilesHandler = ({
 
   const start = (ignoreInterval: boolean) => {
     const task = (async () => {
+      if (rollingBack) {
+        await rollingBack;
+      }
       const result = await tryCatch(runUpdate({ ignoreInterval }));
       const finishedAt = new Date(now()).toISOString();
 
@@ -56,6 +49,14 @@ export const createMapTilesHandler = ({
     })();
     running = { startedAt: new Date(now()).toISOString(), task };
     return task;
+  };
+
+  const requestUpdate = ({ ignoreInterval }: { ignoreInterval: boolean }) => {
+    const alreadyRunning = running !== null;
+    if (!alreadyRunning) {
+      void start(ignoreInterval);
+    }
+    return { ...describe(), alreadyRunning };
   };
 
   const readUpdateRequest = async (request: Request) => {
@@ -77,10 +78,6 @@ export const createMapTilesHandler = ({
         return new Response("Not found", { status: 404 });
       }
 
-      if (!isAuthorized(request)) {
-        return new Response("Unauthorized", { status: 401 });
-      }
-
       if (pathname === "/status" && request.method === "GET") {
         const map = await tryCatch(readMapStatus());
         if (map.error) {
@@ -97,11 +94,9 @@ export const createMapTilesHandler = ({
         if (!body.success) {
           return Response.json({ error: 'Send {} or {"force": true}' }, { status: 400 });
         }
-        const alreadyRunning = running !== null;
-        if (!alreadyRunning) {
-          void start(body.data.force);
-        }
-        return Response.json({ ...describe(), alreadyRunning }, { status: 202 });
+        return Response.json(requestUpdate({ ignoreInterval: body.data.force }), {
+          status: 202,
+        });
       }
 
       if (pathname === "/rollback" && request.method === "POST") {
@@ -113,7 +108,13 @@ export const createMapTilesHandler = ({
             { status: 409 },
           );
         }
-        const result = await tryCatch(rollback());
+        if (rollingBack) {
+          return Response.json({ error: "A rollback is already running" }, { status: 409 });
+        }
+        const pending = tryCatch(rollback());
+        rollingBack = pending;
+        const result = await pending;
+        rollingBack = null;
         if (result.error) {
           return Response.json({ error: result.error.message }, { status: 409 });
         }
@@ -123,5 +124,10 @@ export const createMapTilesHandler = ({
       return new Response("Method not allowed", { status: 405 });
     },
     idle: () => running?.task ?? Promise.resolve(),
+    scheduleUpdates: (intervalMs: number) => {
+      requestUpdate({ ignoreInterval: false });
+      const timer = setInterval(() => requestUpdate({ ignoreInterval: false }), intervalMs);
+      return () => clearInterval(timer);
+    },
   };
 };

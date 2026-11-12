@@ -9,6 +9,11 @@
       "import": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./databaseUrlSchema.ts": {
+      "types": "./src/databaseUrlSchema.ts",
+      "import": "./src/databaseUrlSchema.ts",
+      "default": "./src/databaseUrlSchema.ts"
+    },
     "./enums": {
       "types": "./generated/client/enums.ts",
       "import": "./generated/client/enums.ts",
@@ -29,7 +34,8 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",

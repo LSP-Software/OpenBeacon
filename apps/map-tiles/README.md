@@ -1,6 +1,6 @@
 # Map tiles service
 
-Keeps the [Protomaps](https://docs.protomaps.com/basemaps/downloads) planet basemap in the R2 bucket current. It runs as a small service that the scheduled job runner calls once a day. The same image has a `map-tiles` command for checking the service, rolling back and starting an update by hand.
+Keeps the [Protomaps](https://docs.protomaps.com/basemaps/downloads) planet basemap in the R2 bucket current. It runs as a standalone service that checks for a new map when it starts and then once a day. The same image has a `map-tiles` command for checking the service, rolling back and starting an update by hand.
 
 A planet build is about 130 GiB. Protomaps publishes no diffs, so every update downloads and uploads the whole archive. It streams 64 MiB parts and does not store the archive on disk.
 
@@ -26,16 +26,14 @@ The next update replaces slot A, and so on.
 
 ## Configuration
 
-The service reads `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET`. The credentials need to read, write and list objects and multipart uploads in the bucket.
+The service reads `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET`. The credentials need to read, write, delete and list objects and multipart uploads in the bucket (Cloudflare's "Object Read & Write" permission).
 
-| Variable                         | Default                            | What it does                                                                        |
-| -------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------- |
-| `MAP_TILES_API_KEY`              | None                               | Shared key for the service, the runner and the `map-tiles` command. 32+ characters. |
-| `MAP_TILES_UPDATE_INTERVAL_DAYS` | `30`                               | Days between scheduled updates. Must be more than 8.                                |
-| `MAP_TILES_PORT`                 | `8080`                             | Port the service listens on.                                                        |
-| `MAP_TILES_SERVICE_URL`          | `http://127.0.0.1:$MAP_TILES_PORT` | Where the `map-tiles` command finds the service. Only needed outside its container. |
-| `MAP_TILES_MAX_MBPS`             | None                               | Caps the upload and the download, each at this many megabits per second.            |
-| `MAP_TILES_STATE_DIR`            | `.map-tiles` (`/state` in Docker)  | Resumable upload state. Keep it on a volume.                                        |
+| Variable                         | Default                           | What it does                                                             |
+| -------------------------------- | --------------------------------- | ------------------------------------------------------------------------ |
+| `MAP_TILES_UPDATE_INTERVAL_DAYS` | `30`                              | Days between scheduled updates. Must be more than 8.                     |
+| `MAP_TILES_PORT`                 | `8080`                            | Port the service listens on, inside the container only (`127.0.0.1`).    |
+| `MAP_TILES_MAX_MBPS`             | None                              | Caps the upload and the download, each at this many megabits per second. |
+| `MAP_TILES_STATE_DIR`            | `.map-tiles` (`/state` in Docker) | Resumable upload state. Keep it on a volume.                             |
 
 ## Running the service
 
@@ -47,13 +45,38 @@ To build the image yourself, run this from the repository root:
 docker build -f apps/map-tiles/Dockerfile -t openbeacon-map-tiles .
 ```
 
-Run it with `/state` on a volume:
+Run exactly one map tiles service per bucket; two would race each other's uploads and manifest changes. Run it with `/state` on a volume:
 
 ```bash
-docker run -d --name map-tiles --env-file .env -p 8080:8080 -v openbeacon-map-tiles-state:/state openbeacon-map-tiles
+docker run -d --name map-tiles --env-file .env -v openbeacon-map-tiles-state:/state openbeacon-map-tiles
 ```
 
-Give the scheduled job runner `MAP_TILES_SERVICE_URL` (for example `http://map-tiles:8080`) and the same `MAP_TILES_API_KEY`. It asks the service to update once a day. The runner checks it can reach the service with the key when it starts, and won't start if it can't. It logs `MAP_TILES_HTTP_<status>` if the service refuses an update, and `MAP_TILES_UPDATE_FAILED` if the previous update failed. The service logs progress and the reason for every skip or failure.
+On start the service checks its settings, the same way the backend does. It then checks that its R2 credentials can list the bucket and write and delete a small `map-tiles-access-check` object, and that it can write to its state directory. It exits if any check fails, naming the error code (for example `R2: failed (AccessDenied)`):
+
+```text
+Environment configuration:
+  R2_ACCOUNT_ID: valid
+  ...
+  MAP_TILES_MAX_MBPS: not set (optional/default)
+Environment configuration valid
+Service connectivity:
+  State directory: valid
+  R2: valid
+Map tiles API listening on 127.0.0.1:8080 for the map-tiles command
+Checking for a map update now and every 24 hours in R2 bucket openbeacon-maps
+```
+
+It then checks for an update straight away and every 24 hours after that. The service owns the manifest, so each check first makes sure the maps it lists are in R2:
+
+- If the map in use is missing and the other slot's map is there, it switches to the other slot.
+- If the other slot's map is missing, it removes that slot from the manifest so nothing is served from it or rolled back to.
+- If neither map is there, it removes the manifest and downloads the map again into slot A.
+
+A manifest that can't be read (not valid JSON, or not in the expected format) is never overwritten. The check fails and logs why until the file is fixed or deleted by hand.
+
+After that the update check runs as normal. It logs progress and the reason for every skip or failure. On `SIGTERM` it stops at once; an unfinished upload resumes on the next start.
+
+The image includes `curl`, so Coolify's health check against `http://127.0.0.1:8080/health` works. The Docker `HEALTHCHECK` calls the same endpoint.
 
 A scheduled update does nothing unless all of these hold:
 
@@ -61,9 +84,9 @@ A scheduled update does nothing unless all of these hold:
 - Protomaps has a newer build with basemap schema 4,
 - the other slot is empty or free to replace.
 
-So the runner can call it daily and the map changes roughly monthly.
+So the daily check is cheap and the map changes roughly monthly.
 
-If the service restarts in the middle of an upload, the next update resumes it from the parts already in R2. R2 deletes unfinished multipart uploads after 7 days by default, after which the upload starts again.
+If the service restarts in the middle of an upload, it resumes from the parts already in R2 when it starts again. This includes an upload started with `map-tiles update` before the next update was due. An unreadable upload state file is ignored and the upload starts again. R2 deletes unfinished multipart uploads after 7 days by default, after which the upload starts again.
 
 Before switching to a new map, the service checks that the uploaded size matches the build, compares the first 16 KiB (header and root directory) with the Protomaps source, and checks that the metadata reports basemap schema major version 4, which the app's `@protomaps/basemaps` style expects. Each part is uploaded with its MD5 so R2 rejects corrupted parts. If a check fails, nothing is switched and the next update uploads the slot again.
 
@@ -75,14 +98,14 @@ Run it inside the service's container:
 docker exec map-tiles map-tiles status
 ```
 
-The command talks to the running service using `MAP_TILES_API_KEY`, so it only works while the service is up, and it never races an update the service is running.
+The command talks to the running service, so it only works while the service is up, and it never races an update the service is running. The service listens on `127.0.0.1` only, so nothing outside its container can reach it and it needs no key. Don't publish its port.
 
-| Command    | What it does                                                                                                                                                                                       |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`   | Shows which slot is in use, the Protomaps build in each slot, when the other slot can be replaced, when the next scheduled update is due, whether an update is running and how the last one ended. |
-| `update`   | Starts an update now, ignoring `MAP_TILES_UPDATE_INTERVAL_DAYS`. It still skips when Protomaps has nothing newer or the other slot may still be in use. Returns straight away.                     |
-| `rollback` | Switches back to the map in the other slot after asking for confirmation. Refused while an update is running.                                                                                      |
-| `serve`    | Runs the service. This is what the container runs by default.                                                                                                                                      |
+| Command    | What it does                                                                                                                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`   | Shows which slot is in use, the Protomaps build in each slot, when the other slot can be replaced, when the next scheduled update is due, the speed limit, whether an update is running and how the last one ended. |
+| `update`   | Starts an update now, ignoring `MAP_TILES_UPDATE_INTERVAL_DAYS`. It still skips when Protomaps has nothing newer or the other slot may still be in use. Returns straight away.                                      |
+| `rollback` | Switches back to the map in the other slot after asking for confirmation. Refused while an update is running.                                                                                                       |
+| `serve`    | Runs the service. This is what the container runs by default.                                                                                                                                                       |
 
 `--yes` skips the rollback confirmation, which is needed without a terminal (`docker exec` without `-it`). `--help` lists the commands.
 
@@ -95,6 +118,7 @@ Slot A: Protomaps build 2026-11-01 (schema 4.15.2, 120.3 GiB, published 2026-11-
 Slot B: Protomaps build 2026-12-01 (schema 4.15.2, 121.0 GiB, published 2026-12-02T03:00:00.000Z), in use
 The standby slot can be replaced from 2026-12-10T03:00:00.000Z
 Next scheduled update: from 2027-01-01T03:00:00.000Z, if Protomaps has a newer build
+Speed limit: 100 Mbps each way (MAP_TILES_MAX_MBPS)
 Update: not running
 Last update: published at 2026-12-02T03:00:00.000Z: Published build 20261201 to slot b. Newly opened maps use it within about a minute.
 ```
@@ -119,7 +143,7 @@ Apps using the bad map move off it on their next URL refresh, within about 10 mi
 
 ### Outside the container
 
-From the repository root, with `MAP_TILES_API_KEY` and `MAP_TILES_SERVICE_URL` pointing at a running service:
+From the repository root, while the service runs on the same machine (for example `bun run map-tiles serve` in another terminal):
 
 ```bash
 bun run map-tiles status
@@ -127,6 +151,6 @@ bun run map-tiles status
 
 ## Self-hosting
 
-Self-hosted backends can use their own R2 bucket: run the service against it and either let the scheduled job runner call it or run `map-tiles update` once. The first update fills slot A and creates the manifest; the app shows that the map isn't ready until then.
+Self-hosted backends can use their own R2 bucket: run the service against it and it fills the bucket on its first start. The first update fills slot A and creates the manifest; the app shows that the map isn't ready until then.
 
-Backends that served a map from `R2_PM_TILES_KEY` before the map tiles service existed have no manifest, so the map stops showing when they upgrade. Deploy this service and finish its first update (`map-tiles update`, then `map-tiles status` until it's done) before upgrading the backend.
+Backends that served a map from `R2_PM_TILES_KEY` before the map tiles service existed have no manifest, so the map stops showing when they upgrade. Deploy this service and let its first update finish (`map-tiles status` until it's done) before upgrading the backend.

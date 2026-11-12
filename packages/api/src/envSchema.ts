@@ -1,3 +1,4 @@
+import { r2EnvSchema } from "@openbeacon/map-tiles";
 import { z } from "zod";
 
 export const envSchema = {
@@ -11,8 +12,5 @@ export const envSchema = {
     .default("https://cdn.openbeacon.net/file")
     .transform((url) => url.replace(/\/+$/, "")),
   MAX_IMAGE_FILE_SIZE: z.coerce.number().int().min(1).default(5242880),
-  R2_ACCOUNT_ID: z.string().min(1),
-  R2_ACCESS_KEY_ID: z.string().min(1),
-  R2_SECRET_ACCESS_KEY: z.string().min(1),
-  R2_BUCKET: z.string().min(1),
+  ...r2EnvSchema,
 };

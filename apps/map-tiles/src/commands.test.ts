@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Readable } from "node:stream";
 import { gzipSync } from "node:zlib";
 import {
@@ -18,8 +18,9 @@ import {
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { MAP_TILES_MANIFEST_KEY, type MapTilesManifest } from "@openbeacon/map-tiles";
-import { publish, readMapStatus, rollback } from "./commands.ts";
+import { publish, readMapStatus, repairManifest, rollback } from "./commands.ts";
 import { parseEnv } from "./env.ts";
+import { getUploadStatePath } from "./upload.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -39,7 +40,13 @@ const createArchive = () => {
 const source = createArchive();
 const originalFetch = globalThis.fetch;
 
-const createFakeR2 = ({ corruptOnComplete = false }: { corruptOnComplete?: boolean } = {}) => {
+const createFakeR2 = ({
+  corruptOnComplete = false,
+  failCompletes = 0,
+}: {
+  corruptOnComplete?: boolean;
+  failCompletes?: number;
+} = {}) => {
   const objects = new Map<string, { body: Uint8Array; etag: string }>();
   const parts = new Map<number, Uint8Array>();
   const writes: string[] = [];
@@ -115,6 +122,10 @@ const createFakeR2 = ({ corruptOnComplete = false }: { corruptOnComplete?: boole
       return { ETag: `"part-${command.input.PartNumber}"` };
     }
     if (command instanceof CompleteMultipartUploadCommand) {
+      if (failCompletes > 0) {
+        failCompletes -= 1;
+        fail("InternalError");
+      }
       const body = Buffer.concat([...parts].sort(([a], [b]) => a - b).map(([, part]) => part));
       if (corruptOnComplete) {
         body[200] = (body[200] ?? 0) + 1;
@@ -360,14 +371,49 @@ describe("map tiles commands", () => {
     expect((await publish(context(r2), update)).published).toBe(true);
   });
 
-  test("skips the upload when the slot already holds the build", async () => {
+  test("skips the upload when the slot already holds the build and drops its stale state", async () => {
     const r2 = createFakeR2();
     r2.putArchive("planet-a.pmtiles");
+    const statePath = getUploadStatePath({ bucket: "bucket", key: "planet-a.pmtiles", stateDir });
+    await mkdir(dirname(statePath), { recursive: true });
+    await writeFile(statePath, "{}");
 
     await publish(context(r2), update);
 
     expect(r2.writes).toEqual([`put:${MAP_TILES_MANIFEST_KEY}`]);
     expect(r2.manifest()?.slots.a?.build).toBe("20261107");
+    expect(await Bun.file(statePath).exists()).toBe(false);
+    expect((await readMapStatus(context(r2))).resumableUploads).toEqual([]);
+  });
+
+  test("a scheduled update resumes a manual update that stopped before the interval", async () => {
+    const r2 = createFakeR2({ failCompletes: 1 });
+    const now = Date.now();
+    r2.putArchive("planet-a.pmtiles", otherBuild());
+    r2.putArchive("planet-b.pmtiles", otherBuild());
+    r2.putManifest({
+      current: "a",
+      slots: {
+        a: archive("planet-a.pmtiles", "20261007", now - 2 * DAY_MS),
+        b: {
+          ...archive("planet-b.pmtiles", "20260907", now - 40 * DAY_MS),
+          servedUntil: new Date(now - 10 * DAY_MS).toISOString(),
+        },
+      },
+    });
+
+    await expect(publish(context(r2), update)).rejects.toThrow("Upload stopped");
+    expect(r2.manifest()?.slots.b).toBeNull();
+
+    const result = await publish(context(r2), scheduledUpdate);
+
+    expect(result.published).toBe(true);
+    expect(r2.writes.filter((write) => write === "create:planet-b.pmtiles")).toHaveLength(1);
+    expect(r2.manifest()).toMatchObject({
+      current: "b",
+      slots: { a: { build: "20261007" }, b: { build: "20261107" } },
+    });
+    expect((await publish(context(r2), scheduledUpdate)).published).toBe(false);
   });
 
   test("rollback switches back to the standby slot", async () => {
@@ -436,6 +482,7 @@ describe("map tiles commands", () => {
       },
       standbyReplaceableFrom: new Date(now + 3 * DAY_MS).toISOString(),
       nextUpdateDueAt: new Date(now + 25 * DAY_MS).toISOString(),
+      speedLimitMbps: null,
       untrackedArchives: [{ key: "planet-20260315.pmtiles", size: source.byteLength }],
     });
   });
@@ -446,6 +493,85 @@ describe("map tiles commands", () => {
       slots: { a: null, b: null },
       nextUpdateDueAt: null,
       standbyReplaceableFrom: null,
+    });
+  });
+
+  describe("repairManifest", () => {
+    const now = Date.now();
+    const twoSlots = (): MapTilesManifest => ({
+      current: "b",
+      slots: {
+        a: {
+          ...archive("planet-a.pmtiles", "20261007", now - 40 * DAY_MS),
+          servedUntil: new Date(now + 2 * DAY_MS).toISOString(),
+        },
+        b: archive("planet-b.pmtiles", "20261107", now - 5 * DAY_MS),
+      },
+    });
+
+    test("leaves a manifest whose maps are all in R2 alone", async () => {
+      const r2 = createFakeR2();
+      r2.putManifest(twoSlots());
+      r2.putArchive("planet-a.pmtiles");
+      r2.putArchive("planet-b.pmtiles");
+
+      expect(await repairManifest(context(r2))).toBeNull();
+      expect(await repairManifest(context(createFakeR2()))).toBeNull();
+      expect(r2.writes).toEqual([]);
+    });
+
+    test("drops a missing standby map so it is never served or rolled back to", async () => {
+      const r2 = createFakeR2();
+      r2.putManifest(twoSlots());
+      r2.putArchive("planet-b.pmtiles");
+
+      expect(await repairManifest(context(r2))).toContain("slot a was removed");
+      expect(r2.manifest()).toEqual({ ...twoSlots(), slots: { ...twoSlots().slots, a: null } });
+    });
+
+    test("rolls back when the map in use is missing", async () => {
+      const r2 = createFakeR2();
+      r2.putManifest(twoSlots());
+      r2.putArchive("planet-a.pmtiles");
+
+      expect(await repairManifest(context(r2))).toContain("rolled back to slot a");
+      const { servedUntil: _servedUntil, ...restored } = twoSlots().slots.a ?? {};
+      expect(r2.manifest()).toEqual({ current: "a", slots: { a: restored, b: null } });
+    });
+
+    test("leaves the manifest alone when it changes while being checked", async () => {
+      const r2 = createFakeR2();
+      r2.putManifest(twoSlots());
+      const send = r2.client.send.bind(r2.client);
+      let reads = 0;
+      const client = {
+        send: async (command: unknown) => {
+          if (command instanceof GetObjectCommand) {
+            reads += 1;
+          }
+          if (reads === 2 && command instanceof GetObjectCommand) {
+            r2.putArchive("planet-a.pmtiles");
+            r2.putManifest({ ...twoSlots(), current: "a" });
+          }
+          return send(command as never);
+        },
+      } as unknown as S3Client;
+
+      expect(await repairManifest({ ...context(r2), client })).toContain("left alone");
+      expect(r2.manifest()).toMatchObject({ current: "a" });
+      expect(r2.writes).not.toContain(`delete:${MAP_TILES_MANIFEST_KEY}`);
+    });
+
+    test("removes the manifest when none of its maps are in R2, so the next update starts over", async () => {
+      const r2 = createFakeR2();
+      r2.putManifest(twoSlots());
+
+      expect(await repairManifest(context(r2))).toContain("manifest was removed");
+      expect(r2.manifest()).toBeNull();
+
+      const result = await publish(context(r2), { ignoreInterval: false });
+      expect(result.published).toBe(true);
+      expect(r2.manifest()).toMatchObject({ current: "a", slots: { b: null } });
     });
   });
 });
