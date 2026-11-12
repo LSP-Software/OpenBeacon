@@ -39,7 +39,7 @@ export const holdRowLock = async ({
     },
     { timeout: 20_000 },
   );
-  await locked;
+  await Promise.race([locked, holder]);
 
   return {
     release: async () => {
