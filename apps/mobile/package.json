@@ -52,7 +52,7 @@
     "expo-image": "~55.0.6",
     "expo-image-manipulator": "~55.0.11",
     "expo-image-picker": "~55.0.13",
-    "expo-linking": "~55.0.8",
+    "expo-linking": "~58.0.16",
     "expo-location": "^55.1.4",
     "expo-network": "^55.0.9",
     "expo-router": "~55.0.7",
