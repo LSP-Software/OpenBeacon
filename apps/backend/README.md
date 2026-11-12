@@ -18,8 +18,9 @@ Set `SERVER_NAME` in the root `.env` to the public name shown in the health chec
 
 The backend image validates runtime configuration and then runs Prisma
 migrations before starting the server. Configure
-`DATABASE_URL` for an existing PostgreSQL database and `REDIS_URL` for an
-existing Redis-compatible service. The database user needs permission to apply
+`DATABASE_URL` for an existing PostgreSQL database, `REDIS_URL` for an
+existing Redis-compatible service and `REDIS_HASH_SECRET` (at least 32
+characters, for example from `openssl rand -base64 32`). The database user needs permission to apply
 migrations. Back up an existing database before applying schema changes and
 ensure migrations remain compatible with the previous release during rollout.
 Before accepting requests, the backend also checks PostgreSQL and Redis connectivity, lists S3 object versions, reads the map tiles manifest from R2 and checks that the current PMTiles archive exists (with no manifest yet it starts anyway, the app shows that the map isn't ready, and the backend logs every 5 minutes until the map tiles service publishes the first map), and checks the email provider when one is configured. See `apps/map-tiles/README.md` for publishing new map data. These read-only checks require the corresponding credentials and permissions. If a check or migration fails, the new container does not start. Rolling back an image does

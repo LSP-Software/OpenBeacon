@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { OpenBeaconCache } from "../cache/OpenBeaconCache.ts";
-import { FakeRedis } from "../rateLimits/testUtils.ts";
+import { FakeRedis, testRedisHashSecret } from "../rateLimits/testUtils.ts";
 
 class TestOpenBeaconCache extends OpenBeaconCache {
   protected override createRedisClient(): FakeRedis {
@@ -9,7 +9,10 @@ class TestOpenBeaconCache extends OpenBeaconCache {
 }
 
 const createStore = () =>
-  new TestOpenBeaconCache({ redisUrl: "redis://localhost:6379" }).alertsTurnedOff;
+  new TestOpenBeaconCache({
+    redisUrl: "redis://localhost:6379",
+    hashSecret: testRedisHashSecret,
+  }).alertsTurnedOff;
 
 describe("OpenBeaconCache alertsTurnedOff", () => {
   test("keeps the first time and every alert added until taken", async () => {

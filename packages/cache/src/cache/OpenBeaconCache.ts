@@ -49,6 +49,7 @@ export class OpenBeaconCache {
       keyPrefix: this.keyPrefix,
     });
     this.rateLimits = createRateLimits({
+      hashSecret: parsedOptions.hashSecret,
       redis: this.redis,
       now: this.now,
       keyPrefix: this.keyPrefix,

@@ -3,6 +3,7 @@ import { RedisClient, type RedisOptions } from "bun";
 import { z } from "zod";
 import { OpenBeaconCache } from "./cache/OpenBeaconCache.ts";
 import type { RedisLike } from "./cache/redis.ts";
+import { testRedisHashSecret } from "./rateLimits/testUtils.ts";
 
 const scanReplySchema = z.tuple([z.string(), z.array(z.string())]);
 
@@ -56,6 +57,7 @@ class IntegrationTestCache extends OpenBeaconCache {
 export const createIntegrationTestCache = (now: () => number) => {
   const cache = new IntegrationTestCache({
     redisUrl: process.env["REDIS_URL"] ?? "redis://localhost:6379",
+    hashSecret: testRedisHashSecret,
     keyPrefix: `test-${crypto.randomUUID()}`,
     redisOptions: { connectionTimeout: 1000, autoReconnect: false },
     now,

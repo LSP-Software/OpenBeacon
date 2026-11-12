@@ -3,4 +3,5 @@ import { env } from "./env.ts";
 
 export const cache = new OpenBeaconCache({
   redisUrl: env.REDIS_URL,
+  hashSecret: env.REDIS_HASH_SECRET,
 });

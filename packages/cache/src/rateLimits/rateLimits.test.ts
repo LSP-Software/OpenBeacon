@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { OpenBeaconCache } from "../cache/OpenBeaconCache.ts";
-import { FakeRedis } from "./testUtils.ts";
+import { FakeRedis, testRedisHashSecret } from "./testUtils.ts";
 
 class TestOpenBeaconCache extends OpenBeaconCache {
   protected override createRedisClient(): FakeRedis {
@@ -14,6 +14,7 @@ describe("OpenBeaconCache rateLimits", () => {
       () =>
         new TestOpenBeaconCache({
           redisUrl: "not-a-url",
+          hashSecret: testRedisHashSecret,
         }),
     ).toThrow();
 
@@ -21,6 +22,7 @@ describe("OpenBeaconCache rateLimits", () => {
       () =>
         new TestOpenBeaconCache({
           redisUrl: "https://example.com",
+          hashSecret: testRedisHashSecret,
         }),
     ).toThrowError(expect.objectContaining({ message: expect.stringContaining("redis") }));
 
@@ -28,6 +30,7 @@ describe("OpenBeaconCache rateLimits", () => {
       () =>
         new TestOpenBeaconCache({
           redisUrl: "redis://localhost:6379",
+          hashSecret: testRedisHashSecret,
           now: () => Number.NaN,
         }),
     ).toThrow();
@@ -36,6 +39,7 @@ describe("OpenBeaconCache rateLimits", () => {
       () =>
         new TestOpenBeaconCache({
           redisUrl: "redis://localhost:6379",
+          hashSecret: testRedisHashSecret,
           now: () => {
             throw new Error("clock");
           },
@@ -46,6 +50,7 @@ describe("OpenBeaconCache rateLimits", () => {
       () =>
         new TestOpenBeaconCache({
           redisUrl: "redis://localhost:6379",
+          hashSecret: testRedisHashSecret,
           now: () => Number.POSITIVE_INFINITY,
         }),
     ).toThrow();
@@ -55,12 +60,14 @@ describe("OpenBeaconCache rateLimits", () => {
       () =>
         new TestOpenBeaconCache({
           redisUrl: "redis://localhost:6379",
+          hashSecret: testRedisHashSecret,
           now: nonNumericClock as () => number,
         }),
     ).toThrow();
 
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
     });
 
     await expect(
@@ -102,6 +109,7 @@ describe("OpenBeaconCache rateLimits", () => {
     let nowMs = 0;
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
       now: () => nowMs,
     });
 
@@ -191,6 +199,77 @@ describe("OpenBeaconCache rateLimits", () => {
     });
   });
 
+  test("keeps IP addresses and email addresses out of rate limit keys", async () => {
+    const keys: string[] = [];
+    class RecordingCache extends OpenBeaconCache {
+      protected override createRedisClient(): FakeRedis {
+        const redis = new FakeRedis();
+        const send = redis.send.bind(redis);
+        redis.send = async (command, args) => {
+          keys.push(args[2] ?? "");
+          return send(command, args);
+        };
+        return redis;
+      }
+    }
+    const createCache = (hashSecret: string) =>
+      new RecordingCache({ redisUrl: "redis://localhost:6379", hashSecret, now: () => 0 });
+    const cache = createCache(testRedisHashSecret);
+    const limit = { namespace: "route", limit: 1, windowMs: 1_000 };
+
+    await cache.rateLimits.consume({ ...limit, identifier: { type: "ip", value: "203.0.113.7" } });
+    await cache.rateLimits.consume({
+      ...limit,
+      identifier: { type: "email", value: "sam@example.com" },
+    });
+    await cache.rateLimits.consume({ ...limit, identifier: { type: "userId", value: "user-1" } });
+    await createCache("another-redis-hash-secret-0000000000").rateLimits.consume({
+      ...limit,
+      identifier: { type: "ip", value: "203.0.113.7" },
+    });
+
+    expect(keys.join(" ")).not.toContain("203.0.113.7");
+    expect(keys.join(" ")).not.toContain("sam@example.com");
+    expect(keys[2]).toBe("openbeacon:ratelimit:route:userId:user-1");
+    expect(keys[3]).not.toBe(keys[0]);
+    await expect(
+      cache.rateLimits.peek({ ...limit, identifier: { type: "ip", value: "203.0.113.7" } }),
+    ).resolves.toMatchObject({ remaining: 0 });
+    await expect(
+      cache.rateLimits.peek({ ...limit, identifier: { type: "ip", value: "203.0.113.8" } }),
+    ).resolves.toMatchObject({ remaining: 1 });
+
+    for (const identifier of [
+      { type: "ip", value: "203.0.113.7" },
+      { type: "email", value: "sam@example.com" },
+    ] as const) {
+      await expect(
+        cache.rateLimits.reset({ namespace: limit.namespace, identifier }),
+      ).resolves.toBe(1);
+      await expect(cache.rateLimits.peek({ ...limit, identifier })).resolves.toMatchObject({
+        remaining: 1,
+      });
+    }
+  });
+
+  test("refuses IP and email rate limits without a hash secret but allows user limits", async () => {
+    const cache = new TestOpenBeaconCache({ redisUrl: "redis://localhost:6379", now: () => 0 });
+    const limit = { namespace: "route", limit: 1, windowMs: 1_000 };
+
+    await expect(
+      cache.rateLimits.consume({ ...limit, identifier: { type: "ip", value: "203.0.113.7" } }),
+    ).rejects.toThrow("needs a hash secret");
+    await expect(
+      cache.rateLimits.reset({
+        namespace: "route",
+        identifier: { type: "email", value: "sam@example.com" },
+      }),
+    ).rejects.toThrow("needs a hash secret");
+    await expect(
+      cache.rateLimits.consume({ ...limit, identifier: { type: "userId", value: "user-1" } }),
+    ).resolves.toMatchObject({ allowed: true });
+  });
+
   test("stores and expires one pmtiles signed url per user and archive", async () => {
     let nowMs = 0;
     const originalDateNow = Date.now;
@@ -199,6 +278,7 @@ describe("OpenBeaconCache rateLimits", () => {
     try {
       const cache = new TestOpenBeaconCache({
         redisUrl: "redis://localhost:6379",
+        hashSecret: testRedisHashSecret,
         now: () => nowMs,
       });
 
@@ -265,6 +345,7 @@ describe("OpenBeaconCache rateLimits", () => {
   test("rejects rate limit operations when redis client is closed", async () => {
     const cache = new TestOpenBeaconCache({
       redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
     });
     cache.close();
 

@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import type { RedisLike } from "../cache/redis.ts";
 import {
   type RateLimitIdentifier,
@@ -8,6 +9,7 @@ import {
 import type { RateLimitResult } from "./types.ts";
 
 type RateLimitsDependencies = {
+  hashSecret: string | undefined;
   keyPrefix: string;
   now: () => number;
   redis: RedisLike;
@@ -65,14 +67,25 @@ return {
 
 const buildRateLimitKey = ({
   identifier,
+  hashSecret,
   keyPrefix,
   namespace,
 }: {
   identifier: RateLimitIdentifier;
+  hashSecret: string | undefined;
   keyPrefix: string;
   namespace: string;
 }) => {
-  return `${keyPrefix}:ratelimit:${namespace}:${identifier.type}:${identifier.value}`;
+  if (identifier.type === "userId") {
+    return `${keyPrefix}:ratelimit:${namespace}:userId:${identifier.value}`;
+  }
+  if (!hashSecret) {
+    throw new Error("Rate limiting by IP address or email address needs a hash secret.");
+  }
+  const hash = createHmac("sha256", hashSecret)
+    .update(`${identifier.type}:${identifier.value}`)
+    .digest("base64url");
+  return `${keyPrefix}:ratelimit:${namespace}:${identifier.type}:${hash}`;
 };
 
 const parseRateLimitResult = (result: unknown): RateLimitResult => {
@@ -93,6 +106,7 @@ const parseRateLimitResult = (result: unknown): RateLimitResult => {
 
 const executeRateLimitScript = async ({
   identifier,
+  hashSecret,
   keyPrefix,
   limit,
   namespace,
@@ -103,6 +117,7 @@ const executeRateLimitScript = async ({
   cost,
 }: {
   identifier: RateLimitIdentifier;
+  hashSecret: string | undefined;
   keyPrefix: string;
   limit: number;
   namespace: string;
@@ -112,7 +127,7 @@ const executeRateLimitScript = async ({
   windowMs: number;
   cost: number;
 }) => {
-  const key = buildRateLimitKey({ identifier, keyPrefix, namespace });
+  const key = buildRateLimitKey({ identifier, hashSecret, keyPrefix, namespace });
 
   const result = await redis.send("EVAL", [
     rateLimitScript,
@@ -128,13 +143,14 @@ const executeRateLimitScript = async ({
   return parseRateLimitResult(result);
 };
 
-export const createRateLimits = ({ keyPrefix, now, redis }: RateLimitsDependencies) => {
+export const createRateLimits = ({ hashSecret, keyPrefix, now, redis }: RateLimitsDependencies) => {
   return {
     peek: async (input: Parameters<typeof rateLimitPeekInputSchema.parse>[0]) => {
       const parsedInput = rateLimitPeekInputSchema.parse(input);
 
       return executeRateLimitScript({
         redis,
+        hashSecret,
         keyPrefix,
         now,
         ...parsedInput,
@@ -147,6 +163,7 @@ export const createRateLimits = ({ keyPrefix, now, redis }: RateLimitsDependenci
 
       return executeRateLimitScript({
         redis,
+        hashSecret,
         keyPrefix,
         now,
         ...parsedInput,
@@ -160,6 +177,7 @@ export const createRateLimits = ({ keyPrefix, now, redis }: RateLimitsDependenci
       return redis.del(
         buildRateLimitKey({
           identifier: parsedInput.identifier,
+          hashSecret,
           keyPrefix,
           namespace: parsedInput.namespace,
         }),

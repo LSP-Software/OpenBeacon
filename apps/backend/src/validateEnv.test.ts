@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { testRedisHashSecret } from "@openbeacon/cache/testing";
 
 describe("production environment validation", () => {
   const env = {
@@ -7,6 +8,7 @@ describe("production environment validation", () => {
     GOOGLE_CLIENT_SECRET: "",
     DATABASE_URL: "postgresql://localhost:5432/openbeacon",
     REDIS_URL: "redis://localhost:6379",
+    REDIS_HASH_SECRET: testRedisHashSecret,
     BETTER_AUTH_URL: "https://api.openbeacon.net",
     BETTER_AUTH_SECRET: "test-secret-000000000000000000000000",
     TRUSTED_PROXY_PROVIDER: "cloudflare-authenticated",
@@ -73,6 +75,7 @@ describe("production environment validation", () => {
       { GOOGLE_CLIENT_ID: "client-id", GOOGLE_CLIENT_SECRET: "" },
       { GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "client-secret" },
       { REDIS_URL: "https://example.com" },
+      { REDIS_HASH_SECRET: "short" },
       { OPENBEACON_API_PORT: "1.5" },
       { S3_ENDPOINT: "invalid" },
       { S3_REGION: "" },

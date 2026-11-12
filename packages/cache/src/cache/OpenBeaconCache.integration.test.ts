@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { createIntegrationTestCache } from "../integrationTestCache.ts";
-import { FakeRedis } from "../rateLimits/testUtils.ts";
+import { FakeRedis, testRedisHashSecret } from "../rateLimits/testUtils.ts";
 import { OpenBeaconCache } from "./OpenBeaconCache.ts";
 
 class FakeRedisCache extends OpenBeaconCache {
@@ -10,7 +10,11 @@ class FakeRedisCache extends OpenBeaconCache {
 }
 
 let nowMs = 0;
-const fakeRedisCache = new FakeRedisCache({ redisUrl: "redis://localhost:6379", now: () => nowMs });
+const fakeRedisCache = new FakeRedisCache({
+  redisUrl: "redis://localhost:6379",
+  hashSecret: testRedisHashSecret,
+  now: () => nowMs,
+});
 afterAll(() => fakeRedisCache.close());
 
 const caches = [

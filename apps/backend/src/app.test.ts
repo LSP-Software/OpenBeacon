@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { apiCompatibilityLevel, minClientApiCompatibilityLevel } from "@openbeacon/shared";
+import { testRedisHashSecret } from "@openbeacon/cache/testing";
 
 Object.assign(process.env, {
   DATABASE_URL: "postgresql://localhost:5432/openbeacon",
   REDIS_URL: "redis://localhost:6379",
+  REDIS_HASH_SECRET: testRedisHashSecret,
   BETTER_AUTH_SECRET: "test-secret-with-at-least-32-characters",
   BETTER_AUTH_URL: "http://localhost:3000",
   S3_ACCESS_KEY_ID: "12345678901234567890",
