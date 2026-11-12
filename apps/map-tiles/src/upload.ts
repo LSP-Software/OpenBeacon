@@ -115,15 +115,13 @@ const listUploadedParts = async ({ client, state }: { client: S3Client; state: U
   return parts;
 };
 
-const abortOtherUploads = async ({
+const abortUnfinishedUploads = async ({
   bucket,
   client,
-  keep,
   key,
 }: {
   bucket: string;
   client: S3Client;
-  keep: string | null;
   key: string;
 }) => {
   const uploadIds: string[] = [];
@@ -139,7 +137,7 @@ const abortOtherUploads = async ({
     );
 
     for (const upload of response.Uploads ?? []) {
-      if (upload.Key === key && upload.UploadId && upload.UploadId !== keep) {
+      if (upload.Key === key && upload.UploadId) {
         uploadIds.push(upload.UploadId);
       }
     }
@@ -307,15 +305,13 @@ export const uploadArchive = async ({
     }
   }
 
-  const cleaned = await tryCatch(
-    abortOtherUploads({ bucket, client, keep: state?.uploadId ?? null, key }),
-  );
-
-  if (cleaned.error) {
-    console.warn(`Could not remove stale multipart uploads for ${key}: ${cleaned.error.message}`);
-  }
-
   if (!state) {
+    const cleaned = await tryCatch(abortUnfinishedUploads({ bucket, client, key }));
+
+    if (cleaned.error) {
+      console.warn(`Could not remove stale multipart uploads for ${key}: ${cleaned.error.message}`);
+    }
+
     const created = await client.send(
       new CreateMultipartUploadCommand({
         Bucket: bucket,
