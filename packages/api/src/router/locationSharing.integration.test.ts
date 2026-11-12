@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
@@ -23,7 +22,7 @@ const groupId = `${prefix}-group`;
 const epochId = `${prefix}-epoch`;
 const keys = createDeviceKeyPair();
 const epochKey = generateGroupEpochKey();
-const cache = createIntegrationTestCache(() => 0);
+const cache = { rateLimits: { consume: async () => ({ allowed: true }) } };
 const router = createTRPCRouter({ account: accountRouter, groupTracking: groupTrackingRouter });
 const caller = (ownerId = userId, deviceId = phoneId) =>
   router.createCaller(
@@ -64,6 +63,7 @@ const setSharing = async (
     replacesRequestId: null,
     durationMinutes,
     pausedUntil: durationMinutes === null ? null : new Date(Date.now() + durationMinutes * 60_000),
+    requestedAt: new Date(),
     ...change,
   });
 };
@@ -386,6 +386,40 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       expect((await caller(userId, tabletId).account.locationSharing()).paused).toBe(false);
       expect(await revisionOf(tabletId)).toBe(2);
+    });
+
+    test("a pause tapped before the revision was known cannot be replayed over a later resume", async () => {
+      await reset();
+      const pause = {
+        scope: "device" as const,
+        deviceId: tabletId,
+        paused: true,
+        requestId: crypto.randomUUID(),
+        expectedRevision: null,
+        requestedAt: new Date(Date.now() - 60_000),
+      };
+      expect(await setSharing(pause)).toEqual({ status: "applied" });
+      await setSharing({ scope: "device", deviceId: tabletId, paused: false });
+      expect(await setSharing(pause)).toEqual({ status: "superseded" });
+      expect((await caller(userId, tabletId).account.locationSharing()).paused).toBe(false);
+      expect(await revisionOf(tabletId)).toBe(2);
+    });
+
+    test("a pause tapped before the revision was known applies after earlier changes", async () => {
+      await reset();
+      await setSharing({ scope: "device", deviceId: tabletId, paused: true });
+      await setSharing({ scope: "device", deviceId: tabletId, paused: false });
+      expect(
+        await setSharing({
+          scope: "device",
+          deviceId: tabletId,
+          paused: true,
+          expectedRevision: null,
+          requestedAt: new Date(Date.now() - 2_000),
+        }),
+      ).toEqual({ status: "applied" });
+      expect((await caller(userId, tabletId).account.locationSharing()).paused).toBe(true);
+      expect(await revisionOf(tabletId)).toBe(3);
     });
 
     test("a resume replacing a queued pause still resumes after the pause reached the server", async () => {
