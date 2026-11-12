@@ -55,6 +55,6 @@ The native tracking implementation currently exists on Android. The Account cont
 
 ## Compatibility and validation
 
-Compatibility level 4 requires both updated apps and an updated server. Older apps do not understand the changed clientPointId meaning, discarded uploads, or paused map state. Client version 1.9.0 and server version 0.10.0 include the change.
+Compatibility level 4 requires both updated apps and an updated server. Older apps do not understand the changed clientPointId meaning, discarded uploads, or paused map state. Client version 1.10.0 and server version 0.11.0 include the change.
 
 Tests cover preference composition and expiry, native capture revisions and cached fixes, offline retry and late responses, request IDs and superseded changes, tap-time deadlines and clock offsets, sign-out clearing the queue, map cache removal, server authorization, delayed uploads, new devices during an account pause, and upload/pause races against PostgreSQL.
