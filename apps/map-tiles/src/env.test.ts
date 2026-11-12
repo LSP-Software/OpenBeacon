@@ -6,6 +6,7 @@ const required = {
   R2_ACCESS_KEY_ID: "key",
   R2_SECRET_ACCESS_KEY: "secret",
   R2_BUCKET: "bucket",
+  MAP_TILES_API_KEY: "k".repeat(32),
 };
 
 describe("parseEnv", () => {
@@ -42,8 +43,8 @@ describe("parseEnv", () => {
     );
   });
 
-  test("requires a long service key when one is set", () => {
-    expect(parseEnv({ ...required, MAP_TILES_API_KEY: "" }).MAP_TILES_API_KEY).toBeUndefined();
+  test("requires a long service key", () => {
+    expect(() => parseEnv({ ...required, MAP_TILES_API_KEY: "" })).toThrow();
     expect(() => parseEnv({ ...required, MAP_TILES_API_KEY: "short" })).toThrow();
   });
 });

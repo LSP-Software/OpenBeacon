@@ -34,6 +34,7 @@ const status: ServiceStatus = {
     },
     standbyReplaceableFrom: "2026-12-10T03:00:00.000Z",
     nextUpdateDueAt: "2027-01-01T03:00:00.000Z",
+    speedLimitMbps: null,
     untrackedArchives: [],
     resumableUploads: [],
   },
@@ -48,6 +49,15 @@ describe("formatStatus", () => {
     expect(text).toContain("still served to open maps until 2026-12-09T03:00:00.000Z");
     expect(text).toContain("Slot B: Protomaps build 2026-12-01");
     expect(text).toContain("Last update: published");
+  });
+
+  test("shows the speed limit", () => {
+    expect(formatStatus({ now, status })).toContain(
+      "Speed limit: none (set MAP_TILES_MAX_MBPS to cap it)",
+    );
+    expect(
+      formatStatus({ now, status: { ...status, map: { ...status.map, speedLimitMbps: 100 } } }),
+    ).toContain("Speed limit: 100 Mbps each way (MAP_TILES_MAX_MBPS)");
   });
 
   test("explains that an empty bucket gets slot A first", () => {

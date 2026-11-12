@@ -58,6 +58,14 @@ export const createMapTilesHandler = ({
     return task;
   };
 
+  const requestUpdate = (ignoreInterval: boolean) => {
+    const alreadyRunning = running !== null;
+    if (!alreadyRunning) {
+      void start(ignoreInterval);
+    }
+    return { ...describe(), alreadyRunning };
+  };
+
   const readUpdateRequest = async (request: Request) => {
     const body = await tryCatch(
       request.text().then((text): unknown => (text.trim() === "" ? {} : JSON.parse(text))),
@@ -97,11 +105,7 @@ export const createMapTilesHandler = ({
         if (!body.success) {
           return Response.json({ error: 'Send {} or {"force": true}' }, { status: 400 });
         }
-        const alreadyRunning = running !== null;
-        if (!alreadyRunning) {
-          void start(body.data.force);
-        }
-        return Response.json({ ...describe(), alreadyRunning }, { status: 202 });
+        return Response.json(requestUpdate(body.data.force), { status: 202 });
       }
 
       if (pathname === "/rollback" && request.method === "POST") {
@@ -123,5 +127,10 @@ export const createMapTilesHandler = ({
       return new Response("Method not allowed", { status: 405 });
     },
     idle: () => running?.task ?? Promise.resolve(),
+    scheduleUpdates: (intervalMs: number) => {
+      requestUpdate(false);
+      const timer = setInterval(() => requestUpdate(false), intervalMs);
+      return () => clearInterval(timer);
+    },
   };
 };

@@ -193,6 +193,7 @@ describe("map tiles commands", () => {
       R2_ACCOUNT_ID: "account",
       R2_BUCKET: "bucket",
       R2_SECRET_ACCESS_KEY: "secret",
+      MAP_TILES_API_KEY: "k".repeat(32),
       MAP_TILES_STATE_DIR: stateDir,
     }),
     partClient: r2.client,
@@ -436,6 +437,7 @@ describe("map tiles commands", () => {
       },
       standbyReplaceableFrom: new Date(now + 3 * DAY_MS).toISOString(),
       nextUpdateDueAt: new Date(now + 25 * DAY_MS).toISOString(),
+      speedLimitMbps: null,
       untrackedArchives: [{ key: "planet-20260315.pmtiles", size: source.byteLength }],
     });
   });

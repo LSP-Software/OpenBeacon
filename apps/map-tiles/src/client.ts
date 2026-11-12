@@ -107,6 +107,12 @@ export const formatStatus = ({ now, status }: { now: number; status: ServiceStat
     );
   }
 
+  lines.push(
+    map.speedLimitMbps === null
+      ? "Speed limit: none (set MAP_TILES_MAX_MBPS to cap it)"
+      : `Speed limit: ${map.speedLimitMbps} Mbps each way (MAP_TILES_MAX_MBPS)`,
+  );
+
   lines.push(status.running ? `Update: running since ${status.startedAt}` : "Update: not running");
 
   if (status.last) {

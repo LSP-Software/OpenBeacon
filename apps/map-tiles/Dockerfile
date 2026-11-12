@@ -5,7 +5,10 @@ RUN bun install --frozen-lockfile --production --ignore-scripts --filter @openbe
 
 FROM oven/bun:1.4.4
 WORKDIR /app
-RUN mkdir /state && chown bun:bun /state \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir /state && chown bun:bun /state \
     && printf '#!/bin/sh\nexec bun /app/apps/map-tiles/src/index.ts "$@"\n' > /usr/local/bin/map-tiles \
     && chmod +x /usr/local/bin/map-tiles
 COPY --from=build /app/package.json ./

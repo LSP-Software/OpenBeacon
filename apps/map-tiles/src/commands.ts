@@ -94,6 +94,7 @@ export const readMapStatus = async ({ client, env }: Context): Promise<MapStatus
     standbyReplaceableFrom:
       reuseAt === null ? null : reuseAt === Infinity ? "never" : new Date(reuseAt).toISOString(),
     nextUpdateDueAt: dueAt === null ? null : new Date(dueAt).toISOString(),
+    speedLimitMbps: env.MAP_TILES_MAX_MBPS ?? null,
     untrackedArchives: (listed.Contents ?? []).flatMap((object) =>
       object.Key?.endsWith(".pmtiles") && !tracked.has(object.Key)
         ? [{ key: object.Key, size: object.Size ?? 0 }]

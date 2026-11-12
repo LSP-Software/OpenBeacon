@@ -20,6 +20,7 @@ const map: MapStatus = {
   },
   standbyReplaceableFrom: null,
   nextUpdateDueAt: "2026-12-08T00:00:00.000Z",
+  speedLimitMbps: null,
   untrackedArchives: [],
   resumableUploads: [],
 };
@@ -166,6 +167,38 @@ describe("map tiles service", () => {
     expect(await response.json()).toEqual({
       message: "Rolled back from b-20261201 to a-20261107.",
     });
+  });
+
+  test("checks for an update on start and then on every interval, one at a time", async () => {
+    let finish: (result: PublishResult) => void = () => {};
+    const runUpdate = mock(
+      (_options: { ignoreInterval: boolean }) =>
+        new Promise<PublishResult>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const handler = createHandler({ runUpdate });
+
+    const stop = handler.scheduleUpdates(10);
+    expect(runUpdate).toHaveBeenCalledTimes(1);
+    expect(runUpdate).toHaveBeenCalledWith({ ignoreInterval: false });
+
+    await Bun.sleep(35);
+    const manual = await handler.fetch(request("/update", { key: apiKey, method: "POST" }));
+    expect(await manual.json()).toMatchObject({ alreadyRunning: true });
+    expect(runUpdate).toHaveBeenCalledTimes(1);
+
+    finish({ published: false, message: "Build 20261107 is already current" });
+    await handler.idle();
+    await Bun.sleep(25);
+    stop();
+    finish({ published: false, message: "" });
+    await handler.idle();
+    const calls = runUpdate.mock.calls.length;
+    await Bun.sleep(25);
+
+    expect(calls).toBe(2);
+    expect(runUpdate).toHaveBeenCalledTimes(2);
   });
 
   test("reports why a rollback failed", async () => {

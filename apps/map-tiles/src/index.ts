@@ -1,9 +1,11 @@
+import { access, constants, mkdir } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
-import { tryCatch } from "@openbeacon/shared";
+import { checkMapArchive } from "@openbeacon/map-tiles";
+import { checkServices, tryCatch, validateEnv } from "@openbeacon/shared";
 import { createMapTilesClient, formatStatus } from "./client.ts";
 import { publish, readMapStatus, rollback } from "./commands.ts";
-import { parseClientEnv, parseEnv } from "./env.ts";
+import { envSchema, parseClientEnv, parseEnv } from "./env.ts";
 import { createR2Clients } from "./r2.ts";
 import { createMapTilesHandler } from "./server.ts";
 
@@ -39,25 +41,38 @@ const confirm = async ({ question, yes }: { question: string; yes: boolean }) =>
   }
 };
 
-const serve = () => {
+const serve = async () => {
+  validateEnv({ schemas: envSchema, source: process.env });
   const env = parseEnv(process.env);
-  const apiKey = env.MAP_TILES_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("serve needs MAP_TILES_API_KEY (at least 32 characters)");
-  }
-
   const context = { ...createR2Clients(env), env };
+
+  await checkServices({
+    R2: () => checkMapArchive({ bucket: env.R2_BUCKET, client: context.client }),
+    "State directory": async () => {
+      await mkdir(env.MAP_TILES_STATE_DIR, { recursive: true });
+      await access(env.MAP_TILES_STATE_DIR, constants.W_OK);
+    },
+  });
+
   const handler = createMapTilesHandler({
-    apiKey,
+    apiKey: env.MAP_TILES_API_KEY,
     readMapStatus: () => readMapStatus(context),
     rollback: () => rollback(context),
     runUpdate: (options) => publish(context, options),
   });
-  Bun.serve({ fetch: handler.fetch, port: env.MAP_TILES_PORT });
-  console.log(
-    `Map tiles service listening on port ${env.MAP_TILES_PORT} for bucket ${env.R2_BUCKET}`,
-  );
+  const server = Bun.serve({ fetch: handler.fetch, port: env.MAP_TILES_PORT });
+  console.log(`Map tiles API listening on port ${env.MAP_TILES_PORT}`);
+  console.log(`Checking for a map update now and every 24 hours in R2 bucket ${env.R2_BUCKET}`);
+  const stopUpdates = handler.scheduleUpdates(24 * 60 * 60 * 1000);
+
+  const shutdown = async () => {
+    stopUpdates();
+    await server.stop(true);
+    console.log("Map tiles service stopped; an unfinished upload resumes on the next start");
+    process.exit(0);
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 };
 
 const run = async () => {
