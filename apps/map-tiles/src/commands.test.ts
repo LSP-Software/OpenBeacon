@@ -539,6 +539,29 @@ describe("map tiles commands", () => {
       expect(r2.manifest()).toEqual({ current: "a", slots: { a: restored, b: null } });
     });
 
+    test("leaves the manifest alone when it changes while being checked", async () => {
+      const r2 = createFakeR2();
+      r2.putManifest(twoSlots());
+      const send = r2.client.send.bind(r2.client);
+      let reads = 0;
+      const client = {
+        send: async (command: unknown) => {
+          if (command instanceof GetObjectCommand) {
+            reads += 1;
+          }
+          if (reads === 2 && command instanceof GetObjectCommand) {
+            r2.putArchive("planet-a.pmtiles");
+            r2.putManifest({ ...twoSlots(), current: "a" });
+          }
+          return send(command as never);
+        },
+      } as unknown as S3Client;
+
+      expect(await repairManifest({ ...context(r2), client })).toContain("left alone");
+      expect(r2.manifest()).toMatchObject({ current: "a" });
+      expect(r2.writes).not.toContain(`delete:${MAP_TILES_MANIFEST_KEY}`);
+    });
+
     test("removes the manifest when none of its maps are in R2, so the next update starts over", async () => {
       const r2 = createFakeR2();
       r2.putManifest(twoSlots());

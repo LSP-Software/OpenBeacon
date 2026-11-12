@@ -1,4 +1,9 @@
 import { expect, test } from "bun:test";
+import { emailEnvSchema } from "@openbeacon/email/config.ts";
+
+const env = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => !(name in emailEnvSchema)),
+);
 
 test("requires a PostgreSQL database URL", () => {
   for (const [databaseUrl, valid] of [
@@ -10,7 +15,7 @@ test("requires a PostgreSQL database URL", () => {
   ] as const) {
     const result = Bun.spawnSync({
       cmd: [process.execPath, `${import.meta.dir}/env.ts`],
-      env: { ...process.env, DATABASE_URL: databaseUrl },
+      env: { ...env, DATABASE_URL: databaseUrl },
     });
     expect(result.exitCode === 0).toBe(valid);
   }
@@ -21,11 +26,9 @@ test("lists each setting by name without printing its value", () => {
   const result = Bun.spawnSync({
     cmd: [process.execPath, `${import.meta.dir}/env.ts`],
     env: {
-      ...process.env,
+      ...env,
       DATABASE_URL: "postgresql://runner:database-password@localhost:5432/test",
       S3_ACCESS_KEY: secret,
-      RESEND_API_KEY: "",
-      SMTP_HOST: "",
     },
   });
   const output = result.stdout.toString() + result.stderr.toString();
@@ -43,7 +46,7 @@ test("stops the runner with a clear line before the storage clients read a bad s
   const result = Bun.spawnSync({
     cmd: [process.execPath, `${import.meta.dir}/index.ts`],
     env: {
-      ...process.env,
+      ...env,
       DATABASE_URL: "postgresql://localhost:5432/test",
       S3_ACCESS_KEY: "short-secret",
     },
@@ -60,7 +63,7 @@ test("stops the runner with a clear line when the email settings are invalid", (
   const result = Bun.spawnSync({
     cmd: [process.execPath, `${import.meta.dir}/index.ts`],
     env: {
-      ...process.env,
+      ...env,
       DATABASE_URL: "postgresql://localhost:5432/test",
       EMAIL_CONSOLE: "true",
       NODE_ENV: "production",

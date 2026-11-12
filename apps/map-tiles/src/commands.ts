@@ -150,6 +150,10 @@ export const repairManifest = async ({ client, env }: Context) => {
     return `${current.key} is missing from R2, so the map rolled back to slot ${standbySlot} (Protomaps build ${standby.build})`;
   }
 
+  if ((await readManifest({ bucket: env.R2_BUCKET, client }))?.etag !== etag) {
+    return "The manifest changed while it was being checked, so it was left alone";
+  }
+
   await client.send(
     new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key: MAP_TILES_MANIFEST_KEY }),
   );

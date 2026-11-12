@@ -45,7 +45,7 @@ To build the image yourself, run this from the repository root:
 docker build -f apps/map-tiles/Dockerfile -t openbeacon-map-tiles .
 ```
 
-Run it with `/state` on a volume:
+Run exactly one map tiles service per bucket; two would race each other's uploads and manifest changes. Run it with `/state` on a volume:
 
 ```bash
 docker run -d --name map-tiles --env-file .env -v openbeacon-map-tiles-state:/state openbeacon-map-tiles
