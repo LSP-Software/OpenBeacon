@@ -85,7 +85,7 @@ jobs:
           for image in openbeacon-backend openbeacon-scheduled-jobs openbeacon-map-tiles; do
             ref="docker.io/lspsoftware/${image}:${VERSION}"
             if ! revision=$(docker buildx imagetools inspect "$ref" --format '{{index .Image.Config.Labels "org.opencontainers.image.revision"}}' 2> "$errors"); then
-              if ! grep -qxF "ERROR: ${ref}: not found" "$errors"; then
+              if ! grep -qxF "ERROR: ${ref}: not found" "$errors" && ! grep -qF "repository does not exist" "$errors"; then
                 echo "Could not check whether ${ref} exists:" >&2
                 cat "$errors" >&2
                 exit 1
