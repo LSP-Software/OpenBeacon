@@ -87,6 +87,13 @@ const deleteImageVersions = async (bucketName: string, key: string, exact: boole
     return;
   }
 
+  await deleteImageVersionList(bucketName, objects);
+};
+
+export const deleteImageVersionList = async (
+  bucketName: string,
+  objects: { Key: string; VersionId: string }[],
+) => {
   for (let index = 0; index < objects.length; index += 1000) {
     const response = await s3Client.send(
       new DeleteObjectsCommand({
@@ -97,6 +104,51 @@ const deleteImageVersions = async (bucketName: string, key: string, exact: boole
     if (response.Errors?.length)
       throw new Error("Failed to delete all image versions from storage.");
   }
+};
+
+export const forEachImageVersionPage = async (
+  bucketName: string,
+  prefix: string,
+  onPage: (
+    versions: { key: string; versionId: string; lastModified: Date; isLatest: boolean }[],
+  ) => Promise<void>,
+) => {
+  let keyMarker: string | undefined;
+  let versionIdMarker: string | undefined;
+  do {
+    const response = await s3Client.send(
+      new ListObjectVersionsCommand({
+        Bucket: bucketName,
+        Prefix: prefix,
+        KeyMarker: keyMarker,
+        VersionIdMarker: versionIdMarker,
+      }),
+    );
+    const versions = [...(response.Versions ?? []), ...(response.DeleteMarkers ?? [])].map(
+      (object) => {
+        if (
+          !object.Key?.startsWith(prefix) ||
+          !object.VersionId ||
+          !object.LastModified ||
+          object.IsLatest === undefined
+        ) {
+          throw new Error("Storage returned an invalid image version.");
+        }
+        return {
+          key: object.Key,
+          versionId: object.VersionId,
+          lastModified: object.LastModified,
+          isLatest: object.IsLatest,
+        };
+      },
+    );
+    await onPage(versions);
+    if (response.IsTruncated && !response.NextKeyMarker) {
+      throw new Error("Storage did not return a continuation marker.");
+    }
+    keyMarker = response.IsTruncated ? response.NextKeyMarker : undefined;
+    versionIdMarker = response.IsTruncated ? response.NextVersionIdMarker : undefined;
+  } while (keyMarker);
 };
 
 export const deleteFile = async (
@@ -146,4 +198,10 @@ export const deleteUserImages = async (bucketName: string, userId: string): Prom
 export const deleteImageKey = async (bucketName: string, key: string): Promise<void> => {
   if (!key || key.startsWith("/")) throw new Error("Invalid image key.");
   await deleteImageVersions(bucketName, key, true);
+};
+
+export const deleteImagePrefix = async (bucketName: string, prefix: string): Promise<void> => {
+  if (!prefix.startsWith("user/") || !prefix.endsWith("/"))
+    throw new Error("Invalid image prefix.");
+  await deleteImageVersions(bucketName, prefix, false);
 };

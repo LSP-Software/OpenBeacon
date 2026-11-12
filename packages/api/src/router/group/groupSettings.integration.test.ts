@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   ListObjectVersionsCommand,
   HeadObjectCommand,
 } from "@aws-sdk/client-s3";
@@ -366,6 +367,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           Key: `user/${users[0]}/uploads/group/${pendingGroupId}/avatar/pending.webp`,
         });
         expect(await prisma.group.findUnique({ where: { id: pendingGroupId } })).toBeNull();
+        expect(await prisma.pendingUpload.count({ where: { groupId: pendingGroupId } })).toBe(0);
       } finally {
         send.mockRestore();
         await prisma.group.deleteMany({ where: { id: pendingGroupId } });
@@ -390,38 +392,31 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           fileName: "race.webp",
         },
       });
+      const lateKey = `user/${users[0]}/uploads/group/${uploadGroupId}/avatar/race.webp`;
       const send = spyOn(s3Client, "send").mockImplementation(async (command) =>
-        command instanceof HeadObjectCommand
-          ? { $metadata: {}, ContentLength: 3 }
+        command instanceof ListObjectVersionsCommand &&
+        command.input.Prefix === `user/${users[0]}/uploads/group/${uploadGroupId}/avatar/`
+          ? { $metadata: {}, Versions: [{ Key: lateKey, VersionId: "late" }] }
           : { $metadata: {} },
       );
       try {
         await caller(users[0]!).groupLifecycle.delete({ groupId: uploadGroupId });
+        expect(await prisma.pendingUpload.count({ where: { groupId: uploadGroupId } })).toBe(0);
         send.mockClear();
         await expect(
           caller(users[2]!).groupSettings.confirmGroupImageUpload({ groupId: uploadGroupId }),
-        ).rejects.toThrow();
-        expect(send).not.toHaveBeenCalled();
+        ).rejects.toThrow("No pending group image upload to confirm.");
+        expect(send.mock.calls.some(([command]) => command instanceof DeleteObjectsCommand)).toBe(
+          false,
+        );
+        send.mockClear();
         await expect(
           caller(users[0]!).groupSettings.confirmGroupImageUpload({ groupId: uploadGroupId }),
-        ).rejects.toThrow("Group no longer exists.");
+        ).rejects.toThrow("No pending group image upload to confirm.");
         const deleted = send.mock.calls.find(
-          ([command]) => command instanceof DeleteObjectCommand,
-        )?.[0] as DeleteObjectCommand | undefined;
-        expect(deleted?.input.Key).toBe(
-          `user/${users[0]}/uploads/group/${uploadGroupId}/avatar/race.webp`,
-        );
-        expect(
-          await prisma.pendingUpload.findUnique({
-            where: {
-              userId_uploadType_groupId: {
-                userId: users[0]!,
-                uploadType: "groupAvatar",
-                groupId: uploadGroupId,
-              },
-            },
-          }),
-        ).toBeNull();
+          ([command]) => command instanceof DeleteObjectsCommand,
+        )?.[0] as DeleteObjectsCommand | undefined;
+        expect(deleted?.input.Delete?.Objects).toEqual([{ Key: lateKey, VersionId: "late" }]);
       } finally {
         send.mockRestore();
         await prisma.group.deleteMany({ where: { id: uploadGroupId } });

@@ -208,6 +208,62 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     expect(await prisma.groupEncryptedPayload.count({ where: { groupId } })).toBe(1);
   });
 
+  test("reports points for a deleted epoch as expired but rejects another group's epoch", async () => {
+    const encrypt = (forEpochId: string, clientPointId: string) => ({
+      ...encryptGroupPayload({
+        epochId: forEpochId,
+        epochKey,
+        groupId,
+        kind: TRACKING_POINT_KIND,
+        payload: { latitude: 1, longitude: 2 },
+        senderDeviceId: ownerDeviceId,
+      }),
+      clientPointId,
+    });
+    const result = await caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
+      groupId,
+      points: [
+        encrypt(`${prefix}-deleted-epoch`, `${prefix}-expired`),
+        encrypt(epochId, `${prefix}-current`),
+      ],
+    });
+    expect(result).toEqual({
+      accepted: [`${prefix}-current`],
+      duplicates: [],
+      expired: [`${prefix}-expired`],
+    });
+    const otherGroupId = `${prefix}-other-group`;
+    await prisma.group.create({
+      data: {
+        id: otherGroupId,
+        name: "Other",
+        groupEpochs: {
+          create: {
+            id: `${prefix}-other-epoch`,
+            epochNumber: 1,
+            createdByDeviceId: ownerDeviceId,
+            senderPublicKey: deviceKey.publicKey,
+          },
+        },
+      },
+    });
+    await expect(
+      caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
+        groupId,
+        points: [encrypt(`${prefix}-other-epoch`, `${prefix}-foreign`)],
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Epoch does not belong to this group.",
+    });
+    await prisma.group.delete({ where: { id: otherGroupId } });
+    expect(
+      await prisma.groupEncryptedPayload.count({
+        where: { clientPointId: { in: [`${prefix}-expired`, `${prefix}-foreign`] } },
+      }),
+    ).toBe(0);
+  });
+
   test("getLatest returns each active device's newest point and skips devices with none", async () => {
     const ownerTabletId = `${prefix}-owner-tablet`;
     const ownerRemovedId = `${prefix}-owner-removed`;

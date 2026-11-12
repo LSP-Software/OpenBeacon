@@ -56,11 +56,13 @@ export const setPendingImageUploadForUser = async ({
     });
 
     if (existing) {
-      oldFileName = existing.fileName;
-      oldGroupId = existing.groupId ?? null;
-      await tx.pendingUpload.delete({
-        where: { userId_uploadType_groupId: { userId, uploadType, groupId: groupId ?? "" } },
+      const deleted = await tx.pendingUpload.deleteMany({
+        where: { userId, uploadType, groupId: groupId ?? "", fileName: existing.fileName },
       });
+      if (deleted.count === 1) {
+        oldFileName = existing.fileName;
+        oldGroupId = existing.groupId ?? null;
+      }
     }
 
     await tx.pendingUpload.create({

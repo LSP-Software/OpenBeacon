@@ -7,7 +7,7 @@ This context covers the keys that keep group locations and personal data unreada
 ### Group keys
 
 **Epoch**:
-One generation of a Group's encryption key. A new Epoch starts when the Group is created, someone joins or leaves, or a rotation is due.
+One generation of a Group's encryption key. A new Epoch starts when the Group is created, someone joins or leaves, or a rotation is due. An Epoch replaced more than 60 days ago that no stored point still uses is deleted; a Group's latest Epoch is always kept.
 _Avoid_: Key version, generation, session
 
 **Epoch key**:

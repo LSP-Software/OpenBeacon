@@ -75,6 +75,7 @@ export const groupLifecycleRouter = {
             }
             await deleteFile(image.bucketName, image.path, image.fileName);
           }
+          await tx.pendingUpload.deleteMany({ where: { groupId: input.groupId } });
           await tx.group.delete({ where: { id: input.groupId } });
         },
         { timeout: 15_000 },
