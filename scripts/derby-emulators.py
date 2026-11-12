@@ -82,21 +82,51 @@ def memory_error(devices, available_mb, headroom_mb=2048):
     return f"{len(devices)} emulators need about {needed_mb} MiB of RAM including {headroom_mb} MiB headroom, but only {available_mb} MiB is available. Run fewer emulators with --android-versions, lower --memory-mb, or pass --skip-memory-check to start anyway."
 
 
+def image_updates(listing, packages):
+    tables = {"Installed packages:": {}, "Available Packages:": {}}
+    table = None
+    for line in listing.splitlines():
+        if line.strip() in tables or line.strip() == "Available Updates:":
+            table = tables.get(line.strip())
+            continue
+        cells = [cell.strip() for cell in line.split("|")]
+        if table is not None and len(cells) > 1 and cells[0] in packages:
+            try:
+                table[cells[0]] = max(table.get(cells[0], ()), tuple(int(part) for part in cells[1].split(".")))
+            except ValueError:
+                pass
+    installed, available = tables.values()
+    return {package: (".".join(map(str, installed[package])), ".".join(map(str, available[package]))) for package in packages if package in installed and package in available and available[package] > installed[package]}
+
+
 def create_version_avds(sdk, api_levels, abi):
     tools = sdk / "cmdline-tools" / "latest" / "bin"
     if not (tools / "sdkmanager").is_file() or not (tools / "avdmanager").is_file():
         raise RuntimeError("Install Android SDK Command-line Tools (latest) from Android Studio's SDK Manager to create an emulator for each Android version.")
     avd_home = Path(os.environ.get("ANDROID_AVD_HOME") or Path.home() / ".android" / "avd")
     avd_settings = "disk.dataPartition.size=6G\nhw.keyboard=yes\n"
-    for api in api_levels:
+    images = {f"system-images;android-{api};google_apis;{abi}": (api, sdk / "system-images" / f"android-{api}" / "google_apis" / abi) for api in dict.fromkeys(api_levels)}
+    complete = [package for package, (_, image) in images.items() if all((image / file).is_file() for file in ("package.xml", "system.img"))]
+    updates = {}
+    if complete:
+        print("Checking for system image updates", flush=True)
+        try:
+            listing = subprocess.run([str(tools / "sdkmanager"), "--list"], capture_output=True, text=True, timeout=120)
+            updates = image_updates(listing.stdout, complete)
+            if listing.returncode != 0:
+                print("Could not check for system image updates; using the installed images.", flush=True)
+        except (OSError, subprocess.TimeoutExpired):
+            print("Could not check for system image updates; using the installed images.", flush=True)
+    for package, (api, image) in images.items():
         name = f"OpenBeacon_API_{api}"
-        package = f"system-images;android-{api};google_apis;{abi}"
-        image = sdk / "system-images" / f"android-{api}" / "google_apis" / abi
-        if not all((image / file).is_file() for file in ("package.xml", "system.img", "userdata.img")):
+        if package not in complete:
             if image.exists():
                 print(f"Removing incomplete {package}", flush=True)
                 shutil.rmtree(image)
             print(f"Installing {package}", flush=True)
+            subprocess.run([str(tools / "sdkmanager"), "--install", package], check=True)
+        elif package in updates:
+            print(f"Updating {package} from revision {updates[package][0]} to {updates[package][1]}", flush=True)
             subprocess.run([str(tools / "sdkmanager"), "--install", package], check=True)
         config = avd_home / f"{name}.avd" / "config.ini"
         if not config.is_file() or not config.read_text().endswith(avd_settings):
@@ -159,7 +189,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run Android emulators with Derby GPS simulations.")
     devices_group = parser.add_mutually_exclusive_group()
     devices_group.add_argument("--avd", help="Existing Android Virtual Device name for four route emulators (defaults to the first available)")
-    devices_group.add_argument("--android-versions", nargs="*", type=int, choices=list(ANDROID_VERSIONS), metavar="API", help=f"Run one emulator per supported Android version, creating missing AVDs (API levels, default: {' '.join(map(str, ANDROID_VERSIONS))})")
+    devices_group.add_argument("--android-versions", nargs="*", type=int, choices=list(ANDROID_VERSIONS), metavar="API", help=f"Run one emulator per listed API level, creating missing AVDs; repeat a level to run several emulators of it (default: {' '.join(map(str, ANDROID_VERSIONS))})")
     parser.add_argument("--memory-mb", type=int, help="RAM per emulator in MiB (default: 6144, or typical for each version with --android-versions)")
     parser.add_argument("--skip-memory-check", action="store_true", help="Start the emulators even if the machine does not appear to have enough free RAM")
     parser.add_argument("--api-url", default="http://10.0.2.2:3000", help="Existing backend URL reachable from Android; skips local backend startup")
@@ -168,7 +198,7 @@ def main():
     args = parser.parse_args()
     if args.memory_mb is not None and args.memory_mb < 1:
         parser.error("--memory-mb must be a positive integer")
-    api_levels = None if args.android_versions is None else sorted(set(args.android_versions or ANDROID_VERSIONS))
+    api_levels = None if args.android_versions is None else args.android_versions or list(ANDROID_VERSIONS)
     url = urlparse(args.api_url)
     if url.scheme not in ("http", "https") or not url.netloc or url.path not in ("", "/") or url.query or url.fragment:
         parser.error("--api-url must be an HTTP(S) origin without a path, query or fragment")
