@@ -75,6 +75,7 @@ class TrackingCaptureService : Service() {
     when (intent?.action) {
       ACTION_CHECK_SHARING -> {
         if (!TrackingRuntime.isCaptureRunning && TrackingRuntime.shouldRestoreCapture(this)) {
+          if (TrackingRuntime.isCaptureParked(this)) return parkCapture()
           startCapture(resolveStartIntervalMs(intent))
         }
         if (TrackingRuntime.isCaptureRunning) {
@@ -87,6 +88,7 @@ class TrackingCaptureService : Service() {
       }
       ACTION_SHARING_CHANGED -> {
         if (!TrackingRuntime.isCaptureRunning && TrackingRuntime.shouldRestoreCapture(this)) {
+          if (TrackingRuntime.isCaptureParked(this)) return parkCapture()
           startCapture(resolveStartIntervalMs(intent))
         }
         if (TrackingRuntime.isCaptureRunning) updateSharing()
@@ -129,7 +131,9 @@ class TrackingCaptureService : Service() {
             if (!TrackingRuntime.isCaptureRunning) stopSelf()
             return START_NOT_STICKY
           }
-          startCapture(resolveStartIntervalMs(intent))
+          // Android crashes the app if a startForegroundService start stops before startForeground, so only sticky restarts park without promoting.
+          if (intent == null && TrackingRuntime.isCaptureParked(this)) return parkCapture()
+          startCapture(resolveStartIntervalMs(intent), intent?.getBooleanExtra(EXTRA_RESUMING_SHARING, false) == true)
         }
       }
     }
@@ -163,7 +167,10 @@ class TrackingCaptureService : Service() {
     return (overrideIntervalMs ?: policyIntervalMs).coerceAtLeast(MIN_INTERVAL_MS)
   }
 
-  private fun startCapture(intervalMs: Long) {
+  private fun startCapture(
+    intervalMs: Long,
+    resumingSharing: Boolean = false,
+  ) {
     ensureNotificationChannel()
     val notification = buildNotification()
 
@@ -185,11 +192,19 @@ class TrackingCaptureService : Service() {
       Log.e(TAG, "Failed to start location capture.", error)
       stopCapture()
       stopSelf()
+      if (resumingSharing) SharingResumeWorker.showNotice(this, TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis()))
     } catch (error: IllegalStateException) {
       Log.e(TAG, "Android didn't allow location capture to start in the background.", error)
       stopCapture()
       stopSelf()
+      if (resumingSharing) SharingResumeWorker.showNotice(this, TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis()))
     }
+  }
+
+  private fun parkCapture(): Int {
+    SharingResumeWorker.schedule(this)
+    stopSelf()
+    return START_NOT_STICKY
   }
 
   private fun requestLocationUpdates(intervalMs: Long) {
@@ -250,9 +265,8 @@ class TrackingCaptureService : Service() {
     getSystemService(AlarmManager::class.java)?.cancel(resumeSharingIntent)
     val sharing = TrackingRuntime.sharingState(this)
     if (sharing.isConfirmedIndefinitePause()) {
-      SharingResumeWorker.schedule(this)
       stopCapture()
-      stopSelf()
+      parkCapture()
       return
     }
     if (sharing.isPaused(System.currentTimeMillis())) {
@@ -451,6 +465,7 @@ class TrackingCaptureService : Service() {
     const val ACTION_STOP = "expo.modules.openbeacontracking.action.STOP"
     const val EXTRA_INTERVAL_MS = "intervalMs"
     const val EXTRA_COMMAND_GENERATION = "captureCommandGeneration"
+    const val EXTRA_RESUMING_SHARING = "resumingSharing"
     const val DEFAULT_INTERVAL_MS = CaptureSamplingPolicy.DEFAULT_INTERVAL_MS
     const val MIN_INTERVAL_MS = 5_000L
     private const val TAG = "TrackingCapture"

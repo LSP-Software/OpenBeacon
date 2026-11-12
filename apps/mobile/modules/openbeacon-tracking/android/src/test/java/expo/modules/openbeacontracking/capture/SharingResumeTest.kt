@@ -22,6 +22,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -111,6 +112,38 @@ class SharingResumeTest {
 
     assertEquals(Service.START_NOT_STICKY, service.onStartCommand(null, 0, 1))
     assertFalse(TrackingRuntime.isCaptureRunning)
+    assertNull(shadowOf(service).lastForegroundNotification)
+    assertFalse(shadowOf(service).isForegroundStopped)
+    assertTrue(shadowOf(service).isStoppedBySelf)
+    assertEquals(WorkInfo.State.ENQUEUED, checkState())
+  }
+
+  @Test
+  fun lateSharingCommandsDuringAnIndefinitePauseParkWithoutPromotingCapture() {
+    TrackingRuntime.setSharingState(application, indefinitePause)
+    for (name in listOf(TrackingCaptureService.ACTION_SHARING_CHANGED, TrackingCaptureService.ACTION_CHECK_SHARING)) {
+      WorkManager.getInstance(application).cancelUniqueWork(SharingResumeWorker.WORK_NAME)
+      val service = createService()
+
+      assertEquals(Service.START_NOT_STICKY, service.onStartCommand(action(name), 0, 1))
+      assertFalse(TrackingRuntime.isCaptureRunning)
+      assertNull(shadowOf(service).lastForegroundNotification)
+      assertFalse(shadowOf(service).isForegroundStopped)
+      assertTrue(shadowOf(service).isStoppedBySelf)
+      assertEquals(WorkInfo.State.ENQUEUED, checkState())
+    }
+  }
+
+  @Test
+  fun aForegroundStartDuringAnIndefinitePausePromotesBeforeParking() {
+    TrackingRuntime.setSharingState(application, indefinitePause)
+    val service = createService()
+
+    assertEquals(Service.START_NOT_STICKY, service.onStartCommand(Intent(application, TrackingCaptureService::class.java), 0, 1))
+    assertFalse(TrackingRuntime.isCaptureRunning)
+    assertNotEquals(0, shadowOf(service).lastForegroundNotificationId)
+    assertTrue(shadowOf(service).isForegroundStopped)
+    assertTrue(shadowOf(service).isStoppedBySelf)
     assertEquals(WorkInfo.State.ENQUEUED, checkState())
   }
 
@@ -131,11 +164,30 @@ class SharingResumeTest {
 
     assertEquals(ComponentName(application, TrackingCaptureService::class.java), shadowOf(application).nextStartedService.component)
     assertNull(notice())
-    assertEquals(WorkInfo.State.CANCELLED, checkState())
+    assertEquals(WorkInfo.State.ENQUEUED, checkState())
     val service = createService()
     service.onStartCommand(null, 0, 1)
     assertTrue(TrackingRuntime.isCaptureRunning)
     assertEquals(WorkInfo.State.CANCELLED, checkState())
+  }
+
+  @Test
+  fun aResumeThatFailsToReachTheForegroundKeepsTheCheckAndAsksTheOwnerToOpenTheApp() {
+    park()
+    assertTrue(TrackingRuntime.applySharingState(application, "test-owner", "tablet", SharingCaptureState(revisionPrefix = "s0.3:")))
+    runWorker()
+    val started = shadowOf(application).nextStartedService
+    val service = createService()
+    shadowOf(service).setThrowInStartForeground(IllegalStateException("startForeground() not allowed"))
+
+    assertEquals(Service.START_NOT_STICKY, service.onStartCommand(started, 0, 1))
+    assertFalse(TrackingRuntime.isCaptureRunning)
+    assertTrue(shadowOf(service).isStoppedBySelf)
+    assertEquals(
+      application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_resumed_notice_body),
+      notice()?.extras?.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
+    )
+    assertEquals(WorkInfo.State.ENQUEUED, checkState())
   }
 
   @Test

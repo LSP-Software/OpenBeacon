@@ -159,6 +159,13 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         new Map([...entries].filter(([deviceId]) => !hiddenDeviceIds.has(deviceId))),
       );
     }
+    for (const [groupId, devices] of undecryptableByGroup) {
+      const kept = new Map(
+        [...devices].filter(([, device]) => !hiddenDeviceIds.has(device.deviceId)),
+      );
+      if (kept.size === 0) undecryptableByGroup.delete(groupId);
+      else undecryptableByGroup.set(groupId, kept);
+    }
     status = {
       ...(sharingByGroup.size > 0 ? { sharing: [...sharing.values()] } : {}),
       connection: currentConnection(),

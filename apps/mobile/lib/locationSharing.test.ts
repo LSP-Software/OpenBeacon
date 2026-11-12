@@ -119,6 +119,7 @@ mock.module("./api.ts", () => ({
   },
 }));
 const {
+  abandonLocationSharingChanges,
   changeLocationSharing,
   clearPendingSharingChanges,
   hasPendingSharingPause,
@@ -277,6 +278,45 @@ test("resuming offline replaces the queued pause and resumes capture on this pho
   expect(changes.map((change) => change.paused)).toEqual([false]);
   expect(server.device.sharingPaused).toBe(false);
   expect(nativeStates.at(-1)?.paused).toBe(false);
+});
+
+test("an offline resume the native runtime rejected fails and keeps the queued pause", async () => {
+  await syncLocationSharing();
+  offline = true;
+  await changeLocationSharing({
+    scope: "device",
+    paused: true,
+    durationMinutes: null,
+  });
+  nativeAccepted = false;
+  await expect(
+    changeLocationSharing({
+      scope: "device",
+      paused: false,
+      durationMinutes: null,
+    }),
+  ).rejects.toThrow();
+  expect(getPendingSharingChanges("alex").device).toMatchObject({
+    paused: true,
+    requestId: "request-1",
+  });
+  expect(hasLocallyPausedSharing("alex")).toBe(true);
+});
+
+test("an offline resume of a confirmed pause the native runtime rejected is not queued", async () => {
+  changeFromAnotherPhone("device", true);
+  await syncLocationSharing();
+  offline = true;
+  nativeAccepted = false;
+  await expect(
+    changeLocationSharing({
+      scope: "device",
+      paused: false,
+      durationMinutes: null,
+    }),
+  ).rejects.toThrow();
+  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasLocallyPausedSharing("alex")).toBe(true);
 });
 
 test("a resume still wins when the queued pause reached the server but its reply was lost", async () => {
@@ -542,4 +582,79 @@ test("forgets a queued change saved in a format it no longer understands", async
   await syncLocationSharing();
   expect(changes).toEqual([]);
   expect(hasPendingSharingPause("alex")).toBe(false);
+});
+
+test("a sync still running at sign-out neither stores nor applies its late response", async () => {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  changeFromAnotherPhone("device", true);
+  query = async () => {
+    await gate;
+    return sharingState();
+  };
+  const sync = syncLocationSharing();
+  abandonLocationSharingChanges();
+  clearPendingSharingChanges();
+  release();
+  await sync;
+  expect(nativeStates).toEqual([]);
+  expect([...stored.keys()].some((key) => key.startsWith("locationSharing.synced."))).toBe(false);
+});
+
+test("a change answered after sign-out doesn't refresh or touch capture", async () => {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let entered = () => {};
+  const sent = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  changeFromAnotherPhone("device", true);
+  await syncLocationSharing();
+  nativeStates.length = 0;
+  beforeMutation = () => {
+    entered();
+    return gate;
+  };
+  const change = changeLocationSharing({
+    scope: "device",
+    paused: false,
+    durationMinutes: null,
+  });
+  await sent;
+  abandonLocationSharingChanges();
+  clearPendingSharingChanges();
+  let queries = 0;
+  query = async () => {
+    queries += 1;
+    return sharingState();
+  };
+  release();
+  expect(await change).toBe("applied");
+  expect(queries).toBe(0);
+  expect(nativeStates).toEqual([]);
+  expect(hasPendingSharingPause("alex")).toBe(false);
+});
+
+test("a replayed pause whose reply was lost cannot undo a resume made on another phone", async () => {
+  await syncLocationSharing();
+  loseReply = true;
+  expect(
+    await changeLocationSharing({
+      scope: "device",
+      paused: true,
+      durationMinutes: null,
+    }),
+  ).toBe("queued");
+  loseReply = false;
+  expect(changes.at(-1)?.expectedRevision).toBeNull();
+  changeFromAnotherPhone("device", false);
+  await syncLocationSharing();
+  expect(changes.at(-1)).toMatchObject({ requestId: "request-1", expectedRevision: 0 });
+  expect(server.device).toMatchObject({ sharingPaused: false, sharingRevision: 2 });
+  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(nativeStates.at(-1)).toMatchObject({ paused: false, prefix: "s0.2:" });
 });

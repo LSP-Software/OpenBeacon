@@ -1959,6 +1959,34 @@ describe("paused map devices", () => {
     session.destroy();
   });
 
+  test("a revision change forgets an unreadable point from before it", async () => {
+    let sharing = [{ deviceId: "tablet", userId: "alex", paused: false, revisionPrefix: "" }];
+    const { session } = createSession({
+      getLatest: async () => ({
+        points: [
+          point({
+            createdAt: new Date("2026-11-12T10:00:00Z"),
+            id: "unreadable",
+            senderDeviceId: "tablet",
+            senderUserId: "alex",
+          }),
+        ],
+        sharing,
+      }),
+      poll: async () => ({ points: [], sharing }),
+      decryptPoint: async () => ({ status: "undecryptable" }),
+    });
+    session.setActive(true);
+    await session.tick();
+    expect(session.getStatus().undecryptable).toEqual([
+      { deviceId: "tablet", groupId: "group-1", userId: "alex" },
+    ]);
+    sharing = [{ ...sharing[0]!, revisionPrefix: "s0.2:" }];
+    await session.tick();
+    expect(session.getStatus().undecryptable).toEqual([]);
+    session.destroy();
+  });
+
   test("shows a resumed sender with a slow clock but never its pin from before the pause", async () => {
     const sharing = [
       {

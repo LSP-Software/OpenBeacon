@@ -7,6 +7,7 @@ import { cancelDeviceKeyRegistrations, getRegisteredDeviceKey } from "./deviceKe
 import { clearPendingJoinCodes } from "./pendingJoinCode.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import {
+  abandonLocationSharingChanges,
   clearPendingSharingChanges,
   getPendingSharingChanges,
   syncLocationSharing,
@@ -49,6 +50,7 @@ export const signOutOfThisPhone = async ({
     tryCatch(syncLocationSharing()),
     new Promise((resolve) => setTimeout(resolve, 10_000)),
   ]);
+  abandonLocationSharingChanges();
   await tryCatch(tracking.prepareTrackingSignOut());
   onSigningOut();
   if (removeThisPhone) {
@@ -69,10 +71,11 @@ export const signOutOfThisPhone = async ({
   }
   const device = await getRegisteredDeviceKey();
   const pending = device ? getPendingSharingChanges(device.userId) : null;
-  if (device && (pending?.account?.paused || pending?.device?.paused)) {
-    await tryCatch(tracking.deleteQueuedTrackingPoints(device));
-  }
-  clearPendingSharingChanges();
+  const heldBack =
+    device && (pending?.account?.paused || pending?.device?.paused)
+      ? await tryCatch(tracking.deleteQueuedTrackingPoints(device))
+      : null;
+  if (!heldBack?.error) clearPendingSharingChanges();
   const signedOut = await tryCatch(authClient.signOut());
   if ((signedOut.error || signedOut.data.error) && sessionTokenToRevoke) {
     await tryCatch(SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke));

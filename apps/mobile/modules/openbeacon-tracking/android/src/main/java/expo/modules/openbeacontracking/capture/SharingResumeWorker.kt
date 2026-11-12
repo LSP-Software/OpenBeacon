@@ -129,9 +129,8 @@ class SharingResumeWorker(
             else -> TrackingRuntime.sharingState(context)
           }
         }
-      if (sharing != null && !(TrackingRuntime.shouldRestoreCapture(context) && startCaptureService(context))) {
-        showNotice(context, sharing.isPaused(System.currentTimeMillis()))
-      }
+      if (sharing != null && TrackingRuntime.shouldRestoreCapture(context) && startCaptureService(context)) return
+      if (sharing != null) showNotice(context, sharing.isPaused(System.currentTimeMillis()))
       cancel(context)
     }
 
@@ -141,7 +140,10 @@ class SharingResumeWorker(
 
     private fun startCaptureService(context: Context): Boolean =
       try {
-        ContextCompat.startForegroundService(context, Intent(context, TrackingCaptureService::class.java))
+        ContextCompat.startForegroundService(
+          context,
+          Intent(context, TrackingCaptureService::class.java).putExtra(TrackingCaptureService.EXTRA_RESUMING_SHARING, true),
+        )
         true
       } catch (error: IllegalStateException) {
         Log.w(TAG, "Android didn't allow location capture to restart in the background.", error)
@@ -151,7 +153,7 @@ class SharingResumeWorker(
         false
       }
 
-    private fun showNotice(
+    fun showNotice(
       context: Context,
       paused: Boolean,
     ) {

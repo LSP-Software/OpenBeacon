@@ -367,6 +367,27 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect((await caller(userId, tabletId).account.locationSharing()).paused).toBe(true);
     });
 
+    test("a fresh pause whose reply was lost is replayed with its base revision", async () => {
+      await reset();
+      const pause = {
+        scope: "device" as const,
+        deviceId: tabletId,
+        paused: true,
+        requestId: crypto.randomUUID(),
+      };
+      expect(await setSharing({ ...pause, expectedRevision: null })).toEqual({
+        status: "applied",
+      });
+      expect(await setSharing({ ...pause, expectedRevision: 0 })).toEqual({ status: "applied" });
+      expect(await revisionOf(tabletId)).toBe(1);
+      await setSharing({ scope: "device", deviceId: tabletId, paused: false });
+      expect(await setSharing({ ...pause, expectedRevision: 0 })).toEqual({
+        status: "superseded",
+      });
+      expect((await caller(userId, tabletId).account.locationSharing()).paused).toBe(false);
+      expect(await revisionOf(tabletId)).toBe(2);
+    });
+
     test("a resume replacing a queued pause still resumes after the pause reached the server", async () => {
       await reset();
       const pauseId = crypto.randomUUID();

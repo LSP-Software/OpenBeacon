@@ -22,6 +22,7 @@ import { Alert } from "../../lib/alert.ts";
 import { type RouterOutputs, trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { cn } from "../../lib/cn.ts";
+import { serverNow } from "../../lib/locationSharing.ts";
 import { deviceIconFor, selectableDeviceIcons } from "../../lib/deviceIcons.ts";
 import { shortTimeSince } from "../../lib/timeSince.ts";
 
@@ -214,8 +215,8 @@ const DevicesScreen = () => {
                     <Text className="text-muted-foreground text-sm">
                       {!device.activatedAt
                         ? "Can’t see anyone’s location until it’s set up"
-                        : isSharingPaused(device) ||
-                            (sharing.data && isSharingPaused(sharing.data.account))
+                        : isSharingPaused(device, serverNow()) ||
+                            (sharing.data && isSharingPaused(sharing.data.account, serverNow()))
                           ? "Location sharing paused"
                           : groups.data?.length === 0
                             ? "Not sharing with any group"

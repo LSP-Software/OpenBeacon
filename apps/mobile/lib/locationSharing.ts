@@ -35,6 +35,7 @@ const syncedSchema = z.object({
 });
 const scheduledChanges = new Set<string>();
 let changeRevision = 0;
+let generation = 0;
 let operationQueue: Promise<unknown> = Promise.resolve();
 
 const queueOperation = <T>(operation: () => Promise<T>) => {
@@ -86,6 +87,10 @@ export const getPendingSharingChanges = (userId: string) => ({
 export const hasPendingSharingPause = (userId: string) =>
   storage.getString(pendingKey(userId, "device")) !== undefined ||
   storage.getString(pendingKey(userId, "account")) !== undefined;
+
+export const abandonLocationSharingChanges = () => {
+  generation += 1;
+};
 
 export const clearPendingSharingChanges = () => {
   for (const key of storage.getAllKeys()) {
@@ -156,10 +161,12 @@ const applyLocalSharingState = (
   );
 };
 
-const synchronizeSharing = async () => {
+const synchronizeSharing = async (requestedGeneration: number) => {
   const revision = changeRevision;
+  const abandoned = () => generation !== requestedGeneration;
+  if (abandoned()) return;
   const device = await getRegisteredDeviceKey();
-  if (!device) return;
+  if (!device || abandoned()) return;
   for (const scope of ["device", "account"] as const) {
     const pending = readPendingChange(device.userId, scope);
     if (!pending || scheduledChanges.has(pending.input.requestId)) continue;
@@ -169,10 +176,12 @@ const synchronizeSharing = async () => {
       continue;
     }
     await trpcClient.account.setLocationSharing.mutate(pending.input);
+    if (abandoned()) return;
     if (storage.getString(key) === pending.stored) storage.remove(key);
   }
   const requestedAt = Date.now();
   const state = await trpcClient.account.locationSharing.query();
+  if (abandoned()) return;
   storage.set(
     clockOffsetKey(),
     String(Math.round(state.serverTime.getTime() - (requestedAt + Date.now()) / 2)),
@@ -182,12 +191,16 @@ const synchronizeSharing = async () => {
     syncedKey(device.userId, device.deviceId),
     superjson.stringify({ account: state.account, device: state.device }),
   );
-  const isCurrent = () => !hasPendingSharingPause(device.userId) && changeRevision === revision;
+  const isCurrent = () =>
+    !abandoned() && !hasPendingSharingPause(device.userId) && changeRevision === revision;
   await applyNativeSharingState(state, isCurrent);
   return state;
 };
 
-export const syncLocationSharing = () => queueOperation(synchronizeSharing);
+export const syncLocationSharing = () => {
+  const requestedGeneration = generation;
+  return queueOperation(() => synchronizeSharing(requestedGeneration));
+};
 
 export const changeLocationSharing = async (input: {
   scope: "device" | "account";
@@ -197,8 +210,10 @@ export const changeLocationSharing = async (input: {
   expectedRevision?: number;
 }) => {
   const revision = ++changeRevision;
+  const requestedGeneration = generation;
   const device = await getRegisteredDeviceKey();
   if (!device) throw new Error("This device isn't registered yet.");
+  if (generation !== requestedGeneration) throw new Error("You've signed out.");
   const deviceId = input.deviceId ?? device.deviceId;
   const affectsThisDevice = input.scope === "account" || deviceId === device.deviceId;
   const key = pendingKey(device.userId, input.scope);
@@ -220,7 +235,7 @@ export const changeLocationSharing = async (input: {
     pausedUntil: durationMinutes === null ? null : new Date(serverNow() + durationMinutes * 60_000),
   });
   const stored = superjson.stringify(change);
-  const isCurrent = () => revision === changeRevision;
+  const isCurrent = () => revision === changeRevision && generation === requestedGeneration;
   scheduledChanges.add(change.requestId);
   try {
     if (affectsThisDevice) {
@@ -229,18 +244,30 @@ export const changeLocationSharing = async (input: {
     }
     const result = await tryCatch(
       queueOperation(async () => {
+        if (generation !== requestedGeneration) throw new Error("You've signed out.");
         const { status } = await trpcClient.account.setLocationSharing.mutate(
           change.paused ? { ...change, expectedRevision: null } : change,
         );
+        if (generation !== requestedGeneration) return status;
         if (storage.getString(key) === stored) storage.remove(key);
-        await tryCatch(synchronizeSharing());
+        await tryCatch(synchronizeSharing(requestedGeneration));
         return status;
       }),
     );
     if (!result.error) return result.data;
     if (!affectsThisDevice || storage.getString(key) !== stored) throw result.error;
-    if (!change.paused) await applyLocalSharingState(device, isCurrent);
     if (change.paused && !hasLocallyPausedSharing(device.userId)) throw result.error;
+    if (
+      !change.paused &&
+      !(await applyLocalSharingState(device, isCurrent)) &&
+      Platform.OS === "android" &&
+      isCurrent() &&
+      storage.getString(key) === stored
+    ) {
+      if (queued) storage.set(key, queued.stored);
+      else storage.remove(key);
+      throw result.error;
+    }
     return "queued" as const;
   } finally {
     scheduledChanges.delete(change.requestId);

@@ -48,7 +48,8 @@ export const LocationSharingCard = ({
   const thisDevice = !device || device.isCurrent;
   const pending = session?.user.id ? getPendingSharingChanges(session.user.id) : null;
   const pendingDevice = thisDevice ? (pending?.device ?? null) : null;
-  const pendingHere = Boolean(pending?.account || pendingDevice);
+  const pendingAccount = thisDevice ? (pending?.account ?? null) : null;
+  const pendingHere = Boolean(pendingAccount || pendingDevice);
   const stoppedLocally = Boolean(
     session?.user.id && thisDevice && pendingHere && hasLocallyPausedSharing(session.user.id),
   );
@@ -58,8 +59,8 @@ export const LocationSharingCard = ({
   }, []);
   const pendingPaused = (change: { paused: boolean; pausedUntil: Date | null }) =>
     change.paused && (change.pausedUntil === null || change.pausedUntil.getTime() > now);
-  const accountPaused = pending?.account
-    ? pendingPaused(pending.account)
+  const accountPaused = pendingAccount
+    ? pendingPaused(pendingAccount)
     : sharing.data
       ? isSharingPaused(sharing.data.account, now)
       : false;
@@ -81,7 +82,7 @@ export const LocationSharingCard = ({
     const selectedAt = serverNow();
     setNow(selectedAt);
     setScope(selectedScope);
-    const pendingChange = selectedScope === "account" ? pending?.account : pendingDevice;
+    const pendingChange = selectedScope === "account" ? pendingAccount : pendingDevice;
     if (pendingChange?.paused) {
       setDuration(pendingChange.durationMinutes);
       return;
@@ -178,6 +179,11 @@ export const LocationSharingCard = ({
         ) : pendingHere && thisDevice && !update.isPending ? (
           <Text className="text-sm text-muted-foreground">
             Sharing resumed on this phone. We’ll update your groups when you’re back online.
+          </Text>
+        ) : null}
+        {!thisDevice && pending?.account ? (
+          <Text className="text-sm text-muted-foreground">
+            Your change to all devices is waiting to reach your other devices.
           </Text>
         ) : null}
         {message ? (

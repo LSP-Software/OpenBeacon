@@ -12,12 +12,16 @@ let challengeError: Error | null = null;
 let signOutError: Error | null = null;
 let removedErrorDuringRemoval = false;
 let pendingSharingPause = false;
+let deleteQueueError: Error | null = null;
 const sharingEvents: string[] = [];
 
 mock.module("./pendingJoinCode.ts", () => ({ clearPendingJoinCodes: () => {} }));
 mock.module("./locationSharing.ts", () => ({
   syncLocationSharing: async () => {
     sharingEvents.push("sync");
+  },
+  abandonLocationSharingChanges: () => {
+    sharingEvents.push("abandon");
   },
   getPendingSharingChanges: () => ({
     device: pendingSharingPause ? { paused: true } : null,
@@ -120,6 +124,7 @@ mock.module("./auth-client.ts", () => ({
 mock.module("./tracking.ts", () => ({
   deleteQueuedTrackingPoints: async () => {
     events.push("deleteQueue");
+    if (deleteQueueError) throw deleteQueueError;
   },
   prepareTrackingSignOut: async () => {
     events.push(`prepare:${await readHeaderDeviceId()}`);
@@ -157,6 +162,7 @@ describe("signing out of this phone", () => {
     signOutError = null;
     removedErrorDuringRemoval = false;
     pendingSharingPause = false;
+    deleteQueueError = null;
     sharingEvents.length = 0;
   });
 
@@ -418,7 +424,22 @@ describe("signing out of this phone", () => {
     });
 
     expect(events).toEqual([`prepare:${device.deviceId}`, "deleteQueue", "signOut"]);
-    expect(sharingEvents).toEqual(["sync", "clear:before sign-out"]);
+    expect(sharingEvents).toEqual(["sync", "abandon", "clear:before sign-out"]);
+  });
+
+  test("a sign-out keeps a queued pause when the points it holds back couldn't be deleted", async () => {
+    const device = await ensureDeviceKeyRegistration();
+    pendingSharingPause = true;
+    deleteQueueError = new Error("Native queue unavailable");
+
+    await signOutOfThisPhone({
+      onSigningOut: () => {},
+      removeThisPhone: false,
+      sessionTokenToRevoke: null,
+    });
+
+    expect(events).toEqual([`prepare:${device.deviceId}`, "deleteQueue", "signOut"]);
+    expect(sharingEvents).toEqual(["sync", "abandon"]);
   });
 
   test("a sign-out that throws keeps the session token to revoke on the next sign-in", async () => {

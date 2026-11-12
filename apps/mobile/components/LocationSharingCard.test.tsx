@@ -285,3 +285,34 @@ test("an offline pause closes the sheet and explains that only this phone has st
   );
   expect(output).toContain("Resume");
 });
+
+test("a queued account pause is shown as waiting for another device, not applied to it", async () => {
+  pendingAccount = pendingPause(60);
+  locallyPaused = true;
+  const tablet = await render({
+    ...preference(),
+    id: "tablet",
+    name: "Alex’s tablet",
+    isCurrent: false,
+  });
+  expect(tablet).not.toContain("Paused on all your devices");
+  expect(tablet).toContain("Sharing enabled on Alex’s tablet");
+  expect(tablet).toContain("Your change to all devices is waiting to reach your other devices.");
+});
+
+test("a queued account resume does not hide a server account pause on another device", async () => {
+  sharingData.account = preference({
+    sharingPaused: true,
+    sharingChangedAt: new Date(),
+    sharingRevision: 1,
+  });
+  pendingAccount = { ...pendingPause(null), paused: false };
+  const tablet = await render({
+    ...preference(),
+    id: "tablet",
+    name: "Alex’s tablet",
+    isCurrent: false,
+  });
+  expect(tablet).toContain("Paused on all your devices");
+  expect(tablet).toContain("Your change to all devices is waiting to reach your other devices.");
+});

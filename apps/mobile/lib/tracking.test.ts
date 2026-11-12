@@ -105,6 +105,7 @@ const backfillQueries: string[] = [];
 const captureStateSeenByBackfill: Array<{ provisions: number; starts: number }> = [];
 const historyWrapUploads: Array<{ groupId: string; wraps: WrappedHistoryEpochKey[] }> = [];
 let locationSharingError: Error | null = null;
+const sharingStates: { owner: string; deviceId: string; prefix: string; paused: boolean }[] = [];
 let registrationWait: Promise<void> | null = null;
 let onRegistration: (() => void) | null = null;
 let uploadGroup = async ({
@@ -242,9 +243,18 @@ mock.module("./api.ts", () => ({
       locationSharing: {
         query: async () => {
           if (locationSharingError) throw locationSharingError;
+          const preference = {
+            sharingPaused: false,
+            sharingPausedUntil: null,
+            sharingChangedAt: null,
+            sharingRevision: 0,
+          };
           return {
+            account: preference,
+            device: preference,
             userId: currentUserId,
             deviceId: "device-1",
+            serverTime: new Date(),
             paused: false,
             pausedUntil: null,
             resumeAfter: null,
@@ -409,7 +419,10 @@ mock.module("./api.ts", () => ({
 
 mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   default: {
-    setSharingState: () => true,
+    setSharingState: (owner: string, deviceId: string, prefix: string, paused: boolean) => {
+      sharingStates.push({ owner, deviceId, prefix, paused });
+      return true;
+    },
     setQueueOwner: () => {},
     countUnassignedCiphertexts: async () => unassignedCount,
     assignUnassignedCiphertexts: async (deviceId: string, owner: string) => {
@@ -586,6 +599,7 @@ describe("tracking service", () => {
     registrationWait = null;
     onRegistration = null;
     locationSharingError = null;
+    sharingStates.length = 0;
     uploadGroup = async ({ points }) => ({
       accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
       duplicates: [],
@@ -636,6 +650,19 @@ describe("tracking service", () => {
     storageValues.delete(pauseKey);
     await flushPendingTrackingPoints();
     expect(deleted).toEqual([[1]]);
+  });
+
+  test("starting capture applies the server's sharing preference to the capture runtime", async () => {
+    await reconcileTrackingKeys({ startCapture: true });
+    expect(startCaptureCalls).toBe(1);
+    expect(sharingStates).toEqual([
+      {
+        owner: JSON.stringify(["https://api.example.test", "user-1"]),
+        deviceId: "device-1",
+        prefix: "",
+        paused: false,
+      },
+    ]);
   });
 
   test("an unreachable sharing preference doesn't stop capture from starting", async () => {
