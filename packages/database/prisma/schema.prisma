@@ -46,6 +46,7 @@ model User {
   deviceLinks                DeviceLink[]
 
   @@index([pendingDeletion, deletionDate])
+  @@index([image])
 }
 
 model Session {
@@ -65,6 +66,7 @@ model Session {
 
   @@index([userId])
   @@index([deviceId])
+  @@index([expiresAt])
 }
 
 model GoogleDeletionChallenge {
@@ -131,6 +133,8 @@ model Group {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([image])
 }
 
 model PendingUpload {
@@ -175,6 +179,9 @@ model GroupSharedInvite {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime @default(now())
+
+  @@index([groupId])
+  @@index([creatorId])
 }
 
 model GroupJoinAlert {
@@ -189,6 +196,8 @@ model GroupJoinAlert {
   createdAt   DateTime @default(now())
 
   @@index([recipientId, createdAt])
+  @@index([groupId])
+  @@index([memberId])
 }
 
 model GroupMember {
@@ -366,11 +375,9 @@ model GroupEncryptedPayload {
   @@unique([groupId, clientPointId])
   @@index([groupId, createdAt, id])
   @@index([kind, createdAt])
-  @@index([groupId, senderUserId, createdAt])
-  @@index([groupId, senderDeviceId, createdAt])
+  @@index([senderDeviceId, groupId, createdAt, id])
+  @@index([senderUserId, groupId])
   @@index([epochId])
-  @@index([senderDeviceId])
-  @@index([senderUserId])
 }
 
 model GroupEpochRecipientKey {
@@ -451,6 +458,8 @@ model Feedback {
   mapVersion String?
   serverVersion String?
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model AccountDeletionCleanup {

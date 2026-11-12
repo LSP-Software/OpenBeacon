@@ -4,19 +4,6 @@ import { FakeRedis } from "@openbeacon/cache/testing";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { TRPCError } from "@trpc/server";
 
-type GroupFindUniqueArgs = {
-  include: {
-    groupMembers: {
-      where: {
-        userId: string;
-      };
-    };
-  };
-  where: {
-    id: string;
-  };
-};
-
 type EpochFindFirstArgs = {
   where: {
     epochNumber: {
@@ -53,24 +40,11 @@ class TestOpenBeaconCache extends OpenBeaconCache {
   }
 }
 
-const createGroupFindUniqueMock = (isMember: boolean) =>
-  mock(async (_args: GroupFindUniqueArgs) =>
+const createMemberFindUniqueMock = (isMember: boolean) =>
+  mock(async (_args: { where: { userId_groupId: { userId: string; groupId: string } } }) =>
     isMember
-      ? {
-          groupMembers: [
-            {
-              id: "group-member-1",
-              joinedEpochNumber: 3,
-              role: "OWNER",
-              userId: "user-1",
-            },
-          ],
-          id: "group-1",
-        }
-      : {
-          groupMembers: [],
-          id: "group-1",
-        },
+      ? { id: "group-member-1", joinedEpochNumber: 3, role: "OWNER", userId: "user-1" }
+      : null,
   );
 
 const createEpochFindFirstMock = (result: EpochRecord | null) =>
@@ -80,10 +54,10 @@ let originalBetterAuthUrl: string | undefined;
 let originalBetterAuthSecret: string | undefined;
 
 const createCaller = async ({
-  groupFindUniqueMock,
+  memberFindUniqueMock,
   epochFindFirstMock,
 }: {
-  groupFindUniqueMock: ReturnType<typeof createGroupFindUniqueMock>;
+  memberFindUniqueMock: ReturnType<typeof createMemberFindUniqueMock>;
   epochFindFirstMock: ReturnType<typeof createEpochFindFirstMock>;
 }) => {
   const [{ createTRPCRouter }, { groupEpochRouter }] = await Promise.all([
@@ -101,8 +75,8 @@ const createCaller = async ({
     cache,
     clientIp: "203.0.113.10",
     db: {
-      group: {
-        findUnique: groupFindUniqueMock,
+      groupMember: {
+        findUnique: memberFindUniqueMock,
       },
       groupEpoch: {
         findFirst: epochFindFirstMock,
@@ -119,7 +93,7 @@ const createCaller = async ({
 
   return {
     caller: router.createCaller(context as Parameters<typeof router.createCaller>[0]),
-    groupFindUniqueMock,
+    memberFindUniqueMock,
     epochFindFirstMock,
   };
 };
@@ -147,8 +121,8 @@ describe("groupEpochRouter", () => {
   });
 
   test("forbids access for non-members", async () => {
-    const { caller, groupFindUniqueMock, epochFindFirstMock } = await createCaller({
-      groupFindUniqueMock: createGroupFindUniqueMock(false),
+    const { caller, memberFindUniqueMock, epochFindFirstMock } = await createCaller({
+      memberFindUniqueMock: createMemberFindUniqueMock(false),
       epochFindFirstMock: createEpochFindFirstMock(null),
     });
 
@@ -159,24 +133,15 @@ describe("groupEpochRouter", () => {
         groupId: "group-1",
       }),
     ).rejects.toBeInstanceOf(TRPCError);
-    expect(groupFindUniqueMock).toHaveBeenCalledWith({
-      include: {
-        groupMembers: {
-          where: {
-            userId: "user-1",
-          },
-        },
-      },
-      where: {
-        id: "group-1",
-      },
+    expect(memberFindUniqueMock).toHaveBeenCalledWith({
+      where: { userId_groupId: { userId: "user-1", groupId: "group-1" } },
     });
     expect(epochFindFirstMock).not.toHaveBeenCalled();
   });
 
   test("returns no wraps when the epoch is missing or before the member joined", async () => {
     const { caller, epochFindFirstMock } = await createCaller({
-      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
       epochFindFirstMock: createEpochFindFirstMock(null),
     });
 
@@ -197,7 +162,7 @@ describe("groupEpochRouter", () => {
   test("returns epochId and the epoch creator's public key as the device wrap's senderPublicKey", async () => {
     const createdAt = new Date("2026-03-26T12:00:00.000Z");
     const { caller } = await createCaller({
-      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
       epochFindFirstMock: createEpochFindFirstMock({
         historyWraps: [
           {

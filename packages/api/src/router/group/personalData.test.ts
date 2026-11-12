@@ -24,13 +24,10 @@ test("nicknames are scoped to the caller's membership and targets in the same gr
     deviceId: "device",
     deviceActive: true,
     db: {
-      group: {
-        findUnique: async () => ({
-          id: "group",
-          groupMembers: [{ id: "owner", userId: "user", role: "MEMBER" }],
-        }),
+      groupMember: {
+        findUnique: async () => ({ id: "owner", userId: "user", role: "MEMBER" }),
+        findFirst,
       },
-      groupMember: { findFirst },
       personalGroupNickname: { findMany, createMany, updateMany, deleteMany },
     },
   } as unknown as Parameters<typeof router.createCaller>[0]);
@@ -106,11 +103,8 @@ test("group colors are scoped to the caller's own memberships", async () => {
     deviceId: "device",
     deviceActive: true,
     db: {
-      group: {
-        findUnique: async () => ({
-          id: "group",
-          groupMembers: [{ id: "owner", userId: "user", role: "MEMBER" }],
-        }),
+      groupMember: {
+        findUnique: async () => ({ id: "owner", userId: "user", role: "MEMBER" }),
       },
       personalGroupColor: { findMany, upsert, updateMany },
     },

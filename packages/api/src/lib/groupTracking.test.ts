@@ -349,6 +349,7 @@ describe("pollGroupTrackingPoints", () => {
       take: 100,
       where: {
         groupId: "group-1",
+        createdAt: { gte: createdAt },
         OR: [
           { createdAt: { gt: createdAt } },
           {
