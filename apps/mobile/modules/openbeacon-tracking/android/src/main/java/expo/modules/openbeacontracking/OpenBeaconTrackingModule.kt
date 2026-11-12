@@ -110,6 +110,18 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.isCaptureRunning || TrackingRuntime.isCaptureParked(requireContext())
       }
 
+      Function("areNotificationsEnabled") {
+        Notices.areEnabled(requireContext())
+      }
+
+      Function("showNotice") { kind: String ->
+        Notices.show(requireContext(), kind)
+      }
+
+      Function("dismissNotice") { slot: String ->
+        Notices.dismiss(requireContext(), slot)
+      }
+
       AsyncFunction("countUnassignedCiphertexts") { senderDeviceId: String ->
         CiphertextQueueDatabase.getInstance(requireContext()).ciphertextQueueDao().countUnassigned(senderDeviceId)
       }
@@ -156,14 +168,6 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime
           .ciphertextQueue(requireContext())
           .requeue(ids.map { it.toLong() }, System.currentTimeMillis(), error)
-      }
-
-      Function("showCompatibilityNotice") { title: String, body: String ->
-        CompatibilityNotice.show(requireContext(), title, body)
-      }
-
-      Function("clearCompatibilityNotice") {
-        CompatibilityNotice.clear(requireContext())
       }
     }
 

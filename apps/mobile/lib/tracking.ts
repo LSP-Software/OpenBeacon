@@ -8,7 +8,6 @@ import { Platform } from "react-native";
 import type { CiphertextQueueItem } from "../modules/openbeacon-tracking/index.ts";
 import { trpcClient } from "./api.ts";
 import {
-  apiCompatibilityNotice,
   getApiCompatibility,
   markApiCompatibilityNotified,
   refreshApiCompatibilityInBackground,
@@ -27,6 +26,7 @@ import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
+import { dismissNotice, showNotice } from "./notifications.ts";
 import { backfillHistoryWraps } from "./recovery.ts";
 import { resealPersonalData } from "./resealPersonalData.ts";
 import { hasCustomServerUrl } from "./server-url.ts";
@@ -480,7 +480,10 @@ export const reconcileTrackingKeys = ({
     );
     if (result.error) {
       if (version === reconcileVersion && getErrorCode(result.error) === "UNAUTHORIZED")
-        await revokeTrackingAccess({ keepDeviceRegistration: isDeviceRemovedError(result.error) });
+        await revokeTrackingAccess({
+          keepDeviceRegistration: isDeviceRemovedError(result.error),
+          notice: isDeviceRemovedError(result.error) ? "deviceRemoved" : "signedOut",
+        });
       throw result.error;
     }
     if (result.data) keyAccessChangePending = true;
@@ -602,6 +605,7 @@ const uploadClaimedItems = async (
       await revokeTrackingAccess({
         cancelFlush: false,
         keepDeviceRegistration: isDeviceRemovedError(uploadResult.error),
+        notice: isDeviceRemovedError(uploadResult.error) ? "deviceRemoved" : "signedOut",
       });
       await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
       throw uploadResult.error;
@@ -767,28 +771,18 @@ export const flushPendingTrackingPoints = (force = false): Promise<void> => {
 const showApiCompatibilityNotice = async () => {
   const compatibility = getApiCompatibility();
   if (!compatibility || compatibility.notified) return;
-  const trackingModule = await loadTrackingModule();
-  if (!trackingModule) return;
-  const { title, body } = apiCompatibilityNotice({
+  const shown = await showNotice({
+    kind: "compatibility",
     problem: compatibility.problem,
     selfHosted: hasCustomServerUrl(),
   });
-  const shown = await tryCatch(
-    Promise.resolve().then(() => trackingModule.showCompatibilityNotice(title, body)),
-  );
-  if (shown.data) markApiCompatibilityNotified();
-};
-
-export const clearApiCompatibilityNotice = async () => {
-  const trackingModule = await loadTrackingModule();
-  if (!trackingModule) return;
-  await tryCatch(Promise.resolve().then(() => trackingModule.clearCompatibilityNotice()));
+  if (shown) markApiCompatibilityNotified();
 };
 
 export const syncBackgroundTracking = async () => {
   if (getApiCompatibility()) {
     await refreshApiCompatibilityInBackground();
-    if (!getApiCompatibility()) await clearApiCompatibilityNotice();
+    if (!getApiCompatibility()) await dismissNotice("compatibility");
   }
   if (getApiCompatibility()) {
     await showApiCompatibilityNotice();
@@ -812,7 +806,9 @@ export const syncBackgroundTracking = async () => {
   }
 };
 
-const revokeTrackingAccessInternal = async (): Promise<void> => {
+const revokeTrackingAccessInternal = async (
+  notice: "deviceRemoved" | "signedOut" | undefined,
+): Promise<void> => {
   reconcileVersion += 1;
   reconcileOptions = null;
   for (const cancel of cancelReconciliations) cancel();
@@ -826,17 +822,24 @@ const revokeTrackingAccessInternal = async (): Promise<void> => {
     return;
   }
 
+  const wasSharing = notice !== undefined && trackingModule.isCaptureRunning();
   try {
     trackingModule.revokeEpochKeys();
   } finally {
     await trackingModule.stopCapture();
   }
+  if (notice && wasSharing) await showNotice({ kind: notice });
 };
 
 export const revokeTrackingAccess = ({
   cancelFlush = true,
   keepDeviceRegistration = false,
-}: { cancelFlush?: boolean; keepDeviceRegistration?: boolean } = {}): Promise<void> => {
+  notice,
+}: {
+  cancelFlush?: boolean;
+  keepDeviceRegistration?: boolean;
+  notice?: "deviceRemoved" | "signedOut";
+} = {}): Promise<void> => {
   if (!keepDeviceRegistration) cancelDeviceKeyRegistrations();
   if (cancelFlush) {
     flushController?.abort();
@@ -848,7 +851,7 @@ export const revokeTrackingAccess = ({
     return revokePromise;
   }
 
-  revokePromise = revokeTrackingAccessInternal().finally(() => {
+  revokePromise = revokeTrackingAccessInternal(notice).finally(() => {
     revokePromise = null;
   });
   return revokePromise;

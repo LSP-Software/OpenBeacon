@@ -2,6 +2,7 @@ package expo.modules.openbeacontracking.capture
 
 import android.Manifest
 import android.app.Application
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -42,7 +43,7 @@ class TrackingCaptureServiceTest {
     val keys = InMemoryEpochKeyStore()
     keys.replaceAll(listOf(ProvisionedEpochKey("group", "epoch", ByteArray(32), "tablet", "trackingPoint")))
     keysField.set(null, keys)
-    shadowOf(application).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    shadowOf(application).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_BACKGROUND_LOCATION, Manifest.permission.POST_NOTIFICATIONS)
   }
 
   @After
@@ -191,7 +192,7 @@ class TrackingCaptureServiceTest {
   }
 
   @Test
-  fun thePausedNotificationSaysSharingIsPaused() {
+  fun aTimedPauseSaysWhenSharingStartsAgain() {
     val service = createService()
     service.onStartCommand(Intent(application, TrackingCaptureService::class.java).apply {
       action = TrackingCaptureService.ACTION_CHECK_SHARING
@@ -199,10 +200,62 @@ class TrackingCaptureServiceTest {
     val notification = shadowOf(service).lastForegroundNotification
 
     assertEquals(
+      application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_paused_title),
+      notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE).toString(),
+    )
+    assertTrue(notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString().startsWith("Sharing starts again at "))
+  }
+
+  @Test
+  fun aPauseWithoutAnEndSaysGroupsCantSeeThePhone() {
+    TrackingRuntime.setSharingState(application, SharingCaptureState(paused = true))
+    val service = createService()
+    service.onStartCommand(startIntent(TrackingRuntime.captureCommands.start()), 0, 1)
+
+    assertEquals(
       application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_paused_body),
-      notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
+      shadowOf(service).lastForegroundNotification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
     )
   }
+
+  @Test
+  fun sharingShowsTheBrandedStatusNotification() {
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.2:"))
+    val service = createService()
+    service.onStartCommand(startIntent(TrackingRuntime.captureCommands.start()), 0, 1)
+    val notification = shadowOf(service).lastForegroundNotification
+
+    assertEquals(
+      application.getString(expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_title),
+      notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE).toString(),
+    )
+    assertEquals(expo.modules.openbeacontracking.R.drawable.openbeacon_notification_icon, notification.smallIcon.resId)
+  }
+
+  @Test
+  fun aStickyRestartAfterLocationAccessIsRemovedAsksJsToTellTheOwner() {
+    shadowOf(application).denyPermissions(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    val service = createService()
+
+    assertEquals(Service.START_NOT_STICKY, service.onStartCommand(null, 0, 1))
+    assertFalse(TrackingRuntime.isCaptureRunning)
+    assertTrue(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_location_permission_body))
+  }
+
+  @Test
+  fun aStickyRestartAfterSharingWasTurnedOffSaysNothing() {
+    TrackingRuntime.setCaptureEnabled(application, false)
+    shadowOf(application).denyPermissions(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    val service = createService()
+
+    assertEquals(Service.START_NOT_STICKY, service.onStartCommand(null, 0, 1))
+    assertFalse(hasNotice(expo.modules.openbeacontracking.R.string.openbeacon_notice_location_permission_body))
+  }
+
+  private fun hasNotice(body: Int) =
+    shadowOf(application.getSystemService(NotificationManager::class.java)).allNotifications.any {
+      it.extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString() == application.getString(body)
+    }
 
   private fun startIntent(generation: Long) =
     Intent(application, TrackingCaptureService::class.java).apply {

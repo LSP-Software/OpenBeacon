@@ -1,15 +1,8 @@
 package expo.modules.openbeacontracking.capture
 
-import android.Manifest
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.util.Log
-import androidx.core.app.NotificationChannelCompat
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -25,7 +18,7 @@ import com.facebook.react.bridge.ReactContext
 import com.facebook.react.jstasks.HeadlessJsTaskConfig
 import com.facebook.react.jstasks.HeadlessJsTaskContext
 import com.facebook.react.jstasks.HeadlessJsTaskEventListener
-import expo.modules.openbeacontracking.R
+import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.TrackingRuntime
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
@@ -94,8 +87,6 @@ class SharingResumeWorker(
     private const val TASK_NAME = "OpenBeaconTrackingUpload"
     private const val TASK_TIMEOUT_MS = 60_000L
     private const val SYNC_TIMEOUT_MS = 90_000L
-    private const val CHANNEL_ID = "openbeacon_tracking_capture"
-    const val NOTICE_ID = 7262
 
     fun schedule(context: Context) {
       try {
@@ -130,12 +121,8 @@ class SharingResumeWorker(
           }
         }
       if (sharing != null && TrackingRuntime.shouldRestoreCapture(context) && startCaptureService(context)) return
-      if (sharing != null) showNotice(context, sharing.isPaused(System.currentTimeMillis()))
+      if (sharing != null) showNotice(context)
       cancel(context)
-    }
-
-    fun clearNotice(context: Context) {
-      NotificationManagerCompat.from(context).cancel(NOTICE_ID)
     }
 
     private fun startCaptureService(context: Context): Boolean =
@@ -153,44 +140,14 @@ class SharingResumeWorker(
         false
       }
 
-    fun showNotice(
-      context: Context,
-      paused: Boolean,
-    ) {
-      val manager = NotificationManagerCompat.from(context)
-      if (
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-      ) {
-        return
-      }
-      manager.createNotificationChannel(
-        NotificationChannelCompat
-          .Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-          .setName(context.getString(R.string.openbeacon_tracking_notification_channel))
-          .setDescription(context.getString(R.string.openbeacon_tracking_notification_channel_description))
-          .setShowBadge(false)
-          .build(),
-      )
-      val body =
-        context.getString(
-          if (paused) R.string.openbeacon_tracking_changed_notice_body else R.string.openbeacon_tracking_resumed_notice_body,
-        )
-      val launchIntent =
-        context.packageManager.getLaunchIntentForPackage(context.packageName)?.let { intent ->
-          PendingIntent.getActivity(context, NOTICE_ID, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        }
-      manager.notify(
-        NOTICE_ID,
-        NotificationCompat
-          .Builder(context, CHANNEL_ID)
-          .setContentTitle(context.getString(R.string.openbeacon_tracking_notification_title))
-          .setContentText(body)
-          .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-          .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-          .setAutoCancel(true)
-          .setContentIntent(launchIntent)
-          .build(),
+    fun showNotice(context: Context) {
+      Notices.show(
+        context,
+        when {
+          TrackingRuntime.hasLostLocationPermission(context) -> Notices.LOCATION_PERMISSION
+          TrackingRuntime.sharingState(context).isPaused(System.currentTimeMillis()) -> Notices.SHARING_CHANGED
+          else -> Notices.SHARING_RESUMED
+        },
       )
     }
   }

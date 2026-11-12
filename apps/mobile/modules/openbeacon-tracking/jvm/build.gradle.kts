@@ -28,7 +28,7 @@ sourceSets {
       exclude("**/TrackingBootReceiver.kt")
       exclude("**/SharingResumeWorker.kt")
       exclude("**/BatteryReader.kt")
-      exclude("**/CompatibilityNotice.kt")
+      exclude("**/Notices.kt")
       exclude("**/SecureEpochKeyStore.kt")
       exclude("**/Base64Codec.kt")
       exclude("**/CiphertextQueueEntity.kt")

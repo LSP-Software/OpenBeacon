@@ -1,11 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <string name="openbeacon_tracking_notification_channel">Location sharing</string>
-  <string name="openbeacon_tracking_notification_channel_description">Shown while Open Beacon privately shares your location with your family.</string>
-  <string name="openbeacon_tracking_notification_title">Open Beacon</string>
-  <string name="openbeacon_tracking_notification_body">Private location sharing is active.</string>
-  <string name="openbeacon_tracking_notification_paused_body">Location sharing paused. You can still view your groups.</string>
-  <string name="openbeacon_tracking_resumed_notice_body">Location sharing was turned back on from another device. Tap to start sharing from this device again.</string>
-  <string name="openbeacon_tracking_changed_notice_body">Location sharing was changed from another device. Tap to update this device.</string>
-  <string name="openbeacon_compatibility_notification_channel">App and server updates</string>
+  <string name="openbeacon_tracking_notification_channel">Location sharing status</string>
+  <string name="openbeacon_tracking_notification_channel_description">Shows while this phone is sharing its location or sharing is paused.</string>
+  <string name="openbeacon_tracking_notification_title">Sharing your location</string>
+  <string name="openbeacon_tracking_notification_body">End-to-end encrypted. Only your groups can see it.</string>
+  <string name="openbeacon_tracking_notification_paused_title">Location sharing paused</string>
+  <string name="openbeacon_tracking_notification_paused_body">Your groups can\'t see where you are.</string>
+  <string name="openbeacon_tracking_notification_paused_until_body">Sharing starts again at %1$s.</string>
+  <string name="openbeacon_notice_channel">Sharing alerts</string>
+  <string name="openbeacon_notice_channel_description">When this phone stops sharing its location or needs you to do something.</string>
+  <string name="openbeacon_notice_app_too_old_title">Update Open Beacon</string>
+  <string name="openbeacon_notice_app_too_old_body">This phone has stopped sharing your location. Update the app to start sharing again.</string>
+  <string name="openbeacon_notice_sharing_paused_title">Location sharing paused</string>
+  <string name="openbeacon_notice_server_updating_body">We\'re updating Open Beacon\'s servers. Sharing will start again shortly.</string>
+  <string name="openbeacon_notice_self_hosted_server_too_old_body">Your server needs updating before this phone can share its location again.</string>
+  <string name="openbeacon_notice_out_of_sync_body">The app and your server don\'t match. Open the app for details.</string>
+  <string name="openbeacon_notice_location_permission_title">Location sharing stopped</string>
+  <string name="openbeacon_notice_location_permission_body">Open Beacon can no longer use your location all the time. Tap to turn it back on.</string>
+  <string name="openbeacon_notice_signed_out_title">Signed out of Open Beacon</string>
+  <string name="openbeacon_notice_device_removed_body">This phone was removed from your account and has stopped sharing your location.</string>
+  <string name="openbeacon_notice_signed_out_body">This phone has stopped sharing your location. Sign in again to keep sharing.</string>
+  <string name="openbeacon_notice_sharing_resumed_title">Location sharing turned back on</string>
+  <string name="openbeacon_notice_sharing_resumed_body">You turned sharing on from another device. Tap to start sharing from this phone.</string>
+  <string name="openbeacon_notice_sharing_changed_title">Location sharing changed</string>
+  <string name="openbeacon_notice_sharing_changed_body">Sharing was changed from another device. Tap to update this phone.</string>
 </resources>

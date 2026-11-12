@@ -14,14 +14,17 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Handler
 import android.os.SystemClock
+import android.text.format.DateFormat
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.R
 import expo.modules.openbeacontracking.TrackingRuntime
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
@@ -65,6 +68,12 @@ class TrackingCaptureService : Service() {
     }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   }
 
+  private val openAppIntent by lazy {
+    packageManager.getLaunchIntentForPackage(packageName)?.let { intent ->
+      PendingIntent.getActivity(this, NOTIFICATION_ID, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+  }
+
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onStartCommand(
@@ -82,7 +91,7 @@ class TrackingCaptureService : Service() {
           requestSharingSync()
           updateSharing()
         } else {
-          stopSelf()
+          stopAfterFailedStart()
           return START_NOT_STICKY
         }
       }
@@ -93,7 +102,7 @@ class TrackingCaptureService : Service() {
         }
         if (TrackingRuntime.isCaptureRunning) updateSharing()
         else {
-          stopSelf()
+          stopAfterFailedStart()
           return START_NOT_STICKY
         }
       }
@@ -124,7 +133,7 @@ class TrackingCaptureService : Service() {
       else -> {
         synchronized(captureStateLock) {
           if (intent?.action != ACTION_START && !TrackingRuntime.shouldRestoreCapture(this)) {
-            stopSelf()
+            stopAfterFailedStart()
             return START_NOT_STICKY
           }
           if (intent?.action == ACTION_START && !TrackingRuntime.captureCommands.isCurrent(intent.getLongExtra(EXTRA_COMMAND_GENERATION, -1L)) && !TrackingRuntime.isCaptureEnabled(this)) {
@@ -185,19 +194,24 @@ class TrackingCaptureService : Service() {
         TrackingRuntime.isCaptureRunning = true
       }
       SharingResumeWorker.cancel(this)
-      SharingResumeWorker.clearNotice(this)
+      Notices.dismiss(this, Notices.SLOT_LOCATION_PERMISSION)
+      Notices.dismiss(this, Notices.SLOT_SHARING_CHANGED)
       currentIntervalMs = intervalMs
       updateSharing()
     } catch (error: SecurityException) {
       Log.e(TAG, "Failed to start location capture.", error)
       stopCapture()
-      stopSelf()
-      if (resumingSharing) SharingResumeWorker.showNotice(this, TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis()))
+      if (resumingSharing) {
+        stopSelf()
+        SharingResumeWorker.showNotice(this)
+      } else {
+        stopAfterFailedStart()
+      }
     } catch (error: IllegalStateException) {
       Log.e(TAG, "Android didn't allow location capture to start in the background.", error)
       stopCapture()
       stopSelf()
-      if (resumingSharing) SharingResumeWorker.showNotice(this, TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis()))
+      if (resumingSharing) SharingResumeWorker.showNotice(this)
     }
   }
 
@@ -294,10 +308,15 @@ class TrackingCaptureService : Service() {
       } catch (error: SecurityException) {
         Log.e(TAG, "Failed to resume location sharing.", error)
         stopCapture()
-        stopSelf()
+        stopAfterFailedStart()
       }
     }
     getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, buildNotification())
+  }
+
+  private fun stopAfterFailedStart() {
+    if (TrackingRuntime.hasLostLocationPermission(this)) Notices.show(this, Notices.LOCATION_PERMISSION)
+    stopSelf()
   }
 
   private fun requestSharingSync() {
@@ -439,17 +458,30 @@ class TrackingCaptureService : Service() {
     manager.createNotificationChannel(channel)
   }
 
-  private fun buildNotification(): Notification =
-    NotificationCompat
+  private fun buildNotification(): Notification {
+    val sharing = TrackingRuntime.sharingState(this)
+    val paused = sharing.isPaused(System.currentTimeMillis())
+    val body =
+      when {
+        !paused -> getString(R.string.openbeacon_tracking_notification_body)
+        sharing.pausedUntil != null ->
+          getString(R.string.openbeacon_tracking_notification_paused_until_body, DateFormat.getTimeFormat(this).format(Date(sharing.pausedUntil)))
+        else -> getString(R.string.openbeacon_tracking_notification_paused_body)
+      }
+    return NotificationCompat
       .Builder(this, CHANNEL_ID)
-      .setContentTitle(getString(R.string.openbeacon_tracking_notification_title))
-      .setContentText(getString(if (TrackingRuntime.sharingState(this).isPaused(System.currentTimeMillis())) R.string.openbeacon_tracking_notification_paused_body else R.string.openbeacon_tracking_notification_body))
-      .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+      .setContentTitle(getString(if (paused) R.string.openbeacon_tracking_notification_paused_title else R.string.openbeacon_tracking_notification_title))
+      .setContentText(body)
+      .setSmallIcon(R.drawable.openbeacon_notification_icon)
+      .setColor(ContextCompat.getColor(this, R.color.openbeacon_notification_color))
+      .setContentIntent(openAppIntent)
+      .setShowWhen(false)
       .setOngoing(true)
       .setOnlyAlertOnce(true)
       .setCategory(NotificationCompat.CATEGORY_SERVICE)
       .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
       .build()
+  }
 
   private data class LastQueuedFix(
     val latitude: Double,
