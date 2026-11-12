@@ -54,11 +54,14 @@ const createCaller = async ({
     redisUrl: "redis://localhost:6379",
     now,
   });
+  const statements: string[] = [];
   const db = {
     $queryRaw: async (query: { strings: string[] }) => {
-      if (query.strings.join("").includes('JOIN "User" AS "account"')) return [sharingDeviceRow];
-      if (query.strings.join("").includes("FOR SHARE")) return [];
-      if (query.strings.join("").includes('FROM "Group"')) return [{ id: "group-1" }];
+      const sql = query.strings.join("");
+      statements.push(sql);
+      if (sql.includes('JOIN "User" AS "account"')) return [sharingDeviceRow];
+      if (sql.includes('FROM "User" WHERE')) return [];
+      if (sql.includes('FROM "Group"')) return [{ id: "group-1" }];
       return queryRawMock
         ? queryRawMock(query)
         : [{ id: "group-member-1", createdAt: new Date("2026-01-01") }];
@@ -100,6 +103,7 @@ const createCaller = async ({
     findManyPayloadsMock,
     memberFindUniqueMock,
     queryRawMock,
+    statements,
   };
 };
 
@@ -319,6 +323,66 @@ describe("groupTrackingRouter", () => {
     expect(Date.now() - started).toBeLessThan(4_000);
     expect(result).toEqual({ accepted: ["point-1"], discarded: [], duplicates: [], expired: [] });
   }, 10_000);
+
+  test("uploads share the group and membership locks so a group's uploads run side by side", async () => {
+    const { caller, statements } = await createCaller({
+      createManyMock: mock(async () => ({ count: 1 })),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
+    });
+
+    await caller.groupTracking.uploadBatch({
+      groupId: "group-1",
+      points: [
+        {
+          algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+          ciphertext: "ciphertext",
+          clientPointId: "point-1",
+          epochId: "epoch-1",
+          kind: TRACKING_POINT_KIND,
+          nonce: validNonce,
+          senderDeviceId: "device-1",
+        },
+      ],
+    });
+
+    const locks = statements
+      .filter((sql) => / FOR (SHARE|UPDATE|NO KEY UPDATE)/.test(sql))
+      .map((sql) => [sql.match(/FROM "(\w+)"/)?.[1], sql.match(/FOR [A-Z ]+/)?.[0]?.trim()]);
+    expect(locks).toEqual([
+      ["User", "FOR SHARE"],
+      ["Group", "FOR SHARE"],
+      ["GroupMember", "FOR SHARE"],
+    ]);
+  });
+
+  test("inserts a batch in clientPointId order so overlapping uploads lock rows in the same order", async () => {
+    const createManyMock = mock(async (_args: { data: Array<{ clientPointId: string }> }) => ({
+      count: 3,
+    }));
+    const { caller } = await createCaller({
+      createManyMock,
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
+    });
+    const point = (clientPointId: string) => ({
+      algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+      ciphertext: "ciphertext",
+      clientPointId,
+      epochId: "epoch-1",
+      kind: TRACKING_POINT_KIND,
+      nonce: validNonce,
+      senderDeviceId: "device-1",
+    });
+
+    const result = await caller.groupTracking.uploadBatch({
+      groupId: "group-1",
+      points: [point("point-b"), point("point-c"), point("point-a")],
+    });
+
+    expect(
+      createManyMock.mock.calls[0]?.[0].data.map(({ clientPointId }) => clientPointId),
+    ).toEqual(["point-a", "point-b", "point-c"]);
+    expect(result.accepted).toEqual(["point-b", "point-c", "point-a"]);
+  });
 
   test("rejects an upload if membership was removed after authorization", async () => {
     const createManyMock = mock(async () => ({ count: 1 }));

@@ -194,17 +194,19 @@ export const uploadGroupTrackingBatch = async ({
 
   if (pointsToInsert.length > 0) {
     await db.groupEncryptedPayload.createMany({
-      data: pointsToInsert.map((point) => ({
-        algorithm: point.algorithm,
-        ciphertext: point.ciphertext,
-        clientPointId: point.clientPointId,
-        epochId: point.epochId,
-        groupId,
-        kind: point.kind,
-        nonce: point.nonce,
-        senderDeviceId: point.senderDeviceId,
-        senderUserId: userId,
-      })),
+      data: pointsToInsert
+        .map((point) => ({
+          algorithm: point.algorithm,
+          ciphertext: point.ciphertext,
+          clientPointId: point.clientPointId,
+          epochId: point.epochId,
+          groupId,
+          kind: point.kind,
+          nonce: point.nonce,
+          senderDeviceId: point.senderDeviceId,
+          senderUserId: userId,
+        }))
+        .sort((first, second) => (first.clientPointId < second.clientPointId ? -1 : 1)),
       skipDuplicates: true,
     });
     await db.userDevice.updateMany({
