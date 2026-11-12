@@ -53,15 +53,17 @@ jobs:
           COOLIFY_ENDPOINT: ${{ secrets.COOLIFY_ENDPOINT }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
         run: |
+          api="${COOLIFY_ENDPOINT%/}"
+          api="${api%/api/v1}/api/v1"
           applications=$(curl --fail-with-body --silent --show-error \
             --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
-            "${COOLIFY_ENDPOINT%/}/api/v1/applications")
+            "${api}/applications")
           application=$(jq -cer 'if type != "array" then error("Expected an application list from Coolify") else [.[] | select(.name == "OpenBeacon Backend" and (.deleted_at == null))] | if length != 1 then error("Expected one active OpenBeacon Backend application; found \(length). Check the Coolify endpoint and token access.") elif (.[0].id | type != "number") then error("Backend application has no numeric id") elif (.[0].uuid | type != "string" or length == 0) then error("Backend application has no UUID") else .[0] | {id, uuid} end end' <<< "$applications")
           application_id=$(jq -er '.id | tostring' <<< "$application")
           application_uuid=$(jq -er '.uuid' <<< "$application")
           curl --fail-with-body --silent --show-error \
             --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
-            "${COOLIFY_ENDPOINT%/}/api/v1/deployments" | \
+            "${api}/deployments" | \
             jq -e --arg app "$application_id" 'if type != "array" then error("Unexpected deployments response") else all(.[]; (.application_id | tostring) != $app or (.status != "queued" and .status != "in_progress")) end' > /dev/null || {
               echo 'Unable to confirm that no backend deployment is active. Check Coolify before releasing.' >&2
               exit 1
@@ -71,7 +73,7 @@ jobs:
           runner_uuid=$(jq -er '.uuid | strings | select(length > 0)' <<< "$runner")
           curl --fail-with-body --silent --show-error \
             --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
-            "${COOLIFY_ENDPOINT%/}/api/v1/deployments" | \
+            "${api}/deployments" | \
             jq -e --arg app "$runner_id" 'if type != "array" then error("Unexpected deployments response") else all(.[]; (.application_id | tostring) != $app or (.status != "queued" and .status != "in_progress")) end' > /dev/null
           echo "uuid=${application_uuid}" >> "$GITHUB_OUTPUT"
           echo "runner_uuid=${runner_uuid}" >> "$GITHUB_OUTPUT"
@@ -156,16 +158,18 @@ jobs:
           COOLIFY_BACKEND_UUID: ${{ steps.coolify_application.outputs.uuid }}
           COOLIFY_RUNNER_UUID: ${{ steps.coolify_application.outputs.runner_uuid }}
         run: |
+          api="${COOLIFY_ENDPOINT%/}"
+          api="${api%/api/v1}/api/v1"
           for resource_uuid in "$COOLIFY_BACKEND_UUID" "$COOLIFY_RUNNER_UUID"; do
           response=$(curl --fail-with-body --silent --show-error --request POST --get \
             --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
             --data-urlencode "uuid=${resource_uuid}" \
-            "${COOLIFY_ENDPOINT%/}/api/v1/deploy")
+            "${api}/deploy")
           deployment_uuid=$(jq -er --arg app "$resource_uuid" '.deployments | map(select(.resource_uuid == $app)) | if length == 1 then .[0].deployment_uuid | select(type == "string" and length > 0) else empty end' <<< "$response")
           for _ in {1..120}; do
             status=$(curl --fail-with-body --silent --show-error \
               --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
-              "${COOLIFY_ENDPOINT%/}/api/v1/deployments/${deployment_uuid}" | jq -er '.status | select(type == "string" and length > 0)')
+              "${api}/deployments/${deployment_uuid}" | jq -er '.status | select(type == "string" and length > 0)')
             case "$status" in
               finished) break ;;
               failed|canceled*|cancelled*|stopped) echo "Deployment ${deployment_uuid} ended with status ${status}." >&2; exit 1 ;;
