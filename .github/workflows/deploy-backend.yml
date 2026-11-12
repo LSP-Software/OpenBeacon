@@ -87,7 +87,7 @@ jobs:
           for image in openbeacon-backend openbeacon-scheduled-jobs openbeacon-map-tiles; do
             ref="docker.io/lspsoftware/${image}:${VERSION}"
             docker buildx imagetools inspect "$ref" > /dev/null || {
-              echo "${ref} is not published. Run the Build images workflow for this version first." >&2
+              echo "${ref} is not published. Run the Publish images to Docker Hub workflow for this version first." >&2
               exit 1
             }
           done

@@ -60,17 +60,18 @@ allows Cloudflare's IP ranges. Otherwise use `cloudflare-authenticated`.
 
 The `Deploy backend` GitHub Actions workflow also deploys the separate scheduled job runner. Every installation needs the runner: besides account deletion, it deletes expired email codes and verification tokens every hour, deletes new devices that weren't set up within 7 days or were removed more than 7 days ago, and deletes old device links and expired device challenges. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
 
-Building and deploying are separate workflows. Both use the `DOCKERHUB_USERNAME`
-and `DOCKERHUB_TOKEN` secrets in the `production` GitHub environment.
+Publishing and deploying are separate workflows. Both use the
+`DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets in the `production` GitHub
+environment.
 
-The `Build images` workflow runs on every push to `main` that changes server
-code, and can be dispatched from `main` by hand. It builds the backend, runner
-and map tiles images and pushes them to `lspsoftware/openbeacon-backend`,
-`lspsoftware/openbeacon-scheduled-jobs` and `lspsoftware/openbeacon-map-tiles`,
-tagged with `serverVersion` from `src/version.ts`. It never moves
-`latest-stable` and never deploys. An image already published for that version
-is left alone: a re-run of the same commit skips it, and a different commit
-gets a warning to bump `serverVersion`.
+To publish, dispatch the `Publish images to Docker Hub` workflow from `main`.
+It builds the backend, runner and map tiles images and pushes them to
+`lspsoftware/openbeacon-backend`, `lspsoftware/openbeacon-scheduled-jobs` and
+`lspsoftware/openbeacon-map-tiles`, tagged with `serverVersion` from
+`src/version.ts`. It never moves `latest-stable` and never deploys. Re-running
+it for the same commit skips images it already pushed, and it fails if that
+version was already published from a different commit, so bump
+`serverVersion` for every release.
 
 To release, dispatch the `Deploy backend` workflow from `main`. It releases
 `serverVersion` from `main` unless you enter another version, and fails if the

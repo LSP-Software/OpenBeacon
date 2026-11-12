@@ -39,7 +39,7 @@ The service reads `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` an
 
 ## Running the service
 
-The `Build images` workflow publishes `lspsoftware/openbeacon-map-tiles` tagged with `serverVersion`, and the `Deploy backend` workflow points `latest-stable` at a released version, but neither redeploys the service. Deploy it from Coolify when `map-tiles status` shows no update running.
+The `Publish images to Docker Hub` workflow publishes `lspsoftware/openbeacon-map-tiles` tagged with `serverVersion`, and the `Deploy backend` workflow points `latest-stable` at a released version, but neither redeploys the service. Deploy it from Coolify when `map-tiles status` shows no update running.
 
 To build the image yourself, run this from the repository root:
 
