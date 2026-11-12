@@ -1,5 +1,4 @@
 import { expect, mock, test } from "bun:test";
-import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 import { accountRouter } from "./accountRouter.ts";
 
@@ -9,7 +8,7 @@ test("a delayed sharing change cannot mutate the newly signed-in account", async
   });
   const router = createTRPCRouter({ account: accountRouter });
   const caller = router.createCaller({
-    cache: createIntegrationTestCache(() => 0),
+    cache: { rateLimits: { consume: async () => ({ allowed: true }) } },
     db: { $transaction: transaction },
     clientIp: "127.0.0.1",
     deviceId: "new-account-phone",
@@ -54,7 +53,7 @@ test("an authenticated request whose linked session ended cannot resume sharing"
   };
   const router = createTRPCRouter({ account: accountRouter });
   const caller = router.createCaller({
-    cache: createIntegrationTestCache(() => 0),
+    cache: { rateLimits: { consume: async () => ({ allowed: true }) } },
     db: { $transaction: async (callback: (db: typeof tx) => Promise<unknown>) => callback(tx) },
     clientIp: "127.0.0.1",
     deviceId: "removed-phone",
