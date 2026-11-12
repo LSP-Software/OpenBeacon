@@ -2008,6 +2008,36 @@ describe("tracking service", () => {
     expect(stopCaptureCalls).toBe(1);
   });
 
+  test("a notice asked for during a revoke that's already running is shown once", async () => {
+    captureRunning = true;
+
+    await Promise.all([
+      revokeTrackingAccess(),
+      revokeTrackingAccess({ notice: "signedOut" }),
+      revokeTrackingAccess({ notice: "signedOut" }),
+    ]);
+
+    expect(stopCaptureCalls).toBe(1);
+    expect(notices).toEqual([{ kind: "signedOut" }]);
+  });
+
+  test("a concurrent revoke doesn't notify when this phone wasn't sharing", async () => {
+    captureRunning = false;
+
+    await Promise.all([revokeTrackingAccess(), revokeTrackingAccess({ notice: "deviceRemoved" })]);
+
+    expect(notices).toEqual([]);
+  });
+
+  test("a notice from one revoke isn't carried into the next", async () => {
+    captureRunning = true;
+    await revokeTrackingAccess({ notice: "signedOut" });
+    captureRunning = true;
+    await revokeTrackingAccess();
+
+    expect(notices).toEqual([{ kind: "signedOut" }]);
+  });
+
   test("stops capture when native key removal fails", async () => {
     failRevokeEpochKeys = true;
 

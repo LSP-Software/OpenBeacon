@@ -40,6 +40,16 @@ export type CiphertextQueueEviction = {
   revision: number;
 };
 
+export type NoticeKind =
+  | "appTooOld"
+  | "serverTooOld"
+  | "selfHostedServerTooOld"
+  | "outOfSync"
+  | "deviceRemoved"
+  | "signedOut";
+
+export type NoticeSlot = "compatibility" | "locationPermission" | "signedOut" | "sharingChanged";
+
 declare class OpenBeaconTrackingModule extends NativeModule {
   setSharingState(
     owner: string,
@@ -70,18 +80,8 @@ declare class OpenBeaconTrackingModule extends NativeModule {
   deleteCiphertexts(ids: number[]): Promise<void>;
   requeueCiphertexts(ids: number[], error?: string | null): Promise<void>;
   areNotificationsEnabled(): boolean;
-  showNotice(
-    kind:
-      | "appTooOld"
-      | "serverTooOld"
-      | "selfHostedServerTooOld"
-      | "outOfSync"
-      | "deviceRemoved"
-      | "signedOut",
-  ): boolean;
-  dismissNotice(
-    slot: "compatibility" | "locationPermission" | "signedOut" | "sharingChanged",
-  ): void;
+  showNotice(kind: NoticeKind): boolean;
+  dismissNotice(slot: NoticeSlot): void;
 }
 
 export default requireNativeModule<OpenBeaconTrackingModule>("OpenBeaconTracking");

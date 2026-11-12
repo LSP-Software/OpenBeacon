@@ -172,6 +172,10 @@ object TrackingRuntime {
     enabled: Boolean,
   ) {
     check(context.getSharedPreferences("openbeacon_tracking_capture", Context.MODE_PRIVATE).edit().putBoolean("enabled", enabled).commit())
-    if (!enabled) SharingResumeWorker.cancel(context)
+    if (!enabled) {
+      SharingResumeWorker.cancel(context)
+      Notices.dismiss(context, NoticeSlot.LOCATION_PERMISSION)
+      Notices.dismiss(context, NoticeSlot.SHARING_CHANGED)
+    }
   }
 }

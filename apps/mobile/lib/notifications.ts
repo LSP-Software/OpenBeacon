@@ -1,12 +1,9 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useEffect } from "react";
 import { AppState, PermissionsAndroid, Platform } from "react-native";
+import type { NoticeSlot } from "../modules/openbeacon-tracking/index.ts";
 import type { ApiCompatibilityProblem } from "./apiCompatibility.ts";
-
-const loadTrackingModule = async () =>
-  Platform.OS === "android"
-    ? (await import("../modules/openbeacon-tracking/index.ts")).default
-    : null;
+import { loadTrackingModule } from "./trackingModule.ts";
 
 export const showNotice = async (
   notice:
@@ -14,6 +11,7 @@ export const showNotice = async (
     | { kind: "deviceRemoved" }
     | { kind: "signedOut" },
 ): Promise<boolean> => {
+  if (AppState.currentState === "active") return false;
   const trackingModule = await loadTrackingModule();
   if (!trackingModule) return false;
   const kind =
@@ -26,9 +24,7 @@ export const showNotice = async (
   return result.data ?? false;
 };
 
-export const dismissNotice = async (
-  slot: "compatibility" | "locationPermission" | "signedOut" | "sharingChanged",
-) => {
+export const dismissNotice = async (slot: NoticeSlot) => {
   const trackingModule = await loadTrackingModule();
   if (!trackingModule) return;
   await tryCatch(Promise.resolve().then(() => trackingModule.dismissNotice(slot)));

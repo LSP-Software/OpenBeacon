@@ -4,7 +4,6 @@ import {
   TRACKING_POINT_KIND,
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
-import { Platform } from "react-native";
 import type { CiphertextQueueItem } from "../modules/openbeacon-tracking/index.ts";
 import { trpcClient } from "./api.ts";
 import {
@@ -38,6 +37,7 @@ import {
   markTrackingKeysStale,
   recordTrackingKeyCheck,
 } from "./trackingKeyCheck.ts";
+import { loadTrackingModule } from "./trackingModule.ts";
 import { recordTrackingUpload } from "./trackingUploadTime.ts";
 import { notifyGroupEpochChange } from "./trackingEvents.ts";
 import { hasPendingSharingPause, syncLocationSharing } from "./locationSharing.ts";
@@ -51,6 +51,8 @@ let flushPromise: Promise<void> | null = null;
 let flushWork: Promise<void> | null = null;
 let flushController: AbortController | null = null;
 let revokePromise: Promise<void> | null = null;
+type RevokeNotice = Exclude<Parameters<typeof showNotice>[0]["kind"], "compatibility">;
+let revokeNotice: RevokeNotice | null = null;
 let captureRefreshPending = false;
 let trackingPaused = false;
 let uploadRejectedKeys = false;
@@ -76,14 +78,6 @@ const getKeyCheckScope = (userId: string, startCapture: boolean) =>
 const hasFreshKeyCheck = async (startCapture: boolean) => {
   const device = await getRegisteredDeviceKey();
   return Boolean(device && !isTrackingKeyCheckDue(getKeyCheckScope(device.userId, startCapture)));
-};
-
-const loadTrackingModule = async () => {
-  if (Platform.OS !== "android") {
-    return null;
-  }
-
-  return (await import("../modules/openbeacon-tracking/index.ts")).default;
 };
 
 const getProvisionedKeyIdentity = ({
@@ -480,10 +474,7 @@ export const reconcileTrackingKeys = ({
     );
     if (result.error) {
       if (version === reconcileVersion && getErrorCode(result.error) === "UNAUTHORIZED")
-        await revokeTrackingAccess({
-          keepDeviceRegistration: isDeviceRemovedError(result.error),
-          notice: isDeviceRemovedError(result.error) ? "deviceRemoved" : "signedOut",
-        });
+        await revokeUnauthorizedTrackingAccess(result.error);
       throw result.error;
     }
     if (result.data) keyAccessChangePending = true;
@@ -602,11 +593,7 @@ const uploadClaimedItems = async (
       }
     }
     if (getErrorCode(uploadResult.error) === "UNAUTHORIZED") {
-      await revokeTrackingAccess({
-        cancelFlush: false,
-        keepDeviceRegistration: isDeviceRemovedError(uploadResult.error),
-        notice: isDeviceRemovedError(uploadResult.error) ? "deviceRemoved" : "signedOut",
-      });
+      await revokeUnauthorizedTrackingAccess(uploadResult.error, false);
       await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
       throw uploadResult.error;
     }
@@ -806,9 +793,7 @@ export const syncBackgroundTracking = async () => {
   }
 };
 
-const revokeTrackingAccessInternal = async (
-  notice: "deviceRemoved" | "signedOut" | undefined,
-): Promise<void> => {
+const revokeTrackingAccessInternal = async (): Promise<void> => {
   reconcileVersion += 1;
   reconcileOptions = null;
   for (const cancel of cancelReconciliations) cancel();
@@ -822,13 +807,13 @@ const revokeTrackingAccessInternal = async (
     return;
   }
 
-  const wasSharing = notice !== undefined && trackingModule.isCaptureRunning();
+  const wasSharing = trackingModule.isCaptureRunning();
   try {
     trackingModule.revokeEpochKeys();
   } finally {
     await trackingModule.stopCapture();
   }
-  if (notice && wasSharing) await showNotice({ kind: notice });
+  if (revokeNotice && wasSharing) await showNotice({ kind: revokeNotice });
 };
 
 export const revokeTrackingAccess = ({
@@ -838,7 +823,7 @@ export const revokeTrackingAccess = ({
 }: {
   cancelFlush?: boolean;
   keepDeviceRegistration?: boolean;
-  notice?: "deviceRemoved" | "signedOut";
+  notice?: RevokeNotice;
 } = {}): Promise<void> => {
   if (!keepDeviceRegistration) cancelDeviceKeyRegistrations();
   if (cancelFlush) {
@@ -847,14 +832,25 @@ export const revokeTrackingAccess = ({
     flushWork = null;
     flushController = null;
   }
+  if (notice) revokeNotice = notice;
   if (revokePromise) {
     return revokePromise;
   }
 
-  revokePromise = revokeTrackingAccessInternal(notice).finally(() => {
+  revokePromise = revokeTrackingAccessInternal().finally(() => {
     revokePromise = null;
+    revokeNotice = null;
   });
   return revokePromise;
+};
+
+const revokeUnauthorizedTrackingAccess = (error: unknown, cancelFlush = true) => {
+  const deviceRemoved = isDeviceRemovedError(error);
+  return revokeTrackingAccess({
+    cancelFlush,
+    keepDeviceRegistration: deviceRemoved,
+    notice: deviceRemoved ? "deviceRemoved" : "signedOut",
+  });
 };
 
 export const prepareTrackingSignOut = async (): Promise<void> => {

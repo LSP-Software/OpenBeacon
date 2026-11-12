@@ -7,6 +7,7 @@
   <string name="openbeacon_tracking_notification_paused_title">Location sharing paused</string>
   <string name="openbeacon_tracking_notification_paused_body">Your groups can\'t see where you are.</string>
   <string name="openbeacon_tracking_notification_paused_until_body">Sharing starts again at %1$s.</string>
+  <string name="openbeacon_tracking_notification_paused_until_day_body">Sharing starts again on %1$s at %2$s.</string>
   <string name="openbeacon_notice_channel">Sharing alerts</string>
   <string name="openbeacon_notice_channel_description">When this phone stops sharing its location or needs you to do something.</string>
   <string name="openbeacon_notice_app_too_old_title">Update Open Beacon</string>

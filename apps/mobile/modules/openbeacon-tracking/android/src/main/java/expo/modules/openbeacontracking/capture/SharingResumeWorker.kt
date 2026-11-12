@@ -18,6 +18,7 @@ import com.facebook.react.bridge.ReactContext
 import com.facebook.react.jstasks.HeadlessJsTaskConfig
 import com.facebook.react.jstasks.HeadlessJsTaskContext
 import com.facebook.react.jstasks.HeadlessJsTaskEventListener
+import expo.modules.openbeacontracking.Notice
 import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.TrackingRuntime
 import java.util.concurrent.TimeUnit
@@ -144,9 +145,9 @@ class SharingResumeWorker(
       Notices.show(
         context,
         when {
-          TrackingRuntime.hasLostLocationPermission(context) -> Notices.LOCATION_PERMISSION
-          TrackingRuntime.sharingState(context).isPaused(System.currentTimeMillis()) -> Notices.SHARING_CHANGED
-          else -> Notices.SHARING_RESUMED
+          TrackingRuntime.hasLostLocationPermission(context) -> Notice.LOCATION_PERMISSION
+          TrackingRuntime.sharingState(context).isPaused(System.currentTimeMillis()) -> Notice.SHARING_CHANGED
+          else -> Notice.SHARING_RESUMED
         },
       )
     }

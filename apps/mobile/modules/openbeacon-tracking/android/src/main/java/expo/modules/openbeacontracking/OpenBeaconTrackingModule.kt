@@ -17,6 +17,10 @@ class OpenBeaconTrackingModule : Module() {
     ModuleDefinition {
       Name("OpenBeaconTracking")
 
+      OnCreate {
+        Notices.removeOldChannels(requireContext())
+      }
+
       Function("setSharingState") { owner: String, deviceId: String, prefix: String, paused: Boolean, until: Double?, after: Double? ->
         TrackingRuntime.applySharingState(requireContext(), owner, deviceId, SharingCaptureState(prefix, paused, until?.toLong(), after?.toLong() ?: 0L))
       }
@@ -115,11 +119,11 @@ class OpenBeaconTrackingModule : Module() {
       }
 
       Function("showNotice") { kind: String ->
-        Notices.show(requireContext(), kind)
+        Notices.show(requireContext(), Notice.of(kind))
       }
 
       Function("dismissNotice") { slot: String ->
-        Notices.dismiss(requireContext(), slot)
+        Notices.dismiss(requireContext(), NoticeSlot.of(slot))
       }
 
       AsyncFunction("countUnassignedCiphertexts") { senderDeviceId: String ->

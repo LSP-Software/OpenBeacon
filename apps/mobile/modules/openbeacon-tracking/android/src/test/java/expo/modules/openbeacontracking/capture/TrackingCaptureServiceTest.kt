@@ -6,10 +6,14 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.text.format.DateFormat
+import android.text.format.DateUtils
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
+import expo.modules.openbeacontracking.Notice
+import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.TrackingRuntime
 import expo.modules.openbeacontracking.keys.InMemoryEpochKeyStore
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
@@ -25,6 +29,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
+import java.util.Date
 
 @RunWith(RobolectricTestRunner::class)
 class TrackingCaptureServiceTest {
@@ -207,6 +212,32 @@ class TrackingCaptureServiceTest {
   }
 
   @Test
+  fun aTimedPauseEndingOnAnotherDaySaysWhichDay() {
+    val until = System.currentTimeMillis() + 2 * 86_400_000L
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.1:", paused = true, pausedUntil = until))
+    val service = createService()
+    service.onStartCommand(startIntent(TrackingRuntime.captureCommands.start()), 0, 1)
+
+    assertEquals(
+      application.getString(
+        expo.modules.openbeacontracking.R.string.openbeacon_tracking_notification_paused_until_day_body,
+        DateUtils.formatDateTime(application, until, DateUtils.FORMAT_SHOW_WEEKDAY or DateUtils.FORMAT_SHOW_DATE),
+        DateFormat.getTimeFormat(application).format(Date(until)),
+      ),
+      shadowOf(service).lastForegroundNotification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString(),
+    )
+  }
+
+  @Test
+  fun turningSharingOffClearsStaleSharingAlerts() {
+    Notices.show(application, Notice.LOCATION_PERMISSION)
+    Notices.show(application, Notice.SHARING_CHANGED)
+    TrackingRuntime.setCaptureEnabled(application, false)
+
+    assertTrue(shadowOf(application.getSystemService(NotificationManager::class.java)).allNotifications.isEmpty())
+  }
+
+  @Test
   fun aPauseWithoutAnEndSaysGroupsCantSeeThePhone() {
     TrackingRuntime.setSharingState(application, SharingCaptureState(paused = true))
     val service = createService()
@@ -233,7 +264,7 @@ class TrackingCaptureServiceTest {
   }
 
   @Test
-  fun aStickyRestartAfterLocationAccessIsRemovedAsksJsToTellTheOwner() {
+  fun aStickyRestartAfterLocationAccessIsRemovedTellsTheOwner() {
     shadowOf(application).denyPermissions(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
     val service = createService()
 

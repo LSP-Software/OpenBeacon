@@ -15,6 +15,7 @@ import android.os.Looper
 import android.os.Handler
 import android.os.SystemClock
 import android.text.format.DateFormat
+import android.text.format.DateUtils
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -24,11 +25,14 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import expo.modules.openbeacontracking.Notice
+import expo.modules.openbeacontracking.NoticeSlot
 import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.R
 import expo.modules.openbeacontracking.TrackingRuntime
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -194,8 +198,8 @@ class TrackingCaptureService : Service() {
         TrackingRuntime.isCaptureRunning = true
       }
       SharingResumeWorker.cancel(this)
-      Notices.dismiss(this, Notices.SLOT_LOCATION_PERMISSION)
-      Notices.dismiss(this, Notices.SLOT_SHARING_CHANGED)
+      Notices.dismiss(this, NoticeSlot.LOCATION_PERMISSION)
+      Notices.dismiss(this, NoticeSlot.SHARING_CHANGED)
       currentIntervalMs = intervalMs
       updateSharing()
     } catch (error: SecurityException) {
@@ -315,7 +319,7 @@ class TrackingCaptureService : Service() {
   }
 
   private fun stopAfterFailedStart() {
-    if (TrackingRuntime.hasLostLocationPermission(this)) Notices.show(this, Notices.LOCATION_PERMISSION)
+    if (TrackingRuntime.hasLostLocationPermission(this)) Notices.show(this, Notice.LOCATION_PERMISSION)
     stopSelf()
   }
 
@@ -461,12 +465,19 @@ class TrackingCaptureService : Service() {
   private fun buildNotification(): Notification {
     val sharing = TrackingRuntime.sharingState(this)
     val paused = sharing.isPaused(System.currentTimeMillis())
+    val pausedUntil = sharing.pausedUntil
     val body =
       when {
         !paused -> getString(R.string.openbeacon_tracking_notification_body)
-        sharing.pausedUntil != null ->
-          getString(R.string.openbeacon_tracking_notification_paused_until_body, DateFormat.getTimeFormat(this).format(Date(sharing.pausedUntil)))
-        else -> getString(R.string.openbeacon_tracking_notification_paused_body)
+        pausedUntil == null -> getString(R.string.openbeacon_tracking_notification_paused_body)
+        isToday(pausedUntil) ->
+          getString(R.string.openbeacon_tracking_notification_paused_until_body, DateFormat.getTimeFormat(this).format(Date(pausedUntil)))
+        else ->
+          getString(
+            R.string.openbeacon_tracking_notification_paused_until_day_body,
+            DateUtils.formatDateTime(this, pausedUntil, DateUtils.FORMAT_SHOW_WEEKDAY or DateUtils.FORMAT_SHOW_DATE),
+            DateFormat.getTimeFormat(this).format(Date(pausedUntil)),
+          )
       }
     return NotificationCompat
       .Builder(this, CHANNEL_ID)
@@ -481,6 +492,12 @@ class TrackingCaptureService : Service() {
       .setCategory(NotificationCompat.CATEGORY_SERVICE)
       .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
       .build()
+  }
+
+  private fun isToday(epochMillis: Long): Boolean {
+    val day = Calendar.getInstance().apply { timeInMillis = epochMillis }
+    val today = Calendar.getInstance()
+    return day.get(Calendar.YEAR) == today.get(Calendar.YEAR) && day.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR)
   }
 
   private data class LastQueuedFix(

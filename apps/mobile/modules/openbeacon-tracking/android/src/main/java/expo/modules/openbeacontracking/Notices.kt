@@ -7,68 +7,86 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import androidx.annotation.StringRes
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 
+enum class NoticeSlot(
+  val key: String,
+  val id: Int,
+) {
+  COMPATIBILITY("compatibility", 7261),
+  SHARING_CHANGED("sharingChanged", 7262),
+  LOCATION_PERMISSION("locationPermission", 7263),
+  SIGNED_OUT("signedOut", 7264),
+  ;
+
+  companion object {
+    fun of(key: String) = entries.firstOrNull { it.key == key } ?: throw IllegalArgumentException("Unknown notice slot $key.")
+  }
+}
+
+enum class Notice(
+  val kind: String,
+  val slot: NoticeSlot,
+  @StringRes val title: Int,
+  @StringRes val body: Int,
+  val link: String? = null,
+) {
+  APP_TOO_OLD("appTooOld", NoticeSlot.COMPATIBILITY, R.string.openbeacon_notice_app_too_old_title, R.string.openbeacon_notice_app_too_old_body),
+  SERVER_TOO_OLD("serverTooOld", NoticeSlot.COMPATIBILITY, R.string.openbeacon_notice_sharing_paused_title, R.string.openbeacon_notice_server_updating_body),
+  SELF_HOSTED_SERVER_TOO_OLD(
+    "selfHostedServerTooOld",
+    NoticeSlot.COMPATIBILITY,
+    R.string.openbeacon_notice_sharing_paused_title,
+    R.string.openbeacon_notice_self_hosted_server_too_old_body,
+  ),
+  OUT_OF_SYNC("outOfSync", NoticeSlot.COMPATIBILITY, R.string.openbeacon_notice_sharing_paused_title, R.string.openbeacon_notice_out_of_sync_body),
+  LOCATION_PERMISSION(
+    "locationPermission",
+    NoticeSlot.LOCATION_PERMISSION,
+    R.string.openbeacon_notice_location_permission_title,
+    R.string.openbeacon_notice_location_permission_body,
+    "openbeacon:///account/overview",
+  ),
+  DEVICE_REMOVED("deviceRemoved", NoticeSlot.SIGNED_OUT, R.string.openbeacon_notice_signed_out_title, R.string.openbeacon_notice_device_removed_body),
+  SIGNED_OUT("signedOut", NoticeSlot.SIGNED_OUT, R.string.openbeacon_notice_signed_out_title, R.string.openbeacon_notice_signed_out_body),
+  SHARING_RESUMED("sharingResumed", NoticeSlot.SHARING_CHANGED, R.string.openbeacon_notice_sharing_resumed_title, R.string.openbeacon_notice_sharing_resumed_body),
+  SHARING_CHANGED("sharingChanged", NoticeSlot.SHARING_CHANGED, R.string.openbeacon_notice_sharing_changed_title, R.string.openbeacon_notice_sharing_changed_body),
+  ;
+
+  companion object {
+    fun of(kind: String) = entries.firstOrNull { it.kind == kind } ?: throw IllegalArgumentException("Unknown notice $kind.")
+  }
+}
+
 object Notices {
-  const val LOCATION_PERMISSION = "locationPermission"
-  const val SHARING_RESUMED = "sharingResumed"
-  const val SHARING_CHANGED = "sharingChanged"
-
-  const val SLOT_COMPATIBILITY = "compatibility"
-  const val SLOT_LOCATION_PERMISSION = "locationPermission"
-  const val SLOT_SIGNED_OUT = "signedOut"
-  const val SLOT_SHARING_CHANGED = "sharingChanged"
-
   private const val CHANNEL_ID = "openbeacon_sharing_alerts"
-  private const val OLD_COMPATIBILITY_CHANNEL_ID = "openbeacon_app_compatibility"
 
-  private val slotIds =
-    mapOf(
-      SLOT_COMPATIBILITY to 7261,
-      SLOT_SHARING_CHANGED to 7262,
-      SLOT_LOCATION_PERMISSION to 7263,
-      SLOT_SIGNED_OUT to 7264,
-    )
+  fun removeOldChannels(context: Context) {
+    NotificationManagerCompat.from(context).deleteNotificationChannel("openbeacon_app_compatibility")
+  }
 
-  private data class Notice(
-    val slot: String,
-    val title: Int,
-    val body: Int,
-    val link: String? = null,
-  )
-
-  private val notices =
-    mapOf(
-      "appTooOld" to Notice(SLOT_COMPATIBILITY, R.string.openbeacon_notice_app_too_old_title, R.string.openbeacon_notice_app_too_old_body),
-      "serverTooOld" to Notice(SLOT_COMPATIBILITY, R.string.openbeacon_notice_sharing_paused_title, R.string.openbeacon_notice_server_updating_body),
-      "selfHostedServerTooOld" to Notice(SLOT_COMPATIBILITY, R.string.openbeacon_notice_sharing_paused_title, R.string.openbeacon_notice_self_hosted_server_too_old_body),
-      "outOfSync" to Notice(SLOT_COMPATIBILITY, R.string.openbeacon_notice_sharing_paused_title, R.string.openbeacon_notice_out_of_sync_body),
-      LOCATION_PERMISSION to
-        Notice(SLOT_LOCATION_PERMISSION, R.string.openbeacon_notice_location_permission_title, R.string.openbeacon_notice_location_permission_body, "openbeacon:///account/overview"),
-      "deviceRemoved" to Notice(SLOT_SIGNED_OUT, R.string.openbeacon_notice_signed_out_title, R.string.openbeacon_notice_device_removed_body),
-      "signedOut" to Notice(SLOT_SIGNED_OUT, R.string.openbeacon_notice_signed_out_title, R.string.openbeacon_notice_signed_out_body),
-      SHARING_RESUMED to Notice(SLOT_SHARING_CHANGED, R.string.openbeacon_notice_sharing_resumed_title, R.string.openbeacon_notice_sharing_resumed_body),
-      SHARING_CHANGED to Notice(SLOT_SHARING_CHANGED, R.string.openbeacon_notice_sharing_changed_title, R.string.openbeacon_notice_sharing_changed_body),
-    )
-
-  fun areEnabled(context: Context): Boolean =
-    NotificationManagerCompat.from(context).areNotificationsEnabled() &&
+  fun areEnabled(context: Context): Boolean {
+    val manager = NotificationManagerCompat.from(context)
+    return manager.areNotificationsEnabled() &&
+      manager.getNotificationChannelCompat(CHANNEL_ID)?.importance != NotificationManagerCompat.IMPORTANCE_NONE &&
       (
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
           ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
       )
+  }
 
   fun show(
     context: Context,
-    kind: String,
+    notice: Notice,
   ): Boolean {
-    val notice = notices[kind] ?: throw IllegalArgumentException("Unknown notice $kind.")
     if (!areEnabled(context)) return false
+    val alerted = context.getSharedPreferences("openbeacon_notices", Context.MODE_PRIVATE)
+    if (notice == Notice.LOCATION_PERMISSION && alerted.getBoolean(notice.kind, false)) return true
     val manager = NotificationManagerCompat.from(context)
-    manager.deleteNotificationChannel(OLD_COMPATIBILITY_CHANNEL_ID)
     manager.createNotificationChannel(
       NotificationChannelCompat
         .Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_HIGH)
@@ -77,7 +95,7 @@ object Notices {
         .setShowBadge(false)
         .build(),
     )
-    val id = slotIds.getValue(notice.slot)
+    val id = notice.slot.id
     val body = context.getString(notice.body)
     val intent =
       notice.link?.let { Intent(Intent.ACTION_VIEW, Uri.parse(it)).setPackage(context.packageName) }
@@ -97,14 +115,17 @@ object Notices {
         .setContentIntent(intent?.let { PendingIntent.getActivity(context, id, it, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT) })
         .build(),
     )
+    if (notice == Notice.LOCATION_PERMISSION) alerted.edit().putBoolean(notice.kind, true).apply()
     return true
   }
 
   fun dismiss(
     context: Context,
-    slot: String,
+    slot: NoticeSlot,
   ) {
-    val id = slotIds[slot] ?: throw IllegalArgumentException("Unknown notice slot $slot.")
-    NotificationManagerCompat.from(context).cancel(id)
+    NotificationManagerCompat.from(context).cancel(slot.id)
+    if (slot == NoticeSlot.LOCATION_PERMISSION) {
+      context.getSharedPreferences("openbeacon_notices", Context.MODE_PRIVATE).edit().remove(Notice.LOCATION_PERMISSION.kind).apply()
+    }
   }
 }

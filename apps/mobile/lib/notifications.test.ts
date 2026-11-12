@@ -3,9 +3,13 @@ import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 const shown: string[] = [];
 let showFails = false;
+const appState = {
+  currentState: "background",
+  addEventListener: () => ({ remove: () => {} }),
+};
 
 mock.module("react-native", () => ({
-  ...createReactNativeTestModule({ platformOS: "android" }),
+  ...createReactNativeTestModule({ appState, platformOS: "android" }),
   PermissionsAndroid: {},
 }));
 
@@ -24,6 +28,7 @@ const { showNotice } = await import("./notifications.ts");
 beforeEach(() => {
   shown.length = 0;
   showFails = false;
+  appState.currentState = "background";
 });
 
 describe("showNotice", () => {
@@ -37,5 +42,14 @@ describe("showNotice", () => {
   test("reports the notice as not shown when Android refuses it", async () => {
     showFails = true;
     expect(await showNotice({ kind: "signedOut" })).toBe(false);
+  });
+
+  test("leaves the notice to the in-app screens while the app is open", async () => {
+    appState.currentState = "active";
+    expect(
+      await showNotice({ kind: "compatibility", problem: "appTooOld", selfHosted: false }),
+    ).toBe(false);
+    expect(await showNotice({ kind: "signedOut" })).toBe(false);
+    expect(shown).toEqual([]);
   });
 });
