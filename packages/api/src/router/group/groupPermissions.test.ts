@@ -40,7 +40,7 @@ const createCaller = (
         { id: "target-user", email: "target@example.test", receivedGroupMemberInvites: [] },
       ]),
     },
-    groupMemberInvite: { createMany },
+    groupMemberInvite: { createMany, deleteMany: async () => ({ count: 0 }) },
   };
   return {
     createMany,

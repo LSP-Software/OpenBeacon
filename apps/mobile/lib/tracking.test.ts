@@ -111,7 +111,7 @@ let uploadGroup = async ({
 }: {
   groupId: string;
   points: unknown[];
-}): Promise<{ accepted: string[]; duplicates: string[] }> => ({
+}): Promise<{ accepted: string[]; duplicates: string[]; expired?: string[] }> => ({
   accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
   duplicates: [],
 });
@@ -1503,6 +1503,38 @@ describe("tracking service", () => {
     expect(recordedUploads).toHaveLength(0);
   });
 
+  test("drops points whose epoch the server has expired without requeueing them", async () => {
+    pendingCiphertexts = [
+      createQueueItem({ clientPointId: "point-accepted", groupId: "group-1", id: 1 }),
+      createQueueItem({ clientPointId: "point-expired", groupId: "group-1", id: 2 }),
+    ];
+    uploadGroup = async () => ({
+      accepted: ["point-accepted"],
+      duplicates: [],
+      expired: ["point-expired"],
+    });
+
+    await flushPendingTrackingPoints();
+
+    expect(uploadCalls).toHaveLength(1);
+    expect(deleted.flat().sort()).toEqual([1, 2]);
+    expect(requeued).toEqual([]);
+    expect(recordedUploads).toHaveLength(1);
+  });
+
+  test("treats a response without expired points from an older server as before", async () => {
+    pendingCiphertexts = [
+      createQueueItem({ clientPointId: "point-accepted", groupId: "group-1", id: 1 }),
+      createQueueItem({ clientPointId: "point-missing", groupId: "group-1", id: 2 }),
+    ];
+    uploadGroup = async () => ({ accepted: ["point-accepted"], duplicates: [] });
+
+    await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
+
+    expect(deleted.flat()).toEqual([1]);
+    expect(requeued).toEqual([{ ids: [2], error: "UPLOAD_RESPONSE_INCOMPLETE" }]);
+  });
+
   test("background upload does not throw when the device is offline", async () => {
     captureRunning = true;
     failRegistration = true;
@@ -2016,6 +2048,31 @@ describe("tracking service", () => {
 
       expect(requests).toEqual(expect.arrayContaining(keyCheckRequests));
       expect(requests).not.toContain("auth.registerDeviceKey");
+    });
+
+    test("an upload with expired points rechecks keys in the same run", async () => {
+      await startTracking();
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      uploadGroup = async () => ({ accepted: [], duplicates: [], expired: ["point-1"] });
+
+      await syncBackgroundTracking();
+
+      expect(requests[0]).toBe("groupTracking.uploadBatch");
+      expect(requests).toEqual(expect.arrayContaining(keyCheckRequests));
+      expect(deleted.flat()).toEqual([1]);
+    });
+
+    test("an upload without expired points doesn't recheck keys", async () => {
+      await startTracking();
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+
+      await syncBackgroundTracking();
+
+      expect(requests).toEqual(["groupTracking.uploadBatch"]);
     });
 
     const rejectUploads = (code: string, message: string) => {

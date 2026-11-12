@@ -11,6 +11,7 @@
     "./checkStorage.ts": "./src/checkStorage.ts",
     "./account-deletion.ts": "./src/lib/account-deletion.ts",
     "./storage.ts": "./src/lib/storage.ts",
+    "./image-upload.ts": "./src/lib/image-upload.ts",
     "./s3client.ts": "./src/s3client.ts",
     "./r2.ts": "./src/r2.ts"
   },

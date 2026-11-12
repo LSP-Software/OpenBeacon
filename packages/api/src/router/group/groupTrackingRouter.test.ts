@@ -271,6 +271,7 @@ describe("groupTrackingRouter", () => {
       accepted: ["point-1"],
       discarded: [],
       duplicates: [],
+      expired: [],
     });
     expect(createManyMock).toHaveBeenCalled();
   });

@@ -365,6 +365,7 @@ describe("group epoch helpers", () => {
       where: {
         id: "invite-1",
         recipientId: "user-b",
+        createdAt: { gt: expect.any(Date) },
       },
     });
     expect(findMany).toHaveBeenCalledWith({

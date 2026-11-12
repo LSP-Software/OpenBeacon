@@ -10,7 +10,7 @@ import {
   requestImageUpload,
   setPendingImageUploadForUser,
 } from "../../lib/image-upload.ts";
-import { deleteFile } from "../../lib/storage.ts";
+import { deleteFile, deleteImagePrefix } from "../../lib/storage.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import { groupMemberProcedure, groupAdminProcedure } from "../../procedures/auth/group.ts";
 
@@ -84,6 +84,12 @@ export const groupSettingsRouter = {
         },
       });
       if (!pending || pending.groupId !== input.groupId) {
+        if (
+          !(await ctx.db.group.findUnique({ where: { id: input.groupId }, select: { id: true } }))
+        ) {
+          const { error } = await tryCatch(deleteImagePrefix(env.S3_BUCKET_NAME, `${imagePath}/`));
+          if (error) console.error("[image-upload] failed to delete leftover group images");
+        }
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
           message: "No pending group image upload to confirm.",

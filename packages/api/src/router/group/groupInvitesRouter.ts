@@ -9,6 +9,7 @@ import {
   getInviteAcceptanceContext,
   persistGroupEpoch,
 } from "../../lib/groupEpochs.ts";
+import { emailInviteCreatedAfter } from "../../lib/emailInvites.ts";
 import { createGroupJoinAlerts } from "../../lib/groupJoinAlerts.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
@@ -191,7 +192,11 @@ export const groupInvitesRouter = {
       const member = await ctx.db.$transaction(async (tx) => {
         await assertAccountCanJoinGroup(tx, ctx.session.user.id);
         const invite = await tx.groupMemberInvite.findFirst({
-          where: { id: input.inviteId, recipientId: ctx.session.user.id },
+          where: {
+            id: input.inviteId,
+            recipientId: ctx.session.user.id,
+            createdAt: { gt: emailInviteCreatedAfter() },
+          },
         });
 
         if (!invite) {
@@ -203,7 +208,11 @@ export const groupInvitesRouter = {
         );
 
         const currentInvite = await tx.groupMemberInvite.findFirst({
-          where: { id: input.inviteId, recipientId: ctx.session.user.id },
+          where: {
+            id: input.inviteId,
+            recipientId: ctx.session.user.id,
+            createdAt: { gt: emailInviteCreatedAfter() },
+          },
         });
         if (!currentInvite) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
@@ -262,9 +271,12 @@ export const groupInvitesRouter = {
           });
         }
 
-        await tx.groupMemberInvite.delete({
-          where: { id: input.inviteId },
+        const deletedInvite = await tx.groupMemberInvite.deleteMany({
+          where: { id: input.inviteId, recipientId: ctx.session.user.id },
         });
+        if (deletedInvite.count !== 1) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
+        }
 
         await persistGroupEpoch({
           db: tx,
@@ -369,6 +381,9 @@ export const groupInvitesRouter = {
         ) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Only owners can invite admins." });
         }
+        await tx.groupMemberInvite.deleteMany({
+          where: { groupId: input.groupId, createdAt: { lte: emailInviteCreatedAfter() } },
+        });
         const users = await tx.user.findMany({
           where: {
             email: {
@@ -395,7 +410,7 @@ export const groupInvitesRouter = {
 
         const existingMemberIds = new Set(existingMembers.map((member) => member.userId));
 
-        const invitesToCreate = users
+        const invitesToSend = users
           .map((user) => {
             if (user.id === ctx.session.user.id) return undefined;
 
@@ -404,21 +419,33 @@ export const groupInvitesRouter = {
             const invite = input.invites.find((invite) => invite.email === user.email);
             if (!invite) return undefined;
 
-            if (user.receivedGroupMemberInvites.find((invite) => invite.groupId === input.groupId))
-              return undefined;
-
             return {
-              inviterId: ctx.session.user.id,
+              existingInviteId: user.receivedGroupMemberInvites[0]?.id,
               recipientId: user.id,
-              groupId: input.groupId,
               role: invite.role,
             };
           })
           .filter((invite) => invite !== undefined);
 
-        await tx.groupMemberInvite.createMany({
-          data: invitesToCreate,
-        });
+        const now = new Date();
+        const invitesToCreate = [];
+        for (const invite of invitesToSend) {
+          const refreshed = invite.existingInviteId
+            ? await tx.groupMemberInvite.updateMany({
+                where: { id: invite.existingInviteId },
+                data: { createdAt: now, inviterId: ctx.session.user.id, role: invite.role },
+              })
+            : undefined;
+          if (refreshed?.count === 1) continue;
+          invitesToCreate.push({
+            inviterId: ctx.session.user.id,
+            recipientId: invite.recipientId,
+            groupId: input.groupId,
+            role: invite.role,
+          });
+        }
+
+        await tx.groupMemberInvite.createMany({ data: invitesToCreate });
       });
 
       return {
@@ -430,6 +457,7 @@ export const groupInvitesRouter = {
     const invites = await ctx.db.groupMemberInvite.findMany({
       where: {
         recipientId: ctx.session.user.id,
+        createdAt: { gt: emailInviteCreatedAfter() },
       },
       include: {
         inviter: {

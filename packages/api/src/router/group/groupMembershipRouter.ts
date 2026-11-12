@@ -382,6 +382,15 @@ export const groupMembershipRouter = {
             });
           }
         }
+        if (input.role !== GroupRole.OWNER) {
+          await tx.groupMemberInvite.deleteMany({
+            where: {
+              groupId: input.groupId,
+              inviterId: member.userId,
+              ...(input.role === GroupRole.ADMIN ? { role: GroupRole.ADMIN } : {}),
+            },
+          });
+        }
         return tx.groupMember.update({
           where: { id: member.id },
           data: { role: input.role },

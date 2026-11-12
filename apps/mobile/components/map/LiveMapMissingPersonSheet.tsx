@@ -117,7 +117,7 @@ export const LiveMapMissingPersonSheet = ({
           <Text className="text-sm">
             {person.isSelf
               ? "Your location hasn’t been shared from this phone yet. Check OpenBeacon has location permission and background location turned on."
-              : `This phone hasn’t received a location from ${person.name}. They might have location sharing turned off, or not have opened OpenBeacon since joining.`}
+              : `This phone hasn’t received a location from ${person.name} in the last 60 days. They might have location sharing turned off, or not have opened OpenBeacon recently.`}
           </Text>
         </View>
       )}

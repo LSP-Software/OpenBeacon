@@ -22,7 +22,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "net.openbeacon.app",
-      "buildNumber": "26"
+      "buildNumber": "27"
     },
     "android": {
       "adaptiveIcon": {
@@ -31,7 +31,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "net.openbeacon.app",
-      "versionCode": 26
+      "versionCode": 27
     },
     "scheme": "openbeacon",
     "plugins": [

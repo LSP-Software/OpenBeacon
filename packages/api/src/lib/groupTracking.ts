@@ -58,6 +58,7 @@ type GroupTrackingDb = {
     >;
   };
   groupEpoch: {
+    count: (args: { where: { id: { in: string[] } } }) => Promise<number>;
     findMany: (args: {
       select: { id: true };
       where: { groupId: string; id: { in: string[] }; createdAt?: { gte: Date } };
@@ -158,7 +159,12 @@ export const uploadGroupTrackingBatch = async ({
     });
   }
 
-  if (epochs.length !== epochIds.length) {
+  const foundEpochIds = new Set(epochs.map((epoch) => epoch.id));
+  const missingEpochIds = epochIds.filter((epochId) => !foundEpochIds.has(epochId));
+  if (
+    missingEpochIds.length > 0 &&
+    (await db.groupEpoch.count({ where: { id: { in: missingEpochIds } } })) > 0
+  ) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Epoch does not belong to this group.",
@@ -168,7 +174,9 @@ export const uploadGroupTrackingBatch = async ({
   const existingClientPointIds = new Set(existingRows.map((row) => row.clientPointId));
   const sharing = await getGroupSharingStates(db, groupId);
   const discarded = points.filter((point) => {
-    if (existingClientPointIds.has(point.clientPointId)) return false;
+    if (existingClientPointIds.has(point.clientPointId) || !foundEpochIds.has(point.epochId)) {
+      return false;
+    }
     const state = sharing.find(
       (device) => device.deviceId === point.senderDeviceId && device.userId === userId,
     );
@@ -177,7 +185,9 @@ export const uploadGroupTrackingBatch = async ({
   const discardedIds = new Set(discarded.map((point) => point.clientPointId));
   const pointsToInsert = points.filter(
     (point) =>
-      !existingClientPointIds.has(point.clientPointId) && !discardedIds.has(point.clientPointId),
+      foundEpochIds.has(point.epochId) &&
+      !existingClientPointIds.has(point.clientPointId) &&
+      !discardedIds.has(point.clientPointId),
   );
 
   if (pointsToInsert.length > 0) {
@@ -209,6 +219,9 @@ export const uploadGroupTrackingBatch = async ({
     discarded: [...discardedIds],
     duplicates: points
       .filter((point) => existingClientPointIds.has(point.clientPointId))
+      .map((point) => point.clientPointId),
+    expired: points
+      .filter((point) => !foundEpochIds.has(point.epochId))
       .map((point) => point.clientPointId),
   };
 };

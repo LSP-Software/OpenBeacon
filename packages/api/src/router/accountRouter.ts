@@ -510,14 +510,23 @@ export const accountRouter = {
         noPendingImageUploadMessage: "No pending profile image upload to confirm.",
         commitImageUpload: async (imageUrl) => {
           await ctx.db.$transaction(async (tx) => {
+            const deleted = await tx.pendingUpload.deleteMany({
+              where: {
+                userId,
+                uploadType: "userAvatar",
+                groupId: "",
+                fileName: pendingUpload?.fileName ?? "",
+              },
+            });
+            if (deleted.count !== 1) {
+              throw new TRPCError({
+                code: "PRECONDITION_FAILED",
+                message: "No pending profile image upload to confirm.",
+              });
+            }
             await tx.user.update({
               where: { id: userId },
               data: { image: imageUrl },
-            });
-            await tx.pendingUpload.delete({
-              where: {
-                userId_uploadType_groupId: { userId, uploadType: "userAvatar", groupId: "" },
-              },
             });
           });
         },
