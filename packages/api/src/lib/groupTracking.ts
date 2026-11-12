@@ -40,6 +40,7 @@ type GroupTrackingDb = {
       where: {
         AND?: Array<Record<string, unknown>>;
         clientPointId?: { in: string[] };
+        createdAt?: { gte: Date };
         groupId: string;
         OR?: Array<Record<string, unknown>>;
       };
@@ -257,6 +258,7 @@ export const pollGroupTrackingPoints = async ({
       groupId,
       ...(cursor
         ? {
+            createdAt: { gte: cursor.createdAt },
             OR: [
               { createdAt: { gt: cursor.createdAt } },
               {

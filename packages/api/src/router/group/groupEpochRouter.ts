@@ -58,7 +58,11 @@ const toEpochKeyWraps = ({
 
 export const groupEpochRouter = {
   rotationContext: groupMemberProcedure.query(async ({ ctx, input }) => {
-    if (!ctx.group?.epochRotationRequired) return null;
+    const group = await ctx.db.group.findUnique({
+      where: { id: input.groupId },
+      select: { epochRotationRequired: true },
+    });
+    if (!group?.epochRotationRequired) return null;
     return getGroupJoinContext({ db: ctx.db, groupId: input.groupId, userId: ctx.session.user.id });
   }),
   rotate: groupMemberProcedure

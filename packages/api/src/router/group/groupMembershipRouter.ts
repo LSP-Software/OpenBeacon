@@ -54,8 +54,10 @@ export const groupMembershipRouter = {
         }) satisfies GroupListItem,
     );
   }),
-  get: groupMemberProcedure.query(async ({ ctx }) => {
-    return ctx.group;
+  get: groupMemberProcedure.query(async ({ ctx, input }) => {
+    const group = await ctx.db.group.findUnique({ where: { id: input.groupId } });
+    if (!group) throw new TRPCError({ code: "NOT_FOUND" });
+    return { ...group, groupMembers: [ctx.groupMember] };
   }),
   removalContext: groupMemberProcedure
     .input(z.object({ groupId: z.string().min(1), memberId: z.string().min(1) }))

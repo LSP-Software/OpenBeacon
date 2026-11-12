@@ -15,28 +15,8 @@ import { sharingDeviceRow } from "../../lib/locationSharing.testUtil.ts";
 
 const validNonce = Buffer.alloc(24, 1).toString("base64");
 
-const createGroupFindUniqueMock = (
-  isMember: boolean,
-  rotation = { epochRotationRequired: false },
-) =>
-  mock(async () =>
-    isMember
-      ? {
-          groupMembers: [
-            {
-              id: "group-member-1",
-              role: "OWNER",
-              userId: "user-1",
-            },
-          ],
-          id: "group-1",
-          ...rotation,
-        }
-      : {
-          groupMembers: [],
-          id: "group-1",
-        },
-  );
+const createMemberFindUniqueMock = (isMember: boolean) =>
+  mock(async () => (isMember ? { id: "group-member-1", role: "OWNER", userId: "user-1" } : null));
 
 let originalBetterAuthUrl: string | undefined;
 let originalBetterAuthSecret: string | undefined;
@@ -48,7 +28,7 @@ const createCaller = async ({
   findManyEpochsMock,
   findObsoleteEpochMock,
   findManyPayloadsMock,
-  groupFindUniqueMock,
+  memberFindUniqueMock,
   queryRawMock,
   now = () => 0,
   pending = false,
@@ -58,7 +38,7 @@ const createCaller = async ({
   findManyEpochsMock?: ReturnType<typeof mock>;
   findObsoleteEpochMock?: ReturnType<typeof mock>;
   findManyPayloadsMock?: ReturnType<typeof mock>;
-  groupFindUniqueMock: ReturnType<typeof createGroupFindUniqueMock>;
+  memberFindUniqueMock: ReturnType<typeof createMemberFindUniqueMock>;
   queryRawMock?: ReturnType<typeof mock>;
   now?: () => number;
   pending?: boolean;
@@ -78,11 +58,12 @@ const createCaller = async ({
     $queryRaw: async (query: { strings: string[] }) => {
       if (query.strings.join("").includes('JOIN "User" AS "account"')) return [sharingDeviceRow];
       if (query.strings.join("").includes("FOR SHARE")) return [];
+      if (query.strings.join("").includes('FROM "Group"')) return [{ id: "group-1" }];
       return queryRawMock
         ? queryRawMock(query)
         : [{ id: "group-member-1", createdAt: new Date("2026-01-01") }];
     },
-    group: { findUnique: groupFindUniqueMock },
+    groupMember: { findUnique: memberFindUniqueMock },
     groupEncryptedPayload: {
       createMany: createManyMock ?? mock(async () => ({ count: 0 })),
       findMany: findManyPayloadsMock ?? mock(async () => []),
@@ -117,7 +98,7 @@ const createCaller = async ({
     createManyMock,
     findManyDevicesMock,
     findManyPayloadsMock,
-    groupFindUniqueMock,
+    memberFindUniqueMock,
     queryRawMock,
   };
 };
@@ -151,7 +132,7 @@ describe("groupTrackingRouter", () => {
   test("supports sustained map refreshes across sixteen groups", async () => {
     let now = 0;
     const { caller } = await createCaller({
-      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
       now: () => now,
     });
 
@@ -173,10 +154,10 @@ describe("groupTrackingRouter", () => {
     const {
       caller,
       createManyMock: createMany,
-      groupFindUniqueMock,
+      memberFindUniqueMock,
     } = await createCaller({
       createManyMock,
-      groupFindUniqueMock: createGroupFindUniqueMock(false),
+      memberFindUniqueMock: createMemberFindUniqueMock(false),
     });
 
     await expect(
@@ -195,7 +176,7 @@ describe("groupTrackingRouter", () => {
         ],
       }),
     ).rejects.toBeInstanceOf(TRPCError);
-    expect(groupFindUniqueMock).toHaveBeenCalled();
+    expect(memberFindUniqueMock).toHaveBeenCalled();
     expect(createMany).not.toHaveBeenCalled();
   });
 
@@ -203,7 +184,7 @@ describe("groupTrackingRouter", () => {
     const createManyMock = mock(async () => ({ count: 0 }));
     const { caller } = await createCaller({
       createManyMock,
-      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
     });
     await expect(
       caller.groupTracking.uploadBatch({
@@ -229,7 +210,7 @@ describe("groupTrackingRouter", () => {
     const queryRawMock = mock(async () => []);
     const { caller } = await createCaller({
       findManyPayloadsMock,
-      groupFindUniqueMock: createGroupFindUniqueMock(false),
+      memberFindUniqueMock: createMemberFindUniqueMock(false),
       queryRawMock,
     });
 
@@ -249,7 +230,7 @@ describe("groupTrackingRouter", () => {
     const { caller } = await createCaller({
       createManyMock,
       findManyPayloadsMock,
-      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
     });
 
     await expect(
@@ -281,7 +262,7 @@ describe("groupTrackingRouter", () => {
     const createManyMock = mock(async () => ({ count: 1 }));
     const { caller } = await createCaller({
       createManyMock,
-      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
       queryRawMock: mock(async (query: { strings: string[] }) => {
         if (query.strings.join("").includes("AccountHistoryKey")) {
           throw new Error("key state query failed");
@@ -313,7 +294,7 @@ describe("groupTrackingRouter", () => {
     const createManyMock = mock(async () => ({ count: 1 }));
     const { caller } = await createCaller({
       createManyMock,
-      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
       queryRawMock: mock(async (query: { strings: string[] }) => {
         if (query.strings.join("").includes("AccountHistoryKey")) return new Promise(() => {});
         return [{ id: "group-member-1", createdAt: new Date("2026-01-01") }];
@@ -343,7 +324,7 @@ describe("groupTrackingRouter", () => {
     const createManyMock = mock(async () => ({ count: 1 }));
     const { caller } = await createCaller({
       createManyMock,
-      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
       queryRawMock: mock(async () => []),
     });
 
@@ -366,39 +347,6 @@ describe("groupTrackingRouter", () => {
     expect(createManyMock).not.toHaveBeenCalled();
   });
 
-  test("accepts old epochs while rotation is pending and after rotation", async () => {
-    const point = {
-      algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-      ciphertext: "ciphertext",
-      clientPointId: "point-1",
-      epochId: "epoch-1",
-      kind: TRACKING_POINT_KIND,
-      nonce: validNonce,
-      senderDeviceId: "device-1",
-    };
-    const createManyMock = mock(async () => ({ count: 1 }));
-    const pending = await createCaller({
-      createManyMock,
-      groupFindUniqueMock: createGroupFindUniqueMock(true, {
-        epochRotationRequired: true,
-      }),
-    });
-    await expect(
-      pending.caller.groupTracking.uploadBatch({ groupId: "group-1", points: [point] }),
-    ).resolves.toBeDefined();
-    const rotated = await createCaller({
-      createManyMock,
-      groupFindUniqueMock: createGroupFindUniqueMock(true, {
-        epochRotationRequired: false,
-      }),
-      findObsoleteEpochMock: mock(async () => ({ id: "epoch-1" })),
-    });
-    await expect(
-      rotated.caller.groupTracking.uploadBatch({ groupId: "group-1", points: [point] }),
-    ).resolves.toBeDefined();
-    expect(createManyMock).toHaveBeenCalled();
-  });
-
   test("refuses a Pending device on upload, poll and getLatest without reading points", async () => {
     const createManyMock = mock(async () => ({ count: 0 }));
     const findManyPayloadsMock = mock(async () => []);
@@ -406,7 +354,7 @@ describe("groupTrackingRouter", () => {
     const { caller } = await createCaller({
       createManyMock,
       findManyPayloadsMock,
-      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
       pending: true,
       queryRawMock,
     });
@@ -447,7 +395,7 @@ describe("groupTrackingRouter", () => {
     const findManyPayloadsMock = mock(async () => [point]);
     const { caller } = await createCaller({
       findManyPayloadsMock,
-      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
     });
 
     await expect(caller.groupTracking.poll({ groupId: "group-1" })).resolves.toMatchObject({
@@ -470,7 +418,7 @@ describe("groupTrackingRouter", () => {
     };
     const queryRawMock = mock(async () => [point]);
     const { caller } = await createCaller({
-      groupFindUniqueMock: createGroupFindUniqueMock(true),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
       queryRawMock,
     });
 

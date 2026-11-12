@@ -29,7 +29,6 @@ const createCaller = (
   const createMany = mock(async () => ({ count: 1 }));
   const db = {
     $queryRaw: mock(async () => [actor]),
-    group: { findUnique: mock(async () => ({ id: "group", groupMembers: [actor] })) },
     groupMember: {
       findUnique: mock(async () => actor),
       findFirst: mock(async () => ({ userId: "target-user", role: targetRole })),

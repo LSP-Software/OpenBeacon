@@ -6,26 +6,15 @@ import { protectedProcedure } from "./runtime.ts";
 export const groupMemberProcedure = protectedProcedure
   .input(z.object({ groupId: z.string().min(1).max(128) }))
   .use(async ({ ctx, next, input }) => {
-    const group = await ctx.db.group.findUnique({
-      where: {
-        id: input.groupId,
-      },
-      include: {
-        groupMembers: {
-          where: {
-            userId: ctx.session.user.id,
-          },
-        },
-      },
+    const groupMember = await ctx.db.groupMember.findUnique({
+      where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
     });
-
-    const groupMember = group?.groupMembers.find((member) => member.userId === ctx.session.user.id);
     if (!groupMember) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You are not a member of this group" });
     }
 
     return next({
-      ctx: { ...ctx, user: ctx.session.user, group, groupMember },
+      ctx: { ...ctx, user: ctx.session.user, groupMember },
     });
   });
 
