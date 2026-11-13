@@ -1971,6 +1971,8 @@ The "Update Open Beacon" screen has a disabled Update button and the server can'
 
 #### X-02 · medium · design
 
+- **Status:** fixed on `fix/beta-1-review` by "Send a machine-readable reason with upload rejections and stop matching English text" (SHA added at wrap-up). Q10 (minimal X-02). Tests: formatter sends `data.reason` (device errors keep `cause`); uploader classification per reason, and the old English message alone no longer triggers a key recheck; integration test that `uploadBatch` returns all three reasons. The other app classifiers move to `errorReason` after beta, as decided.
+
 **Errors have no machine-readable identity: the app branches on overloaded HTTP-style codes and on English message text**
 
 - Location: packages/api/src/trpc.ts:79-122 (a `cause` with only 3 values); apps/mobile/lib/tracking.ts:609-647 (upload classifier, message match at :625); apps/mobile/lib/groupEncryption.ts:62 (`HISTORY_RECIPIENT_MISMATCH_MESSAGE`, exported from packages/schemas); apps/mobile/app/setup/link.tsx:161; apps/mobile/lib/needsFreshSignIn.ts:3-4; apps/mobile/lib/recovery.ts:48-49,152,286,331-336; apps/mobile/app/account/add-device.tsx:49-53; apps/mobile/app/account/sign-out-others.tsx:36; docs/development/api-compatibility.md (error identity not listed as API surface)

@@ -13,6 +13,7 @@ import {
   uploadGroupTrackingBatch,
 } from "../../lib/groupTracking.ts";
 import { getTrackingKeyState } from "../../lib/trackingKeyState.ts";
+import { ReasonError } from "../../lib/reasonError.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 
 const DEFAULT_POLL_LIMIT = 100;
@@ -34,7 +35,13 @@ export const groupTrackingRouter = {
         const groups = await tx.$queryRaw<Array<{ id: string }>>(
           Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR SHARE`,
         );
-        if (!groups.length) throw new TRPCError({ code: "FORBIDDEN" });
+        if (!groups.length) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "This group no longer exists.",
+            cause: new ReasonError("GROUP_GONE"),
+          });
+        }
         const members = await tx.$queryRaw<Array<{ id: string; createdAt: Date }>>(Prisma.sql`
           SELECT id, "createdAt" FROM "GroupMember"
           WHERE "groupId" = ${input.groupId} AND "userId" = ${ctx.session.user.id}
@@ -42,7 +49,11 @@ export const groupTrackingRouter = {
         `);
         const member = members[0];
         if (!member) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "You are not a member of this group" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You are not a member of this group",
+            cause: new ReasonError("NOT_GROUP_MEMBER"),
+          });
         }
         return uploadGroupTrackingBatch({
           db: tx,

@@ -67,6 +67,7 @@ const createCaller = async ({
         ? queryRawMock(query)
         : [{ id: "group-member-1", createdAt: new Date("2026-01-01") }];
     },
+    group: { findUnique: mock(async () => ({ id: "group-1" })) },
     groupMember: { findUnique: memberFindUniqueMock },
     groupEncryptedPayload: {
       createMany: createManyMock ?? mock(async () => ({ count: 0 })),

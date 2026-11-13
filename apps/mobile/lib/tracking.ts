@@ -22,6 +22,7 @@ import {
   getRegisteredDeviceKey,
 } from "./deviceKeys.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
+import { errorReason } from "./errorReason.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
@@ -621,9 +622,7 @@ const uploadClaimedItems = async (
       );
       if (
         usesCurrentKey ||
-        (code === "FORBIDDEN" &&
-          usesCurrentDevice &&
-          uploadResult.error.message === "The active device is not registered.")
+        (usesCurrentDevice && errorReason(uploadResult.error) === "DEVICE_NOT_REGISTERED")
       ) {
         markTrackingKeysStale();
         uploadRejectedKeys = true;

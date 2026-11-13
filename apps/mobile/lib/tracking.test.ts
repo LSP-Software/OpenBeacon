@@ -2311,11 +2311,70 @@ describe("tracking service", () => {
       expect(requests).toEqual(["groupTracking.uploadBatch"]);
     });
 
-    const rejectUploads = (code: string, message: string) => {
+    const rejectUploads = (code: string, message: string, reason?: string) => {
       uploadGroup = async () => {
-        throw Object.assign(new Error(message), { data: { code } });
+        throw Object.assign(new Error(message), { data: { code, reason } });
       };
     };
+
+    const queueOldKeyPoint = () => {
+      pendingCiphertexts = [
+        {
+          ...createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+          epochId: "epoch-0",
+        },
+      ];
+    };
+
+    test("an unregistered device reason rechecks keys whatever the message says", async () => {
+      await startTracking();
+      queueOldKeyPoint();
+      rejectUploads("FORBIDDEN", "Reworded by the server", "DEVICE_NOT_REGISTERED");
+
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+      expect(requests).toEqual(expect.arrayContaining(keyCheckRequests));
+      expect(requests).not.toContain("auth.registerDeviceKey");
+      expect(requeued.map(({ ids }) => ids)).toEqual([[1]]);
+    });
+
+    test("the old English message without a reason no longer rechecks keys", async () => {
+      await startTracking();
+      queueOldKeyPoint();
+      rejectUploads("FORBIDDEN", "The active device is not registered.");
+
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+      expect(requests).toEqual(["groupTracking.uploadBatch"]);
+    });
+
+    for (const reason of ["NOT_GROUP_MEMBER", "GROUP_GONE"]) {
+      test(`a ${reason} rejection keeps the points and only retries the upload`, async () => {
+        await startTracking();
+        queueOldKeyPoint();
+        rejectUploads("FORBIDDEN", "Any message", reason);
+
+        await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+        expect(requests).toEqual(["groupTracking.uploadBatch"]);
+        expect(requeued.map(({ ids }) => ids)).toEqual([[1]]);
+        expect(deleted.flat()).toEqual([]);
+      });
+    }
+
+    test("an upload limit keeps the points for a later retry", async () => {
+      await startTracking();
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      rejectUploads("TOO_MANY_REQUESTS", "Too many requests.", "UPLOAD_LIMIT_REACHED");
+
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+      expect(requests).toEqual(["groupTracking.uploadBatch"]);
+      expect(requeued.map(({ ids }) => ids)).toEqual([[1]]);
+      expect(deleted.flat()).toEqual([]);
+    });
 
     test("being removed from a group rechecks keys without registering again", async () => {
       await startTracking();

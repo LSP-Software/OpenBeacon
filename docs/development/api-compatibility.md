@@ -51,6 +51,12 @@ Most changes shouldn't need a new level:
 - For the hosted server, deploy the server before releasing an app that raises `minServerApiCompatibilityLevel`.
 - Raising `minClientApiCompatibilityLevel` on the hosted server locks out everyone on an older app until they update. Leave time for store updates to reach people first.
 
+## Error reasons
+
+A rejection the app needs to act on carries a reason: `data.reason` on tRPC errors, or the better-auth error `code` on auth routes. The values are the `ErrorReason` union in `packages/shared/src/errorReason.ts`, and the app reads them with `errorReason(error)`. The app never matches on error messages, which are free to change.
+
+Error reasons are API surface; never repurpose one. A new condition gets a new reason, which is an additive change. Removing a reason follows the level rules above.
+
 ## Frozen surfaces
 
 The handshake itself can never change, or apps and servers from either side of the change couldn't talk about compatibility at all. Tests pin each of these:
