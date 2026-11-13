@@ -9,7 +9,11 @@ import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import z from "zod";
 import { activateDevice } from "../lib/deviceActivation.ts";
-import { setupDeviceProcedure, setupProcedure } from "../procedures/auth/runtime.ts";
+import {
+  requireFreshSession,
+  setupDeviceProcedure,
+  setupProcedure,
+} from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 
 const challengeLifetimeMs = 5 * 60_000;
@@ -101,6 +105,7 @@ export const deviceRouter = createTRPCRouter({
     };
   }),
   activationChallenge: setupDeviceProcedure
+    .use(requireFreshSession)
     .meta({ rateLimit: { limit: 20, windowMs: 60_000 } })
     .mutation(async ({ ctx }) => {
       const userId = ctx.session.user.id;
@@ -139,6 +144,7 @@ export const deviceRouter = createTRPCRouter({
       };
     }),
   activate: setupDeviceProcedure
+    .use(requireFreshSession)
     .meta({ rateLimit: { limit: 20, windowMs: 60_000 } })
     .input(z.object({ answer: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
