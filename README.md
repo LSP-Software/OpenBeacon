@@ -67,7 +67,7 @@ Containers:
 - **Runner**: the scheduled job runner, built from `apps/scheduled-jobs/Dockerfile`.
 - **Mobile**: the Expo app; these values are embedded in the app bundle when it is built.
 
-The `db` (PostgreSQL) and `redis` (Dragonfly) services in `docker-compose.yml` are for local development. Their settings are fixed in the compose file and match the defaults in `.env.example`.
+The `db` (PostgreSQL) and `redis` (Dragonfly) services in `docker-compose.yml` are for local development only. They listen on 127.0.0.1 and use a fixed password, so don't reuse this file on a server. Their settings are fixed in the compose file and match the defaults in `.env.example`.
 
 Leave an optional variable out rather than setting it to an empty value. Some, such as `OPENBEACON_API_PORT` and `S3_ENDPOINT`, fail validation when empty instead of using their default, and the backend won't start.
 

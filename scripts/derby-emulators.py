@@ -249,8 +249,8 @@ def main():
     if not external_backend:
         if not env_file.exists():
             template = (ROOT / ".env.example").read_text()
-            template = template.replace("BETTER_AUTH_SECRET=                    # Min 32 chars, generate with: openssl rand -base64 32", f"BETTER_AUTH_SECRET={secrets.token_urlsafe(32)}")
-            template = template.replace("REDIS_HASH_SECRET=                     # Min 32 chars, generate with: openssl rand -base64 32", f"REDIS_HASH_SECRET={secrets.token_urlsafe(32)}")
+            template = template.replace("\nBETTER_AUTH_SECRET=\n", f"\nBETTER_AUTH_SECRET={secrets.token_urlsafe(32)}\n")
+            template = template.replace("\nREDIS_HASH_SECRET=\n", f"\nREDIS_HASH_SECRET={secrets.token_urlsafe(32)}\n")
             env_file.write_text(template)
             env_file.chmod(0o600)
             print("Created .env with generated authentication and rate limit secrets.", flush=True)
