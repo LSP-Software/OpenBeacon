@@ -368,6 +368,8 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M7. Google sign-in silently adds Google to an existing password account
 
+- **Status:** fixed on `fix/beta-1-review` by "Refuse Google sign-in for an email that signs in with a password" (SHA added at wrap-up). Integration test `googleSignIn.integration.test.ts` (signed id token, Google keys stubbed): Google sign-in for a password email gets 401 `OAUTH_LINK_ERROR` and adds no Account row. App message mapping tested in `lib/auth.test.ts`. Emulator check of the message is in the end-of-branch batch.
+
 - Finding: S2-02 · security · medium · verified (V1, reproduced). The reviewer said post-beta; V1 made it must-fix.
 - Location: packages/auth/src/createAuth.ts:29-214 (no `account.accountLinking` option, so better-auth links by default)
 - Failure scenario: Someone with brief access to the inbox signs in with Google for that email. Google is now a second way into the account:
@@ -803,6 +805,8 @@ Generated from the raw files, with verifier corrections applied. Must-fix findin
 A session moved to a new phone survives removal of the stolen phone, which can then activate the new phone without the password
 
 #### S2-02 · medium · security · **must-fix, see M7**
+
+- **Status:** fixed on `fix/beta-1-review` by "Refuse Google sign-in for an email that signs in with a password" (SHA added at wrap-up). Integration test `googleSignIn.integration.test.ts` (signed id token, Google keys stubbed): Google sign-in for a password email gets 401 `OAUTH_LINK_ERROR` and adds no Account row. App message mapping tested in `lib/auth.test.ts`. Emulator check of the message is in the end-of-branch batch.
 
 Google sign-in silently links Google to an existing password account
 
