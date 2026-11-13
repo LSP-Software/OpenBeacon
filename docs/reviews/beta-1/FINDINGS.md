@@ -1646,6 +1646,8 @@ A server URL with a trailing slash or path passes the check, then every API call
 
 #### S8-03 · medium · security
 
+- **Status:** fixed on `chore/eas-android-build` in `5d167741` ("Require https:// for a new server in release builds"). Owner decision 13 Nov 2026: require `https://`. Development builds still accept `http://`. A server saved before the change is kept rather than silently swapped for the hosted API. Unit tests in `currentServer.test.ts`. The backend README now says the app needs a TLS reverse proxy.
+
 **Plain `http://` server URLs are accepted, but release builds will likely block them, and they would send passwords and session tokens in clear text**
 
 - Location: apps/mobile/app/serverUrl.tsx:30-41, apps/mobile/app.json:27-35
