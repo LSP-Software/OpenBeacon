@@ -5,7 +5,7 @@ Google Play takes an Android App Bundle (`.aab`) signed with the app's upload ke
 ## What you need
 
 - The Android SDK and JDK 17, the same setup `bun run android` uses.
-- An Expo account with access to the `open-beacon` project. Sign in once with `bunx eas-cli login`.
+- An Expo account with access to the `open-beacon` project. Sign in once with `bunx eas-cli login`. Local builds still need it, because EAS CLI looks up the project and its environment variables on Expo. A free account is enough.
 - The upload keystore and its passwords. Keep them in a password manager. Google only accepts bundles signed with this key, and replacing a lost one means asking Google for an upload key reset.
 
 ## Create an upload key
@@ -57,8 +57,10 @@ Every upload needs a higher `android.versionCode` in `apps/mobile/app.json` than
 From `apps/mobile`:
 
 ```sh
-bunx eas-cli build -p android --profile production --local
+bun run build-aab
 ```
+
+This runs `bunx eas-cli build -p android --profile production --local`.
 
 The build installs dependencies, generates the Prisma client (the `eas-build-post-install` script), runs `expo prebuild` and Gradle in a temporary folder. It writes `build-<timestamp>.aab` into `apps/mobile`. Pass `--output <path>` to choose the file name.
 

@@ -8,6 +8,7 @@
     "dev": "expo start --android --ios",
     "android": "expo prebuild -p android && expo run:android",
     "ios": "expo run:ios",
+    "build-aab": "bunx eas-cli build -p android --profile production --local",
     "eas-build-post-install": "bun run --cwd ../../packages/database prisma generate",
     "typecheck": "bun check",
     "test": "bun test --isolate && bun run test:native",
