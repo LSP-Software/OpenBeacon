@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { type DeleteObjectsCommand, ListObjectVersionsCommand } from "@aws-sdk/client-s3";
 import { s3Client } from "../s3client.ts";
-import { deleteFile, deleteUserImages } from "./storage.ts";
+import { deleteFile, deleteUserImages, getPresignedUploadUrl } from "./storage.ts";
 
 const send = spyOn(s3Client, "send");
 afterEach(() => send.mockReset());
@@ -101,6 +101,17 @@ describe("deleteUserImages", () => {
     send.mockResolvedValueOnce({ $metadata: {}, Errors: [{ Code: "AccessDenied" }] });
     await expect(deleteUserImages("bucket", "a")).rejects.toThrow(
       "Failed to delete all image versions",
+    );
+  });
+});
+
+describe("getPresignedUploadUrl", () => {
+  test("signs the content type so the upload can't choose another one", async () => {
+    const url = new URL(
+      await getPresignedUploadUrl("bucket", "path", "image.webp", "image/webp", "aGFzaA==", 10),
+    );
+    expect(url.searchParams.get("X-Amz-SignedHeaders")?.split(";")).toEqual(
+      expect.arrayContaining(["content-type", "x-amz-checksum-sha256"]),
     );
   });
 });
