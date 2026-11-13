@@ -13,6 +13,7 @@ import { db } from "./db.ts";
 import { type EmailCodes, normalizeEmail } from "./emailCode.ts";
 import { emailCodePlugin } from "./emailCodePlugin.ts";
 import { env } from "./env.ts";
+import { getPublicUrl } from "./publicUrl.ts";
 import type { SecurityAlerts } from "./securityAlerts.ts";
 
 export const clientIpHeader = "x-openbeacon-client-ip";
@@ -194,7 +195,7 @@ export const createAuth = ({
       provider: "postgresql",
     }),
     secret: env.BETTER_AUTH_SECRET,
-    baseURL: env.BETTER_AUTH_URL,
+    baseURL: `${getPublicUrl(env.BETTER_AUTH_URL).baseUrl}/api/auth`,
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: emailCodes !== null,

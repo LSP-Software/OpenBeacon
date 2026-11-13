@@ -11,12 +11,15 @@ import { createAuth } from "./createAuth.ts";
 import { db } from "./db.ts";
 import { createEmailCodes } from "./emailCode.ts";
 import { env } from "./env.ts";
+import { getPublicUrl } from "./publicUrl.ts";
 import { createSecurityAlerts } from "./securityAlerts.ts";
 
 export { clientIpHeader } from "./createAuth.ts";
 export { createEmailCodes, type EmailCodes } from "./emailCode.ts";
 export { createSecurityAlerts, type SecurityAlerts } from "./securityAlerts.ts";
 export { createGoogleDeletionAuthorization, verifyGoogleDeletionCode } from "./googleDeletion.ts";
+
+export const authPublicPath = getPublicUrl(env.BETTER_AUTH_URL).path;
 
 export const authCapabilities = getAuthCapabilities({
   GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,

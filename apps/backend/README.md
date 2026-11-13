@@ -59,6 +59,25 @@ request came from Cloudflare, so only use it when the origin is reachable solely
 through Cloudflare, for example via Cloudflare Tunnel or a firewall that only
 allows Cloudflare's IP ranges. Otherwise use `cloudflare-authenticated`.
 
+### Serving the backend under a path
+
+The backend can share a domain with other apps by sitting under a path, such as
+`https://example.com/openbeacon`. Set `BETTER_AUTH_URL` to the full public URL,
+path included (`https://example.com/openbeacon`), and enter the same URL in the
+app. The reverse proxy must remove the path before it forwards the request, so
+`https://example.com/openbeacon/api/trpc/…` reaches the backend as `/api/trpc/…`
+and `https://example.com/openbeacon/health` as `/health`. For example, in nginx:
+
+```nginx
+location /openbeacon/ {
+    proxy_pass http://openbeacon-backend:3000/;
+}
+```
+
+Caddy's `handle_path /openbeacon/*` and Traefik's `StripPrefix` middleware do the
+same. The Google deletion callback is then
+`https://example.com/openbeacon/api/auth/google-deletion-callback`.
+
 The `Deploy backend` GitHub Actions workflow also deploys the separate scheduled job runner. Every installation needs the runner: besides account deletion, it deletes expired email codes and verification tokens every hour, deletes new devices that weren't set up within 7 days or were removed more than 7 days ago, and deletes old device links and expired device challenges. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
 
 Publishing and deploying are separate workflows. Both use the
