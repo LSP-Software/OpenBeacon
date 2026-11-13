@@ -5,6 +5,7 @@ import {
   minClientApiCompatibilityLevelHeader,
   minServerApiCompatibilityLevel,
 } from "@openbeacon/shared";
+import type { ApiCompatibilityProblem } from "./apiCompatibility.ts";
 
 const stored = new Map<string, string>();
 
@@ -248,6 +249,7 @@ describe("apiCompatibilityFetch", () => {
       problem: "appTooOld",
       serverVersion: null,
       message: null,
+      sticky: true,
       notified: false,
     });
     expect(JSON.parse(stored.get("api_compatibility") ?? "null")).toEqual({
@@ -256,6 +258,7 @@ describe("apiCompatibilityFetch", () => {
       problem: "appTooOld",
       serverVersion: null,
       message: null,
+      sticky: true,
       notified: false,
     });
   });
@@ -315,6 +318,7 @@ describe("server message", () => {
     expect(await readApiCompatibilityResponse(tooOld("Update from the Play Store."))).toEqual({
       verdict: "appTooOld",
       message: "Update from the Play Store.",
+      sticky: true,
     });
 
     respond = () =>
@@ -340,6 +344,7 @@ describe("server message", () => {
     expect(await readApiCompatibilityResponse(tooOld(message))).toEqual({
       verdict: "appTooOld",
       message: null,
+      sticky: true,
     });
   });
 
@@ -359,6 +364,7 @@ describe("server message", () => {
       problem: "appTooOld",
       serverVersion: "9.9.9",
       message: null,
+      sticky: true,
       notified: false,
     });
   });
@@ -373,6 +379,7 @@ describe("notification tracking", () => {
       problem: "appTooOld",
       serverVersion: "9.9.9",
       message: null,
+      sticky: false,
       notified: true,
     });
 
@@ -385,8 +392,120 @@ describe("notification tracking", () => {
       problem: "serverTooOld",
       serverVersion: "9.9.9",
       message: null,
+      sticky: false,
       notified: false,
     });
+  });
+});
+
+describe("a verdict from a missing procedure or a 426", () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const matchingLevels = levelHeaders(apiCompatibilityLevel, apiCompatibilityLevel);
+
+  test.each<[string, ApiCompatibilityProblem, () => Response]>([
+    [
+      "the app is ahead of the server",
+      "serverTooOld",
+      () =>
+        json({ code: "UNKNOWN_PROCEDURE", apiCompatibilityLevel: apiCompatibilityLevel - 1 }, 404),
+    ],
+    [
+      "the app is behind the server",
+      "appTooOld",
+      () =>
+        json({ code: "UNKNOWN_PROCEDURE", apiCompatibilityLevel: apiCompatibilityLevel + 1 }, 404),
+    ],
+    [
+      "both sides claim the same level",
+      "outOfSync",
+      () => json({ code: "UNKNOWN_PROCEDURE", apiCompatibilityLevel }, 404),
+    ],
+    [
+      "the server turns away an app below its minimum",
+      "appTooOld",
+      () =>
+        json(
+          { code: "CLIENT_TOO_OLD", minClientApiCompatibilityLevel: apiCompatibilityLevel + 1 },
+          426,
+        ),
+    ],
+    [
+      "the server turns away an app at its minimum",
+      "outOfSync",
+      () =>
+        json(
+          { code: "CLIENT_TOO_OLD", minClientApiCompatibilityLevel: apiCompatibilityLevel },
+          426,
+        ),
+    ],
+  ])("sticks when %s", async (_, problem, rejection) => {
+    respond = (url) =>
+      url.endsWith("/health") ? health(apiCompatibilityLevel, apiCompatibilityLevel) : rejection();
+    await apiCompatibilityFetch("https://api.example.test/api/trpc/missing");
+    await settle();
+    expect(getApiCompatibility()?.problem).toBe(problem);
+    expect(getApiCompatibility()?.serverVersion).toBe("9.9.9");
+
+    for (let round = 0; round < 3; round += 1) {
+      respond = (url) =>
+        url.endsWith("/health")
+          ? health(apiCompatibilityLevel, apiCompatibilityLevel)
+          : json({}, 200, matchingLevels);
+      await apiCompatibilityFetch("https://api.example.test/api/trpc/other");
+      await refreshApiCompatibility({ userRequested: false });
+      expect(getApiCompatibility()?.problem).toBe(problem);
+    }
+
+    respond = () => health(apiCompatibilityLevel, apiCompatibilityLevel, "10.0.0");
+    await refreshApiCompatibility({ userRequested: false });
+    expect(getApiCompatibility()).toBeNull();
+
+    respond = (url) =>
+      url.endsWith("/health") ? health(apiCompatibilityLevel, apiCompatibilityLevel) : rejection();
+    await apiCompatibilityFetch("https://api.example.test/api/trpc/missing");
+    await settle();
+    await refreshApiCompatibility({ userRequested: true });
+    expect(getApiCompatibility()).toBeNull();
+  });
+
+  test("stays sticky when the level headers later report the same problem", async () => {
+    respond = (url) =>
+      url.endsWith("/health")
+        ? health(apiCompatibilityLevel, apiCompatibilityLevel)
+        : json(
+            { code: "UNKNOWN_PROCEDURE", apiCompatibilityLevel: apiCompatibilityLevel + 1 },
+            404,
+          );
+    await apiCompatibilityFetch("https://api.example.test/api/trpc/missing");
+    await settle();
+
+    respond = () =>
+      json({}, 200, levelHeaders(apiCompatibilityLevel + 1, apiCompatibilityLevel + 1));
+    await apiCompatibilityFetch("https://api.example.test/api/trpc/other");
+    respond = () => json({}, 200, matchingLevels);
+    await apiCompatibilityFetch("https://api.example.test/api/trpc/other");
+    expect(getApiCompatibility()?.problem).toBe("appTooOld");
+  });
+
+  test("gives way to a problem the levels report, which then clears normally", async () => {
+    respond = (url) =>
+      url.endsWith("/health")
+        ? health(apiCompatibilityLevel, apiCompatibilityLevel)
+        : json(
+            { code: "UNKNOWN_PROCEDURE", apiCompatibilityLevel: apiCompatibilityLevel - 1 },
+            404,
+          );
+    await apiCompatibilityFetch("https://api.example.test/api/trpc/missing");
+    await settle();
+
+    respond = () =>
+      json({}, 200, levelHeaders(apiCompatibilityLevel + 1, apiCompatibilityLevel + 1));
+    await apiCompatibilityFetch("https://api.example.test/api/trpc/other");
+    expect(getApiCompatibility()?.problem).toBe("appTooOld");
+
+    respond = () => json({}, 200, matchingLevels);
+    await apiCompatibilityFetch("https://api.example.test/api/trpc/other");
+    expect(getApiCompatibility()).toBeNull();
   });
 });
 
@@ -412,6 +531,7 @@ describe("out of sync", () => {
       problem: "outOfSync",
       serverVersion: "9.9.9",
       message: null,
+      sticky: true,
       notified: false,
     });
   });
@@ -430,6 +550,7 @@ describe("out of sync", () => {
       problem: "outOfSync",
       serverVersion: "9.9.9",
       message: null,
+      sticky: true,
       notified: true,
     });
   });
@@ -450,10 +571,10 @@ describe("out of sync", () => {
 
 describe("refreshApiCompatibility", () => {
   test("drops a /health result that a newer response overtook", async () => {
-    let answerHealth = (_: Response) => {};
+    const healthAnswers: ((response: Response) => void)[] = [];
     respond = (url) =>
       url.endsWith("/health")
-        ? new Promise<Response>((resolve) => (answerHealth = resolve))
+        ? new Promise<Response>((resolve) => healthAnswers.push(resolve))
         : json(
             { code: "CLIENT_TOO_OLD", minClientApiCompatibilityLevel: apiCompatibilityLevel + 1 },
             426,
@@ -461,7 +582,8 @@ describe("refreshApiCompatibility", () => {
 
     const refresh = refreshApiCompatibility({ userRequested: true });
     await apiCompatibilityFetch("https://api.example.test/api/trpc/a");
-    answerHealth(health(apiCompatibilityLevel, apiCompatibilityLevel));
+    for (const answer of healthAnswers)
+      answer(health(apiCompatibilityLevel, apiCompatibilityLevel));
 
     expect(await refresh).toBe("ok");
     expect(getApiCompatibility()?.problem).toBe("appTooOld");
@@ -495,6 +617,7 @@ describe("saved result", () => {
       problem: "serverTooOld",
       serverVersion: "0.1.0",
       message: null,
+      sticky: true,
       notified: true,
     };
     stored.set("api_compatibility", JSON.stringify(saved));
@@ -503,6 +626,7 @@ describe("saved result", () => {
       problem: "serverTooOld",
       serverVersion: "0.1.0",
       message: null,
+      sticky: true,
       notified: true,
     });
 

@@ -90,29 +90,37 @@ const readJson = async (response: Response) => {
 
 export const readApiCompatibilityResponse = async (
   response: Response,
-): Promise<{ verdict: ApiCompatibilityProblem | "ok" | null; message?: string | null }> => {
+): Promise<{
+  verdict: ApiCompatibilityProblem | "ok" | null;
+  message?: string | null;
+  sticky: boolean;
+}> => {
   if (response.status === 426) {
     const body = clientTooOldSchema.safeParse(await readJson(response));
-    if (!body.success) return { verdict: null };
+    if (!body.success) return { verdict: null, sticky: false };
     return {
       verdict:
         apiCompatibilityLevel < body.data.minClientApiCompatibilityLevel
           ? "appTooOld"
           : "outOfSync",
       message: body.data.message,
+      sticky: true,
     };
   }
   if (response.status === 404) {
     const body = unknownProcedureSchema.safeParse(await readJson(response));
     if (body.success) {
-      return { verdict: decideUnknownProcedure({ serverLevel: body.data.apiCompatibilityLevel }) };
+      return {
+        verdict: decideUnknownProcedure({ serverLevel: body.data.apiCompatibilityLevel }),
+        sticky: true,
+      };
     }
   }
   const serverLevel = parseApiCompatibilityLevel(response.headers.get(apiCompatibilityLevelHeader));
   const minClientLevel = parseApiCompatibilityLevel(
     response.headers.get(minClientApiCompatibilityLevelHeader),
   );
-  if (serverLevel === null || minClientLevel === null) return { verdict: null };
+  if (serverLevel === null || minClientLevel === null) return { verdict: null, sticky: false };
   return {
     verdict: decideApiCompatibility({
       server: {
@@ -120,6 +128,7 @@ export const readApiCompatibilityResponse = async (
         minClientApiCompatibilityLevel: minClientLevel,
       },
     }),
+    sticky: false,
   };
 };
 
@@ -146,6 +155,7 @@ const savedSchema = z.object({
   problem: problemSchema,
   serverVersion: z.string().nullable(),
   message: z.string().max(280).nullable().catch(null),
+  sticky: z.boolean(),
   notified: z.boolean(),
 });
 
@@ -169,6 +179,7 @@ const loadSaved = (): ApiCompatibilityState | null => {
     problem: saved.problem,
     serverVersion: saved.serverVersion,
     message: saved.message,
+    sticky: saved.sticky,
     notified: saved.notified,
   };
 };
@@ -196,18 +207,20 @@ const applyVerdict = ({
   verdict,
   serverVersion,
   message,
+  sticky,
   userRequested,
 }: {
   verdict: ApiCompatibilityProblem | "ok" | null;
   serverVersion: string | null;
   message: string | null | undefined;
+  sticky: boolean;
   userRequested: boolean;
 }) => {
   if (verdict === null) return;
   const nextMessage = message === undefined ? (state?.message ?? null) : message;
   if (verdict === "ok") {
     if (!state) return;
-    if (state.problem !== "outOfSync" || userRequested) {
+    if (!state.sticky || userRequested) {
       setState(null);
       return;
     }
@@ -231,10 +244,12 @@ const applyVerdict = ({
     }
     return;
   }
+  const nextSticky = sticky || (state?.problem === verdict && state.sticky);
   if (
     state?.problem === verdict &&
     (serverVersion === null || state.serverVersion === serverVersion) &&
-    state.message === nextMessage
+    state.message === nextMessage &&
+    state.sticky === nextSticky
   ) {
     return;
   }
@@ -242,6 +257,7 @@ const applyVerdict = ({
     problem: verdict,
     serverVersion: serverVersion ?? (state?.problem === verdict ? state.serverVersion : null),
     message: nextMessage,
+    sticky: nextSticky,
     notified: state?.problem === verdict && state.notified,
   });
 };
@@ -255,7 +271,9 @@ export const withApiCompatibilityHeader = (init?: RequestInit): RequestInit => {
 export const refreshApiCompatibility = async ({ userRequested }: { userRequested: boolean }) => {
   const startedAt = revision;
   const { verdict, serverVersion, message } = await checkServerCompatibility(baseUrl);
-  if (revision === startedAt) applyVerdict({ verdict, serverVersion, message, userRequested });
+  if (revision === startedAt) {
+    applyVerdict({ verdict, serverVersion, message, sticky: false, userRequested });
+  }
   return verdict;
 };
 
@@ -267,10 +285,10 @@ export const refreshApiCompatibilityInBackground = async (now = Date.now()) => {
 
 export const apiCompatibilityFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const response = await fetch(input, withApiCompatibilityHeader(init));
-  const { verdict, message } = await readApiCompatibilityResponse(response);
+  const { verdict, message, sticky } = await readApiCompatibilityResponse(response);
   if (verdict !== null && verdict !== "ok") revision += 1;
-  applyVerdict({ verdict, serverVersion: null, message, userRequested: false });
-  if (verdict === "outOfSync" && state?.serverVersion === null) {
+  applyVerdict({ verdict, serverVersion: null, message, sticky, userRequested: false });
+  if (sticky && state?.serverVersion === null) {
     void refreshApiCompatibility({ userRequested: false });
   }
   return response;

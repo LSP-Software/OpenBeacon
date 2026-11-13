@@ -1850,6 +1850,8 @@ The "Update Open Beacon" screen has a disabled Update button and the server can'
 
 #### S10-04 · medium · bug
 
+- **Status:** fixed on `fix/beta-1-review` by "Keep a "too old" result from a missing procedure or a 426 until Try again" (SHA added at wrap-up). C3. Tests in `apiCompatibility.test.ts` for each level ordering (app ahead, behind, same level, 426 below and at the minimum): the verdict survives matching level headers and `/health`, and clears only on a new server version or Try again.
+
 **A "too old" result taken from a missing procedure flips on and off, because only same-level mismatches stick**
 
 - Location: apps/mobile/lib/apiCompatibility.ts:35-46 (`decideUnknownProcedure`), :174-207 (`applyVerdict`), :43-46 in ApiCompatibilityGate.tsx (foreground refresh)
