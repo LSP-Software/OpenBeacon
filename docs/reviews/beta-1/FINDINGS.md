@@ -223,11 +223,61 @@ Settled with the owner on 13 Nov 2026, against `94a73b27` (main had not moved).
 - **Compatibility:** App only. No level change. App patch.
 - **Follow-up:** Set `minSdkVersion` through `expo-build-properties` (or the equivalent config), and check the built APK's manifest.
 
-## Fix branch: validation and what was left out
+## Fix branch: what was fixed
 
-Fixed on `fix/beta-1-review` (13 Nov 2026). Each fixed finding below carries its commit. The branch head passes `bun run ci`, the version check and the full integration suite (339/339, including the Redis restart test against a throwaway container).
+Fixed on `fix/beta-1-review` (13 Nov 2026), one commit per fix. Each fixed finding below also carries its commit. The branch head passes `bun run ci`, the version check and the full integration suite (339/339, including the Redis restart test against a throwaway container). App 1.13.0 (build 34), server 0.17.0, API compatibility unchanged.
 
-**Emulator checks** (pixel_8, Android 15, debug APK 1.13.0 build 34, backend 0.17.0 on a fresh database):
+### At a glance
+
+| Item                            | Commit     | What changed                                                                               |
+| ------------------------------- | ---------- | ------------------------------------------------------------------------------------------ |
+| Review docs                     | `f5b02848` | This folder (local paths and agent prompts removed before pushing)                         |
+| Version bumps                   | `a5304cef` | App 1.13.0 / build 34, server 0.17.0                                                       |
+| M1 (S2-01)                      | `638a2861` | A session linked to a live phone can't move to a new one; activation needs a fresh sign-in |
+| C4 (S1-09, S8-09)               | `3581024e` | Android cloud backup off                                                                   |
+| C5 (S2-09, D8, X-09 deps)       | `796621cb` | hono and better-auth patched, `superjson` declared, unused deps removed                    |
+| C7 (S5-02, S5-03)               | `6f9fb537` | `.env.example` comments on their own lines; compose on 127.0.0.1                           |
+| Q9 (S6-02 for Beta 1)           | `01ceef54` | Android-only builds                                                                        |
+| C12 (S9-01)                     | `874d2cc7` | Group screen keyed by group                                                                |
+| C11 (S9-04)                     | `824b4bcd` | Remove/Leave single flight                                                                 |
+| M2 (S3-01, S3-02 read)          | `09242e4f` | Leaver's next epoch ignored; no pre-join rows for new members                              |
+| E1                              | `b4594f68` | Last member to leave deletes the group                                                     |
+| M7 / Q4 (S2-02)                 | `95a1001a` | No account linking; app message for a password email                                       |
+| C2 (S2-03)                      | `79d274ff` | Generic message for internal errors                                                        |
+| C9 (S2-06)                      | `3dae7ab9` | Unused better-auth routes off, including the open redirect                                 |
+| Q3 (X-01, S8-06, S6-10, I5)     | `22271d92` | One `endSession(reason)` table                                                             |
+| M9 (S8-02, S8-04)               | `86dd3bef` | `currentServer` normaliser; launch screen error and backoff                                |
+| M3 (S8-01)                      | `e9daa70b` | Credentials scoped by server; server change ends the session                               |
+| E2                              | `af015cb3` | Server URLs with a path prefix                                                             |
+| M4 (S6-01)                      | `6b9c1042` | Sharing keeps running while permissions load                                               |
+| M8 / Q1 (S10-02, S6-14, S10-08) | `b30db437` | Tolerant point reader; nullable battery level                                              |
+| C8 / Q11 (S10-01, S1-01 docs)   | `a21dbe39` | Privacy draft corrected; level 4 recorded as the Beta 1 baseline                           |
+| C6 / E3 (S6-09)                 | `49fcf5f5` | Epoch-millisecond fix times; minSdk 26                                                     |
+| M11 / Q8 (S10-03)               | `0e80d624` | Play Store Update button; server update message                                            |
+| C3 (S10-04)                     | `2ab104b0` | Sticky "too old" verdict                                                                   |
+| C1 (D5)                         | `105867d3` | Default timeouts on every outbound client                                                  |
+| M10 / Q6 (S4-02, S4-05, S2-10)  | `b1b844c6` | Batched account deletion                                                                   |
+| M5 / Q5 (S4-01, D6)             | `9df9c764` | Self-healing Redis client with a failure rule per caller                                   |
+| Q10 (X-02, uploader)            | `0e87104b` | `ErrorReason`, `data.reason`, `errorReason()`                                              |
+| M6 / Q2 limits (S3-03)          | `61574d6e` | Upload limits per minute and per day; 1024-character ciphertext                            |
+| Q2 group cap                    | `bcf0e45b` | 16 groups per account                                                                      |
+| Q7a                             | `e80275fc` | Password locked after 10 failures in 15 minutes                                            |
+| Q7b (S2-04, D25)                | `e84690d3` | Every IP-based limit removed                                                               |
+| Findings record                 | `8f7ab5d9` | Commits and emulator results recorded                                                      |
+| Q3 follow-up                    | `9957d563` | A normal sign-out keeps keys with no expiry (owner decision)                               |
+| M10 follow-up                   | `5eb35c6b` | Deletion test seeds 60k rows instead of 500k                                               |
+| C1 follow-up                    | `0be2754a` | Map tiles R2 client throws on its request timeout                                          |
+| Docs                            | `1c7f5844` | Hosting platform and internal deployment details removed from the READMEs                  |
+| X-02 (rest)                     | `8caeedad` | Remaining app error checks use `errorReason`                                               |
+| S6-03 (D22)                     | `cee2810e` | Queued points the server will never accept are dropped                                     |
+| S6-06 (D22)                     | `9bdcdede` | A refused sharing change no longer blocks uploads                                          |
+| Findings record                 | `a92dfb35` | Follow-up commits recorded                                                                 |
+
+Outside this repo: the self-hosting docs are updated in OpenBeacon-Docs PR #5 (merge once server 0.17.0 ships), and OPE-213's scope is updated in Linear (C8).
+
+### Emulator checks
+
+(pixel_8, Android 15, debug APK 1.13.0 build 34, backend 0.17.0 on a fresh database):
 
 - **Built APK:** the manifest has `minSdkVersion=26` and `allowBackup=false` (C4, C6/E3).
 - **M9:** `ftp://`, credentials and a query are each refused with a reason; `http://10.0.2.2:3921/` is saved without the slash, and sign-up and setup work with no `//api` requests.
@@ -246,19 +296,26 @@ Fixed on `fix/beta-1-review` (13 Nov 2026). Each fixed finding below carries its
 - The cap message on invite accept and join-code redeem (create was checked) is covered by integration tests.
 - In development builds `EXPO_PUBLIC_DEV_API_URL` overrides the saved server, as it did before this branch. Server-switch checks need Metro started without it.
 
-**Left out:**
+The follow-up commits after `8f7ab5d9` (sign-out keys, error reasons, S6-03, S6-06) were not checked on an emulator, by owner decision; their unit and integration tests cover them.
+
+### Not fixed
 
 - **C10 (S6-04)** needs a real-device check first, and no real device was available. It stays open.
 - **Partly fixed, rest post-beta:** S1-01 (docs only; the code ships with OPE-213), S1-10 (SecureStore options only), S2-11 and S5-13 (Redis clients only), S3-05, S4-03 and S4-04 (timeouts only; see their notes).
+- The setup-link screen's `problemMessage` still checks HTTP codes to decide whether to show the server's text (X-03, post-beta).
+- Every other finding not marked fixed is post-beta, grouped under "Duplicate groups" and "Refactor shortlist".
 
-**Follow-ups from the decisions and the fix work:**
+### Owner decisions made during the fix work
 
-- Update OPE-213's scope in Linear (History-wrap sender rule, real call sites, historical-key lookup), as C8 asks.
+- A normal sign-out keeps the account's keys with no expiry. Only session loss and a server change record the 30-day / different-account wipe. The 7-day delete option uses the sign-out path, so it keeps keys too; left as is.
+- Keep hosting platform and internal infrastructure details out of public READMEs and docs. The deploy workflow stays as it is.
+
+### Follow-ups
+
 - Free accounts capped at 3 groups once tiers exist; the cap is the single value in `packages/api/src/lib/groupLimit.ts`.
-- Done on this branch: the remaining app classifiers moved onto `errorReason`, then S6-03 and S6-06 fixed (Q10 follow-up).
-- The map-tiles R2 client now throws on its request timeout too ("Stop a stalled map upload hanging").
 - The password limiter refills gradually (about one attempt every 90 s after a lockout), so "Try again in 15 minutes" is approximate.
 - The tRPC `ctx.clientIp` and `RateLimitContextError` are unused after Q7b.
+- In development builds `EXPO_PUBLIC_DEV_API_URL` overrides the server saved in the app, so server-switch checks need Metro started without it.
 
 ## Summary
 
