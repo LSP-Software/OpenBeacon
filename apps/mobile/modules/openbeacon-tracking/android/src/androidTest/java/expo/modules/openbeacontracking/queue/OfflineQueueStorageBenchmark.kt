@@ -37,7 +37,7 @@ class OfflineQueueStorageBenchmark : Instrumentation() {
       ))
       val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "server-a/user-a" }, bootId = "boot")
       for (fixId in 1L..12_000L) {
-        check(pipeline.onFix(51.5 + fixId / 1e6, -0.1, "2026-07-13T18:45:00.000Z", 1.5, 80, false, fixId = fixId) == 2)
+        check(pipeline.onFix(51.5 + fixId / 1e6, -0.1, at("2026-07-13T18:45:00.000Z"), 1.5, 80, false, fixId = fixId) == 2)
       }
       val files = listOf("", "-wal", "-shm").map { suffix -> targetContext.getDatabasePath(name + suffix) }
       val diskBytes = files.sumOf { it.length() }
@@ -53,3 +53,5 @@ class OfflineQueueStorageBenchmark : Instrumentation() {
     }
   }
 }
+
+private fun at(iso: String) = java.time.Instant.parse(iso).toEpochMilli()

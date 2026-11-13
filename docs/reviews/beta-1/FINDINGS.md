@@ -1297,6 +1297,8 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-09 · medium · bug
 
+- **Status:** fixed on `fix/beta-1-review` by "Pass fix times as epoch milliseconds and raise minSdk to 26" (SHA added at wrap-up). C6 / E3. JVM tests: timestamps are formatted from epoch milliseconds in UTC, and the capture pipeline source has no `java.time`. `expo config` gives `android.minSdkVersion=26`; the built APK's manifest is checked in the end-of-branch emulator batch.
+
 **`java.time.Instant` in the capture path crashes on Android 7 (minSdk 24, no desugaring)**
 
 - Location: apps/mobile/modules/openbeacon-tracking/android/src/main/java/expo/modules/openbeacontracking/capture/CapturePipeline.kt:46; TrackingCaptureService.kt:404-434, :465-469

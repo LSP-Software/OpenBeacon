@@ -38,6 +38,14 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
       "./plugins/withMapFonts.js",
       [
         "expo-camera",
