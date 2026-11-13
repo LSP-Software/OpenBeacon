@@ -123,7 +123,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await pending.device.activate({ answer })).toEqual({ activated: true });
       expect(await activatedAt(account.pendingDeviceId)).toEqual(expect.any(Date));
       expect(await pending.account.listDevices()).toHaveLength(2);
-    });
+    }, 30_000);
 
     test("can start fresh", async () => {
       const account = await createAccount("fresh", { withActivePhone: false });
@@ -204,6 +204,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         (await prisma.userDevice.findUniqueOrThrow({ where: { id: account.pendingDeviceId } }))
           .name,
       ).not.toBe("Mine");
-    });
+    }, 30_000);
   },
 );
