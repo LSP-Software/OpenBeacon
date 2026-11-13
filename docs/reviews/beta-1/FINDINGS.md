@@ -110,7 +110,7 @@ Settled with the owner on 13 Nov 2026, against `94a73b27` (main had not moved).
 
 ### Q7 (D25, S2-04) Remove every IP-based limit before beta, after adding a per-account password limit
 
-- **Status:** fixed on `fix/beta-1-review` by "Lock an account's password after 10 failures in 15 minutes" (SHA added at wrap-up). Q7a. Integration tests (`passwordAttempts.integration.test.ts`): the 11th attempt is refused with the right password, case-insensitive email, successes don't count, per account, 30 parallel guesses give exactly 10 checks, change-password shares the count; fails closed with a 503 when Redis is down; app mapping tested. The limiter refills gradually (about one attempt every 90 s after a lockout), so the "15 minutes" copy is approximate. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `e80275fc` ("Lock an account's password after 10 failures in 15 minutes"). Q7a. Integration tests (`passwordAttempts.integration.test.ts`): the 11th attempt is refused with the right password, case-insensitive email, successes don't count, per account, 30 parallel guesses give exactly 10 checks, change-password shares the count; fails closed with a 503 when Redis is down; app mapping tested. The limiter refills gradually (about one attempt every 90 s after a lockout), so the "15 minutes" copy is approximate. Emulator check in the end-of-branch batch.
 
 - **Decision:**
   1. Add a per-account password-failure limit on `/sign-in/email` and `/change-password`, keyed on the normalised email, in the shared Redis `rateLimits`. Allow 10 failures in 15 minutes, then refuse with "Too many attempts. Try again in 15 minutes."
@@ -191,7 +191,7 @@ Settled with the owner on 13 Nov 2026, against `94a73b27` (main had not moved).
 
 ### E1 (M2, raised in this session) The last member to leave deletes the group
 
-- **Status:** fixed on `fix/beta-1-review` by "Delete the group when its last member leaves" (SHA added at wrap-up). Integration test in `groupDeparture.integration.test.ts`: the last member's leave deletes the group and its epochs. The delete body moved into a shared `deleteGroup` helper.
+- **Status:** fixed on `fix/beta-1-review` in `b4594f68` ("Delete the group when its last member leaves"). Integration test in `groupDeparture.integration.test.ts`: the last member's leave deletes the group and its epochs. The delete body moved into a shared `deleteGroup` helper.
 
 - **Decision:** If a self-leave empties the group, the server deletes the group in the same transaction, the way `delete` does (images queued for cleanup). It does not leave behind an empty group flagged for rotation.
 - **Reason:** The app already calls `delete` with `onlyIfLastMember` in this case. The server should still handle older or unusual clients, because nobody would be left to rotate the epoch.
@@ -200,7 +200,7 @@ Settled with the owner on 13 Nov 2026, against `94a73b27` (main had not moved).
 
 ### E2 (M9, raised in this session) Support server URLs with a path prefix
 
-- **Status:** fixed on `fix/beta-1-review` by "Support a server URL with a path prefix" (SHA added at wrap-up). App test that tRPC, auth and `/health` all go under the path; backend route test with a path-prefixed `BETTER_AUTH_URL`; tests for `getPublicUrl` and the Google redirect URI. Emails carry codes only, so no links needed changing. Self-hosting docs: `apps/backend/README.md` "Serving the backend under a path". Reverse-proxy emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `af015cb3` ("Support a server URL with a path prefix"). App test that tRPC, auth and `/health` all go under the path; backend route test with a path-prefixed `BETTER_AUTH_URL`; tests for `getPublicUrl` and the Google redirect URI. Emails carry codes only, so no links needed changing. Self-hosting docs: `apps/backend/README.md` "Serving the backend under a path". Reverse-proxy emulator check in the end-of-branch batch.
 
 - **Decision:**
   - The normaliser accepts `http(s)://host[:port][/path]`. It strips trailing slashes, and rejects a query, a fragment or credentials.
@@ -222,6 +222,44 @@ Settled with the owner on 13 Nov 2026, against `94a73b27` (main had not moved).
 - **Reason:** It fixes the crash at its source and matches the research note's test targets. Android 7 phones date from 2016 and get no security updates.
 - **Compatibility:** App only. No level change. App patch.
 - **Follow-up:** Set `minSdkVersion` through `expo-build-properties` (or the equivalent config), and check the built APK's manifest.
+
+## Fix branch: validation and what was left out
+
+Fixed on `fix/beta-1-review` (13 Nov 2026). Each fixed finding below carries its commit. The branch head passes `bun run ci`, the version check and the full integration suite (339/339, including the Redis restart test against a throwaway container).
+
+**Emulator checks** (pixel_8, Android 15, debug APK 1.13.0 build 34, backend 0.17.0 on a fresh database):
+
+- **Built APK:** the manifest has `minSdkVersion=26` and `allowBackup=false` (C4, C6/E3).
+- **M9:** `ftp://`, credentials and a query are each refused with a reason; `http://10.0.2.2:3921/` is saved without the slash, and sign-up and setup work with no `//api` requests.
+- **M3:** after switching from 3921 to a logging proxy on 3922, the old session is revoked, and the phone, which still held a live 3921 cookie, sent no cookie to 3922; after signing in there, only the 3922 session was sent.
+- **E2:** with the backend behind a proxy at `/beacon` (`BETTER_AUTH_URL` including the path), sign-in, every tRPC call, `/health` and the compatibility gate all went under `/beacon/`.
+- **Q7a:** after ten failed sign-ins, the correct password shows "Too many attempts. Try again in 15 minutes."
+- **Q2 cap:** creating a 17th group shows "Too many groups".
+- **M11:** with a fake level 5 server and `CLIENT_UPDATE_MESSAGE` set, the Update screen shows the message as plain text; Update tries `market://` and falls back to the https Play page. After the server returned to level 4, the gate stayed until Try again (C3).
+- **Q1:** with the battery reported as unknown (`dumpsys battery set level -1`), the member row shows "Battery unavailable".
+- **M4:** with airplane mode on, a force-stopped app cold-launched and backgrounded keeps the capture service in the foreground and keeps queueing (4 → 6 pending); the points upload when the network returns.
+
+**Not checked on an emulator:**
+
+- The M9 launch-screen error only appears on a phone that isn't yet active, which needs a second emulator. None would boot because the host disk was full. The retry backoff and buttons are covered by unit tests.
+- M7 needs Google sign-in configured on the server and the phone. It is covered by an integration test with a signed Google token.
+- The cap message on invite accept and join-code redeem (create was checked) is covered by integration tests.
+- In development builds `EXPO_PUBLIC_DEV_API_URL` overrides the saved server, as it did before this branch. Server-switch checks need Metro started without it.
+
+**Left out:**
+
+- **C10 (S6-04)** needs a real-device check first, and no real device was available. It stays open.
+- **Partly fixed, rest post-beta:** S1-01 (docs only; the code ships with OPE-213), S1-10 (SecureStore options only), S2-11 and S5-13 (Redis clients only), S3-05, S4-03 and S4-04 (timeouts only; see their notes).
+
+**Follow-ups from the decisions and the fix work:**
+
+- Update OPE-213's scope in Linear (History-wrap sender rule, real call sites, historical-key lookup), as C8 asks.
+- Free accounts capped at 3 groups once tiers exist; the cap is the single value in `packages/api/src/lib/groupLimit.ts`.
+- Move the remaining app classifiers onto `errorReason`, then fix S6-03 and S6-06 (Q10).
+- The map-tiles R2 client sets `requestTimeout` without `throwOnRequestTimeout`, so it only logs (one-line fix).
+- The password limiter refills gradually (about one attempt every 90 s after a lockout), so "Try again in 15 minutes" is approximate.
+- The tRPC `ctx.clientIp` and `RateLimitContextError` are unused after Q7b.
+- The 500k-row deletion test is heavy for the shared Postgres container (it once ran out of `/dev/shm`).
 
 ## Summary
 
@@ -265,7 +303,7 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M1. A stolen phone's session survives "Remove device" and can activate a new phone without the password
 
-- **Status:** fixed on `fix/beta-1-review` by "Stop a session moving to a new phone and require a fresh sign-in to activate" (SHA added at wrap-up).
+- **Status:** fixed on `fix/beta-1-review` in `638a2861` ("Stop a session moving to a new phone and require a fresh sign-in to activate").
 
 - Finding: S2-01 · security · **high** · verified (V1, reproduced in an integration test)
 - Location: packages/api/src/lib/groupEpochs.ts:634-639 (`upsertUserDevice` moves the session link); packages/api/src/lib/removeDevice.ts:61-69 (only signs out sessions linked to the removed device or to none); packages/api/src/router/deviceRouter.ts:103-182 (`activationChallenge`/`activate` need no fresh sign-in)
@@ -286,7 +324,7 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M2. A member who leaves a group mints, and keeps, the group key used after they leave; new members can read pre-join rows
 
-- **Status:** fixed on `fix/beta-1-review` by "Stop a leaver choosing the next group key and hide pre-join rows from new members" (SHA added at wrap-up). Integration tests in `groupDeparture.integration.test.ts` (leaver's epoch not stored, rotation flagged; later joiner sees no pre-join rows from `poll` or `getLatest`) and unit tests in `groupTracking.test.ts`.
+- **Status:** fixed on `fix/beta-1-review` in `09242e4f` ("Stop a leaver choosing the next group key and hide pre-join rows from new members"). Integration tests in `groupDeparture.integration.test.ts` (leaver's epoch not stored, rotation flagged; later joiner sees no pre-join rows from `poll` or `getLatest`) and unit tests in `groupTracking.test.ts`.
 
 - Findings: S3-01 · security · **high** · verified (V2, reproduced). S3-02 (read half) · security · medium · verified (V2).
 - Location: packages/api/src/router/group/groupMembershipRouter.ts:212-308 (self-removal persists the leaver's `nextEpoch`); apps/mobile/lib/groupEncryption.ts:135-159; packages/api/src/lib/groupTracking.ts:233-283 (`poll`) and :285-324 (`getLatest`) filter only by group and cursor.
@@ -304,7 +342,7 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M3. Switching server sends the old server's session cookie to the new server
 
-- **Status:** fixed on `fix/beta-1-review` by "Tie the app's credentials to the server that issued them" (SHA added at wrap-up). Unit tests: the cookie key differs per server, credentials use `WHEN_UNLOCKED_THIS_DEVICE_ONLY`, the revoke token is dropped on a server mismatch, and a server change runs `endSession` first. `serverKey` is SHA-256 of the base URL (`@noble/hashes` added to the app). Also covers the SecureStore-options part of S1-10; the rest of S1-10 stays post-beta. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `e9daa70b` ("Tie the app's credentials to the server that issued them"). Unit tests: the cookie key differs per server, credentials use `WHEN_UNLOCKED_THIS_DEVICE_ONLY`, the revoke token is dropped on a server mismatch, and a server change runs `endSession` first. `serverKey` is SHA-256 of the base URL (`@noble/hashes` added to the app). Also covers the SecureStore-options part of S1-10; the rest of S1-10 stays post-beta. Emulator check in the end-of-branch batch.
 
 - Finding: S8-01 · security · **high** · verified (V1; worse than reported)
 - Location: apps/mobile/lib/auth-client.ts:9 and :47-51 (one fixed cookie key, not tied to a server); apps/mobile/lib/api.ts:101-104; apps/mobile/lib/auth.ts:79-92 (revoke token); apps/mobile/app/serverUrl.tsx:43-52 and :123-124 ("Your current session will remain active"); apps/mobile/components/ApiCompatibilityGate.tsx:150-154 ("Use a different server")
@@ -322,7 +360,7 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M4. Opening the app stops location sharing until permissions load; offline, it stays off
 
-- **Status:** fixed on `fix/beta-1-review` by "Keep location sharing running while the permission state loads on launch" (SHA added at wrap-up). Tests: TrackingProvider starting at `permissionState: null` flushes but doesn't reconcile, then reconciles with a forced key check once known; a known not-ready state still stops capture; a failed permission request falls back to a direct read; `tracking.test.ts` reproduces V4 (offline revoke, then `reconcile(true)` goes back to the network). Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `6b9c1042` ("Keep location sharing running while the permission state loads on launch"). Tests: TrackingProvider starting at `permissionState: null` flushes but doesn't reconcile, then reconciles with a forced key check once known; a known not-ready state still stops capture; a failed permission request falls back to a direct read; `tracking.test.ts` reproduces V4 (offline revoke, then `reconcile(true)` goes back to the network). Emulator check in the end-of-branch batch.
 
 - Finding: S6-01 · bug · **high** · verified (V4, reproduced)
 - Location: apps/mobile/providers/TrackingProvider.tsx:51-54 and :186; apps/mobile/providers/LocationPermissionProvider.tsx:42 and :112-120; apps/mobile/lib/tracking.ts:221-235, :273-290, :493-498
@@ -342,7 +380,7 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M5. Redis outages longer than about 30 seconds break every API call until the backend restarts
 
-- **Status:** fixed on `fix/beta-1-review` by "Share one self-healing Redis client per process and choose a failure policy per caller" (SHA added at wrap-up). Q5. Unit tests for the self-healing wrapper and for every Q5 caller with a failing client; `redisRestart.integration.test.ts` stops Redis for 35 s and proves the same client recovers (runs only when `REDIS_RESTART_CONTAINER` names a throwaway container, so CI skips it; run on this branch against `beta1-redis`, 329/329). New `GET /ready` pings Redis; `/health` unchanged.
+- **Status:** fixed on `fix/beta-1-review` in `9df9c764` ("Share one self-healing Redis client per process and choose a failure policy per caller"). Q5. Unit tests for the self-healing wrapper and for every Q5 caller with a failing client; `redisRestart.integration.test.ts` stops Redis for 35 s and proves the same client recovers (runs only when `REDIS_RESTART_CONTAINER` names a throwaway container, so CI skips it; run on this branch against `beta1-redis`, 329/329). New `GET /ready` pings Redis; `/health` unchanged.
 
 - Finding: S4-01 · bug · **high** · verified (V3, reproduced against a throwaway Redis)
 - Location: packages/cache/src/cache/OpenBeaconCache.ts:59-61; apps/backend/src/cache.ts:4-7; packages/auth/src/index.ts:28-33 and packages/email/src/index.ts:43-45 (two more clients); packages/api/src/middlewares/rateLimitMiddleware.ts:34-40; apps/backend/src/routes/health.ts:8-16
@@ -365,7 +403,7 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M6. Any signed-in user can write about 100 MB of ciphertext a minute, kept for 60 days
 
-- **Status:** fixed on `fix/beta-1-review` by "Limit tracking uploads per account by points per minute and a daily budget" (SHA added at wrap-up). Q2 limits. Tests: schema accepts 1024 and rejects 1025; 2,000 points/min (21st batch of 100 refused); budget 35,424 at G=3 and 147,744 at G=16; duplicates don't count; fail-open with a log line when Redis is down; integration test for the daily growth report job.
+- **Status:** fixed on `fix/beta-1-review` in `61574d6e` ("Limit tracking uploads per account by points per minute and a daily budget"). Q2 limits. Tests: schema accepts 1024 and rejects 1025; 2,000 points/min (21st batch of 100 refused); budget 35,424 at G=3 and 147,744 at G=16; duplicates don't count; fail-open with a log line when Redis is down; integration test for the daily growth report job.
 
 - Finding: S3-03 · security · **high** · verified (V2)
 - Location: packages/api/src/router/group/groupTrackingRouter.ts:21-28 (240 requests/min); packages/schemas/src/schemas/group/tracking.ts:23-36 (100 points per batch, `ciphertext` up to 4096 chars); packages/api/src/router/group/groupLifecycleRouter.ts:85-91 (anyone can create a group of one)
@@ -380,7 +418,7 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M7. Google sign-in silently adds Google to an existing password account
 
-- **Status:** fixed on `fix/beta-1-review` by "Refuse Google sign-in for an email that signs in with a password" (SHA added at wrap-up). Integration test `googleSignIn.integration.test.ts` (signed id token, Google keys stubbed): Google sign-in for a password email gets 401 `OAUTH_LINK_ERROR` and adds no Account row. App message mapping tested in `lib/auth.test.ts`. Emulator check of the message is in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `95a1001a` ("Refuse Google sign-in for an email that signs in with a password"). Integration test `googleSignIn.integration.test.ts` (signed id token, Google keys stubbed): Google sign-in for a password email gets 401 `OAUTH_LINK_ERROR` and adds no Account row. App message mapping tested in `lib/auth.test.ts`. Emulator check of the message is in the end-of-branch batch.
 
 - Finding: S2-02 · security · medium · verified (V1, reproduced). The reviewer said post-beta; V1 made it must-fix.
 - Location: packages/auth/src/createAuth.ts:29-214 (no `account.accountLinking` option, so better-auth links by default)
@@ -400,7 +438,7 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M8. The location-point reader rejects any new field, so every future payload change forces the whole family to update
 
-- **Status:** fixed on `fix/beta-1-review` by "Read tracking points tolerantly and send an unknown battery level as null" (SHA added at wrap-up). Q1. New shared vectors (an unknown key, a `null` level) read by TS and the Kotlin JVM tests; the locked-schema test now asserts extra keys are dropped; Kotlin writes `null` for an unknown level and a non-finite speed and drops non-finite coordinates (S10-08); battery UI hides the percentage for an unknown level. JVM tests 40/40 and `testDebugUnitTest` 57/57. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `b30db437` ("Read tracking points tolerantly and send an unknown battery level as null"). Q1. New shared vectors (an unknown key, a `null` level) read by TS and the Kotlin JVM tests; the locked-schema test now asserts extra keys are dropped; Kotlin writes `null` for an unknown level and a non-finite speed and drops non-finite coordinates (S10-08); battery UI hides the percentage for an unknown level. JVM tests 40/40 and `testDebugUnitTest` 57/57. Emulator check in the end-of-branch batch.
 
 - Findings: S10-02 · design · medium · verified (V5, reproduced). Related: S6-14 and S10-08 (D4).
 - Location: packages/encryption/src/trackingPoint.ts:55-87 (`Object.keys(value).length !== 6`, the same check for `battery`); apps/mobile/lib/mapTrackingDecrypt.ts:115; BatteryReader.kt:17-30
@@ -415,7 +453,7 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M9. A server URL with a trailing slash or a path breaks the app, and the launch screen then traps the user
 
-- **Status:** fixed on `fix/beta-1-review` by "Normalise the server URL in one place and give the launch screen a way out" (SHA added at wrap-up). Unit tests for the normaliser (`currentServer.test.ts`), the retry backoff and the launch-screen error state. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `86dd3bef` ("Normalise the server URL in one place and give the launch screen a way out"). Unit tests for the normaliser (`currentServer.test.ts`), the retry backoff and the launch-screen error state. Emulator check in the end-of-branch batch.
 
 - Findings: S8-02 · bug · medium and S8-04 · UX · medium. Both verified (V5, reproduced against the real backend); worse together.
 - Location: apps/mobile/app/serverUrl.tsx:16-18 and :44; apps/mobile/lib/server-url.ts:9-15; apps/mobile/lib/base-url.ts:5-6; apps/mobile/lib/api.ts:93; apps/mobile/lib/apiCompatibility.ts:114; apps/mobile/app/index.tsx:79-104
@@ -437,7 +475,7 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M10. Deleting a heavy account can time out and roll back, locking the user's groups each time
 
-- **Status:** fixed on `fix/beta-1-review` by "Delete location history in batches outside the locking transaction" (SHA added at wrap-up). Q6. Integration test seeds 500k rows (in 50k inserts, under C1's 30 s statement timeout), asserts the deletion completes, and checks a sign-in during the batches is refused. One shared `deletePayloadsInBatches` helper for account deletion, leave/remove-member (after the membership transaction; resolved against M2/E1 on cherry-pick) and history cleanup.
+- **Status:** fixed on `fix/beta-1-review` in `b1b844c6` ("Delete location history in batches outside the locking transaction"). Q6. Integration test seeds 500k rows (in 50k inserts, under C1's 30 s statement timeout), asserts the deletion completes, and checks a sign-in during the batches is refused. One shared `deletePayloadsInBatches` helper for account deletion, leave/remove-member (after the membership transaction; resolved against M2/E1 on cherry-pick) and history cleanup.
 
 - Finding: S4-02 · bug · medium (the reviewer said high) · verified (V3, reproduced)
 - Location: packages/api/src/lib/account-deletion.ts:19-98, called from apps/scheduled-jobs/src/jobs/accountDeletion.ts:21-36, apps/scheduled-jobs/src/deleteAccount.ts:17 and packages/api/src/router/accountRouter.ts:358-366. The same pattern for one group is at groupMembershipRouter.ts:310.
@@ -457,7 +495,7 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M11. The "Update Open Beacon" screen has a permanently disabled Update button
 
-- **Status:** fixed on `fix/beta-1-review` by "Open the Play Store from the update screen and show the server's update message" (SHA added at wrap-up). Q8. Tests: env value unset/blank/non-string/281 chars treated as unset; message on `/health` and the 426 body only when set (frozen-shape tests updated); app parses the message; Update opens `market://` with the https fallback. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `0e80d624` ("Open the Play Store from the update screen and show the server's update message"). Q8. Tests: env value unset/blank/non-string/281 chars treated as unset; message on `/health` and the 426 body only when set (frozen-shape tests updated); app parses the message; Update opens `market://` with the https fallback. Emulator check in the end-of-branch batch.
 
 - Finding: S10-03 · UX · medium · verified (V5)
 - Location: apps/mobile/components/ApiCompatibilityGate.tsx:150-154; apps/backend/src/helpers/apiCompatibility.ts:16; apps/backend/src/routes/health.ts:9-15
@@ -725,7 +763,7 @@ Generated from the raw files, with verifier corrections applied. Must-fix findin
 
 #### S1-01 · medium · security
 
-- **Status:** fixed on `fix/beta-1-review` by "Correct the Beta 1 privacy draft and record level 4 as the Beta 1 baseline" (SHA added at wrap-up). C8, docs only (no test). S1-01: only the docs half (privacy draft wording near line 9 and line 43); the expected-sender code change ships with OPE-213, and updating OPE-213's scope in Linear waits for owner approval at wrap-up.
+- **Status:** fixed on `fix/beta-1-review` in `a21dbe39` ("Correct the Beta 1 privacy draft and record level 4 as the Beta 1 baseline"). C8, docs only (no test). S1-01: only the docs half (privacy draft wording near line 9 and line 43); the expected-sender code change ships with OPE-213, and updating OPE-213's scope in Linear waits for owner approval at wrap-up.
 
 **Wrap sender keys come from the server response, so HPKE auth mode doesn't authenticate the epoch key, and History wraps accept any sender**
 
@@ -799,7 +837,7 @@ Generated from the raw files, with verifier corrections applied. Must-fix findin
 
 #### S1-09 · low · security
 
-- **Status:** fixed on `fix/beta-1-review` by "Turn off Android cloud backup" (SHA added at wrap-up). C4. Config only, so no new test; `expo config --type introspect` shows `android:allowBackup="false"` in the manifest.
+- **Status:** fixed on `fix/beta-1-review` in `3581024e` ("Turn off Android cloud backup"). C4. Config only, so no new test; `expo config --type introspect` shows `android:allowBackup="false"` in the manifest.
 
 **Android Auto Backup is on, so MMKV and the native key-store and queue files go to the user's cloud backup**
 
@@ -822,19 +860,19 @@ Generated from the raw files, with verifier corrections applied. Must-fix findin
 
 #### S2-01 · high · security · **must-fix, see M1**
 
-- **Status:** fixed on `fix/beta-1-review` by "Stop a session moving to a new phone and require a fresh sign-in to activate" (SHA added at wrap-up).
+- **Status:** fixed on `fix/beta-1-review` in `638a2861` ("Stop a session moving to a new phone and require a fresh sign-in to activate").
 
 A session moved to a new phone survives removal of the stolen phone, which can then activate the new phone without the password
 
 #### S2-02 · medium · security · **must-fix, see M7**
 
-- **Status:** fixed on `fix/beta-1-review` by "Refuse Google sign-in for an email that signs in with a password" (SHA added at wrap-up). Integration test `googleSignIn.integration.test.ts` (signed id token, Google keys stubbed): Google sign-in for a password email gets 401 `OAUTH_LINK_ERROR` and adds no Account row. App message mapping tested in `lib/auth.test.ts`. Emulator check of the message is in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `95a1001a` ("Refuse Google sign-in for an email that signs in with a password"). Integration test `googleSignIn.integration.test.ts` (signed id token, Google keys stubbed): Google sign-in for a password email gets 401 `OAUTH_LINK_ERROR` and adds no Account row. App message mapping tested in `lib/auth.test.ts`. Emulator check of the message is in the end-of-branch batch.
 
 Google sign-in silently links Google to an existing password account
 
 #### S2-03 · medium · security
 
-- **Status:** fixed on `fix/beta-1-review` by "Return a generic message for internal server errors and log the real one" (SHA added at wrap-up). C2. Unit test `packages/api/src/trpc.test.ts`: Prisma-style text and a storage cause don't reach the response. The new `onError` log line has no test.
+- **Status:** fixed on `fix/beta-1-review` in `79d274ff` ("Return a generic message for internal server errors and log the real one"). C2. Unit test `packages/api/src/trpc.test.ts`: Prisma-style text and a storage cause don't reach the response. The new `onError` log line has no test.
 
 **Unexpected server errors return their internal message to the client**
 
@@ -846,7 +884,7 @@ Google sign-in silently links Google to an existing password account
 
 #### S2-04 · medium · security
 
-- **Status:** fixed on `fix/beta-1-review` by "Remove every IP-based rate limit" (SHA added at wrap-up). Q7b (D25). Tests: the middleware never keys on an IP (every key recorded), anonymous calls are limited only by a server-wide meta, `feedback.submit` shares 30 per 10 minutes server-wide, one IP can request codes for 25 addresses. `EMAIL_CODE_IP_LIMIT` removed from env schemas, `.env.example`, `turbo.json` and docs. `clientIp`/`TRUSTED_PROXY_PROVIDER` are still used for `Session.ipAddress` and Cloudflare origin checks; the tRPC `ctx.clientIp` and `RateLimitContextError` are now unused (post-beta clean-up).
+- **Status:** fixed on `fix/beta-1-review` in `e84690d3` ("Remove every IP-based rate limit"). Q7b (D25). Tests: the middleware never keys on an IP (every key recorded), anonymous calls are limited only by a server-wide meta, `feedback.submit` shares 30 per 10 minutes server-wide, one IP can request codes for 25 addresses. `EMAIL_CODE_IP_LIMIT` removed from env schemas, `.env.example`, `turbo.json` and docs. `clientIp`/`TRUSTED_PROXY_PROVIDER` are still used for `Session.ipAddress` and Cloudflare origin checks; the tRPC `ctx.clientIp` and `RateLimitContextError` are now unused (post-beta clean-up).
 
 **Password guessing has no per-account limit; only better-auth's implicit per-IP limiter applies**
 
@@ -865,7 +903,7 @@ Google sign-in silently links Google to an existing password account
 
 #### S2-06 · low · security
 
-- **Status:** fixed on `fix/beta-1-review` by "Switch off the better-auth routes the app doesn't use" (SHA added at wrap-up). C9. Extended the "routes the app doesn't use are switched off" test: the proxy redirect to `https://phish.example` now returns 404.
+- **Status:** fixed on `fix/beta-1-review` in `3dae7ab9` ("Switch off the better-auth routes the app doesn't use"). C9. Extended the "routes the app doesn't use are switched off" test: the proxy redirect to `https://phish.example` now returns 404.
 
 **Unused better-auth endpoints are still enabled, including an open redirect**
 
@@ -875,7 +913,7 @@ Google sign-in silently links Google to an existing password account
 
 #### S2-07 · low · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). C1. Each timeout has a test against a hanging server or stub (storage factory, Resend SDK, Google token exchange, Google certs via the new jose-based verifier, pg pool and statement timeout, app image PUT, auth-client body read).
+- **Status:** fixed on `fix/beta-1-review` in `105867d3` ("Give every outbound client a default timeout"). C1. Each timeout has a test against a hanging server or stub (storage factory, Resend SDK, Google token exchange, Google certs via the new jose-based verifier, pg pool and statement timeout, app image PUT, auth-client body read).
 
 **Outbound calls inside requests have no timeout**
 
@@ -895,7 +933,7 @@ Google sign-in silently links Google to an existing password account
 
 #### S2-09 · low · security
 
-- **Status:** fixed on `fix/beta-1-review` by "Patch hono and better-auth, declare superjson in the app, drop unused deps" (SHA added at wrap-up). C5 (the dependency half of X-09; the zod catalog and the rest of X-09 stay post-beta). No new test: `bun audit` no longer lists hono, `bun run ci` and 320 integration tests pass.
+- **Status:** fixed on `fix/beta-1-review` in `796621cb` ("Patch hono and better-auth, declare superjson in the app, drop unused deps"). C5 (the dependency half of X-09; the zod catalog and the rest of X-09 stay post-beta). No new test: `bun audit` no longer lists hono, `bun run ci` and 320 integration tests pass.
 
 **Hono 4.13.11 advisories do not affect the backend, but the dependency should still be upgraded**
 
@@ -905,7 +943,7 @@ Google sign-in silently links Google to an existing password account
 
 #### S2-10 · low · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Delete location history in batches outside the locking transaction" (SHA added at wrap-up). A failed immediate deletion is now logged instead of swallowed.
+- **Status:** fixed on `fix/beta-1-review` in `b1b844c6` ("Delete location history in batches outside the locking transaction"). A failed immediate deletion is now logged instead of swallowed.
 
 **A failed immediate account deletion is swallowed with no log**
 
@@ -916,7 +954,7 @@ Google sign-in silently links Google to an existing password account
 
 #### S2-11 · low · duplication
 
-- **Status:** fixed on `fix/beta-1-review` by "Share one self-healing Redis client per process and choose a failure policy per caller" (SHA added at wrap-up). Only the Redis-client part (auth and email now share the backend's client); the rest stays post-beta.
+- **Status:** fixed on `fix/beta-1-review` in `9df9c764` ("Share one self-healing Redis client per process and choose a failure policy per caller"). Only the Redis-client part (auth and email now share the backend's client); the rest stays post-beta.
 
 **Small clean-ups: dead file, duplicated config and checks, rule breaches**
 
@@ -936,19 +974,19 @@ Google sign-in silently links Google to an existing password account
 
 #### S3-01 · high · security · **must-fix, see M2**
 
-- **Status:** fixed on `fix/beta-1-review` by "Stop a leaver choosing the next group key and hide pre-join rows from new members" (SHA added at wrap-up). Integration tests in `groupDeparture.integration.test.ts` (leaver's epoch not stored, rotation flagged; later joiner sees no pre-join rows from `poll` or `getLatest`) and unit tests in `groupTracking.test.ts`.
+- **Status:** fixed on `fix/beta-1-review` in `09242e4f` ("Stop a leaver choosing the next group key and hide pre-join rows from new members"). Integration tests in `groupDeparture.integration.test.ts` (leaver's epoch not stored, rotation flagged; later joiner sees no pre-join rows from `poll` or `getLatest`) and unit tests in `groupTracking.test.ts`.
 
 A member who leaves creates, and keeps, the group key used after they leave
 
 #### S3-03 · high · security · **must-fix, see M6**
 
-- **Status:** fixed on `fix/beta-1-review` by "Limit tracking uploads per account by points per minute and a daily budget" (SHA added at wrap-up). Q2 limits. Tests: schema accepts 1024 and rejects 1025; 2,000 points/min (21st batch of 100 refused); budget 35,424 at G=3 and 147,744 at G=16; duplicates don't count; fail-open with a log line when Redis is down; integration test for the daily growth report job.
+- **Status:** fixed on `fix/beta-1-review` in `61574d6e` ("Limit tracking uploads per account by points per minute and a daily budget"). Q2 limits. Tests: schema accepts 1024 and rejects 1025; 2,000 points/min (21st batch of 100 refused); budget 35,424 at G=3 and 147,744 at G=16; duplicates don't count; fail-open with a log line when Redis is down; integration test for the daily growth report job.
 
 Any signed-in user can write about 100 MB of ciphertext a minute, with no quota
 
 #### S3-02 · medium · security · **must-fix, see M2**
 
-- **Status:** fixed on `fix/beta-1-review` by "Stop a leaver choosing the next group key and hide pre-join rows from new members" (SHA added at wrap-up). Integration tests in `groupDeparture.integration.test.ts` (leaver's epoch not stored, rotation flagged; later joiner sees no pre-join rows from `poll` or `getLatest`) and unit tests in `groupTracking.test.ts`.
+- **Status:** fixed on `fix/beta-1-review` in `09242e4f` ("Stop a leaver choosing the next group key and hide pre-join rows from new members"). Integration tests in `groupDeparture.integration.test.ts` (leaver's epoch not stored, rotation flagged; later joiner sees no pre-join rows from `poll` or `getLatest`) and unit tests in `groupTracking.test.ts`.
 
 Tracking reads ignore when the reader joined, and uploads under superseded epochs are accepted indefinitely
 
@@ -962,7 +1000,7 @@ Tracking reads ignore when the reader joined, and uploads under superseded epoch
 
 #### S3-05 · medium · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). Partly: the storage timeout only. Group delete still calls storage while holding the group lock, and the SDK's 3 retries can outlast the 15 s transaction; that restructure stays post-beta.
+- **Status:** fixed on `fix/beta-1-review` in `105867d3` ("Give every outbound client a default timeout"). Partly: the storage timeout only. Group delete still calls storage while holding the group lock, and the SDK's 3 retries can outlast the 15 s transaction; that restructure stays post-beta.
 
 **Group deletion calls storage with no timeout while it holds the group lock; storage calls never time out anywhere**
 
@@ -1009,19 +1047,19 @@ Tracking reads ignore when the reader joined, and uploads under superseded epoch
 
 #### S4-01 · high · bug · **must-fix, see M5**
 
-- **Status:** fixed on `fix/beta-1-review` by "Share one self-healing Redis client per process and choose a failure policy per caller" (SHA added at wrap-up). Q5. Unit tests for the self-healing wrapper and for every Q5 caller with a failing client; `redisRestart.integration.test.ts` stops Redis for 35 s and proves the same client recovers (runs only when `REDIS_RESTART_CONTAINER` names a throwaway container, so CI skips it; run on this branch against `beta1-redis`, 329/329). New `GET /ready` pings Redis; `/health` unchanged.
+- **Status:** fixed on `fix/beta-1-review` in `9df9c764` ("Share one self-healing Redis client per process and choose a failure policy per caller"). Q5. Unit tests for the self-healing wrapper and for every Q5 caller with a failing client; `redisRestart.integration.test.ts` stops Redis for 35 s and proves the same client recovers (runs only when `REDIS_RESTART_CONTAINER` names a throwaway container, so CI skips it; run on this branch against `beta1-redis`, 329/329). New `GET /ready` pings Redis; `/health` unchanged.
 
 Redis client never reconnects after a short outage under traffic, so every API call fails until the backend restarts
 
 #### S4-02 · medium · bug · **must-fix, see M10**
 
-- **Status:** fixed on `fix/beta-1-review` by "Delete location history in batches outside the locking transaction" (SHA added at wrap-up). Q6. Integration test seeds 500k rows (in 50k inserts, under C1's 30 s statement timeout), asserts the deletion completes, and checks a sign-in during the batches is refused. One shared `deletePayloadsInBatches` helper for account deletion, leave/remove-member (after the membership transaction; resolved against M2/E1 on cherry-pick) and history cleanup.
+- **Status:** fixed on `fix/beta-1-review` in `b1b844c6` ("Delete location history in batches outside the locking transaction"). Q6. Integration test seeds 500k rows (in 50k inserts, under C1's 30 s statement timeout), asserts the deletion completes, and checks a sign-in during the batches is refused. One shared `deletePayloadsInBatches` helper for account deletion, leave/remove-member (after the membership transaction; resolved against M2/E1 on cherry-pick) and history cleanup.
 
 Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it never completes, and each retry locks the user's groups
 
 #### S4-03 · medium · design
 
-- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). Partly: the pool connection wait (10 s) and `statement_timeout` (30 s) only. A configurable pool size stays post-beta.
+- **Status:** fixed on `fix/beta-1-review` in `105867d3` ("Give every outbound client a default timeout"). Partly: the pool connection wait (10 s) and `statement_timeout` (30 s) only. A configurable pool size stays post-beta.
 
 **Prisma/pg pool has no connection-wait limit, no statement timeout and an unconfigurable pool size**
 
@@ -1032,7 +1070,7 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 
 #### S4-04 · medium · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). Partly: the S3 and Resend timeouts only. The static `/health` part is covered by M5's readiness check if that lands; otherwise post-beta.
+- **Status:** fixed on `fix/beta-1-review` in `105867d3` ("Give every outbound client a default timeout"). Partly: the S3 and Resend timeouts only. The static `/health` part is covered by M5's readiness check if that lands; otherwise post-beta.
 
 **Runner jobs have no timeouts on S3, Resend or Redis calls, and `/health` is static, so a hung call stops a job forever unnoticed**
 
@@ -1044,7 +1082,7 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 
 #### S4-05 · low · design
 
-- **Status:** fixed on `fix/beta-1-review` by "Delete location history in batches outside the locking transaction" (SHA added at wrap-up). Deletion and image-cleanup failures in the job now log `errorCode`.
+- **Status:** fixed on `fix/beta-1-review` in `b1b844c6` ("Delete location history in batches outside the locking transaction"). Deletion and image-cleanup failures in the job now log `errorCode`.
 
 **Account deletion failures are logged without a code, and permanent failures retry every 5 minutes forever**
 
@@ -1131,7 +1169,7 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 
 #### S5-01 · medium · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). C1. Each timeout has a test against a hanging server or stub (storage factory, Resend SDK, Google token exchange, Google certs via the new jose-based verifier, pg pool and statement timeout, app image PUT, auth-client body read).
+- **Status:** fixed on `fix/beta-1-review` in `105867d3` ("Give every outbound client a default timeout"). C1. Each timeout has a test against a hanging server or stub (storage factory, Resend SDK, Google token exchange, Google certs via the new jose-based verifier, pg pool and statement timeout, app image PUT, auth-client body read).
 
 **Resend email calls have no timeout, so a slow Resend stalls requests and piles up background sends**
 
@@ -1143,7 +1181,7 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 
 #### S5-02 · medium · UX
 
-- **Status:** fixed on `fix/beta-1-review` by "Put .env.example comments on their own lines and bind compose services to localhost" (SHA added at wrap-up). C7. Config only, so no new test; the emulator script's secret substitution was updated to match and checked by hand.
+- **Status:** fixed on `fix/beta-1-review` in `6f9fb537` ("Put .env.example comments on their own lines and bind compose services to localhost"). C7. Config only, so no new test; the emulator script's secret substitution was updated to match and checked by hand.
 
 **Following the docs with `docker run --env-file .env` turns the inline comments in `.env.example` into values**
 
@@ -1153,7 +1191,7 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 
 #### S5-03 · medium · security
 
-- **Status:** fixed on `fix/beta-1-review` by "Put .env.example comments on their own lines and bind compose services to localhost" (SHA added at wrap-up). C7. Config only, so no new test; the emulator script's secret substitution was updated to match and checked by hand.
+- **Status:** fixed on `fix/beta-1-review` in `6f9fb537` ("Put .env.example comments on their own lines and bind compose services to localhost"). C7. Config only, so no new test; the emulator script's secret substitution was updated to match and checked by hand.
 
 **docker-compose publishes Postgres (with a known password) and Dragonfly (with no auth) on every interface**
 
@@ -1244,7 +1282,7 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 
 #### S5-13 · low · design
 
-- **Status:** fixed on `fix/beta-1-review` by "Share one self-healing Redis client per process and choose a failure policy per caller" (SHA added at wrap-up). Only the Redis-client part (auth and email now share the backend's client); the rest stays post-beta.
+- **Status:** fixed on `fix/beta-1-review` in `9df9c764` ("Share one self-healing Redis client per process and choose a failure policy per caller"). Only the Redis-client part (auth and email now share the backend's client); the rest stays post-beta.
 
 **The email package creates its own Redis client and reads the environment at import time**
 
@@ -1273,7 +1311,7 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 
 #### S6-01 · high · bug · **must-fix, see M4**
 
-- **Status:** fixed on `fix/beta-1-review` by "Keep location sharing running while the permission state loads on launch" (SHA added at wrap-up). Tests: TrackingProvider starting at `permissionState: null` flushes but doesn't reconcile, then reconciles with a forced key check once known; a known not-ready state still stops capture; a failed permission request falls back to a direct read; `tracking.test.ts` reproduces V4 (offline revoke, then `reconcile(true)` goes back to the network). Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `6b9c1042` ("Keep location sharing running while the permission state loads on launch"). Tests: TrackingProvider starting at `permissionState: null` flushes but doesn't reconcile, then reconciles with a forced key check once known; a known not-ready state still stops capture; a failed permission request falls back to a direct read; `tracking.test.ts` reproduces V4 (offline revoke, then `reconcile(true)` goes back to the network). Emulator check in the end-of-branch batch.
 
 Cold app launch stops sharing and wipes native keys before permissions load; offline, sharing stays off
 
@@ -1333,7 +1371,7 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-09 · medium · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Pass fix times as epoch milliseconds and raise minSdk to 26" (SHA added at wrap-up). C6 / E3. JVM tests: timestamps are formatted from epoch milliseconds in UTC, and the capture pipeline source has no `java.time`. `expo config` gives `android.minSdkVersion=26`; the built APK's manifest is checked in the end-of-branch emulator batch.
+- **Status:** fixed on `fix/beta-1-review` in `49fcf5f5` ("Pass fix times as epoch milliseconds and raise minSdk to 26"). C6 / E3. JVM tests: timestamps are formatted from epoch milliseconds in UTC, and the capture pipeline source has no `java.time`. `expo config` gives `android.minSdkVersion=26`; the built APK's manifest is checked in the end-of-branch emulator batch.
 
 **`java.time.Instant` in the capture path crashes on Android 7 (minSdk 24, no desugaring)**
 
@@ -1344,7 +1382,7 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-02 · low · UX
 
-- **Status:** fixed on `fix/beta-1-review` by "Build the app for Android only" (SHA added at wrap-up). Q9 (Beta 1 only; S6-02 is a must-fix again for the first iOS release). Config only, so no new test; `expo config` shows `platforms: ['android']`. The beta docs note lands with C8.
+- **Status:** fixed on `fix/beta-1-review` in `01ceef54` ("Build the app for Android only"). Q9 (Beta 1 only; S6-02 is a must-fix again for the first iOS release). Config only, so no new test; `expo config` shows `platforms: ['android']`. The beta docs note lands with C8.
 
 **iOS build asks for Always location and says "Sharing enabled", but iOS never captures or uploads**
 
@@ -1355,7 +1393,7 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-10 · low · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "End every session on the phone through one endSession table" (SHA added at wrap-up). Q3. Table-driven `endSession.test.ts` pins what each reason clears across 13 kinds of state; lost-session tests cover same account, different account, and the 30-day expiry; JVM and Robolectric tests for `deleteByOwner` (IN_FLIGHT rows). Owner decision 13 Nov 2026: `signedOut` also records the lost marker, so a signed-out account's keys are wiped after 30 days or when a different account signs in. The 7-day delete option uses `signedOut`; "delete immediately" uses `accountDeleted`. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `22271d92` ("End every session on the phone through one endSession table"). Q3. Table-driven `endSession.test.ts` pins what each reason clears across 13 kinds of state; lost-session tests cover same account, different account, and the 30-day expiry; JVM and Robolectric tests for `deleteByOwner` (IN_FLIGHT rows). Owner decision 13 Nov 2026: `signedOut` also records the lost marker, so a signed-out account's keys are wiped after 30 days or when a different account signs in. The 7-day delete option uses `signedOut`; "delete immediately" uses `accountDeleted`. Emulator check in the end-of-branch batch.
 
 **Sign-out and wipe leave IN_FLIGHT queue rows behind**
 
@@ -1393,7 +1431,7 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-14 · low · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Read tracking points tolerantly and send an unknown battery level as null" (SHA added at wrap-up). Q1. New shared vectors (an unknown key, a `null` level) read by TS and the Kotlin JVM tests; the locked-schema test now asserts extra keys are dropped; Kotlin writes `null` for an unknown level and a non-finite speed and drops non-finite coordinates (S10-08); battery UI hides the percentage for an unknown level. JVM tests 40/40 and `testDebugUnitTest` 57/57. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `b30db437` ("Read tracking points tolerantly and send an unknown battery level as null"). Q1. New shared vectors (an unknown key, a `null` level) read by TS and the Kotlin JVM tests; the locked-schema test now asserts extra keys are dropped; Kotlin writes `null` for an unknown level and a non-finite speed and drops non-finite coordinates (S10-08); battery UI hides the percentage for an unknown level. JVM tests 40/40 and `testDebugUnitTest` 57/57. Emulator check in the end-of-branch batch.
 
 **Unknown battery level is sent as 0%**
 
@@ -1413,7 +1451,7 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-16 · low · style
 
-- **Status:** fixed on `fix/beta-1-review` by "Patch hono and better-auth, declare superjson in the app, drop unused deps" (SHA added at wrap-up). C5 (the dependency half of X-09; the zod catalog and the rest of X-09 stay post-beta). No new test: `bun audit` no longer lists hono, `bun run ci` and 320 integration tests pass.
+- **Status:** fixed on `fix/beta-1-review` in `796621cb` ("Patch hono and better-auth, declare superjson in the app, drop unused deps"). C5 (the dependency half of X-09; the zod catalog and the rest of X-09 stay post-beta). No new test: `bun audit` no longer lists hono, `bun run ci` and 320 integration tests pass.
 
 **Dead and test-only code shipped, plus an unlisted dependency**
 
@@ -1536,13 +1574,13 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S8-01 · high · security · **must-fix, see M3**
 
-- **Status:** fixed on `fix/beta-1-review` by "Tie the app's credentials to the server that issued them" (SHA added at wrap-up). Unit tests: the cookie key differs per server, credentials use `WHEN_UNLOCKED_THIS_DEVICE_ONLY`, the revoke token is dropped on a server mismatch, and a server change runs `endSession` first. `serverKey` is SHA-256 of the base URL (`@noble/hashes` added to the app). Also covers the SecureStore-options part of S1-10; the rest of S1-10 stays post-beta. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `e9daa70b` ("Tie the app's credentials to the server that issued them"). Unit tests: the cookie key differs per server, credentials use `WHEN_UNLOCKED_THIS_DEVICE_ONLY`, the revoke token is dropped on a server mismatch, and a server change runs `endSession` first. `serverKey` is SHA-256 of the base URL (`@noble/hashes` added to the app). Also covers the SecureStore-options part of S1-10; the rest of S1-10 stays post-beta. Emulator check in the end-of-branch batch.
 
 Switching server sends the old server's session cookie and raw session token to the new server
 
 #### S8-02 · medium · bug · **must-fix, see M9**
 
-- **Status:** fixed on `fix/beta-1-review` by "Normalise the server URL in one place and give the launch screen a way out" (SHA added at wrap-up). Unit tests for the normaliser (`currentServer.test.ts`), the retry backoff and the launch-screen error state. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `86dd3bef` ("Normalise the server URL in one place and give the launch screen a way out"). Unit tests for the normaliser (`currentServer.test.ts`), the retry backoff and the launch-screen error state. Emulator check in the end-of-branch batch.
 
 A server URL with a trailing slash or path passes the check, then every API call 404s
 
@@ -1558,7 +1596,7 @@ A server URL with a trailing slash or path passes the check, then every API call
 
 #### S8-04 · medium · UX · **must-fix, see M9**
 
-- **Status:** fixed on `fix/beta-1-review` by "Normalise the server URL in one place and give the launch screen a way out" (SHA added at wrap-up). Unit tests for the normaliser (`currentServer.test.ts`), the retry backoff and the launch-screen error state. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `86dd3bef` ("Normalise the server URL in one place and give the launch screen a way out"). Unit tests for the normaliser (`currentServer.test.ts`), the retry backoff and the launch-screen error state. Emulator check in the end-of-branch batch.
 
 The launch screen retries forever with no message or way out when the device check fails
 
@@ -1573,7 +1611,7 @@ The launch screen retries forever with no message or way out when the device che
 
 #### S8-06 · medium · security
 
-- **Status:** fixed on `fix/beta-1-review` by "End every session on the phone through one endSession table" (SHA added at wrap-up). Q3. Table-driven `endSession.test.ts` pins what each reason clears across 13 kinds of state; lost-session tests cover same account, different account, and the 30-day expiry; JVM and Robolectric tests for `deleteByOwner` (IN_FLIGHT rows). Owner decision 13 Nov 2026: `signedOut` also records the lost marker, so a signed-out account's keys are wiped after 30 days or when a different account signs in. The 7-day delete option uses `signedOut`; "delete immediately" uses `accountDeleted`. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `22271d92` ("End every session on the phone through one endSession table"). Q3. Table-driven `endSession.test.ts` pins what each reason clears across 13 kinds of state; lost-session tests cover same account, different account, and the 30-day expiry; JVM and Robolectric tests for `deleteByOwner` (IN_FLIGHT rows). Owner decision 13 Nov 2026: `signedOut` also records the lost marker, so a signed-out account's keys are wiped after 30 days or when a different account signs in. The 7-day delete option uses `signedOut`; "delete immediately" uses `accountDeleted`. Emulator check in the end-of-branch batch.
 
 **Deleting the account only signs out; it leaves the device key, history keys and queued points on the phone**
 
@@ -1601,7 +1639,7 @@ The launch screen retries forever with no message or way out when the device che
 
 #### S8-09 · low · security
 
-- **Status:** fixed on `fix/beta-1-review` by "Turn off Android cloud backup" (SHA added at wrap-up). C4. Config only, so no new test; `expo config --type introspect` shows `android:allowBackup="false"` in the manifest.
+- **Status:** fixed on `fix/beta-1-review` in `3581024e` ("Turn off Android cloud backup"). C4. Config only, so no new test; `expo config --type introspect` shows `android:allowBackup="false"` in the manifest.
 
 **Android Auto Backup is on by default and backs up native tracking preferences**
 
@@ -1623,7 +1661,7 @@ The launch screen retries forever with no message or way out when the device che
 
 #### S8-11 · low · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). C1. Each timeout has a test against a hanging server or stub (storage factory, Resend SDK, Google token exchange, Google certs via the new jose-based verifier, pg pool and statement timeout, app image PUT, auth-client body read).
+- **Status:** fixed on `fix/beta-1-review` in `105867d3` ("Give every outbound client a default timeout"). C1. Each timeout has a test against a hanging server or stub (storage factory, Resend SDK, Google token exchange, Google certs via the new jose-based verifier, pg pool and statement timeout, app image PUT, auth-client body read).
 
 **Auth client timeout stops at response headers; a stalled body hangs sign-in**
 
@@ -1671,7 +1709,7 @@ The launch screen retries forever with no message or way out when the device che
 
 #### S8-16 · low · style
 
-- **Status:** fixed on `fix/beta-1-review` by "Patch hono and better-auth, declare superjson in the app, drop unused deps" (SHA added at wrap-up). C5 (the dependency half of X-09; the zod catalog and the rest of X-09 stay post-beta). No new test: `bun audit` no longer lists hono, `bun run ci` and 320 integration tests pass.
+- **Status:** fixed on `fix/beta-1-review` in `796621cb` ("Patch hono and better-auth, declare superjson in the app, drop unused deps"). C5 (the dependency half of X-09; the zod catalog and the rest of X-09 stay post-beta). No new test: `bun audit` no longer lists hono, `bun run ci` and 320 integration tests pass.
 
 **AGENTS.md rule breaches and dependency hygiene in scope**
 
@@ -1684,7 +1722,7 @@ The launch screen retries forever with no message or way out when the device che
 
 #### S9-01 · medium · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Reset the group screen when switching to another group" (SHA added at wrap-up). C12. Tested in `groupScreen.test.tsx`: the dismissed warning and selected tab reset when `groupId` changes.
+- **Status:** fixed on `fix/beta-1-review` in `874d2cc7` ("Reset the group screen when switching to another group"). C12. Tested in `groupScreen.test.tsx`: the dismissed warning and selected tab reset when `groupId` changes.
 
 **Group screen state carries over from one group to the next (unsaved rename can hit the wrong group)**
 
@@ -1704,7 +1742,7 @@ The launch screen retries forever with no message or way out when the device che
 
 #### S9-04 · medium · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Stop a member removal or leave being submitted twice" (SHA added at wrap-up). C11. Tested in `memberNicknames.test.tsx`: a second confirm during the epoch build doesn't submit, and Remove/Leave stay disabled until it finishes.
+- **Status:** fixed on `fix/beta-1-review` in `824b4bcd` ("Stop a member removal or leave being submitted twice"). C11. Tested in `memberNicknames.test.tsx`: a second confirm during the epoch build doesn't submit, and Remove/Leave stay disabled until it finishes.
 
 **Remove member and Leave group can be submitted twice while the new epoch is being built**
 
@@ -1723,7 +1761,7 @@ The launch screen retries forever with no message or way out when the device che
 
 #### S9-06 · medium · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). C1. Each timeout has a test against a hanging server or stub (storage factory, Resend SDK, Google token exchange, Google certs via the new jose-based verifier, pg pool and statement timeout, app image PUT, auth-client body read).
+- **Status:** fixed on `fix/beta-1-review` in `105867d3` ("Give every outbound client a default timeout"). C1. Each timeout has a test against a hanging server or stub (storage factory, Resend SDK, Google token exchange, Google certs via the new jose-based verifier, pg pool and statement timeout, app image PUT, auth-client body read).
 
 **Image upload PUT has no timeout; the avatar spinner can stay forever**
 
@@ -1876,19 +1914,19 @@ The launch screen retries forever with no message or way out when the device che
 
 #### S10-02 · medium · design · **must-fix, see M8**
 
-- **Status:** fixed on `fix/beta-1-review` by "Read tracking points tolerantly and send an unknown battery level as null" (SHA added at wrap-up). Q1. New shared vectors (an unknown key, a `null` level) read by TS and the Kotlin JVM tests; the locked-schema test now asserts extra keys are dropped; Kotlin writes `null` for an unknown level and a non-finite speed and drops non-finite coordinates (S10-08); battery UI hides the percentage for an unknown level. JVM tests 40/40 and `testDebugUnitTest` 57/57. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `b30db437` ("Read tracking points tolerantly and send an unknown battery level as null"). Q1. New shared vectors (an unknown key, a `null` level) read by TS and the Kotlin JVM tests; the locked-schema test now asserts extra keys are dropped; Kotlin writes `null` for an unknown level and a non-finite speed and drops non-finite coordinates (S10-08); battery UI hides the percentage for an unknown level. JVM tests 40/40 and `testDebugUnitTest` 57/57. Emulator check in the end-of-branch batch.
 
 The tracking-point reader rejects any extra field, so every future change to the location payload will force the whole family to update
 
 #### S10-03 · medium · UX · **must-fix, see M11**
 
-- **Status:** fixed on `fix/beta-1-review` by "Open the Play Store from the update screen and show the server's update message" (SHA added at wrap-up). Q8. Tests: env value unset/blank/non-string/281 chars treated as unset; message on `/health` and the 426 body only when set (frozen-shape tests updated); app parses the message; Update opens `market://` with the https fallback. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `0e80d624` ("Open the Play Store from the update screen and show the server's update message"). Q8. Tests: env value unset/blank/non-string/281 chars treated as unset; message on `/health` and the 426 body only when set (frozen-shape tests updated); app parses the message; Update opens `market://` with the https fallback. Emulator check in the end-of-branch batch.
 
 The "Update Open Beacon" screen has a disabled Update button and the server can't send users any guidance, and every installed build keeps this behaviour
 
 #### S10-04 · medium · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Keep a "too old" result from a missing procedure or a 426 until Try again" (SHA added at wrap-up). C3. Tests in `apiCompatibility.test.ts` for each level ordering (app ahead, behind, same level, 426 below and at the minimum): the verdict survives matching level headers and `/health`, and clears only on a new server version or Try again.
+- **Status:** fixed on `fix/beta-1-review` in `2ab104b0` ("Keep a "too old" result from a missing procedure or a 426 until Try again"). C3. Tests in `apiCompatibility.test.ts` for each level ordering (app ahead, behind, same level, 426 below and at the minimum): the verdict survives matching level headers and `/health`, and clears only on a new server version or Try again.
 
 **A "too old" result taken from a missing procedure flips on and off, because only same-level mismatches stick**
 
@@ -1917,7 +1955,7 @@ The "Update Open Beacon" screen has a disabled Update button and the server can'
 
 #### S10-01 · low · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Correct the Beta 1 privacy draft and record level 4 as the Beta 1 baseline" (SHA added at wrap-up). Q11 / C8: level 4 recorded as the Beta 1 baseline in `docs/development/api-compatibility.md`; no level change.
+- **Status:** fixed on `fix/beta-1-review` in `a21dbe39` ("Correct the Beta 1 privacy draft and record level 4 as the Beta 1 baseline"). Q11 / C8: level 4 recorded as the Beta 1 baseline in `docs/development/api-compatibility.md`; no level change.
 
 **`setLocationSharing` started requiring `requestedAt` without a level bump, so level-4 apps 1.10.0 and 1.11.0 can no longer pause or resume**
 
@@ -1937,7 +1975,7 @@ The "Update Open Beacon" screen has a disabled Update button and the server can'
 
 #### S10-08 · low · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Read tracking points tolerantly and send an unknown battery level as null" (SHA added at wrap-up). Q1. New shared vectors (an unknown key, a `null` level) read by TS and the Kotlin JVM tests; the locked-schema test now asserts extra keys are dropped; Kotlin writes `null` for an unknown level and a non-finite speed and drops non-finite coordinates (S10-08); battery UI hides the percentage for an unknown level. JVM tests 40/40 and `testDebugUnitTest` 57/57. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `b30db437` ("Read tracking points tolerantly and send an unknown battery level as null"). Q1. New shared vectors (an unknown key, a `null` level) read by TS and the Kotlin JVM tests; the locked-schema test now asserts extra keys are dropped; Kotlin writes `null` for an unknown level and a non-finite speed and drops non-finite coordinates (S10-08); battery UI hides the percentage for an unknown level. JVM tests 40/40 and `testDebugUnitTest` 57/57. Emulator check in the end-of-branch batch.
 
 **The Kotlin tracking-point encoder doesn't validate the way the TS encoder does**
 
@@ -1968,7 +2006,7 @@ The "Update Open Beacon" screen has a disabled Update button and the server can'
 
 #### X-01 · medium · design
 
-- **Status:** fixed on `fix/beta-1-review` by "End every session on the phone through one endSession table" (SHA added at wrap-up). Q3. Table-driven `endSession.test.ts` pins what each reason clears across 13 kinds of state; lost-session tests cover same account, different account, and the 30-day expiry; JVM and Robolectric tests for `deleteByOwner` (IN_FLIGHT rows). Owner decision 13 Nov 2026: `signedOut` also records the lost marker, so a signed-out account's keys are wiped after 30 days or when a different account signs in. The 7-day delete option uses `signedOut`; "delete immediately" uses `accountDeleted`. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `22271d92` ("End every session on the phone through one endSession table"). Q3. Table-driven `endSession.test.ts` pins what each reason clears across 13 kinds of state; lost-session tests cover same account, different account, and the 30-day expiry; JVM and Robolectric tests for `deleteByOwner` (IN_FLIGHT rows). Owner decision 13 Nov 2026: `signedOut` also records the lost marker, so a signed-out account's keys are wiped after 30 days or when a different account signs in. The 7-day delete option uses `signedOut`; "delete immediately" uses `accountDeleted`. Emulator check in the end-of-branch batch.
 
 **No single owner for "end this session on this phone"; six entry points each clear a different subset of local state**
 
@@ -1979,7 +2017,7 @@ The "Update Open Beacon" screen has a disabled Update button and the server can'
 
 #### X-02 · medium · design
 
-- **Status:** fixed on `fix/beta-1-review` by "Send a machine-readable reason with upload rejections and stop matching English text" (SHA added at wrap-up). Q10 (minimal X-02). Tests: formatter sends `data.reason` (device errors keep `cause`); uploader classification per reason, and the old English message alone no longer triggers a key recheck; integration test that `uploadBatch` returns all three reasons. The other app classifiers move to `errorReason` after beta, as decided.
+- **Status:** fixed on `fix/beta-1-review` in `0e87104b` ("Send a machine-readable reason with upload rejections and stop matching English text"). Q10 (minimal X-02). Tests: formatter sends `data.reason` (device errors keep `cause`); uploader classification per reason, and the old English message alone no longer triggers a key recheck; integration test that `uploadBatch` returns all three reasons. The other app classifiers move to `errorReason` after beta, as decided.
 
 **Errors have no machine-readable identity: the app branches on overloaded HTTP-style codes and on English message text**
 
@@ -2052,7 +2090,7 @@ The "Update Open Beacon" screen has a disabled Update button and the server can'
 
 #### X-09 · low · design
 
-- **Status:** fixed on `fix/beta-1-review` by "Patch hono and better-auth, declare superjson in the app, drop unused deps" (SHA added at wrap-up). C5 (the dependency half of X-09; the zod catalog and the rest of X-09 stay post-beta). No new test: `bun audit` no longer lists hono, `bun run ci` and 320 integration tests pass.
+- **Status:** fixed on `fix/beta-1-review` in `796621cb` ("Patch hono and better-auth, declare superjson in the app, drop unused deps"). C5 (the dependency half of X-09; the zod catalog and the rest of X-09 stay post-beta). No new test: `bun audit` no longer lists hono, `bun run ci` and 320 integration tests pass.
 
 **Dependency hygiene: knip results triaged, declared-but-unused and unlisted packages, version-range drift that ships two copies of zod in the app**
 
