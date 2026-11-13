@@ -8,6 +8,7 @@
     "dev": "expo start --android --ios",
     "android": "expo prebuild -p android && expo run:android",
     "ios": "expo run:ios",
+    "eas-build-post-install": "bun run --cwd ../../packages/database prisma generate",
     "typecheck": "bun check",
     "test": "bun test --isolate && bun run test:native",
     "test:native": "(cd modules/openbeacon-tracking/jvm && ./gradlew test --no-daemon) && bash ../../scripts/test-offline-tracking-queue.sh",
