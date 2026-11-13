@@ -1,8 +1,7 @@
 import { deviceUnverifiedCause, tryCatch } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
-import * as SecureStore from "expo-secure-store";
 import { trpcClient } from "./api.ts";
-import { SESSION_TOKEN_TO_REVOKE_KEY } from "./auth-client.ts";
+import { saveSessionTokenToRevoke } from "./auth-client.ts";
 import { getRegisteredDeviceKey } from "./deviceKeys.ts";
 import { endSession } from "./endSession.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
@@ -66,7 +65,7 @@ export const signOutOfThisPhone = async ({
   }
   const { signedOut } = await endSession({ reason: "signedOut" });
   if (!signedOut && sessionTokenToRevoke) {
-    await tryCatch(SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke));
+    await tryCatch(saveSessionTokenToRevoke(sessionTokenToRevoke));
   }
   return { status: "signedOut" };
 };

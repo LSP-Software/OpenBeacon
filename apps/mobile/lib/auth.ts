@@ -4,9 +4,8 @@ import {
   isCancelledResponse,
   isSuccessResponse,
 } from "@react-native-google-signin/google-signin";
-import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
-import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "./auth-client.ts";
+import { authClient, forgetSessionTokenToRevoke, readSessionTokenToRevoke } from "./auth-client.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { resetSessionLinkRetries } from "./sessionLink.ts";
@@ -77,18 +76,15 @@ const configureGoogleSignIn = () => {
 };
 
 export const revokePendingSessionToken = async () => {
-  const tokenResult = await tryCatch(SecureStore.getItemAsync(SESSION_TOKEN_TO_REVOKE_KEY));
+  const token = await tryCatch(readSessionTokenToRevoke());
+  if (!token.data) return;
 
-  if (!tokenResult.data) {
-    return;
-  }
-
-  const revokeResult = await tryCatch(authClient.revokeSession({ token: tokenResult.data }));
+  const revokeResult = await tryCatch(authClient.revokeSession({ token: token.data }));
   if (revokeResult.error || revokeResult.data.error) {
     return;
   }
 
-  await tryCatch(SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY));
+  await tryCatch(forgetSessionTokenToRevoke());
 };
 
 export const completeAuthenticatedSessionSetup = async () => {

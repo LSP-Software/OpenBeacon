@@ -111,7 +111,12 @@ mock.module("./api.ts", () => ({
 }));
 
 mock.module("./auth-client.ts", () => ({
-  SESSION_TOKEN_TO_REVOKE_KEY: "sessionTokenToRevokeOnNextLogin",
+  saveSessionTokenToRevoke: async (token: string) => {
+    secureStoreValues.set("sessionTokenToRevokeOnNextLogin", token);
+  },
+  forgetSessionTokenToRevoke: async () => {
+    secureStoreValues.delete("sessionTokenToRevokeOnNextLogin");
+  },
   authClient: {
     signOut: async () => {
       events.push("signOut");

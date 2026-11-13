@@ -1,12 +1,49 @@
 import { expoClient } from "@better-auth/expo/client";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { tryCatch } from "@openbeacon/shared";
 import { createAuthClient } from "better-auth/react";
 import * as SecureStore from "expo-secure-store";
 import { apiCompatibilityFetch } from "./apiCompatibility.ts";
 import { baseUrl } from "./currentServer.ts";
+import { getSecureStoreOptions } from "./secureStoreOptions.ts";
 import { SERVER_UNREACHABLE_MESSAGE } from "./serverUnreachable.ts";
+import { z } from "zod";
 
-export const SESSION_TOKEN_TO_REVOKE_KEY = "sessionTokenToRevokeOnNextLogin";
+const SESSION_TOKEN_TO_REVOKE_KEY = "sessionTokenToRevokeOnNextLogin";
+
+export const getServerKey = (server: string) =>
+  bytesToHex(sha256(utf8ToBytes(server))).slice(0, 32);
+
+export const saveSessionTokenToRevoke = (token: string) =>
+  SecureStore.setItemAsync(
+    SESSION_TOKEN_TO_REVOKE_KEY,
+    JSON.stringify([baseUrl, token]),
+    getSecureStoreOptions(),
+  );
+
+export const forgetSessionTokenToRevoke = () =>
+  SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, getSecureStoreOptions());
+
+export const readSessionTokenToRevoke = async () => {
+  const stored = await SecureStore.getItemAsync(
+    SESSION_TOKEN_TO_REVOKE_KEY,
+    getSecureStoreOptions(),
+  );
+  if (!stored) return null;
+  const parsed = z.tuple([z.string(), z.string()]).safeParse(parseJson(stored));
+  if (parsed.success && parsed.data[0] === baseUrl) return parsed.data[1];
+  await forgetSessionTokenToRevoke();
+  return null;
+};
+
+const parseJson = (value: string): unknown => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
 
 export const authClient = createAuthClient({
   baseURL: `${baseUrl}/api/auth`,
@@ -46,8 +83,13 @@ export const authClient = createAuthClient({
   plugins: [
     expoClient({
       scheme: "openbeacon",
-      storagePrefix: "openbeacon",
-      storage: SecureStore,
+      storagePrefix: `openbeacon_${getServerKey(baseUrl)}`,
+      storage: {
+        getItem: (key) => SecureStore.getItem(key, getSecureStoreOptions()),
+        getItemAsync: (key) => SecureStore.getItemAsync(key, getSecureStoreOptions()),
+        setItem: (key, value) => SecureStore.setItem(key, value, getSecureStoreOptions()),
+        setItemAsync: (key, value) => SecureStore.setItemAsync(key, value, getSecureStoreOptions()),
+      },
     }),
   ],
 });

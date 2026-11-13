@@ -18,6 +18,7 @@
     "@better-auth/expo": "^1.7.22",
     "@hookform/resolvers": "^5.2.2",
     "@maplibre/maplibre-react-native": "^11.5.1",
+    "@noble/hashes": "^2.4.0",
     "@openbeacon/api": "workspace:*",
     "@openbeacon/encryption": "workspace:*",
     "@openbeacon/schemas": "workspace:*",
