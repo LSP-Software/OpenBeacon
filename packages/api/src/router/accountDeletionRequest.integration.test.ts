@@ -454,7 +454,7 @@ test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 );
 
 test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
-  "deletes an account with 500k location points in batches and refuses a sign-in while the batches run",
+  "deletes an account's location points over many batches and refuses a sign-in while the batches run",
   async () => {
     const heavyEmail = `heavy-${crypto.randomUUID()}@example.test`;
     const signup = await auth.api.signUpEmail({
@@ -488,15 +488,13 @@ test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           senderPublicKey: "k",
         },
       });
-      for (let start = 1; start <= 500_000; start += 50_000) {
-        await prisma.$executeRaw`
-          INSERT INTO "GroupEncryptedPayload"
-            (id, "groupId", "epochId", "senderDeviceId", "senderUserId", kind, algorithm, nonce, ciphertext, "clientPointId", "createdAt")
-          SELECT ${heavyUserId} || lpad(i::text, 7, '0'), ${heavyGroup}, ${epoch.id}, ${`${heavyUserId}-device`}, ${heavyUserId},
-            'location', 'a', 'n', repeat('c', 64), lpad(i::text, 7, '0'), now() - i * interval '10 seconds'
-          FROM generate_series(${start}::int, ${start + 49_999}::int) AS i
-        `;
-      }
+      await prisma.$executeRaw`
+        INSERT INTO "GroupEncryptedPayload"
+          (id, "groupId", "epochId", "senderDeviceId", "senderUserId", kind, algorithm, nonce, ciphertext, "clientPointId", "createdAt")
+        SELECT ${heavyUserId} || lpad(i::text, 7, '0'), ${heavyGroup}, ${epoch.id}, ${`${heavyUserId}-device`}, ${heavyUserId},
+          'location', 'a', 'n', repeat('c', 64), lpad(i::text, 7, '0'), now() - i * interval '10 seconds'
+        FROM generate_series(1, 60000) AS i
+      `;
       await prisma.session.deleteMany({ where: { userId: heavyUserId } });
       await prisma.user.update({
         where: { id: heavyUserId },
@@ -516,7 +514,7 @@ test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       while (
         !deletionSettled &&
         (await prisma.groupEncryptedPayload.count({ where: { senderUserId: heavyUserId } })) ===
-          500_000
+          60_000
       )
         await Bun.sleep(5);
 
@@ -537,5 +535,5 @@ test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$executeRaw`VACUUM "GroupEncryptedPayload"`;
     }
   },
-  300_000,
+  60_000,
 );

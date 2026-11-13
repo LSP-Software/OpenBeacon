@@ -259,7 +259,6 @@ Fixed on `fix/beta-1-review` (13 Nov 2026). Each fixed finding below carries its
 - The map-tiles R2 client sets `requestTimeout` without `throwOnRequestTimeout`, so it only logs (one-line fix).
 - The password limiter refills gradually (about one attempt every 90 s after a lockout), so "Try again in 15 minutes" is approximate.
 - The tRPC `ctx.clientIp` and `RateLimitContextError` are unused after Q7b.
-- The 500k-row deletion test is heavy for the shared Postgres container (it once ran out of `/dev/shm`).
 
 ## Summary
 
@@ -475,7 +474,7 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M10. Deleting a heavy account can time out and roll back, locking the user's groups each time
 
-- **Status:** fixed on `fix/beta-1-review` in `b1b844c6` ("Delete location history in batches outside the locking transaction"). Q6. Integration test seeds 500k rows (in 50k inserts, under C1's 30 s statement timeout), asserts the deletion completes, and checks a sign-in during the batches is refused. One shared `deletePayloadsInBatches` helper for account deletion, leave/remove-member (after the membership transaction; resolved against M2/E1 on cherry-pick) and history cleanup.
+- **Status:** fixed on `fix/beta-1-review` in `b1b844c6` ("Delete location history in batches outside the locking transaction"). Q6. Integration test seeds 60k rows (12 batches; reduced from 500k in "Seed fewer rows in the batched account deletion test" so it suits the shared test database), asserts the deletion completes, and checks a sign-in during the batches is refused. One shared `deletePayloadsInBatches` helper for account deletion, leave/remove-member (after the membership transaction; resolved against M2/E1 on cherry-pick) and history cleanup.
 
 - Finding: S4-02 · bug · medium (the reviewer said high) · verified (V3, reproduced)
 - Location: packages/api/src/lib/account-deletion.ts:19-98, called from apps/scheduled-jobs/src/jobs/accountDeletion.ts:21-36, apps/scheduled-jobs/src/deleteAccount.ts:17 and packages/api/src/router/accountRouter.ts:358-366. The same pattern for one group is at groupMembershipRouter.ts:310.
@@ -1053,7 +1052,7 @@ Redis client never reconnects after a short outage under traffic, so every API c
 
 #### S4-02 · medium · bug · **must-fix, see M10**
 
-- **Status:** fixed on `fix/beta-1-review` in `b1b844c6` ("Delete location history in batches outside the locking transaction"). Q6. Integration test seeds 500k rows (in 50k inserts, under C1's 30 s statement timeout), asserts the deletion completes, and checks a sign-in during the batches is refused. One shared `deletePayloadsInBatches` helper for account deletion, leave/remove-member (after the membership transaction; resolved against M2/E1 on cherry-pick) and history cleanup.
+- **Status:** fixed on `fix/beta-1-review` in `b1b844c6` ("Delete location history in batches outside the locking transaction"). Q6. Integration test seeds 60k rows (12 batches; reduced from 500k in "Seed fewer rows in the batched account deletion test" so it suits the shared test database), asserts the deletion completes, and checks a sign-in during the batches is refused. One shared `deletePayloadsInBatches` helper for account deletion, leave/remove-member (after the membership transaction; resolved against M2/E1 on cherry-pick) and history cleanup.
 
 Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it never completes, and each retry locks the user's groups
 
