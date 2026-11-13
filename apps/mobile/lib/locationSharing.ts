@@ -39,6 +39,9 @@ const syncedSchema = z.object({
   device: preferenceSchema,
 });
 const scheduledChanges = new Set<string>();
+const loadedStateListeners = new Set<
+  (state: Awaited<ReturnType<typeof trpcClient.account.locationSharing.query>>) => void
+>();
 let changeRevision = 0;
 let generation = 0;
 let operationQueue: Promise<unknown> = Promise.resolve();
@@ -229,10 +232,20 @@ const loadSharingState = async (
     syncedKey(device.userId, device.deviceId),
     superjson.stringify({ account: state.account, device: state.device }),
   );
+  for (const listener of loadedStateListeners) listener(state);
   const isCurrent = () =>
     !abandoned() && !hasPendingSharingPause(device.userId) && changeRevision === revision;
   await applyNativeSharingState(state, isCurrent);
   return state;
+};
+
+export const onSharingStateLoaded = (
+  listener: (state: Awaited<ReturnType<typeof trpcClient.account.locationSharing.query>>) => void,
+) => {
+  loadedStateListeners.add(listener);
+  return () => {
+    loadedStateListeners.delete(listener);
+  };
 };
 
 export const syncLocationSharing = () => {

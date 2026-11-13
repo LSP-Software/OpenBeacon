@@ -15,6 +15,7 @@ import {
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
+import { useLoadedSharingState } from "../../hooks/useLoadedSharingState.ts";
 
 export const LocationSharingPausedBanner = ({
   polled,
@@ -26,6 +27,7 @@ export const LocationSharingPausedBanner = ({
   userId: string;
 }) => {
   const queryClient = useQueryClient();
+  useLoadedSharingState();
   const sharing = useQuery({
     ...trpc.account.locationSharing.queryOptions(),
     enabled: userId.length > 0,
