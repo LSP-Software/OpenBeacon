@@ -11,6 +11,7 @@ import {
 } from "../../lib/groupEpochs.ts";
 import { emailInviteCreatedAfter } from "../../lib/emailInvites.ts";
 import { createGroupJoinAlerts } from "../../lib/groupJoinAlerts.ts";
+import { assertAccountBelowGroupLimit } from "../../lib/groupLimit.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
@@ -140,6 +141,7 @@ export const groupInvitesRouter = {
         });
         if (existing)
           throw new TRPCError({ code: "CONFLICT", message: "You are already a group member" });
+        await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
         await tx.groupMember.create({
           data: {
             groupId: invite.groupId,
@@ -223,6 +225,7 @@ export const groupInvitesRouter = {
         if (existing) {
           throw new TRPCError({ code: "CONFLICT", message: "You are already a group member" });
         }
+        await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
 
         const createdMember = await tx.groupMember.create({
           data: {

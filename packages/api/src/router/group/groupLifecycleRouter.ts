@@ -4,6 +4,7 @@ import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { deleteGroup } from "../../lib/deleteGroup.ts";
 import { persistGroupEpoch } from "../../lib/groupEpochs.ts";
+import { assertAccountBelowGroupLimit } from "../../lib/groupLimit.ts";
 import { groupOwnerProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
@@ -70,6 +71,7 @@ export const groupLifecycleRouter = {
         });
         if (!user || user.pendingDeletion || !session)
           throw new TRPCError({ code: "UNAUTHORIZED" });
+        await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
         const createdGroup = await tx.group.create({
           data: {
             id: input.groupId,
