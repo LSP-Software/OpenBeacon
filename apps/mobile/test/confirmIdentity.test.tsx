@@ -75,7 +75,7 @@ const { SessionLinkChallengeUnopenableError } = await import("../lib/sessionLink
 
 const serverError = (code: string, httpStatus: number, cause: string | null = null) =>
   TRPCClientError.from({
-    error: { code: -32003, data: { cause, code, httpStatus }, message: "Refused" },
+    error: { code: -32003, data: { cause, code, httpStatus, reason: cause }, message: "Refused" },
   });
 
 const confirm = async () => {

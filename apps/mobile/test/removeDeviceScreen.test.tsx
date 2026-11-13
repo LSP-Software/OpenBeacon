@@ -62,8 +62,18 @@ mock.module("../lib/api.ts", () => ({
 
 const { default: RemoveDeviceScreen } = await import("../app/account/remove-device.tsx");
 
-const forbidden = (message: string, cause: string | null) =>
-  TRPCClientError.from({ error: { code: -32003, data: { code: "FORBIDDEN", cause }, message } });
+const forbidden = (message: string, reason: string) =>
+  TRPCClientError.from({
+    error: {
+      code: -32003,
+      data: {
+        code: "FORBIDDEN",
+        cause: reason === "FRESH_SIGN_IN_REQUIRED" ? null : reason,
+        reason,
+      },
+      message,
+    },
+  });
 
 const removeAndCollectAlerts = async () => {
   const root = createRoot();
@@ -90,7 +100,7 @@ beforeEach(() => {
 
 test("a session that's too old to remove devices asks to sign in again", async () => {
   removeDevice.mockImplementationOnce(async () => {
-    throw forbidden("Sign in again to continue.", null);
+    throw forbidden("Sign in again to continue.", "FRESH_SIGN_IN_REQUIRED");
   });
 
   expect(await removeAndCollectAlerts()).toEqual([

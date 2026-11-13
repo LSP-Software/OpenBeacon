@@ -2016,6 +2016,8 @@ The "Update Open Beacon" screen has a disabled Update button and the server can'
 
 #### X-02 · medium · design
 
+- **Status:** fixed on `fix/beta-1-review` by "Move the app's error classifiers onto error reasons" (SHA added at wrap-up). Rest of X-02 (Q10 follow-up). Eight new reasons, each sent by the server and read by the app; the remaining classifiers and the history-recipient English match now use `errorReason`. Integration tests check each throw site's reason; app tests cover each converted classifier. `problemMessage` in `setup/link.tsx` still checks codes to decide whether to show the server's text (X-03 work, post-beta).
+
 - **Status:** fixed on `fix/beta-1-review` in `0e87104b` ("Send a machine-readable reason with upload rejections and stop matching English text"). Q10 (minimal X-02). Tests: formatter sends `data.reason` (device errors keep `cause`); uploader classification per reason, and the old English message alone no longer triggers a key recheck; integration test that `uploadBatch` returns all three reasons. The other app classifiers move to `errorReason` after beta, as decided.
 
 **Errors have no machine-readable identity: the app branches on overloaded HTTP-style codes and on English message text**

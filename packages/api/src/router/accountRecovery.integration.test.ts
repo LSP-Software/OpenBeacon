@@ -266,10 +266,20 @@ const verifiedResetToken = async (userId: string) => {
     .resetToken;
 };
 
-const invalidCode = { code: "BAD_REQUEST", message: "The code is wrong or has expired." };
+const invalidCode = {
+  cause: { reason: "INVALID_CODE" },
+  code: "BAD_REQUEST",
+  message: "The code is wrong or has expired.",
+};
 const invalidToken = {
+  cause: { reason: "EMAIL_CONFIRMATION_REQUIRED" },
   code: "PRECONDITION_FAILED",
   message: "Your email confirmation has expired. Confirm a new code.",
+};
+const freshSignInRequired = {
+  cause: { reason: "FRESH_SIGN_IN_REQUIRED" },
+  code: "FORBIDDEN",
+  message: "Sign in again to continue.",
 };
 
 const exposeAll = (keys: HistoryPrivateKeyMaterial[]) => keys.map((key) => key.expose());
@@ -435,6 +445,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const unrelated = createHistoryKeyPair().privateKey;
 
       await expect(setupWith([escrowOf(unrelated, 1)])).rejects.toMatchObject({
+        cause: { reason: "RECOVERY_CHANGED" },
         code: "CONFLICT",
       });
       expect(await prisma.accountHistoryKey.count({ where: { userId: partialSetupUser } })).toBe(0);
@@ -457,7 +468,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         [...escrows, escrowOf(second.privateKey, 3)],
         [escrows[0]!, escrows[0]!],
       ]) {
-        await expect(setupWith(invalid)).rejects.toMatchObject({ code: "CONFLICT" });
+        await expect(setupWith(invalid)).rejects.toMatchObject({
+          code: "CONFLICT",
+          cause: { reason: "RECOVERY_CHANGED" },
+        });
       }
       expect(await prisma.recoveryKey.count({ where: { userId: partialSetupUser } })).toBe(0);
       expect(await account.accountRecovery.escrows()).toEqual([]);
@@ -487,7 +501,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const rejected = results.find(
         (result): result is PromiseRejectedResult => result.status === "rejected",
       );
-      expect(rejected?.reason).toMatchObject({ code: "CONFLICT" });
+      expect(rejected?.reason).toMatchObject({
+        code: "CONFLICT",
+        cause: { reason: "RECOVERY_CHANGED" },
+      });
       const winner = attempts[results.findIndex(({ status }) => status === "fulfilled")]!;
       expect(await prisma.recoveryKey.findMany({ where: { userId: raceUser } })).toMatchObject([
         { publicKey: winner.recoveryKey.publicKey },
@@ -550,7 +567,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           escrows,
           recoveryKey: newRecoveryKey,
         }),
-      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      ).rejects.toMatchObject(freshSignInRequired);
       for (const invalid of [
         [escrows[0]!],
         [...escrows, escrowWith(second.privateKey, 3)],
@@ -563,7 +580,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             escrows: invalid,
             recoveryKey: newRecoveryKey,
           }),
-        ).rejects.toMatchObject({ code: "CONFLICT" });
+        ).rejects.toMatchObject({ code: "CONFLICT", cause: { reason: "RECOVERY_CHANGED" } });
       }
       expect(await restoreHistoryKeys(changeUser, oldPhrase)).toEqual(
         exposeAll([first.privateKey, second.privateKey]),
@@ -643,7 +660,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       };
       await expect(
         caller(resetUser, staleSessionCreatedAt).accountRecovery.reset(resetInput),
-      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      ).rejects.toMatchObject(freshSignInRequired);
       const unconfirmed = await tryCatch(
         caller(resetUser).accountRecovery.reset({
           ...resetInput,
@@ -688,7 +705,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             ...resetInput,
             historyKey: newHistoryKey({ phrase: newPhrase, userId: resetUser, version }).input,
           }),
-        ).rejects.toMatchObject({ code: "CONFLICT" });
+        ).rejects.toMatchObject({ code: "CONFLICT", cause: { reason: "RECOVERY_CHANGED" } });
       }
       expect(await prisma.accountHistoryKey.count({ where: { userId: resetUser } })).toBe(2);
       expect(await prisma.groupEpochHistoryWrap.count({ where: { historyKeyId: second.id } })).toBe(
@@ -766,7 +783,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           ],
           recoveryKey: recoveryKeyInput(phrase),
         }),
-      ).rejects.toMatchObject({ code: "FORBIDDEN", message: "Sign in again to continue." });
+      ).rejects.toMatchObject(freshSignInRequired);
       expect(await stale.accountRecovery.status()).toMatchObject({
         freshForMs: 0,
         recoveryKey: null,
@@ -806,7 +823,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           historyKey: newHistoryKey({ phrase, userId: staleUser, version: 2 }).input,
           recoveryKey: recoveryKeyInput(phrase),
         }),
-      ).rejects.toMatchObject({ code: "FORBIDDEN", message: "Sign in again to continue." });
+      ).rejects.toMatchObject(freshSignInRequired);
       expect(
         await prisma.accountHistoryKey.findMany({ where: { userId: staleUser } }),
       ).toMatchObject([{ id: historyKey.input.id, version: 1 }]);
@@ -820,7 +837,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           escrows: [{ ...escrow, version: 1 }],
           recoveryKey: recoveryKeyInput(phrase),
         }),
-      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      ).rejects.toMatchObject({ code: "NOT_FOUND", cause: { reason: "RECOVERY_CHANGED" } });
       expect(await prisma.recoveryKey.count({ where: { userId: unsetUser } })).toBe(0);
     });
 
@@ -853,6 +870,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           recoveryKey: recoveryKeyInput(newPhrase),
         }),
       ).rejects.toMatchObject({
+        cause: { reason: "RECOVERY_CHANGED" },
         code: "CONFLICT",
         message: "That history key ID is already in use.",
       });
@@ -882,7 +900,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         caller(emailResetUser, staleSessionCreatedAt, emailCodes).accountRecovery.verifyResetCode({
           code,
         }),
-      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      ).rejects.toMatchObject(freshSignInRequired);
 
       expect(await account.accountRecovery.verifyResetCode({ code })).toEqual({
         resetToken: expect.any(String),
@@ -901,6 +919,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const input = resetInputFor(emailResetUser, 2);
 
       await expect(account.accountRecovery.reset(input)).rejects.toMatchObject({
+        cause: { reason: "EMAIL_CONFIRMATION_REQUIRED" },
         code: "PRECONDITION_FAILED",
         message: "Confirm the code we emailed you.",
       });
@@ -946,6 +965,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           resetToken,
         }),
       ).rejects.toMatchObject({
+        cause: { reason: "RECOVERY_CHANGED" },
         code: "CONFLICT",
         message: "That history key ID is already in use.",
       });

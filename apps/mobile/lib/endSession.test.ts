@@ -130,7 +130,12 @@ const removedError = () =>
       error: {
         code: -32001,
         message: "This device was removed.",
-        data: { cause: deviceRemovedCause, code: "UNAUTHORIZED", httpStatus: 401 },
+        data: {
+          cause: deviceRemovedCause,
+          reason: deviceRemovedCause,
+          code: "UNAUTHORIZED",
+          httpStatus: 401,
+        },
       },
     },
   });
@@ -288,7 +293,7 @@ describe("wiping a removed phone", () => {
         error: {
           code: -32600,
           message: "This device was removed.",
-          data: { cause: deviceRemovedCause },
+          data: { cause: deviceRemovedCause, reason: deviceRemovedCause },
         },
       },
     });

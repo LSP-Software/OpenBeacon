@@ -54,6 +54,8 @@ let createError: Error | null = null;
 let loseCreateResponse = false;
 let beforeCreate: (() => void) | null = null;
 let loseResetResponse = false;
+let resetError: Error | null = null;
+let verifyResetCodeError: Error | null = null;
 const validResetTokens = new Set<string>();
 let failNextStore = false;
 let failAddHistoryWrapsCall: number | null = null;
@@ -96,12 +98,13 @@ const setupMock = mock(async (input: unknown) => {
 });
 
 const resetMock = mock(async (input: unknown) => {
+  if (resetError) throw resetError;
   const parsed = resetAccountRecoverySchema.parse(input);
   if (!parsed.resetToken || !validResetTokens.delete(parsed.resetToken)) {
     throw TRPCClientError.from({
       error: {
         code: -32012,
-        data: { code: "PRECONDITION_FAILED" },
+        data: { code: "PRECONDITION_FAILED", reason: "EMAIL_CONFIRMATION_REQUIRED" },
         message: "Your email confirmation has expired. Confirm a new code.",
       },
     });
@@ -173,6 +176,12 @@ mock.module("./api.ts", () => ({
           ),
       },
       reset: { mutate: resetMock },
+      verifyResetCode: {
+        mutate: async () => {
+          if (verifyResetCodeError) throw verifyResetCodeError;
+          return { resetToken: "reset-token" };
+        },
+      },
       setup: { mutate: setupMock },
       status: {
         query: async () => {
@@ -260,9 +269,11 @@ const {
   confirmsRecoveryPhrase,
   HISTORY_KEY_ON_OTHER_DEVICE_MESSAGE,
   pickConfirmationIndexes,
+  RECOVERY_CHANGED_MESSAGE,
   resetRecoveryPhrase,
   setUpRecoveryPhrase,
   SETUP_KEYS_MISMATCH_MESSAGE,
+  verifyRecoveryResetCode,
 } = await import("./recovery.ts");
 const { createHistoryKey, createHistoryKeyIfMissing, KEY_NOT_SAVED_MESSAGE } =
   await import("./createHistoryKey.ts");
@@ -318,7 +329,11 @@ const resolveThroughHistoryWrapOnly = (epoch: ServerEpoch) =>
 
 const conflictError = () =>
   TRPCClientError.from({
-    error: { code: -32009, data: { code: "CONFLICT" }, message: "Already set up" },
+    error: {
+      code: -32009,
+      data: { code: "CONFLICT", reason: "RECOVERY_CHANGED" },
+      message: "Already set up",
+    },
   });
 
 beforeEach(() => {
@@ -332,6 +347,8 @@ beforeEach(() => {
   beforeCreate = null;
   createMock.mockClear();
   loseResetResponse = false;
+  resetError = null;
+  verifyResetCodeError = null;
   validResetTokens.clear();
   resetMock.mockClear();
   failNextStore = false;
@@ -523,7 +540,11 @@ describe("setUpRecoveryPhrase", () => {
 
   test("FORBIDDEN asks for a fresh sign-in and sets up no phrase", async () => {
     setupError = TRPCClientError.from({
-      error: { code: -32003, data: { code: "FORBIDDEN" }, message: "Sign in again to continue." },
+      error: {
+        code: -32003,
+        data: { code: "FORBIDDEN", reason: "FRESH_SIGN_IN_REQUIRED" },
+        message: "Sign in again to continue.",
+      },
     });
 
     const result = await setUpRecoveryPhrase(generateRecoveryPhrase());
@@ -536,7 +557,7 @@ describe("setUpRecoveryPhrase", () => {
   test("a FORBIDDEN because this phone isn't set up or confirmed is thrown, not a sign-in request", async () => {
     for (const cause of ["DEVICE_PENDING", "DEVICE_UNVERIFIED"]) {
       setupError = TRPCClientError.from({
-        error: { code: -32003, data: { cause, code: "FORBIDDEN" }, message: cause },
+        error: { code: -32003, data: { cause, code: "FORBIDDEN", reason: cause }, message: cause },
       });
 
       await expect(setUpRecoveryPhrase(generateRecoveryPhrase())).rejects.toThrow(cause);
@@ -552,7 +573,44 @@ describe("setUpRecoveryPhrase", () => {
   });
 });
 
+const refusal = (code: string, message: string, reason: string | null) =>
+  TRPCClientError.from({ error: { code: -32600, data: { code, reason }, message } });
+
+describe("verifyRecoveryResetCode", () => {
+  test("a wrong or expired code is reported as invalid", async () => {
+    verifyResetCodeError = refusal(
+      "BAD_REQUEST",
+      "The code is wrong or has expired.",
+      "INVALID_CODE",
+    );
+
+    expect(await verifyRecoveryResetCode("123456")).toEqual({ status: "invalidCode" });
+  });
+
+  test("a bad request without the reason is thrown", async () => {
+    verifyResetCodeError = refusal("BAD_REQUEST", "Invalid input", null);
+
+    await expect(verifyRecoveryResetCode("123456")).rejects.toThrow("Invalid input");
+  });
+});
+
 describe("resetRecoveryPhrase", () => {
+  test("a phone the server doesn't know is told so, not that the phrase changed elsewhere", async () => {
+    resetError = refusal("NOT_FOUND", "This phone isn't registered yet.", null);
+
+    await expect(resetRecoveryPhrase(generateRecoveryPhrase(), "reset-token")).rejects.toThrow(
+      "This phone isn't registered yet.",
+    );
+  });
+
+  test("a recovery change elsewhere is reported as such", async () => {
+    resetError = refusal("CONFLICT", "The history key version has changed.", "RECOVERY_CHANGED");
+
+    await expect(resetRecoveryPhrase(generateRecoveryPhrase(), "reset-token")).rejects.toThrow(
+      RECOVERY_CHANGED_MESSAGE,
+    );
+  });
+
   test("a retry after the reset response was lost finishes with the phrase that was set", async () => {
     await setUpRecoveryPhrase(generateRecoveryPhrase());
     const phrase = generateRecoveryPhrase();

@@ -8,12 +8,11 @@ import {
   type RecipientPublicKeyMaterial,
   wrapEpochKeyForHistoryKey,
 } from "@openbeacon/encryption";
-import { HISTORY_RECIPIENT_MISMATCH_MESSAGE } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
-import { TRPCClientError } from "@trpc/client";
 import { trpcClient } from "./api.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
+import { errorReason } from "./errorReason.ts";
 
 const createEpochBundle = ({
   creator,
@@ -57,12 +56,7 @@ export const submitEpochChange = async <Input, Output>({
 }) => {
   const result = await tryCatch(submit(await build()));
   if (!result.error) return result.data;
-  if (
-    !(result.error instanceof TRPCClientError) ||
-    result.error.message !== HISTORY_RECIPIENT_MISMATCH_MESSAGE
-  ) {
-    throw result.error;
-  }
+  if (errorReason(result.error) !== "HISTORY_RECIPIENT_MISMATCH") throw result.error;
   return submit(await build());
 };
 

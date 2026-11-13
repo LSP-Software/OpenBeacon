@@ -257,7 +257,12 @@ describe("auth Google sign-in configuration", () => {
       throw TRPCClientError.from({
         error: {
           code: -32001,
-          data: { cause: deviceRemovedCause, code: "UNAUTHORIZED", httpStatus: 401 },
+          data: {
+            cause: deviceRemovedCause,
+            reason: deviceRemovedCause,
+            code: "UNAUTHORIZED",
+            httpStatus: 401,
+          },
           message: "Removed",
         },
       });
