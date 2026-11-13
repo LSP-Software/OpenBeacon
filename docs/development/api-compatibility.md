@@ -18,14 +18,14 @@ Every app talks to other apps through the server, so the client minimum also cov
 
 Change a level only if one of these is true:
 
-1. **The app now calls something on the server that older servers don't have.** This covers a new procedure, or a new input field on a procedure whose schema rejects unknown keys (`z.strictObject`). Raise `apiCompatibilityLevel` and set `minServerApiCompatibilityLevel` to the new level.
+1. **The app now relies on something older servers don't have.** This covers a new procedure, a new input field on a procedure whose schema rejects unknown keys (`z.strictObject`), and a new input field the app needs the server to act on. Most input schemas are loose objects, so an older server silently drops a field it doesn't know; that only looks compatible. Raise `apiCompatibilityLevel` and set `minServerApiCompatibilityLevel` to the new level.
 2. **You removed or narrowed something a supported app relies on.** This covers a procedure, a required input, a tighter validation rule, or an output field the app reads. Prefer not to (see below). If you must, raise `apiCompatibilityLevel` and set `minClientApiCompatibilityLevel` to the new level.
 3. **You changed an encrypted format or what a field means.** A new file in `packages/encryption/src/testVectors` is a sign of this. Raise the minimum for whichever side can't cope.
 
 Anything else needs no change. That includes:
 
 - a new procedure the app doesn't call yet;
-- a new optional input;
+- a new optional input that an older server can ignore without breaking what the app does;
 - a new output field;
 - looser validation;
 - refactors and performance work;
