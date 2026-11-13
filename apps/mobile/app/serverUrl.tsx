@@ -13,11 +13,11 @@ import { Separator } from "../components/ui/Separator.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { checkServerCompatibility } from "../lib/apiCompatibility.ts";
 import { changeServer } from "../lib/changeServer.ts";
-import { getServerUrl, hasCustomServerUrl, normaliseServerUrl } from "../lib/currentServer.ts";
+import { getServerUrl, hasCustomServerUrl, normaliseNewServerUrl } from "../lib/currentServer.ts";
 
 const serverUrlSchema = z.object({
   url: z.string().superRefine((url, context) => {
-    const { error } = normaliseServerUrl(url);
+    const { error } = normaliseNewServerUrl(url);
     if (error) context.addIssue({ code: "custom", message: error });
   }),
 });
@@ -34,7 +34,7 @@ export default function ServerUrl() {
   });
 
   const handleSave = async (data: z.infer<typeof serverUrlSchema>) => {
-    const { url } = normaliseServerUrl(data.url);
+    const { url } = normaliseNewServerUrl(data.url);
     if (!url) return;
 
     const save = async () => {

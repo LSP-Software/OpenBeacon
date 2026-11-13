@@ -59,6 +59,11 @@ request came from Cloudflare, so only use it when the origin is reachable solely
 through Cloudflare, for example via Cloudflare Tunnel or a firewall that only
 allows Cloudflare's IP ranges. Otherwise use `cloudflare-authenticated`.
 
+The app only connects to a self-hosted backend over `https://`, because sign-in
+passwords, email codes and session cookies would otherwise cross the network
+unencrypted. Put the backend behind a reverse proxy with a TLS certificate. Caddy
+gets one automatically for a public domain.
+
 ### Serving the backend under a path
 
 The backend can share a domain with other apps by sitting under a path, such as
