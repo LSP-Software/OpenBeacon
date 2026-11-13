@@ -1316,6 +1316,8 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-03 · medium · bug
 
+- **Status:** fixed on `fix/beta-1-review` by "Drop queued points the server will never accept" (SHA added at wrap-up). `NOT_GROUP_MEMBER`/`GROUP_GONE` delete that group's queued rows; `DEVICE_NOT_REGISTERED` for another device and a single-item BAD_REQUEST drop those rows; reconcile deletes rows for groups no longer in membership. Re-key, 429 and network errors still retry. Native `deleteByGroup` with JVM and Robolectric tests; uploader and reconcile tests per case.
+
 **Queue rows the server permanently rejects are retried forever and never leave the queue**
 
 - Location: apps/mobile/lib/tracking.ts:608-649, :535-541; apps/mobile/modules/openbeacon-tracking/android/src/main/java/expo/modules/openbeacontracking/queue/CiphertextQueueDao.kt:83-97; packages/api/src/procedures/auth/group.ts:12-14; packages/api/src/lib/groupTracking.ts:156-173
