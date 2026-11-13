@@ -21,6 +21,17 @@ export const normaliseServerUrl = (
   return { url: `${parsed.origin}${path}`, error: null };
 };
 
+export const normaliseNewServerUrl = (input: string) => {
+  const result = normaliseServerUrl(input);
+  if (!__DEV__ && result.url?.startsWith("http:")) {
+    return {
+      url: null,
+      error: "Use an https:// address. The app only connects to servers over HTTPS.",
+    };
+  }
+  return result;
+};
+
 export const getServerUrl = () => {
   const saved = storage.getString(SERVER_URL_KEY);
   return saved ? (normaliseServerUrl(saved).url ?? "") : "";
