@@ -41,6 +41,6 @@ yarn-error.*
 /android
 /modules/*/android/build/
 
-# EAS signing credentials
+# Release signing credentials
 credentials.json
 *.aab

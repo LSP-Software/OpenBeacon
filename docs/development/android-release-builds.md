@@ -1,11 +1,10 @@
 # Android release builds
 
-Google Play takes an Android App Bundle (`.aab`) signed with the app's upload key. We build it on our own machine with `eas build --local`, which is free and signs with a keystore that never leaves the machine.
+Google Play takes an Android App Bundle (`.aab`) signed with the app's upload key. We build it on our own machine with `expo prebuild` and Gradle. No Expo account or build service is involved, and the key never leaves the machine.
 
 ## What you need
 
 - The Android SDK and JDK 17, the same setup `bun run android` uses.
-- An Expo account with access to the `open-beacon` project. Sign in once with `bunx eas-cli login`. Local builds still need it, because EAS CLI looks up the project and its environment variables on Expo. A free account is enough.
 - The upload keystore and its passwords. Keep them in a password manager. Google only accepts bundles signed with this key, and replacing a lost one means asking Google for an upload key reset.
 
 ## Create an upload key
@@ -26,7 +25,7 @@ keytool -export -rfc -keystore ~/keys/openbeacon-upload.jks -alias openbeacon-up
 
 ## Point the build at the key
 
-The `production` profile in `apps/mobile/eas.json` sets `"credentialsSource": "local"`, so it signs with the keystore described in `apps/mobile/credentials.json` rather than one stored on Expo. That file holds passwords and is gitignored.
+The `plugins/withReleaseSigning.js` config plugin makes release builds sign with the key described in `apps/mobile/credentials.json`. That file holds passwords and is gitignored.
 
 ```sh
 cd ./apps/mobile
@@ -42,13 +41,11 @@ Then fill it in:
 | `keyAlias`         | The alias the key was created with.               |
 | `keyPassword`      | The key password, often the same as the keystore. |
 
+A release build without this file stops with an error rather than signing with the debug key. To use a file somewhere else, for example in CI, set the Gradle property `openbeaconCredentials` to its path, or the environment variable `ORG_GRADLE_PROJECT_openbeaconCredentials`.
+
 ## Environment variables
 
-The build reads the `EXPO_PUBLIC_*` variables from the `production` environment on EAS, not from `apps/mobile/.env`. See the [mobile app variables](../../README.md#mobile-app) for what each one does. Add or change one with:
-
-```sh
-bunx eas-cli env:create --environment production --name EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID --value <value> --visibility plaintext
-```
+The build reads `apps/mobile/.env` like a development build, so set the Google sign-in variables there. See the [mobile app variables](../../README.md#mobile-app) for what each one does. Release builds ignore `EXPO_PUBLIC_DEV_API_URL`, so a development server in `.env` never ends up in a release.
 
 ## Build the bundle
 
@@ -60,16 +57,14 @@ From `apps/mobile`:
 bun run build-aab
 ```
 
-This runs `bunx eas-cli build -p android --profile production --local`.
-
-The build installs dependencies, generates the Prisma client (the `eas-build-post-install` script), runs `expo prebuild` and Gradle in a temporary folder. It writes `build-<timestamp>.aab` into `apps/mobile`. Pass `--output <path>` to choose the file name.
+This generates the Prisma client, regenerates `android/` with `expo prebuild --clean`, runs `./gradlew bundleRelease`, and copies the result to `apps/mobile/openbeacon-release.aab`. Regenerating `android/` throws away any local edits in it, which `bun run android` recreates anyway.
 
 ## Check the signature
 
 Before uploading, confirm the bundle is signed with the upload key Play expects:
 
 ```sh
-keytool -printcert -jarfile build-<timestamp>.aab
+keytool -printcert -jarfile openbeacon-release.aab
 ```
 
 The SHA1 must match the upload key certificate shown in Play Console under Protected with Play, Play Store protection, Manage Play app signing. If it doesn't, Play rejects the upload with "signed with the wrong key".
