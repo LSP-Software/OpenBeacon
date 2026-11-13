@@ -1081,6 +1081,8 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 
 #### S5-02 · medium · UX
 
+- **Status:** fixed on `fix/beta-1-review` by "Put .env.example comments on their own lines and bind compose services to localhost" (SHA added at wrap-up). C7. Config only, so no new test; the emulator script's secret substitution was updated to match and checked by hand.
+
 **Following the docs with `docker run --env-file .env` turns the inline comments in `.env.example` into values**
 
 - Location: .env.example:1-48 (every line with a trailing `# ...` comment); apps/map-tiles/README.md:51 (`docker run -d --name map-tiles --env-file .env ...`)
@@ -1088,6 +1090,8 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 - Suggested fix: Move every comment in `.env.example` onto its own line above the variable, or split it into per-container env examples with comments on separate lines. Optionally refuse env values that contain `#` after whitespace.
 
 #### S5-03 · medium · security
+
+- **Status:** fixed on `fix/beta-1-review` by "Put .env.example comments on their own lines and bind compose services to localhost" (SHA added at wrap-up). C7. Config only, so no new test; the emulator script's secret substitution was updated to match and checked by hand.
 
 **docker-compose publishes Postgres (with a known password) and Dragonfly (with no auth) on every interface**
 
