@@ -28,6 +28,8 @@ describe("normalising a server URL", () => {
     ["https://beacon.example.com///", "https://beacon.example.com"],
     ["  HTTPS://Beacon.Example.com:443/ ", "https://beacon.example.com"],
     ["http://192.168.1.10:3000/", "http://192.168.1.10:3000"],
+    ["https://example.com/openbeacon", "https://example.com/openbeacon"],
+    ["https://example.com/apps/openbeacon//", "https://example.com/apps/openbeacon"],
   ])("accepts %p as %p", (input, expected) => {
     expect(normaliseServerUrl(input)).toEqual({ url: expected, error: null });
   });
@@ -41,7 +43,6 @@ describe("normalising a server URL", () => {
     ["https://beacon.example.com/?x=1", "Remove everything from the ? or # onwards"],
     ["https://beacon.example.com/?", "Remove everything from the ? or # onwards"],
     ["https://beacon.example.com/#top", "Remove everything from the ? or # onwards"],
-    ["https://beacon.example.com/beacon", "Enter the server address without a path"],
   ])("rejects %p", (input, error) => {
     expect(normaliseServerUrl(input)).toEqual({ url: null, error });
   });

@@ -198,6 +198,8 @@ Settled with the owner on 13 Nov 2026, against `94a73b27` (main had not moved).
 
 ### E2 (M9, raised in this session) Support server URLs with a path prefix
 
+- **Status:** fixed on `fix/beta-1-review` by "Support a server URL with a path prefix" (SHA added at wrap-up). App test that tRPC, auth and `/health` all go under the path; backend route test with a path-prefixed `BETTER_AUTH_URL`; tests for `getPublicUrl` and the Google redirect URI. Emails carry codes only, so no links needed changing. Self-hosting docs: `apps/backend/README.md` "Serving the backend under a path". Reverse-proxy emulator check in the end-of-branch batch.
+
 - **Decision:**
   - The normaliser accepts `http(s)://host[:port][/path]`. It strips trailing slashes, and rejects a query, a fragment or credentials.
   - Every URL is built from the normalised base: better-auth gets an explicit `${base}/api/auth`, tRPC uses `${base}/api/trpc`, and `/health` is `${base}/health`.

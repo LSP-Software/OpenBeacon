@@ -18,9 +18,6 @@ export const normaliseServerUrl = (
     return { url: null, error: "Remove everything from the ? or # onwards" };
   }
   const path = parsed.pathname.replace(/\/+$/, "");
-  if (path) {
-    return { url: null, error: "Enter the server address without a path" };
-  }
   return { url: `${parsed.origin}${path}`, error: null };
 };
 
