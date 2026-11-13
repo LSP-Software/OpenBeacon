@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis, testRedisHashSecret } from "@openbeacon/cache/testing";
+import { FakeRedis, testRedisHashSecret, UnavailableRedis } from "@openbeacon/cache/testing";
 import { tryCatch } from "@openbeacon/shared";
 import { type AnyRouter, TRPCError } from "@trpc/server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
@@ -12,6 +12,12 @@ import { createTimingMiddleware } from "./timingMiddleware.ts";
 class TestOpenBeaconCache extends OpenBeaconCache {
   protected override createRedisClient(): FakeRedis {
     return new FakeRedis();
+  }
+}
+
+class UnavailableCache extends OpenBeaconCache {
+  protected override createRedisClient(): UnavailableRedis {
+    return new UnavailableRedis();
   }
 }
 
@@ -94,6 +100,30 @@ describe("rateLimitMiddleware", () => {
     } else {
       process.env.NODE_ENV = originalNodeEnv;
     }
+  });
+
+  test("lets requests through with a log line while Redis is unavailable", async () => {
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    const cache = new UnavailableCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+    });
+    const { createTRPCRouter, protectedProcedure, publicProcedure } = createModules();
+    const router = createTRPCRouter({
+      private: protectedProcedure.query(() => "private"),
+      public: publicProcedure.query(() => "public"),
+    });
+    await expect(
+      createCaller({ cache, clientIp: "10.0.0.1", router, userId: "user-1" }).private(),
+    ).resolves.toBe("private");
+    await expect(
+      createCaller({ cache, clientIp: "10.0.0.1", router, userId: null }).public(),
+    ).resolves.toBe("public");
+    expect(error.mock.calls).toEqual([
+      ["[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so private is allowed"],
+      ["[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so public is allowed"],
+    ]);
+    error.mockRestore();
   });
 
   test("applies the default limit independently per path and falls back to client IP for public routes", async () => {

@@ -350,13 +350,16 @@ export const groupInvitesRouter = {
     })
     .input(inviteMemberToGroupSchema)
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.cache.rateLimits.consume({
-        namespace: "groupInvites.send.recipients",
-        identifier: { type: "userId", value: ctx.session.user.id },
-        limit: 96,
-        windowMs: 60_000,
-        cost: input.invites.length,
-      });
+      const result = await ctx.cache.rateLimits.consume(
+        {
+          namespace: "groupInvites.send.recipients",
+          identifier: { type: "userId", value: ctx.session.user.id },
+          limit: 96,
+          windowMs: 60_000,
+          cost: input.invites.length,
+        },
+        { whenUnavailable: "allow" },
+      );
       if (!result.allowed) {
         logRateLimit({ path: "groupInvites.send.recipients", scope: "userId" });
         throw new TRPCError({ code: "TOO_MANY_REQUESTS" });

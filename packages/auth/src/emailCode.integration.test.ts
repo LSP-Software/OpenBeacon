@@ -538,7 +538,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email code rate 
       expect((await requestResetCode(email)).status).toBe(200);
     }
     expect((await requestResetCode(email)).status).toBe(429);
-    expect(await codes.allowRequest({ purpose: "recovery-reset", email, ip: nextIp() })).toBe(true);
+    expect(await codes.allowRequest({ purpose: "recovery-reset", email, ip: nextIp() })).toBe(
+      "allowed",
+    );
   });
 
   test("with the IP limit off, one IP can request codes for any number of addresses", async () => {
@@ -565,7 +567,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email code rate 
       );
     }
     expect(results).toHaveLength(25);
-    expect(results.every(Boolean)).toBe(true);
+    expect(results.every((result) => result === "allowed")).toBe(true);
   });
 
   test("with the IP limit on, an IP can request 20 codes per hour across addresses", async () => {

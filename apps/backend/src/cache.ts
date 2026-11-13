@@ -1,7 +1,4 @@
-import { OpenBeaconCache } from "@openbeacon/cache";
-import { env } from "./env.ts";
+import { sharedCache } from "@openbeacon/cache";
+import "./env.ts";
 
-export const cache = new OpenBeaconCache({
-  redisUrl: env.REDIS_URL,
-  hashSecret: env.REDIS_HASH_SECRET,
-});
+export const cache = sharedCache();

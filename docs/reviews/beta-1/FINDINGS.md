@@ -340,6 +340,8 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M5. Redis outages longer than about 30 seconds break every API call until the backend restarts
 
+- **Status:** fixed on `fix/beta-1-review` by "Share one self-healing Redis client per process and choose a failure policy per caller" (SHA added at wrap-up). Q5. Unit tests for the self-healing wrapper and for every Q5 caller with a failing client; `redisRestart.integration.test.ts` stops Redis for 35 s and proves the same client recovers (runs only when `REDIS_RESTART_CONTAINER` names a throwaway container, so CI skips it; run on this branch against `beta1-redis`, 329/329). New `GET /ready` pings Redis; `/health` unchanged.
+
 - Finding: S4-01 · bug · **high** · verified (V3, reproduced against a throwaway Redis)
 - Location: packages/cache/src/cache/OpenBeaconCache.ts:59-61; apps/backend/src/cache.ts:4-7; packages/auth/src/index.ts:28-33 and packages/email/src/index.ts:43-45 (two more clients); packages/api/src/middlewares/rateLimitMiddleware.ts:34-40; apps/backend/src/routes/health.ts:8-16
 - Failure scenario: Bun's `RedisClient` gives up after an outage of about 25–33 s and stays closed for good. A Redis redeploy, host reboot or crash loop easily lasts that long. After that:
@@ -908,6 +910,8 @@ Google sign-in silently links Google to an existing password account
 
 #### S2-11 · low · duplication
 
+- **Status:** fixed on `fix/beta-1-review` by "Share one self-healing Redis client per process and choose a failure policy per caller" (SHA added at wrap-up). Only the Redis-client part (auth and email now share the backend's client); the rest stays post-beta.
+
 **Small clean-ups: dead file, duplicated config and checks, rule breaches**
 
 - Location: - apps/backend/src/helpers/db.ts (unused; knip lists it; duplicates apps/backend/src/db.ts)
@@ -996,6 +1000,8 @@ Tracking reads ignore when the reader joined, and uploads under superseded epoch
 ### S4 Data layer and jobs
 
 #### S4-01 · high · bug · **must-fix, see M5**
+
+- **Status:** fixed on `fix/beta-1-review` by "Share one self-healing Redis client per process and choose a failure policy per caller" (SHA added at wrap-up). Q5. Unit tests for the self-healing wrapper and for every Q5 caller with a failing client; `redisRestart.integration.test.ts` stops Redis for 35 s and proves the same client recovers (runs only when `REDIS_RESTART_CONTAINER` names a throwaway container, so CI skips it; run on this branch against `beta1-redis`, 329/329). New `GET /ready` pings Redis; `/health` unchanged.
 
 Redis client never reconnects after a short outage under traffic, so every API call fails until the backend restarts
 
@@ -1229,6 +1235,8 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 - Same issue as: D21 (see Duplicate groups)
 
 #### S5-13 · low · design
+
+- **Status:** fixed on `fix/beta-1-review` by "Share one self-healing Redis client per process and choose a failure policy per caller" (SHA added at wrap-up). Only the Redis-client part (auth and email now share the backend's client); the rest stays post-beta.
 
 **The email package creates its own Redis client and reads the environment at import time**
 

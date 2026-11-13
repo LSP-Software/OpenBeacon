@@ -1,4 +1,4 @@
-import { OpenBeaconCache, redisUrlSchema } from "@openbeacon/cache";
+import { sharedCache } from "@openbeacon/cache";
 import {
   emailEnabled,
   sendAccountExistsEmail,
@@ -27,12 +27,7 @@ export const authCapabilities = getAuthCapabilities({
   emailEnabled,
 });
 
-const cache = emailEnabled
-  ? new OpenBeaconCache({
-      redisUrl: redisUrlSchema.parse(process.env["REDIS_URL"]),
-      hashSecret: env.REDIS_HASH_SECRET,
-    })
-  : null;
+const cache = emailEnabled ? sharedCache() : null;
 
 export const emailCodes = cache
   ? createEmailCodes({

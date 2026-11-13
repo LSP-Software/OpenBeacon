@@ -170,3 +170,19 @@ export class FakeRedis {
     this.closed = true;
   }
 }
+
+export class UnavailableRedis {
+  public async send(): Promise<never> {
+    throw Object.assign(new Error("Connection has failed"), {
+      code: "ERR_REDIS_CONNECTION_CLOSED",
+    });
+  }
+
+  public async del(): Promise<never> {
+    throw Object.assign(new Error("Connection has failed"), {
+      code: "ERR_REDIS_CONNECTION_CLOSED",
+    });
+  }
+
+  public close(): void {}
+}

@@ -188,7 +188,12 @@ const sendInBackground = async ({
     email,
     ip: source ? getIP(source, ctx.context.options) : null,
   });
-  if (!allowed) {
+  if (allowed === "unavailable") {
+    throw new APIError("TOO_MANY_REQUESTS", {
+      message: "Codes can't be sent right now. Try again in a minute.",
+    });
+  }
+  if (allowed === "limited") {
     throw new APIError("TOO_MANY_REQUESTS", {
       message: "Too many requests. Please try again later.",
     });

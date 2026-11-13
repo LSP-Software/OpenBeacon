@@ -31,13 +31,16 @@ export const createRateLimitMiddleware = ({
       });
     }
 
-    const result = await ctx.cache.rateLimits.consume({
-      namespace: rateLimit.namespace ?? path,
-      identifier,
-      limit: rateLimit.limit,
-      windowMs: rateLimit.windowMs,
-      cost: rateLimit.cost,
-    });
+    const result = await ctx.cache.rateLimits.consume(
+      {
+        namespace: rateLimit.namespace ?? path,
+        identifier,
+        limit: rateLimit.limit,
+        windowMs: rateLimit.windowMs,
+        cost: rateLimit.cost,
+      },
+      { whenUnavailable: "allow" },
+    );
 
     if (!result.allowed) {
       logRateLimit({ path, scope: identifier.type });
@@ -56,13 +59,16 @@ export const createRateLimitMiddleware = ({
           cause: new RateLimitContextError(),
         });
       }
-      const ipResult = await ctx.cache.rateLimits.consume({
-        namespace: rateLimit.namespace ?? path,
-        identifier: { type: "ip", value: ctx.clientIp },
-        limit: rateLimit.ipLimit,
-        windowMs: rateLimit.windowMs,
-        cost: rateLimit.cost,
-      });
+      const ipResult = await ctx.cache.rateLimits.consume(
+        {
+          namespace: rateLimit.namespace ?? path,
+          identifier: { type: "ip", value: ctx.clientIp },
+          limit: rateLimit.ipLimit,
+          windowMs: rateLimit.windowMs,
+          cost: rateLimit.cost,
+        },
+        { whenUnavailable: "allow" },
+      );
       if (!ipResult.allowed) {
         logRateLimit({ path, scope: "ip" });
         throw new TRPCError({
