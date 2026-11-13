@@ -34,7 +34,11 @@ const result = await tryCatch(
       imageUrlPrefix,
       securityAlerts: null,
     });
-    if (!deleted) throw new Error("Account not found.");
+    if (
+      !deleted &&
+      (await services.db.user.findUnique({ where: { id: user.id }, select: { id: true } }))
+    )
+      throw new Error("Account deletion is waiting for the scheduled job runner.");
   })(),
 );
 await closeServices();
