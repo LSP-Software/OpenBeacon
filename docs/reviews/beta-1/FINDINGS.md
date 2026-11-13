@@ -431,6 +431,8 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M10. Deleting a heavy account can time out and roll back, locking the user's groups each time
 
+- **Status:** fixed on `fix/beta-1-review` by "Delete location history in batches outside the locking transaction" (SHA added at wrap-up). Q6. Integration test seeds 500k rows (in 50k inserts, under C1's 30 s statement timeout), asserts the deletion completes, and checks a sign-in during the batches is refused. One shared `deletePayloadsInBatches` helper for account deletion, leave/remove-member (after the membership transaction; resolved against M2/E1 on cherry-pick) and history cleanup.
+
 - Finding: S4-02 · bug · medium (the reviewer said high) · verified (V3, reproduced)
 - Location: packages/api/src/lib/account-deletion.ts:19-98, called from apps/scheduled-jobs/src/jobs/accountDeletion.ts:21-36, apps/scheduled-jobs/src/deleteAccount.ts:17 and packages/api/src/router/accountRouter.ts:358-366. The same pattern for one group is at groupMembershipRouter.ts:310.
 - Failure scenario: All of a user's location rows are deleted inside one transaction with Prisma's 5 s default timeout, while the user's groups are locked.
@@ -895,6 +897,8 @@ Google sign-in silently links Google to an existing password account
 
 #### S2-10 · low · bug
 
+- **Status:** fixed on `fix/beta-1-review` by "Delete location history in batches outside the locking transaction" (SHA added at wrap-up). A failed immediate deletion is now logged instead of swallowed.
+
 **A failed immediate account deletion is swallowed with no log**
 
 - Location: packages/api/src/router/accountRouter.ts:358-367
@@ -997,6 +1001,8 @@ Redis client never reconnects after a short outage under traffic, so every API c
 
 #### S4-02 · medium · bug · **must-fix, see M10**
 
+- **Status:** fixed on `fix/beta-1-review` by "Delete location history in batches outside the locking transaction" (SHA added at wrap-up). Q6. Integration test seeds 500k rows (in 50k inserts, under C1's 30 s statement timeout), asserts the deletion completes, and checks a sign-in during the batches is refused. One shared `deletePayloadsInBatches` helper for account deletion, leave/remove-member (after the membership transaction; resolved against M2/E1 on cherry-pick) and history cleanup.
+
 Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it never completes, and each retry locks the user's groups
 
 #### S4-03 · medium · design
@@ -1023,6 +1029,8 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 - Same issue as: D5 (see Duplicate groups)
 
 #### S4-05 · low · design
+
+- **Status:** fixed on `fix/beta-1-review` by "Delete location history in batches outside the locking transaction" (SHA added at wrap-up). Deletion and image-cleanup failures in the job now log `errorCode`.
 
 **Account deletion failures are logged without a code, and permanent failures retry every 5 minutes forever**
 

@@ -6,9 +6,8 @@ import {
   deleteImageVersionList,
   forEachImageVersionPage,
 } from "@openbeacon/api/storage.ts";
-import { tryCatch } from "@openbeacon/shared";
+import { errorCode, tryCatch } from "@openbeacon/shared";
 import { getDatabaseTime } from "../databaseTime.ts";
-import { errorCode } from "../errorCode.ts";
 import { services } from "../services.ts";
 
 const gracePeriodMs = 60 * 60_000;

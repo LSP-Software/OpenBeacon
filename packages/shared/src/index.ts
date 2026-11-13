@@ -1,4 +1,5 @@
 export { tryCatch } from "./utils/tryCatch.ts";
+export { errorCode } from "./utils/errorCode.ts";
 export { isSharingPaused, resolveLocationSharing } from "./locationSharing.ts";
 export type {
   DeviceSharingState,

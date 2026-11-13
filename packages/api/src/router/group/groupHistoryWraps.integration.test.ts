@@ -650,11 +650,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           epochKey: rotated.epochKey,
         }),
       ]);
+      const backfillError = backfill.then(
+        () => null,
+        (error: unknown) => error,
+      );
       await lock.waitForWaiters(2);
       await lock.release();
 
       await expect(removal).resolves.toMatchObject({ message: "Group member removed." });
-      await expect(backfill).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(await backfillError).toMatchObject({ code: "FORBIDDEN" });
       expect(
         await prisma.groupEpochHistoryWrap.count({
           where: { groupEpoch: { groupId }, historyKeyId: member.historyKey.id },

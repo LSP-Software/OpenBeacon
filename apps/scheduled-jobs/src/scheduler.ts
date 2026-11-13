@@ -1,5 +1,4 @@
-import { tryCatch } from "@openbeacon/shared";
-import { errorCode } from "./errorCode.ts";
+import { errorCode, tryCatch } from "@openbeacon/shared";
 
 export const startScheduler = (
   jobs: { name: string; delay: number; run: () => Promise<void> }[],

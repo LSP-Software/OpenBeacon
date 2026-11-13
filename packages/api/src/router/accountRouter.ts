@@ -6,7 +6,7 @@ import {
   createGoogleDeletionAuthorization,
   verifyGoogleDeletionCode,
 } from "@openbeacon/auth";
-import { isSharingPaused, resolveLocationSharing, tryCatch } from "@openbeacon/shared";
+import { errorCode, isSharingPaused, resolveLocationSharing, tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import {
   accountNameSchema,
@@ -356,7 +356,7 @@ export const accountRouter = {
         return { deletionDate };
       });
       if (input.immediate) {
-        await tryCatch(
+        const deletion = await tryCatch(
           deleteAccountRecords({
             db: ctx.db,
             userId,
@@ -365,6 +365,12 @@ export const accountRouter = {
             securityAlerts: ctx.securityAlerts,
           }),
         );
+        if (deletion.error) {
+          const code = errorCode(deletion.error);
+          console.error(
+            `Immediate account deletion failed${code ? ` (${code})` : ""}; the scheduled job will retry it`,
+          );
+        }
       } else {
         ctx.securityAlerts?.send(userId, {
           type: "deletion-scheduled",
