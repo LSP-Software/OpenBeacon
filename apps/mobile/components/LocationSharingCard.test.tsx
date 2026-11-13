@@ -286,7 +286,7 @@ test("an offline pause closes the sheet and explains that only this phone has st
   const output = JSON.stringify(root?.container.toJSON());
   expect(output).not.toContain("Pause on");
   expect(output).toContain(
-    "Sharing stopped on this phone. We couldn’t update your groups or other devices. Retrying.",
+    "Sharing stopped on this phone. Your groups and other devices will update when we can reach the server.",
   );
   expect(output).toContain("Resume");
 });

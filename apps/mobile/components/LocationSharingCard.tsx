@@ -107,6 +107,7 @@ export const LocationSharingCard = ({
   };
   const update = useMutation({
     mutationFn: changeLocationSharing,
+    networkMode: "always",
     onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: trpc.account.locationSharing.queryKey() }),
@@ -178,7 +179,9 @@ export const LocationSharingCard = ({
             {stoppedLocally
               ? update.isPending
                 ? "Pausing…"
-                : "Sharing stopped on this phone. We couldn’t update your groups or other devices. Retrying."
+                : pendingAccount
+                  ? "Sharing stopped on this phone. Your groups and other devices will update when we can reach the server."
+                  : "Sharing stopped on this phone. Your groups will update when we can reach the server."
               : `${
                   until && until.getTime() > now
                     ? formatResumeTime(toDeviceClock(until), toDeviceClock(new Date(now)))
@@ -248,19 +251,13 @@ export const LocationSharingCard = ({
           </Text>
         ) : null}
       </CardContent>
-      <Modal
-        transparent
-        visible={open}
-        animationType="slide"
-        onRequestClose={() => !update.isPending && setOpen(false)}
-      >
+      <Modal transparent visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
         <View className="flex-1 justify-end bg-black/50">
           <Pressable
             className="absolute inset-0"
             accessibilityRole="button"
             accessibilityLabel="Cancel pause"
-            disabled={update.isPending}
-            onPress={() => !update.isPending && setOpen(false)}
+            onPress={() => setOpen(false)}
           />
           <View
             accessibilityViewIsModal
@@ -271,12 +268,7 @@ export const LocationSharingCard = ({
               <Text accessibilityRole="header" className="flex-1 text-xl font-semibold">
                 Pause location sharing
               </Text>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={update.isPending}
-                onPress={() => setOpen(false)}
-              >
+              <Button size="sm" variant="ghost" onPress={() => setOpen(false)}>
                 <Text>Cancel</Text>
               </Button>
             </View>

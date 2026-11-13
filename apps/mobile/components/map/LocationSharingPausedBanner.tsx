@@ -4,6 +4,7 @@ import { PauseIcon } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { trpc } from "../../lib/api.ts";
+import { isDeviceOffline } from "../../lib/networkStatus.ts";
 import {
   changeLocationSharing,
   getPendingSharingChanges,
@@ -54,11 +55,18 @@ export const LocationSharingPausedBanner = ({
   }, [loadedPaused, polledPaused, polledState, queryClient]);
   const [failure, setFailure] = useState<string | null>(null);
   const resume = useMutation({
+    networkMode: "always",
     mutationFn: async () => {
-      const fresh = await tryCatch(
-        queryClient.fetchQuery({ ...trpc.account.locationSharing.queryOptions(), staleTime: 0 }),
-      );
-      const current = fresh.data ?? sharing.data;
+      const fresh = (await isDeviceOffline())
+        ? null
+        : await tryCatch(
+            queryClient.fetchQuery({
+              ...trpc.account.locationSharing.queryOptions(),
+              networkMode: "always",
+              staleTime: 0,
+            }),
+          );
+      const current = fresh?.data ?? sharing.data;
       const pending = getPendingSharingChanges(userId);
       const now = serverNow();
       const accountPaused =
