@@ -25,7 +25,7 @@ describe("errorReason", () => {
   test("ignores unknown reasons, codes and errors without data", () => {
     expect(errorReason({ data: { code: "FORBIDDEN", reason: "SOMETHING_NEW" } })).toBeNull();
     expect(errorReason({ data: { code: "FORBIDDEN", reason: null } })).toBeNull();
-    expect(errorReason({ code: "INVALID_CODE" })).toBeNull();
+    expect(errorReason({ code: "INVALID_TOKEN" })).toBeNull();
     expect(errorReason(new Error("GROUP_GONE"))).toBeNull();
     expect(errorReason(null)).toBeNull();
   });

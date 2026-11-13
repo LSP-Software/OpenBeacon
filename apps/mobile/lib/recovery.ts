@@ -11,12 +11,12 @@ import {
 } from "@openbeacon/encryption";
 import type { resetAccountRecoverySchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
-import { TRPCClientError } from "@trpc/client";
 import type z from "zod";
 import { trpcClient } from "./api.ts";
 import { createHistoryKey, KEY_NOT_SAVED_MESSAGE } from "./createHistoryKey.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { type EpochKeyDevice, unwrapDeviceWrap } from "./epochKeys.ts";
+import { errorReason } from "./errorReason.ts";
 import { getStoredHistoryKey, storeHistoryKey } from "./historyKeys.ts";
 import { needsFreshSignIn } from "./needsFreshSignIn.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
@@ -44,9 +44,6 @@ export const confirmsRecoveryPhrase = ({
     answers.every(({ index, word }) => word.normalize("NFKD").trim().toLowerCase() === words[index])
   );
 };
-
-const hasTrpcCode = (error: unknown, code: string) =>
-  error instanceof TRPCClientError && error.data?.code === code;
 
 const recoveryKeyInput = (recoveryKey: ReturnType<typeof deriveRecoveryKeyPair>) =>
   ({
@@ -149,7 +146,7 @@ export const setUpRecoveryPhrase = async (phrase: RecoveryPhrase) => {
     }),
   );
   if (needsFreshSignIn(result.error)) return { status: "reauthenticate" as const };
-  if (hasTrpcCode(result.error, "CONFLICT")) {
+  if (errorReason(result.error) === "RECOVERY_CHANGED") {
     const latest = await trpcClient.accountRecovery.status.query();
     if (!latest.recoveryKey) throw new Error(RECOVERY_CHANGED_MESSAGE);
     if (latest.recoveryKey.publicKey !== recoveryKey.publicKey) {
@@ -283,9 +280,7 @@ export const changeRecoveryPhrase = async (phrase: RecoveryPhrase) => {
     }),
   );
   if (needsFreshSignIn(result.error)) return { status: "reauthenticate" as const };
-  if (hasTrpcCode(result.error, "CONFLICT") || hasTrpcCode(result.error, "NOT_FOUND")) {
-    throw new Error(RECOVERY_CHANGED_MESSAGE);
-  }
+  if (errorReason(result.error) === "RECOVERY_CHANGED") throw new Error(RECOVERY_CHANGED_MESSAGE);
   if (result.error) throw result.error;
   return { status: "changed" as const, versions: result.data.historyKeyVersions };
 };
@@ -300,7 +295,7 @@ export const requestRecoveryResetCode = async () => {
 export const verifyRecoveryResetCode = async (code: string) => {
   const result = await tryCatch(trpcClient.accountRecovery.verifyResetCode.mutate({ code }));
   if (needsFreshSignIn(result.error)) return { status: "reauthenticate" as const };
-  if (hasTrpcCode(result.error, "BAD_REQUEST")) return { status: "invalidCode" as const };
+  if (errorReason(result.error) === "INVALID_CODE") return { status: "invalidCode" as const };
   if (result.error) throw result.error;
   return { resetToken: result.data.resetToken, status: "verified" as const };
 };
@@ -328,12 +323,10 @@ export const resetRecoveryPhrase = async (phrase: RecoveryPhrase, resetToken?: s
     }),
   );
   if (needsFreshSignIn(result.error)) return { status: "reauthenticate" as const };
-  if (hasTrpcCode(result.error, "PRECONDITION_FAILED")) {
+  if (errorReason(result.error) === "EMAIL_CONFIRMATION_REQUIRED") {
     return { status: "confirmationExpired" as const };
   }
-  if (hasTrpcCode(result.error, "CONFLICT") || hasTrpcCode(result.error, "NOT_FOUND")) {
-    throw new Error(RECOVERY_CHANGED_MESSAGE);
-  }
+  if (errorReason(result.error) === "RECOVERY_CHANGED") throw new Error(RECOVERY_CHANGED_MESSAGE);
   if (result.error) throw result.error;
   await tryCatch(deleteSavedDeviceLink(device));
   const stored = await tryCatch(

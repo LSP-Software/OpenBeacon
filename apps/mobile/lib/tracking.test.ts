@@ -2569,7 +2569,7 @@ const createDeviceRemovedError = () =>
       error: {
         code: -32001,
         message: "This device was removed.",
-        data: { code: "UNAUTHORIZED", cause: deviceRemovedCause },
+        data: { code: "UNAUTHORIZED", cause: deviceRemovedCause, reason: deviceRemovedCause },
       },
     },
   });

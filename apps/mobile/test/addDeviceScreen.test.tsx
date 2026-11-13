@@ -80,8 +80,11 @@ const scanCode = async () => {
   expect(rendered()).toContain("to your account?");
 };
 
-const refused = (code: "BAD_REQUEST" | "NOT_FOUND" | "CONFLICT", message: string) =>
-  TRPCClientError.from({ error: { code: -32600, data: { code }, message } });
+const refused = (
+  code: "BAD_REQUEST" | "NOT_FOUND" | "CONFLICT",
+  message: string,
+  reason: "CODE_EXPIRED" | "ALREADY_SET_UP" | null,
+) => TRPCClientError.from({ error: { code: -32600, data: { code, reason }, message } });
 
 beforeEach(() => {
   alerts.length = 0;
@@ -96,10 +99,14 @@ afterEach(async () => {
 });
 
 test("an Add refused because the code expired or was replaced goes back to scanning", async () => {
-  for (const code of ["BAD_REQUEST", "NOT_FOUND", "CONFLICT"] as const) {
+  for (const [code, reason] of [
+    ["BAD_REQUEST", "CODE_EXPIRED"],
+    ["NOT_FOUND", "CODE_EXPIRED"],
+    ["CONFLICT", "ALREADY_SET_UP"],
+  ] as const) {
     const message = `This code is no longer valid (${code}).`;
     approveDeviceLink.mockImplementationOnce(async () => {
-      throw refused(code, message);
+      throw refused(code, message, reason);
     });
     await scanCode();
     await pressButton("Add");
@@ -125,10 +132,21 @@ test("an Add that fails for another reason stays on the confirm step with an ale
   expect(rendered()).toContain("Not me");
 });
 
+test("an Add refused for a bad request without a reason keeps the code and alerts", async () => {
+  approveDeviceLink.mockImplementationOnce(async () => {
+    throw refused("BAD_REQUEST", "Invalid input", null);
+  });
+  await scanCode();
+  await pressButton("Add");
+
+  expect(alerts).toEqual([["Unable to add New phone", "Invalid input"]]);
+  expect(rendered()).toContain("Not me");
+});
+
 test("Not me refused because the code was replaced goes back to scanning", async () => {
   const message = "This code is no longer valid. Scan the new one.";
   decline.mockImplementationOnce(async () => {
-    throw refused("NOT_FOUND", message);
+    throw refused("NOT_FOUND", message, "CODE_EXPIRED");
   });
   await scanCode();
   await pressButton("Not me");

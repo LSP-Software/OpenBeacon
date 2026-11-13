@@ -3,6 +3,7 @@ import type { AlertDevice } from "@openbeacon/email";
 import { devicePlatformSchema } from "@openbeacon/schemas";
 import { TRPCError } from "@trpc/server";
 import { lockUserGroups } from "./lockUserGroups.ts";
+import { ReasonError } from "./reasonError.ts";
 
 export const toAlertDevice = (device: {
   name: string;
@@ -48,6 +49,7 @@ export const removeUserDevice = async ({
         code: "CONFLICT",
         message:
           "This phone has already been set up. Remove it from your devices if it isn't yours.",
+        cause: new ReasonError("ALREADY_SET_UP"),
       });
     }
     if (!current && currentSession.deviceId === deviceId) {

@@ -10,7 +10,11 @@ import { createRoot, type Root } from "test-renderer";
 const HANDOVER_REJECTED_MESSAGE = "handover rejected";
 const notFound = () =>
   TRPCClientError.from({
-    error: { code: -32004, data: { code: "NOT_FOUND" }, message: "NOT_FOUND" },
+    error: {
+      code: -32004,
+      data: { code: "NOT_FOUND", reason: "CODE_EXPIRED" },
+      message: "NOT_FOUND",
+    },
   });
 const approvedStatus = {
   approverPublicKey: "approver-public-key",
@@ -278,7 +282,11 @@ test("a rejected handover the server says isn't set up offers Try again", async 
 test("a phone that's already set up is told so instead of being told the server is unreachable", async () => {
   createLink.mockImplementationOnce(async () => {
     throw TRPCClientError.from({
-      error: { code: -32009, data: { code: "CONFLICT" }, message: "This phone is already set up." },
+      error: {
+        code: -32009,
+        data: { code: "CONFLICT", reason: "ALREADY_SET_UP" },
+        message: "This phone is already set up.",
+      },
     });
   });
   await render();
@@ -462,7 +470,11 @@ test("no other signed-in phone shows the server's reason and goes back to the se
   const message = "None of your other phones are signed in.";
   createLink.mockImplementationOnce(async () => {
     throw TRPCClientError.from({
-      error: { code: -32012, data: { code: "PRECONDITION_FAILED" }, message },
+      error: {
+        code: -32012,
+        data: { code: "PRECONDITION_FAILED", reason: "NO_APPROVING_DEVICE" },
+        message,
+      },
     });
   });
   await render();
