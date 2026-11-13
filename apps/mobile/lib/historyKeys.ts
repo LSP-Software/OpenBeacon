@@ -1,4 +1,5 @@
 import { decodeBase64, encodeBase64, HistoryPrivateKeyMaterial } from "@openbeacon/encryption";
+import { tryCatch } from "@openbeacon/shared";
 import {
   deleteSecret,
   readSecret,
@@ -40,7 +41,10 @@ export const deleteStoredHistoryKeys = async ({
   userId: string;
   upToVersion: number;
 }) => {
+  let firstError: Error | null = null;
   for (let version = 1; version <= upToVersion; version += 1) {
-    await deleteSecret(getHistoryKeyName({ userId, version }));
+    const deleted = await tryCatch(deleteSecret(getHistoryKeyName({ userId, version })));
+    firstError ??= deleted.error;
   }
+  if (firstError) throw firstError;
 };

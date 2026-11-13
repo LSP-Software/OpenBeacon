@@ -7,6 +7,7 @@ import {
 
 const userId = "user-1";
 const storedKeys = new Map<number, HistoryPrivateKeyMaterial>();
+const storeOwners: unknown[] = [];
 const storageValues = new Map<string, string>();
 let createError: Error | null = null;
 let statusError: Error | null = null;
@@ -40,10 +41,18 @@ mock.module("./api.ts", () => ({
   },
 }));
 
+mock.module("./secretStorage.ts", () => ({
+  secretOwner: (owner: string) => ({ userId: owner, generation: 0 }),
+}));
 mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async (input: { userId: string; version: number }) =>
     input.userId === userId ? (storedKeys.get(input.version) ?? null) : null,
-  storeHistoryKey: async (input: { privateKey: HistoryPrivateKeyMaterial; version: number }) => {
+  storeHistoryKey: async (input: {
+    owner: unknown;
+    privateKey: HistoryPrivateKeyMaterial;
+    version: number;
+  }) => {
+    storeOwners.push(input.owner);
     storedKeys.set(input.version, input.privateKey);
   },
   deleteStoredHistoryKeys: async (input: { upToVersion: number }) => {
@@ -72,6 +81,7 @@ const storedPublicKey = () => {
 describe("creating the first History key", () => {
   beforeEach(() => {
     storedKeys.clear();
+    storeOwners.length = 0;
     storageValues.clear();
     createError = null;
     statusError = null;
@@ -79,6 +89,13 @@ describe("creating the first History key", () => {
     recoveryKey = null;
     createGate = null;
     creates = 0;
+  });
+
+  test("saves the key for the account owner the caller captured, not whoever owns it now", async () => {
+    const capturedBeforeSignOut = { userId, generation: 4 };
+    await createHistoryKey(userId, capturedBeforeSignOut);
+
+    expect(storeOwners).toEqual([capturedBeforeSignOut]);
   });
 
   test("two overlapping creates on one phone publish one key and keep it", async () => {

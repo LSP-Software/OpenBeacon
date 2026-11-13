@@ -14,7 +14,7 @@ export const secretOwner = (userId: string) => ({
   generation: generations.get(userId) ?? 0,
 });
 
-const isCurrent = (owner: { userId: string; generation: number }) =>
+const isCurrent = (owner: ReturnType<typeof secretOwner>) =>
   (generations.get(owner.userId) ?? 0) === owner.generation;
 
 export const withSecretDeadline = async <T>(task: Promise<T>) => {
@@ -52,7 +52,7 @@ export const deleteSecret = (key: string) =>
   );
 
 export const writeSecret = async (
-  owner: { userId: string; generation: number },
+  owner: ReturnType<typeof secretOwner>,
   key: string,
   value: string,
 ) => {

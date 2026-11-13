@@ -187,3 +187,24 @@ test("a wipe while a device link secret is being saved leaves no secret behind",
   expect((await saving).error).toBeInstanceOf(Error);
   expect(await readSavedDeviceLink(device)).toBeNull();
 });
+
+test("a write stuck on one History key doesn't stop a wipe removing the account's other keys", async () => {
+  jest.useFakeTimers();
+  stored.set("encryption.history.stuck.2", "key-2");
+  stored.set("encryption.history.stuck.3", "key-3");
+  writeGate = new Promise(() => {});
+  void tryCatch(
+    storeHistoryKey({ privateKey: createHistoryKeyPair().privateKey, userId: "stuck", version: 1 }),
+  );
+  await settle();
+  writeGate = null;
+  const wiping = wipe("stuck");
+  for (let step = 0; step < 4; step++) {
+    await settle();
+    jest.advanceTimersByTime(10_000);
+  }
+  await wiping;
+
+  expect(stored.has("encryption.history.stuck.2")).toBe(false);
+  expect(stored.has("encryption.history.stuck.3")).toBe(false);
+});
