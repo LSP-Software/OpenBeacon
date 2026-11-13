@@ -67,12 +67,20 @@ It then generates the Prisma client, regenerates `android/` with `expo prebuild 
 
 For a build you won't upload, `bun run build-aab --allow-dirty` includes uncommitted changes.
 
+## Code shrinking
+
+Release builds run R8, which removes unused code and renames classes. `expo-build-properties` in `apps/mobile/app.json` turns it on with `enableMinifyInReleaseBuilds` and `enableShrinkResourcesInReleaseBuilds`. Debug builds aren't shrunk, so test a release build after adding or upgrading a native library.
+
+If a library breaks only in release builds, usually with `ClassNotFoundException` or `NoSuchMethodError` in `adb logcat`, add keep rules to `extraProguardRules` in the same plugin entry. Don't edit `android/app/proguard-rules.pro`, because prebuild regenerates it.
+
+The bundle includes R8's mapping file, so Play Console shows readable stack traces in crash reports without a separate upload.
+
 ## Check the signature
 
 The build prints the SHA1 of the key it signed with, and fails if the bundle's signature doesn't match the key in `credentials.json`. To check a bundle yourself:
 
 ```sh
-keytool -printcert -jarfile openbeacon-1.13.1-35.aab
+keytool -printcert -jarfile openbeacon-1.14.0-35.aab
 ```
 
 The SHA1 must match the upload key certificate shown in Play Console under Protected with Play, Play Store protection, Manage Play app signing. If it doesn't, Play rejects the upload with "signed with the wrong key".
