@@ -103,12 +103,14 @@ export type GroupEncryptedPayloadRow = {
 };
 
 export const uploadGroupTrackingBatch = async ({
+  consumeDailyBudget,
   db,
   groupId,
   memberSince,
   points,
   userId,
 }: {
+  consumeDailyBudget: (acceptedPoints: number) => Promise<void>;
   db: GroupTrackingDb;
   groupId: string;
   memberSince?: Date;
@@ -200,6 +202,7 @@ export const uploadGroupTrackingBatch = async ({
   );
 
   if (pointsToInsert.length > 0) {
+    await consumeDailyBudget(pointsToInsert.length);
     await db.groupEncryptedPayload.createMany({
       data: pointsToInsert
         .map((point) => ({

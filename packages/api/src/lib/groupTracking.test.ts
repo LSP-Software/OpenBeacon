@@ -63,6 +63,7 @@ describe("uploadGroupTrackingBatch", () => {
 
   test("inserts points and derives senderUserId from the session user", async () => {
     const result = await uploadGroupTrackingBatch({
+      consumeDailyBudget: async () => {},
       db: createDb(),
       groupId: "group-1",
       points: [createPoint()],
@@ -103,6 +104,7 @@ describe("uploadGroupTrackingBatch", () => {
 
     await expect(
       uploadGroupTrackingBatch({
+        consumeDailyBudget: async () => {},
         db: createDb(),
         groupId: "group-1",
         memberSince,
@@ -121,6 +123,7 @@ describe("uploadGroupTrackingBatch", () => {
     findManyPayloads = mock(async () => [{ clientPointId: "point-1" }]);
 
     const result = await uploadGroupTrackingBatch({
+      consumeDailyBudget: async () => {},
       db: createDb(),
       groupId: "group-1",
       points: [createPoint()],
@@ -141,6 +144,7 @@ describe("uploadGroupTrackingBatch", () => {
     findManyPayloads = mock(async () => [{ clientPointId: "point-1" }]);
 
     const result = await uploadGroupTrackingBatch({
+      consumeDailyBudget: async () => {},
       db: createDb(),
       groupId: "group-1",
       points: [
@@ -177,6 +181,7 @@ describe("uploadGroupTrackingBatch", () => {
   test("rejects duplicate clientPointIds inside one batch", async () => {
     await expect(
       uploadGroupTrackingBatch({
+        consumeDailyBudget: async () => {},
         db: createDb(),
         groupId: "group-1",
         points: [createPoint(), createPoint()],
@@ -193,6 +198,7 @@ describe("uploadGroupTrackingBatch", () => {
 
     await expect(
       uploadGroupTrackingBatch({
+        consumeDailyBudget: async () => {},
         db: createDb(),
         groupId: "group-1",
         points: [createPoint()],
@@ -209,6 +215,7 @@ describe("uploadGroupTrackingBatch", () => {
 
     await expect(
       uploadGroupTrackingBatch({
+        consumeDailyBudget: async () => {},
         db: createDb(),
         groupId: "group-1",
         points: [createPoint()],
@@ -226,6 +233,7 @@ describe("uploadGroupTrackingBatch", () => {
     countEpochs = mock(async () => 0);
 
     const result = await uploadGroupTrackingBatch({
+      consumeDailyBudget: async () => {},
       db: createDb(),
       groupId: "group-1",
       points: [
@@ -247,6 +255,7 @@ describe("uploadGroupTrackingBatch", () => {
     countEpochs = mock(async () => 0);
 
     const result = await uploadGroupTrackingBatch({
+      consumeDailyBudget: async () => {},
       db: createDb(),
       groupId: "group-1",
       points: [createPoint()],

@@ -195,7 +195,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     ).rejects.toMatchObject({ code: "FORBIDDEN", message: "You are not a member of this group" });
     for (const input of [
       { ...point, nonce: `${" ".repeat(1_000_000)}${point.nonce}` },
-      { ...point, ciphertext: "x".repeat(4097) },
+      { ...point, ciphertext: "x".repeat(1025) },
       { ...point, clientPointId: "x".repeat(200_000) },
     ]) {
       await expect(

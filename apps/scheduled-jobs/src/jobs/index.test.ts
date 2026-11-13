@@ -8,6 +8,7 @@ const runLocationHistoryCleanup = mock(async () => {});
 const runEpochCleanup = mock(async () => {});
 const runStalePendingUploadCleanup = mock(async () => {});
 const runImageStorageSweep = mock(async () => {});
+const runUploadGrowthReport = mock(async () => {});
 
 mock.module("./accountDeletion.ts", () => ({ runAccountDeletion }));
 mock.module("./expiredRecordsCleanup.ts", () => ({ runExpiredRecordsCleanup }));
@@ -20,6 +21,7 @@ mock.module("./imageUploadCleanup.ts", () => ({
   runStalePendingUploadCleanup,
   runImageStorageSweep,
 }));
+mock.module("./uploadGrowthReport.ts", () => ({ runUploadGrowthReport }));
 const { jobs } = await import("./index.ts");
 afterAll(() => mock.restore());
 
@@ -32,6 +34,7 @@ test("registers the clean-up jobs alongside account deletion", async () => {
     { name: "epoch-cleanup", delay: 86_400_000, run: runEpochCleanup },
     { name: "pending-upload-cleanup", delay: 3_600_000, run: runStalePendingUploadCleanup },
     { name: "image-storage-sweep", delay: 86_400_000, run: runImageStorageSweep },
+    { name: "upload-growth-report", delay: 86_400_000, run: runUploadGrowthReport },
   ]);
   await startScheduler(jobs)();
   expect(runExpiredRecordsCleanup).toHaveBeenCalledTimes(1);
@@ -40,4 +43,5 @@ test("registers the clean-up jobs alongside account deletion", async () => {
   expect(runEpochCleanup).toHaveBeenCalledTimes(1);
   expect(runStalePendingUploadCleanup).toHaveBeenCalledTimes(1);
   expect(runImageStorageSweep).toHaveBeenCalledTimes(1);
+  expect(runUploadGrowthReport).toHaveBeenCalledTimes(1);
 });
