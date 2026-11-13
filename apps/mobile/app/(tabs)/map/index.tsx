@@ -164,6 +164,7 @@ const MapScreen = () => {
   });
   const dismissQueueEviction = useMutation({
     mutationFn: dismissTrackingQueueEviction,
+    networkMode: "always",
     onSettled: () => queryClient.invalidateQueries({ queryKey: evictionQueryKey }),
   });
   const groupColorRevision = useGroupColorRevision();

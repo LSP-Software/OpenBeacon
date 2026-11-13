@@ -50,6 +50,7 @@ mock.module("../../lib/api.ts", () => ({
     },
   },
 }));
+mock.module("../../lib/networkStatus.ts", () => ({ isDeviceOffline: async () => false }));
 mock.module("../../lib/locationSharing.ts", () => ({
   changeLocationSharing: async (input: Parameters<typeof changeLocationSharing>[0]) => {
     changes.push(input);
