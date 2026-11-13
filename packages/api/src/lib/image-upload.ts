@@ -7,11 +7,26 @@ import {
   buildImagePublicUrl,
   deleteFile,
   extractImageStorageObject,
-  getFileSize,
   getPresignedUploadUrl,
+  getUploadedFile,
 } from "./storage.ts";
 
 export type ImageUploadType = "userAvatar" | "groupAvatar";
+
+export const isWebpFile = (header: Uint8Array, size: number) => {
+  if (header.length < 16) return false;
+  const text = (start: number) => String.fromCharCode(...header.subarray(start, start + 4));
+  const riffLength = new DataView(header.buffer, header.byteOffset, header.length).getUint32(
+    4,
+    true,
+  );
+  return (
+    text(0) === "RIFF" &&
+    text(8) === "WEBP" &&
+    riffLength + 8 === size &&
+    ["VP8 ", "VP8L", "VP8X"].includes(text(12))
+  );
+};
 
 export const buildUserAvatarPath = (userId: string): string => `user/${userId}/uploads/avatar`;
 export const buildGroupAvatarPath = (userId: string, groupId: string): string =>
@@ -133,8 +148,8 @@ export const confirmImageUpload = async ({
     });
   }
 
-  const { data: fileSize, error: verifyError } = await tryCatch(
-    getFileSize(bucketName, imagePath, pendingFileName),
+  const { data: file, error: verifyError } = await tryCatch(
+    getUploadedFile(bucketName, imagePath, pendingFileName, 16, env.MAX_IMAGE_FILE_SIZE),
   );
 
   if (verifyError) {
@@ -145,7 +160,12 @@ export const confirmImageUpload = async ({
     });
   }
 
-  if (!fileSize || fileSize > env.MAX_IMAGE_FILE_SIZE) {
+  if (
+    !file?.size ||
+    file.size > env.MAX_IMAGE_FILE_SIZE ||
+    file.contentType !== "image/webp" ||
+    !isWebpFile(file.header, file.size)
+  ) {
     await deleteFile(bucketName, imagePath, pendingFileName);
     await db.pendingUpload.deleteMany({
       where: { userId, uploadType, fileName: pendingFileName },

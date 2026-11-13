@@ -1,4 +1,4 @@
-import { GroupRole, Prisma } from "@openbeacon/database";
+import { Prisma } from "@openbeacon/database";
 import { createHash } from "node:crypto";
 import {
   auth,
@@ -24,10 +24,9 @@ import {
   requestImageUpload,
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
-import { deleteAccountRecords } from "../lib/account-deletion.ts";
+import { beginAccountDeletion, deleteAccountRecords } from "../lib/account-deletion.ts";
 import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
-import { lockUserGroups } from "../lib/lockUserGroups.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
 import {
   freshSessionProcedure,
@@ -303,57 +302,7 @@ export const accountRouter = {
               message: "Google verification expired. Please try again.",
             });
         }
-        const groupIds = await lockUserGroups(tx, userId);
-        if (groupIds.length) {
-          const soleOwner = await tx.groupMember.findFirst({
-            where: {
-              userId,
-              role: GroupRole.OWNER,
-              group: {
-                AND: [
-                  { groupMembers: { some: { userId: { not: userId } } } },
-                  {
-                    groupMembers: {
-                      none: {
-                        userId: { not: userId },
-                        role: GroupRole.OWNER,
-                        user: { pendingDeletion: false },
-                      },
-                    },
-                  },
-                ],
-              },
-            },
-            select: { id: true },
-          });
-          if (soleOwner)
-            throw new TRPCError({
-              code: "CONFLICT",
-              message: "Transfer ownership or delete your groups before deleting your account.",
-            });
-          const soloGroups = await tx.group.findMany({
-            where: { id: { in: groupIds }, groupMembers: { none: { userId: { not: userId } } } },
-            select: { id: true },
-          });
-          const soloGroupIds = soloGroups.map(({ id }) => id);
-          await tx.groupMemberInvite.deleteMany({ where: { groupId: { in: soloGroupIds } } });
-          await tx.groupSharedInvite.deleteMany({ where: { groupId: { in: soloGroupIds } } });
-        }
-        await tx.groupMemberInvite.deleteMany({
-          where: { OR: [{ inviterId: userId }, { recipientId: userId }] },
-        });
-        await tx.groupSharedInvite.deleteMany({ where: { creatorId: userId } });
-        const [clock] = await tx.$queryRaw<Array<{ deletionDate: Date }>>(
-          Prisma.sql`SELECT clock_timestamp() + (${input.immediate ? 0 : 168} * INTERVAL '1 hour') AS "deletionDate"`,
-        );
-        if (!clock) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-        const { deletionDate } = clock;
-        await tx.user.update({
-          where: { id: userId },
-          data: { pendingDeletion: true, deletionDate, deletionRetryAt: null },
-        });
-        await tx.session.deleteMany({ where: { userId } });
-        return { deletionDate };
+        return beginAccountDeletion(tx, { userId, delayHours: input.immediate ? 0 : 168 });
       });
       if (input.immediate) {
         const deletion = await tryCatch(

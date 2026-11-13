@@ -29,11 +29,11 @@ export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
 
   const isFocused = useIsFocused();
-  const { data: groupList, isPending: isFetchingGroupList } = useQuery({
+  const groups = useQuery({
     ...trpc.groupMembership.list.queryOptions(),
     subscribed: isFocused,
   });
-  const { data: groupInvites, isPending: isFetchingGroupInvites } = useQuery({
+  const invites = useQuery({
     ...trpc.groupInvites.list.queryOptions(),
     subscribed: isFocused,
   });
@@ -50,8 +50,25 @@ export default function GroupsScreen() {
     30_000,
   );
 
-  if (isFetchingGroupList || isFetchingGroupInvites) {
+  if (groups.isPending || invites.isPending) {
     return <LoadingIndicator />;
+  }
+
+  if (!groups.data) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center gap-4 bg-background px-6">
+        <Text className="text-center text-muted-foreground">
+          We couldn’t load your groups. Check your connection and try again.
+        </Text>
+        <Button
+          variant="outline"
+          loading={groups.isFetching}
+          onPress={() => Promise.all([groups.refetch(), invites.refetch()])}
+        >
+          <Text>Try again</Text>
+        </Button>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -74,12 +91,14 @@ export default function GroupsScreen() {
             <Text>Scan QR or enter join code</Text>
           </Button>
         </Link>
+        {groups.isError || invites.isError ? (
+          <Text accessibilityLiveRegion="polite" className="mb-4 text-sm text-muted-foreground">
+            We couldn’t reach the server, so this list may be out of date.
+          </Text>
+        ) : null}
         <GroupJoinAlerts alerts={joinAlerts ?? []} />
-        <GroupInvitesList groupInvites={groupInvites ?? []} />
-        <GroupList
-          groupList={groupList ?? []}
-          setCreateGroupDialogOpen={setCreateGroupDialogOpen}
-        />
+        <GroupInvitesList groupInvites={invites.data ?? []} />
+        <GroupList groupList={groups.data} setCreateGroupDialogOpen={setCreateGroupDialogOpen} />
       </SafeAreaView>
     </RefreshablePage>
   );

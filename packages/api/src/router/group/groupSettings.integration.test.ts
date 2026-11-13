@@ -3,13 +3,13 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
   ListObjectVersionsCommand,
-  HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { tryCatch } from "@openbeacon/shared";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { env } from "../../env.ts";
+import { storedWebpResponse } from "../../lib/storedWebp.testUtil.ts";
 import { DevicePendingError } from "../../lib/deviceActivation.ts";
 import { DeviceUnverifiedError } from "../../lib/deviceUnverified.ts";
 import { buildGroupAvatarPath, setPendingImageUploadForUser } from "../../lib/image-upload.ts";
@@ -437,9 +437,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         });
       }
       const send = spyOn(s3Client, "send").mockImplementation(async (command) =>
-        command instanceof HeadObjectCommand
-          ? { $metadata: {}, ContentLength: 3 }
-          : { $metadata: {} },
+        storedWebpResponse(command),
       );
       try {
         await Promise.all(
@@ -496,9 +494,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         },
       });
       const send = spyOn(s3Client, "send").mockImplementation(async (command) =>
-        command instanceof HeadObjectCommand
-          ? { $metadata: {}, ContentLength: 3 }
-          : { $metadata: {} },
+        storedWebpResponse(command),
       );
       try {
         const result = await caller(users[0]!).groupSettings.confirmGroupImageUpload({

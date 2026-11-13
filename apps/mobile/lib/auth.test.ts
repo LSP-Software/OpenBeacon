@@ -176,7 +176,7 @@ describe("auth Google sign-in configuration", () => {
     ]);
   });
 
-  test("returns silently when Google sign-in is cancelled", async () => {
+  test("reports a cancelled Google sign-in as cancelled", async () => {
     process.env[GOOGLE_WEB_CLIENT_ID_ENV] = "web-client-id";
     googleSignInResponse = {
       type: "cancelled",
@@ -185,7 +185,7 @@ describe("auth Google sign-in configuration", () => {
 
     const { signInWithGoogle } = await importAuthModule();
 
-    expect(await signInWithGoogle()).toEqual({});
+    expect(await signInWithGoogle()).toEqual({ cancelled: true });
     expect(socialSignInMock).not.toHaveBeenCalled();
   });
 

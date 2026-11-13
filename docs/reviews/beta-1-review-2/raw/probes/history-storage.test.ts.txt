@@ -1,0 +1,29 @@
+import { expect, mock, test } from "bun:test";
+const values = new Map<string,string>();
+let delayWrite: Promise<void> | null = null;
+let blockReads = false;
+mock.module("expo-secure-store",()=>({
+ WHEN_UNLOCKED_THIS_DEVICE_ONLY:"device-only",
+ getItemAsync: async (key:string) => blockReads ? new Promise<string|null>(()=>{}) : values.get(key)??null,
+ setItemAsync: async (key:string,value:string) => { await delayWrite; values.set(key,value); },
+ deleteItemAsync: async (key:string)=>{values.delete(key);},
+}));
+const keys = await import("<repo>/apps/mobile/lib/historyKeys.ts");
+const encryption = await import("<repo>/packages/encryption/src/index.ts");
+test("History-key reads have no settling fallback when the native operation stalls", async()=>{
+ blockReads=true;
+ const result=await Promise.race([keys.getStoredHistoryKey({userId:"review",version:1}).then(()=>"settled"),new Promise<string>(r=>setTimeout(()=>r("still pending"),30))]);
+ expect(result).toBe("still pending");
+ blockReads=false;
+});
+test("A late History-key write can repopulate secure storage after the key wipe completes",async()=>{
+ let release=()=>{};
+ delayWrite=new Promise<void>(r=>{release=r;});
+ const write=keys.storeHistoryKey({privateKey:encryption.createHistoryKeyPair().privateKey,userId:"review",version:1});
+ await keys.deleteStoredHistoryKeys({userId:"review",upToVersion:100});
+ expect(values.size).toBe(0);
+ delayWrite=null;
+ release();
+ await write;
+ expect(values.has("encryption.history.review.1")).toBe(true);
+});

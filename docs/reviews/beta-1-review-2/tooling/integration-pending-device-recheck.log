@@ -1,0 +1,51 @@
+$ bun scripts/run-integration-tests.ts packages/api/src/router/pendingDevice.integration.test.ts "--env-file=/tmp/openbeacon-beta2-review.env"
+bun test --isolate --env-file=/tmp/openbeacon-beta2-review.env packages/api/src/router/pendingDevice.integration.test.ts
+bun test v1.4.4-canary.1 (11c367163)
+
+packages/api/src/router/pendingDevice.integration.test.ts:
+[TRPC] auth.registerDeviceKey took 148ms to execute
+[TRPC] accountHistory.create took 402ms to execute
+[TRPC] auth.registerDeviceKey took 440ms to execute
+[TRPC] auth.deviceKeyContext took 118ms to execute
+[TRPC] device.status took 470ms to execute
+[TRPC] accountRecovery.status took 257ms to execute
+[TRPC] accountRecovery.escrows took 124ms to execute
+[TRPC] account.deletionVerificationMethods took 397ms to execute
+[TRPC] account.version took 474ms to execute
+[TRPC] deviceLink.create took 353ms to execute
+[TRPC] deviceLink.status took 306ms to execute
+[TRPC] device.activationChallenge took 487ms to execute
+[TRPC] device.activate took 234ms to execute
+[TRPC] device.activationChallenge took 382ms to execute
+(fail) a phone that isn't set up yet > can register, check its status and get set up by link or by phrase [5000.29ms]
+  ^ this test timed out after 5000ms.
+[TRPC] device.activate took 445ms to execute
+[TRPC] auth.registerDeviceKey took 134ms to execute
+[TRPC] account.listDevices took 169ms to execute
+[TRPC] accountHistory.create took 376ms to execute
+[TRPC] auth.registerDeviceKey took 501ms to execute
+[TRPC] accountRecovery.reset took 328ms to execute
+(pass) a phone that isn't set up yet > can start fresh [1355.80ms]
+[TRPC] auth.registerDeviceKey took 141ms to execute
+[TRPC] accountHistory.create took 419ms to execute
+[TRPC] auth.registerDeviceKey took 167ms to execute
+[TRPC] account.removeThisDevice took 271ms to execute
+(pass) a phone that isn't set up yet > can cancel by removing itself [1008.63ms]
+[TRPC] auth.registerDeviceKey took 308ms to execute
+[TRPC] accountHistory.create took 305ms to execute
+[TRPC] auth.registerDeviceKey took 206ms to execute
+[TRPC] account.listDevices took 396ms to execute
+[TRPC] account.updateDevice took 322ms to execute
+[TRPC] account.requestDeletion took 252ms to execute
+[TRPC] account.signOutOtherSessions took 108ms to execute
+[TRPC] emailAlerts.updateSettings took 286ms to execute
+[TRPC] groupInvites.decline took 108ms to execute
+[TRPC] groupMembership.list took 129ms to execute
+[TRPC] deviceLink.get took 427ms to execute
+(pass) a phone that isn't set up yet > can't see or change anything else on the account [2862.78ms]
+
+ 3 pass
+ 1 fail
+ 34 expect() calls
+Ran 4 tests across 1 file. [10.72s]
+error: script "test:integration" exited with code 1

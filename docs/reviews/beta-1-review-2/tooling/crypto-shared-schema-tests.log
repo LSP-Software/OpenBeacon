@@ -1,0 +1,242 @@
+bun test v1.4.4-canary.1 (11c367163)
+
+packages/encryption/src/deviceLink.test.ts:
+(pass) device link handover > hands over every History key version [10.65ms]
+(pass) device link handover > doesn't open without the QR code's secret [6.77ms]
+(pass) device link handover > doesn't open on a device it wasn't sealed to [5.50ms]
+(pass) device link handover > doesn't open for a different link, account or device [4.01ms]
+(pass) device link handover > doesn't open when another device claims to have sealed it [4.30ms]
+(pass) device link handover > rejects a key that doesn't match its published History public key [7.54ms]
+(pass) device link handover > rejects a handover without the current History key version [4.68ms]
+(pass) device link handover > rejects a handover that breaks the strict format [15.58ms]
+(pass) device link QR code > round-trips and rejects anything else [0.75ms]
+
+packages/encryption/src/sensitive.test.ts:
+(pass) epoch key wrapper > never serialises its bytes [0.08ms]
+(pass) epoch key wrapper > hands out copies so callers cannot alter the stored bytes [0.02ms]
+(pass) payload wrapper > never serialises its bytes [0.05ms]
+(pass) payload wrapper > hands out copies so callers cannot alter the stored bytes
+(pass) device private key wrapper > never serialises its bytes [0.01ms]
+(pass) device private key wrapper > hands out copies so callers cannot alter the stored bytes
+(pass) recovery phrase wrapper > never serialises its bytes [0.01ms]
+(pass) recovery phrase wrapper > hands out copies so callers cannot alter the stored bytes
+(pass) recovery private key wrapper > never serialises its bytes [0.01ms]
+(pass) recovery private key wrapper > hands out copies so callers cannot alter the stored bytes
+(pass) history private key wrapper > never serialises its bytes
+(pass) history private key wrapper > hands out copies so callers cannot alter the stored bytes
+(pass) recovery phrase > splits the phrase into words [0.04ms]
+
+packages/encryption/src/hpke.test.ts:
+(pass) HPKE auth mode > matches the RFC 9180 DHKEM(X25519)/HKDF-SHA256/ChaCha20Poly1305 auth vector [5.26ms]
+(pass) HPKE auth mode > uses a fresh ephemeral key for every seal [3.72ms]
+(pass) HPKE auth mode > rejects a ciphertext that claims a different sender [2.41ms]
+(pass) HPKE auth mode > rejects a ciphertext sealed by a sender who is not the claimed sender [2.75ms]
+(pass) HPKE auth mode > rejects a changed ephemeral key, info or aad [5.17ms]
+(pass) HPKE auth mode > rejects low-order ephemeral keys [1.34ms]
+(pass) HPKE base mode > matches the RFC 9180 DHKEM(X25519)/HKDF-SHA256/ChaCha20Poly1305 base vector [1.02ms]
+(pass) HPKE base mode > rejects the wrong recipient key, a changed ephemeral key, info or aad [4.14ms]
+(pass) HPKE auth PSK mode > matches the RFC 9180 DHKEM(X25519)/HKDF-SHA256/ChaCha20Poly1305 auth PSK vector [1.95ms]
+(pass) HPKE auth PSK mode > rejects a changed PSK, PSK id, sender, recipient, info or aad [7.69ms]
+(pass) HPKE auth PSK mode > refuses an empty or short PSK or an empty PSK id [3.44ms]
+
+packages/encryption/src/deviceActivation.test.ts:
+(pass) device activation challenge > opens with the History private key it was sealed to [1.22ms]
+(pass) device activation challenge > doesn't open with another History key [1.14ms]
+(pass) device activation challenge > is bound to the user and device it was made for [2.30ms]
+(pass) device activation challenge > refuses a challenge that isn't 32 bytes [0.04ms]
+
+packages/encryption/src/recovery.test.ts:
+(pass) recovery phrase > generates distinct, valid 12 word phrases [1.85ms]
+(pass) recovery phrase > accepts phrases with different case, spacing and compatible characters [6.38ms]
+(pass) recovery phrase > rejects a bad checksum, unknown word or wrong length [1.19ms]
+(pass) history key > derives the published public key from the private key [0.46ms]
+(pass) recovery escrow > restores the history key with the phrase [5.70ms]
+(pass) recovery escrow > rejects another phrase, user or version [7.02ms]
+(pass) recovery escrow > rejects an escrow that doesn't match the published history key [4.86ms]
+(pass) recovery escrow > rejects an escrow forged by someone who only knows the recovery public key [7.53ms]
+(pass) recovery escrow > rejects an escrow that doesn't hold a private key [4.70ms]
+(pass) recovery escrow > rejects a tampered escrow or unknown algorithm [3.49ms]
+(pass) recovery escrow > can't be opened with the history key itself [3.74ms]
+(pass) history wrap > round trips an epoch key [2.40ms]
+(pass) history wrap > rejects the wrong epoch, user, version or history key [5.36ms]
+(pass) history wrap > rejects a swapped sender key [2.69ms]
+(pass) history wrap > can't be opened as a device wrap [2.18ms]
+(pass) history wrap > a device wrap can't be opened as a history wrap [2.60ms]
+(pass) diagnoseRecoveryPhraseInput > reports no problem for a valid phrase in any casing or spacing [1.04ms]
+(pass) diagnoseRecoveryPhraseInput > reports the word count when it isn't 12 [0.04ms]
+(pass) diagnoseRecoveryPhraseInput > reports the 1-based positions of words outside the word list [0.39ms]
+(pass) diagnoseRecoveryPhraseInput > reports a checksum failure when every word is valid [0.83ms]
+(pass) diagnoseRecoveryPhraseInput > agrees with parseRecoveryPhrase about what is valid [2.64ms]
+
+packages/encryption/src/personalData.test.ts:
+(pass) personal data > opens with a private key restored from its raw bytes [5.90ms]
+(pass) personal data > uses fresh randomness for every seal [1.87ms]
+(pass) personal data > rejects an unknown envelope version [2.14ms]
+(pass) personal data > rejects another key, purpose or binding [5.78ms]
+(pass) personal data sealed to a history key > opens on any device holding the history key version [2.08ms]
+(pass) personal data sealed to a history key > opens without a device key and reports the history key version [3.05ms]
+(pass) personal data sealed to a history key > still opens device sealed records alongside history keys [2.25ms]
+(pass) personal data sealed to a history key > rejects a missing or different history key version [1.94ms]
+(pass) personal data sealed to a history key > binds the history key version, purpose and binding into the info [1.45ms]
+(pass) personal data sealed to a history key > rejects a relabelled history key version, purpose or binding [3.60ms]
+
+packages/encryption/src/index.test.ts:
+(pass) rejects low-order and invalid X25519 public keys [3.73ms]
+(pass) group epoch encryption > round-trips base64-encoded bytes [0.08ms]
+(pass) group epoch encryption > rejects impossible base64 lengths [0.04ms]
+(pass) group epoch encryption > rejects interior base64 padding [0.02ms]
+(pass) group epoch encryption > rejects over-padded base64 values [0.02ms]
+(pass) group epoch encryption > encrypts and decrypts a payload [5.08ms]
+(pass) group epoch encryption > wraps the same epoch for multiple recipients [6.93ms]
+(pass) group epoch encryption > rotates epochs after a member is added and preserves old ciphertext [9.97ms]
+(pass) group epoch encryption > rotates epochs after a member is removed [5.80ms]
+(pass) group epoch encryption > new recipients cannot decrypt old epochs without an old wrapped key [3.54ms]
+(pass) group epoch encryption > removed recipients cannot decrypt the next epoch [4.44ms]
+(pass) group epoch encryption > rejects tampered ciphertext [3.24ms]
+(pass) group epoch encryption > rejects metadata mismatches [3.40ms]
+(pass) group epoch encryption > rejects wrong private keys while unwrapping [2.38ms]
+(pass) group epoch encryption > records the creator's public key on each wrapped key [3.58ms]
+(pass) group epoch encryption > rejects wrapped keys that were not created by the claimed creator [3.23ms]
+(pass) group epoch encryption > rejects wrapped keys moved to another epoch or recipient [3.46ms]
+
+packages/encryption/src/sessionLink.test.ts:
+(pass) session link challenge > opens with the device private key it was sealed to [1.19ms]
+(pass) session link challenge > doesn't open with another device's key [1.13ms]
+(pass) session link challenge > is bound to the user and device it was made for [1.26ms]
+(pass) session link challenge > can't be opened as an activation challenge, or the other way round [4.08ms]
+(pass) session link challenge > refuses a challenge that isn't 32 bytes [0.04ms]
+
+packages/encryption/src/trackingPoint.test.ts:
+(pass) validateTrackingPointV1 > accepts a valid tracking point [0.18ms]
+(pass) validateTrackingPointV1 > rejects battery levels outside the integer percentage range [0.08ms]
+(pass) validateTrackingPointV1 > requires every schema field [0.11ms]
+(pass) validateTrackingPointV1 > accepts a numeric or null speed and rejects other values [0.04ms]
+(pass) validateTrackingPointV1 > encodes the locked tracking payload as UTF-8 JSON [0.05ms]
+(pass) validateTrackingPointV1 > encoding refuses fields outside the v1 plaintext schema [0.03ms]
+(pass) validateTrackingPointV1 > encodes an unknown battery level as null [0.03ms]
+(pass) validateTrackingPointV1 > rejects coordinates outside WGS84 bounds and non-UTC timestamps [0.09ms]
+(pass) validateTrackingPointV1 > accepts valid ISO 8601 UTC precision and rejects impossible dates [0.03ms]
+(pass) validateTrackingPointV1 > drops fields outside the v1 plaintext schema [0.03ms]
+(pass) validateTrackingPointV1 > returns a copy rather than the decoded object [0.05ms]
+(pass) validateTrackingPointV1 > accepts an unknown battery level as null [0.02ms]
+(pass) validateTrackingPointV1 > still rejects other versions [0.02ms]
+
+packages/schemas/src/env.test.ts:
+(pass) optionalEnvString > returns undefined when the input is undefined [0.14ms]
+(pass) optionalEnvString > converts an empty string to undefined [0.03ms]
+(pass) optionalEnvString > accepts a non-empty trimmed string [0.05ms]
+(pass) optionalEnvString > converts whitespace-only strings to undefined [0.03ms]
+(pass) optionalEnvString > leaves non-string values to zod validation [0.15ms]
+
+packages/shared/src/locationSharing.test.ts:
+(pass) location sharing preferences > leaves an unpaused device sharing with its existing point IDs [0.10ms]
+(pass) location sharing preferences > keeps a tablet paused after an account pause ends [0.20ms]
+(pass) location sharing preferences > uses the later deadline and respects an indefinite pause [0.05ms]
+(pass) location sharing preferences > expires exactly at the deadline and retains the fresh-location cutoff [0.03ms]
+
+packages/encryption/src/testVectors/recovery-vectors.test.ts:
+(pass) recovery v1 vectors > the recovery key is HKDF-SHA256 over the phrase entropy [0.90ms]
+(pass) recovery v1 vectors > derives the pinned recovery key from the phrase [2.02ms]
+(pass) recovery v1 vectors > the escrow is HPKE auth mode from the recovery key to itself with the documented info [3.31ms]
+(pass) recovery v1 vectors > seals an escrow the restore path opens [5.48ms]
+(pass) recovery v1 vectors > restores the pinned history key from the phrase and escrow [2.50ms]
+(pass) recovery v1 vectors > the history wrap is HPKE auth mode with the documented info [1.51ms]
+(pass) recovery v1 vectors > wraps with the documented info and metadata [2.45ms]
+(pass) recovery v1 vectors > unwraps the pinned history wrap [0.81ms]
+
+packages/encryption/src/testVectors/group-payload-interop.test.ts:
+(pass) group-payload interop vectors > vector file uses the locked algorithm and domain context [0.03ms]
+(pass) group-payload interop vectors > TypeScript encrypt matches committed ciphertext for each vector [1.03ms]
+(pass) group-payload interop vectors > TypeScript decrypt recovers plaintext for each vector [0.83ms]
+(pass) group-payload interop vectors > the tracking point reader keeps only the v1 fields of each vector [0.11ms]
+(pass) group-payload interop vectors > AAD JSON key order is locked byte-for-byte [0.03ms]
+
+packages/encryption/src/testVectors/device-challenges-vectors.test.ts:
+(pass) device challenge v1 vectors > the session link challenge is HPKE Base over the documented info [3.73ms]
+(pass) device challenge v1 vectors > the device opens the vector session link challenge [0.82ms]
+(pass) device challenge v1 vectors > the activation challenge is HPKE Base over the documented info [2.71ms]
+(pass) device challenge v1 vectors > the History key opens the vector activation challenge [0.63ms]
+(pass) device challenge v1 vectors > opening refuses a challenge that isn't 32 bytes [5.07ms]
+
+packages/encryption/src/testVectors/device-link-vectors.test.ts:
+(pass) device link v1 vectors > the QR code has the documented layout [0.36ms]
+(pass) device link v1 vectors > the handover is HPKE AuthPSK over the documented plaintext, info and PSK id [4.57ms]
+(pass) device link v1 vectors > the new device opens the vector handover [2.55ms]
+
+packages/shared/src/utils/validateEnv.test.ts:
+(pass) validateEnv > lists each variable without printing its value [0.20ms]
+(pass) validateEnv > reports every invalid variable and failed check before failing [0.08ms]
+
+packages/shared/src/utils/logRateLimit.test.ts:
+(pass) bounds rate-limit warnings and reports suppressed requests [0.10ms]
+
+packages/shared/src/utils/checkServices.test.ts:
+(pass) checkServices > names the error code of a failed check without its message [0.51ms]
+
+packages/schemas/src/schemas/auth/registerDeviceKey.test.ts:
+(pass) registerDeviceKeySchema > accepts a valid X25519 public key and trims surrounding whitespace [1.84ms]
+(pass) registerDeviceKeySchema > rejects malformed base64 [0.21ms]
+(pass) registerDeviceKeySchema > rejects decoded keys with the wrong length [0.11ms]
+(pass) registerDeviceKeySchema > rejects low-order device public keys [0.48ms]
+(pass) registerDeviceKeySchema > rejects internal whitespace and oversized device keys [1.20ms]
+(pass) registerDeviceKeySchema > limits device identifiers [0.89ms]
+(pass) registerDeviceKeySchema > keeps a plain device model and drops one that could carry a link or run on [1.92ms]
+(pass) groupEpochBundleSchema > validates encoded wrapped key components [4.54ms]
+(pass) groupEpochBundleSchema > rejects recipient keys whose epochId does not match the bundle epochId [1.76ms]
+(pass) groupEpochBundleSchema > requires historyKeys on every bundle [0.60ms]
+(pass) groupEpochBundleSchema > rejects oversized epoch identifiers in both the bundle and recipient key [0.65ms]
+(pass) groupEpochBundleSchema > caps epoch numbers and history key versions at the database integer limit [0.58ms]
+(pass) groupEpochBundleSchema > limits how many keys one bundle can carry [61.32ms]
+
+packages/schemas/src/schemas/account/fields.test.ts:
+(pass) accountNameSchema > trims names and accepts international names and punctuation [0.16ms]
+(pass) accountNameSchema > rejects blank, excessively long, and control character names [0.13ms]
+(pass) emailSchema > trims and lowercases emails before validating them [0.08ms]
+(pass) emailSchema > rejects blank and malformed emails [0.11ms]
+
+packages/schemas/src/schemas/account/devices.test.ts:
+(pass) deviceNameSchema > trims names [0.16ms]
+(pass) deviceNameSchema > accepts 40 characters after trimming [0.06ms]
+(pass) deviceNameSchema > rejects blank, long and control character names [0.11ms]
+(pass) deviceNameSchema > rejects invisible format characters that could disguise another phone's name [0.07ms]
+(pass) deviceNameSchema > keeps emoji joined with zero-width joiners [0.02ms]
+(pass) deviceIconSchema > only accepts the fixed icons [0.04ms]
+(pass) approveDeviceLinkSchema > accepts a 32-byte encapsulated key [0.66ms]
+(pass) approveDeviceLinkSchema > rejects an empty or wrongly sized encapsulated key [0.09ms]
+
+packages/schemas/src/schemas/account/locationSharing.test.ts:
+(pass) sharing changes must name their account and device changes must name their device [1.72ms]
+(pass) sharing pauses reject unsupported durations [0.21ms]
+(pass) a timed pause carries the end time chosen when it was tapped [0.15ms]
+(pass) a resume carries no end time and must say what it replaces [0.09ms]
+(pass) a sharing change carries when it was tapped, which can't be far in the future [0.09ms]
+(pass) only the server rejects a change requested more than a day ahead of its clock [0.27ms]
+
+packages/schemas/src/schemas/feedback/submitFeedback.test.ts:
+(pass) limits feedback messages to the shared maximum after trimming [0.86ms]
+(pass) feedback emails are normalised to match account emails [0.07ms]
+
+packages/schemas/src/schemas/group/tracking.test.ts:
+(pass) groupTrackingPointSchema > accepts a valid tracking point envelope [0.79ms]
+(pass) groupTrackingPointSchema > rejects wrong kind [0.25ms]
+(pass) groupTrackingPointSchema > limits ciphertext size [0.11ms]
+(pass) groupTrackingPointSchema > limits client point IDs [0.08ms]
+(pass) groupTrackingPointSchema > rejects invalid nonce length [0.08ms]
+(pass) groupTrackingPointSchema > rejects oversized and noncanonical nonces [0.54ms]
+(pass) groupTrackingUploadBatchSchema > requires at least one point [0.31ms]
+(pass) groupTrackingUploadBatchSchema > accepts a batch of points [0.06ms]
+(pass) groupTrackingPollSchema > defaults cursor and limit as optional [0.25ms]
+(pass) groupTrackingPollSchema > rejects limit above 500 [0.09ms]
+(pass) groupTrackingGetLatestSchema > requires groupId [0.13ms]
+
+packages/schemas/src/schemas/group/create.test.ts:
+(pass) createGroupSchema > trims group names and enforces the same length limits as rename [0.57ms]
+(pass) new group IDs are safe path segments [0.13ms]
+
+packages/schemas/src/schemas/group/inviteMember.test.ts:
+(pass) invite emails are normalised to match how accounts store them [0.81ms]
+
+ 184 pass
+ 0 fail
+ 465 expect() calls
+Ran 184 tests across 26 files. [634.00ms]

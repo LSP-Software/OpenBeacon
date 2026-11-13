@@ -1,0 +1,189 @@
+{
+  "issues": [
+    {
+      "file": "apps/mobile/lib/deviceKeys.ts",
+      "cycles": [
+        [
+          {
+            "name": "apps/mobile/lib/deviceKeys.ts",
+            "kind": "import",
+            "specifier": "./sessionLink.ts",
+            "line": 17,
+            "col": 10,
+            "pos": 624
+          },
+          {
+            "name": "apps/mobile/lib/sessionLink.ts",
+            "kind": "import",
+            "specifier": "./signOut.ts",
+            "line": 79,
+            "col": 30,
+            "pos": 2305
+          },
+          {
+            "name": "apps/mobile/lib/signOut.ts",
+            "kind": "import",
+            "specifier": "./deviceKeys.ts",
+            "line": 5,
+            "col": 10,
+            "pos": 227
+          }
+        ],
+        [
+          {
+            "name": "apps/mobile/lib/deviceKeys.ts",
+            "kind": "import",
+            "specifier": "./sessionLink.ts",
+            "line": 17,
+            "col": 10,
+            "pos": 624
+          },
+          {
+            "name": "apps/mobile/lib/sessionLink.ts",
+            "kind": "import",
+            "specifier": "./signOut.ts",
+            "line": 79,
+            "col": 30,
+            "pos": 2305
+          },
+          {
+            "name": "apps/mobile/lib/signOut.ts",
+            "kind": "import",
+            "specifier": "./endSession.ts",
+            "line": 6,
+            "col": 10,
+            "pos": 285
+          },
+          {
+            "name": "apps/mobile/lib/endSession.ts",
+            "kind": "import",
+            "specifier": "./deviceKeys.ts",
+            "line": 7,
+            "col": 3,
+            "pos": 279
+          }
+        ],
+        [
+          {
+            "name": "apps/mobile/lib/deviceKeys.ts",
+            "kind": "import",
+            "specifier": "./sessionLink.ts",
+            "line": 17,
+            "col": 10,
+            "pos": 624
+          },
+          {
+            "name": "apps/mobile/lib/sessionLink.ts",
+            "kind": "import",
+            "specifier": "./signOut.ts",
+            "line": 79,
+            "col": 30,
+            "pos": 2305
+          },
+          {
+            "name": "apps/mobile/lib/signOut.ts",
+            "kind": "import",
+            "specifier": "./endSession.ts",
+            "line": 6,
+            "col": 10,
+            "pos": 285
+          },
+          {
+            "name": "apps/mobile/lib/endSession.ts",
+            "kind": "import",
+            "specifier": "./locationSharing.ts",
+            "line": 15,
+            "col": 10,
+            "pos": 589
+          },
+          {
+            "name": "apps/mobile/lib/locationSharing.ts",
+            "kind": "import",
+            "specifier": "./deviceKeys.ts",
+            "line": 15,
+            "col": 10,
+            "pos": 498
+          }
+        ]
+      ]
+    },
+    {
+      "file": "apps/mobile/lib/deviceActivation.ts",
+      "cycles": [
+        [
+          {
+            "name": "apps/mobile/lib/deviceActivation.ts",
+            "kind": "import",
+            "specifier": "./deviceKeys.ts",
+            "line": 6,
+            "col": 10,
+            "pos": 251
+          },
+          {
+            "name": "apps/mobile/lib/deviceKeys.ts",
+            "kind": "import",
+            "specifier": "./sessionLink.ts",
+            "line": 17,
+            "col": 10,
+            "pos": 624
+          },
+          {
+            "name": "apps/mobile/lib/sessionLink.ts",
+            "kind": "import",
+            "specifier": "./signOut.ts",
+            "line": 79,
+            "col": 30,
+            "pos": 2305
+          },
+          {
+            "name": "apps/mobile/lib/signOut.ts",
+            "kind": "import",
+            "specifier": "./endSession.ts",
+            "line": 6,
+            "col": 10,
+            "pos": 285
+          },
+          {
+            "name": "apps/mobile/lib/endSession.ts",
+            "kind": "import",
+            "specifier": "./pendingJoinCode.ts",
+            "line": 16,
+            "col": 10,
+            "pos": 682
+          },
+          {
+            "name": "apps/mobile/lib/pendingJoinCode.ts",
+            "kind": "import",
+            "specifier": "./deviceActivation.ts",
+            "line": 2,
+            "col": 10,
+            "pos": 47
+          }
+        ]
+      ]
+    },
+    {
+      "file": "apps/mobile/lib/sessionLink.ts",
+      "cycles": [
+        [
+          {
+            "name": "apps/mobile/lib/sessionLink.ts",
+            "kind": "import",
+            "specifier": "./signOut.ts",
+            "line": 79,
+            "col": 30,
+            "pos": 2305
+          },
+          {
+            "name": "apps/mobile/lib/signOut.ts",
+            "kind": "import",
+            "specifier": "./sessionLink.ts",
+            "line": 10,
+            "col": 10,
+            "pos": 548
+          }
+        ]
+      ]
+    }
+  ]
+}

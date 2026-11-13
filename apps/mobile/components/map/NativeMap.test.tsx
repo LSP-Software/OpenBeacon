@@ -221,6 +221,11 @@ mock.module("../../components/ui/Text.tsx", () => ({
     React.createElement("text", null, children),
 }));
 
+mock.module("../ui/Button.tsx", () => ({
+  Button: ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
+    React.createElement("mock-button", props, children),
+}));
+
 mock.module("../../hooks/useSignedPmtilesUrl.ts", () => ({
   useSignedPmtilesUrl: () => currentSignedPmtilesUrlQuery,
 }));
@@ -465,6 +470,27 @@ describe("NativeMap integration harness", () => {
     testPlatform.OS = platform;
     await renderNativeMap();
     expect(mapAssetUrls).toEqual({ glyphs, sprites });
+  });
+
+  test("offers a retry once the map link can't be loaded", async () => {
+    let refetches = 0;
+    currentSignedPmtilesUrlQuery = {
+      data: null,
+      error: { data: { code: "INTERNAL_SERVER_ERROR" } },
+      isError: true,
+      isFetching: false,
+      isLoading: false,
+      refetch: async () => {
+        refetches += 1;
+      },
+    };
+    await renderNativeMap();
+    expect(getRenderedOutput()).toContain("We couldn’t load the map");
+    const retry = root?.container.queryAll((node) => node.type === "mock-button")[0];
+    const onPress = retry?.props["onPress"];
+    if (typeof onPress !== "function") throw new Error("Missing retry button");
+    await act(async () => onPress());
+    expect(refetches).toBe(1);
   });
 
   test("toggles map symbols in place without replacing the style", async () => {

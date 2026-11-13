@@ -1,0 +1,15 @@
+{
+  "workspaces": {
+    ".": { "entry": ["scripts/*.ts"], "project": ["scripts/**/*.ts"] },
+    "apps/*": { "entry": ["src/index.ts"], "project": ["src/**/*.ts", "src/**/*.tsx"] },
+    "apps/mobile": {
+      "entry": ["app/**/*.{ts,tsx}", "index.ts"],
+      "project": ["**/*.{ts,tsx}"],
+      "expo": false,
+      "metro": false
+    },
+    "packages/*": { "entry": ["src/index.ts"], "project": ["src/**/*.{ts,tsx}"] }
+  },
+  "ignore": ["**/generated/**"],
+  "ignoreBinaries": ["agent-device", "adb"]
+}

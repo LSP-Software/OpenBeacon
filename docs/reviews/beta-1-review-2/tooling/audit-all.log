@@ -1,0 +1,71 @@
+bun audit v1.4.4-canary.1 (11c367163)
+
+decode-uri-component@0.2.2
+  workspace:@openbeacon/mobile > expo-router > query-string > decode-uri-component
+  workspace:@openbeacon/mobile > @react-navigation/bottom-tabs > @react-navigation/native > @react-navigation/core > query-string > decode-uri-component
+  high: decode-uri-component vulnerable to denial of service via quadratic replacement of percent-encoded runs (<=0.5.0) - https://github.com/advisories/GHSA-qr28-fpjm-wq7f
+  moderate: decode-uri-component: Denial of service via exponential decoding of malformed percent-encoded input (<=0.4.2) - https://github.com/advisories/GHSA-vcc3-ghjq-m6fr
+
+deepmerge@4.3.1
+  workspace:@openbeacon/mobile > expo > @expo/metro-config > @expo/config > deepmerge
+  workspace:@openbeacon/mobile > expo-constants > @expo/config > deepmerge
+  workspace:@openbeacon/email > @react-email/render > html-to-text > deepmerge
+  workspace:@openbeacon/mobile > expo-dev-client > expo-manifests > @expo/config > deepmerge
+  low: deepmerge mergeObject() allows prototype poisoning of returned objects (>=4.2.0 <=4.3.1) - https://github.com/advisories/GHSA-gcqx-w48m-w2h4
+
+glob@7.2.3, 13.0.6
+  workspace:@openbeacon/mobile > react-native > @react-native/codegen > glob
+  workspace:@openbeacon/mobile > expo > @expo/metro-config > @expo/config > glob
+  workspace:@openbeacon/mobile > expo-constants > @expo/config > glob
+  workspace:@openbeacon/mobile > expo-dev-client > expo-manifests > @expo/config > glob
+  workspace:@openbeacon/mobile > babel-preset-expo > @react-native/babel-preset > @react-native/babel-plugin-codegen > @react-native/codegen > glob
+  moderate: Glob: AbortSignal cancellation bypass allows post-timeout filesystem traversal (>=9.0.0 <=14.0.1) - https://github.com/advisories/GHSA-3g3m-2fjr-6pw4
+
+image-size@1.2.1
+  workspace:@openbeacon/mobile > expo > @expo/metro-config > @expo/metro > metro > image-size
+  workspace:@openbeacon/mobile > react-native > @react-native/community-cli-plugin > metro > image-size
+  high: image-size: JXL and HEIF parsers allow denial of service through infinite loops (>=1.2.0 <=2.0.2) - https://github.com/advisories/GHSA-5p2g-fcmc-qvqq
+  high: image-size: ICNS parser allows denial of service through an infinite loop (>=0.6.3 <=2.0.2) - https://github.com/advisories/GHSA-w3rx-r6r6-pgpr
+
+minimatch@10.2.4, 3.1.5
+  workspace:@openbeacon/mobile > expo > @expo/fingerprint > minimatch
+  workspace:@openbeacon/mobile > react-native > @react-native/codegen > glob > minimatch
+  workspace:@openbeacon/mobile > expo-constants > @expo/config > glob > minimatch
+  workspace:@openbeacon/mobile > expo-dev-client > expo-manifests > @expo/config > glob > minimatch
+  workspace:@openbeacon/mobile > babel-preset-expo > @react-native/babel-preset > @react-native/babel-plugin-codegen > @react-native/codegen > glob > minimatch
+  moderate: minimatch has potential denial of service via globparts amplification (>=7.0.0 <11.0.1) - https://github.com/advisories/GHSA-g3hv-75wg-m249
+
+node-forge@1.4.1
+  workspace:@openbeacon/mobile > expo > @expo/cli > node-forge
+  low: Forge: Ed25519 signature verification accepts small-order public keys (<=1.4.2) - https://github.com/advisories/GHSA-6889-vf6x-f3g5
+  moderate: Forge: TLS client crash on an unsupported ServerHello compression method (<=1.4.2) - https://github.com/advisories/GHSA-w4xr-hqv8-ch44
+  moderate: Forge: ReDoS in forge.http response header and cookie trimming (>=0.1.2 <=1.4.2) - https://github.com/advisories/GHSA-6cv4-p8m7-4r25
+  moderate: Forge: TLS client crash on a handshake record received without a session (<=1.4.2) - https://github.com/advisories/GHSA-j8rw-jp99-435v
+
+uuid@7.0.3
+  workspace:@openbeacon/mobile > expo > @expo/config > @expo/config-plugins > xcode > uuid
+  workspace:@openbeacon/mobile > expo-constants > @expo/config > @expo/config-plugins > xcode > uuid
+  workspace:@openbeacon/mobile > expo-dev-client > expo-manifests > @expo/config > @expo/config-plugins > xcode > uuid
+  moderate: uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided (<11.1.1) - https://github.com/advisories/GHSA-w5hq-g745-h8pq
+
+zod@4.6.6, 4.6.7, 3.25.76
+  workspace:@openbeacon/backend > zod
+  workspace:@openbeacon/map-tiles-cli > zod
+  workspace:@openbeacon/mobile > zod
+  workspace:@openbeacon/api > zod
+  workspace:@openbeacon/cache > zod
+  workspace:@openbeacon/database > zod
+  workspace:@openbeacon/email > zod
+  workspace:@openbeacon/encryption > zod
+  workspace:@openbeacon/map-tiles > zod
+  workspace:@openbeacon/schemas > zod
+  workspace:@openbeacon/mobile > @better-auth/expo > @better-auth/core > zod
+  workspace:@openbeacon/backend > @t3-oss/env-core > zod
+  workspace:@openbeacon/mobile > better-auth > @better-auth/core > zod
+  workspace:@openbeacon/mobile > expo > @expo/cli > zod
+  high: Zod can exhaust memory while validating oversized constrained collections (<4.6.6) - https://github.com/advisories/GHSA-mrhx-c7xc-m3w5
+
+13 vulnerabilities (4 high, 7 moderate, 2 low)
+
+  bun audit fix           upgrade the vulnerable packages within their ranges
+  bun audit fix --latest  also cross major versions

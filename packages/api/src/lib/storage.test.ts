@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { type DeleteObjectsCommand, ListObjectVersionsCommand } from "@aws-sdk/client-s3";
+import {
+  type DeleteObjectsCommand,
+  GetObjectCommand,
+  ListObjectVersionsCommand,
+} from "@aws-sdk/client-s3";
 import { s3Client } from "../s3client.ts";
-import { deleteFile, deleteUserImages } from "./storage.ts";
+import { deleteFile, deleteUserImages, getPresignedUploadUrl, getUploadedFile } from "./storage.ts";
 
 const send = spyOn(s3Client, "send");
 afterEach(() => send.mockReset());
@@ -102,5 +106,31 @@ describe("deleteUserImages", () => {
     await expect(deleteUserImages("bucket", "a")).rejects.toThrow(
       "Failed to delete all image versions",
     );
+  });
+});
+
+describe("getPresignedUploadUrl", () => {
+  test("signs the content type so the upload can't choose another one", async () => {
+    const url = new URL(
+      await getPresignedUploadUrl("bucket", "path", "image.webp", "image/webp", "aGFzaA==", 10),
+    );
+    expect(url.searchParams.get("X-Amz-SignedHeaders")?.split(";")).toEqual(
+      expect.arrayContaining(["content-type", "x-amz-checksum-sha256"]),
+    );
+  });
+});
+
+describe("getUploadedFile", () => {
+  test("doesn't read an upload that is already over the size limit", async () => {
+    send.mockResolvedValueOnce({
+      $metadata: {},
+      ContentLength: 50_000_000,
+      ContentType: "image/webp",
+    });
+
+    const file = await getUploadedFile("bucket", "path", "image.webp", 16, 5_242_880);
+
+    expect(file?.header).toEqual(new Uint8Array());
+    expect(send.mock.calls.some(([command]) => command instanceof GetObjectCommand)).toBe(false);
   });
 });

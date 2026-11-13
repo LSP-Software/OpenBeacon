@@ -7,13 +7,19 @@ import {
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import * as Device from "expo-device";
-import * as SecureStore from "expo-secure-store";
-import { getSecureStoreOptions } from "./secureStoreOptions.ts";
 import { Platform } from "react-native";
 import { trpcClient } from "./api.ts";
 import { baseUrl } from "./currentServer.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { readRegisteredDevice, REGISTERED_DEVICE_KEY } from "./registeredDevice.ts";
+import {
+  deleteSecret,
+  isSecretOwnerCurrent,
+  readSecret,
+  SIGNED_OUT_MESSAGE,
+  secretOwner,
+  writeSecret,
+} from "./secretStorage.ts";
 import { linkSessionToDevice } from "./sessionLink.ts";
 import { storage } from "./storage.ts";
 
@@ -45,7 +51,7 @@ const loadStoredDeviceKeyContext = async ({
 }) => {
   const deviceId = storage.getString(deviceIdKey);
   const publicKey = storage.getString(publicKeyKey);
-  const privateKey = await SecureStore.getItemAsync(privateKeyKey, getSecureStoreOptions());
+  const privateKey = await readSecret(privateKeyKey);
 
   if (!deviceId || !publicKey || !privateKey) {
     return null;
@@ -70,34 +76,33 @@ const clearStoredDeviceKeyContext = async ({
 }) => {
   storage.remove(deviceIdKey);
   storage.remove(publicKeyKey);
-  await SecureStore.deleteItemAsync(privateKeyKey, getSecureStoreOptions());
+  await deleteSecret(privateKeyKey);
 };
 
 const persistStoredDeviceKeyContext = async ({
   deviceId,
+  owner,
   privateKey,
   publicKey,
-  userId,
 }: {
   deviceId: string;
+  owner: ReturnType<typeof secretOwner>;
   privateKey: Uint8Array;
   publicKey: string;
-  userId: string;
 }) => {
-  const { deviceIdKey, privateKeyKey, publicKeyKey } = getScopedDeviceKeyNames(userId);
+  const { deviceIdKey, privateKeyKey, publicKeyKey } = getScopedDeviceKeyNames(owner.userId);
 
   try {
+    if (!isSecretOwnerCurrent(owner)) throw new Error(SIGNED_OUT_MESSAGE);
     storage.set(deviceIdKey, deviceId);
     storage.set(publicKeyKey, publicKey);
-    await SecureStore.setItemAsync(
-      privateKeyKey,
-      encodeBase64(privateKey),
-      getSecureStoreOptions(),
-    );
+    await writeSecret(owner, privateKeyKey, encodeBase64(privateKey));
   } catch (error) {
-    storage.remove(deviceIdKey);
-    storage.remove(publicKeyKey);
-    await SecureStore.deleteItemAsync(privateKeyKey, getSecureStoreOptions());
+    if (isSecretOwnerCurrent(owner)) {
+      storage.remove(deviceIdKey);
+      storage.remove(publicKeyKey);
+      await deleteSecret(privateKeyKey);
+    }
     throw error;
   }
 };
@@ -110,6 +115,7 @@ const getLegacyDeviceKeyContext = async () =>
   });
 
 export const getStoredDeviceKeyContext = async (userId: string) => {
+  const owner = secretOwner(userId);
   const { deviceIdKey, privateKeyKey, publicKeyKey } = getScopedDeviceKeyNames(userId);
   const existingContext = await loadStoredDeviceKeyContext({
     deviceIdKey,
@@ -128,9 +134,9 @@ export const getStoredDeviceKeyContext = async (userId: string) => {
 
   await persistStoredDeviceKeyContext({
     deviceId: legacyContext.deviceId,
+    owner,
     privateKey: legacyContext.privateKey.expose(),
     publicKey: legacyContext.publicKey,
-    userId,
   });
   await clearStoredDeviceKeyContext({
     deviceIdKey: DEVICE_ID_KEY,
@@ -182,6 +188,7 @@ const getOrCreateDeviceKeyContext = (userId: string) => {
 };
 
 const createDeviceKeyContext = async (userId: string) => {
+  const owner = secretOwner(userId);
   const existingContext = await getStoredDeviceKeyContext(userId);
 
   if (existingContext) {
@@ -193,9 +200,9 @@ const createDeviceKeyContext = async (userId: string) => {
 
   await persistStoredDeviceKeyContext({
     deviceId,
+    owner,
     privateKey: deviceKeyPair.privateKey.expose(),
     publicKey: deviceKeyPair.publicKey,
-    userId,
   });
 
   return {

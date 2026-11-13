@@ -6,12 +6,14 @@ import {
   decodeBase64,
   decodeJsonPayload,
   decryptGroupPayload,
+  DevicePrivateKeyMaterial,
   encodeBase64,
   encryptGroupPayload,
   isUsableX25519PublicKey,
   serializeRecipientPublicKeyMaterial,
   unwrapEpochKey,
 } from "./index.ts";
+import { openAuth } from "./hpke.ts";
 
 test("rejects low-order and invalid X25519 public keys", () => {
   const zero = new Uint8Array(32);
@@ -400,5 +402,44 @@ describe("group epoch encryption", () => {
 
     expect(() => unwrap({ ...wrappedKeys[0], epochId: "epoch_other" })).toThrow();
     expect(() => unwrap({ ...wrappedKeys[0], recipientDeviceId: "device-other" })).toThrow();
+  });
+});
+
+describe("frozen Device wrap", () => {
+  const wrappedEpochKey = {
+    algorithm: "HPKE-Auth-X25519-HKDF-SHA256-ChaCha20Poly1305",
+    createdAt: new Date("2026-11-13T12:12:56.294Z"),
+    ephemeralPublicKey: "dsdByCJCxBTBMaCUR7AvI8u1EDwJ7VL4NduOKRJ2wSM=",
+    epochId: "epoch_vector_1",
+    recipientDeviceId: "device_vector_recipient",
+    senderPublicKey: "eaYx7t4b+cmPEgMs3q3Q56B5OY/HhriMyEbsia+FpRo=",
+    wrappedKey: "t/2zRSWe70+3Low68aNZDnxGSZ8nCCUVKPSB2eQ2gMHROuF5L+mBEmL8QJECxS00",
+  } as const;
+  const recipientPrivateKey = decodeBase64("gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp8=");
+  const epochKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+
+  test("a stored Device wrap still opens", () => {
+    const opened = unwrapEpochKey({
+      recipientDeviceId: "device_vector_recipient",
+      recipientPrivateKey: new DevicePrivateKeyMaterial(recipientPrivateKey),
+      wrappedEpochKey,
+    });
+
+    expect(encodeBase64(opened.expose())).toBe(epochKey);
+  });
+
+  test("the wrap info is these exact bytes", () => {
+    const opened = openAuth({
+      aad: new Uint8Array(),
+      ciphertext: decodeBase64(wrappedEpochKey.wrappedKey),
+      enc: decodeBase64(wrappedEpochKey.ephemeralPublicKey),
+      info: new TextEncoder().encode(
+        '{"context":"openbeacon.group-epoch.v1","epochId":"epoch_vector_1","purpose":"epoch-key-wrap","recipientDeviceId":"device_vector_recipient"}',
+      ),
+      recipientPrivateKey,
+      senderPublicKey: decodeBase64(wrappedEpochKey.senderPublicKey),
+    });
+
+    expect(encodeBase64(opened)).toBe(epochKey);
   });
 });

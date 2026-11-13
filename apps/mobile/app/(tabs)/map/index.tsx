@@ -157,6 +157,7 @@ const MapScreen = () => {
   const evictionQueryKey = ["trackingQueueEviction", selfUserId];
   const { data: queueEviction } = useQuery({
     queryKey: evictionQueryKey,
+    networkMode: "always",
     enabled: selfUserId.length > 0,
     subscribed: isFocused,
     refetchInterval: 60_000,
@@ -164,6 +165,7 @@ const MapScreen = () => {
   });
   const dismissQueueEviction = useMutation({
     mutationFn: dismissTrackingQueueEviction,
+    networkMode: "always",
     onSettled: () => queryClient.invalidateQueries({ queryKey: evictionQueryKey }),
   });
   const groupColorRevision = useGroupColorRevision();

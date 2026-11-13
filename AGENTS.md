@@ -2,7 +2,7 @@ This project "OpenBeacon" is an open source, privacy-first family location track
 
 Users should be able to either host their own backend on their own hardware easily, or pay a simple monthly fee to use our hosted API.
 
-The core concept of this app is to be privacy focused so if users pay for us to host their own backend we shouldn't be able to know anything they are doing as it should be encrypted by default.
+Privacy is the core concept. Locations, battery levels, nicknames and group colours are end-to-end encrypted on the phone, so a server running our code, hosted or self-hosted, stores them without being able to read them. The server still sees accounts, group membership, profile and group images and connection metadata, and phones trust it for other members' public keys. `docs/security/beta-1-privacy-draft.md` is the source of truth for what the operator can see: keep every user-facing privacy claim, in the app, README and docs, matching it, and encrypt new user data end to end unless the server needs to read it.
 
 # Project Rules
 
