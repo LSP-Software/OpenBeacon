@@ -1,7 +1,7 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, trpc, trpcClient } from "../lib/api.ts";
-import { getPmtilesUrlRefreshDelayMs } from "../lib/pmtilesUrl.ts";
+import { getPmtilesUrlRefreshDelayMs, shouldRetrySignedPmtilesUrl } from "../lib/pmtilesUrl.ts";
 
 export const useSignedPmtilesUrl = () => {
   const isFocused = useIsFocused();
@@ -21,7 +21,7 @@ export const useSignedPmtilesUrl = () => {
       state.data
         ? Math.max(getPmtilesUrlRefreshDelayMs({ refreshAt: state.data.refreshAt }), 1_000)
         : false,
-    retry: (_failureCount, error) => error.data?.code !== "UNAUTHORIZED",
+    retry: (failureCount, error) => shouldRetrySignedPmtilesUrl(failureCount, error.data?.code),
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30_000),
   });
 };
