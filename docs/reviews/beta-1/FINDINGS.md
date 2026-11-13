@@ -1622,6 +1622,8 @@ The launch screen retries forever with no message or way out when the device che
 
 #### S9-04 · medium · bug
 
+- **Status:** fixed on `fix/beta-1-review` by "Stop a member removal or leave being submitted twice" (SHA added at wrap-up). C11. Tested in `memberNicknames.test.tsx`: a second confirm during the epoch build doesn't submit, and Remove/Leave stay disabled until it finishes.
+
 **Remove member and Leave group can be submitted twice while the new epoch is being built**
 
 - Location: apps/mobile/app/(tabs)/groups/[groupId]/MembersTab.tsx:115-149,380-389; apps/mobile/lib/groupEncryption.ts:51-67,135-159
