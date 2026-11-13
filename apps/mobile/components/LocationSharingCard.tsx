@@ -26,6 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card.tsx";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "./ui/Icon.tsx";
 import { Text } from "./ui/Text.tsx";
+import { useLoadedSharingState } from "../hooks/useLoadedSharingState.ts";
 
 export const LocationSharingCard = ({
   device,
@@ -33,6 +34,7 @@ export const LocationSharingCard = ({
   device?: SharingPreference & { id: string; name: string; isCurrent: boolean };
 }) => {
   const queryClient = useQueryClient();
+  useLoadedSharingState();
   const insets = useSafeAreaInsets();
   const { data: session } = authClient.useSession();
   const isFocused = useIsFocused();

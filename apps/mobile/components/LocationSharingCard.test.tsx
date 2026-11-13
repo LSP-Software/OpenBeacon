@@ -80,6 +80,7 @@ mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: { user: { id: "alex" } } }) },
 }));
 mock.module("../lib/locationSharing.ts", () => ({
+  onSharingStateLoaded: () => () => {},
   changeLocationSharing: async () => {},
   hasPendingSharingPause: () => pendingAccount !== null,
   getPendingSharingChanges: () => ({ device: null, account: pendingAccount }),

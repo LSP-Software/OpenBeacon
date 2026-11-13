@@ -11,6 +11,7 @@ const stored = new Map<string, string>();
 const nativePauses: boolean[] = [];
 const sentChanges: unknown[] = [];
 let knownOffline = false;
+let sharingQueryFails = false;
 let releaseRequest: (() => void) | null = null;
 let root: Root | null = null;
 let queryClient: QueryClient;
@@ -20,13 +21,14 @@ const preference: SharingPreference = {
   sharingChangedAt: null,
   sharingRevision: 0,
 };
+let serverAccount = preference;
 const sharingState = () => ({
-  account: preference,
+  account: serverAccount,
   device: preference,
   deviceId: "phone",
   userId: "alex",
   serverTime: new Date(),
-  ...resolveLocationSharing(preference, preference, Date.now()),
+  ...resolveLocationSharing(serverAccount, preference, Date.now()),
 });
 const Host = ({ children, ...props }: { children?: React.ReactNode; [key: string]: unknown }) =>
   React.createElement("host", props, children);
@@ -45,7 +47,13 @@ mock.module("../lib/api.ts", () => ({
   trpc: {
     account: {
       locationSharing: {
-        queryOptions: () => ({ queryKey: ["sharing"], queryFn: async () => sharingState() }),
+        queryOptions: () => ({
+          queryKey: ["sharing"],
+          queryFn: async () => {
+            if (sharingQueryFails) throw new Error("Server unavailable");
+            return sharingState();
+          },
+        }),
         queryKey: () => ["sharing"],
       },
       listDevices: { queryKey: () => ["devices"] },
@@ -105,6 +113,7 @@ mock.module("./ui/Card.tsx", () => ({
 mock.module("./ui/Text.tsx", () => ({ Text: Host }));
 mock.module("./ui/Icon.tsx", () => ({ Icon: () => null }));
 const { LocationSharingCard } = await import("./LocationSharingCard.tsx");
+const { syncLocationSharing } = await import("../lib/locationSharing.ts");
 
 const render = async () => {
   root = createRoot();
@@ -135,6 +144,8 @@ beforeEach(() => {
   nativePauses.length = 0;
   sentChanges.length = 0;
   knownOffline = false;
+  sharingQueryFails = false;
+  serverAccount = preference;
   releaseRequest = null;
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(["sharing"], sharingState());
@@ -172,4 +183,22 @@ test("a pause waiting on a slow server can still be dismissed and keeps the phon
   await press("Cancel");
   expect(output()).not.toContain("Pause on");
   expect(nativePauses).toEqual([true]);
+});
+
+test("a pause that reaches the server in the background shows on the card while its own query is failing", async () => {
+  sharingQueryFails = true;
+  await render();
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+  expect(output()).toContain("Couldn’t check sharing status");
+
+  serverAccount = { ...preference, sharingPaused: true, sharingRevision: 1 };
+  await act(async () => {
+    await syncLocationSharing();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+
+  expect(output()).toContain("Paused on all your devices");
+  expect(output()).not.toContain("Couldn’t check sharing status");
 });
