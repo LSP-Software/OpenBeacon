@@ -189,6 +189,8 @@ Settled with the owner on 13 Nov 2026, against `94a73b27` (main had not moved).
 
 ### E1 (M2, raised in this session) The last member to leave deletes the group
 
+- **Status:** fixed on `fix/beta-1-review` by "Delete the group when its last member leaves" (SHA added at wrap-up). Integration test in `groupDeparture.integration.test.ts`: the last member's leave deletes the group and its epochs. The delete body moved into a shared `deleteGroup` helper.
+
 - **Decision:** If a self-leave empties the group, the server deletes the group in the same transaction, the way `delete` does (images queued for cleanup). It does not leave behind an empty group flagged for rotation.
 - **Reason:** The app already calls `delete` with `onlyIfLastMember` in this case. The server should still handle older or unusual clients, because nobody would be left to rotate the epoch.
 - **Compatibility:** Server only. No level change. It is part of the M2 server patch.

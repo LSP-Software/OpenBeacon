@@ -30,6 +30,7 @@ const cache = createIntegrationTestCache(() => 0);
 const prefix = `departure-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
 const readsGroupId = `${prefix}-reads`;
+const emptiedGroupId = `${prefix}-emptied`;
 const ownerId = `${prefix}-owner`;
 const memberId = `${prefix}-member`;
 const ownerDevice = `${prefix}-owner-device`;
@@ -109,7 +110,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     });
 
     afterAll(async () => {
-      await prisma.group.deleteMany({ where: { id: { in: [groupId, readsGroupId] } } });
+      await prisma.group.deleteMany({
+        where: { id: { in: [groupId, readsGroupId, emptiedGroupId] } },
+      });
       await prisma.user.deleteMany({ where: { id: { in: [ownerId, memberId] } } });
       await prisma.$disconnect();
     });
@@ -466,6 +469,56 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         ),
       ).toEqual([ownerId]);
       expect(await owner.groupEpoch.rotationContext({ groupId: readsGroupId })).not.toBeNull();
+    }, 45000);
+
+    test("the last member to leave deletes the group", async () => {
+      const ownerDevices = await prisma.userDevice.findMany({ where: { id: ownerDevice } });
+      const initial = createInitialGroupEpoch({
+        creator: { deviceId: ownerDevice, privateKey: ownerKey.privateKey },
+        groupId: emptiedGroupId,
+        recipients: ownerDevices.map((device) => ({
+          algorithm: "X25519",
+          createdAt: device.createdAt,
+          deviceId: device.id,
+          publicKey: device.publicKey,
+          revokedAt: device.revokedAt,
+          userId: device.userId,
+        })),
+      });
+      await owner.groupLifecycle.create({
+        groupId: emptiedGroupId,
+        name: "Emptied",
+        initialEpoch: bundle(initial),
+      });
+      await owner.groupInvites.send({
+        groupId: emptiedGroupId,
+        invites: [{ email: memberEmail, role: "MEMBER" }],
+      });
+      const invite = (await member.groupInvites.list()).find(
+        (item) => item.group.id === emptiedGroupId,
+      )!;
+      const joinContext = await member.groupInvites.acceptanceContext({ inviteId: invite.id });
+      const joined = createNextGroupEpoch({
+        creator: { deviceId: memberDevice, privateKey: memberKey.privateKey },
+        previousEpoch: joinContext.latestEpoch!,
+        recipients: joinContext.recipients,
+      });
+      await member.groupInvites.accept({ inviteId: invite.id, nextEpoch: bundle(joined) });
+      await prisma.groupMember.delete({
+        where: { userId_groupId: { userId: ownerId, groupId: emptiedGroupId } },
+      });
+
+      const self = (await member.groupMembership.members({ groupId: emptiedGroupId })).find(
+        (item) => item.user.id === memberId,
+      )!;
+      await member.groupMembership.remove({
+        groupId: emptiedGroupId,
+        memberId: self.id,
+        nextEpoch: bundle(joined),
+      });
+
+      expect(await prisma.group.count({ where: { id: emptiedGroupId } })).toBe(0);
+      expect(await prisma.groupEpoch.count({ where: { groupId: emptiedGroupId } })).toBe(0);
     }, 45000);
   },
 );
