@@ -35,7 +35,7 @@ export const setServerUrl = (url: string) => {
 export const hasCustomServerUrl = () => getServerUrl() !== "";
 
 const getDevelopmentUrl = () => {
-  const developmentUrl = process.env.EXPO_PUBLIC_DEV_API_URL;
+  const developmentUrl = __DEV__ ? process.env.EXPO_PUBLIC_DEV_API_URL : undefined;
   return developmentUrl ? (normaliseServerUrl(developmentUrl).url ?? developmentUrl) : "";
 };
 
