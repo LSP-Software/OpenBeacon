@@ -1393,7 +1393,7 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-10 · low · bug
 
-- **Status:** fixed on `fix/beta-1-review` in `22271d92` ("End every session on the phone through one endSession table"). Q3. Table-driven `endSession.test.ts` pins what each reason clears across 13 kinds of state; lost-session tests cover same account, different account, and the 30-day expiry; JVM and Robolectric tests for `deleteByOwner` (IN_FLIGHT rows). Owner decision 13 Nov 2026: `signedOut` also records the lost marker, so a signed-out account's keys are wiped after 30 days or when a different account signs in. The 7-day delete option uses `signedOut`; "delete immediately" uses `accountDeleted`. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `22271d92` ("End every session on the phone through one endSession table"). Q3. Table-driven `endSession.test.ts` pins what each reason clears across 13 kinds of state; lost-session tests cover same account, different account, and the 30-day expiry; JVM and Robolectric tests for `deleteByOwner` (IN_FLIGHT rows). Owner decision 13 Nov 2026, revised the same day: a normal sign-out keeps the account's keys with no expiry, as is standard; only `sessionLost` and `serverChanged` record the 30-day / different-account wipe (changed in "Keep keys after a normal sign-out"). The 7-day delete option uses `signedOut`, so it keeps keys too; "delete immediately" uses `accountDeleted`. Emulator check in the end-of-branch batch.
 
 **Sign-out and wipe leave IN_FLIGHT queue rows behind**
 
@@ -1611,7 +1611,7 @@ The launch screen retries forever with no message or way out when the device che
 
 #### S8-06 · medium · security
 
-- **Status:** fixed on `fix/beta-1-review` in `22271d92` ("End every session on the phone through one endSession table"). Q3. Table-driven `endSession.test.ts` pins what each reason clears across 13 kinds of state; lost-session tests cover same account, different account, and the 30-day expiry; JVM and Robolectric tests for `deleteByOwner` (IN_FLIGHT rows). Owner decision 13 Nov 2026: `signedOut` also records the lost marker, so a signed-out account's keys are wiped after 30 days or when a different account signs in. The 7-day delete option uses `signedOut`; "delete immediately" uses `accountDeleted`. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `22271d92` ("End every session on the phone through one endSession table"). Q3. Table-driven `endSession.test.ts` pins what each reason clears across 13 kinds of state; lost-session tests cover same account, different account, and the 30-day expiry; JVM and Robolectric tests for `deleteByOwner` (IN_FLIGHT rows). Owner decision 13 Nov 2026, revised the same day: a normal sign-out keeps the account's keys with no expiry, as is standard; only `sessionLost` and `serverChanged` record the 30-day / different-account wipe (changed in "Keep keys after a normal sign-out"). The 7-day delete option uses `signedOut`, so it keeps keys too; "delete immediately" uses `accountDeleted`. Emulator check in the end-of-branch batch.
 
 **Deleting the account only signs out; it leaves the device key, history keys and queued points on the phone**
 
@@ -2006,7 +2006,7 @@ The "Update Open Beacon" screen has a disabled Update button and the server can'
 
 #### X-01 · medium · design
 
-- **Status:** fixed on `fix/beta-1-review` in `22271d92` ("End every session on the phone through one endSession table"). Q3. Table-driven `endSession.test.ts` pins what each reason clears across 13 kinds of state; lost-session tests cover same account, different account, and the 30-day expiry; JVM and Robolectric tests for `deleteByOwner` (IN_FLIGHT rows). Owner decision 13 Nov 2026: `signedOut` also records the lost marker, so a signed-out account's keys are wiped after 30 days or when a different account signs in. The 7-day delete option uses `signedOut`; "delete immediately" uses `accountDeleted`. Emulator check in the end-of-branch batch.
+- **Status:** fixed on `fix/beta-1-review` in `22271d92` ("End every session on the phone through one endSession table"). Q3. Table-driven `endSession.test.ts` pins what each reason clears across 13 kinds of state; lost-session tests cover same account, different account, and the 30-day expiry; JVM and Robolectric tests for `deleteByOwner` (IN_FLIGHT rows). Owner decision 13 Nov 2026, revised the same day: a normal sign-out keeps the account's keys with no expiry, as is standard; only `sessionLost` and `serverChanged` record the 30-day / different-account wipe (changed in "Keep keys after a normal sign-out"). The 7-day delete option uses `signedOut`, so it keeps keys too; "delete immediately" uses `accountDeleted`. Emulator check in the end-of-branch batch.
 
 **No single owner for "end this session on this phone"; six entry points each clear a different subset of local state**
 
