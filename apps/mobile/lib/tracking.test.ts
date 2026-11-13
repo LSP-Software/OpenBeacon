@@ -212,7 +212,10 @@ mock.module("./resealPersonalData.ts", () => ({
   },
 }));
 
-mock.module("./base-url.ts", () => ({ baseUrl: "https://api.example.test" }));
+mock.module("./currentServer.ts", () => ({
+  baseUrl: "https://api.example.test",
+  hasCustomServerUrl: () => false,
+}));
 
 let apiCompatibility: {
   problem: "appTooOld" | "serverTooOld" | "outOfSync";
@@ -247,8 +250,6 @@ mock.module("./apiCompatibility.ts", () => ({
     if (apiCompatibility) apiCompatibility = { ...apiCompatibility, notified: true };
   },
 }));
-
-mock.module("./server-url.ts", () => ({ hasCustomServerUrl: () => false }));
 
 mock.module("./api.ts", () => ({
   trpcClient: {

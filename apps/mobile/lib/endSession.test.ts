@@ -116,7 +116,7 @@ mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => 
 const { ensureDeviceKeyRegistration } = await import("./deviceKeys.ts");
 const { handleDeviceRemoved, wipeAfterRemovingThisPhone } = await import("./deviceRemoved.ts");
 const { endSession, settleLostSessions } = await import("./endSession.ts");
-const { baseUrl } = await import("./base-url.ts");
+const { baseUrl } = await import("./currentServer.ts");
 const pendingSharingKey = `locationSharing.pending.${JSON.stringify([baseUrl, "user-a", "device"])}`;
 
 const removedError = () =>

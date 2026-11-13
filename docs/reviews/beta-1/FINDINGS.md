@@ -401,6 +401,8 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M9. A server URL with a trailing slash or a path breaks the app, and the launch screen then traps the user
 
+- **Status:** fixed on `fix/beta-1-review` by "Normalise the server URL in one place and give the launch screen a way out" (SHA added at wrap-up). Unit tests for the normaliser (`currentServer.test.ts`), the retry backoff and the launch-screen error state. Emulator check in the end-of-branch batch.
+
 - Findings: S8-02 · bug · medium and S8-04 · UX · medium. Both verified (V5, reproduced against the real backend); worse together.
 - Location: apps/mobile/app/serverUrl.tsx:16-18 and :44; apps/mobile/lib/server-url.ts:9-15; apps/mobile/lib/base-url.ts:5-6; apps/mobile/lib/api.ts:93; apps/mobile/lib/apiCompatibility.ts:114; apps/mobile/app/index.tsx:79-104
 - Failure scenario: A self-hoster pastes `https://beacon.example.com/`, and the reachability check passes.
@@ -1486,6 +1488,8 @@ Switching server sends the old server's session cookie and raw session token to 
 
 #### S8-02 · medium · bug · **must-fix, see M9**
 
+- **Status:** fixed on `fix/beta-1-review` by "Normalise the server URL in one place and give the launch screen a way out" (SHA added at wrap-up). Unit tests for the normaliser (`currentServer.test.ts`), the retry backoff and the launch-screen error state. Emulator check in the end-of-branch batch.
+
 A server URL with a trailing slash or path passes the check, then every API call 404s
 
 #### S8-03 · medium · security
@@ -1499,6 +1503,8 @@ A server URL with a trailing slash or path passes the check, then every API call
 - Same issue as: D16 (see Duplicate groups)
 
 #### S8-04 · medium · UX · **must-fix, see M9**
+
+- **Status:** fixed on `fix/beta-1-review` by "Normalise the server URL in one place and give the launch screen a way out" (SHA added at wrap-up). Unit tests for the normaliser (`currentServer.test.ts`), the retry backoff and the launch-screen error state. Emulator check in the end-of-branch batch.
 
 The launch screen retries forever with no message or way out when the device check fails
 

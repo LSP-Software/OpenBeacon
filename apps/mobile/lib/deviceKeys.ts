@@ -10,7 +10,7 @@ import * as Device from "expo-device";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { trpcClient } from "./api.ts";
-import { baseUrl } from "./base-url.ts";
+import { baseUrl } from "./currentServer.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { readRegisteredDevice, REGISTERED_DEVICE_KEY } from "./registeredDevice.ts";
 import { linkSessionToDevice } from "./sessionLink.ts";

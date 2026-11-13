@@ -8,7 +8,7 @@ import {
 } from "@openbeacon/shared";
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
-import { baseUrl } from "./base-url.ts";
+import { baseUrl } from "./currentServer.ts";
 import { storage } from "./storage.ts";
 
 const problemSchema = z.enum(["appTooOld", "serverTooOld", "outOfSync"]);
@@ -110,9 +110,7 @@ export const readApiCompatibilityResponse = async (
 export const checkServerCompatibility = async (serverUrl: string) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
-  const response = await tryCatch(
-    fetch(`${serverUrl.replace(/\/+$/, "")}/health`, { signal: controller.signal }),
-  );
+  const response = await tryCatch(fetch(`${serverUrl}/health`, { signal: controller.signal }));
   const body = response.error || !response.data.ok ? null : await readJson(response.data);
   clearTimeout(timer);
   const health = healthSchema.safeParse(body);

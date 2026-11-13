@@ -11,7 +11,7 @@ import {
   markApiCompatibilityNotified,
   refreshApiCompatibilityInBackground,
 } from "./apiCompatibility.ts";
-import { baseUrl } from "./base-url.ts";
+import { baseUrl, hasCustomServerUrl } from "./currentServer.ts";
 import { createHistoryKey } from "./createHistoryKey.ts";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { isThisDeviceActive } from "./deviceActivation.ts";
@@ -28,7 +28,6 @@ import { isDeviceOffline } from "./networkStatus.ts";
 import { dismissNotice, showNotice } from "./notifications.ts";
 import { backfillHistoryWraps } from "./recovery.ts";
 import { resealPersonalData } from "./resealPersonalData.ts";
-import { hasCustomServerUrl } from "./server-url.ts";
 import {
   clearTrackingKeyCheck,
   getMembershipSignature,

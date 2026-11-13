@@ -3,13 +3,13 @@ import { tryCatch } from "@openbeacon/shared";
 import { createAuthClient } from "better-auth/react";
 import * as SecureStore from "expo-secure-store";
 import { apiCompatibilityFetch } from "./apiCompatibility.ts";
-import { baseUrl } from "./base-url.ts";
+import { baseUrl } from "./currentServer.ts";
 import { SERVER_UNREACHABLE_MESSAGE } from "./serverUnreachable.ts";
 
 export const SESSION_TOKEN_TO_REVOKE_KEY = "sessionTokenToRevokeOnNextLogin";
 
 export const authClient = createAuthClient({
-  baseURL: baseUrl,
+  baseURL: `${baseUrl}/api/auth`,
   sessionOptions: { refetchOnWindowFocus: false },
   fetchOptions: {
     timeout: 30_000,

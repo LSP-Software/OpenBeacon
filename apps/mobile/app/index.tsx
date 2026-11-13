@@ -1,14 +1,18 @@
 import { tryCatch } from "@openbeacon/shared";
-import { router, useFocusEffect, useRootNavigationState } from "expo-router";
-import { useCallback, useEffect, useRef } from "react";
+import { Link, router, useFocusEffect, useRootNavigationState } from "expo-router";
+import type React from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Dimensions, Easing, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BeaconIcon } from "../components/BeaconIcon.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
+import { baseUrl, hasCustomServerUrl } from "../lib/currentServer.ts";
 import { isThisDeviceActive } from "../lib/deviceActivation.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
+import { endSession } from "../lib/endSession.ts";
+import { launchRetryDelayMs } from "../lib/launchRetry.ts";
 import { readSavedDeviceLink } from "../lib/savedDeviceLink.ts";
 import { useColors } from "../lib/theme.ts";
 
@@ -16,7 +20,13 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const RING_DIAMETERS = [SCREEN_WIDTH * 1.3, SCREEN_WIDTH, SCREEN_WIDTH * 0.72, SCREEN_WIDTH * 0.46];
 const RING_OPACITIES = [0.04, 0.07, 0.11, 0.16];
 
-function LoadingScreen({ colors }: { colors: ReturnType<typeof useColors> }) {
+function LoadingScreen({
+  children,
+  colors,
+}: {
+  children?: React.ReactNode;
+  colors: ReturnType<typeof useColors>;
+}) {
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -59,6 +69,7 @@ function LoadingScreen({ colors }: { colors: ReturnType<typeof useColors> }) {
       <Animated.View style={{ opacity: pulse }}>
         <BeaconIcon size={80} color={colors.primary} />
       </Animated.View>
+      {children}
     </View>
   );
 }
@@ -68,7 +79,12 @@ export default function HomeScreen() {
   const colors = useColors();
   const rootNavigationState = useRootNavigationState();
 
+  const [failures, setFailures] = useState(0);
+  const [attempt, setAttempt] = useState(0);
+  const [signingOut, setSigningOut] = useState(false);
+
   useFocusEffect(
+    // biome-ignore lint/correctness/useExhaustiveDependencies: attempt reruns the check when the user taps Try again
     useCallback(() => {
       if (!rootNavigationState?.key || isPending || !session) {
         return;
@@ -76,6 +92,7 @@ export default function HomeScreen() {
 
       let cancelled = false;
       let retry: ReturnType<typeof setTimeout> | undefined;
+      let failed = 0;
       const route = async () => {
         const savedLink = await tryCatch(ensureDeviceKeyRegistration().then(readSavedDeviceLink));
         if (cancelled) return;
@@ -86,9 +103,12 @@ export default function HomeScreen() {
         const active = await tryCatch(isThisDeviceActive());
         if (cancelled) return;
         if (active.error) {
-          retry = setTimeout(() => void route(), 5_000);
+          failed += 1;
+          setFailures(failed);
+          retry = setTimeout(() => void route(), launchRetryDelayMs(failed));
           return;
         }
+        setFailures(0);
         router.replace(active.data ? "/(tabs)/map" : "/setup");
       };
       void route();
@@ -96,11 +116,43 @@ export default function HomeScreen() {
         cancelled = true;
         clearTimeout(retry);
       };
-    }, [rootNavigationState?.key, session, isPending]),
+    }, [rootNavigationState?.key, session, isPending, attempt]),
   );
 
+  const signOut = async () => {
+    setSigningOut(true);
+    await tryCatch(endSession({ reason: "signedOut" }));
+    setSigningOut(false);
+    setFailures(0);
+  };
+
   if (isPending || session) {
-    return <LoadingScreen colors={colors} />;
+    return (
+      <LoadingScreen colors={colors}>
+        {session && failures > 0 && (
+          <View className="absolute bottom-0 left-0 right-0 gap-3 px-8 pb-12">
+            <Text className="text-center text-muted" accessibilityLiveRegion="polite">
+              {hasCustomServerUrl()
+                ? `Couldn't connect to ${baseUrl}. Check your connection and that your server is running. Trying again automatically.`
+                : "Couldn't connect to OpenBeacon. Check your connection. Trying again automatically."}
+            </Text>
+            <Button onPress={() => setAttempt((value) => value + 1)}>
+              <Text>Try again</Text>
+            </Button>
+            <Button variant="outline" loading={signingOut} onPress={signOut}>
+              <Text>Sign out</Text>
+            </Button>
+            {hasCustomServerUrl() && (
+              <Link href="/serverUrl" asChild>
+                <Button variant="outline">
+                  <Text>Change server</Text>
+                </Button>
+              </Link>
+            )}
+          </View>
+        )}
+      </LoadingScreen>
+    );
   }
 
   return (

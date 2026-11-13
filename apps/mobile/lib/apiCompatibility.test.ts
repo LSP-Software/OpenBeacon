@@ -16,7 +16,7 @@ mock.module("./storage.ts", () => ({
   },
 }));
 
-mock.module("./base-url.ts", () => ({ baseUrl: "https://api.example.test" }));
+mock.module("./currentServer.ts", () => ({ baseUrl: "https://api.example.test" }));
 
 const {
   apiCompatibilityFetch,
@@ -183,7 +183,7 @@ describe("readApiCompatibilityResponse", () => {
 describe("checkServerCompatibility", () => {
   test("reads the levels and version from /health", async () => {
     respond = () => health(apiCompatibilityLevel + 1, apiCompatibilityLevel + 1);
-    expect(await checkServerCompatibility("https://family.example.test/")).toEqual({
+    expect(await checkServerCompatibility("https://family.example.test")).toEqual({
       verdict: "appTooOld",
       serverVersion: "9.9.9",
     });
