@@ -104,7 +104,8 @@ if (!keyUnlock.ok) fail(`Could not unlock the key with keyPassword:\n${keyUnlock
 if (keyUnlock.output.includes("not supported for PKCS12")) {
   fail("PKCS12 keystores have one password, so keyPassword must match keystorePassword.");
 }
-const keySha1 = sha1Of(keyListing.output) ?? fail("Could not read the upload key's SHA1.");
+const keySha1 = sha1Of(keyListing.output);
+if (!keySha1) fail("Could not read the upload key's SHA1.");
 
 const appJson = z
   .object({
