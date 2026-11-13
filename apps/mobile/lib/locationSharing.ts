@@ -42,6 +42,7 @@ const scheduledChanges = new Set<string>();
 type LoadedSharingState = Awaited<ReturnType<typeof trpcClient.account.locationSharing.query>>;
 const loadedStateListeners = new Set<(state: LoadedSharingState) => void>();
 let changeRevision = 0;
+const latestScopeRevisions = new Map<"device" | "account", number>();
 let generation = 0;
 let operationQueue: Promise<unknown> = Promise.resolve();
 
@@ -258,6 +259,7 @@ export const changeLocationSharing = async (input: {
   expectedRevision?: number;
 }) => {
   const revision = ++changeRevision;
+  latestScopeRevisions.set(input.scope, revision);
   const requestedGeneration = generation;
   const device = await getRegisteredDeviceKey();
   if (!device) throw new Error("This device isn't registered yet.");
@@ -265,6 +267,8 @@ export const changeLocationSharing = async (input: {
   const deviceId = input.deviceId ?? device.deviceId;
   const affectsThisDevice = input.scope === "account" || deviceId === device.deviceId;
   const offline = await (await import("./networkStatus.ts")).isDeviceOffline();
+  if (latestScopeRevisions.get(input.scope) !== revision)
+    throw new Error("A newer sharing change replaced this one.");
   if (offline && !affectsThisDevice) throw new Error(SERVER_UNREACHABLE_MESSAGE);
   const key = pendingKey(device.userId, input.scope);
   const queued = affectsThisDevice ? readPendingChange(device.userId, input.scope) : null;

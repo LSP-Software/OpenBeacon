@@ -18,6 +18,7 @@ const nativeStates: {
 const changes: Change[] = [];
 let offline = false;
 let knownOffline = false;
+let offlineCheckGate: Promise<void> | null = null;
 let rejectWith: Error | null = null;
 let loseReply = false;
 let nextRequestId = 0;
@@ -81,7 +82,14 @@ mock.module("./deviceKeys.ts", () => ({
   getStoredDeviceId: () => registeredDeviceId,
   getRegisteredDeviceKey: async () => ({ userId: "alex", deviceId: registeredDeviceId }),
 }));
-mock.module("./networkStatus.ts", () => ({ isDeviceOffline: async () => knownOffline }));
+mock.module("./networkStatus.ts", () => ({
+  isDeviceOffline: async () => {
+    const gate = offlineCheckGate;
+    offlineCheckGate = null;
+    await gate;
+    return knownOffline;
+  },
+}));
 mock.module("./trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("./storage.ts", () => ({
   storage: {
@@ -146,6 +154,7 @@ beforeEach(() => {
   changes.length = 0;
   offline = false;
   knownOffline = false;
+  offlineCheckGate = null;
   rejectWith = null;
   loseReply = false;
   nativeAccepted = true;
@@ -196,6 +205,26 @@ test("a known offline pause stops capture without trying the network", async () 
   expect(changes.map((change) => change.scope)).toEqual(["account"]);
   expect(server.account.sharingPaused).toBe(true);
   expect(hasPendingSharingPause("alex")).toBe(false);
+});
+
+test("an older offline change that finishes its checks late doesn't replace a newer one", async () => {
+  knownOffline = true;
+  offline = true;
+  let releaseOlder = () => {};
+  offlineCheckGate = new Promise((resolve) => {
+    releaseOlder = resolve;
+  });
+  const older = changeLocationSharing({ scope: "device", paused: false, durationMinutes: null });
+  for (let index = 0; index < 20; index++) await Promise.resolve();
+  expect(
+    await changeLocationSharing({ scope: "device", paused: true, durationMinutes: null }),
+  ).toBe("queued");
+
+  releaseOlder();
+
+  await expect(older).rejects.toThrow("A newer sharing change replaced this one.");
+  expect(getPendingSharingChanges("alex").device?.paused).toBe(true);
+  expect(nativeStates.at(-1)?.paused).toBe(true);
 });
 
 test("a known offline resume of this phone applies locally and queues", async () => {
