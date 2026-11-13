@@ -771,6 +771,8 @@ Generated from the raw files, with verifier corrections applied. Must-fix findin
 
 #### S1-09 · low · security
 
+- **Status:** fixed on `fix/beta-1-review` by "Turn off Android cloud backup" (SHA added at wrap-up). C4. Config only, so no new test; `expo config --type introspect` shows `android:allowBackup="false"` in the manifest.
+
 **Android Auto Backup is on, so MMKV and the native key-store and queue files go to the user's cloud backup**
 
 - Location: apps/mobile/app.json (no `android.allowBackup`; `@expo/config-plugins` defaults it to `true`); apps/mobile/lib/storage.ts; SecureEpochKeyStore.kt (SharedPreferences `openbeacon_tracking_epoch_keys_v2`)
@@ -1508,6 +1510,8 @@ The launch screen retries forever with no message or way out when the device che
 - Confidence: medium
 
 #### S8-09 · low · security
+
+- **Status:** fixed on `fix/beta-1-review` by "Turn off Android cloud backup" (SHA added at wrap-up). C4. Config only, so no new test; `expo config --type introspect` shows `android:allowBackup="false"` in the manifest.
 
 **Android Auto Backup is on by default and backs up native tracking preferences**
 

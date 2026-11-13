@@ -30,6 +30,7 @@
         "backgroundColor": "#090911"
       },
       "predictiveBackGestureEnabled": false,
+      "allowBackup": false,
       "package": "net.openbeacon.app",
       "versionCode": 34
     },
