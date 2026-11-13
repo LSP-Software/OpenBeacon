@@ -47,10 +47,15 @@ export const createAuth = ({
       "/unlink-account",
       "/update-session",
       "/verify-password",
+      "/expo-authorization-proxy",
+      "/error",
+      "/ok",
     ],
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        if (ctx.path === "/reset-password/:token") throw new APIError("NOT_FOUND");
+        if (ctx.path === "/reset-password/:token" || ctx.path === "/callback/:id") {
+          throw new APIError("NOT_FOUND");
+        }
         if (ctx.path === "/change-password") {
           const session = await getAuthoritativeSessionFromCtx(ctx);
           const linked =

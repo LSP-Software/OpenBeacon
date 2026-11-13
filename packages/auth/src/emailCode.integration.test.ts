@@ -1301,6 +1301,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts"
       ["/unlink-account", "POST"],
       ["/update-session", "POST"],
       ["/verify-password", "POST"],
+      ["/expo-authorization-proxy?authorizationURL=https://phish.example", "GET"],
+      ["/callback/google?code=code&state=state", "GET"],
+      ["/error", "GET"],
+      ["/ok", "GET"],
     ] as const) {
       const response = await auth.handler(
         new Request(`http://localhost:3000/api/auth${path}`, {
