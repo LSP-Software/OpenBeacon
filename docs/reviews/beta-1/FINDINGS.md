@@ -865,6 +865,8 @@ Google sign-in silently links Google to an existing password account
 
 #### S2-07 · low · bug
 
+- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). C1. Each timeout has a test against a hanging server or stub (storage factory, Resend SDK, Google token exchange, Google certs via the new jose-based verifier, pg pool and statement timeout, app image PUT, auth-client body read).
+
 **Outbound calls inside requests have no timeout**
 
 - Location: packages/auth/src/googleDeletion.ts:40-60 (token exchange `fetch` and `verifyGoogleIdToken` JWKS fetch) used by packages/api/src/router/accountRouter.ts:242-248; packages/api/src/router/accountRecoveryRouter.ts:196-201 (awaits `emailCodes.send`, which for Resend calls `resend.emails.send` without a signal, packages/email/src/transport.ts:33)
@@ -944,6 +946,8 @@ Tracking reads ignore when the reader joined, and uploads under superseded epoch
 
 #### S3-05 · medium · bug
 
+- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). Partly: the storage timeout only. Group delete still calls storage while holding the group lock, and the SDK's 3 retries can outlast the 15 s transaction; that restructure stays post-beta.
+
 **Group deletion calls storage with no timeout while it holds the group lock; storage calls never time out anywhere**
 
 - Location: packages/api/src/router/group/groupLifecycleRouter.ts:23-82; packages/api/src/s3client.ts:4-11; packages/api/src/lib/storage.ts:219-287 (no `abortSignal`)
@@ -997,6 +1001,8 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 
 #### S4-03 · medium · design
 
+- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). Partly: the pool connection wait (10 s) and `statement_timeout` (30 s) only. A configurable pool size stays post-beta.
+
 **Prisma/pg pool has no connection-wait limit, no statement timeout and an unconfigurable pool size**
 
 - Location: packages/database/src/client.ts:14-15
@@ -1005,6 +1011,8 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 - Same issue as: D5, D7 (see Duplicate groups)
 
 #### S4-04 · medium · bug
+
+- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). Partly: the S3 and Resend timeouts only. The static `/health` part is covered by M5's readiness check if that lands; otherwise post-beta.
 
 **Runner jobs have no timeouts on S3, Resend or Redis calls, and `/health` is static, so a hung call stops a job forever unnoticed**
 
@@ -1100,6 +1108,8 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 ### S5 Supporting packages, map tiles and ops
 
 #### S5-01 · medium · bug
+
+- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). C1. Each timeout has a test against a hanging server or stub (storage factory, Resend SDK, Google token exchange, Google certs via the new jose-based verifier, pg pool and statement timeout, app image PUT, auth-client body read).
 
 **Resend email calls have no timeout, so a slow Resend stalls requests and piles up background sends**
 
@@ -1589,6 +1599,8 @@ The launch screen retries forever with no message or way out when the device che
 
 #### S8-11 · low · bug
 
+- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). C1. Each timeout has a test against a hanging server or stub (storage factory, Resend SDK, Google token exchange, Google certs via the new jose-based verifier, pg pool and statement timeout, app image PUT, auth-client body read).
+
 **Auth client timeout stops at response headers; a stalled body hangs sign-in**
 
 - Location: apps/mobile/lib/auth-client.ts:29-35
@@ -1686,6 +1698,8 @@ The launch screen retries forever with no message or way out when the device che
 - Suggested fix: In dark mode, raise `--muted` to about 65–70% lightness, or stop using `muted` as a text colour. Give `--muted-foreground` a light-mode value of about 40–45% lightness. Pick one "secondary text" token and use it everywhere: today `text-muted`, `text-muted-foreground` and `text-secondary` are mixed with no clear rule.
 
 #### S9-06 · medium · bug
+
+- **Status:** fixed on `fix/beta-1-review` by "Give every outbound client a default timeout" (SHA added at wrap-up). C1. Each timeout has a test against a hanging server or stub (storage factory, Resend SDK, Google token exchange, Google certs via the new jose-based verifier, pg pool and statement timeout, app image PUT, auth-client body read).
 
 **Image upload PUT has no timeout; the avatar spinner can stay forever**
 

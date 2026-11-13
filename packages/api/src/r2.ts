@@ -1,11 +1,12 @@
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { type MapTilesManifest, readManifest, resolveArchive } from "@openbeacon/map-tiles";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import { env } from "./env.ts";
+import { createStorageClient } from "./s3client.ts";
 
-export const r2Client = new S3Client({
+export const r2Client = createStorageClient({
   region: "auto",
   endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
   credentials: {

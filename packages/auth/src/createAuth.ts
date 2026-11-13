@@ -13,6 +13,7 @@ import { db } from "./db.ts";
 import { type EmailCodes, normalizeEmail } from "./emailCode.ts";
 import { emailCodePlugin } from "./emailCodePlugin.ts";
 import { env } from "./env.ts";
+import { verifyGoogleIdToken } from "./googleIdToken.ts";
 import { getPublicUrl } from "./publicUrl.ts";
 import type { SecurityAlerts } from "./securityAlerts.ts";
 
@@ -211,6 +212,12 @@ export const createAuth = ({
               clientId: env.GOOGLE_CLIENT_ID,
               clientSecret: env.GOOGLE_CLIENT_SECRET,
               scope: ["email", "profile"],
+              verifyIdToken: async (token, nonce) =>
+                (await verifyGoogleIdToken({
+                  token,
+                  audience: env.GOOGLE_CLIENT_ID ?? "",
+                  nonce,
+                })) !== null,
             },
           }
         : undefined,

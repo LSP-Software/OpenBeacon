@@ -65,7 +65,16 @@ export const authClient = createAuthClient({
       if (callerSignal?.aborted) abort();
       const timer = setTimeout(abort, timeout);
       const response = await tryCatch(
-        apiCompatibilityFetch(input, { ...init, signal: controller.signal }),
+        apiCompatibilityFetch(input, { ...init, signal: controller.signal }).then(
+          async (received) => {
+            const body = await received.text();
+            return new Response(body || null, {
+              status: received.status,
+              statusText: received.statusText,
+              headers: received.headers,
+            });
+          },
+        ),
       );
       clearTimeout(timer);
       callerSignal?.removeEventListener("abort", abort);
