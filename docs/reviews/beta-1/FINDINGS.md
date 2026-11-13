@@ -255,7 +255,7 @@ Fixed on `fix/beta-1-review` (13 Nov 2026). Each fixed finding below carries its
 
 - Update OPE-213's scope in Linear (History-wrap sender rule, real call sites, historical-key lookup), as C8 asks.
 - Free accounts capped at 3 groups once tiers exist; the cap is the single value in `packages/api/src/lib/groupLimit.ts`.
-- Move the remaining app classifiers onto `errorReason`, then fix S6-03 and S6-06 (Q10).
+- Done on this branch: the remaining app classifiers moved onto `errorReason`, then S6-03 and S6-06 fixed (Q10 follow-up).
 - The map-tiles R2 client now throws on its request timeout too ("Stop a stalled map upload hanging").
 - The password limiter refills gradually (about one attempt every 90 s after a lockout), so "Try again in 15 minutes" is approximate.
 - The tRPC `ctx.clientIp` and `RateLimitContextError` are unused after Q7b.
@@ -1316,7 +1316,7 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-03 · medium · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Drop queued points the server will never accept" (SHA added at wrap-up). `NOT_GROUP_MEMBER`/`GROUP_GONE` delete that group's queued rows; `DEVICE_NOT_REGISTERED` for another device and a single-item BAD_REQUEST drop those rows; reconcile deletes rows for groups no longer in membership. Re-key, 429 and network errors still retry. Native `deleteByGroup` with JVM and Robolectric tests; uploader and reconcile tests per case.
+- **Status:** fixed on `fix/beta-1-review` in `cee2810e` ("Drop queued points the server will never accept"). `NOT_GROUP_MEMBER`/`GROUP_GONE` delete that group's queued rows; `DEVICE_NOT_REGISTERED` for another device and a single-item BAD_REQUEST drop those rows; reconcile deletes rows for groups no longer in membership. Re-key, 429 and network errors still retry. Native `deleteByGroup` with JVM and Robolectric tests; uploader and reconcile tests per case.
 
 **Queue rows the server permanently rejects are retried forever and never leave the queue**
 
@@ -1344,7 +1344,7 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-06 · medium · bug
 
-- **Status:** fixed on `fix/beta-1-review` by "Stop a sharing change the server refuses from blocking uploads" (SHA added at wrap-up). Terminal rejections drop the pending change and reload state, the clock offset is measured even when a replay fails, and the card shows a "couldn't apply" notice. Tests for three terminal and four transient cases, an immediate refusal, and sign-out clearing the flag.
+- **Status:** fixed on `fix/beta-1-review` in `9bdcdede` ("Stop a sharing change the server refuses from blocking uploads"). Terminal rejections drop the pending change and reload state, the clock offset is measured even when a replay fails, and the card shows a "couldn't apply" notice. Tests for three terminal and four transient cases, an immediate refusal, and sign-out clearing the flag.
 
 **A sharing change the server will never accept blocks uploads forever**
 
@@ -2020,7 +2020,7 @@ The "Update Open Beacon" screen has a disabled Update button and the server can'
 
 #### X-02 · medium · design
 
-- **Status:** fixed on `fix/beta-1-review` by "Move the app's error classifiers onto error reasons" (SHA added at wrap-up). Rest of X-02 (Q10 follow-up). Eight new reasons, each sent by the server and read by the app; the remaining classifiers and the history-recipient English match now use `errorReason`. Integration tests check each throw site's reason; app tests cover each converted classifier. `problemMessage` in `setup/link.tsx` still checks codes to decide whether to show the server's text (X-03 work, post-beta).
+- **Status:** fixed on `fix/beta-1-review` in `8caeedad` ("Move the app's error classifiers onto error reasons"). Rest of X-02 (Q10 follow-up). Eight new reasons, each sent by the server and read by the app; the remaining classifiers and the history-recipient English match now use `errorReason`. Integration tests check each throw site's reason; app tests cover each converted classifier. `problemMessage` in `setup/link.tsx` still checks codes to decide whether to show the server's text (X-03 work, post-beta).
 
 - **Status:** fixed on `fix/beta-1-review` in `0e87104b` ("Send a machine-readable reason with upload rejections and stop matching English text"). Q10 (minimal X-02). Tests: formatter sends `data.reason` (device errors keep `cause`); uploader classification per reason, and the old English message alone no longer triggers a key recheck; integration test that `uploadBatch` returns all three reasons. The other app classifiers move to `errorReason` after beta, as decided.
 
