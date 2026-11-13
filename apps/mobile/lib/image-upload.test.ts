@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { devicePendingCause } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
 
@@ -17,7 +17,28 @@ mock.module("expo-crypto", () => ({
   digest: async () => new Uint8Array([4, 5, 6]).buffer,
 }));
 
-const { uploadImageFromUri } = await import("./image-upload.ts");
+const { uploadImageFromUri, uploadToPresignedUrl } = await import("./image-upload.ts");
+
+const hangingServer = Bun.listen({
+  hostname: "127.0.0.1",
+  port: 0,
+  socket: { data: () => {} },
+});
+afterAll(() => hangingServer.stop(true));
+
+test("an image upload to storage that never answers gives up at the timeout", async () => {
+  const start = performance.now();
+
+  await expect(
+    uploadToPresignedUrl(
+      `http://127.0.0.1:${hangingServer.port.toString()}/image`,
+      new Uint8Array([1, 2, 3]).buffer,
+      "BAUG",
+      100,
+    ),
+  ).rejects.toThrow();
+  expect(performance.now() - start).toBeLessThan(2_000);
+});
 
 describe("uploadImageFromUri", () => {
   beforeEach(() => {

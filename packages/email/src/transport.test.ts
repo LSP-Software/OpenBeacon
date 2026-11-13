@@ -2,13 +2,16 @@ import { afterAll, describe, expect, mock, spyOn, test } from "bun:test";
 
 const sendMail = mock(async (_message: unknown) => ({}));
 const smtpVerify = mock(async () => true);
-const resendSend = mock(async (_message: unknown) => ({ data: { id: "id" }, error: null }));
+const resendSend = mock(async (_message: unknown, _options: unknown) => ({
+  data: { id: "id" },
+  error: null,
+}));
 let domainsResult: unknown = { data: { data: [] }, error: null };
 let domainResult: unknown = {
   data: { open_tracking: false, click_tracking: false },
   error: null,
 };
-const getDomain = mock(async (_id: string) => domainResult);
+const getDomain = mock(async (_id: string, _options: unknown) => domainResult);
 
 const createTransport = mock((_options: unknown) => ({ sendMail, verify: smtpVerify }));
 
@@ -122,14 +125,17 @@ describe("Resend transport", () => {
 
   test("sends HTML, text and the logo with its content id", async () => {
     await transport.send(message);
-    expect(resendSend).toHaveBeenCalledWith({
-      from: "OpenBeacon <noreply@example.com>",
-      to: message.to,
-      subject: message.subject,
-      html: message.html,
-      text: message.text,
-      attachments: message.attachments,
-    });
+    expect(resendSend).toHaveBeenCalledWith(
+      {
+        from: "OpenBeacon <noreply@example.com>",
+        to: message.to,
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+        attachments: message.attachments,
+      },
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   test("accepts a sending-only key", async () => {
@@ -162,7 +168,7 @@ describe("Resend transport", () => {
       error: null,
     };
     await transport.verify();
-    expect(getDomain).toHaveBeenLastCalledWith("example");
+    expect(getDomain).toHaveBeenLastCalledWith("example", { signal: expect.any(AbortSignal) });
   });
 
   test("requires open and click tracking to be off for the sender domain", async () => {

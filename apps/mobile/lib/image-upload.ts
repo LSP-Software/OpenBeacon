@@ -19,7 +19,10 @@ export const uploadToPresignedUrl = async (
   presignedUrl: string,
   bytes: ArrayBuffer,
   contentHash: string,
+  timeoutMs = 60_000,
 ): Promise<void> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const response = await fetch(presignedUrl, {
     method: "PUT",
     body: bytes,
@@ -27,7 +30,8 @@ export const uploadToPresignedUrl = async (
       "Content-Type": "image/webp",
       "x-amz-checksum-sha256": contentHash,
     },
-  });
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timer));
 
   if (!response.ok) {
     const summary = `${response.status.toString()}`;

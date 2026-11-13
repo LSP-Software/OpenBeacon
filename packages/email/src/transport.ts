@@ -31,11 +31,17 @@ export const createEmailTransport = (
     const resend = new Resend(config.apiKey);
     return {
       send: async ({ summary: _summary, ...message }) => {
-        const result = await resend.emails.send({ from, ...message });
+        const result = await resend.emails.send(
+          { from, ...message },
+          { signal: AbortSignal.timeout(15_000) },
+        );
         if (result.error) throw new Error(`Resend could not send email: ${result.error.name}`);
       },
       verify: async () => {
-        const result = await resend.domains.list({ limit: 100 });
+        const result = await resend.domains.list(
+          { limit: 100 },
+          { signal: AbortSignal.timeout(15_000) },
+        );
         // Resend has no endpoint for checking a send-only key. A restricted_api_key error means the key is valid but can only send.
         if (result.error?.name === "restricted_api_key") return;
         if (result.error) throw new Error(`Resend rejected the API key: ${result.error.name}`);
@@ -46,7 +52,9 @@ export const createEmailTransport = (
         if (!verified) {
           throw new Error("The EMAIL_FROM domain is not verified in Resend");
         }
-        const details = await resend.domains.get(verified.id);
+        const details = await resend.domains.get(verified.id, {
+          signal: AbortSignal.timeout(15_000),
+        });
         if (details.error) {
           throw new Error(`Resend could not read the EMAIL_FROM domain: ${details.error.name}`);
         }
