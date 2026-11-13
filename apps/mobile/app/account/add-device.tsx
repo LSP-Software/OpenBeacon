@@ -1,6 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { TRPCClientError } from "@trpc/client";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router } from "expo-router";
 import { useRef, useState } from "react";
@@ -12,6 +11,7 @@ import { Text } from "../../components/ui/Text.tsx";
 import { Alert } from "../../lib/alert.ts";
 import { trpc, trpcClient } from "../../lib/api.ts";
 import { approveDeviceLink, lookUpDeviceLink } from "../../lib/deviceLink.ts";
+import { errorReason } from "../../lib/errorReason.ts";
 
 const AddDeviceScreen = () => {
   const queryClient = useQueryClient();
@@ -46,11 +46,10 @@ const AddDeviceScreen = () => {
     setStep("scan");
   };
 
-  const codeNoLongerValid = (error: Error) =>
-    error instanceof TRPCClientError &&
-    (error.data?.code === "BAD_REQUEST" ||
-      error.data?.code === "NOT_FOUND" ||
-      error.data?.code === "CONFLICT");
+  const codeNoLongerValid = (error: Error) => {
+    const reason = errorReason(error);
+    return reason === "CODE_EXPIRED" || reason === "ALREADY_SET_UP";
+  };
 
   const approve = async () => {
     if (!link) return;

@@ -12,7 +12,11 @@ bun run dev
 
 open http://localhost:3000
 
-Set `SERVER_NAME` in the root `.env` to the public name shown in the health check and app. It defaults to `OpenBeacon`. `GET /health` returns the status, backend version, and server name.
+Set `SERVER_NAME` in the root `.env` to the public name shown in the health check and app. It defaults to `OpenBeacon`. `GET /health` returns the status, backend version, and server name. It never touches Redis, so the app can always read it.
+
+`GET /ready` pings Redis. It returns 200 while Redis answers and 503 while it doesn't. Use it for monitoring. Don't use it as the container health check: the backend reconnects to Redis on its own, and during an outage everything except email codes keeps working.
+
+Set `CLIENT_UPDATE_MESSAGE` to tell people with an out-of-date app how to update, for example where to get the new version. The app shows it as plain text on its compatibility screens. It is at most 280 characters; a longer value is ignored.
 
 ## Production deployment
 
@@ -28,27 +32,23 @@ not reverse migrations.
 
 For Google account deletion verification, add `<BETTER_AUTH_URL>/api/auth/google-deletion-callback` as an authorized redirect URI on the Google web OAuth client configured by `GOOGLE_CLIENT_ID`. For the hosted API this is `https://api.openbeacon.net/api/auth/google-deletion-callback`; each self-hosted backend needs its own exact public callback URI registered with its Google client. The Google account chooser may reuse an existing Google browser session and does not guarantee a fresh password prompt.
 
-Set the required environment variables in the root `.env.example`, including
-the R2 variables, in Coolify. Set `BETTER_AUTH_URL` to
-`https://api.openbeacon.net` and `SELF_HOSTED` to `false`. `SELF_HOSTED` defaults
-to `true`, so self-hosted backends never accept app feedback; the app always
-sends feedback to the hosted API. Set `DISCORD_FEEDBACK_WEBHOOK_URL` on the hosted
-API to get a Discord alert for each new feedback; the alert holds only the
-feedback ID and whether a contact email was given. Optional variables may be added when needed; leave
-them absent to use their defaults. The Coolify deployment declares
-`TRUSTED_PROXY_PROVIDER` without a value to prevent startup until it is set.
-For the hosted API, set `TRUSTED_PROXY_PROVIDER` to `cloudflare-authenticated`
-and configure a random `CLOUDFLARE_ORIGIN_SECRET` of at least 32 characters in
-Coolify. Configure Cloudflare to overwrite `X-OpenBeacon-Origin-Secret` with the
-same secret only on HTTPS requests to `api.openbeacon.net`, and use Full (strict)
-TLS for that hostname. Never add the secret to requests received over HTTP:
-Full (strict) does not force Cloudflare to use HTTPS for those origin requests.
-The backend requires that secret and a valid `CF-Connecting-IP` on every request
-except `GET /health`, which Coolify uses for container health checks. Keep the
-secret out of Git and logs. Verify that direct-origin API requests are rejected,
-that Cloudflare overwrites a client-supplied secret header, and that different
-clients get separate rate limits. Do not deploy with `none` behind the reverse
-proxy: users would share the proxy's IP rate limit.
+Set the required environment variables from the root `.env.example`, including
+the R2 variables. `SELF_HOSTED` defaults to `true`, so self-hosted backends never
+accept app feedback; the app always sends feedback to the hosted API. Optional
+variables may be added when needed; leave them absent to use their defaults.
+
+With `TRUSTED_PROXY_PROVIDER=cloudflare-authenticated`, set a random
+`CLOUDFLARE_ORIGIN_SECRET` of at least 32 characters, and configure Cloudflare to
+overwrite `X-OpenBeacon-Origin-Secret` with the same secret only on HTTPS requests
+to your API hostname, using Full (strict) TLS for that hostname. Never add the
+secret to requests received over HTTP: Full (strict) does not force Cloudflare to
+use HTTPS for those origin requests. The backend then requires that secret and a
+valid `CF-Connecting-IP` on every request except `GET /health` and `GET /ready`,
+which stay open for container health checks and monitoring. Keep the secret out
+of Git and logs. Verify that direct-origin API requests are rejected, and that
+Cloudflare overwrites a client-supplied secret header. Do not deploy with `none`
+behind a reverse proxy: every session would record the proxy's IP address instead
+of the client's.
 
 Self-hosted backends behind a single reverse proxy such as Traefik, Caddy or
 nginx can use `trusted-proxy`. The backend uses the last `X-Forwarded-For` entry,
@@ -58,6 +58,25 @@ through the proxy. `cloudflare` trusts `CF-Connecting-IP` without verifying the
 request came from Cloudflare, so only use it when the origin is reachable solely
 through Cloudflare, for example via Cloudflare Tunnel or a firewall that only
 allows Cloudflare's IP ranges. Otherwise use `cloudflare-authenticated`.
+
+### Serving the backend under a path
+
+The backend can share a domain with other apps by sitting under a path, such as
+`https://example.com/openbeacon`. Set `BETTER_AUTH_URL` to the full public URL,
+path included (`https://example.com/openbeacon`), and enter the same URL in the
+app. The reverse proxy must remove the path before it forwards the request, so
+`https://example.com/openbeacon/api/trpc/…` reaches the backend as `/api/trpc/…`
+and `https://example.com/openbeacon/health` as `/health`. For example, in nginx:
+
+```nginx
+location /openbeacon/ {
+    proxy_pass http://openbeacon-backend:3000/;
+}
+```
+
+Caddy's `handle_path /openbeacon/*` and Traefik's `StripPrefix` middleware do the
+same. The Google deletion callback is then
+`https://example.com/openbeacon/api/auth/google-deletion-callback`.
 
 The `Deploy backend` GitHub Actions workflow also deploys the separate scheduled job runner. Every installation needs the runner: besides account deletion, it deletes expired email codes and verification tokens every hour, deletes new devices that weren't set up within 7 days or were removed more than 7 days ago, and deletes old device links and expired device challenges. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
 
@@ -77,21 +96,11 @@ version was already published from a different commit, so bump
 To release, dispatch the `Deploy backend` workflow from `main`. It releases
 `serverVersion` from `main` unless you enter another version, and fails if the
 three images for that version aren't published yet. It points `latest-stable`
-at that version for all three images. With "Trigger the Coolify deployment"
-ticked, it then asks Coolify to deploy `latest-stable` to the
-`OpenBeacon Backend` and `OpenBeacon Scheduled Jobs` applications, using the
-`COOLIFY_ENDPOINT` and `COOLIFY_TOKEN` secrets; leave it unticked to deploy
-from Coolify yourself later. It never redeploys `OpenBeacon Map Tiles`, because
-a restart interrupts a map upload that can take hours: deploy it from Coolify
-when `map-tiles status` shows no update running.
-
-To roll back, dispatch `Deploy backend` with the earlier version and the
-Coolify deployment ticked. For the first deployment, apply the Coolify
-infrastructure plan and populate its environment variables before dispatching
-the workflow. The workflow waits for Coolify to report the deployment result.
-If polling fails or times out, check the deployment in Coolify before retrying.
-Avoid starting other deployments manually while a workflow release is in
-progress.
+at that version for all three images, and can then deploy the backend and the
+runner. It never redeploys the map tiles service, because a restart interrupts
+a map upload that can take hours: redeploy it yourself when `map-tiles status`
+shows no update running. To roll back, release an earlier version. Avoid
+starting other deployments manually while a release is in progress.
 
 ## Email
 
@@ -110,7 +119,7 @@ Emails are branded HTML with a plain-text part. The logo is attached to the emai
 
 At startup the backend checks the email settings without sending anything. For SMTP it connects and logs in. For Resend it checks the API key and, when the key has full access, that the `EMAIL_FROM` domain is verified in Resend with open tracking and click tracking off. A sending-only key passes the key check, but the domain and its tracking settings can't be checked with it, so check them yourself in Resend. A failed check stops the backend from starting.
 
-Each address can request 3 codes of each kind every 15 minutes. `EMAIL_CODE_IP_LIMIT=true` also limits each IP address to 20 code requests an hour across all addresses, which slows down someone sending codes to many addresses from one machine. It is off by default because it can block users who share an IP address, such as phones behind carrier NAT or a household on one connection.
+Each address can request 3 codes of each kind every 15 minutes.
 
 Each account can trigger at most 20 emails an hour. Over that cap, the new sign-in, deletion scheduled, "already have an account" and "sign in with Google" emails are dropped. Codes and the always-on alerts are still sent. The backend never logs email addresses or codes, except in the development console mode below.
 

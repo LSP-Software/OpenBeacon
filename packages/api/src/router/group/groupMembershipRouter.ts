@@ -2,6 +2,9 @@ import { GroupRole, Prisma } from "@openbeacon/database";
 import { devicePlatformSchema, removeGroupMemberSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
+import { errorCode, tryCatch } from "@openbeacon/shared";
+import { deleteGroup } from "../../lib/deleteGroup.ts";
+import { deletePayloadsInBatches } from "../../lib/deletePayloadsInBatches.ts";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
@@ -218,112 +221,140 @@ export const groupMembershipRouter = {
     })
     .input(removeGroupMemberSchema)
     .mutation(async ({ ctx, input }) => {
-      return ctx.db.$transaction(async (tx) => {
-        await tx.$queryRaw(
-          Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
-        );
-        const actors = await tx.$queryRaw<Array<{ id: string; role: GroupRole }>>(Prisma.sql`
+      const removed = await ctx.db.$transaction(
+        async (tx) => {
+          await tx.$queryRaw(
+            Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
+          );
+          const actors = await tx.$queryRaw<Array<{ id: string; role: GroupRole }>>(Prisma.sql`
           SELECT id, role FROM "GroupMember"
           WHERE "groupId" = ${input.groupId} AND "userId" = ${ctx.session.user.id}
           FOR UPDATE
         `);
-        const actor = actors[0];
-        if (
-          !actor ||
-          (actor.id !== input.memberId &&
-            actor.role !== GroupRole.OWNER &&
-            actor.role !== GroupRole.ADMIN)
-        ) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "You cannot remove this member.",
-          });
-        }
-        const member = await tx.groupMember.findFirst({
-          where: { groupId: input.groupId, id: input.memberId },
-          select: { userId: true, role: true },
-        });
-        if (!member) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Group member not found",
-          });
-        }
-        if (
-          actor.id !== input.memberId &&
-          actor.role !== GroupRole.OWNER &&
-          member.role !== GroupRole.MEMBER
-        ) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Only owners can remove owners or admins.",
-          });
-        }
-
-        if (input.successorMemberId) {
+          const actor = actors[0];
           if (
-            actor.id !== input.memberId ||
-            actor.role !== GroupRole.OWNER ||
-            input.successorMemberId === input.memberId
+            !actor ||
+            (actor.id !== input.memberId &&
+              actor.role !== GroupRole.OWNER &&
+              actor.role !== GroupRole.ADMIN)
           ) {
             throw new TRPCError({
               code: "FORBIDDEN",
-              message: "Only a departing owner can select a successor.",
+              message: "You cannot remove this member.",
             });
           }
-          const successor = await tx.groupMember.findFirst({
-            where: { id: input.successorMemberId, groupId: input.groupId },
-            include: { user: { select: { pendingDeletion: true } } },
+          const member = await tx.groupMember.findFirst({
+            where: { groupId: input.groupId, id: input.memberId },
+            select: { userId: true, role: true },
           });
-          if (!successor)
+          if (!member) {
             throw new TRPCError({
               code: "NOT_FOUND",
-              message: "Successor not found.",
-            });
-          if (successor.user.pendingDeletion && successor.role !== GroupRole.OWNER) {
-            throw new TRPCError({
-              code: "CONFLICT",
-              message: "Cannot change the role of an account pending deletion.",
+              message: "Group member not found",
             });
           }
-          await tx.groupMember.update({
-            where: { id: successor.id },
-            data: { role: GroupRole.OWNER },
+          if (
+            actor.id !== input.memberId &&
+            actor.role !== GroupRole.OWNER &&
+            member.role !== GroupRole.MEMBER
+          ) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Only owners can remove owners or admins.",
+            });
+          }
+
+          if (input.successorMemberId) {
+            if (
+              actor.id !== input.memberId ||
+              actor.role !== GroupRole.OWNER ||
+              input.successorMemberId === input.memberId
+            ) {
+              throw new TRPCError({
+                code: "FORBIDDEN",
+                message: "Only a departing owner can select a successor.",
+              });
+            }
+            const successor = await tx.groupMember.findFirst({
+              where: { id: input.successorMemberId, groupId: input.groupId },
+              include: { user: { select: { pendingDeletion: true } } },
+            });
+            if (!successor)
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message: "Successor not found.",
+              });
+            if (successor.user.pendingDeletion && successor.role !== GroupRole.OWNER) {
+              throw new TRPCError({
+                code: "CONFLICT",
+                message: "Cannot change the role of an account pending deletion.",
+              });
+            }
+            await tx.groupMember.update({
+              where: { id: successor.id },
+              data: { role: GroupRole.OWNER },
+            });
+          }
+
+          const isLeaving = actor.id === input.memberId;
+          if (!isLeaving) {
+            await persistGroupEpoch({
+              db: tx,
+              deviceId: ctx.deviceId,
+              epoch: input.nextEpoch,
+              excludedUserId: member.userId,
+              groupId: input.groupId,
+              userId: ctx.session.user.id,
+            });
+          }
+
+          await removeGroupMemberWithOwnerGuard({
+            db: tx,
+            groupId: input.groupId,
+            memberId: input.memberId,
           });
-        }
 
-        await persistGroupEpoch({
-          db: tx,
-          deviceId: ctx.deviceId,
-          epoch: input.nextEpoch,
-          excludedUserId: member.userId,
-          groupId: input.groupId,
-          userId: ctx.session.user.id,
-        });
+          await tx.groupEpochRecipientKey.deleteMany({
+            where: {
+              groupEpoch: { groupId: input.groupId },
+              recipientDevice: { userId: member.userId },
+            },
+          });
+          await tx.groupEpochHistoryWrap.deleteMany({
+            where: {
+              groupEpoch: { groupId: input.groupId },
+              historyKey: { userId: member.userId },
+            },
+          });
 
-        await removeGroupMemberWithOwnerGuard({
-          db: tx,
-          groupId: input.groupId,
-          memberId: input.memberId,
-        });
+          if (isLeaving) {
+            if ((await tx.groupMember.count({ where: { groupId: input.groupId } })) === 0) {
+              await deleteGroup({ db: tx, groupId: input.groupId });
+            } else {
+              await tx.group.update({
+                where: { id: input.groupId },
+                data: { epochRotationRequired: true },
+              });
+            }
+          }
 
-        await tx.groupEncryptedPayload.deleteMany({
-          where: { groupId: input.groupId, senderUserId: member.userId },
-        });
-        await tx.groupEpochRecipientKey.deleteMany({
-          where: {
-            groupEpoch: { groupId: input.groupId },
-            recipientDevice: { userId: member.userId },
-          },
-        });
-        await tx.groupEpochHistoryWrap.deleteMany({
-          where: { groupEpoch: { groupId: input.groupId }, historyKey: { userId: member.userId } },
-        });
-
-        return {
-          message: "Group member removed.",
-        };
-      });
+          return member;
+        },
+        { timeout: 15_000 },
+      );
+      const cleanup = await tryCatch(
+        deletePayloadsInBatches({
+          db: ctx.db,
+          where: Prisma.sql`"groupId" = ${input.groupId} AND "senderUserId" = ${removed.userId}`,
+        }),
+      );
+      if (cleanup.error) {
+        const code = errorCode(cleanup.error);
+        console.error(`Removed member's location clean-up failed${code ? ` (${code})` : ""}`);
+      }
+      return {
+        message: "Group member removed.",
+      };
     }),
   updateRole: groupMemberProcedure
     .input(

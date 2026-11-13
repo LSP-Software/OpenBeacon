@@ -21,8 +21,9 @@ const trackingService = {
     (await import("../lib/tracking.ts")).reconcileTrackingKeys(input),
   revokeTrackingAccess: async (input: { keepDeviceRegistration: boolean }) =>
     (await import("../lib/tracking.ts")).revokeTrackingAccess(input),
-  checkThisPhoneAfterSessionLoss: async () =>
-    (await import("../lib/deviceRemoved.ts")).checkThisPhoneAfterSessionLoss(),
+  endLostSession: async () => {
+    await (await import("../lib/endSession.ts")).endSession({ reason: "sessionLost" });
+  },
   takeKeyAccessChange: async () => (await import("../lib/tracking.ts")).takeKeyAccessChange(),
 };
 
@@ -48,9 +49,9 @@ export const TrackingProvider = ({
   const forceFlushRef = useRef(false);
   const forceKeyCheckRef = useRef(false);
   const recoveryCheckedUserRef = useRef<string | null>(null);
-  const startCaptureRef = useRef(permissionState?.isReadyForSharing ?? false);
+  const startCapture = permissionState ? permissionState.isReadyForSharing : null;
+  const startCaptureRef = useRef(startCapture);
   const userId = session?.user.id ?? null;
-  const startCapture = permissionState?.isReadyForSharing ?? false;
   startCaptureRef.current = startCapture;
 
   const runTrackingCycle = useCallback(
@@ -78,12 +79,12 @@ export const TrackingProvider = ({
           const forceKeyCheck = forceKeyCheckRef.current;
           forceFlushRef.current = false;
           forceKeyCheckRef.current = false;
-          await tryCatch(
-            service.reconcileTrackingKeys({
-              startCapture: startCaptureRef.current,
-              force: forceKeyCheck,
-            }),
-          );
+          const startCapture = startCaptureRef.current;
+          if (startCapture === null) {
+            forceKeyCheckRef.current ||= forceKeyCheck;
+          } else {
+            await tryCatch(service.reconcileTrackingKeys({ startCapture, force: forceKeyCheck }));
+          }
           if (version !== cycleVersionRef.current) return;
           if (appStateRef.current === "active" && (await service.takeKeyAccessChange())) {
             void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
@@ -172,7 +173,7 @@ export const TrackingProvider = ({
       if (changed && (typeof previousUserId === "string" || !userId)) {
         await tryCatch(service.revokeTrackingAccess({ keepDeviceRegistration: !userId }));
         if (!userId && version === cycleVersionRef.current)
-          await tryCatch(service.checkThisPhoneAfterSessionLoss());
+          await tryCatch(service.endLostSession());
       }
       if (version !== cycleVersionRef.current || !userId || !thisDeviceActive) return;
       const starting = !sessionReadyRef.current;

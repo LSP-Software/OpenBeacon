@@ -14,6 +14,9 @@ export const rateLimitIdentifierSchema = z.discriminatedUnion("type", [
     type: z.literal("email"),
     value: z.string().min(1),
   }),
+  z.object({
+    type: z.literal("server"),
+  }),
 ]);
 
 export const rateLimitPeekInputSchema = z.object({

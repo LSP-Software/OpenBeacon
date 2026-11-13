@@ -16,6 +16,18 @@ import kotlin.test.assertTrue
 
 class CapturePipelineTest {
   @Test
+  fun trackingTimestampsAreFormattedFromEpochMillisecondsInUtc() {
+    assertEquals("2026-07-13T18:45:00.123Z", formatTrackingTimestamp(1_783_968_300_123L))
+    assertEquals("1970-01-01T00:00:00.000Z", formatTrackingTimestamp(0L))
+  }
+
+  @Test
+  fun theCapturePathDoesNotUseJavaTimeWhichAndroid7Lacks() {
+    val source = java.io.File("../android/src/main/java/expo/modules/openbeacontracking/capture/CapturePipeline.kt").readText()
+    assertTrue("java.time" !in source)
+  }
+
+  @Test
   fun sharingRevisionTravelsWithTheCapturedPointAndOldFixesAreSkipped() {
     val keys = InMemoryEpochKeyStore()
     keys.replaceAll(listOf(ProvisionedEpochKey("group", "epoch", ByteArray(32), "tablet", "trackingPoint")))
@@ -23,11 +35,11 @@ class CapturePipelineTest {
     val cutoff = java.time.Instant.parse("2026-07-13T18:45:00.000Z").toEpochMilli()
     var state = SharingCaptureState(revisionPrefix = "s1.2:", resumeAfter = cutoff)
     val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, sharingState = { state })
-    assertEquals(0, pipeline.onFix(51.5, 0.0, "2026-07-13T18:45:00.000Z", null, 80, false))
-    assertEquals(1, pipeline.onFix(51.5, 0.0, "2026-07-13T18:45:01.000Z", null, 80, false))
+    assertEquals(0, pipeline.onFix(51.5, 0.0, at("2026-07-13T18:45:00.000Z"), null, 80, false))
+    assertEquals(1, pipeline.onFix(51.5, 0.0, at("2026-07-13T18:45:01.000Z"), null, 80, false))
     assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).single().clientPointId.startsWith("s1.2:"))
     state = state.copy(paused = true)
-    assertEquals(0, pipeline.onFix(51.5, 0.0, "2026-07-13T18:45:02.000Z", null, 80, false))
+    assertEquals(0, pipeline.onFix(51.5, 0.0, at("2026-07-13T18:45:02.000Z"), null, 80, false))
   }
 
   @Test
@@ -42,7 +54,7 @@ class CapturePipelineTest {
       if (ids == 2) state = SharingCaptureState(paused = true, revisionPrefix = "s0.1:")
       "point-$ids"
     })
-    assertEquals(0, pipeline.onFix(51.5, 0.0, "2026-07-13T18:45:00.000Z", null, 80, false))
+    assertEquals(0, pipeline.onFix(51.5, 0.0, at("2026-07-13T18:45:00.000Z"), null, 80, false))
     assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).isEmpty())
   }
 
@@ -54,7 +66,7 @@ class CapturePipelineTest {
     fun pipeline(owner: String = "server-a/user-a", bootId: String = "boot-1") =
       CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { owner }, bootId = bootId)
     fun capture(pipeline: CapturePipeline, id: Long) =
-      pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false, fixId = id)
+      pipeline.onFix(51.5, -0.1, at("2026-07-13T18:45:00.000Z"), null, 80, false, fixId = id)
 
     assertEquals(1, capture(pipeline(), 100))
     val original = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).single()
@@ -79,7 +91,7 @@ class CapturePipelineTest {
     keys.replaceAll(listOf(first))
     val queue = InMemoryCiphertextQueue()
     val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "test" })
-    fun capture(id: Long) = pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false, fixId = id)
+    fun capture(id: Long) = pipeline.onFix(51.5, -0.1, at("2026-07-13T18:45:00.000Z"), null, 80, false, fixId = id)
 
     assertEquals(1, capture(100))
     assertEquals(0, capture(100))
@@ -102,7 +114,7 @@ class CapturePipelineTest {
     commands.stop()
     commands.start()
     val pipeline = CapturePipeline(queueOwner = { "test" }, epochKeyStore = keys, ciphertextQueue = queue, canQueue = { commands.isCurrent(it) })
-    assertEquals(0, pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false, previousGeneration))
+    assertEquals(0, pipeline.onFix(51.5, -0.1, at("2026-07-13T18:45:00.000Z"), null, 80, false, previousGeneration))
     assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).isEmpty())
   }
 
@@ -132,7 +144,7 @@ class CapturePipelineTest {
       },
     )
     val worker = thread {
-      inserted = pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false)
+      inserted = pipeline.onFix(51.5, -0.1, at("2026-07-13T18:45:00.000Z"), null, 80, false)
     }
     assertTrue(started.await(5, TimeUnit.SECONDS))
     synchronized(lock) { enabled = false }
@@ -156,7 +168,7 @@ class CapturePipelineTest {
       pipeline.onFix(
         latitude = 51.5074,
         longitude = -0.1278,
-        timestampIso = "2026-07-13T18:45:00.000Z",
+        timestampMillis = at("2026-07-13T18:45:00.000Z"),
         speedMetersPerSecond = 1.4,
         batteryLevel = 72,
         batteryCharging = false,
@@ -164,6 +176,37 @@ class CapturePipelineTest {
 
     assertEquals(0, inserted)
     assertEquals(0, queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 100).size)
+  }
+
+  @Test
+  fun onFixDropsAFixWithNonFiniteCoordinates() {
+    val keyStore = InMemoryEpochKeyStore()
+    keyStore.replaceAll(
+      listOf(
+        ProvisionedEpochKey(
+          groupId = "group_a",
+          epochId = "epoch_a",
+          epochKey = ByteArray(32),
+          senderDeviceId = "device_1",
+          kind = "trackingPoint",
+        ),
+      ),
+    )
+    val queue = InMemoryCiphertextQueue()
+    val pipeline = CapturePipeline(queueOwner = { "test" }, epochKeyStore = keyStore, ciphertextQueue = queue)
+
+    val inserted =
+      pipeline.onFix(
+        latitude = Double.NaN,
+        longitude = -0.1278,
+        timestampMillis = at("2026-07-13T18:45:00.000Z"),
+        speedMetersPerSecond = 1.4,
+        batteryLevel = null,
+        batteryCharging = false,
+      )
+
+    assertEquals(0, inserted)
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).isEmpty())
   }
 
   @Test
@@ -208,7 +251,7 @@ class CapturePipelineTest {
       pipeline.onFix(
         latitude = 51.5074,
         longitude = -0.1278,
-        timestampIso = "2026-07-13T18:45:00.000Z",
+        timestampMillis = at("2026-07-13T18:45:00.000Z"),
         speedMetersPerSecond = null,
         batteryLevel = 40,
         batteryCharging = true,
@@ -232,7 +275,7 @@ class CapturePipelineTest {
           speed = null,
           batteryLevel = 40,
           batteryCharging = true,
-        ).toByteArray(StandardCharsets.UTF_8)
+        )!!.toByteArray(StandardCharsets.UTF_8)
 
     assertTrue(pending.none { row ->
       GroupPayloadEncrypt.decodeBase64(row.ciphertext).toList()
@@ -322,3 +365,5 @@ class CapturePipelineTest {
     assertEquals(0, queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10).size)
   }
 }
+
+private fun at(iso: String) = java.time.Instant.parse(iso).toEpochMilli()

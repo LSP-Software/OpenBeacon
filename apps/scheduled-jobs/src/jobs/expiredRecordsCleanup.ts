@@ -1,6 +1,5 @@
-import { tryCatch } from "@openbeacon/shared";
+import { errorCode, tryCatch } from "@openbeacon/shared";
 import { getDatabaseTime } from "../databaseTime.ts";
-import { errorCode } from "../errorCode.ts";
 import { services } from "../services.ts";
 
 const day = 24 * 60 * 60_000;

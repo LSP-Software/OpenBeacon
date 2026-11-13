@@ -13,13 +13,14 @@
     "test": "bun --env-file=../../.env.ci --env-file=../../.env test --isolate"
   },
   "dependencies": {
-    "@better-auth/expo": "^1.7.14",
+    "@better-auth/expo": "^1.7.22",
     "@openbeacon/cache": "workspace:*",
     "@openbeacon/database": "workspace:*",
     "@openbeacon/email": "workspace:*",
     "@openbeacon/schemas": "workspace:*",
     "@openbeacon/shared": "workspace:*",
     "@t3-oss/env-core": "^0.13.10",
-    "better-auth": "^1.7.14"
+    "better-auth": "^1.7.22",
+    "jose": "^6.2.17"
   }
 }

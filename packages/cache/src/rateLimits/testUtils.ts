@@ -127,7 +127,9 @@ export class FakeRedis {
         ? Math.min(limit, activeBucket.tokens + (nowMs - activeBucket.lastMs) * refillRate)
         : activeBucket.tokens;
     const remainingTokens =
-      shouldConsume && refilledTokens >= cost ? refilledTokens - cost : refilledTokens;
+      shouldConsume && refilledTokens >= cost
+        ? Math.min(limit, refilledTokens - cost)
+        : refilledTokens;
     const allowed = refilledTokens >= cost;
     const retryAfterMs = allowed ? 0 : Math.ceil((cost - remainingTokens) / refillRate);
     const resetAfterMs = Math.ceil(Math.max(0, limit - remainingTokens) / refillRate);
@@ -169,4 +171,20 @@ export class FakeRedis {
   public close(): void {
     this.closed = true;
   }
+}
+
+export class UnavailableRedis {
+  public async send(): Promise<never> {
+    throw Object.assign(new Error("Connection has failed"), {
+      code: "ERR_REDIS_CONNECTION_CLOSED",
+    });
+  }
+
+  public async del(): Promise<never> {
+    throw Object.assign(new Error("Connection has failed"), {
+      code: "ERR_REDIS_CONNECTION_CLOSED",
+    });
+  }
+
+  public close(): void {}
 }

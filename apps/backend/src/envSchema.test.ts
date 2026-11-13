@@ -9,13 +9,6 @@ test("treats a backend as self-hosted unless SELF_HOSTED is explicitly false", (
   expect(envSchema.SELF_HOSTED.safeParse("maybe").success).toBe(false);
 });
 
-test("leaves the email code IP limit off unless EMAIL_CODE_IP_LIMIT is true", () => {
-  expect(envSchema.EMAIL_CODE_IP_LIMIT.parse(undefined)).toBe(false);
-  expect(envSchema.EMAIL_CODE_IP_LIMIT.parse("")).toBe(false);
-  expect(envSchema.EMAIL_CODE_IP_LIMIT.parse("true")).toBe(true);
-  expect(envSchema.EMAIL_CODE_IP_LIMIT.safeParse("maybe").success).toBe(false);
-});
-
 test("only accepts a Discord webhook URL for feedback alerts and treats empty as unset", () => {
   const schema = envSchema.DISCORD_FEEDBACK_WEBHOOK_URL;
   expect(schema.parse(undefined)).toBeUndefined();
@@ -49,4 +42,15 @@ test("does not echo the Discord webhook URL in validation errors", () => {
   const result = envSchema.DISCORD_FEEDBACK_WEBHOOK_URL.safeParse(secret);
   expect(result.success).toBe(false);
   expect(JSON.stringify(result.error?.issues)).not.toContain("secret-token");
+});
+
+test("treats a missing, blank or over-long CLIENT_UPDATE_MESSAGE as unset without failing", () => {
+  const schema = envSchema.CLIENT_UPDATE_MESSAGE;
+  expect(schema.parse(undefined)).toBeUndefined();
+  expect(schema.parse("")).toBeUndefined();
+  expect(schema.parse("   ")).toBeUndefined();
+  expect(schema.parse(42)).toBeUndefined();
+  expect(schema.parse("x".repeat(281))).toBeUndefined();
+  expect(schema.parse(` ${"x".repeat(280)} `)).toBe("x".repeat(280));
+  expect(schema.parse(" Update from the Play Store. ")).toBe("Update from the Play Store.");
 });

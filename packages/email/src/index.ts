@@ -1,4 +1,4 @@
-import { OpenBeaconCache, redisUrlSchema } from "@openbeacon/cache";
+import { sharedCache } from "@openbeacon/cache";
 import { tryCatch } from "@openbeacon/shared";
 import { renderAccountExistsEmail } from "./accountExistsEmail.tsx";
 import { renderCodeEmail } from "./codeEmail.tsx";
@@ -40,9 +40,7 @@ export const sendEmail = createSendEmail(
   transport
     ? {
         transport,
-        rateLimits: new OpenBeaconCache({
-          redisUrl: redisUrlSchema.parse(process.env["REDIS_URL"]),
-        }).rateLimits,
+        rateLimits: sharedCache().rateLimits,
       }
     : null,
 );

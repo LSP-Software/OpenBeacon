@@ -40,6 +40,7 @@
   "devDependencies": {
     "@types/bun": "^1.4.4",
     "@types/node": "^25.0.10",
+    "@types/pg": "^8.23.1",
     "prisma": "^7.10.1"
   }
 }

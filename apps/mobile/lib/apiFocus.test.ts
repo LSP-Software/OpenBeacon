@@ -18,7 +18,7 @@ mock.module("react-native", () =>
 mock.module("./storage.ts", () => ({
   storage: { getString: () => undefined, set: () => {}, remove: () => {}, contains: () => false },
 }));
-mock.module("./base-url.ts", () => ({
+mock.module("./currentServer.ts", () => ({
   baseUrl: "http://127.0.0.1",
   getFeedbackUrl: () => "http://127.0.0.1",
 }));

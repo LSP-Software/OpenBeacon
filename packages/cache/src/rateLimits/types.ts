@@ -4,4 +4,7 @@ export type RateLimitResult = {
   remaining: number;
   retryAfterMs: number;
   resetAfterMs: number;
+  unavailable?: true;
 };
+
+export type WhenRedisUnavailable = { whenUnavailable: "allow" | "deny" };

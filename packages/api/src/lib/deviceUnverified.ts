@@ -1,7 +1,8 @@
 import { deviceUnverifiedCause } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
+import { ReasonError } from "./reasonError.ts";
 
-export class DeviceUnverifiedError extends Error {
+export class DeviceUnverifiedError extends ReasonError {
   constructor() {
     super(deviceUnverifiedCause);
     this.name = "DeviceUnverifiedError";

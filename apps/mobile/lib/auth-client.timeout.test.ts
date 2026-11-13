@@ -6,6 +6,17 @@ const hangingServer = Bun.listen({
   port: 0,
   socket: { data: () => {} },
 });
+const stallingServer = Bun.listen({
+  hostname: "127.0.0.1",
+  port: 0,
+  socket: {
+    data: (socket) => {
+      socket.write(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{",
+      );
+    },
+  },
+});
 const closingServer = Bun.listen({
   hostname: "127.0.0.1",
   port: 0,
@@ -16,7 +27,7 @@ const baseUrl = `http://127.0.0.1:${hangingServer.port.toString()}`;
 mock.module("./storage.ts", () => ({
   storage: { getString: () => undefined, set: () => {}, remove: () => {}, contains: () => false },
 }));
-mock.module("./base-url.ts", () => ({ baseUrl }));
+mock.module("./currentServer.ts", () => ({ baseUrl }));
 mock.module("expo-secure-store", () => ({}));
 mock.module("@better-auth/expo/client", () => ({ expoClient: () => ({ id: "expo" }) }));
 
@@ -24,6 +35,7 @@ const { authClient }: typeof import("./auth-client.ts") = await import("./auth-c
 
 afterAll(() => {
   hangingServer.stop(true);
+  stallingServer.stop(true);
   closingServer.stop(true);
 });
 
@@ -41,6 +53,19 @@ test("sign-in against a server that never answers returns an error at the timeou
   );
 
   expect(result.data).toBeNull();
+  expect(result.error).toMatchObject(unreachable);
+  expect(performance.now() - start).toBeLessThan(2_000);
+});
+
+test("sign-in against a server that sends headers and then stalls returns an error at the timeout", async () => {
+  const start = performance.now();
+  const result = await authClient.$fetch("/sign-in/email", {
+    baseURL: `http://127.0.0.1:${stallingServer.port.toString()}/api/auth`,
+    method: "POST",
+    body: { email: "person@example.com", password: "password" },
+    timeout: 100,
+  });
+
   expect(result.error).toMatchObject(unreachable);
   expect(performance.now() - start).toBeLessThan(2_000);
 });

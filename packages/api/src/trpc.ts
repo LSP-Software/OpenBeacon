@@ -14,6 +14,7 @@ import { ZodError, z } from "zod";
 import { DevicePendingError } from "./lib/deviceActivation.ts";
 import { DeviceRemovedError, deviceRemovedError } from "./lib/deviceRemoved.ts";
 import { DeviceUnverifiedError } from "./lib/deviceUnverified.ts";
+import { ReasonError } from "./lib/reasonError.ts";
 import { linkRequestDevice } from "./lib/requestDevice.ts";
 import { RateLimitContextError } from "./middlewares/rateLimit.ts";
 
@@ -65,7 +66,7 @@ export type TRPCMeta = {
   rateLimit?: {
     cost?: number;
     namespace?: string;
-    ipLimit?: number;
+    scope?: "server";
     limit: number;
     windowMs: number;
   };
@@ -86,9 +87,24 @@ export const createTRPCComponents = () => {
               httpStatus: shape.data.httpStatus,
               zodError: null,
               cause: null,
+              reason: null,
             },
           };
         }
+        if (error.code === "INTERNAL_SERVER_ERROR") {
+          return {
+            ...shape,
+            message: "Something went wrong. Please try again.",
+            data: {
+              code: shape.data.code,
+              httpStatus: shape.data.httpStatus,
+              zodError: null,
+              cause: null,
+              reason: null,
+            },
+          };
+        }
+        const reason = error.cause instanceof ReasonError ? error.cause.reason : null;
         if (error.code === "TOO_MANY_REQUESTS") {
           return {
             ...shape,
@@ -98,6 +114,7 @@ export const createTRPCComponents = () => {
               httpStatus: shape.data.httpStatus,
               zodError: null,
               cause: null,
+              reason,
             },
           };
         }
@@ -113,6 +130,7 @@ export const createTRPCComponents = () => {
                   : error.cause instanceof DeviceUnverifiedError
                     ? deviceUnverifiedCause
                     : null,
+            reason,
             zodError:
               error.cause instanceof ZodError
                 ? z.flattenError(error.cause as ZodError<Record<string, unknown>>)

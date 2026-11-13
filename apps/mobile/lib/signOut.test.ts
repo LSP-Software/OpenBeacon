@@ -111,7 +111,12 @@ mock.module("./api.ts", () => ({
 }));
 
 mock.module("./auth-client.ts", () => ({
-  SESSION_TOKEN_TO_REVOKE_KEY: "sessionTokenToRevokeOnNextLogin",
+  saveSessionTokenToRevoke: async (token: string) => {
+    secureStoreValues.set("sessionTokenToRevokeOnNextLogin", token);
+  },
+  forgetSessionTokenToRevoke: async () => {
+    secureStoreValues.delete("sessionTokenToRevokeOnNextLogin");
+  },
   authClient: {
     signOut: async () => {
       events.push("signOut");
@@ -256,7 +261,12 @@ describe("signing out of this phone", () => {
     removalError = TRPCClientError.from({
       error: {
         code: -32001,
-        data: { cause: deviceRemovedCause, code: "UNAUTHORIZED", httpStatus: 401 },
+        data: {
+          cause: deviceRemovedCause,
+          reason: deviceRemovedCause,
+          code: "UNAUTHORIZED",
+          httpStatus: 401,
+        },
         message: "This device was removed.",
       },
     });
@@ -399,7 +409,7 @@ describe("signing out of this phone", () => {
     expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(false);
   });
 
-  test("a plain sign-out forgets the registration only after signing out", async () => {
+  test("a plain sign-out forgets the registration but keeps the device key", async () => {
     const device = await ensureDeviceKeyRegistration();
 
     await signOutOfThisPhone({

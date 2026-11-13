@@ -63,6 +63,7 @@ describe("uploadGroupTrackingBatch", () => {
 
   test("inserts points and derives senderUserId from the session user", async () => {
     const result = await uploadGroupTrackingBatch({
+      consumeDailyBudget: async () => {},
       db: createDb(),
       groupId: "group-1",
       points: [createPoint()],
@@ -103,6 +104,7 @@ describe("uploadGroupTrackingBatch", () => {
 
     await expect(
       uploadGroupTrackingBatch({
+        consumeDailyBudget: async () => {},
         db: createDb(),
         groupId: "group-1",
         memberSince,
@@ -121,6 +123,7 @@ describe("uploadGroupTrackingBatch", () => {
     findManyPayloads = mock(async () => [{ clientPointId: "point-1" }]);
 
     const result = await uploadGroupTrackingBatch({
+      consumeDailyBudget: async () => {},
       db: createDb(),
       groupId: "group-1",
       points: [createPoint()],
@@ -141,6 +144,7 @@ describe("uploadGroupTrackingBatch", () => {
     findManyPayloads = mock(async () => [{ clientPointId: "point-1" }]);
 
     const result = await uploadGroupTrackingBatch({
+      consumeDailyBudget: async () => {},
       db: createDb(),
       groupId: "group-1",
       points: [
@@ -177,6 +181,7 @@ describe("uploadGroupTrackingBatch", () => {
   test("rejects duplicate clientPointIds inside one batch", async () => {
     await expect(
       uploadGroupTrackingBatch({
+        consumeDailyBudget: async () => {},
         db: createDb(),
         groupId: "group-1",
         points: [createPoint(), createPoint()],
@@ -193,6 +198,7 @@ describe("uploadGroupTrackingBatch", () => {
 
     await expect(
       uploadGroupTrackingBatch({
+        consumeDailyBudget: async () => {},
         db: createDb(),
         groupId: "group-1",
         points: [createPoint()],
@@ -209,6 +215,7 @@ describe("uploadGroupTrackingBatch", () => {
 
     await expect(
       uploadGroupTrackingBatch({
+        consumeDailyBudget: async () => {},
         db: createDb(),
         groupId: "group-1",
         points: [createPoint()],
@@ -226,6 +233,7 @@ describe("uploadGroupTrackingBatch", () => {
     countEpochs = mock(async () => 0);
 
     const result = await uploadGroupTrackingBatch({
+      consumeDailyBudget: async () => {},
       db: createDb(),
       groupId: "group-1",
       points: [
@@ -247,6 +255,7 @@ describe("uploadGroupTrackingBatch", () => {
     countEpochs = mock(async () => 0);
 
     const result = await uploadGroupTrackingBatch({
+      consumeDailyBudget: async () => {},
       db: createDb(),
       groupId: "group-1",
       points: [createPoint()],
@@ -280,13 +289,14 @@ describe("pollGroupTrackingPoints", () => {
           createMany: mock(async () => ({ count: 0 })),
           findMany: mock(async () => rows),
         },
-        groupEpoch: { findMany: mock(async () => []) },
+        groupEpoch: { findMany: mock(async () => []), findUnique: mock(async () => null) },
         userDevice: {
           findMany: mock(async () => []),
           updateMany: mock(async () => ({ count: 0 })),
         },
       },
       groupId: "group-1",
+      joinedEpochNumber: 1,
       limit: 2,
     });
     expect(result.points).toEqual([]);
@@ -310,6 +320,7 @@ describe("pollGroupTrackingPoints", () => {
         senderUserId: "user-1",
       },
     ]);
+    const findUnique = mock(async () => ({ createdAt: new Date(0) }));
 
     const result = await pollGroupTrackingPoints({
       cursor: { createdAt, id: "id-1" },
@@ -321,6 +332,7 @@ describe("pollGroupTrackingPoints", () => {
         },
         groupEpoch: {
           findMany: mock(async () => []),
+          findUnique,
         },
         userDevice: {
           findMany: mock(async () => []),
@@ -328,6 +340,7 @@ describe("pollGroupTrackingPoints", () => {
         },
       },
       groupId: "group-1",
+      joinedEpochNumber: 3,
       limit: 100,
     });
 
@@ -349,6 +362,7 @@ describe("pollGroupTrackingPoints", () => {
       take: 100,
       where: {
         groupId: "group-1",
+        epoch: { epochNumber: { gte: 3 } },
         createdAt: { gte: createdAt },
         OR: [
           { createdAt: { gt: createdAt } },
@@ -358,6 +372,46 @@ describe("pollGroupTrackingPoints", () => {
         ],
       },
     });
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
+  test("a first poll starts at the reader's join epoch and skips earlier epochs", async () => {
+    const joinedAt = new Date("2026-07-13T17:00:00.000Z");
+    const findMany = mock(async () => []);
+    const findUnique = mock(async () => ({ createdAt: joinedAt }));
+
+    await pollGroupTrackingPoints({
+      cursor: null,
+      db: {
+        $queryRaw: mock(async () => [sharingDeviceRow]),
+        groupEncryptedPayload: {
+          createMany: mock(async () => ({ count: 0 })),
+          findMany,
+        },
+        groupEpoch: { findMany: mock(async () => []), findUnique },
+        userDevice: {
+          findMany: mock(async () => []),
+          updateMany: mock(async () => ({ count: 0 })),
+        },
+      },
+      groupId: "group-1",
+      joinedEpochNumber: 4,
+      limit: 100,
+    });
+
+    expect(findUnique).toHaveBeenCalledWith({
+      select: { createdAt: true },
+      where: { groupId_epochNumber: { epochNumber: 4, groupId: "group-1" } },
+    });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          groupId: "group-1",
+          epoch: { epochNumber: { gte: 4 } },
+          createdAt: { gte: joinedAt },
+        },
+      }),
+    );
   });
 });
 
@@ -391,6 +445,7 @@ describe("getLatestGroupTrackingPoints", () => {
         },
         groupEpoch: {
           findMany: mock(async () => []),
+          findUnique: mock(async () => null),
         },
         userDevice: {
           findMany: mock(async () => []),
@@ -398,11 +453,12 @@ describe("getLatestGroupTrackingPoints", () => {
         },
       },
       groupId: "group-1",
+      joinedEpochNumber: 2,
     });
 
     expect(result.points).toHaveLength(1);
     expect(queryRaw).toHaveBeenCalled();
-    const sql = queryRaw.mock.calls[0]?.[0] as { strings: string[] };
+    const sql = queryRaw.mock.calls[0]?.[0] as { strings: string[]; values: unknown[] };
     const sqlText = sql.strings.join("?");
     expect(sqlText).not.toContain("DISTINCT ON");
     expect(sqlText).toContain('FROM "GroupMember" AS "member"');
@@ -411,5 +467,11 @@ describe("getLatestGroupTrackingPoints", () => {
     expect(sqlText).toContain('"point"."senderDeviceId" = "device"."id"');
     expect(sqlText).toContain('ORDER BY "point"."createdAt" DESC, "point"."id" DESC');
     expect(sqlText).toContain("LIMIT 1");
+    const lateral = sqlText.slice(
+      sqlText.indexOf("CROSS JOIN LATERAL"),
+      sqlText.indexOf("LIMIT 1"),
+    );
+    expect(lateral).toContain('"epoch"."epochNumber" >= ?');
+    expect(sql.values).toEqual([2, "group-1"]);
   });
 });

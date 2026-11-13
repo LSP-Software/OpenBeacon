@@ -103,7 +103,7 @@ const refusal = (code: string, cause: string | null = null) =>
   TRPCClientError.from({
     error: {
       code: -32003,
-      data: { cause, code, httpStatus: httpStatuses[code] },
+      data: { cause, code, httpStatus: httpStatuses[code], reason: cause },
       message: "Refused",
     },
   });

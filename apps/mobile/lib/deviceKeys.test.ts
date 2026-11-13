@@ -515,7 +515,7 @@ describe("device key registration", () => {
           error: {
             code: -32600,
             message: "This device was removed.",
-            data: { cause: deviceRemovedCause },
+            data: { cause: deviceRemovedCause, reason: deviceRemovedCause },
           },
         },
       });

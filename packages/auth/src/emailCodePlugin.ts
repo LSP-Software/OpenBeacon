@@ -1,7 +1,7 @@
 import type { EmailCodePurpose } from "@openbeacon/email";
 import { tryCatch } from "@openbeacon/shared";
 import type { BetterAuthPlugin } from "better-auth";
-import { APIError, createAuthEndpoint, getIP } from "better-auth/api";
+import { APIError, createAuthEndpoint } from "better-auth/api";
 import { z } from "zod";
 import { type EmailCodes, normalizeEmail } from "./emailCode.ts";
 
@@ -171,10 +171,7 @@ const sendInBackground = async ({
   codes: EmailCodes;
   ctx: {
     body: { email: string };
-    request?: Request | undefined;
-    headers?: Headers | undefined;
     context: {
-      options: Parameters<typeof getIP>[1];
       runInBackground: (task: Promise<unknown>) => void;
     };
   };
@@ -182,13 +179,13 @@ const sendInBackground = async ({
   send: (email: string) => Promise<void>;
 }) => {
   const email = normalizeEmail(ctx.body.email);
-  const source = ctx.request ?? ctx.headers;
-  const allowed = await codes.allowRequest({
-    purpose,
-    email,
-    ip: source ? getIP(source, ctx.context.options) : null,
-  });
-  if (!allowed) {
+  const allowed = await codes.allowRequest({ purpose, email });
+  if (allowed === "unavailable") {
+    throw new APIError("TOO_MANY_REQUESTS", {
+      message: "Codes can't be sent right now. Try again in a minute.",
+    });
+  }
+  if (allowed === "limited") {
     throw new APIError("TOO_MANY_REQUESTS", {
       message: "Too many requests. Please try again later.",
     });

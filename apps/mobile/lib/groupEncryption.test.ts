@@ -114,8 +114,13 @@ mock.module("./deviceKeys.ts", () => ({
   ensureDeviceKeyRegistration: ensureDeviceKeyRegistrationMock,
 }));
 
-const badRequest = (message = HISTORY_RECIPIENT_MISMATCH_MESSAGE) =>
-  TRPCClientError.from({ error: { code: -32600, data: { code: "BAD_REQUEST" }, message } });
+const badRequest = (
+  message = HISTORY_RECIPIENT_MISMATCH_MESSAGE,
+  reason: string | null = "HISTORY_RECIPIENT_MISMATCH",
+) =>
+  TRPCClientError.from({
+    error: { code: -32600, data: { code: "BAD_REQUEST", reason }, message },
+  });
 
 const unwrapHistoryWrap = ({
   historyKeys,
@@ -373,7 +378,7 @@ describe("group encryption helpers", () => {
 
     build.mockClear();
     const deviceMismatch = mock(async (_input: string) => {
-      throw badRequest("Epoch recipient set does not match the active group devices.");
+      throw badRequest("Epoch recipient set does not match the active group devices.", null);
     });
     await expect(submitEpochChange({ build, submit: deviceMismatch })).rejects.toThrow(
       "Epoch recipient set does not match the active group devices.",
@@ -386,5 +391,17 @@ describe("group encryption helpers", () => {
     });
     await expect(submitEpochChange({ build, submit: plainError })).rejects.toThrow();
     expect(plainError).toHaveBeenCalledTimes(1);
+  });
+  test("retries on the mismatch reason whatever the server's message says", async () => {
+    const { submitEpochChange } = await importGroupEncryptionModule();
+    const build = mock(async () => "input");
+    let calls = 0;
+    const submit = mock(async (_input: string) => {
+      calls += 1;
+      if (calls === 1) throw badRequest("Recipients changed. Try again.");
+      return "done";
+    });
+    expect(await submitEpochChange({ build, submit })).toBe("done");
+    expect(build).toHaveBeenCalledTimes(2);
   });
 });

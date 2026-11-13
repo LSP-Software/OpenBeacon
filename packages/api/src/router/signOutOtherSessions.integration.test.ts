@@ -168,7 +168,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("signing out othe
 
     await expect(
       callerFor(account, { sessionCreatedAt: minutesAgo(31) }).account.signOutOtherSessions(),
-    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    ).rejects.toMatchObject({ cause: { reason: "FRESH_SIGN_IN_REQUIRED" }, code: "FORBIDDEN" });
     expect(await sessionIds(account.userId)).toHaveLength(3);
     expect(await sentAlerts()).toEqual([]);
 

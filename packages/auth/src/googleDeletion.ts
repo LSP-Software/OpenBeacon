@@ -1,10 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
-import { verifyGoogleIdToken } from "better-auth/social-providers";
 import { z } from "zod";
 import { env } from "./env.ts";
+import { verifyGoogleIdToken } from "./googleIdToken.ts";
+import { getPublicUrl } from "./publicUrl.ts";
 
 const redirectUri = () =>
-  `${env.BETTER_AUTH_URL.replace(/\/+$/, "")}/api/auth/google-deletion-callback`;
+  `${getPublicUrl(env.BETTER_AUTH_URL).baseUrl}/api/auth/google-deletion-callback`;
 
 export const createGoogleDeletionAuthorization = () => {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET)
@@ -48,6 +49,7 @@ export const verifyGoogleDeletionCode = async ({
       redirect_uri: redirectUri(),
       grant_type: "authorization_code",
     }),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) return null;
   const tokens = z.object({ id_token: z.string().min(1) }).safeParse(await response.json());

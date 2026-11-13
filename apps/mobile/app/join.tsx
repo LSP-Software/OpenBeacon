@@ -10,6 +10,7 @@ import { Text } from "../components/ui/Text.tsx";
 import { queryClient, trpcClient } from "../lib/api.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { buildAcceptSharedInviteInput, submitEpochChange } from "../lib/groupEncryption.ts";
+import { groupLimitAlert } from "../lib/groupLimitAlert.ts";
 import { requestTrackingSync } from "../lib/trackingEvents.ts";
 import { useSingleFlight } from "../lib/useSingleFlight.ts";
 
@@ -41,6 +42,11 @@ const Join = () => {
           });
         })(),
       );
+      const limit = groupLimitAlert(result.error);
+      if (limit) {
+        Alert.alert(limit.title, limit.message);
+        return;
+      }
       if (result.error) {
         Alert.alert("Unable to join", result.error.message);
         return;

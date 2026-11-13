@@ -77,11 +77,12 @@ mock.module("../components/ui/Button.tsx", () => ({
     disabled = false,
     onPress,
   }: {
-    children: React.ReactElement<{ children: string }>;
+    children: React.ReactElement<{ children?: unknown }> | undefined;
     disabled?: boolean;
     onPress: () => void;
   }) => {
-    buttons.push({ label: children.props.children, disabled, onPress });
+    const label = children?.props?.children;
+    buttons.push({ label: typeof label === "string" ? label : "", disabled, onPress });
     return null;
   },
 }));
@@ -124,18 +125,24 @@ mock.module("../lib/personalNicknames.ts", () => ({
   loadPersonalNicknames: async () => records,
   encryptPersonalNickname: async () => "new-ciphertext",
 }));
+let buildRemoval = async () => ({});
 mock.module("../lib/groupEncryption.ts", () => ({
-  buildRemoveGroupMemberInput: async () => ({}),
+  buildRemoveGroupMemberInput: () => buildRemoval(),
   submitEpochChange: (async ({ build, submit }) =>
     submit(await build())) satisfies typeof submitEpochChange,
 }));
 mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("../lib/hiddenMapGroups.ts", () => ({ forgetHiddenMapGroup: () => {} }));
 mock.module("../lib/batteryVisual.ts", () => ({
-  getBatteryVisual: () => ({ colorClass: "", icon: () => null }),
+  getBatteryVisual: ({ batteryLevel }: { batteryLevel: number | null }) => ({
+    colorClass: "",
+    icon: () => null,
+    label: batteryLevel === null ? null : `${batteryLevel}%`,
+  }),
 }));
 mock.module("../lib/timeSince.ts", () => ({ timeSince: () => "2 minutes ago" }));
 const { default: MembersTab } = await import("../app/(tabs)/groups/[groupId]/MembersTab.tsx");
+const { getSnapshot: getAlerts } = await import("../lib/alert.ts");
 const button = (label: string) => buttons.findLast((item) => item.label === label)!;
 
 test("waits for loaded nicknames before opening the editor", async () => {
@@ -209,5 +216,42 @@ test("each of a member's devices is read out as one line", async () => {
   ]);
   positions = [];
   memberDevices = [];
+  await act(async () => root.unmount());
+});
+
+test("a removal can't be submitted twice while the new epoch is being built", async () => {
+  const root = createRoot();
+  pending = false;
+  records = {};
+  buttons = [];
+  mutate.mockClear();
+  group.members.push({ id: "self", role: "OWNER", userId: "owner", name: "Owner", image: null });
+  const { promise: built, resolve: finishBuild } = Promise.withResolvers<object>();
+  buildRemoval = () => built;
+  await act(async () => root.render(<MembersTab groupId="group" />));
+  await act(async () => button("Remove member").onPress());
+  const confirm = getAlerts()
+    .at(-1)
+    ?.buttons.find((item) => item.text === "Remove");
+  if (!confirm?.onPress) throw new Error("Remove confirmation not found");
+
+  let first: unknown;
+  await act(async () => {
+    first = confirm.onPress?.();
+  });
+  expect(button("Remove member").disabled).toBe(true);
+  expect(button("Leave group").disabled).toBe(true);
+  await act(async () => {
+    await confirm.onPress?.();
+  });
+  await act(async () => {
+    finishBuild({});
+    await first;
+  });
+
+  expect(mutate).toHaveBeenCalledTimes(1);
+  expect(button("Remove member").disabled).toBe(false);
+  group.members.pop();
+  buildRemoval = async () => ({});
   await act(async () => root.unmount());
 });

@@ -34,6 +34,7 @@ const queueEvictions = new Map<
   { pointCount: number; oldestQueuedAt: number; newestQueuedAt: number; revision: number }
 >();
 const deleted: number[][] = [];
+const deletedGroups: Array<{ owner: string; groupId: string }> = [];
 const requeued: Array<{ ids: number[]; error: string | null | undefined }> = [];
 const uploadCalls: Array<{ groupId: string; points: unknown[] }> = [];
 const rotationChecks: string[] = [];
@@ -78,6 +79,7 @@ let onStopCapture: (() => void) | null = null;
 let refreshCaptureCalls = 0;
 let failRefreshCapture = false;
 let failRevokeEpochKeys = false;
+let failMembershipList = false;
 let failRegistration = false;
 let registrationError: Error | null = null;
 let failRotation = false;
@@ -212,7 +214,10 @@ mock.module("./resealPersonalData.ts", () => ({
   },
 }));
 
-mock.module("./base-url.ts", () => ({ baseUrl: "https://api.example.test" }));
+mock.module("./currentServer.ts", () => ({
+  baseUrl: "https://api.example.test",
+  hasCustomServerUrl: () => false,
+}));
 
 let apiCompatibility: {
   problem: "appTooOld" | "serverTooOld" | "outOfSync";
@@ -247,8 +252,6 @@ mock.module("./apiCompatibility.ts", () => ({
     if (apiCompatibility) apiCompatibility = { ...apiCompatibility, notified: true };
   },
 }));
-
-mock.module("./server-url.ts", () => ({ hasCustomServerUrl: () => false }));
 
 mock.module("./api.ts", () => ({
   trpcClient: {
@@ -306,6 +309,7 @@ mock.module("./api.ts", () => ({
       list: {
         query: async () => {
           requests.push("groupMembership.list");
+          if (failMembershipList) throw new Error("Network request failed");
           return membershipGroups;
         },
       },
@@ -455,6 +459,8 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
     revokeEpochKeys: (groupIds?: string[] | null) => {
       revokedGroups.push(groupIds);
       if (failRevokeEpochKeys) throw new Error("revoke failed");
+      const kept = provisionedKeys.filter(({ groupId }) => groupIds && !groupIds.includes(groupId));
+      provisionedKeys.splice(0, provisionedKeys.length, ...kept);
     },
     listProvisionedEpochKeys: () => provisionedKeys,
     startCapture: async () => {
@@ -486,6 +492,10 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
     },
     deleteCiphertexts: async (ids: number[]) => {
       deleted.push(ids);
+    },
+    deleteCiphertextsByGroup: async (owner: string, groupId: string) => {
+      deletedGroups.push({ owner, groupId });
+      pendingCiphertexts = pendingCiphertexts.filter((item) => item.groupId !== groupId);
     },
     requeueCiphertexts: async (ids: number[], error?: string | null) => {
       requeued.push({ ids, error });
@@ -546,6 +556,7 @@ describe("tracking service", () => {
     evictedBeforeClaim.clear();
     queueEvictions.clear();
     deleted.length = 0;
+    deletedGroups.length = 0;
     requeued.length = 0;
     uploadCalls.length = 0;
     rotationChecks.length = 0;
@@ -585,6 +596,7 @@ describe("tracking service", () => {
     refreshCaptureCalls = 0;
     failRefreshCapture = false;
     failRevokeEpochKeys = false;
+    failMembershipList = false;
     failRegistration = false;
     registrationError = null;
     failRotation = false;
@@ -1043,6 +1055,24 @@ describe("tracking service", () => {
     ).toBe(encodeBase64(epochKey1.expose()));
 
     expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
+  });
+
+  test("revoking keys offline doesn't leave a fresh key check that keeps capture off", async () => {
+    await reconcileTrackingKeys({ startCapture: true, force: true });
+    expect(provisionedKeys).toHaveLength(2);
+    const starts = startCaptureCalls;
+
+    failMembershipList = true;
+    await expect(reconcileTrackingKeys({ startCapture: false, force: true })).rejects.toThrow(
+      "Network request failed",
+    );
+    expect(provisionedKeys).toHaveLength(0);
+
+    failMembershipList = false;
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(provisionedKeys).toHaveLength(2);
+    expect(startCaptureCalls).toBe(starts + 1);
   });
 
   test("checks and sweeps for backfill at most once every ten minutes per user", async () => {
@@ -2005,7 +2035,7 @@ describe("tracking service", () => {
     expect(requeued).toEqual([{ ids: [1], error: "CONFLICT: Group key rotation is pending." }]);
   });
 
-  test("retains rejected batches", async () => {
+  test("drops a single point the server rejects as a bad request", async () => {
     pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
     uploadGroup = async () => {
       throw Object.assign(new Error("Epoch does not belong to this group."), {
@@ -2015,12 +2045,24 @@ describe("tracking service", () => {
       });
     };
 
+    await flushPendingTrackingPoints();
+
+    expect(deleted).toEqual([[1]]);
+    expect(requeued).toEqual([]);
+  });
+
+  test("retains a single point rejected for a reason that may pass later", async () => {
+    pendingCiphertexts = [createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 })];
+    uploadGroup = async () => {
+      throw Object.assign(new Error("Something went wrong. Please try again."), {
+        data: { code: "INTERNAL_SERVER_ERROR" },
+      });
+    };
+
     await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
 
     expect(deleted).toEqual([]);
-    expect(requeued).toEqual([
-      { ids: [1], error: "BAD_REQUEST: Epoch does not belong to this group." },
-    ]);
+    expect(requeued.map(({ ids }) => ids)).toEqual([[1]]);
   });
 
   test("isolates a permanently invalid point without discarding valid points", async () => {
@@ -2047,7 +2089,7 @@ describe("tracking service", () => {
       };
     };
 
-    await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
+    await flushPendingTrackingPoints();
 
     expect(uploadCalls.map(({ points }) => points.length)).toEqual([2, 1, 1]);
     expect(
@@ -2057,10 +2099,8 @@ describe("tracking service", () => {
           (points[0] as { clientPointId: string }).clientPointId === "point-valid",
       ),
     ).toBe(true);
-    expect(deleted.flat()).toEqual([1]);
-    expect(requeued).toEqual([
-      { ids: [2], error: "BAD_REQUEST: Epoch does not belong to this group." },
-    ]);
+    expect(deleted.flat().sort()).toEqual([1, 2]);
+    expect(requeued).toEqual([]);
   });
 
   test("isolates revoked sender devices from valid points in the same group", async () => {
@@ -2104,6 +2144,43 @@ describe("tracking service", () => {
     expect(requeued).toEqual([
       { ids: [2], error: "FORBIDDEN: The active device is not registered." },
     ]);
+  });
+
+  test("drops points from another device of this phone that the server no longer knows", async () => {
+    registeredDevice = {
+      deviceId: "device-1",
+      privateKey: deviceKeyPair.privateKey,
+      userId: "user-1",
+    };
+    pendingCiphertexts = [
+      createQueueItem({ clientPointId: "point-valid", groupId: "group-1", id: 1 }),
+      createQueueItem({
+        clientPointId: "point-old",
+        groupId: "group-1",
+        id: 2,
+        senderDeviceId: "device-old",
+      }),
+    ];
+    uploadGroup = async ({ points }) => {
+      if (
+        points.some(
+          (point) => (point as { senderDeviceId: string }).senderDeviceId === "device-old",
+        )
+      ) {
+        throw Object.assign(new Error("Any message"), {
+          data: { code: "FORBIDDEN", reason: "DEVICE_NOT_REGISTERED" },
+        });
+      }
+      return {
+        accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
+        duplicates: [],
+      };
+    };
+
+    await flushPendingTrackingPoints();
+
+    expect(deleted.flat().sort()).toEqual([1, 2]);
+    expect(requeued).toEqual([]);
   });
 
   test("revokes every native key and stops capture", async () => {
@@ -2256,10 +2333,11 @@ describe("tracking service", () => {
         });
       };
 
-      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+      await syncBackgroundTracking();
 
       expect(requests).toEqual(expect.arrayContaining(keyCheckRequests));
       expect(requests).not.toContain("auth.registerDeviceKey");
+      expect(deleted).toEqual([[1]]);
     });
 
     test("an upload with expired points rechecks keys in the same run", async () => {
@@ -2287,11 +2365,85 @@ describe("tracking service", () => {
       expect(requests).toEqual(["groupTracking.uploadBatch"]);
     });
 
-    const rejectUploads = (code: string, message: string) => {
+    const rejectUploads = (code: string, message: string, reason?: string) => {
       uploadGroup = async () => {
-        throw Object.assign(new Error(message), { data: { code } });
+        throw Object.assign(new Error(message), { data: { code, reason } });
       };
     };
+
+    const queueOldKeyPoint = () => {
+      pendingCiphertexts = [
+        {
+          ...createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+          epochId: "epoch-0",
+        },
+      ];
+    };
+
+    test("an unregistered device reason rechecks keys whatever the message says", async () => {
+      await startTracking();
+      queueOldKeyPoint();
+      rejectUploads("FORBIDDEN", "Reworded by the server", "DEVICE_NOT_REGISTERED");
+
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+      expect(requests).toEqual(expect.arrayContaining(keyCheckRequests));
+      expect(requests).not.toContain("auth.registerDeviceKey");
+      expect(requeued.map(({ ids }) => ids)).toEqual([[1]]);
+    });
+
+    test("the old English message without a reason no longer rechecks keys", async () => {
+      await startTracking();
+      queueOldKeyPoint();
+      rejectUploads("FORBIDDEN", "The active device is not registered.");
+
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+      expect(requests).toEqual(["groupTracking.uploadBatch"]);
+    });
+
+    for (const reason of ["NOT_GROUP_MEMBER", "GROUP_GONE"]) {
+      test(`a ${reason} rejection drops every point queued for that group`, async () => {
+        await startTracking();
+        pendingCiphertexts = [
+          { ...createQueueItem({ clientPointId: "point-1", groupId: "group-3", id: 1 }) },
+          createQueueItem({ clientPointId: "point-2", groupId: "group-3", id: 2 }),
+          createQueueItem({ clientPointId: "point-3", groupId: "group-1", id: 3 }),
+        ];
+        uploadGroup = async ({ groupId, points }) => {
+          if (groupId === "group-3") {
+            throw Object.assign(new Error("Any message"), {
+              data: { code: "FORBIDDEN", reason },
+            });
+          }
+          return {
+            accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
+            duplicates: [],
+          };
+        };
+
+        await syncBackgroundTracking();
+        await syncBackgroundTracking();
+
+        expect(deletedGroups).toEqual([{ owner: requestedOwners[0] ?? "", groupId: "group-3" }]);
+        expect(requeued).toEqual([]);
+        expect(uploadCalls.filter(({ groupId }) => groupId === "group-3")).toHaveLength(1);
+      });
+    }
+
+    test("an upload limit keeps the points for a later retry", async () => {
+      await startTracking();
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      rejectUploads("TOO_MANY_REQUESTS", "Too many requests.", "UPLOAD_LIMIT_REACHED");
+
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+      expect(requests).toEqual(["groupTracking.uploadBatch"]);
+      expect(requeued.map(({ ids }) => ids)).toEqual([[1]]);
+      expect(deleted.flat()).toEqual([]);
+    });
 
     test("being removed from a group rechecks keys without registering again", async () => {
       await startTracking();
@@ -2306,22 +2458,45 @@ describe("tracking service", () => {
       expect(requests).not.toContain("auth.registerDeviceKey");
     });
 
-    test("points still queued for a group this phone has left only retry the upload", async () => {
+    test("points still queued for a group this phone has left are uploaded once, then dropped", async () => {
       await startTracking();
       pendingCiphertexts = [
         createQueueItem({ clientPointId: "point-1", groupId: "group-3", id: 1 }),
       ];
-      rejectUploads("FORBIDDEN", "You are not a member of this group");
+      rejectUploads("FORBIDDEN", "You are not a member of this group", "NOT_GROUP_MEMBER");
 
       for (let index = 0; index < 3; index++) {
-        await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+        await syncBackgroundTracking();
       }
 
-      expect(requests).toEqual([
-        "groupTracking.uploadBatch",
-        "groupTracking.uploadBatch",
-        "groupTracking.uploadBatch",
-      ]);
+      expect(requests).toEqual(["groupTracking.uploadBatch"]);
+    });
+
+    test("a network failure keeps the points for a later retry", async () => {
+      await startTracking();
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
+      ];
+      uploadGroup = async () => {
+        throw new TRPCClientError("Network request failed");
+      };
+
+      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+
+      expect(requeued.map(({ ids }) => ids)).toEqual([[1]]);
+      expect(deleted.flat()).toEqual([]);
+      expect(deletedGroups).toEqual([]);
+    });
+
+    test("a key check that finds a group gone drops the points queued for it", async () => {
+      await startTracking();
+      expect(provisionedKeys.map(({ groupId }) => groupId).sort()).toEqual(["group-1", "group-2"]);
+      membershipGroups = [{ id: "group-1", members: [{ id: "member-1" }] }];
+
+      await reconcileTrackingKeys({ startCapture: true, force: true });
+
+      expect(deletedGroups.map(({ groupId }) => groupId)).toEqual(["group-2"]);
+      expect(provisionedKeys.map(({ groupId }) => groupId)).toEqual(["group-1"]);
     });
 
     test("points from an old device key that the server no longer knows don't register again", async () => {
@@ -2342,7 +2517,7 @@ describe("tracking service", () => {
       expect(requests).toEqual(["groupTracking.uploadBatch", "groupTracking.uploadBatch"]);
     });
 
-    test("points for an epoch this phone no longer uses only retry the upload", async () => {
+    test("a point for an epoch the server says isn't this group's is dropped", async () => {
       await startTracking();
       pendingCiphertexts = [
         {
@@ -2352,10 +2527,10 @@ describe("tracking service", () => {
       ];
       rejectUploads("BAD_REQUEST", "Epoch does not belong to this group.");
 
-      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
-      await expect(syncBackgroundTracking()).rejects.toThrow("Tracking upload failed");
+      await syncBackgroundTracking();
 
-      expect(requests).toEqual(["groupTracking.uploadBatch", "groupTracking.uploadBatch"]);
+      expect(requests).toEqual(["groupTracking.uploadBatch"]);
+      expect(deleted).toEqual([[1]]);
     });
 
     test("a key check that's due but failing is tried once per sync, not again after a failed upload", async () => {
@@ -2486,7 +2661,7 @@ const createDeviceRemovedError = () =>
       error: {
         code: -32001,
         message: "This device was removed.",
-        data: { code: "UNAUTHORIZED", cause: deviceRemovedCause },
+        data: { code: "UNAUTHORIZED", cause: deviceRemovedCause, reason: deviceRemovedCause },
       },
     },
   });

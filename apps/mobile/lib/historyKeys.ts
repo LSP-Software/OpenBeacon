@@ -1,12 +1,9 @@
 import { decodeBase64, encodeBase64, HistoryPrivateKeyMaterial } from "@openbeacon/encryption";
 import * as SecureStore from "expo-secure-store";
+import { getSecureStoreOptions } from "./secureStoreOptions.ts";
 
 const getHistoryKeyName = ({ userId, version }: { userId: string; version: number }) =>
   `encryption.history.${userId}.${version}`;
-
-const getSecureStoreOptions = () => ({
-  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-});
 
 export const getStoredHistoryKey = async (input: { userId: string; version: number }) => {
   const stored = await SecureStore.getItemAsync(getHistoryKeyName(input), getSecureStoreOptions());

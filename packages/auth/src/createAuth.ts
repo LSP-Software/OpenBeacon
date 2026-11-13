@@ -13,6 +13,13 @@ import { db } from "./db.ts";
 import { type EmailCodes, normalizeEmail } from "./emailCode.ts";
 import { emailCodePlugin } from "./emailCodePlugin.ts";
 import { env } from "./env.ts";
+import { verifyGoogleIdToken } from "./googleIdToken.ts";
+import {
+  type PasswordAttemptLimits,
+  reservePasswordAttempt,
+  settlePasswordAttempt,
+} from "./passwordAttempts.ts";
+import { getPublicUrl } from "./publicUrl.ts";
 import type { SecurityAlerts } from "./securityAlerts.ts";
 
 export const clientIpHeader = "x-openbeacon-client-ip";
@@ -20,10 +27,12 @@ export const clientIpHeader = "x-openbeacon-client-ip";
 export const createAuth = ({
   emailCodes,
   securityAlerts,
+  rateLimits,
   runInBackground,
 }: {
   emailCodes: EmailCodes | null;
   securityAlerts: SecurityAlerts | null;
+  rateLimits: PasswordAttemptLimits;
   runInBackground?: (task: Promise<unknown>) => void;
 }) =>
   betterAuth({
@@ -47,10 +56,15 @@ export const createAuth = ({
       "/unlink-account",
       "/update-session",
       "/verify-password",
+      "/expo-authorization-proxy",
+      "/error",
+      "/ok",
     ],
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
-        if (ctx.path === "/reset-password/:token") throw new APIError("NOT_FOUND");
+        if (ctx.path === "/reset-password/:token" || ctx.path === "/callback/:id") {
+          throw new APIError("NOT_FOUND");
+        }
         if (ctx.path === "/change-password") {
           const session = await getAuthoritativeSessionFromCtx(ctx);
           const linked =
@@ -62,6 +76,11 @@ export const createAuth = ({
           if (session && (!linked?.device?.activatedAt || linked.device.revokedAt)) {
             throw new APIError("FORBIDDEN", { message: "Finish setting up this phone first." });
           }
+          if (session) await reservePasswordAttempt(rateLimits, session.user.email);
+        }
+        const signInEmail: unknown = ctx.body?.email;
+        if (ctx.path === "/sign-in/email" && typeof signInEmail === "string") {
+          await reservePasswordAttempt(rateLimits, signInEmail);
         }
         if (ctx.path === "/sign-up/email" && emailCodes) {
           const { email, signUpToken } = ctx.body ?? {};
@@ -77,12 +96,22 @@ export const createAuth = ({
         }
       }),
       after: createAuthMiddleware(async (ctx) => {
+        const passwordEmail: unknown =
+          ctx.path === "/sign-in/email"
+            ? ctx.body?.email
+            : ctx.path === "/change-password"
+              ? ctx.context.session?.user.email
+              : undefined;
+        if (typeof passwordEmail === "string") {
+          await settlePasswordAttempt(rateLimits, passwordEmail, ctx.context.returned);
+        }
         const userId = ctx.context.session?.user.id;
         if (ctx.path === "/change-password" && userId && !isAPIError(ctx.context.returned)) {
           securityAlerts?.send(userId, { type: "password-changed" });
         }
       }),
     },
+    rateLimit: { enabled: false },
     advanced: {
       ipAddress: { ipAddressHeaders: [clientIpHeader] },
       ...(runInBackground ? { backgroundTasks: { handler: runInBackground } } : {}),
@@ -180,6 +209,7 @@ export const createAuth = ({
         },
       },
     },
+    account: { accountLinking: { enabled: false } },
     session: { freshAge: 30 * 60 },
     verification: {
       storeIdentifier: { default: "plain", overrides: { "reset-password:": "hashed" } },
@@ -188,7 +218,7 @@ export const createAuth = ({
       provider: "postgresql",
     }),
     secret: env.BETTER_AUTH_SECRET,
-    baseURL: env.BETTER_AUTH_URL,
+    baseURL: `${getPublicUrl(env.BETTER_AUTH_URL).baseUrl}/api/auth`,
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: emailCodes !== null,
@@ -204,6 +234,12 @@ export const createAuth = ({
               clientId: env.GOOGLE_CLIENT_ID,
               clientSecret: env.GOOGLE_CLIENT_SECRET,
               scope: ["email", "profile"],
+              verifyIdToken: async (token, nonce) =>
+                (await verifyGoogleIdToken({
+                  token,
+                  audience: env.GOOGLE_CLIENT_ID ?? "",
+                  nonce,
+                })) !== null,
             },
           }
         : undefined,

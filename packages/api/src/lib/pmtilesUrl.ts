@@ -1,4 +1,5 @@
 import type { OpenBeaconCache } from "@openbeacon/cache";
+import { errorCode, tryCatch } from "@openbeacon/shared";
 import { createSignedPmtilesUrl, resolvePmtilesArchive } from "../r2.ts";
 
 type ArchiveDependencies = {
@@ -57,12 +58,15 @@ const createAndCacheSignedPmtilesUrlForUser = async ({
   const signer = createSignedPmtilesUrlOverride ?? createSignedPmtilesUrl;
   const signedPmtilesUrl = await signer(archive.key);
 
-  await cache.pmtilesSignedUrls.set({
-    archiveId: archive.id,
-    expiresAt: signedPmtilesUrl.expiresAt,
-    url: signedPmtilesUrl.url,
-    userId,
-  });
+  const cached = await tryCatch(
+    cache.pmtilesSignedUrls.set({
+      archiveId: archive.id,
+      expiresAt: signedPmtilesUrl.expiresAt,
+      url: signedPmtilesUrl.url,
+      userId,
+    }),
+  );
+  if (cached.error) logCacheBypass(cached.error);
 
   return {
     ...buildPmtilesUrlPayload({ ...signedPmtilesUrl, archive }),
@@ -87,10 +91,14 @@ export const getSignedPmtilesUrlForUser = async ({
   const archive = await (resolvePmtilesArchiveOverride ?? resolvePmtilesArchive)(
     requestedArchiveId,
   );
-  const cachedSignedPmtilesUrl = await cache.pmtilesSignedUrls.get({
-    archiveId: archive.id,
-    userId,
-  });
+  const cachedResult = await tryCatch(
+    cache.pmtilesSignedUrls.get({
+      archiveId: archive.id,
+      userId,
+    }),
+  );
+  if (cachedResult.error) logCacheBypass(cachedResult.error);
+  const cachedSignedPmtilesUrl = cachedResult.data;
 
   if (
     cachedSignedPmtilesUrl &&
@@ -128,3 +136,10 @@ export const forceRefreshSignedPmtilesUrlForUser = async ({
     source: "forced",
     userId,
   });
+
+const logCacheBypass = (error: Error) => {
+  const code = errorCode(error);
+  console.error(
+    `[pmtiles] Redis is unavailable${code ? ` (${code})` : ""}, so the URL cache is bypassed`,
+  );
+};

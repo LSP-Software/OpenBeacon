@@ -12,7 +12,6 @@
     "test": "bun test --isolate"
   },
   "dependencies": {
-    "@better-auth/expo": "^1.7.14",
     "@openbeacon/api": "workspace:*",
     "@openbeacon/auth": "workspace:*",
     "@openbeacon/cache": "workspace:*",
@@ -20,11 +19,9 @@
     "@openbeacon/email": "workspace:*",
     "@openbeacon/schemas": "workspace:*",
     "@openbeacon/shared": "workspace:*",
-    "@prisma/adapter-pg": "^7.10.1",
     "@t3-oss/env-core": "^0.13.10",
     "@trpc/server": "^11.12.0",
-    "better-auth": "^1.7.14",
-    "hono": "^4.12.5",
+    "hono": "^4.13.18",
     "zod": "^4.3.6"
   },
   "devDependencies": {

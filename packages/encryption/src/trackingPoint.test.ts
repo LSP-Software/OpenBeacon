@@ -73,6 +73,29 @@ describe("validateTrackingPointV1", () => {
     );
   });
 
+  test("encoding refuses fields outside the v1 plaintext schema", () => {
+    expect(() =>
+      encodeTrackingPointV1({ ...validTrackingPoint, accuracy: 4 } as TrackingPointV1),
+    ).toThrow("Invalid tracking point.");
+    expect(() =>
+      encodeTrackingPointV1({
+        ...validTrackingPoint,
+        battery: { ...validTrackingPoint.battery, state: "full" },
+      } as TrackingPointV1),
+    ).toThrow("Invalid tracking point.");
+  });
+
+  test("encodes an unknown battery level as null", () => {
+    expect(
+      new TextDecoder().decode(
+        encodeTrackingPointV1({
+          ...validTrackingPoint,
+          battery: { level: null, charging: false },
+        }),
+      ),
+    ).toContain('"battery":{"level":null,"charging":false}');
+  });
+
   test("rejects coordinates outside WGS84 bounds and non-UTC timestamps", () => {
     for (const value of [
       { ...validTrackingPoint, latitude: -91 },
@@ -101,18 +124,41 @@ describe("validateTrackingPointV1", () => {
     ).toThrow("Invalid tracking point.");
   });
 
-  test("rejects fields outside the locked plaintext schema", () => {
-    expect(() => validateTrackingPointV1({ ...validTrackingPoint, accuracy: 4 })).toThrow(
-      "Invalid tracking point.",
-    );
-    expect(() =>
+  test("drops fields outside the v1 plaintext schema", () => {
+    const read = validateTrackingPointV1({
+      ...validTrackingPoint,
+      accuracy: 4,
+      battery: {
+        ...validTrackingPoint.battery,
+        state: "full",
+      },
+    });
+
+    expect(read).toEqual(validTrackingPoint);
+    expect(Object.keys(read)).toEqual(Object.keys(validTrackingPoint));
+    expect(Object.keys(read.battery)).toEqual(Object.keys(validTrackingPoint.battery));
+  });
+
+  test("returns a copy rather than the decoded object", () => {
+    const decoded = structuredClone(validTrackingPoint);
+    const read = validateTrackingPointV1(decoded);
+
+    expect(read).not.toBe(decoded);
+    expect(read.battery).not.toBe(decoded.battery);
+  });
+
+  test("accepts an unknown battery level as null", () => {
+    expect(
       validateTrackingPointV1({
         ...validTrackingPoint,
-        battery: {
-          ...validTrackingPoint.battery,
-          state: "full",
-        },
-      }),
-    ).toThrow("Invalid tracking point.");
+        battery: { level: null, charging: true },
+      }).battery,
+    ).toEqual({ level: null, charging: true });
+  });
+
+  test("still rejects other versions", () => {
+    expect(() => validateTrackingPointV1({ ...validTrackingPoint, v: 2 })).toThrow(
+      "Invalid tracking point.",
+    );
   });
 });

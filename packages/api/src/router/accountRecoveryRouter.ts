@@ -17,6 +17,7 @@ import {
 } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 import { activateDevice, devicePendingError, lockThisDevice } from "../lib/deviceActivation.ts";
+import { ReasonError } from "../lib/reasonError.ts";
 
 const emailCodeProcedure = setupProcedure.use(requireFreshSession).use(({ ctx, next }) => {
   if (!ctx.emailCodes) {
@@ -48,7 +49,11 @@ const createHistoryKey = async (
     result.error instanceof Prisma.PrismaClientKnownRequestError &&
     result.error.code === "P2002"
   ) {
-    throw new TRPCError({ code: "CONFLICT", message: "That history key ID is already in use." });
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "That history key ID is already in use.",
+      cause: new ReasonError("RECOVERY_CHANGED"),
+    });
   }
   if (result.error) throw result.error;
 };
@@ -72,6 +77,7 @@ const replaceEscrows = async (
     throw new TRPCError({
       code: "CONFLICT",
       message: "Escrows must cover exactly the existing history key versions.",
+      cause: new ReasonError("RECOVERY_CHANGED"),
     });
   }
   for (const escrow of escrows) {
@@ -149,6 +155,7 @@ export const accountRecoveryRouter = createTRPCRouter({
           throw new TRPCError({
             code: "CONFLICT",
             message: "A recovery phrase is already set up.",
+            cause: new ReasonError("RECOVERY_CHANGED"),
           });
         }
         await replaceEscrows(tx, userId, input.escrows);
@@ -168,7 +175,11 @@ export const accountRecoveryRouter = createTRPCRouter({
         });
         if (!thisDevice.active) throw devicePendingError();
         if (!(await tx.recoveryKey.findUnique({ where: { userId } }))) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "No recovery phrase is set up." });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "No recovery phrase is set up.",
+            cause: new ReasonError("RECOVERY_CHANGED"),
+          });
         }
         await replaceEscrows(tx, userId, input.escrows);
         await tx.recoveryKey.update({ data: input.recoveryKey, where: { userId } });
@@ -181,16 +192,17 @@ export const accountRecoveryRouter = createTRPCRouter({
       select: { email: true, id: true },
       where: { id: ctx.session.user.id },
     });
-    if (
-      !(await ctx.emailCodes.allowRequest({
-        purpose: "recovery-reset",
-        email: user.email,
-        ip: ctx.clientIp ?? null,
-      }))
-    ) {
+    const allowed = await ctx.emailCodes.allowRequest({
+      purpose: "recovery-reset",
+      email: user.email,
+    });
+    if (allowed !== "allowed") {
       throw new TRPCError({
         code: "TOO_MANY_REQUESTS",
-        message: "Too many requests. Please try again later.",
+        message:
+          allowed === "unavailable"
+            ? "Codes can't be sent right now. Try again in a minute."
+            : "Too many requests. Please try again later.",
       });
     }
     await ctx.emailCodes.send({
@@ -209,7 +221,11 @@ export const accountRecoveryRouter = createTRPCRouter({
       subject: userId,
     });
     if (!result.valid) {
-      throw new TRPCError({ code: "BAD_REQUEST", message: "The code is wrong or has expired." });
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "The code is wrong or has expired.",
+        cause: new ReasonError("INVALID_CODE"),
+      });
     }
     return {
       resetToken: await ctx.emailCodes.issueToken({ purpose: "recovery-reset", value: userId }),
@@ -226,6 +242,7 @@ export const accountRecoveryRouter = createTRPCRouter({
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
           message: "Confirm the code we emailed you.",
+          cause: new ReasonError("EMAIL_CONFIRMATION_REQUIRED"),
         });
       }
       await ctx.db.$transaction(async (tx) => {
@@ -243,6 +260,7 @@ export const accountRecoveryRouter = createTRPCRouter({
           throw new TRPCError({
             code: "CONFLICT",
             message: "The history key version has changed. Fetch the status and try again.",
+            cause: new ReasonError("RECOVERY_CHANGED"),
           });
         }
         if (
@@ -258,6 +276,7 @@ export const accountRecoveryRouter = createTRPCRouter({
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
             message: "Your email confirmation has expired. Confirm a new code.",
+            cause: new ReasonError("EMAIL_CONFIRMATION_REQUIRED"),
           });
         }
         if (

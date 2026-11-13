@@ -1,9 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
+const BatteryIcon = () => null;
 const BatteryChargingIcon = () => null;
 const BatteryFullIcon = () => null;
 const BatteryLowIcon = () => null;
 const BatteryMediumIcon = () => null;
 mock.module("lucide-react-native", () => ({
+  BatteryIcon,
   BatteryChargingIcon,
   BatteryFullIcon,
   BatteryLowIcon,
@@ -30,5 +32,19 @@ describe("battery visual", () => {
     expect(getBatteryVisual({ batteryLevel: 20, charging: true }).colorClass).toBe(
       "text-foreground",
     );
+  });
+  test("labels a known level as a percentage", () => {
+    expect(getBatteryVisual({ batteryLevel: 72, charging: false }).label).toBe("72%");
+    expect(getBatteryVisual({ batteryLevel: 0, charging: true }).label).toBe("0%");
+  });
+  test("hides the percentage when the level is unknown", () => {
+    const unknown = getBatteryVisual({ batteryLevel: null, charging: false });
+    expect(unknown.icon as unknown).toBe(BatteryIcon);
+    expect(unknown.colorClass).toBe("text-foreground");
+    expect(unknown.label).toBeNull();
+
+    const charging = getBatteryVisual({ batteryLevel: null, charging: true });
+    expect(charging.icon as unknown).toBe(BatteryChargingIcon);
+    expect(charging.label).toBeNull();
   });
 });

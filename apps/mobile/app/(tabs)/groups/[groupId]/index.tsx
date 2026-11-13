@@ -45,6 +45,10 @@ const GROUP_TABS: readonly SwipeTabsItem<GroupTabValue>[] = [
 
 const GroupScreen = () => {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  return <GroupBody key={groupId} groupId={groupId} />;
+};
+
+const GroupBody = ({ groupId }: { groupId: string }) => {
   const router = useRouter();
   const queryClient = useQueryClient();
   const isFocused = useIsFocused();

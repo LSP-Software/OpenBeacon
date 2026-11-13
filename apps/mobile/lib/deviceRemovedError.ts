@@ -1,5 +1,4 @@
 import { deviceRemovedCause } from "@openbeacon/shared";
-import { TRPCClientError } from "@trpc/client";
+import { errorReason } from "./errorReason.ts";
 
-export const isDeviceRemovedError = (error: unknown) =>
-  error instanceof TRPCClientError && error.data?.cause === deviceRemovedCause;
+export const isDeviceRemovedError = (error: unknown) => errorReason(error) === deviceRemovedCause;

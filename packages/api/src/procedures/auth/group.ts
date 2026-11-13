@@ -1,6 +1,7 @@
 import { GroupRole } from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
 import z from "zod";
+import { ReasonError } from "../../lib/reasonError.ts";
 import { protectedProcedure } from "./runtime.ts";
 
 export const groupMemberProcedure = protectedProcedure
@@ -10,7 +11,22 @@ export const groupMemberProcedure = protectedProcedure
       where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
     });
     if (!groupMember) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "You are not a member of this group" });
+      const group = await ctx.db.group.findUnique({
+        where: { id: input.groupId },
+        select: { id: true },
+      });
+      if (!group) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "This group no longer exists.",
+          cause: new ReasonError("GROUP_GONE"),
+        });
+      }
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "You are not a member of this group",
+        cause: new ReasonError("NOT_GROUP_MEMBER"),
+      });
     }
 
     return next({

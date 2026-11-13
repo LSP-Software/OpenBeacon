@@ -14,6 +14,7 @@ let sessionState: { data: { user: { id: string } } | null; isPending: boolean } 
   isPending: true,
 };
 const notify = mock((_signal: string) => {});
+const settledUsers: Array<string | null> = [];
 
 mock.module("../lib/storage.ts", () => ({
   storage: {
@@ -27,6 +28,12 @@ mock.module("../lib/storage.ts", () => ({
 }));
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => sessionState, $store: { notify } },
+}));
+
+mock.module("../lib/endSession.ts", () => ({
+  settleLostSessions: async ({ userId }: { userId: string | null }) => {
+    settledUsers.push(userId);
+  },
 }));
 
 const { SessionDataCleanup } = await import("./SessionDataCleanup.tsx");
@@ -80,6 +87,7 @@ beforeEach(() => {
   sessionState = { data: null, isPending: true };
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   notify.mockClear();
+  settledUsers.length = 0;
 });
 
 afterEach(async () => {
@@ -176,4 +184,16 @@ test("ignores other errors and rejections after sign-out", async () => {
   });
 
   expect(notify).not.toHaveBeenCalled();
+});
+
+test("settles sessions lost earlier whenever the signed-in account is known", async () => {
+  await render();
+  expect(settledUsers).toEqual([]);
+
+  signOut();
+  await render();
+  signIn("user-2");
+  await render();
+
+  expect(settledUsers).toEqual([null, "user-2"]);
 });

@@ -229,7 +229,9 @@ const DevicesScreen = () => {
                                   : lastLocation === "now"
                                     ? "Location updated now"
                                     : `Location updated ${lastLocation} ago`,
-                                position ? `Battery ${position.battery.level}%` : null,
+                                position && position.battery.level !== null
+                                  ? `Battery ${position.battery.level}%`
+                                  : null,
                               ]
                                 .filter(Boolean)
                                 .join(" · ")}

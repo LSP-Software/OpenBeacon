@@ -13,6 +13,7 @@ import { Text } from "../../components/ui/Text.tsx";
 import { useIdentityGate } from "../../hooks/useIdentityGate.ts";
 import { Alert } from "../../lib/alert.ts";
 import { trpc } from "../../lib/api.ts";
+import { needsFreshSignIn } from "../../lib/needsFreshSignIn.ts";
 
 const SignOutOtherSessionsScreen = () => {
   const [step, setStep] = useState<"verify" | "ready" | "signingOut">("verify");
@@ -33,7 +34,7 @@ const SignOutOtherSessionsScreen = () => {
   const signOut = async () => {
     setStep("signingOut");
     const result = await tryCatch(signOutOthers.mutateAsync());
-    if (result.error instanceof TRPCClientError && result.error.data?.code === "FORBIDDEN") {
+    if (needsFreshSignIn(result.error)) {
       await gate.recheck();
       setStep("verify");
       Alert.alert("Sign in again", "Nothing was signed out. Confirm it’s you, then try again.");

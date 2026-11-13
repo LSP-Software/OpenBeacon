@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { deviceUnverifiedError } from "../../lib/deviceUnverified.ts";
 import { t } from "../../trpcRuntime.ts";
 import { createAuthProcedures } from "./base.ts";
+import { ReasonError } from "../../lib/reasonError.ts";
 
 export const { protectedProcedure, publicProcedure, setupProcedure } = createAuthProcedures({ t });
 
@@ -16,7 +17,11 @@ export const sessionFreshForMs = async (sessionCreatedAt: Date): Promise<number 
 export const requireFreshSession = t.middleware(async ({ ctx, next }) => {
   if (!ctx.session) throw new TRPCError({ code: "UNAUTHORIZED" });
   if ((await sessionFreshForMs(ctx.session.session.createdAt)) === 0) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Sign in again to continue." });
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Sign in again to continue.",
+      cause: new ReasonError("FRESH_SIGN_IN_REQUIRED"),
+    });
   }
   return next();
 });

@@ -68,8 +68,8 @@ let failingReadVersion: number | null;
 let failNextStore: boolean;
 const serverInputs: unknown[] = [];
 
-const trpcError = (code: string, jsonRpcCode: number) =>
-  TRPCClientError.from({ error: { code: jsonRpcCode, data: { code }, message: code } });
+const trpcError = (code: string, jsonRpcCode: number, reason: string | null = null) =>
+  TRPCClientError.from({ error: { code: jsonRpcCode, data: { code, reason }, message: code } });
 
 const currentHistoryKey = () => historyKeys.at(-1) ?? null;
 
@@ -111,7 +111,7 @@ const setupMock = mock(async (input: unknown) => {
   const parsed = setupAccountRecoverySchema.parse(input);
   const escrowVersions = parsed.escrows.map(({ version }) => version).sort((a, b) => a - b);
   if (recoveryKey || escrowVersions.join() !== historyKeys.map(({ version }) => version).join()) {
-    throw trpcError("CONFLICT", -32009);
+    throw trpcError("CONFLICT", -32009, "RECOVERY_CHANGED");
   }
   recoveryKey = parsed.recoveryKey;
   for (const { version, ...escrow } of parsed.escrows) {
@@ -123,13 +123,13 @@ const setupMock = mock(async (input: unknown) => {
 
 const changePhraseMock = mock(async (input: unknown) => {
   serverInputs.push(input);
-  if (!sessionFresh) throw trpcError("FORBIDDEN", -32003);
+  if (!sessionFresh) throw trpcError("FORBIDDEN", -32003, "FRESH_SIGN_IN_REQUIRED");
   const parsed = changeRecoveryPhraseSchema.parse(input);
   beforeRecoveryWrite?.();
-  if (!recoveryKey) throw trpcError("NOT_FOUND", -32004);
+  if (!recoveryKey) throw trpcError("NOT_FOUND", -32004, "RECOVERY_CHANGED");
   const escrowVersions = parsed.escrows.map(({ version }) => version).sort((a, b) => a - b);
   if (escrowVersions.join() !== historyKeys.map(({ version }) => version).join()) {
-    throw trpcError("CONFLICT", -32009);
+    throw trpcError("CONFLICT", -32009, "RECOVERY_CHANGED");
   }
   recoveryKey = parsed.recoveryKey;
   for (const { version, ...escrow } of parsed.escrows) {
@@ -141,11 +141,11 @@ const changePhraseMock = mock(async (input: unknown) => {
 
 const resetMock = mock(async (input: unknown) => {
   serverInputs.push(input);
-  if (!sessionFresh) throw trpcError("FORBIDDEN", -32003);
+  if (!sessionFresh) throw trpcError("FORBIDDEN", -32003, "FRESH_SIGN_IN_REQUIRED");
   const parsed = resetAccountRecoverySchema.parse(input);
   beforeRecoveryWrite?.();
   if (parsed.historyKey.version !== (currentHistoryKey()?.version ?? 0) + 1) {
-    throw trpcError("CONFLICT", -32009);
+    throw trpcError("CONFLICT", -32009, "RECOVERY_CHANGED");
   }
   for (const epoch of epochs) {
     for (const { id } of historyKeys) epoch.historyWraps.delete(id);

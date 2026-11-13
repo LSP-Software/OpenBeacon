@@ -22,6 +22,7 @@ import { KEY_NOT_SAVED_MESSAGE } from "../../lib/createHistoryKey.ts";
 import { isThisDeviceActive } from "../../lib/deviceActivation.ts";
 import { ensureDeviceKeyRegistration } from "../../lib/deviceKeys.ts";
 import { finishDeviceLink, HANDOVER_REJECTED_MESSAGE } from "../../lib/deviceLink.ts";
+import { errorReason } from "../../lib/errorReason.ts";
 import { openAppAfterSetup } from "../../lib/pendingJoinCode.ts";
 import { resealPersonalData } from "../../lib/resealPersonalData.ts";
 import {
@@ -82,14 +83,11 @@ const LinkWithOtherPhoneScreen = () => {
     const created = await tryCatch(
       Promise.all([ensureDeviceKeyRegistration(), createLink.mutateAsync()]),
     );
-    if (created.error instanceof TRPCClientError && created.error.data?.code === "CONFLICT") {
+    if (errorReason(created.error) === "ALREADY_SET_UP") {
       setProblem({ message: `This ${noun} is already set up.`, action: "home" });
       return;
     }
-    if (
-      created.error instanceof TRPCClientError &&
-      created.error.data?.code === "PRECONDITION_FAILED"
-    ) {
+    if (created.error && errorReason(created.error) === "NO_APPROVING_DEVICE") {
       setProblem({ message: created.error.message, action: "setup" });
       return;
     }
@@ -215,7 +213,7 @@ const LinkWithOtherPhoneScreen = () => {
   useEffect(() => {
     if (!link || handover || forgottenLinkId.current === link.linkId) return;
     const state = status.data?.state;
-    const gone = status.error instanceof TRPCClientError && status.error.data?.code === "NOT_FOUND";
+    const gone = errorReason(status.error) === "CODE_EXPIRED";
     if (!gone && state !== "expired" && !(link.active && state === "waiting")) return;
     forgottenLinkId.current = link.linkId;
     void (async () => {
@@ -229,9 +227,7 @@ const LinkWithOtherPhoneScreen = () => {
   }, [link, handover, status.data, status.error]);
 
   const expired = status.data?.state === "expired" && link?.active !== true;
-  const unreachable =
-    status.isError &&
-    !(status.error instanceof TRPCClientError && status.error.data?.code === "NOT_FOUND");
+  const unreachable = status.isError && errorReason(status.error) !== "CODE_EXPIRED";
 
   return (
     <View className="flex-1 bg-background">

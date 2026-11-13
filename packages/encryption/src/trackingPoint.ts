@@ -7,7 +7,7 @@ export type TrackingPointV1 = {
   timestamp: string;
   speed: number | null;
   battery: {
-    level: number;
+    level: number | null;
     charging: boolean;
   };
 };
@@ -55,7 +55,6 @@ export const validateTrackingPointV1 = (value: unknown): TrackingPointV1 => {
   if (
     typeof value !== "object" ||
     value === null ||
-    Object.keys(value).length !== 6 ||
     !("v" in value) ||
     value.v !== 1 ||
     !("latitude" in value) ||
@@ -77,20 +76,37 @@ export const validateTrackingPointV1 = (value: unknown): TrackingPointV1 => {
     !("battery" in value) ||
     typeof value.battery !== "object" ||
     value.battery === null ||
-    Object.keys(value.battery).length !== 2 ||
     !("level" in value.battery) ||
-    typeof value.battery.level !== "number" ||
-    !Number.isInteger(value.battery.level) ||
-    value.battery.level < 0 ||
-    value.battery.level > 100 ||
+    (value.battery.level !== null &&
+      (typeof value.battery.level !== "number" ||
+        !Number.isInteger(value.battery.level) ||
+        value.battery.level < 0 ||
+        value.battery.level > 100)) ||
     !("charging" in value.battery) ||
     typeof value.battery.charging !== "boolean"
   ) {
     throw new Error("Invalid tracking point.");
   }
 
-  return value as TrackingPointV1;
+  return {
+    v: 1,
+    latitude: value.latitude,
+    longitude: value.longitude,
+    timestamp: value.timestamp,
+    speed: value.speed,
+    battery: { level: value.battery.level, charging: value.battery.charging },
+  };
 };
 
-export const encodeTrackingPointV1 = (trackingPoint: TrackingPointV1) =>
-  textEncoder.encode(JSON.stringify(validateTrackingPointV1(trackingPoint)));
+export const encodeTrackingPointV1 = (trackingPoint: TrackingPointV1) => {
+  if (
+    Object.keys(trackingPoint).length !== 6 ||
+    typeof trackingPoint.battery !== "object" ||
+    trackingPoint.battery === null ||
+    Object.keys(trackingPoint.battery).length !== 2
+  ) {
+    throw new Error("Invalid tracking point.");
+  }
+
+  return textEncoder.encode(JSON.stringify(validateTrackingPointV1(trackingPoint)));
+};

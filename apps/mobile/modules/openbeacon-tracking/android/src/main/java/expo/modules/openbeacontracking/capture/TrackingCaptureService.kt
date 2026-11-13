@@ -34,11 +34,8 @@ import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.R
 import expo.modules.openbeacontracking.TrackingRuntime
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
-import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -405,9 +402,9 @@ class TrackingCaptureService : Service() {
       val queuedCount = capturePipeline.onFix(
         latitude = location.latitude,
         longitude = location.longitude,
-        timestampIso = formatTimestamp(location.time),
+        timestampMillis = location.time,
         speedMetersPerSecond = speed,
-        batteryLevel = battery.level,
+        batteryLevel = battery.level.takeIf { battery.levelKnown },
         batteryCharging = battery.charging,
         captureGeneration = generation,
         fixId = location.elapsedRealtimeNanos.takeIf { it > 0 },
@@ -460,12 +457,6 @@ class TrackingCaptureService : Service() {
     val results = FloatArray(1)
     Location.distanceBetween(fromLatitude, fromLongitude, toLatitude, toLongitude, results)
     return results[0].toDouble()
-  }
-
-  private fun formatTimestamp(epochMillis: Long): String {
-    val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-    formatter.timeZone = TimeZone.getTimeZone("UTC")
-    return formatter.format(Date(epochMillis))
   }
 
   private fun ensureNotificationChannel() {

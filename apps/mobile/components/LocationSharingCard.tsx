@@ -15,6 +15,7 @@ import {
   changeLocationSharing,
   getPendingSharingChanges,
   hasLocallyPausedSharing,
+  hasRejectedSharingChange,
   serverNow,
   toDeviceClock,
 } from "../lib/locationSharing.ts";
@@ -50,6 +51,9 @@ export const LocationSharingCard = ({
   const pendingDevice = thisDevice ? (pending?.device ?? null) : null;
   const pendingAccount = thisDevice ? (pending?.account ?? null) : null;
   const pendingHere = Boolean(pendingAccount || pendingDevice);
+  const rejectedHere = Boolean(
+    session?.user.id && thisDevice && !pendingHere && hasRejectedSharingChange(session.user.id),
+  );
   const stoppedLocally = Boolean(
     session?.user.id && thisDevice && pendingHere && hasLocallyPausedSharing(session.user.id),
   );
@@ -130,6 +134,11 @@ export const LocationSharingCard = ({
       );
       return;
     }
+    if (result.data === "rejected") {
+      setOpen(false);
+      setMessage(null);
+      return;
+    }
     if (!result.error) {
       setOpen(false);
       setMessage(null);
@@ -179,6 +188,12 @@ export const LocationSharingCard = ({
         ) : pendingHere && thisDevice && !update.isPending ? (
           <Text className="text-sm text-muted-foreground">
             Sharing resumed on this phone. We’ll update your groups when you’re back online.
+          </Text>
+        ) : null}
+        {rejectedHere && !update.isPending ? (
+          <Text className="text-sm text-muted-foreground">
+            Your last change to location sharing couldn’t be applied, so this shows the current
+            setting. Try again if you still want to change it.
           </Text>
         ) : null}
         {!thisDevice && pending?.account ? (

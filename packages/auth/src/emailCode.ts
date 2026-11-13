@@ -29,7 +29,6 @@ export const emailCodeTokens = {
 >;
 export const emailCodeRequestLimits = {
   perAddress: { limit: 3, windowMs: 15 * 60 * 1000 },
-  perIp: { limit: 20, windowMs: 60 * 60 * 1000 },
 };
 export const emailCodeWrongGuessLimit = { limit: 10, windowMs: 24 * 60 * 60 * 1000 };
 
@@ -44,7 +43,6 @@ export const createEmailCodes = ({
   db,
   secret,
   rateLimits,
-  limitRequestsPerIp,
   sendCodeEmail,
   sendAccountExistsEmail,
   sendGoogleSignInEmail,
@@ -53,7 +51,6 @@ export const createEmailCodes = ({
   db: PrismaClient;
   secret: string;
   rateLimits: Pick<OpenBeaconCache["rateLimits"], "consume" | "peek">;
-  limitRequestsPerIp: boolean;
   sendCodeEmail: (email: Parameters<typeof sendCode>[0]) => Promise<unknown>;
   sendAccountExistsEmail: (email: Parameters<typeof sendAccountExists>[0]) => Promise<unknown>;
   sendGoogleSignInEmail: (email: Parameters<typeof sendGoogleSignIn>[0]) => Promise<unknown>;
@@ -75,29 +72,26 @@ export const createEmailCodes = ({
     allowRequest: async ({
       purpose,
       email,
-      ip,
     }: {
       purpose: EmailCodePurpose;
       email: string;
-      ip: string | null;
-    }) => {
-      if (limitRequestsPerIp) {
-        const ipResult = await rateLimits.consume({
-          namespace: "emailCode.request",
-          identifier: { type: "ip", value: ip ?? "unknown" },
-          ...emailCodeRequestLimits.perIp,
-        });
-        if (!ipResult.allowed) return false;
-      }
-      const addressResult = await rateLimits.consume({
-        namespace: `emailCode.request.${purpose}`,
-        identifier: {
-          type: "email",
-          value: normalizeEmail(email),
+    }): Promise<"allowed" | "limited" | "unavailable"> => {
+      const addressResult = await rateLimits.consume(
+        {
+          namespace: `emailCode.request.${purpose}`,
+          identifier: {
+            type: "email",
+            value: normalizeEmail(email),
+          },
+          ...emailCodeRequestLimits.perAddress,
         },
-        ...emailCodeRequestLimits.perAddress,
-      });
-      return addressResult.allowed;
+        { whenUnavailable: "deny" },
+      );
+      return addressResult.unavailable
+        ? "unavailable"
+        : addressResult.allowed
+          ? "allowed"
+          : "limited";
     },
 
     send: async ({

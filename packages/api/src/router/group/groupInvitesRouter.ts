@@ -11,6 +11,7 @@ import {
 } from "../../lib/groupEpochs.ts";
 import { emailInviteCreatedAfter } from "../../lib/emailInvites.ts";
 import { createGroupJoinAlerts } from "../../lib/groupJoinAlerts.ts";
+import { assertAccountBelowGroupLimit } from "../../lib/groupLimit.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
@@ -92,7 +93,7 @@ export const groupInvitesRouter = {
     }),
   sharedAcceptanceContext: protectedProcedure
     .meta({
-      rateLimit: { limit: 40, ipLimit: 160, namespace: "groupInvites.redeem", windowMs: 60_000 },
+      rateLimit: { limit: 40, namespace: "groupInvites.redeem", windowMs: 60_000 },
     })
     .input(z.object({ code: z.string().regex(/^[A-Fa-f0-9]{32}$/) }))
     .mutation(async ({ ctx, input }) => {
@@ -114,7 +115,7 @@ export const groupInvitesRouter = {
     }),
   acceptShared: protectedProcedure
     .meta({
-      rateLimit: { limit: 40, ipLimit: 160, namespace: "groupInvites.redeem", windowMs: 60_000 },
+      rateLimit: { limit: 40, namespace: "groupInvites.redeem", windowMs: 60_000 },
     })
     .input(
       z.object({ code: z.string().regex(/^[A-Fa-f0-9]{32}$/), nextEpoch: groupEpochBundleSchema }),
@@ -140,6 +141,7 @@ export const groupInvitesRouter = {
         });
         if (existing)
           throw new TRPCError({ code: "CONFLICT", message: "You are already a group member" });
+        await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
         await tx.groupMember.create({
           data: {
             groupId: invite.groupId,
@@ -223,6 +225,7 @@ export const groupInvitesRouter = {
         if (existing) {
           throw new TRPCError({ code: "CONFLICT", message: "You are already a group member" });
         }
+        await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
 
         const createdMember = await tx.groupMember.create({
           data: {
@@ -350,13 +353,16 @@ export const groupInvitesRouter = {
     })
     .input(inviteMemberToGroupSchema)
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.cache.rateLimits.consume({
-        namespace: "groupInvites.send.recipients",
-        identifier: { type: "userId", value: ctx.session.user.id },
-        limit: 96,
-        windowMs: 60_000,
-        cost: input.invites.length,
-      });
+      const result = await ctx.cache.rateLimits.consume(
+        {
+          namespace: "groupInvites.send.recipients",
+          identifier: { type: "userId", value: ctx.session.user.id },
+          limit: 96,
+          windowMs: 60_000,
+          cost: input.invites.length,
+        },
+        { whenUnavailable: "allow" },
+      );
       if (!result.allowed) {
         logRateLimit({ path: "groupInvites.send.recipients", scope: "userId" });
         throw new TRPCError({ code: "TOO_MANY_REQUESTS" });
