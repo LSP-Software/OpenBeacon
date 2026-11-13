@@ -10,6 +10,8 @@ import { createReactNativeTestModule } from "./reactNativeTestModule.ts";
 let queryResult: { data: unknown; isPending: boolean };
 let isFocused = true;
 let sessionUserId = "user-1";
+let routeGroupId = "group-1";
+let selectedTab: { value: string; onValueChange: (value: string) => void } | null = null;
 const storedValues = new Map<string, number>();
 let groups: { id: string }[] = [];
 let keyAccess: {
@@ -35,7 +37,7 @@ mock.module("@tanstack/react-query", () => ({
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => isFocused }));
 mock.module("expo-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => children,
-  useLocalSearchParams: () => ({ groupId: "group-1" }),
+  useLocalSearchParams: () => ({ groupId: routeGroupId }),
   useRouter: () => router,
 }));
 mock.module("react-native", () => createReactNativeTestModule());
@@ -82,7 +84,12 @@ mock.module("../components/ui/Button.tsx", () => ({
   Button: ({ children, onPress }: { children: React.ReactNode; onPress: () => void }) =>
     React.createElement("pressable", { onPress }, children),
 }));
-mock.module("../components/ui/SwipeTabs.tsx", () => ({ SwipeTabs: () => null }));
+mock.module("../components/ui/SwipeTabs.tsx", () => ({
+  SwipeTabs: (props: { value: string; onValueChange: (value: string) => void }) => {
+    selectedTab = props;
+    return null;
+  },
+}));
 mock.module("../components/ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) => children,
 }));
@@ -92,8 +99,8 @@ mock.module("../app/(tabs)/groups/[groupId]/SettingsTab.tsx", () => ({ default: 
 
 const { default: GroupScreen } = await import("../app/(tabs)/groups/[groupId]/index.tsx");
 
-const family = (members: { role: string; userId: string }[]) => ({
-  id: "group-1",
+const family = (members: { role: string; userId: string }[], id = "group-1") => ({
+  id,
   image: null,
   members,
   name: "Family",
@@ -102,6 +109,8 @@ const family = (members: { role: string; userId: string }[]) => ({
 beforeEach(() => {
   isFocused = true;
   sessionUserId = "user-1";
+  routeGroupId = "group-1";
+  selectedTab = null;
   storedValues.clear();
   groups = [];
   fetchGroups = async () => groups;
@@ -299,4 +308,29 @@ test("tries the check again from not found once the connection is back", async (
   await act(async () => {
     root.unmount();
   });
+});
+
+test("opening another group starts from a fresh screen", async () => {
+  keyAccess = [
+    {
+      data: { current: "available", history: { partialFrom: new Date("2026-10-03T12:00:00Z") } },
+      isError: false,
+    },
+  ];
+  queryResult = { data: [family([]), family([], "group-2")], isPending: false };
+  const warning = "Some location history isn’t available on this phone";
+  const root = createRoot();
+  await act(async () => root.render(<GroupScreen />));
+  const [dismiss] = root.container.queryAll((item) => item.type === "pressable");
+  if (!dismiss) throw new Error("Dismiss button not found");
+  await act(async () => (dismiss.props as { onPress: () => void }).onPress());
+  await act(async () => selectedTab?.onValueChange("settings"));
+  expect(selectedTab?.value).toBe("settings");
+
+  routeGroupId = "group-2";
+  await act(async () => root.render(<GroupScreen />));
+
+  expect(JSON.stringify(root.container.toJSON())).toContain(warning);
+  expect(selectedTab?.value).toBe("members");
+  await act(async () => root.unmount());
 });
