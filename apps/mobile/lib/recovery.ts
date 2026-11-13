@@ -118,10 +118,11 @@ const sealEscrowsForHeldKeys = async ({
 
 export const setUpRecoveryPhrase = async (phrase: RecoveryPhrase) => {
   const device = await ensureDeviceKeyRegistration();
+  const owner = secretOwner(device.userId);
   const recoveryKey = deriveRecoveryKeyPair(phrase);
   let status = await trpcClient.accountRecovery.status.query();
   if (!status.recoveryKey && status.historyKeys.length === 0) {
-    await createHistoryKey(device.userId);
+    await createHistoryKey(device.userId, owner);
     status = await trpcClient.accountRecovery.status.query();
   }
   if (status.recoveryKey) {

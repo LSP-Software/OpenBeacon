@@ -54,7 +54,8 @@ export const createHistoryKey = (userId: string, owner = secretOwner(userId)) =>
 };
 
 export const createHistoryKeyIfMissing = async (userId: string) => {
+  const owner = secretOwner(userId);
   const { currentHistoryKey } = await trpcClient.accountRecovery.status.query();
   if (currentHistoryKey) return false;
-  return createHistoryKey(userId);
+  return createHistoryKey(userId, owner);
 };
