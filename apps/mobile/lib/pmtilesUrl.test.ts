@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { describeMapVersion, getPmtilesSource, hasPmtilesArchiveChanged } from "./pmtilesUrl.ts";
+import {
+  describeMapVersion,
+  getPmtilesSource,
+  hasPmtilesArchiveChanged,
+  shouldRetrySignedPmtilesUrl,
+} from "./pmtilesUrl.ts";
 
 describe("hasPmtilesArchiveChanged", () => {
   test("does not remount for the first archive or a refreshed url for the same archive", () => {
@@ -50,5 +55,17 @@ describe("describeMapVersion", () => {
     expect(
       describeMapVersion({ archiveId: "planet.pmtiles", mapBuild: null, mapSlot: null }),
     ).toEqual({ date: null, slot: null, summary: "planet.pmtiles" });
+  });
+});
+
+describe("shouldRetrySignedPmtilesUrl", () => {
+  test("gives up on an unreachable server so the map can offer a retry", () => {
+    expect(shouldRetrySignedPmtilesUrl(3, undefined)).toBe(true);
+    expect(shouldRetrySignedPmtilesUrl(4, undefined)).toBe(false);
+    expect(shouldRetrySignedPmtilesUrl(4, "INTERNAL_SERVER_ERROR")).toBe(false);
+  });
+  test("keeps waiting while the server prepares the map and never retries a signed-out session", () => {
+    expect(shouldRetrySignedPmtilesUrl(50, "SERVICE_UNAVAILABLE")).toBe(true);
+    expect(shouldRetrySignedPmtilesUrl(0, "UNAUTHORIZED")).toBe(false);
   });
 });
