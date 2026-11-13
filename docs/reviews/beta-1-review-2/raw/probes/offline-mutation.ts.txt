@@ -1,0 +1,11 @@
+import {QueryClient,MutationObserver,onlineManager} from '<repo>/node_modules/@tanstack/query-core/build/modern/index.js';
+const client = new QueryClient(); client.mount();
+onlineManager.setOnline(false);
+let localPauseCalls = 0;
+const observer = new MutationObserver(client,{mutationFn:async()=>{localPauseCalls++; return 'paused';}});
+const result=observer.mutate();
+await new Promise(r=>setTimeout(r,20));
+console.log(JSON.stringify({offline:true,localPauseCalls,status:observer.getCurrentResult().status,isPaused:observer.getCurrentResult().isPaused}));
+onlineManager.setOnline(true); await result;
+console.log(JSON.stringify({offline:false,localPauseCalls,status:observer.getCurrentResult().status}));
+client.unmount();

@@ -1,0 +1,1374 @@
+$ bun scripts/run-integration-tests.ts "--env-file=/tmp/openbeacon-beta2-review.env"
+bun test --isolate --env-file=/tmp/openbeacon-beta2-review.env apps/backend/src/routes/trpcFeedback.integration.test.ts apps/scheduled-jobs/src/jobs/expiredRecordsCleanup.integration.test.ts apps/scheduled-jobs/src/jobs/imageUploadCleanup.integration.test.ts apps/scheduled-jobs/src/jobs/locationHistoryCleanup.integration.test.ts apps/scheduled-jobs/src/jobs/pendingDeviceCleanup.integration.test.ts apps/scheduled-jobs/src/jobs/uploadGrowthReport.integration.test.ts packages/api/src/lib/account-deletion-cli.integration.test.ts packages/api/src/lib/account-deletion.integration.test.ts packages/api/src/router/accountDeletionRequest.integration.test.ts packages/api/src/router/accountRecovery.integration.test.ts packages/api/src/router/deviceActivation.integration.test.ts packages/api/src/router/deviceLink.integration.test.ts packages/api/src/router/devices.integration.test.ts packages/api/src/router/feedbackRouter.integration.test.ts packages/api/src/router/googleDeletion.integration.test.ts packages/api/src/router/group/groupDeparture.integration.test.ts packages/api/src/router/group/groupEmailInvites.integration.test.ts packages/api/src/router/group/groupEpochHistoryRecipients.integration.test.ts packages/api/src/router/group/groupEpochKeyWraps.integration.test.ts packages/api/src/router/group/groupHistoryWraps.integration.test.ts packages/api/src/router/group/groupLimit.integration.test.ts packages/api/src/router/group/groupRotation.integration.test.ts packages/api/src/router/group/groupSettings.integration.test.ts packages/api/src/router/group/groupSharedInvites.integration.test.ts packages/api/src/router/group/groupTracking.integration.test.ts packages/api/src/router/group/groupUploadConcurrency.integration.test.ts packages/api/src/router/group/personalData.integration.test.ts packages/api/src/router/locationSharing.integration.test.ts packages/api/src/router/pendingDevice.integration.test.ts packages/api/src/router/removeDevice.integration.test.ts packages/api/src/router/securityAlerts.integration.test.ts packages/api/src/router/sessionLink.integration.test.ts packages/api/src/router/signOutOtherSessions.integration.test.ts packages/auth/src/emailCode.integration.test.ts packages/auth/src/googleSignIn.integration.test.ts packages/auth/src/passwordAttempts.integration.test.ts packages/cache/src/cache/OpenBeaconCache.integration.test.ts packages/cache/src/cache/redisRestart.integration.test.ts packages/database/src/client.integration.test.ts
+bun test v1.4.4-canary.1 (11c367163)
+
+packages/auth/src/emailCode.integration.test.ts:
+(pass) email codes > a code works once and a reused code is rejected [72.08ms]
+(pass) email codes > a wrong code is rejected and the right one still works after it [16.96ms]
+(pass) email codes > an expired code is rejected and removed [9.86ms]
+(pass) email codes > a code is still accepted just before it expires [9.22ms]
+(pass) email codes > too many wrong attempts lock the code, even against the right code [29.76ms]
+(pass) email codes > parallel guesses can't get past the attempt limit [29.41ms]
+(pass) email codes > parallel submissions of the right code succeed only once [10.31ms]
+(pass) email codes > a code for one purpose can't be used for another [16.04ms]
+(pass) email codes > a new code replaces the previous one for the same purpose and address [23.47ms]
+(pass) email codes > a new code resets the attempt count [36.49ms]
+(pass) email codes > wrong guesses across several codes are capped [54.38ms]
+(pass) email codes > the cap refills one guess at a time across the day [56.28ms]
+(pass) email codes > right codes don't use up the wrong guess allowance [144.70ms]
+(pass) email codes > parallel guesses can't get past the cap [164.74ms]
+(pass) email codes > a wrong guess counts against the code and fails when the cap can't be recorded [11.63ms]
+(pass) email codes > the cap only applies to its own purpose and subject [118.00ms]
+(pass) email codes > parallel requests leave exactly one code [24.21ms]
+(pass) email codes > email subjects ignore case and surrounding spaces [7.40ms]
+(pass) email codes > a token for one purpose can't be checked or spent as another [21.06ms]
+(pass) email codes > codes are stored as a keyed hash, not the code or its plain SHA-256 [3.76ms]
+(pass) email code rate limits > an address can request 3 codes per 15 minutes, from any IP [130.84ms]
+(pass) email code rate limits > each purpose has its own allowance for an address [80.19ms]
+(pass) email code rate limits > one IP address can request codes for any number of addresses [22.25ms]
+(pass) email code rate limits > unknown and Google-only addresses are limited the same way as password accounts [87.03ms]
+(pass) password reset codes > a password account gets a code at its address [63.83ms]
+(pass) password reset codes > the response is the same for unknown, Google-only and password accounts [74.26ms]
+(pass) password reset codes > a Google-only account gets a Google sign-in email and no code [6.65ms]
+(pass) password reset codes > every request endpoint answers before any email is sent [196.18ms]
+(pass) password reset codes > password accounts and unknown addresses get no Google sign-in email [70.92ms]
+(pass) password reset codes > a failed send doesn't change the response [63.89ms]
+2026-11-13T11:23:50.170Z WARN [Better Auth]: Invalid password
+(pass) password reset codes > the right code gives a reset token that resets the password once [311.63ms]
+(pass) password reset codes > every failed code check gives the same error and no reset token [88.35ms]
+(pass) password reset codes > a capped check gives the same error as a wrong code [117.25ms]
+(pass) password reset codes > an expired code gives no reset token [66.90ms]
+(pass) password reset codes > reset tokens are stored as a hash and last 5 minutes [75.29ms]
+(pass) password reset codes > an expired reset token can't reset the password [130.51ms]
+2026-11-13T11:23:50.775Z WARN [Better Auth]: Password is too short
+(pass) password reset codes > a password that's too short doesn't use up the reset token [128.46ms]
+(pass) password reset codes > a reset can't add a password if the account loses its password login first [135.93ms]
+(pass) password reset codes > a reset token for a Google-only account can't add a password [58.40ms]
+(pass) password reset codes > a reset signs out every session [238.52ms]
+(pass) password reset codes > a correct reset code marks an unverified account verified, even without a reset [124.13ms]
+(pass) password reset codes > a wrong reset code leaves an unverified account unverified [64.96ms]
+(pass) email routes > code endpoints return 404 when email is off [55.95ms]
+(pass) email routes > better-auth routes that could send email are switched off [108.75ms]
+(pass) email routes > better-auth routes that list or sign out other sessions without a fresh sign-in are switched off [0.96ms]
+(pass) email routes > better-auth's update-user route is switched off so profile edits go through the device gate [0.23ms]
+(pass) sign-up verification > a verified address can sign up and the account starts verified [121.20ms]
+(pass) sign-up verification > sign-up without a token is rejected the same way for new and existing addresses [59.06ms]
+(pass) sign-up verification > a token for another address is rejected and stays usable for its own [69.25ms]
+(pass) sign-up verification > a token works once [74.07ms]
+(pass) sign-up verification > parallel sign-ups with one token create one account [87.29ms]
+(pass) sign-up verification > a token expires [14.71ms]
+2026-11-13T11:23:52.055Z WARN [Better Auth]: Password is too short
+(pass) sign-up verification > a password that's too short doesn't use up the token [63.88ms]
+(pass) sign-up verification > a wrong sign-up code gives no token [9.07ms]
+(pass) sign-up verification > an existing account gets an 'already have an account' email instead of a code [65.95ms]
+(pass) sign-up verification > existing and new addresses are rate limited the same way [69.72ms]
+(pass) sign-up verification > with email off, sign-up works without a token and signs in straight away [107.07ms]
+(pass) unverified accounts > verify with a code at their next sign-in [210.38ms]
+2026-11-13T11:23:52.668Z WARN [Better Auth]: Invalid password
+(pass) unverified accounts > a wrong password gets the usual error, not the verification one [98.99ms]
+(pass) unverified accounts > only an unverified account with the right password gets a verification code [181.53ms]
+(pass) unverified accounts > keep their existing sessions when email is switched on [62.86ms]
+(pass) password alerts > a reset sends one alert, even with every optional alert turned off [120.61ms]
+(pass) password alerts > a password change sends one alert [205.05ms]
+(pass) password alerts > a failed password change sends no alert [199.02ms]
+(pass) password alerts > a phone that isn't set up can't change the password [221.73ms]
+(pass) password alerts > routes the app doesn't use are switched off [121.18ms]
+[security-alert] could not send password-changed
+[security-alert] could not send password-reset
+(pass) password alerts > a failed alert doesn't fail the change or the reset [334.74ms]
+
+packages/auth/src/passwordAttempts.integration.test.ts:
+2026-11-13T11:23:54.385Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:54.434Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:54.479Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:54.527Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:54.573Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:54.618Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:54.665Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:54.712Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:54.758Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:54.802Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > after 10 wrong passwords the right one is refused too [593.04ms]
+2026-11-13T11:23:54.924Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:54.971Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:55.018Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:55.064Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:55.111Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:55.155Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:55.200Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:55.246Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:55.291Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:55.335Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > the limit follows the normalised email [533.15ms]
+2026-11-13T11:23:56.288Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:56.339Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:56.390Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:56.441Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:56.488Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:56.535Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:56.580Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:56.629Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:56.676Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > successful sign-ins don't count [1396.39ms]
+2026-11-13T11:23:56.913Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:56.965Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.014Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.067Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.120Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.169Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.216Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.266Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.314Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.366Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > one locked account doesn't lock another [690.80ms]
+2026-11-13T11:23:57.569Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.594Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.597Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.605Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.609Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.611Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.611Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.612Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.613Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:57.614Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > parallel guesses can't get past the limit [189.99ms]
+2026-11-13T11:23:57.900Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:58.066Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:58.228Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:58.390Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:58.544Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > wrong current passwords on change-password share the account's limit [933.79ms]
+2026-11-13T11:23:58.725Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:58.776Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:58.827Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:58.881Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:58.935Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:58.987Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:59.042Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:59.103Z WARN [Better Auth]: Invalid password
+2026-11-13T11:23:59.157Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > a successful password change doesn't count [769.53ms]
+
+packages/auth/src/googleSignIn.integration.test.ts:
+(pass) Google sign-in with PostgreSQL > a new email can sign up with Google [78.56ms]
+(pass) Google sign-in with PostgreSQL > Google can't be added to an account that signs in with a password [14.50ms]
+
+packages/database/src/client.integration.test.ts:
+(pass) database client timeouts > statements on the shared client stop after 30 seconds [50.98ms]
+(pass) database client timeouts > a statement that runs past the statement timeout is cancelled [214.97ms]
+(pass) database client timeouts > a query waiting for a free connection gives up at the connection timeout [213.30ms]
+
+apps/scheduled-jobs/src/jobs/pendingDeviceCleanup.integration.test.ts:
+Environment configuration:
+  DATABASE_URL: valid
+  S3_ENDPOINT: not set (optional/default)
+  S3_REGION: not set (optional/default)
+  S3_ACCESS_KEY_ID: invalid (Too small: expected string to have >=20 characters)
+  S3_ACCESS_KEY: invalid (Too small: expected string to have >=20 characters)
+  S3_BUCKET_NAME: valid
+  S3_CDN_URL: not set (optional/default)
+  MAX_IMAGE_FILE_SIZE: not set (optional/default)
+  R2_ACCOUNT_ID: valid
+  R2_ACCESS_KEY_ID: valid
+  R2_SECRET_ACCESS_KEY: valid
+  R2_BUCKET: valid
+  RESEND_API_KEY: not set (optional/default)
+  SMTP_HOST: not set (optional/default)
+  SMTP_PORT: not set (optional/default)
+  SMTP_USER: not set (optional/default)
+  SMTP_PASSWORD: not set (optional/default)
+  SMTP_SECURE: not set (optional/default)
+  SMTP_REQUIRE_TLS: not set (optional/default)
+  EMAIL_FROM: not set (optional/default)
+  EMAIL_CONSOLE: not set (optional/default)
+  SERVER_NAME: not set (optional/default)
+
+# Unhandled error between tests
+-------------------------------
+37 |       console.error(`  ${error}`);
+38 |     }
+39 |   }
+40 | 
+41 |   if (!valid) {
+42 |     throw new Error("Environment configuration validation failed");
+                   ^
+error: Environment configuration validation failed
+      at validateEnv (<repo>/packages/shared/src/utils/validateEnv.ts:42:15)
+      at <repo>/apps/scheduled-jobs/src/env.ts:6:1
+-------------------------------
+
+
+apps/scheduled-jobs/src/jobs/expiredRecordsCleanup.integration.test.ts:
+Environment configuration:
+  DATABASE_URL: valid
+  S3_ENDPOINT: not set (optional/default)
+  S3_REGION: not set (optional/default)
+  S3_ACCESS_KEY_ID: invalid (Too small: expected string to have >=20 characters)
+  S3_ACCESS_KEY: invalid (Too small: expected string to have >=20 characters)
+  S3_BUCKET_NAME: valid
+  S3_CDN_URL: not set (optional/default)
+  MAX_IMAGE_FILE_SIZE: not set (optional/default)
+  R2_ACCOUNT_ID: valid
+  R2_ACCESS_KEY_ID: valid
+  R2_SECRET_ACCESS_KEY: valid
+  R2_BUCKET: valid
+  RESEND_API_KEY: not set (optional/default)
+  SMTP_HOST: not set (optional/default)
+  SMTP_PORT: not set (optional/default)
+  SMTP_USER: not set (optional/default)
+  SMTP_PASSWORD: not set (optional/default)
+  SMTP_SECURE: not set (optional/default)
+  SMTP_REQUIRE_TLS: not set (optional/default)
+  EMAIL_FROM: not set (optional/default)
+  EMAIL_CONSOLE: not set (optional/default)
+  SERVER_NAME: not set (optional/default)
+
+# Unhandled error between tests
+-------------------------------
+37 |       console.error(`  ${error}`);
+38 |     }
+39 |   }
+40 | 
+41 |   if (!valid) {
+42 |     throw new Error("Environment configuration validation failed");
+                   ^
+error: Environment configuration validation failed
+      at validateEnv (<repo>/packages/shared/src/utils/validateEnv.ts:42:15)
+      at <repo>/apps/scheduled-jobs/src/env.ts:6:1
+-------------------------------
+
+
+apps/scheduled-jobs/src/jobs/locationHistoryCleanup.integration.test.ts:
+Environment configuration:
+  DATABASE_URL: valid
+  S3_ENDPOINT: not set (optional/default)
+  S3_REGION: not set (optional/default)
+  S3_ACCESS_KEY_ID: invalid (Too small: expected string to have >=20 characters)
+  S3_ACCESS_KEY: invalid (Too small: expected string to have >=20 characters)
+  S3_BUCKET_NAME: valid
+  S3_CDN_URL: not set (optional/default)
+  MAX_IMAGE_FILE_SIZE: not set (optional/default)
+  R2_ACCOUNT_ID: valid
+  R2_ACCESS_KEY_ID: valid
+  R2_SECRET_ACCESS_KEY: valid
+  R2_BUCKET: valid
+  RESEND_API_KEY: not set (optional/default)
+  SMTP_HOST: not set (optional/default)
+  SMTP_PORT: not set (optional/default)
+  SMTP_USER: not set (optional/default)
+  SMTP_PASSWORD: not set (optional/default)
+  SMTP_SECURE: not set (optional/default)
+  SMTP_REQUIRE_TLS: not set (optional/default)
+  EMAIL_FROM: not set (optional/default)
+  EMAIL_CONSOLE: not set (optional/default)
+  SERVER_NAME: not set (optional/default)
+
+# Unhandled error between tests
+-------------------------------
+37 |       console.error(`  ${error}`);
+38 |     }
+39 |   }
+40 | 
+41 |   if (!valid) {
+42 |     throw new Error("Environment configuration validation failed");
+                   ^
+error: Environment configuration validation failed
+      at validateEnv (<repo>/packages/shared/src/utils/validateEnv.ts:42:15)
+      at <repo>/apps/scheduled-jobs/src/env.ts:6:1
+-------------------------------
+
+
+apps/scheduled-jobs/src/jobs/imageUploadCleanup.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+apps/scheduled-jobs/src/jobs/uploadGrowthReport.integration.test.ts:
+Environment configuration:
+  DATABASE_URL: valid
+  S3_ENDPOINT: not set (optional/default)
+  S3_REGION: not set (optional/default)
+  S3_ACCESS_KEY_ID: invalid (Too small: expected string to have >=20 characters)
+  S3_ACCESS_KEY: invalid (Too small: expected string to have >=20 characters)
+  S3_BUCKET_NAME: valid
+  S3_CDN_URL: not set (optional/default)
+  MAX_IMAGE_FILE_SIZE: not set (optional/default)
+  R2_ACCOUNT_ID: valid
+  R2_ACCESS_KEY_ID: valid
+  R2_SECRET_ACCESS_KEY: valid
+  R2_BUCKET: valid
+  RESEND_API_KEY: not set (optional/default)
+  SMTP_HOST: not set (optional/default)
+  SMTP_PORT: not set (optional/default)
+  SMTP_USER: not set (optional/default)
+  SMTP_PASSWORD: not set (optional/default)
+  SMTP_SECURE: not set (optional/default)
+  SMTP_REQUIRE_TLS: not set (optional/default)
+  EMAIL_FROM: not set (optional/default)
+  EMAIL_CONSOLE: not set (optional/default)
+  SERVER_NAME: not set (optional/default)
+
+# Unhandled error between tests
+-------------------------------
+37 |       console.error(`  ${error}`);
+38 |     }
+39 |   }
+40 | 
+41 |   if (!valid) {
+42 |     throw new Error("Environment configuration validation failed");
+                   ^
+error: Environment configuration validation failed
+      at validateEnv (<repo>/packages/shared/src/utils/validateEnv.ts:42:15)
+      at <repo>/apps/scheduled-jobs/src/env.ts:6:1
+-------------------------------
+
+
+apps/backend/src/routes/trpcFeedback.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+(fail) feedback HTTP endpoint > a default self-hosted backend reports its version and rejects feedback [348.05ms]
+
+packages/api/src/router/pendingDevice.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/devices.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/locationSharing.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/googleDeletion.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/signOutOtherSessions.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/removeDevice.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/sessionLink.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/securityAlerts.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/accountRecovery.integration.test.ts:
+[TRPC] accountHistory.create took 496ms to execute
+[TRPC] accountRecovery.status took 417ms to execute
+[TRPC] accountHistory.create took 465ms to execute
+[TRPC] accountHistory.create took 387ms to execute
+(pass) account recovery with PostgreSQL > create makes history key v1 with no escrow, and only once [1783.52ms]
+[TRPC] accountHistory.create took 353ms to execute
+[TRPC] accountHistory.create took 354ms to execute
+(pass) account recovery with PostgreSQL > two devices racing to create v1 leave one key, and the other gets CONFLICT [364.43ms]
+[TRPC] accountHistory.create took 346ms to execute
+[TRPC] accountRecovery.escrows took 235ms to execute
+[TRPC] accountRecovery.escrows took 451ms to execute
+(pass) account recovery with PostgreSQL > escrows leaves out versions with no escrow, so restore never offers them [1052.89ms]
+[TRPC] accountRecovery.status took 500ms to execute
+[TRPC] accountHistory.create took 389ms to execute
+[TRPC] accountRecovery.setup took 147ms to execute
+[TRPC] accountRecovery.status took 418ms to execute
+[TRPC] accountRecovery.escrows took 207ms to execute
+[TRPC] accountRecovery.escrows took 341ms to execute
+(pass) account recovery with PostgreSQL > setup escrows the existing history key and stores only public keys and the escrow [2023.91ms]
+[TRPC] accountRecovery.setup took 499ms to execute
+[TRPC] accountHistory.create took 290ms to execute
+[TRPC] accountRecovery.setup took 252ms to execute
+[TRPC] accountRecovery.setup took 318ms to execute
+[TRPC] accountRecovery.setup took 502ms to execute
+[TRPC] accountRecovery.setup took 235ms to execute
+[TRPC] accountRecovery.escrows took 431ms to execute
+[TRPC] accountRecovery.setup took 415ms to execute
+[TRPC] accountRecovery.escrows took 150ms to execute
+(pass) account recovery with PostgreSQL > setup needs escrows for exactly the existing versions and creates none [3130.38ms]
+[TRPC] accountHistory.create took 340ms to execute
+[TRPC] accountRecovery.setup took 242ms to execute
+[TRPC] accountRecovery.setup took 243ms to execute
+(pass) account recovery with PostgreSQL > concurrent setup calls create one recovery key and the other gets CONFLICT [594.47ms]
+[TRPC] accountHistory.create took 271ms to execute
+[TRPC] accountRecovery.setup took 437ms to execute
+[TRPC] accountRecovery.setup took 220ms to execute
+[TRPC] accountRecovery.setup took 444ms to execute
+[TRPC] accountRecovery.setup took 467ms to execute
+[TRPC] accountRecovery.setup took 133ms to execute
+[TRPC] accountRecovery.setup took 179ms to execute
+[TRPC] accountRecovery.escrows took 410ms to execute
+(pass) account recovery with PostgreSQL > setup rejects private key material and malformed escrows [2574.19ms]
+[TRPC] accountHistory.create took 288ms to execute
+[TRPC] accountRecovery.setup took 464ms to execute
+[TRPC] accountRecovery.changePhrase took 346ms to execute
+[TRPC] accountRecovery.changePhrase took 295ms to execute
+[TRPC] accountRecovery.changePhrase took 434ms to execute
+[TRPC] accountRecovery.changePhrase took 269ms to execute
+[TRPC] accountRecovery.changePhrase took 172ms to execute
+[TRPC] accountRecovery.changePhrase took 324ms to execute
+[TRPC] accountRecovery.escrows took 457ms to execute
+[TRPC] accountRecovery.changePhrase took 352ms to execute
+[TRPC] accountRecovery.status took 419ms to execute
+[TRPC] accountRecovery.escrows took 471ms to execute
+[TRPC] accountRecovery.escrows took 337ms to execute
+(pass) account recovery with PostgreSQL > changePhrase needs a fresh session and re-seals exactly the existing versions [4667.41ms]
+[TRPC] accountHistory.create took 380ms to execute
+[TRPC] accountRecovery.setup took 492ms to execute
+[TRPC] accountRecovery.reset took 161ms to execute
+[TRPC] accountRecovery.reset took 439ms to execute
+[TRPC] accountRecovery.reset took 277ms to execute
+[TRPC] accountRecovery.reset took 187ms to execute
+[TRPC] accountRecovery.reset took 261ms to execute
+[TRPC] accountRecovery.reset took 259ms to execute
+[TRPC] accountRecovery.reset took 316ms to execute
+[TRPC] accountRecovery.status took 344ms to execute
+[TRPC] accountRecovery.escrows took 288ms to execute
+[TRPC] accountRecovery.escrows took 114ms to execute
+(pass) account recovery with PostgreSQL > reset needs a fresh session and confirmation, then replaces every key with v(N+1) [3567.33ms]
+[TRPC] accountHistory.create took 180ms to execute
+[TRPC] accountRecovery.setup took 248ms to execute
+[TRPC] accountRecovery.reset took 341ms to execute
+(pass) account recovery with PostgreSQL > reset is refused and keeps every key when the phone is removed while it waits [793.13ms]
+[TRPC] accountRecovery.setup took 219ms to execute
+[TRPC] accountRecovery.status took 371ms to execute
+(pass) account recovery with PostgreSQL > a session from more than 30 minutes ago cannot set up a phrase and status reports it [600.16ms]
+[TRPC] accountRecovery.status took 295ms to execute
+[TRPC] accountRecovery.status took 463ms to execute
+(pass) account recovery with PostgreSQL > status reports how long the session stays fresh [758.97ms]
+[TRPC] accountHistory.create took 145ms to execute
+[TRPC] accountRecovery.setup took 390ms to execute
+[TRPC] accountRecovery.changePhrase took 268ms to execute
+[TRPC] accountRecovery.reset took 337ms to execute
+(pass) account recovery with PostgreSQL > a session from more than 30 minutes ago cannot change or reset the phrase [1152.67ms]
+[TRPC] accountRecovery.changePhrase took 112ms to execute
+(pass) account recovery with PostgreSQL > changePhrase is NOT_FOUND when no recovery phrase is set up [116.52ms]
+[TRPC] accountHistory.create took 217ms to execute
+[TRPC] accountHistory.create took 390ms to execute
+[TRPC] accountRecovery.setup took 378ms to execute
+[TRPC] accountRecovery.reset took 128ms to execute
+(pass) account recovery with PostgreSQL > create and reset reject a history key id that another user already holds [1131.43ms]
+[TRPC] accountRecovery.requestResetCode took 498ms to execute
+[TRPC] accountRecovery.requestResetCode took 258ms to execute
+[TRPC] accountRecovery.verifyResetCode took 242ms to execute
+[TRPC] accountRecovery.verifyResetCode took 356ms to execute
+[TRPC] accountRecovery.verifyResetCode took 286ms to execute
+[TRPC] accountRecovery.verifyResetCode took 457ms to execute
+[TRPC] accountRecovery.verifyResetCode took 163ms to execute
+(pass) account recovery with PostgreSQL > verifyResetCode only accepts this user's latest code, once, and gives a reset token [2266.02ms]
+[TRPC] accountHistory.create took 495ms to execute
+[TRPC] accountRecovery.setup took 325ms to execute
+[TRPC] accountHistory.create took 444ms to execute
+[TRPC] accountRecovery.setup took 236ms to execute
+[TRPC] accountRecovery.requestResetCode took 457ms to execute
+[TRPC] accountRecovery.verifyResetCode took 258ms to execute
+[TRPC] accountRecovery.requestResetCode took 313ms to execute
+[TRPC] accountRecovery.verifyResetCode took 276ms to execute
+[TRPC] accountRecovery.reset took 158ms to execute
+[TRPC] accountRecovery.reset took 328ms to execute
+[TRPC] accountRecovery.reset took 104ms to execute
+[TRPC] accountRecovery.reset took 387ms to execute
+[TRPC] accountRecovery.reset took 503ms to execute
+[TRPC] accountRecovery.reset took 512ms to execute
+(pass) account recovery with PostgreSQL > with email on, reset needs this user's reset token and the token works once [4825.90ms]
+[TRPC] accountHistory.create took 346ms to execute
+[TRPC] accountRecovery.setup took 145ms to execute
+[TRPC] accountRecovery.requestResetCode took 122ms to execute
+[TRPC] accountRecovery.verifyResetCode took 431ms to execute
+[TRPC] accountRecovery.reset took 173ms to execute
+[TRPC] accountRecovery.reset took 354ms to execute
+[TRPC] accountRecovery.reset took 206ms to execute
+(pass) account recovery with PostgreSQL > a reset that fails after the token is checked keeps the token for the retry [1810.62ms]
+[TRPC] accountHistory.create took 420ms to execute
+[TRPC] accountRecovery.setup took 374ms to execute
+[TRPC] accountRecovery.requestResetCode took 505ms to execute
+[TRPC] accountRecovery.verifyResetCode took 442ms to execute
+[TRPC] accountRecovery.reset took 412ms to execute
+(pass) account recovery with PostgreSQL > an expired reset token can't reset the phrase [2168.84ms]
+[TRPC] accountRecovery.requestResetCode took 468ms to execute
+[TRPC] accountRecovery.requestResetCode took 490ms to execute
+[TRPC] accountRecovery.requestResetCode took 416ms to execute
+[TRPC] accountRecovery.requestResetCode took 256ms to execute
+[TRPC] accountRecovery.requestResetCode took 483ms to execute
+(pass) account recovery with PostgreSQL > requestResetCode needs a fresh session, emails only the account's own address and is rate-limited [2117.54ms]
+[TRPC] accountHistory.create took 386ms to execute
+[TRPC] accountRecovery.setup took 350ms to execute
+[TRPC] accountRecovery.requestResetCode took 370ms to execute
+[TRPC] accountRecovery.verifyResetCode took 340ms to execute
+[TRPC] accountRecovery.reset took 282ms to execute
+(pass) account recovery with PostgreSQL > with email off, there is no code to request or verify and reset works without one [1739.59ms]
+
+packages/api/src/router/feedbackRouter.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/accountDeletionRequest.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/deviceActivation.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/deviceLink.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/lib/account-deletion-cli.integration.test.ts:
+44 |       });
+45 |       expect((await run(email)).code).toBe(1);
+46 |       expect(await prisma.user.findUnique({ where: { id: userId } })).not.toBeNull();
+47 |       await prisma.group.delete({ where: { id: group.id } });
+48 |       const deleted = await run(email);
+49 |       expect(deleted.code).toBe(0);
+                                ^
+error: expect(received).toBe(expected)
+
+Expected: 0
+Received: 1
+
+      at <anonymous> (<repo>/packages/api/src/lib/account-deletion-cli.integration.test.ts:49:28)
+(fail) account deletion CLI with PostgreSQL > deletes an account and returns a failure for an unknown email [788.94ms]
+
+packages/api/src/lib/account-deletion.integration.test.ts:
+(pass) account deletion epoch references with PostgreSQL > new alerts and shared invitations require an account reference [8.07ms]
+(pass) account deletion epoch references with PostgreSQL > removing a sender and their location data preserves the epoch and other sender's data [54.75ms]
+(pass) account deletion epoch references with PostgreSQL > scheduled deletion uses the database deadline and is idempotent [29.01ms]
+(pass) account deletion epoch references with PostgreSQL > deletes a sole member's group and records its image for storage cleanup [26.24ms]
+(pass) account deletion epoch references with PostgreSQL > concurrent deletion cannot remove both group owners [35.48ms]
+(pass) account deletion epoch references with PostgreSQL > waits for an upload from another of the account's phones [40.74ms]
+[security-alert] could not send account-deleted
+(pass) account deletion epoch references with PostgreSQL > a failed account deleted alert doesn't fail the deletion [22.02ms]
+
+packages/cache/src/cache/OpenBeaconCache.integration.test.ts:
+(pass) OpenBeaconCache scripts > Redis runs the token bucket as rateLimits.test.ts expects [3.83ms]
+(pass) OpenBeaconCache scripts > FakeRedis runs the token bucket as rateLimits.test.ts expects [0.64ms]
+(pass) OpenBeaconCache scripts > Redis stores, replaces and resets signed map URLs [6.23ms]
+(pass) OpenBeaconCache scripts > FakeRedis stores, replaces and resets signed map URLs [0.14ms]
+(pass) OpenBeaconCache scripts > Redis keeps turned-off alerts until they are due and taken [4.88ms]
+(pass) OpenBeaconCache scripts > FakeRedis keeps turned-off alerts until they are due and taken [0.11ms]
+
+packages/cache/src/cache/redisRestart.integration.test.ts:
+(skip) the shared client recovers after Redis is down for longer than Bun's own retries
+
+packages/api/src/router/group/groupEmailInvites.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/group/groupSettings.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/group/groupTracking.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/group/groupDeparture.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/group/groupHistoryWraps.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/group/groupRotation.integration.test.ts:
+[TRPC] groupEpoch.rotationContext took 493ms to execute
+[TRPC] groupEpoch.rotationContext took 423ms to execute
+[TRPC] groupEpoch.rotate took 453ms to execute
+[TRPC] groupEpoch.rotate took 123ms to execute
+[TRPC] groupEpoch.rotate took 487ms to execute
+[TRPC] groupEpoch.rotate took 321ms to execute
+[TRPC] groupEpoch.rotate took 343ms to execute
+(pass) group rotation with PostgreSQL > rejects an incorrect recipient set and serializes competing rotations [2348.04ms]
+[TRPC] groupTracking.uploadBatch took 351ms to execute
+[TRPC] groupTracking.uploadBatch took 276ms to execute
+[TRPC] groupEpoch.rotationContext took 150ms to execute
+[TRPC] groupEpoch.rotate took 273ms to execute
+[TRPC] groupTracking.uploadBatch took 285ms to execute
+(pass) group rotation with PostgreSQL > deletion preserves remaining tracking and permits old uploads before and after rotation [1392.16ms]
+
+packages/api/src/router/group/groupLimit.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/group/groupEpochKeyWraps.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13
+-------------------------------
+
+
+packages/api/src/router/group/groupSharedInvites.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/group/groupEpochHistoryRecipients.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/group/personalData.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <anonymous> (<repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13)
+      at <repo>/packages/api/src/env.ts:4:20
+-------------------------------
+
+
+packages/api/src/router/group/groupUploadConcurrency.integration.test.ts:
+❌ Invalid environment variables: [
+  {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY_ID" ],
+    message: "Too small: expected string to have >=20 characters",
+  }, {
+    origin: "string",
+    code: "too_small",
+    minimum: 20,
+    inclusive: true,
+    path: [ "S3_ACCESS_KEY" ],
+    message: "Too small: expected string to have >=20 characters",
+  }
+]
+
+# Unhandled error between tests
+-------------------------------
+27 | 	};
+28 | 	const parsed = (opts.createFinalSchema?.(finalSchemaShape, isServer))?.["~standard"].validate(runtimeEnv) ?? parseWithDictionary(finalSchemaShape, runtimeEnv);
+29 | 	ensureSynchronous(parsed, "Validation must be synchronous");
+30 | 	const onValidationError = opts.onValidationError ?? ((issues) => {
+31 | 		console.error("❌ Invalid environment variables:", issues);
+32 | 		throw new Error("Invalid environment variables");
+                 ^
+error: Invalid environment variables
+      at <repo>/node_modules/@t3-oss/env-core/dist/index.js:32:13
+-------------------------------
+
+
+1 tests skipped:
+(skip) the shared client recovers after Redis is down for longer than Bun's own retries
+
+
+30 tests failed:
+(fail) feedback HTTP endpoint > a default self-hosted backend reports its version and rejects feedback [348.05ms]
+(fail) account deletion CLI with PostgreSQL > deletes an account and returns a failure for an unknown email [788.94ms]
+
+ 115 pass
+ 1 skip
+ 30 fail
+ 28 errors
+ 659 expect() calls
+Ran 146 tests across 39 files. [64.64s]
+error: script "test:integration" exited with code 1

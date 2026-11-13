@@ -1,0 +1,1805 @@
+$ bun scripts/run-integration-tests.ts "--env-file=/tmp/openbeacon-beta2-review.env"
+bun test --isolate --env-file=/tmp/openbeacon-beta2-review.env apps/backend/src/routes/trpcFeedback.integration.test.ts apps/scheduled-jobs/src/jobs/expiredRecordsCleanup.integration.test.ts apps/scheduled-jobs/src/jobs/imageUploadCleanup.integration.test.ts apps/scheduled-jobs/src/jobs/locationHistoryCleanup.integration.test.ts apps/scheduled-jobs/src/jobs/pendingDeviceCleanup.integration.test.ts apps/scheduled-jobs/src/jobs/uploadGrowthReport.integration.test.ts packages/api/src/lib/account-deletion-cli.integration.test.ts packages/api/src/lib/account-deletion.integration.test.ts packages/api/src/router/accountDeletionRequest.integration.test.ts packages/api/src/router/accountRecovery.integration.test.ts packages/api/src/router/deviceActivation.integration.test.ts packages/api/src/router/deviceLink.integration.test.ts packages/api/src/router/devices.integration.test.ts packages/api/src/router/feedbackRouter.integration.test.ts packages/api/src/router/googleDeletion.integration.test.ts packages/api/src/router/group/groupDeparture.integration.test.ts packages/api/src/router/group/groupEmailInvites.integration.test.ts packages/api/src/router/group/groupEpochHistoryRecipients.integration.test.ts packages/api/src/router/group/groupEpochKeyWraps.integration.test.ts packages/api/src/router/group/groupHistoryWraps.integration.test.ts packages/api/src/router/group/groupLimit.integration.test.ts packages/api/src/router/group/groupRotation.integration.test.ts packages/api/src/router/group/groupSettings.integration.test.ts packages/api/src/router/group/groupSharedInvites.integration.test.ts packages/api/src/router/group/groupTracking.integration.test.ts packages/api/src/router/group/groupUploadConcurrency.integration.test.ts packages/api/src/router/group/personalData.integration.test.ts packages/api/src/router/locationSharing.integration.test.ts packages/api/src/router/pendingDevice.integration.test.ts packages/api/src/router/removeDevice.integration.test.ts packages/api/src/router/securityAlerts.integration.test.ts packages/api/src/router/sessionLink.integration.test.ts packages/api/src/router/signOutOtherSessions.integration.test.ts packages/auth/src/emailCode.integration.test.ts packages/auth/src/googleSignIn.integration.test.ts packages/auth/src/passwordAttempts.integration.test.ts packages/cache/src/cache/OpenBeaconCache.integration.test.ts packages/cache/src/cache/redisRestart.integration.test.ts packages/database/src/client.integration.test.ts
+bun test v1.4.4-canary.1 (11c367163)
+
+packages/auth/src/emailCode.integration.test.ts:
+(pass) email codes > a code works once and a reused code is rejected [73.30ms]
+(pass) email codes > a wrong code is rejected and the right one still works after it [18.82ms]
+(pass) email codes > an expired code is rejected and removed [9.44ms]
+(pass) email codes > a code is still accepted just before it expires [9.08ms]
+(pass) email codes > too many wrong attempts lock the code, even against the right code [28.73ms]
+(pass) email codes > parallel guesses can't get past the attempt limit [29.03ms]
+(pass) email codes > parallel submissions of the right code succeed only once [9.98ms]
+(pass) email codes > a code for one purpose can't be used for another [16.00ms]
+(pass) email codes > a new code replaces the previous one for the same purpose and address [22.92ms]
+(pass) email codes > a new code resets the attempt count [31.00ms]
+(pass) email codes > wrong guesses across several codes are capped [52.08ms]
+(pass) email codes > the cap refills one guess at a time across the day [613.12ms]
+(pass) email codes > right codes don't use up the wrong guess allowance [127.90ms]
+(pass) email codes > parallel guesses can't get past the cap [62.50ms]
+(pass) email codes > a wrong guess counts against the code and fails when the cap can't be recorded [7.71ms]
+(pass) email codes > the cap only applies to its own purpose and subject [123.29ms]
+(pass) email codes > parallel requests leave exactly one code [16.31ms]
+(pass) email codes > email subjects ignore case and surrounding spaces [7.27ms]
+(pass) email codes > a token for one purpose can't be checked or spent as another [30.56ms]
+(pass) email codes > codes are stored as a keyed hash, not the code or its plain SHA-256 [6.30ms]
+(pass) email code rate limits > an address can request 3 codes per 15 minutes, from any IP [117.95ms]
+(pass) email code rate limits > each purpose has its own allowance for an address [81.87ms]
+(pass) email code rate limits > one IP address can request codes for any number of addresses [21.06ms]
+(pass) email code rate limits > unknown and Google-only addresses are limited the same way as password accounts [89.39ms]
+(pass) password reset codes > a password account gets a code at its address [61.54ms]
+(pass) password reset codes > the response is the same for unknown, Google-only and password accounts [65.90ms]
+(pass) password reset codes > a Google-only account gets a Google sign-in email and no code [6.64ms]
+(pass) password reset codes > every request endpoint answers before any email is sent [178.26ms]
+(pass) password reset codes > password accounts and unknown addresses get no Google sign-in email [61.54ms]
+(pass) password reset codes > a failed send doesn't change the response [64.14ms]
+2026-11-13T11:25:51.407Z WARN [Better Auth]: Invalid password
+(pass) password reset codes > the right code gives a reset token that resets the password once [288.95ms]
+(pass) password reset codes > every failed code check gives the same error and no reset token [86.25ms]
+(pass) password reset codes > a capped check gives the same error as a wrong code [118.97ms]
+(pass) password reset codes > an expired code gives no reset token [65.08ms]
+(pass) password reset codes > reset tokens are stored as a hash and last 5 minutes [82.56ms]
+(pass) password reset codes > an expired reset token can't reset the password [133.83ms]
+2026-11-13T11:25:52.017Z WARN [Better Auth]: Password is too short
+(pass) password reset codes > a password that's too short doesn't use up the reset token [117.79ms]
+(pass) password reset codes > a reset can't add a password if the account loses its password login first [119.90ms]
+(pass) password reset codes > a reset token for a Google-only account can't add a password [55.06ms]
+(pass) password reset codes > a reset signs out every session [225.10ms]
+(pass) password reset codes > a correct reset code marks an unverified account verified, even without a reset [120.74ms]
+(pass) password reset codes > a wrong reset code leaves an unverified account unverified [69.22ms]
+(pass) email routes > code endpoints return 404 when email is off [59.66ms]
+(pass) email routes > better-auth routes that could send email are switched off [114.25ms]
+(pass) email routes > better-auth routes that list or sign out other sessions without a fresh sign-in are switched off [0.72ms]
+(pass) email routes > better-auth's update-user route is switched off so profile edits go through the device gate [0.22ms]
+(pass) sign-up verification > a verified address can sign up and the account starts verified [116.48ms]
+(pass) sign-up verification > sign-up without a token is rejected the same way for new and existing addresses [55.85ms]
+(pass) sign-up verification > a token for another address is rejected and stays usable for its own [62.94ms]
+(pass) sign-up verification > a token works once [66.75ms]
+(pass) sign-up verification > parallel sign-ups with one token create one account [76.07ms]
+(pass) sign-up verification > a token expires [12.26ms]
+2026-11-13T11:25:53.234Z WARN [Better Auth]: Password is too short
+(pass) sign-up verification > a password that's too short doesn't use up the token [66.21ms]
+(pass) sign-up verification > a wrong sign-up code gives no token [9.94ms]
+(pass) sign-up verification > an existing account gets an 'already have an account' email instead of a code [67.58ms]
+(pass) sign-up verification > existing and new addresses are rate limited the same way [75.98ms]
+(pass) sign-up verification > with email off, sign-up works without a token and signs in straight away [107.57ms]
+(pass) unverified accounts > verify with a code at their next sign-in [223.45ms]
+2026-11-13T11:25:53.873Z WARN [Better Auth]: Invalid password
+(pass) unverified accounts > a wrong password gets the usual error, not the verification one [100.29ms]
+(pass) unverified accounts > only an unverified account with the right password gets a verification code [193.56ms]
+(pass) unverified accounts > keep their existing sessions when email is switched on [59.67ms]
+(pass) password alerts > a reset sends one alert, even with every optional alert turned off [130.85ms]
+(pass) password alerts > a password change sends one alert [204.23ms]
+(pass) password alerts > a failed password change sends no alert [210.88ms]
+(pass) password alerts > a phone that isn't set up can't change the password [220.16ms]
+(pass) password alerts > routes the app doesn't use are switched off [108.43ms]
+[security-alert] could not send password-changed
+[security-alert] could not send password-reset
+(pass) password alerts > a failed alert doesn't fail the change or the reset [308.41ms]
+
+packages/auth/src/passwordAttempts.integration.test.ts:
+2026-11-13T11:25:55.579Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:55.624Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:55.674Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:55.720Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:55.765Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:55.812Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:55.861Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:55.910Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:55.957Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:56.002Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > after 10 wrong passwords the right one is refused too [592.38ms]
+2026-11-13T11:25:56.125Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:56.171Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:56.217Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:56.261Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:56.306Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:56.350Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:56.395Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:56.442Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:56.487Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:56.531Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > the limit follows the normalised email [528.50ms]
+2026-11-13T11:25:57.439Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:57.485Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:57.529Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:57.573Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:57.618Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:57.663Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:57.708Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:57.752Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:57.801Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > successful sign-ins don't count [1325.69ms]
+2026-11-13T11:25:58.015Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.059Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.103Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.147Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.192Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.236Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.280Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.325Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.371Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.418Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > one locked account doesn't lock another [613.24ms]
+2026-11-13T11:25:58.608Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.628Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.640Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.642Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.645Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.646Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.647Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.647Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.649Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:58.650Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > parallel guesses can't get past the limit [178.54ms]
+2026-11-13T11:25:58.912Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:59.043Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:59.179Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:59.311Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:59.445Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > wrong current passwords on change-password share the account's limit [799.09ms]
+2026-11-13T11:25:59.607Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:59.650Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:59.697Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:59.741Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:59.787Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:59.830Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:59.875Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:59.920Z WARN [Better Auth]: Invalid password
+2026-11-13T11:25:59.963Z WARN [Better Auth]: Invalid password
+(pass) password failure limit with PostgreSQL and Redis > a successful password change doesn't count [659.04ms]
+
+packages/auth/src/googleSignIn.integration.test.ts:
+(pass) Google sign-in with PostgreSQL > a new email can sign up with Google [69.02ms]
+(pass) Google sign-in with PostgreSQL > Google can't be added to an account that signs in with a password [13.41ms]
+
+packages/database/src/client.integration.test.ts:
+(pass) database client timeouts > statements on the shared client stop after 30 seconds [47.89ms]
+(pass) database client timeouts > a statement that runs past the statement timeout is cancelled [215.51ms]
+(pass) database client timeouts > a query waiting for a free connection gives up at the connection timeout [213.02ms]
+
+apps/scheduled-jobs/src/jobs/pendingDeviceCleanup.integration.test.ts:
+Environment configuration:
+  DATABASE_URL: valid
+  S3_ENDPOINT: not set (optional/default)
+  S3_REGION: not set (optional/default)
+  S3_ACCESS_KEY_ID: valid
+  S3_ACCESS_KEY: valid
+  S3_BUCKET_NAME: valid
+  S3_CDN_URL: not set (optional/default)
+  MAX_IMAGE_FILE_SIZE: not set (optional/default)
+  R2_ACCOUNT_ID: valid
+  R2_ACCESS_KEY_ID: valid
+  R2_SECRET_ACCESS_KEY: valid
+  R2_BUCKET: valid
+  RESEND_API_KEY: not set (optional/default)
+  SMTP_HOST: not set (optional/default)
+  SMTP_PORT: not set (optional/default)
+  SMTP_USER: not set (optional/default)
+  SMTP_PASSWORD: not set (optional/default)
+  SMTP_SECURE: not set (optional/default)
+  SMTP_REQUIRE_TLS: not set (optional/default)
+  EMAIL_FROM: not set (optional/default)
+  EMAIL_CONSOLE: not set (optional/default)
+  SERVER_NAME: not set (optional/default)
+Environment configuration valid
+(pass) Pending device clean-up > deletes Pending devices older than 7 days and removed ones a week after removal [17.00ms]
+(pass) Pending device clean-up > deletes open and approved links a day after they expire [0.82ms]
+(pass) Pending device clean-up > deletes expired device challenges and keeps live ones [0.75ms]
+
+apps/scheduled-jobs/src/jobs/expiredRecordsCleanup.integration.test.ts:
+Environment configuration:
+  DATABASE_URL: valid
+  S3_ENDPOINT: not set (optional/default)
+  S3_REGION: not set (optional/default)
+  S3_ACCESS_KEY_ID: valid
+  S3_ACCESS_KEY: valid
+  S3_BUCKET_NAME: valid
+  S3_CDN_URL: not set (optional/default)
+  MAX_IMAGE_FILE_SIZE: not set (optional/default)
+  R2_ACCOUNT_ID: valid
+  R2_ACCESS_KEY_ID: valid
+  R2_SECRET_ACCESS_KEY: valid
+  R2_BUCKET: valid
+  RESEND_API_KEY: not set (optional/default)
+  SMTP_HOST: not set (optional/default)
+  SMTP_PORT: not set (optional/default)
+  SMTP_USER: not set (optional/default)
+  SMTP_PASSWORD: not set (optional/default)
+  SMTP_SECURE: not set (optional/default)
+  SMTP_REQUIRE_TLS: not set (optional/default)
+  EMAIL_FROM: not set (optional/default)
+  EMAIL_CONSOLE: not set (optional/default)
+  SERVER_NAME: not set (optional/default)
+Environment configuration valid
+(pass) Expired records clean-up > deletes expired records and keeps live ones [27.92ms]
+(pass) Expired records clean-up > is safe to run again [3.86ms]
+
+apps/scheduled-jobs/src/jobs/locationHistoryCleanup.integration.test.ts:
+Environment configuration:
+  DATABASE_URL: valid
+  S3_ENDPOINT: not set (optional/default)
+  S3_REGION: not set (optional/default)
+  S3_ACCESS_KEY_ID: valid
+  S3_ACCESS_KEY: valid
+  S3_BUCKET_NAME: valid
+  S3_CDN_URL: not set (optional/default)
+  MAX_IMAGE_FILE_SIZE: not set (optional/default)
+  R2_ACCOUNT_ID: valid
+  R2_ACCESS_KEY_ID: valid
+  R2_SECRET_ACCESS_KEY: valid
+  R2_BUCKET: valid
+  RESEND_API_KEY: not set (optional/default)
+  SMTP_HOST: not set (optional/default)
+  SMTP_PORT: not set (optional/default)
+  SMTP_USER: not set (optional/default)
+  SMTP_PASSWORD: not set (optional/default)
+  SMTP_SECURE: not set (optional/default)
+  SMTP_REQUIRE_TLS: not set (optional/default)
+  EMAIL_FROM: not set (optional/default)
+  EMAIL_CONSOLE: not set (optional/default)
+  SERVER_NAME: not set (optional/default)
+Environment configuration valid
+(pass) Location history clean-up > deletes location history older than 60 days and keeps the rest [31.48ms]
+(pass) Location history clean-up > deletes empty epochs superseded before the cutoff, with their wraps [70.00ms]
+(pass) Location history clean-up > deletes the oldest points first across groups, up to the run limit [70.72ms]
+(pass) Location history clean-up > skips an epoch that an upload in progress is using and deletes it on a later run [21.08ms]
+
+apps/scheduled-jobs/src/jobs/imageUploadCleanup.integration.test.ts:
+Environment configuration:
+  DATABASE_URL: valid
+  S3_ENDPOINT: not set (optional/default)
+  S3_REGION: not set (optional/default)
+  S3_ACCESS_KEY_ID: valid
+  S3_ACCESS_KEY: valid
+  S3_BUCKET_NAME: valid
+  S3_CDN_URL: not set (optional/default)
+  MAX_IMAGE_FILE_SIZE: not set (optional/default)
+  R2_ACCOUNT_ID: valid
+  R2_ACCESS_KEY_ID: valid
+  R2_SECRET_ACCESS_KEY: valid
+  R2_BUCKET: valid
+  RESEND_API_KEY: not set (optional/default)
+  SMTP_HOST: not set (optional/default)
+  SMTP_PORT: not set (optional/default)
+  SMTP_USER: not set (optional/default)
+  SMTP_PASSWORD: not set (optional/default)
+  SMTP_SECURE: not set (optional/default)
+  SMTP_REQUIRE_TLS: not set (optional/default)
+  EMAIL_FROM: not set (optional/default)
+  EMAIL_CONSOLE: not set (optional/default)
+  SERVER_NAME: not set (optional/default)
+Environment configuration valid
+(pass) Image upload clean-up > deletes stale pending uploads and their files, keeping recent and in-use ones [27.21ms]
+(pass) Image upload clean-up > keeps a pending upload whose file can't be deleted and logs only a code [9.59ms]
+(pass) Image upload clean-up > skips a pending upload that a confirmation is holding [17.54ms]
+(pass) Image upload clean-up > sweeps files that nothing references across pages and keeps the rest [21.09ms]
+(pass) Image upload clean-up > skips the whole sweep when a stored image URL doesn't match the configured prefix [11.57ms]
+(pass) Image upload clean-up > skips the sweep when a group image uses a different bucket [10.86ms]
+(pass) Image upload clean-up > logs a sweep failure without the storage error [2.34ms]
+
+apps/scheduled-jobs/src/jobs/uploadGrowthReport.integration.test.ts:
+Environment configuration:
+  DATABASE_URL: valid
+  S3_ENDPOINT: not set (optional/default)
+  S3_REGION: not set (optional/default)
+  S3_ACCESS_KEY_ID: valid
+  S3_ACCESS_KEY: valid
+  S3_BUCKET_NAME: valid
+  S3_CDN_URL: not set (optional/default)
+  MAX_IMAGE_FILE_SIZE: not set (optional/default)
+  R2_ACCOUNT_ID: valid
+  R2_ACCESS_KEY_ID: valid
+  R2_SECRET_ACCESS_KEY: valid
+  R2_BUCKET: valid
+  RESEND_API_KEY: not set (optional/default)
+  SMTP_HOST: not set (optional/default)
+  SMTP_PORT: not set (optional/default)
+  SMTP_USER: not set (optional/default)
+  SMTP_PASSWORD: not set (optional/default)
+  SMTP_SECURE: not set (optional/default)
+  SMTP_REQUIRE_TLS: not set (optional/default)
+  EMAIL_FROM: not set (optional/default)
+  EMAIL_CONSOLE: not set (optional/default)
+  SERVER_NAME: not set (optional/default)
+Environment configuration valid
+(pass) upload growth report > ranks accounts by points stored in the last 24 hours and ignores older points [1.95ms]
+(pass) upload growth report > logs the report for the operator [0.85ms]
+
+apps/backend/src/routes/trpcFeedback.integration.test.ts:
+[TRPC] account.version took 205ms to execute
+[TRPC] feedback.submit took 461ms to execute
+(pass) feedback HTTP endpoint > a default self-hosted backend reports its version and rejects feedback [1006.99ms]
+
+packages/api/src/router/pendingDevice.integration.test.ts:
+[TRPC] auth.registerDeviceKey took 448ms to execute
+[TRPC] accountHistory.create took 397ms to execute
+[TRPC] auth.registerDeviceKey took 251ms to execute
+[TRPC] auth.deviceKeyContext took 458ms to execute
+[TRPC] device.status took 416ms to execute
+[TRPC] accountRecovery.status took 234ms to execute
+[TRPC] accountRecovery.escrows took 330ms to execute
+[TRPC] account.deletionVerificationMethods took 257ms to execute
+[TRPC] account.version took 398ms to execute
+[TRPC] deviceLink.create took 339ms to execute
+[TRPC] deviceLink.status took 261ms to execute
+[TRPC] device.activationChallenge took 439ms to execute
+[TRPC] device.activate took 496ms to execute
+(fail) a phone that isn't set up yet > can register, check its status and get set up by link or by phrase [5000.19ms]
+  ^ this test timed out after 5000ms.
+[TRPC] device.activationChallenge took 402ms to execute
+[TRPC] auth.registerDeviceKey took 329ms to execute
+[TRPC] device.activate took 307ms to execute
+[TRPC] account.listDevices took 187ms to execute
+[TRPC] accountHistory.create took 477ms to execute
+[TRPC] auth.registerDeviceKey took 300ms to execute
+[TRPC] accountRecovery.reset took 322ms to execute
+(pass) a phone that isn't set up yet > can start fresh [1443.12ms]
+[TRPC] auth.registerDeviceKey took 364ms to execute
+[TRPC] accountHistory.create took 197ms to execute
+[TRPC] auth.registerDeviceKey took 274ms to execute
+[TRPC] account.removeThisDevice took 121ms to execute
+(pass) a phone that isn't set up yet > can cancel by removing itself [972.16ms]
+[TRPC] auth.registerDeviceKey took 466ms to execute
+[TRPC] accountHistory.create took 323ms to execute
+[TRPC] auth.registerDeviceKey took 227ms to execute
+[TRPC] account.listDevices took 237ms to execute
+[TRPC] account.updateDevice took 107ms to execute
+[TRPC] account.requestDeletion took 234ms to execute
+[TRPC] account.signOutOtherSessions took 384ms to execute
+[TRPC] emailAlerts.updateSettings took 338ms to execute
+[TRPC] groupInvites.decline took 272ms to execute
+[TRPC] groupMembership.list took 231ms to execute
+[TRPC] deviceLink.get took 356ms to execute
+(pass) a phone that isn't set up yet > can't see or change anything else on the account [3188.93ms]
+
+packages/api/src/router/devices.integration.test.ts:
+(pass) the device header > never links a session by itself, and marks the phone it names as unverified [173.17ms]
+(pass) the device header > gives a linked session its device [72.27ms]
+(pass) the device header > keeps a session's existing device and ignores another one it names [78.70ms]
+(pass) the device header > updates last active at most every 5 minutes [85.51ms]
+(pass) the device header > doesn't mark a phone as active for a session it hasn't proved [64.00ms]
+[TRPC] auth.registerDeviceKey took 203ms to execute
+(pass) the device header > registering a phone's key again doesn't mark it as active for a session that hasn't proved it [273.42ms]
+(pass) the device header > ignores another account's device and unknown ids [148.10ms]
+[TRPC] auth.registerDeviceKey took 123ms to execute
+(pass) the device header > a removed Pending phone whose record was cleaned up signs in again as a new Pending phone [201.05ms]
+[TRPC] account.listDevices took 498ms to execute
+(pass) account devices > lists the account's devices and marks the current one [581.01ms]
+[TRPC] account.updateDevice took 429ms to execute
+(pass) account devices > renames a device and changes its icon [504.04ms]
+[TRPC] account.updateDevice took 469ms to execute
+[TRPC] account.listDevices took 352ms to execute
+[TRPC] account.updateDevice took 279ms to execute
+[TRPC] account.listDevices took 498ms to execute
+[TRPC] account.updateDevice took 280ms to execute
+[TRPC] account.listDevices took 181ms to execute
+[TRPC] account.updateDevice took 238ms to execute
+[TRPC] account.listDevices took 266ms to execute
+[TRPC] account.updateDevice took 427ms to execute
+[TRPC] account.listDevices took 261ms to execute
+[TRPC] account.updateDevice took 278ms to execute
+[TRPC] account.listDevices took 462ms to execute
+(pass) account devices > persists the new device identifiers and returns them in the device list [4075.85ms]
+[TRPC] account.updateDevice took 148ms to execute
+(pass) account devices > rejects another account's device [281.15ms]
+[TRPC] account.listDevices took 325ms to execute
+[TRPC] account.updateDevice took 167ms to execute
+[TRPC] account.updateDevice took 445ms to execute
+[TRPC] account.listDevices took 485ms to execute
+[TRPC] account.updateDevice took 129ms to execute
+[TRPC] account.updateDevice took 314ms to execute
+(pass) account devices > a phone that isn't set up can't list or name any phone [1946.65ms]
+[TRPC] account.updateDevice took 171ms to execute
+[TRPC] account.updateDevice took 476ms to execute
+[TRPC] account.updateDevice took 202ms to execute
+(pass) account devices > rejects bad names [923.74ms]
+[TRPC] account.updateName took 475ms to execute
+[TRPC] account.requestProfileImageUpload took 108ms to execute
+[TRPC] account.confirmProfileImageUpload took 323ms to execute
+[TRPC] account.updateName took 193ms to execute
+[TRPC] account.requestProfileImageUpload took 326ms to execute
+[TRPC] account.confirmProfileImageUpload took 134ms to execute
+[TRPC] account.updateName took 400ms to execute
+[TRPC] account.requestProfileImageUpload took 418ms to execute
+(pass) account profile > only an active phone can change the name and photo other members see [2461.62ms]
+[TRPC] account.confirmProfileImageUpload took 507ms to execute
+(pass) account profile > a newer upload request racing a confirm keeps the older file off the profile [584.74ms]
+
+packages/api/src/router/locationSharing.integration.test.ts:
+[TRPC] groupTracking.uploadBatch took 185ms to execute
+[TRPC] account.setLocationSharing took 346ms to execute
+[TRPC] groupTracking.getLatest took 347ms to execute
+[TRPC] groupTracking.poll took 142ms to execute
+(pass) location sharing with PostgreSQL > pausing the tablet hides its previous location while the phone keeps sharing [1035.59ms]
+[TRPC] groupTracking.uploadBatch took 484ms to execute
+[TRPC] account.setLocationSharing took 343ms to execute
+[TRPC] groupTracking.uploadBatch took 350ms to execute
+[TRPC] account.setLocationSharing took 369ms to execute
+[TRPC] groupTracking.getLatest took 453ms to execute
+[TRPC] groupTracking.uploadBatch took 451ms to execute
+[TRPC] account.locationSharing took 207ms to execute
+[TRPC] groupTracking.uploadBatch took 473ms to execute
+[TRPC] groupTracking.getLatest took 361ms to execute
+(pass) location sharing with PostgreSQL > discards delayed points from before pausing and waits for the resumed revision [3506.92ms]
+[TRPC] account.setLocationSharing took 375ms to execute
+[TRPC] account.setLocationSharing took 267ms to execute
+[TRPC] account.locationSharing took 212ms to execute
+[TRPC] account.locationSharing took 197ms to execute
+[TRPC] account.setLocationSharing took 270ms to execute
+[TRPC] account.locationSharing took 311ms to execute
+[TRPC] account.locationSharing took 438ms to execute
+[TRPC] account.locationSharing took 109ms to execute
+(pass) location sharing with PostgreSQL > an account pause overrides all devices and preserves their own pauses [2202.04ms]
+[TRPC] groupTracking.uploadBatch took 325ms to execute
+[TRPC] account.setLocationSharing took 329ms to execute
+[TRPC] account.locationSharing took 449ms to execute
+[TRPC] groupTracking.getLatest took 262ms to execute
+[TRPC] groupTracking.uploadBatch took 510ms to execute
+[TRPC] groupTracking.uploadBatch took 496ms to execute
+(pass) location sharing with PostgreSQL > a timed pause expires without restoring points captured before the pause [2390.39ms]
+[TRPC] account.setLocationSharing took 186ms to execute
+[TRPC] account.locationSharing took 431ms to execute
+(pass) location sharing with PostgreSQL > cannot change another account's device [618.38ms]
+[TRPC] account.setLocationSharing took 165ms to execute
+[TRPC] account.setLocationSharing took 448ms to execute
+[TRPC] account.locationSharing took 253ms to execute
+(pass) location sharing with PostgreSQL > a phone revoked after authentication cannot resume the account [888.16ms]
+[TRPC] account.setLocationSharing took 327ms to execute
+[TRPC] groupTracking.uploadBatch took 487ms to execute
+[TRPC] groupTracking.getLatest took 438ms to execute
+(pass) location sharing with PostgreSQL > a pause wins against an upload racing it [933.22ms]
+[TRPC] account.setLocationSharing took 273ms to execute
+[TRPC] account.setLocationSharing took 186ms to execute
+(pass) location sharing with PostgreSQL > a retried pause whose reply was lost does not restart its timer [469.53ms]
+[TRPC] account.setLocationSharing took 505ms to execute
+[TRPC] account.setLocationSharing took 425ms to execute
+[TRPC] account.setLocationSharing took 126ms to execute
+[TRPC] account.locationSharing took 232ms to execute
+[TRPC] account.setLocationSharing took 494ms to execute
+[TRPC] account.locationSharing took 167ms to execute
+(pass) location sharing with PostgreSQL > a replayed pause cannot undo a resume made on another phone [1960.67ms]
+[TRPC] account.setLocationSharing took 284ms to execute
+[TRPC] account.setLocationSharing took 210ms to execute
+[TRPC] account.setLocationSharing took 327ms to execute
+[TRPC] account.setLocationSharing took 234ms to execute
+[TRPC] account.locationSharing took 378ms to execute
+(pass) location sharing with PostgreSQL > a fresh pause whose reply was lost is replayed with its base revision [1444.09ms]
+[TRPC] account.setLocationSharing took 142ms to execute
+[TRPC] account.setLocationSharing took 234ms to execute
+[TRPC] account.setLocationSharing took 106ms to execute
+[TRPC] account.locationSharing took 289ms to execute
+(pass) location sharing with PostgreSQL > a pause tapped before the revision was known cannot be replayed over a later resume [781.71ms]
+[TRPC] account.setLocationSharing took 434ms to execute
+[TRPC] account.setLocationSharing took 376ms to execute
+[TRPC] account.setLocationSharing took 192ms to execute
+[TRPC] account.locationSharing took 348ms to execute
+(pass) location sharing with PostgreSQL > a pause tapped before the revision was known applies after earlier changes [1358.87ms]
+[TRPC] account.setLocationSharing took 273ms to execute
+[TRPC] account.setLocationSharing took 254ms to execute
+[TRPC] account.locationSharing took 388ms to execute
+[TRPC] account.setLocationSharing took 129ms to execute
+(pass) location sharing with PostgreSQL > a resume replacing a queued pause still resumes after the pause reached the server [1052.63ms]
+[TRPC] account.setLocationSharing took 448ms to execute
+[TRPC] account.setLocationSharing took 359ms to execute
+(pass) location sharing with PostgreSQL > an offline pause ends at the time chosen when it was tapped [815.82ms]
+[TRPC] account.setLocationSharing took 183ms to execute
+[TRPC] account.locationSharing took 124ms to execute
+[TRPC] groupTracking.uploadBatch took 243ms to execute
+(pass) location sharing with PostgreSQL > a pause that already ended pauses nothing but still discards points from before it [559.65ms]
+[TRPC] account.setLocationSharing took 369ms to execute
+[TRPC] account.setLocationSharing took 187ms to execute
+[TRPC] account.setLocationSharing took 193ms to execute
+(pass) location sharing with PostgreSQL > changes that alter nothing keep the revision [759.27ms]
+[TRPC] account.locationSharing took 231ms to execute
+(pass) location sharing with PostgreSQL > reports the server time so phones can correct their clocks [231.96ms]
+
+packages/api/src/router/googleDeletion.integration.test.ts:
+[TRPC] account.beginGoogleDeletionVerification took 200ms to execute
+[TRPC] account.requestDeletion took 311ms to execute
+[TRPC] account.requestDeletion took 482ms to execute
+[TRPC] account.requestDeletion took 231ms to execute
+[TRPC] account.beginGoogleDeletionVerification took 127ms to execute
+[TRPC] account.requestDeletion took 301ms to execute
+[TRPC] account.beginGoogleDeletionVerification took 107ms to execute
+[TRPC] account.requestDeletion took 243ms to execute
+[TRPC] account.beginGoogleDeletionVerification took 127ms to execute
+[TRPC] account.requestDeletion took 402ms to execute
+[TRPC] account.beginGoogleDeletionVerification took 441ms to execute
+[TRPC] account.requestDeletion took 117ms to execute
+[TRPC] account.beginGoogleDeletionVerification took 344ms to execute
+[TRPC] account.requestDeletion took 215ms to execute
+[TRPC] account.beginGoogleDeletionVerification took 405ms to execute
+[TRPC] account.requestDeletion took 131ms to execute
+[TRPC] account.beginGoogleDeletionVerification took 128ms to execute
+[TRPC] account.requestDeletion took 224ms to execute
+(pass) Google deletion verification with PostgreSQL > rejects wrong or expired state, a different session, wrong account, nonce, audience and issuer [4575.32ms]
+[TRPC] account.beginGoogleDeletionVerification took 391ms to execute
+[TRPC] account.requestDeletion took 428ms to execute
+[TRPC] account.requestDeletion took 323ms to execute
+(pass) Google deletion verification with PostgreSQL > verifies the linked subject, consumes the challenge and revokes every session [1147.50ms]
+
+packages/api/src/router/signOutOtherSessions.integration.test.ts:
+[TRPC] account.signOutOtherSessions took 437ms to execute
+(pass) signing out other sessions > ends every other session for the account and keeps this one [938.67ms]
+[TRPC] account.signOutOtherSessions took 323ms to execute
+(pass) signing out other sessions > sends one always-on alert, even with optional alerts off [552.24ms]
+[TRPC] account.signOutOtherSessions took 120ms to execute
+(pass) signing out other sessions > names the device that signed the others out [325.96ms]
+[TRPC] account.signOutOtherSessions took 330ms to execute
+[TRPC] account.signOutOtherSessions took 119ms to execute
+(pass) signing out other sessions > sends no alert when there were no other sessions [669.59ms]
+[TRPC] account.signOutOtherSessions took 262ms to execute
+(pass) signing out other sessions > clears expired sessions without counting them or sending an alert [475.37ms]
+[TRPC] account.signOutOtherSessions took 221ms to execute
+[TRPC] account.signOutOtherSessions took 298ms to execute
+(pass) signing out other sessions > needs a sign-in from the last 30 minutes [750.20ms]
+
+packages/api/src/router/removeDevice.integration.test.ts:
+[TRPC] account.removeDevice took 391ms to execute
+[TRPC] account.listDevices took 190ms to execute
+(pass) removing a device > revokes the device, signs it out, keeps this session and flags rotation [1165.89ms]
+[TRPC] account.removeDevice took 349ms to execute
+(pass) removing a device > waits for an upload holding the group before touching the removed phone [590.54ms]
+[TRPC] account.removeDevice took 434ms to execute
+(pass) removing a device > sends the always-on device removed alert [897.86ms]
+[TRPC] account.removeDevice took 197ms to execute
+(pass) removing a device > refuses the current device [426.15ms]
+[TRPC] account.removeDevice took 276ms to execute
+(pass) removing a device > refuses another account's device [723.43ms]
+[TRPC] account.removeDevice took 214ms to execute
+(pass) removing a device > needs a recent sign-in [460.79ms]
+[TRPC] account.removeThisDevice took 454ms to execute
+(pass) removing a device > removes this phone and its session when signing out [684.59ms]
+[TRPC] account.removeThisDevice took 249ms to execute
+(pass) removing a device > asks a session that hasn't proved this phone to prove it before removing it [502.05ms]
+[TRPC] account.removeDevice took 394ms to execute
+(pass) a removed device > can't register again [625.31ms]
+[TRPC] account.removeDevice took 207ms to execute
+(pass) a removed device > loses a new session that names it [440.99ms]
+[TRPC] account.removeDevice took 362ms to execute
+(pass) a removed device > gets DEVICE_REMOVED on any request, so it can't upload or fetch wraps [586.85ms]
+[TRPC] account.removeDevice took 150ms to execute
+(pass) a removed device > tells the app why over HTTP [421.04ms]
+[TRPC] account.removeDevice took 168ms to execute
+(pass) a removed device > doesn't affect another account's session [770.93ms]
+[TRPC] auth.registerDeviceKey took 204ms to execute
+[TRPC] account.removeDevice took 331ms to execute
+(pass) a removed device > a session linked to a live phone can't register another phone, so removing that phone ends it [793.39ms]
+(pass) a removed device > a session whose phone was removed can register a new phone [236.94ms]
+[TRPC] device.activationChallenge took 240ms to execute
+[TRPC] device.activate took 279ms to execute
+(pass) a removed device > activating a pending phone needs a fresh sign-in [752.52ms]
+
+packages/api/src/router/sessionLink.integration.test.ts:
+[TRPC] auth.registerDeviceKey took 247ms to execute
+[TRPC] accountHistory.create took 457ms to execute
+(pass) linking a session to a phone > a new phone is linked to the sign-in that registers it [888.21ms]
+[TRPC] auth.registerDeviceKey took 389ms to execute
+[TRPC] accountHistory.create took 416ms to execute
+[TRPC] auth.registerDeviceKey took 354ms to execute
+(pass) linking a session to a phone > registering an existing phone from a new sign-in leaves the sign-in unlinked [1367.32ms]
+[TRPC] auth.registerDeviceKey took 178ms to execute
+[TRPC] accountHistory.create took 275ms to execute
+[TRPC] auth.registerDeviceKey took 379ms to execute
+[TRPC] deviceLink.create took 128ms to execute
+[TRPC] deviceLink.approve took 446ms to execute
+[TRPC] deviceLink.get took 423ms to execute
+[TRPC] account.removeDevice took 180ms to execute
+[TRPC] device.activationChallenge took 231ms to execute
+[TRPC] groupTracking.uploadBatch took 497ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 397ms to execute
+[TRPC] account.removeThisDevice took 118ms to execute
+[TRPC] account.listDevices took 314ms to execute
+(pass) linking a session to a phone > a sign-in with only the password can't act as the owner's phone by naming it [3848.70ms]
+[TRPC] auth.registerDeviceKey took 131ms to execute
+[TRPC] accountHistory.create took 322ms to execute
+[TRPC] device.activationChallenge took 234ms to execute
+(pass) linking a session to a phone > tells the app to prove the phone over HTTP [850.97ms]
+[TRPC] auth.registerDeviceKey took 482ms to execute
+[TRPC] accountHistory.create took 466ms to execute
+(pass) linking a session to a phone > a database failure while reading the phone fails the request instead of treating it as no phone [1128.60ms]
+[TRPC] auth.registerDeviceKey took 415ms to execute
+[TRPC] accountHistory.create took 383ms to execute
+[TRPC] device.sessionChallenge took 244ms to execute
+[TRPC] device.linkSession took 155ms to execute
+[TRPC] device.status took 117ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 350ms to execute
+[TRPC] device.sessionChallenge took 219ms to execute
+[TRPC] device.linkSession took 484ms to execute
+(pass) linking a session to a phone > the phone's key links the sign-in, which then passes the gates [2555.22ms]
+[TRPC] auth.registerDeviceKey took 482ms to execute
+[TRPC] accountHistory.create took 486ms to execute
+[TRPC] auth.registerDeviceKey took 394ms to execute
+[TRPC] device.sessionChallenge took 316ms to execute
+[TRPC] device.linkSession took 268ms to execute
+[TRPC] device.sessionChallenge took 491ms to execute
+[TRPC] device.sessionChallenge took 235ms to execute
+[TRPC] device.linkSession took 220ms to execute
+[TRPC] device.sessionChallenge took 315ms to execute
+[TRPC] device.linkSession took 385ms to execute
+[TRPC] device.sessionChallenge took 281ms to execute
+[TRPC] device.linkSession took 299ms to execute
+[TRPC] device.linkSession took 382ms to execute
+(pass) linking a session to a phone > can't link without the phone's private key [4811.10ms]
+[TRPC] auth.registerDeviceKey took 321ms to execute
+[TRPC] accountHistory.create took 354ms to execute
+[TRPC] auth.registerDeviceKey took 463ms to execute
+[TRPC] device.sessionChallenge took 209ms to execute
+[TRPC] device.linkSession took 285ms to execute
+(pass) linking a session to a phone > a linked sign-in can't ask to become another phone [1793.37ms]
+[TRPC] auth.registerDeviceKey took 774ms to execute
+[TRPC] accountHistory.create took 497ms to execute
+[TRPC] auth.registerDeviceKey took 308ms to execute
+[TRPC] accountHistory.create took 472ms to execute
+[TRPC] device.sessionChallenge took 396ms to execute
+[TRPC] device.activationChallenge took 253ms to execute
+(pass) linking a session to a phone > can't ask for a challenge for another account's phone [2976.40ms]
+[TRPC] auth.registerDeviceKey took 364ms to execute
+[TRPC] accountHistory.create took 216ms to execute
+(pass) linking a session to a phone > an unlinked sign-in naming a removed phone is signed out [740.39ms]
+
+packages/api/src/router/securityAlerts.integration.test.ts:
+[TRPC] accountRecovery.setup took 183ms to execute
+[TRPC] accountRecovery.changePhrase took 164ms to execute
+(pass) security alerts > changing the recovery phrase sends one alert, even with optional alerts off [553.98ms]
+[TRPC] accountRecovery.setup took 420ms to execute
+[TRPC] accountRecovery.reset took 490ms to execute
+(pass) security alerts > resetting the recovery phrase sends one alert, even with optional alerts off [1026.02ms]
+[TRPC] accountRecovery.changePhrase took 244ms to execute
+[TRPC] accountRecovery.reset took 462ms to execute
+(pass) security alerts > a failed recovery phrase change or reset sends no alert [802.98ms]
+[TRPC] auth.registerDeviceKey took 401ms to execute
+[TRPC] auth.registerDeviceKey took 513ms to execute
+(pass) security alerts > the first device sends no alert and each later Pending device sends one [1146.89ms]
+(pass) security alerts > a second device registered while the first is still saving sends one alert [109.26ms]
+[TRPC] auth.registerDeviceKey took 369ms to execute
+[TRPC] auth.registerDeviceKey took 442ms to execute
+[TRPC] auth.registerDeviceKey took 264ms to execute
+(pass) security alerts > registering the same device again sends no alert [1288.94ms]
+[TRPC] auth.registerDeviceKey took 467ms to execute
+[TRPC] emailAlerts.updateSettings took 263ms to execute
+[TRPC] auth.registerDeviceKey took 283ms to execute
+(pass) security alerts > new device alerts can be turned off [1228.23ms]
+[TRPC] auth.registerDeviceKey took 321ms to execute
+[TRPC] auth.registerDeviceKey took 643ms to execute
+(pass) security alerts > a new device's model and platform are stored, and unsafe model names are dropped [1172.16ms]
+[TRPC] emailAlerts.setTimezone took 364ms to execute
+[TRPC] account.requestDeletion took 179ms to execute
+(pass) security alerts > scheduling deletion sends one alert with the deletion date [636.58ms]
+[TRPC] emailAlerts.updateSettings took 334ms to execute
+[TRPC] account.requestDeletion took 270ms to execute
+(pass) security alerts > deletion alerts can be turned off [687.86ms]
+[TRPC] emailAlerts.updateSettings took 444ms to execute
+(pass) security alerts > turning an alert off sends one alert naming it a minute later [527.68ms]
+[TRPC] emailAlerts.updateSettings took 279ms to execute
+(pass) security alerts > turning both alerts off at once sends one alert naming both [374.09ms]
+[TRPC] emailAlerts.updateSettings took 291ms to execute
+[TRPC] emailAlerts.updateSettings took 291ms to execute
+(pass) security alerts > turning alerts off one at a time within a minute sends one alert naming both [683.00ms]
+[TRPC] emailAlerts.updateSettings took 333ms to execute
+[TRPC] emailAlerts.updateSettings took 372ms to execute
+(pass) security alerts > turning an alert back on within the minute still sends the alert [790.50ms]
+[TRPC] emailAlerts.updateSettings took 484ms to execute
+[TRPC] emailAlerts.updateSettings took 412ms to execute
+(pass) security alerts > an alert turned off after the batch was sent starts a new batch [985.70ms]
+[TRPC] emailAlerts.updateSettings took 458ms to execute
+(pass) security alerts > a restarted server sends the alerts another server was holding [630.66ms]
+[TRPC] emailAlerts.updateSettings took 483ms to execute
+(pass) security alerts > a server that starts after the minute is up sends the held alert straight away [555.24ms]
+[TRPC] emailAlerts.updateSettings took 170ms to execute
+(pass) security alerts > two servers holding the same alerts send it once [243.71ms]
+[TRPC] emailAlerts.updateSettings took 313ms to execute
+[security-alert] could not send alerts-turned-off
+(pass) security alerts > a failed alerts turned off email doesn't fail the request [384.75ms]
+[security-alert] could not hold alerts-turned-off, so sending it now
+[TRPC] emailAlerts.updateSettings took 421ms to execute
+(pass) security alerts > the alert is sent straight away when it can't be held [493.38ms]
+[TRPC] emailAlerts.updateSettings took 312ms to execute
+[TRPC] emailAlerts.updateSettings took 191ms to execute
+[TRPC] emailAlerts.updateSettings took 499ms to execute
+(pass) security alerts > turning alerts on or saving unchanged settings sends nothing [1103.68ms]
+[TRPC] account.requestDeletion took 467ms to execute
+(pass) security alerts > deleting an account immediately sends one alert to its address, even with optional alerts off [540.97ms]
+[TRPC] account.requestDeletion took 532ms to execute
+(pass) security alerts > a scheduled deletion sends the account deleted alert only when it runs [608.27ms]
+(pass) security alerts > an account without a password is flagged so the email can give Google advice [6.66ms]
+[TRPC] auth.registerDeviceKey took 140ms to execute
+[TRPC] auth.registerDeviceKey took 481ms to execute
+[TRPC] account.requestDeletion took 680ms to execute
+(pass) security alerts > a stalled mail server doesn't hold up the request [1468.42ms]
+[TRPC] auth.registerDeviceKey took 226ms to execute
+[TRPC] accountRecovery.setup took 132ms to execute
+[TRPC] accountRecovery.changePhrase took 257ms to execute
+[security-alert] could not send recovery-phrase-changed
+[TRPC] auth.registerDeviceKey took 379ms to execute
+[security-alert] could not send new-sign-in
+[TRPC] account.requestDeletion took 305ms to execute
+(pass) security alerts > a failed send doesn't fail the request [1518.10ms]
+[security-alert] could not send deletion-scheduled
+[TRPC] emailAlerts.settings took 199ms to execute
+[TRPC] emailAlerts.updateSettings took 194ms to execute
+[TRPC] emailAlerts.settings took 197ms to execute
+(pass) email alert settings > both optional alerts start on and can be changed [657.85ms]
+[TRPC] emailAlerts.setTimezone took 345ms to execute
+(pass) email alert settings > an unknown timezone is rejected [418.41ms]
+
+packages/api/src/router/accountRecovery.integration.test.ts:
+[TRPC] accountHistory.create took 417ms to execute
+[TRPC] accountRecovery.status took 336ms to execute
+[TRPC] accountHistory.create took 462ms to execute
+[TRPC] accountHistory.create took 347ms to execute
+(pass) account recovery with PostgreSQL > create makes history key v1 with no escrow, and only once [1573.47ms]
+[TRPC] accountHistory.create took 223ms to execute
+[TRPC] accountHistory.create took 224ms to execute
+(pass) account recovery with PostgreSQL > two devices racing to create v1 leave one key, and the other gets CONFLICT [233.45ms]
+[TRPC] accountHistory.create took 276ms to execute
+[TRPC] accountRecovery.escrows took 261ms to execute
+[TRPC] accountRecovery.escrows took 200ms to execute
+(pass) account recovery with PostgreSQL > escrows leaves out versions with no escrow, so restore never offers them [751.22ms]
+[TRPC] accountRecovery.status took 461ms to execute
+[TRPC] accountHistory.create took 206ms to execute
+[TRPC] accountRecovery.setup took 334ms to execute
+[TRPC] accountRecovery.status took 303ms to execute
+[TRPC] accountRecovery.escrows took 497ms to execute
+[TRPC] accountRecovery.escrows took 410ms to execute
+(pass) account recovery with PostgreSQL > setup escrows the existing history key and stores only public keys and the escrow [2231.89ms]
+[TRPC] accountRecovery.setup took 462ms to execute
+[TRPC] accountHistory.create took 483ms to execute
+[TRPC] accountRecovery.setup took 444ms to execute
+[TRPC] accountRecovery.setup took 222ms to execute
+[TRPC] accountRecovery.setup took 153ms to execute
+[TRPC] accountRecovery.setup took 215ms to execute
+[TRPC] accountRecovery.escrows took 445ms to execute
+[TRPC] accountRecovery.setup took 335ms to execute
+[TRPC] accountRecovery.escrows took 175ms to execute
+(pass) account recovery with PostgreSQL > setup needs escrows for exactly the existing versions and creates none [2965.97ms]
+[TRPC] accountHistory.create took 292ms to execute
+[TRPC] accountRecovery.setup took 369ms to execute
+[TRPC] accountRecovery.setup took 370ms to execute
+(pass) account recovery with PostgreSQL > concurrent setup calls create one recovery key and the other gets CONFLICT [671.34ms]
+[TRPC] accountHistory.create took 324ms to execute
+[TRPC] accountRecovery.setup took 101ms to execute
+[TRPC] accountRecovery.setup took 217ms to execute
+[TRPC] accountRecovery.setup took 297ms to execute
+[TRPC] accountRecovery.setup took 291ms to execute
+[TRPC] accountRecovery.setup took 132ms to execute
+[TRPC] accountRecovery.setup took 175ms to execute
+[TRPC] accountRecovery.escrows took 230ms to execute
+(pass) account recovery with PostgreSQL > setup rejects private key material and malformed escrows [1777.70ms]
+[TRPC] accountHistory.create took 104ms to execute
+[TRPC] accountRecovery.setup took 209ms to execute
+[TRPC] accountRecovery.changePhrase took 295ms to execute
+[TRPC] accountRecovery.changePhrase took 216ms to execute
+[TRPC] accountRecovery.changePhrase took 191ms to execute
+[TRPC] accountRecovery.changePhrase took 454ms to execute
+[TRPC] accountRecovery.changePhrase took 386ms to execute
+[TRPC] accountRecovery.changePhrase took 235ms to execute
+[TRPC] accountRecovery.escrows took 324ms to execute
+[TRPC] accountRecovery.changePhrase took 488ms to execute
+[TRPC] accountRecovery.status took 249ms to execute
+[TRPC] accountRecovery.escrows took 182ms to execute
+[TRPC] accountRecovery.escrows took 116ms to execute
+(pass) account recovery with PostgreSQL > changePhrase needs a fresh session and re-seals exactly the existing versions [3491.00ms]
+[TRPC] accountHistory.create took 331ms to execute
+[TRPC] accountRecovery.setup took 273ms to execute
+[TRPC] accountRecovery.reset took 115ms to execute
+[TRPC] accountRecovery.reset took 188ms to execute
+[TRPC] accountRecovery.reset took 381ms to execute
+[TRPC] accountRecovery.reset took 236ms to execute
+[TRPC] accountRecovery.reset took 165ms to execute
+[TRPC] accountRecovery.reset took 488ms to execute
+[TRPC] accountRecovery.reset took 154ms to execute
+[TRPC] accountRecovery.status took 299ms to execute
+[TRPC] accountRecovery.escrows took 187ms to execute
+[TRPC] accountRecovery.escrows took 270ms to execute
+(pass) account recovery with PostgreSQL > reset needs a fresh session and confirmation, then replaces every key with v(N+1) [3135.70ms]
+[TRPC] accountHistory.create took 489ms to execute
+[TRPC] accountRecovery.setup took 391ms to execute
+[TRPC] accountRecovery.reset took 237ms to execute
+(pass) account recovery with PostgreSQL > reset is refused and keeps every key when the phone is removed while it waits [1140.50ms]
+[TRPC] accountRecovery.setup took 375ms to execute
+[TRPC] accountRecovery.status took 233ms to execute
+(pass) account recovery with PostgreSQL > a session from more than 30 minutes ago cannot set up a phrase and status reports it [614.59ms]
+[TRPC] accountRecovery.status took 217ms to execute
+[TRPC] accountRecovery.status took 220ms to execute
+(pass) account recovery with PostgreSQL > status reports how long the session stays fresh [438.12ms]
+[TRPC] accountHistory.create took 146ms to execute
+[TRPC] accountRecovery.setup took 194ms to execute
+[TRPC] accountRecovery.changePhrase took 303ms to execute
+[TRPC] accountRecovery.reset took 431ms to execute
+(pass) account recovery with PostgreSQL > a session from more than 30 minutes ago cannot change or reset the phrase [1089.79ms]
+[TRPC] accountRecovery.changePhrase took 230ms to execute
+(pass) account recovery with PostgreSQL > changePhrase is NOT_FOUND when no recovery phrase is set up [234.08ms]
+[TRPC] accountHistory.create took 201ms to execute
+[TRPC] accountHistory.create took 272ms to execute
+[TRPC] accountRecovery.setup took 230ms to execute
+[TRPC] accountRecovery.reset took 347ms to execute
+(pass) account recovery with PostgreSQL > create and reset reject a history key id that another user already holds [1067.72ms]
+[TRPC] accountRecovery.requestResetCode took 391ms to execute
+[TRPC] accountRecovery.requestResetCode took 183ms to execute
+[TRPC] accountRecovery.verifyResetCode took 434ms to execute
+[TRPC] accountRecovery.verifyResetCode took 458ms to execute
+[TRPC] accountRecovery.verifyResetCode took 299ms to execute
+[TRPC] accountRecovery.verifyResetCode took 330ms to execute
+[TRPC] accountRecovery.verifyResetCode took 126ms to execute
+(pass) account recovery with PostgreSQL > verifyResetCode only accepts this user's latest code, once, and gives a reset token [2228.55ms]
+[TRPC] accountHistory.create took 159ms to execute
+[TRPC] accountRecovery.setup took 455ms to execute
+[TRPC] accountHistory.create took 144ms to execute
+[TRPC] accountRecovery.setup took 179ms to execute
+[TRPC] accountRecovery.requestResetCode took 432ms to execute
+[TRPC] accountRecovery.verifyResetCode took 156ms to execute
+[TRPC] accountRecovery.requestResetCode took 499ms to execute
+[TRPC] accountRecovery.verifyResetCode took 424ms to execute
+[TRPC] accountRecovery.reset took 500ms to execute
+[TRPC] accountRecovery.reset took 366ms to execute
+[TRPC] accountRecovery.reset took 464ms to execute
+[TRPC] accountRecovery.reset took 240ms to execute
+[TRPC] accountRecovery.reset took 462ms to execute
+[TRPC] accountRecovery.reset took 234ms to execute
+(pass) account recovery with PostgreSQL > with email on, reset needs this user's reset token and the token works once [4742.18ms]
+[TRPC] accountHistory.create took 239ms to execute
+[TRPC] accountRecovery.setup took 424ms to execute
+[TRPC] accountRecovery.requestResetCode took 123ms to execute
+[TRPC] accountRecovery.verifyResetCode took 483ms to execute
+[TRPC] accountRecovery.reset took 218ms to execute
+[TRPC] accountRecovery.reset took 162ms to execute
+[TRPC] accountRecovery.reset took 222ms to execute
+(pass) account recovery with PostgreSQL > a reset that fails after the token is checked keeps the token for the retry [1900.22ms]
+[TRPC] accountHistory.create took 361ms to execute
+[TRPC] accountRecovery.setup took 202ms to execute
+[TRPC] accountRecovery.requestResetCode took 414ms to execute
+[TRPC] accountRecovery.verifyResetCode took 305ms to execute
+[TRPC] accountRecovery.reset took 264ms to execute
+(pass) account recovery with PostgreSQL > an expired reset token can't reset the phrase [1558.61ms]
+[TRPC] accountRecovery.requestResetCode took 326ms to execute
+[TRPC] accountRecovery.requestResetCode took 287ms to execute
+[TRPC] accountRecovery.requestResetCode took 198ms to execute
+[TRPC] accountRecovery.requestResetCode took 324ms to execute
+[TRPC] accountRecovery.requestResetCode took 384ms to execute
+(pass) account recovery with PostgreSQL > requestResetCode needs a fresh session, emails only the account's own address and is rate-limited [1524.65ms]
+[TRPC] accountHistory.create took 222ms to execute
+[TRPC] accountRecovery.setup took 293ms to execute
+[TRPC] accountRecovery.requestResetCode took 319ms to execute
+[TRPC] accountRecovery.verifyResetCode took 376ms to execute
+[TRPC] accountRecovery.reset took 307ms to execute
+(pass) account recovery with PostgreSQL > with email off, there is no code to request or verify and reset works without one [1529.77ms]
+
+packages/api/src/router/feedbackRouter.integration.test.ts:
+[TRPC] feedback.submit took 446ms to execute
+[TRPC] feedback.submit took 339ms to execute
+(pass) feedback with PostgreSQL > persists anonymous feedback with diagnostics and optional email [790.55ms]
+
+packages/api/src/router/accountDeletionRequest.integration.test.ts:
+[TRPC] account.requestDeletion took 232ms to execute
+[TRPC] account.requestDeletion took 429ms to execute
+[TRPC] account.requestDeletion took 326ms to execute
+[TRPC] account.requestDeletion took 427ms to execute
+[TRPC] groupInvites.accept took 328ms to execute
+[TRPC] groupInvites.acceptShared took 331ms to execute
+[TRPC] groupInvites.createShared took 163ms to execute
+2026-11-13T11:28:31.145Z WARN [Better Auth]: Invalid password
+[TRPC] account.deletionCancellationNotice took 337ms to execute
+[TRPC] account.deletionCancellationNotice took 139ms to execute
+[TRPC] account.acknowledgeDeletionCancellation took 248ms to execute
+[TRPC] account.deletionCancellationNotice took 416ms to execute
+[TRPC] account.acknowledgeDeletionCancellation took 126ms to execute
+[TRPC] account.deletionCancellationNotice took 495ms to execute
+(pass) account deletion request with PostgreSQL > rejects a sole owner, revokes all sessions, and cancels on successful login [4309.46ms]
+(pass) account deletion request with PostgreSQL > rechecks the deadline after waiting for the account lock [923.38ms]
+[TRPC] account.requestDeletion took 285ms to execute
+[TRPC] account.requestDeletion took 381ms to execute
+(pass) account deletion request with PostgreSQL > concurrent owner requests cannot leave a group without an available owner [527.44ms]
+[TRPC] groupLifecycle.create took 134ms to execute
+(pass) account deletion request with PostgreSQL > group creation waiting for deletion cannot create an orphaned group [198.66ms]
+(pass) account deletion request with PostgreSQL > refuses a login after the deadline without cancelling deletion or retaining a session [70.77ms]
+(pass) account deletion request with PostgreSQL > successful sign-in and due deletion cannot both win [53.82ms]
+[TRPC] account.requestDeletion took 170ms to execute
+[TRPC] account.requestDeletion took 519ms to execute
+(pass) immediate deletion verifies credentials and removes the account without a grace period [767.45ms]
+(pass) deletes an account's location points over many batches and refuses a sign-in while the batches run [7114.01ms]
+
+packages/api/src/router/deviceActivation.integration.test.ts:
+[TRPC] auth.registerDeviceKey took 288ms to execute
+[TRPC] accountHistory.create took 201ms to execute
+[TRPC] auth.registerDeviceKey took 485ms to execute
+[TRPC] device.status took 419ms to execute
+[TRPC] device.status took 350ms to execute
+(pass) device activation with PostgreSQL > the first device is active and a later one is Pending without flagging a rotation [1779.55ms]
+[TRPC] auth.registerDeviceKey took 277ms to execute
+[TRPC] accountHistory.create took 178ms to execute
+[TRPC] auth.registerDeviceKey took 477ms to execute
+[TRPC] accountHistory.create took 496ms to execute
+(pass) device activation with PostgreSQL > a Pending device can't create a History key [1443.05ms]
+[TRPC] auth.registerDeviceKey took 506ms to execute
+[TRPC] accountHistory.create took 331ms to execute
+[TRPC] auth.registerDeviceKey took 308ms to execute
+[TRPC] device.activationChallenge took 119ms to execute
+[TRPC] device.activate took 153ms to execute
+[TRPC] device.activationChallenge took 198ms to execute
+[TRPC] device.activate took 498ms to execute
+[TRPC] device.activate took 415ms to execute
+[TRPC] device.activationChallenge took 114ms to execute
+[TRPC] device.activate took 376ms to execute
+(pass) device activation with PostgreSQL > the challenge only passes with the current History key and sets the rotation flag [3035.45ms]
+[TRPC] auth.registerDeviceKey took 145ms to execute
+[TRPC] accountHistory.create took 213ms to execute
+[TRPC] auth.registerDeviceKey took 406ms to execute
+[TRPC] auth.registerDeviceKey took 163ms to execute
+[TRPC] device.activationChallenge took 343ms to execute
+[TRPC] device.sessionChallenge took 121ms to execute
+[TRPC] device.activate took 156ms to execute
+(pass) device activation with PostgreSQL > a session-link answer can't activate a Pending phone [1564.14ms]
+[TRPC] auth.registerDeviceKey took 201ms to execute
+[TRPC] accountHistory.create took 362ms to execute
+[TRPC] auth.registerDeviceKey took 462ms to execute
+[TRPC] device.activationChallenge took 109ms to execute
+[TRPC] device.activate took 287ms to execute
+[TRPC] device.activate took 398ms to execute
+(pass) device activation with PostgreSQL > activating again after a lost response says the phone is active [1830.72ms]
+[TRPC] auth.registerDeviceKey took 488ms to execute
+[TRPC] accountHistory.create took 274ms to execute
+[TRPC] auth.registerDeviceKey took 189ms to execute
+[TRPC] groupInvites.sharedStatuses took 216ms to execute
+[TRPC] groupLifecycle.delete took 400ms to execute
+[TRPC] accountRecovery.setup took 128ms to execute
+[TRPC] accountRecovery.changePhrase took 391ms to execute
+(pass) device activation with PostgreSQL > a Pending device can't run group admin or owner actions or set up a phrase [2101.99ms]
+[TRPC] auth.registerDeviceKey took 296ms to execute
+[TRPC] accountHistory.create took 157ms to execute
+[TRPC] auth.registerDeviceKey took 464ms to execute
+[TRPC] device.activationChallenge took 391ms to execute
+[TRPC] device.activate took 314ms to execute
+(pass) device activation with PostgreSQL > an expired challenge fails [1634.69ms]
+[TRPC] auth.registerDeviceKey took 429ms to execute
+[TRPC] accountHistory.create took 139ms to execute
+[TRPC] auth.registerDeviceKey took 414ms to execute
+[TRPC] device.activationChallenge took 215ms to execute
+[TRPC] device.activate took 199ms to execute
+(pass) device activation with PostgreSQL > a challenge fails once the History key has moved on [1408.46ms]
+[TRPC] auth.registerDeviceKey took 172ms to execute
+[TRPC] accountHistory.create took 382ms to execute
+[TRPC] auth.registerDeviceKey took 319ms to execute
+[TRPC] device.activationChallenge took 334ms to execute
+(pass) device activation with PostgreSQL > an account with no History key gets no challenge [1219.44ms]
+[TRPC] auth.registerDeviceKey took 469ms to execute
+[TRPC] accountHistory.create took 413ms to execute
+[TRPC] auth.registerDeviceKey took 385ms to execute
+[TRPC] auth.registerDeviceKey took 139ms to execute
+[TRPC] accountHistory.create took 410ms to execute
+[TRPC] auth.registerDeviceKey took 253ms to execute
+[TRPC] groupLifecycle.create took 484ms to execute
+[TRPC] groupInvites.accept took 306ms to execute
+[TRPC] groupInvites.acceptShared took 446ms to execute
+(pass) device activation with PostgreSQL > a Pending device can't create or join a group [3336.95ms]
+[TRPC] auth.registerDeviceKey took 181ms to execute
+[TRPC] accountHistory.create took 353ms to execute
+[TRPC] auth.registerDeviceKey took 383ms to execute
+[TRPC] accountRecovery.reset took 122ms to execute
+[TRPC] accountRecovery.status took 214ms to execute
+(pass) device activation with PostgreSQL > a reset with no phrase set up activates the Pending device that calls it [1267.65ms]
+[TRPC] auth.registerDeviceKey took 278ms to execute
+(pass) device activation with PostgreSQL > a phone on an account that has never had an active phone is active straight away [283.04ms]
+[TRPC] auth.registerDeviceKey took 125ms to execute
+[TRPC] accountHistory.create took 506ms to execute
+[TRPC] auth.registerDeviceKey took 409ms to execute
+[TRPC] auth.registerDeviceKey took 205ms to execute
+[TRPC] device.status took 319ms to execute
+[TRPC] device.activationChallenge took 169ms to execute
+[TRPC] device.activate took 282ms to execute
+(pass) device activation with PostgreSQL > once every phone is removed, the next one is Pending, sends an alert and can use the phrase [2029.83ms]
+[TRPC] auth.registerDeviceKey took 379ms to execute
+[TRPC] accountHistory.create took 248ms to execute
+[TRPC] auth.registerDeviceKey took 399ms to execute
+[TRPC] auth.registerDeviceKey took 411ms to execute
+[TRPC] accountRecovery.reset took 195ms to execute
+(pass) device activation with PostgreSQL > once every phone is removed, the next one can be set up by starting fresh [1648.04ms]
+[TRPC] auth.registerDeviceKey took 120ms to execute
+[TRPC] accountHistory.create took 376ms to execute
+[TRPC] auth.registerDeviceKey took 478ms to execute
+[TRPC] auth.registerDeviceKey took 496ms to execute
+[TRPC] device.status took 385ms to execute
+[TRPC] device.status took 256ms to execute
+(pass) device activation with PostgreSQL > a Pending phone left on the account doesn't make the next one active [2124.54ms]
+[TRPC] auth.registerDeviceKey took 831ms to execute
+[TRPC] accountHistory.create took 418ms to execute
+[TRPC] auth.registerDeviceKey took 245ms to execute
+[TRPC] device.status took 194ms to execute
+[TRPC] device.status took 145ms to execute
+[TRPC] auth.registerDeviceKey took 288ms to execute
+[TRPC] device.status took 316ms to execute
+[TRPC] device.status took 250ms to execute
+[TRPC] device.status took 256ms to execute
+(pass) device activation with PostgreSQL > status says whether another phone on the account is active [3248.53ms]
+[TRPC] auth.registerDeviceKey took 337ms to execute
+[TRPC] accountHistory.create took 375ms to execute
+[TRPC] auth.registerDeviceKey took 291ms to execute
+[TRPC] device.status took 268ms to execute
+(pass) device activation with PostgreSQL > status leaves out the phone a session names but hasn't proved [1279.59ms]
+
+packages/api/src/router/deviceLink.integration.test.ts:
+[TRPC] auth.registerDeviceKey took 459ms to execute
+[TRPC] accountHistory.create took 149ms to execute
+[TRPC] auth.registerDeviceKey took 318ms to execute
+[TRPC] deviceLink.create took 504ms to execute
+[TRPC] deviceLink.status took 114ms to execute
+[TRPC] deviceLink.get took 318ms to execute
+[TRPC] deviceLink.approve took 429ms to execute
+[TRPC] deviceLink.status took 494ms to execute
+[TRPC] deviceLink.get took 223ms to execute
+[TRPC] deviceLink.approve took 177ms to execute
+(pass) device links with PostgreSQL > an active device approves a link, which activates the new device with its history [3231.54ms]
+[TRPC] auth.registerDeviceKey took 461ms to execute
+[TRPC] accountHistory.create took 316ms to execute
+[TRPC] auth.registerDeviceKey took 391ms to execute
+[TRPC] auth.registerDeviceKey took 310ms to execute
+[TRPC] accountHistory.create took 352ms to execute
+[TRPC] auth.registerDeviceKey took 350ms to execute
+[TRPC] auth.registerDeviceKey took 506ms to execute
+[TRPC] deviceLink.create took 252ms to execute
+[TRPC] deviceLink.get took 233ms to execute
+[TRPC] deviceLink.approve took 489ms to execute
+[TRPC] deviceLink.get took 404ms to execute
+[TRPC] deviceLink.approve took 496ms to execute
+[TRPC] deviceLink.get took 104ms to execute
+[TRPC] deviceLink.approve took 242ms to execute
+(pass) device links with PostgreSQL > only an active device of the same account can get or approve a link [4957.21ms]
+[TRPC] auth.registerDeviceKey took 245ms to execute
+[TRPC] accountHistory.create took 298ms to execute
+[TRPC] auth.registerDeviceKey took 276ms to execute
+[TRPC] deviceLink.create took 229ms to execute
+[TRPC] deviceLink.get took 160ms to execute
+[TRPC] deviceLink.approve took 321ms to execute
+[TRPC] deviceLink.status took 406ms to execute
+(pass) device links with PostgreSQL > an expired link is refused [1958.11ms]
+[TRPC] auth.registerDeviceKey took 291ms to execute
+[TRPC] accountHistory.create took 351ms to execute
+[TRPC] auth.registerDeviceKey took 218ms to execute
+[TRPC] auth.registerDeviceKey took 169ms to execute
+[TRPC] accountHistory.create took 243ms to execute
+[TRPC] auth.registerDeviceKey took 503ms to execute
+[TRPC] auth.registerDeviceKey took 351ms to execute
+[TRPC] deviceLink.create took 328ms to execute
+[TRPC] deviceLink.approve took 431ms to execute
+[TRPC] deviceLink.status took 337ms to execute
+[TRPC] deviceLink.status took 155ms to execute
+[TRPC] deviceLink.status took 107ms to execute
+(pass) device links with PostgreSQL > the new device can't fetch the handover for someone else's link [3536.09ms]
+[TRPC] auth.registerDeviceKey took 193ms to execute
+[TRPC] accountHistory.create took 369ms to execute
+[TRPC] auth.registerDeviceKey took 177ms to execute
+[TRPC] deviceLink.create took 250ms to execute
+[TRPC] deviceLink.create took 114ms to execute
+[TRPC] deviceLink.get took 474ms to execute
+[TRPC] deviceLink.create took 177ms to execute
+(pass) device links with PostgreSQL > a Pending device has one link at a time and an active device can't make one [1774.14ms]
+[TRPC] auth.registerDeviceKey took 492ms to execute
+[TRPC] accountHistory.create took 372ms to execute
+[TRPC] auth.registerDeviceKey took 105ms to execute
+[TRPC] auth.registerDeviceKey took 502ms to execute
+[TRPC] deviceLink.create took 495ms to execute
+[TRPC] deviceLink.create took 278ms to execute
+(pass) device links with PostgreSQL > a Pending device can't make a link when no other phone on the account is active [2270.75ms]
+[TRPC] auth.registerDeviceKey took 318ms to execute
+[TRPC] accountHistory.create took 352ms to execute
+[TRPC] auth.registerDeviceKey took 157ms to execute
+[TRPC] deviceLink.create took 297ms to execute
+[TRPC] deviceLink.decline took 263ms to execute
+[TRPC] deviceLink.decline took 337ms to execute
+[TRPC] deviceLink.decline took 121ms to execute
+(pass) device links with PostgreSQL > declining removes the Pending device and its link [1863.83ms]
+[TRPC] auth.registerDeviceKey took 441ms to execute
+[TRPC] accountHistory.create took 389ms to execute
+[TRPC] auth.registerDeviceKey took 250ms to execute
+[TRPC] deviceLink.create took 383ms to execute
+[TRPC] deviceLink.decline took 279ms to execute
+(pass) device links with PostgreSQL > declining refuses a phone that was approved while the decline waited [1767.05ms]
+[TRPC] auth.registerDeviceKey took 466ms to execute
+[TRPC] accountHistory.create took 378ms to execute
+[TRPC] auth.registerDeviceKey took 117ms to execute
+[TRPC] deviceLink.create took 403ms to execute
+[TRPC] deviceLink.approve took 466ms to execute
+[TRPC] account.removeThisDevice took 252ms to execute
+(pass) device links with PostgreSQL > a Pending device's session can't act as an active device by naming it [2113.41ms]
+[TRPC] auth.registerDeviceKey took 233ms to execute
+[TRPC] accountHistory.create took 382ms to execute
+[TRPC] auth.registerDeviceKey took 383ms to execute
+[TRPC] account.removeDevice took 247ms to execute
+(pass) device links with PostgreSQL > a Pending device with a fresh session can't remove an active device [1262.29ms]
+[TRPC] auth.registerDeviceKey took 345ms to execute
+[TRPC] accountHistory.create took 449ms to execute
+[TRPC] auth.registerDeviceKey took 503ms to execute
+[TRPC] deviceLink.create took 260ms to execute
+[TRPC] deviceLink.approve took 453ms to execute
+(pass) device links with PostgreSQL > an approver removed while its approval waits can't approve [2032.46ms]
+[TRPC] auth.registerDeviceKey took 267ms to execute
+[TRPC] accountHistory.create took 466ms to execute
+[TRPC] auth.registerDeviceKey took 450ms to execute
+[TRPC] deviceLink.create took 217ms to execute
+[TRPC] deviceLink.create took 270ms to execute
+[TRPC] deviceLink.status took 195ms to execute
+(pass) device links with PostgreSQL > a new link made while an approval lands keeps the approved handover [1884.65ms]
+[TRPC] auth.registerDeviceKey took 497ms to execute
+[TRPC] accountHistory.create took 372ms to execute
+[TRPC] auth.registerDeviceKey took 192ms to execute
+[TRPC] auth.registerDeviceKey took 300ms to execute
+[TRPC] deviceLink.create took 189ms to execute
+[TRPC] account.removeDevice took 461ms to execute
+[TRPC] auth.registerDeviceKey took 184ms to execute
+[TRPC] deviceLink.create took 427ms to execute
+[TRPC] deviceLink.approve took 322ms to execute
+[TRPC] account.removeDevice took 109ms to execute
+[TRPC] deviceLink.status took 457ms to execute
+(pass) device links with PostgreSQL > removing a device deletes its own links but keeps a handover it approved [3541.68ms]
+[TRPC] auth.registerDeviceKey took 242ms to execute
+[TRPC] accountHistory.create took 129ms to execute
+[TRPC] auth.registerDeviceKey took 386ms to execute
+[TRPC] deviceLink.create took 335ms to execute
+(pass) device links with PostgreSQL > deleting the account deletes its links [1118.09ms]
+
+packages/api/src/lib/account-deletion-cli.integration.test.ts:
+(pass) account deletion CLI with PostgreSQL > deletes an account and returns a failure for an unknown email [1424.92ms]
+
+packages/api/src/lib/account-deletion.integration.test.ts:
+(pass) account deletion epoch references with PostgreSQL > new alerts and shared invitations require an account reference [9.29ms]
+(pass) account deletion epoch references with PostgreSQL > removing a sender and their location data preserves the epoch and other sender's data [61.20ms]
+(pass) account deletion epoch references with PostgreSQL > scheduled deletion uses the database deadline and is idempotent [29.51ms]
+(pass) account deletion epoch references with PostgreSQL > deletes a sole member's group and records its image for storage cleanup [27.27ms]
+(pass) account deletion epoch references with PostgreSQL > concurrent deletion cannot remove both group owners [38.02ms]
+(pass) account deletion epoch references with PostgreSQL > waits for an upload from another of the account's phones [46.28ms]
+[security-alert] could not send account-deleted
+(pass) account deletion epoch references with PostgreSQL > a failed account deleted alert doesn't fail the deletion [16.47ms]
+
+packages/cache/src/cache/OpenBeaconCache.integration.test.ts:
+(pass) OpenBeaconCache scripts > Redis runs the token bucket as rateLimits.test.ts expects [3.25ms]
+(pass) OpenBeaconCache scripts > FakeRedis runs the token bucket as rateLimits.test.ts expects [0.56ms]
+(pass) OpenBeaconCache scripts > Redis stores, replaces and resets signed map URLs [2.07ms]
+(pass) OpenBeaconCache scripts > FakeRedis stores, replaces and resets signed map URLs [0.12ms]
+(pass) OpenBeaconCache scripts > Redis keeps turned-off alerts until they are due and taken [2.66ms]
+(pass) OpenBeaconCache scripts > FakeRedis keeps turned-off alerts until they are due and taken [0.10ms]
+
+packages/cache/src/cache/redisRestart.integration.test.ts:
+(skip) the shared client recovers after Redis is down for longer than Bun's own retries
+
+packages/api/src/router/group/groupEmailInvites.integration.test.ts:
+[TRPC] groupLifecycle.create took 342ms to execute
+[TRPC] groupInvites.send took 181ms to execute
+[TRPC] groupInvites.send took 446ms to execute
+[TRPC] groupInvites.send took 506ms to execute
+[TRPC] groupInvites.list took 329ms to execute
+[TRPC] groupInvites.list took 279ms to execute
+[TRPC] groupInvites.list took 304ms to execute
+[TRPC] groupInvites.acceptanceContext took 278ms to execute
+[TRPC] groupInvites.decline took 453ms to execute
+[TRPC] groupInvites.acceptanceContext took 274ms to execute
+[TRPC] groupInvites.acceptanceContext took 209ms to execute
+[TRPC] groupInvites.accept took 263ms to execute
+[TRPC] groupInvites.accept took 199ms to execute
+[TRPC] groupInvites.list took 135ms to execute
+[TRPC] groupInvites.accept took 349ms to execute
+[TRPC] groupInvites.accept took 424ms to execute
+[TRPC] groupInvites.accept took 457ms to execute
+[TRPC] groupInvites.list took 184ms to execute
+[TRPC] groupInvites.acceptanceContext took 208ms to execute
+[TRPC] groupInvites.accept took 191ms to execute
+[TRPC] groupInvites.joinAlerts took 302ms to execute
+[TRPC] groupInvites.send took 299ms to execute
+[TRPC] groupInvites.list took 493ms to execute
+[TRPC] groupInvites.list took 469ms to execute
+[TRPC] groupInvites.decline took 174ms to execute
+[TRPC] groupInvites.decline took 365ms to execute
+[TRPC] groupInvites.acceptanceContext took 104ms to execute
+[TRPC] groupInvites.send took 399ms to execute
+[TRPC] groupInvites.list took 280ms to execute
+[TRPC] groupInvites.acceptanceContext took 492ms to execute
+[TRPC] groupInvites.accept took 261ms to execute
+[TRPC] groupInvites.decline took 390ms to execute
+[TRPC] groupInvites.list took 479ms to execute
+(pass) email group invitations with PostgreSQL > authorizes, deduplicates, declines and accepts invitations atomically across concurrent joins [9173.27ms]
+[TRPC] groupInvites.list took 366ms to execute
+[TRPC] groupInvites.acceptanceContext took 270ms to execute
+[TRPC] groupInvites.send took 126ms to execute
+[TRPC] groupInvites.list took 205ms to execute
+[TRPC] groupInvites.send took 292ms to execute
+[TRPC] groupInvites.list took 212ms to execute
+[TRPC] groupInvites.list took 486ms to execute
+[TRPC] groupInvites.list took 426ms to execute
+(pass) email group invitations with PostgreSQL > expires invites after 30 days and drops them when the inviter leaves [2399.92ms]
+[TRPC] groupInvites.send took 322ms to execute
+[TRPC] groupInvites.send took 266ms to execute
+[TRPC] groupInvites.send took 110ms to execute
+(pass) email group invitations with PostgreSQL > re-sending an invite refreshes it for the latest sender and role [709.37ms]
+[TRPC] groupInvites.send took 498ms to execute
+[TRPC] groupInvites.send took 420ms to execute
+[TRPC] groupInvites.send took 448ms to execute
+[TRPC] groupMembership.updateRole took 469ms to execute
+[TRPC] groupMembership.updateRole took 244ms to execute
+[TRPC] groupMembership.updateRole took 181ms to execute
+(pass) email group invitations with PostgreSQL > demoting an inviter drops the invites their new role could not send [2274.92ms]
+
+packages/api/src/router/group/groupSettings.integration.test.ts:
+[TRPC] groupLifecycle.delete took 302ms to execute
+[TRPC] groupLifecycle.delete took 121ms to execute
+(pass) group settings with PostgreSQL > last member deletion rejects groups with other members and deletes a sole member's group [438.89ms]
+[TRPC] groupSettings.rename took 215ms to execute
+[TRPC] groupLifecycle.delete took 123ms to execute
+[TRPC] groupMembership.updateRole took 334ms to execute
+[TRPC] groupSettings.rename took 246ms to execute
+[TRPC] groupMembership.updateRole took 202ms to execute
+[TRPC] groupMembership.updateRole took 242ms to execute
+(pass) group settings with PostgreSQL > enforces permissions and serializes competing owner demotions [1170.70ms]
+[TRPC] groupMembership.updateRole took 482ms to execute
+[TRPC] groupMembership.updateRole took 294ms to execute
+[TRPC] groupMembership.remove took 360ms to execute
+[TRPC] groupInvites.createShared took 377ms to execute
+[TRPC] groupInvites.acceptShared took 484ms to execute
+[TRPC] groupInvites.accept took 344ms to execute
+[TRPC] groupMembership.updateRole took 320ms to execute
+(pass) group settings with PostgreSQL > freezes pending roles and preserves an owner who can manage the group [2702.62ms]
+[TRPC] groupLifecycle.delete took 231ms to execute
+[TRPC] groupLifecycle.delete took 144ms to execute
+[TRPC] groupLifecycle.delete took 492ms to execute
+(pass) group settings with PostgreSQL > only an owner can delete a group image and a storage failure leaves the group [874.75ms]
+[TRPC] groupLifecycle.delete took 143ms to execute
+(pass) group settings with PostgreSQL > removes already-uploaded pending images when deleting a group [152.02ms]
+[TRPC] groupLifecycle.delete took 313ms to execute
+[TRPC] groupSettings.confirmGroupImageUpload took 137ms to execute
+[TRPC] groupSettings.confirmGroupImageUpload took 206ms to execute
+(pass) group settings with PostgreSQL > cleans up a direct upload confirmed after group deletion [665.69ms]
+[TRPC] groupSettings.confirmGroupImageUpload took 233ms to execute
+[TRPC] groupSettings.confirmGroupImageUpload took 430ms to execute
+(pass) group settings with PostgreSQL > keeps pending uploads for different groups separate [685.24ms]
+[TRPC] groupSettings.confirmGroupImageUpload took 184ms to execute
+(pass) group settings with PostgreSQL > confirms a direct upload for an admin [195.66ms]
+[TRPC] groupMembership.remove took 422ms to execute
+[TRPC] groupMembership.remove took 473ms to execute
+[TRPC] groupInvites.send took 489ms to execute
+[TRPC] groupInvites.send took 281ms to execute
+[TRPC] groupInvites.send took 411ms to execute
+(pass) group settings with PostgreSQL > admins cannot remove owners or admins or invite admins, and members cannot invite [2090.79ms]
+[TRPC] groupMembership.list took 493ms to execute
+[TRPC] groupMembership.get took 209ms to execute
+[TRPC] groupMembership.members took 104ms to execute
+[TRPC] groupMembership.listMemberDevices took 420ms to execute
+[TRPC] groupMembership.nicknames took 215ms to execute
+[TRPC] groupMembership.colors took 242ms to execute
+[TRPC] groupMembership.removalContext took 411ms to execute
+[TRPC] groupMembership.updateNickname took 176ms to execute
+[TRPC] groupMembership.updateColor took 455ms to execute
+[TRPC] groupMembership.remove took 130ms to execute
+[TRPC] groupMembership.remove took 474ms to execute
+[TRPC] groupMembership.updateRole took 368ms to execute
+[TRPC] groupSettings.rename took 343ms to execute
+[TRPC] groupSettings.confirmGroupImageUpload took 147ms to execute
+[TRPC] groupMembership.list took 172ms to execute
+[TRPC] groupMembership.get took 137ms to execute
+[TRPC] groupMembership.members took 346ms to execute
+[TRPC] groupMembership.listMemberDevices took 242ms to execute
+[TRPC] groupMembership.nicknames took 281ms to execute
+[TRPC] groupMembership.colors took 428ms to execute
+[TRPC] groupMembership.removalContext took 239ms to execute
+[TRPC] groupMembership.updateNickname took 211ms to execute
+[TRPC] groupMembership.updateColor took 318ms to execute
+[TRPC] groupMembership.remove took 473ms to execute
+[TRPC] groupMembership.remove took 105ms to execute
+[TRPC] groupMembership.updateRole took 158ms to execute
+[TRPC] groupSettings.rename took 233ms to execute
+[TRPC] groupSettings.confirmGroupImageUpload took 198ms to execute
+(pass) group settings with PostgreSQL > a phone that isn't set up can't read or change the group [7764.98ms]
+[TRPC] groupEpoch.rotate took 319ms to execute
+[TRPC] groupMembership.remove took 321ms to execute
+(pass) group settings with PostgreSQL > an epoch must be made by the phone that sends it, not another phone on the account [655.13ms]
+
+packages/api/src/router/group/groupTracking.integration.test.ts:
+[TRPC] auth.registerDeviceKey took 306ms to execute
+[TRPC] auth.registerDeviceKey took 458ms to execute
+[TRPC] auth.registerDeviceKey took 430ms to execute
+(pass) tracking with PostgreSQL > device registration cannot cross an account change [1203.15ms]
+[TRPC] groupTracking.uploadBatch took 429ms to execute
+[TRPC] groupTracking.uploadBatch took 284ms to execute
+[TRPC] groupTracking.poll took 481ms to execute
+[TRPC] groupTracking.uploadBatch took 283ms to execute
+[TRPC] groupTracking.poll took 260ms to execute
+[TRPC] groupTracking.uploadBatch took 207ms to execute
+[TRPC] groupTracking.uploadBatch took 351ms to execute
+[TRPC] groupTracking.uploadBatch took 154ms to execute
+(pass) tracking with PostgreSQL > stores opaque ciphertext once, authorizes the sender and rejects oversized input [2461.83ms]
+[TRPC] groupTracking.uploadBatch took 486ms to execute
+[TRPC] groupTracking.uploadBatch took 248ms to execute
+[TRPC] groupTracking.uploadBatch took 216ms to execute
+[TRPC] groupTracking.uploadBatch took 426ms to execute
+[TRPC] groupTracking.uploadBatch took 148ms to execute
+[TRPC] groupTracking.uploadBatch took 456ms to execute
+[TRPC] groupTracking.uploadBatch took 182ms to execute
+[TRPC] groupTracking.uploadBatch took 388ms to execute
+[TRPC] groupTracking.uploadBatch took 130ms to execute
+(pass) tracking with PostgreSQL > upload responses carry a key state that changes when tracking keys need checking [2723.89ms]
+[TRPC] groupTracking.uploadBatch took 488ms to execute
+[TRPC] groupTracking.uploadBatch took 480ms to execute
+(pass) tracking with PostgreSQL > reports points for a deleted epoch as expired but rejects another group's epoch [979.54ms]
+[TRPC] groupTracking.uploadBatch took 160ms to execute
+[TRPC] groupTracking.uploadBatch took 145ms to execute
+[TRPC] groupTracking.uploadBatch took 264ms to execute
+(pass) tracking with PostgreSQL > uploadBatch rejections carry a reason for not a member, a deleted group and an unknown device [571.80ms]
+[TRPC] groupTracking.getLatest took 134ms to execute
+[TRPC] groupTracking.getLatest took 257ms to execute
+[TRPC] groupTracking.getLatest took 243ms to execute
+[TRPC] groupTracking.poll took 165ms to execute
+[TRPC] groupTracking.uploadBatch took 144ms to execute
+[TRPC] groupMembership.listMemberDevices took 348ms to execute
+[TRPC] groupMembership.listMemberDevices took 437ms to execute
+(pass) tracking with PostgreSQL > getLatest returns each active device's newest point and skips devices with none [1766.49ms]
+
+packages/api/src/router/group/groupDeparture.integration.test.ts:
+[TRPC] groupLifecycle.create took 265ms to execute
+[TRPC] groupInvites.send took 454ms to execute
+[TRPC] groupInvites.list took 234ms to execute
+[TRPC] groupInvites.acceptanceContext took 470ms to execute
+[TRPC] groupInvites.accept took 155ms to execute
+[TRPC] groupInvites.joinAlerts took 356ms to execute
+[TRPC] groupInvites.joinAlerts took 197ms to execute
+[TRPC] groupTracking.uploadBatch took 390ms to execute
+[TRPC] groupTracking.poll took 270ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 179ms to execute
+[TRPC] groupMembership.members took 385ms to execute
+[TRPC] groupMembership.removalContext took 180ms to execute
+[TRPC] groupMembership.removalContext took 382ms to execute
+[TRPC] groupMembership.remove took 387ms to execute
+[TRPC] groupTracking.poll took 374ms to execute
+[TRPC] groupMembership.members took 127ms to execute
+[TRPC] groupTracking.uploadBatch took 238ms to execute
+[TRPC] groupInvites.send took 198ms to execute
+[TRPC] groupInvites.list took 321ms to execute
+[TRPC] groupInvites.acceptanceContext took 412ms to execute
+[TRPC] groupInvites.accept took 171ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 331ms to execute
+[TRPC] groupEpoch.listEpochKeyWraps took 297ms to execute
+[TRPC] groupTracking.uploadBatch took 371ms to execute
+[TRPC] groupMembership.removalContext took 107ms to execute
+[TRPC] groupMembership.remove took 439ms to execute
+[TRPC] groupMembership.members took 363ms to execute
+[TRPC] groupMembership.members took 383ms to execute
+[TRPC] groupMembership.removalContext took 143ms to execute
+[TRPC] groupMembership.remove took 165ms to execute
+[TRPC] groupTracking.uploadBatch took 461ms to execute
+[TRPC] groupTracking.poll took 156ms to execute
+[TRPC] groupMembership.members took 248ms to execute
+[TRPC] groupInvites.send took 282ms to execute
+[TRPC] groupInvites.list took 101ms to execute
+[TRPC] groupInvites.acceptanceContext took 428ms to execute
+[TRPC] groupInvites.accept took 120ms to execute
+[TRPC] groupMembership.members took 199ms to execute
+[TRPC] groupMembership.removalContext took 487ms to execute
+[TRPC] groupMembership.remove took 170ms to execute
+[TRPC] groupMembership.remove took 317ms to execute
+[TRPC] groupMembership.members took 253ms to execute
+[TRPC] groupMembership.remove took 504ms to execute
+[TRPC] groupMembership.members took 303ms to execute
+[TRPC] groupInvites.send took 356ms to execute
+[TRPC] groupInvites.list took 329ms to execute
+(pass) group departure with PostgreSQL > leave deletes tracking and device wraps, rotates keys, prevents old uploads after rejoining and protects the last owner [13358.31ms]
+[TRPC] groupLifecycle.create took 188ms to execute
+[TRPC] groupTracking.uploadBatch took 169ms to execute
+[TRPC] groupInvites.send took 348ms to execute
+[TRPC] groupInvites.list took 173ms to execute
+[TRPC] groupInvites.acceptanceContext took 412ms to execute
+[TRPC] groupInvites.accept took 126ms to execute
+[TRPC] groupTracking.uploadBatch took 429ms to execute
+[TRPC] groupTracking.uploadBatch took 218ms to execute
+[TRPC] groupTracking.poll took 362ms to execute
+[TRPC] groupTracking.poll took 397ms to execute
+[TRPC] groupTracking.poll took 390ms to execute
+[TRPC] groupTracking.getLatest took 387ms to execute
+[TRPC] groupTracking.getLatest took 270ms to execute
+[TRPC] groupMembership.members took 269ms to execute
+[TRPC] groupMembership.removalContext took 362ms to execute
+[TRPC] groupMembership.remove took 160ms to execute
+[TRPC] groupMembership.members took 476ms to execute
+[TRPC] groupEpoch.rotationContext took 326ms to execute
+(pass) group departure with PostgreSQL > a member who joins later can't read earlier rows, and a leaver can't choose the next key [5482.42ms]
+[TRPC] groupLifecycle.create took 239ms to execute
+[TRPC] groupInvites.send took 247ms to execute
+[TRPC] groupInvites.list took 120ms to execute
+[TRPC] groupInvites.acceptanceContext took 214ms to execute
+[TRPC] groupInvites.accept took 515ms to execute
+[TRPC] groupMembership.members took 475ms to execute
+[TRPC] groupMembership.remove took 122ms to execute
+(pass) group departure with PostgreSQL > the last member to leave deletes the group [1945.77ms]
+
+packages/api/src/router/group/groupHistoryWraps.integration.test.ts:
+[TRPC] auth.deviceKeyContext took 139ms to execute
+[TRPC] groupLifecycle.create took 269ms to execute
+[TRPC] groupInvites.send took 392ms to execute
+[TRPC] groupInvites.list took 432ms to execute
+[TRPC] groupInvites.acceptanceContext took 282ms to execute
+[TRPC] groupInvites.accept took 337ms to execute
+[TRPC] groupInvites.send took 485ms to execute
+[TRPC] groupInvites.list took 205ms to execute
+[TRPC] groupInvites.acceptanceContext took 104ms to execute
+[TRPC] groupInvites.accept took 179ms to execute
+[TRPC] auth.deviceKeyContext took 253ms to execute
+[TRPC] groupLifecycle.create took 363ms to execute
+[TRPC] groupInvites.send took 225ms to execute
+[TRPC] groupInvites.list took 263ms to execute
+[TRPC] groupInvites.acceptanceContext took 464ms to execute
+[TRPC] groupInvites.accept took 225ms to execute
+[TRPC] auth.deviceKeyContext took 419ms to execute
+[TRPC] groupLifecycle.create took 395ms to execute
+[TRPC] accountHistory.create took 235ms to execute
+[TRPC] accountHistory.create took 386ms to execute
+[TRPC] accountHistory.create took 291ms to execute
+[TRPC] accountRecovery.setup took 127ms to execute
+[TRPC] accountRecovery.setup took 188ms to execute
+(pass) group history wraps with PostgreSQL > group creation and invite acceptance record the epoch each membership began [0.70ms]
+[TRPC] groupEpoch.listHistoryBackfill took 481ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 200ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 207ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 396ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 359ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 226ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 207ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 242ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 252ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 311ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 429ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 260ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 457ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 489ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 173ms to execute
+(pass) group history wraps with PostgreSQL > backfill offers only entitled epochs and wraps are stored idempotently, with or without an escrow [4714.16ms]
+[TRPC] groupEpoch.addHistoryWraps took 246ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 120ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 369ms to execute
+(pass) group history wraps with PostgreSQL > a member who joined at epoch N can't add a history wrap for epoch N-1 [744.70ms]
+[TRPC] groupEpoch.addHistoryWraps took 355ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 203ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 157ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 353ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 342ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 276ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 479ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 138ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 156ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 160ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 492ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 286ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 424ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 451ms to execute
+(pass) group history wraps with PostgreSQL > rejects wraps from another user's device and other invalid wraps [4312.89ms]
+[TRPC] groupEpoch.addHistoryWraps took 162ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 172ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 398ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 217ms to execute
+(pass) group history wraps with PostgreSQL > a wrap for a non-current history version is rejected [963.19ms]
+[TRPC] groupEpoch.listHistoryBackfill took 178ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 161ms to execute
+(pass) group history wraps with PostgreSQL > backfill pages through only the epochs the device holds [361.02ms]
+[TRPC] groupEpoch.rotationContext took 302ms to execute
+[TRPC] groupEpoch.rotate took 274ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 371ms to execute
+[TRPC] groupMembership.removalContext took 161ms to execute
+[TRPC] groupMembership.remove took 589ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 156ms to execute
+(pass) group history wraps with PostgreSQL > departure deletes the member's history wraps and backfill racing departure is rejected [1729.83ms]
+[TRPC] auth.registerDeviceKey took 244ms to execute
+[TRPC] auth.registerDeviceKey took 192ms to execute
+(pass) group history wraps with PostgreSQL > a new device is Pending and only flags the user's groups for rotation once it's activated [451.72ms]
+[TRPC] groupEpoch.getEpochKeyWraps took 131ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 496ms to execute
+[TRPC] groupEpoch.listEpochKeyWraps took 181ms to execute
+(pass) group history wraps with PostgreSQL > getEpochKeyWraps returns nothing for epochs before the caller joined [820.91ms]
+[TRPC] auth.deviceKeyContext took 237ms to execute
+[TRPC] groupLifecycle.create took 421ms to execute
+[TRPC] groupInvites.send took 163ms to execute
+[TRPC] groupInvites.list took 309ms to execute
+[TRPC] groupInvites.acceptanceContext took 420ms to execute
+[TRPC] groupInvites.accept took 222ms to execute
+[TRPC] groupMembership.removalContext took 449ms to execute
+[TRPC] groupMembership.remove took 309ms to execute
+[TRPC] groupInvites.send took 170ms to execute
+[TRPC] groupInvites.list took 495ms to execute
+[TRPC] groupInvites.acceptanceContext took 240ms to execute
+[TRPC] groupInvites.accept took 227ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 135ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 257ms to execute
+[TRPC] groupEpoch.listEpochKeyWraps took 252ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 499ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 242ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 454ms to execute
+(pass) group history wraps with PostgreSQL > a member who leaves and rejoins can't read or back up epochs from the earlier membership [5536.06ms]
+[TRPC] groupEpoch.listHistoryBackfill took 459ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 193ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 107ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 170ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 130ms to execute
+(pass) group history wraps with PostgreSQL > history backfill and wraps only accept the calling phone's own device [1075.47ms]
+
+packages/api/src/router/group/groupRotation.integration.test.ts:
+[TRPC] groupEpoch.rotationContext took 491ms to execute
+[TRPC] groupEpoch.rotationContext took 410ms to execute
+[TRPC] groupEpoch.rotate took 483ms to execute
+[TRPC] groupEpoch.rotate took 335ms to execute
+[TRPC] groupEpoch.rotate took 202ms to execute
+[TRPC] groupEpoch.rotate took 389ms to execute
+[TRPC] groupEpoch.rotate took 419ms to execute
+(pass) group rotation with PostgreSQL > rejects an incorrect recipient set and serializes competing rotations [2356.90ms]
+[TRPC] groupTracking.uploadBatch took 223ms to execute
+[TRPC] groupTracking.uploadBatch took 262ms to execute
+[TRPC] groupEpoch.rotationContext took 148ms to execute
+[TRPC] groupEpoch.rotate took 147ms to execute
+[TRPC] groupTracking.uploadBatch took 430ms to execute
+(pass) group rotation with PostgreSQL > deletion preserves remaining tracking and permits old uploads before and after rotation [1264.61ms]
+
+packages/api/src/router/group/groupLimit.integration.test.ts:
+[TRPC] groupLifecycle.create took 457ms to execute
+[TRPC] groupLifecycle.create took 153ms to execute
+[TRPC] groupInvites.list took 243ms to execute
+[TRPC] groupInvites.acceptanceContext took 294ms to execute
+[TRPC] groupInvites.accept took 270ms to execute
+[TRPC] groupInvites.createShared took 423ms to execute
+[TRPC] groupInvites.acceptShared took 200ms to execute
+[TRPC] groupInvites.sharedStatuses took 309ms to execute
+(pass) group membership cap > a 17th group is refused when creating, accepting an invite or redeeming a join code [1912.81ms]
+[TRPC] groupInvites.createShared took 184ms to execute
+[TRPC] groupInvites.sharedAcceptanceContext took 138ms to execute
+[TRPC] groupLifecycle.create took 424ms to execute
+[TRPC] groupInvites.acceptShared took 444ms to execute
+(pass) group membership cap > two joins racing for the last place can't both get in [778.50ms]
+
+packages/api/src/router/group/groupEpochKeyWraps.integration.test.ts:
+[TRPC] auth.deviceKeyContext took 455ms to execute
+[TRPC] groupLifecycle.create took 334ms to execute
+[TRPC] groupInvites.send took 450ms to execute
+[TRPC] groupInvites.list took 173ms to execute
+[TRPC] groupInvites.acceptanceContext took 311ms to execute
+[TRPC] groupInvites.accept took 162ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 110ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 431ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 230ms to execute
+[TRPC] groupEpoch.listEpochKeyWraps took 381ms to execute
+[TRPC] groupEpoch.listEpochKeyWraps took 287ms to execute
+(pass) listing a member's epoch key wraps with PostgreSQL > lists entitled epochs newest first with the caller's own wraps [674.48ms]
+[TRPC] groupEpoch.listEpochKeyWraps took 109ms to execute
+(pass) listing a member's epoch key wraps with PostgreSQL > never returns another user's device wraps [110.53ms]
+[TRPC] groupEpoch.listEpochKeyWraps took 385ms to execute
+(pass) listing a member's epoch key wraps with PostgreSQL > rejects callers who aren't members of the group [385.61ms]
+[TRPC] auth.deviceKeyContext took 360ms to execute
+[TRPC] groupLifecycle.create took 191ms to execute
+[TRPC] groupEpoch.listEpochKeyWraps took 153ms to execute
+[TRPC] groupEpoch.listEpochKeyWraps took 265ms to execute
+(pass) listing a member's epoch key wraps with PostgreSQL > pages newest first in pages of 100 [990.09ms]
+[TRPC] groupEpoch.listEpochKeyWraps took 224ms to execute
+[TRPC] groupEpoch.listEpochKeyWraps took 395ms to execute
+[TRPC] groupEpoch.listEpochKeyWraps took 405ms to execute
+(pass) listing a member's epoch key wraps with PostgreSQL > uses the limit as the page size and keeps the cursor at the last returned epoch [1024.92ms]
+[TRPC] groupEpoch.listEpochKeyWraps took 365ms to execute
+[TRPC] groupEpoch.listEpochKeyWraps took 189ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 215ms to execute
+[TRPC] groupEpoch.listRecipientPublicKeys took 355ms to execute
+(pass) listing a member's epoch key wraps with PostgreSQL > leaves a removed device out of wraps and recipients [1141.38ms]
+[TRPC] groupEpoch.getLatest took 462ms to execute
+[TRPC] groupEpoch.rotationContext took 282ms to execute
+[TRPC] groupEpoch.listRecipientPublicKeys took 417ms to execute
+[TRPC] groupEpoch.listEpochKeyWraps took 257ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 199ms to execute
+[TRPC] groupEpoch.listHistoryBackfill took 388ms to execute
+[TRPC] groupEpoch.addHistoryWraps took 199ms to execute
+[TRPC] groupEpoch.listRecipientPublicKeys took 180ms to execute
+(pass) listing a member's epoch key wraps with PostgreSQL > leaves a Pending device out of every recipient set and refuses its wrap requests [2404.23ms]
+[TRPC] groupEpoch.listEpochKeyWraps took 466ms to execute
+[TRPC] groupEpoch.listEpochKeyWraps took 430ms to execute
+(pass) listing a member's epoch key wraps with PostgreSQL > rejects limits outside 1 to 100 [898.45ms]
+
+packages/api/src/router/group/groupSharedInvites.integration.test.ts:
+[TRPC] groupLifecycle.create took 140ms to execute
+[TRPC] groupInvites.createShared took 260ms to execute
+[TRPC] groupInvites.createShared took 111ms to execute
+[TRPC] groupInvites.sharedStatuses took 492ms to execute
+[TRPC] groupInvites.sharedStatuses took 133ms to execute
+[TRPC] groupInvites.sharedStatuses took 398ms to execute
+[TRPC] groupInvites.sharedAcceptanceContext took 129ms to execute
+[TRPC] groupInvites.sharedAcceptanceContext took 436ms to execute
+[TRPC] groupInvites.sharedStatuses took 157ms to execute
+[TRPC] groupInvites.sharedAcceptanceContext took 120ms to execute
+[TRPC] groupInvites.acceptShared took 174ms to execute
+[TRPC] groupInvites.sharedAcceptanceContext took 483ms to execute
+(pass) shared group invitations with PostgreSQL > only admins can create; expiry and code hashing are enforced [2910.86ms]
+[TRPC] groupInvites.createShared took 350ms to execute
+[TRPC] groupInvites.createShared took 324ms to execute
+[TRPC] groupInvites.sharedAcceptanceContext took 326ms to execute
+[TRPC] groupInvites.acceptShared took 327ms to execute
+[TRPC] groupInvites.sharedStatuses took 349ms to execute
+[TRPC] groupInvites.joinAlerts took 301ms to execute
+[TRPC] groupInvites.sharedAcceptanceContext took 320ms to execute
+[TRPC] groupInvites.acceptShared took 476ms to execute
+[TRPC] groupInvites.acceptShared took 489ms to execute
+[TRPC] groupInvites.sharedStatuses took 418ms to execute
+[TRPC] groupInvites.sharedStatuses took 289ms to execute
+[TRPC] groupInvites.sharedStatuses took 158ms to execute
+[TRPC] groupInvites.joinAlerts took 157ms to execute
+[TRPC] groupInvites.joinAlerts took 375ms to execute
+[TRPC] groupInvites.dismissJoinAlert took 474ms to execute
+[TRPC] groupInvites.joinAlerts took 138ms to execute
+[TRPC] groupInvites.dismissJoinAlert took 193ms to execute
+[TRPC] groupInvites.joinAlerts took 238ms to execute
+[TRPC] groupInvites.sharedAcceptanceContext took 212ms to execute
+(pass) shared group invitations with PostgreSQL > a code is consumed once and a failed epoch rolls back consumption [5471.97ms]
+
+packages/api/src/router/group/groupEpochHistoryRecipients.integration.test.ts:
+[TRPC] accountRecovery.setup took 312ms to execute
+[TRPC] accountRecovery.setup took 435ms to execute
+[TRPC] accountRecovery.setup took 399ms to execute
+[TRPC] accountRecovery.setup took 125ms to execute
+[TRPC] auth.deviceKeyContext took 410ms to execute
+[TRPC] groupLifecycle.create took 501ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 315ms to execute
+(pass) group epoch history recipients with PostgreSQL > group creation wraps the first epoch to the creator's current history key [1235.52ms]
+[TRPC] groupInvites.send took 232ms to execute
+[TRPC] groupInvites.list took 488ms to execute
+[TRPC] groupInvites.acceptanceContext took 291ms to execute
+[TRPC] groupInvites.accept took 419ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 217ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 248ms to execute
+[TRPC] groupInvites.send took 419ms to execute
+[TRPC] groupInvites.list took 452ms to execute
+[TRPC] groupInvites.acceptanceContext took 421ms to execute
+[TRPC] groupInvites.accept took 398ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 391ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 382ms to execute
+(pass) group epoch history recipients with PostgreSQL > invite acceptance wraps the join epoch to exactly the members with a history key, joiner included [4385.00ms]
+[TRPC] groupInvites.createShared took 471ms to execute
+[TRPC] groupInvites.sharedAcceptanceContext took 443ms to execute
+[TRPC] groupInvites.acceptShared took 252ms to execute
+[TRPC] groupInvites.acceptShared took 246ms to execute
+[TRPC] groupInvites.acceptShared took 411ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 391ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 482ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 222ms to execute
+(pass) group epoch history recipients with PostgreSQL > a joiner can't receive history wraps for epochs before their join through the creation path [2941.77ms]
+[TRPC] auth.deviceKeyContext took 330ms to execute
+[TRPC] groupEpoch.rotationContext took 425ms to execute
+[TRPC] auth.deviceKeyContext took 222ms to execute
+[TRPC] groupEpoch.rotate took 286ms to execute
+[TRPC] groupEpoch.rotate took 342ms to execute
+[TRPC] groupEpoch.rotate took 320ms to execute
+[TRPC] groupEpoch.rotate took 315ms to execute
+[TRPC] groupEpoch.rotate took 487ms to execute
+[TRPC] groupEpoch.rotate took 245ms to execute
+[TRPC] groupEpoch.rotate took 278ms to execute
+[TRPC] groupEpoch.rotate took 308ms to execute
+[TRPC] groupEpoch.rotate took 407ms to execute
+[TRPC] groupEpoch.rotate took 298ms to execute
+[TRPC] groupEpoch.rotate took 186ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 330ms to execute
+(pass) group epoch history recipients with PostgreSQL > the exact-set check rejects missing, extra, duplicate and stale-version history wraps [4819.78ms]
+[TRPC] groupEpoch.rotationContext took 277ms to execute
+[TRPC] accountRecovery.setup took 385ms to execute
+[TRPC] groupEpoch.rotate took 252ms to execute
+[TRPC] groupEpoch.rotationContext took 180ms to execute
+[TRPC] groupEpoch.rotate took 249ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 237ms to execute
+(pass) group epoch history recipients with PostgreSQL > a phrase set up while an epoch is being created is rejected and the rebuilt epoch succeeds [1617.57ms]
+[TRPC] groupEpoch.rotationContext took 356ms to execute
+[TRPC] accountRecovery.reset took 111ms to execute
+[TRPC] groupEpoch.rotate took 383ms to execute
+[TRPC] groupEpoch.rotationContext took 236ms to execute
+[TRPC] groupEpoch.rotate took 193ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 276ms to execute
+(pass) group epoch history recipients with PostgreSQL > an epoch built before a reset is rejected as a version mismatch and the rebuilt epoch succeeds [1591.13ms]
+[TRPC] groupEpoch.rotationContext took 375ms to execute
+[TRPC] groupEpoch.rotate took 530ms to execute
+[TRPC] accountRecovery.reset took 309ms to execute
+[TRPC] groupEpoch.rotationContext took 134ms to execute
+[TRPC] groupEpoch.rotate took 208ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 439ms to execute
+(pass) group epoch history recipients with PostgreSQL > a reset waits for epoch creation already holding the group [1727.84ms]
+[TRPC] groupEpoch.rotationContext took 473ms to execute
+[TRPC] groupEpoch.rotate took 164ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 159ms to execute
+(pass) group epoch history recipients with PostgreSQL > epoch creation holds the history keys it wraps to until it commits [818.29ms]
+[TRPC] groupMembership.removalContext took 301ms to execute
+[TRPC] auth.deviceKeyContext took 172ms to execute
+[TRPC] groupMembership.remove took 158ms to execute
+[TRPC] groupMembership.remove took 496ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 106ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 439ms to execute
+[TRPC] groupEpoch.getEpochKeyWraps took 401ms to execute
+(pass) group epoch history recipients with PostgreSQL > removal wraps the next epoch to everyone except the removed member [2095.57ms]
+
+packages/api/src/router/group/personalData.integration.test.ts:
+[TRPC] groupMembership.updateColor took 359ms to execute
+[TRPC] groupMembership.updateColor took 128ms to execute
+[TRPC] groupMembership.updateColor took 496ms to execute
+[TRPC] groupMembership.updateColor took 314ms to execute
+[TRPC] groupMembership.updateColor took 290ms to execute
+[TRPC] groupMembership.updateColor took 110ms to execute
+(pass) personal group colors with PostgreSQL > an expected ciphertext only replaces the caller's matching color [1708.37ms]
+[TRPC] groupMembership.updateColor took 375ms to execute
+[TRPC] groupMembership.updateColor took 199ms to execute
+[TRPC] groupMembership.updateColor took 277ms to execute
+(pass) personal group colors with PostgreSQL > concurrent swaps from the same expected color let exactly one win [656.13ms]
+
+packages/api/src/router/group/groupUploadConcurrency.integration.test.ts:
+[TRPC] groupLifecycle.create took 328ms to execute
+[TRPC] groupInvites.send took 201ms to execute
+[TRPC] groupInvites.list took 342ms to execute
+[TRPC] groupInvites.acceptanceContext took 169ms to execute
+[TRPC] groupInvites.accept took 521ms to execute
+[TRPC] groupTracking.uploadBatch took 428ms to execute
+(pass) concurrent group uploads with PostgreSQL > an upload does not wait for another upload in progress in the same group [2014.63ms]
+[TRPC] groupLifecycle.create took 124ms to execute
+[TRPC] groupInvites.send took 483ms to execute
+[TRPC] groupInvites.list took 444ms to execute
+[TRPC] groupInvites.acceptanceContext took 257ms to execute
+[TRPC] groupInvites.accept took 195ms to execute
+[TRPC] groupTracking.uploadBatch took 384ms to execute
+(pass) concurrent group uploads with PostgreSQL > uploads sharing points cannot deadlock however each batch is ordered [1902.72ms]
+[TRPC] groupLifecycle.create took 499ms to execute
+[TRPC] groupInvites.send took 410ms to execute
+[TRPC] groupInvites.list took 462ms to execute
+[TRPC] groupInvites.acceptanceContext took 108ms to execute
+[TRPC] groupInvites.accept took 202ms to execute
+[TRPC] groupTracking.uploadBatch took 560ms to execute
+(pass) concurrent group uploads with PostgreSQL > an upload waits for a group change that holds the group [2252.47ms]
+[TRPC] groupLifecycle.create took 193ms to execute
+[TRPC] groupInvites.send took 365ms to execute
+[TRPC] groupInvites.list took 300ms to execute
+[TRPC] groupInvites.acceptanceContext took 170ms to execute
+[TRPC] groupInvites.accept took 275ms to execute
+[TRPC] groupEpoch.rotationContext took 343ms to execute
+[TRPC] groupEpoch.rotate took 405ms to execute
+(pass) concurrent group uploads with PostgreSQL > a key rotation waits for an upload in progress and keeps its point [2074.22ms]
+[TRPC] groupLifecycle.create took 173ms to execute
+[TRPC] groupInvites.send took 265ms to execute
+[TRPC] groupInvites.list took 179ms to execute
+[TRPC] groupInvites.acceptanceContext took 478ms to execute
+[TRPC] groupInvites.accept took 201ms to execute
+[TRPC] groupMembership.removalContext took 387ms to execute
+[TRPC] groupMembership.remove took 692ms to execute
+[TRPC] groupTracking.uploadBatch took 415ms to execute
+(pass) concurrent group uploads with PostgreSQL > removing a member waits for their upload in progress and still deletes its point [2807.62ms]
+[TRPC] groupLifecycle.create took 399ms to execute
+[TRPC] groupInvites.send took 367ms to execute
+[TRPC] groupInvites.list took 192ms to execute
+[TRPC] groupInvites.acceptanceContext took 219ms to execute
+[TRPC] groupInvites.accept took 220ms to execute
+[TRPC] groupEpoch.rotationContext took 490ms to execute
+[TRPC] groupTracking.uploadBatch took 121ms to execute
+[TRPC] groupTracking.uploadBatch took 139ms to execute
+[TRPC] groupTracking.uploadBatch took 158ms to execute
+[TRPC] groupTracking.uploadBatch took 199ms to execute
+[TRPC] groupTracking.uploadBatch took 206ms to execute
+[TRPC] groupTracking.uploadBatch took 205ms to execute
+[TRPC] groupTracking.uploadBatch took 278ms to execute
+[TRPC] groupTracking.uploadBatch took 281ms to execute
+[TRPC] groupTracking.uploadBatch took 290ms to execute
+[TRPC] groupTracking.uploadBatch took 295ms to execute
+[TRPC] groupTracking.uploadBatch took 303ms to execute
+[TRPC] groupTracking.uploadBatch took 302ms to execute
+[TRPC] groupTracking.uploadBatch took 307ms to execute
+[TRPC] groupTracking.poll took 339ms to execute
+[TRPC] groupTracking.uploadBatch took 371ms to execute
+[TRPC] groupEpoch.rotate took 407ms to execute
+[TRPC] groupTracking.uploadBatch took 434ms to execute
+[TRPC] groupTracking.uploadBatch took 441ms to execute
+[TRPC] groupTracking.uploadBatch took 439ms to execute
+[TRPC] groupTracking.uploadBatch took 470ms to execute
+[TRPC] groupTracking.uploadBatch took 502ms to execute
+[TRPC] groupTracking.uploadBatch took 507ms to execute
+(pass) concurrent group uploads with PostgreSQL > overlapping uploads, retries and a rotation store every point once without deadlocking [2418.10ms]
+
+1 tests skipped:
+(skip) the shared client recovers after Redis is down for longer than Bun's own retries
+
+
+1 tests failed:
+(fail) a phone that isn't set up yet > can register, check its status and get set up by link or by phrase [5000.19ms]
+  ^ this test timed out after 5000ms.
+
+ 337 pass
+ 1 skip
+ 1 fail
+ 1737 expect() calls
+Ran 339 tests across 39 files. [400.08s]
+error: script "test:integration" exited with code 1

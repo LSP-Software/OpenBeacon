@@ -138,7 +138,7 @@ export const signInWithGoogle = async () => {
   }
 
   if (isCancelledResponse(googleSignInResult.data)) {
-    return {};
+    return { cancelled: true as const };
   }
 
   if (!isSuccessResponse(googleSignInResult.data)) {

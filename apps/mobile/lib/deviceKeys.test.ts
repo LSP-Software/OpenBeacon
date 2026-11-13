@@ -9,7 +9,7 @@ const storageValues = new Map<string, string>();
 let currentUserId = "user-a";
 let secureStoreSetError: Error | null = null;
 let secureStoreReadGate: Promise<void> | null = null;
-let onSecureStoreRead: (() => void) | null = null;
+let onSecureStoreRead: ((key: string) => void) | null = null;
 let secureStoreWriteGate: Promise<void> | null = null;
 let onSecureStoreWrite: (() => void) | null = null;
 let ownerQueryGate: Promise<void> | null = null;
@@ -43,7 +43,7 @@ mock.module("expo-secure-store", () => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: "when-unlocked-this-device-only",
   deleteItemAsync: deleteItemAsyncMock,
   getItemAsync: async (key: string) => {
-    onSecureStoreRead?.();
+    onSecureStoreRead?.(key);
     await secureStoreReadGate;
     return secureStoreValues.get(key) ?? null;
   },
@@ -449,6 +449,36 @@ describe("device key registration", () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  test("a key creation from before a wipe can't overwrite or remove the next sign-in's key", async () => {
+    const { ensureDeviceKeyRegistration } = await importDeviceKeysModule();
+    const { invalidateSecretWrites } = await import("./secretStorage.ts");
+    let release = () => {};
+    let legacyReadStarted = false;
+    onSecureStoreRead = (key) => {
+      if (key !== "encryption.device.privateKey") return;
+      legacyReadStarted = true;
+      secureStoreReadGate = new Promise((resolve) => {
+        release = resolve;
+      });
+    };
+    const stale = ensureDeviceKeyRegistration().catch((error: unknown) => error);
+    for (let index = 0; index < 200 && !legacyReadStarted; index++) await Promise.resolve();
+    expect(legacyReadStarted).toBe(true);
+
+    await invalidateSecretWrites("user-a");
+    storageValues.set("encryption.device.id.user-a", "newer-device");
+    storageValues.set("encryption.device.publicKey.user-a", "newer-public");
+    secureStoreValues.set("encryption.device.privateKey.user-a", "newer-private");
+    onSecureStoreRead = null;
+    secureStoreReadGate = null;
+    release();
+
+    expect(await stale).toBeInstanceOf(Error);
+    expect(storageValues.get("encryption.device.id.user-a")).toBe("newer-device");
+    expect(storageValues.get("encryption.device.publicKey.user-a")).toBe("newer-public");
+    expect(secureStoreValues.get("encryption.device.privateKey.user-a")).toBe("newer-private");
   });
 
   test("a stalled secure-store write is not replaced by a concurrent identity", async () => {

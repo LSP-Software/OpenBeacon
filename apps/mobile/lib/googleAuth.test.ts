@@ -9,10 +9,13 @@ const completeAuthenticatedSessionSetupMock = mock(
   }> => ({ data: undefined, error: null }),
 );
 const signInWithGoogleMock = mock(
-  async (): Promise<{
-    data?: { ok: true };
-    error?: { message: string };
-  }> => ({ data: { ok: true } }),
+  async (): Promise<
+    | {
+        data?: { ok: true };
+        error?: { message: string };
+      }
+    | { cancelled: true }
+  > => ({ data: { ok: true } }),
 );
 
 mock.module("./auth.ts", () => ({
@@ -30,6 +33,28 @@ describe("performGoogleAuth", () => {
     alertMock.mockClear();
     completeAuthenticatedSessionSetupMock.mockClear();
     signInWithGoogleMock.mockClear();
+  });
+
+  test("closing the Google account picker stops quietly without setting up the device", async () => {
+    signInWithGoogleMock.mockImplementationOnce(async () => ({ cancelled: true }));
+
+    const loadingStates: boolean[] = [];
+    const onSuccess = mock(async () => {});
+    const { performGoogleAuth } = await importGoogleAuthModule();
+
+    await performGoogleAuth({
+      setLoading: (loading) => {
+        loadingStates.push(loading);
+      },
+      failureTitle: "Google sign in failed",
+      onSuccess,
+      alert: alertMock,
+    });
+
+    expect(loadingStates).toEqual([true, false]);
+    expect(alertMock).not.toHaveBeenCalled();
+    expect(completeAuthenticatedSessionSetupMock).not.toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 
   test("resets loading and shows an alert when Google sign-in fails", async () => {

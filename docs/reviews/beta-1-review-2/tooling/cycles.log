@@ -1,0 +1,12 @@
+Circular dependencies (5)
+apps/mobile/lib/deviceActivation.ts → apps/mobile/lib/deviceKeys.ts → apps/mobile/…  apps/mobile/lib/deviceActivation.ts
+apps/mobile/lib/deviceKeys.ts → apps/mobile/lib/sessionLink.ts → apps/mobile/lib/s…  apps/mobile/lib/deviceKeys.ts      
+apps/mobile/lib/deviceKeys.ts → apps/mobile/lib/sessionLink.ts → apps/mobile/lib/s…  apps/mobile/lib/deviceKeys.ts      
+apps/mobile/lib/deviceKeys.ts → apps/mobile/lib/sessionLink.ts → apps/mobile/lib/s…  apps/mobile/lib/deviceKeys.ts      
+apps/mobile/lib/sessionLink.ts → apps/mobile/lib/signOut.ts                          apps/mobile/lib/sessionLink.ts     
+Configuration hints (5)
+…tsx  Refine ../../../../../../tmp/openbeacon-review-knip.json → apps/* → project pattern (no matches)                               
+….ts  Remove redundant pattern from ../../../../../../tmp/openbeacon-review-knip.json → apps/* → entry                               
+….ts  Remove redundant pattern from ../../../../../../tmp/openbeacon-review-knip.json → apps/mobile → entry                          
+.css  Compiled extension excluded by ../../../../../../tmp/openbeacon-review-knip.json → apps/mobile → project (imports not followed)
+…sma  Compiled extension excluded by ../../../../../../tmp/openbeacon-review-knip.json → packages/* → project (imports not followed) 

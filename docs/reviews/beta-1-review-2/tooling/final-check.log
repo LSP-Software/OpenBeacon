@@ -1,0 +1,5 @@
+$ bun run format:check && bun run lint
+$ bun fmt --check
+All 836 files are formatted.
+$ biome lint .
+Checked 837 files in 301ms. No fixes applied.

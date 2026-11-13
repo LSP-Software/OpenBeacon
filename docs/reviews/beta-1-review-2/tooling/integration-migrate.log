@@ -1,0 +1,17 @@
+$ bun scripts/migrate-integration-database.ts "--env-file=/tmp/openbeacon-beta2-review.env"
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+Datasource "db": PostgreSQL database "review", schema "public" at "127.0.0.1:32769"
+
+1 migration found in prisma/migrations
+
+Applying migration `20261112120000_init`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20261112120000_init/
+    └─ migration.sql
+
+All migrations have been successfully applied.

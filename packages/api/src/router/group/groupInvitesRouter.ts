@@ -16,6 +16,21 @@ import { groupAdminProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 
+const creatorCanAdmit = async (
+  db: Pick<Prisma.TransactionClient, "groupMember">,
+  invite: { creatorId: string | null; groupId: string },
+) => {
+  if (!invite.creatorId) return false;
+  const creator = await db.groupMember.findUnique({
+    where: { userId_groupId: { userId: invite.creatorId, groupId: invite.groupId } },
+    select: { role: true, user: { select: { pendingDeletion: true } } },
+  });
+  return (
+    !creator?.user.pendingDeletion &&
+    (creator?.role === GroupRole.OWNER || creator?.role === GroupRole.ADMIN)
+  );
+};
+
 export const groupInvitesRouter = {
   joinAlerts: protectedProcedure.query(async ({ ctx }) =>
     ctx.db.groupJoinAlert.findMany({
@@ -100,7 +115,12 @@ export const groupInvitesRouter = {
       const invite = await ctx.db.groupSharedInvite.findUnique({
         where: { codeHash: createHash("sha256").update(input.code.toUpperCase()).digest("hex") },
       });
-      if (!invite || invite.usedAt || invite.expiresAt <= new Date())
+      if (
+        !invite ||
+        invite.usedAt ||
+        invite.expiresAt <= new Date() ||
+        !(await creatorCanAdmit(ctx.db, invite))
+      )
         throw new TRPCError({ code: "NOT_FOUND", message: "Invite is invalid or expired" });
       const member = await ctx.db.groupMember.findUnique({
         where: { userId_groupId: { userId: ctx.session.user.id, groupId: invite.groupId } },
@@ -130,6 +150,8 @@ export const groupInvitesRouter = {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "Group" WHERE id = ${invite.groupId} FOR UPDATE`,
         );
+        if (!(await creatorCanAdmit(tx, invite)))
+          throw new TRPCError({ code: "NOT_FOUND", message: "Invite is invalid or expired" });
         const claimed = await tx.groupSharedInvite.updateMany({
           where: { codeHash, usedAt: null, expiresAt: { gt: new Date() } },
           data: { usedAt: new Date() },
