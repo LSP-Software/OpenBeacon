@@ -124,7 +124,7 @@ describe("readApiCompatibilityResponse", () => {
       { code: "CLIENT_TOO_OLD", minClientApiCompatibilityLevel: apiCompatibilityLevel + 1 },
       426,
     );
-    expect(await readApiCompatibilityResponse(response)).toBe("appTooOld");
+    expect((await readApiCompatibilityResponse(response)).verdict).toBe("appTooOld");
     expect(await response.json()).toEqual({
       code: "CLIENT_TOO_OLD",
       minClientApiCompatibilityLevel: apiCompatibilityLevel + 1,
@@ -136,11 +136,13 @@ describe("readApiCompatibilityResponse", () => {
       { code: "CLIENT_TOO_OLD", minClientApiCompatibilityLevel: apiCompatibilityLevel },
       426,
     );
-    expect(await readApiCompatibilityResponse(response)).toBe("outOfSync");
+    expect((await readApiCompatibilityResponse(response)).verdict).toBe("outOfSync");
   });
 
   test("ignores a 426 that didn't come from an Open Beacon server", async () => {
-    expect(await readApiCompatibilityResponse(new Response("Upgrade", { status: 426 }))).toBe(null);
+    expect(
+      (await readApiCompatibilityResponse(new Response("Upgrade", { status: 426 }))).verdict,
+    ).toBe(null);
   });
 
   test("reads an unknown procedure from an older server as the server being too old", async () => {
@@ -148,7 +150,7 @@ describe("readApiCompatibilityResponse", () => {
       { code: "UNKNOWN_PROCEDURE", apiCompatibilityLevel: apiCompatibilityLevel - 1 },
       404,
     );
-    expect(await readApiCompatibilityResponse(response)).toBe("serverTooOld");
+    expect((await readApiCompatibilityResponse(response)).verdict).toBe("serverTooOld");
   });
 
   test("falls back to the level headers for any other 404", async () => {
@@ -157,14 +159,16 @@ describe("readApiCompatibilityResponse", () => {
       404,
       levelHeaders(apiCompatibilityLevel, apiCompatibilityLevel),
     );
-    expect(await readApiCompatibilityResponse(response)).toBe("ok");
+    expect((await readApiCompatibilityResponse(response)).verdict).toBe("ok");
   });
 
   test("reads the level headers on an ordinary response", async () => {
     expect(
-      await readApiCompatibilityResponse(
-        json({}, 200, levelHeaders(minServerApiCompatibilityLevel - 1, 0)),
-      ),
+      (
+        await readApiCompatibilityResponse(
+          json({}, 200, levelHeaders(minServerApiCompatibilityLevel - 1, 0)),
+        )
+      ).verdict,
     ).toBe("serverTooOld");
   });
 
@@ -176,7 +180,7 @@ describe("readApiCompatibilityResponse", () => {
     ],
     ["half present", { [apiCompatibilityLevelHeader]: "1" }],
   ])("knows nothing when the level headers are %s", async (_, headers) => {
-    expect(await readApiCompatibilityResponse(json({}, 200, headers))).toBe(null);
+    expect((await readApiCompatibilityResponse(json({}, 200, headers))).verdict).toBe(null);
   });
 });
 
@@ -186,6 +190,7 @@ describe("checkServerCompatibility", () => {
     expect(await checkServerCompatibility("https://family.example.test")).toEqual({
       verdict: "appTooOld",
       serverVersion: "9.9.9",
+      message: null,
     });
     expect(requests[0]?.url).toBe("https://family.example.test/health");
   });
@@ -214,6 +219,7 @@ describe("checkServerCompatibility", () => {
         server: { apiCompatibilityLevel: 0, minClientApiCompatibilityLevel: 0 },
       }),
       serverVersion: "0.4.4",
+      message: null,
     });
   });
 });
@@ -241,6 +247,7 @@ describe("apiCompatibilityFetch", () => {
     expect(getApiCompatibility()).toEqual({
       problem: "appTooOld",
       serverVersion: null,
+      message: null,
       notified: false,
     });
     expect(JSON.parse(stored.get("api_compatibility") ?? "null")).toEqual({
@@ -248,6 +255,7 @@ describe("apiCompatibilityFetch", () => {
       appLevel: apiCompatibilityLevel,
       problem: "appTooOld",
       serverVersion: null,
+      message: null,
       notified: false,
     });
   });
@@ -292,6 +300,70 @@ describe("apiCompatibilityFetch", () => {
   });
 });
 
+describe("server message", () => {
+  const tooOld = (message: unknown) =>
+    json(
+      {
+        code: "CLIENT_TOO_OLD",
+        minClientApiCompatibilityLevel: apiCompatibilityLevel + 1,
+        message,
+      },
+      426,
+    );
+
+  test("reads the message from a 426 and from /health", async () => {
+    expect(await readApiCompatibilityResponse(tooOld("Update from the Play Store."))).toEqual({
+      verdict: "appTooOld",
+      message: "Update from the Play Store.",
+    });
+
+    respond = () =>
+      json({
+        status: "ok",
+        version: "9.9.9",
+        apiCompatibilityLevel: apiCompatibilityLevel + 1,
+        minClientApiCompatibilityLevel: apiCompatibilityLevel + 1,
+        message: "Update from the Play Store.",
+      });
+    expect(await checkServerCompatibility("https://family.example.test")).toEqual({
+      verdict: "appTooOld",
+      serverVersion: "9.9.9",
+      message: "Update from the Play Store.",
+    });
+  });
+
+  test.each([
+    ["missing", undefined],
+    ["too long", "x".repeat(281)],
+    ["not a string", { href: "https://evil.example.test/app.apk" }],
+  ])("treats a message that is %s as absent without ignoring the verdict", async (_, message) => {
+    expect(await readApiCompatibilityResponse(tooOld(message))).toEqual({
+      verdict: "appTooOld",
+      message: null,
+    });
+  });
+
+  test("shows the latest message from a source that carries one and keeps it otherwise", async () => {
+    respond = () => tooOld("Update from the Play Store.");
+    await apiCompatibilityFetch("https://api.example.test/api/trpc/a");
+    expect(getApiCompatibility()?.message).toBe("Update from the Play Store.");
+
+    respond = () =>
+      json({}, 200, levelHeaders(apiCompatibilityLevel + 1, apiCompatibilityLevel + 1));
+    await apiCompatibilityFetch("https://api.example.test/api/trpc/b");
+    expect(getApiCompatibility()?.message).toBe("Update from the Play Store.");
+
+    respond = () => health(apiCompatibilityLevel + 1, apiCompatibilityLevel + 1);
+    await refreshApiCompatibility({ userRequested: false });
+    expect(getApiCompatibility()).toEqual({
+      problem: "appTooOld",
+      serverVersion: "9.9.9",
+      message: null,
+      notified: false,
+    });
+  });
+});
+
 describe("notification tracking", () => {
   test("remembers the notice for the same problem and resets it for a new one", async () => {
     respond = () => health(apiCompatibilityLevel + 1, apiCompatibilityLevel + 1);
@@ -300,6 +372,7 @@ describe("notification tracking", () => {
     expect(getApiCompatibility()).toEqual({
       problem: "appTooOld",
       serverVersion: "9.9.9",
+      message: null,
       notified: true,
     });
 
@@ -311,6 +384,7 @@ describe("notification tracking", () => {
     expect(getApiCompatibility()).toEqual({
       problem: "serverTooOld",
       serverVersion: "9.9.9",
+      message: null,
       notified: false,
     });
   });
@@ -337,6 +411,7 @@ describe("out of sync", () => {
     expect(getApiCompatibility()).toEqual({
       problem: "outOfSync",
       serverVersion: "9.9.9",
+      message: null,
       notified: false,
     });
   });
@@ -354,6 +429,7 @@ describe("out of sync", () => {
     expect(getApiCompatibility()).toEqual({
       problem: "outOfSync",
       serverVersion: "9.9.9",
+      message: null,
       notified: true,
     });
   });
@@ -418,6 +494,7 @@ describe("saved result", () => {
       appLevel: apiCompatibilityLevel,
       problem: "serverTooOld",
       serverVersion: "0.1.0",
+      message: null,
       notified: true,
     };
     stored.set("api_compatibility", JSON.stringify(saved));
@@ -425,6 +502,7 @@ describe("saved result", () => {
     expect(sameServer.getApiCompatibility()).toEqual({
       problem: "serverTooOld",
       serverVersion: "0.1.0",
+      message: null,
       notified: true,
     });
 

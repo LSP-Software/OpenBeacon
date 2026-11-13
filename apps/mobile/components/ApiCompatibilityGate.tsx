@@ -10,6 +10,7 @@ import {
 } from "../lib/apiCompatibility.ts";
 import { baseUrl, getBaseUrl, hasCustomServerUrl } from "../lib/currentServer.ts";
 import { dismissNotice } from "../lib/notifications.ts";
+import { openPlayStore } from "../lib/openPlayStore.ts";
 import { appVersion } from "../lib/versions.ts";
 import { Button } from "./ui/Button.tsx";
 import { Text } from "./ui/Text.tsx";
@@ -106,6 +107,9 @@ export const ApiCompatibilityGate = () => {
                 )}
               </>
             )}
+            {compatibility.message !== null && (
+              <Text className="text-lg">{compatibility.message}</Text>
+            )}
             <View className="bg-primary/10 rounded-lg p-4 border border-primary/15 gap-1">
               <Text className="text-sm text-muted">App version {appVersion}</Text>
               {selfHosted && <Text className="text-sm text-muted">Server {baseUrl}</Text>}
@@ -125,7 +129,7 @@ export const ApiCompatibilityGate = () => {
 
           <View className="gap-3">
             {compatibility.problem === "appTooOld" && (
-              <Button disabled className="opacity-50">
+              <Button onPress={() => void openPlayStore()}>
                 <Text>Update</Text>
               </Button>
             )}

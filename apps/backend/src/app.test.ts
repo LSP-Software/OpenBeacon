@@ -29,7 +29,7 @@ const expectLevelHeaders = (response: Response) => {
 
 describe("app", () => {
   test.each(["/api/trpc/account.version", "/api/auth/get-session"])(
-    "turns away %s from an app that sends no level",
+    "turns away %s from an app that sends no level, leaving out the optional message when unset",
     async (path) => {
       const response = await app.request(path);
       expect(response.status).toBe(426);
@@ -53,7 +53,7 @@ describe("app", () => {
     expectLevelHeaders(response);
   });
 
-  test("keeps /health open with its frozen keys", async () => {
+  test("keeps /health open with its frozen keys, leaving out the optional message when unset", async () => {
     const response = await app.request("/health");
     expect(response.status).toBe(200);
     const body: Record<string, unknown> = await response.json();

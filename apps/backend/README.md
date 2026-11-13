@@ -14,6 +14,8 @@ open http://localhost:3000
 
 Set `SERVER_NAME` in the root `.env` to the public name shown in the health check and app. It defaults to `OpenBeacon`. `GET /health` returns the status, backend version, and server name.
 
+Set `CLIENT_UPDATE_MESSAGE` to tell people with an out-of-date app how to update, for example where to get the new version. The app shows it as plain text on its compatibility screens. It is at most 280 characters; a longer value is ignored.
+
 ## Production deployment
 
 The backend image validates runtime configuration and then runs Prisma

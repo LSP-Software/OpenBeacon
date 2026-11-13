@@ -12,6 +12,7 @@ export const envSchema = {
   REDIS_URL: redisUrlSchema,
   REDIS_HASH_SECRET: redisHashSecretSchema,
   SERVER_NAME: serverNameSchema,
+  CLIENT_UPDATE_MESSAGE: z.string().trim().min(1).max(280).optional().catch(undefined),
   SELF_HOSTED: z.preprocess(
     (value) => (value === "" ? undefined : value),
     z.stringbool().default(true),

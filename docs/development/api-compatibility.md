@@ -55,10 +55,11 @@ Most changes shouldn't need a new level:
 
 The handshake itself can never change, or apps and servers from either side of the change couldn't talk about compatibility at all. Tests pin each of these:
 
-- `GET /health` returns `apiCompatibilityLevel` and `minClientApiCompatibilityLevel` alongside `status`, `version` and `serverName`. Self-hosters must expose `/health` as well as `/api/*`.
+- `GET /health` returns `apiCompatibilityLevel` and `minClientApiCompatibilityLevel` alongside `status`, `version` and `serverName`, plus an optional `message`. Self-hosters must expose `/health` as well as `/api/*`.
 - Every request to `/api/*` sends `x-openbeacon-api-compatibility-level`. The server treats a missing or unreadable value as 0. The one exception is `GET /api/auth/google-deletion-callback`: a browser opens it, so it can't send the header.
 - Every `/api/*` response carries `x-openbeacon-api-compatibility-level` and `x-openbeacon-min-client-api-compatibility-level`.
-- An app below the minimum gets a 426 with `{ "code": "CLIENT_TOO_OLD", "minClientApiCompatibilityLevel": number }`.
+- An app below the minimum gets a 426 with `{ "code": "CLIENT_TOO_OLD", "minClientApiCompatibilityLevel": number, "message"?: string }`.
+- `message` is optional on both. It's plain text of at most 280 characters, taken from the server's `CLIENT_UPDATE_MESSAGE`, and left out when that is unset or too long. The app shows it as plain text on any compatibility screen. There is deliberately no update link, so a self-hosted server can't send people to an APK of its choosing.
 - A tRPC call to a procedure the server doesn't have gets a 404 with `{ "code": "UNKNOWN_PROCEDURE", "apiCompatibilityLevel": number }`. This is how the app notices a missed level change: if the levels match but a procedure is missing, it shows an "out of sync" screen with both versions.
 
 `apps/backend/src/app.test.ts` checks these against literal strings, so renaming a constant can't quietly change them.
@@ -69,7 +70,7 @@ A server from before this handshake has no level fields on `/health`. The app tr
 
 - **When it checks.** It checks `/health` at startup and whenever it comes back to the foreground. It also reads the level headers on every response.
 - **When it blocks.** It only blocks on a clear answer. Being offline, timeouts, server errors and unexpected replies leave things as they are.
-- **What it shows.** A full-screen message: "Update Open Beacon", "Your server needs updating" (or "We're updating Open Beacon" on the hosted server), or "The app and server don't match". Every screen offers "Try again" and "Use a different server". The out-of-sync screen also offers "Contact us". Switching server needs a restart, and the screen says so.
+- **What it shows.** A full-screen message: "Update Open Beacon", "Your server needs updating" (or "We're updating Open Beacon" on the hosted server), or "The app and server don't match". Every screen offers "Try again" and "Use a different server". "Update" opens the Play Store listing. The server's `message`, when it sends one, is shown as plain text. The out-of-sync screen also offers "Contact us". Switching server needs a restart, and the screen says so.
 - **Out of sync.** This state stays until the person presses "Try again" or the server's version changes. A routine check finding matching levels doesn't clear it, because the levels matching is exactly what out of sync means.
 - **Saved result.** The result is saved per server URL and app level, so the screen shows straight away on the next launch, even offline.
 - **Background uploads (Android).** Uploads pause while the app is blocked. Capture keeps going, so points pile up in the queue. The queue's 10 MiB limit still applies (see `offline-tracking-queue.md`), so a very long block loses the oldest points. While blocked, the background task checks `/health` at most every 5 minutes. One notification tells the person what to do. It's only counted as shown if Android actually displayed it, and it's removed once the problem clears.

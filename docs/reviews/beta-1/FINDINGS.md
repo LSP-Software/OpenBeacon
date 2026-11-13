@@ -449,6 +449,8 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M11. The "Update Open Beacon" screen has a permanently disabled Update button
 
+- **Status:** fixed on `fix/beta-1-review` by "Open the Play Store from the update screen and show the server's update message" (SHA added at wrap-up). Q8. Tests: env value unset/blank/non-string/281 chars treated as unset; message on `/health` and the 426 body only when set (frozen-shape tests updated); app parses the message; Update opens `market://` with the https fallback. Emulator check in the end-of-branch batch.
+
 - Finding: S10-03 · UX · medium · verified (V5)
 - Location: apps/mobile/components/ApiCompatibilityGate.tsx:150-154; apps/backend/src/helpers/apiCompatibility.ts:16; apps/backend/src/routes/health.ts:9-15
 - Failure scenario: The first time `minClientApiCompatibilityLevel` rises after beta, every beta install shows a greyed-out Update button. Play Store auto-update helps store installs, but sideloaded and internal-track testers have nowhere to go. The hosted operator also can't show a message such as "maintenance until 15:00". The gate is in every installed build, so it has to be right before beta.
@@ -1841,6 +1843,8 @@ The launch screen retries forever with no message or way out when the device che
 The tracking-point reader rejects any extra field, so every future change to the location payload will force the whole family to update
 
 #### S10-03 · medium · UX · **must-fix, see M11**
+
+- **Status:** fixed on `fix/beta-1-review` by "Open the Play Store from the update screen and show the server's update message" (SHA added at wrap-up). Q8. Tests: env value unset/blank/non-string/281 chars treated as unset; message on `/health` and the 426 body only when set (frozen-shape tests updated); app parses the message; Update opens `market://` with the https fallback. Emulator check in the end-of-branch batch.
 
 The "Update Open Beacon" screen has a disabled Update button and the server can't send users any guidance, and every installed build keeps this behaviour
 
