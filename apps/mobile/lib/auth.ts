@@ -182,6 +182,12 @@ export const signInWithGoogle = async () => {
       },
     };
   }
+  if (
+    signInResult.data.error?.code === "OAUTH_LINK_ERROR" ||
+    signInResult.data.error?.message === "account not linked"
+  ) {
+    return { error: { message: "This email signs in with a password." } };
+  }
 
   return signInResult.data;
 };

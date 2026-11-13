@@ -29,7 +29,16 @@ let googleSignInResponse:
   },
 };
 const socialSignInMock = mock(
-  async ({ provider, idToken }: { provider: string; idToken: { token: string } }) => ({
+  async ({
+    provider,
+    idToken,
+  }: {
+    provider: string;
+    idToken: { token: string };
+  }): Promise<{
+    data: { provider: string; token: string } | null;
+    error?: { code: string; message: string; status: number };
+  }> => ({
     data: {
       provider,
       token: idToken.token,
@@ -191,6 +200,20 @@ describe("auth Google sign-in configuration", () => {
       error: {
         message: "oauth failed",
       },
+    });
+  });
+
+  test("explains that an email which signs in with a password can't use Google", async () => {
+    process.env[GOOGLE_WEB_CLIENT_ID_ENV] = "web-client-id";
+    socialSignInMock.mockImplementationOnce(async () => ({
+      data: null,
+      error: { code: "OAUTH_LINK_ERROR", message: "account not linked", status: 401 },
+    }));
+
+    const { signInWithGoogle } = await importAuthModule();
+
+    expect(await signInWithGoogle()).toEqual({
+      error: { message: "This email signs in with a password." },
     });
   });
 

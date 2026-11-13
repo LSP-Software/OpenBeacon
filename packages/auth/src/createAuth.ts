@@ -180,6 +180,7 @@ export const createAuth = ({
         },
       },
     },
+    account: { accountLinking: { enabled: false } },
     session: { freshAge: 30 * 60 },
     verification: {
       storeIdentifier: { default: "plain", overrides: { "reset-password:": "hashed" } },
