@@ -134,10 +134,20 @@ Considered and left:
 - `shouldRetrySignedPmtilesUrl` and `isWebpFile` are single-use but unit-tested.
 - Map URL retries stay unbounded for `SERVICE_UNAVAILABLE`, which has its own "preparing the map" screen.
 - A History-key or link write that misses its 10 s deadline can still land later; for example, restore may report "unsaved" while the key is stored. Retrying writes the same key.
-- A device-key creation still running from before a sign-out makes the same user's next sign-in fail once; a retry works. Fixing it risks the stalled-identity guarantee.
+- A device-key creation still running from before a sign-out makes the same user's next sign-in fail once; a retry works. Since the CodeRabbit round it can no longer overwrite or remove the next sign-in's key.
 - A wipe with storage stalled on many keys can take up to 10 s per stuck key; before this branch it hung indefinitely.
 
 Final validation at `c7299aa0`: frozen install clean, version check passes, `TURBO_FORCE=true bun run ci` 14/14 with 0 cache hits, mobile 1340 pass, full integration 346 pass, 1 skip, 0 fail.
+
+## CodeRabbit review on PR #234
+
+Five inline comments. Fixed, each with a test that fails without the fix:
+
+- An older offline sharing change whose connectivity check finished late could overwrite a newer change to the same scope. The `isDeviceOffline` await added by MOB-01 caused it (`39f34f55`).
+- A device-key creation that started before a wipe could overwrite the next sign-in's device ID and public key, then delete its private key during cleanup (`108e5823`).
+- The map banner still wrote its sync result straight into the query, bypassing the newer-state check. The queue-eviction query stayed paused offline after its offline mutation (`0f05c635`).
+
+Not changed: CodeRabbit asked for a deadline inside `writeSecret`. Device-key creation is bounded by the existing outer `withStorageTimeout`, and the inner write stays pending on purpose so a stalled identity is never replaced (the existing test "a stalled secure-store write is not replaced by a concurrent identity" fails with an inner deadline). History-key and link writes already apply the deadline. The one unwrapped device-key read, in `personalData.ts`, only writes during the legacy key migration (CN-04, deferred).
 
 ## Remaining risks and checks before beta
 
