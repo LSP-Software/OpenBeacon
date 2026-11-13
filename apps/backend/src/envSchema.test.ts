@@ -50,3 +50,14 @@ test("does not echo the Discord webhook URL in validation errors", () => {
   expect(result.success).toBe(false);
   expect(JSON.stringify(result.error?.issues)).not.toContain("secret-token");
 });
+
+test("treats a missing, blank or over-long CLIENT_UPDATE_MESSAGE as unset without failing", () => {
+  const schema = envSchema.CLIENT_UPDATE_MESSAGE;
+  expect(schema.parse(undefined)).toBeUndefined();
+  expect(schema.parse("")).toBeUndefined();
+  expect(schema.parse("   ")).toBeUndefined();
+  expect(schema.parse(42)).toBeUndefined();
+  expect(schema.parse("x".repeat(281))).toBeUndefined();
+  expect(schema.parse(` ${"x".repeat(280)} `)).toBe("x".repeat(280));
+  expect(schema.parse(" Update from the Play Store. ")).toBe("Update from the Play Store.");
+});

@@ -5,12 +5,20 @@ import {
   minClientApiCompatibilityLevel,
   minClientApiCompatibilityLevelHeader,
 } from "@openbeacon/shared";
+import { testRedisHashSecret } from "@openbeacon/cache/testing";
 import { Hono } from "hono";
-import {
-  apiCompatibility,
-  findUnknownProcedure,
-  unknownProcedureBody,
-} from "./apiCompatibility.ts";
+
+const updateMessage = "Update from the Play Store, or email help@example.com.";
+Object.assign(process.env, {
+  DATABASE_URL: "postgresql://localhost:5432/openbeacon",
+  REDIS_URL: "redis://localhost:6379",
+  REDIS_HASH_SECRET: testRedisHashSecret,
+  BETTER_AUTH_SECRET: "test-secret-with-at-least-32-characters",
+  BETTER_AUTH_URL: "http://localhost:3000",
+  CLIENT_UPDATE_MESSAGE: updateMessage,
+});
+const { apiCompatibility, findUnknownProcedure, unknownProcedureBody } =
+  await import("./apiCompatibility.ts");
 
 const app = new Hono();
 app.use("/api/*", apiCompatibility);
@@ -69,12 +77,13 @@ describe("apiCompatibility middleware", () => {
     ["a garbage header", "one"],
     ["a negative level", "-5"],
     ["a decimal level", "1.5"],
-  ])("rejects %s with the frozen 426 body", async (_, level) => {
+  ])("rejects %s with the frozen 426 body and the update message", async (_, level) => {
     const response = await request("/api/thing", level);
     expect(response.status).toBe(426);
     expect(await response.json()).toEqual({
       code: "CLIENT_TOO_OLD",
       minClientApiCompatibilityLevel,
+      message: updateMessage,
     });
     expect(response.headers.get(apiCompatibilityLevelHeader)).toBe(String(apiCompatibilityLevel));
   });

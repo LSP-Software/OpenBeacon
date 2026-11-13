@@ -6,6 +6,7 @@ import {
   parseApiCompatibilityLevel,
 } from "@openbeacon/shared";
 import { createMiddleware } from "hono/factory";
+import { env } from "../env.ts";
 
 export const apiCompatibility = createMiddleware(async (c, next) => {
   const clientLevel = parseApiCompatibilityLevel(c.req.header(apiCompatibilityLevelHeader)) ?? 0;
@@ -14,7 +15,14 @@ export const apiCompatibility = createMiddleware(async (c, next) => {
   if (openedByBrowser || clientLevel >= minClientApiCompatibilityLevel) {
     await next();
   } else {
-    c.res = c.json({ code: "CLIENT_TOO_OLD", minClientApiCompatibilityLevel }, 426);
+    c.res = c.json(
+      {
+        code: "CLIENT_TOO_OLD",
+        minClientApiCompatibilityLevel,
+        message: env.CLIENT_UPDATE_MESSAGE,
+      },
+      426,
+    );
   }
   c.header(apiCompatibilityLevelHeader, String(apiCompatibilityLevel));
   c.header(minClientApiCompatibilityLevelHeader, String(minClientApiCompatibilityLevel));

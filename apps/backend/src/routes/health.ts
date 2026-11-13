@@ -12,6 +12,7 @@ router.get("/health", (context) =>
     serverName: env.SERVER_NAME,
     apiCompatibilityLevel,
     minClientApiCompatibilityLevel,
+    message: env.CLIENT_UPDATE_MESSAGE,
   }),
 );
 
