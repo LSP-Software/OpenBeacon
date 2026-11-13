@@ -17,6 +17,8 @@ const nativeStates: {
 }[] = [];
 const changes: Change[] = [];
 let offline = false;
+let knownOffline = false;
+let offlineCheckGate: Promise<void> | null = null;
 let rejectWith: Error | null = null;
 let loseReply = false;
 let nextRequestId = 0;
@@ -79,6 +81,14 @@ mock.module("./createSecureId.ts", () => ({ createSecureId: () => `request-${++n
 mock.module("./deviceKeys.ts", () => ({
   getStoredDeviceId: () => registeredDeviceId,
   getRegisteredDeviceKey: async () => ({ userId: "alex", deviceId: registeredDeviceId }),
+}));
+mock.module("./networkStatus.ts", () => ({
+  isDeviceOffline: async () => {
+    const gate = offlineCheckGate;
+    offlineCheckGate = null;
+    await gate;
+    return knownOffline;
+  },
 }));
 mock.module("./trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("./storage.ts", () => ({
@@ -143,6 +153,8 @@ beforeEach(() => {
   nativeStates.length = 0;
   changes.length = 0;
   offline = false;
+  knownOffline = false;
+  offlineCheckGate = null;
   rejectWith = null;
   loseReply = false;
   nativeAccepted = true;
@@ -174,6 +186,92 @@ test("stops locally while offline and retries the pause before applying server s
     prefix: "s0.1:",
     paused: true,
   });
+});
+
+test("a known offline pause stops capture without trying the network", async () => {
+  knownOffline = true;
+  offline = true;
+  const attempts = changes.length;
+  expect(await changeLocationSharing({ scope: "account", paused: true, durationMinutes: 60 })).toBe(
+    "queued",
+  );
+  expect(changes).toHaveLength(attempts);
+  expect(nativeStates.at(-1)?.paused).toBe(true);
+  expect(hasLocallyPausedSharing("alex")).toBe(true);
+  expect(getPendingSharingChanges("alex").account?.paused).toBe(true);
+  knownOffline = false;
+  offline = false;
+  await syncLocationSharing();
+  expect(changes.map((change) => change.scope)).toEqual(["account"]);
+  expect(server.account.sharingPaused).toBe(true);
+  expect(hasPendingSharingPause("alex")).toBe(false);
+});
+
+test("an older offline change that finishes its checks late doesn't replace a newer one", async () => {
+  knownOffline = true;
+  offline = true;
+  let releaseOlder = () => {};
+  offlineCheckGate = new Promise((resolve) => {
+    releaseOlder = resolve;
+  });
+  const older = changeLocationSharing({ scope: "device", paused: false, durationMinutes: null });
+  for (let index = 0; index < 20; index++) await Promise.resolve();
+  expect(
+    await changeLocationSharing({ scope: "device", paused: true, durationMinutes: null }),
+  ).toBe("queued");
+
+  releaseOlder();
+
+  await expect(older).rejects.toThrow("A newer sharing change replaced this one.");
+  expect(getPendingSharingChanges("alex").device?.paused).toBe(true);
+  expect(nativeStates.at(-1)?.paused).toBe(true);
+});
+
+test("signing out during the connectivity check stops the change writing anything", async () => {
+  knownOffline = true;
+  offline = true;
+  let release = () => {};
+  offlineCheckGate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const change = changeLocationSharing({ scope: "device", paused: true, durationMinutes: null });
+  for (let index = 0; index < 20; index++) await Promise.resolve();
+
+  abandonLocationSharingChanges();
+  clearPendingSharingChanges("alex");
+  release();
+
+  await expect(change).rejects.toThrow("You've signed out.");
+  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(nativeStates).toHaveLength(0);
+});
+
+test("a known offline resume of this phone applies locally and queues", async () => {
+  server.device = { ...scope(), sharingPaused: true, sharingRevision: 1, requestId: "earlier" };
+  await syncLocationSharing();
+  expect(nativeStates.at(-1)?.paused).toBe(true);
+  knownOffline = true;
+  offline = true;
+  expect(
+    await changeLocationSharing({ scope: "device", paused: false, durationMinutes: null }),
+  ).toBe("queued");
+  expect(nativeStates.at(-1)?.paused).toBe(false);
+  expect(getPendingSharingChanges("alex").device?.paused).toBe(false);
+});
+
+test("pausing another device while known offline fails at once and stores nothing", async () => {
+  knownOffline = true;
+  await expect(
+    changeLocationSharing({
+      scope: "device",
+      deviceId: "tablet",
+      paused: true,
+      durationMinutes: 60,
+    }),
+  ).rejects.toThrow("Can’t reach the server");
+  expect(changes).toHaveLength(0);
+  expect(nativeStates).toHaveLength(0);
+  expect(hasPendingSharingPause("alex")).toBe(false);
 });
 
 test("keeps both device and account pauses pending across a network failure", async () => {

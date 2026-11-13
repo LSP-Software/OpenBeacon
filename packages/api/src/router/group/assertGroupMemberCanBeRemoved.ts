@@ -46,6 +46,13 @@ export const removeGroupMemberWithOwnerGuard = async ({
       USING deleted_member
       WHERE invite."groupId" = ${groupId}
         AND invite."inviterId" = deleted_member."userId"
+    ),
+    deleted_shared_invites AS (
+      DELETE FROM "GroupSharedInvite" AS invite
+      USING deleted_member
+      WHERE invite."groupId" = ${groupId}
+        AND invite."creatorId" = deleted_member."userId"
+        AND invite."usedAt" IS NULL
     )
     SELECT
       EXISTS (SELECT 1 FROM target_member) AS "memberExists",

@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
+import { storedWebpResponse } from "../lib/storedWebp.testUtil.ts";
 import { auth } from "@openbeacon/auth";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
@@ -452,9 +453,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account profile"
       });
     await pendingUpload("old.webp");
     const send = spyOn(s3Client, "send").mockImplementation(async (command) => {
-      if (!(command instanceof HeadObjectCommand)) return { $metadata: {} };
-      await pendingUpload("new.webp");
-      return { $metadata: {}, ContentLength: 3 };
+      if (command instanceof HeadObjectCommand) await pendingUpload("new.webp");
+      return storedWebpResponse(command);
     });
     try {
       await expect(callerFor(account).account.confirmProfileImageUpload()).rejects.toMatchObject({

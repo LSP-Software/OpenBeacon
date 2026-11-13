@@ -4,6 +4,103 @@ import { TRPCError } from "@trpc/server";
 import { deletePayloadsInBatches } from "./deletePayloadsInBatches.ts";
 import { lockUserGroups } from "./lockUserGroups.ts";
 
+export const lockDeletableGroups = async (
+  tx: Prisma.TransactionClient,
+  { userId, imageUrlPrefix }: { userId: string; imageUrlPrefix: string },
+) => {
+  const groupIds = await lockUserGroups(tx, userId);
+  if (!groupIds.length) return { groupIds, soloGroups: [] };
+  const soleOwner = await tx.groupMember.findFirst({
+    where: {
+      userId,
+      role: GroupRole.OWNER,
+      group: {
+        AND: [
+          { groupMembers: { some: { userId: { not: userId } } } },
+          {
+            groupMembers: {
+              none: { userId: { not: userId }, role: GroupRole.OWNER },
+            },
+          },
+        ],
+      },
+    },
+    select: { id: true },
+  });
+  if (soleOwner)
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "Transfer ownership or delete your groups before deleting your account.",
+    });
+  const soloGroups = await tx.group.findMany({
+    where: {
+      id: { in: groupIds },
+      groupMembers: { none: { userId: { not: userId } } },
+    },
+    select: { id: true, image: true },
+  });
+  if (soloGroups.some(({ image }) => image && !image.startsWith(`${imageUrlPrefix}/`)))
+    throw new Error("Cannot identify group image for cleanup.");
+  return { groupIds, soloGroups };
+};
+
+export const beginAccountDeletion = async (
+  tx: Prisma.TransactionClient,
+  { userId, delayHours }: { userId: string; delayHours: number },
+) => {
+  const groupIds = await lockUserGroups(tx, userId);
+  if (groupIds.length) {
+    const soleOwner = await tx.groupMember.findFirst({
+      where: {
+        userId,
+        role: GroupRole.OWNER,
+        group: {
+          AND: [
+            { groupMembers: { some: { userId: { not: userId } } } },
+            {
+              groupMembers: {
+                none: {
+                  userId: { not: userId },
+                  role: GroupRole.OWNER,
+                  user: { pendingDeletion: false },
+                },
+              },
+            },
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    if (soleOwner)
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "Transfer ownership or delete your groups before deleting your account.",
+      });
+    const soloGroups = await tx.group.findMany({
+      where: { id: { in: groupIds }, groupMembers: { none: { userId: { not: userId } } } },
+      select: { id: true },
+    });
+    const soloGroupIds = soloGroups.map(({ id }) => id);
+    await tx.groupMemberInvite.deleteMany({ where: { groupId: { in: soloGroupIds } } });
+    await tx.groupSharedInvite.deleteMany({ where: { groupId: { in: soloGroupIds } } });
+  }
+  await tx.groupMemberInvite.deleteMany({
+    where: { OR: [{ inviterId: userId }, { recipientId: userId }] },
+  });
+  await tx.groupSharedInvite.deleteMany({ where: { creatorId: userId } });
+  const [clock] = await tx.$queryRaw<Array<{ deletionDate: Date }>>(
+    Prisma.sql`SELECT clock_timestamp() + (${delayHours} * INTERVAL '1 hour') AS "deletionDate"`,
+  );
+  if (!clock) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+  const { deletionDate } = clock;
+  await tx.user.update({
+    where: { id: userId },
+    data: { pendingDeletion: true, deletionDate, deletionRetryAt: null },
+  });
+  await tx.session.deleteMany({ where: { userId } });
+  return { deletionDate };
+};
+
 export const deleteAccountRecords = async ({
   db,
   userId,
@@ -24,7 +121,12 @@ export const deleteAccountRecords = async ({
     );
     return status !== undefined && (mode === "immediate" || status.due);
   };
-  if (!(await db.$transaction(lockDueUser))) return false;
+  const ready = await db.$transaction(async (tx) => {
+    if (!(await lockDueUser(tx))) return false;
+    await lockDeletableGroups(tx, { userId, imageUrlPrefix });
+    return true;
+  });
+  if (!ready) return false;
   await deletePayloadsInBatches({
     db,
     where: Prisma.sql`"senderUserId" = ${userId}`,
@@ -36,44 +138,11 @@ export const deleteAccountRecords = async ({
       const user = await findAlertRecipient(tx, userId);
       if (!user) return null;
 
-      const groupIds = await lockUserGroups(tx, userId);
+      const { groupIds, soloGroups } = await lockDeletableGroups(tx, { userId, imageUrlPrefix });
       const imageKeys: string[] = [];
       if (groupIds.length) {
-        const soleOwner = await tx.groupMember.findFirst({
-          where: {
-            userId,
-            role: GroupRole.OWNER,
-            group: {
-              AND: [
-                { groupMembers: { some: { userId: { not: userId } } } },
-                {
-                  groupMembers: {
-                    none: { userId: { not: userId }, role: GroupRole.OWNER },
-                  },
-                },
-              ],
-            },
-          },
-          select: { id: true },
-        });
-        if (soleOwner)
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "Transfer ownership or delete your groups before deleting your account.",
-          });
-        const soloGroups = await tx.group.findMany({
-          where: {
-            id: { in: groupIds },
-            groupMembers: { none: { userId: { not: userId } } },
-          },
-          select: { id: true, image: true },
-        });
         for (const group of soloGroups) {
-          if (group.image) {
-            if (!group.image.startsWith(`${imageUrlPrefix}/`))
-              throw new Error("Cannot identify group image for cleanup.");
-            imageKeys.push(group.image.slice(imageUrlPrefix.length + 1));
-          }
+          if (group.image) imageKeys.push(group.image.slice(imageUrlPrefix.length + 1));
           const uploads = await tx.pendingUpload.findMany({
             where: { groupId: group.id },
             select: { userId: true, fileName: true },

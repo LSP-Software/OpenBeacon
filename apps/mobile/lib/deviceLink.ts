@@ -11,6 +11,7 @@ import { markThisDeviceActive } from "./deviceActivation.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { getStoredHistoryKey, storeHistoryKey } from "./historyKeys.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
+import { secretOwner } from "./secretStorage.ts";
 
 export const NOT_A_DEVICE_CODE_MESSAGE =
   "That isn’t an OpenBeacon setup code. On your new phone, choose “Link with your other phone”.";
@@ -76,6 +77,7 @@ export const finishDeviceLink = async ({
   psk: Uint8Array;
 }) => {
   const device = await ensureDeviceKeyRegistration();
+  const owner = secretOwner(device.userId);
   const status = await trpcClient.accountRecovery.status.query();
   const reject = async () => {
     await tryCatch(deleteSavedDeviceLink(device));
@@ -102,7 +104,7 @@ export const finishDeviceLink = async ({
   const stored = await tryCatch(
     Promise.all(
       opened.data.map(({ privateKey, version }) =>
-        storeHistoryKey({ privateKey, userId: device.userId, version }),
+        storeHistoryKey({ privateKey, owner, userId: device.userId, version }),
       ),
     ),
   );

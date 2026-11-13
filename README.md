@@ -1,6 +1,8 @@
 # OpenBeacon
 
-OpenBeacon is an open-source, privacy-focused family location app. Self-hosting is supported allowing running the backend on your own hardware; the architecture assumes sensitive data is encrypted so the people running servers are not in a position to read your family’s locations or activity. Profile and group images are not end-to-end encrypted.
+OpenBeacon is an open-source, privacy-focused family location app. You can use the hosted server or run the backend on your own hardware.
+
+Locations, battery levels, nicknames and group colours are end-to-end encrypted on the phone, so the server stores them without being able to read them. The server still sees account names and email addresses, who is in which group, profile and group images, and which phones are signed in and when they send data. Phones currently trust the server for other members' public keys, so a deliberately altered server could hand out its own keys and read new locations. The user docs list exactly what a server can see and the known limits.
 
 This repo is a Bun monorepo: a React Native (Expo) app under `apps/mobile`, an API server under `apps/backend`, and shared packages (`api`, `database`, `encryption`, `schemas`, and others) at the root.
 
@@ -121,6 +123,8 @@ Email is optional. Configure Resend or SMTP, not both, or leave both unset to tu
 ### Image storage (S3)
 
 Profile and group images are stored in an S3-compatible bucket. The backend and runner must use the same bucket and `S3_CDN_URL`.
+
+Uploads must be sent as `image/webp`, and the backend checks for a WebP header before using one, but anything uploaded to a presigned URL is stored before that check. Serve images from a domain that hosts nothing else, and have it send `X-Content-Type-Options: nosniff` so browsers never second-guess the image type.
 
 | Variable              | Containers      | Required | Default                                  | Example                                     | What it does                                                                                                                     |
 | --------------------- | --------------- | -------- | ---------------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |

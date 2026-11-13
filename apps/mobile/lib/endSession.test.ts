@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { createDeviceKeyPair, encodeBase64 } from "@openbeacon/encryption";
-import { deviceRemovedCause } from "@openbeacon/shared";
+import { createDeviceKeyPair, createHistoryKeyPair, encodeBase64 } from "@openbeacon/encryption";
+import { deviceRemovedCause, tryCatch } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
 
 const secureStoreValues = new Map<string, string>();
@@ -12,6 +12,8 @@ let trackingRevocations = 0;
 let sessionUserId: string | null = "user-a";
 let registerError: Error | null = null;
 let stalledDelete: string | null = null;
+let writeGate: Promise<void> | null = null;
+let writesStarted: string[] = [];
 let providersError: Error | null = null;
 const providerRequests: unknown[] = [];
 
@@ -39,6 +41,8 @@ mock.module("expo-secure-store", () => ({
   },
   getItemAsync: async (key: string) => secureStoreValues.get(key) ?? null,
   setItemAsync: async (key: string, value: string) => {
+    writesStarted.push(key);
+    await writeGate;
     secureStoreValues.set(key, value);
   },
 }));
@@ -121,6 +125,7 @@ mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => 
 const { ensureDeviceKeyRegistration } = await import("./deviceKeys.ts");
 const { handleDeviceRemoved, wipeAfterRemovingThisPhone } = await import("./deviceRemoved.ts");
 const { endSession, settleLostSessions } = await import("./endSession.ts");
+const { storeHistoryKey } = await import("./historyKeys.ts");
 const { baseUrl } = await import("./currentServer.ts");
 const pendingSharingKey = `locationSharing.pending.${JSON.stringify([baseUrl, "user-a", "device"])}`;
 
@@ -175,6 +180,8 @@ describe("wiping a removed phone", () => {
     sessionUserId = "user-a";
     registerError = null;
     stalledDelete = null;
+    writeGate = null;
+    writesStarted = [];
     providersError = null;
     providerRequests.length = 0;
   });
@@ -198,6 +205,31 @@ describe("wiping a removed phone", () => {
     const replacement = await ensureDeviceKeyRegistration();
     expect(replacement.deviceId).not.toBe(device.deviceId);
     expect(replacement.publicKey).not.toBe(device.publicKey);
+  });
+
+  test("removing the phone while a History key is being saved refuses the save and leaves no key", async () => {
+    const device = await ensureDeviceKeyRegistration();
+    let release = () => {};
+    writeGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const storing = tryCatch(
+      storeHistoryKey({
+        privateKey: createHistoryKeyPair().privateKey,
+        userId: "user-a",
+        version: 2,
+      }),
+    );
+    while (!writesStarted.includes("encryption.history.user-a.2")) await Bun.sleep(1);
+
+    const ending = endSession({ reason: "phoneRemoved" });
+    await Bun.sleep(20);
+    release();
+    await ending;
+
+    expect((await storing).error).toBeInstanceOf(Error);
+    expectWiped(device.deviceId);
+    expect(secureStoreValues.has("encryption.history.user-a.2")).toBe(false);
   });
 
   test("wipes a phone that signed out normally, using the signed-in account", async () => {

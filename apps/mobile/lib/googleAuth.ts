@@ -15,6 +15,11 @@ export const performGoogleAuth = async ({
 
   const result = await signInWithGoogle();
 
+  if ("cancelled" in result) {
+    setLoading(false);
+    return;
+  }
+
   if (result.error) {
     alert(failureTitle, result.error.message ?? "Unable to sign in with Google.");
     setLoading(false);
