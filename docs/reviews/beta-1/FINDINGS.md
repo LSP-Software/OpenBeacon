@@ -259,6 +259,8 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M1. A stolen phone's session survives "Remove device" and can activate a new phone without the password
 
+- **Status:** fixed on `fix/beta-1-review` by "Stop a session moving to a new phone and require a fresh sign-in to activate" (SHA added at wrap-up).
+
 - Finding: S2-01 · security · **high** · verified (V1, reproduced in an integration test)
 - Location: packages/api/src/lib/groupEpochs.ts:634-639 (`upsertUserDevice` moves the session link); packages/api/src/lib/removeDevice.ts:61-69 (only signs out sessions linked to the removed device or to none); packages/api/src/router/deviceRouter.ts:103-182 (`activationChallenge`/`activate` need no fresh sign-in)
 - Failure scenario: An attacker extracts a stolen phone's session cookie and History private key. This needs a rooted or forensically read phone, because both are in SecureStore.
@@ -789,6 +791,8 @@ Generated from the raw files, with verifier corrections applied. Must-fix findin
 ### S2 Server: auth, accounts and devices
 
 #### S2-01 · high · security · **must-fix, see M1**
+
+- **Status:** fixed on `fix/beta-1-review` by "Stop a session moving to a new phone and require a fresh sign-in to activate" (SHA added at wrap-up).
 
 A session moved to a new phone survives removal of the stolen phone, which can then activate the new phone without the password
 

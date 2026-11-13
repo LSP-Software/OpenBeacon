@@ -615,6 +615,20 @@ export const upsertUserDevice = async ({
   const createResult = await tryCatch(
     db.$transaction(async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`);
+      const linkedDevice = sessionId
+        ? (
+            await tx.session.findUnique({
+              select: { device: { select: { revokedAt: true } } },
+              where: { id: sessionId },
+            })
+          )?.device
+        : null;
+      if (linkedDevice && !linkedDevice.revokedAt) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "This sign-in already belongs to another phone. Sign in again.",
+        });
+      }
       const pending =
         (await tx.userDevice.count({ where: { userId, activatedAt: { not: null } } })) > 0;
       const device = await tx.userDevice.create({
