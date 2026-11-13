@@ -846,6 +846,8 @@ Google sign-in silently links Google to an existing password account
 
 #### S2-04 · medium · security
 
+- **Status:** fixed on `fix/beta-1-review` by "Remove every IP-based rate limit" (SHA added at wrap-up). Q7b (D25). Tests: the middleware never keys on an IP (every key recorded), anonymous calls are limited only by a server-wide meta, `feedback.submit` shares 30 per 10 minutes server-wide, one IP can request codes for 25 addresses. `EMAIL_CODE_IP_LIMIT` removed from env schemas, `.env.example`, `turbo.json` and docs. `clientIp`/`TRUSTED_PROXY_PROVIDER` are still used for `Session.ipAddress` and Cloudflare origin checks; the tRPC `ctx.clientIp` and `RateLimitContextError` are now unused (post-beta clean-up).
+
 **Password guessing has no per-account limit; only better-auth's implicit per-IP limiter applies**
 
 - Location: packages/auth/src/createAuth.ts:29-214 (no `rateLimit` option, no sign-in hook); better-auth `context/create-context.mjs:170-175`, `api/rate-limiter/index.mjs:305-318`

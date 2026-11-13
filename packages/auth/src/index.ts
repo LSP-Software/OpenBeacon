@@ -34,7 +34,6 @@ export const emailCodes = cache
       db,
       secret: env.BETTER_AUTH_SECRET,
       rateLimits: cache.rateLimits,
-      limitRequestsPerIp: env.EMAIL_CODE_IP_LIMIT,
       sendCodeEmail,
       sendAccountExistsEmail,
       sendGoogleSignInEmail,

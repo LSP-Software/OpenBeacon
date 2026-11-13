@@ -66,7 +66,7 @@ export type TRPCMeta = {
   rateLimit?: {
     cost?: number;
     namespace?: string;
-    ipLimit?: number;
+    scope?: "server";
     limit: number;
     windowMs: number;
   };

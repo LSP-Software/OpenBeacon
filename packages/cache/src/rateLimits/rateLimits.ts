@@ -76,6 +76,9 @@ const buildRateLimitKey = ({
   keyPrefix: string;
   namespace: string;
 }) => {
+  if (identifier.type === "server") {
+    return `${keyPrefix}:ratelimit:${namespace}:server`;
+  }
   if (identifier.type === "userId") {
     return `${keyPrefix}:ratelimit:${namespace}:userId:${identifier.value}`;
   }

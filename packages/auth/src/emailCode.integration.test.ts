@@ -31,7 +31,6 @@ const codes = createEmailCodes({
   db: prisma,
   secret: "integration-email-code-secret-000000000000",
   rateLimits: createIntegrationTestCache(() => clockMs).rateLimits,
-  limitRequestsPerIp: true,
   sendCodeEmail: async (email) => {
     if (sendFailure) throw sendFailure;
     await sendGate;
@@ -425,7 +424,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email codes", ()
           throw new Error("Redis is down");
         },
       },
-      limitRequestsPerIp: false,
       sendCodeEmail: async () => {},
       sendAccountExistsEmail: async () => {},
       sendGoogleSignInEmail: async () => {},
@@ -540,60 +538,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email code rate 
       expect((await requestResetCode(email)).status).toBe(200);
     }
     expect((await requestResetCode(email)).status).toBe(429);
-    expect(await codes.allowRequest({ purpose: "recovery-reset", email, ip: nextIp() })).toBe(
-      "allowed",
-    );
+    expect(await codes.allowRequest({ purpose: "recovery-reset", email })).toBe("allowed");
   });
 
-  test("with the IP limit off, one IP can request codes for any number of addresses", async () => {
-    const unlimitedCodes = createEmailCodes({
-      db: prisma,
-      secret: "integration-email-code-secret-000000000000",
-      rateLimits: createIntegrationTestCache(() => clockMs).rateLimits,
-      limitRequestsPerIp: false,
-      sendCodeEmail: async () => {},
-      sendAccountExistsEmail: async () => {},
-      sendGoogleSignInEmail: async () => {},
-      now: () => new Date(clockMs),
-    });
+  test("one IP address can request codes for any number of addresses", async () => {
     const ip = nextIp();
-    const purposes = ["sign-up", "password-reset", "email-verification", "recovery-reset"] as const;
-    const results = [];
-    for (let index = 0; index < emailCodeRequestLimits.perIp.limit + 5; index++) {
-      results.push(
-        await unlimitedCodes.allowRequest({
-          purpose: purposes[index % purposes.length] ?? "sign-up",
-          email: nextAddress("ip-limit-off"),
-          ip,
-        }),
-      );
+    for (let index = 0; index < 25; index++) {
+      expect((await requestResetCode(nextAddress("one-ip"), ip)).status).toBe(200);
     }
-    expect(results).toHaveLength(25);
-    expect(results.every((result) => result === "allowed")).toBe(true);
-  });
-
-  test("with the IP limit on, an IP can request 20 codes per hour across addresses", async () => {
-    const ip = nextIp();
-    const allowed = emailCodeRequestLimits.perIp.limit;
-    for (let index = 0; index < allowed; index++) {
-      expect((await requestResetCode(nextAddress("ip-limit"), ip)).status).toBe(200);
-    }
-    const limited = await requestResetCode(nextAddress("ip-limit"), ip);
-    expect(limited.status).toBe(429);
-    expect((await requestResetCode(nextAddress("ip-limit"), nextIp())).status).toBe(200);
-  });
-
-  test("a blocked IP doesn't use up the address's allowance", async () => {
-    const { email } = await createPasswordAccount("ip-first");
-    const ip = nextIp();
-    for (let index = 0; index < emailCodeRequestLimits.perIp.limit; index++) {
-      await requestResetCode(nextAddress("ip-first-filler"), ip);
-    }
-    for (let index = 0; index < 5; index++) {
-      expect((await requestResetCode(email, ip)).status).toBe(429);
-    }
-    expect((await requestResetCode(email)).status).toBe(200);
-    expect(sent.filter((message) => message.to === email)).toHaveLength(1);
   });
 
   test("unknown and Google-only addresses are limited the same way as password accounts", async () => {

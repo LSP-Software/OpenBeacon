@@ -113,7 +113,6 @@ const emailCodes = createEmailCodes({
   db: prisma,
   secret: "integration-email-code-secret-000000000000",
   rateLimits: createIntegrationTestCache(() => 0).rateLimits,
-  limitRequestsPerIp: false,
   sendCodeEmail: async (email) => {
     sent.push(email);
   },

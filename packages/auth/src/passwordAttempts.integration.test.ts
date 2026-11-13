@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { z } from "zod";
-import { clientIpHeader, createAuth } from "./createAuth.ts";
+import { createAuth } from "./createAuth.ts";
 import { passwordFailureLimit } from "./passwordAttempts.ts";
 
 const prefix = `password-attempts-${crypto.randomUUID()}`;
@@ -22,13 +22,11 @@ const createAccount = async () => {
 };
 
 const post = async (path: string, body: unknown, cookie?: string) => {
-  counter += 1;
   const response = await auth.handler(
     new Request(`http://localhost:3000/api/auth${path}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        [clientIpHeader]: `198.51.${Math.floor(counter / 250)}.${(counter % 250) + 1}`,
         ...(cookie ? { cookie, origin: "http://localhost:3000" } : {}),
       },
       body: JSON.stringify(body),
@@ -79,7 +77,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     afterAll(async () => {
       await prisma.user.deleteMany({ where: { email: { startsWith: prefix } } });
       await prisma.$disconnect();
-    });
+    }, 30_000);
 
     test("after 10 wrong passwords the right one is refused too", async () => {
       const email = await createAccount();
@@ -92,7 +90,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         code: "TOO_MANY_PASSWORD_ATTEMPTS",
         message: "Too many attempts. Try again in 15 minutes.",
       });
-    });
+    }, 30_000);
 
     test("the limit follows the normalised email", async () => {
       const email = await createAccount();
@@ -101,7 +99,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
 
       expect((await signIn(email, password)).code).toBe("TOO_MANY_PASSWORD_ATTEMPTS");
-    });
+    }, 30_000);
 
     test("successful sign-ins don't count", async () => {
       const email = await createAccount();
@@ -113,7 +111,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
 
       expect((await signIn(email, password)).status).toBe(200);
-    });
+    }, 30_000);
 
     test("one locked account doesn't lock another", async () => {
       const locked = await createAccount();
@@ -124,7 +122,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
       expect((await signIn(locked, password)).code).toBe("TOO_MANY_PASSWORD_ATTEMPTS");
       expect((await signIn(other, password)).status).toBe(200);
-    });
+    }, 30_000);
 
     test("parallel guesses can't get past the limit", async () => {
       const email = await createAccount();
@@ -137,7 +135,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(results.filter((result) => result.code === "INVALID_EMAIL_OR_PASSWORD")).toHaveLength(
         passwordFailureLimit.limit,
       );
-    });
+    }, 30_000);
 
     test("wrong current passwords on change-password share the account's limit", async () => {
       const email = await createAccount();
@@ -152,7 +150,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         code: "TOO_MANY_PASSWORD_ATTEMPTS",
       });
       expect((await signIn(email, password)).code).toBe("TOO_MANY_PASSWORD_ATTEMPTS");
-    });
+    }, 30_000);
 
     test("a successful password change doesn't count", async () => {
       const email = await createAccount();
@@ -163,6 +161,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
       expect((await changePassword(cookie, password)).status).toBe(200);
       expect((await signIn(email, "a brand new passphrase")).status).toBe(200);
-    });
+    }, 30_000);
   },
 );

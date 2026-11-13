@@ -37,7 +37,6 @@ const codes = createEmailCodes({
   } as unknown as PrismaClient,
   secret: "unit-email-code-secret-0000000000000000",
   rateLimits: cache.rateLimits,
-  limitRequestsPerIp: true,
   sendCodeEmail: async () => {},
   sendAccountExistsEmail: async () => {},
   sendGoogleSignInEmail: async () => {},
@@ -45,20 +44,9 @@ const codes = createEmailCodes({
 
 test("email code requests are refused while Redis is unavailable", async () => {
   const error = spyOn(console, "error").mockImplementation(() => {});
-  for (const limitRequestsPerIp of [true, false]) {
-    const requestCodes = createEmailCodes({
-      db: {} as PrismaClient,
-      secret: "unit-email-code-secret-0000000000000000",
-      rateLimits: cache.rateLimits,
-      limitRequestsPerIp,
-      sendCodeEmail: async () => {},
-      sendAccountExistsEmail: async () => {},
-      sendGoogleSignInEmail: async () => {},
-    });
-    expect(
-      await requestCodes.allowRequest({ purpose: "sign-up", email: "a@example.test", ip: "1" }),
-    ).toBe("unavailable");
-  }
+  expect(await codes.allowRequest({ purpose: "sign-up", email: "a@example.test" })).toBe(
+    "unavailable",
+  );
   error.mockRestore();
 });
 
