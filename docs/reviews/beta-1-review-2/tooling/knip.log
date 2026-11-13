@@ -1,0 +1,67 @@
+ERROR: Error loading apps/mobile/metro.config.cjs (Cannot find module 'tailwind.config')
+ERROR: Please fix or visit https://knip.dev/reference/known-issues
+Unused files (3)
+apps/backend/src/helpers/db.ts            
+apps/mobile/components/ui/Accordion.tsx   
+apps/mobile/hooks/useGroupLivePositions.ts
+Unused dependencies (4)
+@rn-primitives/accordion  apps/mobile/package.json:29:6      
+expo-glass-effect         apps/mobile/package.json:53:6      
+expo-image                apps/mobile/package.json:54:6      
+@prisma/client            packages/database/package.json:36:6
+Unused devDependencies (1)
+expo-dev-client  apps/mobile/package.json:87:6
+Unlisted dependencies (4)
+expo-updates        apps/mobile/app.config.js                                              
+expo-updates        apps/mobile/app.json                                                   
+expo-system-ui      apps/mobile/app.json                                                   
+@aws-sdk/client-s3  apps/scheduled-jobs/src/jobs/imageUploadCleanup.integration.test.ts:6:8
+Unused exports (40)
+SUPPORTED_SCHEMA_MAJOR                               apps/map-tiles/src/pmtiles.ts:4:14                                
+HEADER_CHECK_LENGTH                                  apps/map-tiles/src/pmtiles.ts:5:14                                
+parseMetadata                                        apps/map-tiles/src/pmtiles.ts:28:14                               
+updateRunSchema                                      apps/map-tiles/src/status.ts:13:14                                
+mapStatusSchema                                      apps/map-tiles/src/status.ts:26:14                                
+InviteMembersInputs                                  apps/mobile/components/dialogs/InviteMemberToGroupDialog.tsx:77:14
+buttonTextVariants                                   apps/mobile/components/ui/Button.tsx:94:18                        
+buttonVariants                                       apps/mobile/components/ui/Button.tsx:94:38                        
+CardFooter                                           apps/mobile/components/ui/Card.tsx:63:46                          
+cardVariants                                         apps/mobile/components/ui/Card.tsx:63:81                          
+DialogClose                                          apps/mobile/components/ui/Dialog.tsx:127:3                        
+DialogOverlay                                        apps/mobile/components/ui/Dialog.tsx:132:3                        
+DialogPortal                                         apps/mobile/components/ui/Dialog.tsx:133:3                        
+DialogTrigger                                        apps/mobile/components/ui/Dialog.tsx:135:3                        
+FieldGroup                                           apps/mobile/components/ui/Field.tsx:182:3                         
+FieldLegend                                          apps/mobile/components/ui/Field.tsx:183:3                         
+FieldSeparator                                       apps/mobile/components/ui/Field.tsx:184:3                         
+FieldSet                                             apps/mobile/components/ui/Field.tsx:185:3                         
+FieldContent                                         apps/mobile/components/ui/Field.tsx:186:3                         
+FieldTitle                                           apps/mobile/components/ui/Field.tsx:187:3                         
+SelectLabel                                          apps/mobile/components/ui/Select.tsx:160:3                        
+SelectSeparator                                      apps/mobile/components/ui/Select.tsx:161:3                        
+getServerKey                                         apps/mobile/lib/auth-client.ts:15:14                              
+isNativeGoogleSignInConfiguredForPlatform            apps/mobile/lib/auth.ts:23:14                                     
+revokePendingSessionToken                            apps/mobile/lib/auth.ts:78:14                                     
+ACTIVATION_KEY_MISSING_MESSAGE                       apps/mobile/lib/deviceActivation.ts:13:14                         
+computeSha256Base64                                  apps/mobile/lib/image-upload.ts:5:14                              
+installExpoCrypto                                    apps/mobile/lib/installCrypto.ts:3:14                             
+requestForegroundLocationPermissions                 apps/mobile/lib/locationPermissions.ts:181:14                     
+HEADING_SAMPLE_SMOOTHING_ALPHA                       apps/mobile/lib/smoothDeviceHeading.ts:1:14                       
+HEADING_CHASE_SPEED                                  apps/mobile/lib/smoothDeviceHeading.ts:2:14                       
+HEADING_SETTLED_DEGREES                              apps/mobile/lib/smoothDeviceHeading.ts:4:14                       
+getColors                                            apps/mobile/lib/theme.ts:22:14                                    
+defaultDeviceIcon                                    packages/api/src/lib/groupEpochs.ts:567:14                        
+maxGroupsPerAccount                                  packages/api/src/lib/groupLimit.ts:5:14                           
+PM_TILES_URL_REFRESH_WINDOW_MS                       packages/api/src/lib/pmtilesUrl.ts:12:14                          
+rateLimitIdentifierSchema                            packages/cache/src/rateLimits/schemas.ts:4:14                     
+redisOptionsSchema                                   packages/cache/src/rateLimits/schemas.ts:43:14                    
+default                                    variable  packages/database/src/client.ts:31:16                             
+SensitiveBytes                             class     packages/encryption/src/sensitive.ts:1:14                         
+Unused exported types (4)
+ButtonProps                    type  apps/mobile/components/ui/Button.tsx:95:15  
+LocationPermissionStatus       type  apps/mobile/lib/locationPermissions.ts:9:13 
+LocationPermissionRequirement  type  apps/mobile/lib/locationPermissions.ts:11:13
+LiveMapPosition                type  apps/mobile/lib/mapTracking.ts:14:3         
+Duplicate exports (2)
+X25519_KEY_ALGORITHM|DEVICE_KEY_ALGORITHM              packages/encryption/src/constants.ts                
+changeRecoveryPhraseSchema|setupAccountRecoverySchema  packages/schemas/src/schemas/auth/accountRecovery.ts

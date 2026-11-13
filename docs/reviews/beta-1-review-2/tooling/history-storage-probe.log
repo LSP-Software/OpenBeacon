@@ -1,0 +1,10 @@
+bun test v1.4.4-canary.1 (11c367163)
+
+../../../../../../tmp/openbeacon-review-history-storage.test.ts:
+(pass) History-key reads have no settling fallback when the native operation stalls [30.30ms]
+(pass) A late History-key write can repopulate secure storage after the key wipe completes [1.78ms]
+
+ 2 pass
+ 0 fail
+ 3 expect() calls
+Ran 2 tests across 1 file. [62.00ms]

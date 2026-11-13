@@ -1,0 +1,23 @@
+import { prisma } from "<repo>/packages/database/src/client.ts";
+import { deleteAccountRecords } from "<repo>/packages/api/src/lib/account-deletion.ts";
+const prefix = `beta2-deletion-${crypto.randomUUID()}`;
+const owner = `${prefix}-owner`;
+const member = `${prefix}-member`;
+const group = `${prefix}-group`;
+const device = `${prefix}-device`;
+const epoch = `${prefix}-epoch`;
+try {
+  await prisma.user.createMany({data: [owner, member].map(id => ({id,name:id,email:`${id}@example.test`}))});
+  await prisma.userDevice.create({data:{id:device,userId:owner,publicKey:'test',publicKeyAlgorithm:'X25519',name:'Phone',icon:'phone',activatedAt:new Date()}});
+  await prisma.group.create({data:{id:group,name:'Guarded group',groupMembers:{create:[{userId:owner,role:'OWNER',joinedEpochNumber:1},{userId:member,role:'MEMBER',joinedEpochNumber:1}]}}});
+  await prisma.groupEpoch.create({data:{id:epoch,groupId:group,epochNumber:1,senderPublicKey:'test'}});
+  await prisma.groupEncryptedPayload.create({data:{groupId:group,epochId:epoch,senderDeviceId:device,senderUserId:owner,kind:'trackingPoint',algorithm:'test',nonce:'test',ciphertext:'secret',clientPointId:'unique'}});
+  const before = await prisma.groupEncryptedPayload.count({where:{senderUserId:owner}});
+  let failure: unknown;
+  try { await deleteAccountRecords({db:prisma,userId:owner,imageUrlPrefix:'https://cdn.example/bucket',mode:'immediate',securityAlerts:null}); } catch(error) { failure = error; }
+  console.log(JSON.stringify({before, after:await prisma.groupEncryptedPayload.count({where:{senderUserId:owner}}),userSurvives:!!await prisma.user.findUnique({where:{id:owner}}),error:failure instanceof Error?failure.message:String(failure)}));
+} finally {
+  await prisma.group.deleteMany({where:{id:group}});
+  await prisma.user.deleteMany({where:{id:{in:[owner,member]}}});
+  await prisma.$disconnect();
+}

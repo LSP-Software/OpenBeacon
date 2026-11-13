@@ -1,0 +1,11 @@
+bun test v1.4.4-canary.1 (11c367163)
+
+packages/cache/src/cache/redisRestart.integration.test.ts:
+[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so restart is allowed
+[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so restart is refused
+(pass) the shared client recovers after Redis is down for longer than Bun's own retries [36548.62ms]
+
+ 1 pass
+ 0 fail
+ 8 expect() calls
+Ran 1 test across 1 file. [36.58s]

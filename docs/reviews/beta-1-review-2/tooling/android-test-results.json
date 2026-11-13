@@ -1,0 +1,34 @@
+[
+  {
+    "name": "expo.modules.openbeacontracking.NoticesTest",
+    "tests": "9",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "timestamp": "2026-11-13T11:27:37.554Z"
+  },
+  {
+    "name": "expo.modules.openbeacontracking.queue.OfflineTrackingQueueTest",
+    "tests": "9",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "timestamp": "2026-11-13T11:27:42.602Z"
+  },
+  {
+    "name": "expo.modules.openbeacontracking.capture.TrackingCaptureServiceTest",
+    "tests": "21",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "timestamp": "2026-11-13T11:27:41.385Z"
+  },
+  {
+    "name": "expo.modules.openbeacontracking.capture.SharingResumeTest",
+    "tests": "20",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "timestamp": "2026-11-13T11:27:40.224Z"
+  }
+]
