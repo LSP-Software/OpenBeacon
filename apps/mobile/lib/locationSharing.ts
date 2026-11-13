@@ -267,6 +267,7 @@ export const changeLocationSharing = async (input: {
   const deviceId = input.deviceId ?? device.deviceId;
   const affectsThisDevice = input.scope === "account" || deviceId === device.deviceId;
   const offline = await (await import("./networkStatus.ts")).isDeviceOffline();
+  if (generation !== requestedGeneration) throw new Error("You've signed out.");
   if (latestScopeRevisions.get(input.scope) !== revision)
     throw new Error("A newer sharing change replaced this one.");
   if (offline && !affectsThisDevice) throw new Error(SERVER_UNREACHABLE_MESSAGE);
