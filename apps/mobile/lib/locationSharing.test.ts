@@ -227,6 +227,25 @@ test("an older offline change that finishes its checks late doesn't replace a ne
   expect(nativeStates.at(-1)?.paused).toBe(true);
 });
 
+test("signing out during the connectivity check stops the change writing anything", async () => {
+  knownOffline = true;
+  offline = true;
+  let release = () => {};
+  offlineCheckGate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const change = changeLocationSharing({ scope: "device", paused: true, durationMinutes: null });
+  for (let index = 0; index < 20; index++) await Promise.resolve();
+
+  abandonLocationSharingChanges();
+  clearPendingSharingChanges("alex");
+  release();
+
+  await expect(change).rejects.toThrow("You've signed out.");
+  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(nativeStates).toHaveLength(0);
+});
+
 test("a known offline resume of this phone applies locally and queues", async () => {
   server.device = { ...scope(), sharingPaused: true, sharingRevision: 1, requestId: "earlier" };
   await syncLocationSharing();
