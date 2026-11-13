@@ -238,6 +238,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       };
       await expect(deleteAccountRecords(input)).rejects.toThrow("Transfer ownership");
       expect(await prisma.user.findUnique({ where: { id: deletedUser } })).not.toBeNull();
+      expect(
+        await prisma.groupEncryptedPayload.count({ where: { senderUserId: deletedUser } }),
+      ).toBe(1);
       expect(await sentAlerts()).toEqual([]);
       await prisma.groupMember.update({
         where: { userId_groupId: { userId: remainingUser, groupId } },
