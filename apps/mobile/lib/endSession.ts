@@ -1,9 +1,8 @@
 import { tryCatch } from "@openbeacon/shared";
-import * as SecureStore from "expo-secure-store";
 import { z } from "zod";
 import { queryClient, trpc, trpcClient } from "./api.ts";
 import { clearApiCompatibility } from "./apiCompatibility.ts";
-import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "./auth-client.ts";
+import { authClient, forgetSessionTokenToRevoke } from "./auth-client.ts";
 import {
   deleteDeviceKey,
   forgetDeviceKeyRegistration,
@@ -192,7 +191,7 @@ export const endSession = async ({
     signedOut = !result.error && !result.data.error;
   }
   if (clears.credentials === "signOutAndDropRevokeToken") {
-    await tryCatch(SecureStore.deleteItemAsync(SESSION_TOKEN_TO_REVOKE_KEY));
+    await tryCatch(forgetSessionTokenToRevoke());
   }
   if (clears.pendingJoinCodes) clearPendingJoinCodes();
   queryClient.clear();

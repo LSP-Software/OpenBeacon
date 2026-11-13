@@ -300,6 +300,8 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M3. Switching server sends the old server's session cookie to the new server
 
+- **Status:** fixed on `fix/beta-1-review` by "Tie the app's credentials to the server that issued them" (SHA added at wrap-up). Unit tests: the cookie key differs per server, credentials use `WHEN_UNLOCKED_THIS_DEVICE_ONLY`, the revoke token is dropped on a server mismatch, and a server change runs `endSession` first. `serverKey` is SHA-256 of the base URL (`@noble/hashes` added to the app). Also covers the SecureStore-options part of S1-10; the rest of S1-10 stays post-beta. Emulator check in the end-of-branch batch.
+
 - Finding: S8-01 · security · **high** · verified (V1; worse than reported)
 - Location: apps/mobile/lib/auth-client.ts:9 and :47-51 (one fixed cookie key, not tied to a server); apps/mobile/lib/api.ts:101-104; apps/mobile/lib/auth.ts:79-92 (revoke token); apps/mobile/app/serverUrl.tsx:43-52 and :123-124 ("Your current session will remain active"); apps/mobile/components/ApiCompatibilityGate.tsx:150-154 ("Use a different server")
 - Failure scenario: A user signed in to the hosted server enters someone else's self-hosted URL, for example "join my server". Every request then carries the hosted session cookie, and that operator can replay it against the hosted API.
@@ -1483,6 +1485,8 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 ### S8 Mobile: auth, setup, account and plumbing
 
 #### S8-01 · high · security · **must-fix, see M3**
+
+- **Status:** fixed on `fix/beta-1-review` by "Tie the app's credentials to the server that issued them" (SHA added at wrap-up). Unit tests: the cookie key differs per server, credentials use `WHEN_UNLOCKED_THIS_DEVICE_ONLY`, the revoke token is dropped on a server mismatch, and a server change runs `endSession` first. `serverKey` is SHA-256 of the base URL (`@noble/hashes` added to the app). Also covers the SecureStore-options part of S1-10; the rest of S1-10 stays post-beta. Emulator check in the end-of-branch batch.
 
 Switching server sends the old server's session cookie and raw session token to the new server
 

@@ -1,14 +1,13 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import * as SecureStore from "expo-secure-store";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { View } from "react-native";
 import { Alert } from "../lib/alert.ts";
 import { trpc } from "../lib/api.ts";
 import { isNativeGoogleSignInConfigured, signInWithGoogle } from "../lib/auth.ts";
-import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "../lib/auth-client.ts";
+import { authClient, saveSessionTokenToRevoke } from "../lib/auth-client.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
 import { isDeviceRemovedError } from "../lib/deviceRemovedError.ts";
 import { isSessionLinkRefused, signOutAfterRefusedSessionLink } from "../lib/sessionLink.ts";
@@ -52,7 +51,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
       return;
     }
     if (currentSession.user.id !== previous.userId) {
-      await tryCatch(SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, previous.token));
+      await tryCatch(saveSessionTokenToRevoke(previous.token));
       await tryCatch(authClient.signOut());
       router.replace("/");
       Alert.alert(

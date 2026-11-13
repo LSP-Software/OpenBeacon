@@ -100,7 +100,8 @@ mock.module("expo-secure-store", () => ({
 mock.module("react-native", () => createReactNativeTestModule({ platformOS: "android" }));
 
 mock.module("./auth-client.ts", () => ({
-  SESSION_TOKEN_TO_REVOKE_KEY: "session-token",
+  readSessionTokenToRevoke: async () => storedToken,
+  forgetSessionTokenToRevoke: deleteItemAsyncMock,
   authClient: {
     revokeSession: revokeSessionMock,
     signIn: {

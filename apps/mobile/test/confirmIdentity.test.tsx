@@ -44,7 +44,7 @@ mock.module("../lib/auth.ts", () => ({
   signInWithGoogle: async () => ({}),
 }));
 mock.module("../lib/auth-client.ts", () => ({
-  SESSION_TOKEN_TO_REVOKE_KEY: "sessionTokenToRevokeOnNextLogin",
+  saveSessionTokenToRevoke: async () => {},
   authClient: {
     getSession: async () => ({
       data: { session: { token: "token-2" }, user: { id: "user-1" } },

@@ -1,6 +1,7 @@
 import { Alert } from "../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { router } from "expo-router";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -11,12 +12,8 @@ import { Input } from "../components/ui/Input.tsx";
 import { Separator } from "../components/ui/Separator.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { checkServerCompatibility } from "../lib/apiCompatibility.ts";
-import {
-  getServerUrl,
-  hasCustomServerUrl,
-  normaliseServerUrl,
-  setServerUrl,
-} from "../lib/currentServer.ts";
+import { changeServer } from "../lib/changeServer.ts";
+import { getServerUrl, hasCustomServerUrl, normaliseServerUrl } from "../lib/currentServer.ts";
 
 const serverUrlSchema = z.object({
   url: z.string().superRefine((url, context) => {
@@ -26,6 +23,7 @@ const serverUrlSchema = z.object({
 });
 
 export default function ServerUrl() {
+  const [clearing, setClearing] = useState(false);
   const form = useForm<z.infer<typeof serverUrlSchema>>({
     resolver: zodResolver(serverUrlSchema),
     mode: "onTouched",
@@ -39,8 +37,8 @@ export default function ServerUrl() {
     const { url } = normaliseServerUrl(data.url);
     if (!url) return;
 
-    const save = () => {
-      setServerUrl(url);
+    const save = async () => {
+      await changeServer(url);
       Alert.alert("Server saved", "Restart the app to connect to your custom server.", [
         { text: "OK", onPress: () => router.back() },
       ]);
@@ -48,7 +46,7 @@ export default function ServerUrl() {
 
     const { verdict, serverVersion } = await checkServerCompatibility(url);
     if (verdict === "ok") {
-      save();
+      await save();
       return;
     }
     Alert.alert(
@@ -64,13 +62,15 @@ export default function ServerUrl() {
           : `This server is running version ${serverVersion}, which is too old for this app. Ask whoever runs it to update it. You won't be able to share your location until it's updated.`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Save anyway", onPress: save },
+        { text: "Save anyway", onPress: () => void save() },
       ],
     );
   };
 
-  const handleClear = () => {
-    setServerUrl("");
+  const handleClear = async () => {
+    setClearing(true);
+    await changeServer("");
+    setClearing(false);
     Alert.alert("Using default server", "Restart the app to switch back to the default server.", [
       { text: "OK", onPress: () => router.back() },
     ]);
@@ -115,8 +115,8 @@ export default function ServerUrl() {
 
             <View className="bg-primary/10 rounded-lg p-4 border border-primary/15">
               <Text className="text-sm text-muted">
-                Changes take effect after restarting the app. Your current session will remain
-                active.
+                Changing server signs you out on this phone. Changes take effect after restarting
+                the app.
               </Text>
             </View>
 
@@ -128,7 +128,7 @@ export default function ServerUrl() {
               <Text>Save</Text>
             </Button>
             {hasCustomServerUrl() && (
-              <Button variant="outline" onPress={handleClear}>
+              <Button variant="outline" loading={clearing} onPress={handleClear}>
                 <Text>Use Default Server</Text>
               </Button>
             )}

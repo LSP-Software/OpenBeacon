@@ -8,6 +8,7 @@ import {
 import { tryCatch } from "@openbeacon/shared";
 import * as Device from "expo-device";
 import * as SecureStore from "expo-secure-store";
+import { getSecureStoreOptions } from "./secureStoreOptions.ts";
 import { Platform } from "react-native";
 import { trpcClient } from "./api.ts";
 import { baseUrl } from "./currentServer.ts";
@@ -31,10 +32,6 @@ const getScopedDeviceKeyNames = (userId: string) => ({
   deviceIdKey: getScopedDeviceKey(DEVICE_ID_KEY, userId),
   privateKeyKey: getScopedDeviceKey(DEVICE_PRIVATE_KEY_KEY, userId),
   publicKeyKey: getScopedDeviceKey(DEVICE_PUBLIC_KEY_KEY, userId),
-});
-
-const getSecureStoreOptions = () => ({
-  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 });
 
 const loadStoredDeviceKeyContext = async ({
