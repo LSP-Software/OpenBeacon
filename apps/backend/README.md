@@ -32,27 +32,23 @@ not reverse migrations.
 
 For Google account deletion verification, add `<BETTER_AUTH_URL>/api/auth/google-deletion-callback` as an authorized redirect URI on the Google web OAuth client configured by `GOOGLE_CLIENT_ID`. For the hosted API this is `https://api.openbeacon.net/api/auth/google-deletion-callback`; each self-hosted backend needs its own exact public callback URI registered with its Google client. The Google account chooser may reuse an existing Google browser session and does not guarantee a fresh password prompt.
 
-Set the required environment variables in the root `.env.example`, including
-the R2 variables, in Coolify. Set `BETTER_AUTH_URL` to
-`https://api.openbeacon.net` and `SELF_HOSTED` to `false`. `SELF_HOSTED` defaults
-to `true`, so self-hosted backends never accept app feedback; the app always
-sends feedback to the hosted API. Set `DISCORD_FEEDBACK_WEBHOOK_URL` on the hosted
-API to get a Discord alert for each new feedback; the alert holds only the
-feedback ID and whether a contact email was given. Optional variables may be added when needed; leave
-them absent to use their defaults. The Coolify deployment declares
-`TRUSTED_PROXY_PROVIDER` without a value to prevent startup until it is set.
-For the hosted API, set `TRUSTED_PROXY_PROVIDER` to `cloudflare-authenticated`
-and configure a random `CLOUDFLARE_ORIGIN_SECRET` of at least 32 characters in
-Coolify. Configure Cloudflare to overwrite `X-OpenBeacon-Origin-Secret` with the
-same secret only on HTTPS requests to `api.openbeacon.net`, and use Full (strict)
-TLS for that hostname. Never add the secret to requests received over HTTP:
-Full (strict) does not force Cloudflare to use HTTPS for those origin requests.
-The backend requires that secret and a valid `CF-Connecting-IP` on every request
-except `GET /health`, which Coolify uses for container health checks, and `GET /ready`. Keep the
-secret out of Git and logs. Verify that direct-origin API requests are rejected,
-and that Cloudflare overwrites a client-supplied secret header. Do not deploy
-with `none` behind the reverse proxy: every session would record the proxy's IP
-address instead of the client's.
+Set the required environment variables from the root `.env.example`, including
+the R2 variables. `SELF_HOSTED` defaults to `true`, so self-hosted backends never
+accept app feedback; the app always sends feedback to the hosted API. Optional
+variables may be added when needed; leave them absent to use their defaults.
+
+With `TRUSTED_PROXY_PROVIDER=cloudflare-authenticated`, set a random
+`CLOUDFLARE_ORIGIN_SECRET` of at least 32 characters, and configure Cloudflare to
+overwrite `X-OpenBeacon-Origin-Secret` with the same secret only on HTTPS requests
+to your API hostname, using Full (strict) TLS for that hostname. Never add the
+secret to requests received over HTTP: Full (strict) does not force Cloudflare to
+use HTTPS for those origin requests. The backend then requires that secret and a
+valid `CF-Connecting-IP` on every request except `GET /health` and `GET /ready`,
+which stay open for container health checks and monitoring. Keep the secret out
+of Git and logs. Verify that direct-origin API requests are rejected, and that
+Cloudflare overwrites a client-supplied secret header. Do not deploy with `none`
+behind a reverse proxy: every session would record the proxy's IP address instead
+of the client's.
 
 Self-hosted backends behind a single reverse proxy such as Traefik, Caddy or
 nginx can use `trusted-proxy`. The backend uses the last `X-Forwarded-For` entry,
@@ -100,21 +96,11 @@ version was already published from a different commit, so bump
 To release, dispatch the `Deploy backend` workflow from `main`. It releases
 `serverVersion` from `main` unless you enter another version, and fails if the
 three images for that version aren't published yet. It points `latest-stable`
-at that version for all three images. With "Trigger the Coolify deployment"
-ticked, it then asks Coolify to deploy `latest-stable` to the
-`OpenBeacon Backend` and `OpenBeacon Scheduled Jobs` applications, using the
-`COOLIFY_ENDPOINT` and `COOLIFY_TOKEN` secrets; leave it unticked to deploy
-from Coolify yourself later. It never redeploys `OpenBeacon Map Tiles`, because
-a restart interrupts a map upload that can take hours: deploy it from Coolify
-when `map-tiles status` shows no update running.
-
-To roll back, dispatch `Deploy backend` with the earlier version and the
-Coolify deployment ticked. For the first deployment, apply the Coolify
-infrastructure plan and populate its environment variables before dispatching
-the workflow. The workflow waits for Coolify to report the deployment result.
-If polling fails or times out, check the deployment in Coolify before retrying.
-Avoid starting other deployments manually while a workflow release is in
-progress.
+at that version for all three images, and can then deploy the backend and the
+runner. It never redeploys the map tiles service, because a restart interrupts
+a map upload that can take hours: redeploy it yourself when `map-tiles status`
+shows no update running. To roll back, release an earlier version. Avoid
+starting other deployments manually while a release is in progress.
 
 ## Email
 

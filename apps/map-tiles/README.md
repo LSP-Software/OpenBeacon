@@ -37,7 +37,7 @@ The service reads `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` an
 
 ## Running the service
 
-The `Publish images to Docker Hub` workflow publishes `lspsoftware/openbeacon-map-tiles` tagged with `serverVersion`, and the `Deploy backend` workflow points `latest-stable` at a released version, but neither redeploys the service. Deploy it from Coolify when `map-tiles status` shows no update running.
+The `Publish images to Docker Hub` workflow publishes `lspsoftware/openbeacon-map-tiles` tagged with `serverVersion`, and the `Deploy backend` workflow points `latest-stable` at a released version, but neither redeploys the service. Redeploy it yourself when `map-tiles status` shows no update running.
 
 To build the image yourself, run this from the repository root:
 
@@ -84,7 +84,7 @@ In the first minute the line ends with `measuring speed`, and if nothing reached
 
 On `SIGTERM` it stops at once; an unfinished upload resumes on the next start.
 
-The image includes `curl`, so Coolify's health check against `http://127.0.0.1:8080/health` works. The Docker `HEALTHCHECK` calls the same endpoint.
+The image includes `curl`, so a platform health check against `http://127.0.0.1:8080/health` works. The Docker `HEALTHCHECK` calls the same endpoint.
 
 A scheduled update does nothing unless all of these hold:
 
@@ -106,7 +106,7 @@ Run it inside the service's container:
 docker exec map-tiles map-tiles status
 ```
 
-A shell opened in the container (`docker exec -it map-tiles sh`, or the Coolify terminal) starts with a banner listing these commands.
+A shell opened in the container (for example `docker exec -it map-tiles sh`) starts with a banner listing these commands.
 
 The command talks to the running service, so it only works while the service is up, and it never races an update the service is running. The service listens on `127.0.0.1` only, so nothing outside its container can reach it and it needs no key. Don't publish its port.
 
