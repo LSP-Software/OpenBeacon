@@ -269,25 +269,19 @@ describe("uploadArchive", () => {
     expect(r2.calls).toContain("upload:1");
   });
 
-  test("aborts other in-progress uploads for the key but keeps the resumed one", async () => {
+  test("leaves in-progress uploads alone while resuming the saved one", async () => {
     await writeState({});
-    const log = spyOn(console, "log").mockImplementation(() => {});
     const r2 = createFakeR2({
-      inProgress: [
-        { key: "planet-20261107.pmtiles", uploadId: "upload-existing" },
-        { key: "planet-20261107.pmtiles", uploadId: "orphan" },
-        { key: "planet-20261107.pmtiles.bak", uploadId: "other-key" },
-      ],
+      existingParts: [{ partNumber: 1, size: PART_SIZE }],
+      inProgress: [{ key: "planet-20261107.pmtiles", uploadId: "upload-existing-as-listed" }],
     });
 
     await run(r2);
 
-    expect(r2.calls.filter((call) => call.startsWith("abort:"))).toEqual(["abort:orphan"]);
+    expect(r2.calls.filter((call) => call.startsWith("abort:"))).toEqual([]);
     expect(r2.calls).not.toContain("create");
-    expect(log).toHaveBeenCalledWith(
-      "Aborted 1 stale multipart upload(s) for planet-20261107.pmtiles",
-    );
-    log.mockRestore();
+    expect(r2.calls).not.toContain("upload:1");
+    expect(r2.calls).toContain("complete");
   });
 
   test("aborts orphaned uploads for the key when there is no saved state", async () => {
