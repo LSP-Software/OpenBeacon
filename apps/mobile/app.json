@@ -70,6 +70,13 @@
           "photosPermission": "Allow $(PRODUCT_NAME) to access your photos."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f16568f0-2049-4b34-a6b8-acc280a86142"
+      }
+    },
+    "owner": "lspsoftware"
   }
 }
