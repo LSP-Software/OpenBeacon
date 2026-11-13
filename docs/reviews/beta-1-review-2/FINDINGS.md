@@ -299,4 +299,4 @@ All section passes and the later cross-cutting pass are complete. Per-file check
 
 The prior review is reference material, not an additional unapproved resolution backlog. Each carried-forward finding above is rechecked against this commit. Resolved first-review problems such as server cookie scoping, leaver-chosen epochs, startup sharing permission state, Redis recovery, upload budgets, Google linking, tolerant tracking payloads and the update action were not re-reported as open defects. Rejected hypotheses and uncertainty are recorded in each raw report.
 
-The resolution work begins with scope clarification and design choices, then asks for ordered implementation, regression tests, version/format assessment and a local resolution checklist. This report authorizes identification and planning only.
+The resolution work begins with scope clarification and design choices, then moves to ordered implementation, regression tests, version/format assessment and a local resolution checklist. This report authorizes identification and planning only.
