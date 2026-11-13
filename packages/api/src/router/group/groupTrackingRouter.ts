@@ -77,6 +77,7 @@ export const groupTrackingRouter = {
         cursor: input.cursor,
         db: ctx.db,
         groupId: input.groupId,
+        joinedEpochNumber: ctx.groupMember.joinedEpochNumber,
         limit: input.limit ?? DEFAULT_POLL_LIMIT,
       });
     }),
@@ -87,6 +88,7 @@ export const groupTrackingRouter = {
       return await getLatestGroupTrackingPoints({
         db: ctx.db,
         groupId: input.groupId,
+        joinedEpochNumber: ctx.groupMember.joinedEpochNumber,
       });
     }),
 } satisfies TRPCRouterRecord;

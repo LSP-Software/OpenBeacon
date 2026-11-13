@@ -75,6 +75,7 @@ const createCaller = async ({
     groupEpoch: {
       findMany: findManyEpochsMock ?? mock(async () => [{ id: "epoch-1" }]),
       findFirst: findObsoleteEpochMock ?? mock(async () => null),
+      findUnique: mock(async () => null),
     },
     userDevice: {
       findMany: findManyDevicesMock ?? mock(async () => [{ id: "device-1", userId: "user-1" }]),
