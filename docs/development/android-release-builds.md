@@ -34,14 +34,14 @@ cp credentials.json.example credentials.json
 
 Then fill it in:
 
-| Field              | What to put                                       |
-| ------------------ | ------------------------------------------------- |
-| `keystorePath`     | Absolute path to the `.jks` file.                 |
-| `keystorePassword` | The keystore password.                            |
-| `keyAlias`         | The alias the key was created with.               |
-| `keyPassword`      | The key password, often the same as the keystore. |
+| Field              | What to put                                                                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `keystorePath`     | Absolute path to the `.jks` file.                                                                           |
+| `keystorePassword` | The keystore password.                                                                                      |
+| `keyAlias`         | The alias the key was created with.                                                                         |
+| `keyPassword`      | The key password. For a PKCS12 keystore, like the one `keytool` makes above, this is the keystore password. |
 
-A release build without this file stops with an error rather than signing with the debug key. To use a file somewhere else, for example in CI, set the Gradle property `openbeaconCredentials` to its path, or the environment variable `ORG_GRADLE_PROJECT_openbeaconCredentials`.
+A release build without this file stops with an error rather than signing with the debug key. To use a file somewhere else, for example in CI, set the environment variable `ORG_GRADLE_PROJECT_openbeaconCredentials` to its path. `bun run build-aab` and Gradle both read it.
 
 ## Environment variables
 
@@ -61,7 +61,8 @@ bun run build-aab
 
 - there are uncommitted changes, since they would end up in the release;
 - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` isn't set;
-- `credentials.json` is missing or has an empty field, or the keystore doesn't open with its passwords.
+- `credentials.json` is missing or has an empty field, or the keystore doesn't open with its passwords;
+- `keyPassword` differs from `keystorePassword` in a PKCS12 keystore, which would otherwise only fail at the signing step.
 
 It then generates the Prisma client, regenerates `android/` with `expo prebuild --clean`, runs `./gradlew bundleRelease`, and writes `apps/mobile/openbeacon-<version>-<versionCode>.aab`. Regenerating `android/` throws away any local edits in it, which `bun run android` recreates anyway.
 
@@ -95,7 +96,7 @@ Anyone can build and sign the app with their own key. Google Play only lets one 
 
 - **Its own package name.** Change `android.package` (and `ios.bundleIdentifier`) in `apps/mobile/app.json`.
 - **Its own upload key**, created as above and set in `credentials.json`.
-- **Its own Google sign-in client**, if you want Google sign-in. Create an Android OAuth client in Google Cloud for your package name and the SHA1 of your Play app signing key, and set `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` to the web client your backend uses.
+- **Its own Google sign-in client**, if you want Google sign-in. Create an Android OAuth client in Google Cloud for your package name and the SHA1 of your Play app signing key (and your upload key, for builds installed without Play), and set `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` to the web client your backend uses.
 
 A build you only install yourself can keep the package name; it just can't be installed over the Play Store version.
 
