@@ -6,7 +6,7 @@ export const rateLimitMetaSchema = z
     windowMs: z.number().int().positive(),
     cost: z.number().int().positive().optional(),
     namespace: z.string().min(1).optional(),
-    ipLimit: z.number().int().positive().optional(),
+    scope: z.literal("server").optional(),
   })
   .strict();
 

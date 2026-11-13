@@ -1,7 +1,7 @@
 import { logRateLimit } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type { createTRPCComponents } from "../trpc.ts";
-import { defaultRateLimitMeta, RateLimitContextError, rateLimitMetaSchema } from "./rateLimit.ts";
+import { defaultRateLimitMeta, rateLimitMetaSchema } from "./rateLimit.ts";
 
 export const createRateLimitMiddleware = ({
   t,
@@ -10,26 +10,13 @@ export const createRateLimitMiddleware = ({
 }) =>
   t.middleware(async ({ ctx, meta, next, path }) => {
     const rateLimit = rateLimitMetaSchema.parse(meta?.rateLimit ?? defaultRateLimitMeta);
-    const identifier = ctx.session?.user
-      ? {
-          type: "userId" as const,
-          value: ctx.session.user.id,
-        }
-      : ctx.clientIp
-        ? {
-            type: "ip" as const,
-            value: ctx.clientIp,
-          }
-        : null;
-
-    if (identifier === null) {
-      console.warn(`[rateLimitMiddleware] missing clientIp path=${path}`);
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Unable to process request.",
-        cause: new RateLimitContextError(),
-      });
-    }
+    const identifier =
+      rateLimit.scope === "server"
+        ? { type: "server" as const }
+        : ctx.session?.user
+          ? { type: "userId" as const, value: ctx.session.user.id }
+          : null;
+    if (identifier === null) return next();
 
     const result = await ctx.cache.rateLimits.consume(
       {
@@ -48,34 +35,6 @@ export const createRateLimitMiddleware = ({
         code: "TOO_MANY_REQUESTS",
         message: "Too many requests. Please try again later.",
       });
-    }
-
-    if (rateLimit.ipLimit !== undefined && identifier.type === "userId") {
-      if (!ctx.clientIp) {
-        console.warn(`[rateLimitMiddleware] missing clientIp path=${path}`);
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Unable to process request.",
-          cause: new RateLimitContextError(),
-        });
-      }
-      const ipResult = await ctx.cache.rateLimits.consume(
-        {
-          namespace: rateLimit.namespace ?? path,
-          identifier: { type: "ip", value: ctx.clientIp },
-          limit: rateLimit.ipLimit,
-          windowMs: rateLimit.windowMs,
-          cost: rateLimit.cost,
-        },
-        { whenUnavailable: "allow" },
-      );
-      if (!ipResult.allowed) {
-        logRateLimit({ path, scope: "ip" });
-        throw new TRPCError({
-          code: "TOO_MANY_REQUESTS",
-          message: "Too many requests. Please try again later.",
-        });
-      }
     }
 
     return next();

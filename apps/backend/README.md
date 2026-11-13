@@ -50,9 +50,9 @@ Full (strict) does not force Cloudflare to use HTTPS for those origin requests.
 The backend requires that secret and a valid `CF-Connecting-IP` on every request
 except `GET /health`, which Coolify uses for container health checks, and `GET /ready`. Keep the
 secret out of Git and logs. Verify that direct-origin API requests are rejected,
-that Cloudflare overwrites a client-supplied secret header, and that different
-clients get separate rate limits. Do not deploy with `none` behind the reverse
-proxy: users would share the proxy's IP rate limit.
+and that Cloudflare overwrites a client-supplied secret header. Do not deploy
+with `none` behind the reverse proxy: every session would record the proxy's IP
+address instead of the client's.
 
 Self-hosted backends behind a single reverse proxy such as Traefik, Caddy or
 nginx can use `trusted-proxy`. The backend uses the last `X-Forwarded-For` entry,
@@ -133,7 +133,7 @@ Emails are branded HTML with a plain-text part. The logo is attached to the emai
 
 At startup the backend checks the email settings without sending anything. For SMTP it connects and logs in. For Resend it checks the API key and, when the key has full access, that the `EMAIL_FROM` domain is verified in Resend with open tracking and click tracking off. A sending-only key passes the key check, but the domain and its tracking settings can't be checked with it, so check them yourself in Resend. A failed check stops the backend from starting.
 
-Each address can request 3 codes of each kind every 15 minutes. `EMAIL_CODE_IP_LIMIT=true` also limits each IP address to 20 code requests an hour across all addresses, which slows down someone sending codes to many addresses from one machine. It is off by default because it can block users who share an IP address, such as phones behind carrier NAT or a household on one connection.
+Each address can request 3 codes of each kind every 15 minutes.
 
 Each account can trigger at most 20 emails an hour. Over that cap, the new sign-in, deletion scheduled, "already have an account" and "sign in with Google" emails are dropped. Codes and the always-on alerts are still sent. The backend never logs email addresses or codes, except in the development console mode below.
 

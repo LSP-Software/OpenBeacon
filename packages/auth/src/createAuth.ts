@@ -111,6 +111,7 @@ export const createAuth = ({
         }
       }),
     },
+    rateLimit: { enabled: false },
     advanced: {
       ipAddress: { ipAddressHeaders: [clientIpHeader] },
       ...(runInBackground ? { backgroundTasks: { handler: runInBackground } } : {}),

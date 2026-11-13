@@ -184,7 +184,6 @@ export const accountRecoveryRouter = createTRPCRouter({
     const allowed = await ctx.emailCodes.allowRequest({
       purpose: "recovery-reset",
       email: user.email,
-      ip: ctx.clientIp ?? null,
     });
     if (allowed !== "allowed") {
       throw new TRPCError({

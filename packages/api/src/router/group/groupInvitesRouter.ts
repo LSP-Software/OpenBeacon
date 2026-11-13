@@ -93,7 +93,7 @@ export const groupInvitesRouter = {
     }),
   sharedAcceptanceContext: protectedProcedure
     .meta({
-      rateLimit: { limit: 40, ipLimit: 160, namespace: "groupInvites.redeem", windowMs: 60_000 },
+      rateLimit: { limit: 40, namespace: "groupInvites.redeem", windowMs: 60_000 },
     })
     .input(z.object({ code: z.string().regex(/^[A-Fa-f0-9]{32}$/) }))
     .mutation(async ({ ctx, input }) => {
@@ -115,7 +115,7 @@ export const groupInvitesRouter = {
     }),
   acceptShared: protectedProcedure
     .meta({
-      rateLimit: { limit: 40, ipLimit: 160, namespace: "groupInvites.redeem", windowMs: 60_000 },
+      rateLimit: { limit: 40, namespace: "groupInvites.redeem", windowMs: 60_000 },
     })
     .input(
       z.object({ code: z.string().regex(/^[A-Fa-f0-9]{32}$/), nextEpoch: groupEpochBundleSchema }),
