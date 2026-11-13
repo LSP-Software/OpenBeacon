@@ -1276,6 +1276,8 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-02 · low · UX
 
+- **Status:** fixed on `fix/beta-1-review` by "Build the app for Android only" (SHA added at wrap-up). Q9 (Beta 1 only; S6-02 is a must-fix again for the first iOS release). Config only, so no new test; `expo config` shows `platforms: ['android']`. The beta docs note lands with C8.
+
 **iOS build asks for Always location and says "Sharing enabled", but iOS never captures or uploads**
 
 - Location: apps/mobile/app.json:7, :22-26, :48-56; apps/mobile/lib/trackingModule.ts:3-6; apps/mobile/components/LocationSharingCard.tsx:153-163; apps/mobile/providers/LocationPermissionProvider.tsx:202-224; apps/mobile/modules/openbeacon-tracking/expo-module.config.json:2
