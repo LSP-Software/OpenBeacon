@@ -715,6 +715,8 @@ Generated from the raw files, with verifier corrections applied. Must-fix findin
 
 #### S1-01 · medium · security
 
+- **Status:** fixed on `fix/beta-1-review` by "Correct the Beta 1 privacy draft and record level 4 as the Beta 1 baseline" (SHA added at wrap-up). C8, docs only (no test). S1-01: only the docs half (privacy draft wording near line 9 and line 43); the expected-sender code change ships with OPE-213, and updating OPE-213's scope in Linear waits for owner approval at wrap-up.
+
 **Wrap sender keys come from the server response, so HPKE auth mode doesn't authenticate the epoch key, and History wraps accept any sender**
 
 - Location: packages/encryption/src/index.ts:212-241 (`unwrapEpochKey` reads `senderPublicKey` from the wrap it is checking); packages/encryption/src/recovery.ts:200-234 (`unwrapHistoryEpochKey`, same); apps/mobile/lib/epochKeys.ts:19-74; packages/api/src/router/group/groupEpochRouter.ts:9-56 (each History wrap is returned with its own stored `senderPublicKey`); docs/security/beta-1-privacy-draft.md:43
@@ -1868,6 +1870,8 @@ The "Update Open Beacon" screen has a disabled Update button and the server can'
 - Same issue as: D13 (see Duplicate groups)
 
 #### S10-01 · low · bug
+
+- **Status:** fixed on `fix/beta-1-review` by "Correct the Beta 1 privacy draft and record level 4 as the Beta 1 baseline" (SHA added at wrap-up). Q11 / C8: level 4 recorded as the Beta 1 baseline in `docs/development/api-compatibility.md`; no level change.
 
 **`setLocationSharing` started requiring `requestedAt` without a level bump, so level-4 apps 1.10.0 and 1.11.0 can no longer pause or resume**
 
