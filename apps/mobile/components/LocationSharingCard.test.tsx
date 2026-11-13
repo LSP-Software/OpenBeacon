@@ -11,6 +11,7 @@ import type { changeLocationSharing } from "../lib/locationSharing.ts";
 ).IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root | null = null;
 let locallyPaused = false;
+let rejectedChange = false;
 let mutationError: Error | null = null;
 let mutationStatus: Awaited<ReturnType<typeof changeLocationSharing>> = "applied";
 let pauseLocallyBeforeFailing = false;
@@ -62,6 +63,7 @@ mock.module("@tanstack/react-query", () => ({
       }
       if (mutationError) throw mutationError;
       changes.push(input);
+      if (mutationStatus === "rejected") rejectedChange = true;
       return mutationStatus;
     },
   }),
@@ -82,6 +84,7 @@ mock.module("../lib/locationSharing.ts", () => ({
   hasPendingSharingPause: () => pendingAccount !== null,
   getPendingSharingChanges: () => ({ device: null, account: pendingAccount }),
   hasLocallyPausedSharing: () => locallyPaused,
+  hasRejectedSharingChange: () => rejectedChange,
   serverNow: () => Date.now(),
   toDeviceClock: (serverTime: Date) => serverTime,
 }));
@@ -129,6 +132,7 @@ beforeEach(() => {
   sharingData = { account: preference(), device: preference() };
   pendingAccount = null;
   locallyPaused = false;
+  rejectedChange = false;
   mutationError = null;
   mutationStatus = "applied";
   pauseLocallyBeforeFailing = false;
@@ -285,6 +289,25 @@ test("an offline pause closes the sheet and explains that only this phone has st
     "Sharing stopped on this phone. We couldn’t update your groups or other devices. Retrying.",
   );
   expect(output).toContain("Resume");
+});
+
+test("a change the server won't accept says it couldn't be applied instead of waiting to go online", async () => {
+  mutationStatus = "rejected";
+  await render();
+  await press("Pause sharing");
+  await press("Pause sharing");
+  const output = JSON.stringify(root?.container.toJSON());
+  expect(output).toContain("Your last change to location sharing couldn’t be applied");
+  expect(output).not.toContain("when you’re back online");
+  expect(output).not.toContain("Check your connection");
+  expect(output).not.toContain("Pause on");
+});
+
+test("a dropped change found by a background sync is explained on the card", async () => {
+  rejectedChange = true;
+  const output = await render();
+  expect(output).toContain("Your last change to location sharing couldn’t be applied");
+  expect(output).not.toContain("when you’re back online");
 });
 
 test("a queued account pause is shown as waiting for another device, not applied to it", async () => {

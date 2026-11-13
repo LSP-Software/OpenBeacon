@@ -1344,6 +1344,8 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-06 · medium · bug
 
+- **Status:** fixed on `fix/beta-1-review` by "Stop a sharing change the server refuses from blocking uploads" (SHA added at wrap-up). Terminal rejections drop the pending change and reload state, the clock offset is measured even when a replay fails, and the card shows a "couldn't apply" notice. Tests for three terminal and four transient cases, an immediate refusal, and sign-out clearing the flag.
+
 **A sharing change the server will never accept blocks uploads forever**
 
 - Location: apps/mobile/lib/locationSharing.ts:164-198, :87-89; apps/mobile/lib/tracking.ts:747; apps/mobile/components/LocationSharingCard.tsx:179-182; packages/schemas/src/schemas/account/locationSharing.ts:38-41
