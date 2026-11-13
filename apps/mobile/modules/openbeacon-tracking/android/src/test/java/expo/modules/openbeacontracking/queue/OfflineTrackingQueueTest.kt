@@ -252,7 +252,7 @@ class OfflineTrackingQueueTest {
   private fun capture(
     pipeline: CapturePipeline,
     fixId: Long,
-  ) = pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false, fixId = fixId)
+  ) = pipeline.onFix(51.5, -0.1, at("2026-07-13T18:45:00.000Z"), null, 80, false, fixId = fixId)
 
   private fun row(
     clientPointId: String,
@@ -289,3 +289,5 @@ class OfflineTrackingQueueTest {
     queuedAt = queuedAt,
   )
 }
+
+private fun at(iso: String) = java.time.Instant.parse(iso).toEpochMilli()
