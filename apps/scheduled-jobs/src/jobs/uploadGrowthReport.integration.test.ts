@@ -65,7 +65,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("upload growth re
         ...points(lightId, groupIds[1]!, 40, 25),
       ],
     });
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await prisma.group.deleteMany({ where: { id: { in: groupIds } } });

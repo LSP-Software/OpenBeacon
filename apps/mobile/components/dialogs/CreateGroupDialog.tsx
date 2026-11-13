@@ -9,6 +9,7 @@ import { View } from "react-native";
 import type z from "zod";
 import { trpc } from "../../lib/api.ts";
 import { buildCreateGroupInput, submitEpochChange } from "../../lib/groupEncryption.ts";
+import { groupLimitAlert } from "../../lib/groupLimitAlert.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 import { Button } from "../ui/Button.tsx";
@@ -62,6 +63,11 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
         })(),
       );
 
+      const limit = groupLimitAlert(result.error);
+      if (limit) {
+        Alert.alert(limit.title, limit.message);
+        return;
+      }
       if (result.error) {
         Alert.alert(
           "Unable to create group",
