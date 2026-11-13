@@ -812,6 +812,8 @@ Google sign-in silently links Google to an existing password account
 
 #### S2-03 · medium · security
 
+- **Status:** fixed on `fix/beta-1-review` by "Return a generic message for internal server errors and log the real one" (SHA added at wrap-up). C2. Unit test `packages/api/src/trpc.test.ts`: Prisma-style text and a storage cause don't reach the response. The new `onError` log line has no test.
+
 **Unexpected server errors return their internal message to the client**
 
 - Location: packages/api/src/trpc.ts:79-122 (errorFormatter keeps `shape.message` for INTERNAL_SERVER_ERROR)

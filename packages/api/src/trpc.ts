@@ -89,6 +89,18 @@ export const createTRPCComponents = () => {
             },
           };
         }
+        if (error.code === "INTERNAL_SERVER_ERROR") {
+          return {
+            ...shape,
+            message: "Something went wrong. Please try again.",
+            data: {
+              code: shape.data.code,
+              httpStatus: shape.data.httpStatus,
+              zodError: null,
+              cause: null,
+            },
+          };
+        }
         if (error.code === "TOO_MANY_REQUESTS") {
           return {
             ...shape,
