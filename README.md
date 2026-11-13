@@ -204,6 +204,8 @@ For iOS on macOS, from the same directory:
 bun run ios
 ```
 
+To build a signed Android App Bundle for Google Play, see [Android release builds](docs/development/android-release-builds.md).
+
 ## Derby Android emulator simulation
 
 Install Bun, Python 3, Java 17, Docker Compose and the Android SDK emulator and platform tools. Install the Android NDK and accept the SDK licences in Android Studio’s SDK Manager, create an Android Virtual Device (AVD), and ensure `emulator` and `adb` are on your PATH. Stop any emulators using ports 5554–5560 and any Metro server on port 8081 first.
