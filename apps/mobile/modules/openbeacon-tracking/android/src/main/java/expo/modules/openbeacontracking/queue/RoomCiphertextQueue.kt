@@ -79,6 +79,11 @@ class RoomCiphertextQueue(
 
   override fun deleteByOwner(owner: String) = dao.deleteByOwner(owner)
 
+  override fun deleteByGroup(
+    owner: String,
+    groupId: String,
+  ) = dao.deleteByGroup(owner, groupId)
+
   override fun requeue(
     ids: List<Long>,
     attemptedAt: Long,

@@ -32,4 +32,42 @@ class InMemoryCiphertextQueueTest {
     assertEquals(emptyList(), queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a"))
     assertEquals(listOf("other"), queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.clientPointId })
   }
+
+  @Test
+  fun deletesOnlyTheOwnersPointsForOneGroup() {
+    val queue = InMemoryCiphertextQueue()
+    val row = { clientPointId: String, owner: String, groupId: String ->
+      CiphertextQueueRow(
+        owner = owner,
+        clientPointId = clientPointId,
+        captureId = "capture",
+        groupId = groupId,
+        epochId = "epoch",
+        senderDeviceId = "device",
+        kind = "trackingPoint",
+        algorithm = "algorithm",
+        nonce = "nonce",
+        ciphertext = "ciphertext",
+        queuedAt = 1,
+      )
+    }
+    queue.insertAll(
+      listOf(
+        row("left", "server-a/user-a", "group-left"),
+        row("in-flight", "server-a/user-a", "group-left"),
+        row("kept", "server-a/user-a", "group-kept"),
+        row("other-account", "server-a/user-b", "group-left"),
+      ),
+    )
+    val inFlight = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a")[1]
+    queue.markInFlight(listOf(inFlight.id), 1)
+
+    queue.deleteByGroup("server-a/user-a", "group-left")
+
+    assertEquals(emptyList(), queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10))
+    assertEquals(
+      listOf("kept", "other-account"),
+      queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.clientPointId },
+    )
+  }
 }

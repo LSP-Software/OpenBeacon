@@ -62,6 +62,12 @@ interface CiphertextQueueDao {
   @Query("DELETE FROM ciphertext_queue WHERE owner = :owner")
   fun deleteByOwner(owner: String)
 
+  @Query("DELETE FROM ciphertext_queue WHERE owner = :owner AND groupId = :groupId")
+  fun deleteByGroup(
+    owner: String,
+    groupId: String,
+  )
+
   @Query("SELECT COUNT(*) FROM ciphertext_queue")
   fun count(): Int
 

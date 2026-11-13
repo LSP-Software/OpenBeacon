@@ -172,6 +172,10 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.ciphertextQueue(requireContext()).deleteByOwner(owner)
       }
 
+      AsyncFunction("deleteCiphertextsByGroup") { owner: String, groupId: String ->
+        TrackingRuntime.ciphertextQueue(requireContext()).deleteByGroup(owner, groupId)
+      }
+
       AsyncFunction("requeueCiphertexts") { ids: List<Double>, error: String? ->
         TrackingRuntime
           .ciphertextQueue(requireContext())

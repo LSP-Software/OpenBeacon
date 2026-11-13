@@ -63,6 +63,14 @@ class InMemoryCiphertextQueue : CiphertextQueue {
   }
 
   @Synchronized
+  override fun deleteByGroup(
+    owner: String,
+    groupId: String,
+  ) {
+    rows.removeAll { it.owner == owner && it.groupId == groupId }
+  }
+
+  @Synchronized
   override fun requeue(
     ids: List<Long>,
     attemptedAt: Long,
