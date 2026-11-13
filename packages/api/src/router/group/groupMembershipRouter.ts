@@ -424,6 +424,11 @@ export const groupMembershipRouter = {
             },
           });
         }
+        if (input.role === GroupRole.MEMBER) {
+          await tx.groupSharedInvite.deleteMany({
+            where: { groupId: input.groupId, creatorId: member.userId, usedAt: null },
+          });
+        }
         return tx.groupMember.update({
           where: { id: member.id },
           data: { role: input.role },
