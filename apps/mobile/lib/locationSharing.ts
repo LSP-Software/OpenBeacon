@@ -14,7 +14,6 @@ import { baseUrl } from "./currentServer.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { getRegisteredDeviceKey, getStoredDeviceId } from "./deviceKeys.ts";
 import { errorReason } from "./errorReason.ts";
-import { isDeviceOffline } from "./networkStatus.ts";
 import { SERVER_UNREACHABLE_MESSAGE } from "./serverUnreachable.ts";
 import { storage } from "./storage.ts";
 import { requestTrackingSync } from "./trackingEvents.ts";
@@ -255,7 +254,7 @@ export const changeLocationSharing = async (input: {
   if (generation !== requestedGeneration) throw new Error("You've signed out.");
   const deviceId = input.deviceId ?? device.deviceId;
   const affectsThisDevice = input.scope === "account" || deviceId === device.deviceId;
-  const offline = await isDeviceOffline();
+  const offline = await (await import("./networkStatus.ts")).isDeviceOffline();
   if (offline && !affectsThisDevice) throw new Error(SERVER_UNREACHABLE_MESSAGE);
   const key = pendingKey(device.userId, input.scope);
   const queued = affectsThisDevice ? readPendingChange(device.userId, input.scope) : null;
