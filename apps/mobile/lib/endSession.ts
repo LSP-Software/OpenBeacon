@@ -29,7 +29,7 @@ export const endSessionClears = {
     queuedPoints: "heldBackByPause",
     pendingSharingChanges: true,
     pendingJoinCodes: true,
-    keyMaterial: "keepUntilExpiry",
+    keyMaterial: "keep",
     compatibility: false,
   },
   phoneRemoved: {
@@ -71,7 +71,7 @@ export const endSessionClears = {
     queuedPoints: "all" | "heldBackByPause" | "none";
     pendingSharingChanges: boolean;
     pendingJoinCodes: boolean;
-    keyMaterial: "wipe" | "keepUntilExpiry";
+    keyMaterial: "wipe" | "keepUntilExpiry" | "keep";
     compatibility: boolean;
   }
 >;

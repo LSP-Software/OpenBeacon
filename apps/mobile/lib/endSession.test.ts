@@ -422,6 +422,7 @@ describe("ending a session", () => {
         revokeToken: true,
         compatibility: true,
         ...keptKeys,
+        lostSession: [],
       },
     ],
     [
@@ -486,6 +487,17 @@ describe("ending a session", () => {
 
     await endSession({ reason: "signedOut" });
 
+    expect(queueDeletions).toEqual([]);
+  });
+
+  test("a normal sign-out keeps the account's keys when another account signs in or 30 days pass", async () => {
+    const device = await seedSignedInPhone();
+    await endSession({ reason: "signedOut" });
+
+    await settleLostSessions({ userId: "user-b" });
+    await settleLostSessions({ userId: null, now: Date.now() + 31 * 24 * 60 * 60_000 });
+
+    expect(observe(device.deviceId)).toMatchObject({ ...keptKeys, lostSession: [] });
     expect(queueDeletions).toEqual([]);
   });
 
