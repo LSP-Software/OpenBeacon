@@ -6,7 +6,7 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
-import type { OpenBeaconCache } from "@openbeacon/cache";
+import type { OpenBeaconCache, RateLimitResult } from "@openbeacon/cache";
 import { Prisma, type PrismaClient } from "@openbeacon/database";
 import type {
   EmailCodePurpose,
@@ -80,24 +80,32 @@ export const createEmailCodes = ({
       purpose: EmailCodePurpose;
       email: string;
       ip: string | null;
-    }) => {
+    }): Promise<"allowed" | "limited" | "unavailable"> => {
+      const outcome = (result: RateLimitResult) =>
+        result.unavailable ? "unavailable" : result.allowed ? "allowed" : "limited";
       if (limitRequestsPerIp) {
-        const ipResult = await rateLimits.consume({
-          namespace: "emailCode.request",
-          identifier: { type: "ip", value: ip ?? "unknown" },
-          ...emailCodeRequestLimits.perIp,
-        });
-        if (!ipResult.allowed) return false;
+        const ipResult = await rateLimits.consume(
+          {
+            namespace: "emailCode.request",
+            identifier: { type: "ip", value: ip ?? "unknown" },
+            ...emailCodeRequestLimits.perIp,
+          },
+          { whenUnavailable: "deny" },
+        );
+        if (!ipResult.allowed) return outcome(ipResult);
       }
-      const addressResult = await rateLimits.consume({
-        namespace: `emailCode.request.${purpose}`,
-        identifier: {
-          type: "email",
-          value: normalizeEmail(email),
+      const addressResult = await rateLimits.consume(
+        {
+          namespace: `emailCode.request.${purpose}`,
+          identifier: {
+            type: "email",
+            value: normalizeEmail(email),
+          },
+          ...emailCodeRequestLimits.perAddress,
         },
-        ...emailCodeRequestLimits.perAddress,
-      });
-      return addressResult.allowed;
+        { whenUnavailable: "deny" },
+      );
+      return outcome(addressResult);
     },
 
     send: async ({

@@ -24,4 +24,16 @@ describe("health endpoint", () => {
       message: "Update from the Play Store.",
     });
   });
+
+  test("readiness pings Redis while health stays independent of it", async () => {
+    const { default: health } = await import("./health.ts");
+    const unreachable = { cache: { ping: async () => false } };
+    expect((await health.request("/health", {}, unreachable)).status).toBe(200);
+    const notReady = await health.request("/ready", {}, unreachable);
+    expect(notReady.status).toBe(503);
+    expect(await notReady.json()).toEqual({ status: "unavailable", redis: "unreachable" });
+    const ready = await health.request("/ready", {}, { cache: { ping: async () => true } });
+    expect(ready.status).toBe(200);
+    expect(await ready.json()).toEqual({ status: "ready" });
+  });
 });

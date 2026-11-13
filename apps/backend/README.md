@@ -12,7 +12,9 @@ bun run dev
 
 open http://localhost:3000
 
-Set `SERVER_NAME` in the root `.env` to the public name shown in the health check and app. It defaults to `OpenBeacon`. `GET /health` returns the status, backend version, and server name.
+Set `SERVER_NAME` in the root `.env` to the public name shown in the health check and app. It defaults to `OpenBeacon`. `GET /health` returns the status, backend version, and server name. It never touches Redis, so the app can always read it.
+
+`GET /ready` pings Redis. It returns 200 while Redis answers and 503 while it doesn't. Use it for monitoring. Don't use it as the container health check: the backend reconnects to Redis on its own, and during an outage everything except email codes keeps working.
 
 Set `CLIENT_UPDATE_MESSAGE` to tell people with an out-of-date app how to update, for example where to get the new version. The app shows it as plain text on its compatibility screens. It is at most 280 characters; a longer value is ignored.
 
@@ -46,7 +48,7 @@ same secret only on HTTPS requests to `api.openbeacon.net`, and use Full (strict
 TLS for that hostname. Never add the secret to requests received over HTTP:
 Full (strict) does not force Cloudflare to use HTTPS for those origin requests.
 The backend requires that secret and a valid `CF-Connecting-IP` on every request
-except `GET /health`, which Coolify uses for container health checks. Keep the
+except `GET /health`, which Coolify uses for container health checks, and `GET /ready`. Keep the
 secret out of Git and logs. Verify that direct-origin API requests are rejected,
 that Cloudflare overwrites a client-supplied secret header, and that different
 clients get separate rate limits. Do not deploy with `none` behind the reverse

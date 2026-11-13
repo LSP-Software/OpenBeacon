@@ -181,16 +181,18 @@ export const accountRecoveryRouter = createTRPCRouter({
       select: { email: true, id: true },
       where: { id: ctx.session.user.id },
     });
-    if (
-      !(await ctx.emailCodes.allowRequest({
-        purpose: "recovery-reset",
-        email: user.email,
-        ip: ctx.clientIp ?? null,
-      }))
-    ) {
+    const allowed = await ctx.emailCodes.allowRequest({
+      purpose: "recovery-reset",
+      email: user.email,
+      ip: ctx.clientIp ?? null,
+    });
+    if (allowed !== "allowed") {
       throw new TRPCError({
         code: "TOO_MANY_REQUESTS",
-        message: "Too many requests. Please try again later.",
+        message:
+          allowed === "unavailable"
+            ? "Codes can't be sent right now. Try again in a minute."
+            : "Too many requests. Please try again later.",
       });
     }
     await ctx.emailCodes.send({

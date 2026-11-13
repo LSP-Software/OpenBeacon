@@ -1,11 +1,17 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis } from "@openbeacon/cache/testing";
+import { FakeRedis, UnavailableRedis } from "@openbeacon/cache/testing";
 import { createSendEmail } from "./sender.ts";
 
 class TestOpenBeaconCache extends OpenBeaconCache {
   protected override createRedisClient(): FakeRedis {
     return new FakeRedis();
+  }
+}
+
+class UnavailableCache extends OpenBeaconCache {
+  protected override createRedisClient(): UnavailableRedis {
+    return new UnavailableRedis();
   }
 }
 
@@ -70,5 +76,23 @@ describe("sendEmail", () => {
     const { send, sendEmail } = setup();
     await sendEmail({ ...message, userId: "user-1", optional: true });
     expect(send).toHaveBeenCalledWith(message);
+  });
+
+  test("skips optional alerts but still sends required mail while Redis is unavailable", async () => {
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    const send = mock(async () => {});
+    const sendEmail = createSendEmail({
+      transport: { send, verify: async () => {} },
+      rateLimits: new UnavailableCache({ redisUrl: "redis://localhost:6379" }).rateLimits,
+    });
+    expect(await sendEmail({ ...message, userId: "user-1", optional: true })).toEqual({
+      sent: false,
+      reason: "unavailable",
+    });
+    expect(await sendEmail({ ...message, userId: "user-1", optional: false })).toEqual({
+      sent: true,
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    error.mockRestore();
   });
 });

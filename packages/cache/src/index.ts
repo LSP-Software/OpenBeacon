@@ -1,4 +1,5 @@
 export { OpenBeaconCache } from "./cache/OpenBeaconCache.ts";
+export { sharedCache } from "./cache/sharedCache.ts";
 export type {
   PmtilesSignedUrlInput,
   PmtilesSignedUrlValue,
@@ -11,5 +12,6 @@ export type {
   RateLimitPeekInput,
   RateLimitResetInput,
   RateLimitResult,
+  WhenRedisUnavailable,
 } from "./rateLimits/index.ts";
 export { redisHashSecretSchema, redisUrlSchema } from "./rateLimits/index.ts";

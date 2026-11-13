@@ -1,6 +1,6 @@
 import { expect, mock, spyOn, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis, testRedisHashSecret } from "@openbeacon/cache/testing";
+import { FakeRedis, testRedisHashSecret, UnavailableRedis } from "@openbeacon/cache/testing";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
@@ -12,6 +12,12 @@ class TestCache extends OpenBeaconCache {
   }
 }
 
+class UnavailableCache extends OpenBeaconCache {
+  protected override createRedisClient(): UnavailableRedis {
+    return new UnavailableRedis();
+  }
+}
+
 const router = createTRPCRouter({
   groupInvites: groupInvitesRouter,
   groupMembership: groupMembershipRouter,
@@ -19,6 +25,7 @@ const router = createTRPCRouter({
 const createCaller = (
   actorRole: "OWNER" | "ADMIN" | "MEMBER",
   targetRole: "OWNER" | "ADMIN" | "MEMBER" = "MEMBER",
+  Cache: typeof TestCache = TestCache,
 ) => {
   const actor = {
     id: "actor",
@@ -44,7 +51,7 @@ const createCaller = (
   return {
     createMany,
     caller: router.createCaller({
-      cache: new TestCache({
+      cache: new Cache({
         redisUrl: "redis://localhost:6379",
         hashSecret: testRedisHashSecret,
         now: () => 0,
@@ -153,4 +160,23 @@ test("charges for submitted invitees without revealing account matches", async (
   });
   warning.mockRestore();
   expect(createMany).toHaveBeenCalledTimes(3);
+});
+
+test("invitations still send with a log line while Redis is unavailable", async () => {
+  const error = spyOn(console, "error").mockImplementation(() => {});
+  const { caller, createMany } = createCaller("OWNER", "MEMBER", UnavailableCache);
+  await caller.groupInvites.send({
+    groupId: "group",
+    invites: [{ email: "target@example.test", role: "MEMBER" }],
+  });
+  expect(createMany).toHaveBeenCalledTimes(1);
+  expect(error.mock.calls).toEqual([
+    [
+      "[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so groupInvites.send is allowed",
+    ],
+    [
+      "[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so groupInvites.send.recipients is allowed",
+    ],
+  ]);
+  error.mockRestore();
 });
