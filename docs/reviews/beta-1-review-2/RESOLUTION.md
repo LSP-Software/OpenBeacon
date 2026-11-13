@@ -113,6 +113,32 @@ Debug build 1.13.1 (x86_64) on the pixel_8b emulator (Android 15), a fresh accou
 
 New finding from the device run: after an account pause whose request timed out against a frozen server, the card showed "Location sharing · Couldn't check sharing status" with a Pause button for about 40 s, until its 60 s refetch, though the background replay had already succeeded. Native sharing stayed paused throughout. Cause: the card fell back to its errored, pre-pause query once the pending change cleared, and the replay's fresh server state never reached the query cache. Fixed: `locationSharing.ts` notifies `onSharingStateLoaded` listeners whenever it loads server state, and `useLoadedSharingState` (used by the card and the map banner) writes that state into the query. Regression test in `LocationSharingCard.offline.test.tsx` uses the real card, `QueryClient` and `locationSharing.ts`; it fails without the notification. Not re-run on the device.
 
+## Pre-PR review (13 Nov 2026)
+
+Three independent reviewers read `origin/main...HEAD` (excluding `docs/reviews`): standards (AGENTS.md and `docs/development`), spec (this file's decisions), and correctness (races, failure modes, security, with probes).
+
+Fixed, each with a test that fails without the fix:
+
+- **Confirmed:** a History-key write stuck in native storage made the removal wipe stop at that key, because deletes queue behind writes to the same key, leaving the account's other History keys on the phone (`097c9720`). The wipe now tries every version.
+- Tracking's first History key captured its account owner at write time rather than at the start of the key check. A removal during the check could leave an unpublished key behind (`097c9720`).
+- The new sharing-state listener could replace newer query data with an older background reply (`7b361641`).
+- Confirm read the image header before checking the size, so a storage provider that ignores `Range` would pull a whole oversized upload into memory (`4a872d04`).
+- The CLI said a deletion hadn't finished when the job runner had completed it in between (`1da1ec7f`).
+- Standards: a repeated inline type in `locationSharing.ts` and `secretStorage.ts`.
+
+Considered and left:
+
+- Sole-owner checks in `lockDeletableGroups` and `beginAccountDeletion` look duplicated but differ: the request treats owners pending deletion as absent; the final deletion doesn't. Both existed before, in two files.
+- `storeHistoryKey` takes `owner` and `userId`: the many existing test mocks read `userId`, and `owner` defaults from it.
+- The lazy `networkStatus` import has no comment: it isn't working around an external API (rule 1).
+- `shouldRetrySignedPmtilesUrl` and `isWebpFile` are single-use but unit-tested.
+- Map URL retries stay unbounded for `SERVICE_UNAVAILABLE`, which has its own "preparing the map" screen.
+- A History-key or link write that misses its 10 s deadline can still land later; for example, restore may report "unsaved" while the key is stored. Retrying writes the same key.
+- A device-key creation still running from before a sign-out makes the same user's next sign-in fail once; a retry works. Fixing it risks the stalled-identity guarantee.
+- A wipe with storage stalled on many keys can take up to 10 s per stuck key; before this branch it hung indefinitely.
+
+Final validation at `1da1ec7f`: frozen install clean, version check passes, `TURBO_FORCE=true bun run ci` 14/14 with 0 cache hits, mobile 1340 pass, full integration 346 pass, 1 skip, 0 fail.
+
 ## Remaining risks and checks before beta
 
 - **CDN headers:** add `X-Content-Type-Options: nosniff` to image responses (a Cloudflare response-header rule). `Content-Disposition` is not needed. Whether a CDN would execute uploaded content stays unproven.
