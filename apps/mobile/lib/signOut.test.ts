@@ -399,7 +399,7 @@ describe("signing out of this phone", () => {
     expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(false);
   });
 
-  test("a plain sign-out forgets the registration only after signing out", async () => {
+  test("a plain sign-out forgets the registration but keeps the device key", async () => {
     const device = await ensureDeviceKeyRegistration();
 
     await signOutOfThisPhone({

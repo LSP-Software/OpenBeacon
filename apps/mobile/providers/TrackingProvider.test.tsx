@@ -62,7 +62,7 @@ const trackingService = {
     revokeCalls += 1;
     revokeInputs.push(input);
   },
-  checkThisPhoneAfterSessionLoss: async () => {
+  endLostSession: async () => {
     sessionLossChecks += 1;
   },
   resumeTracking: async () => {},
