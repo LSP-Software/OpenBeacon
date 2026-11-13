@@ -15,7 +15,7 @@
     "test:map-assets:package": "bun scripts/check-map-assets-package.ts"
   },
   "dependencies": {
-    "@better-auth/expo": "^1.7.14",
+    "@better-auth/expo": "^1.7.22",
     "@hookform/resolvers": "^5.2.2",
     "@maplibre/maplibre-react-native": "^11.5.1",
     "@openbeacon/api": "workspace:*",
@@ -38,7 +38,7 @@
     "@trpc/server": "^11.12.0",
     "@trpc/tanstack-react-query": "^11.12.0",
     "@types/node": "^25.4.0",
-    "better-auth": "^1.7.14",
+    "better-auth": "^1.7.22",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "expo": "~55.0.8",
@@ -72,6 +72,7 @@
     "react-native-screens": "~4.23.0",
     "react-native-svg": "15.15.3",
     "react-native-worklets": "0.7.2",
+    "superjson": "^2.2.6",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^4.3.6"
