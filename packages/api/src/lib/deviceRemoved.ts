@@ -1,7 +1,8 @@
 import { deviceRemovedCause } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
+import { ReasonError } from "./reasonError.ts";
 
-export class DeviceRemovedError extends Error {
+export class DeviceRemovedError extends ReasonError {
   constructor() {
     super(deviceRemovedCause);
     this.name = "DeviceRemovedError";

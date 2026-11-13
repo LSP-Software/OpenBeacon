@@ -4,6 +4,7 @@ import type { GroupDeviceSharingState } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type z from "zod";
 import { getGroupSharingStates } from "./locationSharing.ts";
+import { ReasonError } from "./reasonError.ts";
 
 type GroupTrackingDb = {
   $queryRaw: <T>(query: Prisma.Sql) => Promise<T>;
@@ -163,6 +164,7 @@ export const uploadGroupTrackingBatch = async ({
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "The active device is not registered.",
+      cause: new ReasonError("DEVICE_NOT_REGISTERED"),
     });
   }
 

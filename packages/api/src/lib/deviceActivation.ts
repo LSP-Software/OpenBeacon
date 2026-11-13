@@ -3,8 +3,9 @@ import { devicePendingCause } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import { deviceRemovedError } from "./deviceRemoved.ts";
 import { lockUserGroups } from "./lockUserGroups.ts";
+import { ReasonError } from "./reasonError.ts";
 
-export class DevicePendingError extends Error {
+export class DevicePendingError extends ReasonError {
   constructor() {
     super(devicePendingCause);
     this.name = "DevicePendingError";
