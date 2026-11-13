@@ -5,13 +5,18 @@ process.env.GOOGLE_CLIENT_ID = "google-sign-in-test-client";
 process.env.GOOGLE_CLIENT_SECRET = "google-sign-in-test-secret";
 
 const { prisma } = await import("@openbeacon/database");
+const { createIntegrationTestCache } = await import("@openbeacon/cache/integration");
 const { clientIpHeader, createAuth } = await import("./createAuth.ts");
 
 const prefix = `google-sign-in-${crypto.randomUUID()}`;
 const originalFetch = globalThis.fetch;
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const jwk = { ...publicKey.export({ format: "jwk" }), kid: prefix, alg: "RS256", use: "sig" };
-const auth = createAuth({ emailCodes: null, securityAlerts: null });
+const auth = createAuth({
+  emailCodes: null,
+  securityAlerts: null,
+  rateLimits: createIntegrationTestCache(Date.now).rateLimits,
+});
 
 const googleIdToken = (email: string) => {
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");

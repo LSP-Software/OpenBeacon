@@ -41,7 +41,7 @@ local allowed = 0
 if tokens >= cost then
   allowed = 1
   if should_consume == 1 then
-    tokens = tokens - cost
+    tokens = math.min(limit, tokens - cost)
   end
 end
 
@@ -207,6 +207,19 @@ export const createRateLimits = ({ hashSecret, keyPrefix, now, redis }: RateLimi
         }),
         options,
       );
+    },
+    refund: async (input: Parameters<typeof rateLimitConsumeInputSchema.parse>[0]) => {
+      const parsedInput = rateLimitConsumeInputSchema.parse(input);
+
+      return executeRateLimitScript({
+        redis,
+        hashSecret,
+        keyPrefix,
+        now,
+        ...parsedInput,
+        shouldConsume: true,
+        cost: -(parsedInput.cost ?? 1),
+      });
     },
     reset: async (input: Parameters<typeof rateLimitResetInputSchema.parse>[0]) => {
       const parsedInput = rateLimitResetInputSchema.parse(input);

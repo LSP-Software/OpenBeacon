@@ -9,7 +9,8 @@ import { createRoot, type Root } from "test-renderer";
 
 const steps: string[] = [];
 const alerts: string[] = [];
-let changeError: { message: string } | null = null;
+const alertMessages: string[] = [];
+let changeError: { code?: string; message: string } | null = null;
 let linkError: Error | null = null;
 const changePassword = mock(async (_input: { revokeOtherSessions: boolean }) => {
   steps.push("changePassword");
@@ -53,7 +54,12 @@ mock.module("react-native", () => ({
 }));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
 mock.module("../lib/alert.ts", () => ({
-  Alert: { alert: (title: string) => alerts.push(title) },
+  Alert: {
+    alert: (title: string, message?: string) => {
+      alerts.push(title);
+      if (message) alertMessages.push(message);
+    },
+  },
 }));
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { changePassword, listAccounts: async () => ({ data: [] }) },
@@ -89,6 +95,7 @@ const changeThePassword = async () => {
 beforeEach(() => {
   steps.length = 0;
   alerts.length = 0;
+  alertMessages.length = 0;
   changeError = null;
   linkError = null;
   signOutAfterRefusedSessionLink.mockClear();
@@ -113,6 +120,14 @@ test("a failed password change doesn't try to link a sign-in", async () => {
 
   expect(steps).toEqual(["changePassword"]);
   expect(alerts).toEqual(["Unable to change password"]);
+});
+
+test("a password lockout shows when to try again", async () => {
+  changeError = { code: "TOO_MANY_PASSWORD_ATTEMPTS", message: "Too many requests" };
+  await changeThePassword();
+
+  expect(steps).toEqual(["changePassword"]);
+  expect(alertMessages).toEqual(["Too many attempts. Try again in 15 minutes."]);
 });
 
 test("a link that can't reach the server still reports the password as changed", async () => {

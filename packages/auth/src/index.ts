@@ -45,7 +45,14 @@ export const securityAlerts = cache
   ? createSecurityAlerts({ db, sendSecurityAlertEmail, alertsTurnedOff: cache.alertsTurnedOff })
   : null;
 
-export const auth = createAuth({ emailCodes, securityAlerts });
+export const auth = createAuth({
+  emailCodes,
+  securityAlerts,
+  rateLimits: {
+    consume: (input, options) => sharedCache().rateLimits.consume(input, options),
+    refund: (input) => sharedCache().rateLimits.refund(input),
+  },
+});
 
 export type AuthType = {
   user: typeof auth.$Infer.Session.user | null;

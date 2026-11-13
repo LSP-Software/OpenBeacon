@@ -20,6 +20,7 @@ import { authClient } from "../lib/auth-client.ts";
 import { emailCodeErrorMessage, emailCodes } from "../lib/emailCodes.ts";
 import { finishAuthentication } from "../lib/finishAuthentication.ts";
 import { performGoogleAuth } from "../lib/googleAuth.ts";
+import { passwordErrorMessage } from "../lib/passwordErrorMessage.ts";
 
 const SignIn = () => {
   const { joinCode, email: emailParam } = useLocalSearchParams<{
@@ -67,7 +68,7 @@ const SignIn = () => {
       return;
     }
     if (result.error) {
-      Alert.alert("Sign in failed", result.error.message);
+      Alert.alert("Sign in failed", passwordErrorMessage(result.error, "Please try again."));
       setEmailLoading(false);
       return;
     }

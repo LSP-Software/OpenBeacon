@@ -2,6 +2,7 @@ import { expect, mock, spyOn, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { testRedisHashSecret, UnavailableRedis } from "@openbeacon/cache/testing";
 import type { PrismaClient } from "@openbeacon/database";
+import { createAuth } from "./createAuth.ts";
 import { createEmailCodes } from "./emailCode.ts";
 import { createSecurityAlerts } from "./securityAlerts.ts";
 
@@ -101,6 +102,24 @@ test("alerts-turned-off is sent straight away when it can't be held in Redis", a
   expect(sendSecurityAlertEmail.mock.calls[0]?.[0]).toMatchObject({
     alert: { type: "alerts-turned-off", alerts: ["new-sign-in"] },
     to: "owner@example.test",
+  });
+  error.mockRestore();
+});
+
+test("password sign-in is refused while Redis is unavailable, so failures aren't uncounted", async () => {
+  const error = spyOn(console, "error").mockImplementation(() => {});
+  const auth = createAuth({ emailCodes: null, securityAlerts: null, rateLimits: cache.rateLimits });
+  const response = await auth.handler(
+    new Request("http://localhost:3000/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "a@example.test", password: "correct horse battery" }),
+    }),
+  );
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({
+    code: "PASSWORD_CHECK_UNAVAILABLE",
+    message: "Passwords can't be checked right now. Try again shortly.",
   });
   error.mockRestore();
 });

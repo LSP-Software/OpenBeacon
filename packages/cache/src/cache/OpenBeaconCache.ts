@@ -31,6 +31,7 @@ export class OpenBeaconCache {
       input: RateLimitConsumeInput,
       options?: WhenRedisUnavailable,
     ) => Promise<RateLimitResult>;
+    refund: (input: RateLimitConsumeInput) => Promise<RateLimitResult>;
     reset: (input: RateLimitResetInput) => Promise<number>;
   };
   protected readonly now: () => number;

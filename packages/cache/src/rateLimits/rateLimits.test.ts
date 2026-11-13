@@ -199,6 +199,27 @@ describe("OpenBeaconCache rateLimits", () => {
     });
   });
 
+  test("a refund gives a token back without going over the limit", async () => {
+    const cache = new TestOpenBeaconCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => 0,
+    });
+    const input = {
+      namespace: "auth.password",
+      identifier: { type: "userId" as const, value: "user-1" },
+      limit: 2,
+      windowMs: 1_000,
+    };
+
+    await cache.rateLimits.consume(input);
+    await cache.rateLimits.consume(input);
+    expect((await cache.rateLimits.refund(input)).remaining).toBe(1);
+    expect((await cache.rateLimits.refund(input)).remaining).toBe(2);
+    expect((await cache.rateLimits.refund(input)).remaining).toBe(2);
+    expect((await cache.rateLimits.consume(input)).remaining).toBe(1);
+  });
+
   test("keeps IP addresses and email addresses out of rate limit keys", async () => {
     const keys: string[] = [];
     class RecordingCache extends OpenBeaconCache {
