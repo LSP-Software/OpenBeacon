@@ -256,7 +256,7 @@ Fixed on `fix/beta-1-review` (13 Nov 2026). Each fixed finding below carries its
 - Update OPE-213's scope in Linear (History-wrap sender rule, real call sites, historical-key lookup), as C8 asks.
 - Free accounts capped at 3 groups once tiers exist; the cap is the single value in `packages/api/src/lib/groupLimit.ts`.
 - Move the remaining app classifiers onto `errorReason`, then fix S6-03 and S6-06 (Q10).
-- The map-tiles R2 client sets `requestTimeout` without `throwOnRequestTimeout`, so it only logs (one-line fix).
+- The map-tiles R2 client now throws on its request timeout too ("Stop a stalled map upload hanging").
 - The password limiter refills gradually (about one attempt every 90 s after a lockout), so "Try again in 15 minutes" is approximate.
 - The tRPC `ctx.clientIp` and `RateLimitContextError` are unused after Q7b.
 
