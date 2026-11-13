@@ -2,7 +2,9 @@ import { GroupRole, Prisma } from "@openbeacon/database";
 import { devicePlatformSchema, removeGroupMemberSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
+import { errorCode, tryCatch } from "@openbeacon/shared";
 import { deleteGroup } from "../../lib/deleteGroup.ts";
+import { deletePayloadsInBatches } from "../../lib/deletePayloadsInBatches.ts";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
@@ -219,7 +221,7 @@ export const groupMembershipRouter = {
     })
     .input(removeGroupMemberSchema)
     .mutation(async ({ ctx, input }) => {
-      return ctx.db.$transaction(
+      const removed = await ctx.db.$transaction(
         async (tx) => {
           await tx.$queryRaw(
             Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
@@ -312,9 +314,6 @@ export const groupMembershipRouter = {
             memberId: input.memberId,
           });
 
-          await tx.groupEncryptedPayload.deleteMany({
-            where: { groupId: input.groupId, senderUserId: member.userId },
-          });
           await tx.groupEpochRecipientKey.deleteMany({
             where: {
               groupEpoch: { groupId: input.groupId },
@@ -339,12 +338,23 @@ export const groupMembershipRouter = {
             }
           }
 
-          return {
-            message: "Group member removed.",
-          };
+          return member;
         },
         { timeout: 15_000 },
       );
+      const cleanup = await tryCatch(
+        deletePayloadsInBatches({
+          db: ctx.db,
+          where: Prisma.sql`"groupId" = ${input.groupId} AND "senderUserId" = ${removed.userId}`,
+        }),
+      );
+      if (cleanup.error) {
+        const code = errorCode(cleanup.error);
+        console.error(`Removed member's location clean-up failed${code ? ` (${code})` : ""}`);
+      }
+      return {
+        message: "Group member removed.",
+      };
     }),
   updateRole: groupMemberProcedure
     .input(

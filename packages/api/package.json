@@ -10,6 +10,7 @@
     "./envSchema.ts": "./src/envSchema.ts",
     "./checkStorage.ts": "./src/checkStorage.ts",
     "./account-deletion.ts": "./src/lib/account-deletion.ts",
+    "./deletePayloadsInBatches.ts": "./src/lib/deletePayloadsInBatches.ts",
     "./storage.ts": "./src/lib/storage.ts",
     "./image-upload.ts": "./src/lib/image-upload.ts",
     "./s3client.ts": "./src/s3client.ts",

@@ -452,3 +452,90 @@ test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     }
   },
 );
+
+test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
+  "deletes an account with 500k location points in batches and refuses a sign-in while the batches run",
+  async () => {
+    const heavyEmail = `heavy-${crypto.randomUUID()}@example.test`;
+    const signup = await auth.api.signUpEmail({
+      body: { email: heavyEmail, password, name: "Heavy deletion" },
+    });
+    const heavyUserId = signup.user.id;
+    const partner = `${heavyUserId}-partner`;
+    const heavyGroup = `${heavyUserId}-group`;
+    try {
+      await addActiveDevice(heavyUserId);
+      await prisma.user.create({
+        data: { id: partner, name: "Partner", email: `${partner}@example.test` },
+      });
+      await prisma.group.create({
+        data: {
+          id: heavyGroup,
+          name: "Heavy",
+          groupMembers: {
+            create: [
+              { userId: heavyUserId, role: "OWNER", joinedEpochNumber: 1 },
+              { userId: partner, role: "OWNER", joinedEpochNumber: 1 },
+            ],
+          },
+        },
+      });
+      const epoch = await prisma.groupEpoch.create({
+        data: {
+          id: `${heavyGroup}-epoch`,
+          groupId: heavyGroup,
+          epochNumber: 1,
+          senderPublicKey: "k",
+        },
+      });
+      for (let start = 1; start <= 500_000; start += 50_000) {
+        await prisma.$executeRaw`
+          INSERT INTO "GroupEncryptedPayload"
+            (id, "groupId", "epochId", "senderDeviceId", "senderUserId", kind, algorithm, nonce, ciphertext, "clientPointId", "createdAt")
+          SELECT ${heavyUserId} || lpad(i::text, 7, '0'), ${heavyGroup}, ${epoch.id}, ${`${heavyUserId}-device`}, ${heavyUserId},
+            'location', 'a', 'n', repeat('c', 64), lpad(i::text, 7, '0'), now() - i * interval '10 seconds'
+          FROM generate_series(${start}::int, ${start + 49_999}::int) AS i
+        `;
+      }
+      await prisma.session.deleteMany({ where: { userId: heavyUserId } });
+      await prisma.user.update({
+        where: { id: heavyUserId },
+        data: { pendingDeletion: true, deletionDate: new Date(0) },
+      });
+
+      let deletionSettled = false;
+      const deletion = deleteAccountRecords({
+        db: prisma,
+        userId: heavyUserId,
+        imageUrlPrefix: "https://cdn.example/bucket",
+        mode: "scheduled",
+        securityAlerts: null,
+      }).finally(() => {
+        deletionSettled = true;
+      });
+      while (
+        !deletionSettled &&
+        (await prisma.groupEncryptedPayload.count({ where: { senderUserId: heavyUserId } })) ===
+          500_000
+      )
+        await Bun.sleep(5);
+
+      await expect(auth.api.signInEmail({ body: { email: heavyEmail, password } })).rejects.toThrow(
+        "scheduled for deletion",
+      );
+      expect(deletionSettled).toBe(false);
+
+      expect(await deletion).toBe(true);
+      expect(await prisma.user.findUnique({ where: { id: heavyUserId } })).toBeNull();
+      expect(await prisma.groupEncryptedPayload.count({ where: { groupId: heavyGroup } })).toBe(0);
+      expect(await prisma.session.count({ where: { userId: heavyUserId } })).toBe(0);
+    } finally {
+      await prisma.groupEncryptedPayload.deleteMany({ where: { groupId: heavyGroup } });
+      await prisma.group.deleteMany({ where: { id: heavyGroup } });
+      await prisma.accountDeletionCleanup.deleteMany({ where: { userId: heavyUserId } });
+      await prisma.user.deleteMany({ where: { id: { in: [heavyUserId, partner] } } });
+      await prisma.$executeRaw`VACUUM "GroupEncryptedPayload"`;
+    }
+  },
+  300_000,
+);

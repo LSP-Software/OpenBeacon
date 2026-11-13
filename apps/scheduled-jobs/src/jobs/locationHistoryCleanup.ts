@@ -1,7 +1,8 @@
+import { deletePayloadsInBatches } from "@openbeacon/api/deletePayloadsInBatches.ts";
+import { Prisma } from "@openbeacon/database";
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
-import { tryCatch } from "@openbeacon/shared";
+import { errorCode, tryCatch } from "@openbeacon/shared";
 import { getDatabaseTime } from "../databaseTime.ts";
-import { errorCode } from "../errorCode.ts";
 import { services } from "../services.ts";
 
 const retentionCutoff = async () =>
@@ -11,30 +12,21 @@ export const createLocationHistoryCleanup =
   ({ batchSize = 1_000, runLimit = 500_000 }: { batchSize?: number; runLimit?: number } = {}) =>
   async () => {
     const cutoff = await retentionCutoff();
-    let deleted = 0;
-    while (deleted < runLimit) {
-      const limit = Math.min(batchSize, runLimit - deleted);
-      const result = await tryCatch(
-        services.db.$executeRaw`
-          DELETE FROM "GroupEncryptedPayload"
-          WHERE id IN (
-            SELECT id FROM "GroupEncryptedPayload"
-            WHERE kind = ${TRACKING_POINT_KIND}
-              AND "createdAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')
-            ORDER BY "createdAt"
-            LIMIT ${limit}
-            FOR UPDATE SKIP LOCKED
-          )
-        `,
-      );
-      if (result.error) {
-        const code = errorCode(result.error);
-        console.error(`Location history clean-up failed${code ? ` (${code})` : ""}`);
-        return;
-      }
-      deleted += result.data;
-      if (result.data < limit) return;
+    const result = await tryCatch(
+      deletePayloadsInBatches({
+        db: services.db,
+        where: Prisma.sql`kind = ${TRACKING_POINT_KIND} AND "createdAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')`,
+        orderBy: Prisma.sql`ORDER BY "createdAt"`,
+        batchSize,
+        limit: runLimit,
+      }),
+    );
+    if (result.error) {
+      const code = errorCode(result.error);
+      console.error(`Location history clean-up failed${code ? ` (${code})` : ""}`);
+      return;
     }
+    if (result.data < runLimit) return;
     console.warn(
       `Location history clean-up reached its limit of ${runLimit} points; the rest will be deleted on later runs`,
     );

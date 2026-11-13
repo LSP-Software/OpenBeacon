@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, expect, mock, spyOn, test } from "bun:test";
+import type { Prisma } from "@openbeacon/database";
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 
 const databaseNow = new Date("2001-03-02T00:00:00.000Z");
@@ -22,7 +23,8 @@ const queryRaw = mock(async (strings: TemplateStringsArray, ...values: unknown[]
     )
     .slice(0, Number(limit));
 });
-const executeRaw = mock(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+const executeRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args: unknown[]) => {
+  const [strings, values] = Array.isArray(query) ? [query, args] : [query.strings, query.values];
   if (strings.join("?").trimStart().startsWith('DELETE FROM "GroupEpoch"')) {
     epochDeletes.push(values[0] as string[]);
     const failure = failures.shift();
