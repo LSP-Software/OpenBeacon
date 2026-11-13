@@ -106,6 +106,8 @@ Run it inside the service's container:
 docker exec map-tiles map-tiles status
 ```
 
+A shell opened in the container (`docker exec -it map-tiles sh`, or the Coolify terminal) starts with a banner listing these commands.
+
 The command talks to the running service, so it only works while the service is up, and it never races an update the service is running. The service listens on `127.0.0.1` only, so nothing outside its container can reach it and it needs no key. Don't publish its port.
 
 | Command    | What it does                                                                                                                                                                                                                               |
