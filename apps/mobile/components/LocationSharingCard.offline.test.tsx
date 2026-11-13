@@ -202,3 +202,22 @@ test("a pause that reaches the server in the background shows on the card while 
   expect(output()).toContain("Paused on all your devices");
   expect(output()).not.toContain("Couldn’t check sharing status");
 });
+
+test("an older reply from a background sync doesn't replace newer sharing state on the card", async () => {
+  sharingQueryFails = true;
+  const pausedAccount = { ...preference, sharingPaused: true, sharingRevision: 2 };
+  queryClient.setQueryData(["sharing"], {
+    ...sharingState(),
+    account: pausedAccount,
+    serverTime: new Date(Date.now() + 60_000),
+    ...resolveLocationSharing(pausedAccount, preference, Date.now()),
+  });
+  await render();
+
+  await act(async () => {
+    await syncLocationSharing();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+
+  expect(output()).toContain("Paused on all your devices");
+});

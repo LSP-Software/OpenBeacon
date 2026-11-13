@@ -8,7 +8,9 @@ export const useLoadedSharingState = () => {
   useEffect(
     () =>
       onSharingStateLoaded((state) =>
-        queryClient.setQueryData(trpc.account.locationSharing.queryKey(), state),
+        queryClient.setQueryData(trpc.account.locationSharing.queryKey(), (current) =>
+          current && current.serverTime > state.serverTime ? current : state,
+        ),
       ),
     [queryClient],
   );
