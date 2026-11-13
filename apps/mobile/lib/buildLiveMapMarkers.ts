@@ -5,7 +5,7 @@ import type { LiveMapPosition } from "./mapTrackingTypes.ts";
 export type LiveMapMarker = {
   battery: {
     charging: boolean;
-    level: number;
+    level: number | null;
   } | null;
   deviceIcon?: DeviceIcon;
   deviceId: string;

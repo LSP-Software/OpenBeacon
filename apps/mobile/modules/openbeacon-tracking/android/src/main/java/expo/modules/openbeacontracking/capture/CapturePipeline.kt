@@ -4,6 +4,10 @@ import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.keys.EpochKeyStore
 import expo.modules.openbeacontracking.queue.CiphertextQueue
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -24,9 +28,9 @@ class CapturePipeline(
   fun onFix(
     latitude: Double,
     longitude: Double,
-    timestampIso: String,
+    timestampMillis: Long,
     speedMetersPerSecond: Double?,
-    batteryLevel: Int,
+    batteryLevel: Int?,
     batteryCharging: Boolean,
     captureGeneration: Long = 0L,
     fixId: Long? = null,
@@ -43,18 +47,17 @@ class CapturePipeline(
     val captureId = newId()
     val queuedAt = nowMillis()
     val sharing = synchronized(captureLock) { sharingState() }
-    val timestamp = java.time.Instant.parse(timestampIso).toEpochMilli()
-    if (!sharing.canCapture(timestamp, queuedAt)) return 0
+    if (!sharing.canCapture(timestampMillis, queuedAt)) return 0
     val plaintext =
       GroupPayloadEncrypt
         .encodeTrackingPointV1Json(
           latitude = latitude,
           longitude = longitude,
-          timestamp = timestampIso,
+          timestamp = formatTrackingTimestamp(timestampMillis),
           speed = speedMetersPerSecond,
           batteryLevel = batteryLevel,
           batteryCharging = batteryCharging,
-        ).toByteArray(Charsets.UTF_8)
+        )?.toByteArray(Charsets.UTF_8) ?: return 0
 
     val rows =
       keys.map { key ->
@@ -94,7 +97,7 @@ class CapturePipeline(
     return synchronized(captureLock) {
       if (!canQueue(captureGeneration)) return@synchronized 0
       if (queueOwner() != owner) return@synchronized 0
-      if (sharingState() != sharing || !sharing.canCapture(timestamp, nowMillis())) return@synchronized 0
+      if (sharingState() != sharing || !sharing.canCapture(timestampMillis, nowMillis())) return@synchronized 0
       val scopedRows = rows.map { it.copy(owner = owner, clientPointId = sharing.revisionPrefix + it.clientPointId) }
       lastFixByKey.keys.retainAll(scopedRows.map { row ->
         listOf(owner, row.groupId, row.epochId, row.senderDeviceId, row.kind)
@@ -113,4 +116,10 @@ class CapturePipeline(
       inserted
     }
   }
+}
+
+internal fun formatTrackingTimestamp(epochMillis: Long): String {
+  val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+  formatter.timeZone = TimeZone.getTimeZone("UTC")
+  return formatter.format(Date(epochMillis))
 }

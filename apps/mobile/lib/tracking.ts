@@ -11,7 +11,7 @@ import {
   markApiCompatibilityNotified,
   refreshApiCompatibilityInBackground,
 } from "./apiCompatibility.ts";
-import { baseUrl } from "./base-url.ts";
+import { baseUrl, hasCustomServerUrl } from "./currentServer.ts";
 import { createHistoryKey } from "./createHistoryKey.ts";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { isThisDeviceActive } from "./deviceActivation.ts";
@@ -22,13 +22,13 @@ import {
   getRegisteredDeviceKey,
 } from "./deviceKeys.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
+import { errorReason } from "./errorReason.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
 import { dismissNotice, showNotice } from "./notifications.ts";
 import { backfillHistoryWraps } from "./recovery.ts";
 import { resealPersonalData } from "./resealPersonalData.ts";
-import { hasCustomServerUrl } from "./server-url.ts";
 import {
   clearTrackingKeyCheck,
   getMembershipSignature,
@@ -222,7 +222,9 @@ const reconcileTrackingKeysInternal = async ({
     if (trackingModule) {
       if (trackingModule.isCaptureRunning()) await trackingModule.stopCapture();
       if (!isCurrent()) return false;
+      const hadKeys = trackingModule.listProvisionedEpochKeys().length > 0;
       trackingModule.revokeEpochKeys();
+      if (hadKeys) markTrackingKeysStale();
     }
     if (!force && (await hasFreshKeyCheck(false))) return false;
     if (!isCurrent()) return false;
@@ -390,6 +392,14 @@ const reconcileTrackingKeysInternal = async ({
 
   if (!isCurrent() || (onlyIfRunning && !trackingModule.isCaptureRunning())) return false;
 
+  const memberGroupIds = new Set(groups.map(({ id }) => id));
+  const leftGroupIds = new Set(
+    currentKeys.map(({ groupId }) => groupId).filter((groupId) => !memberGroupIds.has(groupId)),
+  );
+  for (const groupId of leftGroupIds) {
+    await trackingModule.deleteCiphertextsByGroup(owner, groupId);
+  }
+  if (!isCurrent()) return false;
   const keptGroupIds = new Set([...preserveGroupIds, ...reusedGroupIds]);
   const preservedKeys = currentKeys.filter(({ groupId }) => keptGroupIds.has(groupId));
   const desiredKeyMetadata = [...resolvedKeyMetadata, ...preservedKeys];
@@ -572,6 +582,7 @@ const isUploadableQueueItem = (item: CiphertextQueueItem): item is UploadableQue
 
 const uploadClaimedItems = async (
   trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
+  owner: string,
   items: UploadableQueueItem[],
   signal: AbortSignal,
 ): Promise<void> => {
@@ -607,41 +618,50 @@ const uploadClaimedItems = async (
   }
   if (uploadResult.error) {
     const code = getErrorCode(uploadResult.error);
+    const reason = errorReason(uploadResult.error);
+    const device =
+      code === "FORBIDDEN" || code === "BAD_REQUEST" ? await getRegisteredDeviceKey() : null;
+    const usesCurrentDevice = items.some(
+      ({ senderDeviceId }) => senderDeviceId === device?.deviceId,
+    );
     if (code === "FORBIDDEN" || code === "BAD_REQUEST") {
-      const device = await getRegisteredDeviceKey();
-      const usesCurrentDevice = items.some(
-        ({ senderDeviceId }) => senderDeviceId === device?.deviceId,
-      );
       const provisionedKeys = trackingModule.listProvisionedEpochKeys();
       const usesCurrentKey = items.some((item) =>
         provisionedKeys.some(
           (key) => getProvisionedKeyIdentity(key) === getProvisionedKeyIdentity(item),
         ),
       );
-      if (
-        usesCurrentKey ||
-        (code === "FORBIDDEN" &&
-          usesCurrentDevice &&
-          uploadResult.error.message === "The active device is not registered.")
-      ) {
+      if (usesCurrentKey || (usesCurrentDevice && reason === "DEVICE_NOT_REGISTERED")) {
         markTrackingKeysStale();
         uploadRejectedKeys = true;
       }
     }
-    if (getErrorCode(uploadResult.error) === "UNAUTHORIZED") {
+    if ((reason === "NOT_GROUP_MEMBER" || reason === "GROUP_GONE") && items[0]) {
+      await trackingModule.deleteCiphertextsByGroup(owner, items[0].groupId);
+      return;
+    }
+    if (reason === "DEVICE_NOT_REGISTERED" && device && !usesCurrentDevice) {
+      await trackingModule.deleteCiphertexts(ids);
+      return;
+    }
+    if (code === "UNAUTHORIZED") {
       await revokeUnauthorizedTrackingAccess(uploadResult.error, false);
       await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
       throw uploadResult.error;
     }
-    if (getErrorCode(uploadResult.error) === "BAD_REQUEST" && items.length > 1) {
+    if (code === "BAD_REQUEST" && items.length > 1) {
       const midpoint = Math.ceil(items.length / 2);
       const results = await Promise.allSettled([
-        uploadClaimedItems(trackingModule, items.slice(0, midpoint), signal),
-        uploadClaimedItems(trackingModule, items.slice(midpoint), signal),
+        uploadClaimedItems(trackingModule, owner, items.slice(0, midpoint), signal),
+        uploadClaimedItems(trackingModule, owner, items.slice(midpoint), signal),
       ]);
       if (results.some((result) => result.status === "rejected")) {
         throw new Error("Tracking upload failed");
       }
+      return;
+    }
+    if (code === "BAD_REQUEST") {
+      await trackingModule.deleteCiphertexts(ids);
       return;
     }
     await trackingModule.requeueCiphertexts(ids, getQueueError(uploadResult.error));
@@ -693,6 +713,7 @@ const uploadClaimedItems = async (
 
 const flushGroup = async (
   trackingModule: Awaited<ReturnType<typeof loadTrackingModule>>,
+  owner: string,
   items: CiphertextQueueItem[],
   signal: AbortSignal,
 ) => {
@@ -725,7 +746,7 @@ const flushGroup = async (
 
   const results = await Promise.allSettled(
     Array.from(itemsBySender.values()).map((senderItems) =>
-      uploadClaimedItems(trackingModule, senderItems, signal),
+      uploadClaimedItems(trackingModule, owner, senderItems, signal),
     ),
   );
   if (invalidItems.length > 0 || results.some((result) => result.status === "rejected")) {
@@ -758,7 +779,9 @@ const flushPendingTrackingPointsInternal = async (
       itemsByGroup.set(item.groupId, [...(itemsByGroup.get(item.groupId) ?? []), item]);
     }
     const results = await Promise.allSettled(
-      Array.from(itemsByGroup.values()).map((items) => flushGroup(trackingModule, items, signal)),
+      Array.from(itemsByGroup.values()).map((items) =>
+        flushGroup(trackingModule, owner, items, signal),
+      ),
     );
     failed ||= results.some((result) => result.status === "rejected");
     if (pending.length < 100) break;
@@ -946,11 +969,7 @@ export const deleteQueuedTrackingPoints = async ({
   if (!trackingModule) return;
   const owner = getOwner(userId);
   if (deviceId) await trackingModule.assignUnassignedCiphertexts(deviceId, owner);
-  for (;;) {
-    const items = await trackingModule.listPendingCiphertexts(owner, 500);
-    if (!items.length) return;
-    await trackingModule.deleteCiphertexts(items.map(({ id }) => id));
-  }
+  await trackingModule.deleteCiphertextsByOwner(owner);
 };
 
 export const resumeTracking = () => {

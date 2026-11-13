@@ -40,7 +40,9 @@ export default {
   fetch(request: Request, server: Bun.Server<unknown>) {
     if (
       env.TRUSTED_PROXY_PROVIDER === "cloudflare-authenticated" &&
-      !(request.method === "GET" && new URL(request.url).pathname === "/health") &&
+      !(
+        request.method === "GET" && ["/health", "/ready"].includes(new URL(request.url).pathname)
+      ) &&
       !authenticateCloudflare({
         headers: request.headers,
         secret: env.CLOUDFLARE_ORIGIN_SECRET ?? "",

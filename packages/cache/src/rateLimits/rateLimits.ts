@@ -6,7 +6,7 @@ import {
   rateLimitPeekInputSchema,
   rateLimitResetInputSchema,
 } from "./schemas.ts";
-import type { RateLimitResult } from "./types.ts";
+import type { RateLimitResult, WhenRedisUnavailable } from "./types.ts";
 
 type RateLimitsDependencies = {
   hashSecret: string | undefined;
@@ -41,7 +41,7 @@ local allowed = 0
 if tokens >= cost then
   allowed = 1
   if should_consume == 1 then
-    tokens = tokens - cost
+    tokens = math.min(limit, tokens - cost)
   end
 end
 
@@ -76,6 +76,9 @@ const buildRateLimitKey = ({
   keyPrefix: string;
   namespace: string;
 }) => {
+  if (identifier.type === "server") {
+    return `${keyPrefix}:ratelimit:${namespace}:server`;
+  }
   if (identifier.type === "userId") {
     return `${keyPrefix}:ratelimit:${namespace}:userId:${identifier.value}`;
   }
@@ -143,22 +146,72 @@ const executeRateLimitScript = async ({
   return parseRateLimitResult(result);
 };
 
+const withFallback = async (
+  { namespace, limit }: { namespace: string; limit: number },
+  result: Promise<RateLimitResult>,
+  options: WhenRedisUnavailable | undefined,
+): Promise<RateLimitResult> => {
+  if (!options) return result;
+  return result.catch((error: unknown) => {
+    const allowed = options.whenUnavailable === "allow";
+    const code = error instanceof Error && "code" in error ? String(error.code) : null;
+    console.error(
+      `[rate-limit] Redis is unavailable${code ? ` (${code})` : ""}, so ${namespace} is ${allowed ? "allowed" : "refused"}`,
+    );
+    return {
+      allowed,
+      limit,
+      remaining: allowed ? limit : 0,
+      retryAfterMs: allowed ? 0 : 60_000,
+      resetAfterMs: 0,
+      unavailable: true,
+    };
+  });
+};
+
 export const createRateLimits = ({ hashSecret, keyPrefix, now, redis }: RateLimitsDependencies) => {
   return {
-    peek: async (input: Parameters<typeof rateLimitPeekInputSchema.parse>[0]) => {
+    peek: async (
+      input: Parameters<typeof rateLimitPeekInputSchema.parse>[0],
+      options?: WhenRedisUnavailable,
+    ) => {
       const parsedInput = rateLimitPeekInputSchema.parse(input);
 
-      return executeRateLimitScript({
-        redis,
-        hashSecret,
-        keyPrefix,
-        now,
-        ...parsedInput,
-        shouldConsume: false,
-        cost: 0,
-      });
+      return withFallback(
+        parsedInput,
+        executeRateLimitScript({
+          redis,
+          hashSecret,
+          keyPrefix,
+          now,
+          ...parsedInput,
+          shouldConsume: false,
+          cost: 0,
+        }),
+        options,
+      );
     },
-    consume: async (input: Parameters<typeof rateLimitConsumeInputSchema.parse>[0]) => {
+    consume: async (
+      input: Parameters<typeof rateLimitConsumeInputSchema.parse>[0],
+      options?: WhenRedisUnavailable,
+    ) => {
+      const parsedInput = rateLimitConsumeInputSchema.parse(input);
+
+      return withFallback(
+        parsedInput,
+        executeRateLimitScript({
+          redis,
+          hashSecret,
+          keyPrefix,
+          now,
+          ...parsedInput,
+          shouldConsume: true,
+          cost: parsedInput.cost ?? 1,
+        }),
+        options,
+      );
+    },
+    refund: async (input: Parameters<typeof rateLimitConsumeInputSchema.parse>[0]) => {
       const parsedInput = rateLimitConsumeInputSchema.parse(input);
 
       return executeRateLimitScript({
@@ -168,7 +221,7 @@ export const createRateLimits = ({ hashSecret, keyPrefix, now, redis }: RateLimi
         now,
         ...parsedInput,
         shouldConsume: true,
-        cost: parsedInput.cost ?? 1,
+        cost: -(parsedInput.cost ?? 1),
       });
     },
     reset: async (input: Parameters<typeof rateLimitResetInputSchema.parse>[0]) => {

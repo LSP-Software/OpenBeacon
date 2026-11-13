@@ -1,6 +1,7 @@
 import { beforeEach, expect, mock, setSystemTime, test } from "bun:test";
 import type { setLocationSharingSchema } from "@openbeacon/schemas";
 import { resolveLocationSharing, type SharingPreference } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 import type { z } from "zod";
 
 type Change = z.infer<typeof setLocationSharingSchema>;
@@ -16,6 +17,7 @@ const nativeStates: {
 }[] = [];
 const changes: Change[] = [];
 let offline = false;
+let rejectWith: Error | null = null;
 let loseReply = false;
 let nextRequestId = 0;
 let nativeAccepted = true;
@@ -72,7 +74,7 @@ const changeFromAnotherPhone = (scopeName: "device" | "account", paused: boolean
   };
 };
 mock.module("react-native", () => ({ Platform: { OS: "android" } }));
-mock.module("./base-url.ts", () => ({ baseUrl: "https://server.test" }));
+mock.module("./currentServer.ts", () => ({ baseUrl: "https://server.test" }));
 mock.module("./createSecureId.ts", () => ({ createSecureId: () => `request-${++nextRequestId}` }));
 mock.module("./deviceKeys.ts", () => ({
   getStoredDeviceId: () => registeredDeviceId,
@@ -111,6 +113,7 @@ mock.module("./api.ts", () => ({
       setLocationSharing: {
         mutate: async (input: Change) => {
           if (offline) throw new Error("Offline");
+          if (rejectWith) throw rejectWith;
           if (beforeMutation) await beforeMutation();
           changes.push(input);
           const status = applyChange(input);
@@ -127,6 +130,7 @@ const {
   clearPendingSharingChanges,
   hasPendingSharingPause,
   hasLocallyPausedSharing,
+  hasRejectedSharingChange,
   getPendingSharingChanges,
   serverNow,
   syncLocationSharing,
@@ -139,6 +143,7 @@ beforeEach(() => {
   nativeStates.length = 0;
   changes.length = 0;
   offline = false;
+  rejectWith = null;
   loseReply = false;
   nativeAccepted = true;
   registeredDeviceId = "phone";
@@ -704,4 +709,79 @@ test("a pause tapped before sharing loaded is replayed with its tap time and can
   expect(server.device).toMatchObject({ sharingPaused: false, sharingRevision: 2 });
   expect(hasPendingSharingPause("alex")).toBe(false);
   expect(nativeStates.at(-1)).toMatchObject({ paused: false, prefix: "s0.2:" });
+});
+
+const refusal = (code: string, reason: string | null = null) =>
+  TRPCClientError.from({
+    error: { code: -32600, data: { code, httpStatus: 400, reason }, message: code },
+  });
+
+for (const [name, error] of [
+  ["a bad request", () => refusal("BAD_REQUEST")],
+  ["a device the server doesn't have", () => refusal("NOT_FOUND")],
+  ["a change for another account", () => refusal("FORBIDDEN")],
+] as const) {
+  test(`a queued pause refused as ${name} is dropped, the real state loaded and uploads resume`, async () => {
+    serverClockAhead = 5 * 60_000;
+    offline = true;
+    await changeLocationSharing({ scope: "device", paused: true, durationMinutes: null });
+    expect(hasPendingSharingPause("alex")).toBe(true);
+    offline = false;
+    rejectWith = error();
+
+    await syncLocationSharing();
+
+    expect(hasPendingSharingPause("alex")).toBe(false);
+    expect(hasRejectedSharingChange("alex")).toBe(true);
+    expect(nativeStates.at(-1)).toMatchObject({ paused: false });
+    expect(Math.abs(serverNow() - serverTime())).toBeLessThan(1_000);
+    expect(getPendingSharingChanges("alex")).toEqual({ device: null, account: null });
+  });
+}
+
+test("a pause the server refuses straight away is undone and reported as rejected", async () => {
+  rejectWith = refusal("BAD_REQUEST");
+
+  expect(
+    await changeLocationSharing({ scope: "device", paused: true, durationMinutes: null }),
+  ).toBe("rejected");
+
+  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasRejectedSharingChange("alex")).toBe(true);
+  expect(nativeStates.at(-1)).toMatchObject({ paused: false });
+
+  rejectWith = null;
+  await changeLocationSharing({ scope: "device", paused: true, durationMinutes: null });
+  expect(hasRejectedSharingChange("alex")).toBe(false);
+});
+
+for (const [name, error] of [
+  ["a network failure", () => new Error("Offline")],
+  ["a server error", () => refusal("INTERNAL_SERVER_ERROR")],
+  ["a rate limit", () => refusal("TOO_MANY_REQUESTS")],
+  ["a phone that isn't set up yet", () => refusal("FORBIDDEN", "DEVICE_PENDING")],
+] as const) {
+  test(`a queued pause that fails with ${name} is kept while the state is still checked`, async () => {
+    serverClockAhead = 5 * 60_000;
+    offline = true;
+    await changeLocationSharing({ scope: "device", paused: true, durationMinutes: null });
+    offline = false;
+    rejectWith = error();
+
+    await expect(syncLocationSharing()).rejects.toBe(rejectWith);
+
+    expect(hasPendingSharingPause("alex")).toBe(true);
+    expect(hasRejectedSharingChange("alex")).toBe(false);
+    expect(Math.abs(serverNow() - serverTime())).toBeLessThan(1_000);
+    expect(nativeStates.at(-1)).toMatchObject({ paused: true });
+  });
+}
+
+test("signing out forgets a rejected change", async () => {
+  rejectWith = refusal("BAD_REQUEST");
+  await changeLocationSharing({ scope: "device", paused: true, durationMinutes: null });
+
+  clearPendingSharingChanges("alex");
+
+  expect(hasRejectedSharingChange("alex")).toBe(false);
 });

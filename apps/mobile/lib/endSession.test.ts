@@ -8,13 +8,19 @@ const storageValues = new Map<string, string | boolean>();
 const navigations: unknown[] = [];
 const queueDeletions: Array<{ deviceId: string | undefined; userId: string }> = [];
 let signOuts = 0;
+let trackingRevocations = 0;
 let sessionUserId: string | null = "user-a";
 let registerError: Error | null = null;
 let stalledDelete: string | null = null;
 let providersError: Error | null = null;
 const providerRequests: unknown[] = [];
 
-mock.module("./pendingJoinCode.ts", () => ({ clearPendingJoinCodes: () => {} }));
+mock.module("./pendingJoinCode.ts", () => ({
+  clearPendingJoinCodes: () => {
+    for (const key of [...storageValues.keys()])
+      if (key.startsWith("pendingJoinCode.")) storageValues.delete(key);
+  },
+}));
 mock.module("expo-router", () => ({
   router: {
     replace: (target: unknown) => {
@@ -85,6 +91,12 @@ mock.module("./api.ts", () => ({
 }));
 
 mock.module("./auth-client.ts", () => ({
+  saveSessionTokenToRevoke: async (token: string) => {
+    secureStoreValues.set("sessionTokenToRevokeOnNextLogin", token);
+  },
+  forgetSessionTokenToRevoke: async () => {
+    secureStoreValues.delete("sessionTokenToRevokeOnNextLogin");
+  },
   authClient: {
     signOut: async () => {
       signOuts += 1;
@@ -97,7 +109,9 @@ mock.module("./tracking.ts", () => ({
   deleteQueuedTrackingPoints: async (input: { deviceId: string | undefined; userId: string }) => {
     queueDeletions.push(input);
   },
-  revokeTrackingAccess: async () => {},
+  revokeTrackingAccess: async () => {
+    trackingRevocations += 1;
+  },
 }));
 
 mock.module("./groupColor.ts", () => ({ clearGroupColors: () => {} }));
@@ -105,12 +119,10 @@ mock.module("./trackingKeyCheck.ts", () => ({ clearTrackingKeyCheck: () => {} })
 mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => {} }));
 
 const { ensureDeviceKeyRegistration } = await import("./deviceKeys.ts");
-const {
-  checkThisPhoneAfterSessionLoss,
-  handleDeviceRemoved,
-  wipeAfterRemovingThisPhone,
-  wipeThisPhone,
-} = await import("./deviceRemoved.ts");
+const { handleDeviceRemoved, wipeAfterRemovingThisPhone } = await import("./deviceRemoved.ts");
+const { endSession, settleLostSessions } = await import("./endSession.ts");
+const { baseUrl } = await import("./currentServer.ts");
+const pendingSharingKey = `locationSharing.pending.${JSON.stringify([baseUrl, "user-a", "device"])}`;
 
 const removedError = () =>
   new TRPCClientError("This device was removed.", {
@@ -118,7 +130,12 @@ const removedError = () =>
       error: {
         code: -32001,
         message: "This device was removed.",
-        data: { cause: deviceRemovedCause, code: "UNAUTHORIZED", httpStatus: 401 },
+        data: {
+          cause: deviceRemovedCause,
+          reason: deviceRemovedCause,
+          code: "UNAUTHORIZED",
+          httpStatus: 401,
+        },
       },
     },
   });
@@ -170,7 +187,7 @@ describe("wiping a removed phone", () => {
     secureStoreValues.set(`encryption.deviceLink.user-a.${device.deviceId}`, "saved-link");
     storageValues.set("locationSharing.pending.queued-pause", "pause");
 
-    await wipeThisPhone();
+    await endSession({ reason: "phoneRemoved" });
 
     expectWiped(device.deviceId);
     expect(storageValues.has("locationSharing.pending.queued-pause")).toBe(false);
@@ -186,7 +203,7 @@ describe("wiping a removed phone", () => {
   test("wipes a phone that signed out normally, using the signed-in account", async () => {
     const device = await seedSignedOutPhone();
 
-    await wipeThisPhone();
+    await endSession({ reason: "phoneRemoved" });
 
     expectWiped(device.deviceId);
     expect(queueDeletions).toEqual([{ deviceId: device.deviceId, userId: "user-a" }]);
@@ -197,7 +214,7 @@ describe("wiping a removed phone", () => {
     const device = await seedSignedOutPhone();
     sessionUserId = null;
 
-    await wipeThisPhone();
+    await endSession({ reason: "phoneRemoved" });
 
     expect(storageValues.get("encryption.device.id.user-a")).toBe(device.deviceId);
     expect(queueDeletions).toEqual([]);
@@ -224,7 +241,7 @@ describe("wiping a removed phone", () => {
     secureStoreValues.set(`encryption.deviceLink.user-a.${device.deviceId}`, "saved-link");
     stalledDelete = "encryption.device.privateKey.user-a";
 
-    void wipeThisPhone();
+    void endSession({ reason: "phoneRemoved" });
     for (
       let index = 0;
       index < 200 && secureStoreValues.has("encryption.history.user-a.1");
@@ -276,14 +293,14 @@ describe("wiping a removed phone", () => {
         error: {
           code: -32600,
           message: "This device was removed.",
-          data: { cause: deviceRemovedCause },
+          data: { cause: deviceRemovedCause, reason: deviceRemovedCause },
         },
       },
     });
 
     await expect(ensureDeviceKeyRegistration()).rejects.toBeInstanceOf(TRPCClientError);
     expect(storageValues.get("encryption.device.id.user-a")).toBe(device.deviceId);
-    await wipeThisPhone();
+    await endSession({ reason: "phoneRemoved" });
 
     expectWiped(device.deviceId);
     expect(queueDeletions).toEqual([{ deviceId: device.deviceId, userId: "user-a" }]);
@@ -296,7 +313,7 @@ describe("wiping a removed phone", () => {
     secureStoreValues.set(`encryption.deviceLink.user-a.${device.deviceId}`, "saved-link");
     providersError = removedError();
 
-    await checkThisPhoneAfterSessionLoss();
+    await endSession({ reason: "sessionLost" });
 
     expect(providerRequests).toEqual([{ context: { handleDeviceErrors: false } }]);
     expectWiped(device.deviceId);
@@ -309,7 +326,7 @@ describe("wiping a removed phone", () => {
     const device = await ensureDeviceKeyRegistration();
     sessionUserId = null;
 
-    await checkThisPhoneAfterSessionLoss();
+    await endSession({ reason: "sessionLost" });
 
     expect(providerRequests).toHaveLength(1);
     expect(storageValues.has("encryption.device.registered")).toBe(false);
@@ -324,7 +341,7 @@ describe("wiping a removed phone", () => {
     sessionUserId = null;
     providersError = TRPCClientError.from(new TypeError("Network request failed"));
 
-    await checkThisPhoneAfterSessionLoss();
+    await endSession({ reason: "sessionLost" });
 
     expect(storageValues.has("encryption.device.registered")).toBe(false);
     expect(secureStoreValues.has("encryption.device.privateKey.user-a")).toBe(true);
@@ -335,9 +352,192 @@ describe("wiping a removed phone", () => {
   test("a lost session without a registration sends nothing", async () => {
     await seedSignedOutPhone();
 
-    await checkThisPhoneAfterSessionLoss();
+    await endSession({ reason: "sessionLost" });
 
     expect(providerRequests).toEqual([]);
     expect(signOuts).toBe(0);
+  });
+});
+
+describe("ending a session", () => {
+  beforeEach(() => {
+    secureStoreValues.clear();
+    storageValues.clear();
+    navigations.length = 0;
+    queueDeletions.length = 0;
+    signOuts = 0;
+    trackingRevocations = 0;
+    sessionUserId = "user-a";
+    providersError = null;
+    providerRequests.length = 0;
+  });
+
+  const seedSignedInPhone = async () => {
+    const device = await ensureDeviceKeyRegistration();
+    storageValues.set(`encryption.device.active.${device.deviceId}`, true);
+    secureStoreValues.set("encryption.history.user-a.3", "history-3");
+    secureStoreValues.set(`encryption.deviceLink.user-a.${device.deviceId}`, "saved-link");
+    secureStoreValues.set("sessionTokenToRevokeOnNextLogin", "old-token");
+    storageValues.set(pendingSharingKey, "change");
+    storageValues.set("pendingJoinCode.user-a", "join-code");
+    storageValues.set("api_compatibility", "saved-verdict");
+    return device;
+  };
+
+  const observe = (deviceId: string) => ({
+    signedOut: signOuts > 0,
+    trackingRevoked: trackingRevocations > 0,
+    registration: storageValues.has("encryption.device.registered"),
+    queuedPoints: queueDeletions.length === 0,
+    pendingSharingChanges: storageValues.has(pendingSharingKey),
+    pendingJoinCodes: storageValues.has("pendingJoinCode.user-a"),
+    deviceKey: secureStoreValues.has("encryption.device.privateKey.user-a"),
+    historyKeys: secureStoreValues.has("encryption.history.user-a.3"),
+    savedDeviceLink: secureStoreValues.has(`encryption.deviceLink.user-a.${deviceId}`),
+    activeFlag: storageValues.has(`encryption.device.active.${deviceId}`),
+    revokeToken: secureStoreValues.has("sessionTokenToRevokeOnNextLogin"),
+    compatibility: storageValues.has("api_compatibility"),
+    lostSession: JSON.parse(String(storageValues.get("session.lost") ?? "[]")).map(
+      ({ userId }: { userId: string }) => userId,
+    ),
+  });
+
+  const keptKeys = {
+    deviceKey: true,
+    historyKeys: true,
+    savedDeviceLink: true,
+    activeFlag: true,
+    lostSession: ["user-a"],
+  };
+  const wipedKeys = {
+    deviceKey: false,
+    historyKeys: false,
+    savedDeviceLink: false,
+    activeFlag: false,
+    lostSession: [],
+  };
+
+  test.each([
+    [
+      "signedOut",
+      {
+        signedOut: true,
+        queuedPoints: true,
+        pendingSharingChanges: false,
+        revokeToken: true,
+        compatibility: true,
+        ...keptKeys,
+        lostSession: [],
+      },
+    ],
+    [
+      "phoneRemoved",
+      {
+        signedOut: true,
+        queuedPoints: false,
+        pendingSharingChanges: false,
+        revokeToken: true,
+        compatibility: true,
+        ...wipedKeys,
+      },
+    ],
+    [
+      "accountDeleted",
+      {
+        signedOut: true,
+        queuedPoints: false,
+        pendingSharingChanges: false,
+        revokeToken: true,
+        compatibility: true,
+        ...wipedKeys,
+      },
+    ],
+    [
+      "serverChanged",
+      {
+        signedOut: true,
+        queuedPoints: false,
+        pendingSharingChanges: false,
+        revokeToken: false,
+        compatibility: false,
+        ...keptKeys,
+      },
+    ],
+    [
+      "sessionLost",
+      {
+        signedOut: false,
+        queuedPoints: true,
+        pendingSharingChanges: true,
+        revokeToken: true,
+        compatibility: true,
+        ...keptKeys,
+      },
+    ],
+  ] as const)("%s clears exactly what its row says", async (reason, expected) => {
+    const device = await seedSignedInPhone();
+
+    await endSession({ reason });
+
+    expect(observe(device.deviceId)).toEqual({
+      trackingRevoked: true,
+      registration: false,
+      pendingJoinCodes: false,
+      ...expected,
+    });
+  });
+
+  test("a sign-out keeps queued points that no pause is holding back", async () => {
+    await seedSignedInPhone();
+
+    await endSession({ reason: "signedOut" });
+
+    expect(queueDeletions).toEqual([]);
+  });
+
+  test("a normal sign-out keeps the account's keys when another account signs in or 30 days pass", async () => {
+    const device = await seedSignedInPhone();
+    await endSession({ reason: "signedOut" });
+
+    await settleLostSessions({ userId: "user-b" });
+    await settleLostSessions({ userId: null, now: Date.now() + 31 * 24 * 60 * 60_000 });
+
+    expect(observe(device.deviceId)).toMatchObject({ ...keptKeys, lostSession: [] });
+    expect(queueDeletions).toEqual([]);
+  });
+
+  test("the same account signing in again keeps its keys and forgets the lost session", async () => {
+    const device = await seedSignedInPhone();
+    await endSession({ reason: "sessionLost" });
+
+    await settleLostSessions({ userId: "user-a" });
+
+    expect(storageValues.has("session.lost")).toBe(false);
+    expect(observe(device.deviceId)).toMatchObject({ deviceKey: true, historyKeys: true });
+  });
+
+  test("a different account signing in wipes the lost account's keys and queued points", async () => {
+    const device = await seedSignedInPhone();
+    await endSession({ reason: "sessionLost" });
+
+    await settleLostSessions({ userId: "user-b" });
+
+    expect(observe(device.deviceId)).toMatchObject({
+      ...wipedKeys,
+      pendingSharingChanges: false,
+    });
+    expect(queueDeletions).toEqual([{ deviceId: device.deviceId, userId: "user-a" }]);
+  });
+
+  test("a lost account's keys are wiped after 30 days with no sign-in, not before", async () => {
+    const device = await seedSignedInPhone();
+    await endSession({ reason: "sessionLost" });
+    const day = 24 * 60 * 60_000;
+
+    await settleLostSessions({ userId: null, now: Date.now() + 29 * day });
+    expect(observe(device.deviceId)).toMatchObject(keptKeys);
+
+    await settleLostSessions({ userId: null, now: Date.now() + 31 * day });
+    expect(observe(device.deviceId)).toMatchObject(wipedKeys);
   });
 });

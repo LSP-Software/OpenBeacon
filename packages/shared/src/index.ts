@@ -1,4 +1,5 @@
 export { tryCatch } from "./utils/tryCatch.ts";
+export { errorCode } from "./utils/errorCode.ts";
 export { isSharingPaused, resolveLocationSharing } from "./locationSharing.ts";
 export type {
   DeviceSharingState,
@@ -18,3 +19,5 @@ export {
 } from "./apiCompatibilityLevel.ts";
 export { deviceIdHeader } from "./deviceIdHeader.ts";
 export { devicePendingCause, deviceRemovedCause, deviceUnverifiedCause } from "./deviceRemoved.ts";
+export { errorReasons } from "./errorReason.ts";
+export type { ErrorReason } from "./errorReason.ts";

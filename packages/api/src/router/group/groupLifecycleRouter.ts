@@ -2,10 +2,9 @@ import { GroupRole, Prisma } from "@openbeacon/database";
 import { createGroupSchema, groupEpochBundleSchema, newGroupIdSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
-import { env } from "../../env.ts";
+import { deleteGroup } from "../../lib/deleteGroup.ts";
 import { persistGroupEpoch } from "../../lib/groupEpochs.ts";
-import { buildGroupAvatarPath } from "../../lib/image-upload.ts";
-import { deleteFile, extractImageStorageObject } from "../../lib/storage.ts";
+import { assertAccountBelowGroupLimit } from "../../lib/groupLimit.ts";
 import { groupOwnerProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
@@ -43,40 +42,7 @@ export const groupLifecycleRouter = {
               message: "The group has other members. Please try leaving again.",
             });
           }
-          const group = await tx.group.findUniqueOrThrow({
-            where: { id: input.groupId },
-            select: { image: true },
-          });
-          const pendingUploads = await tx.pendingUpload.findMany({
-            where: { groupId: input.groupId, uploadType: "groupAvatar" },
-            select: { fileName: true, userId: true },
-          });
-          for (const upload of pendingUploads) {
-            await deleteFile(
-              env.S3_BUCKET_NAME,
-              buildGroupAvatarPath(upload.userId, input.groupId),
-              upload.fileName,
-            );
-          }
-          if (group.image) {
-            const image = extractImageStorageObject(group.image);
-            const uploaderId = image?.path.split("/")[1];
-            if (
-              !image ||
-              image.bucketName !== env.S3_BUCKET_NAME ||
-              (image.path !== `group/${input.groupId}/uploads/avatar` &&
-                (!uploaderId || image.path !== buildGroupAvatarPath(uploaderId, input.groupId))) ||
-              !image.fileName
-            ) {
-              throw new TRPCError({
-                code: "INTERNAL_SERVER_ERROR",
-                message: "The group image cannot be removed from storage.",
-              });
-            }
-            await deleteFile(image.bucketName, image.path, image.fileName);
-          }
-          await tx.pendingUpload.deleteMany({ where: { groupId: input.groupId } });
-          await tx.group.delete({ where: { id: input.groupId } });
+          await deleteGroup({ db: tx, groupId: input.groupId });
         },
         { timeout: 15_000 },
       );
@@ -105,6 +71,7 @@ export const groupLifecycleRouter = {
         });
         if (!user || user.pendingDeletion || !session)
           throw new TRPCError({ code: "UNAUTHORIZED" });
+        await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
         const createdGroup = await tx.group.create({
           data: {
             id: input.groupId,

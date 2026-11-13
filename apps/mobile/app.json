@@ -3,8 +3,8 @@
     "name": "Open Beacon",
     "slug": "open-beacon",
     "description": "Privacy-first family location sharing. You own your data.",
-    "version": "1.12.2",
-    "platforms": ["ios", "android"],
+    "version": "1.13.0",
+    "platforms": ["android"],
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -22,7 +22,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "net.openbeacon.app",
-      "buildNumber": "33"
+      "buildNumber": "34"
     },
     "android": {
       "adaptiveIcon": {
@@ -30,13 +30,22 @@
         "backgroundColor": "#090911"
       },
       "predictiveBackGestureEnabled": false,
+      "allowBackup": false,
       "package": "net.openbeacon.app",
-      "versionCode": 33
+      "versionCode": 34
     },
     "scheme": "openbeacon",
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
       "./plugins/withMapFonts.js",
       [
         "expo-camera",
@@ -50,7 +59,6 @@
         {
           "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your precise location to center the map and prepare private family location sharing.",
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to access your precise location in the background so you can share your location privately with your family.",
-          "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": false
         }

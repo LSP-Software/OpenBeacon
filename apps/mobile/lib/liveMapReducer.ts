@@ -1,7 +1,7 @@
 export type LiveMapEntry = {
   battery: {
     charging: boolean;
-    level: number;
+    level: number | null;
   };
   deviceId: string;
   latitude: number;

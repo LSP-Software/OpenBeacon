@@ -32,7 +32,11 @@ mock.module("../hooks/useTimeSince.ts", () => ({
   useTimeSince: (timestamp: string | null) => (timestamp ? "1 min ago" : null),
 }));
 mock.module("../lib/batteryVisual.ts", () => ({
-  getBatteryVisual: () => ({ colorClass: "", icon: () => null }),
+  getBatteryVisual: ({ batteryLevel }: { batteryLevel: number | null }) => ({
+    colorClass: "",
+    icon: () => null,
+    label: batteryLevel === null ? null : `${batteryLevel}%`,
+  }),
 }));
 mock.module("../lib/deviceIcons.ts", () => ({
   deviceIconFor: () => ({ icon: () => null, label: "Phone" }),

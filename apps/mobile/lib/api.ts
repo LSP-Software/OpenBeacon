@@ -14,7 +14,7 @@ import { AppState } from "react-native";
 import superjson from "superjson";
 import { apiCompatibilityFetch, withApiCompatibilityHeader } from "./apiCompatibility.ts";
 import { authClient } from "./auth-client.ts";
-import { baseUrl, getFeedbackUrl } from "./base-url.ts";
+import { baseUrl, getFeedbackUrl } from "./currentServer.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
 import { RequestTimeoutError, timeoutLink } from "./timeoutLink.ts";

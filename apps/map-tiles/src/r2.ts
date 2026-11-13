@@ -9,7 +9,9 @@ import {
 import { tryCatch } from "@openbeacon/shared";
 import type { MapTilesEnv } from "./env.ts";
 
-export const createR2Clients = (env: MapTilesEnv) => {
+export const createR2Clients = (
+  env: Pick<MapTilesEnv, "R2_ACCOUNT_ID" | "R2_ACCESS_KEY_ID" | "R2_SECRET_ACCESS_KEY">,
+) => {
   const config = {
     region: "auto",
     endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -19,7 +21,11 @@ export const createR2Clients = (env: MapTilesEnv) => {
     },
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
-    requestHandler: { connectionTimeout: 30_000, requestTimeout: 120_000 },
+    requestHandler: {
+      connectionTimeout: 30_000,
+      requestTimeout: 120_000,
+      throwOnRequestTimeout: true,
+    },
   } as const;
 
   return {

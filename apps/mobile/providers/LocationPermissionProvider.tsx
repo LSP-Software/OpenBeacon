@@ -72,11 +72,12 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
         finishCheck = resolve;
       });
 
-      const permissionResult = await tryCatch(
-        flow === "launchRequest"
-          ? requestLocationPermissionsForLaunch()
-          : getLocationPermissionState(),
-      );
+      const launchResult =
+        flow === "launchRequest" ? await tryCatch(requestLocationPermissionsForLaunch()) : null;
+      const permissionResult =
+        launchResult && !launchResult.error
+          ? launchResult
+          : await tryCatch(getLocationPermissionState());
 
       permissionCheckRef.current = null;
       finishCheck();

@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
-import { FakeRedis, testRedisHashSecret } from "@openbeacon/cache/testing";
+import { FakeRedis, testRedisHashSecret, UnavailableRedis } from "@openbeacon/cache/testing";
 import { PAYLOAD_ENCRYPTION_ALGORITHM } from "@openbeacon/encryption";
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 import { TRPCError } from "@trpc/server";
@@ -8,6 +8,12 @@ import { TRPCError } from "@trpc/server";
 class TestOpenBeaconCache extends OpenBeaconCache {
   protected override createRedisClient(): FakeRedis {
     return new FakeRedis();
+  }
+}
+
+class UnavailableCache extends OpenBeaconCache {
+  protected override createRedisClient(): UnavailableRedis {
+    return new UnavailableRedis();
   }
 }
 
@@ -32,6 +38,8 @@ const createCaller = async ({
   queryRawMock,
   now = () => 0,
   pending = false,
+  groupCount = 1,
+  redisAvailable = true,
 }: {
   createManyMock?: ReturnType<typeof mock>;
   findManyDevicesMock?: ReturnType<typeof mock>;
@@ -42,6 +50,8 @@ const createCaller = async ({
   queryRawMock?: ReturnType<typeof mock>;
   now?: () => number;
   pending?: boolean;
+  groupCount?: number;
+  redisAvailable?: boolean;
 }) => {
   const [{ createTRPCRouter }, { groupTrackingRouter }] = await Promise.all([
     import("../../trpcRuntime.ts"),
@@ -50,7 +60,7 @@ const createCaller = async ({
   const router = createTRPCRouter({
     groupTracking: groupTrackingRouter,
   });
-  const cache = new TestOpenBeaconCache({
+  const cache = new (redisAvailable ? TestOpenBeaconCache : UnavailableCache)({
     redisUrl: "redis://localhost:6379",
     hashSecret: testRedisHashSecret,
     now,
@@ -67,7 +77,11 @@ const createCaller = async ({
         ? queryRawMock(query)
         : [{ id: "group-member-1", createdAt: new Date("2026-01-01") }];
     },
-    groupMember: { findUnique: memberFindUniqueMock },
+    group: { findUnique: mock(async () => ({ id: "group-1" })) },
+    groupMember: {
+      count: mock(async () => groupCount),
+      findUnique: memberFindUniqueMock,
+    },
     groupEncryptedPayload: {
       createMany: createManyMock ?? mock(async () => ({ count: 0 })),
       findMany: findManyPayloadsMock ?? mock(async () => []),
@@ -75,6 +89,7 @@ const createCaller = async ({
     groupEpoch: {
       findMany: findManyEpochsMock ?? mock(async () => [{ id: "epoch-1" }]),
       findFirst: findObsoleteEpochMock ?? mock(async () => null),
+      findUnique: mock(async () => null),
     },
     userDevice: {
       findMany: findManyDevicesMock ?? mock(async () => [{ id: "device-1", userId: "user-1" }]),
@@ -98,6 +113,7 @@ const createCaller = async ({
   };
 
   return {
+    cache,
     caller: router.createCaller(context as Parameters<typeof router.createCaller>[0]),
     createManyMock,
     findManyDevicesMock,
@@ -152,6 +168,149 @@ describe("groupTrackingRouter", () => {
       );
       now += 5_000;
     }
+  });
+
+  const trackingPoint = (clientPointId: string) => ({
+    algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+    ciphertext: "ciphertext",
+    clientPointId,
+    epochId: "epoch-1",
+    kind: TRACKING_POINT_KIND,
+    nonce: validNonce,
+    senderDeviceId: "device-1",
+  });
+  const trackingPoints = (prefix: string, count: number) =>
+    Array.from({ length: count }, (_, index) => trackingPoint(`${prefix}-${index}`));
+  const uploadLimitReached = {
+    code: "TOO_MANY_REQUESTS",
+    cause: { reason: "UPLOAD_LIMIT_REACHED" },
+  };
+  const dailyBudget = (limit: number) => ({
+    namespace: "groupTracking.uploadBatch.daily",
+    identifier: { type: "userId" as const, value: "user-1" },
+    limit,
+    windowMs: 86_400_000,
+  });
+
+  test("allows 2,000 points a minute per user, whatever the batch sizes", async () => {
+    const createManyMock = mock(async () => ({ count: 100 }));
+    const { caller } = await createCaller({
+      createManyMock,
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
+    });
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+    for (let batch = 0; batch < 20; batch += 1) {
+      await caller.groupTracking.uploadBatch({
+        groupId: "group-1",
+        points: trackingPoints(`batch-${batch}`, 100),
+      });
+    }
+    await expect(
+      caller.groupTracking.uploadBatch({ groupId: "group-1", points: [trackingPoint("one-more")] }),
+    ).rejects.toMatchObject(uploadLimitReached);
+
+    expect(createManyMock).toHaveBeenCalledTimes(20);
+    expect(warn.mock.calls).toContainEqual([
+      "[rate-limit] upload limit reached",
+      { userId: "user-1", limit: "points per minute" },
+    ]);
+    warn.mockRestore();
+  });
+
+  for (const [groupCount, budget] of [
+    [3, 35_424],
+    [16, 147_744],
+  ] as const) {
+    test(`gives a user in ${groupCount} groups a daily budget of ${budget} accepted points`, async () => {
+      const createManyMock = mock(async () => ({ count: 1 }));
+      const { cache, caller } = await createCaller({
+        createManyMock,
+        groupCount,
+        memberFindUniqueMock: createMemberFindUniqueMock(true),
+      });
+      const consume = spyOn(cache.rateLimits, "consume");
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+      await caller.groupTracking.uploadBatch({
+        groupId: "group-1",
+        points: [trackingPoint("first")],
+      });
+      expect(consume).toHaveBeenCalledWith(
+        { ...dailyBudget(budget), cost: 1 },
+        { whenUnavailable: "allow" },
+      );
+      await cache.rateLimits.consume({ ...dailyBudget(budget), cost: budget - 2 });
+      await caller.groupTracking.uploadBatch({
+        groupId: "group-1",
+        points: [trackingPoint("last")],
+      });
+      await expect(
+        caller.groupTracking.uploadBatch({ groupId: "group-1", points: [trackingPoint("over")] }),
+      ).rejects.toMatchObject(uploadLimitReached);
+
+      expect(createManyMock).toHaveBeenCalledTimes(2);
+      expect(warn.mock.calls).toContainEqual([
+        "[rate-limit] upload limit reached",
+        { userId: "user-1", limit: "daily points" },
+      ]);
+      warn.mockRestore();
+    });
+  }
+
+  test("points the server already has don't count towards the daily budget", async () => {
+    const { cache, caller } = await createCaller({
+      findManyPayloadsMock: mock(async () => [
+        { clientPointId: "stored-1" },
+        { clientPointId: "stored-2" },
+      ]),
+      groupCount: 3,
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
+    });
+    await cache.rateLimits.consume({ ...dailyBudget(35_424), cost: 35_423 });
+
+    const result = await caller.groupTracking.uploadBatch({
+      groupId: "group-1",
+      points: [trackingPoint("stored-1"), trackingPoint("stored-2"), trackingPoint("new")],
+    });
+
+    expect(result.accepted).toEqual(["new"]);
+    expect(result.duplicates).toEqual(["stored-1", "stored-2"]);
+  });
+
+  test("a batch of only duplicates doesn't touch the daily budget", async () => {
+    const { cache, caller } = await createCaller({
+      findManyPayloadsMock: mock(async () => [{ clientPointId: "stored-1" }]),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
+    });
+    await cache.rateLimits.consume({ ...dailyBudget(18_144), cost: 18_144 });
+
+    await expect(
+      caller.groupTracking.uploadBatch({ groupId: "group-1", points: [trackingPoint("stored-1")] }),
+    ).resolves.toMatchObject({ duplicates: ["stored-1"] });
+  });
+
+  test("uploads carry on, with a log line, when Redis is unavailable", async () => {
+    const createManyMock = mock(async () => ({ count: 1 }));
+    const { caller } = await createCaller({
+      createManyMock,
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
+      redisAvailable: false,
+    });
+    const error = spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      caller.groupTracking.uploadBatch({ groupId: "group-1", points: [trackingPoint("point-1")] }),
+    ).resolves.toMatchObject({ accepted: ["point-1"] });
+
+    expect(createManyMock).toHaveBeenCalledTimes(1);
+    expect(error.mock.calls.map(([line]) => line)).toEqual(
+      expect.arrayContaining([
+        "[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so groupTracking.uploadBatch.points is allowed",
+        "[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so groupTracking.uploadBatch.daily is allowed",
+      ]),
+    );
+    error.mockRestore();
   });
 
   test("forbids non-members from uploading", async () => {

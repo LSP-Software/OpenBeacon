@@ -1,4 +1,3 @@
-import { TRPCClientError } from "@trpc/client";
+import { errorReason } from "./errorReason.ts";
 
-export const needsFreshSignIn = (error: unknown) =>
-  error instanceof TRPCClientError && error.data?.code === "FORBIDDEN" && !error.data.cause;
+export const needsFreshSignIn = (error: unknown) => errorReason(error) === "FRESH_SIGN_IN_REQUIRED";

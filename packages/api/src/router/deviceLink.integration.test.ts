@@ -182,11 +182,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       );
 
       await expect(account.active.api.deviceLink.get({ linkId })).rejects.toMatchObject({
+        cause: { reason: "ALREADY_SET_UP" },
         code: "CONFLICT",
       });
       await expect(
         account.active.api.deviceLink.approve({ linkId, ...sealFor(account, linkId, psk) }),
-      ).rejects.toMatchObject({ code: "CONFLICT" });
+      ).rejects.toMatchObject({ code: "CONFLICT", cause: { reason: "ALREADY_SET_UP" } });
     });
 
     test("only an active device of the same account can get or approve a link", async () => {
@@ -222,6 +223,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: { expiresAt: new Date(Date.now() - 1_000) },
       });
       await expect(account.active.api.deviceLink.get({ linkId })).rejects.toMatchObject({
+        cause: { reason: "CODE_EXPIRED" },
         code: "BAD_REQUEST",
       });
       await expect(
@@ -229,7 +231,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           linkId,
           ...sealFor(account, linkId, createDeviceLinkSecret()),
         }),
-      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      ).rejects.toMatchObject({ code: "BAD_REQUEST", cause: { reason: "CODE_EXPIRED" } });
       expect(await account.pending.api.deviceLink.status({ linkId })).toMatchObject({
         state: "expired",
       });
@@ -245,6 +247,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await account.active.api.deviceLink.approve({ linkId, ...sealFor(account, linkId, psk) });
 
       await expect(otherPending.api.deviceLink.status({ linkId })).rejects.toMatchObject({
+        cause: { reason: "CODE_EXPIRED" },
         code: "NOT_FOUND",
       });
       await expect(stranger.pending.api.deviceLink.status({ linkId })).rejects.toMatchObject({
@@ -268,8 +271,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toEqual([{ id: second.linkId }]);
       await expect(
         account.active.api.deviceLink.get({ linkId: first.linkId }),
-      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      ).rejects.toMatchObject({ code: "NOT_FOUND", cause: { reason: "CODE_EXPIRED" } });
       await expect(account.active.api.deviceLink.create()).rejects.toMatchObject({
+        cause: { reason: "ALREADY_SET_UP" },
         code: "CONFLICT",
       });
     });
@@ -283,6 +287,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const other = await register(account.userId, "other-pending");
 
       await expect(account.pending.api.deviceLink.create()).rejects.toMatchObject({
+        cause: { reason: "NO_APPROVING_DEVICE" },
         code: "PRECONDITION_FAILED",
       });
       await expect(other.api.deviceLink.create()).rejects.toMatchObject({
@@ -302,6 +307,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect((await deviceState(account.pending.deviceId)).revokedAt).toEqual(expect.any(Date));
       expect(await prisma.deviceLink.count({ where: { id: linkId } })).toBe(0);
       expect(await prisma.session.count({ where: { deviceId: account.pending.deviceId } })).toBe(0);
+      await expect(account.active.api.deviceLink.decline({ linkId })).rejects.toMatchObject({
+        cause: { reason: "CODE_EXPIRED" },
+        code: "NOT_FOUND",
+      });
       while (alertTasks.length) await Promise.all(alertTasks.splice(0));
       expect(sentAlerts).toContainEqual({
         userId: account.userId,
@@ -331,6 +340,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await lock.release();
 
       await expect(declining).rejects.toMatchObject({
+        cause: { reason: "ALREADY_SET_UP" },
         code: "CONFLICT",
         message:
           "This phone has already been set up. Remove it from your devices if it isn't yours.",
@@ -430,7 +440,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       await lock.release();
 
-      await expect(creating).rejects.toMatchObject({ code: "CONFLICT" });
+      await expect(creating).rejects.toMatchObject({
+        code: "CONFLICT",
+        cause: { reason: "ALREADY_SET_UP" },
+      });
       expect(await account.pending.api.deviceLink.status({ linkId })).toMatchObject({
         ciphertext: "handover",
         state: "approved",

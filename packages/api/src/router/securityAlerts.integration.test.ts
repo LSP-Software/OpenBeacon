@@ -69,7 +69,7 @@ const createAccount = async () => {
   const email = `${prefix}-${accountCounter}@example.test`;
   const { user } = await auth.api.signUpEmail({ body: { email, password, name: "Alert Test" } });
   const session = await prisma.session.findFirstOrThrow({ where: { userId: user.id } });
-  const callerWith = (deviceId: string | null) =>
+  const callerWith = (deviceId: string | null, sessionId = session.id) =>
     appRouter.createCaller(
       withDeviceActive({
         cache,
@@ -78,9 +78,14 @@ const createAccount = async () => {
         securityAlerts,
         clientIp: `ip-${user.id}`,
         deviceId,
-        session: { user: { id: user.id }, session: { id: session.id, createdAt: new Date() } },
+        session: { user: { id: user.id }, session: { id: sessionId, createdAt: new Date() } },
       }) as Parameters<typeof appRouter.createCaller>[0],
     );
+  const newPhoneCaller = async () => {
+    const { token } = await auth.api.signInEmail({ body: { email, password } });
+    const newSession = await prisma.session.findFirstOrThrow({ where: { token } });
+    return callerWith(null, newSession.id);
+  };
   const activeCaller = async () => {
     const device = await prisma.userDevice.create({
       data: {
@@ -95,14 +100,14 @@ const createAccount = async () => {
     });
     return callerWith(device.id);
   };
-  return { activeCaller, caller: callerWith(null), email, userId: user.id };
+  return { activeCaller, caller: callerWith(null), email, newPhoneCaller, userId: user.id };
 };
 
-const registerDevice = (
-  { caller, userId }: Awaited<ReturnType<typeof createAccount>>,
+const registerDevice = async (
+  { newPhoneCaller, userId }: Awaited<ReturnType<typeof createAccount>>,
   details: { platform?: "android" | "ios"; model?: string } = {},
 ) =>
-  caller.auth.registerDeviceKey({
+  (await newPhoneCaller()).auth.registerDeviceKey({
     algorithm: DEVICE_KEY_ALGORITHM,
     deviceId: `${userId}-${crypto.randomUUID()}`,
     publicKey: createDeviceKeyPair().publicKey,
@@ -329,11 +334,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
       publicKey: createDeviceKeyPair().publicKey,
       expectedUserId: account.userId,
     };
-    await account.caller.auth.registerDeviceKey(input);
+    const secondPhone = await account.newPhoneCaller();
+    await secondPhone.auth.registerDeviceKey(input);
     await sentAlerts();
     sent.length = 0;
 
-    await account.caller.auth.registerDeviceKey(input);
+    await secondPhone.auth.registerDeviceKey(input);
 
     expect(await sentAlerts()).toEqual([]);
   });

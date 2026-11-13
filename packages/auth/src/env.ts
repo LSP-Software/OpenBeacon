@@ -10,10 +10,6 @@ export const env = createEnv({
     REDIS_HASH_SECRET: redisHashSecretSchema,
     GOOGLE_CLIENT_ID: optionalEnvString,
     GOOGLE_CLIENT_SECRET: optionalEnvString,
-    EMAIL_CODE_IP_LIMIT: z.preprocess(
-      (value) => (value === "" ? undefined : value),
-      z.stringbool().default(false),
-    ),
   },
   runtimeEnv: process.env,
 });

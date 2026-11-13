@@ -3,6 +3,7 @@ import { auth, createSecurityAlerts } from "@openbeacon/auth";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import type { SecurityAlert } from "@openbeacon/email";
+import { createDeviceKeyPair } from "@openbeacon/encryption";
 import { deviceIdHeader, deviceRemovedCause, tryCatch } from "@openbeacon/shared";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { holdRowLock } from "../lib/databaseLocks.testUtil.ts";
@@ -400,5 +401,100 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("a removed device
       }),
     ).toEqual({ removed: false, deviceId: null, unverifiedDeviceId: null, deviceActive: false });
     expect(await sessionIds(other.userId)).toHaveLength(3);
+  });
+  test("a session linked to a live phone can't register another phone, so removing that phone ends it", async () => {
+    const account = await createAccount();
+    const stolenSession = appRouter.createCaller(
+      withDeviceActive({
+        cache,
+        db: prisma,
+        emailCodes: null,
+        securityAlerts,
+        clientIp: `ip-${account.userId}`,
+        deviceId: null,
+        session: {
+          user: { id: account.userId },
+          session: { id: account.sessions.lost, createdAt: new Date() },
+        },
+      }) as Parameters<typeof appRouter.createCaller>[0],
+    );
+    const attackerDeviceId = `${prefix}-attacker-${crypto.randomUUID()}`;
+
+    const registered = await tryCatch(
+      stolenSession.auth.registerDeviceKey({
+        algorithm: "X25519",
+        deviceId: attackerDeviceId,
+        expectedUserId: account.userId,
+        publicKey: createDeviceKeyPair().publicKey,
+      }),
+    );
+
+    expect(registered.error).toMatchObject({ code: "FORBIDDEN" });
+    expect(await prisma.userDevice.findUnique({ where: { id: attackerDeviceId } })).toBeNull();
+    const lostSession = await prisma.session.findUniqueOrThrow({
+      where: { id: account.sessions.lost },
+    });
+    expect(lostSession.deviceId).toBe(account.lostPhone.id);
+    await callerFor(account).account.removeDevice({ deviceId: account.lostPhone.id });
+    expect(await sessionIds(account.userId)).toEqual([account.sessions.current]);
+  });
+
+  test("a session whose phone was removed can register a new phone", async () => {
+    const account = await createAccount();
+    await prisma.userDevice.update({
+      where: { id: account.lostPhone.id },
+      data: { revokedAt: new Date() },
+    });
+    const deviceId = `${prefix}-replacement-${crypto.randomUUID()}`;
+
+    const device = await upsertUserDevice({
+      db: prisma,
+      input: { algorithm: "X25519", deviceId, publicKey: "replacement-key" },
+      securityAlerts: null,
+      sessionId: account.sessions.lost,
+      userId: account.userId,
+    });
+
+    expect(device.id).toBe(deviceId);
+  });
+
+  test("activating a pending phone needs a fresh sign-in", async () => {
+    const account = await createAccount();
+    const pending = await prisma.userDevice.create({
+      data: {
+        id: `${prefix}-pending-${crypto.randomUUID()}`,
+        userId: account.userId,
+        publicKey: "pending-key",
+        publicKeyAlgorithm: "X25519",
+        name: "Pending",
+        icon: "phone",
+      },
+    });
+    const staleSession = appRouter.createCaller(
+      withDeviceActive({
+        cache,
+        db: prisma,
+        emailCodes: null,
+        securityAlerts,
+        clientIp: `ip-${account.userId}`,
+        deviceId: pending.id,
+        session: {
+          user: { id: account.userId },
+          session: { id: account.sessions.unlinked, createdAt: new Date(Date.now() - 86_400_000) },
+        },
+      }) as Parameters<typeof appRouter.createCaller>[0],
+    );
+
+    const challenge = await tryCatch(staleSession.device.activationChallenge());
+    const activate = await tryCatch(staleSession.device.activate({ answer: "answer" }));
+
+    expect(challenge.error).toMatchObject({
+      code: "FORBIDDEN",
+      message: "Sign in again to continue.",
+    });
+    expect(activate.error).toMatchObject({
+      code: "FORBIDDEN",
+      message: "Sign in again to continue.",
+    });
   });
 });

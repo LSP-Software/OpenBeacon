@@ -4,6 +4,7 @@ import type { GroupDeviceSharingState } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type z from "zod";
 import { getGroupSharingStates } from "./locationSharing.ts";
+import { ReasonError } from "./reasonError.ts";
 
 type GroupTrackingDb = {
   $queryRaw: <T>(query: Prisma.Sql) => Promise<T>;
@@ -41,6 +42,7 @@ type GroupTrackingDb = {
         AND?: Array<Record<string, unknown>>;
         clientPointId?: { in: string[] };
         createdAt?: { gte: Date };
+        epoch?: { epochNumber: { gte: number } };
         groupId: string;
         OR?: Array<Record<string, unknown>>;
       };
@@ -65,6 +67,10 @@ type GroupTrackingDb = {
       select: { id: true };
       where: { groupId: string; id: { in: string[] }; createdAt?: { gte: Date } };
     }) => Promise<Array<{ id: string }>>;
+    findUnique: (args: {
+      select: { createdAt: true };
+      where: { groupId_epochNumber: { epochNumber: number; groupId: string } };
+    }) => Promise<{ createdAt: Date } | null>;
   };
   userDevice: {
     updateMany: (args: {
@@ -97,12 +103,14 @@ export type GroupEncryptedPayloadRow = {
 };
 
 export const uploadGroupTrackingBatch = async ({
+  consumeDailyBudget,
   db,
   groupId,
   memberSince,
   points,
   userId,
 }: {
+  consumeDailyBudget: (acceptedPoints: number) => Promise<void>;
   db: GroupTrackingDb;
   groupId: string;
   memberSince?: Date;
@@ -158,6 +166,7 @@ export const uploadGroupTrackingBatch = async ({
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "The active device is not registered.",
+      cause: new ReasonError("DEVICE_NOT_REGISTERED"),
     });
   }
 
@@ -193,6 +202,7 @@ export const uploadGroupTrackingBatch = async ({
   );
 
   if (pointsToInsert.length > 0) {
+    await consumeDailyBudget(pointsToInsert.length);
     await db.groupEncryptedPayload.createMany({
       data: pointsToInsert
         .map((point) => ({
@@ -234,13 +244,21 @@ export const pollGroupTrackingPoints = async ({
   cursor,
   db,
   groupId,
+  joinedEpochNumber,
   limit,
 }: {
   cursor: { createdAt: Date; id: string } | null | undefined;
   db: GroupTrackingDb;
   groupId: string;
+  joinedEpochNumber: number;
   limit: number;
 }) => {
+  const joinEpoch = cursor
+    ? null
+    : await db.groupEpoch.findUnique({
+        select: { createdAt: true },
+        where: { groupId_epochNumber: { epochNumber: joinedEpochNumber, groupId } },
+      });
   const points = await db.groupEncryptedPayload.findMany({
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: {
@@ -258,6 +276,8 @@ export const pollGroupTrackingPoints = async ({
     take: limit,
     where: {
       groupId,
+      epoch: { epochNumber: { gte: joinedEpochNumber } },
+      ...(joinEpoch ? { createdAt: { gte: joinEpoch.createdAt } } : {}),
       ...(cursor
         ? {
             createdAt: { gte: cursor.createdAt },
@@ -285,9 +305,11 @@ export const pollGroupTrackingPoints = async ({
 export const getLatestGroupTrackingPoints = async ({
   db,
   groupId,
+  joinedEpochNumber,
 }: {
   db: GroupTrackingDb;
   groupId: string;
+  joinedEpochNumber: number;
 }) => {
   const points = await db.$queryRaw<GroupEncryptedPayloadRow[]>(Prisma.sql`
     SELECT
@@ -307,9 +329,11 @@ export const getLatestGroupTrackingPoints = async ({
       AND "device"."revokedAt" IS NULL
       AND "device"."activatedAt" IS NOT NULL
     CROSS JOIN LATERAL (
-      SELECT *
+      SELECT "point".*
       FROM "GroupEncryptedPayload" AS "point"
+      JOIN "GroupEpoch" AS "epoch" ON "epoch"."id" = "point"."epochId"
       WHERE "point"."groupId" = "member"."groupId"
+        AND "epoch"."epochNumber" >= ${joinedEpochNumber}
         AND "point"."senderDeviceId" = "device"."id"
         AND "point"."senderUserId" = "member"."userId"
       ORDER BY "point"."createdAt" DESC, "point"."id" DESC

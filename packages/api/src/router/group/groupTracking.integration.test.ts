@@ -195,7 +195,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     ).rejects.toMatchObject({ code: "FORBIDDEN", message: "You are not a member of this group" });
     for (const input of [
       { ...point, nonce: `${" ".repeat(1_000_000)}${point.nonce}` },
-      { ...point, ciphertext: "x".repeat(4097) },
+      { ...point, ciphertext: "x".repeat(1025) },
       { ...point, clientPointId: "x".repeat(200_000) },
     ]) {
       await expect(
@@ -328,6 +328,38 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
         where: { clientPointId: { in: [`${prefix}-expired`, `${prefix}-foreign`] } },
       }),
     ).toBe(0);
+  });
+
+  test("uploadBatch rejections carry a reason for not a member, a deleted group and an unknown device", async () => {
+    const point = (senderDeviceId: string, clientPointId: string) => ({
+      ...encryptGroupPayload({
+        epochId,
+        epochKey,
+        groupId,
+        kind: TRACKING_POINT_KIND,
+        payload: { latitude: 1, longitude: 2 },
+        senderDeviceId,
+      }),
+      clientPointId,
+    });
+    await expect(
+      caller(outsiderId, outsiderDeviceId).groupTracking.uploadBatch({
+        groupId,
+        points: [point(outsiderDeviceId, `${prefix}-reason-outsider`)],
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN", cause: { reason: "NOT_GROUP_MEMBER" } });
+    await expect(
+      caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
+        groupId: `${prefix}-deleted-group`,
+        points: [point(ownerDeviceId, `${prefix}-reason-gone`)],
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN", cause: { reason: "GROUP_GONE" } });
+    await expect(
+      caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
+        groupId,
+        points: [point(`${prefix}-unknown-device`, `${prefix}-reason-device`)],
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN", cause: { reason: "DEVICE_NOT_REGISTERED" } });
   });
 
   test("getLatest returns each active device's newest point and skips devices with none", async () => {

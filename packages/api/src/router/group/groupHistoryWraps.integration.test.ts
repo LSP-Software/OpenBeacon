@@ -650,11 +650,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           epochKey: rotated.epochKey,
         }),
       ]);
+      const backfillError = backfill.then(
+        () => null,
+        (error: unknown) => error,
+      );
       await lock.waitForWaiters(2);
       await lock.release();
 
       await expect(removal).resolves.toMatchObject({ message: "Group member removed." });
-      await expect(backfill).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(await backfillError).toMatchObject({ code: "FORBIDDEN" });
       expect(
         await prisma.groupEpochHistoryWrap.count({
           where: { groupEpoch: { groupId }, historyKeyId: member.historyKey.id },
@@ -667,7 +671,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toBe(1);
       expect(
         await prisma.groupEpochHistoryWrap.count({ where: { historyKeyId: owner.historyKey.id } }),
-      ).toBe(ownerWrapsBefore + 1);
+      ).toBe(ownerWrapsBefore);
+      expect(await prisma.groupEpoch.count({ where: { id: departure.epoch.epochId } })).toBe(0);
+      expect(
+        (await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).epochRotationRequired,
+      ).toBe(true);
     });
 
     test("a new device is Pending and only flags the user's groups for rotation once it's activated", async () => {

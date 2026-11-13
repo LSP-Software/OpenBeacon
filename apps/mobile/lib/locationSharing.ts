@@ -5,19 +5,23 @@ import {
   type DeviceSharingState,
   type SharingPreference,
 } from "@openbeacon/shared";
+import { TRPCClientError } from "@trpc/client";
 import { Platform } from "react-native";
 import superjson from "superjson";
 import { z } from "zod";
 import { trpcClient } from "./api.ts";
-import { baseUrl } from "./base-url.ts";
+import { baseUrl } from "./currentServer.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { getRegisteredDeviceKey, getStoredDeviceId } from "./deviceKeys.ts";
+import { errorReason } from "./errorReason.ts";
 import { storage } from "./storage.ts";
 import { requestTrackingSync } from "./trackingEvents.ts";
 
 const pendingPrefix = "locationSharing.pending.";
 const pendingKey = (userId: string, scope: "device" | "account") =>
   `${pendingPrefix}${JSON.stringify([baseUrl, userId, scope])}`;
+const rejectedKey = (userId: string) =>
+  `${pendingPrefix}${JSON.stringify([baseUrl, userId, "rejected"])}`;
 const localPauseKey = (userId: string, deviceId: string) =>
   `locationSharing.localPause.${JSON.stringify([baseUrl, userId, deviceId])}`;
 const syncedKey = (userId: string, deviceId: string) =>
@@ -92,10 +96,26 @@ export const abandonLocationSharingChanges = () => {
   generation += 1;
 };
 
-export const clearPendingSharingChanges = () => {
+export const clearPendingSharingChanges = (userId?: string) => {
+  const userKeys = userId
+    ? [pendingKey(userId, "device"), pendingKey(userId, "account"), rejectedKey(userId)]
+    : null;
   for (const key of storage.getAllKeys()) {
-    if (key.startsWith(pendingPrefix)) storage.remove(key);
+    if (key.startsWith(pendingPrefix) && (!userKeys || userKeys.includes(key))) storage.remove(key);
   }
+};
+
+export const hasRejectedSharingChange = (userId: string) =>
+  storage.getString(rejectedKey(userId)) !== undefined;
+
+const isRejectedForGood = (error: unknown) => {
+  if (!(error instanceof TRPCClientError) || !error.data) return false;
+  const code = error.data.code;
+  return (
+    code === "BAD_REQUEST" ||
+    code === "NOT_FOUND" ||
+    (code === "FORBIDDEN" && errorReason(error) === null)
+  );
 };
 
 export const hasLocallyPausedSharing = (userId: string) => {
@@ -167,6 +187,7 @@ const synchronizeSharing = async (requestedGeneration: number) => {
   if (abandoned()) return;
   const device = await getRegisteredDeviceKey();
   if (!device || abandoned()) return;
+  let replayError: unknown = null;
   for (const scope of ["device", "account"] as const) {
     const pending = readPendingChange(device.userId, scope);
     if (!pending || scheduledChanges.has(pending.input.requestId)) continue;
@@ -175,10 +196,26 @@ const synchronizeSharing = async (requestedGeneration: number) => {
       if (storage.getString(key) === pending.stored) storage.remove(key);
       continue;
     }
-    await trpcClient.account.setLocationSharing.mutate(pending.input);
+    const replay = await tryCatch(trpcClient.account.setLocationSharing.mutate(pending.input));
     if (abandoned()) return;
-    if (storage.getString(key) === pending.stored) storage.remove(key);
+    if (replay.error && !isRejectedForGood(replay.error)) {
+      replayError ??= replay.error;
+      continue;
+    }
+    if (storage.getString(key) !== pending.stored) continue;
+    storage.remove(key);
+    if (replay.error) storage.set(rejectedKey(device.userId), "true");
   }
+  const state = await loadSharingState(device, revision, abandoned);
+  if (replayError) throw replayError;
+  return state;
+};
+
+const loadSharingState = async (
+  device: { userId: string; deviceId: string },
+  revision: number,
+  abandoned: () => boolean,
+) => {
   const requestedAt = Date.now();
   const state = await trpcClient.account.locationSharing.query();
   if (abandoned()) return;
@@ -245,6 +282,7 @@ export const changeLocationSharing = async (input: {
       storage.set(key, stored);
       if (change.paused) await applyLocalSharingState(device, isCurrent);
     }
+    storage.remove(rejectedKey(device.userId));
     const result = await tryCatch(
       queueOperation(async () => {
         if (generation !== requestedGeneration) throw new Error("You've signed out.");
@@ -259,6 +297,12 @@ export const changeLocationSharing = async (input: {
     );
     if (!result.error) return result.data;
     if (!affectsThisDevice || storage.getString(key) !== stored) throw result.error;
+    if (isRejectedForGood(result.error)) {
+      storage.remove(key);
+      storage.set(rejectedKey(device.userId), "true");
+      await tryCatch(queueOperation(() => synchronizeSharing(requestedGeneration)));
+      return "rejected" as const;
+    }
     if (change.paused && !hasLocallyPausedSharing(device.userId)) throw result.error;
     if (
       !change.paused &&

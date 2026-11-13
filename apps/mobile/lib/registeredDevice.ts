@@ -1,4 +1,4 @@
-import { baseUrl } from "./base-url.ts";
+import { baseUrl } from "./currentServer.ts";
 import { storage } from "./storage.ts";
 
 export const REGISTERED_DEVICE_KEY = "encryption.device.registered";

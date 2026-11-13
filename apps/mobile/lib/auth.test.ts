@@ -29,7 +29,16 @@ let googleSignInResponse:
   },
 };
 const socialSignInMock = mock(
-  async ({ provider, idToken }: { provider: string; idToken: { token: string } }) => ({
+  async ({
+    provider,
+    idToken,
+  }: {
+    provider: string;
+    idToken: { token: string };
+  }): Promise<{
+    data: { provider: string; token: string } | null;
+    error?: { code: string; message: string; status: number };
+  }> => ({
     data: {
       provider,
       token: idToken.token,
@@ -91,7 +100,8 @@ mock.module("expo-secure-store", () => ({
 mock.module("react-native", () => createReactNativeTestModule({ platformOS: "android" }));
 
 mock.module("./auth-client.ts", () => ({
-  SESSION_TOKEN_TO_REVOKE_KEY: "session-token",
+  readSessionTokenToRevoke: async () => storedToken,
+  forgetSessionTokenToRevoke: deleteItemAsyncMock,
   authClient: {
     revokeSession: revokeSessionMock,
     signIn: {
@@ -194,6 +204,20 @@ describe("auth Google sign-in configuration", () => {
     });
   });
 
+  test("explains that an email which signs in with a password can't use Google", async () => {
+    process.env[GOOGLE_WEB_CLIENT_ID_ENV] = "web-client-id";
+    socialSignInMock.mockImplementationOnce(async () => ({
+      data: null,
+      error: { code: "OAUTH_LINK_ERROR", message: "account not linked", status: 401 },
+    }));
+
+    const { signInWithGoogle } = await importAuthModule();
+
+    expect(await signInWithGoogle()).toEqual({
+      error: { message: "This email signs in with a password." },
+    });
+  });
+
   test("does not delete the pending token when revokeSession throws", async () => {
     storedToken = "pending-session-token";
     revokeSessionMock.mockImplementationOnce(async () => {
@@ -233,7 +257,12 @@ describe("auth Google sign-in configuration", () => {
       throw TRPCClientError.from({
         error: {
           code: -32001,
-          data: { cause: deviceRemovedCause, code: "UNAUTHORIZED", httpStatus: 401 },
+          data: {
+            cause: deviceRemovedCause,
+            reason: deviceRemovedCause,
+            code: "UNAUTHORIZED",
+            httpStatus: 401,
+          },
           message: "Removed",
         },
       });

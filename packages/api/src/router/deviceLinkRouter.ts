@@ -3,6 +3,7 @@ import { Prisma } from "@openbeacon/database";
 import { approveDeviceLinkSchema, deviceLinkIdSchema } from "@openbeacon/schemas";
 import { TRPCError } from "@trpc/server";
 import { activateDevice, devicePendingError } from "../lib/deviceActivation.ts";
+import { ReasonError } from "../lib/reasonError.ts";
 import { removeUserDevice } from "../lib/removeDevice.ts";
 import { protectedProcedure, setupDeviceProcedure } from "../procedures/auth/runtime.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
@@ -42,18 +43,24 @@ const findOpenLink = async ({
     throw new TRPCError({
       code: "NOT_FOUND",
       message: "This code has expired. Show a fresh one on your new phone.",
+      cause: new ReasonError("CODE_EXPIRED"),
     });
   }
   if (link.userId !== userId) {
     throw new TRPCError({ code: "FORBIDDEN", message: "This code is for a different account." });
   }
   if (link.completedAt || link.device.activatedAt || link.device.revokedAt) {
-    throw new TRPCError({ code: "CONFLICT", message: "This phone has already been set up." });
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "This phone has already been set up.",
+      cause: new ReasonError("ALREADY_SET_UP"),
+    });
   }
   if (link.expiresAt <= new Date()) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "This code has expired. Show a fresh one on your new phone.",
+      cause: new ReasonError("CODE_EXPIRED"),
     });
   }
   return link.device;
@@ -74,7 +81,11 @@ export const deviceLinkRouter = createTRPCRouter({
         });
         if (!device) throw new TRPCError({ code: "NOT_FOUND" });
         if (device.activatedAt) {
-          throw new TRPCError({ code: "CONFLICT", message: "This phone is already set up." });
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "This phone is already set up.",
+            cause: new ReasonError("ALREADY_SET_UP"),
+          });
         }
         const approvers = await tx.userDevice.count({
           where: { userId, activatedAt: { not: null }, revokedAt: null },
@@ -84,6 +95,7 @@ export const deviceLinkRouter = createTRPCRouter({
             code: "PRECONDITION_FAILED",
             message:
               "None of your other phones are signed in, so there's nothing to scan this code. Use your recovery phrase or start fresh.",
+            cause: new ReasonError("NO_APPROVING_DEVICE"),
           });
         }
         await tx.deviceLink.deleteMany({ where: { deviceId: ctx.deviceId, completedAt: null } });
@@ -142,7 +154,11 @@ export const deviceLinkRouter = createTRPCRouter({
           },
         });
         if (!(await activateDevice({ activatedBy: "link", db: tx, deviceId: device.id, userId }))) {
-          throw new TRPCError({ code: "CONFLICT", message: "This phone has already been set up." });
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "This phone has already been set up.",
+            cause: new ReasonError("ALREADY_SET_UP"),
+          });
         }
         return { deviceId: device.id };
       });
@@ -160,6 +176,7 @@ export const deviceLinkRouter = createTRPCRouter({
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "This code is no longer valid. Scan the new one.",
+          cause: new ReasonError("CODE_EXPIRED"),
         });
       }
       const device = await removeUserDevice({
@@ -186,7 +203,9 @@ export const deviceLinkRouter = createTRPCRouter({
           expiresAt: true,
         },
       });
-      if (!link) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!link) {
+        throw new TRPCError({ code: "NOT_FOUND", cause: new ReasonError("CODE_EXPIRED") });
+      }
       if (link.completedAt && link.approverDevice && link.enc && link.ciphertext) {
         return {
           approverPublicKey: link.approverDevice.publicKey,

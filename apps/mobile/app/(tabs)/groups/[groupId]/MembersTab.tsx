@@ -34,6 +34,7 @@ import { buildRemoveGroupMemberInput, submitEpochChange } from "../../../../lib/
 import { forgetHiddenMapGroup } from "../../../../lib/hiddenMapGroups.ts";
 import { timeSince } from "../../../../lib/timeSince.ts";
 import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
+import { useSingleFlight } from "../../../../lib/useSingleFlight.ts";
 
 const MembersTab = ({ groupId }: { groupId: string }) => {
   const [nicknameMember, setNicknameMember] = useState<{
@@ -55,6 +56,7 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
   const queryClient = useQueryClient();
   const router = useRouter();
   const removeMember = useMutation(trpc.groupMembership.remove.mutationOptions());
+  const removal = useSingleFlight<string>();
   const deleteGroup = useMutation(trpc.groupLifecycle.delete.mutationOptions());
   const updateRole = useMutation(trpc.groupMembership.updateRole.mutationOptions());
   const { group, isPending: isFetchingMembers } = useCachedGroup(groupId);
@@ -114,7 +116,7 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
           style: "destructive",
           onPress: async () => {
             const result = await tryCatch(
-              (async () => {
+              removal.run(member.id, async () => {
                 if (isLastMember) {
                   await deleteGroup.mutateAsync({
                     groupId,
@@ -138,7 +140,7 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                   queryKey: trpc.groupMembership.list.queryKey(),
                 });
                 requestTrackingSync();
-              })(),
+              }),
             );
             if (result.error) {
               Alert.alert(
@@ -381,7 +383,8 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
                 variant="outline"
                 size="sm"
                 className="flex-1"
-                disabled={removeMember.isPending || deleteGroup.isPending}
+                disabled={removal.isPending}
+                loading={removal.pendingKey === member.id}
                 onPress={() => confirmRemoval(member)}
               >
                 <Text>{member.id === self?.id ? "Leave group" : "Remove member"}</Text>
@@ -449,7 +452,13 @@ const MemberCard = ({
                 <View
                   key={device.deviceId}
                   accessible
-                  accessibilityLabel={`${device.name ?? "Device"}, updated ${updated}, battery ${device.battery.level}%`}
+                  accessibilityLabel={[
+                    device.name ?? "Device",
+                    `updated ${updated}`,
+                    deviceBattery.label && `battery ${deviceBattery.label}`,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
                   className="flex-row items-center gap-2"
                 >
                   <Icon
@@ -460,17 +469,19 @@ const MemberCard = ({
                     {device.name ?? "Device"} · {updated}
                   </Text>
                   <Icon as={deviceBattery.icon} size={16} className={deviceBattery.colorClass} />
-                  <Text className={`${deviceBattery.colorClass} text-sm`}>
-                    {device.battery.level}%
-                  </Text>
+                  {deviceBattery.label ? (
+                    <Text className={`${deviceBattery.colorClass} text-sm`}>
+                      {deviceBattery.label}
+                    </Text>
+                  ) : null}
                 </View>
               );
             })
-          ) : sharingPaused ? null : member.battery && batteryVisual ? (
+          ) : sharingPaused ? null : batteryVisual?.label ? (
             <View className="flex-row items-center gap-2">
               <Icon as={batteryVisual.icon} size={20} className={batteryVisual.colorClass} />
               <Text className={`${batteryVisual.colorClass} text-sm`}>
-                Battery: {member.battery.level}%
+                Battery: {batteryVisual.label}
               </Text>
             </View>
           ) : (

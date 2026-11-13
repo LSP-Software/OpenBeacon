@@ -27,7 +27,7 @@ let flushModes: boolean[] = [];
 let revokeCalls = 0;
 let revokeInputs: Array<{ keepDeviceRegistration: boolean }> = [];
 let sessionLossChecks = 0;
-let isReadyForSharing = true;
+let isReadyForSharing: boolean | null = true;
 let failFlush = false;
 let failReconcile = false;
 let alerts = 0;
@@ -62,7 +62,7 @@ const trackingService = {
     revokeCalls += 1;
     revokeInputs.push(input);
   },
-  checkThisPhoneAfterSessionLoss: async () => {
+  endLostSession: async () => {
     sessionLossChecks += 1;
   },
   resumeTracking: async () => {},
@@ -120,9 +120,7 @@ mock.module("@tanstack/react-query", () => ({
 
 mock.module("./LocationPermissionProvider.tsx", () => ({
   useLocationPermissions: () => ({
-    permissionState: {
-      isReadyForSharing,
-    },
+    permissionState: isReadyForSharing === null ? null : { isReadyForSharing },
   }),
 }));
 
@@ -376,6 +374,37 @@ describe("TrackingProvider", () => {
     isReadyForSharing = false;
 
     await renderProvider();
+
+    expect(reconcileCalls).toEqual([{ startCapture: false, force: true }]);
+  });
+
+  test("waits for the permission state before reconciling, but still flushes", async () => {
+    isReadyForSharing = null;
+    await renderProvider();
+
+    expect(reconcileCalls).toEqual([]);
+    expect(flushModes).toEqual([true]);
+
+    isReadyForSharing = true;
+    await act(async () => {
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(reconcileCalls).toEqual([{ startCapture: true, force: true }]);
+  });
+
+  test("a known not-ready permission state still stops sharing after an unknown start", async () => {
+    isReadyForSharing = null;
+    await renderProvider();
+
+    isReadyForSharing = false;
+    await act(async () => {
+      root?.render(<TrackingProvider service={trackingService}>{null}</TrackingProvider>);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     expect(reconcileCalls).toEqual([{ startCapture: false, force: true }]);
   });

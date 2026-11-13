@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: openbeacon
       POSTGRES_PASSWORD: openbeacon
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - openbeacon_db:/var/lib/postgresql/data
     healthcheck:
@@ -14,11 +14,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    restart: always
+    restart: unless-stopped
   redis:
     image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.31.2
     ports:
-      - "6379:6379"
-    restart: always
+      - "127.0.0.1:6379:6379"
+    restart: unless-stopped
 volumes:
   openbeacon_db:

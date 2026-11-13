@@ -64,6 +64,41 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
+  fun `deletes every point an owner has queued, including ones being uploaded`() {
+    queue.insertAll(listOf(row("a"), row("b"), row("c"), row("other")).mapIndexed { index, row ->
+      row.copy(owner = if (index < 3) "server-a/user-a" else "server-a/user-b")
+    })
+    val owned = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a")
+    queue.markInFlight(listOf(owned[0].id), System.currentTimeMillis())
+
+    queue.deleteByOwner("server-a/user-a")
+
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10, "server-a/user-a").isEmpty())
+    assertTrue(pendingIds("server-a/user-a").isEmpty())
+    assertEquals(listOf("other"), pendingIds("server-a/user-b"))
+  }
+
+  @Test
+  fun `deletes an owner's points for one group, including ones being uploaded`() {
+    queue.insertAll(
+      listOf(
+        row("left", owner = "server-a/user-a").copy(groupId = "group-left"),
+        row("in-flight", owner = "server-a/user-a").copy(groupId = "group-left"),
+        row("kept", owner = "server-a/user-a").copy(groupId = "group-kept"),
+        row("other-account", owner = "server-a/user-b").copy(groupId = "group-left"),
+      ),
+    )
+    val inFlight = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a")[1]
+    queue.markInFlight(listOf(inFlight.id), System.currentTimeMillis())
+
+    queue.deleteByGroup("server-a/user-a", "group-left")
+
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10, "server-a/user-a").isEmpty())
+    assertEquals(listOf("kept"), pendingIds("server-a/user-a"))
+    assertEquals(listOf("other-account"), pendingIds("server-a/user-b"))
+  }
+
+  @Test
   fun `assigns ownerless points only to the device that captured them`() {
     val dao = database.ciphertextQueueDao()
     queue.insertAll(listOf(row("legacy"), row("a", owner = "server-a/user-a")))
@@ -99,7 +134,7 @@ class OfflineTrackingQueueTest {
     assertEquals(1, capture(pipeline(), 100))
     val stored = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a").single()
     val plaintext =
-      GroupPayloadEncrypt.encodeTrackingPointV1Json(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false).toByteArray(Charsets.UTF_8)
+      GroupPayloadEncrypt.encodeTrackingPointV1Json(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false)!!.toByteArray(Charsets.UTF_8)
     val ciphertext = GroupPayloadEncrypt.decodeBase64(stored.ciphertext)
     assertFalse(ciphertext.toList().windowed(plaintext.size).contains(plaintext.toList()))
 
@@ -237,7 +272,7 @@ class OfflineTrackingQueueTest {
   private fun capture(
     pipeline: CapturePipeline,
     fixId: Long,
-  ) = pipeline.onFix(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false, fixId = fixId)
+  ) = pipeline.onFix(51.5, -0.1, at("2026-07-13T18:45:00.000Z"), null, 80, false, fixId = fixId)
 
   private fun row(
     clientPointId: String,
@@ -274,3 +309,5 @@ class OfflineTrackingQueueTest {
     queuedAt = queuedAt,
   )
 }
+
+private fun at(iso: String) = java.time.Instant.parse(iso).toEpochMilli()

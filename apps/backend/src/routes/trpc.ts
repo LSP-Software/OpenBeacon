@@ -31,7 +31,11 @@ router.on(["POST", "GET"], "/trpc/*", async (c) => {
           .split("\n")
           .map((line) => line.match(/(?:apps|packages)\/[\w./-]+\.ts:\d+:\d+/)?.[0])
           .find((line) => line !== undefined);
-        console.error("[trpc] internal server error", { path, location });
+        console.error("[trpc] internal server error", {
+          path,
+          location,
+          message: (error.cause?.message ?? error.message).slice(0, 1000),
+        });
       }
     },
     createContext: () =>

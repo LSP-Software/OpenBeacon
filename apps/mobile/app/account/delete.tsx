@@ -13,7 +13,7 @@ import { Input } from "../../components/ui/Input.tsx";
 import { RadioCardGroup } from "../../components/ui/RadioCardGroup.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
-import { authClient } from "../../lib/auth-client.ts";
+import { endSession } from "../../lib/endSession.ts";
 
 const DeleteAccountScreen = () => {
   const requestDeletion = useMutation(trpc.account.requestDeletion.mutationOptions());
@@ -47,7 +47,7 @@ const DeleteAccountScreen = () => {
               Alert.alert("Unable to delete account", result.error.message);
               return;
             }
-            await tryCatch(authClient.signOut());
+            await tryCatch(endSession({ reason: immediate ? "accountDeleted" : "signedOut" }));
             router.replace("/");
             Alert.alert(
               "Account deletion requested",

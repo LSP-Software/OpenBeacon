@@ -1,13 +1,10 @@
 import { decodeBase64, encodeBase64 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import * as SecureStore from "expo-secure-store";
+import { getSecureStoreOptions } from "./secureStoreOptions.ts";
 
 const getSavedDeviceLinkName = ({ deviceId, userId }: { deviceId: string; userId: string }) =>
   `encryption.deviceLink.${userId}.${deviceId}`;
-
-const getSecureStoreOptions = () => ({
-  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-});
 
 export const saveDeviceLink = async ({
   linkId,

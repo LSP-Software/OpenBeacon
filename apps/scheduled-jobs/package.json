@@ -16,7 +16,6 @@
     "@openbeacon/database": "workspace:*",
     "@openbeacon/email": "workspace:*",
     "@openbeacon/schemas": "workspace:*",
-    "@openbeacon/shared": "workspace:*",
-    "zod": "^4.6.7"
+    "@openbeacon/shared": "workspace:*"
   }
 }

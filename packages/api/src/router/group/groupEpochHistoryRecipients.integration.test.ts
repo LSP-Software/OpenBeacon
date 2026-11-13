@@ -226,7 +226,13 @@ const expectReadable = async (readers: Account[], epochId: string, epochKey: Epo
 };
 
 const rejectsWith = async (promise: Promise<unknown>, message: string) => {
-  await expect(promise).rejects.toMatchObject({ code: "BAD_REQUEST", message });
+  await expect(promise).rejects.toMatchObject({
+    code: "BAD_REQUEST",
+    message,
+    ...(message === HISTORY_RECIPIENT_MISMATCH_MESSAGE
+      ? { cause: { reason: "HISTORY_RECIPIENT_MISMATCH" } }
+      : {}),
+  });
 };
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(

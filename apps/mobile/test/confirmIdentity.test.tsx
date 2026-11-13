@@ -44,7 +44,7 @@ mock.module("../lib/auth.ts", () => ({
   signInWithGoogle: async () => ({}),
 }));
 mock.module("../lib/auth-client.ts", () => ({
-  SESSION_TOKEN_TO_REVOKE_KEY: "sessionTokenToRevokeOnNextLogin",
+  saveSessionTokenToRevoke: async () => {},
   authClient: {
     getSession: async () => ({
       data: { session: { token: "token-2" }, user: { id: "user-1" } },
@@ -75,7 +75,7 @@ const { SessionLinkChallengeUnopenableError } = await import("../lib/sessionLink
 
 const serverError = (code: string, httpStatus: number, cause: string | null = null) =>
   TRPCClientError.from({
-    error: { code: -32003, data: { cause, code, httpStatus }, message: "Refused" },
+    error: { code: -32003, data: { cause, code, httpStatus, reason: cause }, message: "Refused" },
   });
 
 const confirm = async () => {

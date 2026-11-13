@@ -15,11 +15,12 @@ import {
   type devicePlatformSchema,
   HISTORY_RECIPIENT_MISMATCH_MESSAGE,
 } from "@openbeacon/schemas";
-import { tryCatch } from "@openbeacon/shared";
+import { type ErrorReason, tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type { z } from "zod";
 import { deviceRemovedError } from "./deviceRemoved.ts";
 import { emailInviteCreatedAfter } from "./emailInvites.ts";
+import { ReasonError } from "./reasonError.ts";
 
 type DeviceRecord = {
   createdAt: Date;
@@ -60,10 +61,12 @@ const assertExactRecipientSet = ({
   actual,
   expected,
   message = "Epoch recipient set does not match the active group devices.",
+  reason,
 }: {
   actual: string[];
   expected: string[];
   message?: string;
+  reason?: ErrorReason;
 }) => {
   const sortedActual = sortIds(actual);
   const sortedExpected = sortIds(expected);
@@ -72,7 +75,11 @@ const assertExactRecipientSet = ({
     sortedActual.length !== sortedExpected.length ||
     sortedActual.some((id, index) => id !== sortedExpected[index])
   ) {
-    throw new TRPCError({ code: "BAD_REQUEST", message });
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message,
+      ...(reason ? { cause: new ReasonError(reason) } : {}),
+    });
   }
 };
 
@@ -507,6 +514,7 @@ export const persistGroupEpoch = async ({
       JSON.stringify([recipientUserId, version]),
     ),
     message: HISTORY_RECIPIENT_MISMATCH_MESSAGE,
+    reason: "HISTORY_RECIPIENT_MISMATCH",
   });
 
   const historyWrapsByUser = new Map(epoch.historyKeys.map((wrap) => [wrap.userId, wrap]));
@@ -615,6 +623,20 @@ export const upsertUserDevice = async ({
   const createResult = await tryCatch(
     db.$transaction(async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`);
+      const linkedDevice = sessionId
+        ? (
+            await tx.session.findUnique({
+              select: { device: { select: { revokedAt: true } } },
+              where: { id: sessionId },
+            })
+          )?.device
+        : null;
+      if (linkedDevice && !linkedDevice.revokedAt) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "This sign-in already belongs to another phone. Sign in again.",
+        });
+      }
       const pending =
         (await tx.userDevice.count({ where: { userId, activatedAt: { not: null } } })) > 0;
       const device = await tx.userDevice.create({

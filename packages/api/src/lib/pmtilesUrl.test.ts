@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { OpenBeaconCache } from "@openbeacon/cache";
 
 const withEnvSnapshot = (keys: readonly string[]) => {
@@ -58,6 +58,20 @@ const createCache = ({
     get,
     set,
   };
+};
+
+const createUnavailableCache = () => {
+  const unavailable = async () => {
+    throw Object.assign(new Error("Connection has failed"), {
+      code: "ERR_REDIS_CONNECTION_CLOSED",
+    });
+  };
+  const pmtilesSignedUrls = {
+    get: mock(unavailable),
+    reset: mock(unavailable),
+    set: mock(unavailable),
+  } satisfies OpenBeaconCache["pmtilesSignedUrls"];
+  return { pmtilesSignedUrls } as OpenBeaconCache;
 };
 
 const createSigner = (url: string, expiresAt: string) =>
@@ -229,5 +243,29 @@ describe("pmtilesUrl", () => {
       userId: "user-1",
     });
     expect(result).toMatchObject({ archiveId: "b-20261101", source: "forced" });
+  });
+
+  test("signs a fresh url without the cache while Redis is unavailable", async () => {
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    const { getSignedPmtilesUrlForUser } = await importPmtilesUrl();
+    const expiresAt = "2026-03-31T13:00:00.000Z";
+    const result = await getSignedPmtilesUrlForUser({
+      cache: createUnavailableCache(),
+      createSignedPmtilesUrl: createSigner("https://fresh.example/pmtiles", expiresAt),
+      now: () => new Date("2026-03-31T12:00:00.000Z").getTime(),
+      requestedArchiveId: undefined,
+      resolvePmtilesArchive: async () => currentArchive,
+      userId: "user-1",
+    });
+    expect(result).toMatchObject({ source: "generated", url: "https://fresh.example/pmtiles" });
+    expect(error.mock.calls).toEqual([
+      [
+        "[pmtiles] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so the URL cache is bypassed",
+      ],
+      [
+        "[pmtiles] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so the URL cache is bypassed",
+      ],
+    ]);
+    error.mockRestore();
   });
 });

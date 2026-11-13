@@ -159,43 +159,36 @@ describe("feedback", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  test("rate limits anonymous submissions by IP", async () => {
+  test("allows 30 submissions every 10 minutes across the whole server, whoever sends them", async () => {
     const create = mock(async () => ({}));
-    const caller = createCaller({ create, session: null });
-
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await caller.feedback.submit({ message: `message ${attempt}` });
-    }
-
-    await expect(caller.feedback.submit({ message: "one too many" })).rejects.toMatchObject({
-      code: "TOO_MANY_REQUESTS",
-    });
-    expect(create).toHaveBeenCalledTimes(3);
-  });
-
-  test("shares the IP limit between requests with and without a session", async () => {
-    const create = mock(async () => ({}));
+    let nowMs = 0;
     const cache = new TestCache({
       redisUrl: "redis://localhost:6379",
       hashSecret: testRedisHashSecret,
-      now: () => 0,
+      now: () => nowMs,
     });
-    const signedIn = createCaller({
-      create,
-      session: { user: { id: "user-1", email: "user@example.com" } },
-      cache,
-    });
-    const anonymous = createCaller({ create, session: null, cache });
+    const callers = [
+      createCaller({ create, session: null, cache }),
+      createCaller({
+        create,
+        session: { user: { id: "user-1", email: "user@example.com" } },
+        cache,
+      }),
+    ];
 
-    await signedIn.feedback.submit({ message: "one" });
-    await signedIn.feedback.submit({ message: "two" });
-    await anonymous.feedback.submit({ message: "three" });
+    for (let attempt = 0; attempt < 30; attempt++) {
+      await callers[attempt % 2]?.feedback.submit({ message: `message ${attempt}` });
+    }
+    for (const caller of callers) {
+      await expect(caller.feedback.submit({ message: "one too many" })).rejects.toMatchObject({
+        code: "TOO_MANY_REQUESTS",
+      });
+    }
+    expect(create).toHaveBeenCalledTimes(30);
 
-    await expect(anonymous.feedback.submit({ message: "four" })).rejects.toMatchObject({
-      code: "TOO_MANY_REQUESTS",
-    });
-    expect(create).toHaveBeenCalledTimes(3);
-  });
+    nowMs = 10 * 60 * 1000;
+    await expect(callers[0]?.feedback.submit({ message: "later" })).resolves.toBeUndefined();
+  }, 30_000);
 
   test("alerts Discord in the background without sharing the message or email", async () => {
     const logs = captureConsole();

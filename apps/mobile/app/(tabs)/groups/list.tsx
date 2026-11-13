@@ -21,6 +21,7 @@ import { useRefetchWhileFocused } from "../../../hooks/useRefetchWhileFocused.ts
 import { type RouterOutputs, trpc } from "../../../lib/api.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { buildAcceptInviteInput, submitEpochChange } from "../../../lib/groupEncryption.ts";
+import { groupLimitAlert } from "../../../lib/groupLimitAlert.ts";
 import { requestTrackingSync } from "../../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../../lib/useSingleFlight.ts";
 
@@ -162,6 +163,11 @@ export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
         })(),
       );
 
+      const limit = groupLimitAlert(result.error);
+      if (limit) {
+        Alert.alert(limit.title, limit.message);
+        return;
+      }
       if (isNotFound(result.error)) {
         removeInvite(inviteId);
         Alert.alert("Invite no longer available", "This invite has expired or was withdrawn.");

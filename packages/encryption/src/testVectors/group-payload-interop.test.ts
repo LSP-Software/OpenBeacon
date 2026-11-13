@@ -8,8 +8,10 @@ import {
   decryptGroupPayload,
   EpochKeyMaterial,
   encodeBase64,
+  encodeTrackingPointV1,
   encryptGroupPayload,
   PAYLOAD_ENCRYPTION_ALGORITHM,
+  validateTrackingPointV1,
 } from "../index.ts";
 
 const vectorsPath = join(dirname(fileURLToPath(import.meta.url)), "group-payload-interop-v1.json");
@@ -29,6 +31,7 @@ const vectors = JSON.parse(readFileSync(vectorsPath, "utf8")) as {
     nonceBase64: string;
     plaintextBase64: string;
     plaintextJson: string;
+    trackingPointJson: string;
   }[];
   constants: {
     domainContext: string;
@@ -108,6 +111,17 @@ describe("group-payload interop vectors", () => {
       expect(encodeBase64(decrypted.bytes.expose())).toBe(testCase.plaintextBase64);
       expect(decodeJsonPayload<Record<string, unknown>>(decrypted.bytes)).toEqual(
         JSON.parse(testCase.plaintextJson),
+      );
+    }
+  });
+
+  test("the tracking point reader keeps only the v1 fields of each vector", () => {
+    for (const testCase of vectors.cases) {
+      const trackingPoint = validateTrackingPointV1(JSON.parse(testCase.plaintextJson));
+
+      expect(JSON.stringify(trackingPoint)).toBe(testCase.trackingPointJson);
+      expect(new TextDecoder().decode(encodeTrackingPointV1(trackingPoint))).toBe(
+        testCase.trackingPointJson,
       );
     }
   });

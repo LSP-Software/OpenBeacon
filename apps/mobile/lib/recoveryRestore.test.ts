@@ -92,9 +92,9 @@ const escrowsMock = mock(async (input?: unknown) => {
   );
 });
 
-const conflict = () =>
+const conflict = (reason: string | null = null) =>
   TRPCClientError.from({
-    error: { code: -32009, data: { code: "CONFLICT" }, message: "Already set up" },
+    error: { code: -32009, data: { code: "CONFLICT", reason }, message: "Already set up" },
   });
 
 const createHistoryKeyMock = mock(async (input: unknown) => {
@@ -107,7 +107,7 @@ const createHistoryKeyMock = mock(async (input: unknown) => {
 
 const setupMock = mock(async (input: unknown) => {
   serverInputs.push(input);
-  if (recoveryKey) throw conflict();
+  if (recoveryKey) throw conflict("RECOVERY_CHANGED");
   const parsed = setupAccountRecoverySchema.parse(input);
   recoveryKey = parsed.recoveryKey;
   for (const { version, ...escrow } of parsed.escrows) {

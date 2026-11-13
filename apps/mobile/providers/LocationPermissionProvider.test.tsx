@@ -21,6 +21,7 @@ let sessionState: {
   isPending: boolean;
 };
 let launchRequestCalls = 0;
+let failLaunchRequest = false;
 let refreshCalls = 0;
 let backgroundRequestCalls = 0;
 let settingsCalls = 0;
@@ -111,6 +112,7 @@ mock.module("../lib/locationPermissions.ts", () => ({
   requestLocationPermissionsForLaunch: async () => {
     launchRequestCalls += 1;
     permissionRequestOrder.push("location");
+    if (failLaunchRequest) throw new Error("permission request failed");
     return launchRequestResult;
   },
 }));
@@ -205,6 +207,7 @@ describe("LocationPermissionProvider", () => {
       isPending: false,
     };
     launchRequestCalls = 0;
+    failLaunchRequest = false;
     refreshCalls = 0;
     backgroundRequestCalls = 0;
     settingsCalls = 0;
@@ -238,6 +241,22 @@ describe("LocationPermissionProvider", () => {
     expect(notificationRequestCalls).toBe(1);
     expect(permissionRequestOrder).toEqual(["notification", "location"]);
     expect(refreshCalls).toBe(0);
+  });
+
+  test("reads the permission state directly when the launch request fails", async () => {
+    failLaunchRequest = true;
+    refreshResult = createPermissionState({ backgroundStatus: "granted", missing: [] });
+    const seen: { readyForSharing: boolean | null } = { readyForSharing: null };
+    const Probe = () => {
+      seen.readyForSharing = useLocationPermissions().permissionState?.isReadyForSharing ?? null;
+      return null;
+    };
+
+    await renderProvider(<Probe />);
+    await flushEffects();
+
+    expect(refreshCalls).toBe(1);
+    expect(seen.readyForSharing).toBe(true);
   });
 
   test("doesn't ask for permissions until this phone is set up", async () => {
