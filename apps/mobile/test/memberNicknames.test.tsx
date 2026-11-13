@@ -134,7 +134,11 @@ mock.module("../lib/groupEncryption.ts", () => ({
 mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("../lib/hiddenMapGroups.ts", () => ({ forgetHiddenMapGroup: () => {} }));
 mock.module("../lib/batteryVisual.ts", () => ({
-  getBatteryVisual: () => ({ colorClass: "", icon: () => null }),
+  getBatteryVisual: ({ batteryLevel }: { batteryLevel: number | null }) => ({
+    colorClass: "",
+    icon: () => null,
+    label: batteryLevel === null ? null : `${batteryLevel}%`,
+  }),
 }));
 mock.module("../lib/timeSince.ts", () => ({ timeSince: () => "2 minutes ago" }));
 const { default: MembersTab } = await import("../app/(tabs)/groups/[groupId]/MembersTab.tsx");

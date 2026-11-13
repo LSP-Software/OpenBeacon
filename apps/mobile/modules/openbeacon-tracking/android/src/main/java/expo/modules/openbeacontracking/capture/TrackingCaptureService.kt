@@ -407,7 +407,7 @@ class TrackingCaptureService : Service() {
         longitude = location.longitude,
         timestampIso = formatTimestamp(location.time),
         speedMetersPerSecond = speed,
-        batteryLevel = battery.level,
+        batteryLevel = battery.level.takeIf { battery.levelKnown },
         batteryCharging = battery.charging,
         captureGeneration = generation,
         fixId = location.elapsedRealtimeNanos.takeIf { it > 0 },

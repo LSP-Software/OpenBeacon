@@ -394,6 +394,8 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M8. The location-point reader rejects any new field, so every future payload change forces the whole family to update
 
+- **Status:** fixed on `fix/beta-1-review` by "Read tracking points tolerantly and send an unknown battery level as null" (SHA added at wrap-up). Q1. New shared vectors (an unknown key, a `null` level) read by TS and the Kotlin JVM tests; the locked-schema test now asserts extra keys are dropped; Kotlin writes `null` for an unknown level and a non-finite speed and drops non-finite coordinates (S10-08); battery UI hides the percentage for an unknown level. JVM tests 40/40 and `testDebugUnitTest` 57/57. Emulator check in the end-of-branch batch.
+
 - Findings: S10-02 · design · medium · verified (V5, reproduced). Related: S6-14 and S10-08 (D4).
 - Location: packages/encryption/src/trackingPoint.ts:55-87 (`Object.keys(value).length !== 6`, the same check for `battery`); apps/mobile/lib/mapTrackingDecrypt.ts:115; BatteryReader.kt:17-30
 - Failure scenario: After beta, someone adds `accuracy`. Every older app marks every point from an updated phone as unreadable, and the only remedy is raising `minClientApiCompatibilityLevel` for everyone. The reader is in every installed build, so it has to be relaxed before beta builds ship. A nullable field (a `null` battery level, say) can't be added later even with a tolerant reader, because it changes the type of an existing field.
@@ -1351,6 +1353,8 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-14 · low · bug
 
+- **Status:** fixed on `fix/beta-1-review` by "Read tracking points tolerantly and send an unknown battery level as null" (SHA added at wrap-up). Q1. New shared vectors (an unknown key, a `null` level) read by TS and the Kotlin JVM tests; the locked-schema test now asserts extra keys are dropped; Kotlin writes `null` for an unknown level and a non-finite speed and drops non-finite coordinates (S10-08); battery UI hides the percentage for an unknown level. JVM tests 40/40 and `testDebugUnitTest` 57/57. Emulator check in the end-of-branch batch.
+
 **Unknown battery level is sent as 0%**
 
 - Location: apps/mobile/modules/openbeacon-tracking/android/src/main/java/expo/modules/openbeacontracking/capture/BatteryReader.kt:12-28; TrackingCaptureService.kt:410-411; crypto/GroupPayloadEncrypt.kt:65-75
@@ -1828,6 +1832,8 @@ The launch screen retries forever with no message or way out when the device che
 
 #### S10-02 · medium · design · **must-fix, see M8**
 
+- **Status:** fixed on `fix/beta-1-review` by "Read tracking points tolerantly and send an unknown battery level as null" (SHA added at wrap-up). Q1. New shared vectors (an unknown key, a `null` level) read by TS and the Kotlin JVM tests; the locked-schema test now asserts extra keys are dropped; Kotlin writes `null` for an unknown level and a non-finite speed and drops non-finite coordinates (S10-08); battery UI hides the percentage for an unknown level. JVM tests 40/40 and `testDebugUnitTest` 57/57. Emulator check in the end-of-branch batch.
+
 The tracking-point reader rejects any extra field, so every future change to the location payload will force the whole family to update
 
 #### S10-03 · medium · UX · **must-fix, see M11**
@@ -1880,6 +1886,8 @@ The "Update Open Beacon" screen has a disabled Update button and the server can'
 - Same issue as: D12, D18 (see Duplicate groups)
 
 #### S10-08 · low · bug
+
+- **Status:** fixed on `fix/beta-1-review` by "Read tracking points tolerantly and send an unknown battery level as null" (SHA added at wrap-up). Q1. New shared vectors (an unknown key, a `null` level) read by TS and the Kotlin JVM tests; the locked-schema test now asserts extra keys are dropped; Kotlin writes `null` for an unknown level and a non-finite speed and drops non-finite coordinates (S10-08); battery UI hides the percentage for an unknown level. JVM tests 40/40 and `testDebugUnitTest` 57/57. Emulator check in the end-of-branch batch.
 
 **The Kotlin tracking-point encoder doesn't validate the way the TS encoder does**
 

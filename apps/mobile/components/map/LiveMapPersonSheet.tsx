@@ -10,7 +10,7 @@ import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
 
 type PersonDevice = {
-  battery: { charging: boolean; level: number } | null;
+  battery: { charging: boolean; level: number | null } | null;
   deviceId: string;
   icon: DeviceIcon;
   isThisDevice: boolean;
@@ -35,7 +35,7 @@ export const LiveMapPersonSheet = ({
   timestamp,
   unreadableGroup,
 }: {
-  battery: { charging: boolean; level: number } | null;
+  battery: { charging: boolean; level: number | null } | null;
   devices?: readonly PersonDevice[] | undefined;
   image: string | null;
   initials: string;
@@ -102,11 +102,11 @@ export const LiveMapPersonSheet = ({
               </Text>
             </View>
           ) : null}
-          {!isMultiDevice && battery && batteryVisual ? (
+          {!isMultiDevice && batteryVisual?.label ? (
             <View className="mt-3 flex-row items-center gap-2">
               <Icon as={batteryVisual.icon} size={20} className={batteryVisual.colorClass} />
               <Text className={`${batteryVisual.colorClass} text-sm`}>
-                Battery: {battery.level}%
+                Battery: {batteryVisual.label}
               </Text>
             </View>
           ) : null}
@@ -155,7 +155,7 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
       : updatedAge === null
         ? "No location yet"
         : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`;
-  const batteryLevel = device.battery && batteryVisual ? `${device.battery.level}%` : null;
+  const batteryLevel = batteryVisual?.label ?? null;
 
   const content = (
     <>

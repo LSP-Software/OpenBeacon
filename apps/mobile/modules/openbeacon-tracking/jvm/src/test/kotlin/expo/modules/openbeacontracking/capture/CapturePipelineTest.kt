@@ -167,6 +167,37 @@ class CapturePipelineTest {
   }
 
   @Test
+  fun onFixDropsAFixWithNonFiniteCoordinates() {
+    val keyStore = InMemoryEpochKeyStore()
+    keyStore.replaceAll(
+      listOf(
+        ProvisionedEpochKey(
+          groupId = "group_a",
+          epochId = "epoch_a",
+          epochKey = ByteArray(32),
+          senderDeviceId = "device_1",
+          kind = "trackingPoint",
+        ),
+      ),
+    )
+    val queue = InMemoryCiphertextQueue()
+    val pipeline = CapturePipeline(queueOwner = { "test" }, epochKeyStore = keyStore, ciphertextQueue = queue)
+
+    val inserted =
+      pipeline.onFix(
+        latitude = Double.NaN,
+        longitude = -0.1278,
+        timestampIso = "2026-07-13T18:45:00.000Z",
+        speedMetersPerSecond = 1.4,
+        batteryLevel = null,
+        batteryCharging = false,
+      )
+
+    assertEquals(0, inserted)
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).isEmpty())
+  }
+
+  @Test
   fun onFixFansOutOneCiphertextPerProvisionedGroupWithoutPlaintext() {
     val keyStore = InMemoryEpochKeyStore()
     val queue = InMemoryCiphertextQueue()
@@ -232,7 +263,7 @@ class CapturePipelineTest {
           speed = null,
           batteryLevel = 40,
           batteryCharging = true,
-        ).toByteArray(StandardCharsets.UTF_8)
+        )!!.toByteArray(StandardCharsets.UTF_8)
 
     assertTrue(pending.none { row ->
       GroupPayloadEncrypt.decodeBase64(row.ciphertext).toList()
