@@ -1,4 +1,4 @@
-import re, glob, sys
+import re, sys
 base = sys.argv[1]
 must = {"S2-01":"M1","S3-01":"M2","S3-02":"M2","S8-01":"M3","S6-01":"M4","S4-01":"M5","S3-03":"M6","S2-02":"M7","S10-02":"M8","S8-02":"M9","S8-04":"M9","S4-02":"M10","S10-03":"M11"}
 override = {
@@ -13,7 +13,8 @@ override = {
  "S1-01":("medium","post-beta","V6: worse than reported (a malicious server can also make a phone encrypt to a key it chose), but already an accepted Beta 1 risk under OPE-213. Fix docs before beta (C8)."),
  "S1-03":("medium","post-beta","V6 reproduced it. Add a key commitment per epoch when the epoch bundle next changes."),
 }
-x = open(base+"raw/X.md").read()
+with open(base+"raw/X.md") as source:
+    x = source.read()
 dup = {}
 for row in re.findall(r"^\| (D\d+)\. ([^|]+)\|([^|]+)\|", x, re.M):
     for i in re.findall(r"(?:S\d+|X)-\d+", row[2]):
@@ -27,7 +28,8 @@ counts = {}
 files = [f"S{i}" for i in range(1,11)] + ["X"]
 titles = {"S1":"S1 Encryption and key handling","S2":"S2 Server: auth, accounts and devices","S3":"S3 Server: groups, tracking and media","S4":"S4 Data layer and jobs","S5":"S5 Supporting packages, map tiles and ops","S6":"S6 Mobile: tracking, sharing and native","S7":"S7 Mobile: live map","S8":"S8 Mobile: auth, setup, account and plumbing","S9":"S9 Mobile: groups, UI kit and components","S10":"S10 Version skew and encrypted formats","X":"X Cross-cutting"}
 for f in files:
-    t = open(base+f"raw/{f}.md").read()
+    with open(base+f"raw/{f}.md") as source:
+        t = source.read()
     entries = []
     for m in re.finditer(r"^### \[((?:S\d+|X)-\d+)\]\s*(.*?)\n(.*?)(?=^### |^## |\Z)", t, re.S|re.M):
         fid, title, body = m.group(1), m.group(2).strip(), m.group(3)
