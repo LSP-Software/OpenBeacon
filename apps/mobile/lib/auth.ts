@@ -10,15 +10,11 @@ import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { resetSessionLinkRetries } from "./sessionLink.ts";
 
-const GOOGLE_WEB_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID";
-const GOOGLE_IOS_CLIENT_ID_ENV = "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID";
-const GOOGLE_IOS_URL_SCHEME_ENV = "EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME";
+const getGoogleWebClientId = () => process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
-const getGoogleWebClientId = () => process.env[GOOGLE_WEB_CLIENT_ID_ENV];
+const getGoogleIosClientId = () => process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 
-const getGoogleIosClientId = () => process.env[GOOGLE_IOS_CLIENT_ID_ENV];
-
-const getGoogleIosUrlScheme = () => process.env[GOOGLE_IOS_URL_SCHEME_ENV];
+const getGoogleIosUrlScheme = () => process.env.EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME;
 
 export const isNativeGoogleSignInConfiguredForPlatform = (platform: "android" | "ios") => {
   const googleWebClientId = getGoogleWebClientId();

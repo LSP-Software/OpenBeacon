@@ -11,8 +11,14 @@ mock.module("./storage.ts", () => ({
   },
 }));
 
-const { getBaseUrl, getFeedbackUrl, getServerUrl, normaliseServerUrl, setServerUrl } =
-  await import("./currentServer.ts");
+const {
+  getBaseUrl,
+  getFeedbackUrl,
+  getServerUrl,
+  normaliseNewServerUrl,
+  normaliseServerUrl,
+  setServerUrl,
+} = await import("./currentServer.ts");
 const originalDevUrl = process.env.EXPO_PUBLIC_DEV_API_URL;
 
 afterEach(() => {
@@ -45,6 +51,44 @@ describe("normalising a server URL", () => {
     ["https://beacon.example.com/#top", "Remove everything from the ? or # onwards"],
   ])("rejects %p", (input, error) => {
     expect(normaliseServerUrl(input)).toEqual({ url: null, error });
+  });
+});
+
+describe("choosing a new server", () => {
+  test("allows http:// in development builds", () => {
+    expect(normaliseNewServerUrl("http://192.168.1.10:3000/")).toEqual({
+      url: "http://192.168.1.10:3000",
+      error: null,
+    });
+  });
+
+  test("requires https:// in release builds", () => {
+    Object.assign(globalThis, { __DEV__: false });
+    try {
+      expect(normaliseNewServerUrl("http://192.168.1.10:3000")).toEqual({
+        url: null,
+        error: "Use an https:// address. The app only connects to servers over HTTPS.",
+      });
+      expect(normaliseNewServerUrl("https://beacon.example.com/")).toEqual({
+        url: "https://beacon.example.com",
+        error: null,
+      });
+      expect(normaliseNewServerUrl("beacon.example.com").error).toBe(
+        "Enter a URL that starts with http:// or https://",
+      );
+    } finally {
+      Object.assign(globalThis, { __DEV__: true });
+    }
+  });
+
+  test("keeps an http:// server saved before release builds required https://", () => {
+    Object.assign(globalThis, { __DEV__: false });
+    try {
+      stored.set("custom_server_url", "http://192.168.1.10:3000");
+      expect(getBaseUrl()).toBe("http://192.168.1.10:3000");
+    } finally {
+      Object.assign(globalThis, { __DEV__: true });
+    }
   });
 });
 
@@ -91,6 +135,17 @@ describe("the base URL", () => {
     process.env.EXPO_PUBLIC_DEV_API_URL = "http://localhost:3000/";
     setServerUrl("https://self-hosted.example");
     expect(getBaseUrl()).toBe("http://localhost:3000");
+  });
+
+  test("ignores the development override in release builds", () => {
+    process.env.EXPO_PUBLIC_DEV_API_URL = "http://localhost:3000/";
+    Object.assign(globalThis, { __DEV__: false });
+    try {
+      expect(getBaseUrl()).toBe("https://api.openbeacon.net");
+      expect(getFeedbackUrl()).toBe("https://api.openbeacon.net");
+    } finally {
+      Object.assign(globalThis, { __DEV__: true });
+    }
   });
 
   test("always sends feedback to the hosted API, even with a custom server", () => {

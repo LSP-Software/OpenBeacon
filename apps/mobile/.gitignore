@@ -40,3 +40,7 @@ yarn-error.*
 /ios
 /android
 /modules/*/android/build/
+
+# Release signing credentials
+credentials.json
+*.aab
