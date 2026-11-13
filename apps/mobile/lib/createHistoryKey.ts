@@ -3,17 +3,18 @@ import { tryCatch } from "@openbeacon/shared";
 import { trpcClient } from "./api.ts";
 import { getUnpublishedHistoryKeyName } from "./currentHistoryKey.ts";
 import { deleteStoredHistoryKeys, storeHistoryKey } from "./historyKeys.ts";
+import { secretOwner } from "./secretStorage.ts";
 import { storage } from "./storage.ts";
 
 export const KEY_NOT_SAVED_MESSAGE =
   "Unable to save your keys on this phone. Unlock your phone and try again.";
 
-const publishFirstHistoryKey = async (userId: string) => {
+const publishFirstHistoryKey = async (userId: string, owner: ReturnType<typeof secretOwner>) => {
   const historyKey = createHistoryKeyPair();
   const unpublishedName = getUnpublishedHistoryKeyName(userId);
   storage.set(unpublishedName, historyKey.publicKey);
   const stored = await tryCatch(
-    storeHistoryKey({ privateKey: historyKey.privateKey, userId, version: 1 }),
+    storeHistoryKey({ privateKey: historyKey.privateKey, owner, userId, version: 1 }),
   );
   if (stored.error) {
     storage.remove(unpublishedName);
@@ -42,10 +43,10 @@ const publishFirstHistoryKey = async (userId: string) => {
 
 const pendingCreates = new Map<string, Promise<boolean>>();
 
-export const createHistoryKey = (userId: string) => {
+export const createHistoryKey = (userId: string, owner = secretOwner(userId)) => {
   const pending = pendingCreates.get(userId);
   if (pending) return pending;
-  const task = publishFirstHistoryKey(userId).finally(() => {
+  const task = publishFirstHistoryKey(userId, owner).finally(() => {
     pendingCreates.delete(userId);
   });
   pendingCreates.set(userId, task);
