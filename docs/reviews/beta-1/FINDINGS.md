@@ -363,6 +363,8 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M6. Any signed-in user can write about 100 MB of ciphertext a minute, kept for 60 days
 
+- **Status:** fixed on `fix/beta-1-review` by "Limit tracking uploads per account by points per minute and a daily budget" (SHA added at wrap-up). Q2 limits. Tests: schema accepts 1024 and rejects 1025; 2,000 points/min (21st batch of 100 refused); budget 35,424 at G=3 and 147,744 at G=16; duplicates don't count; fail-open with a log line when Redis is down; integration test for the daily growth report job.
+
 - Finding: S3-03 · security · **high** · verified (V2)
 - Location: packages/api/src/router/group/groupTrackingRouter.ts:21-28 (240 requests/min); packages/schemas/src/schemas/group/tracking.ts:23-36 (100 points per batch, `ciphertext` up to 4096 chars); packages/api/src/router/group/groupLifecycleRouter.ts:85-91 (anyone can create a group of one)
 - Failure scenario: A user, or a script running a few free accounts, creates a solo group and loops `uploadBatch`. The hosted Postgres disk fills within hours, and every group's uploads and sign-ins fail.
@@ -935,6 +937,8 @@ Google sign-in silently links Google to an existing password account
 A member who leaves creates, and keeps, the group key used after they leave
 
 #### S3-03 · high · security · **must-fix, see M6**
+
+- **Status:** fixed on `fix/beta-1-review` by "Limit tracking uploads per account by points per minute and a daily budget" (SHA added at wrap-up). Q2 limits. Tests: schema accepts 1024 and rejects 1025; 2,000 points/min (21st batch of 100 refused); budget 35,424 at G=3 and 147,744 at G=16; duplicates don't count; fail-open with a log line when Redis is down; integration test for the daily growth report job.
 
 Any signed-in user can write about 100 MB of ciphertext a minute, with no quota
 

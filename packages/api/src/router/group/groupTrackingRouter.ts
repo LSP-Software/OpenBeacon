@@ -28,6 +28,25 @@ export const groupTrackingRouter = {
     })
     .input(groupTrackingUploadBatchSchema)
     .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const uploadLimitReached = (limit: string) => {
+        console.warn("[rate-limit] upload limit reached", { userId, limit });
+        return new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          cause: new ReasonError("UPLOAD_LIMIT_REACHED"),
+        });
+      };
+      const perMinute = await ctx.cache.rateLimits.consume(
+        {
+          namespace: "groupTracking.uploadBatch.points",
+          identifier: { type: "userId", value: userId },
+          limit: 2_000,
+          windowMs: 60_000,
+          cost: input.points.length,
+        },
+        { whenUnavailable: "allow" },
+      );
+      if (!perMinute.allowed) throw uploadLimitReached("points per minute");
       const result = await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "User" WHERE id = ${ctx.session.user.id} FOR SHARE`,
@@ -60,7 +79,21 @@ export const groupTrackingRouter = {
           groupId: input.groupId,
           memberSince: member.createdAt,
           points: input.points,
-          userId: ctx.session.user.id,
+          userId,
+          consumeDailyBudget: async (acceptedPoints) => {
+            const groupCount = await tx.groupMember.count({ where: { userId } });
+            const budget = await ctx.cache.rateLimits.consume(
+              {
+                namespace: "groupTracking.uploadBatch.daily",
+                identifier: { type: "userId", value: userId },
+                limit: 9_504 + 8_640 * groupCount,
+                windowMs: 86_400_000,
+                cost: acceptedPoints,
+              },
+              { whenUnavailable: "allow" },
+            );
+            if (!budget.allowed) throw uploadLimitReached("daily points");
+          },
         });
       });
       let timer: ReturnType<typeof setTimeout> | undefined;

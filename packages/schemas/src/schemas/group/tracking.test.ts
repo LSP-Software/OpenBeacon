@@ -36,10 +36,10 @@ describe("groupTrackingPointSchema", () => {
 
   test("limits ciphertext size", () => {
     expect(
-      groupTrackingPointSchema.safeParse({ ...validPoint, ciphertext: "a".repeat(4096) }).success,
+      groupTrackingPointSchema.safeParse({ ...validPoint, ciphertext: "a".repeat(1024) }).success,
     ).toBe(true);
     expect(
-      groupTrackingPointSchema.safeParse({ ...validPoint, ciphertext: "a".repeat(4097) }).success,
+      groupTrackingPointSchema.safeParse({ ...validPoint, ciphertext: "a".repeat(1025) }).success,
     ).toBe(false);
   });
 
