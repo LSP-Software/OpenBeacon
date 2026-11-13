@@ -29,6 +29,7 @@ const router = createTRPCRouter({
 const cache = createIntegrationTestCache(() => 0);
 const prefix = `departure-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
+const readsGroupId = `${prefix}-reads`;
 const ownerId = `${prefix}-owner`;
 const memberId = `${prefix}-member`;
 const ownerDevice = `${prefix}-owner-device`;
@@ -55,6 +56,20 @@ const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
   epochNumber: result.epoch.epochNumber,
   historyKeys: [],
   recipientKeys: result.wrappedKeys,
+});
+const ownerPoint = (
+  epoch: { epoch: { epochId: string }; epochKey: Uint8Array },
+  clientPointId: string,
+) => ({
+  ...encryptGroupPayload({
+    epochId: epoch.epoch.epochId,
+    epochKey: epoch.epochKey,
+    groupId: readsGroupId,
+    kind: TRACKING_POINT_KIND,
+    payload: { latitude: 51.5, longitude: -0.12 },
+    senderDeviceId: ownerDevice,
+  }),
+  clientPointId,
 });
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
@@ -94,7 +109,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     });
 
     afterAll(async () => {
-      await prisma.group.deleteMany({ where: { id: groupId } });
+      await prisma.group.deleteMany({ where: { id: { in: [groupId, readsGroupId] } } });
       await prisma.user.deleteMany({ where: { id: { in: [ownerId, memberId] } } });
       await prisma.$disconnect();
     });
@@ -186,7 +201,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await member.groupMembership.remove({ groupId, memberId: self.id, nextEpoch: bundle(next) });
       expect(
         (await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).epochRotationRequired,
-      ).toBe(false);
+      ).toBe(true);
       expect((await owner.groupTracking.poll({ groupId })).points).toHaveLength(0);
       expect(
         (await owner.groupMembership.members({ groupId })).map((item) => item.user.id),
@@ -325,15 +340,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(
         owner.groupMembership.remove({ ...transfer, successorMemberId: "missing" }),
       ).rejects.toThrow("Successor not found");
-      await expect(
-        owner.groupMembership.remove({
-          ...transfer,
-          nextEpoch: { ...transfer.nextEpoch, epochNumber: 999 },
-        }),
-      ).rejects.toMatchObject({
-        code: "BAD_REQUEST",
-        message: "Epoch number does not match the next group epoch.",
-      });
       expect(
         (await owner.groupMembership.members({ groupId })).find((item) => item.id === successor.id)
           ?.role,
@@ -346,6 +352,120 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toBe("OWNER");
       await member.groupInvites.send({ groupId, invites: [{ email: ownerEmail, role: "MEMBER" }] });
       expect(await owner.groupInvites.list()).toHaveLength(1);
+    }, 45000);
+
+    test("a member who joins later can't read earlier rows, and a leaver can't choose the next key", async () => {
+      const ownerDevices = await prisma.userDevice.findMany({ where: { id: ownerDevice } });
+      const initial = createInitialGroupEpoch({
+        creator: { deviceId: ownerDevice, privateKey: ownerKey.privateKey },
+        groupId: readsGroupId,
+        recipients: ownerDevices.map((device) => ({
+          algorithm: "X25519",
+          createdAt: device.createdAt,
+          deviceId: device.id,
+          publicKey: device.publicKey,
+          revokedAt: device.revokedAt,
+          userId: device.userId,
+        })),
+      });
+      await owner.groupLifecycle.create({
+        groupId: readsGroupId,
+        name: "Reads",
+        initialEpoch: bundle(initial),
+      });
+      await owner.groupTracking.uploadBatch({
+        groupId: readsGroupId,
+        points: [ownerPoint(initial, `${prefix}-before-join`)],
+      });
+      await owner.groupInvites.send({
+        groupId: readsGroupId,
+        invites: [{ email: memberEmail, role: "MEMBER" }],
+      });
+      const invite = (await member.groupInvites.list()).find(
+        (item) => item.group.id === readsGroupId,
+      )!;
+      const joinContext = await member.groupInvites.acceptanceContext({ inviteId: invite.id });
+      const joined = createNextGroupEpoch({
+        creator: { deviceId: memberDevice, privateKey: memberKey.privateKey },
+        previousEpoch: joinContext.latestEpoch!,
+        recipients: joinContext.recipients,
+      });
+      await member.groupInvites.accept({ inviteId: invite.id, nextEpoch: bundle(joined) });
+      await owner.groupTracking.uploadBatch({
+        groupId: readsGroupId,
+        points: [ownerPoint(joined, `${prefix}-after-join`)],
+      });
+      await owner.groupTracking.uploadBatch({
+        groupId: readsGroupId,
+        points: [ownerPoint(initial, `${prefix}-old-epoch-after-join`)],
+      });
+
+      expect(
+        (await owner.groupTracking.poll({ groupId: readsGroupId })).points.map(
+          (point) => point.clientPointId,
+        ),
+      ).toEqual([
+        `${prefix}-before-join`,
+        `${prefix}-after-join`,
+        `${prefix}-old-epoch-after-join`,
+      ]);
+      expect(
+        (await member.groupTracking.poll({ groupId: readsGroupId })).points.map(
+          (point) => point.clientPointId,
+        ),
+      ).toEqual([`${prefix}-after-join`]);
+      expect(
+        (
+          await member.groupTracking.poll({
+            groupId: readsGroupId,
+            cursor: { createdAt: new Date(0), id: "0" },
+          })
+        ).points.map((point) => point.clientPointId),
+      ).toEqual([`${prefix}-after-join`]);
+      expect(
+        (await member.groupTracking.getLatest({ groupId: readsGroupId })).points.map(
+          (point) => point.clientPointId,
+        ),
+      ).toEqual([`${prefix}-after-join`]);
+      expect(
+        (await owner.groupTracking.getLatest({ groupId: readsGroupId })).points.map(
+          (point) => point.clientPointId,
+        ),
+      ).toEqual([`${prefix}-old-epoch-after-join`]);
+
+      const self = (await member.groupMembership.members({ groupId: readsGroupId })).find(
+        (item) => item.user.id === memberId,
+      )!;
+      const context = await member.groupMembership.removalContext({
+        groupId: readsGroupId,
+        memberId: self.id,
+      });
+      const leaverEpoch = createNextGroupEpoch({
+        creator: { deviceId: memberDevice, privateKey: memberKey.privateKey },
+        previousEpoch: context.latestEpoch!,
+        recipients: context.recipients,
+      });
+      await member.groupMembership.remove({
+        groupId: readsGroupId,
+        memberId: self.id,
+        nextEpoch: bundle(leaverEpoch),
+      });
+      expect(await prisma.groupEpoch.count({ where: { id: leaverEpoch.epoch.epochId } })).toBe(0);
+      expect(
+        await prisma.groupEpoch.count({
+          where: { groupId: readsGroupId, epochNumber: { gt: joined.epoch.epochNumber } },
+        }),
+      ).toBe(0);
+      expect(
+        (await prisma.group.findUniqueOrThrow({ where: { id: readsGroupId } }))
+          .epochRotationRequired,
+      ).toBe(true);
+      expect(
+        (await owner.groupMembership.members({ groupId: readsGroupId })).map(
+          (item) => item.user.id,
+        ),
+      ).toEqual([ownerId]);
+      expect(await owner.groupEpoch.rotationContext({ groupId: readsGroupId })).not.toBeNull();
     }, 45000);
   },
 );

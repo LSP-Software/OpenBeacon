@@ -280,6 +280,8 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M2. A member who leaves a group mints, and keeps, the group key used after they leave; new members can read pre-join rows
 
+- **Status:** fixed on `fix/beta-1-review` by "Stop a leaver choosing the next group key and hide pre-join rows from new members" (SHA added at wrap-up). Integration tests in `groupDeparture.integration.test.ts` (leaver's epoch not stored, rotation flagged; later joiner sees no pre-join rows from `poll` or `getLatest`) and unit tests in `groupTracking.test.ts`.
+
 - Findings: S3-01 · security · **high** · verified (V2, reproduced). S3-02 (read half) · security · medium · verified (V2).
 - Location: packages/api/src/router/group/groupMembershipRouter.ts:212-308 (self-removal persists the leaver's `nextEpoch`); apps/mobile/lib/groupEncryption.ts:135-159; packages/api/src/lib/groupTracking.ts:233-283 (`poll`) and :285-324 (`getLatest`) filter only by group and cursor.
 - Failure scenario:
@@ -894,6 +896,8 @@ Google sign-in silently links Google to an existing password account
 
 #### S3-01 · high · security · **must-fix, see M2**
 
+- **Status:** fixed on `fix/beta-1-review` by "Stop a leaver choosing the next group key and hide pre-join rows from new members" (SHA added at wrap-up). Integration tests in `groupDeparture.integration.test.ts` (leaver's epoch not stored, rotation flagged; later joiner sees no pre-join rows from `poll` or `getLatest`) and unit tests in `groupTracking.test.ts`.
+
 A member who leaves creates, and keeps, the group key used after they leave
 
 #### S3-03 · high · security · **must-fix, see M6**
@@ -901,6 +905,8 @@ A member who leaves creates, and keeps, the group key used after they leave
 Any signed-in user can write about 100 MB of ciphertext a minute, with no quota
 
 #### S3-02 · medium · security · **must-fix, see M2**
+
+- **Status:** fixed on `fix/beta-1-review` by "Stop a leaver choosing the next group key and hide pre-join rows from new members" (SHA added at wrap-up). Integration tests in `groupDeparture.integration.test.ts` (leaver's epoch not stored, rotation flagged; later joiner sees no pre-join rows from `poll` or `getLatest`) and unit tests in `groupTracking.test.ts`.
 
 Tracking reads ignore when the reader joined, and uploads under superseded epochs are accepted indefinitely
 

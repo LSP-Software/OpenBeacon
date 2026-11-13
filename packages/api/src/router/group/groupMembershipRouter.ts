@@ -292,20 +292,30 @@ export const groupMembershipRouter = {
           });
         }
 
-        await persistGroupEpoch({
-          db: tx,
-          deviceId: ctx.deviceId,
-          epoch: input.nextEpoch,
-          excludedUserId: member.userId,
-          groupId: input.groupId,
-          userId: ctx.session.user.id,
-        });
+        const isLeaving = actor.id === input.memberId;
+        if (!isLeaving) {
+          await persistGroupEpoch({
+            db: tx,
+            deviceId: ctx.deviceId,
+            epoch: input.nextEpoch,
+            excludedUserId: member.userId,
+            groupId: input.groupId,
+            userId: ctx.session.user.id,
+          });
+        }
 
         await removeGroupMemberWithOwnerGuard({
           db: tx,
           groupId: input.groupId,
           memberId: input.memberId,
         });
+
+        if (isLeaving) {
+          await tx.group.update({
+            where: { id: input.groupId },
+            data: { epochRotationRequired: true },
+          });
+        }
 
         await tx.groupEncryptedPayload.deleteMany({
           where: { groupId: input.groupId, senderUserId: member.userId },
