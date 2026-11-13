@@ -45,7 +45,7 @@ A release build without this file stops with an error rather than signing with t
 
 ## Environment variables
 
-The build reads `apps/mobile/.env` like a development build, so set the Google sign-in variables there. See the [mobile app variables](../../README.md#mobile-app) for what each one does. Release builds ignore `EXPO_PUBLIC_DEV_API_URL`, so a development server in `.env` never ends up in a release.
+The build reads `apps/mobile/.env` like a development build, so set the Google sign-in variables there. The build stops if `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` isn't set, because Google sign-in would be turned off in the release. See the [mobile app variables](../../README.md#mobile-app) for what each one does. Release builds ignore `EXPO_PUBLIC_DEV_API_URL`, so a development server in `.env` never ends up in a release.
 
 ## Build the bundle
 
@@ -57,14 +57,22 @@ From `apps/mobile`:
 bun run build-aab
 ```
 
-This generates the Prisma client, regenerates `android/` with `expo prebuild --clean`, runs `./gradlew bundleRelease`, and copies the result to `apps/mobile/openbeacon-release.aab`. Regenerating `android/` throws away any local edits in it, which `bun run android` recreates anyway.
+`scripts/build-aab.ts` checks everything it can before the slow part starts. It stops if:
+
+- there are uncommitted changes, since they would end up in the release;
+- `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` isn't set;
+- `credentials.json` is missing or has an empty field, or the keystore doesn't open with its passwords.
+
+It then generates the Prisma client, regenerates `android/` with `expo prebuild --clean`, runs `./gradlew bundleRelease`, and writes `apps/mobile/openbeacon-<version>-<versionCode>.aab`. Regenerating `android/` throws away any local edits in it, which `bun run android` recreates anyway.
+
+For a build you won't upload, `bun run build-aab --allow-dirty` includes uncommitted changes.
 
 ## Check the signature
 
-Before uploading, confirm the bundle is signed with the upload key Play expects:
+The build prints the SHA1 of the key it signed with, and fails if the bundle's signature doesn't match the key in `credentials.json`. To check a bundle yourself:
 
 ```sh
-keytool -printcert -jarfile openbeacon-release.aab
+keytool -printcert -jarfile openbeacon-1.13.1-35.aab
 ```
 
 The SHA1 must match the upload key certificate shown in Play Console under Protected with Play, Play Store protection, Manage Play app signing. If it doesn't, Play rejects the upload with "signed with the wrong key".
@@ -72,3 +80,15 @@ The SHA1 must match the upload key certificate shown in Play Console under Prote
 ## Upload
 
 Upload the `.aab` in Play Console to the track you want, usually Internal testing first.
+
+## Building your own version
+
+Anyone can build and sign the app with their own key. Google Play only lets one developer publish a package name, so a version published separately from Open Beacon needs:
+
+- **Its own package name.** Change `android.package` (and `ios.bundleIdentifier`) in `apps/mobile/app.json`.
+- **Its own upload key**, created as above and set in `credentials.json`.
+- **Its own Google sign-in client**, if you want Google sign-in. Create an Android OAuth client in Google Cloud for your package name and the SHA1 of your Play app signing key, and set `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` to the web client your backend uses.
+
+A build you only install yourself can keep the package name; it just can't be installed over the Play Store version.
+
+The app talks to `https://api.openbeacon.net` unless the user picks another server in the app.
