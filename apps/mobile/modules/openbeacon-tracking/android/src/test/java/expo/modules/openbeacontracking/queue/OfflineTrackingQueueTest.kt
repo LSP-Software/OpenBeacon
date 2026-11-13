@@ -64,6 +64,21 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
+  fun `deletes every point an owner has queued, including ones being uploaded`() {
+    queue.insertAll(listOf(row("a"), row("b"), row("c"), row("other")).mapIndexed { index, row ->
+      row.copy(owner = if (index < 3) "server-a/user-a" else "server-a/user-b")
+    })
+    val owned = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a")
+    queue.markInFlight(listOf(owned[0].id), System.currentTimeMillis())
+
+    queue.deleteByOwner("server-a/user-a")
+
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10, "server-a/user-a").isEmpty())
+    assertTrue(pendingIds("server-a/user-a").isEmpty())
+    assertEquals(listOf("other"), pendingIds("server-a/user-b"))
+  }
+
+  @Test
   fun `assigns ownerless points only to the device that captured them`() {
     val dao = database.ciphertextQueueDao()
     queue.insertAll(listOf(row("legacy"), row("a", owner = "server-a/user-a")))

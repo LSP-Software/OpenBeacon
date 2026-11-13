@@ -946,11 +946,7 @@ export const deleteQueuedTrackingPoints = async ({
   if (!trackingModule) return;
   const owner = getOwner(userId);
   if (deviceId) await trackingModule.assignUnassignedCiphertexts(deviceId, owner);
-  for (;;) {
-    const items = await trackingModule.listPendingCiphertexts(owner, 500);
-    if (!items.length) return;
-    await trackingModule.deleteCiphertexts(items.map(({ id }) => id));
-  }
+  await trackingModule.deleteCiphertextsByOwner(owner);
 };
 
 export const resumeTracking = () => {

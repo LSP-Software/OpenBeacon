@@ -2,16 +2,11 @@ import { deviceUnverifiedCause, tryCatch } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
 import * as SecureStore from "expo-secure-store";
 import { trpcClient } from "./api.ts";
-import { authClient, SESSION_TOKEN_TO_REVOKE_KEY } from "./auth-client.ts";
-import { cancelDeviceKeyRegistrations, getRegisteredDeviceKey } from "./deviceKeys.ts";
-import { clearPendingJoinCodes } from "./pendingJoinCode.ts";
+import { SESSION_TOKEN_TO_REVOKE_KEY } from "./auth-client.ts";
+import { getRegisteredDeviceKey } from "./deviceKeys.ts";
+import { endSession } from "./endSession.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
-import {
-  abandonLocationSharingChanges,
-  clearPendingSharingChanges,
-  getPendingSharingChanges,
-  syncLocationSharing,
-} from "./locationSharing.ts";
+import { abandonLocationSharingChanges, syncLocationSharing } from "./locationSharing.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
 import { linkSessionToDevice } from "./sessionLink.ts";
 import { requestTrackingSync } from "./trackingEvents.ts";
@@ -69,18 +64,9 @@ export const signOutOfThisPhone = async ({
       return { status: "phoneRemoved" };
     }
   }
-  const device = await getRegisteredDeviceKey();
-  const pending = device ? getPendingSharingChanges(device.userId) : null;
-  const heldBack =
-    device && (pending?.account?.paused || pending?.device?.paused)
-      ? await tryCatch(tracking.deleteQueuedTrackingPoints(device))
-      : null;
-  if (!heldBack?.error) clearPendingSharingChanges();
-  const signedOut = await tryCatch(authClient.signOut());
-  if ((signedOut.error || signedOut.data.error) && sessionTokenToRevoke) {
+  const { signedOut } = await endSession({ reason: "signedOut" });
+  if (!signedOut && sessionTokenToRevoke) {
     await tryCatch(SecureStore.setItemAsync(SESSION_TOKEN_TO_REVOKE_KEY, sessionTokenToRevoke));
   }
-  cancelDeviceKeyRegistrations();
-  clearPendingJoinCodes();
   return { status: "signedOut" };
 };

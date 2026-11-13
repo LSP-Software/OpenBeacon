@@ -17,6 +17,8 @@ interface CiphertextQueue {
 
   fun deleteByIds(ids: List<Long>)
 
+  fun deleteByOwner(owner: String)
+
   fun requeue(
     ids: List<Long>,
     attemptedAt: Long,

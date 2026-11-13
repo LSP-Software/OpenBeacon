@@ -1,3 +1,4 @@
+import { tryCatch } from "@openbeacon/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect, useRef } from "react";
@@ -21,6 +22,11 @@ export const SessionDataCleanup = () => {
 
   useEffect(() => {
     if (isPending) return;
+    void tryCatch(
+      import("../lib/endSession.ts").then(({ settleLostSessions }) =>
+        settleLostSessions({ userId }),
+      ),
+    );
     const previousUserId = previousUserIdRef.current;
     previousUserIdRef.current = userId;
     const sessionEnded =

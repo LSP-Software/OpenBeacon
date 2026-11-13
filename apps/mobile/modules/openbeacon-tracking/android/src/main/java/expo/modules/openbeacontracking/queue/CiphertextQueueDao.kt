@@ -59,6 +59,9 @@ interface CiphertextQueueDao {
   @Query("DELETE FROM ciphertext_queue WHERE id IN (:ids)")
   fun deleteByIds(ids: List<Long>)
 
+  @Query("DELETE FROM ciphertext_queue WHERE owner = :owner")
+  fun deleteByOwner(owner: String)
+
   @Query("SELECT COUNT(*) FROM ciphertext_queue")
   fun count(): Int
 

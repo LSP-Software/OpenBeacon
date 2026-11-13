@@ -240,6 +240,8 @@ export const apiCompatibilityFetch = async (input: RequestInfo | URL, init?: Req
 
 export const getApiCompatibility = () => state;
 
+export const clearApiCompatibility = () => setState(null);
+
 export const markApiCompatibilityNotified = () => {
   if (state && !state.notified) setState({ ...state, notified: true });
 };

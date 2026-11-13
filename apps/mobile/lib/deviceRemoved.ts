@@ -1,52 +1,6 @@
 import { tryCatch } from "@openbeacon/shared";
 import { router } from "expo-router";
-import { queryClient, trpc, trpcClient } from "./api.ts";
-import { authClient } from "./auth-client.ts";
-import {
-  deleteDeviceKey,
-  forgetDeviceKeyRegistration,
-  getStoredDeviceId,
-  stopDeviceKeyRegistrations,
-} from "./deviceKeys.ts";
-import { clearGroupColors } from "./groupColor.ts";
-import { isDeviceRemovedError } from "./deviceRemovedError.ts";
-import { clearPendingSharingChanges } from "./locationSharing.ts";
-import { deleteStoredHistoryKeys } from "./historyKeys.ts";
-import { clearPendingJoinCodes } from "./pendingJoinCode.ts";
-import { readRegisteredDevice } from "./registeredDevice.ts";
-import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
-import { clearTrackingKeyCheck } from "./trackingKeyCheck.ts";
-import { clearTrackingUploadTimes } from "./trackingUploadTime.ts";
-
-export const wipeThisPhone = async () => {
-  const registered = await readRegisteredDevice();
-  stopDeviceKeyRegistrations();
-  const userId =
-    registered?.userId ?? (await tryCatch(trpcClient.auth.deviceKeyContext.query())).data?.userId;
-  const deviceId = registered?.deviceId ?? (userId ? getStoredDeviceId(userId) : undefined);
-  await queryClient.cancelQueries();
-  const currentHistoryKeyVersion =
-    queryClient.getQueryData(trpc.accountRecovery.status.queryKey())?.currentHistoryKey?.version ??
-    0;
-  const tracking = await import("./tracking.ts");
-  await tryCatch(tracking.revokeTrackingAccess({ keepDeviceRegistration: true }));
-  if (userId) {
-    await tryCatch(tracking.deleteQueuedTrackingPoints({ deviceId, userId }));
-    await tryCatch(
-      deleteStoredHistoryKeys({ userId, upToVersion: Math.max(currentHistoryKeyVersion, 100) }),
-    );
-    if (deviceId) await tryCatch(deleteSavedDeviceLink({ deviceId, userId }));
-    await tryCatch(deleteDeviceKey(userId));
-  }
-  forgetDeviceKeyRegistration();
-  clearPendingJoinCodes();
-  clearPendingSharingChanges();
-  queryClient.clear();
-  clearGroupColors();
-  clearTrackingUploadTimes();
-  clearTrackingKeyCheck();
-  await tryCatch(authClient.signOut());
-};
+import { endSession } from "./endSession.ts";
 
 let removal: Promise<void> | null = null;
 let showRemovedScreen = true;
@@ -54,7 +8,7 @@ let showRemovedScreen = true;
 const wipeOnce = ({ removedHere }: { removedHere: boolean }) => {
   if (removedHere) showRemovedScreen = false;
   removal ??= (async () => {
-    await wipeThisPhone();
+    await endSession({ reason: "phoneRemoved" });
     if (showRemovedScreen)
       await tryCatch(Promise.resolve().then(() => router.replace("/device-removed")));
   })().finally(() => {
@@ -69,18 +23,3 @@ export const handleDeviceRemoved = () => wipeOnce({ removedHere: false });
 export const wipeAfterRemovingThisPhone = () => wipeOnce({ removedHere: true });
 
 export const isWipingThisPhone = () => removal !== null;
-
-export const checkThisPhoneAfterSessionLoss = async () => {
-  const registered = await readRegisteredDevice();
-  if (!registered) return;
-  stopDeviceKeyRegistrations();
-  const result = await tryCatch(
-    trpcClient.auth.providers.query(undefined, { context: { handleDeviceErrors: false } }),
-  );
-  if ((await readRegisteredDevice())?.deviceId !== registered.deviceId) return;
-  if (isDeviceRemovedError(result.error)) {
-    await handleDeviceRemoved();
-    return;
-  }
-  forgetDeviceKeyRegistration();
-};

@@ -92,9 +92,10 @@ export const abandonLocationSharingChanges = () => {
   generation += 1;
 };
 
-export const clearPendingSharingChanges = () => {
+export const clearPendingSharingChanges = (userId?: string) => {
+  const userKeys = userId ? [pendingKey(userId, "device"), pendingKey(userId, "account")] : null;
   for (const key of storage.getAllKeys()) {
-    if (key.startsWith(pendingPrefix)) storage.remove(key);
+    if (key.startsWith(pendingPrefix) && (!userKeys || userKeys.includes(key))) storage.remove(key);
   }
 };
 
