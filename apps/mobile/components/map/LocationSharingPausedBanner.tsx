@@ -48,11 +48,8 @@ export const LocationSharingPausedBanner = ({
     if (!changed && !disagrees) return;
     syncedPolledState.current = polledState;
     void tryCatch(syncLocationSharing()).then((synced) => {
-      if (synced.data) {
-        queryClient.setQueryData(trpc.account.locationSharing.queryKey(), synced.data);
-        return;
-      }
-      void queryClient.invalidateQueries({ queryKey: trpc.account.locationSharing.queryKey() });
+      if (!synced.data)
+        void queryClient.invalidateQueries({ queryKey: trpc.account.locationSharing.queryKey() });
     });
   }, [loadedPaused, polledPaused, polledState, queryClient]);
   const [failure, setFailure] = useState<string | null>(null);
