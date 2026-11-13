@@ -114,7 +114,7 @@ class OfflineTrackingQueueTest {
     assertEquals(1, capture(pipeline(), 100))
     val stored = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a").single()
     val plaintext =
-      GroupPayloadEncrypt.encodeTrackingPointV1Json(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false).toByteArray(Charsets.UTF_8)
+      GroupPayloadEncrypt.encodeTrackingPointV1Json(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false)!!.toByteArray(Charsets.UTF_8)
     val ciphertext = GroupPayloadEncrypt.decodeBase64(stored.ciphertext)
     assertFalse(ciphertext.toList().windowed(plaintext.size).contains(plaintext.toList()))
 

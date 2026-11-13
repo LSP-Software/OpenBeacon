@@ -67,11 +67,13 @@ object GroupPayloadEncrypt {
     longitude: Double,
     timestamp: String,
     speed: Double?,
-    batteryLevel: Int,
+    batteryLevel: Int?,
     batteryCharging: Boolean,
-  ): String {
-    val speedJson = speed?.toString() ?: "null"
-    return """{"v":1,"latitude":$latitude,"longitude":$longitude,"timestamp":${jsonString(timestamp)},"speed":$speedJson,"battery":{"level":$batteryLevel,"charging":$batteryCharging}}"""
+  ): String? {
+    if (!latitude.isFinite() || !longitude.isFinite()) return null
+    val speedJson = speed?.takeIf { it.isFinite() }?.toString() ?: "null"
+    val batteryLevelJson = batteryLevel?.toString() ?: "null"
+    return """{"v":1,"latitude":$latitude,"longitude":$longitude,"timestamp":${jsonString(timestamp)},"speed":$speedJson,"battery":{"level":$batteryLevelJson,"charging":$batteryCharging}}"""
   }
 
   fun buildAssociatedData(

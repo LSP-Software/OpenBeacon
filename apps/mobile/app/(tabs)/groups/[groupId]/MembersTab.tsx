@@ -452,7 +452,13 @@ const MemberCard = ({
                 <View
                   key={device.deviceId}
                   accessible
-                  accessibilityLabel={`${device.name ?? "Device"}, updated ${updated}, battery ${device.battery.level}%`}
+                  accessibilityLabel={[
+                    device.name ?? "Device",
+                    `updated ${updated}`,
+                    deviceBattery.label && `battery ${deviceBattery.label}`,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
                   className="flex-row items-center gap-2"
                 >
                   <Icon
@@ -463,17 +469,19 @@ const MemberCard = ({
                     {device.name ?? "Device"} · {updated}
                   </Text>
                   <Icon as={deviceBattery.icon} size={16} className={deviceBattery.colorClass} />
-                  <Text className={`${deviceBattery.colorClass} text-sm`}>
-                    {device.battery.level}%
-                  </Text>
+                  {deviceBattery.label ? (
+                    <Text className={`${deviceBattery.colorClass} text-sm`}>
+                      {deviceBattery.label}
+                    </Text>
+                  ) : null}
                 </View>
               );
             })
-          ) : sharingPaused ? null : member.battery && batteryVisual ? (
+          ) : sharingPaused ? null : batteryVisual?.label ? (
             <View className="flex-row items-center gap-2">
               <Icon as={batteryVisual.icon} size={20} className={batteryVisual.colorClass} />
               <Text className={`${batteryVisual.colorClass} text-sm`}>
-                Battery: {member.battery.level}%
+                Battery: {batteryVisual.label}
               </Text>
             </View>
           ) : (

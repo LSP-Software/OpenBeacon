@@ -26,7 +26,7 @@ class CapturePipeline(
     longitude: Double,
     timestampIso: String,
     speedMetersPerSecond: Double?,
-    batteryLevel: Int,
+    batteryLevel: Int?,
     batteryCharging: Boolean,
     captureGeneration: Long = 0L,
     fixId: Long? = null,
@@ -54,7 +54,7 @@ class CapturePipeline(
           speed = speedMetersPerSecond,
           batteryLevel = batteryLevel,
           batteryCharging = batteryCharging,
-        ).toByteArray(Charsets.UTF_8)
+        )?.toByteArray(Charsets.UTF_8) ?: return 0
 
     val rows =
       keys.map { key ->
