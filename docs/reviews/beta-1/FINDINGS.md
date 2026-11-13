@@ -841,6 +841,8 @@ Google sign-in silently links Google to an existing password account
 
 #### S2-06 · low · security
 
+- **Status:** fixed on `fix/beta-1-review` by "Switch off the better-auth routes the app doesn't use" (SHA added at wrap-up). C9. Extended the "routes the app doesn't use are switched off" test: the proxy redirect to `https://phish.example` now returns 404.
+
 **Unused better-auth endpoints are still enabled, including an open redirect**
 
 - Location: packages/auth/src/createAuth.ts:30-50
