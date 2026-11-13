@@ -56,3 +56,6 @@ export const describeMapVersion = ({
 
   return { date, slot, summary: date && slot ? `Map ${slot}, ${date}` : archiveId };
 };
+
+export const shouldRetrySignedPmtilesUrl = (failureCount: number, code: string | undefined) =>
+  code === "SERVICE_UNAVAILABLE" || (code !== "UNAUTHORIZED" && failureCount < 4);

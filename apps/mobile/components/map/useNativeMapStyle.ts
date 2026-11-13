@@ -237,6 +237,7 @@ export const useNativeMapStyle = () => {
     showRecoverableError,
     isLoading: signedPmtilesUrlQuery.isLoading,
     isError: signedPmtilesUrlQuery.isError,
+    isFetching: signedPmtilesUrlQuery.isFetching,
     isMapNotReady: signedPmtilesUrlQuery.failureReason?.data?.code === "SERVICE_UNAVAILABLE",
     isRefreshing: forceRefreshSignedPmtilesUrlMutation.isPending,
     retryUrl: () => {

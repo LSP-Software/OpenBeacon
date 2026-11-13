@@ -81,7 +81,7 @@ The bundle includes R8's mapping file, so Play Console shows readable stack trac
 The build prints the SHA1 of the key it signed with, and fails if the bundle's signature doesn't match the key in `credentials.json`. To check a bundle yourself:
 
 ```sh
-keytool -printcert -jarfile openbeacon-1.14.0-35.aab
+keytool -printcert -jarfile openbeacon-1.14.0-36.aab
 ```
 
 The SHA1 must match the upload key certificate shown in Play Console under Protected with Play, Play Store protection, Manage Play app signing. If it doesn't, Play rejects the upload with "signed with the wrong key".

@@ -18,6 +18,7 @@ const changes: Parameters<typeof changeLocationSharing>[0][] = [];
 let syncs = 0;
 let fetched: typeof sharingData | null = null;
 let synced: typeof sharingData | null = null;
+const loadedListeners = new Set<(state: typeof sharingData) => void>();
 const preference = (paused: boolean): SharingPreference => ({
   sharingPaused: paused,
   sharingPausedUntil: null,
@@ -32,8 +33,11 @@ mock.module("@tanstack/react-query", () => ({
   useQuery: () => ({ data: sharingData }),
   useQueryClient: () => ({
     invalidateQueries: async () => {},
-    setQueryData: (_key: unknown, data: typeof sharingData) => {
-      sharingData = data;
+    setQueryData: (
+      _key: unknown,
+      update: typeof sharingData | ((current: typeof sharingData) => typeof sharingData),
+    ) => {
+      sharingData = typeof update === "function" ? update(sharingData) : update;
     },
     fetchQuery: async () => fetched ?? sharingData,
   }),
@@ -50,7 +54,12 @@ mock.module("../../lib/api.ts", () => ({
     },
   },
 }));
+mock.module("../../lib/networkStatus.ts", () => ({ isDeviceOffline: async () => false }));
 mock.module("../../lib/locationSharing.ts", () => ({
+  onSharingStateLoaded: (listener: (state: typeof sharingData) => void) => {
+    loadedListeners.add(listener);
+    return () => loadedListeners.delete(listener);
+  },
   changeLocationSharing: async (input: Parameters<typeof changeLocationSharing>[0]) => {
     changes.push(input);
     return "applied";
@@ -60,7 +69,9 @@ mock.module("../../lib/locationSharing.ts", () => ({
   serverNow: () => Date.now(),
   syncLocationSharing: async () => {
     syncs += 1;
-    return synced ?? sharingData;
+    const state = synced ?? sharingData;
+    for (const listener of loadedListeners) listener(state);
+    return state;
   },
 }));
 mock.module("../ui/Button.tsx", () => ({

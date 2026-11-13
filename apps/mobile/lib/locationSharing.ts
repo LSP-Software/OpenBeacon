@@ -14,6 +14,7 @@ import { baseUrl } from "./currentServer.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { getRegisteredDeviceKey, getStoredDeviceId } from "./deviceKeys.ts";
 import { errorReason } from "./errorReason.ts";
+import { SERVER_UNREACHABLE_MESSAGE } from "./serverUnreachable.ts";
 import { storage } from "./storage.ts";
 import { requestTrackingSync } from "./trackingEvents.ts";
 
@@ -38,7 +39,10 @@ const syncedSchema = z.object({
   device: preferenceSchema,
 });
 const scheduledChanges = new Set<string>();
+type LoadedSharingState = Awaited<ReturnType<typeof trpcClient.account.locationSharing.query>>;
+const loadedStateListeners = new Set<(state: LoadedSharingState) => void>();
 let changeRevision = 0;
+const latestScopeRevisions = new Map<"device" | "account", number>();
 let generation = 0;
 let operationQueue: Promise<unknown> = Promise.resolve();
 
@@ -228,10 +232,18 @@ const loadSharingState = async (
     syncedKey(device.userId, device.deviceId),
     superjson.stringify({ account: state.account, device: state.device }),
   );
+  for (const listener of loadedStateListeners) listener(state);
   const isCurrent = () =>
     !abandoned() && !hasPendingSharingPause(device.userId) && changeRevision === revision;
   await applyNativeSharingState(state, isCurrent);
   return state;
+};
+
+export const onSharingStateLoaded = (listener: (state: LoadedSharingState) => void) => {
+  loadedStateListeners.add(listener);
+  return () => {
+    loadedStateListeners.delete(listener);
+  };
 };
 
 export const syncLocationSharing = () => {
@@ -247,12 +259,18 @@ export const changeLocationSharing = async (input: {
   expectedRevision?: number;
 }) => {
   const revision = ++changeRevision;
+  latestScopeRevisions.set(input.scope, revision);
   const requestedGeneration = generation;
   const device = await getRegisteredDeviceKey();
   if (!device) throw new Error("This device isn't registered yet.");
   if (generation !== requestedGeneration) throw new Error("You've signed out.");
   const deviceId = input.deviceId ?? device.deviceId;
   const affectsThisDevice = input.scope === "account" || deviceId === device.deviceId;
+  const offline = await (await import("./networkStatus.ts")).isDeviceOffline();
+  if (generation !== requestedGeneration) throw new Error("You've signed out.");
+  if (latestScopeRevisions.get(input.scope) !== revision)
+    throw new Error("A newer sharing change replaced this one.");
+  if (offline && !affectsThisDevice) throw new Error(SERVER_UNREACHABLE_MESSAGE);
   const key = pendingKey(device.userId, input.scope);
   const queued = affectsThisDevice ? readPendingChange(device.userId, input.scope) : null;
   const synced = affectsThisDevice
@@ -283,18 +301,20 @@ export const changeLocationSharing = async (input: {
       if (change.paused) await applyLocalSharingState(device, isCurrent);
     }
     storage.remove(rejectedKey(device.userId));
-    const result = await tryCatch(
-      queueOperation(async () => {
-        if (generation !== requestedGeneration) throw new Error("You've signed out.");
-        const { status } = await trpcClient.account.setLocationSharing.mutate(
-          change.paused ? { ...change, expectedRevision: null } : change,
+    const result = offline
+      ? { data: null, error: new Error(SERVER_UNREACHABLE_MESSAGE) }
+      : await tryCatch(
+          queueOperation(async () => {
+            if (generation !== requestedGeneration) throw new Error("You've signed out.");
+            const { status } = await trpcClient.account.setLocationSharing.mutate(
+              change.paused ? { ...change, expectedRevision: null } : change,
+            );
+            if (generation !== requestedGeneration) return status;
+            if (storage.getString(key) === stored) storage.remove(key);
+            await tryCatch(synchronizeSharing(requestedGeneration));
+            return status;
+          }),
         );
-        if (generation !== requestedGeneration) return status;
-        if (storage.getString(key) === stored) storage.remove(key);
-        await tryCatch(synchronizeSharing(requestedGeneration));
-        return status;
-      }),
-    );
     if (!result.error) return result.data;
     if (!affectsThisDevice || storage.getString(key) !== stored) throw result.error;
     if (isRejectedForGood(result.error)) {

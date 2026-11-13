@@ -7,6 +7,8 @@ import {
 
 const userId = "user-1";
 const storedKeys = new Map<number, HistoryPrivateKeyMaterial>();
+const storeOwners: unknown[] = [];
+let ownerGeneration = 0;
 const storageValues = new Map<string, string>();
 let createError: Error | null = null;
 let statusError: Error | null = null;
@@ -32,6 +34,7 @@ mock.module("./api.ts", () => ({
     accountRecovery: {
       status: {
         query: async () => {
+          ownerGeneration += 1;
           if (statusError) throw statusError;
           return { currentHistoryKey: serverHistoryKey, recoveryKey };
         },
@@ -40,10 +43,18 @@ mock.module("./api.ts", () => ({
   },
 }));
 
+mock.module("./secretStorage.ts", () => ({
+  secretOwner: (owner: string) => ({ userId: owner, generation: ownerGeneration }),
+}));
 mock.module("./historyKeys.ts", () => ({
   getStoredHistoryKey: async (input: { userId: string; version: number }) =>
     input.userId === userId ? (storedKeys.get(input.version) ?? null) : null,
-  storeHistoryKey: async (input: { privateKey: HistoryPrivateKeyMaterial; version: number }) => {
+  storeHistoryKey: async (input: {
+    owner: unknown;
+    privateKey: HistoryPrivateKeyMaterial;
+    version: number;
+  }) => {
+    storeOwners.push(input.owner);
     storedKeys.set(input.version, input.privateKey);
   },
   deleteStoredHistoryKeys: async (input: { upToVersion: number }) => {
@@ -61,7 +72,7 @@ mock.module("./storage.ts", () => ({
   },
 }));
 
-const { createHistoryKey } = await import("./createHistoryKey.ts");
+const { createHistoryKey, createHistoryKeyIfMissing } = await import("./createHistoryKey.ts");
 const { getCurrentHistoryKeyState } = await import("./currentHistoryKey.ts");
 
 const storedPublicKey = () => {
@@ -72,6 +83,8 @@ const storedPublicKey = () => {
 describe("creating the first History key", () => {
   beforeEach(() => {
     storedKeys.clear();
+    storeOwners.length = 0;
+    ownerGeneration = 0;
     storageValues.clear();
     createError = null;
     statusError = null;
@@ -79,6 +92,19 @@ describe("creating the first History key", () => {
     recoveryKey = null;
     createGate = null;
     creates = 0;
+  });
+
+  test("saves the key for the account owner the caller captured, not whoever owns it now", async () => {
+    const capturedBeforeSignOut = { userId, generation: 4 };
+    await createHistoryKey(userId, capturedBeforeSignOut);
+
+    expect(storeOwners).toEqual([capturedBeforeSignOut]);
+  });
+
+  test("a missing-key check uses the owner from before its status query", async () => {
+    await createHistoryKeyIfMissing(userId);
+
+    expect(storeOwners).toEqual([{ userId, generation: 0 }]);
   });
 
   test("two overlapping creates on one phone publish one key and keep it", async () => {

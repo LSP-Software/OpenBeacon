@@ -1,7 +1,12 @@
 import { decodeBase64, encodeBase64 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
-import * as SecureStore from "expo-secure-store";
-import { getSecureStoreOptions } from "./secureStoreOptions.ts";
+import {
+  deleteSecret,
+  readSecret,
+  secretOwner,
+  withSecretDeadline,
+  writeSecret,
+} from "./secretStorage.ts";
 
 const getSavedDeviceLinkName = ({ deviceId, userId }: { deviceId: string; userId: string }) =>
   `encryption.deviceLink.${userId}.${deviceId}`;
@@ -16,17 +21,16 @@ export const saveDeviceLink = async ({
   psk: Uint8Array;
   userId: string;
 }) =>
-  SecureStore.setItemAsync(
-    getSavedDeviceLinkName(device),
-    JSON.stringify({ linkId, psk: encodeBase64(psk) }),
-    getSecureStoreOptions(),
+  withSecretDeadline(
+    writeSecret(
+      secretOwner(device.userId),
+      getSavedDeviceLinkName(device),
+      JSON.stringify({ linkId, psk: encodeBase64(psk) }),
+    ),
   );
 
 export const readSavedDeviceLink = async (device: { deviceId: string; userId: string }) => {
-  const stored = await SecureStore.getItemAsync(
-    getSavedDeviceLinkName(device),
-    getSecureStoreOptions(),
-  );
+  const stored = await readSecret(getSavedDeviceLinkName(device));
   if (!stored) return null;
   const parsed = await tryCatch(
     Promise.resolve().then(() => {
@@ -39,4 +43,4 @@ export const readSavedDeviceLink = async (device: { deviceId: string; userId: st
 };
 
 export const deleteSavedDeviceLink = async (device: { deviceId: string; userId: string }) =>
-  SecureStore.deleteItemAsync(getSavedDeviceLinkName(device), getSecureStoreOptions());
+  deleteSecret(getSavedDeviceLinkName(device));

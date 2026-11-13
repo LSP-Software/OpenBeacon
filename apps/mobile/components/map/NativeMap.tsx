@@ -28,6 +28,7 @@ import { cn } from "../../lib/cn.ts";
 import type { MapGroupOption, MapMemberDevice, MapPeople } from "../../lib/mapPeopleTypes.ts";
 import { getSymbolVisibility } from "../../lib/protomaps-style.ts";
 import { Icon } from "../ui/Icon.tsx";
+import { Button } from "../ui/Button.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapEdgeChip } from "./LiveMapEdgeChip.tsx";
 import { LiveMapGroupMenu, LiveMapHiddenGroupsNotice } from "./LiveMapGroupVisibility.tsx";
@@ -330,6 +331,22 @@ export const NativeMap = ({
         <Text className="text-center text-muted-foreground">
           The server is still preparing the map. It will appear here when it's ready.
         </Text>
+      </View>
+    );
+  }
+
+  if (!mapStyle && map.isError) {
+    return (
+      <View
+        className="flex-1 items-center justify-center gap-4 bg-background px-8"
+        accessibilityLiveRegion="polite"
+      >
+        <Text className="text-center text-muted-foreground">
+          We couldn’t load the map. Check your connection and try again.
+        </Text>
+        <Button variant="outline" loading={map.isFetching} onPress={map.retryUrl}>
+          <Text>Try again</Text>
+        </Button>
       </View>
     );
   }

@@ -16,6 +16,7 @@ import { createHistoryKey } from "./createHistoryKey.ts";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { isThisDeviceActive } from "./deviceActivation.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
+import { secretOwner } from "./secretStorage.ts";
 import {
   cancelDeviceKeyRegistrations,
   ensureDeviceKeyRegistration,
@@ -119,6 +120,7 @@ const haveMatchingProvisionedKeys = ({
   desired.map(getProvisionedKeyIdentity).sort().join("|");
 
 const checkHistoryBackfill = async (userId: string) => {
+  const owner = secretOwner(userId);
   const lastCleanBackfill = lastCleanBackfills.get(userId);
   if (
     lastCleanBackfill !== undefined &&
@@ -131,7 +133,7 @@ const checkHistoryBackfill = async (userId: string) => {
   const current = await tryCatch(getCurrentHistoryKeyState(userId));
   if (getErrorCode(current.error) === "UNAUTHORIZED") throw current.error;
   if (current.data?.status === "none") {
-    const created = await tryCatch(createHistoryKey(userId));
+    const created = await tryCatch(createHistoryKey(userId, owner));
     if (getErrorCode(created.error) === "UNAUTHORIZED") throw created.error;
     return {
       canBackfill: created.data === true,
