@@ -97,6 +97,8 @@ let recoveryStatus: {
 let recoveryStatusError: Error | null = null;
 let recoveryStatusCalls = 0;
 const storedHistoryKeyVersions = new Set([1]);
+let historyKeyReadError: Error | null = null;
+let failedHistoryKeyReads = 0;
 let createHistoryKeyResult: boolean | Error = true;
 let thisDeviceActive = true;
 let createHistoryKeyCalls = 0;
@@ -126,6 +128,10 @@ let uploadGroup = async ({
   duplicates: [],
 });
 
+mock.module("./secretStorage.ts", () => ({
+  secretOwner: (userId: string) => ({ userId, generation: 0 }),
+  invalidateSecretWrites: async () => {},
+}));
 mock.module("./trackingUploadTime.ts", () => ({
   recordTrackingUpload: (deviceId: string, groupId: string, timestamp: string) => {
     recordedUploads.push({ deviceId, groupId, timestamp });
@@ -177,8 +183,15 @@ mock.module("./deviceKeys.ts", () => ({
 }));
 
 mock.module("./historyKeys.ts", () => ({
-  getStoredHistoryKey: async ({ userId, version }: { userId: string; version: number }) =>
-    userId === "user-1" && storedHistoryKeyVersions.has(version) ? historyKeyPair.privateKey : null,
+  getStoredHistoryKey: async ({ userId, version }: { userId: string; version: number }) => {
+    if (historyKeyReadError) {
+      failedHistoryKeyReads += 1;
+      throw historyKeyReadError;
+    }
+    return userId === "user-1" && storedHistoryKeyVersions.has(version)
+      ? historyKeyPair.privateKey
+      : null;
+  },
   storeHistoryKey: async () => {},
   deleteStoredHistoryKeys: async () => {},
 }));
@@ -577,6 +590,7 @@ describe("tracking service", () => {
     dismissedNotices.length = 0;
     storedHistoryKeyVersions.clear();
     storedHistoryKeyVersions.add(1);
+    historyKeyReadError = null;
     createHistoryKeyResult = true;
     createHistoryKeyCalls = 0;
     thisDeviceActive = true;
@@ -2244,6 +2258,24 @@ describe("tracking service", () => {
       await reconcileTrackingKeys({ startCapture: true, force: true });
       requests.length = 0;
     };
+
+    test("a History key read that times out during the key check doesn't hold back uploads", async () => {
+      recoveryStatus = {
+        currentHistoryKey: { publicKey: historyKeyPair.publicKey, version: 2 },
+        recoveryKey: {},
+      };
+      await startTracking();
+      queueBothGroups();
+      storageValues.delete("tracking.keyCheck");
+      historyKeyReadError = new Error("Key storage is unavailable.");
+      failedHistoryKeyReads = 0;
+
+      await syncBackgroundTracking();
+
+      expect(failedHistoryKeyReads).toBeGreaterThan(0);
+      expect(requests.filter((request) => request === "groupTracking.uploadBatch")).toHaveLength(2);
+      expect(deleted.flat().sort()).toEqual([1, 2]);
+    });
 
     test("a background sync with nothing new sends only the uploads", async () => {
       await startTracking();

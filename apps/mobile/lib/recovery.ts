@@ -20,6 +20,7 @@ import { errorReason } from "./errorReason.ts";
 import { getStoredHistoryKey, storeHistoryKey } from "./historyKeys.ts";
 import { needsFreshSignIn } from "./needsFreshSignIn.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
+import { secretOwner } from "./secretStorage.ts";
 
 export const pickConfirmationIndexes = () => {
   const indexes = new Set<number>();
@@ -214,6 +215,7 @@ export const RECOVERY_DATA_MISMATCH_MESSAGE =
 
 export const restoreFromRecoveryPhrase = async (phrase: RecoveryPhrase) => {
   const device = await ensureDeviceKeyRegistration();
+  const owner = secretOwner(device.userId);
   const status = await trpcClient.accountRecovery.status.query();
   const recoveryKey = deriveRecoveryKeyPair(phrase);
   if (
@@ -247,7 +249,7 @@ export const restoreFromRecoveryPhrase = async (phrase: RecoveryPhrase) => {
   const stored = await tryCatch(
     Promise.all(
       opened.data.map(({ privateKey, version }) =>
-        storeHistoryKey({ privateKey, userId: device.userId, version }),
+        storeHistoryKey({ privateKey, owner, userId: device.userId, version }),
       ),
     ),
   );
@@ -302,6 +304,7 @@ export const verifyRecoveryResetCode = async (code: string) => {
 
 export const resetRecoveryPhrase = async (phrase: RecoveryPhrase, resetToken?: string) => {
   const device = await ensureDeviceKeyRegistration();
+  const owner = secretOwner(device.userId);
   const status = await trpcClient.accountRecovery.status.query();
   const version = (status.currentHistoryKey?.version ?? 0) + 1;
   const { historyPrivateKey, input } = createRecoveryKeys({
@@ -330,7 +333,7 @@ export const resetRecoveryPhrase = async (phrase: RecoveryPhrase, resetToken?: s
   if (result.error) throw result.error;
   await tryCatch(deleteSavedDeviceLink(device));
   const stored = await tryCatch(
-    storeHistoryKey({ privateKey: historyPrivateKey, userId: device.userId, version }),
+    storeHistoryKey({ privateKey: historyPrivateKey, owner, userId: device.userId, version }),
   );
   if (stored.error) return { device, status: "unsaved" as const };
   return { device, status: "reset" as const, version };

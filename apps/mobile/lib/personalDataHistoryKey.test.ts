@@ -109,6 +109,10 @@ const updateNicknameMock = mock(
   },
 );
 
+mock.module("./secretStorage.ts", () => ({
+  secretOwner: (userId: string) => ({ userId, generation: 0 }),
+  invalidateSecretWrites: async () => {},
+}));
 mock.module("./api.ts", () => ({
   trpcClient: {
     accountHistory: {
