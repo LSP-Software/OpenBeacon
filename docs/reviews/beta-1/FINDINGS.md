@@ -320,6 +320,8 @@ Every PR body says `API compatibility: unchanged`.
 
 ### M4. Opening the app stops location sharing until permissions load; offline, it stays off
 
+- **Status:** fixed on `fix/beta-1-review` by "Keep location sharing running while the permission state loads on launch" (SHA added at wrap-up). Tests: TrackingProvider starting at `permissionState: null` flushes but doesn't reconcile, then reconciles with a forced key check once known; a known not-ready state still stops capture; a failed permission request falls back to a direct read; `tracking.test.ts` reproduces V4 (offline revoke, then `reconcile(true)` goes back to the network). Emulator check in the end-of-branch batch.
+
 - Finding: S6-01 · bug · **high** · verified (V4, reproduced)
 - Location: apps/mobile/providers/TrackingProvider.tsx:51-54 and :186; apps/mobile/providers/LocationPermissionProvider.tsx:42 and :112-120; apps/mobile/lib/tracking.ts:221-235, :273-290, :493-498
 - Failure scenario: On a cold launch, `permissionState` is `null`, and the first cycle reads that as "not allowed". It stops the capture service and revokes the native epoch keys. Offline (looking at the map on a hike, say), nothing restarts capture:
@@ -1230,6 +1232,8 @@ Deleting a heavy user's account overruns Prisma's 5 s transaction timeout, so it
 ### S6 Mobile: tracking, sharing and native
 
 #### S6-01 · high · bug · **must-fix, see M4**
+
+- **Status:** fixed on `fix/beta-1-review` by "Keep location sharing running while the permission state loads on launch" (SHA added at wrap-up). Tests: TrackingProvider starting at `permissionState: null` flushes but doesn't reconcile, then reconciles with a forced key check once known; a known not-ready state still stops capture; a failed permission request falls back to a direct read; `tracking.test.ts` reproduces V4 (offline revoke, then `reconcile(true)` goes back to the network). Emulator check in the end-of-branch batch.
 
 Cold app launch stops sharing and wipes native keys before permissions load; offline, sharing stays off
 

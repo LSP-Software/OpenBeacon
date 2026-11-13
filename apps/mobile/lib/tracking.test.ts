@@ -78,6 +78,7 @@ let onStopCapture: (() => void) | null = null;
 let refreshCaptureCalls = 0;
 let failRefreshCapture = false;
 let failRevokeEpochKeys = false;
+let failMembershipList = false;
 let failRegistration = false;
 let registrationError: Error | null = null;
 let failRotation = false;
@@ -307,6 +308,7 @@ mock.module("./api.ts", () => ({
       list: {
         query: async () => {
           requests.push("groupMembership.list");
+          if (failMembershipList) throw new Error("Network request failed");
           return membershipGroups;
         },
       },
@@ -456,6 +458,8 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
     revokeEpochKeys: (groupIds?: string[] | null) => {
       revokedGroups.push(groupIds);
       if (failRevokeEpochKeys) throw new Error("revoke failed");
+      const kept = provisionedKeys.filter(({ groupId }) => groupIds && !groupIds.includes(groupId));
+      provisionedKeys.splice(0, provisionedKeys.length, ...kept);
     },
     listProvisionedEpochKeys: () => provisionedKeys,
     startCapture: async () => {
@@ -586,6 +590,7 @@ describe("tracking service", () => {
     refreshCaptureCalls = 0;
     failRefreshCapture = false;
     failRevokeEpochKeys = false;
+    failMembershipList = false;
     failRegistration = false;
     registrationError = null;
     failRotation = false;
@@ -1044,6 +1049,24 @@ describe("tracking service", () => {
     ).toBe(encodeBase64(epochKey1.expose()));
 
     expect(backfillQueries.sort()).toEqual(["group-1", "group-2"]);
+  });
+
+  test("revoking keys offline doesn't leave a fresh key check that keeps capture off", async () => {
+    await reconcileTrackingKeys({ startCapture: true, force: true });
+    expect(provisionedKeys).toHaveLength(2);
+    const starts = startCaptureCalls;
+
+    failMembershipList = true;
+    await expect(reconcileTrackingKeys({ startCapture: false, force: true })).rejects.toThrow(
+      "Network request failed",
+    );
+    expect(provisionedKeys).toHaveLength(0);
+
+    failMembershipList = false;
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(provisionedKeys).toHaveLength(2);
+    expect(startCaptureCalls).toBe(starts + 1);
   });
 
   test("checks and sweeps for backfill at most once every ten minutes per user", async () => {

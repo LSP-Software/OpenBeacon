@@ -49,9 +49,9 @@ export const TrackingProvider = ({
   const forceFlushRef = useRef(false);
   const forceKeyCheckRef = useRef(false);
   const recoveryCheckedUserRef = useRef<string | null>(null);
-  const startCaptureRef = useRef(permissionState?.isReadyForSharing ?? false);
+  const startCapture = permissionState ? permissionState.isReadyForSharing : null;
+  const startCaptureRef = useRef(startCapture);
   const userId = session?.user.id ?? null;
-  const startCapture = permissionState?.isReadyForSharing ?? false;
   startCaptureRef.current = startCapture;
 
   const runTrackingCycle = useCallback(
@@ -79,12 +79,12 @@ export const TrackingProvider = ({
           const forceKeyCheck = forceKeyCheckRef.current;
           forceFlushRef.current = false;
           forceKeyCheckRef.current = false;
-          await tryCatch(
-            service.reconcileTrackingKeys({
-              startCapture: startCaptureRef.current,
-              force: forceKeyCheck,
-            }),
-          );
+          const startCapture = startCaptureRef.current;
+          if (startCapture === null) {
+            forceKeyCheckRef.current ||= forceKeyCheck;
+          } else {
+            await tryCatch(service.reconcileTrackingKeys({ startCapture, force: forceKeyCheck }));
+          }
           if (version !== cycleVersionRef.current) return;
           if (appStateRef.current === "active" && (await service.takeKeyAccessChange())) {
             void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
