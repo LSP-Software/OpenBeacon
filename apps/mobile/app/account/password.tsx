@@ -12,6 +12,7 @@ import { BackButton } from "../../components/headers/BackButton.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Input } from "../../components/ui/Input.tsx";
 import { Text } from "../../components/ui/Text.tsx";
+import { passwordErrorMessage } from "../../lib/passwordErrorMessage.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { changePasswordFormSchema } from "../../lib/changePasswordSchema.ts";
 import { ensureDeviceKeyRegistration } from "../../lib/deviceKeys.ts";
@@ -46,7 +47,10 @@ const PasswordScreen = () => {
     });
     if (result.error) {
       setSaving(false);
-      Alert.alert("Unable to change password", result.error.message);
+      Alert.alert(
+        "Unable to change password",
+        passwordErrorMessage(result.error, "Please try again."),
+      );
       return;
     }
     form.reset();

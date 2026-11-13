@@ -110,6 +110,8 @@ Settled with the owner on 13 Nov 2026, against `94a73b27` (main had not moved).
 
 ### Q7 (D25, S2-04) Remove every IP-based limit before beta, after adding a per-account password limit
 
+- **Status:** fixed on `fix/beta-1-review` by "Lock an account's password after 10 failures in 15 minutes" (SHA added at wrap-up). Q7a. Integration tests (`passwordAttempts.integration.test.ts`): the 11th attempt is refused with the right password, case-insensitive email, successes don't count, per account, 30 parallel guesses give exactly 10 checks, change-password shares the count; fails closed with a 503 when Redis is down; app mapping tested. The limiter refills gradually (about one attempt every 90 s after a lockout), so the "15 minutes" copy is approximate. Emulator check in the end-of-branch batch.
+
 - **Decision:**
   1. Add a per-account password-failure limit on `/sign-in/email` and `/change-password`, keyed on the normalised email, in the shared Redis `rateLimits`. Allow 10 failures in 15 minutes, then refuse with "Too many attempts. Try again in 15 minutes."
   2. Then remove every IP-based limit:

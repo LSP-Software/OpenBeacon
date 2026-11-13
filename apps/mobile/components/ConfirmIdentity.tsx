@@ -10,6 +10,7 @@ import { isNativeGoogleSignInConfigured, signInWithGoogle } from "../lib/auth.ts
 import { authClient, saveSessionTokenToRevoke } from "../lib/auth-client.ts";
 import { ensureDeviceKeyRegistration } from "../lib/deviceKeys.ts";
 import { isDeviceRemovedError } from "../lib/deviceRemovedError.ts";
+import { passwordErrorMessage } from "../lib/passwordErrorMessage.ts";
 import { isSessionLinkRefused, signOutAfterRefusedSessionLink } from "../lib/sessionLink.ts";
 import { LoadingIndicator } from "./LoadingIndicator.tsx";
 import { Button } from "./ui/Button.tsx";
@@ -40,7 +41,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
     const failure = result.error ?? result.data.error;
     if (failure) {
       setPending(false);
-      Alert.alert("Unable to confirm it’s you", failure.message || "Please try again.");
+      Alert.alert("Unable to confirm it’s you", passwordErrorMessage(failure, "Please try again."));
       return;
     }
     const current = await tryCatch(authClient.getSession());

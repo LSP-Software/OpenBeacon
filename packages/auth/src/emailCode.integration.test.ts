@@ -58,11 +58,13 @@ const securityAlerts = createSecurityAlerts({
 const auth = createAuth({
   emailCodes: codes,
   securityAlerts,
+  rateLimits: createIntegrationTestCache(() => clockMs).rateLimits,
   runInBackground: (task) => tasks.push(task),
 });
 const emailOff = createAuth({
   emailCodes: null,
   securityAlerts: null,
+  rateLimits: createIntegrationTestCache(() => clockMs).rateLimits,
   runInBackground: (task) => tasks.push(task),
 });
 
