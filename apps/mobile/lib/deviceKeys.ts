@@ -12,7 +12,14 @@ import { trpcClient } from "./api.ts";
 import { baseUrl } from "./currentServer.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { readRegisteredDevice, REGISTERED_DEVICE_KEY } from "./registeredDevice.ts";
-import { deleteSecret, readSecret, secretOwner, writeSecret } from "./secretStorage.ts";
+import {
+  deleteSecret,
+  isSecretOwnerCurrent,
+  readSecret,
+  SIGNED_OUT_MESSAGE,
+  secretOwner,
+  writeSecret,
+} from "./secretStorage.ts";
 import { linkSessionToDevice } from "./sessionLink.ts";
 import { storage } from "./storage.ts";
 
@@ -86,13 +93,16 @@ const persistStoredDeviceKeyContext = async ({
   const { deviceIdKey, privateKeyKey, publicKeyKey } = getScopedDeviceKeyNames(owner.userId);
 
   try {
+    if (!isSecretOwnerCurrent(owner)) throw new Error(SIGNED_OUT_MESSAGE);
     storage.set(deviceIdKey, deviceId);
     storage.set(publicKeyKey, publicKey);
     await writeSecret(owner, privateKeyKey, encodeBase64(privateKey));
   } catch (error) {
-    storage.remove(deviceIdKey);
-    storage.remove(publicKeyKey);
-    await deleteSecret(privateKeyKey);
+    if (isSecretOwnerCurrent(owner)) {
+      storage.remove(deviceIdKey);
+      storage.remove(publicKeyKey);
+      await deleteSecret(privateKeyKey);
+    }
     throw error;
   }
 };
