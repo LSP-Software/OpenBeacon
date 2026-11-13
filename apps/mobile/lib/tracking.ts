@@ -221,7 +221,9 @@ const reconcileTrackingKeysInternal = async ({
     if (trackingModule) {
       if (trackingModule.isCaptureRunning()) await trackingModule.stopCapture();
       if (!isCurrent()) return false;
+      const hadKeys = trackingModule.listProvisionedEpochKeys().length > 0;
       trackingModule.revokeEpochKeys();
+      if (hadKeys) markTrackingKeysStale();
     }
     if (!force && (await hasFreshKeyCheck(false))) return false;
     if (!isCurrent()) return false;
