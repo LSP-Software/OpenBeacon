@@ -149,7 +149,7 @@ export const confirmImageUpload = async ({
   }
 
   const { data: file, error: verifyError } = await tryCatch(
-    getUploadedFile(bucketName, imagePath, pendingFileName, 16),
+    getUploadedFile(bucketName, imagePath, pendingFileName, 16, env.MAX_IMAGE_FILE_SIZE),
   );
 
   if (verifyError) {
