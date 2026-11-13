@@ -1,0 +1,50 @@
+Resolving dependencies
+Resolved, downloaded and extracted [154]
+Saved lockfile
+ERROR: Error loading apps/mobile/metro.config.cjs (Cannot find module 'tailwind.config')
+ERROR: Please fix or visit https://knip.dev/reference/known-issues
+Unused files (3)
+apps/backend/src/helpers/db.ts: apps/backend/src/helpers/db.ts
+apps/mobile/components/ui/Accordion.tsx: apps/mobile/components/ui/Accordion.tsx
+apps/mobile/hooks/useGroupLivePositions.ts: apps/mobile/hooks/useGroupLivePositions.ts
+Unused dependencies (4)
+apps/backend/package.json: @better-auth/expo, @prisma/adapter-pg, better-auth
+apps/mobile/package.json: @rn-primitives/accordion, expo-glass-effect, expo-image
+apps/scheduled-jobs/package.json: zod
+packages/database/package.json: @prisma/client, pg
+Unused devDependencies (1)
+apps/mobile/package.json: expo-dev-client
+Unlisted dependencies (5)
+apps/mobile/app.config.js: expo-updates
+apps/mobile/app.json: expo-updates, expo-system-ui
+apps/mobile/lib/api.ts: superjson
+apps/mobile/lib/locationSharing.ts: superjson
+apps/scheduled-jobs/src/jobs/imageUploadCleanup.integration.test.ts: @aws-sdk/client-s3
+Unused exports (20)
+apps/map-tiles/src/pmtiles.ts: SUPPORTED_SCHEMA_MAJOR, HEADER_CHECK_LENGTH, parseMetadata
+apps/map-tiles/src/status.ts: updateRunSchema, mapStatusSchema
+apps/mobile/components/dialogs/InviteMemberToGroupDialog.tsx: InviteMembersInputs
+apps/mobile/components/ui/Button.tsx: buttonTextVariants, buttonVariants
+apps/mobile/components/ui/Card.tsx: CardFooter, cardVariants
+apps/mobile/components/ui/Dialog.tsx: DialogClose, DialogOverlay, DialogPortal, DialogTrigger
+apps/mobile/components/ui/Field.tsx: FieldGroup, FieldLegend, FieldSeparator, FieldSet, FieldContent, FieldTitle
+apps/mobile/components/ui/Select.tsx: SelectLabel, SelectSeparator
+apps/mobile/lib/auth.ts: isNativeGoogleSignInConfiguredForPlatform, revokePendingSessionToken
+apps/mobile/lib/deviceActivation.ts: ACTIVATION_KEY_MISSING_MESSAGE
+apps/mobile/lib/image-upload.ts: computeSha256Base64, uploadToPresignedUrl
+apps/mobile/lib/installCrypto.ts: installExpoCrypto
+apps/mobile/lib/locationPermissions.ts: requestForegroundLocationPermissions
+apps/mobile/lib/smoothDeviceHeading.ts: HEADING_SAMPLE_SMOOTHING_ALPHA, HEADING_CHASE_SPEED, HEADING_SETTLED_DEGREES
+apps/mobile/lib/theme.ts: getColors
+packages/api/src/lib/groupEpochs.ts: defaultDeviceIcon
+packages/api/src/lib/pmtilesUrl.ts: PM_TILES_URL_REFRESH_WINDOW_MS
+packages/cache/src/rateLimits/schemas.ts: rateLimitIdentifierSchema, redisOptionsSchema
+packages/database/src/client.ts: default
+packages/encryption/src/sensitive.ts: SensitiveBytes
+Unused exported types (3)
+apps/mobile/components/ui/Button.tsx: ButtonProps
+apps/mobile/lib/locationPermissions.ts: LocationPermissionStatus, LocationPermissionRequirement
+apps/mobile/lib/mapTracking.ts: LiveMapPosition
+Duplicate exports (2)
+packages/encryption/src/constants.ts: X25519_KEY_ALGORITHM, DEVICE_KEY_ALGORITHM
+packages/schemas/src/schemas/auth/accountRecovery.ts: changeRecoveryPhraseSchema, setupAccountRecoverySchema
