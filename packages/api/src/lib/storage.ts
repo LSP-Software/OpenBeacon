@@ -42,6 +42,7 @@ export const getUploadedFile = async (
   path: string,
   fileName: string,
   headerLength: number,
+  maxSize: number,
 ) => {
   const key = buildKey(path, fileName);
   const { data: head, error: headError } = await tryCatch(
@@ -53,7 +54,8 @@ export const getUploadedFile = async (
     throw headError;
   }
   const size = head.ContentLength ?? 0;
-  if (size < headerLength) return { size, contentType: head.ContentType, header: new Uint8Array() };
+  if (size < headerLength || size > maxSize)
+    return { size, contentType: head.ContentType, header: new Uint8Array() };
   const object = await s3Client.send(
     new GetObjectCommand({ Bucket: bucketName, Key: key, Range: `bytes=0-${headerLength - 1}` }),
   );
