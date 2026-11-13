@@ -7,14 +7,14 @@ const pendingWrites = new Map<string, Set<Promise<void>>>();
 const keyOperations = new Map<string, Promise<unknown>>();
 
 export const SECRET_STORAGE_UNAVAILABLE_MESSAGE = "Key storage is unavailable.";
-const SIGNED_OUT_MESSAGE = "This phone was signed out while saving its keys.";
+export const SIGNED_OUT_MESSAGE = "This phone was signed out while saving its keys.";
 
 export const secretOwner = (userId: string) => ({
   userId,
   generation: generations.get(userId) ?? 0,
 });
 
-const isCurrent = (owner: ReturnType<typeof secretOwner>) =>
+export const isSecretOwnerCurrent = (owner: ReturnType<typeof secretOwner>) =>
   (generations.get(owner.userId) ?? 0) === owner.generation;
 
 export const withSecretDeadline = async <T>(task: Promise<T>) => {
@@ -56,11 +56,11 @@ export const writeSecret = async (
   key: string,
   value: string,
 ) => {
-  if (!isCurrent(owner)) throw new Error(SIGNED_OUT_MESSAGE);
+  if (!isSecretOwnerCurrent(owner)) throw new Error(SIGNED_OUT_MESSAGE);
   const write = queueForKey(key, async () => {
-    if (!isCurrent(owner)) throw new Error(SIGNED_OUT_MESSAGE);
+    if (!isSecretOwnerCurrent(owner)) throw new Error(SIGNED_OUT_MESSAGE);
     await SecureStore.setItemAsync(key, value, getSecureStoreOptions());
-    if (isCurrent(owner)) return;
+    if (isSecretOwnerCurrent(owner)) return;
     await SecureStore.deleteItemAsync(key, getSecureStoreOptions());
     throw new Error(SIGNED_OUT_MESSAGE);
   });
