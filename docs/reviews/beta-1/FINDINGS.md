@@ -1602,6 +1602,8 @@ The launch screen retries forever with no message or way out when the device che
 
 #### S9-01 · medium · bug
 
+- **Status:** fixed on `fix/beta-1-review` by "Reset the group screen when switching to another group" (SHA added at wrap-up). C12. Tested in `groupScreen.test.tsx`: the dismissed warning and selected tab reset when `groupId` changes.
+
 **Group screen state carries over from one group to the next (unsaved rename can hit the wrong group)**
 
 - Location: apps/mobile/app/(tabs)/groups/[groupId]/index.tsx:53-57; apps/mobile/app/(tabs)/groups/[groupId]/SettingsTab.tsx:282,302-317; apps/mobile/app/(tabs)/groups/[groupId]/MembersTab.tsx:39-52
