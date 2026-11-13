@@ -32,7 +32,14 @@
       "predictiveBackGestureEnabled": false,
       "allowBackup": false,
       "package": "net.openbeacon.app",
-      "versionCode": 35
+      "versionCode": 35,
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WRITE_SETTINGS",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "scheme": "openbeacon",
     "plugins": [
@@ -67,7 +74,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos."
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos.",
+          "microphonePermission": false
         }
       ],
       "./plugins/withReleaseSigning.js"
