@@ -11,7 +11,7 @@ mock.module("./storage.ts", () => ({
     contains: (key: string) => stored.has(key),
   },
 }));
-mock.module("./base-url.ts", () => ({
+mock.module("./currentServer.ts", () => ({
   baseUrl: "https://api.example.test",
   getBaseUrl: () => "https://api.example.test",
   getFeedbackUrl: () => "https://hosted.example.test",

@@ -11,10 +11,18 @@ import { Input } from "../components/ui/Input.tsx";
 import { Separator } from "../components/ui/Separator.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { checkServerCompatibility } from "../lib/apiCompatibility.ts";
-import { getServerUrl, hasCustomServerUrl, setServerUrl } from "../lib/server-url.ts";
+import {
+  getServerUrl,
+  hasCustomServerUrl,
+  normaliseServerUrl,
+  setServerUrl,
+} from "../lib/currentServer.ts";
 
 const serverUrlSchema = z.object({
-  url: z.url({ error: "Invalid server url" }).trim(),
+  url: z.string().superRefine((url, context) => {
+    const { error } = normaliseServerUrl(url);
+    if (error) context.addIssue({ code: "custom", message: error });
+  }),
 });
 
 export default function ServerUrl() {
@@ -28,27 +36,14 @@ export default function ServerUrl() {
   });
 
   const handleSave = async (data: z.infer<typeof serverUrlSchema>) => {
-    const { url } = data;
-    try {
-      const parsed = new URL(url);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        Alert.alert("Invalid URL", "Server URL must start with http:// or https://");
-        return;
-      }
-    } catch {
-      Alert.alert("Invalid URL", "Server URL must start with http:// or https://");
-      return;
-    }
+    const { url } = normaliseServerUrl(data.url);
+    if (!url) return;
 
     const save = () => {
       setServerUrl(url);
-      Alert.alert(
-        url ? "Server saved" : "Using default server",
-        url
-          ? "Restart the app to connect to your custom server."
-          : "Restart the app to switch back to the default server.",
-        [{ text: "OK", onPress: () => router.back() }],
-      );
+      Alert.alert("Server saved", "Restart the app to connect to your custom server.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
     };
 
     const { verdict, serverVersion } = await checkServerCompatibility(url);
@@ -97,8 +92,8 @@ export default function ServerUrl() {
           <View className="gap-5">
             <Text className="font-bold text-5xl">Custom{"\n"}server</Text>
             <Text className="text-lg text-muted">
-              Point OpenBeacon at your own self-hosted backend. Leave blank to use the default
-              hosted server.
+              Point OpenBeacon at your own self-hosted backend, for example
+              https://beacon.example.com.
             </Text>
           </View>
 

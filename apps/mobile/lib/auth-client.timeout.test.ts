@@ -16,7 +16,7 @@ const baseUrl = `http://127.0.0.1:${hangingServer.port.toString()}`;
 mock.module("./storage.ts", () => ({
   storage: { getString: () => undefined, set: () => {}, remove: () => {}, contains: () => false },
 }));
-mock.module("./base-url.ts", () => ({ baseUrl }));
+mock.module("./currentServer.ts", () => ({ baseUrl }));
 mock.module("expo-secure-store", () => ({}));
 mock.module("@better-auth/expo/client", () => ({ expoClient: () => ({ id: "expo" }) }));
 

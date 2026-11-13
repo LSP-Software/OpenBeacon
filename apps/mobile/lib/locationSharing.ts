@@ -9,7 +9,7 @@ import { Platform } from "react-native";
 import superjson from "superjson";
 import { z } from "zod";
 import { trpcClient } from "./api.ts";
-import { baseUrl } from "./base-url.ts";
+import { baseUrl } from "./currentServer.ts";
 import { createSecureId } from "./createSecureId.ts";
 import { getRegisteredDeviceKey, getStoredDeviceId } from "./deviceKeys.ts";
 import { storage } from "./storage.ts";

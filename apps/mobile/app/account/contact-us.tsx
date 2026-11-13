@@ -14,7 +14,7 @@ import { useMapVersion } from "../../hooks/useMapVersion.ts";
 import { appVersion, maplibreVersion } from "../../lib/versions.ts";
 import { feedbackClient, trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
-import { hasCustomServerUrl } from "../../lib/server-url.ts";
+import { hasCustomServerUrl } from "../../lib/currentServer.ts";
 
 const ContactUsScreen = () => {
   const [message, setMessage] = useState("");

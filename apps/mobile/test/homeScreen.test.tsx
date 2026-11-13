@@ -14,6 +14,7 @@ let savedLink: { linkId: string; psk: Uint8Array } | null | Error = null;
 const replace = mock((_route: string) => {});
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 mock.module("expo-router", () => ({
+  Link: View,
   router: { replace, push: () => {} },
   useRootNavigationState: () => ({ key: "root" }),
   useFocusEffect: (callback: () => (() => void) | undefined) =>
@@ -41,6 +42,12 @@ mock.module("../lib/theme.ts", () => ({ useColors: () => ({ primary: "blue" }) }
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: session, isPending: false }) },
 }));
+
+mock.module("../lib/currentServer.ts", () => ({
+  baseUrl: "https://beacon.example.com",
+  hasCustomServerUrl: () => true,
+}));
+mock.module("../lib/endSession.ts", () => ({ endSession: async () => ({ signedOut: true }) }));
 
 mock.module("../lib/deviceActivation.ts", () => ({
   isThisDeviceActive: async () => {
@@ -99,6 +106,29 @@ test("keeps loading and checks again when the device status can't be checked", a
     deviceActive = false;
     await act(async () => {
       jest.advanceTimersByTime(5_000);
+    });
+    expect(replace.mock.calls).toEqual([["/setup"]]);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test("backs off the checks while the device status still can't be checked", async () => {
+  jest.useFakeTimers();
+  try {
+    deviceActive = new Error("offline");
+    await renderSignedIn();
+    await act(async () => {
+      jest.advanceTimersByTime(5_000);
+    });
+
+    deviceActive = false;
+    await act(async () => {
+      jest.advanceTimersByTime(14_000);
+    });
+    expect(replace).not.toHaveBeenCalled();
+    await act(async () => {
+      jest.advanceTimersByTime(1_000);
     });
     expect(replace.mock.calls).toEqual([["/setup"]]);
   } finally {

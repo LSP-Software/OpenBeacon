@@ -8,9 +8,8 @@ import {
   refreshApiCompatibilityInBackground,
   useApiCompatibility,
 } from "../lib/apiCompatibility.ts";
-import { baseUrl, getBaseUrl } from "../lib/base-url.ts";
+import { baseUrl, getBaseUrl, hasCustomServerUrl } from "../lib/currentServer.ts";
 import { dismissNotice } from "../lib/notifications.ts";
-import { hasCustomServerUrl } from "../lib/server-url.ts";
 import { appVersion } from "../lib/versions.ts";
 import { Button } from "./ui/Button.tsx";
 import { Text } from "./ui/Text.tsx";

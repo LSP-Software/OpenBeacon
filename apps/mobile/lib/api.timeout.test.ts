@@ -34,7 +34,7 @@ const url = `http://127.0.0.1:${server.port.toString()}`;
 mock.module("./storage.ts", () => ({
   storage: { getString: () => undefined, set: () => {}, remove: () => {}, contains: () => false },
 }));
-mock.module("./base-url.ts", () => ({ baseUrl: url, getFeedbackUrl: () => url }));
+mock.module("./currentServer.ts", () => ({ baseUrl: url, getFeedbackUrl: () => url }));
 mock.module("./auth-client.ts", () => ({ authClient: { getCookie: () => null } }));
 
 const { queryClient, trpc, trpcClient }: typeof import("./api.ts") = await import("./api.ts");
