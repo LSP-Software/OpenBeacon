@@ -124,7 +124,7 @@ Email is optional. Configure Resend or SMTP, not both, or leave both unset to tu
 
 Profile and group images are stored in an S3-compatible bucket. The backend and runner must use the same bucket and `S3_CDN_URL`.
 
-The backend only accepts uploads stored as `image/webp` with a WebP header, but anyone can upload to a presigned URL before that check runs. Serve images from a domain that hosts nothing else, and have it send `X-Content-Type-Options: nosniff` and `Content-Disposition: inline`, so a browser never treats an uploaded file as a page.
+Uploads must be sent as `image/webp`, and the backend checks for a WebP header before using one, but anything uploaded to a presigned URL is stored before that check. Serve images from a domain that hosts nothing else, and have it send `X-Content-Type-Options: nosniff` so browsers never second-guess the image type.
 
 | Variable              | Containers      | Required | Default                                  | Example                                     | What it does                                                                                                                     |
 | --------------------- | --------------- | -------- | ---------------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
