@@ -40,3 +40,6 @@ yarn-error.*
 /ios
 /android
 /modules/*/android/build/
+
+# EAS signing credentials
+credentials.json
