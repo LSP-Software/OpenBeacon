@@ -16,6 +16,7 @@ import { clearPendingSharingChanges, getPendingSharingChanges } from "./location
 import { clearPendingJoinCodes } from "./pendingJoinCode.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
+import { invalidateSecretWrites } from "./secretStorage.ts";
 import { storage } from "./storage.ts";
 import { clearTrackingKeyCheck } from "./trackingKeyCheck.ts";
 import { clearTrackingUploadTimes } from "./trackingUploadTime.ts";
@@ -118,6 +119,7 @@ const wipeKeyMaterial = async ({
   historyKeyVersion: number;
   userId: string;
 }) => {
+  await invalidateSecretWrites(userId);
   await tryCatch(
     deleteStoredHistoryKeys({
       userId,
