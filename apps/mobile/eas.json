@@ -7,6 +7,7 @@
     "production": {
       "environment": "production",
       "bun": "1.4.4",
+      "credentialsSource": "local",
       "android": {
         "buildType": "app-bundle"
       }
