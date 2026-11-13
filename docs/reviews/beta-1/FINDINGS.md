@@ -857,6 +857,8 @@ Google sign-in silently links Google to an existing password account
 
 #### S2-09 · low · security
 
+- **Status:** fixed on `fix/beta-1-review` by "Patch hono and better-auth, declare superjson in the app, drop unused deps" (SHA added at wrap-up). C5 (the dependency half of X-09; the zod catalog and the rest of X-09 stay post-beta). No new test: `bun audit` no longer lists hono, `bun run ci` and 320 integration tests pass.
+
 **Hono 4.13.11 advisories do not affect the backend, but the dependency should still be upgraded**
 
 - Location: apps/backend/package.json (hono 4.13.11); apps/backend/src/app.ts:8-17
@@ -1333,6 +1335,8 @@ Cold app launch stops sharing and wipes native keys before permissions load; off
 
 #### S6-16 · low · style
 
+- **Status:** fixed on `fix/beta-1-review` by "Patch hono and better-auth, declare superjson in the app, drop unused deps" (SHA added at wrap-up). C5 (the dependency half of X-09; the zod catalog and the rest of X-09 stay post-beta). No new test: `bun audit` no longer lists hono, `bun run ci` and 320 integration tests pass.
+
 **Dead and test-only code shipped, plus an unlisted dependency**
 
 - Location: queue/InMemoryCiphertextQueue.kt and keys/InMemoryEpochKeyStore.kt (main source set, only used by tests and the benchmark); TrackingCaptureService.kt:111-115, :544 (`ACTION_STOP` never sent); apps/mobile/lib/locationPermissions.ts:181, :214-215 (`requestForegroundLocationPermissions` exported only for the one-line alias `requestLocationPermissionsForLaunch`); `LocationPermissionStatus`/`LocationPermissionRequirement` exported but unused (knip); `superjson` imported by `lib/locationSharing.ts` and `lib/api.ts` but missing from `apps/mobile/package.json` (knip "unlisted")
@@ -1578,6 +1582,8 @@ The launch screen retries forever with no message or way out when the device che
 - Same issue as: D9, D11 (see Duplicate groups)
 
 #### S8-16 · low · style
+
+- **Status:** fixed on `fix/beta-1-review` by "Patch hono and better-auth, declare superjson in the app, drop unused deps" (SHA added at wrap-up). C5 (the dependency half of X-09; the zod catalog and the rest of X-09 stay post-beta). No new test: `bun audit` no longer lists hono, `bun run ci` and 320 integration tests pass.
 
 **AGENTS.md rule breaches and dependency hygiene in scope**
 
@@ -1937,6 +1943,8 @@ The "Update Open Beacon" screen has a disabled Update button and the server can'
 - Same issue as: D19 (see Duplicate groups)
 
 #### X-09 · low · design
+
+- **Status:** fixed on `fix/beta-1-review` by "Patch hono and better-auth, declare superjson in the app, drop unused deps" (SHA added at wrap-up). C5 (the dependency half of X-09; the zod catalog and the rest of X-09 stay post-beta). No new test: `bun audit` no longer lists hono, `bun run ci` and 320 integration tests pass.
 
 **Dependency hygiene: knip results triaged, declared-but-unused and unlisted packages, version-range drift that ships two copies of zod in the app**
 
