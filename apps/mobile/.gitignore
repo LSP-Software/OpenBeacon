@@ -43,3 +43,4 @@ yarn-error.*
 
 # EAS signing credentials
 credentials.json
+*.aab
