@@ -11,14 +11,8 @@ mock.module("./storage.ts", () => ({
   },
 }));
 
-const {
-  getBaseUrl,
-  getFeedbackUrl,
-  getServerUrl,
-  normaliseNewServerUrl,
-  normaliseServerUrl,
-  setServerUrl,
-} = await import("./currentServer.ts");
+const { getBaseUrl, getFeedbackUrl, getServerUrl, normaliseServerUrl, setServerUrl } =
+  await import("./currentServer.ts");
 const originalDevUrl = process.env.EXPO_PUBLIC_DEV_API_URL;
 
 afterEach(() => {
@@ -54,41 +48,54 @@ describe("normalising a server URL", () => {
   });
 });
 
-describe("choosing a new server", () => {
+describe("requiring https://", () => {
+  const inReleaseBuild = (check: () => void) => {
+    Object.assign(globalThis, { __DEV__: false });
+    try {
+      check();
+    } finally {
+      Object.assign(globalThis, { __DEV__: true });
+    }
+  };
+
   test("allows http:// in development builds", () => {
-    expect(normaliseNewServerUrl("http://192.168.1.10:3000/")).toEqual({
+    expect(normaliseServerUrl("http://192.168.1.10:3000/")).toEqual({
       url: "http://192.168.1.10:3000",
       error: null,
     });
   });
 
-  test("requires https:// in release builds", () => {
-    Object.assign(globalThis, { __DEV__: false });
-    try {
-      expect(normaliseNewServerUrl("http://192.168.1.10:3000")).toEqual({
+  test("rejects http:// in release builds", () => {
+    inReleaseBuild(() => {
+      expect(normaliseServerUrl("http://192.168.1.10:3000")).toEqual({
         url: null,
         error: "Use an https:// address. The app only connects to servers over HTTPS.",
       });
-      expect(normaliseNewServerUrl("https://beacon.example.com/")).toEqual({
+      expect(normaliseServerUrl("HTTP://beacon.example.com").url).toBeNull();
+      expect(normaliseServerUrl("https://beacon.example.com/")).toEqual({
         url: "https://beacon.example.com",
         error: null,
       });
-      expect(normaliseNewServerUrl("beacon.example.com").error).toBe(
-        "Enter a URL that starts with http:// or https://",
-      );
-    } finally {
-      Object.assign(globalThis, { __DEV__: true });
-    }
+    });
   });
 
-  test("keeps an http:// server saved before release builds required https://", () => {
-    Object.assign(globalThis, { __DEV__: false });
-    try {
+  test("only suggests https:// in release builds", () => {
+    inReleaseBuild(() => {
+      expect(normaliseServerUrl("beacon.example.com")).toEqual({
+        url: null,
+        error: "Enter a URL that starts with https://",
+      });
+    });
+  });
+
+  test("won't save or use an http:// server in release builds", () => {
+    delete process.env.EXPO_PUBLIC_DEV_API_URL;
+    inReleaseBuild(() => {
+      setServerUrl("http://192.168.1.10:3000");
+      expect(stored.has("custom_server_url")).toBe(false);
       stored.set("custom_server_url", "http://192.168.1.10:3000");
-      expect(getBaseUrl()).toBe("http://192.168.1.10:3000");
-    } finally {
-      Object.assign(globalThis, { __DEV__: true });
-    }
+      expect(getBaseUrl()).toBe("https://api.openbeacon.net");
+    });
   });
 });
 
