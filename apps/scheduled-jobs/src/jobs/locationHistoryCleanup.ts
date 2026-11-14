@@ -6,7 +6,7 @@ import { getDatabaseTime } from "../databaseTime.ts";
 import { services } from "../services.ts";
 
 const retentionCutoff = async () =>
-  new Date((await getDatabaseTime()).getTime() - 60 * 24 * 60 * 60_000).toISOString();
+  new Date((await getDatabaseTime()).getTime() - 14 * 24 * 60 * 60_000).toISOString();
 
 export const createLocationHistoryCleanup =
   ({ batchSize = 1_000, runLimit = 500_000 }: { batchSize?: number; runLimit?: number } = {}) =>

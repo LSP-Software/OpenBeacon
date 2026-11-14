@@ -42,9 +42,9 @@ Skips a device that a request has locked at that moment; a later run deletes it.
 
 ### `location-history-cleanup` (every hour)
 
-Deletes `trackingPoint` payloads in `GroupEncryptedPayload` whose server `createdAt` is more than 60 days before the database time, oldest first across all groups, 1,000 per statement, using the `(kind, createdAt)` index. A run only reads rows that are due and costs one index probe when nothing is.
+Deletes `trackingPoint` payloads in `GroupEncryptedPayload` whose server `createdAt` is more than 14 days before the database time, oldest first across all groups, 1,000 per statement, using the `(kind, createdAt)` index. A run only reads rows that are due and costs one index probe when nothing is.
 
-A run stops after 500,000 points. When it stops at that limit it logs `Location history clean-up reached its limit of 500000 points; the rest will be deleted on later runs`, without any IDs; if that shows up every hour, uploads are outpacing the clean-up and points are staying past 60 days. Points that a concurrent delete has locked, such as a member leaving, are skipped (`FOR UPDATE SKIP LOCKED`). A failed statement stops the run and logs one line with the database error code; the next run carries on.
+A run stops after 500,000 points. When it stops at that limit it logs `Location history clean-up reached its limit of 500000 points; the rest will be deleted on later runs`, without any IDs; if that shows up every hour, uploads are outpacing the clean-up and points are staying past 14 days. Points that a concurrent delete has locked, such as a member leaving, are skipped (`FOR UPDATE SKIP LOCKED`). A failed statement stops the run and logs one line with the database error code; the next run carries on.
 
 `GroupEncryptedPayload` has `autovacuum_vacuum_scale_factor` set to 0.02 and `autovacuum_vacuum_cost_limit` set to 1000, so dead rows from these deletions are vacuumed sooner and faster. This matters because the clean-up reads the `(kind, createdAt)` index from its oldest end: until a vacuum removes the deleted entries, each batch steps over them.
 
@@ -52,7 +52,7 @@ A benchmark with 1 million groups and 10 million points measured an empty hourly
 
 ### `epoch-cleanup` (every day)
 
-Walks the epochs created more than 60 days ago, 5,000 at a time in `(createdAt, id)` order, and deletes the ones in each page that a newer epoch replaced more than 60 days ago and that no stored payload still uses. The latest epoch of a group is never deleted, so new epochs keep their numbering.
+Walks the epochs created more than 14 days ago, 5,000 at a time in `(createdAt, id)` order, and deletes the ones in each page that a newer epoch replaced more than 14 days ago and that no stored payload still uses. The latest epoch of a group is never deleted, so new epochs keep their numbering.
 
 An epoch that an upload in progress has locked is skipped (`FOR UPDATE SKIP LOCKED`) and looked at again the next day. An upload that read the epoch just before the job deleted it can fail once with a server error; when the app retries, the server lists those points as `expired` and the app drops them from its queue. A failed page stops that day's run and logs one line with the error code. The benchmark above measured about 7 seconds per million old epochs.
 
