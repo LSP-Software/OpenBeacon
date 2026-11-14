@@ -11,7 +11,7 @@ OpenBeacon is for people who choose to share their location with each other. It 
 1. The app never hides. No hidden or disguised launcher icon, no renamed app, no way to remove it from the recent apps list.
 2. A phone that shares its location always says so. Never add a setting or build that shares without a visible notice on that phone, and never let anyone silence that notice from another phone or account.
 3. The person whose phone is sharing always stays in control. No owner, admin or other account may stop them pausing, leaving a group, signing out or deleting their account, or find out their password or keys.
-4. No covert setup. Never let another account add a phone to a group, start sharing or change sharing settings without someone taking action on that phone.
+4. No covert setup. Never let another account add a phone to a group, start sharing or change sharing settings unless the person whose phone it is first sees what will change on that phone and approves it there.
 5. Removing the app or leaving a group stops sharing. Never add anything that survives either, such as device admin rights, hidden services or reinstall prompts.
 6. No marketing or wording for covert tracking. App text, store listings, docs and the website never suggest tracking someone without them knowing.
 7. Keep the Terms of service consent section (openbeacon.net/terms) and Google Play's stalkerware policy in line with these rules. If a feature request conflicts with them, raise it rather than building it.
