@@ -3,7 +3,7 @@ import type { Prisma } from "@openbeacon/database";
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 
 const databaseNow = new Date("2001-03-02T00:00:00.000Z");
-const cutoff = "2001-01-01T00:00:00.000Z";
+const cutoff = "2001-02-16T00:00:00.000Z";
 let backlog = 0;
 let failures: unknown[] = [];
 let epochs: Array<{ id: string; createdAt: Date }> = [];
@@ -55,7 +55,7 @@ beforeEach(() => {
   epochDeletes.length = 0;
 });
 
-test("deletes location points older than database time minus exactly 60 days in batches", async () => {
+test("deletes location points older than database time minus exactly 14 days in batches", async () => {
   backlog = 2_500;
   await createLocationHistoryCleanup()();
   expect(payloadDeletes).toEqual([

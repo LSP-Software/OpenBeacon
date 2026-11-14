@@ -100,7 +100,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
         OR: [
           { groupId: { startsWith: leftover } },
           { senderUserId: { startsWith: leftover } },
-          { kind: TRACKING_POINT_KIND, createdAt: { lt: ago(60) } },
+          { kind: TRACKING_POINT_KIND, createdAt: { lt: ago(14) } },
         ],
       },
     });
@@ -135,13 +135,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     await prisma.$disconnect();
   });
 
-  test("deletes location history older than 60 days and keeps the rest", async () => {
+  test("deletes location history older than 14 days and keeps the rest", async () => {
     const groupId = await createGroup("boundary", [200]);
     const otherGroupId = await createGroup("other", [200]);
     await addPayloads(groupId, [
       { epoch: 1, createdAt: ago(90), name: "old" },
-      { epoch: 1, createdAt: ago(60 + 1 / 24), name: "justOver" },
-      { epoch: 1, createdAt: ago(60 - 1 / 24), name: "justUnder" },
+      { epoch: 1, createdAt: ago(14 + 1 / 24), name: "justOver" },
+      { epoch: 1, createdAt: ago(14 - 1 / 24), name: "justUnder" },
       { epoch: 1, createdAt: ago(1), name: "recent" },
       { epoch: 1, createdAt: ago(90), kind: "other", name: "oldOtherKind" },
     ]);
@@ -152,11 +152,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
   });
 
   test("deletes empty epochs superseded before the cutoff, with their wraps", async () => {
-    const groupId = await createGroup("epochs", [200, 100, 70, 61, 50, 10]);
+    const groupId = await createGroup("epochs", [50, 30, 20, 15, 12, 3]);
     await addPayloads(groupId, [
-      { epoch: 1, createdAt: ago(150) },
+      { epoch: 1, createdAt: ago(40) },
       { epoch: 3, createdAt: ago(1), name: "lateUpload" },
-      { epoch: 5, createdAt: ago(45) },
+      { epoch: 5, createdAt: ago(8) },
     ]);
     const lonelyGroupId = await createGroup("lonely", [300]);
     const staleGroupId = await createGroup("stale", [300, 200]);
