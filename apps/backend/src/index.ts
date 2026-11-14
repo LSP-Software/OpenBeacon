@@ -1,5 +1,6 @@
 import "./validateEnv.ts";
 import "./validateServices.ts";
+import { env as apiEnv } from "@openbeacon/api/env.ts";
 import { getMapTilesManifest } from "@openbeacon/api/r2.ts";
 import { securityAlerts } from "@openbeacon/auth";
 import { tryCatch } from "@openbeacon/shared";
@@ -7,7 +8,15 @@ import { app } from "./app.ts";
 import { cache } from "./cache.ts";
 import { db } from "./db.ts";
 import { env } from "./env.ts";
+import { findHttpsWarnings } from "./findHttpsWarnings.ts";
 import { authenticateCloudflare, resolveClientIp } from "./helpers/clientIp.ts";
+
+for (const warning of findHttpsWarnings({
+  BETTER_AUTH_URL: env.BETTER_AUTH_URL,
+  S3_CDN_URL: apiEnv.S3_CDN_URL,
+})) {
+  console.warn(warning);
+}
 
 if (securityAlerts) {
   securityAlerts.schedulePendingAlertsTurnedOff();
