@@ -1,0 +1,99 @@
+name: Deploy to Coolify
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    steps:
+      - name: Require main branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo 'Deploys must be run from main.' >&2
+          exit 1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Require all latest-stable images from the same release
+        id: release
+        env:
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          expected=
+          for image in openbeacon-backend openbeacon-scheduled-jobs openbeacon-map-tiles; do
+            ref="docker.io/lspsoftware/${image}:latest-stable"
+            labels=$(docker buildx imagetools inspect "$ref" --format '{{index .Image.Config.Labels "org.opencontainers.image.source"}} {{index .Image.Config.Labels "org.opencontainers.image.version"}} {{index .Image.Config.Labels "org.opencontainers.image.revision"}}')
+            read -r source version revision <<< "$labels"
+            if [ "$source" != "$SOURCE" ] || [ -z "$version" ] || [ -z "$revision" ]; then
+              echo "${ref} wasn't released by the Release Docker images workflow. Run it first." >&2
+              exit 1
+            fi
+            echo "${ref} is ${version} from ${revision}."
+            if [ -n "$expected" ] && [ "$expected" != "${version} ${revision}" ]; then
+              echo "The latest-stable images come from different releases. Run the Release Docker images workflow again." >&2
+              exit 1
+            fi
+            expected="${version} ${revision}"
+          done
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "revision=${revision}" >> "$GITHUB_OUTPUT"
+      - name: Deploy latest-stable to Coolify one app at a time
+        env:
+          COOLIFY_ENDPOINT: ${{ secrets.COOLIFY_ENDPOINT }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          VERSION: ${{ steps.release.outputs.version }}
+          REVISION: ${{ steps.release.outputs.revision }}
+        run: |
+          api="${COOLIFY_ENDPOINT%/}"
+          api="${api%/api/v1}/api/v1"
+          coolify() {
+            curl --fail-with-body --silent --show-error --retry 3 --retry-all-errors --max-time 30 \
+              --header "Authorization: Bearer ${COOLIFY_TOKEN}" "$@"
+          }
+          applications=$(coolify "${api}/applications")
+          find_application() {
+            jq -er --arg name "$1" '[.[] | select(.name == $name and .deleted_at == null)] | if length == 1 then .[0].uuid else error("Expected one active \($name) application in Coolify; found \(length).") end' <<< "$applications"
+          }
+          backend=$(find_application "OpenBeacon Backend")
+          scheduled_jobs=$(find_application "OpenBeacon Scheduled Jobs")
+          map_tiles=$(find_application "OpenBeacon Map Tiles")
+          {
+            echo "## Deployed ${VERSION}"
+            echo
+            echo "Commit: \`${REVISION}\`"
+            echo
+            echo '| App | Deployment | Result |'
+            echo '| --- | --- | --- |'
+          } >> "$GITHUB_STEP_SUMMARY"
+          deploy() {
+            local name=$1 uuid=$2 deployment status
+            deployment=$(coolify --request POST --get --data-urlencode "uuid=${uuid}" "${api}/deploy" | jq -er --arg uuid "$uuid" '[.deployments[] | select(.resource_uuid == $uuid)] | if length == 1 and (.[0].deployment_uuid | type == "string" and length > 0) then .[0].deployment_uuid else error("Coolify did not return one deployment for \($uuid).") end')
+            for _ in {1..72}; do
+              status=$(coolify "${api}/deployments/${deployment}" | jq -er '.status')
+              case "$status" in
+                queued|in_progress) sleep 10 ;;
+                *) break ;;
+              esac
+            done
+            echo "| ${name} | \`${deployment}\` | ${status} |" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$status" != finished ]; then
+              echo "${name} deployment ${deployment} is ${status}. Check Coolify." >&2
+              exit 1
+            fi
+            echo "${name} deployment ${deployment} finished."
+          }
+          deploy "OpenBeacon Backend" "$backend"
+          deploy "OpenBeacon Scheduled Jobs" "$scheduled_jobs"
+          deploy "OpenBeacon Map Tiles" "$map_tiles"
