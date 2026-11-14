@@ -63,6 +63,7 @@ module.exports = {
       },
       textColor: {
         secondary: "hsl(var(--text-secondary) / <alpha-value>)",
+        "secondary-foreground": "hsl(var(--secondary-foreground))",
       },
       borderColor: {
         border: "hsl(var(--border) / <alpha-value>)",

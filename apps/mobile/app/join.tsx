@@ -1,60 +1,41 @@
 import { Alert } from "../lib/alert.ts";
-import { tryCatch } from "@openbeacon/shared";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { Link, router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { Link, useLocalSearchParams } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import { TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { InviteConfirmation } from "../components/InviteConfirmation.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
-import { queryClient, trpcClient } from "../lib/api.ts";
 import { authClient } from "../lib/auth-client.ts";
-import { buildAcceptSharedInviteInput, submitEpochChange } from "../lib/groupEncryption.ts";
-import { groupLimitAlert } from "../lib/groupLimitAlert.ts";
-import { requestTrackingSync } from "../lib/trackingEvents.ts";
-import { useSingleFlight } from "../lib/useSingleFlight.ts";
+import type { InviteToConfirm } from "../lib/inviteTypes.ts";
+import { joinCodeFromInput } from "../lib/pendingJoinCode.ts";
 
 const Join = () => {
-  const params = useLocalSearchParams<{ code?: string }>();
+  const params = useLocalSearchParams<{ code?: string; inviteId?: string }>();
   const [code, setCode] = useState(params.code ?? "");
+  const [confirmingCode, setConfirmingCode] = useState(() =>
+    params.code ? joinCodeFromInput(params.code) : null,
+  );
   const [scanning, setScanning] = useState(false);
-  const submission = useSingleFlight<string>();
+  const scanned = useRef(false);
   const [permission, requestPermission] = useCameraPermissions();
   const { data: session, isPending } = authClient.useSession();
   useEffect(() => {
     if (typeof params.code === "string") {
       setCode(params.code);
+      setConfirmingCode(joinCodeFromInput(params.code));
       setScanning(false);
     }
   }, [params.code]);
-  const join = async () => {
-    const normalized = code.trim().toUpperCase();
-    if (!/^[A-F0-9]{32}$/.test(normalized)) {
-      Alert.alert("Invalid code", "Enter the complete join code.");
+  const review = (input: string, invalidMessage: string) => {
+    const normalized = joinCodeFromInput(input);
+    if (!normalized) {
+      Alert.alert("Invalid code", invalidMessage);
       return;
     }
-    await submission.run(normalized, async () => {
-      const result = await tryCatch(
-        (async () => {
-          await submitEpochChange({
-            build: () => buildAcceptSharedInviteInput({ code: normalized }),
-            submit: (input) => trpcClient.groupInvites.acceptShared.mutate(input),
-          });
-        })(),
-      );
-      const limit = groupLimitAlert(result.error);
-      if (limit) {
-        Alert.alert(limit.title, limit.message);
-        return;
-      }
-      if (result.error) {
-        Alert.alert("Unable to join", result.error.message);
-        return;
-      }
-      await queryClient.invalidateQueries();
-      requestTrackingSync();
-      router.replace("/(tabs)/groups/list");
-    });
+    setCode(normalized);
+    setConfirmingCode(normalized);
   };
   const scan = async () => {
     if (scanning) {
@@ -62,9 +43,29 @@ const Join = () => {
       return;
     }
     const granted = permission?.granted || (await requestPermission()).granted;
-    if (granted) setScanning(true);
-    else Alert.alert("Camera permission required", "Allow camera access to scan an invitation.");
+    if (!granted) {
+      Alert.alert("Camera permission required", "Allow camera access to scan an invitation.");
+      return;
+    }
+    scanned.current = false;
+    setScanning(true);
   };
+  const invite: InviteToConfirm | null = params.inviteId
+    ? { kind: "email", inviteId: params.inviteId }
+    : confirmingCode
+      ? { kind: "code", code: confirmingCode }
+      : null;
+  if (session && invite) {
+    return (
+      <SafeAreaView className="flex-1 bg-background p-6">
+        <InviteConfirmation
+          key={JSON.stringify(invite)}
+          invite={invite}
+          onTryAnotherCode={() => setConfirmingCode(null)}
+        />
+      </SafeAreaView>
+    );
+  }
   return (
     <SafeAreaView className="flex-1 bg-background p-6">
       <View className="gap-4">
@@ -92,8 +93,10 @@ const Join = () => {
                 style={{ height: 300 }}
                 barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
                 onBarcodeScanned={({ data }) => {
+                  if (scanned.current) return;
+                  scanned.current = true;
                   setScanning(false);
-                  setCode(data);
+                  review(data, "That QR code isn’t an Open Beacon invite.");
                 }}
               />
             ) : null}
@@ -109,12 +112,12 @@ const Join = () => {
               className="rounded-lg border border-border bg-input text-foreground placeholder:text-secondary dark:placeholder:text-muted-foreground p-4"
               placeholder="Enter join code"
             />
-            <Button onPress={join} loading={submission.isPending}>
-              <Text>Join group</Text>
+            <Button onPress={() => review(code, "Enter the complete join code.")}>
+              <Text>Continue</Text>
             </Button>
-            <Link href="/(tabs)/groups/list" asChild>
+            <Link href="/(tabs)/groups/list" dismissTo asChild>
               <Button variant="secondary">
-                <Text className="dark:text-white">Cancel</Text>
+                <Text>Cancel</Text>
               </Button>
             </Link>
           </>
