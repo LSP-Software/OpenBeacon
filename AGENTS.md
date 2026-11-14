@@ -4,6 +4,18 @@ Users should be able to either host their own backend on their own hardware easi
 
 Privacy is the core concept. Locations, battery levels, nicknames and group colours are end-to-end encrypted on the phone, so a server running our code, hosted or self-hosted, stores them without being able to read them. The server still sees accounts, group membership, profile and group images and connection metadata, and phones trust it for other members' public keys. `docs/security/beta-1-privacy-draft.md` is the source of truth for what the operator can see: keep every user-facing privacy claim, in the app, README and docs, matching it, and encrypt new user data end to end unless the server needs to read it.
 
+# Consent Safeguards
+
+OpenBeacon is for people who choose to share their location with each other. It must never work as stalkerware. These rules apply to every feature, setting and build, and no change may weaken them:
+
+1. The app never hides. No hidden or disguised launcher icon, no renamed app, no way to remove it from the recent apps list.
+2. A phone that shares its location always says so. Never add a setting or build that shares without a visible notice on that phone, and never let anyone silence that notice from another phone or account.
+3. The person whose phone is sharing always stays in control. No owner, admin or other account may stop them pausing, leaving a group, signing out or deleting their account, or find out their password or keys.
+4. No covert setup. Never let another account add a phone to a group, start sharing or change sharing settings without someone taking action on that phone.
+5. Removing the app or leaving a group stops sharing. Never add anything that survives either, such as device admin rights, hidden services or reinstall prompts.
+6. No marketing or wording for covert tracking. App text, store listings, docs and the website never suggest tracking someone without them knowing.
+7. Keep the Terms of service consent section (openbeacon.net/terms) and Google Play's stalkerware policy in line with these rules. If a feature request conflicts with them, raise it rather than building it.
+
 # Project Rules
 
 1. Do not leave comments; code should be understandable by default. Only leave comments when working around dodgy implementations of other APIs.
