@@ -78,6 +78,22 @@ class NoticesTest {
   }
 
   @Test
+  fun aBlockedSharingStatusChannelCountsAsDisabledButAlertsStillPost() {
+    manager.createNotificationChannel(NotificationChannel("openbeacon_tracking_capture", "Location sharing", NotificationManager.IMPORTANCE_NONE))
+
+    assertFalse(Notices.canShowSharing(application))
+    assertTrue(Notices.show(application, Notice.OUT_OF_SYNC))
+    assertEquals(listOf(application.getString(R.string.openbeacon_notice_out_of_sync_body)), texts())
+  }
+
+  @Test
+  fun sharingCanBeShownWhenBothChannelsAreOn() {
+    manager.createNotificationChannel(NotificationChannel("openbeacon_tracking_capture", "Location sharing", NotificationManager.IMPORTANCE_LOW))
+
+    assertTrue(Notices.canShowSharing(application))
+  }
+
+  @Test
   fun alertsAreEnabledBeforeTheChannelExists() {
     assertTrue(Notices.areEnabled(application))
   }

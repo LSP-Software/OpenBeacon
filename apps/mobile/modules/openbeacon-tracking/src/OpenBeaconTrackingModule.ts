@@ -82,6 +82,7 @@ declare class OpenBeaconTrackingModule extends NativeModule {
   deleteCiphertextsByGroup(owner: string, groupId: string): Promise<void>;
   requeueCiphertexts(ids: number[], error?: string | null): Promise<void>;
   areNotificationsEnabled(): boolean;
+  shouldShowNotificationRationale(): boolean;
   showNotice(kind: NoticeKind): boolean;
   dismissNotice(slot: NoticeSlot): void;
 }

@@ -24,6 +24,9 @@ mock.module("../components/LocationSharingCard.tsx", () => ({ LocationSharingCar
 
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 const query = { data: undefined, isError: false };
+const providersQuery: { data: { email: boolean } | undefined } = { data: undefined };
+const notificationSettings: { enabled: boolean | null } = { enabled: true };
+let settingLabels: string[] = [];
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("expo-router", () => ({
   Link: View,
@@ -31,7 +34,7 @@ mock.module("expo-router", () => ({
 }));
 mock.module("@tanstack/react-query", () => ({
   useMutation: () => ({ isPending: false, mutateAsync: async () => {} }),
-  useQuery: () => query,
+  useQuery: (options: { providers?: true }) => (options.providers ? providersQuery : query),
   useQueryClient: () => ({ invalidateQueries: async () => {} }),
 }));
 mock.module("react-hook-form", () => ({
@@ -65,7 +68,10 @@ mock.module("react-native", () => ({
 }));
 mock.module("react-native-safe-area-context", () => ({ SafeAreaView: View }));
 mock.module("../components/containers/settingsContainer.tsx", () => ({
-  SettingsContainer: () => null,
+  SettingsContainer: ({ categories }: { categories: { settings: { label: string }[] }[] }) => {
+    settingLabels = categories.flatMap((category) => category.settings.map(({ label }) => label));
+    return null;
+  },
 }));
 mock.module("../components/image/ProfileImage.tsx", () => ({ ProfileImage: () => null }));
 mock.module("../components/ui/Button.tsx", () => ({
@@ -106,7 +112,7 @@ mock.module("../lib/api.ts", () => ({
       updateName: { mutationOptions: () => ({}) },
     },
     accountRecovery: { status: { queryOptions: () => ({}) } },
-    auth: { providers: { queryOptions: () => ({}) } },
+    auth: { providers: { queryOptions: () => ({ providers: true }) } },
     groupMembership: { list: { queryKey: () => [], queryOptions: () => ({}) } },
   },
 }));
@@ -125,10 +131,12 @@ mock.module("../lib/locationPermissions.ts", () => ({
   getLocationPermissionWarningTitle: () => "",
 }));
 mock.module("../lib/notifications.ts", () => ({
-  requestNotificationPermissions: async () => "granted",
-  useNotificationsEnabled: () => ({ enabled: true, refresh: async () => {} }),
+  useNotificationSettings: () => ({
+    enabled: notificationSettings.enabled,
+    turnOn: async () => {},
+    turningOn: false,
+  }),
 }));
-mock.module("expo-linking", () => ({ openSettings: async () => {} }));
 mock.module("../lib/restoreReminders.ts", () => ({
   dismissRestoreCard: () => {},
   isRestoreCardDismissed: () => false,
@@ -155,9 +163,8 @@ const press = async (title: string, text: string) => {
 
 const removeThisPhoneWithoutAnswer = async () => {
   signOutOfThisPhone.mockImplementationOnce(async () => ({ status: "serverUnreachable" }));
-  root = createRoot();
-  await act(async () => root?.render(<AccountScreen />));
-  const button = root.container
+  const screen = await renderScreen();
+  const button = screen.container
     .queryAll((item) => item.type === "mock-button")
     .find((item) => JSON.stringify(item.children).includes("Sign out"));
   if (!button) throw new Error("Sign out button not found");
@@ -167,7 +174,19 @@ const removeThisPhoneWithoutAnswer = async () => {
 
 const removeCalls = () => signOutOfThisPhone.mock.calls.map(([input]) => input.removeThisPhone);
 
+const renderScreen = async () => {
+  root = createRoot();
+  await act(async () => root?.render(<AccountScreen />));
+  return root;
+};
+
+const showsNotificationsCard = (screen: Root) =>
+  JSON.stringify(screen.container.children).includes("Notifications are off");
+
 beforeEach(() => {
+  notificationSettings.enabled = true;
+  providersQuery.data = undefined;
+  settingLabels = [];
   alerts.length = 0;
   replace.mockClear();
   signOutOfThisPhone.mockClear();
@@ -227,4 +246,28 @@ test("tapping Try again twice only starts one sign-out", async () => {
   });
 
   expect(removeCalls()).toEqual([true, true]);
+});
+
+test("the notifications card shows only once notifications are known to be off", async () => {
+  expect(showsNotificationsCard(await renderScreen())).toBe(false);
+  await act(async () => root?.unmount());
+
+  notificationSettings.enabled = null;
+  expect(showsNotificationsCard(await renderScreen())).toBe(false);
+  await act(async () => root?.unmount());
+
+  notificationSettings.enabled = false;
+  expect(showsNotificationsCard(await renderScreen())).toBe(true);
+});
+
+test("Email alerts is listed only when the server sends email", async () => {
+  providersQuery.data = { email: false };
+  await renderScreen();
+  expect(settingLabels).not.toContain("Email alerts");
+  expect(settingLabels).toContain("Devices");
+  await act(async () => root?.unmount());
+
+  providersQuery.data = { email: true };
+  await renderScreen();
+  expect(settingLabels).toContain("Email alerts");
 });

@@ -3,7 +3,7 @@
     "name": "Open Beacon",
     "slug": "open-beacon",
     "description": "Privacy-first family location sharing. You own your data.",
-    "version": "1.15.3",
+    "version": "1.16.0",
     "platforms": ["android"],
     "orientation": "portrait",
     "icon": "./assets/icon.png",

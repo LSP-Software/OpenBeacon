@@ -1,6 +1,8 @@
 package expo.modules.openbeacontracking
 
+import android.Manifest
 import android.content.Intent
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.capture.SharingCaptureState
@@ -115,7 +117,13 @@ class OpenBeaconTrackingModule : Module() {
       }
 
       Function("areNotificationsEnabled") {
-        Notices.areEnabled(requireContext())
+        Notices.canShowSharing(requireContext())
+      }
+
+      Function("shouldShowNotificationRationale") {
+        appContext.currentActivity?.let {
+          ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.POST_NOTIFICATIONS)
+        } ?: false
       }
 
       Function("showNotice") { kind: String ->

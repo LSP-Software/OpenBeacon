@@ -8,10 +8,30 @@ const appState = {
   addEventListener: () => ({ remove: () => {} }),
 };
 
+const platform = { OS: "android", Version: 34 };
+const android = {
+  granted: false,
+  rationale: false,
+  result: "granted",
+  notificationsEnabled: true,
+  requests: 0,
+};
+
 mock.module("react-native", () => ({
   ...createReactNativeTestModule({ appState, platformOS: "android" }),
-  PermissionsAndroid: {},
+  Platform: platform,
+  PermissionsAndroid: {
+    PERMISSIONS: { POST_NOTIFICATIONS: "android.permission.POST_NOTIFICATIONS" },
+    RESULTS: { DENIED: "denied", GRANTED: "granted", NEVER_ASK_AGAIN: "never_ask_again" },
+    check: async () => android.granted,
+    request: async () => {
+      android.requests += 1;
+      return android.result;
+    },
+  },
 }));
+
+mock.module("expo-linking", () => ({ openSettings: async () => {}, sendIntent: async () => {} }));
 
 mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   default: {
@@ -20,15 +40,25 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
       shown.push(kind);
       return true;
     },
+    areNotificationsEnabled: () => android.notificationsEnabled,
+    shouldShowNotificationRationale: () => android.rationale,
   },
 }));
 
-const { showNotice } = await import("./notifications.ts");
+const { requestNotificationPermissions, showNotice } = await import("./notifications.ts");
 
 beforeEach(() => {
   shown.length = 0;
   showFails = false;
   appState.currentState = "background";
+  platform.Version = 34;
+  Object.assign(android, {
+    granted: false,
+    rationale: false,
+    result: "granted",
+    notificationsEnabled: true,
+    requests: 0,
+  });
 });
 
 describe("showNotice", () => {
@@ -51,5 +81,41 @@ describe("showNotice", () => {
     ).toBe(false);
     expect(await showNotice({ kind: "signedOut" })).toBe(false);
     expect(shown).toEqual([]);
+  });
+});
+
+describe("requestNotificationPermissions", () => {
+  test("is granted when the person allows notifications the first time", async () => {
+    expect(await requestNotificationPermissions()).toBe("granted");
+    expect(android.requests).toBe(1);
+  });
+
+  test("is denied when the person taps Don’t allow", async () => {
+    android.result = "denied";
+    expect(await requestNotificationPermissions()).toBe("denied");
+  });
+
+  test("is denied, not blocked, when the second Don’t allow stops Android asking again", async () => {
+    android.rationale = true;
+    android.result = "never_ask_again";
+    expect(await requestNotificationPermissions()).toBe("denied");
+  });
+
+  test("is blocked when Android no longer shows the dialog", async () => {
+    android.result = "never_ask_again";
+    expect(await requestNotificationPermissions()).toBe("blocked");
+  });
+
+  test("is blocked when the permission is granted but notifications are turned off", async () => {
+    android.granted = true;
+    android.notificationsEnabled = false;
+    expect(await requestNotificationPermissions()).toBe("blocked");
+    expect(android.requests).toBe(0);
+  });
+
+  test("does not ask before Android 13, where no permission is needed", async () => {
+    platform.Version = 32;
+    expect(await requestNotificationPermissions()).toBe("granted");
+    expect(android.requests).toBe(0);
   });
 });

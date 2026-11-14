@@ -5,7 +5,6 @@ import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, router } from "expo-router";
-import * as Linking from "expo-linking";
 import {
   BellIcon,
   BellOffIcon,
@@ -57,10 +56,7 @@ import {
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
 } from "../../../lib/locationPermissions.ts";
-import {
-  requestNotificationPermissions,
-  useNotificationsEnabled,
-} from "../../../lib/notifications.ts";
+import { useNotificationSettings } from "../../../lib/notifications.ts";
 import { dismissRestoreCard, isRestoreCardDismissed } from "../../../lib/restoreReminders.ts";
 import { storage } from "../../../lib/storage.ts";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
@@ -180,7 +176,7 @@ const AccountScreen = () => {
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
   const devices = useQuery({ ...trpc.account.listDevices.queryOptions(), subscribed: isFocused });
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
-  const notifications = useNotificationsEnabled();
+  const notifications = useNotificationSettings();
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
   const signingOut = useRef(false);
   const recoveryStatus = useQuery({
@@ -207,12 +203,6 @@ const AccountScreen = () => {
     !heldHistoryKeyVersions.data.includes(currentHistoryKeyVersion) &&
     !restoreBannerDismissed &&
     !isRestoreCardDismissed({ userId: session.user.id, version: currentHistoryKeyVersion });
-
-  const turnOnNotifications = async () => {
-    const result = await tryCatch(requestNotificationPermissions());
-    if (result.data === "blocked") await Linking.openSettings();
-    await notifications.refresh();
-  };
 
   const saveName = async ({ name }: z.infer<typeof schema>) => {
     const result = await tryCatch(updateName.mutateAsync({ name }));
@@ -422,9 +412,9 @@ const AccountScreen = () => {
             icon={BellOffIcon}
             tone="warning"
             title="Notifications are off"
-            description="You won’t be told if this phone stops sharing your location."
+            description="This phone can’t show that it’s sharing your location, or tell you if sharing stops."
           >
-            <Button size="sm" onPress={turnOnNotifications}>
+            <Button size="sm" onPress={notifications.turnOn} loading={notifications.turningOn}>
               <Text>Turn on notifications</Text>
             </Button>
           </PromptCard>
