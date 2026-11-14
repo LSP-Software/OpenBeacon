@@ -1,7 +1,8 @@
 import { ClockIcon, EyeOffIcon, HourglassIcon, PauseIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { AppState, View } from "react-native";
+import { View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
+import { useAppForeground } from "../../hooks/useAppForeground.ts";
 import { cn } from "../../lib/cn.ts";
 import { type DeviceIcon, deviceIconFor } from "../../lib/deviceIcons.ts";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
@@ -92,14 +93,12 @@ export const LiveMapMarkerPin = ({
       delay > 0 && Number.isFinite(delay)
         ? setTimeout(() => setTick((tick) => tick + 1), delay)
         : null;
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") setTick((tick) => tick + 1);
-    });
     return () => {
       if (timer !== null) clearTimeout(timer);
-      subscription.remove();
     };
   }, [staleAt]);
+
+  useAppForeground(() => setTick((tick) => tick + 1));
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Android marker bitmaps need an explicit refresh when the pin's look changes
   useEffect(() => {
