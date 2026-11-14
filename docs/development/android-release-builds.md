@@ -47,6 +47,8 @@ A release build without this file stops with an error rather than signing with t
 
 The build reads `apps/mobile/.env` like a development build, so set the Google sign-in variables there. The build stops if `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` isn't set, because Google sign-in would be turned off in the release. See the [mobile app variables](../../README.md#mobile-app) for what each one does. Release builds ignore `EXPO_PUBLIC_DEV_API_URL`, so a development server in `.env` never ends up in a release.
 
+Development builds can use an `http://` backend, but release builds only connect over `https://` with a certificate Android trusts. To test a release build against your own backend, serve it over HTTPS.
+
 ## Build the bundle
 
 Every upload needs a higher `android.versionCode` in `apps/mobile/app.json` than any bundle Play has seen, including ones that were never released. Every PR that changes the app already bumps it.

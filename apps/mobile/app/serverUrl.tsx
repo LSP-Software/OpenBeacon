@@ -1,6 +1,6 @@
 import { Alert } from "../lib/alert.ts";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
@@ -13,11 +13,11 @@ import { Separator } from "../components/ui/Separator.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { checkServerCompatibility } from "../lib/apiCompatibility.ts";
 import { changeServer } from "../lib/changeServer.ts";
-import { getServerUrl, hasCustomServerUrl, normaliseNewServerUrl } from "../lib/currentServer.ts";
+import { getServerUrl, hasCustomServerUrl, normaliseServerUrl } from "../lib/currentServer.ts";
 
 const serverUrlSchema = z.object({
   url: z.string().superRefine((url, context) => {
-    const { error } = normaliseNewServerUrl(url);
+    const { error } = normaliseServerUrl(url);
     if (error) context.addIssue({ code: "custom", message: error });
   }),
 });
@@ -34,7 +34,7 @@ export default function ServerUrl() {
   });
 
   const handleSave = async (data: z.infer<typeof serverUrlSchema>) => {
-    const { url } = normaliseNewServerUrl(data.url);
+    const { url } = normaliseServerUrl(data.url);
     if (!url) return;
 
     const save = async () => {
@@ -56,7 +56,7 @@ export default function ServerUrl() {
           ? "Update the app first"
           : "This server needs updating",
       verdict === null
-        ? "Check the address and that the server is running."
+        ? "Check the address, that the server is running and that it has a valid HTTPS certificate."
         : verdict === "appTooOld"
           ? "This server needs a newer version of Open Beacon. Update the app before using it."
           : `This server is running version ${serverVersion}, which is too old for this app. Ask whoever runs it to update it. You won't be able to share your location until it's updated.`,
@@ -93,7 +93,7 @@ export default function ServerUrl() {
             <Text className="font-bold text-5xl">Custom{"\n"}server</Text>
             <Text className="text-lg text-muted">
               Point OpenBeacon at your own self-hosted backend, for example
-              https://beacon.example.com.
+              https://beacon.example.com. It must use https:// with a valid certificate.
             </Text>
           </View>
 
@@ -103,8 +103,10 @@ export default function ServerUrl() {
               name="url"
               label="Server URL"
               placeholder="https://your-server.example.com"
-              keyboardType="default"
+              keyboardType="url"
               autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
               autoComplete="off"
               textContentType="URL"
               returnKeyType="done"
@@ -139,9 +141,20 @@ export default function ServerUrl() {
           <View className="gap-2">
             <Text className="font-semibold text-lg">Self-hosting OpenBeacon</Text>
             <Text className="text-muted">
-              OpenBeacon is fully open source. You can run your own backend using Docker — see the
-              project README for setup instructions.
+              OpenBeacon is fully open source. You can run your own backend using Docker behind
+              HTTPS.
             </Text>
+            <View className="flex-row flex-wrap gap-x-6 gap-y-2 pt-1">
+              <Link
+                href="https://docs.openbeacon.net/docs/self-host/self-hosting-overview"
+                className="text-primary-text"
+              >
+                Self-hosting guide
+              </Link>
+              <Link href="https://github.com/LSP-Software/OpenBeacon" className="text-primary-text">
+                Source code on GitHub
+              </Link>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

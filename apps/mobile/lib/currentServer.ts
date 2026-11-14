@@ -9,7 +9,18 @@ export const normaliseServerUrl = (
   const trimmed = input.trim();
   const parsed = URL.canParse(trimmed) ? new URL(trimmed) : null;
   if (!parsed || (parsed.protocol !== "http:" && parsed.protocol !== "https:") || !parsed.host) {
-    return { url: null, error: "Enter a URL that starts with http:// or https://" };
+    return {
+      url: null,
+      error: __DEV__
+        ? "Enter a URL that starts with http:// or https://"
+        : "Enter a URL that starts with https://",
+    };
+  }
+  if (!__DEV__ && parsed.protocol === "http:") {
+    return {
+      url: null,
+      error: "Use an https:// address. The app only connects to servers over HTTPS.",
+    };
   }
   if (parsed.username || parsed.password) {
     return { url: null, error: "Remove the username and password from the URL" };
@@ -19,17 +30,6 @@ export const normaliseServerUrl = (
   }
   const path = parsed.pathname.replace(/\/+$/, "");
   return { url: `${parsed.origin}${path}`, error: null };
-};
-
-export const normaliseNewServerUrl = (input: string) => {
-  const result = normaliseServerUrl(input);
-  if (!__DEV__ && result.url?.startsWith("http:")) {
-    return {
-      url: null,
-      error: "Use an https:// address. The app only connects to servers over HTTPS.",
-    };
-  }
-  return result;
 };
 
 export const getServerUrl = () => {
