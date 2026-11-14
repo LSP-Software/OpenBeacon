@@ -5,8 +5,10 @@ const warnedNames = (
   BETTER_AUTH_URL: string,
   storage: {
     IMAGES_S3_ENDPOINT?: string;
+    IMAGES_S3_PUBLIC_ENDPOINT?: string;
     IMAGES_S3_CDN_URL?: string;
     MAP_S3_ENDPOINT?: string;
+    MAP_S3_PUBLIC_ENDPOINT?: string;
   } = {},
 ) =>
   findHttpsWarnings({
@@ -18,6 +20,25 @@ const warnedNames = (
   }).map((warning) => warning.split(" ")[0]);
 
 describe("findHttpsWarnings", () => {
+  test("checks the public storage addresses phones use instead of internal ones", () => {
+    expect(
+      warnedNames("https://api.example.com", {
+        IMAGES_S3_ENDPOINT: "http://storage:7070",
+        IMAGES_S3_PUBLIC_ENDPOINT: "https://beacon.example.com",
+        MAP_S3_ENDPOINT: "http://storage:7070",
+        MAP_S3_PUBLIC_ENDPOINT: "https://beacon.example.com",
+      }),
+    ).toEqual([]);
+    expect(
+      warnedNames("https://api.example.com", {
+        IMAGES_S3_ENDPOINT: "https://images-storage.example.com",
+        IMAGES_S3_PUBLIC_ENDPOINT: "http://storage.example.com",
+        MAP_S3_ENDPOINT: "https://map-storage.example.com",
+        MAP_S3_PUBLIC_ENDPOINT: "http://storage.example.com",
+      }),
+    ).toEqual(["IMAGES_S3_PUBLIC_ENDPOINT", "MAP_S3_PUBLIC_ENDPOINT"]);
+  });
+
   test("does not warn for https", () => {
     expect(warnedNames("https://api.example.com")).toEqual([]);
     expect(warnedNames("https://192.168.1.20:3000")).toEqual([]);

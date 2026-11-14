@@ -1,0 +1,14 @@
+# Cloudflare Tunnel mode. Turn it on with this line in .env:
+#   COMPOSE_FILE=docker-compose.yml:cloudflare-tunnel.yml
+# Cloudflare provides HTTPS, so Caddy serves plain HTTP to cloudflared on this machine only.
+
+services:
+  caddy:
+    environment:
+      SITE_ADDRESS: http://${OPENBEACON_DOMAIN:?}
+    ports: !override
+      - 127.0.0.1:80:80
+
+  backend:
+    environment:
+      TRUSTED_PROXY_PROVIDER: cloudflare
