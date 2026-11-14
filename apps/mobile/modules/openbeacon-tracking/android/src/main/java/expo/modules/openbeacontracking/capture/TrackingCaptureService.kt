@@ -539,7 +539,7 @@ class TrackingCaptureService : Service() {
     const val DEFAULT_INTERVAL_MS = CaptureSamplingPolicy.DEFAULT_INTERVAL_MS
     const val MIN_INTERVAL_MS = 5_000L
     private const val TAG = "TrackingCapture"
-    private const val CHANNEL_ID = "openbeacon_tracking_capture"
+    const val CHANNEL_ID = "openbeacon_tracking_capture"
     private const val NOTIFICATION_ID = 7260
   }
 }

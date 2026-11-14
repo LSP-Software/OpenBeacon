@@ -12,6 +12,7 @@ import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import expo.modules.openbeacontracking.capture.TrackingCaptureService
 
 enum class NoticeSlot(
   val key: String,
@@ -78,6 +79,11 @@ object Notices {
           ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
       )
   }
+
+  fun canShowSharing(context: Context): Boolean =
+    areEnabled(context) &&
+      NotificationManagerCompat.from(context).getNotificationChannelCompat(TrackingCaptureService.CHANNEL_ID)?.importance !=
+      NotificationManagerCompat.IMPORTANCE_NONE
 
   fun show(
     context: Context,

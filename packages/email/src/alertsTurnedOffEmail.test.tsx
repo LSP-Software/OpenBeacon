@@ -23,7 +23,7 @@ describe("renderAlertsTurnedOffEmail", () => {
     expect(email.text).not.toContain("New sign-in");
     expect(email.html.match(/<li\b/g)).toHaveLength(1);
     expect(email.text).toContain(
-      "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs out every other device. Then turn this alert back on in Account → Notifications → Email alerts.",
+      "If this wasn't you\n\nSomeone else is signed in to your account. In the OpenBeacon app, change your password in Account → Password and Security. That signs out every other device. Then turn this alert back on in Account → Email alerts.",
     );
   });
 
@@ -33,9 +33,7 @@ describe("renderAlertsTurnedOffEmail", () => {
       "These email alerts were turned off:\n\n * New sign-in\n * Account deletion scheduled\n",
     );
     expect(email.html.match(/<li\b/g)).toHaveLength(2);
-    expect(email.text).toContain(
-      "Then turn these alerts back on in Account → Notifications → Email alerts.",
-    );
+    expect(email.text).toContain("Then turn these alerts back on in Account → Email alerts.");
   });
 
   test("accounts without a password are told to change their Google password, then sign out other sessions", async () => {
