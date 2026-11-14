@@ -2,7 +2,6 @@ import { Alert } from "../../../lib/alert.ts";
 import { useIsFocused } from "@react-navigation/native";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { TRPCClientError } from "@trpc/client";
 import { Link } from "expo-router";
 import { ChevronRightIcon, PlusIcon, ShieldIcon } from "lucide-react-native";
 import { useState } from "react";
@@ -20,10 +19,7 @@ import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
 import { useRefetchWhileFocused } from "../../../hooks/useRefetchWhileFocused.ts";
 import { type RouterOutputs, trpc } from "../../../lib/api.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
-import { buildAcceptInviteInput, submitEpochChange } from "../../../lib/groupEncryption.ts";
-import { groupLimitAlert } from "../../../lib/groupLimitAlert.ts";
-import { requestTrackingSync } from "../../../lib/trackingEvents.ts";
-import { useSingleFlight } from "../../../lib/useSingleFlight.ts";
+import { initials } from "../../../lib/initials.ts";
 
 export default function GroupsScreen() {
   const [createGroupDialogOpen, setCreateGroupDialogOpen] = useState(false);
@@ -140,127 +136,32 @@ const GroupJoinAlerts = ({ alerts }: { alerts: RouterOutputs["groupInvites"]["jo
   );
 };
 
-interface GroupInvitesListProps {
+const GroupInvitesList = ({
+  groupInvites,
+}: {
   groupInvites: RouterOutputs["groupInvites"]["list"];
-}
-
-export const GroupInvitesList = ({ groupInvites }: GroupInvitesListProps) => {
-  const queryClient = useQueryClient();
-  const acceptInviteMutation = useMutation(trpc.groupInvites.accept.mutationOptions());
-  const declineInviteMutation = useMutation(trpc.groupInvites.decline.mutationOptions());
-  const acceptInviteSubmission = useSingleFlight<string>();
-
-  const removeInvite = (inviteId: string) => {
-    queryClient.setQueryData(trpc.groupInvites.list.queryKey(), (previous) =>
-      (previous ?? []).filter((invite) => invite.id !== inviteId),
-    );
-  };
-
-  const handleAcceptInvite = async (inviteId: string) => {
-    if (declineInviteMutation.isPending) return;
-
-    await acceptInviteSubmission.run(inviteId, async () => {
-      const result = await tryCatch(
-        (async () => {
-          const data = await submitEpochChange({
-            build: () => buildAcceptInviteInput({ inviteId }),
-            submit: acceptInviteMutation.mutateAsync,
-          });
-
-          removeInvite(inviteId);
-
-          queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (previous) => {
-            return [
-              ...(previous ?? []),
-              {
-                ...data.group,
-                members: data.group.members,
-              },
-            ] satisfies RouterOutputs["groupMembership"]["list"];
-          });
-          requestTrackingSync();
-        })(),
-      );
-
-      const limit = groupLimitAlert(result.error);
-      if (limit) {
-        Alert.alert(limit.title, limit.message);
-        return;
-      }
-      if (isNotFound(result.error)) {
-        removeInvite(inviteId);
-        Alert.alert("Invite no longer available", "This invite has expired or was withdrawn.");
-        return;
-      }
-      if (result.error) {
-        Alert.alert(
-          "Unable to accept invite",
-          result.error instanceof Error ? result.error.message : "Something went wrong.",
-        );
-      }
-    });
-  };
-  const handleDeclineInvite = async (inviteId: string) => {
-    const result = await tryCatch(declineInviteMutation.mutateAsync({ inviteId }));
-    if (result.error && !isNotFound(result.error)) {
-      Alert.alert(
-        "Unable to decline invite",
-        result.error instanceof Error ? result.error.message : "Something went wrong.",
-      );
-      return;
-    }
-    removeInvite(inviteId);
-  };
-
-  if (!groupInvites?.length) {
-    return null;
-  }
-
+}) => {
+  if (!groupInvites.length) return null;
   return (
-    <View className="gap-4">
+    <View className="gap-3 mb-4">
       <Text className="text-foreground font-bold text-lg">Group Invites</Text>
-      {groupInvites?.map((invite) => {
-        const isAcceptingInvite =
-          acceptInviteSubmission.pendingKey === invite.id && !declineInviteMutation.isPending;
-
-        return (
-          <Card key={invite.id}>
-            <CardHeader>
-              <Text>
-                {invite.inviter.name} invited you to join {invite.group.name}
-              </Text>
-              <View className="flex-row items-center justify-between gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onPress={() => handleDeclineInvite(invite.id)}
-                  loading={declineInviteMutation.isPending}
-                  disabled={acceptInviteSubmission.isPending}
-                >
-                  <Text>Decline</Text>
-                </Button>
-                <Button
-                  size="sm"
-                  onPress={() => handleAcceptInvite(invite.id)}
-                  loading={isAcceptingInvite}
-                  disabled={
-                    declineInviteMutation.isPending ||
-                    (acceptInviteSubmission.isPending && !isAcceptingInvite)
-                  }
-                >
-                  <Text>Accept</Text>
-                </Button>
-              </View>
-            </CardHeader>
-          </Card>
-        );
-      })}
+      {groupInvites.map((invite) => (
+        <Card key={invite.id}>
+          <CardHeader className="flex-row items-center gap-3">
+            <Text className="flex-1">
+              You’ve been sent an invite to <Text className="font-bold">{invite.group.name}</Text>
+            </Text>
+            <Link href={{ pathname: "/join", params: { inviteId: invite.id } }} asChild>
+              <Button size="sm">
+                <Text>View invite</Text>
+              </Button>
+            </Link>
+          </CardHeader>
+        </Card>
+      ))}
     </View>
   );
 };
-
-const isNotFound = (error: unknown) =>
-  error instanceof TRPCClientError && error.data?.code === "NOT_FOUND";
 
 interface GroupListProps {
   groupList: RouterOutputs["groupMembership"]["list"];
@@ -329,9 +230,7 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
                         <Avatar alt={`${group.name}'s image`} className="size-12">
                           <AvatarImage source={{ uri: group.image ?? "" }} />
                           <AvatarFallback>
-                            <Text className="font-bold">
-                              {(group.name.charAt(0) + group.name.charAt(1)).toUpperCase()}
-                            </Text>
+                            <Text className="font-bold">{initials(group.name)}</Text>
                           </AvatarFallback>
                         </Avatar>
                       </View>
@@ -351,9 +250,7 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
                           >
                             <AvatarImage source={{ uri: member.image ?? "" }} />
                             <AvatarFallback>
-                              <Text className="font-bold">
-                                {(member.name.charAt(0) + member.name.charAt(1)).toUpperCase()}
-                              </Text>
+                              <Text className="font-bold">{initials(member.name)}</Text>
                             </AvatarFallback>
                           </Avatar>
                         ))}
