@@ -14,7 +14,7 @@
     "./storage.ts": "./src/lib/storage.ts",
     "./image-upload.ts": "./src/lib/image-upload.ts",
     "./s3client.ts": "./src/s3client.ts",
-    "./r2.ts": "./src/r2.ts"
+    "./mapStorage.ts": "./src/mapStorage.ts"
   },
   "scripts": {
     "typecheck": "bun check",

@@ -13,7 +13,7 @@ describe("checkServices", () => {
 
     await expect(
       checkServices({
-        R2: async () => {
+        "Map storage": async () => {
           throw Object.assign(new Error("key AKIA-secret is invalid"), {
             name: "InvalidAccessKeyId",
           });
@@ -30,7 +30,7 @@ describe("checkServices", () => {
     const output = error.mock.calls.map((call) => String(call[0]));
     expect(output.sort()).toEqual([
       "  Email: failed",
-      "  R2: failed (InvalidAccessKeyId)",
+      "  Map storage: failed (InvalidAccessKeyId)",
       "  State: failed (EACCES)",
     ]);
   });

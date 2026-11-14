@@ -1,6 +1,6 @@
 # Map tiles service
 
-Keeps the [Protomaps](https://docs.protomaps.com/basemaps/downloads) planet basemap in the R2 bucket current. It checks for a new map when it starts and again whenever the map in use reaches `MAP_TILES_UPDATE_INTERVAL_DAYS` old, counted from its Protomaps build date. The same image has a `map-tiles` command for checking the service, rolling back and starting an update by hand.
+Keeps the [Protomaps](https://docs.protomaps.com/basemaps/downloads) planet basemap in the map storage bucket current. It checks for a new map when it starts and again whenever the map in use reaches `MAP_TILES_UPDATE_INTERVAL_DAYS` old, counted from its Protomaps build date. The same image has a `map-tiles` command for checking the service, rolling back and starting an update by hand.
 
 Running it, the `map-tiles` commands, rolling back and its settings are covered in the docs:
 
@@ -27,7 +27,7 @@ On an empty bucket the first update downloads the map into slot A and starts usi
 
 ## Each check
 
-Each check first makes sure the maps the manifest lists are in R2:
+Each check first makes sure the maps the manifest lists are in the bucket:
 
 - If the map in use is missing and the other slot's map is there, it switches to the other slot.
 - If the other slot's map is missing, it removes that slot from the manifest so nothing is served from it or rolled back to.
@@ -47,13 +47,13 @@ A timer doesn't survive a restart, so every start checks the map's age instead. 
 
 A planet build is about 130 GiB. Protomaps publishes no diffs, so every update downloads and uploads the whole archive. It streams 64 MiB parts and doesn't store the archive on disk.
 
-Each part is uploaded with its MD5, so R2 rejects corrupted parts. Upload state is kept in `MAP_TILES_STATE_DIR`, so a restart resumes from the parts already in R2. An unreadable state file is ignored and the upload starts again. R2 deletes unfinished multipart uploads after 7 days by default.
+Each part is uploaded with its MD5, so the storage provider rejects corrupted parts. Upload state is kept in `MAP_TILES_STATE_DIR`, so a restart resumes from the parts already in the bucket. An unreadable state file is ignored and the upload starts again. Unfinished multipart uploads stay in the bucket until the provider removes them; Cloudflare R2 does this after 7 days by default, and other providers need a lifecycle rule.
 
 Before switching to a new map, the service checks that the uploaded size matches the build, compares the first 16 KiB (header and root directory) with the Protomaps source, and checks that the metadata reports basemap schema major version 4, which the app's `@protomaps/basemaps` style expects. If a check fails, nothing is switched and the next update uploads the slot again.
 
 ## Rollback
 
-After a rollback the bad map is in the other slot. The manifest records its build as rolled back, so scheduled updates skip it until Protomaps publishes a newer build. `map-tiles update` installs it anyway. Publishing any build clears the record. The service's own switch to the other slot, when the map in use is missing from R2, doesn't record anything.
+After a rollback the bad map is in the other slot. The manifest records its build as rolled back, so scheduled updates skip it until Protomaps publishes a newer build. `map-tiles update` installs it anyway. Publishing any build clears the record. The service's own switch to the other slot, when the map in use is missing from the bucket, doesn't record anything.
 
 ## The `map-tiles` command
 

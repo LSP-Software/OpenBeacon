@@ -7,10 +7,11 @@ export const createStorageClient = (
 ) => new S3Client({ ...config, requestHandler: { ...timeouts, throwOnRequestTimeout: true } });
 
 export const s3Client = createStorageClient({
-  endpoint: env.S3_ENDPOINT,
-  region: env.S3_REGION,
+  endpoint: env.IMAGES_S3_ENDPOINT,
+  region: env.IMAGES_S3_REGION,
+  forcePathStyle: env.IMAGES_S3_FORCE_PATH_STYLE,
   credentials: {
-    accessKeyId: env.S3_ACCESS_KEY_ID,
-    secretAccessKey: env.S3_ACCESS_KEY,
+    accessKeyId: env.IMAGES_S3_ACCESS_KEY_ID,
+    secretAccessKey: env.IMAGES_S3_ACCESS_KEY,
   },
 });

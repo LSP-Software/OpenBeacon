@@ -53,7 +53,7 @@ Install OpenBeacon from Google Play. See [Install the app](https://docs.openbeac
 
 ## Run your own server
 
-A server runs as three containers next to PostgreSQL, a Redis-compatible cache, S3-compatible storage for pictures and a Cloudflare R2 bucket for the map:
+A server runs as three containers next to PostgreSQL, a Redis-compatible cache, and S3-compatible storage for pictures and the map:
 
 | Image                                                                                                     | What it does                       |
 | --------------------------------------------------------------------------------------------------------- | ---------------------------------- |
@@ -83,7 +83,7 @@ cp .env.example .env
 bun run android
 ```
 
-`.env` needs real S3 and R2 credentials for pictures and the map. The [development setup guide](https://docs.openbeacon.net/docs/contribute/development-setup) explains every value, and [Android emulators](https://docs.openbeacon.net/docs/contribute/android-emulators) covers `bun run emulators`, which starts everything on four simulated phones at once. To build a signed bundle for Google Play, see [Android release builds](https://docs.openbeacon.net/docs/contribute/android-release-builds).
+`.env` needs real S3-compatible storage credentials for pictures and the map. The [development setup guide](https://docs.openbeacon.net/docs/contribute/development-setup) explains every value, and [Android emulators](https://docs.openbeacon.net/docs/contribute/android-emulators) covers `bun run emulators`, which starts everything on four simulated phones at once. To build a signed bundle for Google Play, see [Android release builds](https://docs.openbeacon.net/docs/contribute/android-release-builds).
 
 Before opening a pull request, run:
 

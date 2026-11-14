@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import { GetObjectCommand, HeadObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import type { MapTilesManifest } from "./manifest.ts";
-import { checkMapArchive } from "./r2.ts";
+import { checkMapArchive } from "./storage.ts";
 
 const manifest: MapTilesManifest = {
   current: "b",

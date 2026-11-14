@@ -18,7 +18,7 @@ import {
 import { tryCatch } from "@openbeacon/shared";
 import type { MapTilesEnv } from "./env.ts";
 import { readArchiveInfo } from "./pmtiles.ts";
-import { headObject, readObjectRange } from "./r2.ts";
+import { headObject, readObjectRange } from "./storage.ts";
 import {
   fetchSourceRange,
   getBuildDate,
@@ -49,7 +49,7 @@ export type Context = {
   partClient: S3Client;
 };
 
-const readR2ArchiveInfo = ({
+const readStoredArchiveInfo = ({
   client,
   env,
   key,
@@ -59,7 +59,7 @@ const readR2ArchiveInfo = ({
   key: string;
 }) =>
   readArchiveInfo((start, length) =>
-    readObjectRange({ bucket: env.R2_BUCKET, client, key, length, start }),
+    readObjectRange({ bucket: env.MAP_S3_BUCKET_NAME, client, key, length, start }),
   );
 
 const describeSlot = (archive: MapTilesArchive | null) =>
@@ -79,7 +79,8 @@ const getUpdateDueAt = ({ archive, env }: { archive: MapTilesArchive; env: MapTi
   ) + env.updateIntervalMs;
 
 export const readMapStatus = async ({ client, env }: Context): Promise<MapStatus> => {
-  const manifest = (await readManifest({ bucket: env.R2_BUCKET, client }))?.manifest ?? null;
+  const manifest =
+    (await readManifest({ bucket: env.MAP_S3_BUCKET_NAME, client }))?.manifest ?? null;
   const reuseAt = manifest ? getStandbyReuseAt(manifest) : null;
   const current = manifest ? getCurrentArchive(manifest) : null;
   const dueAt = current
@@ -93,11 +94,13 @@ export const readMapStatus = async ({ client, env }: Context): Promise<MapStatus
       ? Object.values(manifest.slots).flatMap((archive) => (archive ? [archive.key] : []))
       : [],
   );
-  const listed = await client.send(new ListObjectsV2Command({ Bucket: env.R2_BUCKET }));
-  const pendingUploads = await tryCatch(readdir(join(env.MAP_TILES_STATE_DIR, env.R2_BUCKET)));
+  const listed = await client.send(new ListObjectsV2Command({ Bucket: env.MAP_S3_BUCKET_NAME }));
+  const pendingUploads = await tryCatch(
+    readdir(join(env.MAP_TILES_STATE_DIR, env.MAP_S3_BUCKET_NAME)),
+  );
 
   return {
-    bucket: env.R2_BUCKET,
+    bucket: env.MAP_S3_BUCKET_NAME,
     current: manifest?.current ?? null,
     slots: {
       a: describeSlot(manifest?.slots.a ?? null),
@@ -118,7 +121,7 @@ export const readMapStatus = async ({ client, env }: Context): Promise<MapStatus
 };
 
 export const repairManifest = async ({ client, env }: Context) => {
-  const stored = await readManifest({ bucket: env.R2_BUCKET, client });
+  const stored = await readManifest({ bucket: env.MAP_S3_BUCKET_NAME, client });
 
   if (!stored) {
     return null;
@@ -128,9 +131,13 @@ export const repairManifest = async ({ client, env }: Context) => {
   const standbySlot = getOtherSlot(manifest.current);
   const current = getCurrentArchive(manifest).archive;
   const standby = manifest.slots[standbySlot];
-  const currentExists = await headObject({ bucket: env.R2_BUCKET, client, key: current.key });
+  const currentExists = await headObject({
+    bucket: env.MAP_S3_BUCKET_NAME,
+    client,
+    key: current.key,
+  });
   const standbyExists = standby
-    ? await headObject({ bucket: env.R2_BUCKET, client, key: standby.key })
+    ? await headObject({ bucket: env.MAP_S3_BUCKET_NAME, client, key: standby.key })
     : null;
 
   if (currentExists && (!standby || standbyExists)) {
@@ -139,18 +146,18 @@ export const repairManifest = async ({ client, env }: Context) => {
 
   if (currentExists && standby) {
     await writeManifest({
-      bucket: env.R2_BUCKET,
+      bucket: env.MAP_S3_BUCKET_NAME,
       client,
       etag,
       manifest: { ...manifest, slots: { ...manifest.slots, [standbySlot]: null } },
     });
-    return `${standby.key} is missing from R2, so slot ${standbySlot} was removed from the manifest`;
+    return `${standby.key} is missing from map storage, so slot ${standbySlot} was removed from the manifest`;
   }
 
   if (standby && standbyExists) {
     const { servedUntil: _servedUntil, ...restored } = standby;
     await writeManifest({
-      bucket: env.R2_BUCKET,
+      bucket: env.MAP_S3_BUCKET_NAME,
       client,
       etag,
       manifest: {
@@ -159,21 +166,21 @@ export const repairManifest = async ({ client, env }: Context) => {
         slots: { ...manifest.slots, [standbySlot]: restored, [manifest.current]: null },
       },
     });
-    return `${current.key} is missing from R2, so the map rolled back to slot ${standbySlot} (Protomaps build ${standby.build})`;
+    return `${current.key} is missing from map storage, so the map rolled back to slot ${standbySlot} (Protomaps build ${standby.build})`;
   }
 
-  if ((await readManifest({ bucket: env.R2_BUCKET, client }))?.etag !== etag) {
+  if ((await readManifest({ bucket: env.MAP_S3_BUCKET_NAME, client }))?.etag !== etag) {
     return "The manifest changed while it was being checked, so it was left alone";
   }
 
   await client.send(
-    new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key: MAP_TILES_MANIFEST_KEY }),
+    new DeleteObjectCommand({ Bucket: env.MAP_S3_BUCKET_NAME, Key: MAP_TILES_MANIFEST_KEY }),
   );
-  return "No map in the manifest is in R2, so the manifest was removed and the map is downloaded again";
+  return "No map in the manifest is in map storage, so the manifest was removed and the map is downloaded again";
 };
 
 export const rollback = async ({ client, env }: Context) => {
-  const manifest = await readManifest({ bucket: env.R2_BUCKET, client });
+  const manifest = await readManifest({ bucket: env.MAP_S3_BUCKET_NAME, client });
 
   if (!manifest) {
     throw new Error("There is no map to roll back from yet");
@@ -186,12 +193,12 @@ export const rollback = async ({ client, env }: Context) => {
   const from = getCurrentArchive(manifest.manifest);
   const to = getCurrentArchive(next);
 
-  if (!(await headObject({ bucket: env.R2_BUCKET, client, key: to.archive.key }))) {
-    throw new Error(`${to.archive.key} is missing from R2`);
+  if (!(await headObject({ bucket: env.MAP_S3_BUCKET_NAME, client, key: to.archive.key }))) {
+    throw new Error(`${to.archive.key} is missing from map storage`);
   }
 
   await writeManifest({
-    bucket: env.R2_BUCKET,
+    bucket: env.MAP_S3_BUCKET_NAME,
     client,
     etag: manifest.etag,
     manifest: next,
@@ -259,7 +266,7 @@ export const publish = async (
   const build = pickProtomapsBuild({ builds: await listProtomapsBuilds(), date: undefined });
   const buildDate = getBuildDate(build);
   const url = getProtomapsBuildUrl(build);
-  const initialManifest = await readManifest({ bucket: env.R2_BUCKET, client });
+  const initialManifest = await readManifest({ bucket: env.MAP_S3_BUCKET_NAME, client });
   const now = Date.now();
   const current = initialManifest ? getCurrentArchive(initialManifest.manifest) : null;
 
@@ -277,7 +284,7 @@ export const publish = async (
   const slot = initialManifest ? getOtherSlot(initialManifest.manifest.current) : "a";
   const key = getSlotKey(slot);
   const statePath = getUploadStatePath({
-    bucket: env.R2_BUCKET,
+    bucket: env.MAP_S3_BUCKET_NAME,
     key,
     stateDir: env.MAP_TILES_STATE_DIR,
   });
@@ -332,7 +339,7 @@ export const publish = async (
     [
       `Build: ${build.key} (basemap schema ${sourceInfo.schemaVersion})`,
       `Size: ${formatBytes(source.size)} in ${planParts({ partSize: PART_SIZE, size: source.size }).length} parts`,
-      `Target: ${env.R2_BUCKET}/${key} (slot ${slot})`,
+      `Target: ${env.MAP_S3_BUCKET_NAME}/${key} (slot ${slot})`,
       `Replaces: ${replaced ? `${replaced.key} build ${replaced.build}` : "nothing"}`,
       `Current: ${current ? `${current.archive.key} build ${current.archive.build}` : "none yet"}`,
       env.maxBytesPerSecond === null
@@ -343,7 +350,7 @@ export const publish = async (
 
   if (initialManifest && replaced) {
     await writeManifest({
-      bucket: env.R2_BUCKET,
+      bucket: env.MAP_S3_BUCKET_NAME,
       client,
       etag: initialManifest.etag,
       manifest: clearStandbySlot({ manifest: initialManifest.manifest, now }),
@@ -352,11 +359,11 @@ export const publish = async (
   }
 
   const matchesSource = async () => {
-    const uploaded = await headObject({ bucket: env.R2_BUCKET, client, key });
+    const uploaded = await headObject({ bucket: env.MAP_S3_BUCKET_NAME, client, key });
     if (uploaded?.size !== source.size) {
       return false;
     }
-    const uploadedInfo = await readR2ArchiveInfo({ client, env, key });
+    const uploadedInfo = await readStoredArchiveInfo({ client, env, key });
     return (
       uploadedInfo.schemaVersion === sourceInfo.schemaVersion &&
       Buffer.from(uploadedInfo.headBytes).equals(Buffer.from(sourceInfo.headBytes))
@@ -370,7 +377,7 @@ export const publish = async (
     const reporter = createProgressReporter(source.size);
     const result = await tryCatch(
       uploadArchive({
-        bucket: env.R2_BUCKET,
+        bucket: env.MAP_S3_BUCKET_NAME,
         client,
         downloadLimiter: createRateLimiter({ bytesPerSecond: env.maxBytesPerSecond }),
         key,
@@ -395,14 +402,14 @@ export const publish = async (
 
     if (!(await matchesSource())) {
       throw new Error(
-        `${key} in R2 does not match build ${buildDate}, so it was not published. The next update uploads it again.`,
+        `${key} in map storage does not match build ${buildDate}, so it was not published. The next update uploads it again.`,
       );
     }
   }
 
-  const manifest = await readManifest({ bucket: env.R2_BUCKET, client });
+  const manifest = await readManifest({ bucket: env.MAP_S3_BUCKET_NAME, client });
   await writeManifest({
-    bucket: env.R2_BUCKET,
+    bucket: env.MAP_S3_BUCKET_NAME,
     client,
     etag: manifest?.etag ?? null,
     manifest: publishToStandby({

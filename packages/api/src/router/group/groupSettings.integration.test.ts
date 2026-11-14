@@ -303,7 +303,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: {
           id: imageGroupId,
           name: "Image group",
-          image: buildImagePublicUrl(env.S3_BUCKET_NAME, path, "avatar.webp"),
+          image: buildImagePublicUrl(env.IMAGES_S3_BUCKET_NAME, path, "avatar.webp"),
           groupMembers: {
             create: [
               { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 },
@@ -332,7 +332,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         expect(send.mock.calls[0]?.[0]).toBeInstanceOf(ListObjectVersionsCommand);
         expect(send.mock.calls[1]?.[0]).toBeInstanceOf(DeleteObjectCommand);
         expect((send.mock.calls[1]?.[0] as DeleteObjectCommand | undefined)?.input).toEqual({
-          Bucket: env.S3_BUCKET_NAME,
+          Bucket: env.IMAGES_S3_BUCKET_NAME,
           Key: `${path}/avatar.webp`,
         });
         expect(await prisma.group.findUnique({ where: { id: imageGroupId } })).toBeNull();
@@ -363,7 +363,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       try {
         await caller(users[0]!).groupLifecycle.delete({ groupId: pendingGroupId });
         expect((send.mock.calls[1]?.[0] as DeleteObjectCommand | undefined)?.input).toEqual({
-          Bucket: env.S3_BUCKET_NAME,
+          Bucket: env.IMAGES_S3_BUCKET_NAME,
           Key: `user/${users[0]}/uploads/group/${pendingGroupId}/avatar/pending.webp`,
         });
         expect(await prisma.group.findUnique({ where: { id: pendingGroupId } })).toBeNull();
@@ -448,7 +448,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
               uploadType: "groupAvatar",
               fileName: `${id}.webp`,
               groupId: id,
-              bucketName: env.S3_BUCKET_NAME,
+              bucketName: env.IMAGES_S3_BUCKET_NAME,
               currentImagePath: buildGroupAvatarPath(userId, id),
             }),
           ),

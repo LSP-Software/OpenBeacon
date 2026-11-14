@@ -2,13 +2,36 @@ import { describe, expect, test } from "bun:test";
 import { getServiceUrl, parseEnv } from "./env.ts";
 
 const required = {
-  R2_ACCOUNT_ID: "account",
-  R2_ACCESS_KEY_ID: "key",
-  R2_SECRET_ACCESS_KEY: "secret",
-  R2_BUCKET: "bucket",
+  MAP_S3_ENDPOINT: "https://map-storage.example.com",
+  MAP_S3_REGION: "us-east-1",
+  MAP_S3_ACCESS_KEY_ID: "key",
+  MAP_S3_ACCESS_KEY: "secret",
+  MAP_S3_BUCKET_NAME: "bucket",
 };
 
 describe("parseEnv", () => {
+  test("requires the region, with no default provider", () => {
+    const { MAP_S3_REGION: _region, ...withoutRegion } = required;
+    expect(() => parseEnv(withoutRegion)).toThrow();
+    expect(parseEnv(required).MAP_S3_REGION).toBe("us-east-1");
+  });
+
+  test("only uses path-style bucket addresses when asked", () => {
+    expect(parseEnv(required).MAP_S3_FORCE_PATH_STYLE).toBe(false);
+    expect(parseEnv({ ...required, MAP_S3_FORCE_PATH_STYLE: "" }).MAP_S3_FORCE_PATH_STYLE).toBe(
+      false,
+    );
+    expect(parseEnv({ ...required, MAP_S3_FORCE_PATH_STYLE: "true" }).MAP_S3_FORCE_PATH_STYLE).toBe(
+      true,
+    );
+    expect(() => parseEnv({ ...required, MAP_S3_FORCE_PATH_STYLE: "sometimes" })).toThrow();
+  });
+
+  test("rejects a map storage endpoint that isn't an address", () => {
+    expect(() => parseEnv({ ...required, MAP_S3_ENDPOINT: "account-id" })).toThrow();
+    expect(() => parseEnv({ ...required, MAP_S3_ENDPOINT: "ftp://storage.example.com" })).toThrow();
+  });
+
   test("has no bandwidth limit when MAP_TILES_MAX_MBPS is unset or blank", () => {
     expect(parseEnv(required).maxBytesPerSecond).toBeNull();
     expect(parseEnv({ ...required, MAP_TILES_MAX_MBPS: " " }).maxBytesPerSecond).toBeNull();

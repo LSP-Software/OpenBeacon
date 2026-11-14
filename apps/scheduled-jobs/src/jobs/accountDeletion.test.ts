@@ -24,7 +24,7 @@ const waitForSecurityAlerts = mock(async () => {});
 
 mock.module("@openbeacon/api/account-deletion.ts", () => ({ deleteAccountRecords: removeAccount }));
 mock.module("@openbeacon/api/env.ts", () => ({
-  env: { S3_CDN_URL: "https://cdn.example", S3_BUCKET_NAME: "bucket" },
+  env: { IMAGES_S3_CDN_URL: "https://cdn.example", IMAGES_S3_BUCKET_NAME: "bucket" },
 }));
 mock.module("@openbeacon/api/storage.ts", () => ({
   deleteUserImages: removeImages,

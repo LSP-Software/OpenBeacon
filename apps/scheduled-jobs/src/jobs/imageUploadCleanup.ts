@@ -25,7 +25,7 @@ const pendingUploadKey = (upload: {
       : buildUserAvatarPath(upload.userId)
   }/${upload.fileName}`;
 
-const imageUrl = (key: string) => `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}/${key}`;
+const imageUrl = (key: string) => `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}/${key}`;
 
 const failureCode = (error: unknown) =>
   errorCode(error) ?? (error instanceof Error && error.name !== "Error" ? error.name : null);
@@ -55,7 +55,7 @@ export const runStalePendingUploadCleanup = async () => {
           const referenced =
             (await tx.user.count({ where: { image: imageUrl(key) } })) +
             (await tx.group.count({ where: { image: imageUrl(key) } }));
-          if (referenced === 0) await deleteImageKey(env.S3_BUCKET_NAME, key);
+          if (referenced === 0) await deleteImageKey(env.IMAGES_S3_BUCKET_NAME, key);
           await tx.pendingUpload.deleteMany({
             where: {
               userId: upload.userId,
@@ -82,7 +82,7 @@ export const runStalePendingUploadCleanup = async () => {
 };
 
 export const runImageStorageSweep = async () => {
-  const urlPrefix = `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}/`;
+  const urlPrefix = `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}/`;
   const [check] = await services.db.$queryRaw<Array<{ mismatched: boolean }>>(Prisma.sql`
     SELECT EXISTS (
       SELECT 1 FROM "User"
@@ -94,13 +94,13 @@ export const runImageStorageSweep = async () => {
   `);
   if (check?.mismatched !== false) {
     console.error(
-      "Image storage sweep skipped: stored image URLs don't match S3_CDN_URL and S3_BUCKET_NAME",
+      "Image storage sweep skipped: stored image URLs don't match IMAGES_S3_CDN_URL and IMAGES_S3_BUCKET_NAME",
     );
     return;
   }
   const cutoff = new Date((await getDatabaseTime()).getTime() - gracePeriodMs);
   const result = await tryCatch(
-    forEachImageVersionPage(env.S3_BUCKET_NAME, "user/", async (versions) => {
+    forEachImageVersionPage(env.IMAGES_S3_BUCKET_NAME, "user/", async (versions) => {
       const candidates = versions.filter(
         ({ key, lastModified }) => lastModified < cutoff && uploadKeyPattern.test(key),
       );
@@ -128,7 +128,7 @@ export const runImageStorageSweep = async () => {
           referenced.has(imageUrl(key)) ? !isLatest : !pendingKeys.has(key),
         )
         .map(({ key, versionId }) => ({ Key: key, VersionId: versionId }));
-      await deleteImageVersionList(env.S3_BUCKET_NAME, toDelete);
+      await deleteImageVersionList(env.IMAGES_S3_BUCKET_NAME, toDelete);
     }),
   );
   if (result.error) {

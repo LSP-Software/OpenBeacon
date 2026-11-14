@@ -1,108 +1,40 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-let originalBetterAuthUrl: string | undefined;
-let originalBetterAuthSecret: string | undefined;
-let originalDatabaseUrl: string | undefined;
-let originalNodeEnv: string | undefined;
-let originalR2AccessKeyId: string | undefined;
-let originalR2AccountId: string | undefined;
-let originalR2Bucket: string | undefined;
-let originalR2SecretAccessKey: string | undefined;
-let originalS3AccessKey: string | undefined;
-let originalS3AccessKeyId: string | undefined;
-let originalS3BucketName: string | undefined;
+const testEnv = {
+  BETTER_AUTH_URL: "http://localhost:3000",
+  BETTER_AUTH_SECRET: "test-secret-000000000000000000000000",
+  DATABASE_URL: "postgresql://localhost:5432/openbeacon",
+  NODE_ENV: "production",
+  IMAGES_S3_ENDPOINT: "https://images-storage.example.com",
+  IMAGES_S3_REGION: "us-east-1",
+  IMAGES_S3_ACCESS_KEY_ID: "test-images-access-key-id",
+  IMAGES_S3_ACCESS_KEY: "test-images-secret-access-key",
+  IMAGES_S3_BUCKET_NAME: "test-images-bucket",
+  IMAGES_S3_CDN_URL: "https://cdn.example.com/file",
+  MAP_S3_ENDPOINT: "https://map-storage.example.com",
+  MAP_S3_REGION: "us-east-1",
+  MAP_S3_ACCESS_KEY_ID: "test-storage-access-key-id",
+  MAP_S3_ACCESS_KEY: "test-storage-secret-access-key",
+  MAP_S3_BUCKET_NAME: "test-storage-bucket",
+};
 
 describe("mapsRouter", () => {
+  const original = new Map<string, string | undefined>();
+
   beforeEach(() => {
-    originalBetterAuthUrl = process.env.BETTER_AUTH_URL;
-    originalBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
-    originalDatabaseUrl = process.env.DATABASE_URL;
-    originalNodeEnv = process.env.NODE_ENV;
-    originalS3AccessKeyId = process.env.S3_ACCESS_KEY_ID;
-    originalS3AccessKey = process.env.S3_ACCESS_KEY;
-    originalS3BucketName = process.env.S3_BUCKET_NAME;
-    originalR2AccountId = process.env.R2_ACCOUNT_ID;
-    originalR2AccessKeyId = process.env.R2_ACCESS_KEY_ID;
-    originalR2SecretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-    originalR2Bucket = process.env.R2_BUCKET;
-    process.env.BETTER_AUTH_URL = "http://localhost:3000";
-    process.env.BETTER_AUTH_SECRET = "test-secret-000000000000000000000000";
-    process.env.DATABASE_URL = "postgresql://localhost:5432/openbeacon";
-    process.env.NODE_ENV = "production";
-    process.env.S3_ACCESS_KEY_ID = "12345678901234567890";
-    process.env.S3_ACCESS_KEY = "12345678901234567890";
-    process.env.S3_BUCKET_NAME = "test-s3-bucket";
-    process.env.R2_ACCOUNT_ID = "test-r2-account-id";
-    process.env.R2_ACCESS_KEY_ID = "test-r2-access-key-id";
-    process.env.R2_SECRET_ACCESS_KEY = "test-r2-secret-access-key";
-    process.env.R2_BUCKET = "test-r2-bucket";
+    for (const [key, value] of Object.entries(testEnv)) {
+      original.set(key, process.env[key]);
+      process.env[key] = value;
+    }
   });
 
   afterEach(() => {
-    if (originalBetterAuthUrl === undefined) {
-      delete process.env.BETTER_AUTH_URL;
-    } else {
-      process.env.BETTER_AUTH_URL = originalBetterAuthUrl;
-    }
-
-    if (originalBetterAuthSecret === undefined) {
-      delete process.env.BETTER_AUTH_SECRET;
-    } else {
-      process.env.BETTER_AUTH_SECRET = originalBetterAuthSecret;
-    }
-
-    if (originalDatabaseUrl === undefined) {
-      delete process.env.DATABASE_URL;
-    } else {
-      process.env.DATABASE_URL = originalDatabaseUrl;
-    }
-
-    if (originalNodeEnv === undefined) {
-      delete process.env.NODE_ENV;
-    } else {
-      process.env.NODE_ENV = originalNodeEnv;
-    }
-
-    if (originalS3AccessKeyId === undefined) {
-      delete process.env.S3_ACCESS_KEY_ID;
-    } else {
-      process.env.S3_ACCESS_KEY_ID = originalS3AccessKeyId;
-    }
-
-    if (originalS3AccessKey === undefined) {
-      delete process.env.S3_ACCESS_KEY;
-    } else {
-      process.env.S3_ACCESS_KEY = originalS3AccessKey;
-    }
-
-    if (originalS3BucketName === undefined) {
-      delete process.env.S3_BUCKET_NAME;
-    } else {
-      process.env.S3_BUCKET_NAME = originalS3BucketName;
-    }
-
-    if (originalR2AccountId === undefined) {
-      delete process.env.R2_ACCOUNT_ID;
-    } else {
-      process.env.R2_ACCOUNT_ID = originalR2AccountId;
-    }
-
-    if (originalR2AccessKeyId === undefined) {
-      delete process.env.R2_ACCESS_KEY_ID;
-    } else {
-      process.env.R2_ACCESS_KEY_ID = originalR2AccessKeyId;
-    }
-
-    if (originalR2SecretAccessKey === undefined) {
-      delete process.env.R2_SECRET_ACCESS_KEY;
-    } else {
-      process.env.R2_SECRET_ACCESS_KEY = originalR2SecretAccessKey;
-    }
-
-    if (originalR2Bucket === undefined) {
-      delete process.env.R2_BUCKET;
-    } else {
-      process.env.R2_BUCKET = originalR2Bucket;
+    for (const [key, value] of original) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
     }
   });
 

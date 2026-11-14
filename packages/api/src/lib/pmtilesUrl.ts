@@ -1,6 +1,6 @@
 import type { OpenBeaconCache } from "@openbeacon/cache";
 import { errorCode, tryCatch } from "@openbeacon/shared";
-import { createSignedPmtilesUrl, resolvePmtilesArchive } from "../r2.ts";
+import { createSignedPmtilesUrl, resolvePmtilesArchive } from "../mapStorage.ts";
 
 type ArchiveDependencies = {
   createSignedPmtilesUrl?: typeof createSignedPmtilesUrl;

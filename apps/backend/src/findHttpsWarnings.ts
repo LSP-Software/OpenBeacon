@@ -5,11 +5,16 @@ const isLocalDevelopmentHost = (hostname: string) =>
   hostname === "10.0.2.2" ||
   /^127\.\d+\.\d+\.\d+$/.test(hostname);
 
-export const findHttpsWarnings = (urls: { BETTER_AUTH_URL: string; S3_CDN_URL: string }) =>
+export const findHttpsWarnings = (urls: {
+  BETTER_AUTH_URL: string;
+  IMAGES_S3_CDN_URL: string;
+  MAP_S3_ENDPOINT: string;
+}) =>
   (
     [
       ["BETTER_AUTH_URL", urls.BETTER_AUTH_URL, "phones won't be able to connect to this server"],
-      ["S3_CDN_URL", urls.S3_CDN_URL, "profile and group pictures won't load"],
+      ["IMAGES_S3_CDN_URL", urls.IMAGES_S3_CDN_URL, "profile and group pictures won't load"],
+      ["MAP_S3_ENDPOINT", urls.MAP_S3_ENDPOINT, "the map won't load"],
     ] as const
   )
     .filter(([, value]) => {

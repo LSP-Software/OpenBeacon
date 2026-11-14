@@ -20,7 +20,7 @@ const result = await tryCatch(
   (async () => {
     const user = await services.db.user.findUnique({ where: { email }, select: { id: true } });
     if (!user) throw new Error("Account not found.");
-    const imageUrlPrefix = `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`;
+    const imageUrlPrefix = `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}`;
     await services.db.$transaction(async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${user.id} FOR NO KEY UPDATE`);
       await lockDeletableGroups(tx, { userId: user.id, imageUrlPrefix });

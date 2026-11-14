@@ -168,13 +168,13 @@ export const deleteFile = async (
 
 export const buildImagePublicUrl = (bucketName: string, path: string, fileName: string): string => {
   const key = buildKey(path, fileName);
-  return `${env.S3_CDN_URL}/${bucketName}/${key}`;
+  return `${env.IMAGES_S3_CDN_URL}/${bucketName}/${key}`;
 };
 
 export const extractImageStorageObject = (
   imageUrl: string,
 ): { bucketName: string; path: string; fileName: string } | null => {
-  const baseUrl = `${env.S3_CDN_URL}/`;
+  const baseUrl = `${env.IMAGES_S3_CDN_URL}/`;
   if (!imageUrl?.startsWith(baseUrl)) return null;
 
   const imagePath = imageUrl.slice(baseUrl.length);

@@ -1,4 +1,4 @@
-import { checkR2, checkS3 } from "@openbeacon/api/checkStorage.ts";
+import { checkMapStorage, checkImageStorage } from "@openbeacon/api/checkStorage.ts";
 import { checkEmail, emailEnabled } from "@openbeacon/email";
 import { RedisClient } from "bun";
 import { checkServices } from "./checkServices.ts";
@@ -15,7 +15,7 @@ await checkServices({
       redis.close();
     }
   },
-  S3: checkS3,
-  R2: checkR2,
+  "Image storage": checkImageStorage,
+  "Map storage": checkMapStorage,
   ...(emailEnabled ? { Email: checkEmail } : {}),
 });

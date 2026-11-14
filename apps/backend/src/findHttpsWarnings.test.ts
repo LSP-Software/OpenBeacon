@@ -1,8 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { findHttpsWarnings } from "./findHttpsWarnings.ts";
 
-const warnedNames = (BETTER_AUTH_URL: string, S3_CDN_URL = "https://cdn.openbeacon.net/file") =>
-  findHttpsWarnings({ BETTER_AUTH_URL, S3_CDN_URL }).map((warning) => warning.split(" ")[0]);
+const warnedNames = (
+  BETTER_AUTH_URL: string,
+  IMAGES_S3_CDN_URL = "https://cdn.openbeacon.net/file",
+  MAP_S3_ENDPOINT = "https://map-storage.example.com",
+) =>
+  findHttpsWarnings({ BETTER_AUTH_URL, IMAGES_S3_CDN_URL, MAP_S3_ENDPOINT }).map(
+    (warning) => warning.split(" ")[0],
+  );
 
 describe("findHttpsWarnings", () => {
   test("does not warn for https", () => {
@@ -19,7 +25,7 @@ describe("findHttpsWarnings", () => {
       "http://[::1]:3000",
       "http://10.0.2.2:3000",
     ]) {
-      expect(warnedNames(url, url)).toEqual([]);
+      expect(warnedNames(url, url, url)).toEqual([]);
     }
   });
 
@@ -40,21 +46,29 @@ describe("findHttpsWarnings", () => {
   test("warns for each value that is not https", () => {
     expect(warnedNames("http://api.example.com", "http://cdn.example.com/file")).toEqual([
       "BETTER_AUTH_URL",
-      "S3_CDN_URL",
+      "IMAGES_S3_CDN_URL",
     ]);
     expect(warnedNames("https://api.example.com", "http://cdn.example.com/file")).toEqual([
-      "S3_CDN_URL",
+      "IMAGES_S3_CDN_URL",
     ]);
+    expect(
+      warnedNames(
+        "https://api.example.com",
+        "https://cdn.example.com/file",
+        "http://map-storage.example.com",
+      ),
+    ).toEqual(["MAP_S3_ENDPOINT"]);
   });
 
   test("explains the value and links to the docs", () => {
     expect(
       findHttpsWarnings({
         BETTER_AUTH_URL: "https://api.example.com",
-        S3_CDN_URL: "http://cdn.example.com/file",
+        IMAGES_S3_CDN_URL: "http://cdn.example.com/file",
+        MAP_S3_ENDPOINT: "https://map-storage.example.com",
       }),
     ).toEqual([
-      "S3_CDN_URL is http://cdn.example.com/file, which isn't HTTPS. The OpenBeacon app only connects over HTTPS, so profile and group pictures won't load. See https://docs.openbeacon.net/docs/self-host/networking-and-reverse-proxies#https-is-required",
+      "IMAGES_S3_CDN_URL is http://cdn.example.com/file, which isn't HTTPS. The OpenBeacon app only connects over HTTPS, so profile and group pictures won't load. See https://docs.openbeacon.net/docs/self-host/networking-and-reverse-proxies#https-is-required",
     ]);
   });
 });

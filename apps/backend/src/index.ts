@@ -1,7 +1,7 @@
 import "./validateEnv.ts";
 import "./validateServices.ts";
 import { env as apiEnv } from "@openbeacon/api/env.ts";
-import { getMapTilesManifest } from "@openbeacon/api/r2.ts";
+import { getMapTilesManifest } from "@openbeacon/api/mapStorage.ts";
 import { securityAlerts } from "@openbeacon/auth";
 import { tryCatch } from "@openbeacon/shared";
 import { app } from "./app.ts";
@@ -13,7 +13,8 @@ import { authenticateCloudflare, resolveClientIp } from "./helpers/clientIp.ts";
 
 for (const warning of findHttpsWarnings({
   BETTER_AUTH_URL: env.BETTER_AUTH_URL,
-  S3_CDN_URL: apiEnv.S3_CDN_URL,
+  IMAGES_S3_CDN_URL: apiEnv.IMAGES_S3_CDN_URL,
+  MAP_S3_ENDPOINT: apiEnv.MAP_S3_ENDPOINT,
 })) {
   console.warn(warning);
 }
@@ -34,10 +35,10 @@ const watchForFirstMap = async (waiting: boolean) => {
   }
 
   if (manifest.error) {
-    console.error(`Could not check R2 for the map: ${manifest.error.message}`);
+    console.error(`Could not read the map from map storage: ${manifest.error.message}`);
   } else {
     console.warn(
-      "There is no map in R2 yet, so the app shows that the map isn't ready. Check the map tiles container logs or run `map-tiles status` in it to follow the first download.",
+      "There is no map in map storage yet, so the app shows that the map isn't ready. Check the map tiles container logs or run `map-tiles status` in it to follow the first download.",
     );
   }
   setTimeout(() => void watchForFirstMap(true), 5 * 60_000);

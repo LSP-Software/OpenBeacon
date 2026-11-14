@@ -309,7 +309,7 @@ export const accountRouter = {
           deleteAccountRecords({
             db: ctx.db,
             userId,
-            imageUrlPrefix: `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`,
+            imageUrlPrefix: `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}`,
             mode: "scheduled",
             securityAlerts: ctx.securityAlerts,
           }),
@@ -462,7 +462,7 @@ export const accountRouter = {
       const fileName = `${crypto.randomUUID()}.webp`;
 
       const { presignedUrl } = await requestImageUpload({
-        bucketName: env.S3_BUCKET_NAME,
+        bucketName: env.IMAGES_S3_BUCKET_NAME,
         contentHash: input.contentHash,
         fileSize: input.fileSize,
         imagePath,
@@ -474,7 +474,7 @@ export const accountRouter = {
         userId,
         uploadType: "userAvatar",
         fileName,
-        bucketName: env.S3_BUCKET_NAME,
+        bucketName: env.IMAGES_S3_BUCKET_NAME,
         currentImagePath: imagePath,
       });
 
@@ -504,7 +504,7 @@ export const accountRouter = {
         db: ctx.db,
         userId,
         uploadType: "userAvatar",
-        bucketName: env.S3_BUCKET_NAME,
+        bucketName: env.IMAGES_S3_BUCKET_NAME,
         imagePath: buildUserAvatarPath(userId),
         pendingFileName: pendingUpload?.fileName ?? null,
         currentImageUrl: currentUser?.image ?? null,

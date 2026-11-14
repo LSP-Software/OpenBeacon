@@ -6,12 +6,13 @@ import { TRPCError } from "@trpc/server";
 import { env } from "./env.ts";
 import { createStorageClient } from "./s3client.ts";
 
-export const r2Client = createStorageClient({
-  region: "auto",
-  endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+export const mapStorageClient = createStorageClient({
+  endpoint: env.MAP_S3_ENDPOINT,
+  region: env.MAP_S3_REGION,
+  forcePathStyle: env.MAP_S3_FORCE_PATH_STYLE,
   credentials: {
-    accessKeyId: env.R2_ACCESS_KEY_ID,
-    secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+    accessKeyId: env.MAP_S3_ACCESS_KEY_ID,
+    secretAccessKey: env.MAP_S3_ACCESS_KEY,
   },
 });
 
@@ -58,7 +59,8 @@ export const createManifestCache = ({
 
 export const getMapTilesManifest = createManifestCache({
   read: async () =>
-    (await readManifest({ bucket: env.R2_BUCKET, client: r2Client }))?.manifest ?? null,
+    (await readManifest({ bucket: env.MAP_S3_BUCKET_NAME, client: mapStorageClient }))?.manifest ??
+    null,
 });
 
 export const resolvePmtilesArchive = async (requestedId: string | undefined) => {
@@ -77,11 +79,11 @@ export const resolvePmtilesArchive = async (requestedId: string | undefined) => 
 
 export const createSignedPmtilesUrl = async (key: string) => {
   const command = new GetObjectCommand({
-    Bucket: env.R2_BUCKET,
+    Bucket: env.MAP_S3_BUCKET_NAME,
     Key: key,
   });
 
-  const url = await getSignedUrl(r2Client, command, {
+  const url = await getSignedUrl(mapStorageClient, command, {
     expiresIn: PM_TILES_URL_EXPIRES_IN_SECONDS,
   });
 

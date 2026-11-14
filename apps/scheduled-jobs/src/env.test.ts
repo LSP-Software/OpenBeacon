@@ -28,14 +28,14 @@ test("lists each setting by name without printing its value", () => {
     env: {
       ...env,
       DATABASE_URL: "postgresql://runner:database-password@localhost:5432/test",
-      S3_ACCESS_KEY: secret,
+      IMAGES_S3_ACCESS_KEY: secret,
     },
   });
   const output = result.stdout.toString() + result.stderr.toString();
   expect(result.exitCode).toBe(0);
   expect(output).toContain("Environment configuration:");
   expect(output).toContain("  DATABASE_URL: valid");
-  expect(output).toContain("  S3_ACCESS_KEY: valid");
+  expect(output).toContain("  IMAGES_S3_ACCESS_KEY: valid");
   expect(output).toContain("  RESEND_API_KEY: not set (optional/default)");
   expect(output).toContain("Environment configuration valid");
   expect(output).not.toContain(secret);
@@ -48,12 +48,12 @@ test("stops the runner with a clear line before the storage clients read a bad s
     env: {
       ...env,
       DATABASE_URL: "postgresql://localhost:5432/test",
-      S3_ACCESS_KEY: "short-secret",
+      IMAGES_S3_ENDPOINT: "short-secret",
     },
   });
   const stderr = result.stderr.toString();
   expect(result.exitCode).not.toBe(0);
-  expect(stderr).toContain("  S3_ACCESS_KEY: invalid (");
+  expect(stderr).toContain("  IMAGES_S3_ENDPOINT: invalid (");
   expect(stderr).toContain("Environment configuration validation failed");
   expect(stderr).not.toContain("short-secret");
   expect(stderr).not.toContain("Invalid environment variables");

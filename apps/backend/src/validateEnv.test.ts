@@ -13,13 +13,17 @@ describe("production environment validation", () => {
     BETTER_AUTH_SECRET: "test-secret-000000000000000000000000",
     TRUSTED_PROXY_PROVIDER: "cloudflare-authenticated",
     CLOUDFLARE_ORIGIN_SECRET: "a-secure-test-secret-with-32-characters",
-    S3_ACCESS_KEY_ID: "12345678901234567890",
-    S3_ACCESS_KEY: "12345678901234567890",
-    S3_BUCKET_NAME: "test-bucket",
-    R2_ACCOUNT_ID: "test-account",
-    R2_ACCESS_KEY_ID: "test-key",
-    R2_SECRET_ACCESS_KEY: "test-secret",
-    R2_BUCKET: "test-bucket",
+    IMAGES_S3_ENDPOINT: "https://images-storage.example.com",
+    IMAGES_S3_REGION: "us-east-1",
+    IMAGES_S3_CDN_URL: "https://cdn.example.com/file",
+    IMAGES_S3_ACCESS_KEY_ID: "12345678901234567890",
+    IMAGES_S3_ACCESS_KEY: "12345678901234567890",
+    IMAGES_S3_BUCKET_NAME: "test-bucket",
+    MAP_S3_ENDPOINT: "https://map-storage.example.com",
+    MAP_S3_REGION: "us-east-1",
+    MAP_S3_ACCESS_KEY_ID: "test-key",
+    MAP_S3_ACCESS_KEY: "test-secret",
+    MAP_S3_BUCKET_NAME: "test-bucket",
   };
 
   test("accepts valid runtime configuration", () => {
@@ -40,7 +44,7 @@ describe("production environment validation", () => {
       env: {
         ...env,
         BETTER_AUTH_URL: "http://localhost:3000",
-        S3_CDN_URL: "http://localhost:9000",
+        IMAGES_S3_CDN_URL: "http://localhost:9000",
       },
     });
     expect(result.exitCode).toBe(0);
@@ -66,9 +70,9 @@ describe("production environment validation", () => {
     for (const invalid of [
       { TRUSTED_PROXY_PROVIDER: "" },
       { CLOUDFLARE_ORIGIN_SECRET: "" },
-      { R2_BUCKET: "" },
+      { MAP_S3_BUCKET_NAME: "" },
       { BETTER_AUTH_URL: "ftp://example.com" },
-      { S3_CDN_URL: "mailto:test@example.com" },
+      { IMAGES_S3_CDN_URL: "mailto:test@example.com" },
       { DATABASE_URL: "https://example.com" },
       { DATABASE_URL: "not-a-url" },
       { REDIS_URL: "not-a-url" },
@@ -77,8 +81,8 @@ describe("production environment validation", () => {
       { REDIS_URL: "https://example.com" },
       { REDIS_HASH_SECRET: "short" },
       { OPENBEACON_API_PORT: "1.5" },
-      { S3_ENDPOINT: "invalid" },
-      { S3_REGION: "" },
+      { IMAGES_S3_ENDPOINT: "invalid" },
+      { IMAGES_S3_REGION: "" },
       { MAX_IMAGE_FILE_SIZE: "0" },
       { SELF_HOSTED: "maybe" },
       { RESEND_API_KEY: "re_key", SMTP_HOST: "smtp.example.com", EMAIL_FROM: "a@example.com" },
@@ -92,7 +96,7 @@ describe("production environment validation", () => {
       });
       expect(result.exitCode).not.toBe(0);
       expect(result.stderr.toString()).toContain("Environment configuration validation failed");
-      expect(result.stdout.toString()).toContain("R2_SECRET_ACCESS_KEY: valid");
+      expect(result.stdout.toString()).toContain("MAP_S3_ACCESS_KEY: valid");
     }
   }, 30_000);
 

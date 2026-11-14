@@ -86,7 +86,7 @@ export const createMapTilesHandler = ({
         const map = await tryCatch(readMapStatus());
         if (map.error) {
           return Response.json(
-            { error: `Could not read the map from R2: ${map.error.message}` },
+            { error: `Could not read the map from map storage: ${map.error.message}` },
             { status: 502 },
           );
         }
@@ -150,7 +150,7 @@ export const createMapTilesHandler = ({
           return;
         }
         if (map.error) {
-          console.error(`Could not read the map from R2: ${map.error.message}`);
+          console.error(`Could not read the map from map storage: ${map.error.message}`);
         }
         const dueAt = map.data?.nextUpdateDueAt ? Date.parse(map.data.nextUpdateDueAt) : null;
         const retry = dueAt === null || last?.outcome === "failed";

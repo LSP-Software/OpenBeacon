@@ -3,11 +3,18 @@ import { z } from "zod";
 import { getCurrentArchive } from "./manifest.ts";
 import { readManifest } from "./manifestStore.ts";
 
-export const r2EnvSchema = {
-  R2_ACCOUNT_ID: z.string().min(1),
-  R2_ACCESS_KEY_ID: z.string().min(1),
-  R2_SECRET_ACCESS_KEY: z.string().min(1),
-  R2_BUCKET: z.string().min(1),
+export const forcePathStyleSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.stringbool().default(false),
+);
+
+export const mapStorageEnvSchema = {
+  MAP_S3_ENDPOINT: z.url({ protocol: /^https?$/ }),
+  MAP_S3_REGION: z.string().min(1),
+  MAP_S3_ACCESS_KEY_ID: z.string().min(1),
+  MAP_S3_ACCESS_KEY: z.string().min(1),
+  MAP_S3_BUCKET_NAME: z.string().min(1),
+  MAP_S3_FORCE_PATH_STYLE: forcePathStyleSchema,
 };
 
 export const checkMapArchive = async ({ bucket, client }: { bucket: string; client: S3Client }) => {

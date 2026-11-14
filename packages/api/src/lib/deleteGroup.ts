@@ -21,7 +21,7 @@ export const deleteGroup = async ({
   });
   for (const upload of pendingUploads) {
     await deleteFile(
-      env.S3_BUCKET_NAME,
+      env.IMAGES_S3_BUCKET_NAME,
       buildGroupAvatarPath(upload.userId, groupId),
       upload.fileName,
     );
@@ -31,7 +31,7 @@ export const deleteGroup = async ({
     const uploaderId = image?.path.split("/")[1];
     if (
       !image ||
-      image.bucketName !== env.S3_BUCKET_NAME ||
+      image.bucketName !== env.IMAGES_S3_BUCKET_NAME ||
       (image.path !== `group/${groupId}/uploads/avatar` &&
         (!uploaderId || image.path !== buildGroupAvatarPath(uploaderId, groupId))) ||
       !image.fileName

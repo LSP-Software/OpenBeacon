@@ -17,7 +17,7 @@ let databaseNow = new Date();
 const ago = (ms: number) => new Date(databaseNow.getTime() - ms);
 const groupKey = (fileName: string) => `user/${userId}/uploads/group/${groupId}/avatar/${fileName}`;
 const avatarKey = (fileName: string) => `user/${userId}/uploads/avatar/${fileName}`;
-const url = (key: string) => `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}/${key}`;
+const url = (key: string) => `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}/${key}`;
 
 type Version = { Key: string; VersionId: string; LastModified: Date; IsLatest: boolean };
 let pages: Array<{ Versions?: Version[]; DeleteMarkers?: Version[] }> = [];
@@ -243,7 +243,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Image upload cle
         id: otherUserId,
         name: otherUserId,
         email: `${otherUserId}@example.test`,
-        image: `https://other-cdn.example.test/${env.S3_BUCKET_NAME}/user/${otherUserId}/uploads/avatar/current.webp`,
+        image: `https://other-cdn.example.test/${env.IMAGES_S3_BUCKET_NAME}/user/${otherUserId}/uploads/avatar/current.webp`,
       },
     });
     pages = [
@@ -263,7 +263,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Image upload cle
     expect(send).not.toHaveBeenCalled();
     expect(deletedKeys()).toEqual([]);
     expect(error.mock.calls).toEqual([
-      ["Image storage sweep skipped: stored image URLs don't match S3_CDN_URL and S3_BUCKET_NAME"],
+      [
+        "Image storage sweep skipped: stored image URLs don't match IMAGES_S3_CDN_URL and IMAGES_S3_BUCKET_NAME",
+      ],
     ]);
     error.mockRestore();
   });
@@ -276,7 +278,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Image upload cle
       data: {
         id: otherGroupId,
         name: "Group",
-        image: `${env.S3_CDN_URL}/other-bucket/user/${userId}/uploads/group/${otherGroupId}/avatar/a.webp`,
+        image: `${env.IMAGES_S3_CDN_URL}/other-bucket/user/${userId}/uploads/group/${otherGroupId}/avatar/a.webp`,
       },
     });
     pages = [
