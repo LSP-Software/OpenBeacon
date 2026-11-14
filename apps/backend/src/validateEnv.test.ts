@@ -82,6 +82,8 @@ describe("production environment validation", () => {
       { REDIS_HASH_SECRET: "short" },
       { OPENBEACON_API_PORT: "1.5" },
       { IMAGES_S3_ENDPOINT: "invalid" },
+      { IMAGES_S3_PUBLIC_ENDPOINT: "beacon.example.com" },
+      { MAP_S3_PUBLIC_ENDPOINT: "https://beacon.example.com/openbeacon-map" },
       { IMAGES_S3_REGION: "" },
       { MAX_IMAGE_FILE_SIZE: "0" },
       { SELF_HOSTED: "maybe" },
