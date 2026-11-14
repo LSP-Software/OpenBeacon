@@ -28,6 +28,7 @@ mock.module("expo-router", () => ({
 
 const {
   clearPendingJoinCodes,
+  joinCodeFromInput,
   joinCodeFromLink,
   openAppAfterSetup,
   saveJoinLinkForAfterSetup,
@@ -124,6 +125,17 @@ describe("join links", () => {
     `openbeacon://join?xcode=${code}`,
   ])("ignores %s", (link) => {
     expect(joinCodeFromLink(link)).toBeNull();
+  });
+
+  test.each([code, ` ${code.toLowerCase()} `, `openbeacon://join?code=${code}`])(
+    "accepts a typed or scanned %s",
+    (input) => {
+      expect(joinCodeFromInput(input)).toBe(code);
+    },
+  );
+
+  test.each(["", "ABC123", `${code}0`, "https://example.test/"])("rejects %s", (input) => {
+    expect(joinCodeFromInput(input)).toBeNull();
   });
 
   test("an invite link opened on a phone that isn't set up is saved for after setup", () => {

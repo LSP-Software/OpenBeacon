@@ -4,6 +4,7 @@ import { readRegisteredDeviceNow } from "./registeredDevice.ts";
 import { storage } from "./storage.ts";
 
 const STORAGE_PREFIX = "pendingJoinCode.";
+const JOIN_CODE = /^[A-Fa-f0-9]{32}$/;
 
 export const clearPendingJoinCodes = () => {
   for (const key of storage.getAllKeys()) {
@@ -34,7 +35,13 @@ export const joinCodeFromLink = (link: string) => {
     .split("&")
     .find((pair) => pair.startsWith("code="))
     ?.slice("code=".length);
-  return code && /^[A-Fa-f0-9]{32}$/.test(code) ? code.toUpperCase() : null;
+  return code && JOIN_CODE.test(code) ? code.toUpperCase() : null;
+};
+
+export const joinCodeFromInput = (input: string) => {
+  const trimmed = input.trim();
+  if (JOIN_CODE.test(trimmed)) return trimmed.toUpperCase();
+  return joinCodeFromLink(trimmed);
 };
 
 export const saveJoinLinkForAfterSetup = (link: string) => {

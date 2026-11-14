@@ -330,6 +330,13 @@ describe("rateLimitMiddleware", () => {
     }
   });
 
+  test("a join-code preview spends the same per-account budget as joining", async () => {
+    const { groupInvitesRouter } = await import("../router/group/groupInvitesRouter.ts");
+    expect(groupInvitesRouter.sharedPreview._def.meta).toEqual(
+      groupInvitesRouter.acceptShared._def.meta,
+    );
+  });
+
   test("an account gets forty joins a minute, however many accounts share an IP", async () => {
     const { groupInvitesRouter } = await import("../router/group/groupInvitesRouter.ts");
     const cache = new TestOpenBeaconCache({

@@ -11,7 +11,7 @@ import {
 } from "../../lib/groupEpochs.ts";
 import { emailInviteCreatedAfter } from "../../lib/emailInvites.ts";
 import { createGroupJoinAlerts } from "../../lib/groupJoinAlerts.ts";
-import { assertAccountBelowGroupLimit } from "../../lib/groupLimit.ts";
+import { assertAccountBelowGroupLimit, maxGroupsPerAccount } from "../../lib/groupLimit.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
@@ -29,6 +29,73 @@ const creatorCanAdmit = async (
     !creator?.user.pendingDeletion &&
     (creator?.role === GroupRole.OWNER || creator?.role === GroupRole.ADMIN)
   );
+};
+
+const sharedCodeHash = (code: string) =>
+  createHash("sha256").update(code.toUpperCase()).digest("hex");
+
+const findRedeemableSharedInvite = async (
+  db: Pick<Prisma.TransactionClient, "groupMember" | "groupSharedInvite">,
+  code: string,
+) => {
+  const invite = await db.groupSharedInvite.findUnique({
+    where: { codeHash: sharedCodeHash(code) },
+    include: { creator: { select: { name: true, image: true } } },
+  });
+  if (
+    !invite?.creator ||
+    invite.usedAt ||
+    invite.expiresAt <= new Date() ||
+    !(await creatorCanAdmit(db, invite))
+  )
+    throw new TRPCError({ code: "NOT_FOUND", message: "Invite is invalid or expired" });
+  return { groupId: invite.groupId, creator: invite.creator };
+};
+
+const getInvitePreview = async ({
+  db,
+  groupId,
+  inviter,
+  notFoundMessage,
+  userId,
+}: {
+  db: Pick<Prisma.TransactionClient, "group" | "groupMember" | "user">;
+  groupId: string;
+  inviter: { name: string; image: string | null };
+  notFoundMessage: string;
+  userId: string;
+}) => {
+  const [group, member, user, groupCount] = await Promise.all([
+    db.group.findUnique({
+      where: { id: groupId },
+      select: { id: true, name: true, image: true, _count: { select: { groupMembers: true } } },
+    }),
+    db.groupMember.findUnique({
+      where: { userId_groupId: { userId, groupId } },
+      select: { id: true },
+    }),
+    db.user.findUnique({ where: { id: userId }, select: { pendingDeletion: true } }),
+    db.groupMember.count({ where: { userId } }),
+  ]);
+  if (!group) throw new TRPCError({ code: "NOT_FOUND", message: notFoundMessage });
+  const alreadyMember = member !== null;
+  return {
+    group: {
+      id: group.id,
+      name: group.name,
+      image: group.image,
+      memberCount: group._count.groupMembers,
+    },
+    inviter,
+    alreadyMember,
+    joinBlockedBy: alreadyMember
+      ? null
+      : !user || user.pendingDeletion
+        ? ("PENDING_DELETION" as const)
+        : groupCount >= maxGroupsPerAccount
+          ? ("GROUP_LIMIT" as const)
+          : null,
+  };
 };
 
 export const groupInvitesRouter = {
@@ -112,16 +179,7 @@ export const groupInvitesRouter = {
     })
     .input(z.object({ code: z.string().regex(/^[A-Fa-f0-9]{32}$/) }))
     .mutation(async ({ ctx, input }) => {
-      const invite = await ctx.db.groupSharedInvite.findUnique({
-        where: { codeHash: createHash("sha256").update(input.code.toUpperCase()).digest("hex") },
-      });
-      if (
-        !invite ||
-        invite.usedAt ||
-        invite.expiresAt <= new Date() ||
-        !(await creatorCanAdmit(ctx.db, invite))
-      )
-        throw new TRPCError({ code: "NOT_FOUND", message: "Invite is invalid or expired" });
+      const invite = await findRedeemableSharedInvite(ctx.db, input.code);
       const member = await ctx.db.groupMember.findUnique({
         where: { userId_groupId: { userId: ctx.session.user.id, groupId: invite.groupId } },
       });
@@ -133,6 +191,21 @@ export const groupInvitesRouter = {
         userId: ctx.session.user.id,
       });
     }),
+  sharedPreview: protectedProcedure
+    .meta({
+      rateLimit: { limit: 40, namespace: "groupInvites.redeem", windowMs: 60_000 },
+    })
+    .input(z.object({ code: z.string().regex(/^[A-Fa-f0-9]{32}$/) }))
+    .mutation(async ({ ctx, input }) => {
+      const invite = await findRedeemableSharedInvite(ctx.db, input.code);
+      return getInvitePreview({
+        db: ctx.db,
+        groupId: invite.groupId,
+        inviter: invite.creator,
+        notFoundMessage: "Invite is invalid or expired",
+        userId: ctx.session.user.id,
+      });
+    }),
   acceptShared: protectedProcedure
     .meta({
       rateLimit: { limit: 40, namespace: "groupInvites.redeem", windowMs: 60_000 },
@@ -141,7 +214,7 @@ export const groupInvitesRouter = {
       z.object({ code: z.string().regex(/^[A-Fa-f0-9]{32}$/), nextEpoch: groupEpochBundleSchema }),
     )
     .mutation(async ({ ctx, input }) => {
-      const codeHash = createHash("sha256").update(input.code.toUpperCase()).digest("hex");
+      const codeHash = sharedCodeHash(input.code);
       await ctx.db.$transaction(async (tx) => {
         await assertAccountCanJoinGroup(tx, ctx.session.user.id);
         const invite = await tx.groupSharedInvite.findUnique({ where: { codeHash } });
@@ -189,6 +262,26 @@ export const groupInvitesRouter = {
         });
       });
       return { message: "Invite accepted." };
+    }),
+  preview: protectedProcedure
+    .input(z.object({ inviteId: z.string().min(1).max(128) }))
+    .query(async ({ ctx, input }) => {
+      const invite = await ctx.db.groupMemberInvite.findFirst({
+        where: {
+          id: input.inviteId,
+          recipientId: ctx.session.user.id,
+          createdAt: { gt: emailInviteCreatedAfter() },
+        },
+        select: { groupId: true, inviter: { select: { name: true, image: true } } },
+      });
+      if (!invite) throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
+      return getInvitePreview({
+        db: ctx.db,
+        groupId: invite.groupId,
+        inviter: invite.inviter,
+        notFoundMessage: "Invite not found",
+        userId: ctx.session.user.id,
+      });
     }),
   acceptanceContext: protectedProcedure
     .input(z.object({ inviteId: z.string().min(1).max(128) }))

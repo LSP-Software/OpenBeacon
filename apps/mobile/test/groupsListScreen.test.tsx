@@ -33,7 +33,8 @@ mock.module("@tanstack/react-query", () => ({
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("expo-router", () => ({
-  Link: ({ children }: { children: React.ReactNode }) => children,
+  Link: ({ children, href }: { children: React.ReactNode; href: unknown }) =>
+    React.createElement("router-link", { href }, children),
 }));
 mock.module("react-native", () => createReactNativeTestModule());
 mock.module("react-native-safe-area-context", () => ({
@@ -56,20 +57,12 @@ mock.module("../lib/api.ts", () => ({
         queryOptions: () => ({ queryKey: ["joinAlerts"] }),
         queryKey: () => ["joinAlerts"],
       },
-      accept: { mutationOptions: () => ({}) },
-      decline: { mutationOptions: () => ({}) },
       dismissJoinAlert: { mutationOptions: () => ({}) },
     },
   },
 }));
 mock.module("../lib/alert.ts", () => ({ Alert: { alert: () => {} } }));
 mock.module("../lib/groupColor.ts", () => ({ getGroupColor: () => "#000000" }));
-mock.module("../lib/groupEncryption.ts", () => ({
-  buildAcceptInviteInput: async () => ({}),
-  submitEpochChange: async () => ({}),
-}));
-mock.module("../lib/groupLimitAlert.ts", () => ({ groupLimitAlert: () => false }));
-mock.module("../lib/trackingEvents.ts", () => ({ requestTrackingSync: () => {} }));
 mock.module("../hooks/useRefetchWhileFocused.ts", () => ({ useRefetchWhileFocused: () => {} }));
 mock.module("../hooks/useGroupColorRevision.ts", () => ({ useGroupColorRevision: () => 0 }));
 mock.module("../components/dialogs/CreateGroupDialog.tsx", () => ({
@@ -147,4 +140,27 @@ test("an empty list with no errors shows the normal page", async () => {
   expect(output).toContain("Your Groups");
   expect(output).not.toContain("out of date");
   expect(output).not.toContain("couldn’t load");
+});
+
+test("an invite card names the group and opens the invite", async () => {
+  queries["invites"] = query("invites", {
+    data: [
+      {
+        id: "invite-1",
+        inviter: { id: "user-2", name: "Alex", image: null },
+        group: { id: "group-1", name: "Smith Family", image: null },
+      },
+    ],
+  });
+  const root = await render();
+  const output = JSON.stringify(root.container.toJSON());
+  expect(output).toContain("You’ve been sent an invite to ");
+  expect(output).toContain("Smith Family");
+  expect(output).toContain("View invite");
+  expect(output).not.toContain("Alex");
+  const links = root.container.queryAll((node) => node.type === "router-link");
+  expect(links.map((link) => link.props["href"])).toContainEqual({
+    pathname: "/join",
+    params: { inviteId: "invite-1" },
+  });
 });
