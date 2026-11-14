@@ -1,28 +1,45 @@
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { type MapTilesManifest, readManifest, resolveArchive } from "@openbeacon/map-tiles";
+import {
+  checkMapArchive,
+  type MapTilesManifest,
+  readManifest,
+  resolveArchive,
+  runStorageCheck,
+} from "@openbeacon/map-tiles";
 import { tryCatch } from "@openbeacon/shared";
+import { createEnv } from "@t3-oss/env-core";
 import { TRPCError } from "@trpc/server";
-import { env } from "./env.ts";
+import { mapEnvSchema } from "./envSchema.ts";
 import { createStorageClient } from "./s3client.ts";
 
+export const mapEnv = createEnv({ server: mapEnvSchema, runtimeEnv: process.env });
+
 const mapConfig = {
-  region: env.MAP_S3_REGION,
-  forcePathStyle: env.MAP_S3_FORCE_PATH_STYLE,
+  region: mapEnv.MAP_S3_REGION,
+  forcePathStyle: mapEnv.MAP_S3_FORCE_PATH_STYLE,
   credentials: {
-    accessKeyId: env.MAP_S3_ACCESS_KEY_ID,
-    secretAccessKey: env.MAP_S3_ACCESS_KEY,
+    accessKeyId: mapEnv.MAP_S3_ACCESS_KEY_ID,
+    secretAccessKey: mapEnv.MAP_S3_ACCESS_KEY,
   },
 };
 
 export const mapStorageClient = createStorageClient({
   ...mapConfig,
-  endpoint: env.MAP_S3_ENDPOINT,
+  endpoint: mapEnv.MAP_S3_ENDPOINT,
 });
 
-const mapStoragePresignClient = env.MAP_S3_PUBLIC_ENDPOINT
-  ? createStorageClient({ ...mapConfig, endpoint: env.MAP_S3_PUBLIC_ENDPOINT })
+const mapStoragePresignClient = mapEnv.MAP_S3_PUBLIC_ENDPOINT
+  ? createStorageClient({ ...mapConfig, endpoint: mapEnv.MAP_S3_PUBLIC_ENDPOINT })
   : mapStorageClient;
+
+export const checkMapStorage = () =>
+  runStorageCheck({
+    label: "Map storage",
+    prefix: "MAP_S3",
+    forcePathStyle: mapEnv.MAP_S3_FORCE_PATH_STYLE,
+    check: () => checkMapArchive({ bucket: mapEnv.MAP_S3_BUCKET_NAME, client: mapStorageClient }),
+  });
 
 export const PM_TILES_URL_EXPIRES_IN_SECONDS = 60 * 10;
 export const MAP_TILES_MANIFEST_CACHE_MS = 60_000;
@@ -67,8 +84,8 @@ export const createManifestCache = ({
 
 export const getMapTilesManifest = createManifestCache({
   read: async () =>
-    (await readManifest({ bucket: env.MAP_S3_BUCKET_NAME, client: mapStorageClient }))?.manifest ??
-    null,
+    (await readManifest({ bucket: mapEnv.MAP_S3_BUCKET_NAME, client: mapStorageClient }))
+      ?.manifest ?? null,
 });
 
 export const resolvePmtilesArchive = async (requestedId: string | undefined) => {
@@ -87,7 +104,7 @@ export const resolvePmtilesArchive = async (requestedId: string | undefined) => 
 
 export const createSignedPmtilesUrl = async (key: string) => {
   const command = new GetObjectCommand({
-    Bucket: env.MAP_S3_BUCKET_NAME,
+    Bucket: mapEnv.MAP_S3_BUCKET_NAME,
     Key: key,
   });
 

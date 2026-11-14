@@ -1,11 +1,22 @@
-import { afterAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, describe, expect, mock, spyOn, test } from "bun:test";
 import type { MapTilesManifest } from "@openbeacon/map-tiles";
 
 const mapTiles = await import("@openbeacon/map-tiles");
-mock.module("@openbeacon/map-tiles", () => ({ ...mapTiles, readManifest: async () => null }));
+const checkMapArchive = mock(async (_input: unknown) => {});
+mock.module("@openbeacon/map-tiles", () => ({
+  ...mapTiles,
+  checkMapArchive,
+  readManifest: async () => null,
+}));
 
-const { createManifestCache, MAP_TILES_MANIFEST_CACHE_MS, resolvePmtilesArchive } =
-  await import("./mapStorage.ts");
+const {
+  checkMapStorage,
+  createManifestCache,
+  MAP_TILES_MANIFEST_CACHE_MS,
+  mapEnv,
+  mapStorageClient,
+  resolvePmtilesArchive,
+} = await import("./mapStorage.ts");
 
 const manifest = (key: string): MapTilesManifest => ({
   current: "a",
@@ -98,5 +109,27 @@ describe("resolvePmtilesArchive", () => {
     await expect(resolvePmtilesArchive(undefined)).rejects.toMatchObject({
       code: "SERVICE_UNAVAILABLE",
     });
+  });
+});
+
+describe("checkMapStorage", () => {
+  test("checks the map archive in the configured map bucket", async () => {
+    await checkMapStorage();
+    expect(checkMapArchive).toHaveBeenLastCalledWith({
+      bucket: mapEnv.MAP_S3_BUCKET_NAME,
+      client: mapStorageClient,
+    });
+  });
+
+  test("explains likely fixes under the storage label", async () => {
+    const consoleError = spyOn(console, "error").mockImplementation(() => {});
+    const noSuchBucket = Object.assign(new Error("The bucket does not exist"), {
+      name: "NoSuchBucket",
+    });
+    checkMapArchive.mockRejectedValueOnce(noSuchBucket);
+
+    await expect(checkMapStorage()).rejects.toBe(noSuchBucket);
+    expect(consoleError.mock.calls).toEqual([["  Map storage: check MAP_S3_BUCKET_NAME"]]);
+    consoleError.mockRestore();
   });
 });

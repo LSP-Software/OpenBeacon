@@ -1,10 +1,10 @@
-import { envSchema as apiEnvSchema } from "@openbeacon/api/envSchema.ts";
+import { envSchema as apiEnvSchema, mapEnvSchema } from "@openbeacon/api/envSchema.ts";
 import { emailEnvSchema, findEmailSettingsError } from "@openbeacon/email/config.ts";
 import { validateEnv } from "@openbeacon/shared";
 import { envSchema as backendEnvSchema } from "./envSchema.ts";
 
 validateEnv({
-  schemas: { ...backendEnvSchema, ...apiEnvSchema, ...emailEnvSchema },
+  schemas: { ...backendEnvSchema, ...apiEnvSchema, ...mapEnvSchema, ...emailEnvSchema },
   source: process.env,
   checks: [
     () =>

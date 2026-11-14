@@ -17,6 +17,9 @@ export const envSchema = {
   IMAGES_S3_FORCE_PATH_STYLE: forcePathStyleSchema,
   IMAGES_S3_CDN_URL: z.url({ protocol: /^https?$/ }).transform((url) => url.replace(/\/+$/, "")),
   MAX_IMAGE_FILE_SIZE: z.coerce.number().int().min(1).default(5242880),
+};
+
+export const mapEnvSchema = {
   ...mapStorageEnvSchema,
   MAP_S3_PUBLIC_ENDPOINT: publicEndpointSchema("MAP_S3"),
 };

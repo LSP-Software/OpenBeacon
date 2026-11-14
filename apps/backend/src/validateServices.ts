@@ -1,4 +1,5 @@
-import { checkMapStorage, checkImageStorage } from "@openbeacon/api/checkStorage.ts";
+import { checkImageStorage } from "@openbeacon/api/checkStorage.ts";
+import { checkMapStorage } from "@openbeacon/api/mapStorage.ts";
 import { checkEmail, emailEnabled } from "@openbeacon/email";
 import { pingRedis } from "@openbeacon/cache";
 import { cache } from "./cache.ts";
