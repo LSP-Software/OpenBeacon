@@ -11,10 +11,11 @@ const pendingKey = `${keyPrefix}:alertsTurnedOff:pending`;
 const url = new URL(redisUrl);
 url.username = user;
 url.password = password;
-const admin = new RedisClient(redisUrl);
+let admin: RedisClient | null = null;
 let cache: OpenBeaconCache | null = null;
 afterAll(async () => {
   cache?.close();
+  if (!admin) return;
   await admin.send("ACL", ["DELUSER", user]);
   await admin.send("DEL", [pendingKey]);
   admin.close();
@@ -23,6 +24,7 @@ afterAll(async () => {
 test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "lists the commands a restricted Redis user can't run, and nothing once it can",
   async () => {
+    admin = new RedisClient(redisUrl);
     await admin.send("ZADD", [pendingKey, "1", "user-1"]);
     await admin.send("ACL", [
       "SETUSER",
