@@ -1,0 +1,174 @@
+name: Release Docker images
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    steps:
+      - name: Require main branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo 'Images must be released from main.' >&2
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read server version
+        id: version
+        run: |
+          version=$(sed -nE 's/^export const serverVersion = "([0-9]+\.[0-9]+\.[0-9]+)";$/\1/p' apps/backend/src/version.ts)
+          if [ -z "$version" ]; then
+            echo 'Could not read serverVersion from apps/backend/src/version.ts.' >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Refuse to overwrite a version released from another commit
+        id: release_check
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          errors=$(mktemp)
+          existing=0
+          for image in openbeacon-backend openbeacon-scheduled-jobs openbeacon-map-tiles; do
+            ref="docker.io/lspsoftware/${image}:${VERSION}"
+            if ! revision=$(docker buildx imagetools inspect "$ref" --format '{{index .Image.Config.Labels "org.opencontainers.image.revision"}}' 2> "$errors"); then
+              if ! grep -qxF "ERROR: ${ref}: not found" "$errors" && ! grep -qF "repository does not exist" "$errors"; then
+                echo "Could not check whether ${ref} exists:" >&2
+                cat "$errors" >&2
+                exit 1
+              fi
+              continue
+            fi
+            if [ "$revision" != "$COMMIT" ]; then
+              echo "${ref} was already released from ${revision}. Bump serverVersion in apps/backend/src/version.ts first." >&2
+              exit 1
+            fi
+            existing=$((existing + 1))
+          done
+          if [ "$existing" -eq 3 ]; then
+            echo "All three ${VERSION} images were already released from this commit; skipping the builds."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build and push backend
+        if: steps.release_check.outputs.build == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          provenance: mode=max
+          sbom: true
+          tags: docker.io/lspsoftware/openbeacon-backend:${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+      - name: Build and push scheduled jobs
+        if: steps.release_check.outputs.build == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/scheduled-jobs/Dockerfile
+          push: true
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          provenance: mode=max
+          sbom: true
+          tags: docker.io/lspsoftware/openbeacon-scheduled-jobs:${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=scheduled-jobs
+          cache-to: type=gha,mode=max,scope=scheduled-jobs
+      - name: Build and push map tiles
+        if: steps.release_check.outputs.build == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: apps/map-tiles/Dockerfile
+          push: true
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          provenance: mode=max
+          sbom: true
+          tags: docker.io/lspsoftware/openbeacon-map-tiles:${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=map-tiles
+          cache-to: type=gha,mode=max,scope=map-tiles
+      - name: Refuse to move latest-stable to an older version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          ref=docker.io/lspsoftware/openbeacon-backend:latest-stable
+          errors=$(mktemp)
+          if ! current=$(docker buildx imagetools inspect "$ref" --format '{{index .Image.Config.Labels "org.opencontainers.image.source"}} {{index .Image.Config.Labels "org.opencontainers.image.version"}}' 2> "$errors"); then
+            if ! grep -qxF "ERROR: ${ref}: not found" "$errors" && ! grep -qF "repository does not exist" "$errors"; then
+              echo "Could not read the version of ${ref}:" >&2
+              cat "$errors" >&2
+              exit 1
+            fi
+            current=
+          fi
+          if [ "${current%% *}" = "$SOURCE" ]; then
+            current="${current#* }"
+          else
+            current=
+          fi
+          if [ -n "$current" ] && [ "$(printf '%s\n' "$current" "$VERSION" | sort -V | tail -n 1)" != "$VERSION" ]; then
+            echo "latest-stable is ${current}, which is newer than ${VERSION}. Refusing to roll production back; release a newer serverVersion instead." >&2
+            exit 1
+          fi
+      - name: Point latest-stable at this version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          for image in openbeacon-backend openbeacon-scheduled-jobs openbeacon-map-tiles; do
+            docker buildx imagetools create \
+              --tag "docker.io/lspsoftware/${image}:latest-stable" \
+              "docker.io/lspsoftware/${image}:${VERSION}"
+          done
+      - name: Write job summary
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          {
+            echo "## Released ${VERSION}"
+            echo
+            echo "Commit: \`${COMMIT}\`"
+            echo
+            echo '| Image | Digest |'
+            echo '| --- | --- |'
+            for image in openbeacon-backend openbeacon-scheduled-jobs openbeacon-map-tiles; do
+              ref="docker.io/lspsoftware/${image}:${VERSION}"
+              digest=$(docker buildx imagetools inspect "$ref" --format '{{.Manifest.Digest}}')
+              echo "| \`${ref}\` | \`${digest}\` |"
+            done
+            echo
+            echo "latest-stable now points at ${VERSION}. Next, run the Deploy to Coolify workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
