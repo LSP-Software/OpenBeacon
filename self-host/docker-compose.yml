@@ -5,8 +5,10 @@ name: openbeacon
 
 services:
   caddy:
-    image: caddy:latest
+    image: caddy:2
     restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${OPENBEACON_DOMAIN:?}
     ports:
       - 80:80
       - 443:443
@@ -29,29 +31,29 @@ services:
       BETTER_AUTH_URL: https://${OPENBEACON_DOMAIN:?}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
       DATABASE_URL: postgresql://openbeacon:${POSTGRES_PASSWORD:?}@db:5432/openbeacon
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://valkey:6379
       REDIS_HASH_SECRET: ${REDIS_HASH_SECRET:?}
       TRUSTED_PROXY_PROVIDER: trusted-proxy
       IMAGES_S3_ENDPOINT: http://storage:7070
       IMAGES_S3_PUBLIC_ENDPOINT: https://${OPENBEACON_DOMAIN:?}
       IMAGES_S3_CDN_URL: https://${OPENBEACON_DOMAIN:?}
       IMAGES_S3_REGION: us-east-1
-      IMAGES_S3_ACCESS_KEY_ID: openbeacon
-      IMAGES_S3_ACCESS_KEY: ${STORAGE_SECRET_KEY:?}
+      IMAGES_S3_ACCESS_KEY_ID: pictures
+      IMAGES_S3_ACCESS_KEY: ${STORAGE_PICTURES_SECRET_KEY:?}
       IMAGES_S3_BUCKET_NAME: openbeacon-pictures
       IMAGES_S3_FORCE_PATH_STYLE: true
       MAP_S3_ENDPOINT: http://storage:7070
       MAP_S3_PUBLIC_ENDPOINT: https://${OPENBEACON_DOMAIN:?}
       MAP_S3_REGION: us-east-1
-      MAP_S3_ACCESS_KEY_ID: openbeacon
-      MAP_S3_ACCESS_KEY: ${STORAGE_SECRET_KEY:?}
+      MAP_S3_ACCESS_KEY_ID: map
+      MAP_S3_ACCESS_KEY: ${STORAGE_MAP_SECRET_KEY:?}
       MAP_S3_BUCKET_NAME: openbeacon-map
       MAP_S3_FORCE_PATH_STYLE: true
     networks: [internet, database, cache, storage]
     depends_on:
       db:
         condition: service_healthy
-      redis:
+      valkey:
         condition: service_healthy
       storage-setup:
         condition: service_completed_successfully
@@ -64,14 +66,14 @@ services:
       IMAGES_S3_ENDPOINT: http://storage:7070
       IMAGES_S3_CDN_URL: https://${OPENBEACON_DOMAIN:?}
       IMAGES_S3_REGION: us-east-1
-      IMAGES_S3_ACCESS_KEY_ID: openbeacon
-      IMAGES_S3_ACCESS_KEY: ${STORAGE_SECRET_KEY:?}
+      IMAGES_S3_ACCESS_KEY_ID: pictures
+      IMAGES_S3_ACCESS_KEY: ${STORAGE_PICTURES_SECRET_KEY:?}
       IMAGES_S3_BUCKET_NAME: openbeacon-pictures
       IMAGES_S3_FORCE_PATH_STYLE: true
       MAP_S3_ENDPOINT: http://storage:7070
       MAP_S3_REGION: us-east-1
-      MAP_S3_ACCESS_KEY_ID: openbeacon
-      MAP_S3_ACCESS_KEY: ${STORAGE_SECRET_KEY:?}
+      MAP_S3_ACCESS_KEY_ID: map
+      MAP_S3_ACCESS_KEY: ${STORAGE_MAP_SECRET_KEY:?}
       MAP_S3_BUCKET_NAME: openbeacon-map
       MAP_S3_FORCE_PATH_STYLE: true
     networks: [internet, database, storage]
@@ -85,8 +87,8 @@ services:
     environment:
       MAP_S3_ENDPOINT: http://storage:7070
       MAP_S3_REGION: us-east-1
-      MAP_S3_ACCESS_KEY_ID: openbeacon
-      MAP_S3_ACCESS_KEY: ${STORAGE_SECRET_KEY:?}
+      MAP_S3_ACCESS_KEY_ID: map
+      MAP_S3_ACCESS_KEY: ${STORAGE_MAP_SECRET_KEY:?}
       MAP_S3_BUCKET_NAME: openbeacon-map
       MAP_S3_FORCE_PATH_STYLE: true
     volumes:
@@ -110,26 +112,28 @@ services:
       test: pg_isready -U openbeacon -d openbeacon
       interval: 10s
 
-  redis:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+  valkey:
+    image: valkey/valkey:9
     restart: unless-stopped
-    command: dragonfly --logtostderr --proactor_threads=1 --maxmemory=256mb --version_check=false
-    ulimits:
-      memlock: -1
     volumes:
-      - redis:/data
+      - valkey:/data
     networks: [cache]
+    healthcheck:
+      test: valkey-cli ping
+      interval: 10s
 
   storage:
-    image: versity/versitygw:latest
+    image: versity/versitygw:v1.11.0
     restart: unless-stopped
-    entrypoint: sh -c "mkdir -p /data/buckets /data/versions && exec docker-entrypoint.sh"
+    entrypoint: sh -c "mkdir -p /data/buckets /data/versions /data/iam && exec docker-entrypoint.sh"
     environment:
-      ROOT_ACCESS_KEY: openbeacon
-      ROOT_SECRET_KEY: ${STORAGE_SECRET_KEY:?}
+      ROOT_ACCESS_KEY: admin
+      ROOT_SECRET_KEY: ${STORAGE_ADMIN_SECRET_KEY:?}
       VGW_BACKEND: posix
       VGW_BACKEND_ARG: /data/buckets
       VGW_VERSIONING_DIR: /data/versions
+      VGW_IAM_DIR: /data/iam
+      VGW_ADMIN_PORT: :7071
       VGW_HEALTH: /health
       VGW_QUIET: true
       VGW_FSYNC: true
@@ -141,19 +145,30 @@ services:
       interval: 10s
 
   storage-setup:
-    image: curlimages/curl:latest
+    image: curlimages/curl:8.23.0
     restart: on-failure
     environment:
-      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?}
+      ADMIN_KEY: ${STORAGE_ADMIN_SECRET_KEY:?}
+      PICTURES_KEY: ${STORAGE_PICTURES_SECRET_KEY:?}
+      MAP_KEY: ${STORAGE_MAP_SECRET_KEY:?}
     entrypoint: sh -ec
     command:
       - |
-        s3() { curl -fsS -o /dev/null --aws-sigv4 aws:amz:us-east-1:s3 --user "openbeacon:$$STORAGE_SECRET_KEY" "$$@"; }
-        for bucket in openbeacon-pictures openbeacon-map; do
-          s3 -I "http://storage:7070/$$bucket" || s3 -X PUT "http://storage:7070/$$bucket"
-        done
-        s3 -X PUT "http://storage:7070/openbeacon-pictures?versioning" --data-binary '<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Status>Enabled</Status></VersioningConfiguration>'
-        s3 -X PUT "http://storage:7070/openbeacon-pictures?policy" --data-binary '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::openbeacon-pictures/*"}]}'
+        admin() { curl -fsS -o /dev/null --aws-sigv4 aws:amz:us-east-1:s3 --user "admin:$$ADMIN_KEY" "$$@"; }
+        user() {
+          admin -X PATCH http://storage:7071/create-user --data-binary "<Account><Access>$$1</Access><Secret>$$2</Secret><Role>user</Role></Account>" 2>/dev/null ||
+            admin -X PATCH "http://storage:7071/update-user?access=$$1" --data-binary "<MutableProps><Secret>$$2</Secret></MutableProps>"
+        }
+        bucket() {
+          admin -I "http://storage:7070/$$1" 2>/dev/null || admin -X PUT "http://storage:7070/$$1"
+          admin -X PATCH "http://storage:7071/change-bucket-owner/?bucket=$$1&owner=$$2"
+        }
+        user pictures "$$PICTURES_KEY"
+        user map "$$MAP_KEY"
+        bucket openbeacon-pictures pictures
+        bucket openbeacon-map map
+        admin -X PUT "http://storage:7070/openbeacon-pictures?versioning" --data-binary '<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Status>Enabled</Status></VersioningConfiguration>'
+        admin -X PUT "http://storage:7070/openbeacon-pictures?policy" --data-binary '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::openbeacon-pictures/*"}]}'
         echo "Storage is ready"
     networks: [storage]
     depends_on:
@@ -163,7 +178,7 @@ services:
 configs:
   caddyfile:
     content: |
-      ${OPENBEACON_DOMAIN:?} {
+      {$$SITE_ADDRESS} {
         @storage path /openbeacon-pictures/* /openbeacon-map/*
         handle @storage {
           @notAllowed {
@@ -190,7 +205,7 @@ networks:
 
 volumes:
   db:
-  redis:
+  valkey:
   storage:
   map_tiles_state:
   caddy_data:

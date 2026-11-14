@@ -114,11 +114,12 @@ Status on 2026-11-14:
    - Caddy keeps the original `Host`, so signatures still match.
    - On the storage paths, Caddy only allows `GET`, `HEAD` and `PUT` and refuses an `Authorization` header. That is a second layer behind the bucket policy.
 4. **Init container.** A one-shot `curlimages/curl` container (about 11 MB, using curl's built-in SigV4 signing) creates both buckets, enables versioning on the pictures bucket and applies the `s3:GetObject`-only policy. Every step is safe to repeat. An earlier version used `amazon/aws-cli`, a 654 MB image whose default checksum behaviour has changed between releases before.
-5. **No versioning fallback needed.** Versity, SeaweedFS and Silo all support versioning. A fallback would only matter for Garage.
+5. **Separate keys.** Versity's built-in IAM (`VGW_IAM_DIR`) holds a `pictures` user and a `map` user with the `user` role. The setup container creates or updates them through the admin API, which listens on its own internal port (`VGW_ADMIN_PORT=:7071`) rather than the S3 port. It then makes each one the owner of its bucket. Each key is refused on the other bucket and on the admin API. The services never get the admin key, and changing a key in `.env` takes effect on the next `docker compose up -d`.
+6. **No versioning fallback needed.** Versity, SeaweedFS and Silo all support versioning. A fallback would only matter for Garage.
 
 ## Test results
 
-Run on 2026-11-14 with `self-host/docker-compose.yml`, Versity Gateway v1.11.0 with fsync on, Dragonfly v2.1.0, PostgreSQL 18 and locally built OpenBeacon 0.21.0 images. The `.env` file was filled in as the quick start describes. Requests from the host went through Caddy on a single `beacon.localhost` domain, where the two bucket paths go to Versity and everything else goes to the backend. Checks inside the stack called the real OpenBeacon functions.
+Run on 2026-11-14 with `self-host/docker-compose.yml`, Versity Gateway v1.11.0 with fsync on, Valkey 9, PostgreSQL 18 and locally built OpenBeacon 0.21.0 images. The `.env` file was filled in as the quick start describes. Requests from the host went through Caddy on a single `beacon.localhost` domain, where the two bucket paths go to Versity and everything else goes to the backend. Checks inside the stack called the real OpenBeacon functions.
 
 - Map tiles bucket:
   - The map-tiles start-up access check passed.
@@ -133,6 +134,9 @@ Run on 2026-11-14 with `self-host/docker-compose.yml`, Versity Gateway v1.11.0 w
 - Versity checks the region in SigV4 signatures, so `MAP_S3_REGION` and `IMAGES_S3_REGION` must match `VGW_REGION`.
 - The server signs phone links for `IMAGES_S3_PUBLIC_ENDPOINT` and `MAP_S3_PUBLIC_ENDPOINT` while it reaches storage on the internal network. Caddy keeps the Host header, so the signatures still match.
 - The image has `/usr/bin/wget`, which the Docker healthcheck uses.
-- Data survived `docker compose down` and `up`.
+- Data survived `docker compose down` and `up`, and so did Valkey's.
+- The map key, the pictures key and the admin key are separate. Each storage key was refused on the other bucket and on the admin API. After a map key rotation, the old map key was refused and map tiles stayed healthy.
+- Cloudflare Tunnel mode (`COMPOSE_FILE=docker-compose.yml:cloudflare-tunnel.yml` in `.env`) was tested by sending plain HTTP to `127.0.0.1:80` with the public Host header, the way `cloudflared` does. Uploads, the map and public pictures all worked.
+- The whole integration suite (352 tests) passes against Valkey 9, including the cache restart test.
 
-Not tested: a phone on a real network, Cloudflare Tunnel, Let's Encrypt issuance, and a full planet download.
+Not tested: a phone on a real network, a real Cloudflare Tunnel, Let's Encrypt issuance, and a full planet download.
