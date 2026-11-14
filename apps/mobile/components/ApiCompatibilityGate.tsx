@@ -1,7 +1,8 @@
 import { Link, usePathname } from "expo-router";
 import { useEffect, useState } from "react";
-import { AccessibilityInfo, AppState, BackHandler, ScrollView, View } from "react-native";
+import { AccessibilityInfo, BackHandler, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAppForeground } from "../hooks/useAppForeground.ts";
 import {
   getApiCompatibility,
   refreshApiCompatibility,
@@ -40,13 +41,12 @@ export const ApiCompatibilityGate = () => {
 
   useEffect(() => {
     void refreshApiCompatibility({ userRequested: false });
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active") return;
-      if (getApiCompatibility()) void refreshApiCompatibility({ userRequested: false });
-      else void refreshApiCompatibilityInBackground();
-    });
-    return () => subscription.remove();
   }, []);
+
+  useAppForeground(() => {
+    if (getApiCompatibility()) void refreshApiCompatibility({ userRequested: false });
+    else void refreshApiCompatibilityInBackground();
+  });
 
   useEffect(() => {
     setUnreachable(false);

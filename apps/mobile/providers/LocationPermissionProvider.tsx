@@ -2,7 +2,6 @@ import { tryCatch } from "@openbeacon/shared";
 import { useGlobalSearchParams, usePathname } from "expo-router";
 import type React from "react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { AppState, type AppStateStatus } from "react-native";
 import { Button } from "../components/ui/Button.tsx";
 import {
   Dialog,
@@ -13,6 +12,7 @@ import {
   DialogTitle,
 } from "../components/ui/Dialog.tsx";
 import { Text } from "../components/ui/Text.tsx";
+import { useAppForeground } from "../hooks/useAppForeground.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { useThisDeviceState } from "../lib/deviceActivation.ts";
 import {
@@ -43,7 +43,6 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
   const [isLaunchingLocationSetup, setIsLaunchingLocationSetup] = useState(true);
   const [isBackgroundPermissionDialogOpen, setIsBackgroundPermissionDialogOpen] = useState(false);
   const [isRequestingBackgroundPermission, setIsRequestingBackgroundPermission] = useState(false);
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const permissionCheckRef = useRef<Promise<void> | null>(null);
   const shouldOpenBackgroundPermissionDialog = useCallback(
     ({
@@ -124,25 +123,7 @@ export const LocationPermissionProvider = ({ children }: { children: React.React
     };
   }, [isPending, readyToAsk, syncLocationPermissions]);
 
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
-      const appBecameActive =
-        (appStateRef.current === "background" || appStateRef.current === "inactive") &&
-        nextAppState === "active";
-
-      appStateRef.current = nextAppState;
-
-      if (!appBecameActive) {
-        return;
-      }
-
-      void syncLocationPermissions("refresh");
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [syncLocationPermissions]);
+  useAppForeground(() => void syncLocationPermissions("refresh"));
 
   useEffect(() => {
     if (permissionState?.isReadyForSharing) void dismissNotice("locationPermission");

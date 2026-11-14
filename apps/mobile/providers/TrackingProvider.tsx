@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { AppState } from "react-native";
+import { useAppForeground } from "../hooks/useAppForeground.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { useThisDeviceState } from "../lib/deviceActivation.ts";
 import { subscribeToTrackingSync } from "../lib/trackingEvents.ts";
@@ -42,7 +43,6 @@ export const TrackingProvider = ({
   const cycleVersionRef = useRef(0);
   const sessionReadyRef = useRef(false);
   const startingVersionRef = useRef<number | null>(null);
-  const appStateRef = useRef(AppState.currentState);
   const completedCycleRef = useRef(0);
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
   const requestedCycleRef = useRef(0);
@@ -86,7 +86,7 @@ export const TrackingProvider = ({
             await tryCatch(service.reconcileTrackingKeys({ startCapture, force: forceKeyCheck }));
           }
           if (version !== cycleVersionRef.current) return;
-          if (appStateRef.current === "active" && (await service.takeKeyAccessChange())) {
+          if (AppState.currentState === "active" && (await service.takeKeyAccessChange())) {
             void queryClient.invalidateQueries({ queryKey: ["groupKeyAccess"] });
           }
           await tryCatch(service.flushPendingTrackingPoints(forceFlush));
@@ -188,23 +188,9 @@ export const TrackingProvider = ({
     })();
   }, [isPending, runTrackingCycle, service, startCapture, thisDeviceActive, userId]);
 
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
-      const appBecameActive =
-        (appStateRef.current === "background" || appStateRef.current === "inactive") &&
-        nextAppState === "active";
-
-      appStateRef.current = nextAppState;
-
-      if (appBecameActive && userId) {
-        void runTrackingCycle({ forceKeyCheck: true });
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [runTrackingCycle, userId]);
+  useAppForeground(() => {
+    if (userId) void runTrackingCycle({ forceKeyCheck: true });
+  });
 
   useEffect(() => {
     if (!userId) {
@@ -212,7 +198,7 @@ export const TrackingProvider = ({
     }
 
     const interval = setInterval(() => {
-      if (appStateRef.current === "active") {
+      if (AppState.currentState === "active") {
         void runTrackingCycle();
       }
     }, 60_000);

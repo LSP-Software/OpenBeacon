@@ -2,7 +2,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { useEffect, useRef } from "react";
-import { AppState } from "react-native";
+import { useAppForeground } from "../hooks/useAppForeground.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { clearGroupColors } from "../lib/groupColor.ts";
 import { clearTrackingUploadTimes } from "../lib/trackingUploadTime.ts";
@@ -60,15 +60,11 @@ export const SessionDataCleanup = () => {
     };
   }, [queryClient]);
 
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active" || !userIdRef.current) return;
-      if (Date.now() - lastResumeCheckRef.current < 60 * 60_000) return;
-      lastResumeCheckRef.current = Date.now();
-      authClient.$store.notify("$sessionSignal");
-    });
-    return () => subscription.remove();
-  }, []);
+  useAppForeground(() => {
+    if (!userIdRef.current || Date.now() - lastResumeCheckRef.current < 60 * 60_000) return;
+    lastResumeCheckRef.current = Date.now();
+    authClient.$store.notify("$sessionSignal");
+  });
 
   return null;
 };

@@ -172,6 +172,7 @@ describe("LiveMapMarkerPin", () => {
     expect(JSON.stringify(root.container.toJSON())).not.toContain("Location is over");
     now += 600_001;
     await act(async () => {
+      appStateListener?.("background");
       appStateListener?.("active");
     });
     expect(JSON.stringify(root.container.toJSON())).toContain("Location is over 10 minutes old");
