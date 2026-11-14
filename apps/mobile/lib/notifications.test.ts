@@ -31,7 +31,17 @@ mock.module("react-native", () => ({
   },
 }));
 
-mock.module("expo-linking", () => ({ openSettings: async () => {}, sendIntent: async () => {} }));
+const settings = { opened: [] as string[], sendIntentFails: false };
+
+mock.module("expo-linking", () => ({
+  openSettings: async () => {
+    settings.opened.push("app details");
+  },
+  sendIntent: async (action: string, extras: { key: string; value: string }[]) => {
+    if (settings.sendIntentFails) throw new Error("No activity found");
+    settings.opened.push(`${action} ${extras.map((extra) => extra.value).join(" ")}`);
+  },
+}));
 
 mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   default: {
@@ -45,10 +55,13 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   },
 }));
 
-const { requestNotificationPermissions, showNotice } = await import("./notifications.ts");
+const { requestNotificationPermissions, showNotice, turnOnNotifications } =
+  await import("./notifications.ts");
 
 beforeEach(() => {
   shown.length = 0;
+  settings.opened.length = 0;
+  settings.sendIntentFails = false;
   showFails = false;
   appState.currentState = "background";
   platform.Version = 34;
@@ -117,5 +130,30 @@ describe("requestNotificationPermissions", () => {
     platform.Version = 32;
     expect(await requestNotificationPermissions()).toBe("granted");
     expect(android.requests).toBe(0);
+  });
+});
+
+describe("turnOnNotifications", () => {
+  test("opens Open Beacon’s notification settings when Android won’t ask", async () => {
+    android.result = "never_ask_again";
+    await turnOnNotifications();
+    expect(settings.opened).toEqual([
+      "android.settings.APP_NOTIFICATION_SETTINGS net.openbeacon.app",
+    ]);
+  });
+
+  test("falls back to the app’s details page when the notification settings can’t open", async () => {
+    android.granted = true;
+    android.notificationsEnabled = false;
+    settings.sendIntentFails = true;
+    await turnOnNotifications();
+    expect(settings.opened).toEqual(["app details"]);
+  });
+
+  test("stays in the app when the person allows or denies in the dialog", async () => {
+    await turnOnNotifications();
+    android.result = "denied";
+    await turnOnNotifications();
+    expect(settings.opened).toEqual([]);
   });
 });

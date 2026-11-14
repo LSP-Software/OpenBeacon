@@ -1,12 +1,13 @@
 import { tryCatch } from "@openbeacon/shared";
 import * as Linking from "expo-linking";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 // biome-ignore lint/correctness/useReactNativePlatformComponents: imports must end in .ts, so Metro cannot pick a .android.ts file; the Android call is guarded by Platform.OS
 import { AppState, PermissionsAndroid, Platform } from "react-native";
 import appConfig from "../app.json";
 import type { NoticeSlot } from "../modules/openbeacon-tracking/index.ts";
 import type { ApiCompatibilityProblem } from "./apiCompatibility.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
+import { useSingleFlight } from "./useSingleFlight.ts";
 
 export const showNotice = async (
   notice:
@@ -69,10 +70,20 @@ export const requestNotificationPermissions = async (): Promise<
   return (await areNotificationsEnabled()) ? "granted" : "blocked";
 };
 
+export const turnOnNotifications = async () => {
+  const permission = await tryCatch(requestNotificationPermissions());
+  if (permission.data !== "blocked") return;
+  const opened = await tryCatch(
+    Linking.sendIntent("android.settings.APP_NOTIFICATION_SETTINGS", [
+      { key: "android.provider.extra.APP_PACKAGE", value: appConfig.expo.android.package },
+    ]),
+  );
+  if (opened.error) await tryCatch(Linking.openSettings());
+};
+
 export const useNotificationSettings = () => {
   const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [turningOn, setTurningOn] = useState(false);
-  const busy = useRef(false);
+  const turningOn = useSingleFlight<"turnOn">();
 
   const refresh = useCallback(async () => {
     const result = await tryCatch(areNotificationsEnabled());
@@ -87,23 +98,11 @@ export const useNotificationSettings = () => {
     return () => subscription.remove();
   }, [refresh]);
 
-  const turnOn = async () => {
-    if (busy.current) return;
-    busy.current = true;
-    setTurningOn(true);
-    const permission = await tryCatch(requestNotificationPermissions());
-    if (permission.data === "blocked") {
-      const opened = await tryCatch(
-        Linking.sendIntent("android.settings.APP_NOTIFICATION_SETTINGS", [
-          { key: "android.provider.extra.APP_PACKAGE", value: appConfig.expo.android.package },
-        ]),
-      );
-      if (opened.error) await tryCatch(Linking.openSettings());
-    }
-    await refresh();
-    busy.current = false;
-    setTurningOn(false);
-  };
+  const turnOn = () =>
+    turningOn.run("turnOn", async () => {
+      await turnOnNotifications();
+      await refresh();
+    });
 
-  return { enabled, turnOn, turningOn };
+  return { enabled, turnOn, turningOn: turningOn.isPending };
 };
