@@ -3,12 +3,19 @@ import { findHttpsWarnings } from "./findHttpsWarnings.ts";
 
 const warnedNames = (
   BETTER_AUTH_URL: string,
-  IMAGES_S3_CDN_URL = "https://cdn.openbeacon.net/file",
-  MAP_S3_ENDPOINT = "https://map-storage.example.com",
+  storage: {
+    IMAGES_S3_ENDPOINT?: string;
+    IMAGES_S3_CDN_URL?: string;
+    MAP_S3_ENDPOINT?: string;
+  } = {},
 ) =>
-  findHttpsWarnings({ BETTER_AUTH_URL, IMAGES_S3_CDN_URL, MAP_S3_ENDPOINT }).map(
-    (warning) => warning.split(" ")[0],
-  );
+  findHttpsWarnings({
+    BETTER_AUTH_URL,
+    IMAGES_S3_ENDPOINT: "https://images-storage.example.com",
+    IMAGES_S3_CDN_URL: "https://cdn.openbeacon.net/file",
+    MAP_S3_ENDPOINT: "https://map-storage.example.com",
+    ...storage,
+  }).map((warning) => warning.split(" ")[0]);
 
 describe("findHttpsWarnings", () => {
   test("does not warn for https", () => {
@@ -25,7 +32,13 @@ describe("findHttpsWarnings", () => {
       "http://[::1]:3000",
       "http://10.0.2.2:3000",
     ]) {
-      expect(warnedNames(url, url, url)).toEqual([]);
+      expect(
+        warnedNames(url, {
+          IMAGES_S3_ENDPOINT: url,
+          IMAGES_S3_CDN_URL: url,
+          MAP_S3_ENDPOINT: url,
+        }),
+      ).toEqual([]);
     }
   });
 
@@ -44,30 +57,32 @@ describe("findHttpsWarnings", () => {
   });
 
   test("warns for each value that is not https", () => {
-    expect(warnedNames("http://api.example.com", "http://cdn.example.com/file")).toEqual([
-      "BETTER_AUTH_URL",
-      "IMAGES_S3_CDN_URL",
-    ]);
-    expect(warnedNames("https://api.example.com", "http://cdn.example.com/file")).toEqual([
-      "IMAGES_S3_CDN_URL",
-    ]);
     expect(
-      warnedNames(
-        "https://api.example.com",
-        "https://cdn.example.com/file",
-        "http://map-storage.example.com",
-      ),
+      warnedNames("http://api.example.com", { IMAGES_S3_CDN_URL: "http://cdn.example.com/file" }),
+    ).toEqual(["BETTER_AUTH_URL", "IMAGES_S3_CDN_URL"]);
+    expect(
+      warnedNames("https://api.example.com", { IMAGES_S3_CDN_URL: "http://cdn.example.com/file" }),
+    ).toEqual(["IMAGES_S3_CDN_URL"]);
+    expect(
+      warnedNames("https://api.example.com", { MAP_S3_ENDPOINT: "http://map-storage.example.com" }),
     ).toEqual(["MAP_S3_ENDPOINT"]);
+    expect(
+      warnedNames("https://api.example.com", {
+        IMAGES_S3_ENDPOINT: "http://images-storage.example.com",
+      }),
+    ).toEqual(["IMAGES_S3_ENDPOINT"]);
   });
 
   test("explains the value and links to the docs", () => {
     expect(
       findHttpsWarnings({
         BETTER_AUTH_URL: "https://api.example.com",
+        IMAGES_S3_ENDPOINT: "http://images-storage.example.com",
         IMAGES_S3_CDN_URL: "http://cdn.example.com/file",
         MAP_S3_ENDPOINT: "https://map-storage.example.com",
       }),
     ).toEqual([
+      "IMAGES_S3_ENDPOINT is http://images-storage.example.com, which isn't HTTPS. The OpenBeacon app only connects over HTTPS, so profile and group pictures can't be uploaded. See https://docs.openbeacon.net/docs/self-host/networking-and-reverse-proxies#https-is-required",
       "IMAGES_S3_CDN_URL is http://cdn.example.com/file, which isn't HTTPS. The OpenBeacon app only connects over HTTPS, so profile and group pictures won't load. See https://docs.openbeacon.net/docs/self-host/networking-and-reverse-proxies#https-is-required",
     ]);
   });

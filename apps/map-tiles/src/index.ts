@@ -1,6 +1,7 @@
 import { access, constants, mkdir } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
+import { runStorageCheck } from "@openbeacon/map-tiles";
 import { checkServices, tryCatch, validateEnv } from "@openbeacon/shared";
 import { createMapTilesClient, formatStatus } from "./client.ts";
 import { publish, readMapStatus, repairManifest, rollback } from "./commands.ts";
@@ -47,7 +48,12 @@ const serve = async () => {
 
   await checkServices({
     "Map storage": () =>
-      checkBucketAccess({ bucket: env.MAP_S3_BUCKET_NAME, client: context.client }),
+      runStorageCheck({
+        label: "Map storage",
+        prefix: "MAP_S3",
+        forcePathStyle: env.MAP_S3_FORCE_PATH_STYLE,
+        check: () => checkBucketAccess({ bucket: env.MAP_S3_BUCKET_NAME, client: context.client }),
+      }),
     "State directory": async () => {
       await mkdir(env.MAP_TILES_STATE_DIR, { recursive: true });
       await access(env.MAP_TILES_STATE_DIR, constants.W_OK);

@@ -13,6 +13,7 @@ import { authenticateCloudflare, resolveClientIp } from "./helpers/clientIp.ts";
 
 for (const warning of findHttpsWarnings({
   BETTER_AUTH_URL: env.BETTER_AUTH_URL,
+  IMAGES_S3_ENDPOINT: apiEnv.IMAGES_S3_ENDPOINT,
   IMAGES_S3_CDN_URL: apiEnv.IMAGES_S3_CDN_URL,
   MAP_S3_ENDPOINT: apiEnv.MAP_S3_ENDPOINT,
 })) {

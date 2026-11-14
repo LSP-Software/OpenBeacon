@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, mock, test } from "bun:test";
+import { afterAll, describe, expect, mock, spyOn, test } from "bun:test";
 import { ListObjectVersionsCommand } from "@aws-sdk/client-s3";
 
 const s3Send = mock(async (_command: unknown, _options: unknown) => ({}));
@@ -40,5 +40,22 @@ describe("storage startup checks", () => {
     checkMapArchive.mockRejectedValueOnce(new Error("map storage unavailable"));
     await expect(checkImageStorage()).rejects.toThrow("S3 unavailable");
     await expect(checkMapStorage()).rejects.toThrow("map storage unavailable");
+  });
+
+  test("explains likely fixes under each storage label", async () => {
+    const consoleError = spyOn(console, "error").mockImplementation(() => {});
+    const noSuchBucket = Object.assign(new Error("The bucket does not exist"), {
+      name: "NoSuchBucket",
+    });
+    s3Send.mockRejectedValueOnce(noSuchBucket);
+    checkMapArchive.mockRejectedValueOnce(noSuchBucket);
+
+    await expect(checkImageStorage()).rejects.toBe(noSuchBucket);
+    await expect(checkMapStorage()).rejects.toBe(noSuchBucket);
+    expect(consoleError.mock.calls).toEqual([
+      ["  Image storage: check IMAGES_S3_BUCKET_NAME"],
+      ["  Map storage: check MAP_S3_BUCKET_NAME"],
+    ]);
+    consoleError.mockRestore();
   });
 });

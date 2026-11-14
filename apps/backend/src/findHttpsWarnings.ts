@@ -7,12 +7,18 @@ const isLocalDevelopmentHost = (hostname: string) =>
 
 export const findHttpsWarnings = (urls: {
   BETTER_AUTH_URL: string;
+  IMAGES_S3_ENDPOINT: string;
   IMAGES_S3_CDN_URL: string;
   MAP_S3_ENDPOINT: string;
 }) =>
   (
     [
       ["BETTER_AUTH_URL", urls.BETTER_AUTH_URL, "phones won't be able to connect to this server"],
+      [
+        "IMAGES_S3_ENDPOINT",
+        urls.IMAGES_S3_ENDPOINT,
+        "profile and group pictures can't be uploaded",
+      ],
       ["IMAGES_S3_CDN_URL", urls.IMAGES_S3_CDN_URL, "profile and group pictures won't load"],
       ["MAP_S3_ENDPOINT", urls.MAP_S3_ENDPOINT, "the map won't load"],
     ] as const

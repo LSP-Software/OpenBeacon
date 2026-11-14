@@ -32,6 +32,12 @@ describe("parseEnv", () => {
     expect(() => parseEnv({ ...required, MAP_S3_ENDPOINT: "ftp://storage.example.com" })).toThrow();
   });
 
+  test("rejects a map storage endpoint with the bucket in its path", () => {
+    expect(() =>
+      parseEnv({ ...required, MAP_S3_ENDPOINT: "https://account.r2.cloudflarestorage.com/bucket" }),
+    ).toThrow("put the bucket name in MAP_S3_BUCKET_NAME");
+  });
+
   test("has no bandwidth limit when MAP_TILES_MAX_MBPS is unset or blank", () => {
     expect(parseEnv(required).maxBytesPerSecond).toBeNull();
     expect(parseEnv({ ...required, MAP_TILES_MAX_MBPS: " " }).maxBytesPerSecond).toBeNull();
