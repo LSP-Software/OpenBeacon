@@ -82,7 +82,7 @@ describe("renderSecurityAlertEmail", () => {
 
   test("only optional alerts say where to choose which emails you get", async () => {
     const settingsLine =
-      "To choose which emails you get, open the OpenBeacon app and go to Account → Notifications → Email alerts.";
+      "To choose which emails you get, open the OpenBeacon app and go to Account → Email alerts.";
     for (const alert of alwaysOn) {
       const email = await render(alert);
       expect(email.canTurnOff).toBe(false);

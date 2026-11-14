@@ -42,7 +42,7 @@ export const renderAlertsTurnedOffEmail = async ({
         <EmailDetails rows={[{ label: "Turned off at", value: happenedAt }]} />
         <EmailSubheading>If this wasn't you</EmailSubheading>
         <Text style={{ margin: 0 }}>
-          {`${signedInAdvice} Then turn ${several ? "these alerts" : "this alert"} back on in Account → Notifications → Email alerts.`}
+          {`${signedInAdvice} Then turn ${several ? "these alerts" : "this alert"} back on in Account → Email alerts.`}
         </Text>
       </>
     ),

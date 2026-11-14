@@ -5,8 +5,10 @@ import { accountNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, router } from "expo-router";
+import * as Linking from "expo-linking";
 import {
   BellIcon,
+  BellOffIcon,
   CameraIcon,
   HelpCircleIcon,
   HistoryIcon,
@@ -22,7 +24,7 @@ import {
 } from "lucide-react-native";
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Platform, Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
 import { SettingsContainer } from "../../../components/containers/settingsContainer.tsx";
@@ -55,6 +57,10 @@ import {
   getLocationPermissionWarningDescription,
   getLocationPermissionWarningTitle,
 } from "../../../lib/locationPermissions.ts";
+import {
+  requestNotificationPermissions,
+  useNotificationsEnabled,
+} from "../../../lib/notifications.ts";
 import { dismissRestoreCard, isRestoreCardDismissed } from "../../../lib/restoreReminders.ts";
 import { storage } from "../../../lib/storage.ts";
 import { useLocationPermissions } from "../../../providers/LocationPermissionProvider.tsx";
@@ -64,10 +70,10 @@ const categories = [
     label: "Account",
     settings: [
       {
-        label: "Notifications",
+        label: "Email alerts",
         icon: BellIcon,
-        href: "/account/notifications",
-        requiresEmailOnIos: true,
+        href: "/account/email-alerts",
+        requiresEmail: true,
       },
       {
         label: "Devices",
@@ -174,6 +180,7 @@ const AccountScreen = () => {
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
   const devices = useQuery({ ...trpc.account.listDevices.queryOptions(), subscribed: isFocused });
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
+  const notifications = useNotificationsEnabled();
   const [signOutPhase, setSignOutPhase] = useState<"uploading" | "signingOut" | null>(null);
   const signingOut = useRef(false);
   const recoveryStatus = useQuery({
@@ -200,6 +207,12 @@ const AccountScreen = () => {
     !heldHistoryKeyVersions.data.includes(currentHistoryKeyVersion) &&
     !restoreBannerDismissed &&
     !isRestoreCardDismissed({ userId: session.user.id, version: currentHistoryKeyVersion });
+
+  const turnOnNotifications = async () => {
+    const result = await tryCatch(requestNotificationPermissions());
+    if (result.data === "blocked") await Linking.openSettings();
+    await notifications.refresh();
+  };
 
   const saveName = async ({ name }: z.infer<typeof schema>) => {
     const result = await tryCatch(updateName.mutateAsync({ name }));
@@ -404,6 +417,19 @@ const AccountScreen = () => {
           </PromptCard>
         )}
 
+        {notifications.enabled === false && (
+          <PromptCard
+            icon={BellOffIcon}
+            tone="warning"
+            title="Notifications are off"
+            description="You won’t be told if this phone stops sharing your location."
+          >
+            <Button size="sm" onPress={turnOnNotifications}>
+              <Text>Turn on notifications</Text>
+            </Button>
+          </PromptCard>
+        )}
+
         {showRecoveryPrompt && (
           <PromptCard
             icon={KeyRoundIcon}
@@ -466,10 +492,8 @@ const AccountScreen = () => {
         <SettingsContainer
           categories={categories.map((category) => ({
             ...category,
-            settings: category.settings.map((setting) =>
-              "requiresEmailOnIos" in setting && Platform.OS !== "android" && !providers?.email
-                ? { label: setting.label, icon: setting.icon }
-                : setting,
+            settings: category.settings.filter(
+              (setting) => !("requiresEmail" in setting) || providers?.email,
             ),
           }))}
         />

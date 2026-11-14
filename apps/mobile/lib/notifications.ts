@@ -1,5 +1,5 @@
 import { tryCatch } from "@openbeacon/shared";
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 // biome-ignore lint/correctness/useReactNativePlatformComponents: imports must end in .ts, so Metro cannot pick a .android.ts file; the Android call is guarded by Platform.OS
 import { AppState, PermissionsAndroid, Platform } from "react-native";
 import type { NoticeSlot } from "../modules/openbeacon-tracking/index.ts";
@@ -61,4 +61,23 @@ export const requestNotificationPermissions = async (): Promise<
     if (result !== PermissionsAndroid.RESULTS.GRANTED) return "denied";
   }
   return (await areNotificationsEnabled()) ? "granted" : "blocked";
+};
+
+export const useNotificationsEnabled = () => {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+
+  const refresh = useCallback(async () => {
+    const result = await tryCatch(areNotificationsEnabled());
+    if (!result.error) setEnabled(result.data);
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void refresh();
+    });
+    return () => subscription.remove();
+  }, [refresh]);
+
+  return { enabled, refresh };
 };

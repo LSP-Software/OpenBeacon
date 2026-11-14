@@ -42,6 +42,7 @@ mock.module("lucide-react-native", () =>
   Object.fromEntries(
     [
       "BellIcon",
+      "BellOffIcon",
       "CameraIcon",
       "HelpCircleIcon",
       "HistoryIcon",
@@ -123,6 +124,11 @@ mock.module("../lib/locationPermissions.ts", () => ({
   getLocationPermissionWarningDescription: () => "",
   getLocationPermissionWarningTitle: () => "",
 }));
+mock.module("../lib/notifications.ts", () => ({
+  requestNotificationPermissions: async () => "granted",
+  useNotificationsEnabled: () => ({ enabled: true, refresh: async () => {} }),
+}));
+mock.module("expo-linking", () => ({ openSettings: async () => {} }));
 mock.module("../lib/restoreReminders.ts", () => ({
   dismissRestoreCard: () => {},
   isRestoreCardDismissed: () => false,
