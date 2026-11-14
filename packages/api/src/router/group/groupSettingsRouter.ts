@@ -53,7 +53,7 @@ export const groupSettingsRouter = {
       const fileName = `${crypto.randomUUID()}.webp`;
 
       const { presignedUrl } = await requestImageUpload({
-        bucketName: env.S3_BUCKET_NAME,
+        bucketName: env.IMAGES_S3_BUCKET_NAME,
         contentHash: input.contentHash,
         fileSize: input.fileSize,
         imagePath,
@@ -66,7 +66,7 @@ export const groupSettingsRouter = {
         uploadType: "groupAvatar",
         fileName,
         groupId: input.groupId,
-        bucketName: env.S3_BUCKET_NAME,
+        bucketName: env.IMAGES_S3_BUCKET_NAME,
         currentImagePath: imagePath,
       });
 
@@ -87,7 +87,9 @@ export const groupSettingsRouter = {
         if (
           !(await ctx.db.group.findUnique({ where: { id: input.groupId }, select: { id: true } }))
         ) {
-          const { error } = await tryCatch(deleteImagePrefix(env.S3_BUCKET_NAME, `${imagePath}/`));
+          const { error } = await tryCatch(
+            deleteImagePrefix(env.IMAGES_S3_BUCKET_NAME, `${imagePath}/`),
+          );
           if (error) console.error("[image-upload] failed to delete leftover group images");
         }
         throw new TRPCError({
@@ -100,7 +102,7 @@ export const groupSettingsRouter = {
           db: ctx.db,
           userId,
           uploadType: "groupAvatar",
-          bucketName: env.S3_BUCKET_NAME,
+          bucketName: env.IMAGES_S3_BUCKET_NAME,
           imagePath,
           pendingFileName: pending.fileName,
           currentImageUrl: null,
@@ -147,7 +149,7 @@ export const groupSettingsRouter = {
       );
       if (result.error) {
         if (result.error instanceof TRPCError && result.error.code === "NOT_FOUND") {
-          await deleteFile(env.S3_BUCKET_NAME, imagePath, pending.fileName);
+          await deleteFile(env.IMAGES_S3_BUCKET_NAME, imagePath, pending.fileName);
           await ctx.db.pendingUpload.deleteMany({
             where: {
               userId,

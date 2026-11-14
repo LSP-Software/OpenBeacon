@@ -14,7 +14,7 @@ Run it locally with `bun run dev --filter=@openbeacon/scheduled-jobs`; it reads 
 
 ## Adding a job
 
-Register an object in `src/jobs/index.ts` with a unique stable `name`, a positive integer `delay` in milliseconds (at most 2,147,483,647), and an async `run` function. Put job-specific work in `src/jobs`. The shared Prisma, S3, and R2 clients are available from `src/services.ts`; pass them to jobs explicitly. Create and validate additional clients once at startup and close them after the scheduler stops. Grant only the permissions jobs need in addition to the startup checks.
+Register an object in `src/jobs/index.ts` with a unique stable `name`, a positive integer `delay` in milliseconds (at most 2,147,483,647), and an async `run` function. Put job-specific work in `src/jobs`. The shared Prisma, image storage and map storage clients are available from `src/services.ts`; pass them to jobs explicitly. Create and validate additional clients once at startup and close them after the scheduler stops. Grant only the permissions jobs need in addition to the startup checks.
 
 Jobs start immediately on process startup. After each run completes or fails, the runner waits the configured delay before starting it again. Runs of the same job do not overlap within one process; different jobs can run concurrently. Failures are logged with the job name and the error code (or error name) only, never the error itself, and retried after the same delay. Shutdown stops future runs and waits for active work. Jobs should have bounded execution time so a container can shut down within its configured grace period.
 
@@ -64,7 +64,7 @@ Handles at most 500 uploads per run, each in its own transaction. It locks the r
 
 Lists every object version under `user/` in the S3 bucket and deletes avatar files more than an hour old that no user, group or pending upload points to. Other keys in the bucket, including images under the old `group/<id>/uploads/avatar/` path, are left alone.
 
-It decides whether a file is in use by rebuilding the image URL from `S3_CDN_URL` and `S3_BUCKET_NAME`, so the runner's values must match the backend's exactly. Before listing anything it checks that every stored image starts with `<S3_CDN_URL>/<S3_BUCKET_NAME>/`, and skips the whole sweep if any doesn't.
+It decides whether a file is in use by rebuilding the image URL from `IMAGES_S3_CDN_URL` and `IMAGES_S3_BUCKET_NAME`, so the runner's values must match the backend's exactly. Before listing anything it checks that every stored image starts with `<IMAGES_S3_CDN_URL>/<IMAGES_S3_BUCKET_NAME>/`, and skips the whole sweep if any doesn't.
 
 It checks each listed page of versions against users, groups and pending uploads in one `REPEATABLE READ` snapshot, so an image confirmed during the sweep is never treated as unused. New uploads always use a new random file name. It scans the `User` and `Group` tables once per 1,000 object versions, because `image` isn't indexed; add an index on `image` if it ever shows up as slow. A failure stops that day's sweep and logs one line with the error code; the next day's run starts again from the beginning.
 

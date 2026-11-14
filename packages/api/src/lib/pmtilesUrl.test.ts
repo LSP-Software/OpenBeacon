@@ -28,13 +28,17 @@ const withEnvSnapshot = (keys: readonly string[]) => {
 };
 
 const pmtilesUrlTestEnvKeys = [
-  "S3_ACCESS_KEY_ID",
-  "S3_ACCESS_KEY",
-  "S3_BUCKET_NAME",
-  "R2_ACCOUNT_ID",
-  "R2_ACCESS_KEY_ID",
-  "R2_SECRET_ACCESS_KEY",
-  "R2_BUCKET",
+  "IMAGES_S3_ENDPOINT",
+  "IMAGES_S3_REGION",
+  "IMAGES_S3_CDN_URL",
+  "MAP_S3_REGION",
+  "IMAGES_S3_ACCESS_KEY_ID",
+  "IMAGES_S3_ACCESS_KEY",
+  "IMAGES_S3_BUCKET_NAME",
+  "MAP_S3_ENDPOINT",
+  "MAP_S3_ACCESS_KEY_ID",
+  "MAP_S3_ACCESS_KEY",
+  "MAP_S3_BUCKET_NAME",
 ] as const;
 
 const createCache = ({
@@ -98,13 +102,17 @@ describe("pmtilesUrl", () => {
 
   beforeEach(() => {
     envSnapshot.save();
-    process.env.S3_ACCESS_KEY_ID = "12345678901234567890";
-    process.env.S3_ACCESS_KEY = "12345678901234567890";
-    process.env.S3_BUCKET_NAME = "test-s3-bucket";
-    process.env.R2_ACCOUNT_ID = "test-r2-account-id";
-    process.env.R2_ACCESS_KEY_ID = "test-r2-access-key-id";
-    process.env.R2_SECRET_ACCESS_KEY = "test-r2-secret-access-key";
-    process.env.R2_BUCKET = "test-r2-bucket";
+    process.env.IMAGES_S3_ENDPOINT = "https://images-storage.example.com";
+    process.env.IMAGES_S3_REGION = "us-east-1";
+    process.env.IMAGES_S3_CDN_URL = "https://cdn.example.com/file";
+    process.env.MAP_S3_REGION = "us-east-1";
+    process.env.IMAGES_S3_ACCESS_KEY_ID = "12345678901234567890";
+    process.env.IMAGES_S3_ACCESS_KEY = "12345678901234567890";
+    process.env.IMAGES_S3_BUCKET_NAME = "test-s3-bucket";
+    process.env.MAP_S3_ENDPOINT = "https://map-storage.example.com";
+    process.env.MAP_S3_ACCESS_KEY_ID = "test-storage-access-key-id";
+    process.env.MAP_S3_ACCESS_KEY = "test-storage-secret-access-key";
+    process.env.MAP_S3_BUCKET_NAME = "test-storage-bucket";
   });
 
   afterEach(() => {

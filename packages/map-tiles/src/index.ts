@@ -17,4 +17,11 @@ export {
   SLOT_REUSE_MARGIN_MS,
 } from "./manifest.ts";
 export { readManifest, writeManifest } from "./manifestStore.ts";
-export { checkMapArchive, r2EnvSchema } from "./r2.ts";
+export {
+  checkMapArchive,
+  forcePathStyleSchema,
+  mapStorageEnvSchema,
+  runStorageCheck,
+  s3EndpointSchema,
+  storageFailureHint,
+} from "./storage.ts";

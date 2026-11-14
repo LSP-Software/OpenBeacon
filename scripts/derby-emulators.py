@@ -259,7 +259,7 @@ def main():
             if "=" in line and not line.lstrip().startswith("#"):
                 key, value = line.split("=", 1)
                 values[key.strip()] = value.split(" #", 1)[0].strip().strip("\"'")
-        required = ("BETTER_AUTH_SECRET", "REDIS_HASH_SECRET", "S3_ACCESS_KEY_ID", "S3_ACCESS_KEY", "S3_BUCKET_NAME", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET")
+        required = ("BETTER_AUTH_SECRET", "REDIS_HASH_SECRET", "IMAGES_S3_ENDPOINT", "IMAGES_S3_REGION", "IMAGES_S3_ACCESS_KEY_ID", "IMAGES_S3_ACCESS_KEY", "IMAGES_S3_BUCKET_NAME", "IMAGES_S3_CDN_URL", "MAP_S3_ENDPOINT", "MAP_S3_REGION", "MAP_S3_ACCESS_KEY_ID", "MAP_S3_ACCESS_KEY", "MAP_S3_BUCKET_NAME")
         missing = [key for key in required if not values.get(key)]
         if missing:
             parser.error(f"set these required values in {env_file}: {', '.join(missing)}")

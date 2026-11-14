@@ -4,7 +4,7 @@ import { checkServices } from "./checkServices.ts";
 describe("startup service checks", () => {
   test("accepts successful checks", async () => {
     await expect(
-      checkServices({ S3: async () => {}, R2: async () => {} }),
+      checkServices({ S3: async () => {}, "Map storage": async () => {} }),
     ).resolves.toBeUndefined();
   });
 
@@ -16,11 +16,11 @@ describe("startup service checks", () => {
           checked.push("S3");
           throw new Error("private credentials");
         },
-        R2: async () => {
-          checked.push("R2");
+        "Map storage": async () => {
+          checked.push("Map storage");
         },
       }),
     ).rejects.toThrow("Service connectivity validation failed");
-    expect(checked.sort()).toEqual(["R2", "S3"]);
+    expect(checked.sort()).toEqual(["Map storage", "S3"]);
   });
 });

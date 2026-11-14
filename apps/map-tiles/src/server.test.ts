@@ -280,7 +280,7 @@ describe("map tiles service", () => {
       const unreadable = createHandler({
         now: () => Date.parse("2026-11-20T00:00:00.000Z"),
         readMapStatus: async () => {
-          throw new Error("R2 unavailable");
+          throw new Error("map storage unavailable");
         },
       });
       const empty = createHandler({
@@ -296,7 +296,9 @@ describe("map tiles service", () => {
       await settle();
 
       expect(timers.map((timer) => timer.delay)).toEqual([HOUR_MS, HOUR_MS]);
-      expect(errorSpy).toHaveBeenCalledWith("Could not read the map from R2: R2 unavailable");
+      expect(errorSpy).toHaveBeenCalledWith(
+        "Could not read the map from map storage: map storage unavailable",
+      );
       for (const stop of stops) {
         stop();
       }

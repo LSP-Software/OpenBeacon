@@ -3,19 +3,21 @@ import { tryCatch } from "@openbeacon/shared";
 
 const query = mock(async () => []);
 const disconnect = mock(async () => {});
-const checkS3 = mock(async () => {});
-const checkR2 = mock(async () => {});
+const checkImageStorage = mock(async () => {});
+const checkMapStorage = mock(async () => {});
 const destroyS3 = mock(() => {});
-const destroyR2 = mock(() => {});
+const destroyMapStorage = mock(() => {});
 const checkEmail = mock(async () => {});
 let runInBackground = (_task: Promise<unknown>) => {};
 
 mock.module("@openbeacon/database", () => ({
   prisma: { $queryRaw: query, $disconnect: disconnect },
 }));
-mock.module("@openbeacon/api/checkStorage.ts", () => ({ checkS3, checkR2 }));
+mock.module("@openbeacon/api/checkStorage.ts", () => ({ checkImageStorage, checkMapStorage }));
 mock.module("@openbeacon/api/s3client.ts", () => ({ s3Client: { destroy: destroyS3 } }));
-mock.module("@openbeacon/api/r2.ts", () => ({ r2Client: { destroy: destroyR2 } }));
+mock.module("@openbeacon/api/mapStorage.ts", () => ({
+  mapStorageClient: { destroy: destroyMapStorage },
+}));
 mock.module("@openbeacon/email", () => ({
   checkEmail,
   emailEnabled: true,
@@ -34,13 +36,13 @@ afterAll(() => mock.restore());
 test("checks all services and closes clients", async () => {
   await checkServices();
   expect(query).toHaveBeenCalledTimes(1);
-  expect(checkS3).toHaveBeenCalledTimes(1);
-  expect(checkR2).toHaveBeenCalledTimes(1);
+  expect(checkImageStorage).toHaveBeenCalledTimes(1);
+  expect(checkMapStorage).toHaveBeenCalledTimes(1);
   expect(checkEmail).toHaveBeenCalledTimes(1);
   await closeServices();
   expect(disconnect).toHaveBeenCalledTimes(1);
   expect(destroyS3).toHaveBeenCalledTimes(1);
-  expect(destroyR2).toHaveBeenCalledTimes(1);
+  expect(destroyMapStorage).toHaveBeenCalledTimes(1);
 });
 
 test("waits for pending security alerts before closing the database", async () => {
@@ -56,7 +58,7 @@ test("waits for pending security alerts before closing the database", async () =
 });
 
 test("fails startup when a service check fails without logging credentials", async () => {
-  checkS3.mockImplementationOnce(async () => {
+  checkImageStorage.mockImplementationOnce(async () => {
     throw new Error("secret test credential");
   });
   const error = mock(() => {});

@@ -22,7 +22,7 @@ export const runAccountDeletion = async () => {
       deleteAccountRecords({
         db: services.db,
         userId: user.id,
-        imageUrlPrefix: `${env.S3_CDN_URL}/${env.S3_BUCKET_NAME}`,
+        imageUrlPrefix: `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}`,
         mode: "scheduled",
         securityAlerts: services.securityAlerts,
       }),
@@ -47,8 +47,8 @@ export const runAccountDeletion = async () => {
   for (const item of cleanup) {
     const result = await tryCatch(
       (async () => {
-        await deleteUserImages(env.S3_BUCKET_NAME, item.userId);
-        for (const key of item.imageKeys) await deleteImageKey(env.S3_BUCKET_NAME, key);
+        await deleteUserImages(env.IMAGES_S3_BUCKET_NAME, item.userId);
+        for (const key of item.imageKeys) await deleteImageKey(env.IMAGES_S3_BUCKET_NAME, key);
       })(),
     );
     if (result.error) {

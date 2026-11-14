@@ -5,7 +5,7 @@ import {
   PutObjectCommand,
   type S3Client,
 } from "@aws-sdk/client-s3";
-import { checkBucketAccess, createR2Clients } from "./r2.ts";
+import { checkBucketAccess, createStorageClients } from "./storage.ts";
 
 describe("checkBucketAccess", () => {
   test("lists, writes and deletes a small object", async () => {
@@ -41,7 +41,7 @@ describe("checkBucketAccess", () => {
   });
 });
 
-describe("createR2Clients", () => {
+describe("createStorageClients", () => {
   const hangingServer = Bun.listen({
     hostname: "127.0.0.1",
     port: 0,
@@ -50,10 +50,12 @@ describe("createR2Clients", () => {
   afterAll(() => hangingServer.stop(true));
 
   test("both clients give up on a stalled request instead of only logging a warning", async () => {
-    const clients = createR2Clients({
-      R2_ACCOUNT_ID: "account",
-      R2_ACCESS_KEY_ID: "key-id",
-      R2_SECRET_ACCESS_KEY: "secret",
+    const clients = createStorageClients({
+      MAP_S3_ENDPOINT: "https://map-storage.example.com",
+      MAP_S3_REGION: "us-east-1",
+      MAP_S3_FORCE_PATH_STYLE: false,
+      MAP_S3_ACCESS_KEY_ID: "key-id",
+      MAP_S3_ACCESS_KEY: "secret",
     });
 
     for (const client of [clients.client, clients.partClient]) {
@@ -77,6 +79,21 @@ describe("createR2Clients", () => {
         requestTimeout: 120_000,
         throwOnRequestTimeout: true,
       });
+    }
+  });
+
+  test("puts the bucket in the path only when asked", () => {
+    const env = {
+      MAP_S3_ENDPOINT: "https://map-storage.example.com",
+      MAP_S3_REGION: "us-east-1",
+      MAP_S3_ACCESS_KEY_ID: "key-id",
+      MAP_S3_ACCESS_KEY: "secret",
+    };
+
+    for (const forcePathStyle of [false, true]) {
+      const clients = createStorageClients({ ...env, MAP_S3_FORCE_PATH_STYLE: forcePathStyle });
+      expect(clients.client.config.forcePathStyle).toBe(forcePathStyle);
+      expect(clients.partClient.config.forcePathStyle).toBe(forcePathStyle);
     }
   });
 });

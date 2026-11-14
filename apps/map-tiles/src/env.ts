@@ -1,4 +1,8 @@
-import { ARCHIVE_GRACE_PERIOD_MS, r2EnvSchema, SLOT_REUSE_MARGIN_MS } from "@openbeacon/map-tiles";
+import {
+  ARCHIVE_GRACE_PERIOD_MS,
+  mapStorageEnvSchema,
+  SLOT_REUSE_MARGIN_MS,
+} from "@openbeacon/map-tiles";
 import { z } from "zod";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -12,7 +16,7 @@ const portSchema = z.preprocess(
 );
 
 export const envSchema = {
-  ...r2EnvSchema,
+  ...mapStorageEnvSchema,
   MAP_TILES_MAX_MBPS: z.preprocess(blankAsUndefined, z.coerce.number().positive().optional()),
   MAP_TILES_STATE_DIR: z.preprocess(blankAsUndefined, z.string().trim().default(".map-tiles")),
   MAP_TILES_PORT: portSchema,

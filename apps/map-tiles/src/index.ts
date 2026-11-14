@@ -1,11 +1,12 @@
 import { access, constants, mkdir } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
+import { runStorageCheck } from "@openbeacon/map-tiles";
 import { checkServices, tryCatch, validateEnv } from "@openbeacon/shared";
 import { createMapTilesClient, formatStatus } from "./client.ts";
 import { publish, readMapStatus, repairManifest, rollback } from "./commands.ts";
 import { envSchema, getServiceUrl, parseEnv } from "./env.ts";
-import { checkBucketAccess, createR2Clients } from "./r2.ts";
+import { checkBucketAccess, createStorageClients } from "./storage.ts";
 import { createMapTilesHandler } from "./server.ts";
 
 const usage = `Usage: map-tiles <command> [options]
@@ -43,10 +44,16 @@ const confirm = async ({ question, yes }: { question: string; yes: boolean }) =>
 const serve = async () => {
   validateEnv({ schemas: envSchema, source: process.env });
   const env = parseEnv(process.env);
-  const context = { ...createR2Clients(env), env };
+  const context = { ...createStorageClients(env), env };
 
   await checkServices({
-    R2: () => checkBucketAccess({ bucket: env.R2_BUCKET, client: context.client }),
+    "Map storage": () =>
+      runStorageCheck({
+        label: "Map storage",
+        prefix: "MAP_S3",
+        forcePathStyle: env.MAP_S3_FORCE_PATH_STYLE,
+        check: () => checkBucketAccess({ bucket: env.MAP_S3_BUCKET_NAME, client: context.client }),
+      }),
     "State directory": async () => {
       await mkdir(env.MAP_TILES_STATE_DIR, { recursive: true });
       await access(env.MAP_TILES_STATE_DIR, constants.W_OK);
@@ -74,7 +81,7 @@ const serve = async () => {
     `Map tiles API listening on 127.0.0.1:${env.MAP_TILES_PORT} for the map-tiles command`,
   );
   console.log(
-    `Checking for a map update in R2 bucket ${env.R2_BUCKET} now and whenever the map is ${env.MAP_TILES_UPDATE_INTERVAL_DAYS} days old`,
+    `Checking for a map update in map storage bucket ${env.MAP_S3_BUCKET_NAME} now and whenever the map is ${env.MAP_TILES_UPDATE_INTERVAL_DAYS} days old`,
   );
   const stopUpdates = handler.scheduleUpdates(env.updateIntervalMs);
 

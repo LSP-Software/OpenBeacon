@@ -16,7 +16,7 @@ const router = t.router({
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
       message: "Upload verification failed.",
-      cause: new Error("NoSuchBucket: bucket private-bucket at https://r2.internal"),
+      cause: new Error("NoSuchBucket: bucket private-bucket at https://storage.example.internal"),
     });
   }),
   missing: t.procedure.query(() => {

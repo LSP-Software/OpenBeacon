@@ -9,15 +9,23 @@ import {
 import { tryCatch } from "@openbeacon/shared";
 import type { MapTilesEnv } from "./env.ts";
 
-export const createR2Clients = (
-  env: Pick<MapTilesEnv, "R2_ACCOUNT_ID" | "R2_ACCESS_KEY_ID" | "R2_SECRET_ACCESS_KEY">,
+export const createStorageClients = (
+  env: Pick<
+    MapTilesEnv,
+    | "MAP_S3_ENDPOINT"
+    | "MAP_S3_REGION"
+    | "MAP_S3_ACCESS_KEY_ID"
+    | "MAP_S3_ACCESS_KEY"
+    | "MAP_S3_FORCE_PATH_STYLE"
+  >,
 ) => {
   const config = {
-    region: "auto",
-    endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    region: env.MAP_S3_REGION,
+    endpoint: env.MAP_S3_ENDPOINT,
+    forcePathStyle: env.MAP_S3_FORCE_PATH_STYLE,
     credentials: {
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+      accessKeyId: env.MAP_S3_ACCESS_KEY_ID,
+      secretAccessKey: env.MAP_S3_ACCESS_KEY,
     },
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
@@ -78,7 +86,7 @@ export const readObjectRange = async ({
   );
 
   if (!response.Body) {
-    throw new Error(`Reading ${key} from R2 returned no body`);
+    throw new Error(`Reading ${key} from map storage returned no body`);
   }
 
   return response.Body.transformToByteArray();

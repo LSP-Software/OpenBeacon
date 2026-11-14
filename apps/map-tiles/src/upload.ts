@@ -321,7 +321,7 @@ export const uploadArchive = async ({
     );
 
     if (!created.UploadId) {
-      throw new Error("R2 did not return a multipart upload ID");
+      throw new Error("Map storage did not return a multipart upload ID");
     }
 
     state = { ...expected, uploadId: created.UploadId };
@@ -381,7 +381,7 @@ export const uploadArchive = async ({
           );
 
           if (!response.ETag) {
-            throw new Error(`R2 did not return an ETag for part ${part.partNumber}`);
+            throw new Error(`Map storage did not return an ETag for part ${part.partNumber}`);
           }
 
           return response.ETag;

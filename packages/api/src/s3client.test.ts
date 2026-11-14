@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { HeadObjectCommand, type S3Client } from "@aws-sdk/client-s3";
-import { r2Client } from "./r2.ts";
+import { mapStorageClient } from "./mapStorage.ts";
 import { createStorageClient, s3Client } from "./s3client.ts";
 
 const hangingServer = Bun.listen({
@@ -31,7 +31,7 @@ const handlerConfig = async (client: S3Client) => {
 };
 
 test("the image and map storage clients time out connections and requests", async () => {
-  for (const client of [s3Client, r2Client]) {
+  for (const client of [s3Client, mapStorageClient]) {
     expect(await handlerConfig(client)).toMatchObject({
       connectionTimeout: 5_000,
       requestTimeout: 15_000,

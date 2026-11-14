@@ -5,7 +5,7 @@ const mapTiles = await import("@openbeacon/map-tiles");
 mock.module("@openbeacon/map-tiles", () => ({ ...mapTiles, readManifest: async () => null }));
 
 const { createManifestCache, MAP_TILES_MANIFEST_CACHE_MS, resolvePmtilesArchive } =
-  await import("./r2.ts");
+  await import("./mapStorage.ts");
 
 const manifest = (key: string): MapTilesManifest => ({
   current: "a",
@@ -73,7 +73,7 @@ describe("createManifestCache", () => {
     const getManifest = createManifestCache({ now: () => time, read });
 
     await getManifest();
-    read.mockRejectedValueOnce(new Error("R2 unavailable"));
+    read.mockRejectedValueOnce(new Error("map storage unavailable"));
     time = MAP_TILES_MANIFEST_CACHE_MS;
 
     expect((await getManifest())?.slots.a?.key).toBe("planet-a.pmtiles");
@@ -83,18 +83,18 @@ describe("createManifestCache", () => {
     const getManifest = createManifestCache({
       now: () => 0,
       read: async () => {
-        throw new Error("R2 unavailable");
+        throw new Error("map storage unavailable");
       },
     });
 
-    await expect(getManifest()).rejects.toThrow("R2 unavailable");
+    await expect(getManifest()).rejects.toThrow("map storage unavailable");
   });
 });
 
 describe("resolvePmtilesArchive", () => {
   afterAll(() => mock.restore());
 
-  test("reports that the map isn't ready while R2 has no manifest", async () => {
+  test("reports that the map isn't ready while map storage has no manifest", async () => {
     await expect(resolvePmtilesArchive(undefined)).rejects.toMatchObject({
       code: "SERVICE_UNAVAILABLE",
     });

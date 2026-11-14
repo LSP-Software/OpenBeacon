@@ -448,7 +448,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account profile"
         userId: account.userId,
         uploadType: "userAvatar",
         fileName,
-        bucketName: env.S3_BUCKET_NAME,
+        bucketName: env.IMAGES_S3_BUCKET_NAME,
         currentImagePath: buildUserAvatarPath(account.userId),
       });
     await pendingUpload("old.webp");
