@@ -15,7 +15,7 @@ type RateLimitsDependencies = {
   redis: RedisLike;
 };
 
-const rateLimitScript = `
+export const rateLimitScript = `
 local key = KEYS[1]
 local now_ms = tonumber(ARGV[1])
 local limit = tonumber(ARGV[2])
