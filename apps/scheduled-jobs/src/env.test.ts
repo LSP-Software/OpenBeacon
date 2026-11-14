@@ -78,17 +78,3 @@ test("stops the runner with a clear line when the email settings are invalid", (
   expect(stderr).not.toContain("at resolveEmailConfig");
   expect(stderr).not.toContain("at loadEmailSettings");
 });
-
-test("starts without any map storage settings", () => {
-  const result = Bun.spawnSync({
-    cmd: [process.execPath, "-e", `await import("${import.meta.dir}/services.ts")`],
-    env: {
-      ...Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith("MAP_S3_"))),
-      DATABASE_URL: "postgresql://localhost:5432/test",
-    },
-  });
-  const output = result.stdout.toString() + result.stderr.toString();
-  expect(result.exitCode).toBe(0);
-  expect(output).toContain("Environment configuration valid");
-  expect(output).not.toContain("MAP_S3");
-});

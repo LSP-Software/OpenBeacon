@@ -13,10 +13,10 @@ const {
   checkMapStorage,
   createManifestCache,
   MAP_TILES_MANIFEST_CACHE_MS,
-  mapEnv,
   mapStorageClient,
   resolvePmtilesArchive,
 } = await import("./mapStorage.ts");
+const { mapEnv } = await import("./mapEnv.ts");
 
 const manifest = (key: string): MapTilesManifest => ({
   current: "a",

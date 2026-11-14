@@ -1,7 +1,8 @@
 import "./validateEnv.ts";
 import "./validateServices.ts";
 import { env as apiEnv } from "@openbeacon/api/env.ts";
-import { getMapTilesManifest, mapEnv } from "@openbeacon/api/mapStorage.ts";
+import { mapEnv } from "@openbeacon/api/mapEnv.ts";
+import { getMapTilesManifest } from "@openbeacon/api/mapStorage.ts";
 import { securityAlerts } from "@openbeacon/auth";
 import { tryCatch } from "@openbeacon/shared";
 import { app } from "./app.ts";

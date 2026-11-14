@@ -8,12 +8,9 @@ import {
   runStorageCheck,
 } from "@openbeacon/map-tiles";
 import { tryCatch } from "@openbeacon/shared";
-import { createEnv } from "@t3-oss/env-core";
 import { TRPCError } from "@trpc/server";
-import { mapEnvSchema } from "./envSchema.ts";
+import { mapEnv } from "./mapEnv.ts";
 import { createStorageClient } from "./s3client.ts";
-
-export const mapEnv = createEnv({ server: mapEnvSchema, runtimeEnv: process.env });
 
 const mapConfig = {
   region: mapEnv.MAP_S3_REGION,
