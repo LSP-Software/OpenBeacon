@@ -1,0 +1,197 @@
+# OpenBeacon server. Copy .env.example to .env, fill it in, then run `docker compose up -d`.
+# Guide: https://docs.openbeacon.net/docs/self-host/quick-start-with-docker
+
+name: openbeacon
+
+services:
+  caddy:
+    image: caddy:latest
+    restart: unless-stopped
+    ports:
+      - 80:80
+      - 443:443
+      - 443:443/udp
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [internet, storage]
+    depends_on:
+      - backend
+      - storage
+
+  backend:
+    image: lspsoftware/openbeacon-backend:latest-stable
+    restart: unless-stopped
+    environment:
+      BETTER_AUTH_URL: https://${OPENBEACON_DOMAIN:?}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
+      DATABASE_URL: postgresql://openbeacon:${POSTGRES_PASSWORD:?}@db:5432/openbeacon
+      REDIS_URL: redis://redis:6379
+      REDIS_HASH_SECRET: ${REDIS_HASH_SECRET:?}
+      TRUSTED_PROXY_PROVIDER: trusted-proxy
+      IMAGES_S3_ENDPOINT: http://storage:7070
+      IMAGES_S3_PUBLIC_ENDPOINT: https://${OPENBEACON_DOMAIN:?}
+      IMAGES_S3_CDN_URL: https://${OPENBEACON_DOMAIN:?}
+      IMAGES_S3_REGION: us-east-1
+      IMAGES_S3_ACCESS_KEY_ID: openbeacon
+      IMAGES_S3_ACCESS_KEY: ${STORAGE_SECRET_KEY:?}
+      IMAGES_S3_BUCKET_NAME: openbeacon-pictures
+      IMAGES_S3_FORCE_PATH_STYLE: true
+      MAP_S3_ENDPOINT: http://storage:7070
+      MAP_S3_PUBLIC_ENDPOINT: https://${OPENBEACON_DOMAIN:?}
+      MAP_S3_REGION: us-east-1
+      MAP_S3_ACCESS_KEY_ID: openbeacon
+      MAP_S3_ACCESS_KEY: ${STORAGE_SECRET_KEY:?}
+      MAP_S3_BUCKET_NAME: openbeacon-map
+      MAP_S3_FORCE_PATH_STYLE: true
+    networks: [internet, database, cache, storage]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      storage-setup:
+        condition: service_completed_successfully
+
+  scheduled-jobs:
+    image: lspsoftware/openbeacon-scheduled-jobs:latest-stable
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://openbeacon:${POSTGRES_PASSWORD:?}@db:5432/openbeacon
+      IMAGES_S3_ENDPOINT: http://storage:7070
+      IMAGES_S3_CDN_URL: https://${OPENBEACON_DOMAIN:?}
+      IMAGES_S3_REGION: us-east-1
+      IMAGES_S3_ACCESS_KEY_ID: openbeacon
+      IMAGES_S3_ACCESS_KEY: ${STORAGE_SECRET_KEY:?}
+      IMAGES_S3_BUCKET_NAME: openbeacon-pictures
+      IMAGES_S3_FORCE_PATH_STYLE: true
+      MAP_S3_ENDPOINT: http://storage:7070
+      MAP_S3_REGION: us-east-1
+      MAP_S3_ACCESS_KEY_ID: openbeacon
+      MAP_S3_ACCESS_KEY: ${STORAGE_SECRET_KEY:?}
+      MAP_S3_BUCKET_NAME: openbeacon-map
+      MAP_S3_FORCE_PATH_STYLE: true
+    networks: [internet, database, storage]
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  map-tiles:
+    image: lspsoftware/openbeacon-map-tiles:latest-stable
+    restart: unless-stopped
+    environment:
+      MAP_S3_ENDPOINT: http://storage:7070
+      MAP_S3_REGION: us-east-1
+      MAP_S3_ACCESS_KEY_ID: openbeacon
+      MAP_S3_ACCESS_KEY: ${STORAGE_SECRET_KEY:?}
+      MAP_S3_BUCKET_NAME: openbeacon-map
+      MAP_S3_FORCE_PATH_STYLE: true
+    volumes:
+      - map_tiles_state:/state
+    networks: [internet, storage]
+    depends_on:
+      storage-setup:
+        condition: service_completed_successfully
+
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openbeacon
+      POSTGRES_USER: openbeacon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes:
+      - db:/var/lib/postgresql
+    networks: [database]
+    healthcheck:
+      test: pg_isready -U openbeacon -d openbeacon
+      interval: 10s
+
+  redis:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    restart: unless-stopped
+    command: dragonfly --logtostderr --proactor_threads=1 --maxmemory=256mb --version_check=false
+    ulimits:
+      memlock: -1
+    volumes:
+      - redis:/data
+    networks: [cache]
+
+  storage:
+    image: versity/versitygw:latest
+    restart: unless-stopped
+    entrypoint: sh -c "mkdir -p /data/buckets /data/versions && exec docker-entrypoint.sh"
+    environment:
+      ROOT_ACCESS_KEY: openbeacon
+      ROOT_SECRET_KEY: ${STORAGE_SECRET_KEY:?}
+      VGW_BACKEND: posix
+      VGW_BACKEND_ARG: /data/buckets
+      VGW_VERSIONING_DIR: /data/versions
+      VGW_HEALTH: /health
+      VGW_QUIET: true
+      VGW_FSYNC: true
+    volumes:
+      - storage:/data
+    networks: [storage]
+    healthcheck:
+      test: wget -q -O /dev/null http://127.0.0.1:7070/health
+      interval: 10s
+
+  storage-setup:
+    image: curlimages/curl:latest
+    restart: on-failure
+    environment:
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?}
+    entrypoint: sh -ec
+    command:
+      - |
+        s3() { curl -fsS -o /dev/null --aws-sigv4 aws:amz:us-east-1:s3 --user "openbeacon:$$STORAGE_SECRET_KEY" "$$@"; }
+        for bucket in openbeacon-pictures openbeacon-map; do
+          s3 -I "http://storage:7070/$$bucket" || s3 -X PUT "http://storage:7070/$$bucket"
+        done
+        s3 -X PUT "http://storage:7070/openbeacon-pictures?versioning" --data-binary '<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Status>Enabled</Status></VersioningConfiguration>'
+        s3 -X PUT "http://storage:7070/openbeacon-pictures?policy" --data-binary '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::openbeacon-pictures/*"}]}'
+        echo "Storage is ready"
+    networks: [storage]
+    depends_on:
+      storage:
+        condition: service_healthy
+
+configs:
+  caddyfile:
+    content: |
+      ${OPENBEACON_DOMAIN:?} {
+        @storage path /openbeacon-pictures/* /openbeacon-map/*
+        handle @storage {
+          @notAllowed {
+            not method GET HEAD PUT
+          }
+          respond @notAllowed 405
+          @signedWithHeader header Authorization *
+          respond @signedWithHeader 403
+          reverse_proxy storage:7070
+        }
+        handle {
+          reverse_proxy backend:3000
+        }
+      }
+
+networks:
+  internet:
+  database:
+    internal: true
+  cache:
+    internal: true
+  storage:
+    internal: true
+
+volumes:
+  db:
+  redis:
+  storage:
+  map_tiles_state:
+  caddy_data:
+  caddy_config:
