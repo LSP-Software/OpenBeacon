@@ -119,7 +119,7 @@ export const ApiCompatibilityGate = () => {
             </View>
             {compatibility.problem === "serverTooOld" && selfHosted && (
               <Link
-                href="https://github.com/LSP-Software/OpenBeacon#run-the-backend"
+                href="https://docs.openbeacon.net/docs/self-host/running-your-server/upgrades-and-migrations"
                 className="text-primary-text"
               >
                 How to update a self-hosted server
