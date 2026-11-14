@@ -12,7 +12,10 @@ export default function TabsLayout() {
   const { data: session, isPending } = authClient.useSession();
   useQuery(groupColorSyncQueryOptions(session?.user.id));
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
-  const { mutate: setTimezone } = useMutation(trpc.emailAlerts.setTimezone.mutationOptions());
+  const { mutate: setTimezone } = useMutation({
+    ...trpc.emailAlerts.setTimezone.mutationOptions(),
+    scope: { id: "emailAlerts.setTimezone" },
+  });
   const reportedTimezone = useRef<string | null>(null);
   const userId = session?.user.id;
   const emailEnabled = providers?.email === true;
