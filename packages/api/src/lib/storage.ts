@@ -9,7 +9,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { tryCatch } from "@openbeacon/shared";
 import { env } from "../env.ts";
-import { s3Client } from "../s3client.ts";
+import { s3Client, s3PresignClient } from "../s3client.ts";
 
 const buildKey = (path: string, fileName: string): string => {
   return path ? `${path}/${fileName}` : fileName;
@@ -30,7 +30,7 @@ export const getPresignedUploadUrl = async (
     ChecksumSHA256: contentHash,
     ContentLength: contentSize,
   });
-  return getSignedUrl(s3Client, command, {
+  return getSignedUrl(s3PresignClient, command, {
     expiresIn: 300,
     signableHeaders: new Set(["content-type", "x-amz-checksum-sha256"]),
     unhoistableHeaders: new Set(["x-amz-checksum-sha256"]),

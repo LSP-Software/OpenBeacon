@@ -6,15 +6,23 @@ import { TRPCError } from "@trpc/server";
 import { env } from "./env.ts";
 import { createStorageClient } from "./s3client.ts";
 
-export const mapStorageClient = createStorageClient({
-  endpoint: env.MAP_S3_ENDPOINT,
+const mapConfig = {
   region: env.MAP_S3_REGION,
   forcePathStyle: env.MAP_S3_FORCE_PATH_STYLE,
   credentials: {
     accessKeyId: env.MAP_S3_ACCESS_KEY_ID,
     secretAccessKey: env.MAP_S3_ACCESS_KEY,
   },
+};
+
+export const mapStorageClient = createStorageClient({
+  ...mapConfig,
+  endpoint: env.MAP_S3_ENDPOINT,
 });
+
+const mapStoragePresignClient = env.MAP_S3_PUBLIC_ENDPOINT
+  ? createStorageClient({ ...mapConfig, endpoint: env.MAP_S3_PUBLIC_ENDPOINT })
+  : mapStorageClient;
 
 export const PM_TILES_URL_EXPIRES_IN_SECONDS = 60 * 10;
 export const MAP_TILES_MANIFEST_CACHE_MS = 60_000;
@@ -83,7 +91,7 @@ export const createSignedPmtilesUrl = async (key: string) => {
     Key: key,
   });
 
-  const url = await getSignedUrl(mapStorageClient, command, {
+  const url = await getSignedUrl(mapStoragePresignClient, command, {
     expiresIn: PM_TILES_URL_EXPIRES_IN_SECONDS,
   });
 
