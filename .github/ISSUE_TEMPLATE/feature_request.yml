@@ -1,0 +1,30 @@
+name: Feature idea
+description: Suggest something OpenBeacon should do.
+labels: ["enhancement"]
+body:
+  - type: checkboxes
+    id: roadmap
+    attributes:
+      label: Before you start
+      options:
+        - label: I've checked the [roadmap](https://docs.openbeacon.net/docs/use-openbeacon/roadmap) and it isn't already planned.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How could OpenBeacon solve it?
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy
+      description: Would this need the server to see anything it can't see today? Leave blank if you're not sure.
