@@ -16,6 +16,7 @@ import type {
 import { openBeaconCacheOptionsSchema } from "../rateLimits/schemas.ts";
 import type { RateLimitResult, WhenRedisUnavailable } from "../rateLimits/types.ts";
 import { type RedisLike, toRedisOptions } from "./redis.ts";
+import { findMissingRedisPermissions } from "./redisPermissions.ts";
 import { createSelfHealingRedis } from "./selfHealingRedis.ts";
 
 export class OpenBeaconCache {
@@ -77,6 +78,10 @@ export class OpenBeaconCache {
       (reply) => reply === "PONG",
       () => false,
     );
+  }
+
+  public findMissingPermissions(): Promise<{ missing: string[]; keyPattern: string }> {
+    return findMissingRedisPermissions({ keyPrefix: this.keyPrefix, redis: this.redis });
   }
 
   public close(): void {

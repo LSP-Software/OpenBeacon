@@ -44,4 +44,4 @@ The app only connects to a self-hosted backend over `https://`, so put it behind
 
 ## Publishing images
 
-The `Publish images to Docker Hub` and `Deploy backend` workflows build and release the backend, runner and map tiles images together. See [Publishing releases](https://docs.openbeacon.net/docs/contribute/publishing-releases).
+The `Release Docker images` workflow builds the backend, runner and map tiles images for `serverVersion`, pushes them to Docker Hub and points `latest-stable` at them. The `Deploy to Coolify` workflow then has Coolify pull and deploy `latest-stable`. See [Publishing releases](https://docs.openbeacon.net/docs/contribute/publishing-releases).

@@ -52,10 +52,12 @@ export const createSecurityAlerts = ({
   setTimer?: (callback: () => void, ms: number) => void;
 }) => {
   const alertsTurnedOffDelayMs = 60_000;
+  const logError = (message: string) =>
+    console.error(`${new Date().toISOString()} [security-alert] ${message}`);
   const background = (task: Promise<unknown>, failure: string) =>
     runInBackground(
       tryCatch(task).then((result) => {
-        if (result.error) console.error(`[security-alert] ${failure}`);
+        if (result.error) logError(failure);
       }),
     );
   const deliver = (
@@ -121,18 +123,21 @@ export const createSecurityAlerts = ({
       const hold = async () => {
         const added = await tryCatch(alertsTurnedOff.add({ userId, alerts, at: at.getTime() }));
         if (!added.error) return scheduleAlertsTurnedOff(userId, added.data);
-        console.error("[security-alert] could not hold alerts-turned-off, so sending it now");
+        logError("could not hold alerts-turned-off, so sending it now");
         sendNow();
       };
       runInBackground(hold());
     },
     schedulePendingAlertsTurnedOff: () => {
       if (!alertsTurnedOff) return;
-      background(
-        alertsTurnedOff.pending().then((pending) => {
-          for (const { userId, firstAt } of pending) scheduleAlertsTurnedOff(userId, firstAt);
+      runInBackground(
+        tryCatch(alertsTurnedOff.pending()).then((pending) => {
+          if (pending.error) {
+            logError(`could not load pending alerts-turned-off: ${pending.error.message}`);
+            return;
+          }
+          for (const { userId, firstAt } of pending.data) scheduleAlertsTurnedOff(userId, firstAt);
         }),
-        "could not load pending alerts-turned-off",
       );
     },
   };
