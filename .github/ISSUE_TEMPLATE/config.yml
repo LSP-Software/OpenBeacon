@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Docs
+    url: https://docs.openbeacon.net
+    about: How to use the app, run your own server and contribute.
+  - name: Ask a question
+    url: https://openbeacon.net/contact
+    about: Questions that aren't bugs or feature ideas.
+  - name: Report a vulnerability
+    url: https://github.com/LSP-Software/OpenBeacon/security/advisories/new
+    about: Report security problems privately, never in a public issue.

@@ -1,141 +1,47 @@
-To install dependencies:
+# Backend
+
+The API server the app talks to. It serves tRPC under `/api/trpc` and better-auth under `/api/auth`.
+
+## Run it locally
+
+From the repository root, with `.env` filled in and PostgreSQL and Redis running (`docker compose up -d db redis`):
 
 ```sh
-bun install
+bun run dev --filter=@openbeacon/backend
 ```
 
-To run:
+It listens on http://localhost:3000 and reads the root `.env`. See [Run the app and backend](https://docs.openbeacon.net/docs/contribute/run-the-app-and-backend) and [Development setup](https://docs.openbeacon.net/docs/contribute/development-setup) for every value.
 
-```sh
-bun run dev
-```
+For email in development, set `EMAIL_CONSOLE=true` instead of a provider. Each email is printed to the log as one line, such as `[email] to=alice@example.com type=password-reset code=123456`, instead of being sent. It's refused unless `NODE_ENV` is `development` or `test`; `bun run dev` sets `development`.
 
-open http://localhost:3000
+## Health checks
 
-Set `SERVER_NAME` in the root `.env` to the public name shown in the health check and app. It defaults to `OpenBeacon`. `GET /health` returns the status, backend version, and server name. It never touches Redis, so the app can always read it.
+- `GET /health` returns the status, backend version and server name (`SERVER_NAME`). It never touches Redis, so the app can always read it.
+- `GET /ready` returns 200 while Redis answers and 503 while it doesn't. It's for monitoring, not the container health check: the backend reconnects to Redis by itself.
 
-`GET /ready` pings Redis. It returns 200 while Redis answers and 503 while it doesn't. Use it for monitoring. Don't use it as the container health check: the backend reconnects to Redis on its own, and during an outage everything except email codes keeps working.
+## Startup
 
-Set `CLIENT_UPDATE_MESSAGE` to tell people with an out-of-date app how to update, for example where to get the new version. The app shows it as plain text on its compatibility screens. It is at most 280 characters; a longer value is ignored.
+The Docker image validates its settings, applies Prisma migrations, then checks PostgreSQL, Redis, picture storage, the map bucket and, if configured, the email provider. If a check or migration fails, the container doesn't start. Rolling back an image doesn't reverse migrations, so migrations must stay compatible with the previous release.
 
-## Production deployment
+With no map tiles manifest in the bucket yet, the backend starts anyway, the app shows that the map isn't ready, and the backend logs a reminder every 5 minutes until the [map tiles service](../map-tiles/README.md) publishes the first map.
 
-The backend image validates runtime configuration and then runs Prisma
-migrations before starting the server. Configure
-`DATABASE_URL` for an existing PostgreSQL database, `REDIS_URL` for an
-existing Redis-compatible service and `REDIS_HASH_SECRET` (at least 32
-characters, for example from `openssl rand -base64 32`). The database user needs permission to apply
-migrations. Back up an existing database before applying schema changes and
-ensure migrations remain compatible with the previous release during rollout.
-Before accepting requests, the backend also checks PostgreSQL and Redis connectivity, lists S3 object versions, reads the map tiles manifest from R2 and checks that the current PMTiles archive exists (with no manifest yet it starts anyway, the app shows that the map isn't ready, and the backend logs every 5 minutes until the map tiles service publishes the first map), and checks the email provider when one is configured. See `apps/map-tiles/README.md` for publishing new map data. These read-only checks require the corresponding credentials and permissions. If a check or migration fails, the new container does not start. Rolling back an image does
-not reverse migrations.
+## Google sign-in
 
-For Google account deletion verification, add `<BETTER_AUTH_URL>/api/auth/google-deletion-callback` as an authorized redirect URI on the Google web OAuth client configured by `GOOGLE_CLIENT_ID`. For the hosted API this is `https://api.openbeacon.net/api/auth/google-deletion-callback`; each self-hosted backend needs its own exact public callback URI registered with its Google client. The Google account chooser may reuse an existing Google browser session and does not guarantee a fresh password prompt.
+Google sign-in isn't released yet. To try it, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, and add `<BETTER_AUTH_URL>/api/auth/google-deletion-callback` as an authorised redirect URI on that Google web client. Account deletion uses it to confirm the person is the account owner.
 
-Set the required environment variables from the root `.env.example`, including
-the R2 variables. `SELF_HOSTED` defaults to `true`, so self-hosted backends never
-accept app feedback; the app always sends feedback to the hosted API. Optional
-variables may be added when needed; leave them absent to use their defaults.
+## Running your own server
 
-With `TRUSTED_PROXY_PROVIDER=cloudflare-authenticated`, set a random
-`CLOUDFLARE_ORIGIN_SECRET` of at least 32 characters, and configure Cloudflare to
-overwrite `X-OpenBeacon-Origin-Secret` with the same secret only on HTTPS requests
-to your API hostname, using Full (strict) TLS for that hostname. Never add the
-secret to requests received over HTTP: Full (strict) does not force Cloudflare to
-use HTTPS for those origin requests. The backend then requires that secret and a
-valid `CF-Connecting-IP` on every request except `GET /health` and `GET /ready`,
-which stay open for container health checks and monitoring. Keep the secret out
-of Git and logs. Verify that direct-origin API requests are rejected, and that
-Cloudflare overwrites a client-supplied secret header. Do not deploy with `none`
-behind a reverse proxy: every session would record the proxy's IP address instead
-of the client's.
+Everything about running the backend in production is in the docs:
 
-Self-hosted backends behind a single reverse proxy such as Traefik, Caddy or
-nginx can use `trusted-proxy`. The backend uses the last `X-Forwarded-For` entry,
-so the proxy must append the connecting address to that header (nginx:
-`$proxy_add_x_forwarded_for`) and the backend port must not be reachable except
-through the proxy. `cloudflare` trusts `CF-Connecting-IP` without verifying the
-request came from Cloudflare, so only use it when the origin is reachable solely
-through Cloudflare, for example via Cloudflare Tunnel or a firewall that only
-allows Cloudflare's IP ranges. Otherwise use `cloudflare-authenticated`.
+- [Quick start with Docker](https://docs.openbeacon.net/docs/self-host/quick-start-with-docker)
+- [Environment variables](https://docs.openbeacon.net/docs/self-host/configuration/environment-variables)
+- [Networking and reverse proxies](https://docs.openbeacon.net/docs/self-host/networking-and-reverse-proxies), including `TRUSTED_PROXY_PROVIDER` and serving under a path
+- [Email](https://docs.openbeacon.net/docs/self-host/configuration/email)
+- [Health checks and the job runner](https://docs.openbeacon.net/docs/self-host/running-your-server/health-checks-and-the-job-runner)
+- [Upgrades and migrations](https://docs.openbeacon.net/docs/self-host/running-your-server/upgrades-and-migrations)
 
-The app only connects to a self-hosted backend over `https://`, because sign-in
-passwords, email codes and session cookies would otherwise cross the network
-unencrypted. Put the backend behind a reverse proxy with a TLS certificate. Caddy
-gets one automatically for a public domain.
+The app only connects to a self-hosted backend over `https://`, so put it behind a reverse proxy with a TLS certificate. Every server also needs the [scheduled job runner](../scheduled-jobs/README.md).
 
-### Serving the backend under a path
+## Publishing images
 
-The backend can share a domain with other apps by sitting under a path, such as
-`https://example.com/openbeacon`. Set `BETTER_AUTH_URL` to the full public URL,
-path included (`https://example.com/openbeacon`), and enter the same URL in the
-app. The reverse proxy must remove the path before it forwards the request, so
-`https://example.com/openbeacon/api/trpc/…` reaches the backend as `/api/trpc/…`
-and `https://example.com/openbeacon/health` as `/health`. For example, in nginx:
-
-```nginx
-location /openbeacon/ {
-    proxy_pass http://openbeacon-backend:3000/;
-}
-```
-
-Caddy's `handle_path /openbeacon/*` and Traefik's `StripPrefix` middleware do the
-same. The Google deletion callback is then
-`https://example.com/openbeacon/api/auth/google-deletion-callback`.
-
-The `Deploy backend` GitHub Actions workflow also deploys the separate scheduled job runner. Every installation needs the runner: besides account deletion, it deletes expired email codes and verification tokens every hour, deletes new devices that weren't set up within 7 days or were removed more than 7 days ago, and deletes old device links and expired device challenges. See [the runner guide](../scheduled-jobs/README.md) for rollout and job requirements.
-
-Publishing and deploying are separate workflows. Both use the
-`DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets in the `production` GitHub
-environment.
-
-To publish, dispatch the `Publish images to Docker Hub` workflow from `main`.
-It builds the backend, runner and map tiles images and pushes them to
-`lspsoftware/openbeacon-backend`, `lspsoftware/openbeacon-scheduled-jobs` and
-`lspsoftware/openbeacon-map-tiles`, tagged with `serverVersion` from
-`src/version.ts`. It never moves `latest-stable` and never deploys. Re-running
-it for the same commit skips images it already pushed, and it fails if that
-version was already published from a different commit, so bump
-`serverVersion` for every release.
-
-To release, dispatch the `Deploy backend` workflow from `main`. It releases
-`serverVersion` from `main` unless you enter another version, and fails if the
-three images for that version aren't published yet. It points `latest-stable`
-at that version for all three images, and can then deploy the backend and the
-runner. It never redeploys the map tiles service, because a restart interrupts
-a map upload that can take hours: redeploy it yourself when `map-tiles status`
-shows no update running. To roll back, release an earlier version. Avoid
-starting other deployments manually while a release is in progress.
-
-## Email
-
-Email is optional. Without it the backend starts normally, sends nothing, and reports `email: false` from `auth.providers`. The app then hides the sign-up code, Forgot password, the recovery reset code and Account → Notifications → Email alerts. Users can't reset a forgotten password, and a recovery phrase reset needs only a fresh sign-in, a session linked to this phone, and typing `RESET`. That includes "Start fresh" when setting up a new phone: with email off, the account password is enough to set up a new phone without the recovery phrase. For an account that only uses Google, signing in with Google is enough. It deletes the account's encrypted history, and the new phone can see the family's locations from then on.
-
-With email on, the backend sends codes for sign-up, email verification, password reset and recovery phrase reset, an "already have an account" email when someone signs up with a registered address, a "sign in with Google" email when someone asks to reset the password of an account that only uses Google, and security alerts. The alerts are always on for a password or recovery phrase change or reset, for other sessions being signed out, for a device being removed, for email alerts being turned off, and for account deletion. Users can turn off the new sign-in and deletion scheduled alerts in Account → Notifications → Email alerts.
-
-To switch email on, configure one provider and a sender address in the root `.env`:
-
-- Resend: verify your sending domain in Resend, then set `RESEND_API_KEY`. A sending-only key works. In the domain's settings in Resend, turn off open tracking and click tracking; with a full-access key the backend won't start while either is on. The hosted API uses Resend.
-- SMTP: set `SMTP_HOST`, plus `SMTP_USER` and `SMTP_PASSWORD` if your server needs a login. `SMTP_PORT` defaults to `587`, where the backend requires STARTTLS and refuses to log in or send if the server doesn't offer it. Set `SMTP_SECURE=true` or `SMTP_PORT=465` for implicit TLS. For a local relay that only speaks plaintext, set `SMTP_REQUIRE_TLS=false`; credentials and emails then cross the network unencrypted.
-
-Set `EMAIL_FROM` to the sender address, for example `noreply@example.com`. Emails always come from `OpenBeacon <EMAIL_FROM>`. A small "Sent from <SERVER_NAME>" line in the footer shows which server sent it. Setting both Resend and SMTP stops the backend from starting.
-
-Emails are branded HTML with a plain-text part. The logo is attached to the email and shown inline, so nothing loads from the internet: there are no remote images, tracking pixels or click tracking.
-
-At startup the backend checks the email settings without sending anything. For SMTP it connects and logs in. For Resend it checks the API key and, when the key has full access, that the `EMAIL_FROM` domain is verified in Resend with open tracking and click tracking off. A sending-only key passes the key check, but the domain and its tracking settings can't be checked with it, so check them yourself in Resend. A failed check stops the backend from starting.
-
-Each address can request 3 codes of each kind every 15 minutes.
-
-Each account can trigger at most 20 emails an hour. Over that cap, the new sign-in, deletion scheduled, "already have an account" and "sign in with Google" emails are dropped. Codes and the always-on alerts are still sent. The backend never logs email addresses or codes, except in the development console mode below.
-
-For local development, set `EMAIL_CONSOLE=true` instead of a provider to print a one-line summary of each email to the log instead of sending it, for example `[email] to=alice@example.com type=password-reset code=123456`. It is refused unless `NODE_ENV` is `development` or `test`; the backend and runner `bun run dev` scripts set `NODE_ENV=development`.
-
-Give the scheduled job runner the same email settings and `REDIS_URL`, so it can send the account deleted email at the end of the grace period. See [the runner guide](../scheduled-jobs/README.md).
-
-### Switching email on later
-
-Accounts created while email is off aren't verified. Once you switch email on, signing in with a password to one of those accounts sends a code to its address, and the owner enters it to finish signing in. Google sign-in isn't affected.
-
-### What the email provider sees
-
-Your email provider sees each recipient's address and every email in full: which kind it is, when it was sent, and the code or alert text. Emails never contain locations, IP addresses or recovery material. Anyone who can read an account's email can reset its password, unless it only signs in with Google. See [the privacy draft](../../docs/security/beta-1-privacy-draft.md#email).
+The `Publish images to Docker Hub` and `Deploy backend` workflows build and release the backend, runner and map tiles images together. See [Publishing releases](https://docs.openbeacon.net/docs/contribute/publishing-releases).

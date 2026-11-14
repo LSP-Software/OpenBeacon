@@ -1,0 +1,65 @@
+name: Bug report
+description: Something in OpenBeacon doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: checkboxes
+    id: not-security
+    attributes:
+      label: Before you start
+      options:
+        - label: This isn't a security problem. Security problems go through SECURITY.md, not a public issue.
+          required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: From Account › About.
+      placeholder: "1.13.0 (34)"
+    validations:
+      required: true
+  - type: input
+    id: server-version
+    attributes:
+      label: Server version
+      description: From Account › About.
+      placeholder: "0.17.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: server
+    attributes:
+      label: Which server?
+      options:
+        - OpenBeacon's hosted server
+        - My own server
+    validations:
+      required: true
+  - type: input
+    id: phone
+    attributes:
+      label: Phone and Android version
+      placeholder: "Pixel 8, Android 15"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Tap …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Include screenshots or logs if you have them. Remove locations, email addresses and anything else personal first.
+    validations:
+      required: true
