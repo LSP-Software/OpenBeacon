@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { prisma } from "@openbeacon/database";
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
-import { lockGroupEpoch } from "@openbeacon/api/groupWriteChecks.ts";
 import { createEpochCleanup, createLocationHistoryCleanup } from "./locationHistoryCleanup.ts";
 
 const prefix = `location-history-cleanup-${crypto.randomUUID()}`;
@@ -228,25 +227,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
       where: { id: place.id },
       data: { epochId: `${groupId}-epoch-2` },
     });
-    await createEpochCleanup()();
-    expect(await epochNumbers(groupId)).toEqual([2]);
-  });
-
-  test("skips an epoch that a place being saved has locked", async () => {
-    const groupId = await createGroup("place-race", [200, 100]);
-    const error = spyOn(console, "error").mockImplementation(() => {});
-    let epochsDuringSave: number[] = [];
-    const rollback = new Error("roll back the place");
-    const save = prisma.$transaction(async (tx) => {
-      await lockGroupEpoch(tx, { epochId: `${groupId}-epoch-1`, groupId });
-      await createEpochCleanup()();
-      epochsDuringSave = await epochNumbers(groupId);
-      throw rollback;
-    });
-    await expect(save).rejects.toBe(rollback);
-    expect(epochsDuringSave).toEqual([1, 2]);
-    expect(error).not.toHaveBeenCalled();
-    error.mockRestore();
     await createEpochCleanup()();
     expect(await epochNumbers(groupId)).toEqual([2]);
   });

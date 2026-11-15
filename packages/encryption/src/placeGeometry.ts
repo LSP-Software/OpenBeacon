@@ -7,42 +7,47 @@ export type PlaceGeometryV1 = {
   radiusMeters: number;
 };
 
+const PLACE_GEOMETRY_V1_BYTES = 128;
+
 const textEncoder = new TextEncoder();
 
 export const validatePlaceGeometryV1 = (value: unknown): PlaceGeometryV1 => {
+  const fields = new Map<string, unknown>(
+    typeof value === "object" && value !== null ? Object.entries(value) : [],
+  );
+  const latitude = fields.get("latitude");
+  const longitude = fields.get("longitude");
+  const radiusMeters = fields.get("radiusMeters");
+
   if (
-    typeof value !== "object" ||
-    value === null ||
-    Object.keys(value).length !== 4 ||
-    !("v" in value) ||
-    value.v !== 1 ||
-    !("latitude" in value) ||
-    typeof value.latitude !== "number" ||
-    !Number.isFinite(value.latitude) ||
-    value.latitude < -90 ||
-    value.latitude > 90 ||
-    !("longitude" in value) ||
-    typeof value.longitude !== "number" ||
-    !Number.isFinite(value.longitude) ||
-    value.longitude < -180 ||
-    value.longitude > 180 ||
-    !("radiusMeters" in value) ||
-    typeof value.radiusMeters !== "number" ||
-    !Number.isInteger(value.radiusMeters) ||
-    value.radiusMeters < 100 ||
-    value.radiusMeters > 1000 ||
-    value.radiusMeters % 25 !== 0
+    fields.size !== 4 ||
+    fields.get("v") !== 1 ||
+    typeof latitude !== "number" ||
+    !Number.isFinite(latitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    typeof longitude !== "number" ||
+    !Number.isFinite(longitude) ||
+    longitude < -180 ||
+    longitude > 180 ||
+    typeof radiusMeters !== "number" ||
+    !Number.isInteger(radiusMeters) ||
+    radiusMeters < 100 ||
+    radiusMeters > 1000 ||
+    radiusMeters % 25 !== 0
   ) {
     throw new Error("Invalid place geometry.");
   }
 
-  return {
-    v: 1,
-    latitude: value.latitude,
-    longitude: value.longitude,
-    radiusMeters: value.radiusMeters,
-  };
+  return { v: 1, latitude, longitude, radiusMeters };
 };
 
-export const encodePlaceGeometryV1 = (placeGeometry: PlaceGeometryV1) =>
-  textEncoder.encode(JSON.stringify(validatePlaceGeometryV1(placeGeometry)));
+export const encodePlaceGeometryV1 = (placeGeometry: PlaceGeometryV1) => {
+  const json = JSON.stringify(validatePlaceGeometryV1(placeGeometry));
+
+  if (json.length > PLACE_GEOMETRY_V1_BYTES) {
+    throw new Error("Invalid place geometry.");
+  }
+
+  return textEncoder.encode(json.padEnd(PLACE_GEOMETRY_V1_BYTES, " "));
+};

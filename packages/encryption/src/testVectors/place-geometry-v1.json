@@ -21,10 +21,10 @@
         "senderDeviceId": "device_place_1"
       },
       "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_place_1\",\"groupId\":\"group_place_1\",\"kind\":\"placeGeometry\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_place_1\"}",
-      "plaintextJson": "{\"v\":1,\"latitude\":51.5074,\"longitude\":-0.1278,\"radiusMeters\":100}",
-      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6NTEuNTA3NCwibG9uZ2l0dWRlIjotMC4xMjc4LCJyYWRpdXNNZXRlcnMiOjEwMH0=",
+      "plaintextJson": "{\"v\":1,\"latitude\":51.5074,\"longitude\":-0.1278,\"radiusMeters\":100}                                                               ",
+      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6NTEuNTA3NCwibG9uZ2l0dWRlIjotMC4xMjc4LCJyYWRpdXNNZXRlcnMiOjEwMH0gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA=",
       "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3",
-      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v5A3xpjaC1U1+RWBXjWtFNEQn49kLPnyVB3mFvRR2CLfEvp+KmKC14gEtRukPGVhleeDMGNalysT4RkBUBSwC"
+      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v5A3xpjaC1U1+RWBXjWtFNEQn49kLPnyVB3mFvRR2CLfEvp+KmKC14gEtRukPGVh3AdNj7iFTOwrtzJ0jGI8UR872Etl7ibLyJHGYAk9V2gsPDmD1AYaJbglvblv5qaGmYNyjhn0jtoDu2ihULHFXEMiy/hc9DZRkRUqRz1f0"
     },
     {
       "name": "largest-radius-southern-hemisphere",
@@ -35,10 +35,10 @@
         "senderDeviceId": "device_place_2"
       },
       "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_place_2\",\"groupId\":\"group_place_2\",\"kind\":\"placeGeometry\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_place_2\"}",
-      "plaintextJson": "{\"v\":1,\"latitude\":-33.8688,\"longitude\":151.2093,\"radiusMeters\":1000}",
-      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6LTMzLjg2ODgsImxvbmdpdHVkZSI6MTUxLjIwOTMsInJhZGl1c01ldGVycyI6MTAwMH0=",
+      "plaintextJson": "{\"v\":1,\"latitude\":-33.8688,\"longitude\":151.2093,\"radiusMeters\":1000}                                                            ",
+      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6LTMzLjg2ODgsImxvbmdpdHVkZSI6MTUxLjIwOTMsInJhZGl1c01ldGVycyI6MTAwMH0gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA=",
       "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3",
-      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v/A/svT6D2VlwC2NWhGVYNVUmpMEcP2eVG3yNqAUoS6HMr4Wyjpm15Bd9D/oFGBVnEY69DlZf86+GvGGRpUxfJnmO"
+      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v/A/svT6D2VlwC2NWhGVYNVUmpMEcP2eVG3yNqAUoS6HMr4Wyjpm15Bd9D/oFGBVnEY5j7iFTOwrtzJ0jGI8UR872Etl7ibLyJHGYAk9V2gsPDmD1AYaJbglvblv5qaGmYNyjhn0jtoDu2ihULHFlRlVU6NUDlN1ePmd4v+/E"
     },
     {
       "name": "mid-radius",
@@ -49,10 +49,10 @@
         "senderDeviceId": "device_place_3"
       },
       "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_place_3\",\"groupId\":\"group_place_3\",\"kind\":\"placeGeometry\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_place_3\"}",
-      "plaintextJson": "{\"v\":1,\"latitude\":40.7128,\"longitude\":-74.006,\"radiusMeters\":275}",
-      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6NDAuNzEyOCwibG9uZ2l0dWRlIjotNzQuMDA2LCJyYWRpdXNNZXRlcnMiOjI3NX0=",
+      "plaintextJson": "{\"v\":1,\"latitude\":40.7128,\"longitude\":-74.006,\"radiusMeters\":275}                                                               ",
+      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6NDAuNzEyOCwibG9uZ2l0dWRlIjotNzQuMDA2LCJyYWRpdXNNZXRlcnMiOjI3NX0gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA=",
       "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3",
-      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v5QzxpDeH2U1+RWBXjWtFNEQn49kLOWaKBX6LvRR2CLfEvp+KmKC14gEtRuoIHFhghuBLiBLbkFCXrU82TSUb"
+      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v5QzxpDeH2U1+RWBXjWtFNEQn49kLOWaKBX6LvRR2CLfEvp+KmKC14gEtRuoIHFh3AdNj7iFTOwrtzJ0jGI8UR872Etl7ibLyJHGYAk9V2gsPDmD1AYaJbglvblv5qaGmYNyjhn0jtoDu2ihULHH+1N50NOsY2nkZooeKAfJ/"
     }
   ]
 }

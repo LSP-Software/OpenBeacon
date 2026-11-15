@@ -80,6 +80,18 @@ describe("validatePlaceGeometryV1", () => {
     }
   });
 
+  test("rejects fields that come from the prototype", () => {
+    const inherited = Object.create({ radiusMeters: 150 });
+    Object.assign(inherited, { v: 1, latitude: 51.5074, longitude: -0.1278, extra: true });
+
+    expect(() => validatePlaceGeometryV1(inherited)).toThrow("Invalid place geometry.");
+    expect(() =>
+      validatePlaceGeometryV1(
+        Object.assign(Object.create(validGeometry), { a: 1, b: 2, c: 3, d: 4 }),
+      ),
+    ).toThrow("Invalid place geometry.");
+  });
+
   test("rejects other versions and non-objects", () => {
     for (const value of [{ ...validGeometry, v: 2 }, null, "geometry", 150, []]) {
       expect(() => validatePlaceGeometryV1(value)).toThrow("Invalid place geometry.");
@@ -88,10 +100,44 @@ describe("validatePlaceGeometryV1", () => {
 });
 
 describe("encodePlaceGeometryV1", () => {
-  test("encodes the locked geometry payload as UTF-8 JSON", () => {
+  test("encodes the locked geometry payload as UTF-8 JSON padded with spaces to 128 bytes", () => {
     expect(new TextDecoder().decode(encodePlaceGeometryV1(validGeometry))).toBe(
-      '{"v":1,"latitude":51.5074,"longitude":-0.1278,"radiusMeters":150}',
+      '{"v":1,"latitude":51.5074,"longitude":-0.1278,"radiusMeters":150}'.padEnd(128, " "),
     );
+  });
+
+  test("encodes every geometry to exactly 128 bytes, including the longest numbers", () => {
+    for (const latitude of [
+      0, 90, -90, -89.12345678901234, -0.0000012345678901234567, 1e-7, 5e-324,
+    ]) {
+      for (const longitude of [0, 180, -180, -179.1234567890123, -1.2345678901234566e-7, -5e-324]) {
+        for (const radiusMeters of [100, 1000]) {
+          const geometry = { v: 1, latitude, longitude, radiusMeters } satisfies PlaceGeometryV1;
+          const encoded = encodePlaceGeometryV1(geometry);
+
+          expect(encoded.length).toBe(128);
+          expect(JSON.parse(new TextDecoder().decode(encoded))).toEqual(geometry);
+        }
+      }
+    }
+  });
+
+  test("encodes keys in the fixed order whatever order they are given in", () => {
+    expect(
+      new TextDecoder()
+        .decode(
+          encodePlaceGeometryV1({ radiusMeters: 150, longitude: -0.1278, latitude: 51.5074, v: 1 }),
+        )
+        .trimEnd(),
+    ).toBe('{"v":1,"latitude":51.5074,"longitude":-0.1278,"radiusMeters":150}');
+  });
+
+  test("encodes negative zero as zero", () => {
+    expect(
+      new TextDecoder()
+        .decode(encodePlaceGeometryV1({ ...validGeometry, latitude: -0, longitude: -0 }))
+        .trimEnd(),
+    ).toBe('{"v":1,"latitude":0,"longitude":0,"radiusMeters":150}');
   });
 
   test("refuses fields outside the v1 schema", () => {

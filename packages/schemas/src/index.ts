@@ -43,8 +43,9 @@ import {
   listPlacesSchema,
   MAX_PLACES_PER_GROUP,
   placeEmojiSchema,
+  PLACE_GEOMETRY_KIND,
   placeNameSchema,
-  reEncryptPlaceSchema,
+  reEncryptPlacesSchema,
   updatePlaceSchema,
 } from "./schemas/group/places.ts";
 import { removeGroupMemberSchema } from "./schemas/group/removeMember.ts";
@@ -55,7 +56,6 @@ import {
   groupTrackingUploadBatchSchema,
   TRACKING_POINT_KIND,
 } from "./schemas/group/tracking.ts";
-import { PLACE_GEOMETRY_KIND } from "@openbeacon/encryption";
 import { requestImageUploadInputSchema } from "./schemas/image/requestImageUpload.ts";
 
 export {
@@ -87,7 +87,7 @@ export {
   optionalEnvString,
   placeEmojiSchema,
   placeNameSchema,
-  reEncryptPlaceSchema,
+  reEncryptPlacesSchema,
   serverNameSchema,
   registerDeviceKeySchema,
   removeGroupMemberSchema,

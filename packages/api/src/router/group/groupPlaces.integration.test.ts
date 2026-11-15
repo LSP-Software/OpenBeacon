@@ -8,6 +8,7 @@ import {
   encryptGroupPayload,
   generateGroupEpochKey,
   PLACE_GEOMETRY_KIND,
+  type PlaceGeometryV1,
   validatePlaceGeometryV1,
 } from "@openbeacon/encryption";
 import { MAX_PLACES_PER_GROUP } from "@openbeacon/schemas";
@@ -26,6 +27,7 @@ const owner = `${prefix}-owner`;
 const admin = `${prefix}-admin`;
 const member = `${prefix}-member`;
 const outsider = `${prefix}-outsider`;
+const creator = `${prefix}-creator`;
 const users = [owner, admin, member, outsider];
 const groupId = `${prefix}-group`;
 const otherGroupId = `${prefix}-other-group`;
@@ -33,7 +35,12 @@ const oldEpochId = `${prefix}-epoch-1`;
 const latestEpochId = `${prefix}-epoch-2`;
 const otherEpochId = `${prefix}-other-epoch`;
 const epochKey = generateGroupEpochKey();
-const home = { v: 1, latitude: 51.5074, longitude: -0.1278, radiusMeters: 150 } as const;
+const home = {
+  v: 1,
+  latitude: 51.5074,
+  longitude: -0.1278,
+  radiusMeters: 150,
+} satisfies PlaceGeometryV1;
 
 const deviceOf = (userId: string) => `${userId}-device`;
 
@@ -56,7 +63,7 @@ const sealGeometry = ({
   targetGroupId = groupId,
 }: {
   epochId?: string;
-  geometry?: { v: 1; latitude: number; longitude: number; radiusMeters: number };
+  geometry?: PlaceGeometryV1;
   senderDeviceId: string;
   targetGroupId?: string;
 }) => {
@@ -86,8 +93,56 @@ const createPlace = (userId: string, name = "Home", targetGroupId = groupId) =>
     geometry: sealGeometry({ senderDeviceId: deviceOf(userId), targetGroupId }),
   });
 
-const revision = async () =>
-  (await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).placesRevision;
+const seedPlace = ({
+  id,
+  epochId = latestEpochId,
+  name = "Home",
+  emoji = "🏠",
+  targetGroupId = groupId,
+  createdByUserId = owner,
+  updatedByUserId,
+}: {
+  id: string;
+  epochId?: string;
+  name?: string;
+  emoji?: string;
+  targetGroupId?: string;
+  createdByUserId?: string;
+  updatedByUserId?: string;
+}) => {
+  const geometry = sealGeometry({ epochId, senderDeviceId: deviceOf(owner), targetGroupId });
+  return prisma.place.create({
+    data: {
+      id,
+      groupId: targetGroupId,
+      name,
+      emoji,
+      epochId,
+      senderDeviceId: geometry.senderDeviceId,
+      algorithm: geometry.algorithm,
+      nonce: geometry.nonce,
+      ciphertext: geometry.ciphertext,
+      createdByUserId,
+      updatedByUserId: updatedByUserId ?? null,
+    },
+  });
+};
+
+const reEncryptRequest = (place: {
+  id: string;
+  name: string;
+  emoji: string;
+  ciphertext: string;
+}) => ({
+  placeId: place.id,
+  name: place.name,
+  emoji: place.emoji,
+  expectedCiphertext: place.ciphertext,
+  geometry: sealGeometry({ senderDeviceId: deviceOf(member) }),
+});
+
+const revision = async (targetGroupId = groupId) =>
+  (await prisma.group.findUniqueOrThrow({ where: { id: targetGroupId } })).placesRevision;
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "group places with PostgreSQL",
@@ -95,6 +150,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     beforeEach(async () => {
       now += 60_000;
       await prisma.place.deleteMany({ where: { groupId: { in: [groupId, otherGroupId] } } });
+      await prisma.group.updateMany({
+        where: { id: { in: [groupId, otherGroupId] } },
+        data: { epochRotationRequired: false },
+      });
     });
 
     beforeAll(async () => {
@@ -145,7 +204,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
     afterAll(async () => {
       await prisma.group.deleteMany({ where: { id: { in: [groupId, otherGroupId] } } });
-      await prisma.user.deleteMany({ where: { id: { in: users } } });
+      await prisma.user.deleteMany({ where: { id: { in: [...users, creator] } } });
       await prisma.$disconnect();
     });
 
@@ -265,76 +324,189 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await revision()).toBe(revisionAfterFirst);
     });
 
-    test("any member can re-encrypt to the latest epoch, without changing the name or emoji", async () => {
-      const created = await caller(owner).groupPlaces.create({
-        groupId,
-        name: "School",
-        emoji: "🏫",
-        geometry: sealGeometry({ epochId: oldEpochId, senderDeviceId: deviceOf(owner) }),
-      });
-      expect(created.place.epochId).toBe(oldEpochId);
-      const reEncrypt = (
-        overrides: Partial<{ epochId: string; name: string; emoji: string; expected: string }>,
-      ) =>
-        caller(member).groupPlaces.reEncrypt({
-          groupId,
-          placeId: created.place.id,
-          name: overrides.name ?? "School",
-          emoji: overrides.emoji ?? "🏫",
-          geometry: sealGeometry({
-            epochId: overrides.epochId ?? latestEpochId,
-            senderDeviceId: deviceOf(member),
+    test("geometry writes need the group's latest epoch and the caller's own device", async () => {
+      const old = await seedPlace({ id: `${prefix}-old`, epochId: oldEpochId });
+      const save = (epochId: string, senderDeviceId = deviceOf(owner)) => ({
+        create: () =>
+          caller(owner).groupPlaces.create({
+            groupId,
+            name: "Home",
+            emoji: "🏠",
+            geometry: sealGeometry({ epochId, senderDeviceId }),
           }),
-          expectedCiphertext: overrides.expected ?? created.place.ciphertext,
-        });
+        update: () =>
+          caller(owner).groupPlaces.update({
+            groupId,
+            placeId: old.id,
+            name: "Home",
+            emoji: "🏠",
+            geometry: sealGeometry({ epochId, senderDeviceId }),
+            expectedCiphertext: old.ciphertext,
+          }),
+      });
 
-      await expect(reEncrypt({ epochId: oldEpochId })).rejects.toMatchObject({
+      for (const epochId of [oldEpochId, `${prefix}-missing`]) {
+        const { create, update } = save(epochId);
+        await expect(create()).rejects.toMatchObject({ cause: { reason: "EPOCH_NOT_LATEST" } });
+        await expect(update()).rejects.toMatchObject({ cause: { reason: "EPOCH_NOT_LATEST" } });
+      }
+      const otherGroup = save(otherEpochId);
+      await expect(otherGroup.create()).rejects.toMatchObject({
         code: "BAD_REQUEST",
-        cause: { reason: "EPOCH_NOT_LATEST" },
+        message: "Epoch does not belong to this group.",
       });
-      await expect(reEncrypt({ name: "Old school" })).rejects.toMatchObject({
-        code: "CONFLICT",
-        cause: { reason: "PLACE_CHANGED" },
+      await expect(otherGroup.update()).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+        message: "Epoch does not belong to this group.",
       });
-      await expect(reEncrypt({ emoji: "🎒" })).rejects.toMatchObject({ code: "CONFLICT" });
+      const otherDevice = save(latestEpochId, deviceOf(admin));
+      await expect(otherDevice.create()).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(otherDevice.update()).rejects.toMatchObject({ code: "FORBIDDEN" });
 
-      const reEncrypted = await reEncrypt({});
-      expect(reEncrypted.place).toMatchObject({
-        name: "School",
-        emoji: "🏫",
-        epochId: latestEpochId,
-        senderDeviceId: deviceOf(member),
-        updatedByUserId: null,
-      });
-      await expect(reEncrypt({})).rejects.toMatchObject({ code: "CONFLICT" });
+      expect(await prisma.place.findMany({ where: { groupId } })).toEqual([old]);
     });
 
-    test("the sender device must be the caller's own and the epoch must be the group's", async () => {
+    test("geometry writes wait for a pending key rotation, but deletes go ahead", async () => {
+      const old = await seedPlace({ id: `${prefix}-old`, epochId: oldEpochId });
+      const current = await seedPlace({ id: `${prefix}-current` });
+      await prisma.group.update({ where: { id: groupId }, data: { epochRotationRequired: true } });
+      const pending = { cause: { reason: "EPOCH_ROTATION_PENDING" } };
+
+      await expect(createPlace(owner)).rejects.toMatchObject(pending);
       await expect(
-        caller(owner).groupPlaces.create({
+        caller(owner).groupPlaces.update({
           groupId,
-          name: "Home",
+          placeId: current.id,
+          name: "Moved",
           emoji: "🏠",
-          geometry: sealGeometry({ senderDeviceId: deviceOf(admin) }),
+          geometry: sealGeometry({ senderDeviceId: deviceOf(owner) }),
+          expectedCiphertext: current.ciphertext,
         }),
-      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      ).rejects.toMatchObject(pending);
       await expect(
-        caller(owner).groupPlaces.create({
-          groupId,
-          name: "Home",
-          emoji: "🏠",
-          geometry: sealGeometry({ epochId: otherEpochId, senderDeviceId: deviceOf(owner) }),
-        }),
-      ).rejects.toThrow("Epoch does not belong to this group.");
+        caller(member).groupPlaces.reEncrypt({ groupId, places: [reEncryptRequest(old)] }),
+      ).rejects.toMatchObject(pending);
+      expect(await prisma.place.findMany({ where: { groupId }, orderBy: { id: "asc" } })).toEqual([
+        current,
+        old,
+      ]);
+
+      await caller(admin).groupPlaces.delete({ groupId, placeId: current.id });
+      expect(await prisma.place.findMany({ where: { groupId } })).toEqual([old]);
+    });
+
+    test("any member can re-encrypt old places to the latest epoch in one batch", async () => {
+      const school = await seedPlace({
+        id: `${prefix}-a`,
+        epochId: oldEpochId,
+        name: "School",
+        emoji: "🏫",
+        updatedByUserId: admin,
+      });
+      const gym = await seedPlace({ id: `${prefix}-b`, epochId: oldEpochId, name: "Gym" });
+      const renamed = await seedPlace({ id: `${prefix}-c`, epochId: oldEpochId });
+      const newEmoji = await seedPlace({ id: `${prefix}-d`, epochId: oldEpochId });
+      const edited = await seedPlace({ id: `${prefix}-e`, epochId: oldEpochId });
+      const upToDate = await seedPlace({ id: `${prefix}-f` });
+      const before = await revision();
+
+      const result = await caller(member).groupPlaces.reEncrypt({
+        groupId,
+        places: [
+          reEncryptRequest(upToDate),
+          { ...reEncryptRequest(edited), expectedCiphertext: "stale" },
+          { ...reEncryptRequest(newEmoji), emoji: "🏡" },
+          { ...reEncryptRequest(renamed), name: "Old home" },
+          { ...reEncryptRequest(school), placeId: `${prefix}-g-missing` },
+          reEncryptRequest(gym),
+          reEncryptRequest(school),
+        ],
+      });
+
+      expect(result).toMatchObject({
+        places: [
+          {
+            id: school.id,
+            name: "School",
+            emoji: "🏫",
+            epochId: latestEpochId,
+            senderDeviceId: deviceOf(member),
+            kind: PLACE_GEOMETRY_KIND,
+            createdByUserId: owner,
+            updatedByUserId: admin,
+          },
+          { id: gym.id, name: "Gym", epochId: latestEpochId, updatedByUserId: null },
+        ],
+        skipped: [upToDate.id],
+        changed: [renamed.id, newEmoji.id, edited.id],
+        gone: [`${prefix}-g-missing`],
+        placesRevision: before + 1,
+      });
+      expect(await revision()).toBe(before + 1);
+      const stored = await prisma.place.findMany({ where: { groupId }, orderBy: { id: "asc" } });
+      expect(stored.slice(2)).toEqual([renamed, newEmoji, edited, upToDate]);
+
+      const nothingToDo = await caller(member).groupPlaces.reEncrypt({
+        groupId,
+        places: [reEncryptRequest(upToDate), { ...reEncryptRequest(renamed), name: "Old home" }],
+      });
+      expect(nothingToDo).toEqual({
+        places: [],
+        skipped: [upToDate.id],
+        changed: [renamed.id],
+        gone: [],
+        placesRevision: before + 1,
+      });
+      expect(await revision()).toBe(before + 1);
+    });
+
+    test("re-encrypting refuses any geometry that isn't on the latest epoch", async () => {
+      const school = await seedPlace({ id: `${prefix}-a`, epochId: oldEpochId });
+      const gym = await seedPlace({ id: `${prefix}-b`, epochId: oldEpochId });
+      const before = await revision();
       await expect(
-        caller(owner).groupPlaces.create({
+        caller(member).groupPlaces.reEncrypt({
           groupId,
-          name: "Home",
-          emoji: "🏠",
-          geometry: sealGeometry({ epochId: `${prefix}-missing`, senderDeviceId: deviceOf(owner) }),
+          places: [
+            reEncryptRequest(school),
+            {
+              ...reEncryptRequest(gym),
+              geometry: sealGeometry({ epochId: oldEpochId, senderDeviceId: deviceOf(member) }),
+            },
+          ],
         }),
-      ).rejects.toThrow("Epoch does not belong to this group.");
-      expect(await prisma.place.count({ where: { groupId } })).toBe(0);
+      ).rejects.toMatchObject({ cause: { reason: "EPOCH_NOT_LATEST" } });
+      expect(await prisma.place.findMany({ where: { groupId }, orderBy: { id: "asc" } })).toEqual([
+        school,
+        gym,
+      ]);
+      expect(await revision()).toBe(before);
+    });
+
+    test("a place from another group is never touched through this group", async () => {
+      const foreign = await seedPlace({
+        id: `${prefix}-foreign`,
+        epochId: otherEpochId,
+        targetGroupId: otherGroupId,
+        createdByUserId: outsider,
+      });
+      await expect(
+        caller(owner).groupPlaces.update({
+          groupId,
+          placeId: foreign.id,
+          name: "Taken",
+          emoji: "🏠",
+          geometry: sealGeometry({ senderDeviceId: deviceOf(owner) }),
+          expectedCiphertext: foreign.ciphertext,
+        }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      await expect(
+        caller(owner).groupPlaces.delete({ groupId, placeId: foreign.id }),
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      await expect(
+        caller(member).groupPlaces.reEncrypt({ groupId, places: [reEncryptRequest(foreign)] }),
+      ).resolves.toMatchObject({ places: [], gone: [foreign.id] });
+      expect(await prisma.place.findUniqueOrThrow({ where: { id: foreign.id } })).toEqual(foreign);
     });
 
     test(`a group holds at most ${MAX_PLACES_PER_GROUP} places`, async () => {
@@ -396,7 +568,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     });
 
     test("removing the creator keeps their places, and deleting their account deletes them", async () => {
-      const creator = `${prefix}-creator`;
       await prisma.user.create({
         data: {
           id: creator,
@@ -436,7 +607,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         (await caller(member).groupPlaces.list({ groupId })).places.map((place) => place.id),
       ).toEqual([kept.id, created.id]);
 
+      const editedElsewhere = await seedPlace({
+        id: `${prefix}-edited-elsewhere`,
+        epochId: otherEpochId,
+        targetGroupId: otherGroupId,
+        createdByUserId: outsider,
+        updatedByUserId: creator,
+      });
       const before = await revision();
+      const otherBefore = await revision(otherGroupId);
       await expect(
         deleteAccountRecords({
           db: prisma,
@@ -450,6 +629,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         { id: kept.id, name: "Edited by creator", createdByUserId: owner, updatedByUserId: null },
       ]);
       expect(await revision()).toBe(before + 1);
+      expect(await prisma.place.findUniqueOrThrow({ where: { id: editedElsewhere.id } })).toEqual({
+        ...editedElsewhere,
+        updatedByUserId: null,
+      });
+      expect(await revision(otherGroupId)).toBe(otherBefore + 1);
     });
   },
 );

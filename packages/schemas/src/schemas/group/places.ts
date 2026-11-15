@@ -1,18 +1,19 @@
 import { PAYLOAD_ENCRYPTION_ALGORITHM, PLACE_GEOMETRY_KIND } from "@openbeacon/encryption";
 import z from "zod";
+import { isVisibleName } from "../account/fields.ts";
 import { groupPayloadNonceSchema } from "./tracking.ts";
 
 export const MAX_PLACES_PER_GROUP = 50;
 
 const singleEmojiPattern =
-  /^(?:\p{Regional_Indicator}{2}|[#*0-9]️?⃣|\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier})?(?:[\u{E0020}-\u{E007E}]+\u{E007F})?(?:‍\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier})?)*)$/u;
+  /^(?:\p{Regional_Indicator}{2}|[#*0-9]\u{FE0F}?\u{20E3}|\p{Extended_Pictographic}(?:\u{FE0F}|\p{Emoji_Modifier})?(?:[\u{E0020}-\u{E007E}]+\u{E007F})?(?:\u{200D}\p{Extended_Pictographic}(?:\u{FE0F}|\p{Emoji_Modifier})?)*)$/u;
 
 export const placeNameSchema = z
   .string()
   .trim()
   .min(1, { message: "Name is required" })
   .max(50, { message: "Name must be at most 50 characters" })
-  .refine((name) => !/[\p{Cc}\p{Cs}]/u.test(name), {
+  .refine(isVisibleName, {
     message: "Name contains invalid characters",
   });
 
@@ -50,7 +51,24 @@ export const updatePlaceSchema = z.object({
   expectedCiphertext: placeCiphertextSchema,
 });
 
-export const reEncryptPlaceSchema = updatePlaceSchema;
+export const reEncryptPlacesSchema = z.object({
+  groupId: z.string().min(1),
+  places: z
+    .array(
+      z.object({
+        placeId: placeIdSchema,
+        name: placeNameSchema,
+        emoji: placeEmojiSchema,
+        expectedCiphertext: placeCiphertextSchema,
+        geometry: encryptedPlaceGeometrySchema,
+      }),
+    )
+    .min(1)
+    .max(MAX_PLACES_PER_GROUP)
+    .refine((places) => new Set(places.map(({ placeId }) => placeId)).size === places.length, {
+      message: "Each place can only be re-encrypted once per request",
+    }),
+});
 
 export const deletePlaceSchema = z.object({
   groupId: z.string().min(1),
@@ -60,3 +78,5 @@ export const deletePlaceSchema = z.object({
 export const listPlacesSchema = z.object({
   groupId: z.string().min(1),
 });
+
+export { PLACE_GEOMETRY_KIND };

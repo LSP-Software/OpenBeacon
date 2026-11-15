@@ -102,20 +102,37 @@ export const findGroupEpochs = async (
   return found;
 };
 
-export const lockGroupEpoch = async (
-  db: Pick<GroupWriteChecksDb, "$queryRaw">,
-  { epochId, groupId }: { epochId: string; groupId: string },
+export const assertLatestGroupEpoch = async (
+  db: Pick<Prisma.TransactionClient, "group" | "groupEpoch">,
+  { epochIds, groupId }: { epochIds: string[]; groupId: string },
 ) => {
-  const [epoch] = await db.$queryRaw<Array<{ epochNumber: number; latestEpochNumber: number }>>(
-    Prisma.sql`
-      SELECT e."epochNumber", (
-        SELECT max(n."epochNumber") FROM "GroupEpoch" n WHERE n."groupId" = e."groupId"
-      ) AS "latestEpochNumber"
-      FROM "GroupEpoch" e
-      WHERE e.id = ${epochId} AND e."groupId" = ${groupId}
-      FOR KEY SHARE OF e
-    `,
-  );
-  if (!epoch) throw epochNotInGroup();
-  return { isLatest: epoch.epochNumber === epoch.latestEpochNumber };
+  const group = await db.group.findUniqueOrThrow({
+    where: { id: groupId },
+    select: {
+      epochRotationRequired: true,
+      groupEpochs: { orderBy: { epochNumber: "desc" }, take: 1, select: { id: true } },
+    },
+  });
+  const latestEpochId = group.groupEpochs[0]?.id;
+  const notLatest = epochIds.filter((epochId) => epochId !== latestEpochId);
+  if (
+    notLatest.length > 0 &&
+    (await db.groupEpoch.count({ where: { id: { in: notLatest }, groupId: { not: groupId } } })) > 0
+  ) {
+    throw epochNotInGroup();
+  }
+  if (group.epochRotationRequired) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "This group's keys need to change first. Try again shortly.",
+      cause: new ReasonError("EPOCH_ROTATION_PENDING"),
+    });
+  }
+  if (notLatest.length > 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Places can only be saved with the group's latest epoch.",
+      cause: new ReasonError("EPOCH_NOT_LATEST"),
+    });
+  }
 };

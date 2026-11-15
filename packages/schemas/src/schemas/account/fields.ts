@@ -16,3 +16,5 @@ export const accountNameSchema = z
   .refine((name) => !/[\p{Cc}\p{Cs}]/u.test(name), {
     message: "Name contains invalid characters",
   });
+export const isVisibleName = (name: string) =>
+  !/[\p{Cc}\p{Cs}]|(?!‍)\p{Cf}/u.test(name) && /[\p{L}\p{N}\p{P}\p{S}]/u.test(name);

@@ -7,7 +7,9 @@ import {
 import {
   createPlaceSchema,
   placeEmojiSchema,
+  MAX_PLACES_PER_GROUP,
   placeNameSchema,
+  reEncryptPlacesSchema,
   updatePlaceSchema,
 } from "./places.ts";
 
@@ -44,6 +46,24 @@ describe("placeNameSchema", () => {
 
   test("rejects control characters", () => {
     expect(placeNameSchema.safeParse("Home\nSchool").success).toBe(false);
+  });
+
+  test("rejects bidi and invisible format characters", () => {
+    for (const name of ["Ho\u202Eme", "Ho\u200Bme", "\u2066Home\u2069", "Ho\uFEFFme"]) {
+      expect(placeNameSchema.safeParse(name).success).toBe(false);
+    }
+  });
+
+  test("rejects names made only of zero-width characters", () => {
+    for (const name of ["\u200B", "\u200D", "\u200D\u200D", "\u200B\u200C\u200D", "\uFE0F"]) {
+      expect(placeNameSchema.safeParse(name).success).toBe(false);
+    }
+  });
+
+  test("keeps emoji joined with zero-width joiners", () => {
+    expect(placeNameSchema.safeParse("\u{1F468}\u200D\u{1F469}\u200D\u{1F467} home").success).toBe(
+      true,
+    );
   });
 });
 
@@ -87,5 +107,35 @@ describe("place input schemas", () => {
     const input = { groupId: "group-1", placeId: "place-1", name: "Home", emoji: "🏠", geometry };
     expect(updatePlaceSchema.safeParse(input).success).toBe(false);
     expect(updatePlaceSchema.safeParse({ ...input, expectedCiphertext: "old" }).success).toBe(true);
+  });
+
+  test("re-encrypting takes a batch of distinct places", () => {
+    const place = {
+      placeId: "place-1",
+      name: "Home",
+      emoji: "🏠",
+      expectedCiphertext: "old",
+      geometry,
+    };
+    expect(reEncryptPlacesSchema.safeParse({ groupId: "group-1", places: [place] }).success).toBe(
+      true,
+    );
+    expect(reEncryptPlacesSchema.safeParse({ groupId: "group-1", places: [] }).success).toBe(false);
+    expect(
+      reEncryptPlacesSchema.safeParse({ groupId: "group-1", places: [place, place] }).success,
+    ).toBe(false);
+    expect(
+      reEncryptPlacesSchema.safeParse({
+        groupId: "group-1",
+        places: Array.from({ length: MAX_PLACES_PER_GROUP + 1 }, (_, index) => ({
+          ...place,
+          placeId: `place-${index}`,
+        })),
+      }).success,
+    ).toBe(false);
+    const { expectedCiphertext: _, ...withoutExpected } = place;
+    expect(
+      reEncryptPlacesSchema.safeParse({ groupId: "group-1", places: [withoutExpected] }).success,
+    ).toBe(false);
   });
 });

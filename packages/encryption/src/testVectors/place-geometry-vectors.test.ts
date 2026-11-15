@@ -30,8 +30,10 @@ const vectors = JSON.parse(
   }[];
   constants: {
     domainContext: string;
+    epochKeyBase64: string;
     epochKeyHex: string;
     kind: string;
+    nonceBase64: string;
     nonceHex: string;
     purpose: string;
   };
@@ -48,6 +50,15 @@ describe("place geometry vectors", () => {
     expect(PLACE_GEOMETRY_KIND).toBe("placeGeometry");
   });
 
+  test("vector file's base64 key and nonce match their hex forms", () => {
+    expect(encodeBase64(hexToBytes(vectors.constants.epochKeyHex))).toBe(
+      vectors.constants.epochKeyBase64,
+    );
+    expect(encodeBase64(hexToBytes(vectors.constants.nonceHex))).toBe(
+      vectors.constants.nonceBase64,
+    );
+  });
+
   test("encoding each geometry gives the committed plaintext and ciphertext", () => {
     const epochKey = new EpochKeyMaterial(hexToBytes(vectors.constants.epochKeyHex));
 
@@ -62,6 +73,7 @@ describe("place geometry vectors", () => {
         payload: plaintext,
       });
 
+      expect(plaintext.length).toBe(128);
       expect(new TextDecoder().decode(plaintext)).toBe(testCase.plaintextJson);
       expect(encodeBase64(plaintext)).toBe(testCase.plaintextBase64);
       expect(encrypted.nonce).toBe(testCase.nonceBase64);

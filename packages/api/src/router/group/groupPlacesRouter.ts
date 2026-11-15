@@ -6,7 +6,7 @@ import {
   listPlacesSchema,
   MAX_PLACES_PER_GROUP,
   PLACE_GEOMETRY_KIND,
-  reEncryptPlaceSchema,
+  reEncryptPlacesSchema,
   updatePlaceSchema,
 } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
@@ -14,7 +14,7 @@ import { TRPCError } from "@trpc/server";
 import type z from "zod";
 import {
   assertActiveDevices,
-  lockGroupEpoch,
+  assertLatestGroupEpoch,
   lockGroupMemberForWrite,
 } from "../../lib/groupWriteChecks.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
@@ -69,10 +69,10 @@ export const groupPlacesRouter = {
     .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })
     .input(createPlaceSchema)
     .mutation(async ({ ctx, input }) =>
-      writePlaces({
+      writePlace({
         db: ctx.db,
         deviceId: ctx.deviceId,
-        geometry: input.geometry,
+        geometries: [input.geometry],
         groupId: input.groupId,
         needsAdmin: true,
         userId: ctx.session.user.id,
@@ -91,11 +91,7 @@ export const groupPlacesRouter = {
               groupId: input.groupId,
               name: input.name,
               emoji: input.emoji,
-              epochId: input.geometry.epochId,
-              senderDeviceId: input.geometry.senderDeviceId,
-              algorithm: input.geometry.algorithm,
-              nonce: input.geometry.nonce,
-              ciphertext: input.geometry.ciphertext,
+              ...geometryColumns(input.geometry),
               createdByUserId: ctx.session.user.id,
             },
             select: placeSelect,
@@ -108,64 +104,112 @@ export const groupPlacesRouter = {
     .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })
     .input(updatePlaceSchema)
     .mutation(async ({ ctx, input }) =>
-      writePlaces({
+      writePlace({
         db: ctx.db,
         deviceId: ctx.deviceId,
-        geometry: input.geometry,
+        geometries: [input.geometry],
         groupId: input.groupId,
         needsAdmin: true,
         userId: ctx.session.user.id,
-        write: async (tx) =>
-          swapPlace(tx, {
+        write: async (tx) => {
+          const updated = await tx.place.updateMany({
+            where: {
+              id: input.placeId,
+              groupId: input.groupId,
+              ciphertext: input.expectedCiphertext,
+            },
             data: {
               name: input.name,
               emoji: input.emoji,
               updatedByUserId: ctx.session.user.id,
+              ...geometryColumns(input.geometry),
             },
-            geometry: input.geometry,
-            groupId: input.groupId,
-            placeId: input.placeId,
-            where: { ciphertext: input.expectedCiphertext },
-          }),
+          });
+          if (updated.count === 0) {
+            const exists = await tx.place.findFirst({
+              where: { id: input.placeId, groupId: input.groupId },
+              select: { id: true },
+            });
+            if (!exists) throw placeGone();
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "This place changed. Reload and try again.",
+              cause: new ReasonError("PLACE_CHANGED"),
+            });
+          }
+          const place = await tx.place.findUniqueOrThrow({
+            where: { id: input.placeId },
+            select: placeSelect,
+          });
+          return { place: { ...place, kind: PLACE_GEOMETRY_KIND } };
+        },
       }),
     ),
   reEncrypt: groupMemberProcedure
     .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
-    .input(reEncryptPlaceSchema)
+    .input(reEncryptPlacesSchema)
     .mutation(async ({ ctx, input }) =>
-      writePlaces({
+      writePlace({
         db: ctx.db,
         deviceId: ctx.deviceId,
-        geometry: input.geometry,
+        geometries: input.places.map(({ geometry }) => geometry),
         groupId: input.groupId,
         needsAdmin: false,
         userId: ctx.session.user.id,
-        write: async (tx, epoch) => {
-          if (!epoch?.isLatest) {
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: "Places can only be re-encrypted with the group's latest epoch.",
-              cause: new ReasonError("EPOCH_NOT_LATEST"),
-            });
-          }
-          return swapPlace(tx, {
-            data: {},
-            geometry: input.geometry,
-            groupId: input.groupId,
-            placeId: input.placeId,
-            where: { ciphertext: input.expectedCiphertext, name: input.name, emoji: input.emoji },
+        write: async (tx) => {
+          const requests = [...input.places].sort((a, b) => (a.placeId < b.placeId ? -1 : 1));
+          const stored = await tx.place.findMany({
+            where: { id: { in: requests.map(({ placeId }) => placeId) }, groupId: input.groupId },
+            select: { id: true, name: true, emoji: true, epochId: true, ciphertext: true },
           });
+          const storedById = new Map(stored.map((place) => [place.id, place]));
+          const reEncrypted: string[] = [];
+          const skipped: string[] = [];
+          const changed: string[] = [];
+          const gone: string[] = [];
+          for (const request of requests) {
+            const place = storedById.get(request.placeId);
+            if (!place) {
+              gone.push(request.placeId);
+            } else if (place.epochId === request.geometry.epochId) {
+              skipped.push(request.placeId);
+            } else if (
+              place.ciphertext !== request.expectedCiphertext ||
+              place.name !== request.name ||
+              place.emoji !== request.emoji
+            ) {
+              changed.push(request.placeId);
+            } else {
+              await tx.place.update({
+                where: { id: place.id },
+                data: geometryColumns(request.geometry),
+              });
+              reEncrypted.push(place.id);
+            }
+          }
+          const places = await tx.place.findMany({
+            where: { id: { in: reEncrypted } },
+            orderBy: { id: "asc" },
+            select: placeSelect,
+          });
+          return {
+            places: places.map((place) => ({ ...place, kind: PLACE_GEOMETRY_KIND })),
+            skipped,
+            changed,
+            gone,
+          };
         },
+        changesPlaces: (result) => result.places.length > 0,
       }),
     ),
   delete: groupAdminProcedure
     .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })
     .input(deletePlaceSchema)
     .mutation(async ({ ctx, input }) =>
-      writePlaces({
+      writePlace({
         db: ctx.db,
         deviceId: ctx.deviceId,
-        geometry: null,
+        geometries: [],
         groupId: input.groupId,
         needsAdmin: true,
         userId: ctx.session.user.id,
@@ -180,24 +224,36 @@ export const groupPlacesRouter = {
     ),
 } satisfies TRPCRouterRecord;
 
-const writePlaces = async <T extends object>({
+type PlaceGeometry = z.infer<typeof createPlaceSchema>["geometry"];
+
+const geometryColumns = (geometry: PlaceGeometry) => ({
+  epochId: geometry.epochId,
+  senderDeviceId: geometry.senderDeviceId,
+  algorithm: geometry.algorithm,
+  nonce: geometry.nonce,
+  ciphertext: geometry.ciphertext,
+});
+
+const writePlace = async <T extends object>({
+  changesPlaces = () => true,
   db,
   deviceId,
-  geometry,
+  geometries,
   groupId,
   needsAdmin,
   userId,
   write,
 }: {
+  changesPlaces?: (result: T) => boolean;
   db: PrismaClient;
   deviceId: string;
-  geometry: z.infer<typeof createPlaceSchema>["geometry"] | null;
+  geometries: PlaceGeometry[];
   groupId: string;
   needsAdmin: boolean;
   userId: string;
-  write: (tx: Prisma.TransactionClient, epoch: { isLatest: boolean } | null) => Promise<T>;
+  write: (tx: Prisma.TransactionClient) => Promise<T>;
 }) => {
-  if (geometry && geometry.senderDeviceId !== deviceId) {
+  if (geometries.some((geometry) => geometry.senderDeviceId !== deviceId)) {
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "Places must be sent from this device.",
@@ -213,60 +269,26 @@ const writePlaces = async <T extends object>({
     if (needsAdmin && member.role !== GroupRole.OWNER && member.role !== GroupRole.ADMIN) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You are not an admin of this group" });
     }
-    let epoch: { isLatest: boolean } | null = null;
-    if (geometry) {
-      await assertActiveDevices(tx, { deviceIds: [deviceId], userId });
-      epoch = await lockGroupEpoch(tx, { epochId: geometry.epochId, groupId });
+    await assertActiveDevices(tx, { deviceIds: [deviceId], userId });
+    if (geometries.length > 0) {
+      await assertLatestGroupEpoch(tx, {
+        epochIds: [...new Set(geometries.map(({ epochId }) => epochId))],
+        groupId,
+      });
     }
-    const result = await write(tx, epoch);
-    const group = await tx.group.update({
-      where: { id: groupId },
-      data: { placesRevision: { increment: 1 } },
-      select: { placesRevision: true },
-    });
+    const result = await write(tx);
+    const group = changesPlaces(result)
+      ? await tx.group.update({
+          where: { id: groupId },
+          data: { placesRevision: { increment: 1 } },
+          select: { placesRevision: true },
+        })
+      : await tx.group.findUniqueOrThrow({
+          where: { id: groupId },
+          select: { placesRevision: true },
+        });
     return { ...result, placesRevision: group.placesRevision };
   });
-};
-
-const swapPlace = async (
-  tx: Prisma.TransactionClient,
-  {
-    data,
-    geometry,
-    groupId,
-    placeId,
-    where,
-  }: {
-    data: { name?: string; emoji?: string; updatedByUserId?: string };
-    geometry: z.infer<typeof createPlaceSchema>["geometry"];
-    groupId: string;
-    placeId: string;
-    where: { ciphertext: string; name?: string; emoji?: string };
-  },
-) => {
-  const updated = await tx.place.updateMany({
-    where: { ...where, id: placeId, groupId },
-    data: {
-      ...data,
-      epochId: geometry.epochId,
-      senderDeviceId: geometry.senderDeviceId,
-      algorithm: geometry.algorithm,
-      nonce: geometry.nonce,
-      ciphertext: geometry.ciphertext,
-    },
-  });
-  if (updated.count === 0) {
-    if (!(await tx.place.findFirst({ where: { id: placeId, groupId }, select: { id: true } }))) {
-      throw placeGone();
-    }
-    throw new TRPCError({
-      code: "CONFLICT",
-      message: "This place changed. Reload and try again.",
-      cause: new ReasonError("PLACE_CHANGED"),
-    });
-  }
-  const place = await tx.place.findUniqueOrThrow({ where: { id: placeId }, select: placeSelect });
-  return { place: { ...place, kind: PLACE_GEOMETRY_KIND } };
 };
 
 const placeGone = () =>
