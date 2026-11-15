@@ -31,3 +31,14 @@ export const setPlaceSharingSchema = z.object({
 export const getPlaceSharingSchema = z.object({
   groupId: z.string().min(1),
 });
+
+export const getPlaceAlertMutesSchema = z.object({
+  groupId: z.string().min(1),
+});
+
+export const setPlaceAlertMuteSchema = z.object({
+  groupId: z.string().min(1),
+  placeId: z.string().min(1).max(128),
+  mutedUserId: z.string().min(1).max(128).nullable(),
+  muted: z.boolean(),
+});

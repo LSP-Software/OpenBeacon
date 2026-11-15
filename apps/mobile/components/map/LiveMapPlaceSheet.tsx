@@ -1,10 +1,13 @@
 import { Link } from "expo-router";
 import { PencilIcon, Trash2Icon } from "lucide-react-native";
 import { ScrollView, View } from "react-native";
+import { usePlaceAlertMutes } from "../../hooks/usePlaceAlertMutes.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
+import { placeMuteState } from "../../lib/placeAlertMutes.ts";
 import { formatPlaceSize, type MapPlace } from "../../lib/places.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
+import { Switch } from "../ui/Switch.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
 
@@ -60,8 +63,9 @@ export const LiveMapPlaceSheet = ({
         ))}
       </ScrollView>
     )}
+    <MuteEveryoneRow groupId={place.groupId} placeId={place.id} placeName={place.name} />
     {place.canManage ? (
-      <View className="mt-3 flex-row gap-3 border-t border-border pt-4">
+      <View className="mt-1 flex-row gap-3 pt-2">
         <Link
           href={{ pathname: "/place", params: { groupId: place.groupId, placeId: place.id } }}
           asChild
@@ -79,3 +83,33 @@ export const LiveMapPlaceSheet = ({
     ) : null}
   </LiveMapBottomSheet>
 );
+
+const MuteEveryoneRow = ({
+  groupId,
+  placeId,
+  placeName,
+}: {
+  groupId: string;
+  placeId: string;
+  placeName: string;
+}) => {
+  const { mutes, setMute } = usePlaceAlertMutes(groupId);
+  return (
+    <View className="mt-3 flex-row items-center gap-4 border-t border-border py-4">
+      <View className="flex-1 gap-0.5">
+        <Text className="text-foreground text-base font-semibold">Mute everyone here</Text>
+        <Text className="text-muted-foreground text-sm">Only changes your alerts</Text>
+      </View>
+      <Switch
+        accessibilityLabel={`Mute everyone at ${placeName}`}
+        disabled={!mutes.data}
+        value={
+          mutes.data
+            ? placeMuteState({ memberUserIds: [], mutes: mutes.data.mutes, placeId }).everyoneMuted
+            : false
+        }
+        onValueChange={(muted) => setMute({ placeId, mutedUserId: null, muted })}
+      />
+    </View>
+  );
+};

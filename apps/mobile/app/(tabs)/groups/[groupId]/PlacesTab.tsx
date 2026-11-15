@@ -4,6 +4,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import {
+  BellIcon,
   ChevronRightIcon,
   HourglassIcon,
   InfoIcon,
@@ -192,7 +193,14 @@ const PlacesTab = ({
           <Text className="text-foreground text-xl font-bold">Places</Text>
           <Text className="text-muted-foreground">{placeCount}</Text>
         </View>
-        {canManage ? addPlaceButton("Add place") : null}
+        <View className="flex-row items-center gap-3">
+          <Link href={{ pathname: "/place-alerts", params: { groupId } }} asChild>
+            <Button size="sm" variant="outline" className="w-10 px-0" accessibilityLabel="Alerts">
+              <Icon as={BellIcon} size={18} className="text-primary-text" />
+            </Button>
+          </Link>
+          {canManage ? addPlaceButton("Add place") : null}
+        </View>
       </View>
       {places.data.map((place) => {
         if (!place.geometry) {

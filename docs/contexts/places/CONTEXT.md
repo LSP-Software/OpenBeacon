@@ -29,7 +29,7 @@ A notification on a Group member's phone about another member's Place Transition
 _Avoid_: Push, banner, toast, geofence notification
 
 **Place Alert Mute**:
-A recipient’s choice not to be notified about a particular member’s Place Transitions at a particular Place.
+A recipient’s choice not to be notified about a particular member’s Place Transitions at a particular Place, or about everyone’s there, including members who join later. It covers all of that member’s devices and only changes the recipient’s own Place Alerts. It is stored in plain text, and is deleted with the Place or when either member leaves the Group.
 _Avoid_: Notification setting, silence, block, filter, preference
 
 **Place Sharing**:

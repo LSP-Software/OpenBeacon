@@ -49,10 +49,12 @@ import {
   updatePlaceSchema,
 } from "./schemas/group/places.ts";
 import {
+  getPlaceAlertMutesSchema,
   getPlaceSharingSchema,
   placeAlertsCursorSchema,
   placeTransitionSchema,
   recentPlaceTransitionsSchema,
+  setPlaceAlertMuteSchema,
   setPlaceSharingSchema,
 } from "./schemas/group/placeTransitions.ts";
 import { removeGroupMemberSchema } from "./schemas/group/removeMember.ts";
@@ -80,6 +82,7 @@ export {
   createPlaceSchema,
   deletePlaceSchema,
   emailCodeSchema,
+  getPlaceAlertMutesSchema,
   getPlaceSharingSchema,
   FEEDBACK_MESSAGE_MAX_LENGTH,
   HISTORY_RECIPIENT_MISMATCH_MESSAGE,
@@ -100,6 +103,7 @@ export {
   reEncryptPlacesSchema,
   recentPlaceTransitionsSchema,
   serverNameSchema,
+  setPlaceAlertMuteSchema,
   setPlaceSharingSchema,
   registerDeviceKeySchema,
   removeGroupMemberSchema,

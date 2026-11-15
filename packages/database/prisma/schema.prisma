@@ -1,6 +1,7 @@
 generator client {
   provider = "prisma-client"
   output   = "../generated/client"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -159,6 +160,7 @@ model Place {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   transitions     PlaceTransition[]
+  alertMutes      PlaceAlertMute[]
 
   @@index([groupId, createdAt])
   @@index([epochId])
@@ -189,6 +191,23 @@ model PlaceTransition {
   @@index([groupId, occurredAt, id])
   @@index([placeId])
   @@index([occurredAt])
+}
+
+model PlaceAlertMute {
+  id          String       @id @default(uuid(7))
+  placeId     String
+  place       Place        @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  groupId     String
+  muterUserId String
+  muter       GroupMember  @relation("PlaceAlertMuteMuter", fields: [muterUserId, groupId], references: [userId, groupId], onDelete: Cascade)
+  mutedUserId String?
+  muted       GroupMember? @relation("PlaceAlertMuteMuted", fields: [mutedUserId, groupId], references: [userId, groupId], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+
+  @@unique([placeId, muterUserId, mutedUserId], map: "PlaceAlertMute_person_key", where: raw("\"mutedUserId\" IS NOT NULL"))
+  @@unique([placeId, muterUserId], map: "PlaceAlertMute_everyone_key", where: raw("\"mutedUserId\" IS NULL"))
+  @@index([muterUserId, groupId])
+  @@index([mutedUserId, groupId])
 }
 
 model PlaceSharing {
@@ -283,6 +302,8 @@ model GroupMember {
   ownedNicknames PersonalGroupNickname[] @relation("NicknameOwner")
   personalColor PersonalGroupColor?
   placeSharing PlaceSharing[]
+  placeAlertMutesSet PlaceAlertMute[] @relation("PlaceAlertMuteMuter")
+  placeAlertMutesAbout PlaceAlertMute[] @relation("PlaceAlertMuteMuted")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

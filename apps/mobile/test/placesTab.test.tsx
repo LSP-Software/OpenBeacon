@@ -43,6 +43,7 @@ mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("expo-router", () => ({ Link: passthrough }));
 mock.module("react-native", () => createReactNativeTestModule());
 mock.module("lucide-react-native", () => ({
+  BellIcon: () => null,
   ChevronRightIcon: () => null,
   HourglassIcon: () => null,
   InfoIcon: () => null,

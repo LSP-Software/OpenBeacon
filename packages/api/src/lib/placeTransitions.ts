@@ -164,9 +164,22 @@ export const readPlaceAlerts = async ({
     select: { groupId: true, createdAt: true },
   });
   if (memberships.length === 0) return { alerts: [], cursor };
+  const mutes = await db.placeAlertMute.findMany({
+    where: { muterUserId: userId },
+    select: { placeId: true, mutedUserId: true },
+  });
   const rows = await db.placeTransition.findMany({
     where: {
       userId: { not: userId },
+      ...(mutes.length > 0
+        ? {
+            NOT: {
+              OR: mutes.map(({ placeId, mutedUserId }) =>
+                mutedUserId === null ? { placeId } : { placeId, userId: mutedUserId },
+              ),
+            },
+          }
+        : {}),
       createdAt: { gte: after.createdAt, lt: settledBefore },
       AND: [
         {
