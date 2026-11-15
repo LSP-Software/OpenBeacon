@@ -1,11 +1,12 @@
 import { parseProjectEnv } from "@expo/env";
 import { tryCatch } from "@openbeacon/shared";
-import { copyFileSync, existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
 
 const projectRoot = resolve(import.meta.dir, "..");
 const allowDirty = process.argv.includes("--allow-dirty");
+const apk = process.argv.includes("--apk");
 
 const fail: (message: string) => never = (message) => {
   console.error(`\n${message}`);
@@ -25,9 +26,14 @@ const run = (command: string[], cwd: string, env: Record<string, string | undefi
   };
 };
 
-const runVisible = (command: string[], cwd: string) => {
+const runVisible = (
+  command: string[],
+  cwd: string,
+  env: Record<string, string | undefined> = {},
+) => {
   const result = Bun.spawnSync(command, {
     cwd,
+    env: { ...process.env, ...env },
     stdout: "inherit",
     stderr: "inherit",
   });
@@ -35,12 +41,13 @@ const runVisible = (command: string[], cwd: string) => {
 };
 
 const sha1Of = (keytoolOutput: string) => keytoolOutput.match(/SHA1:\s*([0-9A-F:]+)/)?.[1];
+const normaliseSha1 = (sha1: string) => sha1.replaceAll(":", "").toLowerCase();
 
 const status = run(["git", "status", "--porcelain"], projectRoot);
 if (!status.ok) fail(`Could not read git status:\n${status.output}`);
 if (status.output.trim() && !allowDirty) {
   fail(
-    `There are uncommitted changes, which would end up in the release:\n${status.output}\nCommit or stash them, or pass --allow-dirty for a build you won't upload.`,
+    `There are uncommitted changes, which would end up in the release:\n${status.output}\nCommit or stash them, or pass --allow-dirty for a test build.`,
   );
 }
 
@@ -107,6 +114,29 @@ if (keyUnlock.output.includes("not supported for PKCS12")) {
 const keySha1 = sha1Of(keyListing.output);
 if (!keySha1) fail("Could not read the upload key's SHA1.");
 
+const findApksigner = () => {
+  const androidSdk = process.env["ANDROID_HOME"] ?? process.env["ANDROID_SDK_ROOT"];
+  if (!androidSdk) {
+    return fail(
+      "Could not find apksigner because ANDROID_HOME is not set. Set it to your Android SDK.",
+    );
+  }
+  const buildToolsPath = join(androidSdk, "build-tools");
+  const buildToolsVersion = existsSync(buildToolsPath)
+    ? readdirSync(buildToolsPath)
+        .filter((folder) => existsSync(join(buildToolsPath, folder, "apksigner")))
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        .at(-1)
+    : undefined;
+  if (!buildToolsVersion) {
+    return fail(
+      `Could not find apksigner in ${buildToolsPath}. Install the Android SDK build tools or set ANDROID_HOME.`,
+    );
+  }
+  return join(buildToolsPath, buildToolsVersion, "apksigner");
+};
+const apksigner = apk ? findApksigner() : undefined;
+
 const appJson = z
   .object({
     expo: z.object({
@@ -118,25 +148,42 @@ const appJson = z
 const { version } = appJson.expo;
 const { versionCode } = appJson.expo.android;
 
-console.log(`Building Open Beacon ${version} (${versionCode})`);
+console.log(`Building Open Beacon ${version} (${versionCode}) as ${apk ? "an APK" : "a bundle"}`);
 console.log(`Signing with ${keyAlias}, SHA1 ${keySha1}`);
 if (allowDirty) console.log("Including uncommitted changes");
 
 runVisible(["bun", "run", "prisma", "generate"], resolve(projectRoot, "../../packages/database"));
 runVisible(["bunx", "expo", "prebuild", "-p", "android", "--clean"], projectRoot);
-runVisible(["./gradlew", "bundleRelease"], join(projectRoot, "android"));
+runVisible(["./gradlew", apk ? "assembleRelease" : "bundleRelease"], join(projectRoot, "android"), {
+  ORG_GRADLE_PROJECT_openbeaconCredentials: credentialsPath,
+});
 
-const outputPath = join(projectRoot, `openbeacon-${version}-${versionCode}.aab`);
+const outputPath = join(projectRoot, `openbeacon-${version}-${versionCode}.${apk ? "apk" : "aab"}`);
 copyFileSync(
-  join(projectRoot, "android/app/build/outputs/bundle/release/app-release.aab"),
+  join(
+    projectRoot,
+    apk
+      ? "android/app/build/outputs/apk/release/app-release.apk"
+      : "android/app/build/outputs/bundle/release/app-release.aab",
+  ),
   outputPath,
 );
 
-const bundleCertificate = run(["keytool", "-printcert", "-jarfile", outputPath], projectRoot);
-const bundleSha1 = sha1Of(bundleCertificate.output);
-if (bundleSha1 !== keySha1) {
-  fail(`${outputPath} is signed with ${bundleSha1 ?? "no key"}, not the upload key ${keySha1}.`);
+const signature = apksigner
+  ? run([apksigner, "verify", "--print-certs", outputPath], projectRoot)
+  : run(["keytool", "-printcert", "-jarfile", outputPath], projectRoot);
+if (!signature.ok) fail(`Could not verify the signature of ${outputPath}:\n${signature.output}`);
+const signedSha1 = apksigner
+  ? signature.output.match(/SHA-1 digest:\s*([0-9a-f]+)/)?.[1]
+  : sha1Of(signature.output);
+if (!signedSha1) fail(`Could not read the SHA1 ${outputPath} is signed with:\n${signature.output}`);
+if (normaliseSha1(signedSha1) !== normaliseSha1(keySha1)) {
+  fail(`${outputPath} is signed with ${signedSha1}, not the upload key ${keySha1}.`);
 }
 
 console.log(`\nBuilt ${outputPath}`);
-console.log(`Signed with SHA1 ${bundleSha1}. Check it matches the upload key in Play Console.`);
+console.log(
+  apk
+    ? `Signed with SHA1 ${keySha1}. Install it with adb install -r ${outputPath}`
+    : `Signed with SHA1 ${keySha1}. Check it matches the upload key in Play Console.`,
+);

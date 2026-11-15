@@ -44,3 +44,4 @@ yarn-error.*
 # Release signing credentials
 credentials.json
 *.aab
+*.apk

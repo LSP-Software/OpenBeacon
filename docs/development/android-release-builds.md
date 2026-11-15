@@ -41,7 +41,7 @@ Then fill it in:
 | `keyAlias`         | The alias the key was created with.                                                                         |
 | `keyPassword`      | The key password. For a PKCS12 keystore, like the one `keytool` makes above, this is the keystore password. |
 
-A release build without this file stops with an error rather than signing with the debug key. To use a file somewhere else, for example in CI, set the environment variable `ORG_GRADLE_PROJECT_openbeaconCredentials` to its path. `bun run build-aab` and Gradle both read it.
+A release build without this file stops with an error rather than signing with the debug key. To use a file somewhere else, for example in CI, set the environment variable `ORG_GRADLE_PROJECT_openbeaconCredentials` to its path. A relative path is read from `apps/mobile`. `bun run build-aab` and `bun run build-apk` pass the full path on to Gradle, so both read the same file.
 
 ## Environment variables
 
@@ -53,13 +53,13 @@ Development builds can use an `http://` backend, but release builds only connect
 
 Every upload needs a higher `android.versionCode` in `apps/mobile/app.json` than any bundle Play has seen, including ones that were never released. Every PR that changes the app already bumps it.
 
-From `apps/mobile`:
+From the repository root or `apps/mobile`:
 
 ```sh
 bun run build-aab
 ```
 
-`scripts/build-aab.ts` checks everything it can before the slow part starts. It stops if:
+`scripts/build-release.ts` checks everything it can before the slow part starts. It stops if:
 
 - there are uncommitted changes, since they would end up in the release;
 - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` isn't set;
@@ -68,7 +68,7 @@ bun run build-aab
 
 It then generates the Prisma client, regenerates `android/` with `expo prebuild --clean`, runs `./gradlew bundleRelease`, and writes `apps/mobile/openbeacon-<version>-<versionCode>.aab`. Regenerating `android/` throws away any local edits in it, which `bun run android` recreates anyway.
 
-For a build you won't upload, `bun run build-aab --allow-dirty` includes uncommitted changes.
+For a test build, `bun run build-aab --allow-dirty` includes uncommitted changes.
 
 ## Code shrinking
 
@@ -80,17 +80,45 @@ The bundle includes R8's mapping file, so Play Console shows readable stack trac
 
 ## Check the signature
 
-The build prints the SHA1 of the key it signed with, and fails if the bundle's signature doesn't match the key in `credentials.json`. To check a bundle yourself:
+The build prints the SHA1 of the key it signed with, and fails if the signature doesn't match the key in `credentials.json`. To check a bundle yourself:
 
 ```sh
 keytool -printcert -jarfile openbeacon-1.14.0-36.aab
 ```
+
+`keytool` can't read an APK's signature, so check an APK with `apksigner` from the Android SDK build tools:
+
+```sh
+apksigner verify --print-certs openbeacon-1.14.0-36.apk
+```
+
+`apksigner` prints the SHA1 in lower case without colons.
 
 The SHA1 must match the upload key certificate shown in Play Console under Protected with Play, Play Store protection, Manage Play app signing. If it doesn't, Play rejects the upload with "signed with the wrong key".
 
 ## Upload
 
 Upload the `.aab` in Play Console to the track you want, usually Internal testing first.
+
+## Build an APK
+
+To install a release build straight onto a phone without Google Play, build an APK instead. From the repository root or `apps/mobile`:
+
+```sh
+bun run build-apk
+```
+
+It signs with the key in `credentials.json` and runs the same checks as `build-aab`, including `--allow-dirty`. It also needs `apksigner` from the Android SDK build tools in `ANDROID_HOME` to check the signature. It writes `apps/mobile/openbeacon-<version>-<versionCode>.apk`, which you can install with:
+
+```sh
+adb install -r apps/mobile/openbeacon-<version>-<versionCode>.apk
+```
+
+`adb install -r` refuses an APK with a lower `versionCode` than the copy already on the phone.
+
+Phones that installed Open Beacon from Google Play have it signed with Google's app signing key, so the APK can't be installed over that copy. Remove it first with `adb uninstall net.openbeacon.app`, which deletes the app's data on that phone.
+
+Google sign-in in the APK only works if the SHA1 of your signing key is registered on the Android OAuth client. See [Building your own version](#building-your-own-version).
 
 ## Building your own version
 
