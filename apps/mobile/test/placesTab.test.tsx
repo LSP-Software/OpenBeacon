@@ -11,6 +11,7 @@ import { createReactNativeTestModule } from "./reactNativeTestModule.ts";
 let role = "OWNER";
 let places: GroupPlace[] = [];
 let sharing = { enabled: true, arrivalsOff: [] as { userId: string; deviceId: string }[] };
+let sharingFailed = false;
 const passthrough = ({ children }: { children?: ReactNode }) =>
   React.createElement(React.Fragment, null, children);
 
@@ -21,7 +22,11 @@ mock.module("@tanstack/react-query", () => ({
   useQuery: (options: { queryKey?: unknown[]; select?: (groups: unknown[]) => unknown }) => {
     const key = options.queryKey?.[0];
     if (key === "groupPlaces") return { data: places, isPending: false, isError: false };
-    if (key === "placeSharing") return { data: sharing };
+    if (key === "placeSharing") {
+      return sharingFailed
+        ? { data: undefined, isError: true, isFetching: false, refetch: async () => {} }
+        : { data: sharing, isError: false };
+    }
     if (key === "memberDevices") {
       return { data: [{ deviceId: "phone", name: "Pixel 8", userId: "self" }] };
     }
@@ -71,8 +76,7 @@ mock.module("../hooks/useMemberNames.ts", () => ({
 }));
 mock.module("../lib/registeredDevice.ts", () => ({ readRegisteredDevice: async () => null }));
 mock.module("../lib/placeSync.ts", () => ({
-  groupPlacesQueryKey: () => ["groupPlaces"],
-  loadGroupPlaces: async () => places,
+  groupPlacesQueryOptions: () => ({ queryKey: ["groupPlaces"] }),
 }));
 
 const { default: PlacesTab } = await import("../app/(tabs)/groups/[groupId]/PlacesTab.tsx");
@@ -123,6 +127,7 @@ const render = async () => {
 beforeEach(() => {
   role = "OWNER";
   sharing = { enabled: true, arrivalsOff: [] };
+  sharingFailed = false;
   places = [place({}), place({ id: "club", name: "Football club", emoji: "⚽", geometry: null })];
 });
 
@@ -160,4 +165,21 @@ test("says when this phone's arrivals and departures are off", async () => {
   expect(text).toContain("Arrivals and departures are off on this phone");
   expect(text).toContain("your Pixel 8");
   expect(text).toContain("switch:off");
+});
+
+test("keeps the arrivals switch reachable with no places while it's off on this phone", async () => {
+  places = [];
+  expect(await render()).not.toContain("switch:");
+  sharing = { enabled: false, arrivalsOff: [{ userId: "self", deviceId: "phone" }] };
+  const text = await render();
+  expect(text).toContain("Arrivals and departures are off on this phone");
+  expect(text).toContain("switch:off");
+});
+
+test("offers a retry when the arrivals setting can't be loaded", async () => {
+  sharingFailed = true;
+  const text = await render();
+  expect(text).toContain("Couldn’t load this setting.");
+  expect(text).toContain("Try again");
+  expect(text).not.toContain("switch:");
 });

@@ -34,8 +34,11 @@ export const placeSharingRouter = {
           userId,
         });
         await assertActiveDevices(tx, { deviceIds: [ctx.deviceId], userId });
+        const where = { deviceId_groupId: { deviceId: ctx.deviceId, groupId: input.groupId } };
+        const current = await tx.placeSharing.findUnique({ where, select: { enabled: true } });
+        if ((current?.enabled ?? true) === input.enabled) return { enabled: input.enabled };
         return await tx.placeSharing.upsert({
-          where: { deviceId_groupId: { deviceId: ctx.deviceId, groupId: input.groupId } },
+          where,
           create: {
             deviceId: ctx.deviceId,
             groupId: input.groupId,

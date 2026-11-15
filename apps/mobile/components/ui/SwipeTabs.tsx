@@ -230,6 +230,8 @@ export const SwipeTabs = <T extends string>({
             <Animated.View
               pointerEvents="none"
               accessible={false}
+              importantForAccessibility="no-hide-descendants"
+              accessibilityElementsHidden
               className="absolute bottom-0 top-0 overflow-hidden rounded-xl"
               style={[indicatorStyle, { backgroundColor: colors.primary }]}
             >

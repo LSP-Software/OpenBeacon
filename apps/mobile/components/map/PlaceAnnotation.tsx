@@ -1,7 +1,7 @@
 import { Marker, ViewAnnotation, type ViewAnnotationRef } from "@maplibre/maplibre-react-native";
 import { useEffect, useRef } from "react";
 import { type GestureResponderEvent, Platform, Pressable } from "react-native";
-import type { PlacePin as PlacePinData } from "../../lib/places.ts";
+import type { MapPlace } from "../../lib/places.ts";
 import { PlacePin } from "./PlacePin.tsx";
 
 export const PlaceAnnotation = ({
@@ -10,7 +10,7 @@ export const PlaceAnnotation = ({
   selected,
 }: {
   onSelected: (event?: GestureResponderEvent) => void;
-  place: PlacePinData;
+  place: MapPlace;
   selected: boolean;
 }) => {
   const annotationRef = useRef<ViewAnnotationRef>(null);

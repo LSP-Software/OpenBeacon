@@ -13,6 +13,7 @@ const epochKeys = new Map<string, EpochKeyMaterial>([
 ]);
 let latestEpochIds: string[] = [];
 let failures: unknown[] = [];
+let keyLookupError: Error | null = null;
 type SentPlace = { geometry: ReturnType<typeof encryptPlaceGeometry>; name: string };
 const sent: { epochId: string; input: SentPlace }[] = [];
 const rotate = mock(async (_groupId: string) => true);
@@ -76,7 +77,10 @@ mock.module("./deviceKeys.ts", () => ({
   ensureDeviceKeyRegistration: async () => ({ deviceId: "device-a", userId: "user-a" }),
 }));
 mock.module("./epochKeys.ts", () => ({
-  resolveEpochKey: async ({ epochId }: { epochId: string }) => epochKeys.get(epochId) ?? null,
+  resolveEpochKey: async ({ epochId }: { epochId: string }) => {
+    if (keyLookupError) throw keyLookupError;
+    return epochKeys.get(epochId) ?? null;
+  },
 }));
 mock.module("./groupEncryption.ts", () => ({ rotateGroupEpochIfRequired: rotate }));
 
@@ -88,6 +92,7 @@ const saveHome = () =>
 beforeEach(() => {
   latestEpochIds = ["epoch-1", "epoch-2"];
   failures = [];
+  keyLookupError = null;
   sent.length = 0;
   rotate.mockClear();
 });
@@ -140,4 +145,9 @@ test("loads places and leaves the ones this phone can't read yet as syncing", as
     { id: "readable", geometry: home },
     { id: "syncing", geometry: null },
   ]);
+});
+
+test("fails the load when the group's keys can't be fetched instead of showing syncing", async () => {
+  keyLookupError = new Error("Network request failed");
+  await expect(loadGroupPlaces("family")).rejects.toThrow("Network request failed");
 });

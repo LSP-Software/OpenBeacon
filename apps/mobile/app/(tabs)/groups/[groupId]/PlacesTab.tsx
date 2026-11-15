@@ -1,7 +1,7 @@
 import { useIsFocused } from "@react-navigation/native";
 import { MAX_PLACES_PER_GROUP } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
-import { skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import {
   ChevronRightIcon,
@@ -23,7 +23,7 @@ import { trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
 import type { LiveMapPosition } from "../../../../lib/mapTrackingTypes.ts";
 import { describePeopleHere, formatPlaceSize, peopleAtPlace } from "../../../../lib/places.ts";
-import { groupPlacesQueryKey, loadGroupPlaces } from "../../../../lib/placeSync.ts";
+import { groupPlacesQueryOptions } from "../../../../lib/placeSync.ts";
 import { readRegisteredDevice } from "../../../../lib/registeredDevice.ts";
 
 const PlacesTab = ({
@@ -42,11 +42,7 @@ const PlacesTab = ({
   const { group } = useCachedGroup(groupId);
   const self = group?.members.find((member) => member.userId === userId);
   const canManage = self?.role === "OWNER" || self?.role === "ADMIN";
-  const places = useQuery({
-    queryKey: groupPlacesQueryKey(groupId, userId),
-    queryFn: userId ? () => loadGroupPlaces(groupId) : skipToken,
-    subscribed: isFocused,
-  });
+  const places = useQuery({ ...groupPlacesQueryOptions(groupId, userId), subscribed: isFocused });
   const memberName = useMemberNames(groupId);
   const sharingQueryOptions = trpc.placeSharing.get.queryOptions({ groupId });
   const sharing = useQuery({ ...sharingQueryOptions, subscribed: isFocused });
@@ -114,39 +110,83 @@ const PlacesTab = ({
       </Link>
     );
 
+  const arrivalsOffNotice =
+    sharing.data?.enabled === false ? (
+      <View className="flex-row gap-3 rounded-2xl border border-amber-500 bg-amber-50 p-4 dark:border-amber-400 dark:bg-amber-950">
+        <Icon as={InfoIcon} size={20} className="mt-0.5 text-amber-800 dark:text-amber-300" />
+        <Text className="flex-1 text-amber-900 dark:text-amber-200">
+          Arrivals and departures are off on this phone. {groupName} sees “Arrivals off” for{" "}
+          {thisDeviceName ? `your ${thisDeviceName}` : "this phone"}.
+        </Text>
+      </View>
+    ) : null;
+
+  const arrivalsSwitchCard = (
+    <View className="flex-row items-center gap-4 rounded-2xl border border-border bg-card p-4">
+      <View className="flex-1 gap-1">
+        <Text className="text-foreground text-lg font-semibold">Share arrivals and departures</Text>
+        <Text className="text-sm text-muted-foreground">
+          {sharing.isError
+            ? "Couldn’t load this setting."
+            : `Only this phone. When it arrives at or leaves a place, ${groupName} gets an alert.`}
+        </Text>
+      </View>
+      {sharing.isError ? (
+        <Button
+          size="sm"
+          variant="outline"
+          loading={sharing.isFetching}
+          onPress={() => void sharing.refetch()}
+        >
+          <Text>Try again</Text>
+        </Button>
+      ) : (
+        <Switch
+          accessibilityLabel="Share arrivals and departures"
+          disabled={sharing.data === undefined || setSharing.isPending}
+          value={sharing.data?.enabled ?? true}
+          onValueChange={async (enabled) => {
+            const result = await tryCatch(setSharing.mutateAsync({ groupId, enabled }));
+            if (result.error) {
+              Alert.alert("Unable to change this setting", result.error.message);
+              return;
+            }
+            await queryClient.invalidateQueries({ queryKey: sharingQueryOptions.queryKey });
+          }}
+        />
+      )}
+    </View>
+  );
+
   if (placeCount === 0) {
     return (
-      <View className="gap-4 rounded-2xl border border-border bg-card p-5">
-        <View className="size-12 items-center justify-center rounded-full border border-primary/15 bg-primary/10">
-          <Icon as={MapPinIcon} size={20} className="text-primary" />
+      <View className="gap-4">
+        {arrivalsOffNotice}
+        <View className="gap-4 rounded-2xl border border-border bg-card p-5">
+          <View className="size-12 items-center justify-center rounded-full border border-primary/15 bg-primary/10">
+            <Icon as={MapPinIcon} size={20} className="text-primary" />
+          </View>
+          <Text className="text-foreground text-2xl font-bold">
+            {canManage ? "Add your first place" : "No places yet"}
+          </Text>
+          <Text className="text-sm leading-6 text-muted-foreground">
+            {canManage
+              ? `Add places like home or school. When someone’s phone arrives or leaves, the rest of ${groupName} gets an alert.`
+              : `Owners and admins can add places like home or school. When someone’s phone arrives or leaves, the rest of ${groupName} gets an alert.`}
+          </Text>
+          <Text className="text-sm leading-6 text-muted-foreground">
+            Each phone shows the group’s places and can turn off its own arrivals and departures.
+          </Text>
+          {canManage ? addPlaceButton("Add place", "h-12") : null}
         </View>
-        <Text className="text-foreground text-2xl font-bold">
-          {canManage ? "Add your first place" : "No places yet"}
-        </Text>
-        <Text className="text-sm leading-6 text-muted-foreground">
-          {canManage
-            ? `Add places like home or school. When someone’s phone arrives or leaves, the rest of ${groupName} gets an alert.`
-            : `Owners and admins can add places like home or school. When someone’s phone arrives or leaves, the rest of ${groupName} gets an alert.`}
-        </Text>
-        <Text className="text-sm leading-6 text-muted-foreground">
-          Each phone shows the group’s places and can turn off its own arrivals and departures.
-        </Text>
-        {canManage ? addPlaceButton("Add place", "h-12") : null}
+        {sharing.data?.enabled === false || sharing.isError ? arrivalsSwitchCard : null}
       </View>
     );
   }
 
   return (
     <View className="gap-4 pt-1">
-      {sharing.data?.enabled === false ? (
-        <View className="flex-row gap-3 rounded-2xl border border-amber-500 bg-amber-50 p-4 dark:border-amber-400 dark:bg-amber-950">
-          <Icon as={InfoIcon} size={20} className="mt-0.5 text-amber-800 dark:text-amber-300" />
-          <Text className="flex-1 text-amber-900 dark:text-amber-200">
-            Arrivals and departures are off on this phone. {groupName} sees “Arrivals off” for{" "}
-            {thisDeviceName ? `your ${thisDeviceName}` : "this phone"}.
-          </Text>
-        </View>
-      ) : null}
+      {arrivalsOffNotice}
       <View className="flex-row items-center justify-between gap-3">
         <View className="flex-row items-baseline gap-2">
           <Text className="text-foreground text-xl font-bold">Places</Text>
@@ -215,29 +255,7 @@ const PlacesTab = ({
           </Link>
         );
       })}
-      <View className="flex-row items-center gap-4 rounded-2xl border border-border bg-card p-4">
-        <View className="flex-1 gap-1">
-          <Text className="text-foreground text-lg font-semibold">
-            Share arrivals and departures
-          </Text>
-          <Text className="text-sm text-muted-foreground">
-            Only this phone. When it arrives at or leaves a place, {groupName} gets an alert.
-          </Text>
-        </View>
-        <Switch
-          accessibilityLabel="Share arrivals and departures"
-          disabled={sharing.data === undefined || setSharing.isPending}
-          value={sharing.data?.enabled ?? true}
-          onValueChange={async (enabled) => {
-            const result = await tryCatch(setSharing.mutateAsync({ groupId, enabled }));
-            if (result.error) {
-              Alert.alert("Unable to change this setting", result.error.message);
-              return;
-            }
-            await queryClient.invalidateQueries({ queryKey: sharingQueryOptions.queryKey });
-          }}
-        />
-      </View>
+      {arrivalsSwitchCard}
     </View>
   );
 };

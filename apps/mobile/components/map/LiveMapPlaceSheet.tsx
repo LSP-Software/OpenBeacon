@@ -2,7 +2,7 @@ import { Link } from "expo-router";
 import { PencilIcon, Trash2Icon } from "lucide-react-native";
 import { ScrollView, View } from "react-native";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
-import { formatPlaceSize, type PlacePin } from "../../lib/places.ts";
+import { formatPlaceSize, type MapPlace } from "../../lib/places.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
@@ -19,7 +19,7 @@ export const LiveMapPlaceSheet = ({
   onDelete: () => void;
   onDismiss: () => void;
   onHeightChange: (height: number) => void;
-  place: PlacePin;
+  place: MapPlace;
 }) => (
   <LiveMapBottomSheet
     accessibilityLabel={`${place.name}, ${place.groupName}`}

@@ -15,7 +15,7 @@ export const LiveMapBottomSheet = ({
   accessibilityLabel: string;
   children?: ReactNode;
   header: ReactNode;
-  onDismiss: () => void;
+  onDismiss?: (() => void) | undefined;
   onHeightChange?: ((height: number) => void) | undefined;
 }) => {
   const translateY = useRef(new Animated.Value(HIDDEN_OFFSET)).current;
@@ -37,7 +37,7 @@ export const LiveMapBottomSheet = ({
       useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) {
-        onDismiss();
+        onDismiss?.();
       }
     });
   };
@@ -73,7 +73,7 @@ export const LiveMapBottomSheet = ({
   return (
     <Animated.View
       accessible={children === undefined}
-      accessibilityActions={[{ name: "dismiss", label: "Dismiss" }]}
+      accessibilityActions={onDismiss ? [{ name: "dismiss", label: "Dismiss" }] : []}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="summary"
       className="absolute bottom-3 left-3 right-3"
@@ -89,12 +89,16 @@ export const LiveMapBottomSheet = ({
         className="rounded-2xl border border-border bg-card px-5 pb-4 pt-3 shadow-md shadow-black/15"
         onLayout={(event) => onHeightChange?.(event.nativeEvent.layout.height)}
       >
-        <View {...panResponder.panHandlers}>
-          <View className="mb-3 items-center">
-            <View className="h-1 w-10 rounded-full bg-border" />
+        {onDismiss ? (
+          <View {...panResponder.panHandlers}>
+            <View className="mb-3 items-center">
+              <View className="h-1 w-10 rounded-full bg-border" />
+            </View>
+            {header}
           </View>
-          {header}
-        </View>
+        ) : (
+          <View className="pt-1">{header}</View>
+        )}
         {children}
       </View>
     </Animated.View>

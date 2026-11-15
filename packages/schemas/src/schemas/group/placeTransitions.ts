@@ -1,11 +1,9 @@
 import z from "zod";
 
-export const PLACE_TRANSITION_DIRECTIONS = ["ARRIVE", "LEAVE"] as const;
-
 export const placeTransitionSchema = z.object({
   clientId: z.uuid(),
   placeId: z.string().min(1).max(128),
-  direction: z.enum(PLACE_TRANSITION_DIRECTIONS),
+  direction: z.enum(["ARRIVE", "LEAVE"]),
   occurredAt: z.date(),
   senderDeviceId: z.string().min(1).max(128),
 });

@@ -13,6 +13,7 @@ import {
   formatPlaceSize,
   type GroupPlace,
   groupByDay,
+  hiddenGroupWithPlace,
   metersBetween,
   metersPerPixel,
   peopleAtPlace,
@@ -22,6 +23,7 @@ import {
   shiftLatitudeByPixels,
   sliderFromPlaceRadius,
   snapPlaceRadius,
+  zoomToFitPlace,
 } from "./places.ts";
 
 const home: PlaceGeometryV1 = { v: 1, latitude: 51.5, longitude: -0.12, radiusMeters: 250 };
@@ -121,11 +123,24 @@ describe("map pins", () => {
         {
           canManage: true,
           id: "family",
+          memberUserIds: ["user-a", "user-b"],
           name: "Family",
           places: [storedPlace(), storedPlace({ id: "syncing", geometry: null })],
         },
-        { canManage: false, id: "hidden", name: "Hidden", places: [storedPlace()] },
-        { canManage: false, id: "loading", name: "Loading", places: undefined },
+        {
+          canManage: false,
+          id: "hidden",
+          memberUserIds: ["user-a"],
+          name: "Hidden",
+          places: [storedPlace()],
+        },
+        {
+          canManage: false,
+          id: "loading",
+          memberUserIds: ["user-a"],
+          name: "Loading",
+          places: undefined,
+        },
       ],
       hiddenGroupIds: new Set(["hidden"]),
     });
@@ -133,12 +148,12 @@ describe("map pins", () => {
       {
         canManage: true,
         emoji: "🏠",
-        expectedCiphertext: "cipher",
         groupId: "family",
         groupName: "Family",
         id: "place-1",
         latitude: home.latitude,
         longitude: home.longitude,
+        memberUserIds: ["user-a", "user-b"],
         name: "Home",
         radiusMeters: 250,
       },
@@ -162,6 +177,33 @@ describe("map pins", () => {
       51.5,
       6,
     );
+  });
+
+  test("keeps a shifted latitude within the map's ±85°", () => {
+    expect(shiftLatitudeByPixels({ latitude: 84.99, pixels: 150, zoom: 2 })).toBe(85);
+    expect(shiftLatitudeByPixels({ latitude: -84.99, pixels: -150, zoom: 2 })).toBe(-85);
+  });
+
+  test("zooms so the whole place circle fits the given width", () => {
+    for (const radiusMeters of [100, 250, 1000]) {
+      const zoom = zoomToFitPlace({ diameterPixels: 240, latitude: 51.5, radiusMeters });
+      expect((2 * radiusMeters) / metersPerPixel({ latitude: 51.5, zoom })).toBeCloseTo(240, 6);
+    }
+    expect(
+      zoomToFitPlace({ diameterPixels: 240, latitude: 51.5, radiusMeters: 100 }),
+    ).toBeGreaterThan(zoomToFitPlace({ diameterPixels: 240, latitude: 51.5, radiusMeters: 1000 }));
+  });
+
+  test("finds the hidden group a focused place belongs to", () => {
+    const groups = [
+      { id: "family", name: "Family", places: [storedPlace({ id: "home" })] },
+      { id: "club", name: "Club", places: [storedPlace({ id: "pitch" })] },
+      { id: "loading", name: "Loading", places: undefined },
+    ];
+    const hiddenGroupIds = new Set(["club", "loading"]);
+    expect(hiddenGroupWithPlace({ groups, hiddenGroupIds, placeId: "pitch" })?.name).toBe("Club");
+    expect(hiddenGroupWithPlace({ groups, hiddenGroupIds, placeId: "home" })).toBeNull();
+    expect(hiddenGroupWithPlace({ groups, hiddenGroupIds, placeId: "missing" })).toBeNull();
   });
 });
 
@@ -237,6 +279,24 @@ describe("place geometry encryption", () => {
     expect(
       decryptPlaceGeometry({ epochKey: generateGroupEpochKey(), groupId: "family", place: stored }),
     ).toBeNull();
+  });
+
+  test("accepts geometry copied from another place in the same group, as it isn't bound to the place id", () => {
+    const school: PlaceGeometryV1 = { v: 1, latitude: 51.6, longitude: -0.2, radiusMeters: 500 };
+    const schoolCiphertext = encryptPlaceGeometry({
+      epochId: "epoch-1",
+      epochKey,
+      geometry: school,
+      groupId: "family",
+      senderDeviceId: "device-a",
+    });
+    expect(
+      decryptPlaceGeometry({
+        epochKey,
+        groupId: "family",
+        place: { ...stored, ...schoolCiphertext },
+      }),
+    ).toEqual(school);
   });
 
   test("refuses other payload kinds and invalid geometry", () => {

@@ -1,12 +1,10 @@
 import type { Prisma, PrismaClient } from "@openbeacon/database";
 import type { placeTransitionSchema } from "@openbeacon/schemas";
 import { resolveLocationSharing } from "@openbeacon/shared";
-import { TRPCError } from "@trpc/server";
 import type z from "zod";
 import { assertActiveDevices } from "./groupWriteChecks.ts";
-import { ReasonError } from "./reasonError.ts";
 
-export const PLACE_TRANSITION_RETENTION_MS = 14 * 24 * 60 * 60_000;
+const PLACE_TRANSITION_RETENTION_MS = 14 * 24 * 60 * 60_000;
 
 const placeTransitionSelect = {
   id: true,
@@ -43,6 +41,12 @@ const toPlaceTransitionView = (
   deviceName: transition.device.name,
 });
 
+const readDatabaseTime = async (db: Pick<Prisma.TransactionClient, "$queryRaw">) => {
+  const [clock] = await db.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
+  if (!clock) throw new Error("Unable to read database time.");
+  return clock.now;
+};
+
 export const uploadPlaceTransitions = async ({
   db,
   deviceId,
@@ -60,13 +64,6 @@ export const uploadPlaceTransitions = async ({
   transitions: z.infer<typeof placeTransitionSchema>[];
   userId: string;
 }) => {
-  if (transitions.some((transition) => transition.senderDeviceId !== deviceId)) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Place transitions must be sent from this device.",
-      cause: new ReasonError("DEVICE_NOT_REGISTERED"),
-    });
-  }
   await assertActiveDevices(db, { deviceIds: [deviceId], userId });
 
   const existing = await db.placeTransition.findMany({
@@ -79,53 +76,62 @@ export const uploadPlaceTransitions = async ({
   });
   const placeSharing = await db.placeSharing.findUnique({
     where: { deviceId_groupId: { deviceId, groupId } },
-    select: { enabled: true },
+    select: { enabled: true, updatedAt: true },
   });
   const places = await db.place.findMany({
     where: { groupId, id: { in: [...new Set(transitions.map(({ placeId }) => placeId))] } },
     select: { id: true },
   });
 
-  const duplicateIds = new Set(existing.map(({ clientId }) => clientId));
+  const existingIds = new Set(existing.map(({ clientId }) => clientId));
   const placeIds = new Set(places.map(({ id }) => id));
   const sharing = resolveLocationSharing(device.user, device, now.getTime());
   const earliest = Math.max(
     now.getTime() - PLACE_TRANSITION_RETENTION_MS,
     memberSince.getTime(),
     sharing.resumeAfter?.getTime() ?? 0,
+    placeSharing?.updatedAt.getTime() ?? 0,
   );
   const latest = now.getTime() + 5 * 60_000;
-  const fresh = transitions.filter(({ clientId }) => !duplicateIds.has(clientId));
+  const fresh = transitions.filter(({ clientId }) => !existingIds.has(clientId));
   const toInsert =
     sharing.paused || placeSharing?.enabled === false
       ? []
       : fresh.filter(
-          ({ occurredAt, placeId }) =>
+          ({ occurredAt, placeId, senderDeviceId }) =>
+            senderDeviceId === deviceId &&
             placeIds.has(placeId) &&
             occurredAt.getTime() >= earliest &&
             occurredAt.getTime() <= latest,
         );
-  if (toInsert.length > 0) {
-    await db.placeTransition.createMany({
-      data: toInsert.map((transition) => ({
-        placeId: transition.placeId,
-        groupId,
-        deviceId,
-        userId,
-        direction: transition.direction,
-        occurredAt: transition.occurredAt,
-        clientId: transition.clientId,
-        createdAt: now,
-      })),
-      skipDuplicates: true,
-    });
-  }
-  const insertedIds = new Set(toInsert.map(({ clientId }) => clientId));
+  const createdAt = toInsert.length > 0 ? await readDatabaseTime(db) : now;
+  const inserted =
+    toInsert.length > 0
+      ? await db.placeTransition.createManyAndReturn({
+          data: toInsert.map((transition) => ({
+            placeId: transition.placeId,
+            groupId,
+            deviceId,
+            userId,
+            direction: transition.direction,
+            occurredAt: transition.occurredAt,
+            clientId: transition.clientId,
+            createdAt,
+          })),
+          skipDuplicates: true,
+          select: { clientId: true },
+        })
+      : [];
+  const insertedIds = new Set(inserted.map(({ clientId }) => clientId));
+  const attemptedIds = new Set(toInsert.map(({ clientId }) => clientId));
   return {
     accepted: [...insertedIds],
-    duplicates: [...duplicateIds],
+    duplicates: [
+      ...existingIds,
+      ...[...attemptedIds].filter((clientId) => !insertedIds.has(clientId)),
+    ],
     discarded: fresh
-      .filter(({ clientId }) => !insertedIds.has(clientId))
+      .filter(({ clientId }) => !attemptedIds.has(clientId))
       .map(({ clientId }) => clientId),
   };
 };
@@ -136,14 +142,13 @@ export const encodePlaceAlertsCursor = ({ createdAt, id }: { createdAt: Date; id
 export const readPlaceAlerts = async ({
   cursor,
   db,
-  now,
   userId,
 }: {
   cursor: string | null;
   db: PrismaClient;
-  now: Date;
   userId: string;
 }) => {
+  const now = await readDatabaseTime(db);
   const settledBefore = new Date(now.getTime() - 15_000);
   const oldestAlert = now.getTime() - 24 * 60 * 60_000;
   if (cursor === null) {
@@ -188,7 +193,10 @@ export const readPlaceAlerts = async ({
 
 export const readPlacesSummary = async ({ db, userId }: { db: PrismaClient; userId: string }) => {
   const groups = await db.group.findMany({
-    where: { groupMembers: { some: { userId } }, places: { some: {} } },
+    where: {
+      groupMembers: { some: { userId } },
+      OR: [{ placesRevision: { gt: 0 } }, { places: { some: {} } }],
+    },
     orderBy: { id: "asc" },
     select: {
       id: true,

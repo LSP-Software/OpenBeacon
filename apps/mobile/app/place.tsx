@@ -1,14 +1,14 @@
 import { Camera, type CameraRef, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
 import { placeEmojiSchema, placeNameSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
-import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { LocateFixedIcon, XIcon } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  BackHandler,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   TextInput,
   View,
@@ -34,12 +34,7 @@ import {
   placeErrorMessage,
   shiftLatitudeByPixels,
 } from "../lib/places.ts";
-import {
-  confirmDeletePlace,
-  groupPlacesQueryKey,
-  loadGroupPlaces,
-  savePlace,
-} from "../lib/placeSync.ts";
+import { confirmDeletePlace, groupPlacesQueryOptions, savePlace } from "../lib/placeSync.ts";
 
 const PIN_ABOVE_CENTER = 150;
 
@@ -49,10 +44,9 @@ const PlaceScreen = () => {
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
   const { group, isPending: groupPending } = useCachedGroup(groupId);
-  const places = useQuery({
-    queryKey: groupPlacesQueryKey(groupId, userId),
-    queryFn: userId ? () => loadGroupPlaces(groupId) : skipToken,
-  });
+  const places = useQuery(groupPlacesQueryOptions(groupId, userId));
+  const [revision, setRevision] = useState(0);
+  const [closing, setClosing] = useState(false);
   const role = group?.members.find((member) => member.userId === userId)?.role;
   const place = placeId ? places.data?.find((item) => item.id === placeId) : undefined;
   const close = () => {
@@ -83,7 +77,7 @@ const PlaceScreen = () => {
             ? "This place is still syncing to this phone. Try again in a few minutes."
             : null;
 
-  if (problem || !group) {
+  if ((problem && !closing) || !group) {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-background px-8">
         <Text className="text-center text-foreground">{problem}</Text>
@@ -96,11 +90,15 @@ const PlaceScreen = () => {
 
   return (
     <PlaceEditor
-      key={placeId ?? "new"}
+      key={`${placeId ?? "new"}:${revision}`}
       groupId={groupId}
       groupName={group.name}
-      onClose={close}
-      place={
+      onClose={() => {
+        setClosing(true);
+        close();
+      }}
+      onReload={() => setRevision((current) => current + 1)}
+      initialPlace={
         place?.geometry
           ? {
               emoji: place.emoji,
@@ -118,20 +116,23 @@ const PlaceScreen = () => {
 const PlaceEditor = ({
   groupId,
   groupName,
+  initialPlace,
   onClose,
-  place,
+  onReload,
 }: {
   groupId: string;
   groupName: string;
-  onClose: () => void;
-  place: {
+  initialPlace: {
     emoji: string;
     expectedCiphertext: string;
     geometry: { latitude: number; longitude: number; radiusMeters: number };
     id: string;
     name: string;
   } | null;
+  onClose: () => void;
+  onReload: () => void;
 }) => {
+  const [place] = useState(initialPlace);
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const map = useNativeMapStyle();
@@ -158,7 +159,21 @@ const PlaceEditor = ({
   const [customEmojiOpen, setCustomEmojiOpen] = useState(
     place !== null && !PLACE_EMOJI_CHOICES.some((choice) => choice === place.emoji),
   );
-  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState<"deleting" | "saving" | null>(null);
+  const busyRef = useRef(false);
+  const mapStyleJson = useMemo(
+    () => (map.mapStyle ? JSON.stringify(map.mapStyle) : null),
+    [map.mapStyle],
+  );
+
+  useEffect(() => {
+    if (step !== 2) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      setStep(1);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [step]);
 
   useEffect(() => {
     if (place || center || !selfLocation || movedToSelf.current) return;
@@ -184,8 +199,9 @@ const PlaceEditor = ({
       Alert.alert("Check the emoji", parsedEmoji.error.issues[0]?.message);
       return;
     }
-    if (!center) return;
-    setSaving(true);
+    if (!center || busyRef.current) return;
+    busyRef.current = true;
+    setBusy("saving");
     const result = await tryCatch(
       savePlace({
         emoji: parsedEmoji.data,
@@ -202,19 +218,31 @@ const PlaceEditor = ({
         name: parsedName.data,
       }),
     );
-    setSaving(false);
     if (result.error) {
       const reason = errorReason(result.error);
-      if (reason === "PLACE_CHANGED" || reason === "PLACE_GONE") await refreshPlaces();
+      if (reason === "PLACE_CHANGED") {
+        await refreshPlaces();
+        Alert.alert(
+          "Someone else changed this place",
+          "It now shows their changes. Make your change again and save.",
+        );
+        onReload();
+        return;
+      }
+      busyRef.current = false;
+      setBusy(null);
       Alert.alert("Unable to save place", placeErrorMessage(reason, result.error.message));
-      if (reason === "PLACE_GONE") onClose();
+      if (reason === "PLACE_GONE") {
+        onClose();
+        void refreshPlaces();
+      }
       return;
     }
-    await refreshPlaces();
     onClose();
+    void refreshPlaces();
   };
 
-  if (!map.mapStyle) {
+  if (!mapStyleJson) {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-background px-8">
         {map.isError ? (
@@ -238,14 +266,11 @@ const PlaceEditor = ({
     : 0;
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-background"
-      behavior={Platform.select({ ios: "padding", android: undefined })}
-    >
+    <View className="flex-1 bg-background">
       <MapLibreMap
         key={map.mapRevision}
         style={{ flex: 1 }}
-        mapStyle={JSON.stringify(map.mapStyle)}
+        mapStyle={mapStyleJson}
         attribution={false}
         logo={true}
         touchPitch={false}
@@ -323,134 +348,156 @@ const PlaceEditor = ({
           <Icon as={LocateFixedIcon} size={22} className="text-foreground" />
         </Pressable>
       ) : null}
-      <View
+      <KeyboardAvoidingView
+        behavior="padding"
         pointerEvents="box-none"
-        className="absolute bottom-0 left-0 right-0"
-        style={{ paddingBottom: insets.bottom }}
+        className="absolute inset-0 justify-end"
       >
-        <LiveMapBottomSheet
-          accessibilityLabel={step === 1 ? "Where is it?" : "Name it"}
-          onDismiss={onClose}
-          header={
-            <View className="gap-1">
-              <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Step {step} of 2
-              </Text>
-              <Text className="text-foreground text-2xl font-bold">
-                {step === 1 ? "Where is it?" : "Name it"}
-              </Text>
-            </View>
-          }
-        >
-          {step === 1 ? (
-            <View className="gap-4 pt-2">
-              <Text className="text-muted-foreground">
-                {center
-                  ? "Move the map so the pin sits on the place."
-                  : "Finding your location. You can also move the map to the place."}
-              </Text>
-              <PlaceSizeSlider radiusMeters={radiusMeters} onChange={setRadiusMeters} />
-              <Button disabled={!center} onPress={() => setStep(2)}>
-                <Text>Next</Text>
-              </Button>
-            </View>
-          ) : (
-            <View className="gap-3 pt-2">
-              <Text className="text-foreground font-semibold">Name</Text>
-              <TextInput
-                accessibilityLabel="Name"
-                value={name}
-                onChangeText={setName}
-                maxLength={50}
-                placeholder="Home"
-                autoFocus={place === null}
-                className="rounded-lg border border-border bg-input p-4 text-foreground"
-              />
-              <Text className="text-foreground font-semibold">Emoji</Text>
-              <View className="flex-row flex-wrap gap-2">
-                {PLACE_EMOJI_CHOICES.map((choice) => {
-                  const selected = !customEmojiOpen && choice === emoji;
-                  return (
-                    <Pressable
-                      key={choice}
-                      accessibilityRole="radio"
-                      accessibilityLabel={choice}
-                      accessibilityState={{ checked: selected }}
-                      onPress={() => {
-                        setCustomEmojiOpen(false);
-                        setEmoji(choice);
-                      }}
-                      className={cn(
-                        "h-12 items-center justify-center rounded-xl border",
-                        selected ? "border-2 border-primary bg-primary/10" : "border-border",
-                      )}
-                      style={{ width: "15%" }}
-                    >
-                      <Text className="text-2xl">{choice}</Text>
-                    </Pressable>
-                  );
-                })}
+        <View pointerEvents="box-none" style={{ paddingBottom: insets.bottom }}>
+          <LiveMapBottomSheet
+            accessibilityLabel={step === 1 ? "Where is it?" : "Name it"}
+            header={
+              <View className="gap-1">
+                <Text className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Step {step} of 2
+                </Text>
+                <Text className="text-foreground text-2xl font-bold">
+                  {step === 1 ? "Where is it?" : "Name it"}
+                </Text>
               </View>
-              {customEmojiOpen ? (
+            }
+          >
+            {step === 1 ? (
+              <View className="gap-4 pt-2">
+                <Text className="text-muted-foreground">
+                  {center
+                    ? "Move the map so the pin sits on the place."
+                    : "Finding your location. You can also move the map to the place."}
+                </Text>
+                <PlaceSizeSlider radiusMeters={radiusMeters} onChange={setRadiusMeters} />
+                <Button disabled={!center} onPress={() => setStep(2)}>
+                  <Text>Next</Text>
+                </Button>
+              </View>
+            ) : (
+              <View className="gap-3 pt-2">
+                <Text className="text-foreground font-semibold">Name</Text>
                 <TextInput
-                  accessibilityLabel="Emoji"
-                  value={emoji}
-                  onChangeText={setEmoji}
-                  maxLength={32}
-                  placeholder="Type one emoji"
-                  autoFocus
-                  className="rounded-lg border border-border bg-input p-4 text-2xl text-foreground"
+                  accessibilityLabel="Name"
+                  value={name}
+                  onChangeText={setName}
+                  maxLength={50}
+                  placeholder="Home"
+                  autoFocus={place === null}
+                  className="rounded-lg border border-border bg-input p-4 text-foreground"
                 />
-              ) : (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setCustomEmojiOpen(true);
-                    setEmoji("");
-                  }}
+                <Text className="text-foreground font-semibold">Emoji</Text>
+                <View
+                  accessibilityRole="radiogroup"
+                  accessibilityLabel="Emoji"
+                  className="flex-row flex-wrap gap-2"
                 >
-                  <Text className="font-semibold text-primary">Choose another emoji</Text>
-                </Pressable>
-              )}
-              <View className="flex-row gap-3 pt-1">
-                <Button variant="outline" className="flex-1" onPress={() => setStep(1)}>
-                  <Text>Back</Text>
-                </Button>
-                <Button className="flex-1" loading={saving} disabled={saving} onPress={save}>
-                  <Text>Save place</Text>
-                </Button>
+                  {PLACE_EMOJI_CHOICES.map((choice) => {
+                    const selected = !customEmojiOpen && choice === emoji;
+                    return (
+                      <Pressable
+                        key={choice}
+                        accessibilityRole="radio"
+                        accessibilityLabel={choice}
+                        accessibilityState={{ checked: selected }}
+                        onPress={() => {
+                          setCustomEmojiOpen(false);
+                          setEmoji(choice);
+                        }}
+                        className={cn(
+                          "h-12 items-center justify-center rounded-xl border",
+                          selected ? "border-2 border-primary bg-primary/10" : "border-border",
+                        )}
+                        style={{ width: "15%" }}
+                      >
+                        <Text className="text-2xl">{choice}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {customEmojiOpen ? (
+                  <TextInput
+                    accessibilityLabel="Emoji"
+                    value={emoji}
+                    onChangeText={setEmoji}
+                    maxLength={32}
+                    placeholder="Type one emoji"
+                    autoFocus
+                    className="rounded-lg border border-border bg-input p-4 text-2xl text-foreground"
+                  />
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setCustomEmojiOpen(true);
+                      setEmoji("");
+                    }}
+                  >
+                    <Text className="font-semibold text-primary">Choose another emoji</Text>
+                  </Pressable>
+                )}
+                <View className="flex-row gap-3 pt-1">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    disabled={busy !== null}
+                    onPress={() => setStep(1)}
+                  >
+                    <Text>Back</Text>
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    loading={busy === "saving"}
+                    disabled={busy !== null}
+                    onPress={save}
+                  >
+                    <Text>Save place</Text>
+                  </Button>
+                </View>
+                {place ? (
+                  <Button
+                    variant="ghost"
+                    loading={busy === "deleting"}
+                    disabled={busy !== null}
+                    onPress={() =>
+                      confirmDeletePlace({
+                        groupId,
+                        name: place.name,
+                        placeId: place.id,
+                        onDeleting: (deleting) => {
+                          busyRef.current = deleting;
+                          setBusy(deleting ? "deleting" : null);
+                        },
+                        onDeleted: () => {
+                          onClose();
+                          void refreshPlaces();
+                        },
+                      })
+                    }
+                  >
+                    <Text className="text-destructive">Delete place</Text>
+                  </Button>
+                ) : null}
               </View>
-              {place ? (
-                <Button
-                  variant="ghost"
-                  disabled={saving}
-                  onPress={() =>
-                    confirmDeletePlace({
-                      groupId,
-                      name: place.name,
-                      placeId: place.id,
-                      onDeleted: async () => {
-                        await refreshPlaces();
-                        onClose();
-                      },
-                    })
-                  }
-                >
-                  <Text className="text-destructive">Delete place</Text>
-                </Button>
-              ) : null}
-            </View>
-          )}
-        </LiveMapBottomSheet>
-      </View>
-    </KeyboardAvoidingView>
+            )}
+          </LiveMapBottomSheet>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
 
-const cameraCenterFor = (pin: { latitude: number; longitude: number }, zoom: number) =>
-  [
-    pin.longitude,
-    shiftLatitudeByPixels({ latitude: pin.latitude, pixels: -PIN_ABOVE_CENTER, zoom }),
-  ] as [number, number];
+const cameraCenterFor = (
+  pin: { latitude: number; longitude: number },
+  zoom: number,
+): [number, number] => [
+  pin.longitude,
+  shiftLatitudeByPixels({ latitude: pin.latitude, pixels: -PIN_ABOVE_CENTER, zoom }),
+];
 
 export default PlaceScreen;

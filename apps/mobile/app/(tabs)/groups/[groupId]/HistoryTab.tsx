@@ -17,13 +17,17 @@ const HistoryTab = ({ groupId }: { groupId: string }) => {
   const memberName = useMemberNames(groupId);
   const history = useInfiniteQuery({
     queryKey: ["placeTransitions", groupId, session?.user.id],
-    initialPageParam: undefined as RouterInputs["placeTransitions"]["recent"]["before"],
-    queryFn: ({ pageParam }) =>
+    initialPageParam: null,
+    queryFn: ({
+      pageParam,
+    }: {
+      pageParam: RouterInputs["placeTransitions"]["recent"]["before"] | null;
+    }) =>
       trpcClient.placeTransitions.recent.query({
         groupId,
         ...(pageParam ? { before: pageParam } : {}),
       }),
-    getNextPageParam: (page) => page.nextBefore ?? undefined,
+    getNextPageParam: (page) => page.nextBefore,
     subscribed: isFocused,
   });
 

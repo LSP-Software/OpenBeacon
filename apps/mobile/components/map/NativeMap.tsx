@@ -26,7 +26,12 @@ import {
 } from "../../lib/liveMapPinGroups.ts";
 import { cn } from "../../lib/cn.ts";
 import type { MapGroupOption, MapMemberDevice, MapPeople } from "../../lib/mapPeopleTypes.ts";
-import { peopleAtPlace, type PlacePin, placeCirclePolygon } from "../../lib/places.ts";
+import {
+  type MapPlace,
+  peopleAtPlace,
+  placeCirclePolygon,
+  zoomToFitPlace,
+} from "../../lib/places.ts";
 import { getSymbolVisibility } from "../../lib/protomaps-style.ts";
 import { useColors } from "../../lib/theme.ts";
 import { Icon } from "../ui/Icon.tsx";
@@ -71,12 +76,12 @@ export const NativeMap = ({
   now?: number;
   onFocusPlaceHandled?: () => void;
   onPeopleTrayOpenChange?: (open: boolean) => void;
-  onDeletePlace?: (place: PlacePin, onDeleted: () => void) => void;
+  onDeletePlace?: (place: MapPlace, onDeleted: () => void) => void;
   onSetGroupHidden?: (groupId: string, hidden: boolean) => void;
   onSelectDeviceId?: (deviceId: string | null) => void;
   people?: MapPeople | null;
   peopleTrayOpen?: boolean;
-  places?: readonly PlacePin[];
+  places?: readonly MapPlace[];
   selectedDeviceId?: string | null;
 } = {}) => {
   const insets = useSafeAreaInsets();
@@ -281,12 +286,24 @@ export const NativeMap = ({
   }, [goToDevice, markers, missingPerson, missingUserId, people, pinMarkers]);
 
   useEffect(() => {
-    if (!focusPlaceId || handledFocusPlaceIdRef.current === focusPlaceId) return;
+    if (!focusPlaceId) {
+      handledFocusPlaceIdRef.current = null;
+      return;
+    }
+    if (handledFocusPlaceIdRef.current === focusPlaceId) return;
     const place = places.find((item) => item.id === focusPlaceId);
     if (!place) return;
     handledFocusPlaceIdRef.current = focusPlaceId;
     onFocusPlaceHandled?.();
-    zoomIntoStack({ latitude: place.latitude, longitude: place.longitude, zoomLevel: 15 });
+    zoomIntoStack({
+      latitude: place.latitude,
+      longitude: place.longitude,
+      zoomLevel: zoomToFitPlace({
+        diameterPixels: 240,
+        latitude: place.latitude,
+        radiusMeters: place.radiusMeters,
+      }),
+    });
     setSelectedPlaceKey(placeKey(place));
   }, [focusPlaceId, onFocusPlaceHandled, places, zoomIntoStack]);
 
@@ -299,7 +316,9 @@ export const NativeMap = ({
         geometry: { v: 1, ...selectedPlace },
         now: Date.now(),
         people: markers.flatMap((marker) =>
-          marker.timestamp === null ? [] : [{ ...marker, timestamp: marker.timestamp }],
+          marker.timestamp === null || !selectedPlace.memberUserIds.includes(marker.userId)
+            ? []
+            : [{ ...marker, timestamp: marker.timestamp }],
         ),
       })
     : [];
@@ -811,7 +830,7 @@ export const NativeMap = ({
   );
 };
 
-const placeKey = (place: PlacePin) => `${place.groupId}:${place.id}`;
+const placeKey = (place: MapPlace) => `${place.groupId}:${place.id}`;
 
 const personPinDeviceId = ({
   markers,

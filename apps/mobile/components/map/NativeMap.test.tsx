@@ -317,7 +317,8 @@ mock.module("./LiveMapGroupVisibility.tsx", () => ({
 }));
 
 mock.module("./LiveMapPlaceSheet.tsx", () => ({
-  LiveMapPlaceSheet: () => null,
+  LiveMapPlaceSheet: ({ here }: { here: readonly LiveMapMarker[] }) =>
+    React.createElement("live-map-place-sheet", { here: here.map((marker) => marker.userId) }),
 }));
 
 mock.module("./PlaceAnnotation.tsx", () => ({
@@ -1524,6 +1525,63 @@ describe("NativeMap integration harness", () => {
     expect(followStop && "stop" in followStop ? followStop.stop : null).not.toHaveProperty(
       "zoomLevel",
     );
+  });
+
+  test("focuses the same place again each time it's asked for", async () => {
+    const home = {
+      canManage: true,
+      emoji: "🏠",
+      groupId: "family",
+      groupName: "Family",
+      id: "home",
+      latitude: 51.5,
+      longitude: -0.12,
+      memberUserIds: ["alice"],
+      name: "Home",
+      radiusMeters: 250,
+    };
+    const focusHandled = mock(() => {});
+    const placeFocusCount = () =>
+      getNativeMapCameraCommands().filter(
+        (command) =>
+          command.type === "setCamera" &&
+          JSON.stringify(command.stop).includes('"centerCoordinate":[-0.12,51.5]'),
+      ).length;
+
+    for (const focusPlaceId of [null, "home", null, "home"]) {
+      await renderNativeMap({ focusPlaceId, onFocusPlaceHandled: focusHandled, places: [home] });
+      await flushEffects();
+    }
+
+    expect(focusHandled).toHaveBeenCalledTimes(2);
+    expect(placeFocusCount()).toBe(2);
+  });
+
+  test("only counts members of the place's group as here now", async () => {
+    const timestamp = new Date().toISOString();
+    const markers = [
+      createLiveMapMarkerFixture({ timestamp, userId: "alice" }),
+      createLiveMapMarkerFixture({ name: "Bob", timestamp, userId: "bob" }),
+    ];
+    const home = {
+      canManage: false,
+      emoji: "🏠",
+      groupId: "family",
+      groupName: "Family",
+      id: "home",
+      latitude: 51.5,
+      longitude: -0.12,
+      memberUserIds: ["alice"],
+      name: "Home",
+      radiusMeters: 250,
+    };
+    await renderNativeMap({ markers, places: [home] });
+    await flushEffects();
+    await renderNativeMap({ focusPlaceId: "home", markers, places: [home] });
+    await flushEffects();
+
+    const sheet = root?.container.queryAll((node) => node.type === "live-map-place-sheet")[0];
+    expect(sheet?.props["here"]).toEqual(["alice"]);
   });
 
   test("heading-only updates do not issue camera commands while following", async () => {

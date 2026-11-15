@@ -1,8 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
+import {
+  encodeBase64,
+  PAYLOAD_ENCRYPTION_ALGORITHM,
+  TRACKING_POINT_KIND,
+} from "@openbeacon/encryption";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { encodePlaceAlertsCursor } from "../../lib/placeTransitions.ts";
+import { tryCatch } from "@openbeacon/shared";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 import { placeSharingRouter } from "./placeSharingRouter.ts";
@@ -36,10 +42,10 @@ const minute = 60_000;
 const day = 24 * 60 * minute;
 const longAgo = new Date(Date.now() - 30 * day);
 
-const caller = (userId: string, deviceId: string) =>
+const caller = (userId: string, deviceId: string, callerCache = cache) =>
   router.createCaller(
     withDeviceActive({
-      cache,
+      cache: callerCache,
       db: prisma,
       clientIp: "127.0.0.1",
       deviceId,
@@ -256,13 +262,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         [otherGroupPlace.clientId, unknownPlace.clientId, future.clientId, tooOld.clientId].sort(),
       );
 
-      await caller(member, memberPhone).placeSharing.set({ groupId, enabled: false });
-      const switchedOff = transition();
-      expect((await upload([switchedOff])).placeTransitions?.discarded).toEqual([
-        switchedOff.clientId,
-      ]);
-      await caller(member, memberPhone).placeSharing.set({ groupId, enabled: true });
-
       await prisma.userDevice.update({
         where: { id: memberPhone },
         data: {
@@ -289,18 +288,106 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         discarded: [recordedWhilePaused.clientId],
       });
       expect(await storedCount()).toBe(3);
+
+      await caller(member, memberPhone).placeSharing.set({ groupId, enabled: false });
+      const switchedOff = transition();
+      expect((await upload([switchedOff])).placeTransitions?.discarded).toEqual([
+        switchedOff.clientId,
+      ]);
     });
 
-    test("refuses transitions from a device that isn't the caller's, a revoked device or a non-member", async () => {
-      await expect(upload([transition({ senderDeviceId: ownerPhone })])).rejects.toThrow(
-        "Place transitions must be sent from this device.",
-      );
-      await expect(
-        upload([transition({ senderDeviceId: ownerTablet })], {
-          userId: owner,
-          deviceId: ownerPhone,
+    test("turning the switch back on drops what happened while it was off", async () => {
+      const sharingSwitch = caller(member, memberPhone).placeSharing;
+      const beforeOff = transition({ occurredAt: new Date(Date.now() - 10 * minute) });
+      expect(await sharingSwitch.set({ groupId, enabled: true })).toEqual({ enabled: true });
+      expect(await prisma.placeSharing.count({ where: { deviceId: memberPhone } })).toBe(0);
+      await sharingSwitch.set({ groupId, enabled: false });
+      const whileOff = transition({ occurredAt: new Date(Date.now() - 1_000) });
+      await sharingSwitch.set({ groupId, enabled: true });
+      const turnedOnAt = await prisma.placeSharing.findUniqueOrThrow({
+        where: { deviceId_groupId: { deviceId: memberPhone, groupId } },
+        select: { updatedAt: true },
+      });
+      await sharingSwitch.set({ groupId, enabled: true });
+      expect(
+        await prisma.placeSharing.findUniqueOrThrow({
+          where: { deviceId_groupId: { deviceId: memberPhone, groupId } },
+          select: { updatedAt: true },
         }),
-      ).rejects.toThrow("Place transitions must be sent from this device.");
+      ).toEqual(turnedOnAt);
+      const afterOn = transition({ occurredAt: new Date(Date.now() + 1_000) });
+      expect((await upload([beforeOff, whileOff, afterOn])).placeTransitions).toEqual({
+        accepted: [afterOn.clientId],
+        duplicates: [],
+        discarded: [beforeOff.clientId, whileOff.clientId],
+      });
+    });
+
+    test("pausing the whole account drops transitions too", async () => {
+      await prisma.user.update({
+        where: { id: member },
+        data: { sharingPaused: true, sharingChangedAt: new Date(), sharingRevision: 1 },
+      });
+      const paused = transition();
+      const result = await tryCatch(upload([paused]));
+      await prisma.user.update({
+        where: { id: member },
+        data: { sharingPaused: false, sharingChangedAt: null, sharingRevision: 0 },
+      });
+      expect(result.data?.placeTransitions?.discarded).toEqual([paused.clientId]);
+      expect(await storedCount()).toBe(0);
+    });
+
+    test("going over the hourly transition budget drops the transitions but keeps the points", async () => {
+      const budgetCache = createIntegrationTestCache(() => 0);
+      const point = (index: number) => ({
+        algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+        ciphertext: "ciphertext",
+        clientPointId: `${prefix}-budget-point-${index}`,
+        epochId: latestEpochId,
+        kind: TRACKING_POINT_KIND,
+        nonce: encodeBase64(new Uint8Array(24)),
+        senderDeviceId: memberPhone,
+      });
+      const send = (index: number) =>
+        caller(member, memberPhone, budgetCache).groupTracking.uploadBatch({
+          groupId,
+          points: [point(index)],
+          placeTransitions: Array.from({ length: 50 }, () => transition()),
+        });
+      for (const index of [0, 1, 2, 3]) {
+        expect((await send(index)).placeTransitions?.accepted).toHaveLength(50);
+      }
+      const overBudget = await send(4);
+      expect(overBudget.accepted).toEqual([point(4).clientPointId]);
+      expect(overBudget.placeTransitions?.accepted).toEqual([]);
+      expect(overBudget.placeTransitions?.discarded).toHaveLength(50);
+      expect(await storedCount()).toBe(200);
+      expect(
+        await prisma.groupEncryptedPayload.count({
+          where: { clientPointId: { startsWith: `${prefix}-budget-point-` } },
+        }),
+      ).toBe(5);
+      await prisma.groupEncryptedPayload.deleteMany({
+        where: { clientPointId: { startsWith: `${prefix}-budget-point-` } },
+      });
+    });
+
+    test("discards transitions from another device without failing the batch, and refuses a revoked device or a non-member", async () => {
+      const someoneElse = transition({ senderDeviceId: ownerPhone });
+      const own = transition();
+      expect((await upload([someoneElse, own])).placeTransitions).toEqual({
+        accepted: [own.clientId],
+        duplicates: [],
+        discarded: [someoneElse.clientId],
+      });
+      const otherDevice = transition({ senderDeviceId: ownerTablet });
+      expect(
+        (await upload([otherDevice], { userId: owner, deviceId: ownerPhone })).placeTransitions
+          ?.discarded,
+      ).toEqual([otherDevice.clientId]);
+      expect(await storedCount()).toBe(1);
+      await prisma.placeTransition.deleteMany({ where: { groupId } });
       await expect(
         upload([transition({ senderDeviceId: outsiderPhone })], {
           userId: outsider,
@@ -355,6 +442,36 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.place.update({ where: { id: schoolId }, data: { epochId: oldEpochId } });
       const later = await readAlerts(owner, ownerPhone, first.placeAlerts?.cursor ?? null);
       expect(later.places).toEqual([{ groupId, revision: 0, needsCatchUp: true }]);
+    });
+
+    test("the places summary still lists a group after its last place is deleted", async () => {
+      await prisma.group.update({ where: { id: quietGroupId }, data: { placesRevision: 2 } });
+      const summary = await readAlerts(owner, ownerPhone, null);
+      await prisma.group.update({ where: { id: quietGroupId }, data: { placesRevision: 0 } });
+      expect(summary.places).toEqual([
+        { groupId, revision: 0, needsCatchUp: false },
+        { groupId: quietGroupId, revision: 2, needsCatchUp: false },
+      ]);
+    });
+
+    test("place alerts page through many rows that share one createdAt", async () => {
+      const createdAt = new Date(Date.now() - 10 * minute);
+      const ids = Array.from(
+        { length: 120 },
+        (_, index) => `${prefix}-same-created-${String(index).padStart(3, "0")}`,
+      );
+      await seedTransitions(ids.map((id) => ({ id, createdAt })));
+      const seen: string[] = [];
+      let cursor = encodePlaceAlertsCursor({
+        createdAt: new Date(createdAt.getTime() - 1),
+        id: "",
+      });
+      for (const _page of [0, 1, 2, 3]) {
+        const page = await readAlerts(owner, ownerPhone, cursor);
+        seen.push(...(page.placeAlerts?.alerts.map(({ id }) => id) ?? []));
+        cursor = page.placeAlerts?.cursor ?? cursor;
+      }
+      expect(seen).toEqual(ids);
     });
 
     test("place alerts skip the caller's own devices, follow the cursor and stop at 50", async () => {
@@ -499,6 +616,27 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(
         caller(outsider, outsiderPhone).placeTransitions.recent({ groupId }),
       ).rejects.toThrow("You are not a member of this group");
+    });
+
+    test("recent pages through more than 100 rows that share one occurredAt", async () => {
+      const occurredAt = new Date(Date.now() - day);
+      const ids = Array.from(
+        { length: 230 },
+        (_, index) => `${prefix}-same-time-${String(index).padStart(3, "0")}`,
+      );
+      await seedTransitions(ids.map((id) => ({ id, createdAt: occurredAt })));
+      const seen: string[] = [];
+      let before: { occurredAt: Date; id: string } | undefined;
+      for (const _page of [0, 1, 2]) {
+        const page = await caller(member, memberPhone).placeTransitions.recent({
+          groupId,
+          ...(before ? { before } : {}),
+        });
+        seen.push(...page.transitions.map(({ id }) => id));
+        before = page.nextBefore ?? undefined;
+      }
+      expect(before).toBeUndefined();
+      expect(seen).toEqual([...ids].reverse());
     });
 
     test("leaving a group removes the device's switch for it", async () => {

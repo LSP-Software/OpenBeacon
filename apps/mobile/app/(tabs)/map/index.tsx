@@ -28,12 +28,9 @@ import { authClient } from "../../../lib/auth-client.ts";
 import { buildLiveMapMarkers, labelDeviceIcons } from "../../../lib/buildLiveMapMarkers.ts";
 import { classifyMapPeople, flagUnreadableMarkers } from "../../../lib/classifyMapPeople.ts";
 import { loadPersonalNicknames } from "../../../lib/personalNicknames.ts";
-import { buildPlacePins } from "../../../lib/places.ts";
-import {
-  confirmDeletePlace,
-  groupPlacesQueryKey,
-  loadGroupPlaces,
-} from "../../../lib/placeSync.ts";
+import { Alert } from "../../../lib/alert.ts";
+import { buildPlacePins, hiddenGroupWithPlace } from "../../../lib/places.ts";
+import { confirmDeletePlace, groupPlacesQueryOptions } from "../../../lib/placeSync.ts";
 import { canShowSharedLocation } from "../../../lib/locationSharingVisibility.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { setMapGroupHidden } from "../../../lib/hiddenMapGroups.ts";
@@ -80,10 +77,7 @@ const MapScreen = () => {
   const { placeId: focusPlaceId } = useLocalSearchParams<{ placeId?: string }>();
   const router = useRouter();
   const groupPlaces = useQueries({
-    queries: (groups ?? []).map((group) => ({
-      queryKey: groupPlacesQueryKey(group.id, userId),
-      queryFn: userId ? () => loadGroupPlaces(group.id) : skipToken,
-    })),
+    queries: (groups ?? []).map((group) => groupPlacesQueryOptions(group.id, userId)),
     combine: (results) => results.map((result) => result.data),
     subscribed: isFocused,
   });
@@ -209,6 +203,7 @@ const MapScreen = () => {
               member.userId === userId && (member.role === "OWNER" || member.role === "ADMIN"),
           ),
           id: group.id,
+          memberUserIds: group.members.map((member) => member.userId),
           name: group.name,
           places: groupPlaces[index],
         })),
@@ -322,6 +317,34 @@ const MapScreen = () => {
   ]);
 
   const clearFocusPlace = useCallback(() => router.setParams({ placeId: undefined }), [router]);
+
+  const hiddenPlaceAlertedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!focusPlaceId) {
+      hiddenPlaceAlertedRef.current = null;
+      return;
+    }
+    if (!selfUserId || hiddenPlaceAlertedRef.current === focusPlaceId) return;
+    const group = hiddenGroupWithPlace({
+      groups: (groups ?? []).map((item, index) => ({ ...item, places: groupPlaces[index] })),
+      hiddenGroupIds,
+      placeId: focusPlaceId,
+    });
+    if (!group) return;
+    hiddenPlaceAlertedRef.current = focusPlaceId;
+    clearFocusPlace();
+    Alert.alert(`${group.name} is hidden on the map`, undefined, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: `Show ${group.name}`,
+        onPress: () => {
+          setMapGroupHidden({ groupId: group.id, hidden: false, userId: selfUserId });
+          router.setParams({ placeId: focusPlaceId });
+        },
+      },
+    ]);
+  }, [clearFocusPlace, focusPlaceId, groupPlaces, groups, hiddenGroupIds, router, selfUserId]);
 
   useEffect(() => {
     for (const [groupId, access] of keyAccessByGroupId) {

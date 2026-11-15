@@ -50,7 +50,6 @@ import {
 } from "./schemas/group/places.ts";
 import {
   getPlaceSharingSchema,
-  PLACE_TRANSITION_DIRECTIONS,
   placeAlertsCursorSchema,
   placeTransitionSchema,
   recentPlaceTransitionsSchema,
@@ -98,7 +97,6 @@ export {
   placeEmojiSchema,
   placeNameSchema,
   placeTransitionSchema,
-  PLACE_TRANSITION_DIRECTIONS,
   reEncryptPlacesSchema,
   recentPlaceTransitionsSchema,
   serverNameSchema,

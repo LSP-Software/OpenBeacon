@@ -86,7 +86,18 @@ export const shiftLatitudeByPixels = ({
   latitude: number;
   pixels: number;
   zoom: number;
-}) => latitude + (pixels * metersPerPixel({ latitude, zoom })) / 111_320;
+}) =>
+  Math.min(85, Math.max(-85, latitude + (pixels * metersPerPixel({ latitude, zoom })) / 111_320));
+
+export const zoomToFitPlace = ({
+  diameterPixels,
+  latitude,
+  radiusMeters,
+}: {
+  diameterPixels: number;
+  latitude: number;
+  radiusMeters: number;
+}) => Math.log2((metersPerPixel({ latitude, zoom: 0 }) * diameterPixels) / (2 * radiusMeters));
 
 export const placeCirclePolygon = ({ latitude, longitude, radiusMeters }: PlaceGeometryV1) => {
   const steps = 64;
@@ -134,15 +145,15 @@ export const describePeopleHere = (names: readonly string[]) => {
   return `${first}, ${second} and ${names.length - 2} more are here`;
 };
 
-export type PlacePin = {
+export type MapPlace = {
   canManage: boolean;
   emoji: string;
-  expectedCiphertext: string;
   groupId: string;
   groupName: string;
   id: string;
   latitude: number;
   longitude: number;
+  memberUserIds: readonly string[];
   name: string;
   radiusMeters: number;
 };
@@ -154,11 +165,12 @@ export const buildPlacePins = ({
   groups: readonly {
     canManage: boolean;
     id: string;
+    memberUserIds: readonly string[];
     name: string;
     places: readonly GroupPlace[] | undefined;
   }[];
   hiddenGroupIds: ReadonlySet<string>;
-}): PlacePin[] =>
+}): MapPlace[] =>
   groups
     .filter((group) => !hiddenGroupIds.has(group.id))
     .flatMap((group) =>
@@ -168,12 +180,12 @@ export const buildPlacePins = ({
               {
                 canManage: group.canManage,
                 emoji: place.emoji,
-                expectedCiphertext: place.ciphertext,
                 groupId: group.id,
                 groupName: group.name,
                 id: place.id,
                 latitude: place.geometry.latitude,
                 longitude: place.geometry.longitude,
+                memberUserIds: group.memberUserIds,
                 name: place.name,
                 radiusMeters: place.geometry.radiusMeters,
               },
@@ -181,6 +193,22 @@ export const buildPlacePins = ({
           : [],
       ),
     );
+
+export const hiddenGroupWithPlace = <
+  T extends { id: string; places: readonly { id: string }[] | undefined },
+>({
+  groups,
+  hiddenGroupIds,
+  placeId,
+}: {
+  groups: readonly T[];
+  hiddenGroupIds: ReadonlySet<string>;
+  placeId: string;
+}) =>
+  groups.find(
+    (group) =>
+      hiddenGroupIds.has(group.id) && (group.places ?? []).some((place) => place.id === placeId),
+  ) ?? null;
 
 export const groupByDay = <T extends { occurredAt: Date }>({
   items,

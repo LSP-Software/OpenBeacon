@@ -55,18 +55,24 @@ export const groupTrackingRouter = {
         if (!perMinute.allowed) throw uploadLimitReached("points per minute");
       }
       const placeTransitions = input.placeTransitions ?? [];
-      if (placeTransitions.length > 0) {
-        const transitionBudget = await ctx.cache.rateLimits.consume(
-          {
-            namespace: "groupTracking.uploadBatch.placeTransitions",
-            identifier: { type: "userId", value: userId },
-            limit: 240,
-            windowMs: 3_600_000,
-            cost: placeTransitions.length,
-          },
-          { whenUnavailable: "allow" },
-        );
-        if (!transitionBudget.allowed) throw uploadLimitReached("place transitions per hour");
+      const transitionBudget =
+        placeTransitions.length > 0
+          ? await ctx.cache.rateLimits.consume(
+              {
+                namespace: "groupTracking.uploadBatch.placeTransitions",
+                identifier: { type: "userId", value: userId },
+                limit: 240,
+                windowMs: 3_600_000,
+                cost: placeTransitions.length,
+              },
+              { whenUnavailable: "allow" },
+            )
+          : { allowed: true };
+      if (!transitionBudget.allowed) {
+        console.warn("[rate-limit] upload limit reached", {
+          userId,
+          limit: "place transitions per hour",
+        });
       }
       const now = new Date();
       const result = await ctx.db.$transaction(async (tx) => {
@@ -102,15 +108,21 @@ export const groupTrackingRouter = {
         if (placeTransitions.length === 0) return points;
         return {
           ...points,
-          placeTransitions: await uploadPlaceTransitions({
-            db: tx,
-            deviceId: ctx.deviceId,
-            groupId: input.groupId,
-            memberSince: member.createdAt,
-            now,
-            transitions: placeTransitions,
-            userId,
-          }),
+          placeTransitions: transitionBudget.allowed
+            ? await uploadPlaceTransitions({
+                db: tx,
+                deviceId: ctx.deviceId,
+                groupId: input.groupId,
+                memberSince: member.createdAt,
+                now,
+                transitions: placeTransitions,
+                userId,
+              })
+            : {
+                accepted: [],
+                duplicates: [],
+                discarded: placeTransitions.map(({ clientId }) => clientId),
+              },
         };
       });
       const placeUpdates =
@@ -119,7 +131,7 @@ export const groupTrackingRouter = {
           : await tryCatch(
               Promise.all([
                 readPlacesSummary({ db: ctx.db, userId }),
-                readPlaceAlerts({ cursor: input.placeAlertsCursor, db: ctx.db, now, userId }),
+                readPlaceAlerts({ cursor: input.placeAlertsCursor, db: ctx.db, userId }),
               ]),
             );
       const placeFields =

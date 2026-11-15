@@ -1,5 +1,6 @@
 import type { EpochKeyMaterial, PlaceGeometryV1 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
+import { queryOptions, skipToken } from "@tanstack/react-query";
 import { Alert } from "./alert.ts";
 import { trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
@@ -8,9 +9,6 @@ import { errorReason } from "./errorReason.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { decryptPlaceGeometry, encryptPlaceGeometry, type GroupPlace } from "./places.ts";
 
-export const groupPlacesQueryKey = (groupId: string, userId: string | undefined) =>
-  ["groupPlaces", groupId, userId] as const;
-
 export const loadGroupPlaces = async (groupId: string): Promise<GroupPlace[]> => {
   const [list, device] = await Promise.all([
     trpcClient.groupPlaces.list.query({ groupId }),
@@ -18,9 +16,7 @@ export const loadGroupPlaces = async (groupId: string): Promise<GroupPlace[]> =>
   ]);
   const epochKeys = new Map<string, Promise<EpochKeyMaterial | null>>();
   const epochKey = (epochId: string) => {
-    const loaded =
-      epochKeys.get(epochId) ??
-      tryCatch(resolveEpochKey({ device, epochId, groupId })).then((result) => result.data ?? null);
+    const loaded = epochKeys.get(epochId) ?? resolveEpochKey({ device, epochId, groupId });
     epochKeys.set(epochId, loaded);
     return loaded;
   };
@@ -34,6 +30,13 @@ export const loadGroupPlaces = async (groupId: string): Promise<GroupPlace[]> =>
     }),
   );
 };
+
+export const groupPlacesQueryOptions = (groupId: string, userId: string | undefined) =>
+  queryOptions({
+    queryKey: ["groupPlaces", groupId, userId],
+    queryFn: userId ? () => loadGroupPlaces(groupId) : skipToken,
+    staleTime: 5 * 60_000,
+  });
 
 export const savePlace = async ({
   emoji,
@@ -88,11 +91,13 @@ export const confirmDeletePlace = ({
   groupId,
   name,
   onDeleted,
+  onDeleting,
   placeId,
 }: {
   groupId: string;
   name: string;
   onDeleted: () => void;
+  onDeleting?: (deleting: boolean) => void;
   placeId: string;
 }) =>
   Alert.alert(
@@ -104,8 +109,10 @@ export const confirmDeletePlace = ({
         text: "Delete",
         style: "destructive",
         onPress: async () => {
+          onDeleting?.(true);
           const result = await tryCatch(trpcClient.groupPlaces.delete.mutate({ groupId, placeId }));
           if (result.error && errorReason(result.error) !== "PLACE_GONE") {
+            onDeleting?.(false);
             Alert.alert("Unable to delete place", result.error.message);
             return;
           }
