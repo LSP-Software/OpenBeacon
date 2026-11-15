@@ -21,6 +21,8 @@
     "emulators:versions": "python3 scripts/derby-emulators.py --android-versions",
     "prepare": "husky",
     "build": "turbo build",
+    "build-aab": "cd apps/mobile && bun run build-aab",
+    "build-apk": "cd apps/mobile && bun run build-apk",
     "format": "bun fmt",
     "format:check": "bun fmt --check",
     "format:fix": "bun fmt",
