@@ -24,6 +24,7 @@ import { trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
 import type { LiveMapPosition } from "../../../../lib/mapTrackingTypes.ts";
 import { describePeopleHere, formatPlaceSize, peopleAtPlace } from "../../../../lib/places.ts";
+import { catchUpGroupPlaces } from "../../../../lib/placeCatchUp.ts";
 import { groupPlacesQueryOptions } from "../../../../lib/placeSync.ts";
 import { readRegisteredDevice } from "../../../../lib/registeredDevice.ts";
 
@@ -43,7 +44,12 @@ const PlacesTab = ({
   const { group } = useCachedGroup(groupId);
   const self = group?.members.find((member) => member.userId === userId);
   const canManage = self?.role === "OWNER" || self?.role === "ADMIN";
-  const places = useQuery({ ...groupPlacesQueryOptions(groupId, userId), subscribed: isFocused });
+  const places = useQuery({
+    ...groupPlacesQueryOptions(groupId, userId),
+    subscribed: isFocused,
+    refetchInterval: (query) =>
+      query.state.data?.some((place) => !place.geometry) ? 60_000 : false,
+  });
   const memberName = useMemberNames(groupId);
   const sharingQueryOptions = trpc.placeSharing.get.queryOptions({ groupId });
   const sharing = useQuery({ ...sharingQueryOptions, subscribed: isFocused });
@@ -62,6 +68,18 @@ const PlacesTab = ({
     (device) => device.deviceId === registeredDevice?.deviceId,
   )?.name;
   const placeCount = places.data?.length ?? 0;
+  useQuery({
+    queryKey: ["placeCatchUp", groupId, userId],
+    enabled: userId !== undefined && placeCount > 0,
+    subscribed: isFocused,
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: async () => {
+      const moved = await catchUpGroupPlaces(groupId);
+      if (moved > 0) await queryClient.invalidateQueries({ queryKey: ["groupPlaces", groupId] });
+      return moved;
+    },
+  });
   const atLimit = placeCount >= MAX_PLACES_PER_GROUP;
   const now = Date.now();
 
