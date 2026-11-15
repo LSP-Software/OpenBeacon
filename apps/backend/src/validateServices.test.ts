@@ -15,10 +15,8 @@ mock.module("./db.ts", () => ({ db: { $queryRaw: query } }));
 mock.module("./cache.ts", () => ({ cache: { findMissingPermissions } }));
 mock.module("./env.ts", () => ({ env: { REDIS_URL: "redis://openbeacon:secret@redis:6379" } }));
 mock.module("@openbeacon/cache", () => ({ pingRedis: ping }));
-mock.module("@openbeacon/api/checkStorage.ts", () => ({
-  checkImageStorage: s3,
-  checkMapStorage: mapStorage,
-}));
+mock.module("@openbeacon/api/checkStorage.ts", () => ({ checkImageStorage: s3 }));
+mock.module("@openbeacon/api/mapStorage.ts", () => ({ checkMapStorage: mapStorage }));
 mock.module("@openbeacon/email", () => ({ checkEmail: email, emailEnabled: true }));
 mock.module("./checkServices.ts", () => ({
   checkServices: async (services: typeof checks) => {

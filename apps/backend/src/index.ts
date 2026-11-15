@@ -1,6 +1,7 @@
 import "./validateEnv.ts";
 import "./validateServices.ts";
 import { env as apiEnv } from "@openbeacon/api/env.ts";
+import { mapEnv } from "@openbeacon/api/mapEnv.ts";
 import { getMapTilesManifest } from "@openbeacon/api/mapStorage.ts";
 import { securityAlerts } from "@openbeacon/auth";
 import { tryCatch } from "@openbeacon/shared";
@@ -16,8 +17,8 @@ for (const warning of findHttpsWarnings({
   IMAGES_S3_ENDPOINT: apiEnv.IMAGES_S3_ENDPOINT,
   IMAGES_S3_PUBLIC_ENDPOINT: apiEnv.IMAGES_S3_PUBLIC_ENDPOINT,
   IMAGES_S3_CDN_URL: apiEnv.IMAGES_S3_CDN_URL,
-  MAP_S3_ENDPOINT: apiEnv.MAP_S3_ENDPOINT,
-  MAP_S3_PUBLIC_ENDPOINT: apiEnv.MAP_S3_PUBLIC_ENDPOINT,
+  MAP_S3_ENDPOINT: mapEnv.MAP_S3_ENDPOINT,
+  MAP_S3_PUBLIC_ENDPOINT: mapEnv.MAP_S3_PUBLIC_ENDPOINT,
 })) {
   console.warn(warning);
 }
