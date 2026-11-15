@@ -316,6 +316,14 @@ mock.module("./LiveMapGroupVisibility.tsx", () => ({
   }) => React.createElement("live-map-hidden-groups-notice", props),
 }));
 
+mock.module("./LiveMapPlaceSheet.tsx", () => ({
+  LiveMapPlaceSheet: () => null,
+}));
+
+mock.module("./PlaceAnnotation.tsx", () => ({
+  PlaceAnnotation: () => null,
+}));
+
 mock.module("./LiveMapStackSheet.tsx", () => ({
   LiveMapStackSheet: ({ members }: { members: readonly LiveMapMarker[] }) =>
     React.createElement("live-map-stack-sheet", { count: members.length }),

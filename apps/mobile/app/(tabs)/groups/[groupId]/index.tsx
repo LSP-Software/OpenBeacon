@@ -2,7 +2,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { tryCatch } from "@openbeacon/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
-import { Clock3Icon, SlidersHorizontalIcon, UsersIcon } from "lucide-react-native";
+import { Clock3Icon, MapPinIcon, SlidersHorizontalIcon, UsersIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,20 +16,27 @@ import { Text } from "../../../../components/ui/Text.tsx";
 import { useGroupKeyHistoryAccess } from "../../../../hooks/useGroupKeyAccess.ts";
 import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
 import { useHeldHistoryKeyVersions } from "../../../../hooks/useHeldHistoryKeyVersions.ts";
+import { useLiveTrackingPositions } from "../../../../hooks/useLiveTrackingPositions.ts";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
 import { storage } from "../../../../lib/storage.ts";
 import HistoryTab from "./HistoryTab.tsx";
 import MembersTab from "./MembersTab.tsx";
+import PlacesTab from "./PlacesTab.tsx";
 import SettingsTab from "./SettingsTab.tsx";
 
-type GroupTabValue = "members" | "history" | "settings";
+type GroupTabValue = "members" | "places" | "history" | "settings";
 
 const GROUP_TABS: readonly SwipeTabsItem<GroupTabValue>[] = [
   {
     value: "members",
     label: "Members",
     icon: UsersIcon,
+  },
+  {
+    value: "places",
+    label: "Places",
+    icon: MapPinIcon,
   },
   {
     value: "history",
@@ -69,6 +76,7 @@ const GroupBody = ({ groupId }: { groupId: string }) => {
     recoveryStatus.data?.currentHistoryKey ?? undefined,
   );
   const { group, isPending, isMissing } = useCachedGroup(groupId);
+  const live = useLiveTrackingPositions({ groupId });
   const [verifyFailedFor, setVerifyFailedFor] = useState<string | null>(null);
   const [verifyAttempt, setVerifyAttempt] = useState(0);
   const historyPartialFrom =
@@ -184,11 +192,21 @@ const GroupBody = ({ groupId }: { groupId: string }) => {
               onValueChange={setValue}
               renderScene={(tabValue) => {
                 if (tabValue === "members") {
-                  return <MembersTab groupId={groupId} />;
+                  return <MembersTab groupId={groupId} live={live} />;
+                }
+
+                if (tabValue === "places") {
+                  return (
+                    <PlacesTab
+                      groupId={groupId}
+                      groupName={group.name}
+                      livePositions={live.positions}
+                    />
+                  );
                 }
 
                 if (tabValue === "history") {
-                  return <HistoryTab />;
+                  return <HistoryTab groupId={groupId} />;
                 }
 
                 return <SettingsTab groupId={groupId} />;

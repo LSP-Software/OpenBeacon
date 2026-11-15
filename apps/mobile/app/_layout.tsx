@@ -52,6 +52,7 @@ const RootLayout = () => {
                   >
                     <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="join" />
+                    <Stack.Screen name="place" />
                     <Stack.Screen name="setup/name" />
                     <Stack.Screen name="setup/remove-devices" />
                     <Stack.Screen name="account/about" />

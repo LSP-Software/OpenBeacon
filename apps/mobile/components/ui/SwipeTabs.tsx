@@ -12,13 +12,14 @@ import {
 import Animated, {
   Extrapolation,
   interpolate,
+  type SharedValue,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
 import { useColors } from "../../lib/theme.ts";
 import { Icon } from "./Icon.tsx";
-import { getSceneIndexFromOffset, getSwipeTabsIndex } from "./swipeTabs.ts";
+import { getExpandingTabLayouts, getSceneIndexFromOffset, getSwipeTabsIndex } from "./swipeTabs.ts";
 import { Text } from "./Text.tsx";
 
 export type SwipeTabsItem<T extends string> = {
@@ -49,15 +50,13 @@ export const SwipeTabs = <T extends string>({
   const [containerWidth, setContainerWidth] = useState(windowWidth);
   const [visited, setVisited] = useState<Set<T>>(() => new Set([value]));
   const pageGap = 16;
-  const [tabLayouts, setTabLayouts] = useState<Partial<Record<T, { x: number; width: number }>>>(
-    {},
-  );
+  const [barWidth, setBarWidth] = useState(0);
   const activeIndex = getSwipeTabsIndex(tabs, value);
   const pageWidth = Math.max(containerWidth, 1);
   const inputRange = tabs.map((_, index) => index * pageWidth);
-  const indicatorLeftRange = tabs.map((tab) => tabLayouts[tab.value]?.x ?? 0);
-  const indicatorWidthRange = tabs.map((tab) => tabLayouts[tab.value]?.width ?? 0);
-  const hasAllTabLayouts = tabs.every((tab) => tabLayouts[tab.value] !== undefined);
+  const layouts = getExpandingTabLayouts({ barWidth, tabCount: tabs.length });
+  const activeLefts = layouts.map((pageLayouts, index) => pageLayouts[index]?.left ?? 0);
+  const activeWidths = layouts.map((pageLayouts, index) => pageLayouts[index]?.width ?? 0);
 
   useEffect(() => {
     setVisited((currentVisited) => {
@@ -102,32 +101,6 @@ export const SwipeTabs = <T extends string>({
       setContainerWidth(nextWidth);
     }
   };
-
-  const handleTabLayout =
-    (tabValue: T) =>
-    (event: LayoutChangeEvent): void => {
-      const nextLayout = {
-        x: event.nativeEvent.layout.x,
-        width: event.nativeEvent.layout.width,
-      };
-
-      setTabLayouts((currentLayouts) => {
-        const currentLayout = currentLayouts[tabValue];
-
-        if (
-          currentLayout &&
-          currentLayout.x === nextLayout.x &&
-          currentLayout.width === nextLayout.width
-        ) {
-          return currentLayouts;
-        }
-
-        return {
-          ...currentLayouts,
-          [tabValue]: nextLayout,
-        };
-      });
-    };
 
   const handleScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -176,118 +149,116 @@ export const SwipeTabs = <T extends string>({
   };
 
   const indicatorStyle = useAnimatedStyle(() => {
-    if (!hasAllTabLayouts || inputRange.length === 0) {
-      return {
-        opacity: 0,
-      };
+    if (barWidth === 0 || inputRange.length === 0) {
+      return { opacity: 0 };
     }
 
     return {
       opacity: 1,
-      left: interpolate(scrollX.value, inputRange, indicatorLeftRange, Extrapolation.CLAMP),
-      width: interpolate(scrollX.value, inputRange, indicatorWidthRange, Extrapolation.CLAMP),
+      left: interpolate(scrollX.value, inputRange, activeLefts, Extrapolation.CLAMP),
+      width: interpolate(scrollX.value, inputRange, activeWidths, Extrapolation.CLAMP),
     };
   });
 
   const overlayTrackStyle = useAnimatedStyle(() => {
-    if (!hasAllTabLayouts || inputRange.length === 0) {
-      return {
-        opacity: 0,
-      };
+    if (barWidth === 0 || inputRange.length === 0) {
+      return { opacity: 0 };
     }
-
-    const left = interpolate(scrollX.value, inputRange, indicatorLeftRange, Extrapolation.CLAMP);
 
     return {
       opacity: 1,
-      transform: [{ translateX: -left }],
+      transform: [
+        {
+          translateX: -interpolate(scrollX.value, inputRange, activeLefts, Extrapolation.CLAMP),
+        },
+      ],
     };
   });
-
-  const renderTabFace = ({ tab, textColor }: { tab: SwipeTabsItem<T>; textColor: string }) => {
-    return (
-      <View className="min-h-11 flex-row items-center justify-center gap-2 rounded-xl px-3 py-2">
-        {tab.icon ? <Icon as={tab.icon} size={16} color={textColor} /> : null}
-        <Text
-          className="text-center text-sm font-semibold leading-none"
-          style={{ color: textColor }}
-        >
-          {tab.label}
-        </Text>
-      </View>
-    );
-  };
 
   return (
     <View className="gap-4">
       <View
-        className="relative flex-row rounded-2xl p-1"
+        className="rounded-2xl p-1"
         style={{ backgroundColor: colors.isDark ? "#0F0C1A" : "#EEE6FA" }}
         accessibilityLabel={ariaLabel}
+        accessibilityRole="tablist"
       >
-        <Animated.View
-          pointerEvents="none"
-          className="absolute bottom-1 top-1 rounded-xl"
-          style={[
-            indicatorStyle,
-            {
-              backgroundColor: colors.primary,
-            },
-          ]}
-        />
-        {tabs.map((tab) => {
-          const isActive = tab.value === value;
-
-          return (
-            <Pressable
-              key={tab.value}
-              onPress={() => handleTabPress(tab.value)}
-              onLayout={handleTabLayout(tab.value)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: isActive }}
-              className="flex-1"
-            >
-              {renderTabFace({
-                tab,
-                textColor: colors.textSecondary,
-              })}
-            </Pressable>
-          );
-        })}
-        {hasAllTabLayouts ? (
-          <Animated.View
-            pointerEvents="none"
-            accessible={false}
-            className="absolute bottom-1 top-1 overflow-hidden rounded-xl"
-            style={indicatorStyle}
-          >
-            <Animated.View className="absolute inset-0" style={overlayTrackStyle}>
-              {tabs.map((tab) => {
-                const tabLayout = tabLayouts[tab.value];
-
-                if (!tabLayout) {
-                  return null;
-                }
+        <View
+          className="relative h-11"
+          onLayout={(event) => {
+            const nextWidth = Math.round(event.nativeEvent.layout.width);
+            if (nextWidth !== barWidth) setBarWidth(nextWidth);
+          }}
+        >
+          {barWidth > 0
+            ? tabs.map((tab, index) => {
+                const isActive = tab.value === value;
 
                 return (
-                  <View
+                  <ExpandingTabSlot
                     key={tab.value}
-                    className="absolute top-0"
-                    style={{
-                      left: tabLayout.x,
-                      width: tabLayout.width,
-                    }}
+                    inputRange={inputRange}
+                    layouts={layouts.map(
+                      (pageLayouts) => pageLayouts[index] ?? { left: 0, width: 0 },
+                    )}
+                    scrollX={scrollX}
                   >
-                    {renderTabFace({
-                      tab,
-                      textColor: colors.onPrimary,
-                    })}
-                  </View>
+                    <Pressable
+                      onPress={() => handleTabPress(tab.value)}
+                      accessibilityRole="tab"
+                      accessibilityLabel={tab.label}
+                      accessibilityState={{ selected: isActive }}
+                      className="h-11 items-center justify-center"
+                    >
+                      {tab.icon ? (
+                        <Icon as={tab.icon} size={20} color={colors.textSecondary} />
+                      ) : (
+                        <Text
+                          className="text-sm font-semibold"
+                          style={{ color: colors.textSecondary }}
+                          numberOfLines={1}
+                        >
+                          {tab.label}
+                        </Text>
+                      )}
+                    </Pressable>
+                  </ExpandingTabSlot>
                 );
-              })}
+              })
+            : null}
+          {barWidth > 0 ? (
+            <Animated.View
+              pointerEvents="none"
+              accessible={false}
+              className="absolute bottom-0 top-0 overflow-hidden rounded-xl"
+              style={[indicatorStyle, { backgroundColor: colors.primary }]}
+            >
+              <Animated.View className="absolute inset-0" style={overlayTrackStyle}>
+                {tabs.map((tab, index) => (
+                  <ExpandingTabSlot
+                    key={tab.value}
+                    inputRange={inputRange}
+                    layouts={layouts.map(
+                      (pageLayouts) => pageLayouts[index] ?? { left: 0, width: 0 },
+                    )}
+                    scrollX={scrollX}
+                  >
+                    <View className="h-11 flex-row items-center justify-center gap-2 px-3">
+                      {tab.icon ? <Icon as={tab.icon} size={18} color={colors.onPrimary} /> : null}
+                      <Text
+                        className="shrink text-sm font-semibold leading-none"
+                        style={{ color: colors.onPrimary }}
+                        numberOfLines={1}
+                      >
+                        {tab.label}
+                      </Text>
+                    </View>
+                  </ExpandingTabSlot>
+                ))}
+              </Animated.View>
             </Animated.View>
-          </Animated.View>
-        ) : null}
+          ) : null}
+        </View>
       </View>
 
       <View onLayout={handleContainerLayout}>
@@ -319,5 +290,30 @@ export const SwipeTabs = <T extends string>({
         </Animated.ScrollView>
       </View>
     </View>
+  );
+};
+
+const ExpandingTabSlot = ({
+  children,
+  inputRange,
+  layouts,
+  scrollX,
+}: {
+  children: React.ReactNode;
+  inputRange: number[];
+  layouts: { left: number; width: number }[];
+  scrollX: SharedValue<number>;
+}) => {
+  const lefts = layouts.map((layout) => layout.left);
+  const widths = layouts.map((layout) => layout.width);
+  const style = useAnimatedStyle(() => ({
+    left: interpolate(scrollX.value, inputRange, lefts, Extrapolation.CLAMP),
+    width: interpolate(scrollX.value, inputRange, widths, Extrapolation.CLAMP),
+  }));
+
+  return (
+    <Animated.View className="absolute bottom-0 top-0" style={style}>
+      {children}
+    </Animated.View>
   );
 };

@@ -1,0 +1,163 @@
+import { beforeEach, expect, mock, test } from "bun:test";
+import React, { act, type ReactNode } from "react";
+import { createRoot } from "test-renderer";
+import type { GroupPlace } from "../lib/places.ts";
+import { createReactNativeTestModule } from "./reactNativeTestModule.ts";
+
+(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
+let role = "OWNER";
+let places: GroupPlace[] = [];
+let sharing = { enabled: true, arrivalsOff: [] as { userId: string; deviceId: string }[] };
+const passthrough = ({ children }: { children?: ReactNode }) =>
+  React.createElement(React.Fragment, null, children);
+
+mock.module("@tanstack/react-query", () => ({
+  skipToken: Symbol("skipToken"),
+  useMutation: () => ({ isPending: false, mutateAsync: async () => ({}) }),
+  useQueryClient: () => ({ invalidateQueries: async () => {} }),
+  useQuery: (options: { queryKey?: unknown[]; select?: (groups: unknown[]) => unknown }) => {
+    const key = options.queryKey?.[0];
+    if (key === "groupPlaces") return { data: places, isPending: false, isError: false };
+    if (key === "placeSharing") return { data: sharing };
+    if (key === "memberDevices") {
+      return { data: [{ deviceId: "phone", name: "Pixel 8", userId: "self" }] };
+    }
+    if (key === "registeredDevice") return { data: { deviceId: "phone", userId: "self" } };
+    return {
+      data: options.select?.([
+        { id: "family", members: [{ id: "m-self", role, userId: "self", name: "Me" }] },
+      ]),
+      isPending: false,
+    };
+  },
+}));
+mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
+mock.module("expo-router", () => ({ Link: passthrough }));
+mock.module("react-native", () => createReactNativeTestModule());
+mock.module("lucide-react-native", () => ({
+  ChevronRightIcon: () => null,
+  HourglassIcon: () => null,
+  InfoIcon: () => null,
+  MapPinIcon: () => null,
+  PlusIcon: () => null,
+}));
+mock.module("../components/ui/Button.tsx", () => ({ Button: passthrough }));
+mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
+mock.module("../components/ui/Switch.tsx", () => ({
+  Switch: ({ value }: { value: boolean }) => `switch:${value ? "on" : "off"}`,
+}));
+mock.module("../components/ui/Text.tsx", () => ({ Text: passthrough }));
+mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
+mock.module("../lib/api.ts", () => ({
+  trpc: {
+    groupMembership: {
+      list: { queryOptions: () => ({}) },
+      listMemberDevices: { queryOptions: () => ({ queryKey: ["memberDevices"] }) },
+    },
+    placeSharing: {
+      get: { queryOptions: () => ({ queryKey: ["placeSharing"] }) },
+      set: { mutationOptions: () => ({}) },
+    },
+  },
+}));
+mock.module("../lib/auth-client.ts", () => ({
+  authClient: { useSession: () => ({ data: { user: { id: "self" } } }) },
+}));
+mock.module("../hooks/useMemberNames.ts", () => ({
+  useMemberNames: () => (userId: string) => (userId === "sam" ? "Sam" : null),
+}));
+mock.module("../lib/registeredDevice.ts", () => ({ readRegisteredDevice: async () => null }));
+mock.module("../lib/placeSync.ts", () => ({
+  groupPlacesQueryKey: () => ["groupPlaces"],
+  loadGroupPlaces: async () => places,
+}));
+
+const { default: PlacesTab } = await import("../app/(tabs)/groups/[groupId]/PlacesTab.tsx");
+
+const place = (overrides: Partial<GroupPlace>): GroupPlace => ({
+  algorithm: "xchacha20poly1305",
+  ciphertext: "cipher",
+  createdAt: new Date(0),
+  createdByUserId: "self",
+  emoji: "🏠",
+  epochId: "epoch",
+  geometry: { v: 1, latitude: 51.5, longitude: -0.12, radiusMeters: 250 },
+  id: "home",
+  kind: "placeGeometry",
+  name: "Home",
+  nonce: "nonce",
+  senderDeviceId: "phone",
+  updatedAt: new Date(0),
+  updatedByUserId: null,
+  ...overrides,
+});
+
+const render = async () => {
+  const root = createRoot();
+  await act(async () =>
+    root.render(
+      <PlacesTab
+        groupId="family"
+        groupName="Family"
+        livePositions={[
+          {
+            battery: { charging: false, level: 80 },
+            deviceId: "sams-phone",
+            latitude: 51.5001,
+            longitude: -0.12,
+            sourceGroupId: "family",
+            speed: null,
+            timestamp: new Date().toISOString(),
+            userId: "sam",
+          },
+        ]}
+      />,
+    ),
+  );
+  return JSON.stringify(root.container.toJSON());
+};
+
+beforeEach(() => {
+  role = "OWNER";
+  sharing = { enabled: true, arrivalsOff: [] };
+  places = [place({}), place({ id: "club", name: "Football club", emoji: "⚽", geometry: null })];
+});
+
+test("shows each place with its size and who's here, and places still syncing", async () => {
+  const text = await render();
+  expect(text).toContain("Medium · 250 m");
+  expect(text).toContain("Sam is here");
+  expect(text).toContain("Football club");
+  expect(text).toContain("Syncing, this can take a few minutes");
+  expect(text).toContain("switch:on");
+});
+
+test("only owners and admins can add places", async () => {
+  expect(await render()).toContain("Add place");
+  role = "ADMIN";
+  expect(await render()).toContain("Add place");
+  role = "MEMBER";
+  const memberView = await render();
+  expect(memberView).not.toContain("Add place");
+  expect(memberView).toContain("Home");
+});
+
+test("the empty state only offers adding a place to admins", async () => {
+  places = [];
+  expect(await render()).toContain("Add your first place");
+  role = "MEMBER";
+  const memberView = await render();
+  expect(memberView).toContain("No places yet");
+  expect(memberView).not.toContain("Add place");
+});
+
+test("says when this phone's arrivals and departures are off", async () => {
+  sharing = { enabled: false, arrivalsOff: [{ userId: "self", deviceId: "phone" }] };
+  const text = await render();
+  expect(text).toContain("Arrivals and departures are off on this phone");
+  expect(text).toContain("your Pixel 8");
+  expect(text).toContain("switch:off");
+});

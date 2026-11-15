@@ -20,7 +20,7 @@ import {
 import { Icon } from "../../../../components/ui/Icon.tsx";
 import { Text } from "../../../../components/ui/Text.tsx";
 import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
-import { useLiveTrackingPositions } from "../../../../hooks/useLiveTrackingPositions.ts";
+import type { useLiveTrackingPositions } from "../../../../hooks/useLiveTrackingPositions.ts";
 import { trpc } from "../../../../lib/api.ts";
 import {
   loadPersonalNicknames,
@@ -36,7 +36,13 @@ import { timeSince } from "../../../../lib/timeSince.ts";
 import { requestTrackingSync } from "../../../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../../../lib/useSingleFlight.ts";
 
-const MembersTab = ({ groupId }: { groupId: string }) => {
+const MembersTab = ({
+  groupId,
+  live: { positions: livePositions, status: liveStatus },
+}: {
+  groupId: string;
+  live: ReturnType<typeof useLiveTrackingPositions>;
+}) => {
   const [nicknameMember, setNicknameMember] = useState<{
     id: string;
     name: string;
@@ -76,11 +82,24 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
     queryFn: userId ? () => loadPersonalNicknames(groupId, userId) : skipToken,
   });
   const nicknames = nicknameQuery.data ?? {};
-  const { positions: livePositions, status: liveStatus } = useLiveTrackingPositions({ groupId });
   const memberDevices = useQuery({
     ...trpc.groupMembership.listMemberDevices.queryOptions({ groupId }),
     subscribed: isFocused,
   });
+  const placeSharing = useQuery({
+    ...trpc.placeSharing.get.queryOptions({ groupId }),
+    subscribed: isFocused,
+  });
+  const arrivalsOffLabel = (memberUserId: string) => {
+    const off = placeSharing.data?.arrivalsOff.filter((item) => item.userId === memberUserId);
+    if (!off?.length) return null;
+    const devices = memberDevices.data?.filter((device) => device.userId === memberUserId) ?? [];
+    if (devices.length <= 1) return "Arrivals off";
+    const names = off.map(
+      (item) => devices.find((device) => device.deviceId === item.deviceId)?.name ?? "a device",
+    );
+    return `Arrivals off on ${names.join(", ")}`;
+  };
   const memberStatuses = buildMemberLiveStatuses({
     memberDevices: memberDevices.data ?? [],
     members: (members ?? []).map((member) => ({
@@ -289,6 +308,7 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
       {memberStatuses.map((member) => (
         <View key={member.id} className="gap-3 rounded-2xl border border-border bg-card p-4">
           <MemberCard
+            arrivalsOff={arrivalsOffLabel(member.user.id)}
             member={member}
             sharingPaused={
               liveStatus.sharing?.some((device) => device.userId === member.user.id) === true &&
@@ -398,9 +418,11 @@ const MembersTab = ({ groupId }: { groupId: string }) => {
 };
 
 const MemberCard = ({
+  arrivalsOff,
   member,
   sharingPaused,
 }: {
+  arrivalsOff: string | null;
   member: ReturnType<typeof buildMemberLiveStatuses>[number];
   sharingPaused: boolean;
 }) => {
@@ -487,6 +509,7 @@ const MemberCard = ({
           ) : (
             <Text className="text-muted text-sm">Battery unavailable</Text>
           )}
+          {arrivalsOff ? <Text className="text-muted text-sm">{arrivalsOff}</Text> : null}
         </View>
       </View>
     </View>
