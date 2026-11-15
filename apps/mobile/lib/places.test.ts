@@ -94,12 +94,12 @@ describe("who's here", () => {
     expect(here.map((person) => person.userId)).toEqual(["sam"]);
   });
 
-  test("ignores locations older than 10 minutes", () => {
+  test("ignores locations older than 20 minutes", () => {
     expect(
       peopleAtPlace({
         geometry: home,
         now,
-        people: [{ ...northOf(0), timestamp: "2026-11-15T11:49:00.000Z", userId: "sam" }],
+        people: [{ ...northOf(0), timestamp: "2026-11-15T11:39:00.000Z", userId: "sam" }],
       }),
     ).toEqual([]);
   });

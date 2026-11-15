@@ -128,7 +128,7 @@ export const peopleAtPlace = <
   now: number;
   people: readonly T[];
 }) => {
-  const freshSince = now - 10 * 60_000;
+  const freshSince = now - 20 * 60_000;
   const here = people.filter(
     (person) =>
       Date.parse(person.timestamp) >= freshSince &&
