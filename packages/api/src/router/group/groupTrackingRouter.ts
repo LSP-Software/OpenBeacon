@@ -4,7 +4,6 @@ import {
   groupTrackingUploadBatchSchema,
 } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
-import { Prisma } from "@openbeacon/database";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import {
@@ -12,6 +11,7 @@ import {
   pollGroupTrackingPoints,
   uploadGroupTrackingBatch,
 } from "../../lib/groupTracking.ts";
+import { lockGroupMemberForWrite } from "../../lib/groupWriteChecks.ts";
 import { getTrackingKeyState } from "../../lib/trackingKeyState.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
@@ -48,32 +48,11 @@ export const groupTrackingRouter = {
       );
       if (!perMinute.allowed) throw uploadLimitReached("points per minute");
       const result = await ctx.db.$transaction(async (tx) => {
-        await tx.$queryRaw(
-          Prisma.sql`SELECT id FROM "User" WHERE id = ${ctx.session.user.id} FOR SHARE`,
-        );
-        const groups = await tx.$queryRaw<Array<{ id: string }>>(
-          Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR SHARE`,
-        );
-        if (!groups.length) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "This group no longer exists.",
-            cause: new ReasonError("GROUP_GONE"),
-          });
-        }
-        const members = await tx.$queryRaw<Array<{ id: string; createdAt: Date }>>(Prisma.sql`
-          SELECT id, "createdAt" FROM "GroupMember"
-          WHERE "groupId" = ${input.groupId} AND "userId" = ${ctx.session.user.id}
-          FOR SHARE
-        `);
-        const member = members[0];
-        if (!member) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "You are not a member of this group",
-            cause: new ReasonError("NOT_GROUP_MEMBER"),
-          });
-        }
+        const member = await lockGroupMemberForWrite(tx, {
+          groupId: input.groupId,
+          groupLock: "FOR SHARE",
+          userId,
+        });
         return uploadGroupTrackingBatch({
           db: tx,
           groupId: input.groupId,

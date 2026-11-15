@@ -18,6 +18,10 @@ export const errorReasons = [
   "ALREADY_SET_UP",
   "NO_APPROVING_DEVICE",
   "HISTORY_RECIPIENT_MISMATCH",
+  "PLACE_LIMIT_REACHED",
+  "PLACE_CHANGED",
+  "PLACE_GONE",
+  "EPOCH_NOT_LATEST",
 ] as const;
 
 export type ErrorReason = (typeof errorReasons)[number];

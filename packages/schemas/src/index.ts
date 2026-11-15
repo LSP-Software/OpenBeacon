@@ -37,6 +37,16 @@ import {
 } from "./schemas/feedback/submitFeedback.ts";
 import { createGroupSchema, newGroupIdSchema } from "./schemas/group/create.ts";
 import { inviteMemberToGroupSchema } from "./schemas/group/inviteMember.ts";
+import {
+  createPlaceSchema,
+  deletePlaceSchema,
+  listPlacesSchema,
+  MAX_PLACES_PER_GROUP,
+  placeEmojiSchema,
+  placeNameSchema,
+  reEncryptPlaceSchema,
+  updatePlaceSchema,
+} from "./schemas/group/places.ts";
 import { removeGroupMemberSchema } from "./schemas/group/removeMember.ts";
 import {
   groupTrackingGetLatestSchema,
@@ -45,6 +55,7 @@ import {
   groupTrackingUploadBatchSchema,
   TRACKING_POINT_KIND,
 } from "./schemas/group/tracking.ts";
+import { PLACE_GEOMETRY_KIND } from "@openbeacon/encryption";
 import { requestImageUploadInputSchema } from "./schemas/image/requestImageUpload.ts";
 
 export {
@@ -59,6 +70,8 @@ export {
   changeRecoveryPhraseSchema,
   createAccountHistoryKeySchema,
   createGroupSchema,
+  createPlaceSchema,
+  deletePlaceSchema,
   emailCodeSchema,
   FEEDBACK_MESSAGE_MAX_LENGTH,
   HISTORY_RECIPIENT_MISMATCH_MESSAGE,
@@ -69,7 +82,12 @@ export {
   groupTrackingPollSchema,
   groupTrackingUploadBatchSchema,
   inviteMemberToGroupSchema,
+  listPlacesSchema,
+  MAX_PLACES_PER_GROUP,
   optionalEnvString,
+  placeEmojiSchema,
+  placeNameSchema,
+  reEncryptPlaceSchema,
   serverNameSchema,
   registerDeviceKeySchema,
   removeGroupMemberSchema,
@@ -80,8 +98,10 @@ export {
   signUpSchema,
   submitFeedbackSchema,
   TRACKING_POINT_KIND,
+  PLACE_GEOMETRY_KIND,
   removeDeviceSchema,
   updateDeviceSchema,
+  updatePlaceSchema,
   wrappedEpochKeySchema,
   approveDeviceLinkSchema,
   deviceLinkIdSchema,

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { prisma } from "@openbeacon/database";
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
+import { lockGroupEpoch } from "@openbeacon/api/groupWriteChecks.ts";
 import { createEpochCleanup, createLocationHistoryCleanup } from "./locationHistoryCleanup.ts";
 
 const prefix = `location-history-cleanup-${crypto.randomUUID()}`;
@@ -204,6 +205,50 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     expect(await counts()).toEqual([0, 0, 0]);
     expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();
+  });
+
+  test("keeps an epoch that a place still uses and deletes it once the place moves on", async () => {
+    const groupId = await createGroup("places", [200, 100]);
+    const place = await prisma.place.create({
+      data: {
+        groupId,
+        name: "Home",
+        emoji: "🏠",
+        epochId: `${groupId}-epoch-1`,
+        senderDeviceId: deviceId,
+        algorithm: "XChaCha20-Poly1305",
+        nonce: "nonce",
+        ciphertext: "ciphertext",
+        createdByUserId: userId,
+      },
+    });
+    await createEpochCleanup()();
+    expect(await epochNumbers(groupId)).toEqual([1, 2]);
+    await prisma.place.update({
+      where: { id: place.id },
+      data: { epochId: `${groupId}-epoch-2` },
+    });
+    await createEpochCleanup()();
+    expect(await epochNumbers(groupId)).toEqual([2]);
+  });
+
+  test("skips an epoch that a place being saved has locked", async () => {
+    const groupId = await createGroup("place-race", [200, 100]);
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    let epochsDuringSave: number[] = [];
+    const rollback = new Error("roll back the place");
+    const save = prisma.$transaction(async (tx) => {
+      await lockGroupEpoch(tx, { epochId: `${groupId}-epoch-1`, groupId });
+      await createEpochCleanup()();
+      epochsDuringSave = await epochNumbers(groupId);
+      throw rollback;
+    });
+    await expect(save).rejects.toBe(rollback);
+    expect(epochsDuringSave).toEqual([1, 2]);
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+    await createEpochCleanup()();
+    expect(await epochNumbers(groupId)).toEqual([2]);
   });
 
   test("skips an epoch that an upload in progress is using and deletes it on a later run", async () => {

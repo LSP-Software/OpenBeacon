@@ -7,7 +7,7 @@ import {
 } from "@openbeacon/encryption";
 import z from "zod";
 
-const trackingNonceSchema = z
+export const groupPayloadNonceSchema = z
   .string()
   .min(1)
   .refine((nonce) => {
@@ -18,7 +18,7 @@ const trackingNonceSchema = z
     } catch {
       return false;
     }
-  }, "Invalid tracking point nonce.");
+  }, "Invalid payload nonce.");
 
 export const groupTrackingPointSchema = z.object({
   algorithm: z.literal(PAYLOAD_ENCRYPTION_ALGORITHM),
@@ -26,7 +26,7 @@ export const groupTrackingPointSchema = z.object({
   clientPointId: z.string().min(1).max(128),
   epochId: z.string().min(1).max(128),
   kind: z.literal(TRACKING_POINT_KIND),
-  nonce: trackingNonceSchema,
+  nonce: groupPayloadNonceSchema,
   senderDeviceId: z.string().min(1).max(128),
 });
 

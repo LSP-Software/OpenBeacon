@@ -184,6 +184,17 @@ export const deleteAccountRecords = async ({
       await tx.feedback.deleteMany({
         where: { email: { equals: user.email, mode: "insensitive" } },
       });
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE "Group" SET "placesRevision" = "placesRevision" + 1
+        WHERE id IN (
+          SELECT g.id FROM "Group" g
+          WHERE EXISTS (
+            SELECT 1 FROM "Place" p WHERE p."groupId" = g.id AND p."createdByUserId" = ${userId}
+          )
+          ORDER BY g.id
+          FOR NO KEY UPDATE
+        )
+      `);
       await tx.user.delete({ where: { id: userId } });
       return user;
     },

@@ -44,6 +44,8 @@ model User {
   recoveryKey                RecoveryKey?
   historyKeys                AccountHistoryKey[]
   deviceLinks                DeviceLink[]
+  createdPlaces              Place[] @relation("PlaceCreatedBy")
+  updatedPlaces              Place[] @relation("PlaceUpdatedBy")
 
   @@index([pendingDeletion, deletionDate])
   @@index([image])
@@ -124,17 +126,43 @@ model Group {
   name           String
   image          String?
   epochRotationRequired Boolean @default(false)
+  placesRevision Int @default(0)
   groupMembers           GroupMember[]
   groupInvites           GroupMemberInvite[]
   sharedInvites          GroupSharedInvite[]
   joinAlerts             GroupJoinAlert[]
   groupEpochs            GroupEpoch[]
   groupEncryptedPayloads GroupEncryptedPayload[]
+  places                 Place[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([image])
+}
+
+model Place {
+  id              String   @id @default(uuid(7))
+  groupId         String
+  group           Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name            String
+  emoji           String
+  epochId         String
+  senderDeviceId  String
+  algorithm       String
+  nonce           String
+  ciphertext      String
+  createdByUserId String
+  createdBy       User     @relation("PlaceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  updatedByUserId String?
+  updatedBy       User?    @relation("PlaceUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([groupId, createdAt])
+  @@index([epochId])
+  @@index([createdByUserId])
+  @@index([updatedByUserId])
 }
 
 model PendingUpload {
