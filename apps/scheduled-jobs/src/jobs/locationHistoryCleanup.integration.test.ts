@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { prisma } from "@openbeacon/database";
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
-import { createEpochCleanup, createLocationHistoryCleanup } from "./locationHistoryCleanup.ts";
+import {
+  createEpochCleanup,
+  createLocationHistoryCleanup,
+  createPlaceTransitionCleanup,
+} from "./locationHistoryCleanup.ts";
 
 const prefix = `location-history-cleanup-${crypto.randomUUID()}`;
 const userId = `${prefix}-user`;
@@ -229,6 +233,53 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     });
     await createEpochCleanup()();
     expect(await epochNumbers(groupId)).toEqual([2]);
+  });
+
+  test("deletes place transitions that happened more than 14 days ago, in batches", async () => {
+    const groupId = await createGroup("transitions", [200]);
+    const place = await prisma.place.create({
+      data: {
+        groupId,
+        name: "Home",
+        emoji: "🏠",
+        epochId: `${groupId}-epoch-1`,
+        senderDeviceId: deviceId,
+        algorithm: "XChaCha20-Poly1305",
+        nonce: "nonce",
+        ciphertext: "ciphertext",
+        createdByUserId: userId,
+      },
+    });
+    const transitions = [
+      { name: "old", occurredAt: ago(30) },
+      { name: "older", occurredAt: ago(60) },
+      { name: "justOver", occurredAt: ago(14 + 1 / 24) },
+      { name: "justUnder", occurredAt: ago(14 - 1 / 24) },
+      { name: "recent", occurredAt: ago(1) },
+    ];
+    await prisma.placeTransition.createMany({
+      data: transitions.map(({ name, occurredAt }) => ({
+        id: `${groupId}-${name}`,
+        placeId: place.id,
+        groupId,
+        deviceId,
+        userId,
+        direction: "ARRIVE" as const,
+        occurredAt,
+        clientId: crypto.randomUUID(),
+        createdAt: ago(0),
+      })),
+    });
+    await createPlaceTransitionCleanup({ batchSize: 2 })();
+    const remaining = await prisma.placeTransition.findMany({
+      where: { groupId },
+      select: { id: true },
+      orderBy: { id: "asc" },
+    });
+    expect(remaining.map(({ id }) => id.slice(groupId.length + 1))).toEqual([
+      "justUnder",
+      "recent",
+    ]);
   });
 
   test("skips an epoch that an upload in progress is using and deletes it on a later run", async () => {

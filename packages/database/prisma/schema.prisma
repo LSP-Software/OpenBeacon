@@ -158,11 +158,51 @@ model Place {
   updatedBy       User?    @relation("PlaceUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  transitions     PlaceTransition[]
 
   @@index([groupId, createdAt])
   @@index([epochId])
   @@index([createdByUserId])
   @@index([updatedByUserId])
+}
+
+enum PlaceTransitionDirection {
+  ARRIVE
+  LEAVE
+}
+
+model PlaceTransition {
+  id         String                   @id @default(uuid(7))
+  placeId    String
+  place      Place                    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  groupId    String
+  deviceId   String
+  device     UserDevice               @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  userId     String
+  direction  PlaceTransitionDirection
+  occurredAt DateTime
+  clientId   String
+  createdAt  DateTime                 @default(now())
+
+  @@unique([deviceId, clientId])
+  @@index([groupId, createdAt, id])
+  @@index([groupId, occurredAt, id])
+  @@index([placeId])
+  @@index([occurredAt])
+}
+
+model PlaceSharing {
+  deviceId  String
+  device    UserDevice  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  groupId   String
+  userId    String
+  member    GroupMember @relation(fields: [userId, groupId], references: [userId, groupId], onDelete: Cascade)
+  enabled   Boolean
+  updatedAt DateTime    @updatedAt
+
+  @@id([deviceId, groupId])
+  @@index([userId, groupId])
+  @@index([groupId])
 }
 
 model PendingUpload {
@@ -242,6 +282,7 @@ model GroupMember {
   personalNicknames PersonalGroupNickname[] @relation("NicknameTarget")
   ownedNicknames PersonalGroupNickname[] @relation("NicknameOwner")
   personalColor PersonalGroupColor?
+  placeSharing PlaceSharing[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -295,6 +336,8 @@ model UserDevice {
   deviceLink             DeviceLink?              @relation("DeviceLinkNewDevice")
   approvedDeviceLinks    DeviceLink[]             @relation("DeviceLinkApprover")
   challenges             DeviceChallenge[]
+  placeTransitions       PlaceTransition[]
+  placeSharing           PlaceSharing[]
 
   @@index([userId])
 }

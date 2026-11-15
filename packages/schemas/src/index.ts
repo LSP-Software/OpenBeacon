@@ -48,6 +48,14 @@ import {
   reEncryptPlacesSchema,
   updatePlaceSchema,
 } from "./schemas/group/places.ts";
+import {
+  getPlaceSharingSchema,
+  PLACE_TRANSITION_DIRECTIONS,
+  placeAlertsCursorSchema,
+  placeTransitionSchema,
+  recentPlaceTransitionsSchema,
+  setPlaceSharingSchema,
+} from "./schemas/group/placeTransitions.ts";
 import { removeGroupMemberSchema } from "./schemas/group/removeMember.ts";
 import {
   groupTrackingGetLatestSchema,
@@ -73,6 +81,7 @@ export {
   createPlaceSchema,
   deletePlaceSchema,
   emailCodeSchema,
+  getPlaceSharingSchema,
   FEEDBACK_MESSAGE_MAX_LENGTH,
   HISTORY_RECIPIENT_MISMATCH_MESSAGE,
   newGroupIdSchema,
@@ -85,10 +94,15 @@ export {
   listPlacesSchema,
   MAX_PLACES_PER_GROUP,
   optionalEnvString,
+  placeAlertsCursorSchema,
   placeEmojiSchema,
   placeNameSchema,
+  placeTransitionSchema,
+  PLACE_TRANSITION_DIRECTIONS,
   reEncryptPlacesSchema,
+  recentPlaceTransitionsSchema,
   serverNameSchema,
+  setPlaceSharingSchema,
   registerDeviceKeySchema,
   removeGroupMemberSchema,
   requestImageUploadInputSchema,

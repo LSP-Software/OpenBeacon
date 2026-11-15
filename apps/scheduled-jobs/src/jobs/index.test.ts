@@ -5,6 +5,7 @@ const runAccountDeletion = mock(async () => {});
 const runExpiredRecordsCleanup = mock(async () => {});
 const runPendingDeviceCleanup = mock(async () => {});
 const runLocationHistoryCleanup = mock(async () => {});
+const runPlaceTransitionCleanup = mock(async () => {});
 const runEpochCleanup = mock(async () => {});
 const runStalePendingUploadCleanup = mock(async () => {});
 const runImageStorageSweep = mock(async () => {});
@@ -15,6 +16,7 @@ mock.module("./expiredRecordsCleanup.ts", () => ({ runExpiredRecordsCleanup }));
 mock.module("./pendingDeviceCleanup.ts", () => ({ runPendingDeviceCleanup }));
 mock.module("./locationHistoryCleanup.ts", () => ({
   createLocationHistoryCleanup: () => runLocationHistoryCleanup,
+  createPlaceTransitionCleanup: () => runPlaceTransitionCleanup,
   createEpochCleanup: () => runEpochCleanup,
 }));
 mock.module("./imageUploadCleanup.ts", () => ({
@@ -31,6 +33,7 @@ test("registers the clean-up jobs alongside account deletion", async () => {
     { name: "expired-records-cleanup", delay: 3_600_000, run: runExpiredRecordsCleanup },
     { name: "pending-device-cleanup", delay: 3_600_000, run: runPendingDeviceCleanup },
     { name: "location-history-cleanup", delay: 3_600_000, run: runLocationHistoryCleanup },
+    { name: "place-transition-cleanup", delay: 3_600_000, run: runPlaceTransitionCleanup },
     { name: "epoch-cleanup", delay: 86_400_000, run: runEpochCleanup },
     { name: "pending-upload-cleanup", delay: 3_600_000, run: runStalePendingUploadCleanup },
     { name: "image-storage-sweep", delay: 86_400_000, run: runImageStorageSweep },
@@ -40,6 +43,7 @@ test("registers the clean-up jobs alongside account deletion", async () => {
   expect(runExpiredRecordsCleanup).toHaveBeenCalledTimes(1);
   expect(runPendingDeviceCleanup).toHaveBeenCalledTimes(1);
   expect(runLocationHistoryCleanup).toHaveBeenCalledTimes(1);
+  expect(runPlaceTransitionCleanup).toHaveBeenCalledTimes(1);
   expect(runEpochCleanup).toHaveBeenCalledTimes(1);
   expect(runStalePendingUploadCleanup).toHaveBeenCalledTimes(1);
   expect(runImageStorageSweep).toHaveBeenCalledTimes(1);

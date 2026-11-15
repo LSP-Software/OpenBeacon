@@ -6,6 +6,7 @@ import {
   XCHACHA20_NONCE_LENGTH,
 } from "@openbeacon/encryption";
 import z from "zod";
+import { placeAlertsCursorSchema, placeTransitionSchema } from "./placeTransitions.ts";
 
 export const groupPayloadNonceSchema = z
   .string()
@@ -30,10 +31,25 @@ export const groupTrackingPointSchema = z.object({
   senderDeviceId: z.string().min(1).max(128),
 });
 
-export const groupTrackingUploadBatchSchema = z.object({
-  groupId: z.string().min(1),
-  points: z.array(groupTrackingPointSchema).min(1).max(100),
-});
+export const groupTrackingUploadBatchSchema = z
+  .object({
+    groupId: z.string().min(1),
+    points: z.array(groupTrackingPointSchema).max(100),
+    placeTransitions: z
+      .array(placeTransitionSchema)
+      .max(50)
+      .refine(
+        (transitions) =>
+          new Set(transitions.map(({ clientId }) => clientId)).size === transitions.length,
+        { message: "Each place transition can only be sent once per request" },
+      )
+      .optional(),
+    placeAlertsCursor: placeAlertsCursorSchema.nullable().optional(),
+  })
+  .refine((batch) => batch.points.length > 0 || (batch.placeTransitions?.length ?? 0) > 0, {
+    message: "An upload needs at least one point or place transition",
+    path: ["points"],
+  });
 
 export const groupTrackingPollSchema = z.object({
   cursor: z

@@ -32,6 +32,31 @@ export const createLocationHistoryCleanup =
     );
   };
 
+export const createPlaceTransitionCleanup =
+  ({ batchSize = 1_000 }: { batchSize?: number } = {}) =>
+  async () => {
+    const cutoff = await retentionCutoff();
+    while (true) {
+      const result = await tryCatch(
+        services.db.$executeRaw`
+          DELETE FROM "PlaceTransition"
+          WHERE id IN (
+            SELECT id FROM "PlaceTransition"
+            WHERE "occurredAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')
+            ORDER BY "occurredAt"
+            LIMIT ${batchSize}
+          )
+        `,
+      );
+      if (result.error) {
+        const code = errorCode(result.error);
+        console.error(`Place transition clean-up failed${code ? ` (${code})` : ""}`);
+        return;
+      }
+      if (result.data < batchSize) return;
+    }
+  };
+
 export const createEpochCleanup =
   ({ pageSize = 5_000 }: { pageSize?: number } = {}) =>
   async () => {
