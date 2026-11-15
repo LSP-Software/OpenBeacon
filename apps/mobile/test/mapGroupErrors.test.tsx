@@ -67,6 +67,7 @@ mock.module("expo-router", () => ({
 }));
 mock.module("../lib/placeSync.ts", () => ({
   confirmDeletePlace: () => {},
+  groupPlacesQueryKey: (groupId: string) => ["groupPlaces", groupId],
   groupPlacesQueryOptions: () => ({ queryKey: ["groupPlaces"] }),
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));

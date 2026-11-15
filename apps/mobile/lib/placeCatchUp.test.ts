@@ -126,6 +126,8 @@ mock.module("./groupEncryption.ts", () => ({ rotateGroupEpochIfRequired: rotate 
 
 const { catchUpGroupPlaces } = await import("./placeCatchUp.ts");
 
+const family = { groupId: "family", userId: "user-a" };
+
 const open = (target: StoredPlace, epochId: string) =>
   decryptPlaceGeometry({ epochKey: keys.get(epochId)!, groupId: "family", place: target });
 
@@ -150,7 +152,7 @@ beforeEach(() => {
 
 test("moves the places this phone can read onto the latest epoch", async () => {
   const before = structuredClone(stored);
-  expect(await catchUpGroupPlaces("family")).toBe(2);
+  expect(await catchUpGroupPlaces(family)).toBe(2);
 
   const [home2, school2, current, unreadable] = stored;
   expect(home2?.epochId).toBe("epoch-2");
@@ -165,7 +167,7 @@ test("moves the places this phone can read onto the latest epoch", async () => {
 
 test("re-encrypts exactly the decrypted geometry, name and emoji against the stored ciphertext", async () => {
   const before = structuredClone(stored);
-  await catchUpGroupPlaces("family");
+  await catchUpGroupPlaces(family);
 
   const sent = reEncryptCalls[0]!.places;
   expect(sent.map(({ placeId }) => placeId)).toEqual(["home", "school"]);
@@ -187,19 +189,19 @@ test("re-encrypts exactly the decrypted geometry, name and emoji against the sto
 
 test("old epoch keys can't open the places once catch-up has run", async () => {
   expect(open(stored[0]!, "epoch-1")).toEqual(home);
-  await catchUpGroupPlaces("family");
+  await catchUpGroupPlaces(family);
   expect(open(stored[0]!, "epoch-1")).toBeNull();
   expect(open(stored[1]!, "epoch-1")).toBeNull();
 });
 
 test("does nothing when every place is up to date or unreadable", async () => {
   stored = stored.slice(2);
-  expect(await catchUpGroupPlaces("family")).toBe(0);
+  expect(await catchUpGroupPlaces(family)).toBe(0);
   expect(reEncryptCalls).toHaveLength(0);
 
   stored = [];
   latestEpochId = null;
-  expect(await catchUpGroupPlaces("family")).toBe(0);
+  expect(await catchUpGroupPlaces(family)).toBe(0);
   expect(reEncryptCalls).toHaveLength(0);
 });
 
@@ -207,7 +209,7 @@ test("never overwrites an admin's edit made while catching up", async () => {
   beforeReEncrypt = () => {
     stored[0] = { ...stored[0]!, ...seal({ epochId: "epoch-2", geometry: moved }), name: "Home" };
   };
-  expect(await catchUpGroupPlaces("family")).toBe(1);
+  expect(await catchUpGroupPlaces(family)).toBe(1);
 
   expect(stored[0]?.name).toBe("Home");
   expect(open(stored[0]!, "epoch-2")).toEqual(moved);
@@ -220,7 +222,7 @@ test("reloads and retries once when a place changed, then stops", async () => {
   beforeReEncrypt = once(() => {
     stored[0] = { ...stored[0]!, name: "Renamed" };
   });
-  expect(await catchUpGroupPlaces("family")).toBe(2);
+  expect(await catchUpGroupPlaces(family)).toBe(2);
   expect(reEncryptCalls.map(({ places }) => places.map(({ placeId }) => placeId))).toEqual([
     ["home", "school"],
     ["home"],
@@ -233,7 +235,7 @@ test("reloads and retries once when a place changed, then stops", async () => {
   beforeReEncrypt = () => {
     stored[1] = { ...stored[1]!, name: `${stored[1]!.name}!` };
   };
-  expect(await catchUpGroupPlaces("family")).toBe(0);
+  expect(await catchUpGroupPlaces(family)).toBe(0);
   expect(reEncryptCalls).toHaveLength(2);
   expect(stored[1]?.epochId).toBe("epoch-1");
 });
@@ -242,7 +244,7 @@ test("leaves a place another phone already moved without retrying", async () => 
   beforeReEncrypt = () => {
     stored[0] = { ...stored[0]!, ...seal({ epochId: "epoch-2", geometry: home }) };
   };
-  expect(await catchUpGroupPlaces("family")).toBe(1);
+  expect(await catchUpGroupPlaces(family)).toBe(1);
   expect(reEncryptCalls).toHaveLength(1);
   expect(listCalls).toBe(1);
 });
@@ -253,7 +255,7 @@ test("runs a pending key rotation, then retries once on the new epoch", async ()
     latestEpochId = "epoch-3";
     return true;
   });
-  expect(await catchUpGroupPlaces("family")).toBe(3);
+  expect(await catchUpGroupPlaces(family)).toBe(3);
   expect(rotate).toHaveBeenCalledWith("family");
   expect(reEncryptCalls.map(({ places }) => places.map(({ placeId }) => placeId))).toEqual([
     ["home", "school"],
@@ -264,27 +266,37 @@ test("runs a pending key rotation, then retries once on the new epoch", async ()
 
 test("refreshes the latest epoch once, and gives up on a second failure or other errors", async () => {
   failures = [reasonError("EPOCH_NOT_LATEST")];
-  expect(await catchUpGroupPlaces("family")).toBe(2);
+  expect(await catchUpGroupPlaces(family)).toBe(2);
   expect(rotate).not.toHaveBeenCalled();
   expect(reEncryptCalls).toHaveLength(2);
 
   stored[0] = place("home", "epoch-1", home);
   reEncryptCalls.length = 0;
   failures = [reasonError("EPOCH_NOT_LATEST"), reasonError("EPOCH_NOT_LATEST")];
-  await expect(catchUpGroupPlaces("family")).rejects.toThrow("EPOCH_NOT_LATEST");
+  await expect(catchUpGroupPlaces(family)).rejects.toThrow("EPOCH_NOT_LATEST");
   expect(reEncryptCalls).toHaveLength(2);
 
   reEncryptCalls.length = 0;
   failures = [reasonError("NOT_GROUP_MEMBER")];
-  await expect(catchUpGroupPlaces("family")).rejects.toThrow("NOT_GROUP_MEMBER");
+  await expect(catchUpGroupPlaces(family)).rejects.toThrow("NOT_GROUP_MEMBER");
   expect(reEncryptCalls).toHaveLength(1);
 });
 
 test("shares one run between callers for the same group", async () => {
   const [first, second] = await Promise.all([
-    catchUpGroupPlaces("family"),
-    catchUpGroupPlaces("family"),
+    catchUpGroupPlaces(family),
+    catchUpGroupPlaces(family),
   ]);
   expect([first, second]).toEqual([2, 2]);
   expect(reEncryptCalls).toHaveLength(1);
+});
+
+test("never shares a run between different people for the same group", async () => {
+  const [first, second] = await Promise.all([
+    catchUpGroupPlaces(family),
+    catchUpGroupPlaces({ groupId: "family", userId: "user-b" }),
+  ]);
+  expect(first + second).toBe(2);
+  expect(listCalls).toBe(2);
+  expect(reEncryptCalls).toHaveLength(2);
 });

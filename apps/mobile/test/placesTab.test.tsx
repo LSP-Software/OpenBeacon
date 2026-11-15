@@ -78,6 +78,7 @@ mock.module("../hooks/useMemberNames.ts", () => ({
 mock.module("../lib/registeredDevice.ts", () => ({ readRegisteredDevice: async () => null }));
 mock.module("../lib/placeCatchUp.ts", () => ({ catchUpGroupPlaces: async () => 0 }));
 mock.module("../lib/placeSync.ts", () => ({
+  groupPlacesQueryKey: (groupId: string) => ["groupPlaces", groupId],
   groupPlacesQueryOptions: () => ({ queryKey: ["groupPlaces"] }),
 }));
 

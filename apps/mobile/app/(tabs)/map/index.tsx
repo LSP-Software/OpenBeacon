@@ -30,7 +30,11 @@ import { classifyMapPeople, flagUnreadableMarkers } from "../../../lib/classifyM
 import { loadPersonalNicknames } from "../../../lib/personalNicknames.ts";
 import { Alert } from "../../../lib/alert.ts";
 import { buildPlacePins, hiddenGroupWithPlace } from "../../../lib/places.ts";
-import { confirmDeletePlace, groupPlacesQueryOptions } from "../../../lib/placeSync.ts";
+import {
+  confirmDeletePlace,
+  groupPlacesQueryKey,
+  groupPlacesQueryOptions,
+} from "../../../lib/placeSync.ts";
 import { canShowSharedLocation } from "../../../lib/locationSharingVisibility.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { setMapGroupHidden } from "../../../lib/hiddenMapGroups.ts";
@@ -397,7 +401,7 @@ const MapScreen = () => {
             placeId: place.id,
             onDeleted: () => {
               onDeleted();
-              void queryClient.invalidateQueries({ queryKey: ["groupPlaces", place.groupId] });
+              void queryClient.invalidateQueries({ queryKey: groupPlacesQueryKey(place.groupId) });
               void queryClient.invalidateQueries({ queryKey: ["placeTransitions", place.groupId] });
             },
           })

@@ -1,7 +1,7 @@
 import { useIsFocused } from "@react-navigation/native";
 import { MAX_PLACES_PER_GROUP } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import {
   BellIcon,
@@ -25,7 +25,7 @@ import { authClient } from "../../../../lib/auth-client.ts";
 import type { LiveMapPosition } from "../../../../lib/mapTrackingTypes.ts";
 import { describePeopleHere, formatPlaceSize, peopleAtPlace } from "../../../../lib/places.ts";
 import { catchUpGroupPlaces } from "../../../../lib/placeCatchUp.ts";
-import { groupPlacesQueryOptions } from "../../../../lib/placeSync.ts";
+import { groupPlacesQueryKey, groupPlacesQueryOptions } from "../../../../lib/placeSync.ts";
 import { readRegisteredDevice } from "../../../../lib/registeredDevice.ts";
 
 const PlacesTab = ({
@@ -70,15 +70,19 @@ const PlacesTab = ({
   const placeCount = places.data?.length ?? 0;
   useQuery({
     queryKey: ["placeCatchUp", groupId, userId],
-    enabled: userId !== undefined && placeCount > 0,
+    enabled: placeCount > 0,
     subscribed: isFocused,
     staleTime: 5 * 60_000,
     retry: false,
-    queryFn: async () => {
-      const moved = await catchUpGroupPlaces(groupId);
-      if (moved > 0) await queryClient.invalidateQueries({ queryKey: ["groupPlaces", groupId] });
-      return moved;
-    },
+    queryFn: userId
+      ? async () => {
+          const moved = await catchUpGroupPlaces({ groupId, userId });
+          if (moved > 0) {
+            await queryClient.invalidateQueries({ queryKey: groupPlacesQueryKey(groupId) });
+          }
+          return moved;
+        }
+      : skipToken,
   });
   const atLimit = placeCount >= MAX_PLACES_PER_GROUP;
   const now = Date.now();

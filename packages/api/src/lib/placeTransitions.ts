@@ -198,9 +198,15 @@ export const readPlaceAlerts = async ({
     select: placeTransitionSelect,
   });
   const last = rows.at(-1);
+  if (last && rows.length === 50) {
+    return { alerts: rows.map(toPlaceTransitionView), cursor: encodePlaceAlertsCursor(last) };
+  }
   return {
     alerts: rows.map(toPlaceTransitionView),
-    cursor: last ? encodePlaceAlertsCursor(last) : cursor,
+    cursor:
+      settledBefore > after.createdAt
+        ? encodePlaceAlertsCursor({ createdAt: settledBefore, id: "" })
+        : cursor,
   };
 };
 

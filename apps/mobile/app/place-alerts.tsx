@@ -1,3 +1,4 @@
+import { useIsFocused } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { ScrollView, View } from "react-native";
@@ -23,10 +24,11 @@ import { groupPlacesQueryOptions } from "../lib/placeSync.ts";
 
 const PlaceAlertsScreen = () => {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const isFocused = useIsFocused();
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
   const { group } = useCachedGroup(groupId);
-  const places = useQuery(groupPlacesQueryOptions(groupId, userId));
+  const places = useQuery({ ...groupPlacesQueryOptions(groupId, userId), subscribed: isFocused });
   const memberName = useMemberNames(groupId);
   const { mutes, setMute } = usePlaceAlertMutes(groupId);
   const memberUserIds = (group?.members ?? [])
@@ -72,7 +74,7 @@ const PlaceAlertsScreen = () => {
               <Text>Try again</Text>
             </Button>
           </View>
-        ) : places.isPending || mutes.isPending ? (
+        ) : places.isPending || mutes.isPending || !group ? (
           <LoadingIndicator />
         ) : places.data.length === 0 ? (
           <Text className="text-muted-foreground">This group has no places yet.</Text>

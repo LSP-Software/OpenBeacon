@@ -55,20 +55,21 @@ const reEncryptOldPlaces = async (groupId: string) => {
 
 const catchUp = async (groupId: string) => {
   const first = await tryCatch(reEncryptOldPlaces(groupId));
-  if (!first.error && !first.data.changed) return first.data.moved;
   if (first.error) {
     const reason = errorReason(first.error);
     if (reason === "EPOCH_ROTATION_PENDING") await rotateGroupEpochIfRequired(groupId);
     else if (reason !== "EPOCH_NOT_LATEST") throw first.error;
+    return (await reEncryptOldPlaces(groupId)).moved;
   }
-  const second = await reEncryptOldPlaces(groupId);
-  return (first.data?.moved ?? 0) + second.moved;
+  if (!first.data.changed) return first.data.moved;
+  return first.data.moved + (await reEncryptOldPlaces(groupId)).moved;
 };
 
-export const catchUpGroupPlaces = (groupId: string) => {
-  const existing = running.get(groupId);
+export const catchUpGroupPlaces = ({ groupId, userId }: { groupId: string; userId: string }) => {
+  const key = `${userId}:${groupId}`;
+  const existing = running.get(key);
   if (existing) return existing;
-  const current = catchUp(groupId).finally(() => running.delete(groupId));
-  running.set(groupId, current);
+  const current = catchUp(groupId).finally(() => running.delete(key));
+  running.set(key, current);
   return current;
 };

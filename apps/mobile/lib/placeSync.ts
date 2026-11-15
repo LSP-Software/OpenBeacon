@@ -31,9 +31,11 @@ export const loadGroupPlaces = async (groupId: string): Promise<GroupPlace[]> =>
   );
 };
 
+export const groupPlacesQueryKey = (groupId: string) => ["groupPlaces", groupId] as const;
+
 export const groupPlacesQueryOptions = (groupId: string, userId: string | undefined) =>
   queryOptions({
-    queryKey: ["groupPlaces", groupId, userId],
+    queryKey: [...groupPlacesQueryKey(groupId), userId],
     queryFn: userId ? () => loadGroupPlaces(groupId) : skipToken,
     staleTime: 5 * 60_000,
   });

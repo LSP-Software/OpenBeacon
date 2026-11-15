@@ -2,6 +2,11 @@ import type { RouterOutputs } from "./api.ts";
 
 type PlaceAlertMute = RouterOutputs["placeAlerts"]["mutes"]["mutes"][number];
 
+export type PlaceAlertMuteChange = PlaceAlertMute & { muted: boolean };
+
+export const isEveryoneMuted = (mutes: readonly PlaceAlertMute[], placeId: string) =>
+  mutes.some((mute) => mute.placeId === placeId && mute.mutedUserId === null);
+
 export const placeMuteState = ({
   memberUserIds,
   mutes,
@@ -12,7 +17,7 @@ export const placeMuteState = ({
   placeId: string;
 }) => {
   const forPlace = mutes.filter((mute) => mute.placeId === placeId);
-  const everyoneMuted = forPlace.some((mute) => mute.mutedUserId === null);
+  const everyoneMuted = isEveryoneMuted(forPlace, placeId);
   const mutedUserIds = new Set(forPlace.map((mute) => mute.mutedUserId));
   const members = memberUserIds.map((userId) => ({
     userId,
@@ -32,7 +37,7 @@ export const placeMuteState = ({
 
 export const applyMuteChange = (
   mutes: readonly PlaceAlertMute[],
-  change: PlaceAlertMute & { muted: boolean },
+  change: PlaceAlertMuteChange,
 ): PlaceAlertMute[] => {
   const others = mutes.filter(
     (mute) => mute.placeId !== change.placeId || mute.mutedUserId !== change.mutedUserId,

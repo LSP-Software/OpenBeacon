@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { applyMuteChange, placeMuteState } from "./placeAlertMutes.ts";
+import { applyMuteChange, isEveryoneMuted, placeMuteState } from "./placeAlertMutes.ts";
 
 const memberUserIds = ["peter", "logan"];
 
@@ -74,5 +74,17 @@ describe("applyMuteChange", () => {
     expect(applyMuteChange(mutes, { placeId: "home", mutedUserId: "peter", muted: false })).toEqual(
       mutes,
     );
+  });
+});
+
+describe("isEveryoneMuted", () => {
+  test("is true only for an everyone mute at that place", () => {
+    const mutes = [
+      { placeId: "home", mutedUserId: "logan" },
+      { placeId: "school", mutedUserId: null },
+    ];
+    expect(isEveryoneMuted(mutes, "home")).toBe(false);
+    expect(isEveryoneMuted(mutes, "school")).toBe(true);
+    expect(isEveryoneMuted([], "school")).toBe(false);
   });
 });

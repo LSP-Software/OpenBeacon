@@ -1,15 +1,18 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
+import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { deleteAccountRecords } from "../../lib/account-deletion.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { encodePlaceAlertsCursor } from "../../lib/placeTransitions.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { removeGroupMemberWithOwnerGuard } from "./assertGroupMemberCanBeRemoved.ts";
+import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 import { placeAlertsRouter } from "./placeAlertsRouter.ts";
 
 const router = createTRPCRouter({
+  groupMembership: groupMembershipRouter,
   groupTracking: groupTrackingRouter,
   placeAlerts: placeAlertsRouter,
 });
@@ -84,8 +87,8 @@ const seedArrivals = (rows: Array<{ id: string; userId: string; placeId: string 
   });
 };
 
-const alertIds = async (userId: string) => {
-  const response = await caller(userId).groupTracking.uploadBatch({
+const pollAlerts = (userId: string, placeAlertsCursor: string) =>
+  caller(userId).groupTracking.uploadBatch({
     groupId,
     points: [],
     placeTransitions: [
@@ -97,11 +100,14 @@ const alertIds = async (userId: string) => {
         senderDeviceId: phoneOf(userId),
       },
     ],
-    placeAlertsCursor: encodePlaceAlertsCursor({
-      createdAt: new Date(Date.now() - 10 * minute),
-      id: "",
-    }),
+    placeAlertsCursor,
   });
+
+const alertIds = async (userId: string) => {
+  const response = await pollAlerts(
+    userId,
+    encodePlaceAlertsCursor({ createdAt: new Date(Date.now() - 10 * minute), id: "" }),
+  );
   return (response.placeAlerts?.alerts ?? []).map(({ id }) => id.slice(prefix.length + 1)).sort();
 };
 
@@ -173,6 +179,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.groupMember.deleteMany({
         where: { groupId, userId: { in: [joiner, leaver] } },
       });
+      await prisma.group.update({ where: { id: groupId }, data: { epochRotationRequired: false } });
     });
 
     afterAll(async () => {
@@ -231,7 +238,66 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await alertIds(member)).toEqual(["joiner-home", "joiner-school"]);
     });
 
-    test("leaving, removal and account deletion clear the mutes a person set and the mutes about them", async () => {
+    test("unmuting does not bring back arrivals that came in while muted", async () => {
+      await setMute(owner, { mutedUserId: member });
+      await seedArrivals([{ id: "muted-home", userId: member, placeId: homeId }]);
+      const start = encodePlaceAlertsCursor({
+        createdAt: new Date(Date.now() - 10 * minute),
+        id: "",
+      });
+      const whileMuted = await pollAlerts(owner, start);
+      expect(whileMuted.placeAlerts?.alerts).toEqual([]);
+
+      await setMute(owner, { mutedUserId: member, muted: false });
+      const afterUnmute = await pollAlerts(owner, whileMuted.placeAlerts?.cursor ?? start);
+      expect(afterUnmute.placeAlerts?.alerts).toEqual([]);
+    });
+
+    test("leaving through the app clears the leaver's mutes and the mutes about them", async () => {
+      await addMember(leaver);
+      await setMute(owner, { mutedUserId: leaver });
+      await setMute(owner, { placeId: schoolId, mutedUserId: null });
+      await setMute(leaver, { mutedUserId: owner });
+      await setMute(leaver, { placeId: schoolId, mutedUserId: null });
+      await setMute(member, { mutedUserId: owner });
+      await setMute(member, { mutedUserId: leaver });
+      const leaving = await prisma.groupMember.findUniqueOrThrow({
+        where: { userId_groupId: { userId: leaver, groupId } },
+      });
+      const epochId = crypto.randomUUID();
+
+      await caller(leaver).groupMembership.remove({
+        groupId,
+        memberId: leaving.id,
+        nextEpoch: {
+          createdByDeviceId: phoneOf(leaver),
+          epochId,
+          epochNumber: 2,
+          historyKeys: [],
+          recipientKeys: [
+            {
+              algorithm: WRAPPED_EPOCH_KEY_ALGORITHM,
+              createdAt: new Date(),
+              ephemeralPublicKey: Buffer.alloc(32).toString("base64"),
+              epochId,
+              recipientDeviceId: phoneOf(owner),
+              senderPublicKey: Buffer.alloc(32).toString("base64"),
+              wrappedKey: Buffer.alloc(48).toString("base64"),
+            },
+          ],
+        },
+      });
+
+      expect(await mutesOf(owner)).toEqual([{ placeId: schoolId, mutedUserId: null }]);
+      expect(await mutesOf(member)).toEqual([{ placeId: homeId, mutedUserId: owner }]);
+      expect(
+        await prisma.placeAlertMute.count({
+          where: { OR: [{ muterUserId: leaver }, { mutedUserId: leaver }] },
+        }),
+      ).toBe(0);
+    });
+
+    test("removal and account deletion clear the mutes a person set and the mutes about them", async () => {
       await addMember(leaver);
       await addMember(joiner);
       await setMute(owner, { mutedUserId: leaver });

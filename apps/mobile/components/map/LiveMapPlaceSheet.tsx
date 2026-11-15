@@ -3,7 +3,7 @@ import { PencilIcon, Trash2Icon } from "lucide-react-native";
 import { ScrollView, View } from "react-native";
 import { usePlaceAlertMutes } from "../../hooks/usePlaceAlertMutes.ts";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
-import { placeMuteState } from "../../lib/placeAlertMutes.ts";
+import { isEveryoneMuted } from "../../lib/placeAlertMutes.ts";
 import { formatPlaceSize, type MapPlace } from "../../lib/places.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
@@ -98,18 +98,27 @@ const MuteEveryoneRow = ({
     <View className="mt-3 flex-row items-center gap-4 border-t border-border py-4">
       <View className="flex-1 gap-0.5">
         <Text className="text-foreground text-base font-semibold">Mute everyone here</Text>
-        <Text className="text-muted-foreground text-sm">Only changes your alerts</Text>
+        <Text className="text-muted-foreground text-sm">
+          {mutes.isError ? "Couldn’t load this setting." : "Only changes your alerts"}
+        </Text>
       </View>
-      <Switch
-        accessibilityLabel={`Mute everyone at ${placeName}`}
-        disabled={!mutes.data}
-        value={
-          mutes.data
-            ? placeMuteState({ memberUserIds: [], mutes: mutes.data.mutes, placeId }).everyoneMuted
-            : false
-        }
-        onValueChange={(muted) => setMute({ placeId, mutedUserId: null, muted })}
-      />
+      {mutes.isError ? (
+        <Button
+          size="sm"
+          variant="outline"
+          loading={mutes.isFetching}
+          onPress={() => void mutes.refetch()}
+        >
+          <Text>Try again</Text>
+        </Button>
+      ) : (
+        <Switch
+          accessibilityLabel={`Mute everyone at ${placeName}`}
+          disabled={mutes.data === undefined}
+          value={mutes.data ? isEveryoneMuted(mutes.data.mutes, placeId) : false}
+          onValueChange={(muted) => setMute({ placeId, mutedUserId: null, muted })}
+        />
+      )}
     </View>
   );
 };

@@ -34,7 +34,12 @@ import {
   placeErrorMessage,
   shiftLatitudeByPixels,
 } from "../lib/places.ts";
-import { confirmDeletePlace, groupPlacesQueryOptions, savePlace } from "../lib/placeSync.ts";
+import {
+  confirmDeletePlace,
+  groupPlacesQueryKey,
+  groupPlacesQueryOptions,
+  savePlace,
+} from "../lib/placeSync.ts";
 
 const PIN_ABOVE_CENTER = 150;
 
@@ -184,7 +189,7 @@ const PlaceEditor = ({
 
   const refreshPlaces = () =>
     Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["groupPlaces", groupId] }),
+      queryClient.invalidateQueries({ queryKey: groupPlacesQueryKey(groupId) }),
       queryClient.invalidateQueries({ queryKey: ["placeTransitions", groupId] }),
     ]);
 

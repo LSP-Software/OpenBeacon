@@ -524,15 +524,32 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         `${prefix}-alert-51`,
       ]);
       const lastCursor = secondPage.placeAlerts?.cursor ?? "";
-      expect((await readAlerts(owner, ownerPhone, lastCursor)).placeAlerts).toEqual({
-        alerts: [],
-        cursor: lastCursor,
-      });
+      const thirdPage = await readAlerts(owner, ownerPhone, lastCursor);
+      expect(thirdPage.placeAlerts?.alerts).toEqual([]);
+      expect(thirdPage.placeAlerts?.cursor.localeCompare(lastCursor)).toBeGreaterThanOrEqual(0);
 
       const memberView = await readAlerts(member, memberPhone, start);
       expect(memberView.placeAlerts?.alerts.map(({ id }) => id).sort()).toEqual(
         [`${prefix}-own-phone`, `${prefix}-own-tablet`].sort(),
       );
+    });
+
+    test("a short page moves the cursor to the settled boundary without skipping rows at it", async () => {
+      const lateId = `${prefix}-late`;
+      await seedTransitions([{ id: lateId, createdAt: new Date(Date.now() - 1_000) }]);
+      const start = encodePlaceAlertsCursor({ createdAt: new Date(Date.now() - minute), id: "" });
+      const shortPage = await readAlerts(owner, ownerPhone, start);
+      expect(shortPage.placeAlerts?.alerts).toEqual([]);
+      const boundary = shortPage.placeAlerts?.cursor ?? "";
+      expect(boundary.endsWith("|")).toBe(true);
+      expect(boundary.localeCompare(start)).toBeGreaterThan(0);
+
+      await prisma.placeTransition.update({
+        where: { id: lateId },
+        data: { createdAt: new Date(boundary.slice(0, -1)) },
+      });
+      const nextPage = await readAlerts(owner, ownerPhone, boundary);
+      expect(nextPage.placeAlerts?.alerts.map(({ id }) => id)).toEqual([lateId]);
     });
 
     test("place alerts and history leave out what happened before the reader joined", async () => {
