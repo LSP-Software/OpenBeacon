@@ -16,6 +16,10 @@ import expo.modules.openbeacontracking.capture.SharingResumeWorker
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.keys.EpochKeyStore
 import expo.modules.openbeacontracking.keys.SecureEpochKeyStore
+import expo.modules.openbeacontracking.places.PlaceDetection
+import expo.modules.openbeacontracking.places.PlaceTransitionDatabase
+import expo.modules.openbeacontracking.places.RoomPlaceTransitionQueue
+import expo.modules.openbeacontracking.places.SecurePlaceStore
 import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
 import expo.modules.openbeacontracking.queue.RoomCiphertextQueue
 
@@ -27,6 +31,9 @@ object TrackingRuntime {
 
   @Volatile
   private var ciphertextQueue: RoomCiphertextQueue? = null
+
+  @Volatile
+  private var placeDetection: PlaceDetection? = null
 
   @Volatile
   var isCaptureRunning: Boolean = false
@@ -50,6 +57,20 @@ object TrackingRuntime {
     return synchronized(this) {
       ciphertextQueue
         ?: RoomCiphertextQueue(CiphertextQueueDatabase.getInstance(context.applicationContext)).also { ciphertextQueue = it }
+    }
+  }
+
+  fun placeDetection(context: Context): PlaceDetection {
+    placeDetection?.let {
+      return it
+    }
+
+    return synchronized(this) {
+      placeDetection
+        ?: PlaceDetection(
+          store = SecurePlaceStore(context.applicationContext),
+          queue = RoomPlaceTransitionQueue(PlaceTransitionDatabase.getInstance(context.applicationContext)),
+        ).also { placeDetection = it }
     }
   }
 
@@ -99,6 +120,7 @@ object TrackingRuntime {
       if (changed) {
         captureCommands.stop()
         setSharingState(context, state)
+        placeDetection(context).onSharingChanged(owner, state, System.currentTimeMillis())
       }
       changed
     }
@@ -131,6 +153,7 @@ object TrackingRuntime {
         setCaptureEnabled(context, false)
         context.stopService(Intent(context, TrackingCaptureService::class.java))
         epochKeyStore(context).revoke(null)
+        placeDetection(context).removeGroups(null)
       }
       if (previousOwner != owner || previousDeviceId != deviceId) {
         check(preferences.edit().putString("owner", owner).putString("deviceId", deviceId).commit())

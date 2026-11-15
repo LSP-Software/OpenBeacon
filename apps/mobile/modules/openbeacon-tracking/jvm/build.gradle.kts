@@ -36,6 +36,12 @@ sourceSets {
       exclude("**/CiphertextQueueEvictionEntity.kt")
       exclude("**/CiphertextQueueDatabase.kt")
       exclude("**/RoomCiphertextQueue.kt")
+      exclude("**/KeystoreSealer.kt")
+      exclude("**/SecurePlaceStore.kt")
+      exclude("**/PlaceTransitionEntity.kt")
+      exclude("**/PlaceTransitionDao.kt")
+      exclude("**/PlaceTransitionDatabase.kt")
+      exclude("**/RoomPlaceTransitionQueue.kt")
     }
   }
   test {

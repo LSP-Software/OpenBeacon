@@ -40,6 +40,7 @@ import {
   groupPlacesQueryOptions,
   savePlace,
 } from "../lib/placeSync.ts";
+import { syncGroupPlaces } from "../lib/placeBackgroundSync.ts";
 
 const PIN_ABOVE_CENTER = 150;
 
@@ -138,6 +139,7 @@ const PlaceEditor = ({
   onReload: () => void;
 }) => {
   const [place] = useState(initialPlace);
+  const userId = authClient.useSession().data?.user.id;
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const map = useNativeMapStyle();
@@ -191,6 +193,7 @@ const PlaceEditor = ({
     Promise.all([
       queryClient.invalidateQueries({ queryKey: groupPlacesQueryKey(groupId) }),
       queryClient.invalidateQueries({ queryKey: ["placeTransitions", groupId] }),
+      userId ? tryCatch(syncGroupPlaces({ announce: false, groupId, userId })) : null,
     ]);
 
   const save = async () => {

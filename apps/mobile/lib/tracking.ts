@@ -3,8 +3,12 @@ import {
   PAYLOAD_ENCRYPTION_ALGORITHM,
   TRACKING_POINT_KIND,
 } from "@openbeacon/encryption";
+import { placeTransitionSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
-import type { CiphertextQueueItem } from "../modules/openbeacon-tracking/index.ts";
+import type {
+  CiphertextQueueItem,
+  QueuedPlaceTransition,
+} from "../modules/openbeacon-tracking/index.ts";
 import { trpcClient } from "./api.ts";
 import {
   getApiCompatibility,
@@ -28,6 +32,11 @@ import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
 import { dismissNotice, showNotice } from "./notifications.ts";
+import {
+  applyPlaceUpdates,
+  getPlaceAlertsCursor,
+  type PlaceUpdates,
+} from "./placeBackgroundSync.ts";
 import { backfillHistoryWraps } from "./recovery.ts";
 import { resealPersonalData } from "./resealPersonalData.ts";
 import {
@@ -582,22 +591,99 @@ type UploadableQueueItem = CiphertextQueueItem & {
 const isUploadableQueueItem = (item: CiphertextQueueItem): item is UploadableQueueItem =>
   item.algorithm === PAYLOAD_ENCRYPTION_ALGORITHM && item.kind === TRACKING_POINT_KIND;
 
+const takePlaceAlertsCursor = (round: PlaceRound) => {
+  const cursor = round.cursor;
+  round.cursor = null;
+  return cursor;
+};
+
+const placeUploadFields = (
+  transitions: readonly QueuedPlaceTransition[],
+  cursor: { value: string | null } | null,
+) => ({
+  ...(transitions.length > 0
+    ? {
+        placeTransitions: transitions.map(
+          ({ clientId, direction, occurredAt, placeId, senderDeviceId }) => ({
+            clientId,
+            direction,
+            occurredAt: new Date(occurredAt),
+            placeId,
+            senderDeviceId,
+          }),
+        ),
+      }
+    : {}),
+  ...(cursor ? { placeAlertsCursor: cursor.value } : {}),
+});
+
+const settlePlaceResponse = async (
+  trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
+  round: PlaceRound,
+  response: {
+    placeTransitions?: { accepted: string[]; duplicates: string[]; discarded: string[] };
+  } & PlaceUpdates,
+) => {
+  if (response.placeTransitions) {
+    const { accepted, duplicates, discarded } = response.placeTransitions;
+    await trackingModule.deletePlaceTransitions([...accepted, ...duplicates, ...discarded]);
+  }
+  if (response.places !== undefined || response.placeAlerts !== undefined) {
+    round.updates = { places: response.places, placeAlerts: response.placeAlerts };
+  }
+};
+
+const uploadPlaceTransitionsAlone = async (
+  trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
+  round: PlaceRound,
+  groupId: string,
+  transitions: readonly QueuedPlaceTransition[],
+  signal: AbortSignal,
+) => {
+  const cursor = takePlaceAlertsCursor(round);
+  const result = await tryCatch(
+    trpcClient.groupTracking.uploadBatch.mutate(
+      { groupId, points: [], ...placeUploadFields(transitions, cursor) },
+      { signal },
+    ),
+  );
+  if (!result.error) {
+    await settlePlaceResponse(trackingModule, round, result.data);
+    return;
+  }
+  const code = getErrorCode(result.error);
+  const reason = errorReason(result.error);
+  if (code === "BAD_REQUEST" || reason === "NOT_GROUP_MEMBER" || reason === "GROUP_GONE") {
+    await trackingModule.deletePlaceTransitions(transitions.map(({ clientId }) => clientId));
+    return;
+  }
+  if (code === "UNAUTHORIZED") await revokeUnauthorizedTrackingAccess(result.error, false);
+  throw result.error;
+};
+
 const uploadClaimedItems = async (
   trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
   owner: string,
   items: UploadableQueueItem[],
   signal: AbortSignal,
+  round: PlaceRound,
 ): Promise<void> => {
   const ids = items.map(({ id }) => id);
   if (signal.aborted) {
     await trackingModule.requeueCiphertexts(ids, "UPLOAD_CANCELLED");
     throw new Error("Tracking upload cancelled");
   }
+  const groupId = items[0]?.groupId ?? "";
+  const carriesPlaces = items[0]?.senderDeviceId === round.deviceId;
+  const transitions = carriesPlaces ? (round.transitions.get(groupId) ?? []) : [];
+  if (carriesPlaces) round.transitions.delete(groupId);
+  const cursor = carriesPlaces ? takePlaceAlertsCursor(round) : null;
   const sentAt = new Date().toISOString();
   const uploadResult = await tryCatch(
     trpcClient.groupTracking.uploadBatch.mutate(
       {
-        groupId: items[0]?.groupId ?? "",
+        groupId,
+        ...placeUploadFields(transitions, cursor),
         points: items.map(
           ({ algorithm, ciphertext, clientPointId, epochId, kind, nonce, senderDeviceId }) => ({
             algorithm,
@@ -617,6 +703,14 @@ const uploadClaimedItems = async (
   if (signal.aborted) {
     await trackingModule.requeueCiphertexts(ids, "UPLOAD_CANCELLED");
     throw new Error("Tracking upload cancelled");
+  }
+  if (
+    uploadResult.error &&
+    getErrorCode(uploadResult.error) === "BAD_REQUEST" &&
+    (transitions.length > 0 || cursor)
+  ) {
+    if (transitions.length > 0) round.retryAlone.set(groupId, transitions);
+    return uploadClaimedItems(trackingModule, owner, items, signal, round);
   }
   if (uploadResult.error) {
     const code = getErrorCode(uploadResult.error);
@@ -654,8 +748,8 @@ const uploadClaimedItems = async (
     if (code === "BAD_REQUEST" && items.length > 1) {
       const midpoint = Math.ceil(items.length / 2);
       const results = await Promise.allSettled([
-        uploadClaimedItems(trackingModule, owner, items.slice(0, midpoint), signal),
-        uploadClaimedItems(trackingModule, owner, items.slice(midpoint), signal),
+        uploadClaimedItems(trackingModule, owner, items.slice(0, midpoint), signal, round),
+        uploadClaimedItems(trackingModule, owner, items.slice(midpoint), signal, round),
       ]);
       if (results.some((result) => result.status === "rejected")) {
         throw new Error("Tracking upload failed");
@@ -685,6 +779,7 @@ const uploadClaimedItems = async (
   } = uploadResult.data;
 
   if (keyState && noteTrackingKeyState(keyState)) uploadRejectedKeys = true;
+  await settlePlaceResponse(trackingModule, round, uploadResult.data);
 
   if (accepted.length > 0 && items[0]) {
     const { senderDeviceId, groupId } = items[0];
@@ -718,6 +813,7 @@ const flushGroup = async (
   owner: string,
   items: CiphertextQueueItem[],
   signal: AbortSignal,
+  round: PlaceRound,
 ) => {
   if (!trackingModule || items.length === 0) {
     return;
@@ -748,12 +844,66 @@ const flushGroup = async (
 
   const results = await Promise.allSettled(
     Array.from(itemsBySender.values()).map((senderItems) =>
-      uploadClaimedItems(trackingModule, owner, senderItems, signal),
+      uploadClaimedItems(trackingModule, owner, senderItems, signal, round),
     ),
   );
   if (invalidItems.length > 0 || results.some((result) => result.status === "rejected")) {
     throw new Error("Tracking upload failed");
   }
+};
+
+type PlaceRound = {
+  cursor: { value: string | null } | null;
+  deviceId: string;
+  retryAlone: Map<string, QueuedPlaceTransition[]>;
+  transitions: Map<string, QueuedPlaceTransition[]>;
+  updates: PlaceUpdates | null;
+  userId: string;
+};
+
+const startPlaceRound = async (
+  trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
+  owner: string,
+  device: Awaited<ReturnType<typeof getRegisteredDeviceKey>>,
+): Promise<PlaceRound> => {
+  if (!device || owner !== getOwner(device.userId)) {
+    return {
+      cursor: null,
+      deviceId: "",
+      retryAlone: new Map(),
+      transitions: new Map(),
+      updates: null,
+      userId: "",
+    };
+  }
+  const queued = await tryCatch(trackingModule.listPlaceTransitions(owner));
+  const all = queued.data ?? [];
+  const sendable = all.filter(
+    (transition) =>
+      transition.senderDeviceId === device.deviceId &&
+      placeTransitionSchema.safeParse({
+        ...transition,
+        occurredAt: new Date(transition.occurredAt),
+      }).success,
+  );
+  const stale = all.filter((transition) => !sendable.includes(transition));
+  if (stale.length > 0) {
+    await tryCatch(trackingModule.deletePlaceTransitions(stale.map(({ clientId }) => clientId)));
+  }
+  const transitions = new Map<string, QueuedPlaceTransition[]>();
+  for (const transition of all) {
+    if (!sendable.includes(transition)) continue;
+    const group = transitions.get(transition.groupId) ?? [];
+    if (group.length < 50) transitions.set(transition.groupId, [...group, transition]);
+  }
+  return {
+    cursor: { value: getPlaceAlertsCursor(device.userId) },
+    deviceId: device.deviceId,
+    retryAlone: new Map(),
+    transitions,
+    updates: null,
+    userId: device.userId,
+  };
 };
 
 const flushPendingTrackingPointsInternal = async (
@@ -769,6 +919,7 @@ const flushPendingTrackingPointsInternal = async (
   const device = await getRegisteredDeviceKey();
   if (device && hasPendingSharingPause(device.userId)) return;
   const owner = await getQueueOwner(signal);
+  const round = await startPlaceRound(trackingModule, owner, device);
   let afterId = 0;
   let failed = false;
   while (true) {
@@ -782,12 +933,23 @@ const flushPendingTrackingPointsInternal = async (
     }
     const results = await Promise.allSettled(
       Array.from(itemsByGroup.values()).map((items) =>
-        flushGroup(trackingModule, owner, items, signal),
+        flushGroup(trackingModule, owner, items, signal, round),
       ),
     );
     failed ||= results.some((result) => result.status === "rejected");
     if (pending.length < 100) break;
     afterId = pending[pending.length - 1]?.id ?? afterId;
+  }
+  if (!signal.aborted) {
+    const alone = await Promise.allSettled(
+      [...round.transitions, ...round.retryAlone].map(([groupId, transitions]) =>
+        uploadPlaceTransitionsAlone(trackingModule, round, groupId, transitions, signal),
+      ),
+    );
+    failed ||= alone.some((result) => result.status === "rejected");
+    if (round.updates && !signal.aborted) {
+      await tryCatch(applyPlaceUpdates({ updates: round.updates, userId: round.userId }));
+    }
   }
   if (failed) throw new Error("Tracking upload failed");
 };
@@ -836,6 +998,22 @@ const showApiCompatibilityNotice = async () => {
   if (shown) markApiCompatibilityNotified();
 };
 
+const pollPlaceUpdates = async () => {
+  const trackingModule = await loadTrackingModule();
+  const device = await getRegisteredDeviceKey();
+  const groupId = trackingModule?.listProvisionedEpochKeys()[0]?.groupId;
+  if (!device || !groupId) return;
+  const response = await trpcClient.groupTracking.uploadBatch.mutate({
+    groupId,
+    points: [],
+    placeAlertsCursor: getPlaceAlertsCursor(device.userId),
+  });
+  await applyPlaceUpdates({
+    updates: { places: response.places, placeAlerts: response.placeAlerts },
+    userId: device.userId,
+  });
+};
+
 export const syncBackgroundTracking = async (
   reason: "upload" | "sharing" | "parked" = "upload",
 ) => {
@@ -849,6 +1027,7 @@ export const syncBackgroundTracking = async (
   }
   if (reason === "parked") {
     await tryCatch(syncSharingPreference());
+    await tryCatch(pollPlaceUpdates());
     return;
   }
   if (reason === "sharing" && (await hasFreshKeyCheck(true))) {

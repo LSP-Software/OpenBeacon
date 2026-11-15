@@ -7,6 +7,7 @@ import {
   ApiCompatibilityGate,
   useApiCompatibilityGateShown,
 } from "../components/ApiCompatibilityGate.tsx";
+import { InAppNoticeBanner } from "../components/InAppNoticeBanner.tsx";
 import { AlertHost } from "../components/ui/Alert.tsx";
 import { OfflineBanner } from "../components/OfflineBanner.tsx";
 import { queryClient } from "../lib/api.ts";
@@ -74,6 +75,7 @@ const RootLayout = () => {
               </View>
               <ApiCompatibilityGate />
               <OfflineBanner />
+              {session ? <InAppNoticeBanner /> : null}
             </View>
           </TrackingProvider>
         </LocationPermissionProvider>

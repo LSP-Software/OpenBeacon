@@ -296,6 +296,7 @@ class TrackingCaptureService : Service() {
   }
 
   private fun updateSharing() {
+    TrackingRuntime.placeDetection(this).restart()
     sharingHandler.removeCallbacks(resumeSharing)
     getSystemService(AlarmManager::class.java)?.cancel(resumeSharingIntent)
     val sharing = TrackingRuntime.sharingState(this)
@@ -366,6 +367,8 @@ class TrackingCaptureService : Service() {
       return
     }
 
+    detectPlaces(location, nowMs)
+
     val refreshGeneration = synchronized(captureStateLock) { refreshState.pending() }
     val decision =
       CaptureSamplingPolicy.evaluate(
@@ -431,12 +434,32 @@ class TrackingCaptureService : Service() {
     }
   }
 
+  private fun detectPlaces(location: Location, nowMs: Long) {
+    val owner = TrackingRuntime.queueOwner(this) ?: return
+    val deviceId = TrackingRuntime.queueDeviceId(this) ?: return
+    try {
+      TrackingRuntime.placeDetection(this).onFix(
+        owner = owner,
+        deviceId = deviceId,
+        sharing = TrackingRuntime.sharingState(this),
+        nowMillis = nowMs,
+        latitude = location.latitude,
+        longitude = location.longitude,
+        accuracyMeters = location.accuracy.toDouble().takeIf { location.hasAccuracy() },
+        timestampMillis = location.time,
+      )
+    } catch (error: Exception) {
+      Log.e(TAG, "Failed to check places.", error)
+    }
+  }
+
   private fun hasPendingUploads(): Boolean =
     try {
+      val owner = TrackingRuntime.queueOwner(this)
       TrackingRuntime
         .ciphertextQueue(this)
-        .listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, TrackingRuntime.queueOwner(this))
-        .isNotEmpty()
+        .listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, owner)
+        .isNotEmpty() || (owner != null && TrackingRuntime.placeDetection(this).hasQueued(owner))
     } catch (error: Exception) {
       Log.e(TAG, "Failed to check for pending uploads.", error)
       false

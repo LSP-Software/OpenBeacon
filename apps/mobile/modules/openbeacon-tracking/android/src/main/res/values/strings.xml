@@ -26,4 +26,7 @@
   <string name="openbeacon_notice_sharing_resumed_body">You turned sharing on from another device. Tap to start sharing from this phone.</string>
   <string name="openbeacon_notice_sharing_changed_title">Location sharing changed</string>
   <string name="openbeacon_notice_sharing_changed_body">Sharing was changed from another device. Tap to update this phone.</string>
+  <string name="openbeacon_place_alerts_channel">Place alerts</string>
+  <string name="openbeacon_place_alerts_channel_description">When someone in your groups arrives at or leaves a place.</string>
+  <string name="openbeacon_places_changed_manage">Manage</string>
 </resources>

@@ -46,10 +46,16 @@ export const groupTrackingUploadBatchSchema = z
       .optional(),
     placeAlertsCursor: placeAlertsCursorSchema.nullable().optional(),
   })
-  .refine((batch) => batch.points.length > 0 || (batch.placeTransitions?.length ?? 0) > 0, {
-    message: "An upload needs at least one point or place transition",
-    path: ["points"],
-  });
+  .refine(
+    (batch) =>
+      batch.points.length > 0 ||
+      (batch.placeTransitions?.length ?? 0) > 0 ||
+      batch.placeAlertsCursor !== undefined,
+    {
+      message: "An upload needs at least one point, place transition or place alerts cursor",
+      path: ["points"],
+    },
+  );
 
 export const groupTrackingPollSchema = z.object({
   cursor: z

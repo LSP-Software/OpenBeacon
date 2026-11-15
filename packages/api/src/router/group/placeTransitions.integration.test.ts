@@ -236,7 +236,20 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("a batch with neither points nor transitions is refused", async () => {
       await expect(
         caller(member, memberPhone).groupTracking.uploadBatch({ groupId, points: [] }),
-      ).rejects.toThrow("An upload needs at least one point or place transition");
+      ).rejects.toThrow(
+        "An upload needs at least one point, place transition or place alerts cursor",
+      );
+    });
+
+    test("a paused phone can read place updates with only a cursor", async () => {
+      const result = await caller(member, memberPhone).groupTracking.uploadBatch({
+        groupId,
+        points: [],
+        placeAlertsCursor: null,
+      });
+      expect(result.accepted).toEqual([]);
+      expect(result.places?.some((summary) => summary.groupId === groupId)).toBe(true);
+      expect(result.placeAlerts?.alerts).toEqual([]);
     });
 
     test("discards places from another group, out-of-range times and anything while sharing is off", async () => {

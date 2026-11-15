@@ -63,17 +63,36 @@ enum class Notice(
   }
 }
 
+enum class PlaceNoticeKind(
+  val kind: String,
+  val tag: String,
+) {
+  ALERT("alert", "openbeacon_place_alert"),
+  PLACES_CHANGED("placesChanged", "openbeacon_places_changed"),
+  ;
+
+  companion object {
+    fun of(kind: String) = entries.firstOrNull { it.kind == kind } ?: throw IllegalArgumentException("Unknown place notice $kind.")
+  }
+}
+
 object Notices {
   private const val CHANNEL_ID = "openbeacon_sharing_alerts"
+  private const val PLACE_ALERTS_CHANNEL_ID = "openbeacon_place_alerts"
 
   fun removeOldChannels(context: Context) {
     NotificationManagerCompat.from(context).deleteNotificationChannel("openbeacon_app_compatibility")
   }
 
-  fun areEnabled(context: Context): Boolean {
+  fun areEnabled(context: Context): Boolean = isChannelEnabled(context, CHANNEL_ID)
+
+  private fun isChannelEnabled(
+    context: Context,
+    channelId: String,
+  ): Boolean {
     val manager = NotificationManagerCompat.from(context)
     return manager.areNotificationsEnabled() &&
-      manager.getNotificationChannelCompat(CHANNEL_ID)?.importance != NotificationManagerCompat.IMPORTANCE_NONE &&
+      manager.getNotificationChannelCompat(channelId)?.importance != NotificationManagerCompat.IMPORTANCE_NONE &&
       (
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
           ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
@@ -93,14 +112,7 @@ object Notices {
     val alerted = context.getSharedPreferences("openbeacon_notices", Context.MODE_PRIVATE)
     if (notice == Notice.LOCATION_PERMISSION && alerted.getBoolean(notice.kind, false)) return true
     val manager = NotificationManagerCompat.from(context)
-    manager.createNotificationChannel(
-      NotificationChannelCompat
-        .Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_HIGH)
-        .setName(context.getString(R.string.openbeacon_notice_channel))
-        .setDescription(context.getString(R.string.openbeacon_notice_channel_description))
-        .setShowBadge(false)
-        .build(),
-    )
+    createSharingChannel(context)
     val id = notice.slot.id
     val body = context.getString(notice.body)
     val intent =
@@ -123,6 +135,66 @@ object Notices {
     )
     if (notice == Notice.LOCATION_PERMISSION) alerted.edit().putBoolean(notice.kind, true).apply()
     return true
+  }
+
+  fun showPlace(
+    context: Context,
+    kind: PlaceNoticeKind,
+    key: String,
+    title: String,
+    body: String?,
+    groupName: String,
+    link: String,
+  ): Boolean {
+    val manager = NotificationManagerCompat.from(context)
+    val channelId =
+      if (kind == PlaceNoticeKind.ALERT) {
+        manager.createNotificationChannel(
+          NotificationChannelCompat
+            .Builder(PLACE_ALERTS_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_DEFAULT)
+            .setName(context.getString(R.string.openbeacon_place_alerts_channel))
+            .setDescription(context.getString(R.string.openbeacon_place_alerts_channel_description))
+            .build(),
+        )
+        PLACE_ALERTS_CHANNEL_ID
+      } else {
+        createSharingChannel(context)
+        CHANNEL_ID
+      }
+    if (!isChannelEnabled(context, channelId)) return false
+    val id = key.hashCode()
+    val intent =
+      PendingIntent.getActivity(
+        context,
+        id,
+        Intent(Intent.ACTION_VIEW, Uri.parse(link)).setPackage(context.packageName),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+      )
+    val builder =
+      NotificationCompat
+        .Builder(context, channelId)
+        .setContentTitle(title)
+        .setSubText(groupName)
+        .setSmallIcon(R.drawable.openbeacon_notification_icon)
+        .setColor(ContextCompat.getColor(context, R.color.openbeacon_notification_color))
+        .setCategory(if (kind == PlaceNoticeKind.ALERT) NotificationCompat.CATEGORY_EVENT else NotificationCompat.CATEGORY_STATUS)
+        .setAutoCancel(true)
+        .setContentIntent(intent)
+    if (body != null) builder.setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body))
+    if (kind == PlaceNoticeKind.PLACES_CHANGED) builder.addAction(0, context.getString(R.string.openbeacon_places_changed_manage), intent)
+    manager.notify(kind.tag, id, builder.build())
+    return true
+  }
+
+  private fun createSharingChannel(context: Context) {
+    NotificationManagerCompat.from(context).createNotificationChannel(
+      NotificationChannelCompat
+        .Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_HIGH)
+        .setName(context.getString(R.string.openbeacon_notice_channel))
+        .setDescription(context.getString(R.string.openbeacon_notice_channel_description))
+        .setShowBadge(false)
+        .build(),
+    )
   }
 
   fun dismiss(

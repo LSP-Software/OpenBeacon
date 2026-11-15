@@ -81,13 +81,15 @@ describe("groupTrackingUploadBatchSchema", () => {
     senderDeviceId: "device-1",
   } as const;
 
-  test("requires at least one point or place transition", () => {
+  test("requires a point, a place transition or a place alerts cursor", () => {
     const parse = (batch: object) =>
       groupTrackingUploadBatchSchema.safeParse({ groupId: "group-1", points: [], ...batch })
         .success;
     expect(parse({})).toBe(false);
     expect(parse({ placeTransitions: [] })).toBe(false);
     expect(parse({ placeTransitions: [arrival] })).toBe(true);
+    expect(parse({ placeAlertsCursor: null })).toBe(true);
+    expect(parse({ placeAlertsCursor: "2026-11-15T10:00:00.000Z|" })).toBe(true);
   });
 
   test("refuses repeated or malformed place transitions", () => {

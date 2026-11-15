@@ -12,6 +12,8 @@ let role = "OWNER";
 let places: GroupPlace[] = [];
 let sharing = { enabled: true, arrivalsOff: [] as { userId: string; deviceId: string }[] };
 let sharingFailed = false;
+let notificationRequests = 0;
+const storedFlags = new Set<string>();
 const passthrough = ({ children }: { children?: ReactNode }) =>
   React.createElement(React.Fragment, null, children);
 
@@ -77,6 +79,21 @@ mock.module("../hooks/useMemberNames.ts", () => ({
 }));
 mock.module("../lib/registeredDevice.ts", () => ({ readRegisteredDevice: async () => null }));
 mock.module("../lib/placeCatchUp.ts", () => ({ catchUpGroupPlaces: async () => 0 }));
+mock.module("../lib/placeBackgroundSync.ts", () => ({ syncGroupPlaces: async () => true }));
+mock.module("../lib/notifications.ts", () => ({
+  requestNotificationPermissions: async () => {
+    notificationRequests += 1;
+    return "granted";
+  },
+}));
+mock.module("../lib/storage.ts", () => ({
+  storage: {
+    getBoolean: (key: string) => storedFlags.has(key),
+    set: (key: string) => {
+      storedFlags.add(key);
+    },
+  },
+}));
 mock.module("../lib/placeSync.ts", () => ({
   groupPlacesQueryKey: (groupId: string) => ["groupPlaces", groupId],
   groupPlacesQueryOptions: () => ({ queryKey: ["groupPlaces"] }),
@@ -131,6 +148,8 @@ beforeEach(() => {
   role = "OWNER";
   sharing = { enabled: true, arrivalsOff: [] };
   sharingFailed = false;
+  notificationRequests = 0;
+  storedFlags.clear();
   places = [place({}), place({ id: "club", name: "Football club", emoji: "⚽", geometry: null })];
 });
 
@@ -185,4 +204,10 @@ test("offers a retry when the arrivals setting can't be loaded", async () => {
   expect(text).toContain("Couldn’t load this setting.");
   expect(text).toContain("Try again");
   expect(text).not.toContain("switch:");
+});
+
+test("asks for notification permission the first time Places opens, and only then", async () => {
+  await render();
+  await render();
+  expect(notificationRequests).toBe(1);
 });

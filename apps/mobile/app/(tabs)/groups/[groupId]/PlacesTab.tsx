@@ -11,6 +11,7 @@ import {
   MapPinIcon,
   PlusIcon,
 } from "lucide-react-native";
+import { useEffect } from "react";
 import { Pressable, View } from "react-native";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { Button } from "../../../../components/ui/Button.tsx";
@@ -24,9 +25,12 @@ import { trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
 import type { LiveMapPosition } from "../../../../lib/mapTrackingTypes.ts";
 import { describePeopleHere, formatPlaceSize, peopleAtPlace } from "../../../../lib/places.ts";
+import { requestNotificationPermissions } from "../../../../lib/notifications.ts";
+import { syncGroupPlaces } from "../../../../lib/placeBackgroundSync.ts";
 import { catchUpGroupPlaces } from "../../../../lib/placeCatchUp.ts";
 import { groupPlacesQueryKey, groupPlacesQueryOptions } from "../../../../lib/placeSync.ts";
 import { readRegisteredDevice } from "../../../../lib/registeredDevice.ts";
+import { storage } from "../../../../lib/storage.ts";
 
 const PlacesTab = ({
   groupId,
@@ -84,6 +88,11 @@ const PlacesTab = ({
         }
       : skipToken,
   });
+  useEffect(() => {
+    if (!isFocused || storage.getBoolean("places.notificationsAsked")) return;
+    storage.set("places.notificationsAsked", true);
+    void tryCatch(requestNotificationPermissions());
+  }, [isFocused]);
   const atLimit = placeCount >= MAX_PLACES_PER_GROUP;
   const now = Date.now();
 
@@ -175,6 +184,7 @@ const PlacesTab = ({
               return;
             }
             await queryClient.invalidateQueries({ queryKey: sharingQueryOptions.queryKey });
+            if (userId) await tryCatch(syncGroupPlaces({ announce: false, groupId, userId }));
           }}
         />
       )}

@@ -51,17 +51,23 @@ const GROUP_TABS: readonly SwipeTabsItem<GroupTabValue>[] = [
 ] as const;
 
 const GroupScreen = () => {
-  const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  return <GroupBody key={groupId} groupId={groupId} />;
+  const { groupId, tab } = useLocalSearchParams<{ groupId: string; tab?: string }>();
+  return (
+    <GroupBody
+      key={`${groupId}:${tab ?? ""}`}
+      groupId={groupId}
+      initialTab={GROUP_TABS.find((item) => item.value === tab)?.value ?? "members"}
+    />
+  );
 };
 
-const GroupBody = ({ groupId }: { groupId: string }) => {
+const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: GroupTabValue }) => {
   const router = useRouter();
   const queryClient = useQueryClient();
   const isFocused = useIsFocused();
   const { data: session } = authClient.useSession();
   const [keyAccess] = useGroupKeyHistoryAccess([groupId], session?.user.id);
-  const [value, setValue] = useState<GroupTabValue>("members");
+  const [value, setValue] = useState<GroupTabValue>(initialTab);
   const historyWarningKey = `recovery.historyWarningDismissedFrom.${session?.user.id}.${groupId}`;
   const [historyWarningDismissedFrom, setHistoryWarningDismissedFrom] = useState<number | null>(
     null,
