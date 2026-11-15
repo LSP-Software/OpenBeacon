@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "algorithm": "XChaCha20-Poly1305",
+  "description": "Place geometry v1 vectors. Only the centre and radius of a Place are encrypted; its name and emoji are plain text.",
+  "constants": {
+    "domainContext": "openbeacon.group-epoch.v1",
+    "purpose": "payload",
+    "kind": "placeGeometry",
+    "epochKeyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "epochKeyBase64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    "nonceHex": "202122232425262728292a2b2c2d2e2f3031323334353637",
+    "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3"
+  },
+  "cases": [
+    {
+      "name": "smallest-radius",
+      "metadata": {
+        "epochId": "epoch_place_1",
+        "groupId": "group_place_1",
+        "kind": "placeGeometry",
+        "senderDeviceId": "device_place_1"
+      },
+      "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_place_1\",\"groupId\":\"group_place_1\",\"kind\":\"placeGeometry\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_place_1\"}",
+      "plaintextJson": "{\"v\":1,\"latitude\":51.5074,\"longitude\":-0.1278,\"radiusMeters\":100}",
+      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6NTEuNTA3NCwibG9uZ2l0dWRlIjotMC4xMjc4LCJyYWRpdXNNZXRlcnMiOjEwMH0=",
+      "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3",
+      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v5A3xpjaC1U1+RWBXjWtFNEQn49kLPnyVB3mFvRR2CLfEvp+KmKC14gEtRukPGVhleeDMGNalysT4RkBUBSwC"
+    },
+    {
+      "name": "largest-radius-southern-hemisphere",
+      "metadata": {
+        "epochId": "epoch_place_2",
+        "groupId": "group_place_2",
+        "kind": "placeGeometry",
+        "senderDeviceId": "device_place_2"
+      },
+      "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_place_2\",\"groupId\":\"group_place_2\",\"kind\":\"placeGeometry\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_place_2\"}",
+      "plaintextJson": "{\"v\":1,\"latitude\":-33.8688,\"longitude\":151.2093,\"radiusMeters\":1000}",
+      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6LTMzLjg2ODgsImxvbmdpdHVkZSI6MTUxLjIwOTMsInJhZGl1c01ldGVycyI6MTAwMH0=",
+      "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3",
+      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v/A/svT6D2VlwC2NWhGVYNVUmpMEcP2eVG3yNqAUoS6HMr4Wyjpm15Bd9D/oFGBVnEY69DlZf86+GvGGRpUxfJnmO"
+    },
+    {
+      "name": "mid-radius",
+      "metadata": {
+        "epochId": "epoch_place_3",
+        "groupId": "group_place_3",
+        "kind": "placeGeometry",
+        "senderDeviceId": "device_place_3"
+      },
+      "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_place_3\",\"groupId\":\"group_place_3\",\"kind\":\"placeGeometry\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_place_3\"}",
+      "plaintextJson": "{\"v\":1,\"latitude\":40.7128,\"longitude\":-74.006,\"radiusMeters\":275}",
+      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6NDAuNzEyOCwibG9uZ2l0dWRlIjotNzQuMDA2LCJyYWRpdXNNZXRlcnMiOjI3NX0=",
+      "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3",
+      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v5QzxpDeH2U1+RWBXjWtFNEQn49kLOWaKBX6LvRR2CLfEvp+KmKC14gEtRuoIHFhghuBLiBLbkFCXrU82TSUb"
+    }
+  ]
+}

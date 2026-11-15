@@ -14,6 +14,12 @@ import {
   XCHACHA20_NONCE_LENGTH,
 } from "./constants.ts";
 import { openAuth, sealAuth } from "./hpke.ts";
+import type { PlaceGeometryV1 } from "./placeGeometry.ts";
+import {
+  encodePlaceGeometryV1,
+  PLACE_GEOMETRY_KIND,
+  validatePlaceGeometryV1,
+} from "./placeGeometry.ts";
 import {
   DevicePrivateKeyMaterial,
   EpochKeyMaterial,
@@ -431,16 +437,19 @@ export {
   DEVICE_KEY_ALGORITHM,
   DevicePrivateKeyMaterial,
   encodeBase64,
+  encodePlaceGeometryV1,
   encodeTrackingPointV1,
   EpochKeyMaterial,
   HISTORY_ESCROW_ALGORITHM,
   HistoryPrivateKeyMaterial,
   PAYLOAD_ENCRYPTION_ALGORITHM,
+  PLACE_GEOMETRY_KIND,
   RECOVERY_KEY_DERIVATION_VERSION,
   RecoveryPhrase,
   RecoveryPrivateKeyMaterial,
   SensitivePayloadBytes,
   TRACKING_POINT_KIND,
+  validatePlaceGeometryV1,
   validateTrackingPointV1,
   WRAPPED_EPOCH_KEY_ALGORITHM,
   X25519_KEY_ALGORITHM,
@@ -457,6 +466,7 @@ export type {
   HistoryKeyEscrow,
   HistoryPublicKey,
   PersonalDataPurpose,
+  PlaceGeometryV1,
   RecipientPublicKeyMaterial,
   TrackingPointV1,
   WrappedEpochKey,
