@@ -1,24 +1,49 @@
 import { parseArgs } from "node:util";
 import {
   announcementMessageSchema,
+  announcementSchema,
   appVersionSchema,
   compareAppVersions,
+  devicePlatformSchema,
 } from "@openbeacon/schemas";
 import { z } from "zod";
 
-const timeSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/, {
-    message: "Give times as ISO 8601 with a time zone, such as 2026-11-21T09:00Z",
-  })
-  .refine(
-    (value) => {
-      const [year = 0, month = 0, day = 0] = value.slice(0, 10).split("-").map(Number);
-      return new Date(Date.UTC(year, month - 1, day)).getUTCDate() === day;
-    },
-    { message: "That date doesn't exist" },
-  )
-  .transform((value) => new Date(value));
+const timeSchema = z.string().transform((value, context) => {
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(
+      value,
+    );
+  if (!match) {
+    context.addIssue({
+      code: "custom",
+      message: "Give times as ISO 8601 with a time zone, such as 2026-11-21T09:00Z",
+    });
+    return z.NEVER;
+  }
+  const [
+    year = 0,
+    month = 0,
+    day = 0,
+    hour = 0,
+    minute = 0,
+    second = 0,
+    offsetHours = 0,
+    offsetMinutes = 0,
+  ] = match.slice(1).map((part) => Number(part ?? 0));
+  const problem =
+    month < 1 || month > 12 || new Date(Date.UTC(year, month - 1, day)).getUTCDate() !== day
+      ? "That date doesn't exist"
+      : hour > 23 || minute > 59 || second > 59
+        ? "That time doesn't exist"
+        : offsetHours > 14 || offsetMinutes > 59
+          ? "That time zone offset doesn't exist"
+          : null;
+  if (problem) {
+    context.addIssue({ code: "custom", message: problem });
+    return z.NEVER;
+  }
+  return new Date(value);
+});
 
 const durationSchema = z
   .string()
@@ -33,8 +58,8 @@ const durationSchema = z
 
 const addOptionsSchema = z.object({
   message: announcementMessageSchema,
-  severity: z.enum(["info", "warning"]).default("info"),
-  platform: z.enum(["android", "ios"]).optional(),
+  severity: announcementSchema.shape.severity.default("info"),
+  platform: devicePlatformSchema.optional(),
   "min-version": appVersionSchema.optional(),
   "max-version": appVersionSchema.optional(),
   "downtime-start": timeSchema.optional(),
@@ -50,7 +75,7 @@ export const announceUsage = `Usage:
   announce end <id>
 
 Options for add:
-  --message <text>         Up to 280 characters of plain text
+  --message <text>         One line of plain text, up to 280 characters
   --severity info|warning  Defaults to info
   --platform android|ios   Show only on one platform
   --min-version <x.y.z>    Show only on this app version or newer
@@ -58,7 +83,7 @@ Options for add:
   --downtime-start <time>  When planned downtime starts, shown in each person's local time
   --downtime-end <time>    When planned downtime ends
   --from <time>            When to start showing it, defaults to now
-  --until <time>           When to stop showing it
+  --until <time>           When to stop showing it, at most 90 days from now
   --for <duration>         How long to show it for, such as 90m, 2h or 1d
 
 Times are ISO 8601 with a time zone, such as 2026-11-21T09:00Z or 2026-11-21T09:00+01:00.`;
@@ -141,6 +166,9 @@ export const parseAnnounceCommand = (
   if (downtimeStartsAt && downtimeEndsAt && downtimeEndsAt <= downtimeStartsAt) {
     return { command: "error", message: "--downtime-end must be after --downtime-start" };
   }
+  if (downtimeEndsAt && downtimeEndsAt <= now) {
+    return { command: "error", message: "--downtime-end is in the past, so the downtime is over" };
+  }
   if (values.until && values.for !== undefined) {
     return { command: "error", message: "Give --until or --for, not both" };
   }
@@ -155,6 +183,9 @@ export const parseAnnounceCommand = (
   }
   if (endsAt <= startsAt || endsAt <= now) {
     return { command: "error", message: "It would stop showing before it starts" };
+  }
+  if (endsAt.getTime() > now.getTime() + 90 * 86_400_000) {
+    return { command: "error", message: "An announcement can show for at most 90 days from now" };
   }
 
   return {

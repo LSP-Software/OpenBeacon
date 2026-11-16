@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { devicePlatformSchema } from "../auth/registerDeviceKey.ts";
 
 export const appVersionSchema = z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,4}$/);
 
@@ -12,13 +13,20 @@ export const compareAppVersions = (left: string, right: string) => {
   return 0;
 };
 
-export const announcementMessageSchema = z.string().trim().min(1).max(280);
+export const announcementMessageSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(280)
+  .regex(/^[^\p{Cc}\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]*$/u, {
+    message: "Use one line of text without control or text direction characters",
+  });
 
 export const announcementSchema = z.object({
   id: z.string().min(1).max(64),
   message: announcementMessageSchema,
   severity: z.enum(["info", "warning"]),
-  platform: z.enum(["android", "ios"]).nullable(),
+  platform: devicePlatformSchema.nullable(),
   minAppVersion: appVersionSchema.nullable(),
   maxAppVersion: appVersionSchema.nullable(),
   downtimeStartsAt: z.iso.datetime().nullable(),

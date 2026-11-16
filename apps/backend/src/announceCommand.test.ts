@@ -88,8 +88,44 @@ describe("parseAnnounceCommand", () => {
       ["--downtime-start", "2026-11-21T09:00Z", "--downtime-end", "2026-11-21T09:00Z"],
       "--downtime-end must be after --downtime-start",
     ],
+    [
+      ["--downtime-start", "2026-11-20T09:00Z", "--downtime-end", "2026-11-20T11:00Z"],
+      "--downtime-end is in the past, so the downtime is over",
+    ],
+    [["--for", "91d"], "An announcement can show for at most 90 days from now"],
+    [["--until", "2027-02-18T12:00:01Z"], "An announcement can show for at most 90 days from now"],
+    [
+      ["--from", "2027-02-01T00:00Z", "--for", "30d"],
+      "An announcement can show for at most 90 days from now",
+    ],
   ])("rejects %j", (args, message) => {
     expect(errorOf(add(...args))).toBe(message);
+  });
+
+  test("allows an announcement to show for exactly 90 days", () => {
+    expect(add("--for", "90d").command).toBe("add");
+    expect(add("--until", "2027-02-18T12:00Z").command).toBe("add");
+  });
+
+  test.each([
+    ["2026-13-01T09:00Z", "That date doesn't exist"],
+    ["2026-00-01T09:00Z", "That date doesn't exist"],
+    ["2026-11-00T09:00Z", "That date doesn't exist"],
+    ["2026-11-21T25:00Z", "That time doesn't exist"],
+    ["2026-11-21T24:00Z", "That time doesn't exist"],
+    ["2026-11-21T09:99Z", "That time doesn't exist"],
+    ["2026-11-21T09:00:60Z", "That time doesn't exist"],
+    ["2026-11-21T09:00+99:00", "That time zone offset doesn't exist"],
+    ["2026-11-21T09:00+15:00", "That time zone offset doesn't exist"],
+    ["2026-11-21T09:00+01:60", "That time zone offset doesn't exist"],
+  ])("rejects the impossible time %s", (time, message) => {
+    expect(errorOf(add("--until", time))).toBe(`--until: ${message}`);
+  });
+
+  test("accepts seconds, fractions and the largest offsets", () => {
+    expect(add("--until", "2026-11-21T23:59:59.5Z").command).toBe("add");
+    expect(add("--until", "2026-11-21T09:00+14:00").command).toBe("add");
+    expect(add("--until", "2026-11-21T09:00-12:00").command).toBe("add");
   });
 
   test.each([

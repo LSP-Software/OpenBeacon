@@ -1,4 +1,3 @@
-import { prisma } from "@openbeacon/database";
 import { announceUsage, parseAnnounceCommand } from "./announceCommand.ts";
 
 const now = new Date();
@@ -6,14 +5,26 @@ const parsed = parseAnnounceCommand(process.argv.slice(2), now);
 
 if (parsed.command === "help") {
   console.log(announceUsage);
-} else if (parsed.command === "error") {
+  process.exit(0);
+}
+if (parsed.command === "error") {
   console.error(`${parsed.message}\n\n${announceUsage}`);
-  process.exitCode = 1;
-} else if (parsed.command === "add") {
+  process.exit(1);
+}
+
+const { prisma } = await import("@openbeacon/database");
+
+if (parsed.command === "add") {
   const created = await prisma.announcement.create({ data: parsed.announcement });
   console.log(
-    `Added announcement ${created.id}, shown from ${created.startsAt.toISOString()} to ${created.endsAt.toISOString()}. Apps pick it up the next time they check in with the server.`,
+    `Added announcement ${created.id}, shown from ${created.startsAt.toISOString()} to ${created.endsAt.toISOString()}. Apps pick it up the next time they check in with the server after it starts.`,
   );
+  const showingOrUpcoming = await prisma.announcement.count({ where: { endsAt: { gt: now } } });
+  if (showingOrUpcoming >= 20) {
+    console.warn(
+      `There are now ${showingOrUpcoming} current or upcoming announcements, but apps only receive 20 at once, warnings first and then the most recent. End some with \`announce end <id>\`.`,
+    );
+  }
 } else if (parsed.command === "list") {
   const announcements = await prisma.announcement.findMany({
     where: { endsAt: { gt: now } },
@@ -50,7 +61,9 @@ if (parsed.command === "help") {
     console.error(`No current or upcoming announcement has the id ${parsed.id}.`);
     process.exitCode = 1;
   } else {
-    console.log(`Ended announcement ${parsed.id}. Apps stop showing it within 30 seconds.`);
+    console.log(
+      `Ended announcement ${parsed.id}. Apps stop showing it the next time they check in with the server.`,
+    );
   }
 }
 

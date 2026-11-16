@@ -46,6 +46,33 @@ describe("announcementSchema", () => {
     ).toBe(false);
   });
 
+  test("accepts exactly 280 characters", () => {
+    expect(
+      announcementSchema.safeParse({ ...announcement, message: "a".repeat(280) }).success,
+    ).toBe(true);
+  });
+
+  test("accepts emoji joined with a zero width joiner", () => {
+    const message = "Back soon \u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
+    expect(announcementSchema.parse({ ...announcement, message }).message).toBe(message);
+  });
+
+  test.each([
+    ["a newline", "Line one\nLine two"],
+    ["a tab", "Down\tsoon"],
+    ["a null byte", "Down\u0000soon"],
+    ["a delete character", "Down\u007Fsoon"],
+    ["an Arabic letter mark", "Down\u061Csoon"],
+    ["a left-to-right mark", "Down\u200Esoon"],
+    ["a right-to-left mark", "Down\u200Fsoon"],
+    ["a right-to-left override", "Down\u202Esoon"],
+    ["a left-to-right embedding", "Down\u202Asoon"],
+    ["a first strong isolate", "Down\u2068soon"],
+    ["a pop directional isolate", "Down\u2069soon"],
+  ])("rejects a message with %s", (_name, message) => {
+    expect(announcementSchema.safeParse({ ...announcement, message }).success).toBe(false);
+  });
+
   test("rejects a platform it doesn't know", () => {
     expect(announcementSchema.safeParse({ ...announcement, platform: "web" }).success).toBe(false);
   });

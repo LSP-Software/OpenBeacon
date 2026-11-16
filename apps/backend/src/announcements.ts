@@ -1,17 +1,25 @@
-import type { Announcement as AnnouncementRow, PrismaClient } from "@openbeacon/database";
+import type { Announcement as AnnouncementRow } from "@openbeacon/database";
 import type { Announcement } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 
 let upcoming: AnnouncementRow[] = [];
 
 export const refreshAnnouncements = async (
-  database: Pick<PrismaClient, "announcement">,
+  database: {
+    announcement: {
+      findMany: (args: {
+        where: { startsAt: { lte: Date }; endsAt: { gt: Date } };
+        orderBy: [{ severity: "desc" }, { startsAt: "desc" }, { id: "asc" }];
+        take: number;
+      }) => Promise<AnnouncementRow[]>;
+    };
+  },
   now = new Date(),
 ) => {
   const rows = await tryCatch(
     database.announcement.findMany({
-      where: { endsAt: { gt: now } },
-      orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+      where: { startsAt: { lte: new Date(now.getTime() + 60_000) }, endsAt: { gt: now } },
+      orderBy: [{ severity: "desc" }, { startsAt: "desc" }, { id: "asc" }],
       take: 20,
     }),
   );

@@ -29,8 +29,10 @@ if (securityAlerts) {
   setInterval(securityAlerts.schedulePendingAlertsTurnedOff, 60_000);
 }
 
-void refreshAnnouncements(db);
-setInterval(() => void refreshAnnouncements(db), 30_000);
+const scheduleAnnouncementRefresh = () =>
+  setTimeout(() => void refreshAnnouncements(db).then(scheduleAnnouncementRefresh), 30_000);
+const firstAnnouncementRefresh = refreshAnnouncements(db).then(scheduleAnnouncementRefresh);
+await Promise.race([firstAnnouncementRefresh, Bun.sleep(10_000)]);
 
 const watchForFirstMap = async (waiting: boolean) => {
   const manifest = await tryCatch(getMapTilesManifest());

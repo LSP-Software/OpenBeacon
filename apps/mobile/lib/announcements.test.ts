@@ -13,7 +13,8 @@ mock.module("./storage.ts", () => ({
 
 const useServer = (baseUrl: string) => mock.module("./currentServer.ts", () => ({ baseUrl }));
 
-const importFresh = async (tag: string) => import(`./announcements.ts?${tag}`);
+const importFresh = async (tag: string): Promise<typeof import("./announcements.ts")> =>
+  import(`./announcements.ts?${tag}`);
 
 const announcement = (overrides: Partial<Announcement> = {}): Announcement => ({
   id: "one",
@@ -41,7 +42,7 @@ describe("pickAnnouncement", () => {
     return (
       pickAnnouncement({
         announcements,
-        dismissedIds,
+        dismissed: dismissedIds.map((id) => ({ id })),
         platform: "android",
         appVersion: "1.20.0",
         now,
@@ -83,72 +84,117 @@ describe("healthAnnouncementsSchema", () => {
     expect(
       healthAnnouncementsSchema.parse([
         announcement(),
-        announcement({ id: "future", severity: "critical" as "warning" }),
+        { ...announcement({ id: "future" }), severity: "critical" },
         "nonsense",
       ]),
     ).toEqual([announcement()]);
     expect(healthAnnouncementsSchema.parse(undefined)).toEqual([]);
     expect(healthAnnouncementsSchema.parse({ not: "a list" })).toEqual([]);
   });
+
+  test("keeps the first 20 valid announcements of a longer list", async () => {
+    const { healthAnnouncementsSchema } = await importFresh("schema-long");
+    const announcements = Array.from({ length: 25 }, (_, index) =>
+      announcement({ id: `a${index}` }),
+    );
+    expect(healthAnnouncementsSchema.parse(["nonsense", ...announcements])).toEqual(
+      announcements.slice(0, 20),
+    );
+  });
 });
 
 describe("announcement store", () => {
-  test("remembers dismissals across launches until the server stops sending that announcement", async () => {
-    const first = await importFresh("store-1");
-    first.saveAnnouncements([announcement({ id: "a" }), announcement({ id: "b" })]);
-    first.dismissAnnouncement("a");
+  const future = "2999-01-01T00:00:00.000Z";
 
-    const relaunched = await importFresh("store-2");
-    relaunched.saveAnnouncements([announcement({ id: "a" })]);
-    expect(JSON.parse(stored.get("announcements") ?? "{}").dismissedIds).toEqual(["a"]);
+  const shownId = (store: typeof import("./announcements.ts")) => {
+    const { announcements, dismissed } = store.getAnnouncementState();
+    return (
+      store.pickAnnouncement({
+        announcements,
+        dismissed,
+        platform: "android",
+        appVersion: "1.20.0",
+        now: new Date(),
+      })?.id ?? null
+    );
+  };
 
-    relaunched.saveAnnouncements([announcement({ id: "c" })]);
-    expect(JSON.parse(stored.get("announcements") ?? "{}").dismissedIds).toEqual([]);
+  test("keeps a dismissed announcement hidden after a relaunch while the server still sends it", async () => {
+    const first = await importFresh("relaunch-1");
+    first.saveAnnouncements([announcement({ id: "a", endsAt: future })]);
+    first.dismissAnnouncement(announcement({ id: "a", endsAt: future }));
+    expect(shownId(first)).toBeNull();
+
+    const relaunched = await importFresh("relaunch-2");
+    relaunched.saveAnnouncements([announcement({ id: "a", endsAt: future })]);
+    expect(shownId(relaunched)).toBeNull();
+  });
+
+  test("keeps a dismissal when the server briefly sends no announcements", async () => {
+    const store = await importFresh("gap");
+    const sent = announcement({ id: "a", endsAt: future });
+    store.saveAnnouncements([sent]);
+    store.dismissAnnouncement(sent);
+
+    store.saveAnnouncements([]);
+    store.saveAnnouncements([sent]);
+    expect(shownId(store)).toBeNull();
+  });
+
+  test("keeps a dismissal when the server extends the announcement", async () => {
+    const store = await importFresh("extended");
+    const soon = new Date(Date.now() + 60_000).toISOString();
+    store.dismissAnnouncement(announcement({ id: "a", endsAt: soon }));
+    store.saveAnnouncements([announcement({ id: "a", endsAt: future })]);
+    expect(store.getAnnouncementState().dismissed).toEqual([{ id: "a", endsAt: future }]);
+  });
+
+  test("forgets dismissals once their announcement has ended", async () => {
+    const store = await importFresh("expired-save");
+    store.dismissAnnouncement(announcement({ id: "current", endsAt: future }));
+    store.dismissAnnouncement(announcement({ id: "old", endsAt: "2000-01-01T00:00:00.000Z" }));
+    store.saveAnnouncements([]);
+    expect(store.getAnnouncementState().dismissed).toEqual([{ id: "current", endsAt: future }]);
+
+    stored.set(
+      "announcements",
+      JSON.stringify({
+        serverUrl: "https://api.example.test",
+        announcements: [],
+        dismissed: [
+          { id: "old", endsAt: "2000-01-01T00:00:00.000Z" },
+          { id: "current", endsAt: future },
+        ],
+      }),
+    );
+    const relaunched = await importFresh("expired-load");
+    expect(relaunched.getAnnouncementState().dismissed).toEqual([
+      { id: "current", endsAt: future },
+    ]);
+  });
+
+  test("starts fresh when the saved data has an older shape", async () => {
+    stored.set(
+      "announcements",
+      JSON.stringify({
+        serverUrl: "https://api.example.test",
+        announcements: [announcement({ id: "a", endsAt: future })],
+        dismissedIds: ["a"],
+      }),
+    );
+    const store = await importFresh("old-shape");
+    expect(store.getAnnouncementState()).toEqual({ announcements: [], dismissed: [] });
+    expect(stored.has("announcements")).toBe(false);
   });
 
   test("forgets another server's announcements", async () => {
     const first = await importFresh("server-1");
-    first.saveAnnouncements([announcement({ id: "a" })]);
-    first.dismissAnnouncement("a");
+    first.saveAnnouncements([announcement({ id: "a", endsAt: future })]);
+    first.dismissAnnouncement(announcement({ id: "a", endsAt: future }));
 
     useServer("https://family.example.test");
     const switched = await importFresh("server-2");
-    switched.saveAnnouncements([announcement({ id: "a" })]);
-    expect(JSON.parse(stored.get("announcements") ?? "{}")).toEqual({
-      serverUrl: "https://family.example.test",
-      announcements: [announcement({ id: "a" })],
-      dismissedIds: [],
-    });
-  });
-});
-
-describe("formatDowntime", () => {
-  const time = (iso: string) =>
-    new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-
-  test("names today and tomorrow and gives both times in local time", async () => {
-    const { formatDowntime } = await importFresh("format");
-    const start = new Date(now.getTime() + 2 * 3_600_000);
-    const end = new Date(start.getTime() + 3_600_000);
-    const sameDay =
-      start.toDateString() === now.toDateString() && end.toDateString() === start.toDateString();
-    if (sameDay) {
-      expect(formatDowntime(start, end, now)).toBe(
-        `Down today from ${time(start.toISOString())} to ${time(end.toISOString())}`,
-      );
-    }
-    const tomorrowStart = new Date(now);
-    tomorrowStart.setDate(now.getDate() + 1);
-    tomorrowStart.setHours(9, 0, 0, 0);
-    const tomorrowEnd = new Date(tomorrowStart);
-    tomorrowEnd.setHours(10, 0, 0, 0);
-    expect(formatDowntime(tomorrowStart, tomorrowEnd, now)).toBe(
-      `Down tomorrow from ${time(tomorrowStart.toISOString())} to ${time(tomorrowEnd.toISOString())}`,
-    );
-    const overnightEnd = new Date(tomorrowStart);
-    overnightEnd.setDate(tomorrowStart.getDate() + 1);
-    expect(formatDowntime(now, overnightEnd, now)).toStartWith(
-      `Down from today at ${time(now.toISOString())} to `,
-    );
+    switched.saveAnnouncements([announcement({ id: "a", endsAt: future })]);
+    expect(shownId(switched)).toBe("a");
   });
 });

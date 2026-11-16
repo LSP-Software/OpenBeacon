@@ -45,7 +45,7 @@ describe("health endpoint", () => {
       announcement: { findMany: async () => rows },
     });
 
-    await refreshAnnouncements(database([showing]) as never);
+    await refreshAnnouncements(database([showing]));
     const body: Record<string, unknown> = await (await health.request("/health")).json();
     expect(body["announcements"]).toEqual([
       {
@@ -61,7 +61,7 @@ describe("health endpoint", () => {
       },
     ]);
 
-    await refreshAnnouncements(database([]) as never);
+    await refreshAnnouncements(database([]));
     expect(Object.keys(await (await health.request("/health")).json())).not.toContain(
       "announcements",
     );

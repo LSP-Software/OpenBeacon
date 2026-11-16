@@ -6,39 +6,47 @@ import { storage } from "./storage.ts";
 
 export const healthAnnouncementsSchema = z
   .array(announcementSchema.nullable().catch(null))
-  .max(20)
   .optional()
   .catch(undefined)
   .transform((announcements) =>
-    (announcements ?? []).filter((announcement) => announcement !== null),
+    (announcements ?? []).filter((announcement) => announcement !== null).slice(0, 20),
   );
+
+const dismissalSchema = z.object({ id: z.string(), endsAt: z.iso.datetime() });
 
 const savedSchema = z.object({
   serverUrl: z.string(),
   announcements: z.array(announcementSchema),
-  dismissedIds: z.array(z.string()),
+  dismissed: z.array(dismissalSchema),
 });
 
 const storageKey = "announcements";
 
+const unexpired = (dismissed: z.infer<typeof dismissalSchema>[]) =>
+  dismissed.filter((dismissal) => new Date(dismissal.endsAt).getTime() > Date.now());
+
 const loadSaved = () => {
+  const empty = { announcements: [], dismissed: [] };
   const raw = storage.getString(storageKey);
-  if (raw === undefined) return { announcements: [], dismissedIds: [] };
+  if (raw === undefined) return empty;
   let saved: z.infer<typeof savedSchema>;
   try {
     saved = savedSchema.parse(JSON.parse(raw));
   } catch {
     storage.remove(storageKey);
-    return { announcements: [], dismissedIds: [] };
+    return empty;
   }
   if (saved.serverUrl !== baseUrl) {
     storage.remove(storageKey);
-    return { announcements: [], dismissedIds: [] };
+    return empty;
   }
-  return { announcements: saved.announcements, dismissedIds: saved.dismissedIds };
+  return { announcements: saved.announcements, dismissed: unexpired(saved.dismissed) };
 };
 
-let state: { announcements: Announcement[]; dismissedIds: string[] } = loadSaved();
+let state: {
+  announcements: Announcement[];
+  dismissed: z.infer<typeof dismissalSchema>[];
+} = loadSaved();
 const listeners = new Set<() => void>();
 
 const setState = (next: typeof state) => {
@@ -47,35 +55,39 @@ const setState = (next: typeof state) => {
   for (const listener of listeners) listener();
 };
 
+export const getAnnouncementState = () => state;
+
 export const saveAnnouncements = (announcements: Announcement[]) => {
-  const ids = new Set(announcements.map((announcement) => announcement.id));
-  setState({
-    announcements,
-    dismissedIds: state.dismissedIds.filter((id) => ids.has(id)),
+  const dismissed = unexpired(state.dismissed).map((dismissal) => {
+    const endsAt = announcements.find(({ id }) => id === dismissal.id)?.endsAt;
+    return endsAt && new Date(endsAt) > new Date(dismissal.endsAt)
+      ? { ...dismissal, endsAt }
+      : dismissal;
   });
+  setState({ announcements, dismissed });
 };
 
-export const dismissAnnouncement = (id: string) => {
-  if (state.dismissedIds.includes(id)) return;
-  setState({ ...state, dismissedIds: [...state.dismissedIds, id] });
+export const dismissAnnouncement = ({ id, endsAt }: Announcement) => {
+  if (state.dismissed.some((dismissal) => dismissal.id === id)) return;
+  setState({ ...state, dismissed: [...unexpired(state.dismissed), { id, endsAt }] });
 };
 
 export const pickAnnouncement = ({
   announcements,
-  dismissedIds,
+  dismissed,
   platform,
   appVersion,
   now,
 }: {
   announcements: Announcement[];
-  dismissedIds: string[];
-  platform: string;
+  dismissed: { id: string }[];
+  platform: NonNullable<Announcement["platform"]>;
   appVersion: string;
   now: Date;
 }) => {
   const shown = announcements.filter(
     (announcement) =>
-      !dismissedIds.includes(announcement.id) &&
+      !dismissed.some((dismissal) => dismissal.id === announcement.id) &&
       new Date(announcement.endsAt) > now &&
       (announcement.platform === null || announcement.platform === platform) &&
       (announcement.minAppVersion === null ||
@@ -84,22 +96,6 @@ export const pickAnnouncement = ({
         compareAppVersions(appVersion, announcement.maxAppVersion) <= 0),
   );
   return shown.find((announcement) => announcement.severity === "warning") ?? shown[0] ?? null;
-};
-
-export const formatDowntime = (startsAt: Date, endsAt: Date, now: Date) => {
-  const sameDay = (left: Date, right: Date) => left.toDateString() === right.toDateString();
-  const time = (date: Date) =>
-    date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  const day = (date: Date) => {
-    if (sameDay(date, now)) return "today";
-    const tomorrow = new Date(now);
-    tomorrow.setDate(now.getDate() + 1);
-    if (sameDay(date, tomorrow)) return "tomorrow";
-    return date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-  };
-  return sameDay(startsAt, endsAt)
-    ? `Down ${day(startsAt)} from ${time(startsAt)} to ${time(endsAt)}`
-    : `Down from ${day(startsAt)} at ${time(startsAt)} to ${day(endsAt)} at ${time(endsAt)}`;
 };
 
 export const useAnnouncements = () =>

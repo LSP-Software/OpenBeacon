@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Announcement, PrismaClient } from "@openbeacon/database";
+import type { Announcement } from "@openbeacon/database";
 import { announcementSchema } from "@openbeacon/schemas";
 import { currentAnnouncements, refreshAnnouncements } from "./announcements.ts";
 
@@ -18,8 +18,9 @@ const row = (overrides: Partial<Announcement>): Announcement => ({
   ...overrides,
 });
 
-const databaseReturning = (result: () => Promise<Announcement[]>) =>
-  ({ announcement: { findMany: result } }) as unknown as Pick<PrismaClient, "announcement">;
+const databaseReturning = (result: () => Promise<Announcement[]>) => ({
+  announcement: { findMany: result },
+});
 
 describe("announcements", () => {
   test("serves only announcements whose window has started and not ended, in the wire format", async () => {
@@ -58,6 +59,31 @@ describe("announcements", () => {
       "upcoming",
     ]);
     expect(currentAnnouncements(new Date("2026-11-21T10:00:00.000Z"))).toEqual([]);
+  });
+
+  test("asks for warnings first, then the most recent, among those starting within a minute", async () => {
+    const received: unknown[] = [];
+    await refreshAnnouncements(
+      {
+        announcement: {
+          findMany: async (args) => {
+            received.push(args);
+            return [];
+          },
+        },
+      },
+      new Date("2026-11-20T12:00:00.000Z"),
+    );
+    expect(received).toEqual([
+      {
+        where: {
+          startsAt: { lte: new Date("2026-11-20T12:01:00.000Z") },
+          endsAt: { gt: new Date("2026-11-20T12:00:00.000Z") },
+        },
+        orderBy: [{ severity: "desc" }, { startsAt: "desc" }, { id: "asc" }],
+        take: 20,
+      },
+    ]);
   });
 
   test("keeps serving the last announcements it loaded when the database can't be read", async () => {

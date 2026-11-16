@@ -1,14 +1,10 @@
 import { InfoIcon, TriangleAlertIcon, XIcon } from "lucide-react-native";
-import { useEffect, useState } from "react";
-import { Platform, Pressable, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { AccessibilityInfo, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  dismissAnnouncement,
-  formatDowntime,
-  pickAnnouncement,
-  useAnnouncements,
-} from "../lib/announcements.ts";
+import { dismissAnnouncement, pickAnnouncement, useAnnouncements } from "../lib/announcements.ts";
 import { cn } from "../lib/cn.ts";
+import { formatDowntime } from "../lib/formatDowntime.ts";
 import { useCurrentInAppNotice } from "../lib/inAppNotices.ts";
 import { useOfflineStatus } from "../lib/networkStatus.ts";
 import { appVersion } from "../lib/versions.ts";
@@ -16,34 +12,52 @@ import { Icon } from "./ui/Icon.tsx";
 import { Text } from "./ui/Text.tsx";
 
 export const AnnouncementBanner = () => {
-  const { announcements, dismissedIds } = useAnnouncements();
+  const { announcements, dismissed } = useAnnouncements();
   const notice = useCurrentInAppNotice();
   const offline = useOfflineStatus();
   const insets = useSafeAreaInsets();
   const [now, setNow] = useState(() => new Date());
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const announcedId = useRef<string | null>(null);
   const announcement = pickAnnouncement({
     announcements,
-    dismissedIds,
-    platform: Platform.OS,
+    dismissed,
+    platform: Platform.OS === "ios" ? "ios" : "android",
     appVersion,
     now,
   });
+  const visible = announcement !== null && !notice;
 
   useEffect(() => {
-    setNow(new Date());
     if (!announcement) return;
-    const timer = setTimeout(
-      () => setNow(new Date()),
-      Math.min(new Date(announcement.endsAt).getTime() - Date.now() + 1_000, 60 * 60_000),
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    const downtimeEndsAt = announcement.downtimeEndsAt
+      ? new Date(announcement.downtimeEndsAt).getTime()
+      : Number.POSITIVE_INFINITY;
+    const next = Math.min(
+      new Date(announcement.endsAt).getTime(),
+      midnight.getTime(),
+      now.getTime() + 60 * 60_000,
+      downtimeEndsAt > now.getTime() ? downtimeEndsAt : Number.POSITIVE_INFINITY,
     );
+    const timer = setTimeout(() => setNow(new Date()), Math.max(next - Date.now(), 0) + 1_000);
     return () => clearTimeout(timer);
-  }, [announcement]);
+  }, [announcement, now]);
 
-  if (!announcement || notice) return null;
+  useEffect(() => {
+    if (!visible || announcedId.current === announcement.id) return;
+    announcedId.current = announcement.id;
+    AccessibilityInfo.announceForAccessibility(announcement.message);
+  }, [visible, announcement]);
+
+  if (!visible) return null;
   const warning = announcement.severity === "warning";
+  const expanded = expandedId === announcement.id;
   return (
     <View
       accessibilityRole="alert"
+      accessibilityLiveRegion="polite"
       className="absolute left-4 right-4"
       style={{ top: insets.top + (offline ? 36 : 8) }}
     >
@@ -59,8 +73,17 @@ export const AnnouncementBanner = () => {
           className={warning ? "text-warning-accent" : "text-primary"}
         />
         <View className="flex-1 gap-1">
-          <Text className="text-foreground">{announcement.message}</Text>
-          {announcement.downtimeStartsAt && announcement.downtimeEndsAt ? (
+          <Pressable
+            accessibilityState={{ expanded }}
+            onPress={() => setExpandedId(expanded ? null : announcement.id)}
+          >
+            <Text className="text-foreground" numberOfLines={expanded ? undefined : 4}>
+              {announcement.message}
+            </Text>
+          </Pressable>
+          {announcement.downtimeStartsAt &&
+          announcement.downtimeEndsAt &&
+          new Date(announcement.downtimeEndsAt) > now ? (
             <Text className="font-semibold text-foreground">
               {formatDowntime(
                 new Date(announcement.downtimeStartsAt),
@@ -73,8 +96,9 @@ export const AnnouncementBanner = () => {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Dismiss announcement"
-          hitSlop={12}
-          onPress={() => dismissAnnouncement(announcement.id)}
+          className="-my-3.5 -mr-3.5 h-12 w-12 items-center justify-center"
+          hitSlop={4}
+          onPress={() => dismissAnnouncement(announcement)}
         >
           <Icon as={XIcon} size={18} className="text-muted-foreground" />
         </Pressable>
