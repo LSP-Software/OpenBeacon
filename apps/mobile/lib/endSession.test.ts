@@ -8,6 +8,7 @@ const storageValues = new Map<string, string | boolean>();
 const navigations: unknown[] = [];
 const queueDeletions: Array<{ deviceId: string | undefined; userId: string }> = [];
 let signOuts = 0;
+let picturesAtSignOut = -1;
 let trackingRevocations = 0;
 let sessionUserId: string | null = "user-a";
 let registerError: Error | null = null;
@@ -104,6 +105,9 @@ mock.module("./auth-client.ts", () => ({
   authClient: {
     signOut: async () => {
       signOuts += 1;
+      picturesAtSignOut = [...cachedFiles].filter((file) =>
+        file.startsWith("cache/images/"),
+      ).length;
       return { error: null };
     },
   },
@@ -410,6 +414,15 @@ describe("wiping a removed phone", () => {
     expect(providerRequests).toEqual([]);
     expect(signOuts).toBe(0);
   });
+
+  test("a lost session still deletes decrypted pictures when it stops early", async () => {
+    await seedSignedOutPhone();
+    cachedFiles.add("cache/images/0d6c8c2e-2b1a-4c55-9a4e-6f1b2f3c4d5e");
+
+    await endSession({ reason: "sessionLost" });
+
+    expect([...cachedFiles].filter((file) => file.startsWith("cache/images/"))).toEqual([]);
+  });
 });
 
 describe("ending a session", () => {
@@ -570,6 +583,15 @@ describe("ending a session", () => {
     await endSession({ reason });
 
     expect([...cachedFiles]).toEqual(["cache/map/tiles.pmtiles"]);
+  });
+
+  test("deletes decrypted pictures before contacting the server", async () => {
+    await seedSignedInPhone();
+    cachedFiles.add("cache/images/0d6c8c2e-2b1a-4c55-9a4e-6f1b2f3c4d5e");
+
+    await endSession({ reason: "signedOut" });
+
+    expect(picturesAtSignOut).toBe(0);
   });
 
   test("a lost session's picture key is wiped along with its other keys", async () => {

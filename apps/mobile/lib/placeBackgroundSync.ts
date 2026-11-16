@@ -25,6 +25,7 @@ export type PlaceUpdates = {
 type Groups = () => Promise<RouterOutputs["groupMembership"]["list"]>;
 
 const knownPlacesSchema = z.record(z.string(), z.string());
+const imageKeyMissesSchema = z.record(z.string(), z.number());
 
 const placeOwner = (userId: string) => JSON.stringify([baseUrl, userId]);
 
@@ -77,12 +78,17 @@ export const describePlacesChanged = ({
   };
 };
 
-const readKnownPlaces = async (userId: string, groupId: string) => {
-  const raw = storage.getString(storageKey(userId, "known", groupId));
-  if (raw === undefined) return {};
+const readStoredJson = async (key: string) => {
+  const raw = storage.getString(key);
+  if (raw === undefined) return { raw, value: undefined };
   const parsed = await tryCatch(Promise.resolve().then((): unknown => JSON.parse(raw)));
-  return knownPlacesSchema.catch({}).parse(parsed.data);
+  return { raw, value: parsed.data };
 };
+
+const readKnownPlaces = async (userId: string, groupId: string) =>
+  knownPlacesSchema
+    .catch({})
+    .parse((await readStoredJson(storageKey(userId, "known", groupId))).value);
 
 export const syncGroupPlaces = async ({
   groupId,
@@ -244,12 +250,24 @@ export const applyPlaceUpdates = async ({
     if (!shown.error) storage.set(storageKey(userId, "alertsCursor"), updates.placeAlerts.cursor);
   }
   let imageKeysMoved = false;
-  for (const groupId of updates.imageKeysNeedCatchUp ?? []) {
-    const catchUpKey = storageKey(userId, "imageKeysCatchUpAt", groupId);
-    if (Date.now() - (storage.getNumber(catchUpKey) ?? 0) < 15 * 60_000) continue;
-    storage.set(catchUpKey, Date.now());
-    const moved = await tryCatch(catchUpGroupImageKeys({ groupId, userId }));
-    imageKeysMoved ||= Boolean(moved.data);
+  if (updates.imageKeysNeedCatchUp) {
+    const missesKey = storageKey(userId, "imageKeysCatchUpMisses");
+    const stored = await readStoredJson(missesKey);
+    const previous = imageKeyMissesSchema.catch({}).parse(stored.value);
+    const misses: Record<string, number> = {};
+    for (const groupId of updates.imageKeysNeedCatchUp) {
+      const missed = previous[groupId] ?? 0;
+      misses[groupId] = missed;
+      const catchUpKey = storageKey(userId, "imageKeysCatchUpAt", groupId);
+      const waitMinutes = [15, 15, 60, 6 * 60][missed] ?? 24 * 60;
+      if (Date.now() - (storage.getNumber(catchUpKey) ?? 0) < waitMinutes * 60_000) continue;
+      storage.set(catchUpKey, Date.now());
+      const moved = await tryCatch(catchUpGroupImageKeys({ groupId, groups, userId }));
+      imageKeysMoved ||= Boolean(moved.data);
+      misses[groupId] = moved.data ? 0 : Math.min(missed + 1, 4);
+    }
+    const next = JSON.stringify(misses);
+    if (next !== stored.raw) storage.set(missesKey, next);
   }
   if (imageKeysMoved) {
     await queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() });

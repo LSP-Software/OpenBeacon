@@ -24,6 +24,7 @@ export type DecryptedImageResult =
   | { status: "unavailable" };
 
 const RETRY_AFTER_MS = 60_000;
+const MAX_DOWNLOADS = 4;
 
 export const imageKeySources = ({
   fileName,
@@ -95,7 +96,58 @@ export const createImageDecryptor = (deps: {
   }) => string | null;
 }) => {
   const attempts = new Map<string, { at: number; result: Promise<DecryptedImageResult> }>();
-  let attemptsGeneration = deps.generation();
+  const epochKeys = new Map<string, EpochKeyMaterial>();
+  const missingEpochKeys = new Map<string, number>();
+  const epochKeyLookups = new Map<string, Promise<EpochKeyMaterial | null>>();
+  const waitingDownloads: (() => void)[] = [];
+  let activeDownloads = 0;
+  let memoGeneration = deps.generation();
+
+  const currentGeneration = () => {
+    const generation = deps.generation();
+    if (generation !== memoGeneration) {
+      attempts.clear();
+      epochKeys.clear();
+      missingEpochKeys.clear();
+      epochKeyLookups.clear();
+      memoGeneration = generation;
+    }
+    return generation;
+  };
+
+  const resolveEpochKey = (input: { epochId: string; groupId: string }) => {
+    const generation = currentGeneration();
+    const cacheKey = `${input.groupId.length}:${input.groupId}:${input.epochId}`;
+    const known = epochKeys.get(cacheKey);
+    if (known) return Promise.resolve(known);
+    const missingUntil = missingEpochKeys.get(cacheKey);
+    if (missingUntil !== undefined && deps.now() < missingUntil) return Promise.resolve(null);
+    const inFlight = epochKeyLookups.get(cacheKey);
+    if (inFlight) return inFlight;
+    const lookup = Promise.resolve()
+      .then(() => deps.resolveEpochKey(input))
+      .then((epochKey) => {
+        if (generation !== memoGeneration) return epochKey;
+        if (epochKey) epochKeys.set(cacheKey, epochKey);
+        else missingEpochKeys.set(cacheKey, deps.now() + RETRY_AFTER_MS);
+        return epochKey;
+      })
+      .finally(() => {
+        if (epochKeyLookups.get(cacheKey) === lookup) epochKeyLookups.delete(cacheKey);
+      });
+    epochKeyLookups.set(cacheKey, lookup);
+    return lookup;
+  };
+
+  const download = async (url: string) => {
+    if (activeDownloads < MAX_DOWNLOADS) activeDownloads += 1;
+    else await new Promise<void>((resolve) => waitingDownloads.push(resolve));
+    const downloaded = await tryCatch(Promise.resolve().then(() => deps.download(url)));
+    const next = waitingDownloads.shift();
+    if (next) next();
+    else activeDownloads -= 1;
+    return downloaded;
+  };
 
   const unwrapKey = async ({
     fileName,
@@ -114,7 +166,7 @@ export const createImageDecryptor = (deps: {
       return own.data ? { key: own.data } : { status: "no-key" };
     }
     const epochKey = await tryCatch(
-      deps.resolveEpochKey({ epochId: source.imageKey.epochId, groupId: source.groupId }),
+      resolveEpochKey({ epochId: source.imageKey.epochId, groupId: source.groupId }),
     );
     if (epochKey.error) return { status: "unavailable" };
     const resolvedEpochKey = epochKey.data;
@@ -146,15 +198,15 @@ export const createImageDecryptor = (deps: {
     url: string;
   }): Promise<DecryptedImageResult> => {
     const failures = new Set<DecryptedImageResult["status"]>();
-    let blob: Promise<Uint8Array> | null = null;
+    let blob: ReturnType<typeof download> | null = null;
     for (const source of sources) {
       const unwrapped = await unwrapKey({ fileName, source });
       if ("status" in unwrapped) {
         failures.add(unwrapped.status);
         continue;
       }
-      blob ??= deps.download(url);
-      const downloaded = await tryCatch(blob);
+      blob ??= download(url);
+      const downloaded = await blob;
       if (downloaded.error) return { status: "unavailable" };
       const plain = await tryCatch(
         Promise.resolve().then(() =>
@@ -179,7 +231,7 @@ export const createImageDecryptor = (deps: {
       if (written.error || !written.data) return { status: "unavailable" };
       return { status: "ready", uri: written.data };
     }
-    for (const status of ["unavailable", "undecryptable", "stale-key"] as const) {
+    for (const status of ["unavailable", "stale-key", "undecryptable"] as const) {
       if (failures.has(status)) return { status };
     }
     return { status: "no-key" };
@@ -196,18 +248,21 @@ export const createImageDecryptor = (deps: {
     if (!url || !fileName) return { status: "no-picture" };
     const cached = await tryCatch(Promise.resolve().then(() => deps.cachedUri(fileName)));
     if (cached.data) return { status: "ready", uri: cached.data };
-    const forGeneration = deps.generation();
-    if (forGeneration !== attemptsGeneration) {
-      attempts.clear();
-      attemptsGeneration = forGeneration;
-    }
+    currentGeneration();
     const attemptKey = `${fileName}|${imageKeySourcesSignature(sources)}`;
-    const previous = attempts.get(attemptKey);
-    if (previous) {
+    let previous = attempts.get(attemptKey);
+    while (previous) {
       const result = await previous.result;
+      const latest = attempts.get(attemptKey);
+      if (latest && latest !== previous) {
+        previous = latest;
+        continue;
+      }
       const retryable = result.status === "unavailable" || result.status === "stale-key";
       if (!retryable || deps.now() - previous.at < RETRY_AFTER_MS) return result;
+      previous = undefined;
     }
+    const forGeneration = currentGeneration();
     const result = decrypt({ fileName, forGeneration, sources, url }).then((settled) => {
       if (settled.status === "ready") attempts.delete(attemptKey);
       return settled;

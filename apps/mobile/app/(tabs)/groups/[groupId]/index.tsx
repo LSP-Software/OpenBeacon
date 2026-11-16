@@ -90,6 +90,7 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
     enabled: Boolean(group && (group.imageKey || group.members.some((member) => member.image))),
     subscribed: isFocused,
     staleTime: 15 * 60_000,
+    gcTime: 15 * 60_000,
     retry: false,
     queryFn: userId
       ? async () => {

@@ -1,22 +1,32 @@
 import { decodeBase64, encodeBase64, ImageKeyMaterial } from "@openbeacon/encryption";
 import { z } from "zod";
-import { deleteSecret, readSecret, secretOwner, writeSecret } from "./secretStorage.ts";
+import {
+  deleteSecret,
+  invalidateSecretWrites,
+  readSecret,
+  secretOwner,
+  writeSecret,
+} from "./secretStorage.ts";
 
 const getOwnImageKeyName = (userId: string) => `encryption.profileImage.${userId}`;
 
 const storedOwnImageKeySchema = z.object({ fileName: z.string(), key: z.string() });
 
+export const ownImageKeyOwner = (userId: string) => secretOwner(getOwnImageKeyName(userId));
+
 export const storeOwnImageKey = ({
   fileName,
   imageKey,
+  owner,
   userId,
 }: {
   fileName: string;
   imageKey: ImageKeyMaterial;
+  owner?: ReturnType<typeof ownImageKeyOwner>;
   userId: string;
 }) =>
   writeSecret(
-    secretOwner(userId),
+    owner ?? ownImageKeyOwner(userId),
     getOwnImageKeyName(userId),
     JSON.stringify({ fileName, key: encodeBase64(imageKey.expose()) }),
   );
@@ -35,7 +45,10 @@ export const readOwnImageKey = async ({
   return new ImageKeyMaterial(decodeBase64(parsed.data.key));
 };
 
-export const deleteOwnImageKey = (userId: string) => deleteSecret(getOwnImageKeyName(userId));
+export const deleteOwnImageKey = async (userId: string) => {
+  await invalidateSecretWrites(getOwnImageKeyName(userId));
+  await deleteSecret(getOwnImageKeyName(userId));
+};
 
 const parseJson = (value: string): unknown => {
   try {

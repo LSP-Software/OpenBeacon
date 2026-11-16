@@ -147,6 +147,7 @@ export const endSession = async ({
 }: {
   reason: EndSessionReason;
 }): Promise<{ signedOut: boolean }> => {
+  await tryCatch(Promise.resolve().then(clearImageCache));
   const clears = endSessionClears[reason];
   const registered = await readRegisteredDevice();
   if (reason === "sessionLost") {

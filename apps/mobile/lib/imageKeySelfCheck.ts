@@ -1,18 +1,28 @@
 import { decryptImage, decryptImageKey, type ImageKeyMaterial } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { type RouterOutputs, trpcClient } from "./api.ts";
+import { baseUrl } from "./currentServer.ts";
 import { downloadEncryptedImage } from "./decryptedImages.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { uploadEncryptedImage } from "./image-upload.ts";
-import { imageFileNameFromUrl, readCachedImage } from "./imageCache.ts";
+import { cachedImageUri, imageFileNameFromUrl, readCachedImage } from "./imageCache.ts";
 import { confirmGroupImage, getOwnImageKey, storeOwnImageKeyInGroup } from "./imageKeys.ts";
+import { storage } from "./storage.ts";
 
 type StoredImageKey = NonNullable<RouterOutputs["groupMembership"]["list"][number]["imageKey"]>;
 
 const RETRY_AFTER_MS = 15 * 60_000;
+const GROUP_IMAGE_REPAIR_EVERY_MS = 24 * 60 * 60_000;
 
-const checks = new Map<string, { at: number; settled: boolean }>();
+const attempts = new Map<string, { at: number; signature: string }>();
 let running: Promise<boolean> | null = null;
+let pending: CheckInput | null = null;
+let currentUserId: string | null = null;
+
+const unsettled = { settled: false, repaired: false };
+
+const storageKey = (name: string, userId: string, groupId: string) =>
+  `imageKeys.${name}.${JSON.stringify([baseUrl, userId, groupId])}`;
 
 const sameBytes = (a: Uint8Array, b: Uint8Array) =>
   a.length === b.length && a.every((byte, index) => byte === b[index]);
@@ -63,7 +73,6 @@ const checkOwnKey = async ({
       kind: "profile-image-key",
       ownerId: userId,
     });
-    if (stored.status === "unknown") return { settled: false, repaired: false };
     if (stored.status === "ok" && sameBytes(stored.key.expose(), ownKey.expose())) {
       return { settled: true, repaired: false };
     }
@@ -77,14 +86,19 @@ const checkGroupKey = async ({
   groupId,
   imageKey,
   url,
+  userId,
 }: {
   fileName: string;
   groupId: string;
   imageKey: StoredImageKey;
   url: string;
+  userId: string;
 }) => {
-  const plain = await readCachedImage(fileName);
-  if (!plain) return { settled: false, repaired: false };
+  const repairKey = storageKey("groupImageRepairAt", userId, groupId);
+  const repairedAt = storage.getNumber(repairKey) ?? 0;
+  if (!cachedImageUri(fileName) || Date.now() - repairedAt < GROUP_IMAGE_REPAIR_EVERY_MS) {
+    return unsettled;
+  }
   const stored = await unwrapStoredKey({
     fileName,
     groupId,
@@ -92,7 +106,7 @@ const checkGroupKey = async ({
     kind: "group-image-key",
     ownerId: groupId,
   });
-  if (stored.status === "unknown") return { settled: false, repaired: false };
+  if (stored.status === "unknown") return unsettled;
   if (stored.status === "ok") {
     const blob = await downloadEncryptedImage(url);
     const opened = await tryCatch(
@@ -102,6 +116,18 @@ const checkGroupKey = async ({
     );
     if (!opened.error) return { settled: true, repaired: false };
   }
+  const latest = (await trpcClient.groupMembership.list.query()).find(({ id }) => id === groupId);
+  const role = latest?.members.find((member) => member.userId === userId)?.role;
+  if (
+    latest?.image !== url ||
+    latest.imageKey?.ciphertext !== imageKey.ciphertext ||
+    (role !== "OWNER" && role !== "ADMIN")
+  ) {
+    return unsettled;
+  }
+  const plain = await readCachedImage(fileName);
+  if (!plain) return unsettled;
+  storage.set(repairKey, Date.now());
   await uploadEncryptedImage({
     bytes: plain,
     ownerId: groupId,
@@ -115,44 +141,46 @@ const checkGroupKey = async ({
   return { settled: true, repaired: true };
 };
 
-const runCheck = async (
-  checkKey: string,
-  check: () => Promise<{ repaired: boolean; settled: boolean }>,
-) => {
-  const previous = checks.get(checkKey);
-  if (previous && (previous.settled || Date.now() - previous.at < RETRY_AFTER_MS)) return false;
-  checks.set(checkKey, { at: Date.now(), settled: false });
+const runCheck = async ({
+  check,
+  signature,
+  slot,
+}: {
+  check: () => Promise<{ repaired: boolean; settled: boolean }>;
+  signature: string;
+  slot: string;
+}) => {
+  if (storage.getString(slot) === signature) return false;
+  const previous = attempts.get(slot);
+  if (previous?.signature === signature && Date.now() - previous.at < RETRY_AFTER_MS) return false;
+  attempts.set(slot, { at: Date.now(), signature });
   const result = await tryCatch(check());
   if (result.error) return false;
-  checks.set(checkKey, { at: Date.now(), settled: result.data.settled });
+  if (result.data.settled) storage.set(slot, signature);
   return result.data.repaired;
 };
 
-const checkAll = async ({
-  groups,
-  user,
-}: {
-  groups: RouterOutputs["groupMembership"]["list"];
-  user: { id: string; image?: string | null; imageKeySealed?: string | null };
-}) => {
+const checkAll = async ({ groups, user }: CheckInput) => {
   let repaired = false;
   const ownFileName = imageFileNameFromUrl(user.image);
   let ownKey: Promise<ImageKeyMaterial | null> | null = null;
   for (const group of groups) {
+    if (currentUserId !== user.id) break;
     const me = group.members.find(({ userId }) => userId === user.id);
     if (!me) continue;
     if (ownFileName && imageFileNameFromUrl(me.image) === ownFileName) {
       repaired =
-        (await runCheck(
-          `${user.id}|own|${group.id}|${ownFileName}|${me.imageKey?.ciphertext ?? ""}`,
-          async () => {
+        (await runCheck({
+          slot: storageKey("ownChecked", user.id, group.id),
+          signature: `${ownFileName}|${me.imageKey?.ciphertext ?? ""}`,
+          check: async () => {
             ownKey ??= getOwnImageKey({
               fileName: ownFileName,
               sealed: user.imageKeySealed ?? null,
               userId: user.id,
             });
             const key = await ownKey;
-            if (!key) return { settled: false, repaired: false };
+            if (!key) return unsettled;
             return checkOwnKey({
               fileName: ownFileName,
               groupId: group.id,
@@ -161,8 +189,9 @@ const checkAll = async ({
               userId: user.id,
             });
           },
-        )) || repaired;
+        })) || repaired;
     }
+    if (currentUserId !== user.id) break;
     const groupFileName = imageFileNameFromUrl(group.image);
     const groupImageKey = group.imageKey;
     if (
@@ -173,24 +202,42 @@ const checkAll = async ({
     ) {
       const url = group.image;
       repaired =
-        (await runCheck(
-          `${user.id}|group|${group.id}|${groupFileName}|${groupImageKey.ciphertext}`,
-          () =>
+        (await runCheck({
+          slot: storageKey("groupChecked", user.id, group.id),
+          signature: `${groupFileName}|${groupImageKey.ciphertext}`,
+          check: () =>
             checkGroupKey({
               fileName: groupFileName,
               groupId: group.id,
               imageKey: groupImageKey,
               url,
+              userId: user.id,
             }),
-        )) || repaired;
+        })) || repaired;
     }
   }
   return repaired;
 };
 
-export const checkImageKeys = (input: Parameters<typeof checkAll>[0]) => {
-  running ??= checkAll(input).finally(() => {
-    running = null;
-  });
+const drain = async () => {
+  let repaired = false;
+  for (let next = pending; next; next = pending) {
+    pending = null;
+    const checked = await tryCatch(checkAll(next));
+    repaired = Boolean(checked.data) || repaired;
+  }
+  running = null;
+  return repaired;
+};
+
+export const checkImageKeys = (input: CheckInput) => {
+  pending = input;
+  currentUserId = input.user.id;
+  running ??= drain();
   return running;
+};
+
+type CheckInput = {
+  groups: RouterOutputs["groupMembership"]["list"];
+  user: { id: string; image?: string | null; imageKeySealed?: string | null };
 };

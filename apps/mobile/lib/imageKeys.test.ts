@@ -34,6 +34,8 @@ let historyState: "held" | "onOtherDevice" = "held";
 let failures: unknown[] = [];
 let sessions: { id: string; image: string | null; imageKeySealed: string | null }[] = [];
 let ownKeys = new Map<string, { fileName: string; key: ImageKeyMaterial }>();
+let ownKeyGeneration = 0;
+let beforeOpen: () => Promise<void> = async () => {};
 let profileConfirms: {
   wraps: (EncryptedImageKey & { groupId: string })[];
   sealed?: string;
@@ -113,6 +115,7 @@ mock.module("./currentHistoryKey.ts", () => ({
       : { status: "onOtherDevice", version: historyKey.version },
 }));
 mock.module("./ownImageKey.ts", () => ({
+  ownImageKeyOwner: (userId: string) => ({ userId, generation: ownKeyGeneration }),
   readOwnImageKey: async ({ fileName, userId }: { fileName: string; userId: string }) => {
     const stored = ownKeys.get(userId);
     return stored?.fileName === fileName ? stored.key : null;
@@ -120,12 +123,15 @@ mock.module("./ownImageKey.ts", () => ({
   storeOwnImageKey: async ({
     fileName,
     imageKey,
+    owner,
     userId,
   }: {
     fileName: string;
     imageKey: ImageKeyMaterial;
+    owner?: { generation: number };
     userId: string;
   }) => {
+    if ((owner?.generation ?? ownKeyGeneration) !== ownKeyGeneration) throw new Error("signed out");
     ownKeys.set(userId, { fileName, key: imageKey });
   },
 }));
@@ -140,16 +146,18 @@ mock.module("./personalData.ts", () => ({
       binding: string[];
       purpose: PersonalDataPurpose;
       sealed: string;
-    }) =>
-      openPersonalData({
+    }) => {
+      await beforeOpen();
+      return openPersonalData({
         historyPrivateKeys: new Map([[historyKey.version, history.privateKey]]),
         purpose,
         binding,
         sealed,
-      }),
+      });
+    },
 }));
 
-const { confirmGroupImage, confirmProfileImage, storeOwnImageKeyInGroup } =
+const { confirmGroupImage, confirmProfileImage, getOwnImageKey, storeOwnImageKeyInGroup } =
   await import("./imageKeys.ts");
 
 const openWrap = ({
@@ -187,6 +195,8 @@ beforeEach(() => {
   failures = [];
   sessions = [];
   ownKeys = new Map();
+  ownKeyGeneration = 0;
+  beforeOpen = async () => {};
   profileConfirms = [];
   groupConfirms = [];
   stores = [];
@@ -365,6 +375,24 @@ describe("confirmGroupImage", () => {
       confirmGroupImage({ fileName, groupId: "family", imageKey: generateImageKey() }),
     ).rejects.toThrow("current key");
     expect(groupConfirms).toHaveLength(0);
+  });
+});
+
+describe("getOwnImageKey", () => {
+  test("doesn't keep the opened key when the phone signs out while opening it", async () => {
+    const imageKey = generateImageKey();
+    beforeOpen = async () => {
+      ownKeyGeneration += 1;
+    };
+
+    const opened = await getOwnImageKey({
+      fileName,
+      sealed: sealProfileImageKey({ fileName, historyKey, imageKey, userId: "user-a" }),
+      userId: "user-a",
+    });
+
+    expect(opened?.expose()).toEqual(imageKey.expose());
+    expect(ownKeys.has("user-a")).toBe(false);
   });
 });
 

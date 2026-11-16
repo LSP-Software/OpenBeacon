@@ -10,6 +10,8 @@ import {
 } from "@openbeacon/encryption";
 
 mock.module("expo-file-system", () => ({ Directory: class {}, File: class {}, Paths: {} }));
+mock.module("./storage.ts", () => ({ storage: {} }));
+mock.module("./currentServer.ts", () => ({ baseUrl: "https://api.example" }));
 
 const { createImageDecryptor, imageKeySources } = await import("./imageDecryptor.ts");
 
@@ -452,5 +454,163 @@ describe("finding keys for a picture", () => {
     });
 
     expect(sources).toEqual([]);
+  });
+});
+
+describe("mixed keys", () => {
+  test("a key that can't be read yet wins over a broken one, so the picture is retried", async () => {
+    const imageKey = encrypt({ fileName: fileA, ownerId: bob, purpose: "profile-image" });
+    const stale = wrap({
+      epochId: "epoch-0",
+      fileName: fileA,
+      imageKey,
+      kind: "profile-image-key",
+      ownerId: bob,
+    });
+    const broken = wrap({ fileName: fileA, imageKey, kind: "profile-image-key", ownerId: bob });
+    const sources = [memberSource(broken, alice), memberSource(stale)];
+    const decryptor = createDecryptor();
+
+    const first = await decryptor.load({ sources, url: urlFor(fileA) });
+    epochKeys.set(`${groupId}:epoch-0`, generateGroupEpochKey());
+    now = 61_000;
+    await decryptor.load({ sources, url: urlFor(fileA) });
+
+    expect(first).toEqual({ status: "stale-key" });
+    expect(epochKeyRequests.filter((request) => request.endsWith("epoch-0"))).toHaveLength(2);
+  });
+});
+
+describe("epoch keys", () => {
+  const memberPicture = (fileName: string) => {
+    const imageKey = encrypt({ fileName, ownerId: bob, purpose: "profile-image" });
+    return memberSource(wrap({ fileName, imageKey, kind: "profile-image-key", ownerId: bob }));
+  };
+
+  test("many pictures under one epoch look the key up once", async () => {
+    const files = Array.from({ length: 10 }, () => crypto.randomUUID());
+    const decryptor = createDecryptor();
+
+    const results = await Promise.all(
+      files.map((fileName) =>
+        decryptor.load({ sources: [memberPicture(fileName)], url: urlFor(fileName) }),
+      ),
+    );
+    const later = crypto.randomUUID();
+    await decryptor.load({ sources: [memberPicture(later)], url: urlFor(later) });
+
+    expect(results.every((result) => result.status === "ready")).toBe(true);
+    expect(epochKeyRequests).toEqual([`${groupId}:epoch-1`]);
+  });
+
+  test("a missing epoch key is looked up again after a minute, not before", async () => {
+    const imageKey = encrypt({ fileName: fileA, ownerId: bob, purpose: "profile-image" });
+    const key = wrap({
+      epochId: "epoch-2",
+      fileName: fileA,
+      imageKey,
+      kind: "profile-image-key",
+      ownerId: bob,
+    });
+    const otherKey = encrypt({ fileName: fileB, ownerId: bob, purpose: "profile-image" });
+    const other = wrap({
+      epochId: "epoch-2",
+      fileName: fileB,
+      imageKey: otherKey,
+      kind: "profile-image-key",
+      ownerId: bob,
+    });
+    const decryptor = createDecryptor();
+
+    await decryptor.load({ sources: [memberSource(key)], url: urlFor(fileA) });
+    const soon = await decryptor.load({ sources: [memberSource(other)], url: urlFor(fileB) });
+    expect(soon).toEqual({ status: "stale-key" });
+    expect(epochKeyRequests).toEqual([`${groupId}:epoch-2`]);
+
+    now = 60_000;
+    await decryptor.load({ sources: [memberSource(key)], url: urlFor(fileA) });
+    expect(epochKeyRequests).toEqual([`${groupId}:epoch-2`, `${groupId}:epoch-2`]);
+  });
+
+  test("a failed lookup isn't remembered", async () => {
+    const source = memberPicture(fileA);
+    let failing = true;
+    const decryptor = createImageDecryptor({
+      cachedUri: () => null,
+      download: async (url) => served.get(url) ?? new Uint8Array(),
+      generation: () => generation,
+      getOwnImageKey: async () => null,
+      now: () => now,
+      resolveEpochKey: async ({ epochId, groupId: group }) => {
+        epochKeyRequests.push(`${group}:${epochId}`);
+        if (failing) throw new Error("offline");
+        return epochKeys.get(`${group}:${epochId}`) ?? null;
+      },
+      writeCached: ({ fileName }) => `file:///cache/images/${fileName}`,
+    });
+
+    const first = await decryptor.load({ sources: [source], url: urlFor(fileA) });
+    failing = false;
+    const second = await decryptor.load({ sources: [memberPicture(fileB)], url: urlFor(fileB) });
+
+    expect(first).toEqual({ status: "unavailable" });
+    expect(second.status).toBe("ready");
+    expect(epochKeyRequests).toHaveLength(2);
+  });
+
+  test("signing out forgets remembered epoch keys", async () => {
+    const decryptor = createDecryptor();
+
+    await decryptor.load({ sources: [memberPicture(fileA)], url: urlFor(fileA) });
+    generation += 1;
+    await decryptor.load({ sources: [memberPicture(fileB)], url: urlFor(fileB) });
+
+    expect(epochKeyRequests).toEqual([`${groupId}:epoch-1`, `${groupId}:epoch-1`]);
+  });
+});
+
+describe("downloads", () => {
+  test("ten loads retrying together after a minute share one download", async () => {
+    const imageKey = encrypt({ fileName: fileA, ownerId: bob, purpose: "profile-image" });
+    const key = wrap({ fileName: fileA, imageKey, kind: "profile-image-key", ownerId: bob });
+    const decryptor = createDecryptor();
+    downloadError = new Error("offline");
+    await decryptor.load({ sources: [memberSource(key)], url: urlFor(fileA) });
+    downloadError = null;
+    now = 61_000;
+
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () =>
+        decryptor.load({ sources: [memberSource(key)], url: urlFor(fileA) }),
+      ),
+    );
+
+    expect(results.every((result) => result.status === "ready")).toBe(true);
+    expect(downloads).toHaveLength(2);
+  });
+
+  test("no more than four pictures download at once", async () => {
+    const pictures = Array.from({ length: 10 }, () => {
+      const fileName = crypto.randomUUID();
+      const imageKey = encrypt({ fileName, ownerId: bob, purpose: "profile-image" });
+      const key = wrap({ fileName, imageKey, kind: "profile-image-key", ownerId: bob });
+      return { fileName, source: memberSource(key) };
+    });
+    let release = () => {};
+    downloadGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const decryptor = createDecryptor();
+
+    const loads = pictures.map(({ fileName, source }) =>
+      decryptor.load({ sources: [source], url: urlFor(fileName) }),
+    );
+    await Bun.sleep(10);
+    expect(downloads).toHaveLength(4);
+    release();
+    const results = await Promise.all(loads);
+
+    expect(results.every((result) => result.status === "ready")).toBe(true);
+    expect(downloads).toHaveLength(10);
   });
 });

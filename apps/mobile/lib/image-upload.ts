@@ -9,7 +9,7 @@ import { TRPCClientError } from "@trpc/client";
 import * as Crypto from "expo-crypto";
 import { File as FSFile } from "expo-file-system";
 import { errorReason } from "./errorReason.ts";
-import { writeCachedImage } from "./imageCache.ts";
+import { imageCacheGeneration, writeCachedImage } from "./imageCache.ts";
 import { GroupKeyUnavailableError, ImageStorageError } from "./imageUploadErrors.ts";
 
 export const computeSha256Base64 = async (bytes: Uint8Array<ArrayBuffer>): Promise<string> => {
@@ -66,6 +66,7 @@ export const uploadEncryptedImage = async ({
   purpose: ImagePurpose;
   request: () => Promise<{ fileName: string }>;
 }) => {
+  const forGeneration = imageCacheGeneration();
   const { fileName } = await request();
   const { blob, key } = encryptImage({ bytes, fileName, ownerId, purpose });
   const contentHash = await computeSha256Base64(blob);
@@ -73,7 +74,9 @@ export const uploadEncryptedImage = async ({
   const put = await tryCatch(uploadToPresignedUrl(presignedUrl, blob.buffer, contentHash));
   if (put.error) await uploadToPresignedUrl(presignedUrl, blob.buffer, contentHash);
   const { imageUrl } = await confirm({ fileName, imageKey: key });
-  await tryCatch(Promise.resolve().then(() => writeCachedImage({ bytes, fileName })));
+  await tryCatch(
+    Promise.resolve().then(() => writeCachedImage({ bytes, fileName, forGeneration })),
+  );
   return { fileName, imageUrl };
 };
 

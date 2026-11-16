@@ -1,7 +1,7 @@
 import { decryptImageKey, encryptImageKey, type EpochKeyMaterial } from "@openbeacon/encryption";
 import { MAX_IMAGE_KEY_REENCRYPTS } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
-import { trpcClient } from "./api.ts";
+import { type RouterOutputs, trpcClient } from "./api.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { errorReason } from "./errorReason.ts";
@@ -11,13 +11,23 @@ import { storeOwnImageKeyInGroup } from "./imageKeys.ts";
 
 const running = new Map<string, Promise<number>>();
 
-const reEncryptOldImageKeys = async ({ groupId, userId }: { groupId: string; userId: string }) => {
-  const [groups, latest, device] = await Promise.all([
-    trpcClient.groupMembership.list.query(),
+const fetchGroups = () => trpcClient.groupMembership.list.query();
+
+const reEncryptOldImageKeys = async ({
+  groupId,
+  groups,
+  userId,
+}: {
+  groupId: string;
+  groups: Groups;
+  userId: string;
+}) => {
+  const [list, latest, device] = await Promise.all([
+    groups(),
     trpcClient.groupEpoch.getLatest.query({ groupId }),
     ensureDeviceKeyRegistration(),
   ]);
-  const group = groups.find(({ id }) => id === groupId);
+  const group = list.find(({ id }) => id === groupId);
   if (!group || !latest) return { moved: 0, changed: false, ownKeyMissing: false };
   const me = group.members.find((member) => member.userId === userId);
   const ownKeyMissing = Boolean(me?.image && !me.imageKey);
@@ -43,9 +53,6 @@ const reEncryptOldImageKeys = async ({ groupId, userId }: { groupId: string; use
       ? [{ ...rest, fileName, imageKey }]
       : [];
   });
-  if (stored.length === 0) return { moved: 0, changed: false, ownKeyMissing };
-  const latestKey = await resolveEpochKey({ device, epochId: latestEpochId, groupId });
-  if (!latestKey) return { moved: 0, changed: false, ownKeyMissing };
   const epochKeys = new Map<string, Promise<EpochKeyMaterial | null>>();
   const epochKey = (epochId: string) => {
     const loaded =
@@ -54,11 +61,11 @@ const reEncryptOldImageKeys = async ({ groupId, userId }: { groupId: string; use
     epochKeys.set(epochId, loaded);
     return loaded;
   };
-  const requests = await Promise.all(
+  const unwrapped = await Promise.all(
     stored.map(async ({ fileName, imageKey, kind, ownerId, target }) => {
       const oldKey = await epochKey(imageKey.epochId);
       if (!oldKey) return [];
-      const unwrapped = await tryCatch(
+      const opened = await tryCatch(
         Promise.resolve().then(() =>
           decryptImageKey({
             encryptedKey: imageKey,
@@ -70,27 +77,40 @@ const reEncryptOldImageKeys = async ({ groupId, userId }: { groupId: string; use
           }),
         ),
       );
-      if (unwrapped.error) return [];
+      if (opened.error) return [];
       return [
         {
           target,
           fileName,
+          kind,
+          ownerId,
           expectedCiphertext: imageKey.ciphertext,
-          key: encryptImageKey({
-            epochId: latestEpochId,
-            epochKey: latestKey,
-            fileName,
-            groupId,
-            imageKey: unwrapped.data,
-            kind,
-            ownerId,
-            senderDeviceId: device.deviceId,
-          }),
+          imageKey: opened.data,
         },
       ];
     }),
   );
-  const keys = requests.flat();
+  const readable = unwrapped.flat();
+  if (readable.length === 0) return { moved: 0, changed: false, ownKeyMissing };
+  const latestKey = await resolveEpochKey({ device, epochId: latestEpochId, groupId });
+  if (!latestKey) return { moved: 0, changed: false, ownKeyMissing };
+  const keys = readable.map(
+    ({ expectedCiphertext, fileName, imageKey, kind, ownerId, target }) => ({
+      target,
+      fileName,
+      expectedCiphertext,
+      key: encryptImageKey({
+        epochId: latestEpochId,
+        epochKey: latestKey,
+        fileName,
+        groupId,
+        imageKey,
+        kind,
+        ownerId,
+        senderDeviceId: device.deviceId,
+      }),
+    }),
+  );
   let moved = 0;
   let changed = false;
   for (let start = 0; start < keys.length; start += MAX_IMAGE_KEY_REENCRYPTS) {
@@ -104,30 +124,49 @@ const reEncryptOldImageKeys = async ({ groupId, userId }: { groupId: string; use
   return { moved, changed, ownKeyMissing };
 };
 
-const catchUp = async (input: { groupId: string; userId: string }) => {
-  const { groupId } = input;
-  const first = await tryCatch(reEncryptOldImageKeys(input));
+const catchUp = async ({
+  groupId,
+  groups,
+  userId,
+}: {
+  groupId: string;
+  groups: Groups;
+  userId: string;
+}) => {
+  const first = await tryCatch(reEncryptOldImageKeys({ groupId, groups, userId }));
+  let result = first.data;
   if (first.error) {
     const reason = errorReason(first.error);
     if (reason === "EPOCH_ROTATION_PENDING") await rotateGroupEpochIfRequired(groupId);
     else if (reason === "DEVICE_NOT_REGISTERED") {
       await ensureDeviceKeyRegistration({ linkSession: true });
     } else if (reason !== "EPOCH_NOT_LATEST") throw first.error;
-    return (await reEncryptOldImageKeys(input)).moved;
+    result = await reEncryptOldImageKeys({ groupId, groups: fetchGroups, userId });
   }
-  const stored = first.data.ownKeyMissing
+  if (!result) return 0;
+  const stored = result.ownKeyMissing
     ? await tryCatch(storeOwnImageKeyInGroup(groupId))
     : { data: false };
-  const moved = first.data.moved + (stored.data ? 1 : 0);
-  if (!first.data.changed) return moved;
-  return moved + (await reEncryptOldImageKeys(input)).moved;
+  const moved = result.moved + (stored.data ? 1 : 0);
+  if (!result.changed) return moved;
+  return moved + (await reEncryptOldImageKeys({ groupId, groups: fetchGroups, userId })).moved;
 };
 
-export const catchUpGroupImageKeys = ({ groupId, userId }: { groupId: string; userId: string }) => {
+export const catchUpGroupImageKeys = ({
+  groupId,
+  groups = fetchGroups,
+  userId,
+}: {
+  groupId: string;
+  groups?: Groups;
+  userId: string;
+}) => {
   const key = `${userId}:${groupId}`;
   const existing = running.get(key);
   if (existing) return existing;
-  const current = catchUp({ groupId, userId }).finally(() => running.delete(key));
+  const current = catchUp({ groupId, groups, userId }).finally(() => running.delete(key));
   running.set(key, current);
   return current;
 };
+
+type Groups = () => Promise<RouterOutputs["groupMembership"]["list"]>;

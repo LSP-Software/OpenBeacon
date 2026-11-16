@@ -16,6 +16,7 @@ let sessionState: { data: { user: { id: string } } | null; isPending: boolean } 
 const notify = mock((_signal: string) => {});
 const settledUsers: Array<string | null> = [];
 let savedMapClears = 0;
+const imageCacheClaims: Array<string | null> = [];
 
 mock.module("../lib/storage.ts", () => ({
   storage: {
@@ -43,7 +44,14 @@ mock.module("../lib/mapCache.ts", () => ({
   },
 }));
 
+mock.module("../lib/imageCache.ts", () => ({
+  claimImageCache: (owner: string | null) => {
+    imageCacheClaims.push(owner);
+  },
+}));
+
 const { SessionDataCleanup } = await import("./SessionDataCleanup.tsx");
+const { baseUrl } = await import("../lib/currentServer.ts");
 const { getGroupColor, setGroupColor } = await import("../lib/groupColor.ts");
 const { getTrackingUploadTime, recordTrackingUpload } =
   await import("../lib/trackingUploadTime.ts");
@@ -97,6 +105,7 @@ beforeEach(() => {
   notify.mockClear();
   settledUsers.length = 0;
   savedMapClears = 0;
+  imageCacheClaims.length = 0;
 });
 
 afterEach(async () => {
@@ -206,4 +215,20 @@ test("settles sessions lost earlier whenever the signed-in account is known", as
   await render();
 
   expect(settledUsers).toEqual([null, "user-2"]);
+});
+
+test("hands the picture cache to whoever is signed in on this server", async () => {
+  await render();
+  signIn("user-1");
+  await render();
+  signIn("user-2");
+  await render();
+  signOut();
+  await render();
+
+  expect(imageCacheClaims).toEqual([
+    JSON.stringify([baseUrl, "user-1"]),
+    JSON.stringify([baseUrl, "user-2"]),
+    null,
+  ]);
 });

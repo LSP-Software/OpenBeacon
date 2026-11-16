@@ -15,7 +15,7 @@ import { errorReason } from "./errorReason.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { imageFileNameFromUrl } from "./imageCache.ts";
 import { GroupKeyUnavailableError } from "./imageUploadErrors.ts";
-import { readOwnImageKey, storeOwnImageKey } from "./ownImageKey.ts";
+import { ownImageKeyOwner, readOwnImageKey, storeOwnImageKey } from "./ownImageKey.ts";
 import { createPersonalDataOpener } from "./personalData.ts";
 
 const wrapUnderLatestEpoch = async ({
@@ -98,6 +98,7 @@ export const confirmProfileImage = async ({
   imageKey: ImageKeyMaterial;
   userId: string;
 }) => {
+  const owner = ownImageKeyOwner(userId);
   const sealed = await sealOwnImageKey({ fileName, imageKey, userId });
   const confirmed = await retryImageKeyWrite({
     groupId: null,
@@ -127,7 +128,7 @@ export const confirmProfileImage = async ({
       });
     },
   });
-  await tryCatch(storeOwnImageKey({ fileName, imageKey, userId }));
+  await tryCatch(storeOwnImageKey({ fileName, imageKey, owner, userId }));
   return confirmed;
 };
 
@@ -165,6 +166,7 @@ export const getOwnImageKey = async ({
   sealed: string | null;
   userId: string;
 }) => {
+  const owner = ownImageKeyOwner(userId);
   const stored = await tryCatch(readOwnImageKey({ fileName, userId }));
   if (stored.data) return stored.data;
   if (!sealed) return null;
@@ -177,7 +179,7 @@ export const getOwnImageKey = async ({
   );
   if (!opened.data) return null;
   const imageKey = new ImageKeyMaterial(decodeBase64(opened.data));
-  await tryCatch(storeOwnImageKey({ fileName, imageKey, userId }));
+  await tryCatch(storeOwnImageKey({ fileName, imageKey, owner, userId }));
   return imageKey;
 };
 

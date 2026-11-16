@@ -9,27 +9,59 @@ import { devicePendingCause } from "@openbeacon/shared";
 import { TRPCClientError } from "@trpc/client";
 
 const plainImage = new Uint8Array(Array.from({ length: 300 }, (_, index) => (index * 7) % 256));
-const cached = new Map<string, Uint8Array>();
+const files = new Map<string, Uint8Array>();
+const cached = {
+  get: (path: string) => files.get(path),
+  has: (path: string) => files.has(path),
+  get size() {
+    return [...files.keys()].filter((path) => path.startsWith("cache/images/")).length;
+  },
+};
 let deleted = false;
 
 mock.module("expo-file-system", () => ({
   Paths: { cache: "cache" },
   Directory: class {
-    create = () => {};
-  },
-  File: class {
-    exists = true;
     path: string;
     constructor(...parts: string[]) {
       this.path = parts.join("/");
     }
-    bytes = async () => plainImage.slice();
+    get exists() {
+      return [...files.keys()].some((path) => path.startsWith(`${this.path}/`));
+    }
     create = () => {};
+    delete = () => {
+      for (const path of [...files.keys()]) {
+        if (path.startsWith(`${this.path}/`)) files.delete(path);
+      }
+    };
+  },
+  File: class {
+    path: string;
+    constructor(...parts: string[]) {
+      this.path = parts.join("/");
+    }
+    get exists() {
+      return files.has(this.path);
+    }
+    get uri() {
+      return this.path;
+    }
+    bytes = async () => files.get(this.path)!.slice();
+    create = () => {
+      files.set(this.path, new Uint8Array());
+    };
     write = (bytes: Uint8Array) => {
-      cached.set(this.path, bytes.slice());
+      files.set(this.path, bytes.slice());
+    };
+    move = (destination: { path: string }) => {
+      files.set(destination.path, files.get(this.path)!);
+      files.delete(this.path);
+      this.path = destination.path;
     };
     delete = () => {
-      deleted = true;
+      if (this.path === "file://picked") deleted = true;
+      files.delete(this.path);
     };
   },
 }));
@@ -42,6 +74,7 @@ mock.module("expo-crypto", () => ({
 const { imageUploadErrorMessage, uploadImageFromUri, uploadToPresignedUrl } =
   await import("./image-upload.ts");
 const { GroupKeyUnavailableError, ImageStorageError } = await import("./imageUploadErrors.ts");
+const { clearImageCache } = await import("./imageCache.ts");
 
 const trpcError = ({
   cause,
@@ -89,11 +122,13 @@ describe("uploadImageFromUri", () => {
   let fileNames: string[] = [];
   let confirmed: { fileName: string; imageKey: ImageKeyMaterial }[] = [];
   let confirmFailures: unknown[] = [];
+  let onRequest = () => {};
 
   const request = mock(async () => {
     const fileName = crypto.randomUUID();
     fileNames.push(fileName);
     events.push(`request:${fileName}`);
+    onRequest();
     return { fileName };
   });
   const presign = mock(
@@ -128,7 +163,9 @@ describe("uploadImageFromUri", () => {
     confirmed = [];
     confirmFailures = [];
     deleted = false;
-    cached.clear();
+    files.clear();
+    files.set("file://picked", plainImage.slice());
+    onRequest = () => {};
     request.mockClear();
     presign.mockClear();
     globalThis.fetch = mock(async (url: string, init: RequestInit) => {
@@ -208,8 +245,20 @@ describe("uploadImageFromUri", () => {
     expect(deleted).toBe(true);
   });
 
+  test("doesn't cache the plain picture when the phone signs out during the upload", async () => {
+    onRequest = clearImageCache;
+    expect((await upload()).data).toBeString();
+    expect(cached.size).toBe(0);
+  });
+
+  test("leaves no partly written file in the cache", async () => {
+    await upload();
+    expect([...files.keys()]).toEqual([`cache/images/${fileNames[0]}`]);
+  });
+
   test("makes a fresh key for every upload", async () => {
     await upload();
+    files.set("file://picked", plainImage.slice());
     await upload();
     expect(confirmed[0]!.imageKey.expose()).not.toEqual(confirmed[1]!.imageKey.expose());
   });

@@ -21,11 +21,14 @@ const url = (fileName: string) => `https://images.example.test/${fileName}`;
 type Member = {
   id: string;
   userId: string;
+  name: string;
+  role: "OWNER" | "ADMIN" | "MEMBER";
   image: string | null;
   imageKey: EncryptedImageKey | null;
 };
 type Group = {
   id: string;
+  name: string;
   image: string | null;
   imageKey: EncryptedImageKey | null;
   members: Member[];
@@ -47,6 +50,7 @@ let latestEpochId = "epoch-2";
 let failures: unknown[] = [];
 let beforeReEncrypt: (() => void) | null = null;
 let listCalls = 0;
+const resolvedEpochs: string[] = [];
 const reEncryptCalls: ReEncryptInput[] = [];
 const rotate = mock(async (_groupId: string) => true);
 const relink = mock(async (_options?: { linkSession?: boolean }) => device);
@@ -160,8 +164,10 @@ mock.module("./api.ts", () => ({
 }));
 mock.module("./deviceKeys.ts", () => ({ ensureDeviceKeyRegistration: relink }));
 mock.module("./epochKeys.ts", () => ({
-  resolveEpochKey: async ({ epochId }: { epochId: string }) =>
-    epochId === "epoch-before-joining" ? null : (epochKeys.get(epochId) ?? null),
+  resolveEpochKey: async ({ epochId }: { epochId: string }) => {
+    resolvedEpochs.push(epochId);
+    return epochId === "epoch-before-joining" ? null : (epochKeys.get(epochId) ?? null);
+  },
 }));
 mock.module("./groupEncryption.ts", () => ({ rotateGroupEpochIfRequired: rotate }));
 mock.module("./imageKeys.ts", () => ({ storeOwnImageKeyInGroup: storeOwn }));
@@ -210,33 +216,41 @@ beforeEach(() => {
   latestEpochId = "epoch-2";
   group = {
     id: "family",
+    name: "Family",
     image: url(GROUP_FILE),
     imageKey: groupKey("epoch-1"),
     members: [
       {
         id: "m-a",
         userId: "user-a",
+        name: "Ana",
+        role: "ADMIN",
         image: url(ME_FILE),
         imageKey: memberKey("user-a", ME_FILE, "epoch-2"),
       },
       {
         id: "m-b",
         userId: "user-b",
+        name: "Bea",
+        role: "MEMBER",
         image: url(BEA_FILE),
         imageKey: memberKey("user-b", BEA_FILE, "epoch-1"),
       },
       {
         id: "m-c",
         userId: "user-c",
+        name: "Cal",
+        role: "MEMBER",
         image: url(CAL_FILE),
         imageKey: memberKey("user-c", CAL_FILE, "epoch-before-joining"),
       },
-      { id: "m-d", userId: "user-d", image: null, imageKey: null },
+      { id: "m-d", userId: "user-d", name: "Dev", role: "OWNER", image: null, imageKey: null },
     ],
   };
   failures = [];
   beforeReEncrypt = null;
   listCalls = 0;
+  resolvedEpochs.length = 0;
   reEncryptCalls.length = 0;
   rotate.mockClear();
   relink.mockClear();
@@ -455,4 +469,50 @@ test("shares one run between callers for the same person and group", async () =>
   ]);
   expect([first, second]).toEqual([2, 2]);
   expect(reEncryptCalls).toHaveLength(1);
+});
+
+test("doesn't fetch the latest epoch key when no stale key is readable", async () => {
+  group.imageKey = groupKey("epoch-2");
+  member("m-b").imageKey = memberKey("user-b", BEA_FILE, "epoch-2");
+  expect(await catchUpGroupImageKeys(family)).toBe(0);
+  expect(resolvedEpochs).toEqual(["epoch-before-joining"]);
+  expect(reEncryptCalls).toHaveLength(0);
+});
+
+test("uses a given group list for the first pass and refetches only to retry", async () => {
+  let given = 0;
+  const groups = async () => {
+    given += 1;
+    return [structuredClone(group)];
+  };
+  expect(await catchUpGroupImageKeys({ ...family, groups })).toBe(2);
+  expect([given, listCalls]).toEqual([1, 0]);
+
+  group.imageKey = groupKey("epoch-1");
+  beforeReEncrypt = once(() => {
+    group.imageKey = groupKey("epoch-1");
+  });
+  expect(await catchUpGroupImageKeys({ ...family, groups })).toBe(1);
+  expect([given, listCalls]).toEqual([2, 1]);
+
+  group.imageKey = groupKey("epoch-1");
+  failures = [reasonError("EPOCH_NOT_LATEST")];
+  expect(await catchUpGroupImageKeys({ ...family, groups })).toBe(1);
+  expect([given, listCalls]).toEqual([3, 2]);
+});
+
+test("after an error retry it still stores a missing own key and retries a changed key once", async () => {
+  member("m-a").imageKey = null;
+  failures = [reasonError("DEVICE_NOT_REGISTERED")];
+  beforeReEncrypt = () => {
+    if (reEncryptCalls.length === 2) {
+      pictureKeys.set("user-b", generateImageKey());
+      member("m-b").imageKey = memberKey("user-b", BEA_FILE, "epoch-1");
+    }
+  };
+  expect(await catchUpGroupImageKeys(family)).toBe(3);
+  expect(storeOwn).toHaveBeenCalledWith("family");
+  expect(reEncryptCalls).toHaveLength(3);
+  expect(listCalls).toBe(3);
+  expect(member("m-b").imageKey?.epochId).toBe("epoch-2");
 });
