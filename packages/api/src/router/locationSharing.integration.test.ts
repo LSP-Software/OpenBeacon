@@ -1,13 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { prisma } from "@openbeacon/database";
-import {
-  createDeviceKeyPair,
-  encryptGroupPayload,
-  generateGroupEpochKey,
-} from "@openbeacon/encryption";
-import { TRACKING_POINT_KIND, type setLocationSharingSchema } from "@openbeacon/schemas";
+import { createDeviceKeyPair, generateGroupEpochKey } from "@openbeacon/encryption";
+import type { setLocationSharingSchema } from "@openbeacon/schemas";
 import type { z } from "zod";
 import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
+import { encryptedTrackingPoint, testClientPointId } from "../lib/trackingPoints.testUtil.ts";
 import { createTRPCRouter } from "../trpcRuntime.ts";
 import { accountRouter } from "./accountRouter.ts";
 import { groupTrackingRouter } from "./group/groupTrackingRouter.ts";
@@ -34,17 +31,14 @@ const caller = (ownerId = userId, deviceId = phoneId) =>
       session: { user: { id: ownerId }, session: { id: `${ownerId}-session` } },
     }) as Parameters<typeof router.createCaller>[0],
   );
-const point = (deviceId: string, revisionPrefix = "") => ({
-  ...encryptGroupPayload({
+const point = (deviceId: string, revisionPrefix = "") =>
+  encryptedTrackingPoint({
+    clientPointId: testClientPointId(crypto.randomUUID(), revisionPrefix),
     epochId,
     epochKey,
     groupId,
-    kind: TRACKING_POINT_KIND,
     senderDeviceId: deviceId,
-    payload: { latitude: 51, longitude: 0, timestamp: new Date().toISOString() },
-  }),
-  clientPointId: `${revisionPrefix}${crypto.randomUUID()}`,
-});
+  });
 const setSharing = async (
   change: Partial<
     Omit<z.input<typeof setLocationSharingSchema>, "scope" | "deviceId" | "paused">
@@ -77,7 +71,7 @@ const reset = async () => {
     sharingRevision: 0,
     sharingRequestId: null,
   };
-  await prisma.groupEncryptedPayload.deleteMany({ where: { groupId } });
+  await prisma.trackingStream.deleteMany({ where: { groupId } });
   await prisma.user.update({ where: { id: userId }, data });
   await prisma.userDevice.updateMany({ where: { userId }, data });
 };
@@ -191,10 +185,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         (await caller().groupTracking.uploadBatch({ groupId, points: [fresh] })).accepted,
       ).toEqual([fresh.clientPointId]);
       expect(
-        (await caller().groupTracking.getLatest({ groupId })).points.map(
-          (row) => row.clientPointId,
-        ),
-      ).toEqual([fresh.clientPointId]);
+        (await caller().groupTracking.getLatest({ groupId })).points.map((row) => [
+          row.senderDeviceId,
+          row.revisionPrefix,
+          row.ciphertext,
+        ]),
+      ).toEqual([[tabletId, sharing.revisionPrefix, fresh.ciphertext]]);
     });
 
     test("an account pause overrides all devices and preserves their own pauses", async () => {

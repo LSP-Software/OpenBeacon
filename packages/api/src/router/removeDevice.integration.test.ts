@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { auth, createSecurityAlerts } from "@openbeacon/auth";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
-import { prisma } from "@openbeacon/database";
+import { Prisma, prisma } from "@openbeacon/database";
 import type { SecurityAlert } from "@openbeacon/email";
 import { createDeviceKeyPair } from "@openbeacon/encryption";
 import { deviceIdHeader, deviceRemovedCause, tryCatch } from "@openbeacon/shared";
@@ -14,6 +14,11 @@ import { linkRequestDevice } from "../lib/requestDevice.ts";
 import { appRouter } from "../root.ts";
 import { createTRPCContext } from "../trpc.ts";
 import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
+import {
+  countTrackingPoints,
+  storeLatestTrackingPoint,
+  storeTrackingPoints,
+} from "../lib/trackingPoints.testUtil.ts";
 
 const prefix = `remove-device-${crypto.randomUUID()}`;
 const password = "testing-password-123";
@@ -159,19 +164,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
       id: account.groupId,
       table: "Group",
       beforeCommit: async (tx) => {
-        await tx.groupEncryptedPayload.create({
-          data: {
-            algorithm: "test",
-            ciphertext: "ciphertext",
-            clientPointId: crypto.randomUUID(),
-            epochId: epoch.id,
-            groupId: account.groupId,
-            kind: "location",
-            nonce: "nonce",
-            senderDeviceId: account.lostPhone.id,
-            senderUserId: account.userId,
-          },
-        });
+        const stream = {
+          epochId: epoch.id,
+          groupId: account.groupId,
+          senderDeviceId: account.lostPhone.id,
+          senderUserId: account.userId,
+        };
+        await storeTrackingPoints(tx, stream);
+        await storeLatestTrackingPoint(tx, stream);
         await tx.userDevice.update({
           where: { id: account.lostPhone.id },
           data: { lastLocationAt: new Date() },
@@ -185,8 +185,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
 
     expect(await revokedAt(account.lostPhone.id)).toBeInstanceOf(Date);
     expect(
-      await prisma.groupEncryptedPayload.count({ where: { senderUserId: account.userId } }),
+      await countTrackingPoints(prisma, Prisma.sql`"stream"."senderUserId" = ${account.userId}`),
     ).toBe(1);
+    expect(
+      await prisma.trackingLatestPoint.count({ where: { senderDeviceId: account.lostPhone.id } }),
+    ).toBe(0);
   });
 
   test("sends the always-on device removed alert", async () => {

@@ -31,7 +31,7 @@ class CapturePipelineTest {
     val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, sharingState = { state })
     assertEquals(0, pipeline.onFix(51.5, 0.0, at("2026-07-13T18:45:00.000Z"), null, 80, false))
     assertEquals(1, pipeline.onFix(51.5, 0.0, at("2026-07-13T18:45:01.000Z"), null, 80, false))
-    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).single().clientPointId.startsWith("s1.2:"))
+    assertTrue(Regex("^s1\\.2:[A-Za-z0-9+/]{10}[AEIMQUYcgkosw048]=$").matches(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).single().clientPointId))
     state = state.copy(paused = true)
     assertEquals(0, pipeline.onFix(51.5, 0.0, at("2026-07-13T18:45:02.000Z"), null, 80, false))
   }
@@ -42,11 +42,9 @@ class CapturePipelineTest {
     keys.replaceAll(listOf(ProvisionedEpochKey("group", "epoch", ByteArray(32), "tablet", "trackingPoint")))
     val queue = InMemoryCiphertextQueue()
     var state = SharingCaptureState()
-    var ids = 0
-    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, sharingState = { state }, newId = {
-      ids += 1
-      if (ids == 2) state = SharingCaptureState(paused = true, revisionPrefix = "s0.1:")
-      "point-$ids"
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, sharingState = { state }, newPointId = {
+      state = SharingCaptureState(paused = true, revisionPrefix = "s0.1:")
+      ByteArray(8)
     })
     assertEquals(0, pipeline.onFix(51.5, 0.0, at("2026-07-13T18:45:00.000Z"), null, 80, false))
     assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).isEmpty())
@@ -64,6 +62,7 @@ class CapturePipelineTest {
 
     assertEquals(1, capture(pipeline(), 100))
     val original = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).single()
+    assertTrue(Regex("^[A-Za-z0-9+/]{10}[AEIMQUYcgkosw048]=$").matches(original.clientPointId))
     assertEquals(1, capture(pipeline(), 101))
     assertEquals(0, capture(pipeline(), 100))
     queue.deleteByIds(listOf(original.id))

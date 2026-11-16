@@ -5,6 +5,7 @@ import expo.modules.openbeacontracking.crypto.TrackingPointCodec
 import expo.modules.openbeacontracking.keys.EpochKeyStore
 import expo.modules.openbeacontracking.queue.CiphertextQueue
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
+import java.security.SecureRandom
 import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -14,6 +15,7 @@ class CapturePipeline(
   private val ciphertextQueue: CiphertextQueue,
   private val nowMillis: () -> Long = { System.currentTimeMillis() },
   private val newId: () -> String = { UUID.randomUUID().toString() },
+  private val newPointId: () -> ByteArray = { ByteArray(POINT_ID_BYTES).also { SecureRandom().nextBytes(it) } },
   private val captureLock: Any = Any(),
   private val canQueue: (Long) -> Boolean = { true },
   private val queueOwner: () -> String? = { null },
@@ -99,9 +101,9 @@ class CapturePipeline(
             val parts = listOf("openbeacon.tracking-point-id.v1", owner, key.groupId, key.epochId, key.senderDeviceId, key.kind, bootId, point.fixId.toString())
             val context = (if (role == CiphertextQueueRow.ROLE_POINT) parts else parts + role)
               .joinToString(":") { GroupPayloadEncrypt.encodeBase64(it.toByteArray(Charsets.UTF_8)) }
-            GroupPayloadEncrypt.encodeBase64(mac.doFinal(context.toByteArray(Charsets.UTF_8)))
+            GroupPayloadEncrypt.encodeBase64(mac.doFinal(context.toByteArray(Charsets.UTF_8)).copyOf(POINT_ID_BYTES))
           } else {
-            newId()
+            GroupPayloadEncrypt.encodeBase64(newPointId())
           },
           captureId = captureId,
           groupId = encrypted.groupId,
@@ -134,5 +136,9 @@ class CapturePipeline(
     allowances[group] = next ?: current
     if (next != null) saveAllowance(group, next)
     return next != null
+  }
+
+  private companion object {
+    const val POINT_ID_BYTES = 8
   }
 }

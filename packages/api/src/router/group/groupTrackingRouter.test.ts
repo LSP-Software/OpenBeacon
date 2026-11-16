@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis, testRedisHashSecret, UnavailableRedis } from "@openbeacon/cache/testing";
-import { PAYLOAD_ENCRYPTION_ALGORITHM } from "@openbeacon/encryption";
-import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 import { TRPCError } from "@trpc/server";
 
 class TestOpenBeaconCache extends OpenBeaconCache {
@@ -17,23 +15,37 @@ class UnavailableCache extends OpenBeaconCache {
   }
 }
 
+import { parseClientPointId } from "../../lib/groupTracking.ts";
 import { sharingDeviceRow } from "../../lib/locationSharing.testUtil.ts";
+import { testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
 
 const validNonce = Buffer.alloc(24, 1).toString("base64");
 
 const createMemberFindUniqueMock = (isMember: boolean) =>
   mock(async () => (isMember ? { id: "group-member-1", role: "OWNER", userId: "user-1" } : null));
 
+const storedPoints = (stored: string[] = []) =>
+  mock(async (pointIds: string[], _update: boolean) =>
+    pointIds
+      .filter(
+        (pointId) =>
+          !stored.some(
+            (clientPointId) => parseClientPointId(clientPointId).pointId.toString() === pointId,
+          ),
+      )
+      .map((pointId) => ({ streamId: "1", pointId })),
+  );
+
 let originalBetterAuthUrl: string | undefined;
 let originalBetterAuthSecret: string | undefined;
 let originalNodeEnv: string | undefined;
 
 const createCaller = async ({
-  createManyMock,
+  insertPointsMock,
   findManyDevicesMock,
   findManyEpochsMock,
   findObsoleteEpochMock,
-  findManyPayloadsMock,
+  latestRows = [],
   memberFindUniqueMock,
   queryRawMock,
   now = () => 0,
@@ -41,11 +53,11 @@ const createCaller = async ({
   groupCount = 1,
   redisAvailable = true,
 }: {
-  createManyMock?: ReturnType<typeof mock>;
+  insertPointsMock?: ReturnType<typeof storedPoints>;
   findManyDevicesMock?: ReturnType<typeof mock>;
   findManyEpochsMock?: ReturnType<typeof mock>;
   findObsoleteEpochMock?: ReturnType<typeof mock>;
-  findManyPayloadsMock?: ReturnType<typeof mock>;
+  latestRows?: unknown[];
   memberFindUniqueMock: ReturnType<typeof createMemberFindUniqueMock>;
   queryRawMock?: ReturnType<typeof mock>;
   now?: () => number;
@@ -67,10 +79,19 @@ const createCaller = async ({
   });
   const statements: string[] = [];
   const db = {
-    $queryRaw: async (query: { strings: string[] }) => {
+    $queryRaw: async (query: { strings: string[]; values: unknown[] }) => {
       const sql = query.strings.join("");
       statements.push(sql);
       if (sql.includes('JOIN "User" AS "account"')) return [sharingDeviceRow];
+      if (sql.includes('INSERT INTO "TrackingPoint"')) {
+        return (insertPointsMock ?? storedPoints())(
+          query.values[1] as string[],
+          sql.includes("DO UPDATE"),
+        );
+      }
+      if (sql.includes('INSERT INTO "Tracking')) return [];
+      if (sql.includes('FROM "TrackingStream"')) return [{ id: "1" }];
+      if (sql.includes('FROM "TrackingLatestPoint"')) return latestRows;
       if (sql.includes('FROM "User" WHERE')) return [];
       if (sql.includes('FROM "Group"')) return [{ id: "group-1" }];
       return queryRawMock
@@ -81,10 +102,6 @@ const createCaller = async ({
     groupMember: {
       count: mock(async () => groupCount),
       findUnique: memberFindUniqueMock,
-    },
-    groupEncryptedPayload: {
-      createMany: createManyMock ?? mock(async () => ({ count: 0 })),
-      findMany: findManyPayloadsMock ?? mock(async () => []),
     },
     groupEpoch: {
       findMany: findManyEpochsMock ?? mock(async () => [{ id: "epoch-1" }]),
@@ -115,9 +132,8 @@ const createCaller = async ({
   return {
     cache,
     caller: router.createCaller(context as Parameters<typeof router.createCaller>[0]),
-    createManyMock,
     findManyDevicesMock,
-    findManyPayloadsMock,
+    insertPointsMock,
     memberFindUniqueMock,
     queryRawMock,
     statements,
@@ -170,13 +186,12 @@ describe("groupTrackingRouter", () => {
     }
   });
 
-  const trackingPoint = (clientPointId: string) => ({
-    algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-    ciphertext: "ciphertext",
-    clientPointId,
+  const trackingPoint = (seed: string, role: "POINT" | "STAY" | "LIVE" = "POINT") => ({
+    ciphertext: "Y2lwaGVydGV4dA==",
+    clientPointId: testClientPointId(seed),
     epochId: "epoch-1",
-    kind: TRACKING_POINT_KIND,
     nonce: validNonce,
+    role,
     senderDeviceId: "device-1",
   });
   const trackingPoints = (prefix: string, count: number) =>
@@ -193,9 +208,9 @@ describe("groupTrackingRouter", () => {
   });
 
   test("allows 2,000 points a minute per user, whatever the batch sizes", async () => {
-    const createManyMock = mock(async () => ({ count: 100 }));
+    const insertPointsMock = storedPoints();
     const { caller } = await createCaller({
-      createManyMock,
+      insertPointsMock,
       memberFindUniqueMock: createMemberFindUniqueMock(true),
     });
     const warn = spyOn(console, "warn").mockImplementation(() => {});
@@ -207,10 +222,13 @@ describe("groupTrackingRouter", () => {
       });
     }
     await expect(
-      caller.groupTracking.uploadBatch({ groupId: "group-1", points: [trackingPoint("one-more")] }),
+      caller.groupTracking.uploadBatch({
+        groupId: "group-1",
+        points: [trackingPoint("one-more")],
+      }),
     ).rejects.toMatchObject(uploadLimitReached);
 
-    expect(createManyMock).toHaveBeenCalledTimes(20);
+    expect(insertPointsMock).toHaveBeenCalledTimes(20);
     expect(warn.mock.calls).toContainEqual([
       "[rate-limit] upload limit reached",
       { userId: "user-1", limit: "points per minute" },
@@ -223,9 +241,9 @@ describe("groupTrackingRouter", () => {
     [16, 147_744],
   ] as const) {
     test(`gives a user in ${groupCount} groups a daily budget of ${budget} accepted points`, async () => {
-      const createManyMock = mock(async () => ({ count: 1 }));
+      const insertPointsMock = storedPoints();
       const { cache, caller } = await createCaller({
-        createManyMock,
+        insertPointsMock,
         groupCount,
         memberFindUniqueMock: createMemberFindUniqueMock(true),
       });
@@ -240,16 +258,22 @@ describe("groupTrackingRouter", () => {
         { ...dailyBudget(budget), cost: 1 },
         { whenUnavailable: "allow" },
       );
-      await cache.rateLimits.consume({ ...dailyBudget(budget), cost: budget - 2 });
+      await cache.rateLimits.consume({
+        ...dailyBudget(budget),
+        cost: budget - 2,
+      });
       await caller.groupTracking.uploadBatch({
         groupId: "group-1",
         points: [trackingPoint("last")],
       });
       await expect(
-        caller.groupTracking.uploadBatch({ groupId: "group-1", points: [trackingPoint("over")] }),
+        caller.groupTracking.uploadBatch({
+          groupId: "group-1",
+          points: [trackingPoint("over")],
+        }),
       ).rejects.toMatchObject(uploadLimitReached);
 
-      expect(createManyMock).toHaveBeenCalledTimes(2);
+      expect(insertPointsMock).toHaveBeenCalledTimes(3);
       expect(warn.mock.calls).toContainEqual([
         "[rate-limit] upload limit reached",
         { userId: "user-1", limit: "daily points" },
@@ -260,9 +284,9 @@ describe("groupTrackingRouter", () => {
 
   test("points the server already has don't count towards the daily budget", async () => {
     const { cache, caller } = await createCaller({
-      findManyPayloadsMock: mock(async () => [
-        { clientPointId: "stored-1" },
-        { clientPointId: "stored-2" },
+      insertPointsMock: storedPoints([
+        testClientPointId("stored-1"),
+        testClientPointId("stored-2"),
       ]),
       groupCount: 3,
       memberFindUniqueMock: createMemberFindUniqueMock(true),
@@ -274,36 +298,45 @@ describe("groupTrackingRouter", () => {
       points: [trackingPoint("stored-1"), trackingPoint("stored-2"), trackingPoint("new")],
     });
 
-    expect(result.accepted).toEqual(["new"]);
-    expect(result.duplicates).toEqual(["stored-1", "stored-2"]);
+    expect(result.accepted).toEqual([testClientPointId("new")]);
+    expect(result.duplicates).toEqual([
+      testClientPointId("stored-1"),
+      testClientPointId("stored-2"),
+    ]);
   });
 
   test("a batch of only duplicates doesn't touch the daily budget", async () => {
     const { cache, caller } = await createCaller({
-      findManyPayloadsMock: mock(async () => [{ clientPointId: "stored-1" }]),
+      insertPointsMock: storedPoints([testClientPointId("stored-1")]),
       memberFindUniqueMock: createMemberFindUniqueMock(true),
     });
     await cache.rateLimits.consume({ ...dailyBudget(18_144), cost: 18_144 });
 
     await expect(
-      caller.groupTracking.uploadBatch({ groupId: "group-1", points: [trackingPoint("stored-1")] }),
-    ).resolves.toMatchObject({ duplicates: ["stored-1"] });
+      caller.groupTracking.uploadBatch({
+        groupId: "group-1",
+        points: [trackingPoint("stored-1")],
+      }),
+    ).resolves.toMatchObject({ duplicates: [testClientPointId("stored-1")] });
   });
 
   test("uploads carry on, with a log line, when Redis is unavailable", async () => {
-    const createManyMock = mock(async () => ({ count: 1 }));
+    const insertPointsMock = storedPoints();
     const { caller } = await createCaller({
-      createManyMock,
+      insertPointsMock,
       memberFindUniqueMock: createMemberFindUniqueMock(true),
       redisAvailable: false,
     });
     const error = spyOn(console, "error").mockImplementation(() => {});
 
     await expect(
-      caller.groupTracking.uploadBatch({ groupId: "group-1", points: [trackingPoint("point-1")] }),
-    ).resolves.toMatchObject({ accepted: ["point-1"] });
+      caller.groupTracking.uploadBatch({
+        groupId: "group-1",
+        points: [trackingPoint("point-1")],
+      }),
+    ).resolves.toMatchObject({ accepted: [testClientPointId("point-1")] });
 
-    expect(createManyMock).toHaveBeenCalledTimes(1);
+    expect(insertPointsMock).toHaveBeenCalledTimes(1);
     expect(error.mock.calls.map(([line]) => line)).toEqual(
       expect.arrayContaining([
         "[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so groupTracking.uploadBatch.points is allowed",
@@ -314,40 +347,30 @@ describe("groupTrackingRouter", () => {
   });
 
   test("forbids non-members from uploading", async () => {
-    const createManyMock = mock(async () => ({ count: 0 }));
+    const insertPointsMock = storedPoints();
     const {
       caller,
-      createManyMock: createMany,
+      insertPointsMock: insertPoints,
       memberFindUniqueMock,
     } = await createCaller({
-      createManyMock,
+      insertPointsMock,
       memberFindUniqueMock: createMemberFindUniqueMock(false),
     });
 
     await expect(
       caller.groupTracking.uploadBatch({
         groupId: "group-1",
-        points: [
-          {
-            algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-            ciphertext: "ciphertext",
-            clientPointId: "point-1",
-            epochId: "epoch-1",
-            kind: TRACKING_POINT_KIND,
-            nonce: validNonce,
-            senderDeviceId: "device-1",
-          },
-        ],
+        points: [trackingPoint("point-1")],
       }),
     ).rejects.toBeInstanceOf(TRPCError);
     expect(memberFindUniqueMock).toHaveBeenCalled();
-    expect(createMany).not.toHaveBeenCalled();
+    expect(insertPoints).not.toHaveBeenCalled();
   });
 
   test("rejects oversized nonces before persisting tracking points", async () => {
-    const createManyMock = mock(async () => ({ count: 0 }));
+    const insertPointsMock = storedPoints();
     const { caller } = await createCaller({
-      createManyMock,
+      insertPointsMock,
       memberFindUniqueMock: createMemberFindUniqueMock(true),
     });
     await expect(
@@ -355,25 +378,18 @@ describe("groupTrackingRouter", () => {
         groupId: "group-1",
         points: [
           {
-            algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-            ciphertext: "ciphertext",
-            clientPointId: "point-1",
-            epochId: "epoch-1",
-            kind: TRACKING_POINT_KIND,
+            ...trackingPoint("point-1"),
             nonce: `${" ".repeat(1_000_000)}${validNonce}`,
-            senderDeviceId: "device-1",
           },
         ],
       }),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
-    expect(createManyMock).not.toHaveBeenCalled();
+    expect(insertPointsMock).not.toHaveBeenCalled();
   });
 
   test("forbids non-members from reading tracking ciphertext", async () => {
-    const findManyPayloadsMock = mock(async () => []);
     const queryRawMock = mock(async () => []);
-    const { caller } = await createCaller({
-      findManyPayloadsMock,
+    const { caller, statements } = await createCaller({
       memberFindUniqueMock: createMemberFindUniqueMock(false),
       queryRawMock,
     });
@@ -384,48 +400,36 @@ describe("groupTrackingRouter", () => {
     await expect(caller.groupTracking.getLatest({ groupId: "group-1" })).rejects.toMatchObject({
       code: "FORBIDDEN",
     });
-    expect(findManyPayloadsMock).not.toHaveBeenCalled();
+    expect(statements.some((sql) => sql.includes("TrackingLatestPoint"))).toBe(false);
     expect(queryRawMock).not.toHaveBeenCalled();
   });
 
   test("uploadBatch inserts for members and returns accepted ids", async () => {
-    const createManyMock = mock(async () => ({ count: 1 }));
-    const findManyPayloadsMock = mock(async () => []);
+    const insertPointsMock = storedPoints();
     const { caller } = await createCaller({
-      createManyMock,
-      findManyPayloadsMock,
+      insertPointsMock,
       memberFindUniqueMock: createMemberFindUniqueMock(true),
     });
 
     await expect(
       caller.groupTracking.uploadBatch({
         groupId: "group-1",
-        points: [
-          {
-            algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-            ciphertext: "ciphertext",
-            clientPointId: "point-1",
-            epochId: "epoch-1",
-            kind: TRACKING_POINT_KIND,
-            nonce: validNonce,
-            senderDeviceId: "device-1",
-          },
-        ],
+        points: [trackingPoint("point-1")],
       }),
     ).resolves.toEqual({
-      accepted: ["point-1"],
+      accepted: [testClientPointId("point-1")],
       discarded: [],
       duplicates: [],
       expired: [],
       keyState: expect.any(String),
     });
-    expect(createManyMock).toHaveBeenCalled();
+    expect(insertPointsMock).toHaveBeenCalled();
   });
 
   test("uploadBatch still succeeds without a key state when the key-state query fails", async () => {
-    const createManyMock = mock(async () => ({ count: 1 }));
+    const insertPointsMock = storedPoints();
     const { caller } = await createCaller({
-      createManyMock,
+      insertPointsMock,
       memberFindUniqueMock: createMemberFindUniqueMock(true),
       queryRawMock: mock(async (query: { strings: string[] }) => {
         if (query.strings.join("").includes("AccountHistoryKey")) {
@@ -437,27 +441,22 @@ describe("groupTrackingRouter", () => {
 
     const result = await caller.groupTracking.uploadBatch({
       groupId: "group-1",
-      points: [
-        {
-          algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-          ciphertext: "ciphertext",
-          clientPointId: "point-1",
-          epochId: "epoch-1",
-          kind: TRACKING_POINT_KIND,
-          nonce: validNonce,
-          senderDeviceId: "device-1",
-        },
-      ],
+      points: [trackingPoint("point-1")],
     });
-    expect(result).toEqual({ accepted: ["point-1"], discarded: [], duplicates: [], expired: [] });
+    expect(result).toEqual({
+      accepted: [testClientPointId("point-1")],
+      discarded: [],
+      duplicates: [],
+      expired: [],
+    });
     expect(result).not.toHaveProperty("keyState");
-    expect(createManyMock).toHaveBeenCalled();
+    expect(insertPointsMock).toHaveBeenCalled();
   });
 
   test("uploadBatch answers without a key state when the key-state query stalls", async () => {
-    const createManyMock = mock(async () => ({ count: 1 }));
+    const insertPointsMock = storedPoints();
     const { caller } = await createCaller({
-      createManyMock,
+      insertPointsMock,
       memberFindUniqueMock: createMemberFindUniqueMock(true),
       queryRawMock: mock(async (query: { strings: string[] }) => {
         if (query.strings.join("").includes("AccountHistoryKey")) return new Promise(() => {});
@@ -468,41 +467,26 @@ describe("groupTrackingRouter", () => {
     const started = Date.now();
     const result = await caller.groupTracking.uploadBatch({
       groupId: "group-1",
-      points: [
-        {
-          algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-          ciphertext: "ciphertext",
-          clientPointId: "point-1",
-          epochId: "epoch-1",
-          kind: TRACKING_POINT_KIND,
-          nonce: validNonce,
-          senderDeviceId: "device-1",
-        },
-      ],
+      points: [trackingPoint("point-1")],
     });
     expect(Date.now() - started).toBeLessThan(4_000);
-    expect(result).toEqual({ accepted: ["point-1"], discarded: [], duplicates: [], expired: [] });
+    expect(result).toEqual({
+      accepted: [testClientPointId("point-1")],
+      discarded: [],
+      duplicates: [],
+      expired: [],
+    });
   }, 10_000);
 
   test("uploads share the group and membership locks so a group's uploads run side by side", async () => {
     const { caller, statements } = await createCaller({
-      createManyMock: mock(async () => ({ count: 1 })),
+      insertPointsMock: storedPoints(),
       memberFindUniqueMock: createMemberFindUniqueMock(true),
     });
 
     await caller.groupTracking.uploadBatch({
       groupId: "group-1",
-      points: [
-        {
-          algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-          ciphertext: "ciphertext",
-          clientPointId: "point-1",
-          epochId: "epoch-1",
-          kind: TRACKING_POINT_KIND,
-          nonce: validNonce,
-          senderDeviceId: "device-1",
-        },
-      ],
+      points: [trackingPoint("point-1")],
     });
 
     const locks = statements
@@ -512,42 +496,36 @@ describe("groupTrackingRouter", () => {
       ["User", "FOR SHARE"],
       ["Group", "FOR SHARE"],
       ["GroupMember", "FOR SHARE"],
+      ["TrackingStream", "FOR SHARE"],
     ]);
   });
 
-  test("inserts a batch in clientPointId order so overlapping uploads lock rows in the same order", async () => {
-    const createManyMock = mock(async (_args: { data: Array<{ clientPointId: string }> }) => ({
-      count: 3,
-    }));
+  test("inserts a batch in stream and point ID order so overlapping uploads lock rows in the same order", async () => {
+    const insertPointsMock = storedPoints();
     const { caller } = await createCaller({
-      createManyMock,
+      insertPointsMock,
       memberFindUniqueMock: createMemberFindUniqueMock(true),
     });
-    const point = (clientPointId: string) => ({
-      algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-      ciphertext: "ciphertext",
-      clientPointId,
-      epochId: "epoch-1",
-      kind: TRACKING_POINT_KIND,
-      nonce: validNonce,
-      senderDeviceId: "device-1",
-    });
+    const points = ["point-b", "point-c", "point-a"].map((seed) => trackingPoint(seed));
 
     const result = await caller.groupTracking.uploadBatch({
       groupId: "group-1",
-      points: [point("point-b"), point("point-c"), point("point-a")],
+      points,
     });
 
-    expect(
-      createManyMock.mock.calls[0]?.[0].data.map(({ clientPointId }) => clientPointId),
-    ).toEqual(["point-a", "point-b", "point-c"]);
-    expect(result.accepted).toEqual(["point-b", "point-c", "point-a"]);
+    const pointIds = points.map(({ clientPointId }) => parseClientPointId(clientPointId).pointId);
+    expect(insertPointsMock.mock.calls[0]?.[0]).toEqual(
+      pointIds
+        .toSorted((first, second) => Number(first > second) - Number(first < second))
+        .map(String),
+    );
+    expect(result.accepted).toEqual(points.map(({ clientPointId }) => clientPointId));
   });
 
   test("rejects an upload if membership was removed after authorization", async () => {
-    const createManyMock = mock(async () => ({ count: 1 }));
+    const insertPointsMock = storedPoints();
     const { caller } = await createCaller({
-      createManyMock,
+      insertPointsMock,
       memberFindUniqueMock: createMemberFindUniqueMock(true),
       queryRawMock: mock(async () => []),
     });
@@ -555,100 +533,70 @@ describe("groupTrackingRouter", () => {
     await expect(
       caller.groupTracking.uploadBatch({
         groupId: "group-1",
-        points: [
-          {
-            algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-            ciphertext: "ciphertext",
-            clientPointId: "point-1",
-            epochId: "epoch-1",
-            kind: TRACKING_POINT_KIND,
-            nonce: validNonce,
-            senderDeviceId: "device-1",
-          },
-        ],
+        points: [trackingPoint("point-1")],
       }),
     ).rejects.toThrow("You are not a member of this group");
-    expect(createManyMock).not.toHaveBeenCalled();
+    expect(insertPointsMock).not.toHaveBeenCalled();
   });
 
   test("refuses a Pending device on upload, poll and getLatest without reading points", async () => {
-    const createManyMock = mock(async () => ({ count: 0 }));
-    const findManyPayloadsMock = mock(async () => []);
+    const insertPointsMock = storedPoints();
     const queryRawMock = mock(async () => []);
-    const { caller } = await createCaller({
-      createManyMock,
-      findManyPayloadsMock,
+    const { caller, statements } = await createCaller({
+      insertPointsMock,
       memberFindUniqueMock: createMemberFindUniqueMock(true),
       pending: true,
       queryRawMock,
     });
-    const point = {
-      algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-      ciphertext: "ciphertext",
-      clientPointId: "point-1",
-      epochId: "epoch-1",
-      kind: TRACKING_POINT_KIND,
-      nonce: validNonce,
-      senderDeviceId: "device-1",
-    };
+    const point = trackingPoint("point-1");
     for (const request of [
-      () => caller.groupTracking.uploadBatch({ groupId: "group-1", points: [point] }),
+      () =>
+        caller.groupTracking.uploadBatch({
+          groupId: "group-1",
+          points: [point],
+        }),
       () => caller.groupTracking.poll({ groupId: "group-1" }),
       () => caller.groupTracking.getLatest({ groupId: "group-1" }),
     ]) {
       await expect(request()).rejects.toMatchObject({ code: "FORBIDDEN" });
     }
-    expect(createManyMock).not.toHaveBeenCalled();
-    expect(findManyPayloadsMock).not.toHaveBeenCalled();
+    expect(insertPointsMock).not.toHaveBeenCalled();
+    expect(statements.some((sql) => sql.includes("TrackingLatestPoint"))).toBe(false);
     expect(queryRawMock).not.toHaveBeenCalled();
   });
 
-  test("poll returns points for members", async () => {
-    const point = {
-      algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-      ciphertext: "ciphertext",
-      clientPointId: "point-1",
-      createdAt: new Date("2026-07-13T18:00:00.000Z"),
+  test("poll and getLatest split the stored payload into nonce and ciphertext", async () => {
+    const latestRow = {
       epochId: "epoch-1",
-      id: "id-1",
-      kind: TRACKING_POINT_KIND,
-      nonce: validNonce,
+      payload: new Uint8Array([...Buffer.alloc(24, 1), 7, 8, 9]),
+      revisionPrefix: "",
       senderDeviceId: "device-1",
       senderUserId: "user-1",
+      updatedAt: new Date("2026-07-13T18:00:00.000Z"),
     };
-    const findManyPayloadsMock = mock(async () => [point]);
     const { caller } = await createCaller({
-      findManyPayloadsMock,
+      latestRows: [latestRow],
       memberFindUniqueMock: createMemberFindUniqueMock(true),
     });
-
-    await expect(caller.groupTracking.poll({ groupId: "group-1" })).resolves.toMatchObject({
-      points: [point],
-    });
-  });
-
-  test("getLatest uses raw DISTINCT ON query for members", async () => {
     const point = {
-      algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-      ciphertext: "ciphertext",
-      clientPointId: "point-1",
-      createdAt: new Date("2026-07-13T18:00:00.000Z"),
+      ciphertext: Buffer.from([7, 8, 9]).toString("base64"),
       epochId: "epoch-1",
-      id: "id-1",
-      kind: TRACKING_POINT_KIND,
       nonce: validNonce,
+      revisionPrefix: "",
       senderDeviceId: "device-1",
       senderUserId: "user-1",
+      updatedAt: latestRow.updatedAt,
     };
-    const queryRawMock = mock(async () => [point]);
-    const { caller } = await createCaller({
-      memberFindUniqueMock: createMemberFindUniqueMock(true),
-      queryRawMock,
-    });
 
-    await expect(caller.groupTracking.getLatest({ groupId: "group-1" })).resolves.toMatchObject({
+    await expect(caller.groupTracking.poll({ groupId: "group-1" })).resolves.toEqual({
+      cursor: { senderDeviceId: "device-1", updatedAt: latestRow.updatedAt },
+      hasMore: false,
       points: [point],
+      sharing: expect.any(Array),
     });
-    expect(queryRawMock).toHaveBeenCalled();
+    await expect(caller.groupTracking.getLatest({ groupId: "group-1" })).resolves.toEqual({
+      points: [point],
+      sharing: expect.any(Array),
+    });
   });
 });

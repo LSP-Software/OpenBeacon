@@ -9,9 +9,7 @@ import {
   type DevicePrivateKeyMaterial,
   encodeBase64,
   openSessionLinkChallenge,
-  PAYLOAD_ENCRYPTION_ALGORITHM,
   sealDeviceLinkHandover,
-  TRACKING_POINT_KIND,
 } from "@openbeacon/encryption";
 import { deviceIdHeader, deviceUnverifiedCause } from "@openbeacon/shared";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
@@ -212,12 +210,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           groupId: account.group.id,
           points: [
             {
-              algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-              ciphertext: "ciphertext",
-              clientPointId: `${prefix}-point`,
+              ciphertext: encodeBase64(new Uint8Array(39)),
+              clientPointId: Buffer.alloc(8, 1).toString("base64"),
               epochId: "epoch-1",
-              kind: TRACKING_POINT_KIND,
               nonce: Buffer.alloc(24, 1).toString("base64"),
+              role: "POINT",
               senderDeviceId: account.phone.id,
             },
           ],

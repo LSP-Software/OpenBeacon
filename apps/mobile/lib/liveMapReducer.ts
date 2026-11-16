@@ -6,8 +6,7 @@ export type LiveMapEntry = {
   deviceId: string;
   latitude: number;
   longitude: number;
-  serverCreatedAt: Date;
-  serverId: string;
+  serverUpdatedAt: Date;
   sourceGroupId: string;
   speed: number | null;
   timestamp: string;
@@ -21,13 +20,7 @@ const isNewerThan = (candidate: LiveMapEntry, current: LiveMapEntry) => {
   if (candidate.timestamp < current.timestamp) {
     return false;
   }
-  if (candidate.serverCreatedAt.getTime() > current.serverCreatedAt.getTime()) {
-    return true;
-  }
-  if (candidate.serverCreatedAt.getTime() < current.serverCreatedAt.getTime()) {
-    return false;
-  }
-  return candidate.serverId > current.serverId;
+  return candidate.serverUpdatedAt.getTime() > current.serverUpdatedAt.getTime();
 };
 
 export const reduceLivePositions = (

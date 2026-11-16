@@ -2,33 +2,28 @@ import type { LiveMapEntry } from "./liveMapReducer.ts";
 import type { GroupDeviceSharingState } from "@openbeacon/shared";
 
 export type MapTrackingEncryptedPoint = {
-  algorithm: string;
   ciphertext: string;
-  clientPointId: string;
-  createdAt: Date;
   epochId: string;
-  id: string;
-  kind: string;
   nonce: string;
+  revisionPrefix: string;
   senderDeviceId: string;
   senderUserId: string;
+  updatedAt: Date;
 };
 
 export type MapTrackingCursor = {
-  createdAt: Date;
-  id: string;
+  senderDeviceId: string;
+  updatedAt: Date;
 };
 
-export type LiveMapPosition = Omit<LiveMapEntry, "serverCreatedAt" | "serverId">;
+export type LiveMapPosition = Omit<LiveMapEntry, "serverUpdatedAt">;
 
 export type MapTrackingDeps = {
   clearEpochKeys: (groupId?: string) => void;
   decryptPoint: (input: {
     groupId: string;
     point: MapTrackingEncryptedPoint;
-  }) => Promise<
-    { entry: LiveMapEntry; status: "ok" } | { status: "ignored" } | { status: "undecryptable" }
-  >;
+  }) => Promise<{ entry: LiveMapEntry; status: "ok" } | { status: "undecryptable" }>;
   getLatest: (
     groupId: string,
     signal: AbortSignal,

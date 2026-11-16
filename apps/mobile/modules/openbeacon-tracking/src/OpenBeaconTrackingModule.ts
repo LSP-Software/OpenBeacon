@@ -26,6 +26,7 @@ export type CiphertextQueueItem = {
   algorithm: string;
   nonce: string;
   ciphertext: string;
+  role: "POINT" | "STAY" | "LIVE";
   queuedAt: number;
   attemptCount: number;
   lastAttemptAt: number | null;

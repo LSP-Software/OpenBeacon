@@ -6,7 +6,7 @@ import { errorCode, tryCatch } from "@openbeacon/shared";
 import { recordGroupEvent } from "../../lib/groupHistory.ts";
 import { deleteGroup } from "../../lib/deleteGroup.ts";
 import { imageKeySelect, toStoredImageKey } from "../../lib/imageKeys.ts";
-import { deletePayloadsInBatches } from "../../lib/deletePayloadsInBatches.ts";
+import { deleteTrackingStreams } from "../../lib/trackingCleanup.ts";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
@@ -374,9 +374,9 @@ export const groupMembershipRouter = {
         { timeout: 15_000 },
       );
       const cleanup = await tryCatch(
-        deletePayloadsInBatches({
+        deleteTrackingStreams({
           db: ctx.db,
-          where: Prisma.sql`"groupId" = ${input.groupId} AND "senderUserId" = ${removed.userId}`,
+          streams: Prisma.sql`"stream"."groupId" = ${input.groupId} AND "stream"."senderUserId" = ${removed.userId}`,
         }),
       );
       if (cleanup.error) {

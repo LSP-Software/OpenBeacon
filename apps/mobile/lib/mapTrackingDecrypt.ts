@@ -75,13 +75,7 @@ export const createMapTrackingDecryptPoint = ({
     }: {
       groupId: string;
       point: MapTrackingEncryptedPoint;
-    }): Promise<
-      { entry: LiveMapEntry; status: "ok" } | { status: "ignored" } | { status: "undecryptable" }
-    > => {
-      if (point.kind !== TRACKING_POINT_KIND || point.algorithm !== PAYLOAD_ENCRYPTION_ALGORITHM) {
-        return { status: "ignored" };
-      }
-
+    }): Promise<{ entry: LiveMapEntry; status: "ok" } | { status: "undecryptable" }> => {
       const epochKey = await loadEpochKey({
         epochId: point.epochId,
         groupId,
@@ -96,10 +90,10 @@ export const createMapTrackingDecryptPoint = ({
           encryptedPayload: {
             algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
             ciphertext: point.ciphertext,
-            createdAt: point.createdAt,
+            createdAt: point.updatedAt,
             epochId: point.epochId,
             groupId,
-            kind: point.kind,
+            kind: TRACKING_POINT_KIND,
             nonce: point.nonce,
             senderDeviceId: point.senderDeviceId,
           },
@@ -107,7 +101,7 @@ export const createMapTrackingDecryptPoint = ({
           expectedMetadata: {
             epochId: point.epochId,
             groupId,
-            kind: point.kind,
+            kind: TRACKING_POINT_KIND,
             senderDeviceId: point.senderDeviceId,
           },
         });
@@ -120,8 +114,7 @@ export const createMapTrackingDecryptPoint = ({
             deviceId: point.senderDeviceId,
             latitude: trackingPoint.latitude,
             longitude: trackingPoint.longitude,
-            serverCreatedAt: point.createdAt,
-            serverId: point.id,
+            serverUpdatedAt: point.updatedAt,
             sourceGroupId: groupId,
             speed: trackingPoint.speed,
             timestamp: new Date(trackingPoint.time).toISOString(),

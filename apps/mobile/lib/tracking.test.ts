@@ -80,6 +80,7 @@ let pendingCiphertexts: Array<{
   algorithm: string;
   nonce: string;
   ciphertext: string;
+  role: "POINT" | "STAY" | "LIVE";
   queuedAt: number;
   attemptCount: number;
   lastAttemptAt: number | null;
@@ -577,11 +578,13 @@ const createQueueItem = ({
   clientPointId,
   groupId,
   id,
+  role = "POINT",
   senderDeviceId = "device-1",
 }: {
   clientPointId: string;
   groupId: string;
   id: number;
+  role?: "POINT" | "STAY" | "LIVE";
   senderDeviceId?: string;
 }) => ({
   id,
@@ -594,6 +597,7 @@ const createQueueItem = ({
   algorithm: "XChaCha20-Poly1305",
   nonce: "nonce",
   ciphertext: "ciphertext",
+  role,
   queuedAt: id,
   attemptCount: 0,
   lastAttemptAt: null,
@@ -864,14 +868,35 @@ describe("tracking service", () => {
   test("sends only the newest queued copy of a stay and drops the older ones", async () => {
     const owner = JSON.stringify(["https://api.example.test", "user-1"]);
     pendingCiphertexts = [
-      { ...createQueueItem({ clientPointId: "stay", groupId: "group-1", id: 1 }), owner },
+      {
+        ...createQueueItem({ clientPointId: "stay", groupId: "group-1", id: 1, role: "STAY" }),
+        owner,
+      },
       { ...createQueueItem({ clientPointId: "point", groupId: "group-1", id: 2 }), owner },
-      { ...createQueueItem({ clientPointId: "stay", groupId: "group-1", id: 3 }), owner },
+      {
+        ...createQueueItem({ clientPointId: "stay", groupId: "group-1", id: 3, role: "STAY" }),
+        owner,
+      },
     ];
     await flushPendingTrackingPoints();
-    expect(
-      uploadCalls[0]?.points.map((point) => (point as { clientPointId: string }).clientPointId),
-    ).toEqual(["point", "stay"]);
+    expect(uploadCalls[0]?.points).toEqual([
+      {
+        ciphertext: "ciphertext",
+        clientPointId: "point",
+        epochId: "epoch-1",
+        nonce: "nonce",
+        role: "POINT",
+        senderDeviceId: "device-1",
+      },
+      {
+        ciphertext: "ciphertext",
+        clientPointId: "stay",
+        epochId: "epoch-1",
+        nonce: "nonce",
+        role: "STAY",
+        senderDeviceId: "device-1",
+      },
+    ]);
     expect(markedInFlight).toEqual([[2, 3]]);
     expect(deleted).toEqual([[1], [2, 3]]);
   });

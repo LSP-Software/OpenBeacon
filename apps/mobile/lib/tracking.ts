@@ -701,13 +701,12 @@ const uploadClaimedItems = async (
         groupId,
         ...placeUploadFields(transitions, cursor),
         points: items.map(
-          ({ algorithm, ciphertext, clientPointId, epochId, kind, nonce, senderDeviceId }) => ({
-            algorithm,
+          ({ ciphertext, clientPointId, epochId, nonce, role, senderDeviceId }) => ({
             ciphertext,
             clientPointId,
             epochId,
-            kind,
             nonce,
+            role,
             senderDeviceId,
           }),
         ),

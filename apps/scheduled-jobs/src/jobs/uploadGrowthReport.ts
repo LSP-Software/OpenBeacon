@@ -4,13 +4,14 @@ import { services } from "../services.ts";
 export const findTopUploadGrowth = async ({ limit = 10 }: { limit?: number } = {}) => {
   const dayAgo = new Date((await getDatabaseTime()).getTime() - 24 * 60 * 60_000).toISOString();
   return services.db.$queryRaw<Array<{ userId: string; groups: number; points: number }>>`
-    SELECT "senderUserId" AS "userId",
-      COUNT(DISTINCT "groupId")::int AS groups,
+    SELECT "stream"."senderUserId" AS "userId",
+      COUNT(DISTINCT "stream"."groupId")::int AS groups,
       COUNT(*)::int AS points
-    FROM "GroupEncryptedPayload"
-    WHERE "createdAt" >= (${dayAgo}::timestamptz AT TIME ZONE 'UTC')
-    GROUP BY "senderUserId"
-    ORDER BY points DESC, "senderUserId"
+    FROM "TrackingStream" AS "stream"
+    JOIN "TrackingPoint" AS "point" ON "point"."streamId" = "stream"."id"
+    WHERE "point"."receivedAt" >= (${dayAgo}::timestamptz AT TIME ZONE 'UTC')
+    GROUP BY "stream"."senderUserId"
+    ORDER BY points DESC, "stream"."senderUserId"
     LIMIT ${limit}
   `;
 };

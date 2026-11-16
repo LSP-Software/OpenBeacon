@@ -42,13 +42,15 @@ Skips a device that a request has locked at that moment; a later run deletes it.
 
 ### `location-history-cleanup` (every hour)
 
-Deletes `trackingPoint` payloads in `GroupEncryptedPayload` whose server `createdAt` is more than 14 days before the database time, oldest first across all groups, 1,000 per statement, using the `(kind, createdAt)` index. A run only reads rows that are due and costs one index probe when nothing is.
+Deletes points in `TrackingPoint` whose `receivedAt` is more than 14 days before the database time. A stay keeps the `receivedAt` of its first upload, so it's deleted 14 days after it began even if it's still being updated; its next update stores it again. The job walks `TrackingStream` in ID order, skipping streams created less than 14 days ago because they can't hold anything due, and deletes due points 1,000 per statement, oldest first within each stream, through the `(streamId, receivedAt)` index. Each statement starts at the last stream the previous one reached, so a run reads each stream once. A run with nothing due costs one index probe per stream older than 14 days.
+
+It then deletes `TrackingLatestPoint` rows not updated for 14 days, so the live map stops showing a device that has been silent that long, and deletes streams left with no points and no latest point. Uploads hold a share lock on their stream, so a stream in use is skipped.
 
 A run stops after 500,000 points. When it stops at that limit it logs `Location history clean-up reached its limit of 500000 points; the rest will be deleted on later runs`, without any IDs; if that shows up every hour, uploads are outpacing the clean-up and points are staying past 14 days. Points that a concurrent delete has locked, such as a member leaving, are skipped (`FOR UPDATE SKIP LOCKED`). A failed statement stops the run and logs one line with the database error code; the next run carries on.
 
-`GroupEncryptedPayload` has `autovacuum_vacuum_scale_factor` set to 0.02 and `autovacuum_vacuum_cost_limit` set to 1000, so dead rows from these deletions are vacuumed sooner and faster. This matters because the clean-up reads the `(kind, createdAt)` index from its oldest end: until a vacuum removes the deleted entries, each batch steps over them.
+`TrackingPoint` has `autovacuum_vacuum_scale_factor` set to 0.02 and `autovacuum_vacuum_cost_limit` set to 1000, so dead rows from these deletions are vacuumed sooner and faster. This matters because the clean-up reads each stream's `(streamId, receivedAt)` index from its oldest end: until a vacuum removes the deleted entries, each batch steps over them.
 
-A benchmark with 1 million groups and 10 million points measured an empty hourly run at about 2 ms, 50,000 due points in under half a second, and a 3.4 million point backlog cleared at 100,000 to 175,000 points a second while the index was clean, slowing to about 15,000 a second when vacuum fell behind. The index made no measurable difference to upload speed.
+A benchmark with 20,000 streams of 200 points each (4 million points, all due) deleted 500,000 points per run in 5 to 8 seconds, about 60,000 to 100,000 points a second. With 5,000 streams older than 14 days and nothing due, a run took 26 to 92 ms after a vacuum and about 0.5 seconds before one.
 
 ### `group-history-cleanup` (every hour)
 
@@ -56,9 +58,9 @@ Deletes `PlaceTransition` rows whose `occurredAt`, and `GroupEvent` rows whose `
 
 ### `epoch-cleanup` (every day)
 
-Walks the epochs created more than 14 days ago, 5,000 at a time in `(createdAt, id)` order, and deletes the ones in each page that a newer epoch replaced more than 14 days ago and that no stored payload still uses. The latest epoch of a group is never deleted, so new epochs keep their numbering.
+Walks the epochs created more than 14 days ago, 5,000 at a time in `(createdAt, id)` order, and deletes the ones in each page that a newer epoch replaced more than 14 days ago and that no tracking stream or place still uses. A stream goes once it has no points and no latest point, so an epoch can go once its last points and latest points have expired. The latest epoch of a group is never deleted, so new epochs keep their numbering.
 
-An epoch that an upload in progress has locked is skipped (`FOR UPDATE SKIP LOCKED`) and looked at again the next day. An upload that read the epoch just before the job deleted it can fail once with a server error; when the app retries, the server lists those points as `expired` and the app drops them from its queue. A failed page stops that day's run and logs one line with the error code. The benchmark above measured about 7 seconds per million old epochs.
+An epoch that an upload in progress has locked is skipped (`FOR UPDATE SKIP LOCKED`) and looked at again the next day. An upload that read the epoch just before the job deleted it can fail once with a server error; when the app retries, the server lists those points as `expired` and the app drops them from its queue. A failed page stops that day's run and logs one line with the error code. A benchmark of the earlier single-table layout, with 1 million groups, measured about 7 seconds per million old epochs; the stream check uses the stream table's unique index in the same way.
 
 ### `pending-upload-cleanup` (every hour)
 
@@ -74,7 +76,7 @@ It checks each listed page of versions against users, groups and pending uploads
 
 ### `upload-growth-report` (every day)
 
-Logs the 10 accounts that stored the most location points in the last 24 hours, with how many groups each is in. It logs nothing when there were no uploads.
+Logs the 10 accounts that stored the most location history points in the last 24 hours (live-only uploads aren't stored, so they don't count), with how many groups each is in. It logs nothing when there were no uploads.
 
 ## Releases
 

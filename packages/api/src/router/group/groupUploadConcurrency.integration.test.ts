@@ -1,15 +1,20 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
-import { type Prisma, prisma } from "@openbeacon/database";
+import { Prisma, prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
   createInitialGroupEpoch,
   createNextGroupEpoch,
-  encryptGroupPayload,
 } from "@openbeacon/encryption";
-import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 import { holdRowLock } from "../../lib/databaseLocks.testUtil.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
+import {
+  encryptedTrackingPoint,
+  pointIdOf,
+  storeUploadedTrackingPoint,
+  testClientPointId,
+  trackingPointIds,
+} from "../../lib/trackingPoints.testUtil.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
@@ -81,17 +86,15 @@ const createGroup = async () => {
     recipients: context.recipients,
   });
   await member.groupInvites.accept({ inviteId: invite.id, nextEpoch: bundle(joined) });
-  const point = (deviceId: string, clientPointId: string) => ({
-    ...encryptGroupPayload({
+  const point = (deviceId: string, clientPointId: string) =>
+    encryptedTrackingPoint({
+      clientPointId,
       epochId: joined.epoch.epochId,
       epochKey: joined.epochKey,
       groupId,
-      kind: TRACKING_POINT_KIND,
       payload: { latitude: 51.5, longitude: -0.12 },
       senderDeviceId: deviceId,
-    }),
-    clientPointId,
-  });
+    });
   return { groupId, epochId: joined.epoch.epochId, point };
 };
 
@@ -169,9 +172,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       try {
         const result = await member.groupTracking.uploadBatch({
           groupId,
-          points: [point(memberDevice, `${prefix}-alongside`)],
+          points: [point(memberDevice, testClientPointId(`${prefix}-alongside`))],
         });
-        expect(result.accepted).toEqual([`${prefix}-alongside`]);
+        expect(result.accepted).toEqual([testClientPointId(`${prefix}-alongside`)]);
       } finally {
         await inFlight.release();
       }
@@ -180,17 +183,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("uploads sharing points cannot deadlock however each batch is ordered", async () => {
       const { groupId, epochId, point } = await createGroup();
       const stored = (clientPointId: string) => (tx: Prisma.TransactionClient) =>
-        tx.groupEncryptedPayload.create({
-          data: {
-            ...point(memberDevice, clientPointId),
-            epochId,
-            groupId,
-            senderDeviceId: memberDevice,
-            senderUserId: memberId,
-          },
+        storeUploadedTrackingPoint(tx, {
+          clientPointId,
+          epochId,
+          groupId,
+          senderDeviceId: memberDevice,
+          senderUserId: memberId,
         });
-      const first = `${prefix}-shared-a`;
-      const second = `${prefix}-shared-b`;
+      const first = testClientPointId(`${prefix}-shared-a`);
+      const second = testClientPointId(`${prefix}-shared-b`);
       const inFlight = await holdRowLock({
         db: prisma,
         id: groupId,
@@ -207,11 +208,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await inFlight.release();
 
       await upload;
-      expect(
-        await prisma.groupEncryptedPayload.count({
-          where: { groupId, clientPointId: { in: [first, second] } },
-        }),
-      ).toBe(2);
+      expect(await trackingPointIds(prisma, Prisma.sql`"stream"."groupId" = ${groupId}`)).toEqual(
+        [pointIdOf(first), pointIdOf(second)].sort((a, b) => Number(BigInt(a) - BigInt(b))),
+      );
     });
 
     test("an upload waits for a group change that holds the group", async () => {
@@ -219,33 +218,30 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const change = await holdRowLock({ db: prisma, id: groupId, table: "Group" });
       const upload = member.groupTracking.uploadBatch({
         groupId,
-        points: [point(memberDevice, `${prefix}-after-change`)],
+        points: [point(memberDevice, testClientPointId(`${prefix}-after-change`))],
       });
       await change.waitForWaiters(1);
       expect(await settledState(upload)).toBe("pending");
       await change.release();
-      expect((await upload).accepted).toEqual([`${prefix}-after-change`]);
+      expect((await upload).accepted).toEqual([testClientPointId(`${prefix}-after-change`)]);
     });
 
     test("a key rotation waits for an upload in progress and keeps its point", async () => {
-      const { groupId, epochId, point } = await createGroup();
+      const { groupId, epochId } = await createGroup();
       const nextEpoch = await nextEpochFor(groupId);
-      const clientPointId = `${prefix}-before-rotation`;
-      const stored = point(ownerDevice, clientPointId);
+      const clientPointId = testClientPointId(`${prefix}-before-rotation`);
       const inFlight = await holdRowLock({
         db: prisma,
         id: groupId,
         mode: "FOR SHARE",
         table: "Group",
         beforeCommit: (tx) =>
-          tx.groupEncryptedPayload.create({
-            data: {
-              ...stored,
-              epochId,
-              groupId,
-              senderDeviceId: ownerDevice,
-              senderUserId: ownerId,
-            },
+          storeUploadedTrackingPoint(tx, {
+            clientPointId,
+            epochId,
+            groupId,
+            senderDeviceId: ownerDevice,
+            senderUserId: ownerId,
           }),
       });
       const rotation = owner.groupEpoch.rotate({ groupId, nextEpoch });
@@ -253,7 +249,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await settledState(rotation)).toBe("pending");
       await inFlight.release();
       expect(await rotation).toEqual({ rotated: true });
-      expect(await prisma.groupEncryptedPayload.count({ where: { clientPointId } })).toBe(1);
+      expect(await trackingPointIds(prisma, Prisma.sql`"stream"."groupId" = ${groupId}`)).toEqual([
+        pointIdOf(clientPointId),
+      ]);
     });
 
     test("removing a member waits for their upload in progress and still deletes its point", async () => {
@@ -278,14 +276,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         mode: "FOR SHARE",
         table: "Group",
         beforeCommit: (tx) =>
-          tx.groupEncryptedPayload.create({
-            data: {
-              ...point(memberDevice, `${prefix}-during-removal`),
-              epochId,
-              groupId,
-              senderDeviceId: memberDevice,
-              senderUserId: memberId,
-            },
+          storeUploadedTrackingPoint(tx, {
+            clientPointId: testClientPointId(`${prefix}-during-removal`),
+            epochId,
+            groupId,
+            senderDeviceId: memberDevice,
+            senderUserId: memberId,
           }),
       });
       const removing = owner.groupMembership.remove({
@@ -299,12 +295,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await removing;
 
       expect(
-        await prisma.groupEncryptedPayload.count({ where: { groupId, senderUserId: memberId } }),
+        await trackingPointIds(
+          prisma,
+          Prisma.sql`"stream"."groupId" = ${groupId} AND "stream"."senderUserId" = ${memberId}`,
+        ),
+      ).toEqual([]);
+      expect(
+        await prisma.trackingStream.count({ where: { groupId, senderUserId: memberId } }),
       ).toBe(0);
       await expect(
         member.groupTracking.uploadBatch({
           groupId,
-          points: [point(memberDevice, `${prefix}-after-removal`)],
+          points: [point(memberDevice, testClientPointId(`${prefix}-after-removal`))],
         }),
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
     });
@@ -314,7 +316,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const nextEpoch = await nextEpochFor(groupId);
       const pointsFor = (deviceId: string) =>
         Array.from({ length: 24 }, (_, index) =>
-          point(deviceId, `${prefix}-${deviceId}-${String(index).padStart(2, "0")}`),
+          point(deviceId, testClientPointId(`${prefix}-${deviceId}-${index}`)),
         );
       const owned = pointsFor(ownerDevice);
       const members = pointsFor(memberDevice);
@@ -332,15 +334,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ]);
 
       expect(results.filter((result) => result.status === "rejected")).toEqual([]);
-      const stored = await prisma.groupEncryptedPayload.groupBy({
-        by: ["clientPointId"],
-        where: { groupId },
-        _count: true,
-      });
-      expect(stored.every(({ _count }) => _count === 1)).toBe(true);
-      expect(stored.map(({ clientPointId }) => clientPointId).sort()).toEqual(
-        [...owned, ...members].map(({ clientPointId }) => clientPointId).sort(),
-      );
+      expect(
+        (await trackingPointIds(prisma, Prisma.sql`"stream"."groupId" = ${groupId}`)).sort(),
+      ).toEqual([...owned, ...members].map(({ clientPointId }) => pointIdOf(clientPointId)).sort());
     });
   },
 );

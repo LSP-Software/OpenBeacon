@@ -29,21 +29,17 @@ const maxCursor = (points: readonly MapTrackingEncryptedPoint[]): MapTrackingCur
   let cursor: MapTrackingCursor | null = null;
 
   for (const point of points) {
-    if (
-      !cursor ||
-      point.createdAt.getTime() > cursor.createdAt.getTime() ||
-      (point.createdAt.getTime() === cursor.createdAt.getTime() && point.id > cursor.id)
-    ) {
-      cursor = { createdAt: point.createdAt, id: point.id };
-    }
+    const candidate = { senderDeviceId: point.senderDeviceId, updatedAt: point.updatedAt };
+    if (!cursor || isCursorAfter(candidate, cursor)) cursor = candidate;
   }
 
   return cursor;
 };
 
 export const isCursorAfter = (candidate: MapTrackingCursor, current: MapTrackingCursor) =>
-  candidate.createdAt.getTime() > current.createdAt.getTime() ||
-  (candidate.createdAt.getTime() === current.createdAt.getTime() && candidate.id > current.id);
+  candidate.updatedAt.getTime() > current.updatedAt.getTime() ||
+  (candidate.updatedAt.getTime() === current.updatedAt.getTime() &&
+    candidate.senderDeviceId > current.senderDeviceId);
 
 const toLiveMapPosition = ({
   battery,
@@ -328,7 +324,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     points: readonly MapTrackingEncryptedPoint[];
     runId: number;
   }) => {
-    const entries: { entry: LiveMapEntry; clientPointId: string }[] = [];
+    const entries: { entry: LiveMapEntry; revisionPrefix: string }[] = [];
     const undecryptable = new Map(undecryptableByGroup.get(groupId));
     let undecryptableChanged = false;
 
@@ -342,13 +338,12 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         return;
       }
       const sharing = status.sharing?.find((device) => device.deviceId === point.senderDeviceId);
-      if (sharing && (sharing.paused || !point.clientPointId.startsWith(sharing.revisionPrefix)))
-        continue;
+      if (sharing && (sharing.paused || point.revisionPrefix !== sharing.revisionPrefix)) continue;
 
       const deviceKey = `${point.senderUserId}:${point.senderDeviceId}`;
       if (result.status === "ok") {
         if (!canShowSharedLocation(result.entry, status.sharing)) continue;
-        entries.push({ entry: result.entry, clientPointId: point.clientPointId });
+        entries.push({ entry: result.entry, revisionPrefix: point.revisionPrefix });
         undecryptableChanged = undecryptable.delete(deviceKey) || undecryptableChanged;
       } else if (result.status === "undecryptable" && !undecryptable.has(deviceKey)) {
         undecryptable.set(deviceKey, {
@@ -377,10 +372,10 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
 
     const groupEntries = positionsByGroup.get(groupId) ?? new Map<string, LiveMapEntry>();
     const currentEntries = entries
-      .filter(({ entry, clientPointId }) => {
+      .filter(({ entry, revisionPrefix }) => {
         const sharing = status.sharing?.find((device) => device.deviceId === entry.deviceId);
         return (
-          (!sharing || clientPointId.startsWith(sharing.revisionPrefix)) &&
+          (!sharing || revisionPrefix === sharing.revisionPrefix) &&
           canShowSharedLocation(entry, status.sharing)
         );
       })

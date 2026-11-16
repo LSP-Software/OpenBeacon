@@ -55,14 +55,11 @@ const resolveFromDeviceWrap =
     return result.error ? null : result.data;
   };
 
-const undecryptablePoint = ({ epochId, id }: { epochId: string; id: string }) => ({
-  algorithm: "XChaCha20-Poly1305" as const,
+const undecryptablePoint = (epochId: string) => ({
   ciphertext: "cipher",
-  clientPointId: `client-${id}`,
-  createdAt: new Date("2026-07-17T12:00:00.000Z"),
+  revisionPrefix: "",
+  updatedAt: new Date("2026-07-17T12:00:00.000Z"),
   epochId,
-  id,
-  kind: TRACKING_POINT_KIND,
   nonce: "nonce",
   senderDeviceId: "device-sender",
   senderUserId: "user-sender",
@@ -106,13 +103,10 @@ describe("createMapTrackingDecryptPoint", () => {
     const result = await decryptPoint({
       groupId: "group-1",
       point: {
-        algorithm: encrypted.algorithm,
         ciphertext: encrypted.ciphertext,
-        clientPointId: "client-1",
-        createdAt: encrypted.createdAt,
+        revisionPrefix: "",
+        updatedAt: encrypted.createdAt,
         epochId: encrypted.epochId,
-        id: "server-1",
-        kind: encrypted.kind,
         nonce: encrypted.nonce,
         senderDeviceId: encrypted.senderDeviceId,
         senderUserId: "user-sender",
@@ -126,8 +120,7 @@ describe("createMapTrackingDecryptPoint", () => {
         deviceId: "device-sender",
         latitude: 51.5,
         longitude: -0.12,
-        serverCreatedAt: encrypted.createdAt,
-        serverId: "server-1",
+        serverUpdatedAt: encrypted.createdAt,
         sourceGroupId: "group-1",
         speed: 3.5,
         timestamp: "2026-07-17T12:00:00.000Z",
@@ -139,13 +132,10 @@ describe("createMapTrackingDecryptPoint", () => {
     await decryptPoint({
       groupId: "group-1",
       point: {
-        algorithm: encrypted.algorithm,
         ciphertext: encrypted.ciphertext,
-        clientPointId: "client-2",
-        createdAt: encrypted.createdAt,
+        revisionPrefix: "",
+        updatedAt: encrypted.createdAt,
         epochId: encrypted.epochId,
-        id: "server-2",
-        kind: encrypted.kind,
         nonce: encrypted.nonce,
         senderDeviceId: encrypted.senderDeviceId,
         senderUserId: "user-sender",
@@ -166,39 +156,9 @@ describe("createMapTrackingDecryptPoint", () => {
     await expect(
       decryptPoint({
         groupId: "group-1",
-        point: undecryptablePoint({ epochId: "epoch-missing", id: "server-1" }),
+        point: undecryptablePoint("epoch-missing"),
       }),
     ).resolves.toEqual({ status: "undecryptable" });
-  });
-
-  test("ignores non-trackingPoint kinds", async () => {
-    const { keyPair, recipient } = createRecipient("device-1", "user-1");
-    const decryptPoint = createMapTrackingDecryptPoint({
-      resolveEpochKey: resolveFromDeviceWrap({
-        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
-        getWrappedEpochKey: async () => {
-          throw new Error("should not fetch");
-        },
-      }),
-    });
-
-    await expect(
-      decryptPoint({
-        groupId: "group-1",
-        point: {
-          algorithm: "XChaCha20-Poly1305",
-          ciphertext: "cipher",
-          clientPointId: "client-1",
-          createdAt: new Date("2026-07-17T12:00:00.000Z"),
-          epochId: "epoch-1",
-          id: "server-1",
-          kind: "other",
-          nonce: "nonce",
-          senderDeviceId: "device-sender",
-          senderUserId: "user-sender",
-        },
-      }),
-    ).resolves.toEqual({ status: "ignored" });
   });
 
   test("treats malformed wrapped keys as undecryptable", async () => {
@@ -221,7 +181,7 @@ describe("createMapTrackingDecryptPoint", () => {
     await expect(
       decryptPoint({
         groupId: "group-1",
-        point: undecryptablePoint({ epochId: "epoch-1", id: "server-1" }),
+        point: undecryptablePoint("epoch-1"),
       }),
     ).resolves.toEqual({ status: "undecryptable" });
   });
@@ -264,13 +224,10 @@ describe("createMapTrackingDecryptPoint", () => {
       decryptPoint({
         groupId: "group-1",
         point: {
-          algorithm: encrypted.algorithm,
           ciphertext: "AAAA",
-          clientPointId: "client-bad",
-          createdAt: encrypted.createdAt,
+          revisionPrefix: "",
+          updatedAt: encrypted.createdAt,
           epochId: encrypted.epochId,
-          id: "server-bad",
-          kind: encrypted.kind,
           nonce: encrypted.nonce,
           senderDeviceId: encrypted.senderDeviceId,
           senderUserId: "user-sender",
@@ -281,13 +238,10 @@ describe("createMapTrackingDecryptPoint", () => {
     const good = await decryptPoint({
       groupId: "group-1",
       point: {
-        algorithm: encrypted.algorithm,
         ciphertext: encrypted.ciphertext,
-        clientPointId: "client-good",
-        createdAt: encrypted.createdAt,
+        revisionPrefix: "",
+        updatedAt: encrypted.createdAt,
         epochId: encrypted.epochId,
-        id: "server-good",
-        kind: encrypted.kind,
         nonce: encrypted.nonce,
         senderDeviceId: encrypted.senderDeviceId,
         senderUserId: "user-sender",
@@ -339,13 +293,10 @@ describe("createMapTrackingDecryptPoint", () => {
     const first = decryptPoint({
       groupId: "group-1",
       point: {
-        algorithm: encrypted.algorithm,
         ciphertext: encrypted.ciphertext,
-        clientPointId: "client-1",
-        createdAt: encrypted.createdAt,
+        revisionPrefix: "",
+        updatedAt: encrypted.createdAt,
         epochId: encrypted.epochId,
-        id: "server-1",
-        kind: encrypted.kind,
         nonce: encrypted.nonce,
         senderDeviceId: encrypted.senderDeviceId,
         senderUserId: "user-sender",
@@ -354,13 +305,10 @@ describe("createMapTrackingDecryptPoint", () => {
     const second = decryptPoint({
       groupId: "group-1",
       point: {
-        algorithm: encrypted.algorithm,
         ciphertext: encrypted.ciphertext,
-        clientPointId: "client-2",
-        createdAt: encrypted.createdAt,
+        revisionPrefix: "",
+        updatedAt: encrypted.createdAt,
         epochId: encrypted.epochId,
-        id: "server-2",
-        kind: encrypted.kind,
         nonce: encrypted.nonce,
         senderDeviceId: encrypted.senderDeviceId,
         senderUserId: "user-sender",
@@ -394,7 +342,7 @@ describe("createMapTrackingDecryptPoint", () => {
       results.push(
         await decryptPoint({
           groupId: "group-1",
-          point: undecryptablePoint({ epochId: "epoch-missing", id: `server-${index}` }),
+          point: undecryptablePoint("epoch-missing"),
         }),
       );
     }
@@ -444,13 +392,10 @@ describe("createMapTrackingDecryptPoint", () => {
       decryptPoint({
         groupId: "group-1",
         point: {
-          algorithm: encrypted.algorithm,
           ciphertext: encrypted.ciphertext,
-          clientPointId: "client-1",
-          createdAt: encrypted.createdAt,
+          revisionPrefix: "",
+          updatedAt: encrypted.createdAt,
           epochId: encrypted.epochId,
-          id: "server-1",
-          kind: encrypted.kind,
           nonce: encrypted.nonce,
           senderDeviceId: encrypted.senderDeviceId,
           senderUserId: "user-sender",
@@ -461,13 +406,10 @@ describe("createMapTrackingDecryptPoint", () => {
     const result = await decryptPoint({
       groupId: "group-1",
       point: {
-        algorithm: encrypted.algorithm,
         ciphertext: encrypted.ciphertext,
-        clientPointId: "client-2",
-        createdAt: encrypted.createdAt,
+        revisionPrefix: "",
+        updatedAt: encrypted.createdAt,
         epochId: encrypted.epochId,
-        id: "server-2",
-        kind: encrypted.kind,
         nonce: encrypted.nonce,
         senderDeviceId: encrypted.senderDeviceId,
         senderUserId: "user-sender",
@@ -519,13 +461,10 @@ describe("createMapTrackingDecryptPoint", () => {
       decryptPoint({
         groupId: "group-1",
         point: {
-          algorithm: encrypted.algorithm,
           ciphertext: encrypted.ciphertext,
-          clientPointId: "client-1",
-          createdAt: encrypted.createdAt,
+          revisionPrefix: "",
+          updatedAt: encrypted.createdAt,
           epochId: encrypted.epochId,
-          id: "server-1",
-          kind: encrypted.kind,
           nonce: encrypted.nonce,
           senderDeviceId: encrypted.senderDeviceId,
           senderUserId: "user-sender",
@@ -540,13 +479,10 @@ describe("createMapTrackingDecryptPoint", () => {
       decryptPoint({
         groupId: "group-1",
         point: {
-          algorithm: encrypted.algorithm,
           ciphertext: encrypted.ciphertext,
-          clientPointId: "client-2",
-          createdAt: encrypted.createdAt,
+          revisionPrefix: "",
+          updatedAt: encrypted.createdAt,
           epochId: encrypted.epochId,
-          id: "server-2",
-          kind: encrypted.kind,
           nonce: encrypted.nonce,
           senderDeviceId: encrypted.senderDeviceId,
           senderUserId: "user-sender",
@@ -559,13 +495,10 @@ describe("createMapTrackingDecryptPoint", () => {
     const result = await decryptPoint({
       groupId: "group-1",
       point: {
-        algorithm: encrypted.algorithm,
         ciphertext: encrypted.ciphertext,
-        clientPointId: "client-3",
-        createdAt: encrypted.createdAt,
+        revisionPrefix: "",
+        updatedAt: encrypted.createdAt,
         epochId: encrypted.epochId,
-        id: "server-3",
-        kind: encrypted.kind,
         nonce: encrypted.nonce,
         senderDeviceId: encrypted.senderDeviceId,
         senderUserId: "user-sender",
@@ -616,13 +549,10 @@ describe("createMapTrackingDecryptPoint", () => {
     const firstResult = await decryptPoint({
       groupId: "a:b",
       point: {
-        algorithm: firstEncrypted.algorithm,
         ciphertext: firstEncrypted.ciphertext,
-        clientPointId: "client-1",
-        createdAt: firstEncrypted.createdAt,
+        revisionPrefix: "",
+        updatedAt: firstEncrypted.createdAt,
         epochId: firstEncrypted.epochId,
-        id: "server-1",
-        kind: firstEncrypted.kind,
         nonce: firstEncrypted.nonce,
         senderDeviceId: firstEncrypted.senderDeviceId,
         senderUserId: "user-sender",
@@ -633,7 +563,7 @@ describe("createMapTrackingDecryptPoint", () => {
     await expect(
       decryptPoint({
         groupId: "a",
-        point: undecryptablePoint({ epochId: `b:${first.epoch.epochId}`, id: "server-2" }),
+        point: undecryptablePoint(`b:${first.epoch.epochId}`),
       }),
     ).resolves.toEqual({ status: "undecryptable" });
 
@@ -681,13 +611,10 @@ describe("createMapTrackingDecryptPoint", () => {
       decryptPoint({
         groupId: "group-1",
         point: {
-          algorithm: encrypted.algorithm,
           ciphertext: encrypted.ciphertext,
-          clientPointId: "client-1",
-          createdAt: encrypted.createdAt,
+          revisionPrefix: "",
+          updatedAt: encrypted.createdAt,
           epochId: encrypted.epochId,
-          id: "server-1",
-          kind: encrypted.kind,
           nonce: encrypted.nonce,
           senderDeviceId: encrypted.senderDeviceId,
           senderUserId: "user-sender",
@@ -702,13 +629,10 @@ describe("createMapTrackingDecryptPoint", () => {
       decryptPoint({
         groupId: "group-1",
         point: {
-          algorithm: encrypted.algorithm,
           ciphertext: encrypted.ciphertext,
-          clientPointId: "client-2",
-          createdAt: encrypted.createdAt,
+          revisionPrefix: "",
+          updatedAt: encrypted.createdAt,
           epochId: encrypted.epochId,
-          id: "server-2",
-          kind: encrypted.kind,
           nonce: encrypted.nonce,
           senderDeviceId: encrypted.senderDeviceId,
           senderUserId: "user-sender",
@@ -779,13 +703,10 @@ describe("createMapTrackingDecryptPoint", () => {
     await decryptPoint({
       groupId: "group-1",
       point: {
-        algorithm: encryptedOne.algorithm,
         ciphertext: encryptedOne.ciphertext,
-        clientPointId: "client-1",
-        createdAt: encryptedOne.createdAt,
+        revisionPrefix: "",
+        updatedAt: encryptedOne.createdAt,
         epochId: encryptedOne.epochId,
-        id: "server-1",
-        kind: encryptedOne.kind,
         nonce: encryptedOne.nonce,
         senderDeviceId: encryptedOne.senderDeviceId,
         senderUserId: "user-sender",
@@ -794,13 +715,10 @@ describe("createMapTrackingDecryptPoint", () => {
     await decryptPoint({
       groupId: "group-2",
       point: {
-        algorithm: encryptedTwo.algorithm,
         ciphertext: encryptedTwo.ciphertext,
-        clientPointId: "client-2",
-        createdAt: encryptedTwo.createdAt,
+        revisionPrefix: "",
+        updatedAt: encryptedTwo.createdAt,
         epochId: encryptedTwo.epochId,
-        id: "server-2",
-        kind: encryptedTwo.kind,
         nonce: encryptedTwo.nonce,
         senderDeviceId: encryptedTwo.senderDeviceId,
         senderUserId: "user-sender",
@@ -813,13 +731,10 @@ describe("createMapTrackingDecryptPoint", () => {
     await decryptPoint({
       groupId: "group-1",
       point: {
-        algorithm: encryptedOne.algorithm,
         ciphertext: encryptedOne.ciphertext,
-        clientPointId: "client-3",
-        createdAt: encryptedOne.createdAt,
+        revisionPrefix: "",
+        updatedAt: encryptedOne.createdAt,
         epochId: encryptedOne.epochId,
-        id: "server-3",
-        kind: encryptedOne.kind,
         nonce: encryptedOne.nonce,
         senderDeviceId: encryptedOne.senderDeviceId,
         senderUserId: "user-sender",
@@ -828,13 +743,10 @@ describe("createMapTrackingDecryptPoint", () => {
     await decryptPoint({
       groupId: "group-2",
       point: {
-        algorithm: encryptedTwo.algorithm,
         ciphertext: encryptedTwo.ciphertext,
-        clientPointId: "client-4",
-        createdAt: encryptedTwo.createdAt,
+        revisionPrefix: "",
+        updatedAt: encryptedTwo.createdAt,
         epochId: encryptedTwo.epochId,
-        id: "server-4",
-        kind: encryptedTwo.kind,
         nonce: encryptedTwo.nonce,
         senderDeviceId: encryptedTwo.senderDeviceId,
         senderUserId: "user-sender",
@@ -885,13 +797,10 @@ describe("createMapTrackingDecryptPoint", () => {
     const pending = decryptPoint({
       groupId: "group-1",
       point: {
-        algorithm: encrypted.algorithm,
         ciphertext: encrypted.ciphertext,
-        clientPointId: "client-1",
-        createdAt: encrypted.createdAt,
+        revisionPrefix: "",
+        updatedAt: encrypted.createdAt,
         epochId: encrypted.epochId,
-        id: "server-1",
-        kind: encrypted.kind,
         nonce: encrypted.nonce,
         senderDeviceId: encrypted.senderDeviceId,
         senderUserId: "user-sender",
@@ -906,13 +815,10 @@ describe("createMapTrackingDecryptPoint", () => {
     await decryptPoint({
       groupId: "group-1",
       point: {
-        algorithm: encrypted.algorithm,
         ciphertext: encrypted.ciphertext,
-        clientPointId: "client-2",
-        createdAt: encrypted.createdAt,
+        revisionPrefix: "",
+        updatedAt: encrypted.createdAt,
         epochId: encrypted.epochId,
-        id: "server-2",
-        kind: encrypted.kind,
         nonce: encrypted.nonce,
         senderDeviceId: encrypted.senderDeviceId,
         senderUserId: "user-sender",
