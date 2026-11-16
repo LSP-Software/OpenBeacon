@@ -580,3 +580,29 @@ model AccountDeletionCleanup {
   retryAt DateTime?
   imageKeys String[] @default([])
 }
+
+enum AnnouncementSeverity {
+  INFO
+  WARNING
+}
+
+enum AnnouncementPlatform {
+  ANDROID
+  IOS
+}
+
+model Announcement {
+  id               String                @id @default(uuid(7))
+  message          String
+  severity         AnnouncementSeverity  @default(INFO)
+  platform         AnnouncementPlatform?
+  minAppVersion    String?
+  maxAppVersion    String?
+  downtimeStartsAt DateTime?
+  downtimeEndsAt   DateTime?
+  startsAt         DateTime              @default(now())
+  endsAt           DateTime
+  createdAt        DateTime              @default(now())
+
+  @@index([endsAt])
+}

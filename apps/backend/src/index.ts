@@ -5,6 +5,7 @@ import { mapEnv } from "@openbeacon/api/mapEnv.ts";
 import { getMapTilesManifest } from "@openbeacon/api/mapStorage.ts";
 import { securityAlerts } from "@openbeacon/auth";
 import { tryCatch } from "@openbeacon/shared";
+import { refreshAnnouncements } from "./announcements.ts";
 import { app } from "./app.ts";
 import { cache } from "./cache.ts";
 import { db } from "./db.ts";
@@ -27,6 +28,9 @@ if (securityAlerts) {
   securityAlerts.schedulePendingAlertsTurnedOff();
   setInterval(securityAlerts.schedulePendingAlertsTurnedOff, 60_000);
 }
+
+void refreshAnnouncements(db);
+setInterval(() => void refreshAnnouncements(db), 30_000);
 
 const watchForFirstMap = async (waiting: boolean) => {
   const manifest = await tryCatch(getMapTilesManifest());

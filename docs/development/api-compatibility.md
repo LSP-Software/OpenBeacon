@@ -61,11 +61,12 @@ Error reasons are API surface; never repurpose one. A new condition gets a new r
 
 The handshake itself can never change, or apps and servers from either side of the change couldn't talk about compatibility at all. Tests pin each of these:
 
-- `GET /health` returns `apiCompatibilityLevel` and `minClientApiCompatibilityLevel` alongside `status`, `version` and `serverName`, plus an optional `message`. Self-hosters must expose `/health` as well as `/api/*`.
+- `GET /health` returns `apiCompatibilityLevel` and `minClientApiCompatibilityLevel` alongside `status`, `version` and `serverName`, plus an optional `message` and an optional `announcements` list. Self-hosters must expose `/health` as well as `/api/*`.
 - Every request to `/api/*` sends `x-openbeacon-api-compatibility-level`. The server treats a missing or unreadable value as 0. The one exception is `GET /api/auth/google-deletion-callback`: a browser opens it, so it can't send the header.
 - Every `/api/*` response carries `x-openbeacon-api-compatibility-level` and `x-openbeacon-min-client-api-compatibility-level`.
 - An app below the minimum gets a 426 with `{ "code": "CLIENT_TOO_OLD", "minClientApiCompatibilityLevel": number, "message"?: string }`.
 - `message` is optional on both. It's plain text of at most 280 characters, taken from the server's `CLIENT_UPDATE_MESSAGE`, and left out when that is unset or too long. The app shows it as plain text on any compatibility screen. There is deliberately no update link, so a self-hosted server can't send people to an APK of its choosing.
+- `announcements` is left out when none are showing. Each entry follows `announcementSchema` in `packages/schemas`. The app drops any entry it can't read, such as one with a severity it doesn't know, so a new severity or platform doesn't need a level change, but changing what an existing field means does.
 - A tRPC call to a procedure the server doesn't have gets a 404 with `{ "code": "UNKNOWN_PROCEDURE", "apiCompatibilityLevel": number }`. This is how the app notices a missed level change: if the levels match but a procedure is missing, it shows an "out of sync" screen with both versions.
 
 `apps/backend/src/app.test.ts` checks these against literal strings, so renaming a constant can't quietly change them.

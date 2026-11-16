@@ -39,6 +39,7 @@ mock.module("../components/ui/Alert.tsx", () => ({
   AlertHost: () => React.createElement("alert-host"),
 }));
 mock.module("../components/OfflineBanner.tsx", () => ({ OfflineBanner: () => null }));
+mock.module("../components/AnnouncementBanner.tsx", () => ({ AnnouncementBanner: () => null }));
 mock.module("../components/InAppNoticeBanner.tsx", () => ({ InAppNoticeBanner: () => null }));
 mock.module("../lib/api.ts", () => ({ queryClient: {} }));
 mock.module("../lib/auth-client.ts", () => ({ authClient: { useSession: () => session } }));
