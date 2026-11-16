@@ -11,6 +11,8 @@ const storageValues = new Map<string, string | number | boolean>();
 const nativePlaces: { groupId: string; places: unknown[] }[] = [];
 const notices: { kind: string; title: string; body: string | null; key: string }[] = [];
 const catchUps: string[] = [];
+const invalidated: unknown[] = [];
+let movedByCatchUp = 0;
 let places: Place[] = [];
 let sharingEnabled = true;
 let nativeAccepts = true;
@@ -38,6 +40,7 @@ mock.module("./deviceKeys.ts", () => ({
   getRegisteredDeviceKey: async () => ({ deviceId: "device-1", userId: "user-1" }),
 }));
 mock.module("./placeSync.ts", () => ({
+  groupPlacesQueryKey: (groupId: string) => ["groupPlaces", groupId],
   loadGroupPlaces: async () => {
     listCalls += 1;
     return places;
@@ -46,7 +49,7 @@ mock.module("./placeSync.ts", () => ({
 mock.module("./placeCatchUp.ts", () => ({
   catchUpGroupPlaces: async ({ groupId }: { groupId: string }) => {
     catchUps.push(groupId);
-    return 0;
+    return movedByCatchUp;
   },
 }));
 mock.module("./personalNicknames.ts", () => ({
@@ -78,6 +81,11 @@ mock.module("./trackingModule.ts", () => ({
   }),
 }));
 mock.module("./api.ts", () => ({
+  queryClient: {
+    invalidateQueries: async ({ queryKey }: { queryKey: unknown }) => {
+      invalidated.push(queryKey);
+    },
+  },
   trpcClient: {
     placeSharing: { get: { query: async () => ({ enabled: sharingEnabled, arrivalsOff: [] }) } },
     groupMembership: {
@@ -140,6 +148,8 @@ beforeEach(() => {
   nativePlaces.length = 0;
   notices.length = 0;
   catchUps.length = 0;
+  invalidated.length = 0;
+  movedByCatchUp = 0;
   places = [home];
   sharingEnabled = true;
   nativeAccepts = true;
@@ -248,6 +258,30 @@ describe("applyPlaceUpdates", () => {
     expect(listCalls).toBe(1);
     await applyPlaceUpdates({ updates: summary(2), userId: "user-1" });
     expect(listCalls).toBe(2);
+  });
+
+  test("tells an open app to reload a group's places when they change", async () => {
+    await applyPlaceUpdates({ updates: summary(1), userId: "user-1" });
+    await applyPlaceUpdates({ updates: summary(1), userId: "user-1" });
+    expect(invalidated).toEqual([["groupPlaces", "family"]]);
+  });
+
+  test("tells an open app to reload a group's places after catch-up moves some", async () => {
+    storageValues.set(
+      `places.revision.${JSON.stringify(["https://api.example.test", "user-1", "family"])}`,
+      1,
+    );
+    await applyPlaceUpdates({ updates: summary(1, true), userId: "user-1" });
+    expect(invalidated).toEqual([]);
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(Date.now() + 15 * 60_000);
+      movedByCatchUp = 2;
+      await applyPlaceUpdates({ updates: summary(1, true), userId: "user-1" });
+      expect(invalidated).toEqual([["groupPlaces", "family"]]);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test("runs catch-up at most once every 15 minutes per group", async () => {

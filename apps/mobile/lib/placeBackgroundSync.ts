@@ -1,13 +1,13 @@
 import { placeAlertsCursorSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import z from "zod";
-import { type RouterOutputs, trpcClient } from "./api.ts";
+import { queryClient, type RouterOutputs, trpcClient } from "./api.ts";
 import { baseUrl } from "./currentServer.ts";
 import { getRegisteredDeviceKey } from "./deviceKeys.ts";
 import { showPlaceNotice } from "./notifications.ts";
 import { loadPersonalNicknames } from "./personalNicknames.ts";
 import { catchUpGroupPlaces } from "./placeCatchUp.ts";
-import { loadGroupPlaces } from "./placeSync.ts";
+import { groupPlacesQueryKey, loadGroupPlaces } from "./placeSync.ts";
 import { storage } from "./storage.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
 
@@ -194,12 +194,18 @@ export const applyPlaceUpdates = async ({
       const synced = await tryCatch(
         syncGroupPlaces({ announce: true, groupId: summary.groupId, groups, userId }),
       );
-      if (synced.data) storage.set(revisionKey, summary.revision);
+      if (synced.data) {
+        storage.set(revisionKey, summary.revision);
+        await queryClient.invalidateQueries({ queryKey: groupPlacesQueryKey(summary.groupId) });
+      }
     }
     const catchUpKey = storageKey(userId, "catchUpAt", summary.groupId);
     if (summary.needsCatchUp && Date.now() - (storage.getNumber(catchUpKey) ?? 0) >= 15 * 60_000) {
       storage.set(catchUpKey, Date.now());
-      await tryCatch(catchUpGroupPlaces({ groupId: summary.groupId, userId }));
+      const moved = await tryCatch(catchUpGroupPlaces({ groupId: summary.groupId, userId }));
+      if (moved.data) {
+        await queryClient.invalidateQueries({ queryKey: groupPlacesQueryKey(summary.groupId) });
+      }
     }
   }
   if (!updates.placeAlerts) return;
