@@ -3,6 +3,7 @@ import { GroupEventType, GroupRole, Prisma, type PrismaClient } from "@openbeaco
 import { TRPCError } from "@trpc/server";
 import { readDatabaseTime } from "./databaseTime.ts";
 import { deletePayloadsInBatches } from "./deletePayloadsInBatches.ts";
+import { imageKeyColumns } from "./imageKeys.ts";
 import { lockUserGroups } from "./lockUserGroups.ts";
 
 export const lockDeletableGroups = async (
@@ -188,7 +189,7 @@ export const deleteAccountRecords = async ({
       });
       const imageGroups = await tx.group.updateManyAndReturn({
         where: { image: { startsWith: `${imageUrlPrefix}/user/${userId}/` } },
-        data: { image: null },
+        data: { image: null, ...imageKeyColumns(null) },
         select: { id: true },
       });
       const eventsAt = await readDatabaseTime(tx);

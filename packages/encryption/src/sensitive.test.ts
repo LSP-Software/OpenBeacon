@@ -3,6 +3,7 @@ import {
   DevicePrivateKeyMaterial,
   EpochKeyMaterial,
   HistoryPrivateKeyMaterial,
+  ImageKeyMaterial,
   RecoveryPhrase,
   RecoveryPrivateKeyMaterial,
   SensitivePayloadBytes,
@@ -17,6 +18,7 @@ describe.each([
   ["recovery phrase", RecoveryPhrase],
   ["recovery private key", RecoveryPrivateKeyMaterial],
   ["history private key", HistoryPrivateKeyMaterial],
+  ["image key", ImageKeyMaterial],
 ] as const)("%s wrapper", (label, Wrapper) => {
   test("never serialises its bytes", () => {
     const value = new Wrapper(secretBytes);

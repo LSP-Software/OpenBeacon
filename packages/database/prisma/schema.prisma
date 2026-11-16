@@ -14,6 +14,7 @@ model User {
   email          String          @unique
   emailVerified  Boolean         @default(false)
   image          String?
+  imageKeySealed String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   pendingDeletion Boolean        @default(false)
@@ -126,6 +127,11 @@ model Group {
   id             String          @id @default(uuid(7))
   name           String
   image          String?
+  imageKeyEpochId        String?
+  imageKeySenderDeviceId String?
+  imageKeyAlgorithm      String?
+  imageKeyNonce          String?
+  imageKeyCiphertext     String?
   epochRotationRequired Boolean @default(false)
   placesRevision Int @default(0)
   groupMembers           GroupMember[]
@@ -226,11 +232,13 @@ model PlaceSharing {
 }
 
 model PendingUpload {
-  userId     String
-  uploadType ImageUploadType
-  fileName   String
-  createdAt  DateTime        @default(now())
-  groupId    String          @default("")
+  userId      String
+  uploadType  ImageUploadType
+  fileName    String
+  contentHash String?
+  fileSize    Int?
+  createdAt   DateTime        @default(now())
+  groupId     String          @default("")
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -318,6 +326,11 @@ model GroupMember {
 
   role GroupRole
   joinedEpochNumber Int
+  imageKeyEpochId        String?
+  imageKeySenderDeviceId String?
+  imageKeyAlgorithm      String?
+  imageKeyNonce          String?
+  imageKeyCiphertext     String?
   personalNicknames PersonalGroupNickname[] @relation("NicknameTarget")
   ownedNicknames PersonalGroupNickname[] @relation("NicknameOwner")
   personalColor PersonalGroupColor?

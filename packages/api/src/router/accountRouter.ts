@@ -11,8 +11,9 @@ import { TRPCError } from "@trpc/server";
 import {
   accountNameSchema,
   setLocationSharingSchema,
+  confirmProfileImageUploadSchema,
   removeDeviceSchema,
-  requestImageUploadInputSchema,
+  presignImageUploadInputSchema,
   updateDeviceSchema,
 } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
@@ -21,10 +22,12 @@ import { env } from "../env.ts";
 import {
   buildUserAvatarPath,
   confirmImageUpload,
-  requestImageUpload,
+  presignImageUpload,
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
 import { readAccountViewers } from "../lib/accountViewers.ts";
+import { assertActiveDevices, assertSentFromThisDevice } from "../lib/groupWriteChecks.ts";
+import { imageKeyColumns } from "../lib/imageKeys.ts";
 import { beginAccountDeletion, deleteAccountRecords } from "../lib/account-deletion.ts";
 import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
@@ -457,23 +460,9 @@ export const accountRouter = {
         windowMs: 60_000,
       },
     })
-    .input(
-      requestImageUploadInputSchema({
-        maxImageFileSize: env.MAX_IMAGE_FILE_SIZE,
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ ctx }) => {
       const userId = ctx.session.user.id;
-      const imagePath = buildUserAvatarPath(userId);
-      const fileName = `${crypto.randomUUID()}.webp`;
-
-      const { presignedUrl } = await requestImageUpload({
-        bucketName: env.IMAGES_S3_BUCKET_NAME,
-        contentHash: input.contentHash,
-        fileSize: input.fileSize,
-        imagePath,
-        fileName,
-      });
+      const fileName = crypto.randomUUID();
 
       await setPendingImageUploadForUser({
         db: ctx.db,
@@ -481,10 +470,32 @@ export const accountRouter = {
         uploadType: "userAvatar",
         fileName,
         bucketName: env.IMAGES_S3_BUCKET_NAME,
-        currentImagePath: imagePath,
+        currentImagePath: buildUserAvatarPath(userId),
       });
 
-      return { presignedUrl };
+      return { fileName };
+    }),
+  presignProfileImageUpload: protectedProcedure
+    .meta({
+      rateLimit: {
+        limit: 10,
+        windowMs: 60_000,
+      },
+    })
+    .input(presignImageUploadInputSchema({ maxImageFileSize: env.MAX_IMAGE_FILE_SIZE }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      return presignImageUpload({
+        db: ctx.db,
+        userId,
+        uploadType: "userAvatar",
+        bucketName: env.IMAGES_S3_BUCKET_NAME,
+        contentHash: input.contentHash,
+        fileSize: input.fileSize,
+        imagePath: buildUserAvatarPath(userId),
+        fileName: input.fileName,
+        noPendingImageUploadMessage: "No pending profile image upload.",
+      });
     }),
   confirmProfileImageUpload: protectedProcedure
     .meta({
@@ -493,8 +504,14 @@ export const accountRouter = {
         windowMs: 60_000,
       },
     })
-    .mutation(async ({ ctx }) => {
+    .input(confirmProfileImageUploadSchema)
+    .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      assertSentFromThisDevice(
+        input.wraps,
+        ctx.deviceId,
+        "Picture keys must be sent from this device.",
+      );
 
       const pendingUpload = await ctx.db.pendingUpload.findUnique({
         where: { userId_uploadType_groupId: { userId, uploadType: "userAvatar", groupId: "" } },
@@ -531,10 +548,33 @@ export const accountRouter = {
                 message: "No pending profile image upload to confirm.",
               });
             }
+            await assertActiveDevices(tx, { deviceIds: [ctx.deviceId], userId });
+            const epochIds = [...new Set(input.wraps.map(({ epochId }) => epochId))];
+            const epochs = await tx.groupEpoch.findMany({
+              where: { id: { in: epochIds } },
+              select: { id: true, groupId: true },
+            });
+            const epochGroups = new Map(epochs.map(({ id, groupId }) => [id, groupId]));
+            if (input.wraps.some(({ epochId, groupId }) => epochGroups.get(epochId) !== groupId)) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Epoch does not belong to this group.",
+              });
+            }
             await tx.user.update({
               where: { id: userId },
-              data: { image: imageUrl },
+              data: { image: imageUrl, imageKeySealed: input.sealed ?? null },
             });
+            await tx.groupMember.updateMany({
+              where: { userId, groupId: { notIn: input.wraps.map(({ groupId }) => groupId) } },
+              data: imageKeyColumns(null),
+            });
+            for (const wrap of input.wraps) {
+              await tx.groupMember.updateMany({
+                where: { userId, groupId: wrap.groupId },
+                data: imageKeyColumns(wrap),
+              });
+            }
           });
         },
       });

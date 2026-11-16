@@ -91,6 +91,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           recipientKeys: initial.wrappedKeys,
         },
       });
+      await prisma.group.update({
+        where: { id: groupId },
+        data: { image: "https://images.example.test/group" },
+      });
     });
     afterAll(async () => {
       await prisma.group.deleteMany({ where: { id: groupId } });
@@ -98,11 +102,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
-    test("a valid code shows the group and its creator without using the code", async () => {
+    test("a valid code shows the group and its creator, without pictures or using the code", async () => {
       const { code, id } = await caller(owner).groupInvites.createShared({ groupId });
       expect(await caller(guest).groupInvites.sharedPreview({ code: code.toLowerCase() })).toEqual({
         group: { id: groupId, name: "Smith Family", image: null, memberCount: 1 },
-        inviter: { name: `Name ${owner}`, image: "https://images.example.test/owner.png" },
+        inviter: { name: `Name ${owner}`, image: null },
         alreadyMember: false,
         joinBlockedBy: null,
       });
@@ -155,7 +159,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       expect(await caller(guest).groupInvites.preview({ inviteId: invite.id })).toEqual({
         group: { id: groupId, name: "Smith Family", image: null, memberCount: 1 },
-        inviter: { name: `Name ${owner}`, image: "https://images.example.test/owner.png" },
+        inviter: { name: `Name ${owner}`, image: null },
         alreadyMember: false,
         joinBlockedBy: null,
       });

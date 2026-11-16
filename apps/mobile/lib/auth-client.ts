@@ -2,10 +2,12 @@ import { expoClient } from "@better-auth/expo/client";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { tryCatch } from "@openbeacon/shared";
+import { inferAdditionalFields } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import * as SecureStore from "expo-secure-store";
 import { apiCompatibilityFetch } from "./apiCompatibility.ts";
 import { baseUrl } from "./currentServer.ts";
+import { parseJson } from "./parseJson.ts";
 import { getSecureStoreOptions } from "./secureStoreOptions.ts";
 import { SERVER_UNREACHABLE_MESSAGE } from "./serverUnreachable.ts";
 import { z } from "zod";
@@ -35,14 +37,6 @@ export const readSessionTokenToRevoke = async () => {
   if (parsed.success && parsed.data[0] === baseUrl) return parsed.data[1];
   await forgetSessionTokenToRevoke();
   return null;
-};
-
-const parseJson = (value: string): unknown => {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
 };
 
 export const authClient = createAuthClient({
@@ -90,6 +84,9 @@ export const authClient = createAuthClient({
     },
   },
   plugins: [
+    inferAdditionalFields({
+      user: { imageKeySealed: { type: "string", required: false, input: false } },
+    }),
     expoClient({
       scheme: "openbeacon",
       storagePrefix: `openbeacon_${getServerKey(baseUrl)}`,

@@ -77,6 +77,9 @@ mock.module("../components/ui/Button.tsx", () => ({
 }));
 const Host = ({ children }: { children?: React.ReactNode }) =>
   React.createElement("view", null, children);
+mock.module("../components/image/DecryptedAvatarImage.tsx", () => ({
+  DecryptedAvatarImage: () => null,
+}));
 mock.module("../components/ui/Avatar.tsx", () => ({
   Avatar: Host,
   AvatarFallback: Host,

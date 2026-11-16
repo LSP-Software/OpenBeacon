@@ -15,6 +15,7 @@ let pendingSharingPause = false;
 let deleteQueueError: Error | null = null;
 const sharingEvents: string[] = [];
 
+mock.module("expo-file-system", () => ({ Directory: class {}, File: class {}, Paths: {} }));
 mock.module("./pendingJoinCode.ts", () => ({ clearPendingJoinCodes: () => {} }));
 mock.module("./locationSharing.ts", () => ({
   syncLocationSharing: async () => {
@@ -147,6 +148,7 @@ mock.module("./trackingEvents.ts", () => ({
 }));
 
 mock.module("./groupColor.ts", () => ({ clearGroupColors: () => {} }));
+mock.module("./imageKeySelfCheck.ts", () => ({ resetImageKeyCheck: () => {} }));
 mock.module("./trackingKeyCheck.ts", () => ({ clearTrackingKeyCheck: () => {} }));
 mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => {} }));
 

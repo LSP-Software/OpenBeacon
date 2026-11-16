@@ -73,6 +73,7 @@ mock.module("lucide-react-native", () => ({
   TagIcon: () => null,
   WatchIcon: () => null,
 }));
+mock.module("../image/DecryptedAvatarImage.tsx", () => ({ DecryptedAvatarImage: () => null }));
 mock.module("../ui/Avatar.tsx", () => ({
   Avatar: ({ children }: { children: React.ReactNode }) => children,
   AvatarFallback: () => null,

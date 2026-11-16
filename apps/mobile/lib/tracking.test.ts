@@ -281,6 +281,7 @@ mock.module("./placeBackgroundSync.ts", () => ({
     appliedPlaceUpdates.push(input);
   },
   getPlaceAlertsCursor: () => storedPlaceCursor,
+  settleImageKeyCatchUps: async () => {},
 }));
 
 mock.module("./apiCompatibility.ts", () => ({

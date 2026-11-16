@@ -5,6 +5,7 @@ import z from "zod";
 import { errorCode, tryCatch } from "@openbeacon/shared";
 import { recordGroupEvent } from "../../lib/groupHistory.ts";
 import { deleteGroup } from "../../lib/deleteGroup.ts";
+import { imageKeySelect, toStoredImageKey } from "../../lib/imageKeys.ts";
 import { deletePayloadsInBatches } from "../../lib/deletePayloadsInBatches.ts";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
@@ -26,10 +27,12 @@ export const groupMembershipRouter = {
         id: true,
         name: true,
         image: true,
+        ...imageKeySelect,
         groupMembers: {
           select: {
             id: true,
             role: true,
+            ...imageKeySelect,
             user: {
               select: {
                 id: true,
@@ -48,11 +51,13 @@ export const groupMembershipRouter = {
           id: group.id,
           name: group.name,
           image: group.image,
+          imageKey: toStoredImageKey(group),
           members: group.groupMembers.map((member) => ({
             id: member.id,
             userId: member.user.id,
             name: member.user.name,
             image: member.user.image,
+            imageKey: toStoredImageKey(member),
             role: member.role,
           })),
         }) satisfies GroupListItem,

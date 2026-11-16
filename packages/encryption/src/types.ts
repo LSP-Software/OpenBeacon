@@ -72,7 +72,19 @@ export type DecryptedGroupPayload = {
   metadata: Pick<EncryptedPayload, "epochId" | "groupId" | "kind" | "senderDeviceId">;
 };
 
-export type PersonalDataPurpose = "nickname" | "group-color";
+export type PersonalDataPurpose = "nickname" | "group-color" | "profile-image";
+
+export type ImagePurpose = "profile-image" | "group-image";
+
+export type ImageKeyKind = "profile-image-key" | "group-image-key";
+
+export type EncryptedImageKey = {
+  algorithm: typeof PAYLOAD_ENCRYPTION_ALGORITHM;
+  ciphertext: string;
+  epochId: string;
+  nonce: string;
+  senderDeviceId: string;
+};
 
 export type HistoryPublicKey = {
   publicKey: string;

@@ -1,15 +1,13 @@
 import { Alert } from "../../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
-import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
-import * as ImagePicker from "expo-image-picker";
 import { PencilIcon, UserIcon } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { cn } from "../../lib/cn.ts";
 import type { ImageUploadResult } from "../../lib/image-upload.ts";
-import { cleanupTempFile } from "../../lib/image-upload.ts";
-import { withOwnScreen } from "../../lib/ownScreen.ts";
-import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
+import { pickImage, processImage } from "../../lib/pickImage.ts";
+import { DecryptedAvatarImage } from "./DecryptedAvatarImage.tsx";
+import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Icon } from "../ui/Icon.tsx";
 
 interface EditableImageProps {
@@ -54,65 +52,17 @@ export const EditableImage = ({
     },
   } as const;
 
-  const pickAndCropImage = async (): Promise<{ ok: true; path: string } | undefined> => {
-    const permissionResult = await withOwnScreen(ImagePicker.requestMediaLibraryPermissionsAsync);
-    if (!permissionResult.granted) {
-      Alert.alert("Permission required", "Permission to access the media library is required.");
-      return;
-    }
-
-    const result = await withOwnScreen(() =>
-      ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.85,
-        allowsMultipleSelection: false,
-        exif: false,
-        shape: "oval",
-      }),
-    );
-
-    if (result.canceled) {
-      return;
-    }
-
-    const photo = result.assets[0];
-    if (!photo) {
-      Alert.alert("No photo selected");
-      return;
-    }
-
-    return { ok: true, path: photo.uri };
-  };
-
-  const processImage = async (uri: string): Promise<string> => {
-    try {
-      const context = ImageManipulator.manipulate(uri);
-      const imageRef = await context.resize({ width: 512, height: 512 }).renderAsync();
-      const result = await imageRef.saveAsync({ format: SaveFormat.WEBP, compress: 0.85 });
-      return result.uri;
-    } finally {
-      cleanupTempFile(uri);
-    }
-  };
-
   const handleEditPress = async () => {
     if (isLoading || pickerOpen || !uploadImage) return;
     setPickerOpen(true);
 
     try {
-      const pickResult = await pickAndCropImage();
-      if (!pickResult) return;
+      const pickedUri = await pickImage();
+      if (!pickedUri) return;
       setIsUploading(true);
 
-      const { data: processedUri, error: processError } = await tryCatch(
-        processImage(pickResult.path),
-      );
-      if (processError) {
-        Alert.alert("Image processing failed", processError.message);
-        return;
-      }
+      const processedUri = await processImage(pickedUri);
+      if (!processedUri) return;
 
       const uploadResult = await uploadImage(processedUri);
       if ("error" in uploadResult) {
@@ -125,7 +75,7 @@ export const EditableImage = ({
           Promise.resolve(onImageUploaded(uploadResult.data)),
         );
         if (callbackError) {
-          Alert.alert("Failed to update image", callbackError.message);
+          Alert.alert("Unable to update the picture", callbackError.message);
         }
       }
     } catch (error) {
@@ -139,7 +89,7 @@ export const EditableImage = ({
   return (
     <View>
       <Avatar alt={alt} className={cn(sizeClassNames[size].avatar, "border-2 border-white")}>
-        <AvatarImage source={{ uri: imageUrl ?? "" }} />
+        <DecryptedAvatarImage url={imageUrl} />
         <AvatarFallback>
           <Icon
             as={UserIcon}

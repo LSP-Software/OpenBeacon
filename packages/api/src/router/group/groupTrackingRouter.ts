@@ -12,6 +12,7 @@ import {
   uploadGroupTrackingBatch,
 } from "../../lib/groupTracking.ts";
 import { lockGroupMemberForWrite } from "../../lib/groupWriteChecks.ts";
+import { readImageKeysNeedCatchUp } from "../../lib/imageKeys.ts";
 import {
   readPlaceAlerts,
   readPlacesSummary,
@@ -125,19 +126,26 @@ export const groupTrackingRouter = {
               },
         };
       });
-      const placeUpdates =
+      const [placeUpdates, imageKeysNeedCatchUp] =
         input.placeAlertsCursor === undefined
-          ? null
-          : await tryCatch(
-              Promise.all([
-                readPlacesSummary({ db: ctx.db, userId }),
-                readPlaceAlerts({ cursor: input.placeAlertsCursor, db: ctx.db, userId }),
-              ]),
-            );
-      const placeFields =
-        !placeUpdates || placeUpdates.error
-          ? {}
-          : { places: placeUpdates.data[0], placeAlerts: placeUpdates.data[1] };
+          ? [null, null]
+          : await Promise.all([
+              tryCatch(
+                Promise.all([
+                  readPlacesSummary({ db: ctx.db, userId }),
+                  readPlaceAlerts({ cursor: input.placeAlertsCursor, db: ctx.db, userId }),
+                ]),
+              ),
+              tryCatch(readImageKeysNeedCatchUp({ db: ctx.db, userId })),
+            ]);
+      const catchUpFields = {
+        ...(placeUpdates && !placeUpdates.error
+          ? { places: placeUpdates.data[0], placeAlerts: placeUpdates.data[1] }
+          : {}),
+        ...(imageKeysNeedCatchUp && !imageKeysNeedCatchUp.error
+          ? { imageKeysNeedCatchUp: imageKeysNeedCatchUp.data }
+          : {}),
+      };
       let timer: ReturnType<typeof setTimeout> | undefined;
       const keyState = await tryCatch(
         Promise.race([
@@ -152,8 +160,8 @@ export const groupTrackingRouter = {
         ]),
       );
       clearTimeout(timer);
-      if (keyState.error || keyState.data === null) return { ...result, ...placeFields };
-      return { ...result, ...placeFields, keyState: keyState.data };
+      if (keyState.error || keyState.data === null) return { ...result, ...catchUpFields };
+      return { ...result, ...catchUpFields, keyState: keyState.data };
     }),
   poll: groupMemberProcedure
     .meta({ rateLimit: { limit: 480, windowMs: 60_000 } })

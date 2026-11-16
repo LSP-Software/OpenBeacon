@@ -5,7 +5,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../../components/headers/BackButton.tsx";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { LocationSharingCard } from "../../components/LocationSharingCard.tsx";
-import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/Avatar.tsx";
+import { DecryptedAvatarImage } from "../../components/image/DecryptedAvatarImage.tsx";
+import { Avatar, AvatarFallback } from "../../components/ui/Avatar.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
@@ -41,7 +42,7 @@ const Person = ({
     className={cn("flex-row items-center gap-4 px-5 py-4", !last && "border-b border-border/50")}
   >
     <Avatar alt={`${name}'s profile picture`} className="size-11">
-      <AvatarImage source={{ uri: image ?? "" }} />
+      <DecryptedAvatarImage url={image} />
       <AvatarFallback>
         <Text className="text-sm font-bold">{initials(name)}</Text>
       </AvatarFallback>
