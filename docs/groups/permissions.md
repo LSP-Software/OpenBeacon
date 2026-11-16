@@ -20,4 +20,4 @@
 
 The creator is an owner. Owners may promote members to owner; email invites can assign admin or member, while link and code invites always join as members. The last owner must transfer ownership before leaving a group with other members. Leaving as the last person deletes the group. Removing or leaving a group rotates its encryption key and deletes the departing person's group location history. Places someone created stay in the group after they leave or are removed, and are deleted with their account.
 
-See [Group history](history.md) for recorded activity, visibility and retention.
+See [Group history](history.md) for recorded activity, visibility and retention, and [Who can see me](who-can-see-me.md) for the account-level list of current and past viewers.
