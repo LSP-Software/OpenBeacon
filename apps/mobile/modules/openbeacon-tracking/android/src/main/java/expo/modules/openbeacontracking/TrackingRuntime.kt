@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import expo.modules.openbeacontracking.capture.CapturePipeline
 import expo.modules.openbeacontracking.capture.CaptureCommandState
 import expo.modules.openbeacontracking.capture.SharingCaptureState
+import expo.modules.openbeacontracking.capture.HistoryAllowance
 import expo.modules.openbeacontracking.capture.BootRestartPolicy
 import expo.modules.openbeacontracking.capture.SharingResumeWorker
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
@@ -83,6 +84,18 @@ object TrackingRuntime {
       queueOwner = { queueOwner(context) },
       bootId = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1).takeIf { it >= 0 }?.toString(),
       sharingState = { sharingState(context) },
+      loadAllowance = { group ->
+        context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
+          .getString(org.json.JSONArray(group).toString(), null)
+          ?.split(":")
+          ?.let { (tokens, updatedAt) -> HistoryAllowance(tokens.toDouble(), updatedAt.toLong()) }
+      },
+      saveAllowance = { group, allowance ->
+        context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
+          .edit()
+          .putString(org.json.JSONArray(group).toString(), "${allowance.tokens}:${allowance.updatedAt}")
+          .apply()
+      },
     )
 
   fun sharingState(context: Context): SharingCaptureState {

@@ -397,10 +397,6 @@ class TrackingCaptureService : Service() {
       currentUploadIntervalMs = decision.uploadIntervalMs
     }
 
-    if (!decision.shouldQueue) {
-      return
-    }
-
     try {
       val queuedCount = capturePipeline.onFix(
         latitude = location.latitude,
@@ -411,6 +407,8 @@ class TrackingCaptureService : Service() {
         batteryCharging = battery.charging,
         captureGeneration = generation,
         fixId = location.elapsedRealtimeNanos.takeIf { it > 0 },
+        accuracyMeters = location.accuracy.toDouble().takeIf { location.hasAccuracy() },
+        live = decision.shouldQueue,
       )
       synchronized(captureStateLock) {
         if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && queuedCount > 0 && (decision.forceUpload || nowMs - lastUploadRequestMs >= decision.uploadIntervalMs) && isOnline()) {

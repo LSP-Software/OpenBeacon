@@ -302,6 +302,78 @@ class CapturePipelineTest {
   }
 
   @Test
+  fun liveFixesKeepOnlyTheNewestLiveRowWhileHistoryKeepsItsOwnPoints() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))
+    val queue = InMemoryCiphertextQueue()
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, bootId = "boot")
+    val start = at("2026-07-13T18:45:00.000Z")
+    for (step in 0L until 6L) {
+      pipeline.onFix(51.5, -0.1 + step * 0.0002, start + step * 10_000L, 1.4, 80, false, fixId = step + 1, live = step != 5L)
+    }
+    val pending = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10)
+    assertEquals(listOf(CiphertextQueueRow.ROLE_POINT, CiphertextQueueRow.ROLE_LIVE), pending.map { it.role })
+    assertEquals(start + 40_000L, decrypt(pending.last()).timestampMillis)
+  }
+
+  @Test
+  fun stayUpdatesReuseTheArrivalIdAndReplaceOnlyPendingRows() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))
+    val queue = InMemoryCiphertextQueue()
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, bootId = "boot")
+    val start = at("2026-07-13T18:45:00.000Z")
+    fun still(minute: Long) = pipeline.onFix(51.5, -0.1, start + minute * 60_000L, 0.0, 80, false, fixId = minute + 1, accuracyMeters = 5.0, live = false)
+    for (minute in 0L..3L) still(minute)
+    val arrival = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).single { it.role == CiphertextQueueRow.ROLE_STAY }
+    queue.markInFlight(listOf(arrival.id), attemptedAt = 1L)
+    for (minute in 4L..8L) still(minute)
+    val update = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).single { it.role == CiphertextQueueRow.ROLE_STAY }
+    assertEquals(arrival.clientPointId, update.clientPointId)
+    assertEquals(1, queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10).size)
+    for (minute in 9L..13L) still(minute)
+    val stays = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).filter { it.role == CiphertextQueueRow.ROLE_STAY }
+    assertEquals(listOf(arrival.clientPointId), stays.map { it.clientPointId })
+    assertEquals(start, decrypt(stays.single()).timestampMillis)
+    val point = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).first { it.role == CiphertextQueueRow.ROLE_POINT }
+    assertTrue(point.clientPointId != arrival.clientPointId)
+  }
+
+  @Test
+  fun aNewSharingRevisionStartsAFreshRouteAndAnEmptyAllowanceSendsOnlyLiveRows() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))
+    val queue = InMemoryCiphertextQueue()
+    var state = SharingCaptureState(revisionPrefix = "s1.1:")
+    val saved = mutableMapOf<List<String>, HistoryAllowance>()
+    val start = at("2026-07-13T18:45:00.000Z")
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, nowMillis = { start }, sharingState = { state }, saveAllowance = { group, allowance -> saved[group] = allowance })
+    assertEquals(1, pipeline.onFix(51.5, -0.1, start, 1.4, 80, false, live = false))
+    assertEquals(0, pipeline.onFix(51.5, -0.1, start + 1_000L, 1.4, 80, false, live = false))
+    state = SharingCaptureState(revisionPrefix = "s1.2:")
+    assertEquals(1, pipeline.onFix(51.5, -0.1, start + 2_000L, 1.4, 80, false, live = false))
+    assertEquals(2_878.0, saved.getValue(listOf("owner", "group_a")).tokens)
+
+    val emptyQueue = InMemoryCiphertextQueue()
+    val empty = CapturePipeline(epochKeyStore = keys, ciphertextQueue = emptyQueue, queueOwner = { "owner" }, nowMillis = { start }, loadAllowance = { HistoryAllowance(0.0, start) })
+    assertEquals(1, empty.onFix(51.5, -0.1, start, 1.4, 80, false))
+    assertEquals(listOf(CiphertextQueueRow.ROLE_LIVE), emptyQueue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.role })
+  }
+
+  private fun decrypt(row: CiphertextQueueRow): HistoryFix {
+    val json = org.json.JSONObject(
+      String(
+        GroupPayloadEncrypt.decryptGroupPayload(
+          ByteArray(32),
+          EncryptedGroupPayload(row.algorithm, row.ciphertext, row.epochId, row.groupId, row.kind, row.nonce, row.senderDeviceId),
+        ),
+        Charsets.UTF_8,
+      ),
+    )
+    return HistoryFix(json.getDouble("latitude"), json.getDouble("longitude"), at(json.getString("timestamp")), null, null, null, false, null)
+  }
+
+  @Test
   fun queueSeparatesOwnersAndLeavesLegacyRowsUnclaimed() {
     val queue = InMemoryCiphertextQueue()
     val row = CiphertextQueueRow(

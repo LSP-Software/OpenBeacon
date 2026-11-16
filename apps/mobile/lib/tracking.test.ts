@@ -861,6 +861,21 @@ describe("tracking service", () => {
     expect(deleted).toEqual([[1]]);
   });
 
+  test("sends only the newest queued copy of a stay and drops the older ones", async () => {
+    const owner = JSON.stringify(["https://api.example.test", "user-1"]);
+    pendingCiphertexts = [
+      { ...createQueueItem({ clientPointId: "stay", groupId: "group-1", id: 1 }), owner },
+      { ...createQueueItem({ clientPointId: "point", groupId: "group-1", id: 2 }), owner },
+      { ...createQueueItem({ clientPointId: "stay", groupId: "group-1", id: 3 }), owner },
+    ];
+    await flushPendingTrackingPoints();
+    expect(
+      uploadCalls[0]?.points.map((point) => (point as { clientPointId: string }).clientPointId),
+    ).toEqual(["point", "stay"]);
+    expect(markedInFlight).toEqual([[2, 3]]);
+    expect(deleted).toEqual([[1], [2, 3]]);
+  });
+
   test("holds pre-pause points while a local pause hasn't reached the server", async () => {
     registeredDevice = {
       deviceId: "device-1",

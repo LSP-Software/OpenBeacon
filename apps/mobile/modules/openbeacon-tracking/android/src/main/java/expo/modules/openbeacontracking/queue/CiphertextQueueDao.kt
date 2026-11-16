@@ -19,6 +19,32 @@ interface CiphertextQueueDao {
   @Insert(onConflict = OnConflictStrategy.IGNORE)
   fun insertAll(entities: List<CiphertextQueueEntity>): List<Long>
 
+  @Query("SELECT COUNT(*) FROM ciphertext_queue WHERE clientPointId = :clientPointId")
+  fun countByClientPointId(clientPointId: String): Int
+
+  @Query("DELETE FROM ciphertext_queue WHERE clientPointId = :clientPointId AND status = :pendingStatus")
+  fun deletePendingByClientPointId(
+    clientPointId: String,
+    pendingStatus: String = CiphertextQueueRow.STATUS_PENDING,
+  )
+
+  @Query(
+    """
+    DELETE FROM ciphertext_queue
+    WHERE owner IS :owner AND groupId = :groupId AND epochId = :epochId AND senderDeviceId = :senderDeviceId
+      AND kind = :kind AND role = :liveRole AND status = :pendingStatus
+    """,
+  )
+  fun deletePendingLive(
+    owner: String?,
+    groupId: String,
+    epochId: String,
+    senderDeviceId: String,
+    kind: String,
+    liveRole: String = CiphertextQueueRow.ROLE_LIVE,
+    pendingStatus: String = CiphertextQueueRow.STATUS_PENDING,
+  )
+
   @Query(
     """
     SELECT * FROM ciphertext_queue

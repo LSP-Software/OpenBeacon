@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
   entities = [CiphertextQueueEntity::class, CiphertextQueueEvictionEntity::class],
-  version = 3,
+  version = 4,
   exportSchema = false,
 )
 abstract class CiphertextQueueDatabase : RoomDatabase() {
@@ -41,7 +41,15 @@ abstract class CiphertextQueueDatabase : RoomDatabase() {
       }
     }
 
-    val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+    val MIGRATION_3_4 = object : Migration(3, 4) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE ciphertext_queue ADD COLUMN role TEXT NOT NULL DEFAULT 'POINT'")
+        db.execSQL("DROP INDEX IF EXISTS index_ciphertext_queue_clientPointId")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_ciphertext_queue_clientPointId ON ciphertext_queue (clientPointId)")
+      }
+    }
+
+    val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 
     val BOUND_WAL = object : Callback() {
       override fun onOpen(db: SupportSQLiteDatabase) {

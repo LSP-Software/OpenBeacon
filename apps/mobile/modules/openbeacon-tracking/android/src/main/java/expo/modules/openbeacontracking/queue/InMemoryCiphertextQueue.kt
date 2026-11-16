@@ -8,7 +8,12 @@ class InMemoryCiphertextQueue : CiphertextQueue {
   override fun insertAll(rows: List<CiphertextQueueRow>): Int {
     var inserted = 0
     for (row in rows) {
-      if (this.rows.any { it.clientPointId == row.clientPointId }) continue
+      val pending = this.rows.filter { it.status == CiphertextQueueRow.STATUS_PENDING }
+      when (row.role) {
+        CiphertextQueueRow.ROLE_STAY -> this.rows.removeAll(pending.filter { it.clientPointId == row.clientPointId })
+        CiphertextQueueRow.ROLE_LIVE -> this.rows.removeAll(pending.filter { it.role == CiphertextQueueRow.ROLE_LIVE && it.owner == row.owner && it.groupId == row.groupId && it.epochId == row.epochId && it.senderDeviceId == row.senderDeviceId && it.kind == row.kind })
+        else -> if (this.rows.any { it.clientPointId == row.clientPointId }) continue
+      }
       this.rows.add(row.copy(id = nextId++))
       inserted += 1
     }

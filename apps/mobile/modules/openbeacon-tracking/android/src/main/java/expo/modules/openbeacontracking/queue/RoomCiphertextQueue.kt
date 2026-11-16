@@ -8,7 +8,14 @@ class RoomCiphertextQueue(
 
   override fun insertAll(rows: List<CiphertextQueueRow>): Int =
     database.runInTransaction<Int> {
-      val inserted = dao.insertAll(rows.map { it.toEntity() }).count { it != -1L }
+      val inserted = rows.count { row ->
+        when (row.role) {
+          CiphertextQueueRow.ROLE_STAY -> dao.deletePendingByClientPointId(row.clientPointId)
+          CiphertextQueueRow.ROLE_LIVE -> dao.deletePendingLive(row.owner, row.groupId, row.epochId, row.senderDeviceId, row.kind)
+          else -> if (dao.countByClientPointId(row.clientPointId) > 0) return@count false
+        }
+        dao.insertAll(listOf(row.toEntity())).single() != -1L
+      }
       if (inserted > 0) evictOldestPendingOverLimit()
       inserted
     }
@@ -114,6 +121,7 @@ private fun CiphertextQueueRow.toEntity(): CiphertextQueueEntity =
     lastAttemptAt = lastAttemptAt,
     lastError = lastError,
     status = status,
+    role = role,
   )
 
 private fun CiphertextQueueEntity.toRow(): CiphertextQueueRow =
@@ -134,4 +142,5 @@ private fun CiphertextQueueEntity.toRow(): CiphertextQueueRow =
     lastAttemptAt = lastAttemptAt,
     lastError = lastError,
     status = status,
+    role = role,
   )

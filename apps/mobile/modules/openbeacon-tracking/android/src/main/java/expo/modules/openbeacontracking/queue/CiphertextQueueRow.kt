@@ -17,9 +17,13 @@ data class CiphertextQueueRow(
   val lastAttemptAt: Long? = null,
   val lastError: String? = null,
   val status: String = STATUS_PENDING,
+  val role: String = ROLE_POINT,
 ) {
   companion object {
     const val STATUS_PENDING = "PENDING"
     const val STATUS_IN_FLIGHT = "IN_FLIGHT"
+    const val ROLE_POINT = "POINT"
+    const val ROLE_STAY = "STAY"
+    const val ROLE_LIVE = "LIVE"
   }
 }

@@ -835,8 +835,20 @@ const flushGroup = async (
     return;
   }
 
-  const invalidItems = items.filter((item) => !isUploadableQueueItem(item));
-  const validItems = items.filter(isUploadableQueueItem);
+  const newestIds = new Map<string, number>();
+  for (const item of items) {
+    newestIds.set(item.clientPointId, Math.max(item.id, newestIds.get(item.clientPointId) ?? 0));
+  }
+  const superseded = items.filter((item) => newestIds.get(item.clientPointId) !== item.id);
+  if (superseded.length > 0) {
+    const deleted = await tryCatch(
+      trackingModule.deleteCiphertexts(superseded.map(({ id }) => id)),
+    );
+    if (deleted.error) throw deleted.error;
+  }
+  const newestItems = items.filter((item) => newestIds.get(item.clientPointId) === item.id);
+  const invalidItems = newestItems.filter((item) => !isUploadableQueueItem(item));
+  const validItems = newestItems.filter(isUploadableQueueItem);
 
   if (validItems.length === 0) {
     if (invalidItems.length > 0) throw new Error("Unsupported tracking queue item");

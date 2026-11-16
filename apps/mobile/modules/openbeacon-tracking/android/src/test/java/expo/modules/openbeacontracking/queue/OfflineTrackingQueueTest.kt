@@ -130,6 +130,25 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
+  fun `replaces pending stay and live rows but keeps ones being uploaded`() {
+    val owner = "server-a/user-a"
+    assertEquals(1, queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "first"))))
+    assertEquals(1, queue.insertAll(listOf(row("live-1", owner).copy(role = CiphertextQueueRow.ROLE_LIVE))))
+    val first = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner).first()
+    queue.markInFlight(listOf(first.id), attemptedAt = System.currentTimeMillis())
+    assertEquals(1, queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "second"))))
+    assertEquals(1, queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "third"))))
+    assertEquals(1, queue.insertAll(listOf(row("live-2", owner).copy(role = CiphertextQueueRow.ROLE_LIVE))))
+    assertEquals(1, queue.insertAll(listOf(row("live-3", owner).copy(role = CiphertextQueueRow.ROLE_LIVE, groupId = "other"))))
+    assertEquals(0, queue.insertAll(listOf(row("stay", owner))))
+
+    val pending = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner)
+    assertEquals(listOf("stay", "live-2", "live-3"), pending.map { it.clientPointId })
+    assertEquals("third", pending.first().ciphertext)
+    assertEquals("first", queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10, owner).single().ciphertext)
+  }
+
+  @Test
   fun `stores only ciphertext that decrypts with the group key`() {
     assertEquals(1, capture(pipeline(), 100))
     val stored = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a").single()
