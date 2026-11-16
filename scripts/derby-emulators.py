@@ -6,6 +6,7 @@ import platform
 import shutil
 import secrets
 import signal
+import socket
 import subprocess
 import tempfile
 import time
@@ -134,19 +135,30 @@ def create_version_avds(sdk, api_levels, abi):
                 file.write(avd_settings)
 
 
-def wait_for_metro(process, timeout=120):
+def free_port(start=8081, attempts=100):
+    for port in range(start, start + attempts):
+        with socket.socket() as probe:
+            try:
+                probe.bind(("", port))
+            except OSError:
+                continue
+            return port
+    raise RuntimeError(f"No free Metro port between {start} and {start + attempts - 1}")
+
+
+def wait_for_metro(process, port, timeout=120):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise RuntimeError("Metro exited before it was ready")
+            raise RuntimeError(f"Metro exited before it was ready (exit {process.returncode})")
         try:
-            with urlopen("http://127.0.0.1:8081/status", timeout=2) as response:
+            with urlopen(f"http://127.0.0.1:{port}/status", timeout=2) as response:
                 if response.read().strip() == b"packager-status:running":
                     return
         except OSError:
             pass
         time.sleep(1)
-    raise RuntimeError("Metro did not become ready on port 8081")
+    raise RuntimeError(f"Metro did not become ready on port {port}")
 
 
 def app_running(serial):
@@ -154,10 +166,10 @@ def app_running(serial):
     return result.returncode == 0 and bool(result.stdout.strip())
 
 
-def launch_apps(ports, attempts=3, stable_seconds=15):
+def launch_apps(ports, metro_port, attempts=3, stable_seconds=15):
     remaining = set(ports)
     launch_counts = {port: 0 for port in ports}
-    link = "exp+open-beacon://expo-development-client/?url=" + quote("http://127.0.0.1:8081", safe="")
+    link = "exp+open-beacon://expo-development-client/?url=" + quote(f"http://127.0.0.1:{metro_port}", safe="")
     while remaining:
         for port in list(remaining):
             serial = f"emulator-{port}"
@@ -266,13 +278,16 @@ def main():
     children = []
     emulator_logs = []
     log_directory = None
-    previous_sigint = signal.getsignal(signal.SIGINT)
+    stop_signals = [signal.SIGINT, signal.SIGTERM] + ([signal.SIGHUP] if hasattr(signal, "SIGHUP") else [])
+    previous_handlers = {signum: signal.getsignal(signum) for signum in stop_signals}
 
     def stop_simulation(signum, frame):
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        for stop_signal in stop_signals:
+            signal.signal(stop_signal, signal.SIG_IGN)
         raise KeyboardInterrupt
 
-    signal.signal(signal.SIGINT, stop_simulation)
+    for signum in stop_signals:
+        signal.signal(signum, stop_simulation)
     try:
         if api_levels is not None:
             create_version_avds(sdk, api_levels, "arm64-v8a" if platform.machine().lower() in ("arm64", "aarch64") else "x86_64")
@@ -293,7 +308,10 @@ def main():
             parser.error(f"development build APK not found: {args.apk}")
         env = os.environ.copy()
         env["EXPO_PUBLIC_DEV_API_URL"] = args.api_url.rstrip("/")
-        metro = subprocess.Popen(["bun", "x", "expo", "start", "--dev-client", "--port", "8081", "--clear"], cwd=ROOT / "apps/mobile", env=env, stdin=subprocess.DEVNULL, start_new_session=True)
+        metro_port = free_port()
+        if metro_port != 8081:
+            print(f"Port 8081 is in use, so Metro will run on port {metro_port}.", flush=True)
+        metro = subprocess.Popen(["bun", "x", "expo", "start", "--dev-client", "--port", str(metro_port), "--clear"], cwd=ROOT / "apps/mobile", env=env, stdin=subprocess.DEVNULL, start_new_session=True)
         children.append(metro)
         log_directory = Path(tempfile.mkdtemp(prefix="openbeacon-emulators-"))
         print(f"Emulator logs: {log_directory}", flush=True)
@@ -311,14 +329,14 @@ def main():
                     raise TimeoutError(f"{serial} did not finish booting")
                 time.sleep(2)
             subprocess.run(["adb", "-s", serial, "install", "-r", str(args.apk)], check=True)
-            subprocess.run(["adb", "-s", serial, "reverse", "tcp:8081", "tcp:8081"], check=True)
+            subprocess.run(["adb", "-s", serial, "reverse", f"tcp:{metro_port}", f"tcp:{metro_port}"], check=True, stdout=subprocess.DEVNULL)
         started = time.monotonic()
         for port, (_, _, _, (_, _, points)) in zip(ports, devices):
             lat, lon = points[0]
             subprocess.run(["adb", "-s", f"emulator-{port}", "emu", "geo", "fix", str(lon), str(lat)], check=True, stdout=subprocess.DEVNULL)
         print("Waiting for Metro to become ready.", flush=True)
-        wait_for_metro(metro)
-        launch_apps(ports)
+        wait_for_metro(metro, metro_port)
+        launch_apps(ports, metro_port)
         print("Simulating locations every second. Press Ctrl+C to stop.", flush=True)
         while True:
             if any(child.poll() is not None for child in children):
@@ -330,7 +348,7 @@ def main():
             time.sleep(1)
     except KeyboardInterrupt:
         print("\nStopping simulation.")
-    except RuntimeError as error:
+    except (RuntimeError, TimeoutError, subprocess.TimeoutExpired) as error:
         print(str(error), flush=True)
         if log_directory:
             print(f"Emulator logs: {log_directory}", flush=True)
@@ -358,7 +376,8 @@ def main():
                 child.wait()
         for log in emulator_logs:
             log.close()
-        signal.signal(signal.SIGINT, previous_sigint)
+        for signum, handler in previous_handlers.items():
+            signal.signal(signum, handler)
 
 
 if __name__ == "__main__":

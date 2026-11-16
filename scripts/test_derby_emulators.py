@@ -175,7 +175,7 @@ class LaunchTest(unittest.TestCase):
     @patch.object(simulation.subprocess, "run")
     def test_retries_when_app_dies_after_launch(self, run, running):
         run.return_value = SimpleNamespace(returncode=0, stdout="Status: ok", stderr="")
-        simulation.launch_apps([5554], stable_seconds=0)
+        simulation.launch_apps([5554], 8081, stable_seconds=0)
         self.assertEqual(run.call_count, 2)
 
     @patch.object(simulation, "app_running", return_value=False)
@@ -183,15 +183,30 @@ class LaunchTest(unittest.TestCase):
     def test_reports_failure_when_retries_are_exhausted(self, run, running):
         run.return_value = SimpleNamespace(returncode=0, stdout="Status: ok", stderr="")
         with self.assertRaisesRegex(RuntimeError, "emulator-5554.*after 2 attempts"):
-            simulation.launch_apps([5554], attempts=2, stable_seconds=0)
+            simulation.launch_apps([5554], 8081, attempts=2, stable_seconds=0)
         self.assertEqual(run.call_count, 2)
 
     @patch.object(simulation, "app_running", return_value=True)
     @patch.object(simulation.subprocess, "run")
     def test_retries_when_android_reports_launch_error(self, run, running):
         run.side_effect = [SimpleNamespace(returncode=0, stdout="Error: Activity not started", stderr=""), SimpleNamespace(returncode=0, stdout="Status: ok", stderr="")]
-        simulation.launch_apps([5554], stable_seconds=0)
+        simulation.launch_apps([5554], 8081, stable_seconds=0)
         self.assertEqual(run.call_count, 2)
+
+
+class MetroPortTest(unittest.TestCase):
+    def test_skips_port_held_by_another_metro(self):
+        with simulation.socket.socket() as busy:
+            busy.bind(("", 0))
+            busy.listen()
+            port = busy.getsockname()[1]
+            self.assertGreater(simulation.free_port(port), port)
+
+    def test_launch_link_points_at_chosen_metro_port(self):
+        with patch.object(simulation, "app_running", return_value=True), patch.object(simulation.subprocess, "run") as run:
+            run.return_value = SimpleNamespace(returncode=0, stdout="Status: ok", stderr="")
+            simulation.launch_apps([5554], 8083, stable_seconds=0)
+        self.assertIn("127.0.0.1%3A8083", " ".join(run.call_args.args[0]))
 
 
 class MemoryCheckTest(unittest.TestCase):
@@ -242,6 +257,14 @@ class ShutdownTest(unittest.TestCase):
         with patch("sys.argv", ["derby-emulators.py", "--external-backend", "--skip-memory-check"]), patch.object(simulation.shutil, "which", return_value="/bin/true"), patch.object(simulation.subprocess, "check_output", side_effect=["test-avd\n", "List of devices attached\n"]), patch.object(simulation.subprocess, "run", side_effect=lambda *args, **kwargs: signal.raise_signal(signal.SIGINT)), patch.object(Path, "is_file", return_value=False), patch("builtins.print", side_effect=lambda *args, **kwargs: signal.raise_signal(signal.SIGINT)):
             simulation.main()
         self.assertEqual(signal.getsignal(signal.SIGINT), previous_sigint)
+
+    def test_terminal_closing_still_stops_children(self):
+        previous_sigterm = signal.getsignal(signal.SIGTERM)
+        with patch("sys.argv", ["derby-emulators.py", "--external-backend", "--skip-memory-check"]), patch.object(simulation.shutil, "which", return_value="/bin/true"), patch.object(simulation.subprocess, "check_output", side_effect=["test-avd\n", "List of devices attached\n"]), patch.object(simulation.subprocess, "run", side_effect=lambda command, **kwargs: signal.raise_signal(signal.SIGTERM) if command[0] == "bun" else SimpleNamespace(returncode=0, stdout="", stderr='version "17.0"')), patch.object(simulation.subprocess, "Popen") as popen, patch("builtins.print") as printed:
+            simulation.main()
+        popen.assert_not_called()
+        printed.assert_any_call("\nStopping simulation.")
+        self.assertEqual(signal.getsignal(signal.SIGTERM), previous_sigterm)
 
 
 if __name__ == "__main__":
