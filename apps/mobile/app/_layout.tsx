@@ -63,6 +63,7 @@ const RootLayout = () => {
                     <Stack.Screen name="account/delete" />
                     <Stack.Screen name="account/devices" />
                     <Stack.Screen name="account/email-alerts" />
+                    <Stack.Screen name="account/map-storage" />
                     <Stack.Screen name="account/password" />
                     <Stack.Screen name="account/recovery" />
                     <Stack.Screen name="account/recovery-change" />

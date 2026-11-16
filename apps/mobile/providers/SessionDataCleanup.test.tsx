@@ -15,6 +15,7 @@ let sessionState: { data: { user: { id: string } } | null; isPending: boolean } 
 };
 const notify = mock((_signal: string) => {});
 const settledUsers: Array<string | null> = [];
+let savedMapClears = 0;
 
 mock.module("../lib/storage.ts", () => ({
   storage: {
@@ -33,6 +34,12 @@ mock.module("../lib/auth-client.ts", () => ({
 mock.module("../lib/endSession.ts", () => ({
   settleLostSessions: async ({ userId }: { userId: string | null }) => {
     settledUsers.push(userId);
+  },
+}));
+
+mock.module("../lib/mapCache.ts", () => ({
+  clearSavedMap: async () => {
+    savedMapClears += 1;
   },
 }));
 
@@ -75,6 +82,7 @@ const expectSessionDataCleared = () => {
   expect(getGroupColor("group-1")).toBe("#FF1464");
   expect(getTrackingUploadTime("device-1", ["group-1"])).toBeNull();
   expect(storageValues.get("server.url")).toBe("https://beacon.example");
+  expect(savedMapClears).toBe(1);
 };
 
 const unauthorized = () =>
@@ -88,6 +96,7 @@ beforeEach(() => {
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   notify.mockClear();
   settledUsers.length = 0;
+  savedMapClears = 0;
 });
 
 afterEach(async () => {
@@ -139,6 +148,7 @@ test("keeps data when the app starts with an existing session", async () => {
     { "member-1": "Mum" },
   );
   expect(getGroupColor("group-1")).toBe("#2A9D8F");
+  expect(savedMapClears).toBe(0);
 });
 
 test("rechecks the session once when the server rejects it", async () => {
