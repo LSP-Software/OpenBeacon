@@ -8,6 +8,7 @@ import {
   useApiCompatibilityGateShown,
 } from "../components/ApiCompatibilityGate.tsx";
 import { AppLockScreen } from "../components/AppLockScreen.tsx";
+import { InAppNoticeBanner } from "../components/InAppNoticeBanner.tsx";
 import { AlertHost } from "../components/ui/Alert.tsx";
 import { OfflineBanner } from "../components/OfflineBanner.tsx";
 import { queryClient } from "../lib/api.ts";
@@ -58,6 +59,8 @@ const RootLayout = () => {
                   >
                     <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="join" />
+                    <Stack.Screen name="place" />
+                    <Stack.Screen name="place-alerts" />
                     <Stack.Screen name="setup/name" />
                     <Stack.Screen name="setup/remove-devices" />
                     <Stack.Screen name="account/about" />
@@ -67,6 +70,7 @@ const RootLayout = () => {
                     <Stack.Screen name="account/delete" />
                     <Stack.Screen name="account/devices" />
                     <Stack.Screen name="account/email-alerts" />
+                    <Stack.Screen name="account/map-storage" />
                     <Stack.Screen name="account/password" />
                     <Stack.Screen name="account/recovery" />
                     <Stack.Screen name="account/recovery-change" />
@@ -85,6 +89,7 @@ const RootLayout = () => {
               >
                 <ApiCompatibilityGate />
                 <OfflineBanner />
+                {session ? <InAppNoticeBanner /> : null}
               </View>
             </View>
           </TrackingProvider>

@@ -6,8 +6,9 @@ import {
   XCHACHA20_NONCE_LENGTH,
 } from "@openbeacon/encryption";
 import z from "zod";
+import { placeAlertsCursorSchema, placeTransitionSchema } from "./placeTransitions.ts";
 
-const trackingNonceSchema = z
+export const groupPayloadNonceSchema = z
   .string()
   .min(1)
   .refine((nonce) => {
@@ -18,7 +19,7 @@ const trackingNonceSchema = z
     } catch {
       return false;
     }
-  }, "Invalid tracking point nonce.");
+  }, "Invalid payload nonce.");
 
 export const groupTrackingPointSchema = z.object({
   algorithm: z.literal(PAYLOAD_ENCRYPTION_ALGORITHM),
@@ -26,14 +27,35 @@ export const groupTrackingPointSchema = z.object({
   clientPointId: z.string().min(1).max(128),
   epochId: z.string().min(1).max(128),
   kind: z.literal(TRACKING_POINT_KIND),
-  nonce: trackingNonceSchema,
+  nonce: groupPayloadNonceSchema,
   senderDeviceId: z.string().min(1).max(128),
 });
 
-export const groupTrackingUploadBatchSchema = z.object({
-  groupId: z.string().min(1),
-  points: z.array(groupTrackingPointSchema).min(1).max(100),
-});
+export const groupTrackingUploadBatchSchema = z
+  .object({
+    groupId: z.string().min(1),
+    points: z.array(groupTrackingPointSchema).max(100),
+    placeTransitions: z
+      .array(placeTransitionSchema)
+      .max(50)
+      .refine(
+        (transitions) =>
+          new Set(transitions.map(({ clientId }) => clientId)).size === transitions.length,
+        { message: "Each place transition can only be sent once per request" },
+      )
+      .optional(),
+    placeAlertsCursor: placeAlertsCursorSchema.nullable().optional(),
+  })
+  .refine(
+    (batch) =>
+      batch.points.length > 0 ||
+      (batch.placeTransitions?.length ?? 0) > 0 ||
+      batch.placeAlertsCursor !== undefined,
+    {
+      message: "An upload needs at least one point, place transition or place alerts cursor",
+      path: ["points"],
+    },
+  );
 
 export const groupTrackingPollSchema = z.object({
   cursor: z

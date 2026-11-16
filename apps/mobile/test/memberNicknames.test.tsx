@@ -103,9 +103,6 @@ mock.module("../components/dialogs/InviteMemberToGroupDialog.tsx", () => ({
   InviteMemberToGroupDialog: () => null,
 }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
-mock.module("../hooks/useLiveTrackingPositions.ts", () => ({
-  useLiveTrackingPositions: () => ({ positions, status: { undecryptable: [] } }),
-}));
 mock.module("../lib/api.ts", () => ({
   trpc: {
     groupMembership: {
@@ -115,6 +112,7 @@ mock.module("../lib/api.ts", () => ({
       updateRole: { mutationOptions: () => ({}) },
       updateNickname: { mutationOptions: () => ({}) },
     },
+    placeSharing: { get: { queryOptions: () => ({ queryKey: ["placeSharing"] }) } },
     groupLifecycle: { delete: { mutationOptions: () => ({}) } },
   },
 }));
@@ -143,6 +141,16 @@ mock.module("../lib/batteryVisual.ts", () => ({
 mock.module("../lib/timeSince.ts", () => ({ timeSince: () => "2 minutes ago" }));
 const { default: MembersTab } = await import("../app/(tabs)/groups/[groupId]/MembersTab.tsx");
 const { getSnapshot: getAlerts } = await import("../lib/alert.ts");
+const live = () => ({
+  dropRemovedDevices: () => {},
+  positions,
+  status: {
+    connection: "ok" as const,
+    groups: {},
+    membership: "loaded" as const,
+    undecryptable: [],
+  },
+});
 const button = (label: string) => buttons.findLast((item) => item.label === label)!;
 
 test("waits for loaded nicknames before opening the editor", async () => {
@@ -150,14 +158,14 @@ test("waits for loaded nicknames before opening the editor", async () => {
   pending = true;
   records = {};
   buttons = [];
-  await act(async () => root.render(<MembersTab groupId="group" />));
+  await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
   expect(button("Edit nickname").disabled).toBe(true);
   await act(async () => button("Edit nickname").onPress());
   expect(buttons.some((item) => item.label === "Save nickname")).toBe(false);
   pending = false;
   records = { member: { name: "Gran", ciphertext: "saved" } };
   buttons = [];
-  await act(async () => root.render(<MembersTab groupId="group" />));
+  await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
   await act(async () => button("Edit nickname").onPress());
   expect(input).toBe("Gran");
   await act(async () => root.unmount());
@@ -169,7 +177,7 @@ test("keeps an unreadable nickname on blank save and replaces it when a new nick
   records = { member: { name: null, ciphertext: "old" } };
   buttons = [];
   mutate.mockClear();
-  await act(async () => root.render(<MembersTab groupId="group" />));
+  await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
   await act(async () => button("Edit nickname").onPress());
   await act(async () => button("Save nickname").onPress());
   expect(mutate).not.toHaveBeenCalled();
@@ -205,7 +213,7 @@ test("each of a member's devices is read out as one line", async () => {
     { deviceId: "phone", icon: "phone", name: "Pixel", platform: "android", userId: "other" },
     { deviceId: "tablet", icon: "tablet", name: "iPad", platform: "ios", userId: "other" },
   ];
-  await act(async () => root.render(<MembersTab groupId="group" />));
+  await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
   const labels = root.container
     .queryAll((item) => item.type === "view")
     .map((item) => (item.props as { accessibilityLabel?: string }).accessibilityLabel)
@@ -228,7 +236,7 @@ test("a removal can't be submitted twice while the new epoch is being built", as
   group.members.push({ id: "self", role: "OWNER", userId: "owner", name: "Owner", image: null });
   const { promise: built, resolve: finishBuild } = Promise.withResolvers<object>();
   buildRemoval = () => built;
-  await act(async () => root.render(<MembersTab groupId="group" />));
+  await act(async () => root.render(<MembersTab groupId="group" live={live()} />));
   await act(async () => button("Remove member").onPress());
   const confirm = getAlerts()
     .at(-1)

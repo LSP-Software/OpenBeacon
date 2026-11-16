@@ -50,6 +50,10 @@ A run stops after 500,000 points. When it stops at that limit it logs `Location 
 
 A benchmark with 1 million groups and 10 million points measured an empty hourly run at about 2 ms, 50,000 due points in under half a second, and a 3.4 million point backlog cleared at 100,000 to 175,000 points a second while the index was clean, slowing to about 15,000 a second when vacuum fell behind. The index made no measurable difference to upload speed.
 
+### `place-transition-cleanup` (every hour)
+
+Deletes `PlaceTransition` rows whose `occurredAt` is more than 14 days before the database time, oldest first, 1,000 per statement, using the `occurredAt` index, until none are due. Uploads refuse transitions that are already older than 14 days, so a row never lives much past its 14 days. A failed statement stops the run and logs one line with the database error code; the next run carries on.
+
 ### `epoch-cleanup` (every day)
 
 Walks the epochs created more than 14 days ago, 5,000 at a time in `(createdAt, id)` order, and deletes the ones in each page that a newer epoch replaced more than 14 days ago and that no stored payload still uses. The latest epoch of a group is never deleted, so new epochs keep their numbering.

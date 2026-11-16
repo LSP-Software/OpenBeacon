@@ -46,6 +46,7 @@ mock.module("react-native-safe-area-context", () => ({
 }));
 mock.module("lucide-react-native", () => ({
   Clock3Icon: () => null,
+  MapPinIcon: () => null,
   SlidersHorizontalIcon: () => null,
   UsersIcon: () => null,
 }));
@@ -95,6 +96,10 @@ mock.module("../components/ui/Text.tsx", () => ({
 }));
 mock.module("../app/(tabs)/groups/[groupId]/MembersTab.tsx", () => ({ default: () => null }));
 mock.module("../app/(tabs)/groups/[groupId]/HistoryTab.tsx", () => ({ default: () => null }));
+mock.module("../app/(tabs)/groups/[groupId]/PlacesTab.tsx", () => ({ default: () => null }));
+mock.module("../hooks/useLiveTrackingPositions.ts", () => ({
+  useLiveTrackingPositions: () => ({ positions: [], status: { undecryptable: [] } }),
+}));
 mock.module("../app/(tabs)/groups/[groupId]/SettingsTab.tsx", () => ({ default: () => null }));
 
 const { default: GroupScreen } = await import("../app/(tabs)/groups/[groupId]/index.tsx");

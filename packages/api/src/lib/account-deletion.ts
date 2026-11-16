@@ -6,9 +6,13 @@ import { lockUserGroups } from "./lockUserGroups.ts";
 
 export const lockDeletableGroups = async (
   tx: Prisma.TransactionClient,
-  { userId, imageUrlPrefix }: { userId: string; imageUrlPrefix: string },
+  {
+    userId,
+    imageUrlPrefix,
+    otherGroupIds,
+  }: { userId: string; imageUrlPrefix: string; otherGroupIds?: string[] },
 ) => {
-  const groupIds = await lockUserGroups(tx, userId);
+  const groupIds = await lockUserGroups(tx, userId, otherGroupIds);
   if (!groupIds.length) return { groupIds, soloGroups: [] };
   const soleOwner = await tx.groupMember.findFirst({
     where: {
@@ -138,7 +142,17 @@ export const deleteAccountRecords = async ({
       const user = await findAlertRecipient(tx, userId);
       if (!user) return null;
 
-      const { groupIds, soloGroups } = await lockDeletableGroups(tx, { userId, imageUrlPrefix });
+      const placeGroups = await tx.place.findMany({
+        where: { OR: [{ createdByUserId: userId }, { updatedByUserId: userId }] },
+        distinct: ["groupId"],
+        select: { groupId: true },
+      });
+      const placeGroupIds = placeGroups.map(({ groupId }) => groupId);
+      const { groupIds, soloGroups } = await lockDeletableGroups(tx, {
+        userId,
+        imageUrlPrefix,
+        otherGroupIds: placeGroupIds,
+      });
       const imageKeys: string[] = [];
       if (groupIds.length) {
         for (const group of soloGroups) {
@@ -183,6 +197,10 @@ export const deleteAccountRecords = async ({
       });
       await tx.feedback.deleteMany({
         where: { email: { equals: user.email, mode: "insensitive" } },
+      });
+      await tx.group.updateMany({
+        where: { id: { in: placeGroupIds } },
+        data: { placesRevision: { increment: 1 } },
       });
       await tx.user.delete({ where: { id: userId } });
       return user;

@@ -1,6 +1,7 @@
 generator client {
   provider = "prisma-client"
   output   = "../generated/client"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -44,6 +45,8 @@ model User {
   recoveryKey                RecoveryKey?
   historyKeys                AccountHistoryKey[]
   deviceLinks                DeviceLink[]
+  createdPlaces              Place[] @relation("PlaceCreatedBy")
+  updatedPlaces              Place[] @relation("PlaceUpdatedBy")
 
   @@index([pendingDeletion, deletionDate])
   @@index([image])
@@ -124,17 +127,102 @@ model Group {
   name           String
   image          String?
   epochRotationRequired Boolean @default(false)
+  placesRevision Int @default(0)
   groupMembers           GroupMember[]
   groupInvites           GroupMemberInvite[]
   sharedInvites          GroupSharedInvite[]
   joinAlerts             GroupJoinAlert[]
   groupEpochs            GroupEpoch[]
   groupEncryptedPayloads GroupEncryptedPayload[]
+  places                 Place[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([image])
+}
+
+model Place {
+  id              String   @id @default(uuid(7))
+  groupId         String
+  group           Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name            String
+  emoji           String
+  epochId         String
+  senderDeviceId  String
+  algorithm       String
+  nonce           String
+  ciphertext      String
+  createdByUserId String
+  createdBy       User     @relation("PlaceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  updatedByUserId String?
+  updatedBy       User?    @relation("PlaceUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  transitions     PlaceTransition[]
+  alertMutes      PlaceAlertMute[]
+
+  @@index([groupId, createdAt])
+  @@index([epochId])
+  @@index([createdByUserId])
+  @@index([updatedByUserId])
+}
+
+enum PlaceTransitionDirection {
+  ARRIVE
+  LEAVE
+}
+
+model PlaceTransition {
+  id         String                   @id @default(uuid(7))
+  placeId    String
+  place      Place                    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  groupId    String
+  deviceId   String
+  device     UserDevice               @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  userId     String
+  direction  PlaceTransitionDirection
+  occurredAt DateTime
+  clientId   String
+  createdAt  DateTime                 @default(now())
+
+  @@unique([deviceId, clientId])
+  @@index([groupId, createdAt, id])
+  @@index([groupId, occurredAt, id])
+  @@index([placeId])
+  @@index([occurredAt])
+}
+
+model PlaceAlertMute {
+  id          String       @id @default(uuid(7))
+  placeId     String
+  place       Place        @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  groupId     String
+  muterUserId String
+  muter       GroupMember  @relation("PlaceAlertMuteMuter", fields: [muterUserId, groupId], references: [userId, groupId], onDelete: Cascade)
+  mutedUserId String?
+  muted       GroupMember? @relation("PlaceAlertMuteMuted", fields: [mutedUserId, groupId], references: [userId, groupId], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+
+  @@unique([placeId, muterUserId, mutedUserId], map: "PlaceAlertMute_person_key", where: raw("\"mutedUserId\" IS NOT NULL"))
+  @@unique([placeId, muterUserId], map: "PlaceAlertMute_everyone_key", where: raw("\"mutedUserId\" IS NULL"))
+  @@index([placeId])
+  @@index([muterUserId, groupId])
+  @@index([mutedUserId, groupId])
+}
+
+model PlaceSharing {
+  deviceId  String
+  device    UserDevice  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  groupId   String
+  userId    String
+  member    GroupMember @relation(fields: [userId, groupId], references: [userId, groupId], onDelete: Cascade)
+  enabled   Boolean
+  updatedAt DateTime    @updatedAt
+
+  @@id([deviceId, groupId])
+  @@index([userId, groupId])
+  @@index([groupId])
 }
 
 model PendingUpload {
@@ -214,6 +302,9 @@ model GroupMember {
   personalNicknames PersonalGroupNickname[] @relation("NicknameTarget")
   ownedNicknames PersonalGroupNickname[] @relation("NicknameOwner")
   personalColor PersonalGroupColor?
+  placeSharing PlaceSharing[]
+  placeAlertMutesSet PlaceAlertMute[] @relation("PlaceAlertMuteMuter")
+  placeAlertMutesAbout PlaceAlertMute[] @relation("PlaceAlertMuteMuted")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -267,6 +358,8 @@ model UserDevice {
   deviceLink             DeviceLink?              @relation("DeviceLinkNewDevice")
   approvedDeviceLinks    DeviceLink[]             @relation("DeviceLinkApprover")
   challenges             DeviceChallenge[]
+  placeTransitions       PlaceTransition[]
+  placeSharing           PlaceSharing[]
 
   @@index([userId])
 }

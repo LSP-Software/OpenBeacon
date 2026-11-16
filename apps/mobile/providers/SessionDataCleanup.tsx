@@ -37,6 +37,7 @@ export const SessionDataCleanup = () => {
     queryClient.clear();
     clearGroupColors();
     clearTrackingUploadTimes();
+    void tryCatch(import("../lib/mapCache.ts").then(({ clearSavedMap }) => clearSavedMap()));
   }, [isPending, queryClient, userId]);
 
   useEffect(() => {

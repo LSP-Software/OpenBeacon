@@ -5,8 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import { AppState, PermissionsAndroid, Platform } from "react-native";
 import appConfig from "../app.json";
 import { useAppForeground } from "../hooks/useAppForeground.ts";
+import type { Href } from "expo-router";
 import type { NoticeSlot } from "../modules/openbeacon-tracking/index.ts";
 import type { ApiCompatibilityProblem } from "./apiCompatibility.ts";
+import { showInAppNotice } from "./inAppNotices.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
 import { withOwnScreen } from "./ownScreen.ts";
 import { useSingleFlight } from "./useSingleFlight.ts";
@@ -27,6 +29,35 @@ export const showNotice = async (
         ? "selfHostedServerTooOld"
         : notice.problem;
   const result = await tryCatch(Promise.resolve().then(() => trackingModule.showNotice(kind)));
+  return result.data ?? false;
+};
+
+export const showPlaceNotice = async ({
+  body,
+  groupName,
+  key,
+  kind,
+  link,
+  title,
+}: {
+  body: string | null;
+  groupName: string;
+  key: string;
+  kind: "alert" | "placesChanged";
+  link: { href: Href; url: string };
+  title: string;
+}): Promise<boolean> => {
+  if (AppState.currentState === "active") {
+    showInAppNotice({ title, body, href: link.href });
+    return true;
+  }
+  const trackingModule = await loadTrackingModule();
+  if (!trackingModule) return false;
+  const result = await tryCatch(
+    Promise.resolve().then(() =>
+      trackingModule.showPlaceNotice(kind, key, title, body, groupName, link.url),
+    ),
+  );
   return result.data ?? false;
 };
 

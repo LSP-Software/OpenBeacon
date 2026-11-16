@@ -73,13 +73,53 @@ describe("groupTrackingPointSchema", () => {
 });
 
 describe("groupTrackingUploadBatchSchema", () => {
-  test("requires at least one point", () => {
-    expect(() =>
-      groupTrackingUploadBatchSchema.parse({
+  const arrival = {
+    clientId: "2f0c8f5e-4d6b-4b8e-9a51-0d6f3c1b2a77",
+    placeId: "place-1",
+    direction: "ARRIVE",
+    occurredAt: new Date("2026-11-15T10:00:00.000Z"),
+    senderDeviceId: "device-1",
+  } as const;
+
+  test("requires a point, a place transition or a place alerts cursor", () => {
+    const parse = (batch: object) =>
+      groupTrackingUploadBatchSchema.safeParse({ groupId: "group-1", points: [], ...batch })
+        .success;
+    expect(parse({})).toBe(false);
+    expect(parse({ placeTransitions: [] })).toBe(false);
+    expect(parse({ placeTransitions: [arrival] })).toBe(true);
+    expect(parse({ placeAlertsCursor: null })).toBe(true);
+    expect(parse({ placeAlertsCursor: "2026-11-15T10:00:00.000Z|" })).toBe(true);
+  });
+
+  test("refuses repeated or malformed place transitions", () => {
+    const parse = (placeTransitions: unknown[]) =>
+      groupTrackingUploadBatchSchema.safeParse({ groupId: "group-1", points: [], placeTransitions })
+        .success;
+    expect(parse([arrival, { ...arrival, direction: "LEAVE" }])).toBe(false);
+    expect(parse([{ ...arrival, clientId: "not-a-uuid" }])).toBe(false);
+    expect(parse([{ ...arrival, direction: "STAY" }])).toBe(false);
+    const tooMany = Array.from({ length: 51 }, () => ({
+      ...arrival,
+      clientId: crypto.randomUUID(),
+    }));
+    expect(parse(tooMany)).toBe(false);
+  });
+
+  test("only accepts place alert cursors the server could have issued", () => {
+    const parse = (placeAlertsCursor: unknown) =>
+      groupTrackingUploadBatchSchema.safeParse({
         groupId: "group-1",
-        points: [],
-      }),
-    ).toThrow();
+        points: [validPoint],
+        placeAlertsCursor,
+      }).success;
+    expect(parse(null)).toBe(true);
+    expect(parse("2026-11-15T10:00:00.000Z|")).toBe(true);
+    expect(parse("2026-11-15T10:00:00.000Z|01a1e112-8664-7549-a2b4-485385e6b556")).toBe(true);
+    expect(parse("2026-13-45T10:00:00.000Z|id")).toBe(false);
+    expect(parse("2026-11-15T10:00:00Z|id")).toBe(false);
+    expect(parse("2026-11-15T10:00:00.000Z|a|b")).toBe(false);
+    expect(parse("")).toBe(false);
   });
 
   test("accepts a batch of points", () => {

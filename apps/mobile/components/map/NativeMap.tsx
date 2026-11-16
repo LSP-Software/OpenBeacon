@@ -1,4 +1,4 @@
-import { Camera, Layer, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
+import { Camera, GeoJSONSource, Layer, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
 import {
   EyeOffIcon,
   LayersIcon,
@@ -26,7 +26,14 @@ import {
 } from "../../lib/liveMapPinGroups.ts";
 import { cn } from "../../lib/cn.ts";
 import type { MapGroupOption, MapMemberDevice, MapPeople } from "../../lib/mapPeopleTypes.ts";
+import {
+  type MapPlace,
+  peopleAtPlace,
+  placeCirclePolygon,
+  zoomToFitPlace,
+} from "../../lib/places.ts";
 import { getSymbolVisibility } from "../../lib/protomaps-style.ts";
+import { useColors } from "../../lib/theme.ts";
 import { Icon } from "../ui/Icon.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Text } from "../ui/Text.tsx";
@@ -36,6 +43,8 @@ import { LiveMapMissingPersonSheet } from "./LiveMapMissingPersonSheet.tsx";
 import { LiveMapPeopleTray } from "./LiveMapPeopleTray.tsx";
 import { LiveMapPointAnnotation, SelfLiveMapPointAnnotation } from "./LiveMapPointAnnotation.tsx";
 import { LiveMapPersonSheet } from "./LiveMapPersonSheet.tsx";
+import { LiveMapPlaceSheet } from "./LiveMapPlaceSheet.tsx";
+import { PlaceAnnotation } from "./PlaceAnnotation.tsx";
 import { LiveMapStackAnnotation } from "./LiveMapStackAnnotation.tsx";
 import { LiveMapStackSheet } from "./LiveMapStackSheet.tsx";
 import { useLiveMapEdgeMarkers } from "./useLiveMapEdgeMarkers.ts";
@@ -46,28 +55,40 @@ import { useNativeMapStyle } from "./useNativeMapStyle.ts";
 
 export const NativeMap = ({
   devices = [],
+  focusPlaceId = null,
   groupOptions = null,
   markers = [],
   now = 0,
+  onFocusPlaceHandled,
   onPeopleTrayOpenChange,
+  onDeletePlace,
   onSetGroupHidden,
   onSelectDeviceId,
   people = null,
   peopleTrayOpen = false,
+  places = [],
   selectedDeviceId = null,
 }: {
   devices?: readonly (MapMemberDevice & { paused: boolean; unreadable: boolean })[];
+  focusPlaceId?: string | null;
   groupOptions?: readonly MapGroupOption[] | null;
   markers?: readonly LiveMapMarker[];
   now?: number;
+  onFocusPlaceHandled?: () => void;
   onPeopleTrayOpenChange?: (open: boolean) => void;
+  onDeletePlace?: (place: MapPlace, onDeleted: () => void) => void;
   onSetGroupHidden?: (groupId: string, hidden: boolean) => void;
   onSelectDeviceId?: (deviceId: string | null) => void;
   people?: MapPeople | null;
   peopleTrayOpen?: boolean;
+  places?: readonly MapPlace[];
   selectedDeviceId?: string | null;
 } = {}) => {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const [selectedPlaceKey, setSelectedPlaceKey] = useState<string | null>(null);
+  const selectedPlace = places.find((place) => placeKey(place) === selectedPlaceKey) ?? null;
+  const handledFocusPlaceIdRef = useRef<string | null>(null);
   const map = useNativeMapStyle();
   const { mapStyle, pmtilesUrl, showSymbols } = map;
   const selectedMarker = markers.find((marker) => marker.deviceId === selectedDeviceId) ?? null;
@@ -107,7 +128,11 @@ export const NativeMap = ({
       ...(people?.hidden ?? []),
     ].find((person) => person.userId === missingUserId) ?? null;
   const isTrayOpen =
-    peopleTrayOpen && selectedMarker === null && !isStackSheetOpen && missingUserId === null;
+    peopleTrayOpen &&
+    selectedMarker === null &&
+    selectedPlace === null &&
+    !isStackSheetOpen &&
+    missingUserId === null;
   const trayPeople = isTrayOpen ? people : null;
   const [trayHeight, setTrayHeight] = useState(0);
   const [mapHeight, setMapHeight] = useState(0);
@@ -154,6 +179,7 @@ export const NativeMap = ({
     markers: edgeSubjects,
     mapRevision: map.mapRevision,
     sheetKey:
+      (selectedPlace ? `place:${placeKey(selectedPlace)}` : null) ??
       selectedMarker?.userId ??
       (isStackSheetOpen
         ? "stack"
@@ -176,6 +202,7 @@ export const NativeMap = ({
     },
   });
   const closeSheets = () => {
+    setSelectedPlaceKey(null);
     setStackSheetDeviceIds(null);
     setMissingUserId(null);
     setGroupMenuOpen(false);
@@ -258,6 +285,44 @@ export const NativeMap = ({
     if (pinDeviceId) goToDevice(pinDeviceId);
   }, [goToDevice, markers, missingPerson, missingUserId, people, pinMarkers]);
 
+  useEffect(() => {
+    if (!focusPlaceId) {
+      handledFocusPlaceIdRef.current = null;
+      return;
+    }
+    if (handledFocusPlaceIdRef.current === focusPlaceId) return;
+    const place = places.find((item) => item.id === focusPlaceId);
+    if (!place) return;
+    handledFocusPlaceIdRef.current = focusPlaceId;
+    onFocusPlaceHandled?.();
+    zoomIntoStack({
+      latitude: place.latitude,
+      longitude: place.longitude,
+      zoomLevel: zoomToFitPlace({
+        diameterPixels: 240,
+        latitude: place.latitude,
+        radiusMeters: place.radiusMeters,
+      }),
+    });
+    setSelectedPlaceKey(placeKey(place));
+  }, [focusPlaceId, onFocusPlaceHandled, places, zoomIntoStack]);
+
+  useEffect(() => {
+    if (selectedPlaceKey !== null && selectedPlace === null) setSelectedPlaceKey(null);
+  }, [selectedPlace, selectedPlaceKey]);
+
+  const placeHere = selectedPlace
+    ? peopleAtPlace({
+        geometry: { v: 1, ...selectedPlace },
+        now: Date.now(),
+        people: markers.flatMap((marker) =>
+          marker.timestamp === null || !selectedPlace.memberUserIds.includes(marker.userId)
+            ? []
+            : [{ ...marker, timestamp: marker.timestamp }],
+        ),
+      })
+    : [];
+
   const edgeGroupIds = new Set(edgeMarkers.flatMap((chip) => chip.memberIds));
 
   const rememberMarkerPress = (event?: GestureResponderEvent) => {
@@ -271,6 +336,7 @@ export const NativeMap = ({
 
   const pressStack = (group: LiveMapPinGroup, event?: GestureResponderEvent) => {
     rememberMarkerPress(event);
+    setSelectedPlaceKey(null);
     setStackSheetDeviceIds(null);
     setGroupMenuOpen(false);
     const zoomLevel = liveMapStackExpansionZoom({ group, zoom: pins.getZoom() });
@@ -283,6 +349,7 @@ export const NativeMap = ({
   };
 
   const pressEdgeChip = (chip: (typeof edgeMarkers)[number]) => {
+    setSelectedPlaceKey(null);
     setStackSheetDeviceIds(null);
     setGroupMenuOpen(false);
     const deviceIds = pins.groups
@@ -308,6 +375,7 @@ export const NativeMap = ({
       },
       onSelected: (event?: GestureResponderEvent) => {
         rememberMarkerPress(event);
+        setSelectedPlaceKey(null);
         setStackSheetDeviceIds(null);
         setGroupMenuOpen(false);
         handleAnnotationSelected(marker.deviceId);
@@ -330,6 +398,19 @@ export const NativeMap = ({
         <ActivityIndicator />
         <Text className="text-center text-muted-foreground">
           The server is still preparing the map. It will appear here when it's ready.
+        </Text>
+      </View>
+    );
+  }
+
+  if (!mapStyle && map.isOffline) {
+    return (
+      <View
+        className="flex-1 items-center justify-center bg-background px-8"
+        accessibilityLiveRegion="polite"
+      >
+        <Text className="text-center text-muted-foreground">
+          You’re offline. The map will appear when you reconnect.
         </Text>
       </View>
     );
@@ -452,6 +533,32 @@ export const NativeMap = ({
             id={id}
             type="symbol"
             layout={{ visibility: getSymbolVisibility(showSymbols) }}
+          />
+        ))}
+        {selectedPlace ? (
+          <GeoJSONSource id="selected-place" data={placeCirclePolygon({ v: 1, ...selectedPlace })}>
+            <Layer
+              id="selected-place-fill"
+              type="fill"
+              paint={{ "fill-color": colors.primary, "fill-opacity": 0.18 }}
+            />
+            <Layer
+              id="selected-place-line"
+              type="line"
+              paint={{ "line-color": colors.primary, "line-width": 2 }}
+            />
+          </GeoJSONSource>
+        ) : null}
+        {places.map((place) => (
+          <PlaceAnnotation
+            key={`place:${placeKey(place)}`}
+            place={place}
+            selected={placeKey(place) === selectedPlaceKey}
+            onSelected={(event) => {
+              rememberMarkerPress(event);
+              closeSheets();
+              setSelectedPlaceKey(placeKey(place));
+            }}
           />
         ))}
         {[
@@ -635,7 +742,20 @@ export const NativeMap = ({
           }}
         />
       ) : null}
-      {selectedMarker ? (
+      {selectedPlace ? (
+        <LiveMapPlaceSheet
+          key={placeKey(selectedPlace)}
+          here={placeHere}
+          place={selectedPlace}
+          onDelete={() => {
+            onDeletePlace?.(selectedPlace, () => setSelectedPlaceKey(null));
+          }}
+          onDismiss={() => setSelectedPlaceKey(null)}
+          onHeightChange={(height) => {
+            edge.onSheetHeightChange(height);
+          }}
+        />
+      ) : selectedMarker ? (
         <LiveMapPersonSheet
           key={selectedMarker.userId}
           battery={selectedMarker.battery}
@@ -722,6 +842,8 @@ export const NativeMap = ({
     </View>
   );
 };
+
+const placeKey = (place: MapPlace) => `${place.groupId}:${place.id}`;
 
 const personPinDeviceId = ({
   markers,

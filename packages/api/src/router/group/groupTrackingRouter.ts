@@ -4,7 +4,6 @@ import {
   groupTrackingUploadBatchSchema,
 } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
-import { Prisma } from "@openbeacon/database";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import {
@@ -12,6 +11,12 @@ import {
   pollGroupTrackingPoints,
   uploadGroupTrackingBatch,
 } from "../../lib/groupTracking.ts";
+import { lockGroupMemberForWrite } from "../../lib/groupWriteChecks.ts";
+import {
+  readPlaceAlerts,
+  readPlacesSummary,
+  uploadPlaceTransitions,
+} from "../../lib/placeTransitions.ts";
 import { getTrackingKeyState } from "../../lib/trackingKeyState.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
@@ -36,66 +41,103 @@ export const groupTrackingRouter = {
           cause: new ReasonError("UPLOAD_LIMIT_REACHED"),
         });
       };
-      const perMinute = await ctx.cache.rateLimits.consume(
-        {
-          namespace: "groupTracking.uploadBatch.points",
-          identifier: { type: "userId", value: userId },
-          limit: 2_000,
-          windowMs: 60_000,
-          cost: input.points.length,
-        },
-        { whenUnavailable: "allow" },
-      );
-      if (!perMinute.allowed) throw uploadLimitReached("points per minute");
-      const result = await ctx.db.$transaction(async (tx) => {
-        await tx.$queryRaw(
-          Prisma.sql`SELECT id FROM "User" WHERE id = ${ctx.session.user.id} FOR SHARE`,
+      if (input.points.length > 0) {
+        const perMinute = await ctx.cache.rateLimits.consume(
+          {
+            namespace: "groupTracking.uploadBatch.points",
+            identifier: { type: "userId", value: userId },
+            limit: 2_000,
+            windowMs: 60_000,
+            cost: input.points.length,
+          },
+          { whenUnavailable: "allow" },
         );
-        const groups = await tx.$queryRaw<Array<{ id: string }>>(
-          Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR SHARE`,
-        );
-        if (!groups.length) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "This group no longer exists.",
-            cause: new ReasonError("GROUP_GONE"),
-          });
-        }
-        const members = await tx.$queryRaw<Array<{ id: string; createdAt: Date }>>(Prisma.sql`
-          SELECT id, "createdAt" FROM "GroupMember"
-          WHERE "groupId" = ${input.groupId} AND "userId" = ${ctx.session.user.id}
-          FOR SHARE
-        `);
-        const member = members[0];
-        if (!member) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "You are not a member of this group",
-            cause: new ReasonError("NOT_GROUP_MEMBER"),
-          });
-        }
-        return uploadGroupTrackingBatch({
-          db: tx,
-          groupId: input.groupId,
-          memberSince: member.createdAt,
-          points: input.points,
-          userId,
-          consumeDailyBudget: async (acceptedPoints) => {
-            const groupCount = await tx.groupMember.count({ where: { userId } });
-            const budget = await ctx.cache.rateLimits.consume(
+        if (!perMinute.allowed) throw uploadLimitReached("points per minute");
+      }
+      const placeTransitions = input.placeTransitions ?? [];
+      const transitionBudget =
+        placeTransitions.length > 0
+          ? await ctx.cache.rateLimits.consume(
               {
-                namespace: "groupTracking.uploadBatch.daily",
+                namespace: "groupTracking.uploadBatch.placeTransitions",
                 identifier: { type: "userId", value: userId },
-                limit: 9_504 + 8_640 * groupCount,
-                windowMs: 86_400_000,
-                cost: acceptedPoints,
+                limit: 240,
+                windowMs: 3_600_000,
+                cost: placeTransitions.length,
               },
               { whenUnavailable: "allow" },
-            );
-            if (!budget.allowed) throw uploadLimitReached("daily points");
-          },
+            )
+          : { allowed: true };
+      if (!transitionBudget.allowed) {
+        console.warn("[rate-limit] upload limit reached", {
+          userId,
+          limit: "place transitions per hour",
         });
+      }
+      const now = new Date();
+      const result = await ctx.db.$transaction(async (tx) => {
+        const member = await lockGroupMemberForWrite(tx, {
+          groupId: input.groupId,
+          groupLock: "FOR SHARE",
+          userId,
+        });
+        const points =
+          input.points.length > 0
+            ? await uploadGroupTrackingBatch({
+                db: tx,
+                groupId: input.groupId,
+                memberSince: member.createdAt,
+                points: input.points,
+                userId,
+                consumeDailyBudget: async (acceptedPoints) => {
+                  const groupCount = await tx.groupMember.count({ where: { userId } });
+                  const budget = await ctx.cache.rateLimits.consume(
+                    {
+                      namespace: "groupTracking.uploadBatch.daily",
+                      identifier: { type: "userId", value: userId },
+                      limit: 9_504 + 8_640 * groupCount,
+                      windowMs: 86_400_000,
+                      cost: acceptedPoints,
+                    },
+                    { whenUnavailable: "allow" },
+                  );
+                  if (!budget.allowed) throw uploadLimitReached("daily points");
+                },
+              })
+            : { accepted: [], discarded: [], duplicates: [], expired: [] };
+        if (placeTransitions.length === 0) return points;
+        return {
+          ...points,
+          placeTransitions: transitionBudget.allowed
+            ? await uploadPlaceTransitions({
+                db: tx,
+                deviceId: ctx.deviceId,
+                groupId: input.groupId,
+                memberSince: member.createdAt,
+                now,
+                transitions: placeTransitions,
+                userId,
+              })
+            : {
+                accepted: [],
+                duplicates: [],
+                discarded: placeTransitions.map(({ clientId }) => clientId),
+              },
+        };
       });
+      const placeUpdates =
+        input.placeAlertsCursor === undefined
+          ? null
+          : await tryCatch(
+              Promise.all([
+                readPlacesSummary({ db: ctx.db, userId }),
+                readPlaceAlerts({ cursor: input.placeAlertsCursor, db: ctx.db, userId }),
+              ]),
+            );
+      const placeFields =
+        !placeUpdates || placeUpdates.error
+          ? {}
+          : { places: placeUpdates.data[0], placeAlerts: placeUpdates.data[1] };
       let timer: ReturnType<typeof setTimeout> | undefined;
       const keyState = await tryCatch(
         Promise.race([
@@ -110,8 +152,8 @@ export const groupTrackingRouter = {
         ]),
       );
       clearTimeout(timer);
-      if (keyState.error || keyState.data === null) return { ...result };
-      return { ...result, keyState: keyState.data };
+      if (keyState.error || keyState.data === null) return { ...result, ...placeFields };
+      return { ...result, ...placeFields, keyState: keyState.data };
     }),
   poll: groupMemberProcedure
     .meta({ rateLimit: { limit: 480, windowMs: 60_000 } })

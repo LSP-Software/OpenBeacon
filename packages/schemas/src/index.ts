@@ -37,6 +37,26 @@ import {
 } from "./schemas/feedback/submitFeedback.ts";
 import { createGroupSchema, newGroupIdSchema } from "./schemas/group/create.ts";
 import { inviteMemberToGroupSchema } from "./schemas/group/inviteMember.ts";
+import {
+  createPlaceSchema,
+  deletePlaceSchema,
+  listPlacesSchema,
+  MAX_PLACES_PER_GROUP,
+  placeEmojiSchema,
+  PLACE_GEOMETRY_KIND,
+  placeNameSchema,
+  reEncryptPlacesSchema,
+  updatePlaceSchema,
+} from "./schemas/group/places.ts";
+import {
+  getPlaceAlertMutesSchema,
+  getPlaceSharingSchema,
+  placeAlertsCursorSchema,
+  placeTransitionSchema,
+  recentPlaceTransitionsSchema,
+  setPlaceAlertMuteSchema,
+  setPlaceSharingSchema,
+} from "./schemas/group/placeTransitions.ts";
 import { removeGroupMemberSchema } from "./schemas/group/removeMember.ts";
 import {
   groupTrackingGetLatestSchema,
@@ -59,7 +79,11 @@ export {
   changeRecoveryPhraseSchema,
   createAccountHistoryKeySchema,
   createGroupSchema,
+  createPlaceSchema,
+  deletePlaceSchema,
   emailCodeSchema,
+  getPlaceAlertMutesSchema,
+  getPlaceSharingSchema,
   FEEDBACK_MESSAGE_MAX_LENGTH,
   HISTORY_RECIPIENT_MISMATCH_MESSAGE,
   newGroupIdSchema,
@@ -69,8 +93,18 @@ export {
   groupTrackingPollSchema,
   groupTrackingUploadBatchSchema,
   inviteMemberToGroupSchema,
+  listPlacesSchema,
+  MAX_PLACES_PER_GROUP,
   optionalEnvString,
+  placeAlertsCursorSchema,
+  placeEmojiSchema,
+  placeNameSchema,
+  placeTransitionSchema,
+  reEncryptPlacesSchema,
+  recentPlaceTransitionsSchema,
   serverNameSchema,
+  setPlaceAlertMuteSchema,
+  setPlaceSharingSchema,
   registerDeviceKeySchema,
   removeGroupMemberSchema,
   requestImageUploadInputSchema,
@@ -80,8 +114,10 @@ export {
   signUpSchema,
   submitFeedbackSchema,
   TRACKING_POINT_KIND,
+  PLACE_GEOMETRY_KIND,
   removeDeviceSchema,
   updateDeviceSchema,
+  updatePlaceSchema,
   wrappedEpochKeySchema,
   approveDeviceLinkSchema,
   deviceLinkIdSchema,

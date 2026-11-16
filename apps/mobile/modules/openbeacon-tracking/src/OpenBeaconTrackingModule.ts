@@ -40,6 +40,22 @@ export type CiphertextQueueEviction = {
   revision: number;
 };
 
+export type PlaceGeofenceInput = {
+  placeId: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+};
+
+export type QueuedPlaceTransition = {
+  clientId: string;
+  senderDeviceId: string;
+  groupId: string;
+  placeId: string;
+  direction: "ARRIVE" | "LEAVE";
+  occurredAt: number;
+};
+
 export type NoticeKind =
   | "appTooOld"
   | "serverTooOld"
@@ -87,6 +103,23 @@ declare class OpenBeaconTrackingModule extends NativeModule {
   setRecentsPreviewHidden(hidden: boolean): Promise<void>;
   elapsedRealtime(): number;
   dismissNotice(slot: NoticeSlot): void;
+  setGroupPlaces(
+    owner: string,
+    deviceId: string,
+    groupId: string,
+    places: PlaceGeofenceInput[],
+  ): Promise<boolean>;
+  listPlaceGroups(owner: string, deviceId: string): string[] | null;
+  listPlaceTransitions(owner: string): Promise<QueuedPlaceTransition[]>;
+  deletePlaceTransitions(clientIds: string[]): Promise<void>;
+  showPlaceNotice(
+    kind: "alert" | "placesChanged",
+    key: string,
+    title: string,
+    body: string | null,
+    groupName: string,
+    link: string,
+  ): boolean;
 }
 
 export default requireNativeModule<OpenBeaconTrackingModule>("OpenBeaconTracking");

@@ -1,5 +1,6 @@
 import { DeviceIcon } from "@openbeacon/database/enums";
 import z from "zod";
+import { isVisibleName } from "./fields.ts";
 
 export const deviceIconSchema = z.enum(DeviceIcon);
 
@@ -8,7 +9,7 @@ export const deviceNameSchema = z
   .trim()
   .min(1, { message: "Name is required" })
   .max(40, { message: "Name must be at most 40 characters" })
-  .refine((name) => !/[\p{Cc}\p{Cs}]|(?!\u200d)\p{Cf}/u.test(name), {
+  .refine(isVisibleName, {
     message: "Name contains invalid characters",
   });
 

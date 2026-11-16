@@ -10,8 +10,12 @@ import { groupEpochRouter } from "./router/group/groupEpochRouter.ts";
 import { groupInvitesRouter } from "./router/group/groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./router/group/groupLifecycleRouter.ts";
 import { groupMembershipRouter } from "./router/group/groupMembershipRouter.ts";
+import { groupPlacesRouter } from "./router/group/groupPlacesRouter.ts";
 import { groupSettingsRouter } from "./router/group/groupSettingsRouter.ts";
 import { groupTrackingRouter } from "./router/group/groupTrackingRouter.ts";
+import { placeAlertsRouter } from "./router/group/placeAlertsRouter.ts";
+import { placeSharingRouter } from "./router/group/placeSharingRouter.ts";
+import { placeTransitionsRouter } from "./router/group/placeTransitionsRouter.ts";
 import { mapsRouter } from "./router/mapsRouter.ts";
 import { createTRPCRouter } from "./trpcRuntime.ts";
 
@@ -24,6 +28,7 @@ export const appRouter = createTRPCRouter({
   groupInvites: groupInvitesRouter,
   groupEpoch: groupEpochRouter,
   groupMembership: groupMembershipRouter,
+  groupPlaces: groupPlacesRouter,
   groupTracking: groupTrackingRouter,
   auth: authRouter,
   device: deviceRouter,
@@ -31,6 +36,9 @@ export const appRouter = createTRPCRouter({
   emailAlerts: emailAlertsRouter,
   feedback: feedbackRouter,
   maps: mapsRouter,
+  placeAlerts: placeAlertsRouter,
+  placeSharing: placeSharingRouter,
+  placeTransitions: placeTransitionsRouter,
 });
 
 export type AppRouter = typeof appRouter;
