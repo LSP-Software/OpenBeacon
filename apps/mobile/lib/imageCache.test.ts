@@ -4,6 +4,42 @@ const files = new Map<string, Uint8Array | string>();
 let failWrites = false;
 let failDirectoryDeletes = false;
 
+class MockFile {
+  path: string;
+  constructor(...parts: string[]) {
+    this.path = parts.join("/");
+  }
+  get exists() {
+    return files.has(this.path);
+  }
+  get uri() {
+    return `file://${this.path}`;
+  }
+  get name() {
+    return this.path.split("/").pop() ?? "";
+  }
+  textSync = () => String(files.get(this.path));
+  create = () => {
+    files.set(this.path, new Uint8Array());
+  };
+  write = (content: Uint8Array | string) => {
+    if (failWrites) {
+      files.set(this.path, new Uint8Array([1]));
+      throw new Error("disk full");
+    }
+    files.set(this.path, content);
+  };
+  move = (destination: { path: string }) => {
+    if (files.has(destination.path)) throw new Error("exists");
+    files.set(destination.path, files.get(this.path)!);
+    files.delete(this.path);
+    this.path = destination.path;
+  };
+  delete = () => {
+    files.delete(this.path);
+  };
+}
+
 mock.module("expo-file-system", () => ({
   Paths: { cache: "cache" },
   Directory: class {
@@ -15,6 +51,10 @@ mock.module("expo-file-system", () => ({
       return [...files.keys()].some((path) => path.startsWith(`${this.path}/`));
     }
     create = () => {};
+    list = () =>
+      [...files.keys()]
+        .filter((path) => path.startsWith(`${this.path}/`))
+        .map((path) => new MockFile(path));
     delete = () => {
       if (failDirectoryDeletes) throw new Error("busy");
       for (const path of [...files.keys()]) {
@@ -22,38 +62,7 @@ mock.module("expo-file-system", () => ({
       }
     };
   },
-  File: class {
-    path: string;
-    constructor(...parts: string[]) {
-      this.path = parts.join("/");
-    }
-    get exists() {
-      return files.has(this.path);
-    }
-    get uri() {
-      return `file://${this.path}`;
-    }
-    textSync = () => String(files.get(this.path));
-    create = () => {
-      files.set(this.path, new Uint8Array());
-    };
-    write = (content: Uint8Array | string) => {
-      if (failWrites) {
-        files.set(this.path, new Uint8Array([1]));
-        throw new Error("disk full");
-      }
-      files.set(this.path, content);
-    };
-    move = (destination: { path: string }) => {
-      if (files.has(destination.path)) throw new Error("exists");
-      files.set(destination.path, files.get(this.path)!);
-      files.delete(this.path);
-      this.path = destination.path;
-    };
-    delete = () => {
-      files.delete(this.path);
-    };
-  },
+  File: MockFile,
 }));
 
 const { cachedImageUri, claimImageCache, clearImageCache, imageCacheGeneration, writeCachedImage } =
@@ -110,6 +119,18 @@ test("keeps the cache for the same account and wipes it for another", () => {
 
   claimImageCache("owner-b");
   expect(cachedImageUri(fileName)).toBeNull();
+});
+
+test("removes a half-written picture left by a crash when the same account claims the cache", () => {
+  claimImageCache("owner-a");
+  writeCachedImage({ bytes: picture, fileName });
+  files.set(`cache/images/${fileName}.part`, new Uint8Array([1]));
+
+  claimImageCache("owner-a");
+
+  expect([...files.keys()].sort()).toEqual(
+    ["cache/images/owner", `cache/images/${fileName}`].sort(),
+  );
 });
 
 test("wipes the cache when nobody is signed in", () => {

@@ -1,12 +1,13 @@
 import {
   decodeBase64,
+  decryptImageKey,
   encryptImageKey,
   ImageKeyMaterial,
   type ImageKeyKind,
   sealProfileImageKey,
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
-import { trpcClient } from "./api.ts";
+import { type RouterOutputs, trpcClient } from "./api.ts";
 import { authClient } from "./auth-client.ts";
 import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
@@ -133,10 +134,12 @@ export const confirmProfileImage = async ({
 };
 
 export const confirmGroupImage = ({
+  expectedFileName,
   fileName,
   groupId,
   imageKey,
 }: {
+  expectedFileName?: string | null;
   fileName: string;
   groupId: string;
   imageKey: ImageKeyMaterial;
@@ -153,32 +156,77 @@ export const confirmGroupImage = ({
         kind: "group-image-key",
         ownerId: groupId,
       });
-      return trpcClient.groupSettings.confirmGroupImageUpload.mutate({ groupId, key });
+      return trpcClient.groupSettings.confirmGroupImageUpload.mutate({
+        groupId,
+        key,
+        ...(expectedFileName === undefined ? {} : { expectedFileName }),
+      });
     },
   });
 
+const unwrapOwnImageKeyFromGroups = async ({
+  fileName,
+  groups,
+  userId,
+}: {
+  fileName: string;
+  groups: () => Promise<RouterOutputs["groupMembership"]["list"]>;
+  userId: string;
+}) => {
+  const list = await tryCatch(groups());
+  for (const group of list.data ?? []) {
+    const me = group.members.find((member) => member.userId === userId);
+    const imageKey = me?.imageKey;
+    if (!imageKey || imageFileNameFromUrl(me?.image) !== fileName) continue;
+    const epochKey = await tryCatch(
+      resolveEpochKey({ epochId: imageKey.epochId, groupId: group.id }),
+    );
+    const resolved = epochKey.data;
+    if (!resolved) continue;
+    const opened = await tryCatch(
+      Promise.resolve().then(() =>
+        decryptImageKey({
+          encryptedKey: imageKey,
+          epochKey: resolved,
+          fileName,
+          groupId: group.id,
+          kind: "profile-image-key",
+          ownerId: userId,
+        }),
+      ),
+    );
+    if (opened.data) return opened.data;
+  }
+  return null;
+};
+
 export const getOwnImageKey = async ({
   fileName,
+  groups = () => trpcClient.groupMembership.list.query(),
   sealed,
   userId,
 }: {
   fileName: string;
+  groups?: () => Promise<RouterOutputs["groupMembership"]["list"]>;
   sealed: string | null;
   userId: string;
 }) => {
   const owner = ownImageKeyOwner(userId);
   const stored = await tryCatch(readOwnImageKey({ fileName, userId }));
   if (stored.data) return stored.data;
-  if (!sealed) return null;
-  const opened = await tryCatch(
-    createPersonalDataOpener(userId)({
-      purpose: "profile-image",
-      binding: [userId, fileName],
-      sealed,
-    }),
-  );
-  if (!opened.data) return null;
-  const imageKey = new ImageKeyMaterial(decodeBase64(opened.data));
+  const opened = sealed
+    ? await tryCatch(
+        createPersonalDataOpener(userId)({
+          purpose: "profile-image",
+          binding: [userId, fileName],
+          sealed,
+        }),
+      )
+    : null;
+  const imageKey = opened?.data
+    ? new ImageKeyMaterial(decodeBase64(opened.data))
+    : await unwrapOwnImageKeyFromGroups({ fileName, groups, userId });
+  if (!imageKey) return null;
   await tryCatch(storeOwnImageKey({ fileName, imageKey, owner, userId }));
   return imageKey;
 };

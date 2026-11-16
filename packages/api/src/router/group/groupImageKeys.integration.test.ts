@@ -324,6 +324,60 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
     });
 
+    test("an upload stays pinned to the picture it was first presigned for", async () => {
+      const hash = (fill: number) => Buffer.alloc(32, fill).toString("base64");
+      const { fileName } = await caller(member).account.requestProfileImageUpload();
+      const presign = (contentHash: string, fileSize = 1024) =>
+        caller(member).account.presignProfileImageUpload({ fileName, fileSize, contentHash });
+
+      await presign(hash(1));
+      await expect(presign(hash(1))).resolves.toMatchObject({ presignedUrl: expect.any(String) });
+      await expect(presign(hash(2))).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+      await expect(presign(hash(1), 2048)).rejects.toMatchObject({
+        code: "PRECONDITION_FAILED",
+      });
+      expect(
+        await prisma.pendingUpload.findFirstOrThrow({ where: { userId: member, fileName } }),
+      ).toMatchObject({ contentHash: hash(1), fileSize: 1024 });
+
+      const group = await caller(admin).groupSettings.requestGroupImageUpload({ groupId });
+      const presignGroup = (contentHash: string) =>
+        caller(admin).groupSettings.presignGroupImageUpload({
+          groupId,
+          fileName: group.fileName,
+          fileSize: 1024,
+          contentHash,
+        });
+      await Promise.allSettled([presignGroup(hash(3)), presignGroup(hash(4))]);
+      const pinned = await prisma.pendingUpload.findFirstOrThrow({
+        where: { userId: admin, fileName: group.fileName },
+      });
+      const other = pinned.contentHash === hash(3) ? hash(4) : hash(3);
+      await expect(presignGroup(other)).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+      await expect(presignGroup(pinned.contentHash ?? "")).resolves.toMatchObject({
+        presignedUrl: expect.any(String),
+      });
+    });
+
+    test("a fresh upload request can be presigned for a different picture", async () => {
+      await caller(member).account.requestProfileImageUpload();
+      const first = await prisma.pendingUpload.findFirstOrThrow({ where: { userId: member } });
+      await caller(member).account.presignProfileImageUpload({
+        fileName: first.fileName,
+        fileSize: 1024,
+        contentHash: Buffer.alloc(32, 1).toString("base64"),
+      });
+
+      const { fileName } = await caller(member).account.requestProfileImageUpload();
+      await expect(
+        caller(member).account.presignProfileImageUpload({
+          fileName,
+          fileSize: 2048,
+          contentHash: Buffer.alloc(32, 2).toString("base64"),
+        }),
+      ).resolves.toMatchObject({ presignedUrl: expect.any(String) });
+    });
+
     test("confirming a group picture stores its key in the same write", async () => {
       const fileName = await addPendingUpload(admin, "groupAvatar", groupId);
       const key = wrap({
@@ -340,6 +394,61 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         image: result.imageUrl,
         ...imageKeyColumns(key),
       });
+    });
+
+    test("a group picture confirm with an expected file name only replaces that picture", async () => {
+      const current = await setGroupPicture();
+      const fileName = await addPendingUpload(admin, "groupAvatar", groupId);
+      const key = wrap({
+        fileName,
+        kind: "group-image-key",
+        ownerId: groupId,
+        senderUserId: admin,
+      });
+      const confirm = (expectedFileName: string | null) =>
+        caller(admin).groupSettings.confirmGroupImageUpload({ expectedFileName, groupId, key });
+      const events = () =>
+        prisma.groupEvent.count({ where: { groupId, type: "GROUP_IMAGE_CHANGED" } });
+      const eventsBefore = await events();
+
+      for (const expectedFileName of [crypto.randomUUID(), null]) {
+        await expect(confirm(expectedFileName)).rejects.toMatchObject({
+          code: "CONFLICT",
+          cause: { reason: "IMAGE_CHANGED" },
+        });
+      }
+      expect(await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).toMatchObject({
+        image: groupUrl(admin, groupId, current.fileName),
+        ...imageKeyColumns(current.key),
+      });
+      expect(await prisma.pendingUpload.count({ where: { userId: admin, fileName } })).toBe(1);
+      expect(await events()).toBe(eventsBefore);
+
+      await expect(confirm(current.fileName)).resolves.toMatchObject({
+        imageUrl: groupUrl(admin, groupId, fileName),
+      });
+      expect(await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).toMatchObject({
+        image: groupUrl(admin, groupId, fileName),
+        ...imageKeyColumns(key),
+      });
+    });
+
+    test("a group picture confirm expecting no picture succeeds when there is none", async () => {
+      const fileName = await addPendingUpload(admin, "groupAvatar", groupId);
+      const key = wrap({
+        fileName,
+        kind: "group-image-key",
+        ownerId: groupId,
+        senderUserId: admin,
+      });
+
+      await expect(
+        caller(admin).groupSettings.confirmGroupImageUpload({
+          expectedFileName: null,
+          groupId,
+          key,
+        }),
+      ).resolves.toMatchObject({ imageUrl: groupUrl(admin, groupId, fileName) });
     });
 
     test("a member who isn't an admin can't confirm a group picture", async () => {

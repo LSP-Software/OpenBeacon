@@ -21,6 +21,7 @@ export const encryptedImageKeySchema = z.object({
 });
 
 export const confirmGroupImageUploadSchema = z.object({
+  expectedFileName: imageFileNameSchema.nullable().optional(),
   groupId: groupIdSchema,
   key: encryptedImageKeySchema,
 });

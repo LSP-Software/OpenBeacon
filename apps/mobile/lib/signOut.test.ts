@@ -148,6 +148,7 @@ mock.module("./trackingEvents.ts", () => ({
 }));
 
 mock.module("./groupColor.ts", () => ({ clearGroupColors: () => {} }));
+mock.module("./imageKeySelfCheck.ts", () => ({ resetImageKeyCheck: () => {} }));
 mock.module("./trackingKeyCheck.ts", () => ({ clearTrackingKeyCheck: () => {} }));
 mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => {} }));
 

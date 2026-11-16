@@ -14,7 +14,7 @@ import {
   assertLatestGroupEpoch,
   assertSentFromThisDevice,
 } from "../../lib/groupWriteChecks.ts";
-import { imageKeyColumns } from "../../lib/imageKeys.ts";
+import { imageChanged, imageFileName, imageKeyColumns } from "../../lib/imageKeys.ts";
 import {
   buildGroupAvatarPath,
   confirmImageUpload,
@@ -167,6 +167,12 @@ export const groupSettingsRouter = {
                   code: "FORBIDDEN",
                   message: "You are not an admin of this group.",
                 });
+              }
+              if (
+                input.expectedFileName !== undefined &&
+                imageFileName(group.image) !== input.expectedFileName
+              ) {
+                throw imageChanged();
               }
               const deleted = await tx.pendingUpload.deleteMany({
                 where: {

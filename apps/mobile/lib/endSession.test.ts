@@ -123,6 +123,7 @@ mock.module("./tracking.ts", () => ({
 }));
 
 const cachedFiles = new Set<string>();
+let imageKeyCheckResets = 0;
 
 mock.module("expo-file-system", () => ({
   Paths: { cache: "cache" },
@@ -144,6 +145,11 @@ mock.module("expo-file-system", () => ({
 }));
 
 mock.module("./groupColor.ts", () => ({ clearGroupColors: () => {} }));
+mock.module("./imageKeySelfCheck.ts", () => ({
+  resetImageKeyCheck: () => {
+    imageKeyCheckResets += 1;
+  },
+}));
 mock.module("./trackingKeyCheck.ts", () => ({ clearTrackingKeyCheck: () => {} }));
 mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => {} }));
 
@@ -583,6 +589,15 @@ describe("ending a session", () => {
     await endSession({ reason });
 
     expect([...cachedFiles]).toEqual(["cache/map/tiles.pmtiles"]);
+  });
+
+  test("a plain sign-out stops the picture key check", async () => {
+    await seedSignedInPhone();
+    const before = imageKeyCheckResets;
+
+    await endSession({ reason: "signedOut" });
+
+    expect(imageKeyCheckResets).toBe(before + 1);
   });
 
   test("deletes decrypted pictures before contacting the server", async () => {

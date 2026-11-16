@@ -22,6 +22,8 @@ let nativeAccepts = true;
 let listCalls = 0;
 let failNotices = false;
 let detectedGroups: string[] | null = null;
+let provisionedKeys: { epochId: string; groupId: string; senderDeviceId: string }[] = [];
+let imageCatchUpGate: Promise<void> | null = null;
 let groupListCalls = 0;
 
 mock.module("./storage.ts", () => ({
@@ -67,6 +69,7 @@ mock.module("./imageKeyCatchUp.ts", () => ({
   }) => {
     imageCatchUps.push(groupId);
     await groups?.();
+    await imageCatchUpGate;
     if (imageCatchUpFails) throw new Error("offline");
     return movedImageKeys;
   },
@@ -89,6 +92,7 @@ mock.module("./notifications.ts", () => ({
 mock.module("./trackingModule.ts", () => ({
   loadTrackingModule: async () => ({
     listPlaceGroups: () => detectedGroups,
+    listProvisionedEpochKeys: () => provisionedKeys,
     setGroupPlaces: async (
       _owner: string,
       _deviceId: string,
@@ -135,6 +139,7 @@ const {
   describePlacesChanged,
   getPlaceAlertsCursor,
   markPlacesUnsynced,
+  settleImageKeyCatchUps,
   syncGroupPlaces,
 } = await import("./placeBackgroundSync.ts");
 
@@ -184,6 +189,8 @@ beforeEach(() => {
   listCalls = 0;
   failNotices = false;
   detectedGroups = null;
+  provisionedKeys = [];
+  imageCatchUpGate = null;
   groupListCalls = 0;
 });
 
@@ -412,21 +419,26 @@ describe("applyPlaceUpdates", () => {
 });
 
 describe("picture key catch-up", () => {
+  const applyAndSettle = async (input: Parameters<typeof applyPlaceUpdates>[0]) => {
+    await applyPlaceUpdates(input);
+    await settleImageKeyCatchUps();
+  };
+
   test("runs for each listed group at most once every 15 minutes", async () => {
     jest.useFakeTimers();
     try {
       jest.setSystemTime(new Date("2026-11-16T10:00:00.000Z"));
-      await applyPlaceUpdates({
+      await applyAndSettle({
         updates: { imageKeysNeedCatchUp: ["family", "school"] },
         userId: "user-1",
       });
       expect(imageCatchUps).toEqual(["family", "school"]);
       jest.setSystemTime(new Date("2026-11-16T10:14:00.000Z"));
-      await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
-      await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-2" });
+      await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-2" });
       expect(imageCatchUps).toEqual(["family", "school", "family"]);
       jest.setSystemTime(new Date("2026-11-16T10:15:00.000Z"));
-      await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
       expect(imageCatchUps).toEqual(["family", "school", "family", "family"]);
     } finally {
       jest.useRealTimers();
@@ -434,24 +446,24 @@ describe("picture key catch-up", () => {
   });
 
   test("treats a missing list as unknown and an empty one as nothing to do", async () => {
-    await applyPlaceUpdates({ updates: {}, userId: "user-1" });
-    await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: [] }, userId: "user-1" });
+    await applyAndSettle({ updates: {}, userId: "user-1" });
+    await applyAndSettle({ updates: { imageKeysNeedCatchUp: [] }, userId: "user-1" });
     expect(imageCatchUps).toEqual([]);
     expect([...storageValues.keys()].some((key) => key.includes("imageKeysCatchUpAt"))).toBe(false);
-    await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+    await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
     expect(imageCatchUps).toEqual(["family"]);
   });
 
   test("reloads the group list only when keys moved", async () => {
-    await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+    await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
     expect(invalidated).toEqual([]);
     movedImageKeys = 2;
-    await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["school"] }, userId: "user-1" });
+    await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["school"] }, userId: "user-1" });
     expect(invalidated).toEqual([[["groupMembership", "list"]]]);
   });
 
   test("shares one group list fetch between the listed groups", async () => {
-    await applyPlaceUpdates({
+    await applyAndSettle({
       updates: { imageKeysNeedCatchUp: ["family", "school"] },
       userId: "user-1",
     });
@@ -464,7 +476,7 @@ describe("picture key catch-up", () => {
     const start = new Date("2026-11-16T10:00:00.000Z").getTime();
     const runAt = async (minutes: number) => {
       jest.setSystemTime(start + minutes * 60_000);
-      await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
       return imageCatchUps.length;
     };
     try {
@@ -492,20 +504,105 @@ describe("picture key catch-up", () => {
     }
   });
 
-  test("forgets a group's back-off once it's no longer listed, but not when the list is missing", async () => {
+  test("starts over when this phone moves to a new key epoch for the group", async () => {
+    jest.useFakeTimers();
+    const start = new Date("2026-11-16T10:00:00.000Z").getTime();
+    const runAt = async (minutes: number) => {
+      jest.setSystemTime(start + minutes * 60_000);
+      await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      return imageCatchUps.length;
+    };
+    const keyFor = (epochId: string, senderDeviceId = "device-1") => ({
+      epochId,
+      groupId: "family",
+      senderDeviceId,
+    });
+    try {
+      provisionedKeys = [keyFor("epoch-1")];
+      for (const minutes of [0, 15, 75, 435, 1875]) await runAt(minutes);
+      expect(imageCatchUps).toHaveLength(5);
+      expect(await runAt(1875 + 60)).toBe(5);
+      provisionedKeys = [keyFor("epoch-1"), keyFor("epoch-2", "device-2")];
+      expect(await runAt(1875 + 61)).toBe(5);
+      provisionedKeys = [];
+      expect(await runAt(1875 + 62)).toBe(5);
+      provisionedKeys = [keyFor("epoch-2")];
+      expect(await runAt(1875 + 63)).toBe(6);
+      expect(await runAt(1938 + 14)).toBe(6);
+      expect(await runAt(1938 + 15)).toBe(7);
+      imageCatchUpFails = true;
+      expect(await runAt(1953 + 59)).toBe(7);
+      expect(await runAt(1953 + 60)).toBe(8);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("doesn't hold up the round, but settling waits for the catch-up to finish", async () => {
+    let release = () => {};
+    imageCatchUpGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    movedImageKeys = 1;
+    await applyPlaceUpdates({
+      updates: {
+        imageKeysNeedCatchUp: ["family"],
+        placeAlerts: { alerts: [alert({})], cursor: "2026-11-16T10:00:00.000Z|alert-1" },
+      },
+      userId: "user-1",
+    });
+    expect(getPlaceAlertsCursor("user-1")).toBe("2026-11-16T10:00:00.000Z|alert-1");
+    expect(imageCatchUps).toEqual(["family"]);
+    let settled = false;
+    const settling = settleImageKeyCatchUps().then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(invalidated).toEqual([]);
+    release();
+    await settling;
+    expect(invalidated).toEqual([[["groupMembership", "list"]]]);
+  });
+
+  test("a round that starts while a catch-up runs skips that group and keeps its back-off", async () => {
+    let release = () => {};
+    imageCatchUpGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    imageCatchUpFails = true;
     jest.useFakeTimers();
     try {
       jest.setSystemTime(new Date("2026-11-16T10:00:00.000Z"));
       await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      release();
+      await settleImageKeyCatchUps();
+      expect(imageCatchUps).toEqual(["family"]);
       jest.setSystemTime(new Date("2026-11-16T10:15:00.000Z"));
-      await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
       jest.setSystemTime(new Date("2026-11-16T10:30:00.000Z"));
-      await applyPlaceUpdates({ updates: {}, userId: "user-1" });
-      await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      expect(imageCatchUps).toEqual(["family", "family"]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("forgets a group's back-off once it's no longer listed, but not when the list is missing", async () => {
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(new Date("2026-11-16T10:00:00.000Z"));
+      await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      jest.setSystemTime(new Date("2026-11-16T10:15:00.000Z"));
+      await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      jest.setSystemTime(new Date("2026-11-16T10:30:00.000Z"));
+      await applyAndSettle({ updates: {}, userId: "user-1" });
+      await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
       expect(imageCatchUps).toHaveLength(2);
       jest.setSystemTime(new Date("2026-11-16T10:45:00.000Z"));
-      await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: [] }, userId: "user-1" });
-      await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      await applyAndSettle({ updates: { imageKeysNeedCatchUp: [] }, userId: "user-1" });
+      await applyAndSettle({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
       expect(imageCatchUps).toHaveLength(3);
     } finally {
       jest.useRealTimers();
@@ -514,7 +611,7 @@ describe("picture key catch-up", () => {
 
   test("a failed catch-up still shows alerts and saves the cursor", async () => {
     imageCatchUpFails = true;
-    await applyPlaceUpdates({
+    await applyAndSettle({
       updates: {
         imageKeysNeedCatchUp: ["family"],
         placeAlerts: { alerts: [alert({})], cursor: "2026-11-16T10:00:00.000Z|alert-1" },

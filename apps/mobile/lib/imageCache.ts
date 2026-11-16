@@ -57,7 +57,12 @@ export const clearImageCache = () => {
 
 export const claimImageCache = (owner: string | null) => {
   const ownerFile = new File(Paths.cache, "images", "owner");
-  if (owner && ownerFile.exists && ownerFile.textSync() === owner) return;
+  if (owner && ownerFile.exists && ownerFile.textSync() === owner) {
+    for (const entry of new Directory(Paths.cache, "images").list()) {
+      if (entry instanceof File && entry.name.endsWith(".part")) entry.delete();
+    }
+    return;
+  }
   clearImageCache();
   if (!owner) return;
   new Directory(Paths.cache, "images").create({ idempotent: true, intermediates: true });

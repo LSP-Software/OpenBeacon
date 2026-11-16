@@ -9,7 +9,7 @@ import type { DecryptedImageResult } from "../lib/imageDecryptor.ts";
 
 const fileName = "0d6c8c2e-2b1a-4c55-9a4e-6f1b2f3c4d5e";
 const url = `https://cdn.example/images/profile/${fileName}`;
-const session = { data: null };
+let session: { data: { user: { id: string; image: string | null } } | null } = { data: null };
 const appStateListeners = new Set<(state: string) => void>();
 const cachedFiles = new Set<string>();
 let cacheGeneration = 0;
@@ -25,7 +25,7 @@ mock.module("react-native", () => ({
     },
   },
 }));
-const groupsQuery = { data: [] };
+const groupsQuery: { data: unknown[] } = { data: [] };
 mock.module("@tanstack/react-query", () => ({ useQuery: () => groupsQuery }));
 mock.module("../lib/api.ts", () => ({
   trpc: { groupMembership: { list: { queryOptions: () => ({}) } } },
@@ -43,9 +43,11 @@ mock.module("../lib/imageCache.ts", () => ({
 const { useDecryptedImage } = await import("./useDecryptedImage.ts");
 
 let shown: string | null = null;
+let renders = 0;
 let root: Root | null = null;
 
 const Avatar = () => {
+  renders += 1;
   shown = useDecryptedImage(url);
   return null;
 };
@@ -74,6 +76,9 @@ afterEach(async () => {
   await act(async () => root?.unmount());
   root = null;
   shown = null;
+  renders = 0;
+  session = { data: null };
+  groupsQuery.data = [];
   jest.useRealTimers();
   loadDecryptedImage.mockClear();
   cachedFiles.clear();
@@ -145,4 +150,53 @@ test("a cached picture is dropped once the image cache is cleared", async () => 
 
   expect(shown).toBeNull();
   expect(loadDecryptedImage).toHaveBeenCalledTimes(1);
+});
+
+test("a picture that's gone from storage isn't tried again", async () => {
+  nextResult = { status: "gone" };
+  await render();
+
+  await advance(10 * 60_000);
+  await comeBackToForeground();
+
+  expect(loadDecryptedImage).toHaveBeenCalledTimes(1);
+});
+
+test("refetching the same keys doesn't load the picture again", async () => {
+  nextResult = { status: "undecryptable" };
+  session = { data: { user: { id: "user-a", image: url } } };
+  await render();
+
+  session = { data: { user: { id: "user-a", image: url } } };
+  groupsQuery.data = [{ id: "family", image: null, imageKey: null, members: [] }];
+  await render();
+
+  expect(loadDecryptedImage).toHaveBeenCalledTimes(1);
+});
+
+test("new keys for the picture load it again, without re-rendering when it's unchanged", async () => {
+  nextResult = { status: "ready", uri: `file:///cache/${fileName}` };
+  await render();
+  expect(shown).toBe(`file:///cache/${fileName}`);
+  const rendersWhenShown = renders;
+
+  groupsQuery.data = [
+    {
+      id: "family",
+      image: null,
+      imageKey: null,
+      members: [
+        {
+          userId: "user-b",
+          image: url,
+          imageKey: { epochId: "epoch-2", ciphertext: "wrapped" },
+        },
+      ],
+    },
+  ];
+  await render();
+
+  expect(loadDecryptedImage).toHaveBeenCalledTimes(2);
+  expect(renders).toBe(rendersWhenShown + 1);
+  expect(shown).toBe(`file:///cache/${fileName}`);
 });

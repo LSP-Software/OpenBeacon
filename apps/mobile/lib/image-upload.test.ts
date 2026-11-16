@@ -273,7 +273,7 @@ describe("uploadImageFromUri", () => {
   test("doesn't confirm or cache when storage keeps refusing the upload", async () => {
     putStatuses = [403, 403];
     expect(await upload()).toEqual({
-      error: "Unable to upload image. Check your connection and try again.",
+      error: "Unable to upload the picture. Check your connection and try again.",
     });
     expect(confirmed).toHaveLength(0);
     expect(cached.size).toBe(0);
@@ -297,7 +297,7 @@ describe("uploadImageFromUri", () => {
       trpcError({ code: "PRECONDITION_FAILED", httpStatus: 412 }),
     ];
     expect(await upload()).toEqual({
-      error: "That upload expired. Please choose the image again.",
+      error: "That upload expired. Choose the picture again.",
     });
     expect(cached.size).toBe(0);
   });
@@ -305,7 +305,7 @@ describe("uploadImageFromUri", () => {
   test("doesn't cache a picture whose confirm failed", async () => {
     confirmFailures = [new GroupKeyUnavailableError()];
     expect(await upload()).toEqual({
-      error: "This phone can’t use this group’s key yet. Try again in a minute.",
+      error: "This phone is still catching up with this group. Try again in a minute.",
     });
     expect(cached.size).toBe(0);
   });
@@ -331,18 +331,24 @@ describe("imageUploadErrorMessage", () => {
     ],
     [
       trpcError({ code: "PRECONDITION_FAILED", httpStatus: 412 }),
-      "That upload expired. Please choose the image again.",
+      "That upload expired. Choose the picture again.",
     ],
     [
       trpcError({ code: "BAD_REQUEST", httpStatus: 400, message: "Uploaded failed verification." }),
-      "That image couldn’t be uploaded. Try a different one.",
+      "That picture couldn’t be uploaded. Try a different one.",
     ],
     [
       trpcError({ code: "INTERNAL_SERVER_ERROR", httpStatus: 500 }),
-      "Unable to upload image. Check your connection and try again.",
+      "Unable to upload the picture. Check your connection and try again.",
     ],
-    [new ImageStorageError(403), "Unable to upload image. Check your connection and try again."],
-    [new ImageStorageError(null), "Unable to upload image. Check your connection and try again."],
+    [
+      new ImageStorageError(403),
+      "Unable to upload the picture. Check your connection and try again.",
+    ],
+    [
+      new ImageStorageError(null),
+      "Unable to upload the picture. Check your connection and try again.",
+    ],
   ])("%#: maps to a plain message", (error, message) => {
     expect(imageUploadErrorMessage(error)).toBe(message);
   });

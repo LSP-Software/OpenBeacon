@@ -3,6 +3,7 @@ import {
   createHistoryKeyPair,
   decryptImageKey,
   type EncryptedImageKey,
+  encryptImageKey,
   type EpochKeyMaterial,
   generateGroupEpochKey,
   generateImageKey,
@@ -28,6 +29,11 @@ const epochKeyFor = (epochId: string) => {
 const reasonError = (reason: string) => Object.assign(new Error(reason), { data: { reason } });
 
 let groups: string[] = [];
+let members = new Map<
+  string,
+  { image: string | null; imageKey: EncryptedImageKey | null; userId: string }[]
+>();
+let listCalls = 0;
 let latestEpochs = new Map<string, string[]>();
 let unreadableEpochs = new Set<string>();
 let historyState: "held" | "onOtherDevice" = "held";
@@ -54,7 +60,14 @@ const failOrReturn = <T>(value: T) => {
 
 mock.module("./api.ts", () => ({
   trpcClient: {
-    groupMembership: { list: { query: async () => groups.map((id) => ({ id })) } },
+    groupMembership: {
+      list: {
+        query: async () => {
+          listCalls += 1;
+          return groups.map((id) => ({ id, members: members.get(id) ?? [] }));
+        },
+      },
+    },
     groupEpoch: {
       getLatest: {
         query: async ({ groupId }: { groupId: string }) => {
@@ -189,6 +202,8 @@ const pictureUrl = (name: string) =>
 
 beforeEach(() => {
   groups = [];
+  members = new Map();
+  listCalls = 0;
   latestEpochs = new Map();
   unreadableEpochs = new Set();
   historyState = "held";
@@ -393,6 +408,135 @@ describe("getOwnImageKey", () => {
 
     expect(opened?.expose()).toEqual(imageKey.expose());
     expect(ownKeys.has("user-a")).toBe(false);
+  });
+
+  const wrapOwnKey = ({
+    epochId,
+    groupId,
+    imageKey,
+    wrappedFor = fileName,
+  }: {
+    epochId: string;
+    groupId: string;
+    imageKey: ImageKeyMaterial;
+    wrappedFor?: string;
+  }) =>
+    encryptImageKey({
+      epochId,
+      epochKey: epochKeyFor(epochId),
+      fileName: wrappedFor,
+      groupId,
+      imageKey,
+      kind: "profile-image-key",
+      ownerId: "user-a",
+      senderDeviceId: "device-b",
+    });
+
+  test("recovers the key from a group that holds it for the current picture, and keeps it", async () => {
+    const imageKey = generateImageKey();
+    groups = ["old-picture", "unreadable", "family"];
+    unreadableEpochs = new Set(["epoch-lost"]);
+    members = new Map([
+      [
+        "old-picture",
+        [
+          {
+            userId: "user-a",
+            image: pictureUrl(newerFileName),
+            imageKey: wrapOwnKey({
+              epochId: "epoch-1",
+              groupId: "old-picture",
+              imageKey: generateImageKey(),
+              wrappedFor: newerFileName,
+            }),
+          },
+        ],
+      ],
+      [
+        "unreadable",
+        [
+          {
+            userId: "user-a",
+            image: pictureUrl(fileName),
+            imageKey: wrapOwnKey({ epochId: "epoch-lost", groupId: "unreadable", imageKey }),
+          },
+        ],
+      ],
+      [
+        "family",
+        [
+          { userId: "user-b", image: null, imageKey: null },
+          {
+            userId: "user-a",
+            image: pictureUrl(fileName),
+            imageKey: wrapOwnKey({ epochId: "epoch-2", groupId: "family", imageKey }),
+          },
+        ],
+      ],
+    ]);
+
+    const recovered = await getOwnImageKey({ fileName, sealed: null, userId: "user-a" });
+
+    expect(recovered?.expose()).toEqual(imageKey.expose());
+    expect(ownKeys.get("user-a")?.key.expose()).toEqual(imageKey.expose());
+    expect(ownKeys.get("user-a")?.fileName).toBe(fileName);
+  });
+
+  test("ignores a group wrap bound to another group, and asks the server only when needed", async () => {
+    groups = ["family"];
+    members = new Map([
+      [
+        "family",
+        [
+          {
+            userId: "user-a",
+            image: pictureUrl(fileName),
+            imageKey: wrapOwnKey({
+              epochId: "epoch-2",
+              groupId: "elsewhere",
+              imageKey: generateImageKey(),
+            }),
+          },
+        ],
+      ],
+    ]);
+
+    expect(await getOwnImageKey({ fileName, sealed: null, userId: "user-a" })).toBeNull();
+    expect(listCalls).toBe(1);
+    expect(ownKeys.has("user-a")).toBe(false);
+
+    const kept = generateImageKey();
+    ownKeys.set("user-a", { fileName, key: kept });
+    expect((await getOwnImageKey({ fileName, sealed: null, userId: "user-a" }))?.expose()).toEqual(
+      kept.expose(),
+    );
+    expect(listCalls).toBe(1);
+  });
+
+  test("uses a group list it's given instead of fetching one", async () => {
+    const imageKey = generateImageKey();
+    const given = [
+      {
+        id: "family",
+        members: [
+          {
+            userId: "user-a",
+            image: pictureUrl(fileName),
+            imageKey: wrapOwnKey({ epochId: "epoch-2", groupId: "family", imageKey }),
+          },
+        ],
+      },
+    ];
+
+    const recovered = await getOwnImageKey({
+      fileName,
+      groups: async () => given as never,
+      sealed: null,
+      userId: "user-a",
+    });
+
+    expect(recovered?.expose()).toEqual(imageKey.expose());
+    expect(listCalls).toBe(0);
   });
 });
 

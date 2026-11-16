@@ -5,10 +5,10 @@ import {
   type ImageKeyMaterial,
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
-import type { RouterOutputs } from "./api.ts";
 import { imageFileNameFromUrl } from "./imageCache.ts";
+import type { StoredImageKey } from "./imageKeyTypes.ts";
 
-type StoredImageKey = NonNullable<RouterOutputs["groupMembership"]["list"][number]["imageKey"]>;
+export class ImageGoneError extends Error {}
 
 export type ImageKeySource =
   | { kind: "own"; sealed: string | null; userId: string }
@@ -21,6 +21,7 @@ export type DecryptedImageResult =
   | { status: "no-key" }
   | { status: "stale-key" }
   | { status: "undecryptable" }
+  | { status: "gone" }
   | { status: "unavailable" };
 
 const RETRY_AFTER_MS = 60_000;
@@ -66,7 +67,7 @@ export const imageKeySources = ({
   return sources;
 };
 
-const imageKeySourcesSignature = (sources: readonly ImageKeySource[]) =>
+export const imageKeySourcesSignature = (sources: readonly ImageKeySource[]) =>
   sources
     .map((source) =>
       source.kind === "own"
@@ -207,7 +208,9 @@ export const createImageDecryptor = (deps: {
       }
       blob ??= download(url);
       const downloaded = await blob;
-      if (downloaded.error) return { status: "unavailable" };
+      if (downloaded.error) {
+        return { status: downloaded.error instanceof ImageGoneError ? "gone" : "unavailable" };
+      }
       const plain = await tryCatch(
         Promise.resolve().then(() =>
           decryptImage({

@@ -13,7 +13,8 @@ mock.module("expo-file-system", () => ({ Directory: class {}, File: class {}, Pa
 mock.module("./storage.ts", () => ({ storage: {} }));
 mock.module("./currentServer.ts", () => ({ baseUrl: "https://api.example" }));
 
-const { createImageDecryptor, imageKeySources } = await import("./imageDecryptor.ts");
+const { createImageDecryptor, ImageGoneError, imageKeySources } =
+  await import("./imageDecryptor.ts");
 
 const alice = "user-alice";
 const bob = "user-bob";
@@ -337,6 +338,25 @@ describe("requests", () => {
     expect(first).toEqual({ status: "unavailable" });
     expect(soon).toEqual({ status: "unavailable" });
     expect(later.status).toBe("ready");
+    expect(downloads).toHaveLength(2);
+  });
+
+  test("a picture gone from storage isn't downloaded again until its keys change", async () => {
+    const imageKey = encrypt({ fileName: fileA, ownerId: bob, purpose: "profile-image" });
+    const key = wrap({ fileName: fileA, imageKey, kind: "profile-image-key", ownerId: bob });
+    const decryptor = createDecryptor();
+    downloadError = new ImageGoneError("Picture download failed with 404.");
+
+    const first = await decryptor.load({ sources: [memberSource(key)], url: urlFor(fileA) });
+    now = 10 * 60_000;
+    const later = await decryptor.load({ sources: [memberSource(key)], url: urlFor(fileA) });
+    downloadError = null;
+    const fresh = wrap({ fileName: fileA, imageKey, kind: "profile-image-key", ownerId: bob });
+    const rekeyed = await decryptor.load({ sources: [memberSource(fresh)], url: urlFor(fileA) });
+
+    expect(first).toEqual({ status: "gone" });
+    expect(later).toEqual({ status: "gone" });
+    expect(rekeyed.status).toBe("ready");
     expect(downloads).toHaveLength(2);
   });
 

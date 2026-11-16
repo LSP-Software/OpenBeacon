@@ -232,11 +232,13 @@ model PlaceSharing {
 }
 
 model PendingUpload {
-  userId     String
-  uploadType ImageUploadType
-  fileName   String
-  createdAt  DateTime        @default(now())
-  groupId    String          @default("")
+  userId      String
+  uploadType  ImageUploadType
+  fileName    String
+  contentHash String?
+  fileSize    Int?
+  createdAt   DateTime        @default(now())
+  groupId     String          @default("")
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 

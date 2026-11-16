@@ -82,10 +82,10 @@ export const uploadEncryptedImage = async ({
 
 export const imageUploadErrorMessage = (error: unknown) => {
   if (error instanceof GroupKeyUnavailableError) {
-    return "This phone can’t use this group’s key yet. Try again in a minute.";
+    return "This phone is still catching up with this group. Try again in a minute.";
   }
   if (error instanceof ImageStorageError || !(error instanceof TRPCClientError) || !error.data) {
-    return "Unable to upload image. Check your connection and try again.";
+    return "Unable to upload the picture. Check your connection and try again.";
   }
   const cause: unknown = error.data.cause;
   if (cause === devicePendingCause || cause === deviceUnverifiedCause) return error.message;
@@ -103,18 +103,18 @@ export const imageUploadErrorMessage = (error: unknown) => {
       return "You’re no longer in this group.";
   }
   if (error.data.code === "PRECONDITION_FAILED") {
-    return "That upload expired. Please choose the image again.";
+    return "That upload expired. Choose the picture again.";
   }
   if (error.data.code === "FORBIDDEN") {
-    return "Only group owners and admins can change the group photo.";
+    return "Only group owners and admins can change the group picture.";
   }
   if (error.data.code === "TOO_MANY_REQUESTS") {
     return "Too many uploads. Wait a minute and try again.";
   }
   if (error.data.httpStatus < 500) {
-    return "That image couldn’t be uploaded. Try a different one.";
+    return "That picture couldn’t be uploaded. Try a different one.";
   }
-  return "Unable to upload image. Check your connection and try again.";
+  return "Unable to upload the picture. Check your connection and try again.";
 };
 
 export type ImageUploadResult = { data: string; error?: never } | { data?: never; error: string };
@@ -128,7 +128,7 @@ export const uploadImageFromUri = async ({
   const bytes = await tryCatch(new FSFile(uri).bytes());
   if (bytes.error) {
     cleanupTempFile(uri);
-    return { error: "Unable to read that image. Try a different one." };
+    return { error: "Unable to read that picture. Try a different one." };
   }
   let result = await tryCatch(uploadEncryptedImage({ ...upload, bytes: bytes.data }));
   if (

@@ -3,19 +3,25 @@ import { tryCatch } from "@openbeacon/shared";
 import { type RouterOutputs, trpcClient } from "./api.ts";
 import { baseUrl } from "./currentServer.ts";
 import { downloadEncryptedImage } from "./decryptedImages.ts";
+import { errorReason } from "./errorReason.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { uploadEncryptedImage } from "./image-upload.ts";
 import { cachedImageUri, imageFileNameFromUrl, readCachedImage } from "./imageCache.ts";
 import { confirmGroupImage, getOwnImageKey, storeOwnImageKeyInGroup } from "./imageKeys.ts";
+import type { StoredImageKey } from "./imageKeyTypes.ts";
 import { storage } from "./storage.ts";
-
-type StoredImageKey = NonNullable<RouterOutputs["groupMembership"]["list"][number]["imageKey"]>;
 
 const RETRY_AFTER_MS = 15 * 60_000;
 const GROUP_IMAGE_REPAIR_EVERY_MS = 24 * 60 * 60_000;
 
 const attempts = new Map<string, { at: number; signature: string }>();
 let running: Promise<boolean> | null = null;
+
+type CheckInput = {
+  groups: RouterOutputs["groupMembership"]["list"];
+  user: { id: string; image?: string | null; imageKeySealed?: string | null };
+};
+
 let pending: CheckInput | null = null;
 let currentUserId: string | null = null;
 
@@ -128,16 +134,25 @@ const checkGroupKey = async ({
   const plain = await readCachedImage(fileName);
   if (!plain) return unsettled;
   storage.set(repairKey, Date.now());
-  await uploadEncryptedImage({
-    bytes: plain,
-    ownerId: groupId,
-    purpose: "group-image",
-    request: () => trpcClient.groupSettings.requestGroupImageUpload.mutate({ groupId }),
-    presign: (input) =>
-      trpcClient.groupSettings.presignGroupImageUpload.mutate({ groupId, ...input }),
-    confirm: ({ fileName: newFileName, imageKey: newImageKey }) =>
-      confirmGroupImage({ fileName: newFileName, groupId, imageKey: newImageKey }),
-  });
+  const uploaded = await tryCatch(
+    uploadEncryptedImage({
+      bytes: plain,
+      ownerId: groupId,
+      purpose: "group-image",
+      request: () => trpcClient.groupSettings.requestGroupImageUpload.mutate({ groupId }),
+      presign: (input) =>
+        trpcClient.groupSettings.presignGroupImageUpload.mutate({ groupId, ...input }),
+      confirm: ({ fileName: newFileName, imageKey: newImageKey }) =>
+        confirmGroupImage({
+          expectedFileName: fileName,
+          fileName: newFileName,
+          groupId,
+          imageKey: newImageKey,
+        }),
+    }),
+  );
+  if (errorReason(uploaded.error) === "IMAGE_CHANGED") return unsettled;
+  if (uploaded.error) throw uploaded.error;
   return { settled: true, repaired: true };
 };
 
@@ -176,6 +191,7 @@ const checkAll = async ({ groups, user }: CheckInput) => {
           check: async () => {
             ownKey ??= getOwnImageKey({
               fileName: ownFileName,
+              groups: async () => groups,
               sealed: user.imageKeySealed ?? null,
               userId: user.id,
             });
@@ -237,7 +253,8 @@ export const checkImageKeys = (input: CheckInput) => {
   return running;
 };
 
-type CheckInput = {
-  groups: RouterOutputs["groupMembership"]["list"];
-  user: { id: string; image?: string | null; imageKeySealed?: string | null };
+export const resetImageKeyCheck = () => {
+  pending = null;
+  currentUserId = null;
+  attempts.clear();
 };

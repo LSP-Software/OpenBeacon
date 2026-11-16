@@ -103,11 +103,17 @@ export const presignImageUpload = async ({
   fileName: string;
   noPendingImageUploadMessage: string;
 }): Promise<{ presignedUrl: string }> => {
-  const pending = await db.pendingUpload.findUnique({
-    where: { userId_uploadType_groupId: { userId, uploadType, groupId: groupId ?? "" } },
-    select: { fileName: true },
+  const pinned = await db.pendingUpload.updateMany({
+    where: {
+      userId,
+      uploadType,
+      groupId: groupId ?? "",
+      fileName,
+      OR: [{ contentHash: null }, { contentHash, fileSize }],
+    },
+    data: { contentHash, fileSize },
   });
-  if (pending?.fileName !== fileName) {
+  if (pinned.count !== 1) {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: noPendingImageUploadMessage });
   }
 

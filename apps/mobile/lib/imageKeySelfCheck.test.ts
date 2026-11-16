@@ -44,11 +44,17 @@ let downloadFails = false;
 let downloadGate: Promise<void> | null = null;
 let serverGroups: Group[] | null = null;
 let lastChecked: Group[] = [];
+const ownKeyGroups: unknown[] = [];
 const reads: string[] = [];
 const storageValues = new Map<string, string | number>();
 const downloads: string[] = [];
 const uploads: { bytes: Uint8Array; ownerId: string; purpose: string }[] = [];
-const groupConfirms: { fileName: string; groupId: string }[] = [];
+const groupConfirms: {
+  expectedFileName: string | null | undefined;
+  fileName: string;
+  groupId: string;
+}[] = [];
+let confirmError: Error | null = null;
 const storeOwn = mock(async (_groupId: string) => true);
 
 const wrap = ({
@@ -141,15 +147,27 @@ mock.module("./image-upload.ts", () => ({
   },
 }));
 mock.module("./imageKeys.ts", () => ({
-  confirmGroupImage: async (input: { fileName: string; groupId: string }) => {
-    groupConfirms.push({ fileName: input.fileName, groupId: input.groupId });
+  confirmGroupImage: async (input: {
+    expectedFileName?: string | null;
+    fileName: string;
+    groupId: string;
+  }) => {
+    groupConfirms.push({
+      expectedFileName: input.expectedFileName,
+      fileName: input.fileName,
+      groupId: input.groupId,
+    });
+    if (confirmError) throw confirmError;
     return { imageUrl: url(input.fileName) };
   },
-  getOwnImageKey: async () => ownKey,
+  getOwnImageKey: async (input: { groups?: () => Promise<unknown> }) => {
+    ownKeyGroups.push(await input.groups?.());
+    return ownKey;
+  },
   storeOwnImageKeyInGroup: storeOwn,
 }));
 
-const { checkImageKeys } = await import("./imageKeySelfCheck.ts");
+const { checkImageKeys, resetImageKeyCheck } = await import("./imageKeySelfCheck.ts");
 
 const user = { id: "user-a", image: url(ME_FILE), imageKeySealed: null };
 
@@ -228,11 +246,13 @@ beforeEach(() => {
   downloadGate = null;
   serverGroups = null;
   lastChecked = [];
+  ownKeyGroups.length = 0;
   reads.length = 0;
   storageValues.clear();
   downloads.length = 0;
   uploads.length = 0;
   groupConfirms.length = 0;
+  confirmError = null;
   storeOwn.mockClear();
 });
 
@@ -307,7 +327,20 @@ test("an admin's phone uploads the cached picture again when the group key was r
   });
   expect(await check([makeGroup({ groupKey: junk })])).toBe(true);
   expect(uploads).toEqual([{ bytes: plainPicture, ownerId: groupId, purpose: "group-image" }]);
-  expect(groupConfirms).toEqual([{ fileName: NEW_GROUP_FILE, groupId }]);
+  expect(groupConfirms).toEqual([
+    { expectedFileName: GROUP_FILE, fileName: NEW_GROUP_FILE, groupId },
+  ]);
+});
+
+test("stops repairing when another admin changes the picture before the upload is confirmed", async () => {
+  confirmError = Object.assign(new Error("IMAGE_CHANGED"), { data: { reason: "IMAGE_CHANGED" } });
+  const groups = [makeGroup({ groupKey: junkGroupKey() })];
+  expect(await check(groups)).toBe(false);
+  expect(groupConfirms).toEqual([
+    { expectedFileName: GROUP_FILE, fileName: NEW_GROUP_FILE, groupId },
+  ]);
+  expect(await check(groups)).toBe(false);
+  expect(uploads).toHaveLength(1);
 });
 
 test("an admin's phone repairs a group key that doesn't decrypt without downloading", async () => {
@@ -483,4 +516,35 @@ test("stops checking for a person who signed out mid-check", async () => {
   expect(await Promise.all([running, other])).toEqual([false, false]);
   expect(downloads).toHaveLength(1);
   expect(storeOwn).not.toHaveBeenCalled();
+});
+
+test("stops checking when this person signs out mid-check", async () => {
+  const release = holdDownloads();
+  const firstGroup = makeGroup({});
+  groupId = `${groupId}-second`;
+  const secondGroup = makeGroup({ ownGroupKey: null, role: "MEMBER" });
+  const running = check([firstGroup, secondGroup]);
+  await downloadStarted();
+  resetImageKeyCheck();
+  release();
+  expect(await running).toBe(false);
+  expect(downloads).toHaveLength(1);
+  expect(storeOwn).not.toHaveBeenCalled();
+});
+
+test("signing out forgets recent attempts, so the next account's check runs straight away", async () => {
+  ownKey = null;
+  const group = makeGroup({ ownGroupKey: null, role: "MEMBER" });
+  await check([group]);
+  await check([group]);
+  expect(ownKeyGroups).toHaveLength(1);
+  resetImageKeyCheck();
+  await check([group]);
+  expect(ownKeyGroups).toHaveLength(2);
+});
+
+test("looks for this person's own key in the groups being checked", async () => {
+  const groups = [makeGroup({ ownGroupKey: null, role: "MEMBER" })];
+  await check(groups);
+  expect(ownKeyGroups).toEqual([groups]);
 });

@@ -1,5 +1,6 @@
 import { decodeBase64, encodeBase64, ImageKeyMaterial } from "@openbeacon/encryption";
 import { z } from "zod";
+import { parseJson } from "./parseJson.ts";
 import {
   deleteSecret,
   invalidateSecretWrites,
@@ -48,12 +49,4 @@ export const readOwnImageKey = async ({
 export const deleteOwnImageKey = async (userId: string) => {
   await invalidateSecretWrites(getOwnImageKeyName(userId));
   await deleteSecret(getOwnImageKeyName(userId));
-};
-
-const parseJson = (value: string): unknown => {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
 };

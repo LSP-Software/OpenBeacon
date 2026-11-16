@@ -6,6 +6,7 @@ import { baseUrl } from "./currentServer.ts";
 import { getRegisteredDeviceKey } from "./deviceKeys.ts";
 import { catchUpGroupImageKeys } from "./imageKeyCatchUp.ts";
 import { showPlaceNotice } from "./notifications.ts";
+import { parseJson } from "./parseJson.ts";
 import { loadPersonalNicknames } from "./personalNicknames.ts";
 import { catchUpGroupPlaces } from "./placeCatchUp.ts";
 import { groupPlacesQueryKey, loadGroupPlaces } from "./placeSync.ts";
@@ -25,7 +26,12 @@ export type PlaceUpdates = {
 type Groups = () => Promise<RouterOutputs["groupMembership"]["list"]>;
 
 const knownPlacesSchema = z.record(z.string(), z.string());
-const imageKeyMissesSchema = z.record(z.string(), z.number());
+const imageKeyMissesSchema = z.record(
+  z.string(),
+  z.object({ epoch: z.string().optional(), misses: z.number() }),
+);
+
+const imageKeyCatchUps = new Set<Promise<void>>();
 
 const placeOwner = (userId: string) => JSON.stringify([baseUrl, userId]);
 
@@ -78,17 +84,13 @@ export const describePlacesChanged = ({
   };
 };
 
-const readStoredJson = async (key: string) => {
+const readStoredJson = (key: string) => {
   const raw = storage.getString(key);
-  if (raw === undefined) return { raw, value: undefined };
-  const parsed = await tryCatch(Promise.resolve().then((): unknown => JSON.parse(raw)));
-  return { raw, value: parsed.data };
+  return raw === undefined ? undefined : parseJson(raw);
 };
 
-const readKnownPlaces = async (userId: string, groupId: string) =>
-  knownPlacesSchema
-    .catch({})
-    .parse((await readStoredJson(storageKey(userId, "known", groupId))).value);
+const readKnownPlaces = (userId: string, groupId: string) =>
+  knownPlacesSchema.catch({}).parse(readStoredJson(storageKey(userId, "known", groupId)));
 
 export const syncGroupPlaces = async ({
   groupId,
@@ -134,7 +136,7 @@ export const syncGroupPlaces = async ({
     );
     if (!applied) return false;
   }
-  const known = await readKnownPlaces(userId, groupId);
+  const known = readKnownPlaces(userId, groupId);
   const next = Object.fromEntries(
     ready.map(({ geometry, id }) => [
       id,
@@ -197,14 +199,80 @@ const showPlaceAlerts = async ({
 export const markPlacesUnsynced = ({ groupId, userId }: { groupId: string; userId: string }) =>
   storage.remove(storageKey(userId, "revision", groupId));
 
-const listDetectedGroups = async (userId: string) => {
+const readNativeGroups = async (userId: string) => {
   const [device, trackingModule] = await Promise.all([
     getRegisteredDeviceKey(),
     loadTrackingModule(),
   ]);
   if (!device || device.userId !== userId || !trackingModule) return null;
   const groupIds = trackingModule.listPlaceGroups(placeOwner(userId), device.deviceId);
-  return groupIds ? new Set(groupIds) : null;
+  const keys = trackingModule
+    .listProvisionedEpochKeys()
+    .filter(({ senderDeviceId }) => senderDeviceId === device.deviceId);
+  return {
+    detected: groupIds ? new Set(groupIds) : null,
+    epochOf: (groupId: string) =>
+      keys
+        .filter((key) => key.groupId === groupId)
+        .map(({ epochId }) => epochId)
+        .sort()
+        .join(",") || undefined,
+  };
+};
+
+const catchUpImageKeys = async ({
+  epochOf,
+  groupIds,
+  groups,
+  userId,
+}: {
+  epochOf: (groupId: string) => string | undefined;
+  groupIds: readonly string[];
+  groups: Groups;
+  userId: string;
+}) => {
+  const missesKey = storageKey(userId, "imageKeysCatchUpMisses");
+  const readMisses = () => imageKeyMissesSchema.catch({}).parse(readStoredJson(missesKey));
+  const saveMisses = (misses: z.infer<typeof imageKeyMissesSchema>) => {
+    const next = JSON.stringify(misses);
+    if (next !== storage.getString(missesKey)) storage.set(missesKey, next);
+  };
+  const previous = readMisses();
+  const current = Object.fromEntries(
+    groupIds.map((groupId) => {
+      const stored = previous[groupId];
+      const epoch = epochOf(groupId) ?? stored?.epoch;
+      return [groupId, { epoch, misses: stored && stored.epoch === epoch ? stored.misses : 0 }];
+    }),
+  );
+  saveMisses(current);
+  const due = groupIds.filter((groupId) => {
+    const catchUpKey = storageKey(userId, "imageKeysCatchUpAt", groupId);
+    const waitMinutes = [15, 15, 60, 6 * 60][current[groupId]?.misses ?? 0] ?? 24 * 60;
+    if (Date.now() - (storage.getNumber(catchUpKey) ?? 0) < waitMinutes * 60_000) return false;
+    storage.set(catchUpKey, Date.now());
+    return true;
+  });
+  let imageKeysMoved = false;
+  for (const groupId of due) {
+    const moved = await tryCatch(catchUpGroupImageKeys({ groupId, groups, userId }));
+    imageKeysMoved ||= Boolean(moved.data);
+    const latest = readMisses();
+    const entry = latest[groupId];
+    if (entry) {
+      saveMisses({
+        ...latest,
+        [groupId]: { ...entry, misses: moved.data ? 0 : Math.min(entry.misses + 1, 4) },
+      });
+    }
+  }
+  if (imageKeysMoved) {
+    await queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() });
+  }
+};
+
+export const settleImageKeyCatchUps = async () => {
+  while (imageKeyCatchUps.size > 0) await Promise.allSettled([...imageKeyCatchUps]);
 };
 
 export const applyPlaceUpdates = async ({
@@ -219,7 +287,8 @@ export const applyPlaceUpdates = async ({
     groupList ??= trpcClient.groupMembership.list.query();
     return groupList;
   };
-  const detectedGroups = await listDetectedGroups(userId);
+  const nativeGroups = await readNativeGroups(userId);
+  const detectedGroups = nativeGroups?.detected ?? null;
   for (const summary of updates.places ?? []) {
     const revisionKey = storageKey(userId, "revision", summary.groupId);
     if (
@@ -249,27 +318,17 @@ export const applyPlaceUpdates = async ({
     );
     if (!shown.error) storage.set(storageKey(userId, "alertsCursor"), updates.placeAlerts.cursor);
   }
-  let imageKeysMoved = false;
   if (updates.imageKeysNeedCatchUp) {
-    const missesKey = storageKey(userId, "imageKeysCatchUpMisses");
-    const stored = await readStoredJson(missesKey);
-    const previous = imageKeyMissesSchema.catch({}).parse(stored.value);
-    const misses: Record<string, number> = {};
-    for (const groupId of updates.imageKeysNeedCatchUp) {
-      const missed = previous[groupId] ?? 0;
-      misses[groupId] = missed;
-      const catchUpKey = storageKey(userId, "imageKeysCatchUpAt", groupId);
-      const waitMinutes = [15, 15, 60, 6 * 60][missed] ?? 24 * 60;
-      if (Date.now() - (storage.getNumber(catchUpKey) ?? 0) < waitMinutes * 60_000) continue;
-      storage.set(catchUpKey, Date.now());
-      const moved = await tryCatch(catchUpGroupImageKeys({ groupId, groups, userId }));
-      imageKeysMoved ||= Boolean(moved.data);
-      misses[groupId] = moved.data ? 0 : Math.min(missed + 1, 4);
-    }
-    const next = JSON.stringify(misses);
-    if (next !== stored.raw) storage.set(missesKey, next);
-  }
-  if (imageKeysMoved) {
-    await queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() });
+    const catchUp = tryCatch(
+      catchUpImageKeys({
+        epochOf: nativeGroups?.epochOf ?? (() => undefined),
+        groupIds: updates.imageKeysNeedCatchUp,
+        groups,
+        userId,
+      }),
+    ).then(() => {
+      imageKeyCatchUps.delete(catchUp);
+    });
+    imageKeyCatchUps.add(catchUp);
   }
 };

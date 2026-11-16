@@ -36,6 +36,7 @@ import {
   applyPlaceUpdates,
   getPlaceAlertsCursor,
   type PlaceUpdates,
+  settleImageKeyCatchUps,
 } from "./placeBackgroundSync.ts";
 import { backfillHistoryWraps } from "./recovery.ts";
 import { resealPersonalData } from "./resealPersonalData.ts";
@@ -1033,9 +1034,7 @@ const pollPlaceUpdates = async () => {
   });
 };
 
-export const syncBackgroundTracking = async (
-  reason: "upload" | "sharing" | "parked" = "upload",
-) => {
+const syncBackgroundTrackingInternal = async (reason: "upload" | "sharing" | "parked") => {
   if (getApiCompatibility()) {
     await refreshApiCompatibilityInBackground();
     if (!getApiCompatibility()) await dismissNotice("compatibility");
@@ -1069,6 +1068,14 @@ export const syncBackgroundTracking = async (
   if (result.error && !(await isDeviceOffline())) {
     throw result.error;
   }
+};
+
+export const syncBackgroundTracking = async (
+  reason: "upload" | "sharing" | "parked" = "upload",
+) => {
+  const synced = await tryCatch(syncBackgroundTrackingInternal(reason));
+  await settleImageKeyCatchUps();
+  if (synced.error) throw synced.error;
 };
 
 const revokeTrackingAccessInternal = async (): Promise<void> => {
@@ -1147,6 +1154,7 @@ export const prepareTrackingSignOut = async (): Promise<void> => {
         if (previousFlush) await previousFlush;
         if (!controller.signal.aborted) {
           await flushPendingTrackingPointsInternal(true, controller.signal);
+          await settleImageKeyCatchUps();
         }
       })(),
       new Promise<void>((resolve) =>

@@ -12,9 +12,11 @@ import {
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { clearGroupColors } from "./groupColor.ts";
 import { clearImageCache } from "./imageCache.ts";
+import { resetImageKeyCheck } from "./imageKeySelfCheck.ts";
 import { deleteStoredHistoryKeys } from "./historyKeys.ts";
 import { clearPendingSharingChanges, getPendingSharingChanges } from "./locationSharing.ts";
 import { deleteOwnImageKey } from "./ownImageKey.ts";
+import { parseJson } from "./parseJson.ts";
 import { clearPendingJoinCodes } from "./pendingJoinCode.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
@@ -83,14 +85,6 @@ const LOST_SESSIONS_KEY = "session.lost";
 
 const lostSessionsSchema = z.array(z.object({ userId: z.string(), lostAt: z.number() }));
 
-const parseJson = (value: string): unknown => {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-};
-
 const readLostSessions = () => {
   const stored = storage.getString(LOST_SESSIONS_KEY);
   if (!stored) return [];
@@ -147,6 +141,7 @@ export const endSession = async ({
 }: {
   reason: EndSessionReason;
 }): Promise<{ signedOut: boolean }> => {
+  resetImageKeyCheck();
   await tryCatch(Promise.resolve().then(clearImageCache));
   const clears = endSessionClears[reason];
   const registered = await readRegisteredDevice();
