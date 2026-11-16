@@ -8,6 +8,7 @@ import {
 } from "@openbeacon/shared";
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
+import { healthAnnouncementsSchema, saveAnnouncements } from "./announcements.ts";
 import { baseUrl } from "./currentServer.ts";
 import { storage } from "./storage.ts";
 
@@ -67,6 +68,7 @@ const healthSchema = z.union([
     apiCompatibilityLevel: levelSchema,
     minClientApiCompatibilityLevel: levelSchema,
     message: messageSchema,
+    announcements: healthAnnouncementsSchema,
   }),
   z
     .object({
@@ -80,6 +82,7 @@ const healthSchema = z.union([
       apiCompatibilityLevel: 0,
       minClientApiCompatibilityLevel: 0,
       message: null,
+      announcements: [],
     })),
 ]);
 
@@ -139,11 +142,12 @@ export const checkServerCompatibility = async (serverUrl: string) => {
   const body = response.error || !response.data.ok ? null : await readJson(response.data);
   clearTimeout(timer);
   const health = healthSchema.safeParse(body);
-  if (!health.success) return { verdict: null, serverVersion: null };
+  if (!health.success) return { verdict: null, serverVersion: null, announcements: null };
   return {
     verdict: decideApiCompatibility({ server: health.data }),
     serverVersion: health.data.version,
     message: health.data.message,
+    announcements: health.data.announcements,
   };
 };
 
@@ -201,6 +205,7 @@ const setState = (next: ApiCompatibilityState | null) => {
 };
 
 let revision = 0;
+let latestHealthCheck = 0;
 let lastBackgroundRefreshAt: number | null = null;
 
 const applyVerdict = ({
@@ -270,7 +275,11 @@ export const withApiCompatibilityHeader = (init?: RequestInit): RequestInit => {
 
 export const refreshApiCompatibility = async ({ userRequested }: { userRequested: boolean }) => {
   const startedAt = revision;
-  const { verdict, serverVersion, message } = await checkServerCompatibility(baseUrl);
+  latestHealthCheck += 1;
+  const healthCheck = latestHealthCheck;
+  const { verdict, serverVersion, message, announcements } =
+    await checkServerCompatibility(baseUrl);
+  if (announcements && healthCheck === latestHealthCheck) saveAnnouncements(announcements);
   if (revision === startedAt) {
     applyVerdict({ verdict, serverVersion, message, sticky: false, userRequested });
   }

@@ -21,6 +21,7 @@ Object.assign(process.env, {
   MAP_S3_BUCKET_NAME: "test-bucket",
 });
 const { app } = await import("./app.ts");
+const { refreshAnnouncements } = await import("./announcements.ts");
 
 const expectLevelHeaders = (response: Response) => {
   expect(response.headers.get("x-openbeacon-api-compatibility-level")).toBe(
@@ -72,6 +73,46 @@ describe("app", () => {
         "minClientApiCompatibilityLevel",
       ].sort(),
     );
+  });
+
+  test("adds the frozen announcements key to /health while one is showing", async () => {
+    await refreshAnnouncements({
+      announcement: {
+        findMany: async ({ where }: { where: { startsAt: { gt?: Date } } }) =>
+          where.startsAt.gt
+            ? []
+            : [
+                {
+                  id: "0196a1b2-0000-7000-8000-000000000001",
+                  message: "We're moving servers tonight.",
+                  severity: "WARNING",
+                  platform: "IOS",
+                  minAppVersion: "1.0.0",
+                  maxAppVersion: "2.0.0",
+                  downtimeStartsAt: new Date("2999-01-01T00:00:00.000Z"),
+                  downtimeEndsAt: new Date("2999-01-01T01:00:00.000Z"),
+                  startsAt: new Date(Date.now() - 60_000),
+                  endsAt: new Date("2999-01-01T01:00:00.000Z"),
+                  createdAt: new Date(),
+                },
+              ],
+      },
+    });
+    const body: Record<string, unknown> = await (await app.request("/health")).json();
+    expect(body["announcements"]).toEqual([
+      {
+        id: "0196a1b2-0000-7000-8000-000000000001",
+        message: "We're moving servers tonight.",
+        severity: "warning",
+        platform: "ios",
+        minAppVersion: "1.0.0",
+        maxAppVersion: "2.0.0",
+        downtimeStartsAt: "2999-01-01T00:00:00.000Z",
+        downtimeEndsAt: "2999-01-01T01:00:00.000Z",
+        endsAt: "2999-01-01T01:00:00.000Z",
+      },
+    ]);
+    await refreshAnnouncements({ announcement: { findMany: async () => [] } });
   });
 
   test("sends a browser back to the app from the Google deletion callback", async () => {

@@ -4,6 +4,7 @@ import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Dimensions, Easing, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AnnouncementBanner } from "../components/AnnouncementBanner.tsx";
 import { BeaconIcon } from "../components/BeaconIcon.tsx";
 import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
@@ -131,6 +132,7 @@ export default function HomeScreen() {
       <LoadingScreen colors={colors}>
         {session && failures > 0 && (
           <View className="absolute bottom-0 left-0 right-0 gap-3 px-8 pb-12">
+            <AnnouncementBanner />
             <Text className="text-center text-muted" accessibilityLiveRegion="polite">
               {hasCustomServerUrl()
                 ? `Couldn't connect to ${baseUrl}. Check your connection and that your server is running. Trying again automatically.`
@@ -182,6 +184,7 @@ export default function HomeScreen() {
             ))}
           </View>
 
+          <AnnouncementBanner />
           <View className="flex-1 items-center justify-center gap-10 pt-10">
             <BeaconIcon size={96} color={colors.primary} />
             <View className="items-center gap-4">

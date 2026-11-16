@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "NODE_ENV=development bun run --cwd ../.. --env-file=.env --hot apps/backend/src/index.ts",
     "typecheck": "bun check",
-    "test": "bun test --isolate"
+    "test": "bun test --isolate",
+    "announce": "bun run --cwd ../.. --env-file=.env apps/backend/src/announce.ts"
   },
   "dependencies": {
     "@openbeacon/api": "workspace:*",

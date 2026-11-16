@@ -16,8 +16,12 @@ For email in development, set `EMAIL_CONSOLE=true` instead of a provider. Each e
 
 ## Health checks
 
-- `GET /health` returns the status, backend version and server name (`SERVER_NAME`). It never touches Redis, so the app can always read it.
+- `GET /health` returns the status, backend version and server name (`SERVER_NAME`), plus any announcements showing now. It never touches Redis or waits on PostgreSQL, so the app can always read it. Announcements are loaded from PostgreSQL every 30 seconds in the background.
 - `GET /ready` returns 200 while Redis answers and 503 while it doesn't. It's for monitoring, not the container health check: the backend reconnects to Redis by itself.
+
+## Announcements
+
+`bun run announce` adds, lists and ends the banners the app shows at the top of its main tabs and sign-in screens, for example before planned downtime. Run it with no arguments for its options. Announcements live in the `Announcement` table and the app filters them by platform and app version itself, so it never sends those to the server for this. See [Announcements](https://docs.openbeacon.net/docs/self-host/running-your-server/announcements).
 
 ## Startup
 
@@ -39,6 +43,7 @@ Everything about running the backend in production is in the docs:
 - [Email](https://docs.openbeacon.net/docs/self-host/configuration/email)
 - [Health checks and the job runner](https://docs.openbeacon.net/docs/self-host/running-your-server/health-checks-and-the-job-runner)
 - [Upgrades and migrations](https://docs.openbeacon.net/docs/self-host/running-your-server/upgrades-and-migrations)
+- [Announcements](https://docs.openbeacon.net/docs/self-host/running-your-server/announcements)
 
 The app only connects to a self-hosted backend over `https://`, so put it behind a reverse proxy with a TLS certificate. Every server also needs the [scheduled job runner](../scheduled-jobs/README.md).
 

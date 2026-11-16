@@ -25,6 +25,51 @@ describe("health endpoint", () => {
     });
   });
 
+  test("adds the announcements that are showing now and leaves the key out when there are none", async () => {
+    const { refreshAnnouncements } = await import("../announcements.ts");
+    const { default: health } = await import("./health.ts");
+    const showing = {
+      id: "0196a1b2-0000-7000-8000-000000000001",
+      message: "We're moving servers tonight.",
+      severity: "INFO" as const,
+      platform: null,
+      minAppVersion: null,
+      maxAppVersion: null,
+      downtimeStartsAt: null,
+      downtimeEndsAt: null,
+      startsAt: new Date(Date.now() - 60_000),
+      endsAt: new Date("2999-01-01T00:00:00.000Z"),
+      createdAt: new Date(),
+    };
+    const database = (rows: (typeof showing)[]) => ({
+      announcement: {
+        findMany: async ({ where }: { where: { startsAt: { gt?: Date } } }) =>
+          where.startsAt.gt ? [] : rows,
+      },
+    });
+
+    await refreshAnnouncements(database([showing]));
+    const body: Record<string, unknown> = await (await health.request("/health")).json();
+    expect(body["announcements"]).toEqual([
+      {
+        id: showing.id,
+        message: showing.message,
+        severity: "info",
+        platform: null,
+        minAppVersion: null,
+        maxAppVersion: null,
+        downtimeStartsAt: null,
+        downtimeEndsAt: null,
+        endsAt: "2999-01-01T00:00:00.000Z",
+      },
+    ]);
+
+    await refreshAnnouncements(database([]));
+    expect(Object.keys(await (await health.request("/health")).json())).not.toContain(
+      "announcements",
+    );
+  });
+
   test("readiness pings Redis while health stays independent of it", async () => {
     const { default: health } = await import("./health.ts");
     const unreachable = { cache: { ping: async () => false } };

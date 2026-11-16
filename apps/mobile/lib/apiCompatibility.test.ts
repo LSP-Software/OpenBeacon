@@ -192,6 +192,7 @@ describe("checkServerCompatibility", () => {
       verdict: "appTooOld",
       serverVersion: "9.9.9",
       message: null,
+      announcements: [],
     });
     expect(requests[0]?.url).toBe("https://family.example.test/health");
   });
@@ -210,6 +211,7 @@ describe("checkServerCompatibility", () => {
     expect(await checkServerCompatibility("https://family.example.test")).toEqual({
       verdict: null,
       serverVersion: null,
+      announcements: null,
     });
   });
 
@@ -221,6 +223,7 @@ describe("checkServerCompatibility", () => {
       }),
       serverVersion: "0.4.4",
       message: null,
+      announcements: [],
     });
   });
 });
@@ -333,6 +336,7 @@ describe("server message", () => {
       verdict: "appTooOld",
       serverVersion: "9.9.9",
       message: "Update from the Play Store.",
+      announcements: [],
     });
   });
 
@@ -587,6 +591,74 @@ describe("refreshApiCompatibility", () => {
 
     expect(await refresh).toBe("ok");
     expect(getApiCompatibility()?.problem).toBe("appTooOld");
+  });
+
+  test("keeps the announcements from the newest /health check when an older one answers last", async () => {
+    const answers: ((response: Response) => void)[] = [];
+    respond = () => new Promise<Response>((resolve) => answers.push(resolve));
+    const withAnnouncement = (id: string) =>
+      json({
+        status: "ok",
+        version: "9.9.9",
+        apiCompatibilityLevel,
+        minClientApiCompatibilityLevel: apiCompatibilityLevel,
+        announcements: [
+          {
+            id,
+            message: "Planned maintenance.",
+            severity: "info",
+            platform: null,
+            minAppVersion: null,
+            maxAppVersion: null,
+            downtimeStartsAt: null,
+            downtimeEndsAt: null,
+            endsAt: "2999-01-01T00:00:00.000Z",
+          },
+        ],
+      });
+
+    const older = refreshApiCompatibility({ userRequested: false });
+    const newer = refreshApiCompatibility({ userRequested: false });
+    answers[1]?.(withAnnouncement("newer"));
+    await newer;
+    answers[0]?.(withAnnouncement("older"));
+    await older;
+
+    const saved = JSON.parse(stored.get("announcements") ?? "{}").announcements;
+    expect(saved.map(({ id }: { id: string }) => id)).toEqual(["newer"]);
+  });
+
+  test("saves the server's announcements and keeps them while the server can't be reached", async () => {
+    const announcement = {
+      id: "maintenance",
+      message: "Planned maintenance on Saturday.",
+      severity: "warning",
+      platform: null,
+      minAppVersion: null,
+      maxAppVersion: null,
+      downtimeStartsAt: null,
+      downtimeEndsAt: null,
+      endsAt: "2999-01-01T00:00:00.000Z",
+    };
+    respond = () =>
+      json({
+        status: "ok",
+        version: "9.9.9",
+        apiCompatibilityLevel,
+        minClientApiCompatibilityLevel: apiCompatibilityLevel,
+        announcements: [announcement],
+      });
+    await refreshApiCompatibility({ userRequested: false });
+    const saved = () => JSON.parse(stored.get("announcements") ?? "{}").announcements;
+    expect(saved()).toEqual([announcement]);
+
+    respond = () => Promise.reject(new Error("offline"));
+    await refreshApiCompatibility({ userRequested: false });
+    expect(saved()).toEqual([announcement]);
+
+    respond = () => health(apiCompatibilityLevel, apiCompatibilityLevel);
+    await refreshApiCompatibility({ userRequested: false });
+    expect(saved()).toEqual([]);
   });
 });
 

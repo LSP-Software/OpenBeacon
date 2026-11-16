@@ -1,6 +1,6 @@
 import { Link, usePathname } from "expo-router";
 import { useEffect, useState } from "react";
-import { AccessibilityInfo, BackHandler, ScrollView, View } from "react-native";
+import { AccessibilityInfo, AppState, BackHandler, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppForeground } from "../hooks/useAppForeground.ts";
 import {
@@ -41,6 +41,13 @@ export const ApiCompatibilityGate = () => {
 
   useEffect(() => {
     void refreshApiCompatibility({ userRequested: false });
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (AppState.currentState === "active") void refreshApiCompatibilityInBackground();
+    }, 15 * 60_000);
+    return () => clearInterval(timer);
   }, []);
 
   useAppForeground(() => {

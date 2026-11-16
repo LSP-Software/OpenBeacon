@@ -12,6 +12,7 @@ import { AppState, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LocationSharingPausedBanner } from "../../../components/map/LocationSharingPausedBanner.tsx";
 import { NativeMap } from "../../../components/map/NativeMap.tsx";
+import { AnnouncementBanner } from "../../../components/AnnouncementBanner.tsx";
 import { NewSignInBanner } from "../../../components/NewSignInBanner.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
@@ -429,6 +430,7 @@ const MapScreen = () => {
         className="absolute left-4 right-16"
         style={{ top: insets.top + 8, maxHeight: "65%" }}
       >
+        <AnnouncementBanner className="mb-2" />
         <NewSignInBanner subscribed={isFocused} />
         <LocationSharingPausedBanner
           polled={trackingStatus.sharing?.find((state) => state.deviceId === selfDeviceId) ?? null}

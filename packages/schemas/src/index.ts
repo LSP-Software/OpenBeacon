@@ -70,6 +70,14 @@ import {
 import { requestImageUploadInputSchema } from "./schemas/image/requestImageUpload.ts";
 
 export {
+  announcementMessageSchema,
+  announcementSchema,
+  appVersionSchema,
+  compareAppVersions,
+} from "./schemas/announcement/announcement.ts";
+export type { Announcement } from "./schemas/announcement/announcement.ts";
+
+export {
   deviceIconSchema,
   deviceNameSchema,
   devicePlatformSchema,

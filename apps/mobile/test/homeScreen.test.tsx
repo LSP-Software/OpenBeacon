@@ -13,6 +13,7 @@ let deviceActive: boolean | Error = true;
 let savedLink: { linkId: string; psk: Uint8Array } | null | Error = null;
 const replace = mock((_route: string) => {});
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
+mock.module("../components/AnnouncementBanner.tsx", () => ({ AnnouncementBanner: () => null }));
 mock.module("expo-router", () => ({
   Link: View,
   router: { replace, push: () => {} },

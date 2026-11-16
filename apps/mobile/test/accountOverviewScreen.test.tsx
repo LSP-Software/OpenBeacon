@@ -20,6 +20,7 @@ const signOutOfThisPhone = mock(
   }),
 );
 
+mock.module("../components/AnnouncementBanner.tsx", () => ({ AnnouncementBanner: () => null }));
 mock.module("../components/LocationSharingCard.tsx", () => ({ LocationSharingCard: () => null }));
 
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
