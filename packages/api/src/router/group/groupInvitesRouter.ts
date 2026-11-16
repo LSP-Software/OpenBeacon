@@ -41,7 +41,7 @@ const findRedeemableSharedInvite = async (
 ) => {
   const invite = await db.groupSharedInvite.findUnique({
     where: { codeHash: sharedCodeHash(code) },
-    include: { creator: { select: { name: true, image: true } } },
+    include: { creator: { select: { name: true } } },
   });
   if (
     !invite?.creator ||
@@ -62,14 +62,14 @@ const getInvitePreview = async ({
 }: {
   db: Pick<Prisma.TransactionClient, "group" | "groupMember" | "user">;
   groupId: string;
-  inviter: { name: string; image: string | null };
+  inviter: { name: string };
   notFoundMessage: string;
   userId: string;
 }) => {
   const [group, member, user, groupCount] = await Promise.all([
     db.group.findUnique({
       where: { id: groupId },
-      select: { id: true, name: true, image: true, _count: { select: { groupMembers: true } } },
+      select: { id: true, name: true, _count: { select: { groupMembers: true } } },
     }),
     db.groupMember.findUnique({
       where: { userId_groupId: { userId, groupId } },
@@ -84,10 +84,10 @@ const getInvitePreview = async ({
     group: {
       id: group.id,
       name: group.name,
-      image: group.image,
+      image: null,
       memberCount: group._count.groupMembers,
     },
-    inviter,
+    inviter: { name: inviter.name, image: null },
     alreadyMember,
     joinBlockedBy: alreadyMember
       ? null
@@ -267,7 +267,7 @@ export const groupInvitesRouter = {
           recipientId: ctx.session.user.id,
           createdAt: { gt: emailInviteCreatedAfter() },
         },
-        select: { groupId: true, inviter: { select: { name: true, image: true } } },
+        select: { groupId: true, inviter: { select: { name: true } } },
       });
       if (!invite) throw new TRPCError({ code: "NOT_FOUND", message: "Invite not found" });
       return getInvitePreview({
@@ -586,20 +586,8 @@ export const groupInvitesRouter = {
         createdAt: { gt: emailInviteCreatedAfter() },
       },
       include: {
-        inviter: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-          },
-        },
-        group: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-          },
-        },
+        inviter: { select: { name: true } },
+        group: { select: { name: true } },
       },
     });
 
@@ -608,12 +596,12 @@ export const groupInvitesRouter = {
       inviter: {
         id: invite.inviterId,
         name: invite.inviter.name,
-        image: invite.inviter.image,
+        image: null,
       },
       group: {
         id: invite.groupId,
         name: invite.group.name,
-        image: invite.group.image,
+        image: null,
       },
     }));
   }),
