@@ -78,7 +78,11 @@ for (const [name, size, contentType] of [
   ["an empty file", 0, "application/octet-stream"],
   ["a file over the size limit", env.MAX_IMAGE_FILE_SIZE + 1, "application/octet-stream"],
   ["a file stored as HTML", 100, "text/html"],
-  ["a file stored as a plain WebP", 100, "image/webp"],
+  [
+    "a file stored with an image content type instead of application/octet-stream",
+    100,
+    "image/webp",
+  ],
 ] as const) {
   test(`confirming rejects and deletes ${name}`, async () => {
     const deleted = storeObject(size, contentType);

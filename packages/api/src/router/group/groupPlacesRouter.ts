@@ -16,6 +16,7 @@ import type z from "zod";
 import {
   assertActiveDevices,
   assertLatestGroupEpoch,
+  assertSentFromThisDevice,
   lockGroupMemberForWrite,
 } from "../../lib/groupWriteChecks.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
@@ -290,13 +291,7 @@ const writePlace = async <T extends object>({
   userId: string;
   write: (tx: Prisma.TransactionClient) => Promise<T>;
 }) => {
-  if (geometries.some((geometry) => geometry.senderDeviceId !== deviceId)) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Places must be sent from this device.",
-      cause: new ReasonError("DEVICE_NOT_REGISTERED"),
-    });
-  }
+  assertSentFromThisDevice(geometries, deviceId, "Places must be sent from this device.");
   return await db.$transaction(async (tx) => {
     const member = await lockGroupMemberForWrite(tx, {
       groupId,

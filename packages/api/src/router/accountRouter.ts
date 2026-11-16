@@ -26,8 +26,8 @@ import {
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
 import { readAccountViewers } from "../lib/accountViewers.ts";
-import { assertActiveDevices } from "../lib/groupWriteChecks.ts";
-import { assertKeysFromThisDevice, imageKeyColumns } from "../lib/imageKeys.ts";
+import { assertActiveDevices, assertSentFromThisDevice } from "../lib/groupWriteChecks.ts";
+import { imageKeyColumns } from "../lib/imageKeys.ts";
 import { beginAccountDeletion, deleteAccountRecords } from "../lib/account-deletion.ts";
 import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
@@ -499,7 +499,11 @@ export const accountRouter = {
     .input(confirmProfileImageUploadSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      assertKeysFromThisDevice(input.wraps, ctx.deviceId);
+      assertSentFromThisDevice(
+        input.wraps,
+        ctx.deviceId,
+        "Picture keys must be sent from this device.",
+      );
 
       const pendingUpload = await ctx.db.pendingUpload.findUnique({
         where: { userId_uploadType_groupId: { userId, uploadType: "userAvatar", groupId: "" } },
@@ -536,10 +540,6 @@ export const accountRouter = {
                 message: "No pending profile image upload to confirm.",
               });
             }
-            await tx.user.update({
-              where: { id: userId },
-              data: { image: imageUrl, imageKeySealed: input.sealed ?? null },
-            });
             await assertActiveDevices(tx, { deviceIds: [ctx.deviceId], userId });
             const epochIds = [...new Set(input.wraps.map(({ epochId }) => epochId))];
             const epochs = await tx.groupEpoch.findMany({
@@ -553,16 +553,18 @@ export const accountRouter = {
                 message: "Epoch does not belong to this group.",
               });
             }
-            const memberships = await tx.groupMember.findMany({
-              where: { userId },
-              orderBy: { id: "asc" },
-              select: { id: true, groupId: true },
+            await tx.user.update({
+              where: { id: userId },
+              data: { image: imageUrl, imageKeySealed: input.sealed ?? null },
             });
-            const wraps = new Map(input.wraps.map((wrap) => [wrap.groupId, wrap]));
-            for (const membership of memberships) {
-              await tx.groupMember.update({
-                where: { id: membership.id },
-                data: imageKeyColumns(wraps.get(membership.groupId) ?? null),
+            await tx.groupMember.updateMany({
+              where: { userId, groupId: { notIn: input.wraps.map(({ groupId }) => groupId) } },
+              data: imageKeyColumns(null),
+            });
+            for (const wrap of input.wraps) {
+              await tx.groupMember.updateMany({
+                where: { userId, groupId: wrap.groupId },
+                data: imageKeyColumns(wrap),
               });
             }
           });

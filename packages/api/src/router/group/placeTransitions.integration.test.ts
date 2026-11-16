@@ -459,11 +459,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(later.places).toEqual([{ groupId, revision: 0, needsCatchUp: true }]);
 
       await prisma.user.update({
-        where: { id: member },
-        data: { image: "https://cdn.example.test/bucket/user/member/uploads/avatar/picture" },
+        where: { id: owner },
+        data: { image: "https://cdn.example.test/bucket/user/owner/uploads/avatar/picture" },
       });
       const withPicture = await readAlerts(owner, ownerPhone, null);
-      await prisma.user.update({ where: { id: member }, data: { image: null } });
+      await prisma.user.update({ where: { id: owner }, data: { image: null } });
       expect(withPicture.imageKeysNeedCatchUp).toEqual([groupId]);
     });
 

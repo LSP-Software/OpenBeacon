@@ -47,6 +47,7 @@ const member = `${prefix}-member`;
 const outsider = `${prefix}-outsider`;
 const uploader = `${prefix}-uploader`;
 const users = [owner, admin, member, outsider, uploader];
+const deletedUploader = `${prefix}-deleted-uploader`;
 const groupId = `${prefix}-group`;
 const secondGroupId = `${prefix}-second-group`;
 const otherGroupId = `${prefix}-other-group`;
@@ -259,7 +260,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       send.mockRestore();
       await prisma.pendingUpload.deleteMany({ where: { userId: { in: users } } });
       await prisma.group.deleteMany({ where: { id: { in: groupIds } } });
-      await prisma.user.deleteMany({ where: { id: { in: users } } });
+      await prisma.user.deleteMany({ where: { id: { in: [...users, deletedUploader] } } });
       await prisma.$disconnect();
     });
 
@@ -303,6 +304,24 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         image: result.imageUrl,
         ...imageKeyColumns(key),
       });
+    });
+
+    test("a member who isn't an admin can't confirm a group picture", async () => {
+      const current = await setGroupPicture();
+      const fileName = await addPendingUpload(member, "groupAvatar", groupId);
+
+      await expect(
+        caller(member).groupSettings.confirmGroupImageUpload({
+          groupId,
+          key: wrap({ fileName, kind: "group-image-key", ownerId: groupId, senderUserId: member }),
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).toMatchObject({
+        image: groupUrl(admin, groupId, current.fileName),
+        ...imageKeyColumns(current.key),
+      });
+      expect(await prisma.pendingUpload.count({ where: { userId: member, fileName } })).toBe(1);
     });
 
     test("a group picture key must use the latest epoch", async () => {
@@ -389,6 +408,24 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       ).toBe(0);
     });
 
+    test("a profile picture is stored even while a group's keys need to change", async () => {
+      await prisma.group.update({ where: { id: groupId }, data: { epochRotationRequired: true } });
+      const fileName = await addPendingUpload(member, "userAvatar");
+      const key = wrap({
+        fileName,
+        kind: "profile-image-key",
+        ownerId: member,
+        senderUserId: member,
+      });
+
+      await caller(member).account.confirmProfileImageUpload({ wraps: [{ groupId, ...key }] });
+
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: member } })).image).toBe(
+        profileUrl(member, fileName),
+      );
+      expect(await memberRow(member)).toMatchObject(imageKeyColumns(key));
+    });
+
     test("a profile picture key under another group's epoch is refused and nothing changes", async () => {
       const current = await setProfilePicture(member);
       const fileName = await addPendingUpload(member, "userAvatar");
@@ -468,6 +505,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(store(outsider)).rejects.toMatchObject({
         cause: { reason: "NOT_GROUP_MEMBER" },
       });
+      await expect(
+        store(member, { targetGroupId: otherGroupId, epochId: otherEpochId }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(
+        await prisma.groupMember.count({
+          where: { groupId: otherGroupId, imageKeyCiphertext: { not: null } },
+        }),
+      ).toBe(0);
       await expect(store(member, { fileName: crypto.randomUUID() })).rejects.toMatchObject({
         cause: { reason: "IMAGE_CHANGED" },
       });
@@ -658,50 +703,61 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       );
     });
 
-    test("the catch-up flag lists groups with stale or missing keys", async () => {
-      expect(await readImageKeysNeedCatchUp({ db: prisma, userId: member })).toEqual([]);
+    test("the catch-up flag lists stale keys for everyone and a missing key only for its owner", async () => {
+      const needCatchUp = (userId: string) => readImageKeysNeedCatchUp({ db: prisma, userId });
+      expect(await needCatchUp(member)).toEqual([]);
 
       await setGroupPicture();
       await setProfilePicture(admin);
       await setProfilePicture(member, { targetGroupId: secondGroupId, epochId: secondEpochId });
-      expect(await readImageKeysNeedCatchUp({ db: prisma, userId: member })).toEqual([groupId]);
+      expect(await needCatchUp(member)).toEqual([groupId]);
+      expect(await needCatchUp(admin)).toEqual([]);
 
       await setProfilePicture(member);
-      expect(await readImageKeysNeedCatchUp({ db: prisma, userId: member })).toEqual([]);
+      expect(await needCatchUp(member)).toEqual([]);
 
       await setGroupPicture({ epochId: oldEpochId });
-      expect(await readImageKeysNeedCatchUp({ db: prisma, userId: member })).toEqual([groupId]);
+      expect(await needCatchUp(member)).toEqual([groupId]);
+      expect(await needCatchUp(admin)).toEqual([groupId]);
 
       await setGroupPicture();
       await setProfilePicture(owner, { epochId: oldEpochId });
-      expect(await readImageKeysNeedCatchUp({ db: prisma, userId: member })).toEqual([
-        groupId,
-        secondGroupId,
-      ]);
-      expect(await readImageKeysNeedCatchUp({ db: prisma, userId: outsider })).toEqual([]);
+      expect(await needCatchUp(member)).toEqual([groupId]);
+      expect(await needCatchUp(owner)).toEqual([groupId, secondGroupId]);
+      expect(await needCatchUp(outsider)).toEqual([]);
+
+      await prisma.group.update({ where: { id: groupId }, data: { epochRotationRequired: true } });
+      expect(await needCatchUp(member)).toEqual([]);
+      expect(await needCatchUp(owner)).toEqual([secondGroupId]);
+      await prisma.group.update({ where: { id: groupId }, data: { epochRotationRequired: false } });
 
       await setProfilePicture(owner);
-      expect(await readImageKeysNeedCatchUp({ db: prisma, userId: member })).toEqual([
-        secondGroupId,
-      ]);
+      expect(await needCatchUp(member)).toEqual([]);
+      expect(await needCatchUp(owner)).toEqual([secondGroupId]);
     });
 
     test("deleting the uploader's account clears the group picture and its key", async () => {
+      await prisma.user.create({
+        data: { id: deletedUploader, name: "Uploader", email: `${deletedUploader}@example.test` },
+      });
+      await prisma.groupMember.create({
+        data: { userId: deletedUploader, groupId, role: "ADMIN", joinedEpochNumber: 1 },
+      });
       const fileName = crypto.randomUUID();
       const key = wrap({
         fileName,
         kind: "group-image-key",
         ownerId: groupId,
-        senderUserId: uploader,
+        senderUserId: deletedUploader,
       });
       await prisma.group.update({
         where: { id: groupId },
-        data: { image: groupUrl(uploader, groupId, fileName), ...imageKeyColumns(key) },
+        data: { image: groupUrl(deletedUploader, groupId, fileName), ...imageKeyColumns(key) },
       });
 
       await deleteAccountRecords({
         db: prisma,
-        userId: uploader,
+        userId: deletedUploader,
         imageUrlPrefix: `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}`,
         mode: "immediate",
         securityAlerts: null,
@@ -711,7 +767,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         image: null,
         ...imageKeyColumns(null),
       });
-      expect(await prisma.groupMember.count({ where: { userId: uploader } })).toBe(0);
+      expect(await prisma.user.count({ where: { id: deletedUploader } })).toBe(0);
+      expect(await prisma.groupMember.count({ where: { groupId } })).toBe(4);
     });
 
     test("the migration clears every picture and key", async () => {

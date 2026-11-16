@@ -1,13 +1,12 @@
-import { Prisma } from "@openbeacon/database";
 import { reEncryptImageKeysSchema, storeImageKeySchema } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
 import {
   assertActiveDevices,
   assertLatestGroupEpoch,
+  assertSentFromThisDevice,
   lockGroupMemberForWrite,
 } from "../../lib/groupWriteChecks.ts";
 import {
-  assertKeysFromThisDevice,
   imageChanged,
   imageFileName,
   imageKeyColumns,
@@ -22,7 +21,11 @@ export const groupImageKeysRouter = {
     .input(storeImageKeySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      assertKeysFromThisDevice([input.key], ctx.deviceId);
+      assertSentFromThisDevice(
+        [input.key],
+        ctx.deviceId,
+        "Picture keys must be sent from this device.",
+      );
       return ctx.db.$transaction(async (tx) => {
         const member = await lockGroupMemberForWrite(tx, {
           groupId: input.groupId,
@@ -49,14 +52,23 @@ export const groupImageKeysRouter = {
     .input(reEncryptImageKeysSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      assertKeysFromThisDevice(
+      assertSentFromThisDevice(
         input.keys.map(({ key }) => key),
         ctx.deviceId,
+        "Picture keys must be sent from this device.",
+      );
+      const memberIds = input.keys.flatMap(({ target }) =>
+        target.kind === "member" ? [target.memberId] : [],
       );
       return ctx.db.$transaction(async (tx) => {
+        const targetUsers = await tx.groupMember.findMany({
+          where: { id: { in: memberIds }, groupId: input.groupId },
+          select: { userId: true },
+        });
         await lockGroupMemberForWrite(tx, {
           groupId: input.groupId,
           groupLock: "FOR NO KEY UPDATE",
+          otherUserIds: targetUsers.map((member) => member.userId),
           userId,
         });
         await assertActiveDevices(tx, { deviceIds: [ctx.deviceId], userId });
@@ -64,19 +76,6 @@ export const groupImageKeysRouter = {
           epochIds: [...new Set(input.keys.map(({ key }) => key.epochId))],
           groupId: input.groupId,
         });
-        const memberIds = input.keys.flatMap(({ target }) =>
-          target.kind === "member" ? [target.memberId] : [],
-        );
-        const targetUsers = await tx.groupMember.findMany({
-          where: { id: { in: memberIds }, groupId: input.groupId },
-          select: { userId: true },
-        });
-        const targetUserIds = [...new Set(targetUsers.map((member) => member.userId))].sort();
-        if (targetUserIds.length > 0) {
-          await tx.$queryRaw(Prisma.sql`
-            SELECT id FROM "User" WHERE id IN (${Prisma.join(targetUserIds)}) ORDER BY id FOR SHARE
-          `);
-        }
         const group = await tx.group.findUniqueOrThrow({
           where: { id: input.groupId },
           select: { image: true, ...imageKeySelect },

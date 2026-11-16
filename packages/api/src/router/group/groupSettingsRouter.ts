@@ -9,8 +9,12 @@ import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { env } from "../../env.ts";
 import { recordGroupEvent } from "../../lib/groupHistory.ts";
-import { assertActiveDevices, assertLatestGroupEpoch } from "../../lib/groupWriteChecks.ts";
-import { assertKeysFromThisDevice, imageKeyColumns } from "../../lib/imageKeys.ts";
+import {
+  assertActiveDevices,
+  assertLatestGroupEpoch,
+  assertSentFromThisDevice,
+} from "../../lib/groupWriteChecks.ts";
+import { imageKeyColumns } from "../../lib/imageKeys.ts";
 import {
   buildGroupAvatarPath,
   confirmImageUpload,
@@ -95,7 +99,11 @@ export const groupSettingsRouter = {
     .input(confirmGroupImageUploadSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      assertKeysFromThisDevice([input.key], ctx.deviceId);
+      assertSentFromThisDevice(
+        [input.key],
+        ctx.deviceId,
+        "Picture keys must be sent from this device.",
+      );
       const imagePath = buildGroupAvatarPath(userId, input.groupId);
       const pending = await ctx.db.pendingUpload.findUnique({
         where: {

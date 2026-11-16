@@ -17,6 +17,7 @@ import {
   sealPersonalDataForHistoryKey,
   sealProfileImageKey,
 } from "./index.ts";
+import { encryptImageWithKeyAndNonce } from "./image.ts";
 
 const picture = Uint8Array.from({ length: 2048 }, (_, index) => (index * 31 + 7) % 256);
 
@@ -88,14 +89,20 @@ describe("encryptImage", () => {
 
   test("rejects a key or nonce of the wrong length", () => {
     expect(() =>
-      encryptImage({
+      encryptImageWithKeyAndNonce({
         ...pictureContext,
         bytes: picture,
         key: new ImageKeyMaterial(new Uint8Array(16)),
+        nonce: new Uint8Array(24),
       }),
     ).toThrow("Invalid key length.");
     expect(() =>
-      encryptImage({ ...pictureContext, bytes: picture, nonce: new Uint8Array(12) }),
+      encryptImageWithKeyAndNonce({
+        ...pictureContext,
+        bytes: picture,
+        key: generateImageKey(),
+        nonce: new Uint8Array(12),
+      }),
     ).toThrow("Invalid nonce length.");
   });
 });

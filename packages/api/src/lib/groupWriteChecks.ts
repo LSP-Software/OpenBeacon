@@ -33,10 +33,19 @@ export const lockGroupMemberForWrite = async (
   {
     groupId,
     groupLock,
+    otherUserIds = [],
     userId,
-  }: { groupId: string; groupLock: "FOR SHARE" | "FOR NO KEY UPDATE"; userId: string },
+  }: {
+    groupId: string;
+    groupLock: "FOR SHARE" | "FOR NO KEY UPDATE";
+    otherUserIds?: string[];
+    userId: string;
+  },
 ) => {
-  await db.$queryRaw(Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR SHARE`);
+  const userIds = [...new Set([userId, ...otherUserIds])].sort();
+  await db.$queryRaw(
+    Prisma.sql`SELECT id FROM "User" WHERE id IN (${Prisma.join(userIds)}) ORDER BY id FOR SHARE`,
+  );
   const groups = await db.$queryRaw<Array<{ id: string }>>(
     Prisma.sql`SELECT id FROM "Group" WHERE id = ${groupId} ${Prisma.raw(groupLock)}`,
   );
@@ -63,6 +72,20 @@ export const lockGroupMemberForWrite = async (
     });
   }
   return member;
+};
+
+export const assertSentFromThisDevice = (
+  items: Array<{ senderDeviceId: string }>,
+  deviceId: string,
+  message: string,
+) => {
+  if (items.some((item) => item.senderDeviceId !== deviceId)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message,
+      cause: new ReasonError("DEVICE_NOT_REGISTERED"),
+    });
+  }
 };
 
 export const assertActiveDevices = async (

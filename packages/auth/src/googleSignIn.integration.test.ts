@@ -79,7 +79,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const email = `${prefix}-photo@example.test`;
       expect((await signInWithGoogle(email)).status).toBe(200);
       const user = await prisma.user.findUniqueOrThrow({ where: { email } });
-      expect(user.image).toBeNull();
+      expect(user).toMatchObject({ image: null, name: "Google User", email });
 
       const picture = "https://cdn.example.com/file/bucket/user/x/uploads/avatar/picture";
       await prisma.user.update({

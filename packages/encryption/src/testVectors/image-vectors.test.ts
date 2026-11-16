@@ -2,20 +2,22 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import type { ImageKeyKind, ImagePurpose } from "../index.ts";
 import {
   decryptImage,
   decryptImageKey,
   EpochKeyMaterial,
+  decodeBase64,
   encodeBase64,
-  encryptImage,
   encryptImageKey,
   IMAGE_ENCRYPTION_CONTEXT,
   IMAGE_ENCRYPTION_VERSION,
   ImageKeyMaterial,
   PAYLOAD_ENCRYPTION_ALGORITHM,
 } from "../index.ts";
+import { encryptImageWithKeyAndNonce } from "../image.ts";
 
 const vectors = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "image-v1.json"), "utf8"),
@@ -86,7 +88,7 @@ describe("image vectors", () => {
 
   test("encrypting each picture gives the committed blob", () => {
     for (const picture of vectors.pictures) {
-      const { blob } = encryptImage({
+      const { blob } = encryptImageWithKeyAndNonce({
         bytes: hexToBytes(picture.plaintextHex),
         fileName: picture.fileName,
         key: imageKey,
@@ -152,6 +154,29 @@ describe("image vectors", () => {
       });
 
       expect(bytesToHex(decrypted.expose())).toBe(constants.imageKeyHex);
+    }
+  });
+
+  test("each aadJson is the exact associated data the ciphertext was sealed with", () => {
+    const textEncoder = new TextEncoder();
+    for (const picture of vectors.pictures) {
+      const blob = hexToBytes(picture.blobHex);
+      const plaintext = xchacha20poly1305(
+        hexToBytes(constants.imageKeyHex),
+        blob.subarray(1, 25),
+        textEncoder.encode(picture.aadJson),
+      ).decrypt(blob.subarray(25));
+
+      expect(bytesToHex(plaintext)).toBe(picture.plaintextHex);
+    }
+    for (const testCase of vectors.imageKeys) {
+      const plaintext = xchacha20poly1305(
+        hexToBytes(constants.epochKeyHex),
+        decodeBase64(testCase.nonceBase64),
+        textEncoder.encode(testCase.aadJson),
+      ).decrypt(decodeBase64(testCase.ciphertextBase64));
+
+      expect(bytesToHex(plaintext)).toBe(constants.imageKeyHex);
     }
   });
 

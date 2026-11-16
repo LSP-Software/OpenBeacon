@@ -1,12 +1,7 @@
 import type { GroupRole } from "@openbeacon/database";
+import type { EncryptedImageKey } from "@openbeacon/encryption";
 
-export type StoredImageKey = {
-  algorithm: string;
-  ciphertext: string;
-  epochId: string;
-  nonce: string;
-  senderDeviceId: string;
-};
+export type StoredImageKey = Omit<EncryptedImageKey, "algorithm"> & { algorithm: string };
 
 export interface GroupListItem {
   id: string;

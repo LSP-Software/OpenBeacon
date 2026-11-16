@@ -8,8 +8,12 @@ import {
   XCHACHA20_NONCE_LENGTH,
 } from "./constants.ts";
 import { openPersonalData, sealPersonalDataForHistoryKey } from "./personalData.ts";
-import type { EpochKeyMaterial, HistoryPrivateKeyMaterial } from "./sensitive.ts";
-import { ImageKeyMaterial } from "./sensitive.ts";
+import {
+  type EpochKeyMaterial,
+  type HistoryPrivateKeyMaterial,
+  ImageKeyMaterial,
+  type SensitiveBytes,
+} from "./sensitive.ts";
 import type { EncryptedImageKey, HistoryPublicKey, ImageKeyKind, ImagePurpose } from "./types.ts";
 
 export const IMAGE_ENCRYPTION_CONTEXT = "openbeacon.image.v1";
@@ -63,7 +67,7 @@ const getImageKeyAssociatedData = ({
     }),
   );
 
-const exposeKey = (key: { expose: () => Uint8Array }, length: number) => {
+const exposeKey = (key: SensitiveBytes, length: number) => {
   const bytes = key.expose();
   if (bytes.length !== length) {
     throw new Error("Invalid key length.");
@@ -80,18 +84,18 @@ const checkNonce = (nonce: Uint8Array) => {
 
 export const generateImageKey = () => new ImageKeyMaterial(randomBytes(IMAGE_KEY_LENGTH));
 
-export const encryptImage = ({
+export const encryptImageWithKeyAndNonce = ({
   bytes,
   fileName,
-  key = generateImageKey(),
-  nonce = randomBytes(XCHACHA20_NONCE_LENGTH),
+  key,
+  nonce,
   ownerId,
   purpose,
 }: {
   bytes: Uint8Array;
   fileName: string;
-  key?: ImageKeyMaterial;
-  nonce?: Uint8Array;
+  key: ImageKeyMaterial;
+  nonce: Uint8Array;
   ownerId: string;
   purpose: ImagePurpose;
 }) => {
@@ -106,6 +110,26 @@ export const encryptImage = ({
   blob.set(ciphertext, HEADER_LENGTH);
   return { blob, key };
 };
+
+export const encryptImage = ({
+  bytes,
+  fileName,
+  ownerId,
+  purpose,
+}: {
+  bytes: Uint8Array;
+  fileName: string;
+  ownerId: string;
+  purpose: ImagePurpose;
+}) =>
+  encryptImageWithKeyAndNonce({
+    bytes,
+    fileName,
+    key: generateImageKey(),
+    nonce: randomBytes(XCHACHA20_NONCE_LENGTH),
+    ownerId,
+    purpose,
+  });
 
 export const decryptImage = ({
   blob,

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "algorithm": "XChaCha20-Poly1305",
-  "description": "Encrypted picture v1 vectors. A picture is stored as version byte || nonce || ciphertext under a random per-picture key. The picture key is encrypted under a group epoch key.",
+  "description": "Encrypted picture v1 vectors. A picture is stored as version byte || nonce || ciphertext under a random per-picture key. The picture key is encrypted under a group epoch key. Each aadJson is the exact associated data: implementations must serialise it with keys in the order shown and without escaping slashes (Swift JSONEncoder: .sortedKeys and .withoutEscapingSlashes). Both picture key vectors share one epoch key and nonce only to keep the file short; real code must never reuse a nonce under the same key.",
   "constants": {
     "imageContext": "openbeacon.image.v1",
     "imageVersion": 1,

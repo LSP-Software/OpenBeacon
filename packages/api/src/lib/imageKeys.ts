@@ -14,11 +14,7 @@ export const imageKeySelect = {
 } as const;
 
 export const toStoredImageKey = (row: {
-  imageKeyEpochId: string | null;
-  imageKeySenderDeviceId: string | null;
-  imageKeyAlgorithm: string | null;
-  imageKeyNonce: string | null;
-  imageKeyCiphertext: string | null;
+  [column in keyof typeof imageKeySelect]: string | null;
 }): StoredImageKey | null =>
   row.imageKeyEpochId &&
   row.imageKeySenderDeviceId &&
@@ -45,19 +41,6 @@ export const imageKeyColumns = (key: z.infer<typeof encryptedImageKeySchema> | n
 export const imageFileName = (imageUrl: string | null) =>
   imageUrl ? imageUrl.slice(imageUrl.lastIndexOf("/") + 1) : null;
 
-export const assertKeysFromThisDevice = (
-  keys: Array<{ senderDeviceId: string }>,
-  deviceId: string,
-) => {
-  if (keys.some((key) => key.senderDeviceId !== deviceId)) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Picture keys must be sent from this device.",
-      cause: new ReasonError("DEVICE_NOT_REGISTERED"),
-    });
-  }
-};
-
 export const imageChanged = () =>
   new TRPCError({
     code: "CONFLICT",
@@ -82,15 +65,18 @@ export const readImageKeysNeedCatchUp = async ({
       ORDER BY e."epochNumber" DESC
       LIMIT 1
     ) latest
-    WHERE (g."imageKeyEpochId" IS NOT NULL AND g."imageKeyEpochId" <> latest.id)
-      OR EXISTS (
-        SELECT 1 FROM "GroupMember" m
-        JOIN "User" u ON u.id = m."userId"
-        WHERE m."groupId" = g.id
-          AND (
-            (m."imageKeyEpochId" IS NOT NULL AND m."imageKeyEpochId" <> latest.id)
-            OR (u.image IS NOT NULL AND m."imageKeyCiphertext" IS NULL)
-          )
+    WHERE NOT g."epochRotationRequired"
+      AND (
+        (g."imageKeyEpochId" IS NOT NULL AND g."imageKeyEpochId" <> latest.id)
+        OR EXISTS (
+          SELECT 1 FROM "GroupMember" m
+          JOIN "User" u ON u.id = m."userId"
+          WHERE m."groupId" = g.id
+            AND (
+              (m."imageKeyEpochId" IS NOT NULL AND m."imageKeyEpochId" <> latest.id)
+              OR (m."userId" = ${userId} AND u.image IS NOT NULL AND m."imageKeyCiphertext" IS NULL)
+            )
+        )
       )
     ORDER BY g.id
   `);
