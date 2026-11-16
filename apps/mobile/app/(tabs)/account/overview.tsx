@@ -9,6 +9,7 @@ import {
   BellIcon,
   BellOffIcon,
   CameraIcon,
+  EyeIcon,
   HelpCircleIcon,
   HistoryIcon,
   InfoIcon,
@@ -67,6 +68,11 @@ const categories = [
   {
     label: "Account",
     settings: [
+      {
+        label: "Who can see me",
+        icon: EyeIcon,
+        href: "/account/who-can-see-me",
+      },
       {
         label: "Email alerts",
         icon: BellIcon,

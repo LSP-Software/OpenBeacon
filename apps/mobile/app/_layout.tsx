@@ -78,6 +78,7 @@ const RootLayout = () => {
                     <Stack.Screen name="account/remove-device" />
                     <Stack.Screen name="account/sign-out-others" />
                     <Stack.Screen name="account/theme" />
+                    <Stack.Screen name="account/who-can-see-me" />
                   </Stack.Protected>
                 </Stack>
               </View>

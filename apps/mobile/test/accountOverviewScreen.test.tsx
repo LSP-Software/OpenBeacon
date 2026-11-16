@@ -47,6 +47,7 @@ mock.module("lucide-react-native", () =>
       "BellIcon",
       "BellOffIcon",
       "CameraIcon",
+      "EyeIcon",
       "HelpCircleIcon",
       "HistoryIcon",
       "InfoIcon",

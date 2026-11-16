@@ -38,6 +38,7 @@ OpenBeacon is available on **Android 8.0 and newer**. An iPhone app is on the [r
 
 - Live map of everyone in your groups, with one pin per phone
 - Pause sharing for a set time or until you turn it back on
+- See who can see your location now, and who could in the last 14 days
 - Several groups, with owner, admin and member roles
 - Invite by email, link or QR code
 - Use OpenBeacon on more than one phone or tablet, and link a new one by scanning a code

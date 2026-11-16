@@ -24,6 +24,7 @@ import {
   requestImageUpload,
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
+import { readAccountViewers } from "../lib/accountViewers.ts";
 import { beginAccountDeletion, deleteAccountRecords } from "../lib/account-deletion.ts";
 import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
@@ -378,6 +379,11 @@ export const accountRouter = {
         select: { name: true },
       });
     }),
+  viewers: protectedProcedure
+    .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })
+    .query(async ({ ctx }) =>
+      readAccountViewers({ db: ctx.db, now: new Date(), userId: ctx.session.user.id }),
+    ),
   listDevices: protectedProcedure.query(async ({ ctx }) => {
     const devices = await ctx.db.userDevice.findMany({
       where: { userId: ctx.session.user.id, revokedAt: null },
