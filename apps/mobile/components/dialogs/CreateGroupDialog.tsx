@@ -88,8 +88,8 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
         <DialogHeader>
           <DialogTitle>Create a new group</DialogTitle>
           <DialogDescription>
-            Create a new group to start sharing locations privately; All location data is end to end
-            encrypted. Only members of your group can see each other.
+            Create a group to share your location with people you choose. Locations are end-to-end
+            encrypted.
           </DialogDescription>
         </DialogHeader>
 

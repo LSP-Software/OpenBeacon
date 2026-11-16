@@ -62,6 +62,13 @@ mock.module("../components/ui/Button.tsx", () => ({
 mock.module("expo-router", () => ({
   Link: ({ children, href }: { children: React.ReactNode; href: unknown }) =>
     React.createElement("a", { href }, children),
+  useLocalSearchParams: () => ({}),
+  useRouter: () => ({ setParams: () => {} }),
+}));
+mock.module("../lib/placeSync.ts", () => ({
+  confirmDeletePlace: () => {},
+  groupPlacesQueryKey: (groupId: string) => ["groupPlaces", groupId],
+  groupPlacesQueryOptions: () => ({ queryKey: ["groupPlaces"] }),
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("react-native", () => ({

@@ -3,11 +3,11 @@ import type { groupTrackingPointSchema } from "@openbeacon/schemas";
 import type { GroupDeviceSharingState } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type z from "zod";
+import type { GroupWriteChecksDb } from "./groupWriteChecks.ts";
+import { assertActiveDevices, findGroupEpochs } from "./groupWriteChecks.ts";
 import { getGroupSharingStates } from "./locationSharing.ts";
-import { ReasonError } from "./reasonError.ts";
 
-type GroupTrackingDb = {
-  $queryRaw: <T>(query: Prisma.Sql) => Promise<T>;
+type GroupTrackingDb = GroupWriteChecksDb & {
   groupEncryptedPayload: {
     createMany: (args: {
       data: Array<{
@@ -62,11 +62,6 @@ type GroupTrackingDb = {
     >;
   };
   groupEpoch: {
-    count: (args: { where: { id: { in: string[] } } }) => Promise<number>;
-    findMany: (args: {
-      select: { id: true };
-      where: { groupId: string; id: { in: string[] }; createdAt?: { gte: Date } };
-    }) => Promise<Array<{ id: string }>>;
     findUnique: (args: {
       select: { createdAt: true };
       where: { groupId_epochNumber: { epochNumber: number; groupId: string } };
@@ -77,15 +72,6 @@ type GroupTrackingDb = {
       data: { lastLocationAt: Date };
       where: { id: { in: string[] }; userId: string };
     }) => Promise<{ count: number }>;
-    findMany: (args: {
-      select: { id: true; userId: true };
-      where: {
-        id: { in: string[] };
-        revokedAt: null;
-        activatedAt: { not: null };
-        userId: string;
-      };
-    }) => Promise<Array<{ id: string; userId: string }>>;
   };
 };
 
@@ -128,29 +114,9 @@ export const uploadGroupTrackingBatch = async ({
   const senderDeviceIds = [...new Set(points.map((point) => point.senderDeviceId))];
   const epochIds = [...new Set(points.map((point) => point.epochId))];
 
-  const [devices, epochs, existingRows] = await Promise.all([
-    db.userDevice.findMany({
-      select: {
-        id: true,
-        userId: true,
-      },
-      where: {
-        id: { in: senderDeviceIds },
-        revokedAt: null,
-        activatedAt: { not: null },
-        userId,
-      },
-    }),
-    db.groupEpoch.findMany({
-      select: {
-        id: true,
-      },
-      where: {
-        groupId,
-        id: { in: epochIds },
-        ...(memberSince ? { createdAt: { gte: memberSince } } : {}),
-      },
-    }),
+  await assertActiveDevices(db, { deviceIds: senderDeviceIds, userId });
+  const [foundEpochIds, existingRows] = await Promise.all([
+    findGroupEpochs(db, { epochIds, groupId, ...(memberSince ? { memberSince } : {}) }),
     db.groupEncryptedPayload.findMany({
       select: {
         clientPointId: true,
@@ -161,26 +127,6 @@ export const uploadGroupTrackingBatch = async ({
       },
     }),
   ]);
-
-  if (devices.length !== senderDeviceIds.length) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "The active device is not registered.",
-      cause: new ReasonError("DEVICE_NOT_REGISTERED"),
-    });
-  }
-
-  const foundEpochIds = new Set(epochs.map((epoch) => epoch.id));
-  const missingEpochIds = epochIds.filter((epochId) => !foundEpochIds.has(epochId));
-  if (
-    missingEpochIds.length > 0 &&
-    (await db.groupEpoch.count({ where: { id: { in: missingEpochIds } } })) > 0
-  ) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "Epoch does not belong to this group.",
-    });
-  }
 
   const existingClientPointIds = new Set(existingRows.map((row) => row.clientPointId));
   const sharing = await getGroupSharingStates(db, groupId);

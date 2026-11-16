@@ -7,6 +7,7 @@ import {
   ApiCompatibilityGate,
   useApiCompatibilityGateShown,
 } from "../components/ApiCompatibilityGate.tsx";
+import { InAppNoticeBanner } from "../components/InAppNoticeBanner.tsx";
 import { AlertHost } from "../components/ui/Alert.tsx";
 import { OfflineBanner } from "../components/OfflineBanner.tsx";
 import { queryClient } from "../lib/api.ts";
@@ -52,6 +53,8 @@ const RootLayout = () => {
                   >
                     <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="join" />
+                    <Stack.Screen name="place" />
+                    <Stack.Screen name="place-alerts" />
                     <Stack.Screen name="setup/name" />
                     <Stack.Screen name="setup/remove-devices" />
                     <Stack.Screen name="account/about" />
@@ -72,6 +75,7 @@ const RootLayout = () => {
               </View>
               <ApiCompatibilityGate />
               <OfflineBanner />
+              {session ? <InAppNoticeBanner /> : null}
             </View>
           </TrackingProvider>
         </LocationPermissionProvider>

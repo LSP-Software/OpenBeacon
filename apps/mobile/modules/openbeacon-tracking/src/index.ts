@@ -4,6 +4,8 @@ export {
   default,
   type NoticeKind,
   type NoticeSlot,
+  type PlaceGeofenceInput,
   type ProvisionedEpochKeyInfo,
   type ProvisionedEpochKeyInput,
+  type QueuedPlaceTransition,
 } from "./OpenBeaconTrackingModule.ts";

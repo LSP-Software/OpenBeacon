@@ -6,8 +6,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Link } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LocationSharingPausedBanner } from "../../../components/map/LocationSharingPausedBanner.tsx";
@@ -28,6 +28,13 @@ import { authClient } from "../../../lib/auth-client.ts";
 import { buildLiveMapMarkers, labelDeviceIcons } from "../../../lib/buildLiveMapMarkers.ts";
 import { classifyMapPeople, flagUnreadableMarkers } from "../../../lib/classifyMapPeople.ts";
 import { loadPersonalNicknames } from "../../../lib/personalNicknames.ts";
+import { Alert } from "../../../lib/alert.ts";
+import { buildPlacePins, hiddenGroupWithPlace } from "../../../lib/places.ts";
+import {
+  confirmDeletePlace,
+  groupPlacesQueryKey,
+  groupPlacesQueryOptions,
+} from "../../../lib/placeSync.ts";
 import { canShowSharedLocation } from "../../../lib/locationSharingVisibility.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { setMapGroupHidden } from "../../../lib/hiddenMapGroups.ts";
@@ -68,6 +75,13 @@ const MapScreen = () => {
       queryKey: ["personalNicknames", group.id, userId],
       queryFn: userId ? () => loadPersonalNicknames(group.id, userId) : skipToken,
     })),
+    combine: (results) => results.map((result) => result.data),
+    subscribed: isFocused,
+  });
+  const { placeId: focusPlaceId } = useLocalSearchParams<{ placeId?: string }>();
+  const router = useRouter();
+  const groupPlaces = useQueries({
+    queries: (groups ?? []).map((group) => groupPlacesQueryOptions(group.id, userId)),
     combine: (results) => results.map((result) => result.data),
     subscribed: isFocused,
   });
@@ -184,6 +198,23 @@ const MapScreen = () => {
       name: group.name,
     }));
   }, [groupColorRevision, groups, hiddenGroupIds, selfUserId]);
+  const placePins = useMemo(
+    () =>
+      buildPlacePins({
+        groups: (groups ?? []).map((group, index) => ({
+          canManage: group.members.some(
+            (member) =>
+              member.userId === userId && (member.role === "OWNER" || member.role === "ADMIN"),
+          ),
+          id: group.id,
+          memberUserIds: group.members.map((member) => member.userId),
+          name: group.name,
+          places: groupPlaces[index],
+        })),
+        hiddenGroupIds,
+      }),
+    [groupPlaces, groups, hiddenGroupIds, userId],
+  );
   const shownGroups = useMemo(
     () =>
       groupsWithNicknames &&
@@ -289,6 +320,36 @@ const MapScreen = () => {
     trackingStatus,
   ]);
 
+  const clearFocusPlace = useCallback(() => router.setParams({ placeId: undefined }), [router]);
+
+  const hiddenPlaceAlertedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!focusPlaceId) {
+      hiddenPlaceAlertedRef.current = null;
+      return;
+    }
+    if (!selfUserId || hiddenPlaceAlertedRef.current === focusPlaceId) return;
+    const group = hiddenGroupWithPlace({
+      groups: (groups ?? []).map((item, index) => ({ ...item, places: groupPlaces[index] })),
+      hiddenGroupIds,
+      placeId: focusPlaceId,
+    });
+    if (!group) return;
+    hiddenPlaceAlertedRef.current = focusPlaceId;
+    clearFocusPlace();
+    Alert.alert(`${group.name} is hidden on the map`, undefined, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: `Show ${group.name}`,
+        onPress: () => {
+          setMapGroupHidden({ groupId: group.id, hidden: false, userId: selfUserId });
+          router.setParams({ placeId: focusPlaceId });
+        },
+      },
+    ]);
+  }, [clearFocusPlace, focusPlaceId, groupPlaces, groups, hiddenGroupIds, router, selfUserId]);
+
   useEffect(() => {
     for (const [groupId, access] of keyAccessByGroupId) {
       if (access === "available") storage.remove(keyBannerDismissedKey(selfUserId, groupId));
@@ -330,6 +391,21 @@ const MapScreen = () => {
             (item) => item.deviceId === device.deviceId && item.userId === device.userId,
           ),
         }))}
+        focusPlaceId={focusPlaceId ?? null}
+        onFocusPlaceHandled={clearFocusPlace}
+        places={placePins}
+        onDeletePlace={(place, onDeleted) =>
+          confirmDeletePlace({
+            groupId: place.groupId,
+            name: place.name,
+            placeId: place.id,
+            onDeleted: () => {
+              onDeleted();
+              void queryClient.invalidateQueries({ queryKey: groupPlacesQueryKey(place.groupId) });
+              void queryClient.invalidateQueries({ queryKey: ["placeTransitions", place.groupId] });
+            },
+          })
+        }
         groupOptions={groupOptions}
         onSetGroupHidden={(groupId, hidden) => {
           if (!selfUserId) return;

@@ -35,8 +35,25 @@ const queueEvictions = new Map<
 >();
 const deleted: number[][] = [];
 const deletedGroups: Array<{ owner: string; groupId: string }> = [];
+let placeGroups: string[] | null = [];
 const requeued: Array<{ ids: number[]; error: string | null | undefined }> = [];
-const uploadCalls: Array<{ groupId: string; points: unknown[] }> = [];
+const uploadCalls: Array<{
+  groupId: string;
+  points: unknown[];
+  placeTransitions?: { clientId: string }[];
+  placeAlertsCursor?: string | null;
+}> = [];
+let queuedTransitions: {
+  clientId: string;
+  senderDeviceId: string;
+  groupId: string;
+  placeId: string;
+  direction: "ARRIVE" | "LEAVE";
+  occurredAt: number;
+}[] = [];
+const deletedTransitions: string[][] = [];
+const appliedPlaceUpdates: { updates: unknown; userId: string }[] = [];
+let storedPlaceCursor: string | null = null;
 const rotationChecks: string[] = [];
 const requests: string[] = [];
 const storageValues = new Map<string, string>();
@@ -118,11 +135,16 @@ let uploadGroup = async ({
 }: {
   groupId: string;
   points: unknown[];
+  placeTransitions?: { clientId: string }[];
+  placeAlertsCursor?: string | null;
 }): Promise<{
   accepted: string[];
   duplicates: string[];
   expired?: string[];
   keyState?: string;
+  placeTransitions?: { accepted: string[]; duplicates: string[]; discarded: string[] };
+  places?: { groupId: string; revision: number; needsCatchUp: boolean }[];
+  placeAlerts?: { alerts: unknown[]; cursor: string };
 }> => ({
   accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
   duplicates: [],
@@ -252,6 +274,13 @@ mock.module("./notifications.ts", () => ({
   dismissNotice: async (slot: string) => {
     dismissedNotices.push(slot);
   },
+}));
+
+mock.module("./placeBackgroundSync.ts", () => ({
+  applyPlaceUpdates: async (input: { updates: unknown; userId: string }) => {
+    appliedPlaceUpdates.push(input);
+  },
+  getPlaceAlertsCursor: () => storedPlaceCursor,
 }));
 
 mock.module("./apiCompatibility.ts", () => ({
@@ -438,7 +467,12 @@ mock.module("./api.ts", () => ({
     },
     groupTracking: {
       uploadBatch: {
-        mutate: async (input: { groupId: string; points: unknown[] }) => {
+        mutate: async (input: {
+          groupId: string;
+          points: unknown[];
+          placeTransitions?: { clientId: string }[];
+          placeAlertsCursor?: string | null;
+        }) => {
           requests.push("groupTracking.uploadBatch");
           uploadCalls.push(input);
           return uploadGroup(input);
@@ -513,6 +547,12 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
     requeueCiphertexts: async (ids: number[], error?: string | null) => {
       requeued.push({ ids, error });
     },
+    listPlaceGroups: () => placeGroups,
+    listPlaceTransitions: async () => queuedTransitions,
+    deletePlaceTransitions: async (clientIds: string[]) => {
+      deletedTransitions.push(clientIds);
+      queuedTransitions = queuedTransitions.filter(({ clientId }) => !clientIds.includes(clientId));
+    },
   },
 }));
 
@@ -570,6 +610,7 @@ describe("tracking service", () => {
     queueEvictions.clear();
     deleted.length = 0;
     deletedGroups.length = 0;
+    placeGroups = [];
     requeued.length = 0;
     uploadCalls.length = 0;
     rotationChecks.length = 0;
@@ -637,6 +678,165 @@ describe("tracking service", () => {
     uploadGroup = async ({ points }) => ({
       accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
       duplicates: [],
+    });
+    queuedTransitions = [];
+    deletedTransitions.length = 0;
+    appliedPlaceUpdates.length = 0;
+    storedPlaceCursor = null;
+  });
+
+  describe("place transitions and alerts", () => {
+    const t1 = "00000000-0000-4000-8000-000000000001";
+    const old = "00000000-0000-4000-8000-000000000009";
+    const transition = (clientId: string, groupId = "group-1", senderDeviceId = "device-1") => ({
+      clientId,
+      senderDeviceId,
+      groupId,
+      placeId: `place-${groupId}`,
+      direction: "ARRIVE" as const,
+      occurredAt: 1_000,
+    });
+    const placeAnswer = (input: {
+      points: unknown[];
+      placeTransitions?: { clientId: string }[];
+      placeAlertsCursor?: string | null;
+    }) => ({
+      accepted: input.points.map((point) => (point as { clientPointId: string }).clientPointId),
+      duplicates: [],
+      ...(input.placeTransitions
+        ? {
+            placeTransitions: {
+              accepted: input.placeTransitions.map(({ clientId }) => clientId),
+              duplicates: [],
+              discarded: [],
+            },
+          }
+        : {}),
+      ...(input.placeAlertsCursor !== undefined
+        ? {
+            places: [{ groupId: "group-1", revision: 3, needsCatchUp: false }],
+            placeAlerts: { alerts: [], cursor: "2026-11-15T10:00:00.000Z|" },
+          }
+        : {}),
+    });
+
+    beforeEach(() => {
+      registeredDevice = {
+        deviceId: "device-1",
+        privateKey: deviceKeyPair.privateKey,
+        userId: "user-1",
+      };
+      uploadGroup = async (input) => placeAnswer(input);
+    });
+
+    test("transitions ride with their group's points and the cursor goes on one upload", async () => {
+      storedPlaceCursor = "2026-11-15T09:00:00.000Z|";
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 }),
+        createQueueItem({ clientPointId: "p2", groupId: "group-2", id: 2 }),
+      ];
+      queuedTransitions = [transition(t1)];
+      await flushPendingTrackingPoints();
+      expect(uploadCalls).toHaveLength(2);
+      const withTransitions = uploadCalls.find((call) => call.groupId === "group-1");
+      expect(withTransitions?.placeTransitions?.map(({ clientId }) => clientId)).toEqual([t1]);
+      expect(uploadCalls.filter((call) => call.placeAlertsCursor !== undefined)).toEqual([
+        expect.objectContaining({ placeAlertsCursor: "2026-11-15T09:00:00.000Z|" }),
+      ]);
+      expect(deletedTransitions).toEqual([[t1]]);
+      expect(appliedPlaceUpdates).toEqual([
+        {
+          userId: "user-1",
+          updates: {
+            places: [{ groupId: "group-1", revision: 3, needsCatchUp: false }],
+            placeAlerts: { alerts: [], cursor: "2026-11-15T10:00:00.000Z|" },
+          },
+        },
+      ]);
+    });
+
+    test("a group with only transitions gets an upload of its own, and the first one asks for alerts from now", async () => {
+      queuedTransitions = [transition(t1, "group-2")];
+      await flushPendingTrackingPoints();
+      expect(uploadCalls).toEqual([
+        expect.objectContaining({ groupId: "group-2", points: [], placeAlertsCursor: null }),
+      ]);
+      expect(deletedTransitions).toEqual([[t1]]);
+    });
+
+    test("transitions from an earlier device are dropped, never sent", async () => {
+      queuedTransitions = [transition(old, "group-1", "device-0"), transition(t1)];
+      await flushPendingTrackingPoints();
+      expect(deletedTransitions[0]).toEqual([old]);
+      expect(uploadCalls.flatMap((call) => call.placeTransitions ?? [])).toEqual([
+        expect.objectContaining({ clientId: t1 }),
+      ]);
+    });
+
+    test("a transition the server wouldn't accept is dropped, never sent", async () => {
+      queuedTransitions = [{ ...transition(t1), clientId: "not-a-uuid" }, transition(old)];
+      await flushPendingTrackingPoints();
+      expect(deletedTransitions[0]).toEqual(["not-a-uuid"]);
+      expect(uploadCalls.flatMap((call) => call.placeTransitions ?? [])).toEqual([
+        expect.objectContaining({ clientId: old }),
+      ]);
+    });
+
+    test("points from an earlier device don't carry this phone's transitions", async () => {
+      pendingCiphertexts = [
+        createQueueItem({
+          clientPointId: "old",
+          groupId: "group-1",
+          id: 1,
+          senderDeviceId: "device-0",
+        }),
+      ];
+      queuedTransitions = [transition(t1)];
+      await flushPendingTrackingPoints();
+      const oldDeviceUpload = uploadCalls.find((call) => call.points.length > 0);
+      expect(oldDeviceUpload?.placeTransitions).toBeUndefined();
+      expect(oldDeviceUpload?.placeAlertsCursor).toBeUndefined();
+      expect(uploadCalls.find((call) => call.points.length === 0)?.placeTransitions).toEqual([
+        expect.objectContaining({ clientId: t1 }),
+      ]);
+    });
+
+    test("a failed upload keeps the transitions queued and doesn't touch the cursor", async () => {
+      pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
+      queuedTransitions = [transition(t1)];
+      uploadGroup = async () => {
+        throw new Error("Network request failed");
+      };
+      await expect(flushPendingTrackingPoints()).rejects.toThrow();
+      expect(deletedTransitions).toEqual([]);
+      expect(queuedTransitions).toHaveLength(1);
+      expect(appliedPlaceUpdates).toEqual([]);
+    });
+
+    test("a refused request with transitions retries the points alone, then the transitions alone", async () => {
+      pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
+      queuedTransitions = [transition(t1)];
+      uploadGroup = async (input) => {
+        if (input.placeTransitions && input.points.length > 0) {
+          throw Object.assign(new Error("Bad request"), { data: { code: "BAD_REQUEST" } });
+        }
+        if (input.placeTransitions) {
+          throw Object.assign(new Error("Bad request"), { data: { code: "BAD_REQUEST" } });
+        }
+        return placeAnswer(input);
+      };
+      await flushPendingTrackingPoints();
+      expect(deleted).toEqual([[1]]);
+      expect(deletedTransitions).toEqual([[t1]]);
+    });
+
+    test("a phone with no registered device sends no place fields", async () => {
+      registeredDevice = null;
+      pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
+      queuedTransitions = [transition("00000000-0000-4000-8000-000000000001")];
+      await flushPendingTrackingPoints();
+      expect(uploadCalls[0]?.placeTransitions).toBeUndefined();
+      expect(uploadCalls[0]?.placeAlertsCursor).toBeUndefined();
     });
   });
 
@@ -1020,6 +1220,13 @@ describe("tracking service", () => {
       ],
     ]);
     expect(startCaptureCalls).toBe(1);
+  });
+
+  test("stops detecting places in a group this phone has left", async () => {
+    placeGroups = ["group-1", "group-left"];
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(revokedGroups).toEqual([["group-left"]]);
   });
 
   test("provisions a group's current epoch from a history wrap when there's no device wrap", async () => {
@@ -2549,7 +2756,7 @@ describe("tracking service", () => {
       expect(requests).toEqual(["groupTracking.uploadBatch", "groupTracking.uploadBatch"]);
     });
 
-    test("a point for an epoch the server says isn't this group's is dropped", async () => {
+    test("a point for an epoch the server says isn't this group's is dropped, after one retry without the alerts cursor", async () => {
       await startTracking();
       pendingCiphertexts = [
         {
@@ -2561,7 +2768,8 @@ describe("tracking service", () => {
 
       await syncBackgroundTracking();
 
-      expect(requests).toEqual(["groupTracking.uploadBatch"]);
+      expect(requests).toEqual(["groupTracking.uploadBatch", "groupTracking.uploadBatch"]);
+      expect(uploadCalls.map((call) => call.placeAlertsCursor)).toEqual([null, undefined]);
       expect(deleted).toEqual([[1]]);
     });
 

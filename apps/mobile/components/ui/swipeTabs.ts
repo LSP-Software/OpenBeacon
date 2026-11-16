@@ -45,3 +45,22 @@ export const getActiveSceneHeight = <T extends string>({
 
   return fallbackSceneHeight ?? 1;
 };
+
+export const getExpandingTabLayouts = ({
+  barWidth,
+  tabCount,
+}: {
+  barWidth: number;
+  tabCount: number;
+}) => {
+  const inactiveWidth = tabCount <= 1 ? barWidth : Math.max(44, Math.round(barWidth * 0.17));
+  const activeWidth =
+    tabCount <= 1 ? barWidth : Math.max(barWidth - inactiveWidth * (tabCount - 1), inactiveWidth);
+  return Array.from({ length: tabCount }, (_, activeIndex) =>
+    Array.from({ length: tabCount }, (_, index) => ({
+      left:
+        index <= activeIndex ? index * inactiveWidth : (index - 1) * inactiveWidth + activeWidth,
+      width: index === activeIndex ? activeWidth : inactiveWidth,
+    })),
+  );
+};

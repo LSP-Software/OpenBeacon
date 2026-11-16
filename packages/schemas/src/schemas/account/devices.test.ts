@@ -11,7 +11,7 @@ describe("deviceNameSchema", () => {
   });
 
   test("rejects blank, long and control character names", () => {
-    for (const name of ["", "   ", "a".repeat(41), "Car\nKeys", "A\u0000B"]) {
+    for (const name of ["", "   ", "\u200D", "a".repeat(41), "Car\nKeys", "A\u0000B"]) {
       expect(deviceNameSchema.safeParse(name).success).toBe(false);
     }
   });

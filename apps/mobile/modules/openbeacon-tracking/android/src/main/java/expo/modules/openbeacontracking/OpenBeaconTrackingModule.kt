@@ -9,6 +9,7 @@ import expo.modules.openbeacontracking.capture.SharingCaptureState
 import expo.modules.openbeacontracking.capture.SharingResumeWorker
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
+import expo.modules.openbeacontracking.places.PlaceGeofence
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
 import expo.modules.kotlin.modules.Module
@@ -56,6 +57,55 @@ class OpenBeaconTrackingModule : Module() {
           synchronized(TrackingRuntime.captureLock) { TrackingRuntime.setCaptureEnabled(requireContext(), false) }
         }
         TrackingRuntime.epochKeyStore(requireContext()).revoke(groupIds)
+        TrackingRuntime.placeDetection(requireContext()).removeGroups(groupIds?.takeIf { it.isNotEmpty() })
+      }
+
+      AsyncFunction("setGroupPlaces") { owner: String, deviceId: String, groupId: String, places: List<Map<String, Any?>> ->
+        val parsed =
+          places.map { place ->
+            PlaceGeofence(
+              groupId = groupId,
+              placeId = place.stringValue("placeId") ?: throw IllegalArgumentException("placeId is required."),
+              latitude = place.doubleValue("latitude"),
+              longitude = place.doubleValue("longitude"),
+              radiusMeters = place.doubleValue("radiusMeters"),
+            )
+          }
+        synchronized(TrackingRuntime.captureLock) {
+          val context = requireContext()
+          if (TrackingRuntime.queueOwner(context) != owner || TrackingRuntime.queueDeviceId(context) != deviceId) return@AsyncFunction false
+          TrackingRuntime.placeDetection(context).setGroupPlaces(groupId, parsed)
+        }
+        true
+      }
+
+      Function("listPlaceGroups") { owner: String, deviceId: String ->
+        synchronized(TrackingRuntime.captureLock) {
+          val context = requireContext()
+          if (TrackingRuntime.queueOwner(context) != owner || TrackingRuntime.queueDeviceId(context) != deviceId) return@Function null
+          TrackingRuntime.placeDetection(context).groups().toList()
+        }
+      }
+
+      AsyncFunction("listPlaceTransitions") { owner: String ->
+        TrackingRuntime.placeDetection(requireContext()).queued(owner, MAX_PLACE_TRANSITIONS).map {
+          mapOf(
+            "clientId" to it.clientId,
+            "senderDeviceId" to it.senderDeviceId,
+            "groupId" to it.groupId,
+            "placeId" to it.placeId,
+            "direction" to it.direction,
+            "occurredAt" to it.occurredAt.toDouble(),
+          )
+        }
+      }
+
+      AsyncFunction("deletePlaceTransitions") { clientIds: List<String> ->
+        TrackingRuntime.placeDetection(requireContext()).acknowledge(clientIds)
+      }
+
+      Function("showPlaceNotice") { kind: String, key: String, title: String, body: String?, groupName: String, link: String ->
+        Notices.showPlace(requireContext(), PlaceNoticeKind.of(kind), key, title, body, groupName, link)
       }
 
       Function("listProvisionedEpochKeys") {
@@ -196,6 +246,9 @@ class OpenBeaconTrackingModule : Module() {
 
   private fun Map<String, Any?>.stringValue(key: String): String? = this[key]?.toString()
 
+  private fun Map<String, Any?>.doubleValue(key: String): Double =
+    (this[key] as? Number)?.toDouble()?.takeIf { it.isFinite() } ?: throw IllegalArgumentException("$key is required.")
+
   private fun CiphertextQueueRow.toMap(): Map<String, Any?> =
     mapOf(
       "id" to id.toDouble(),
@@ -218,5 +271,6 @@ class OpenBeaconTrackingModule : Module() {
   companion object {
     private const val DEFAULT_KIND = "trackingPoint"
     private const val DEFAULT_PENDING_LIMIT = 100
+    private const val MAX_PLACE_TRANSITIONS = 200
   }
 }
