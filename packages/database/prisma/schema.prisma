@@ -38,8 +38,8 @@ model User {
   sentGroupMemberInvites     GroupMemberInvite[] @relation("GroupMemberInviteInviter")
   receivedGroupMemberInvites GroupMemberInvite[] @relation("GroupMemberInviteRecipient")
   groupEncryptedPayloads     GroupEncryptedPayload[]
-  groupJoinAlerts             GroupJoinAlert[] @relation("GroupJoinAlertRecipient")
-  createdGroupJoinAlerts      GroupJoinAlert[] @relation("GroupJoinAlertMember")
+  groupEventsActed           GroupEvent[] @relation("GroupEventActor")
+  groupEventsAbout           GroupEvent[] @relation("GroupEventSubject")
   feedback                   Feedback[]
   createdSharedInvites       GroupSharedInvite[]
   recoveryKey                RecoveryKey?
@@ -131,7 +131,7 @@ model Group {
   groupMembers           GroupMember[]
   groupInvites           GroupMemberInvite[]
   sharedInvites          GroupSharedInvite[]
-  joinAlerts             GroupJoinAlert[]
+  events                 GroupEvent[]
   groupEpochs            GroupEpoch[]
   groupEncryptedPayloads GroupEncryptedPayload[]
   places                 Place[]
@@ -272,20 +272,39 @@ model GroupSharedInvite {
   @@index([creatorId])
 }
 
-model GroupJoinAlert {
-  id          String   @id @default(uuid(7))
-  recipientId String
-  recipient   User     @relation("GroupJoinAlertRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-  memberId    String?
-  member      User?    @relation("GroupJoinAlertMember", fields: [memberId], references: [id], onDelete: Cascade)
-  groupId     String
-  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  memberName  String
-  createdAt   DateTime @default(now())
+enum GroupEventType {
+  GROUP_CREATED
+  MEMBER_JOINED
+  MEMBER_LEFT
+  MEMBER_REMOVED
+  ACCOUNT_DELETED
+  ROLE_CHANGED
+  GROUP_RENAMED
+  GROUP_IMAGE_CHANGED
+  PLACE_ADDED
+  PLACE_UPDATED
+  PLACE_DELETED
+}
 
-  @@index([recipientId, createdAt])
-  @@index([groupId])
-  @@index([memberId])
+model GroupEvent {
+  id            String         @id @default(uuid(7))
+  groupId       String
+  group         Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  type          GroupEventType
+  actorUserId   String?
+  actor         User?          @relation("GroupEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  subjectUserId String?
+  subject       User?          @relation("GroupEventSubject", fields: [subjectUserId], references: [id], onDelete: SetNull)
+  role          GroupRole?
+  name          String?
+  previousName  String?
+  emoji         String?
+  createdAt     DateTime       @default(now())
+
+  @@index([groupId, createdAt, id])
+  @@index([actorUserId])
+  @@index([subjectUserId])
+  @@index([createdAt])
 }
 
 model GroupMember {

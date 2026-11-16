@@ -10,6 +10,8 @@ let epochs: Array<{ id: string; createdAt: Date }> = [];
 const payloadDeletes: Array<{ kind: unknown; cutoff: unknown; limit: number }> = [];
 const epochPages: Array<{ cutoff: unknown; after: unknown[]; limit: unknown }> = [];
 const epochDeletes: string[][] = [];
+let historyBacklog = { PlaceTransition: 0, GroupEvent: 0 };
+const historyDeletes: Array<{ table: string; cutoff: unknown; limit: number }> = [];
 
 const queryRaw = mock(async (strings: TemplateStringsArray, ...values: unknown[]) => {
   if (strings.join("?").includes("clock_timestamp")) return [{ now: databaseNow }];
@@ -31,6 +33,18 @@ const executeRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args
     if (failure) throw failure;
     return 0;
   }
+  const historyTable = (["PlaceTransition", "GroupEvent"] as const).find((table) =>
+    strings.join("?").trimStart().startsWith(`DELETE FROM "${table}"`),
+  );
+  if (historyTable) {
+    const failure = failures.shift();
+    if (failure) throw failure;
+    const limit = Number(values[1]);
+    historyDeletes.push({ table: historyTable, cutoff: values[0], limit });
+    const count = Math.min(limit, historyBacklog[historyTable]);
+    historyBacklog[historyTable] -= count;
+    return count;
+  }
   const failure = failures.shift();
   if (failure) throw failure;
   const limit = Number(values[2]);
@@ -43,7 +57,7 @@ const executeRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args
 mock.module("../services.ts", () => ({
   services: { db: { $queryRaw: queryRaw, $executeRaw: executeRaw } },
 }));
-const { createEpochCleanup, createLocationHistoryCleanup } =
+const { createEpochCleanup, createGroupHistoryCleanup, createLocationHistoryCleanup } =
   await import("./locationHistoryCleanup.ts");
 afterAll(() => mock.restore());
 beforeEach(() => {
@@ -53,6 +67,8 @@ beforeEach(() => {
   payloadDeletes.length = 0;
   epochPages.length = 0;
   epochDeletes.length = 0;
+  historyBacklog = { PlaceTransition: 0, GroupEvent: 0 };
+  historyDeletes.length = 0;
 });
 
 test("deletes location points older than database time minus exactly 14 days in batches", async () => {
@@ -116,5 +132,38 @@ test("logs a failed epoch page with only its code and stops", async () => {
   failures = [Object.assign(new Error("row secret"), { code: "P2034" })];
   await createEpochCleanup()();
   expect(error.mock.calls).toEqual([["Epoch clean-up failed (P2034)"]]);
+  error.mockRestore();
+});
+
+test("stops each group history table at the run limit and warns without identifiers", async () => {
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  historyBacklog = { PlaceTransition: 10, GroupEvent: 3 };
+  const run = createGroupHistoryCleanup({ batchSize: 4, runLimit: 6 });
+  await run();
+  expect(historyDeletes).toEqual([
+    { table: "PlaceTransition", cutoff, limit: 4 },
+    { table: "PlaceTransition", cutoff, limit: 2 },
+    { table: "GroupEvent", cutoff, limit: 4 },
+  ]);
+  expect(historyBacklog).toEqual({ PlaceTransition: 4, GroupEvent: 0 });
+  expect(warn.mock.calls).toEqual([
+    [
+      "Place transition clean-up reached its limit of 6 rows; the rest will be deleted on later runs",
+    ],
+  ]);
+  warn.mockClear();
+  await run();
+  expect(historyBacklog).toEqual({ PlaceTransition: 0, GroupEvent: 0 });
+  expect(warn).not.toHaveBeenCalled();
+  warn.mockRestore();
+});
+
+test("still cleans group events when place transitions fail", async () => {
+  const error = spyOn(console, "error").mockImplementation(() => {});
+  historyBacklog = { PlaceTransition: 5, GroupEvent: 5 };
+  failures = [Object.assign(new Error("row secret"), { code: "P2010" })];
+  await createGroupHistoryCleanup()();
+  expect(historyBacklog).toEqual({ PlaceTransition: 5, GroupEvent: 0 });
+  expect(error.mock.calls).toEqual([["Place transition clean-up failed (P2010)"]]);
   error.mockRestore();
 });

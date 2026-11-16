@@ -12,8 +12,8 @@ import {
   encryptPlaceGeometry,
   formatPlaceSize,
   type GroupPlace,
-  groupByDay,
   hiddenGroupWithPlace,
+  isPlaceEditUnchanged,
   metersBetween,
   metersPerPixel,
   peopleAtPlace,
@@ -207,36 +207,38 @@ describe("map pins", () => {
   });
 });
 
-describe("history by day", () => {
-  test("splits newest-first items into Today, Yesterday and older days", () => {
-    const now = new Date(2026, 10, 15, 18, 0);
-    const sections = groupByDay({
-      items: [
-        { id: "a", occurredAt: new Date(2026, 10, 15, 17, 42) },
-        { id: "b", occurredAt: new Date(2026, 10, 15, 0, 1) },
-        { id: "c", occurredAt: new Date(2026, 10, 14, 23, 59) },
-        { id: "d", occurredAt: new Date(2026, 10, 12, 9, 0) },
-      ],
-      now,
-    });
-    expect(sections.map((section) => section.title.slice(0, 9))).toEqual([
-      "Today",
-      "Yesterday",
-      expect.not.stringMatching(/Today|Yesterday/),
-    ]);
-    expect(sections.map((section) => section.items.map((item) => item.id))).toEqual([
-      ["a", "b"],
-      ["c"],
-      ["d"],
-    ]);
+describe("unchanged place edits", () => {
+  const before = {
+    name: "Home",
+    emoji: "🏠",
+    geometry: { latitude: 51.5, longitude: -0.12, radiusMeters: 250 },
+  };
+
+  test("treats the same name, emoji, size and a centre within a metre as unchanged", () => {
+    expect(isPlaceEditUnchanged({ before, after: before })).toBe(true);
+    expect(
+      isPlaceEditUnchanged({
+        before,
+        after: { ...before, geometry: { ...before.geometry, latitude: 51.500_005 } },
+      }),
+    ).toBe(true);
   });
 
-  test("treats yesterday across a month boundary", () => {
-    const sections = groupByDay({
-      items: [{ occurredAt: new Date(2026, 10, 30, 22, 0) }],
-      now: new Date(2026, 11, 1, 8, 0),
-    });
-    expect(sections[0]?.title).toBe("Yesterday");
+  test("sees any real change", () => {
+    expect(isPlaceEditUnchanged({ before, after: { ...before, name: "Home 2" } })).toBe(false);
+    expect(isPlaceEditUnchanged({ before, after: { ...before, emoji: "🏡" } })).toBe(false);
+    expect(
+      isPlaceEditUnchanged({
+        before,
+        after: { ...before, geometry: { ...before.geometry, radiusMeters: 300 } },
+      }),
+    ).toBe(false);
+    expect(
+      isPlaceEditUnchanged({
+        before,
+        after: { ...before, geometry: { ...before.geometry, latitude: 51.5001 } },
+      }),
+    ).toBe(false);
   });
 });
 

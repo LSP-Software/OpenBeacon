@@ -1,6 +1,7 @@
-import { GroupRole, Prisma } from "@openbeacon/database";
+import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
 import { createGroupSchema, groupEpochBundleSchema, newGroupIdSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
+import { readDatabaseTime } from "../../lib/databaseTime.ts";
 import z from "zod";
 import { deleteGroup } from "../../lib/deleteGroup.ts";
 import { persistGroupEpoch } from "../../lib/groupEpochs.ts";
@@ -81,6 +82,7 @@ export const groupLifecycleRouter = {
                 userId: ctx.session.user.id,
                 role: GroupRole.OWNER,
                 joinedEpochNumber: input.initialEpoch.epochNumber,
+                createdAt: await readDatabaseTime(tx),
               },
             },
           },
@@ -89,6 +91,7 @@ export const groupLifecycleRouter = {
               select: {
                 id: true,
                 role: true,
+                createdAt: true,
                 user: {
                   select: {
                     id: true,
@@ -107,6 +110,17 @@ export const groupLifecycleRouter = {
           epoch: input.initialEpoch,
           groupId: input.groupId,
           userId: ctx.session.user.id,
+        });
+        const [creator] = createdGroup.groupMembers;
+        if (!creator) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        await tx.groupEvent.create({
+          data: {
+            groupId: input.groupId,
+            type: GroupEventType.GROUP_CREATED,
+            actorUserId: ctx.session.user.id,
+            name: input.name,
+            createdAt: creator.createdAt,
+          },
         });
 
         return createdGroup;

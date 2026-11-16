@@ -1,7 +1,5 @@
-import { Alert } from "../../../lib/alert.ts";
 import { useIsFocused } from "@react-navigation/native";
-import { tryCatch } from "@openbeacon/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "expo-router";
 import { ChevronRightIcon, PlusIcon, ShieldIcon } from "lucide-react-native";
 import { useState } from "react";
@@ -17,6 +15,7 @@ import { Icon } from "../../../components/ui/Icon.tsx";
 import { Text } from "../../../components/ui/Text.tsx";
 import { useGroupColorRevision } from "../../../hooks/useGroupColorRevision.ts";
 import { useRefetchWhileFocused } from "../../../hooks/useRefetchWhileFocused.ts";
+import { useUnseenGroupHistory } from "../../../hooks/useUnseenGroupHistory.ts";
 import { type RouterOutputs, trpc } from "../../../lib/api.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { initials } from "../../../lib/initials.ts";
@@ -33,16 +32,8 @@ export default function GroupsScreen() {
     ...trpc.groupInvites.list.queryOptions(),
     subscribed: isFocused,
   });
-  const { data: joinAlerts } = useQuery({
-    ...trpc.groupInvites.joinAlerts.queryOptions(),
-    subscribed: isFocused,
-  });
   useRefetchWhileFocused(
-    [
-      trpc.groupMembership.list.queryKey(),
-      trpc.groupInvites.list.queryKey(),
-      trpc.groupInvites.joinAlerts.queryKey(),
-    ],
+    [trpc.groupMembership.list.queryKey(), trpc.groupInvites.list.queryKey()],
     30_000,
   );
 
@@ -92,49 +83,12 @@ export default function GroupsScreen() {
             We couldn’t reach the server, so this list may be out of date.
           </Text>
         ) : null}
-        <GroupJoinAlerts alerts={joinAlerts ?? []} />
         <GroupInvitesList groupInvites={invites.data ?? []} />
         <GroupList groupList={groups.data} setCreateGroupDialogOpen={setCreateGroupDialogOpen} />
       </SafeAreaView>
     </RefreshablePage>
   );
 }
-
-const GroupJoinAlerts = ({ alerts }: { alerts: RouterOutputs["groupInvites"]["joinAlerts"] }) => {
-  const queryClient = useQueryClient();
-  const dismiss = useMutation(trpc.groupInvites.dismissJoinAlert.mutationOptions());
-  if (!alerts.length) return null;
-  return (
-    <View className="gap-3 mb-4">
-      <Text className="font-bold text-lg">Group activity</Text>
-      {alerts.map((item) => (
-        <Card key={item.id}>
-          <CardHeader>
-            <Text>
-              {item.memberName} joined {item.group.name}
-            </Text>
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={async () => {
-                const result = await tryCatch(dismiss.mutateAsync({ id: item.id }));
-                if (result.error) {
-                  Alert.alert("Unable to dismiss alert", result.error.message);
-                  return;
-                }
-                await queryClient.invalidateQueries({
-                  queryKey: trpc.groupInvites.joinAlerts.queryKey(),
-                });
-              }}
-            >
-              <Text>Dismiss</Text>
-            </Button>
-          </CardHeader>
-        </Card>
-      ))}
-    </View>
-  );
-};
 
 const GroupInvitesList = ({
   groupInvites,
@@ -170,6 +124,7 @@ interface GroupListProps {
 
 export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProps) => {
   useGroupColorRevision();
+  const { unseenGroupIds } = useUnseenGroupHistory();
 
   return (
     <View>
@@ -219,10 +174,14 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
             const membersToShow = group.members.slice(0, maxMembersToShow);
 
             return (
-              <Link href={`/groups/${group.id}`} key={group.id}>
+              <Link
+                href={`/groups/${group.id}`}
+                key={group.id}
+                accessibilityLabel={`${group.name}, ${group.members.length} members${unseenGroupIds.has(group.id) ? ", new activity" : ""}`}
+              >
                 <Card className="w-full">
                   <CardHeader className="flex-row items-center justify-between">
-                    <View className="flex-row items-center gap-3">
+                    <View className="flex-1 flex-row items-center gap-3">
                       <View
                         className="rounded-full p-0.5"
                         style={{ borderWidth: 3, borderColor: getGroupColor(group.id) }}
@@ -234,13 +193,20 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
                           </AvatarFallback>
                         </Avatar>
                       </View>
-                      <View className="gap-1">
-                        <CardTitle>{group.name}</CardTitle>
+                      <View className="flex-1 gap-1">
+                        <View className="flex-row items-center gap-2">
+                          <CardTitle numberOfLines={1} className="shrink">
+                            {group.name}
+                          </CardTitle>
+                          {unseenGroupIds.has(group.id) ? (
+                            <View className="size-2 rounded-full bg-primary" />
+                          ) : null}
+                        </View>
                         <CardDescription>{group.members.length} members</CardDescription>
                       </View>
                     </View>
 
-                    <View className="flex-row items-center gap-4">
+                    <View className="ml-3 flex-row items-center gap-4">
                       <View className="flex-row items-center">
                         {membersToShow.map((member) => (
                           <Avatar

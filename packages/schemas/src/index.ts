@@ -51,6 +51,8 @@ import {
 import {
   getPlaceAlertMutesSchema,
   getPlaceSharingSchema,
+  groupHistoryCategorySchema,
+  groupHistorySchema,
   placeAlertsCursorSchema,
   placeTransitionSchema,
   recentPlaceTransitionsSchema,
@@ -92,6 +94,8 @@ export {
   groupTrackingPointSchema,
   groupTrackingPollSchema,
   groupTrackingUploadBatchSchema,
+  groupHistoryCategorySchema,
+  groupHistorySchema,
   inviteMemberToGroupSchema,
   listPlacesSchema,
   MAX_PLACES_PER_GROUP,

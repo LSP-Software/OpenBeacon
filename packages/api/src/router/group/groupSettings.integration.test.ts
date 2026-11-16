@@ -504,6 +504,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           result.imageUrl,
         );
         expect(
+          await prisma.groupEvent.findMany({
+            where: { groupId: uploadGroupId },
+            select: { type: true, actorUserId: true },
+          }),
+        ).toEqual([{ type: "GROUP_IMAGE_CHANGED", actorUserId: users[0]! }]);
+        expect(
           await prisma.pendingUpload.findUnique({
             where: {
               userId_uploadType_groupId: {

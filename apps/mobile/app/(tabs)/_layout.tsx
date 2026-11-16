@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef } from "react";
 import { LoadingIndicator } from "../../components/LoadingIndicator.tsx";
 import { TabBar } from "../../components/TabBar.tsx";
 import { useAppForeground } from "../../hooks/useAppForeground.ts";
+import { useRefetchWhileFocused } from "../../hooks/useRefetchWhileFocused.ts";
+import { useUnseenGroupHistory } from "../../hooks/useUnseenGroupHistory.ts";
 import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { groupColorSyncQueryOptions } from "../../lib/groupColorSync.ts";
@@ -12,6 +14,8 @@ export default function TabsLayout() {
   const { data: session, isPending } = authClient.useSession();
   useQuery(groupColorSyncQueryOptions(session?.user.id));
   const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
+  const { unseenGroupIds } = useUnseenGroupHistory();
+  useRefetchWhileFocused([trpc.groupHistory.latest.queryKey()], 60_000);
   const { mutate: setTimezone } = useMutation({
     ...trpc.emailAlerts.setTimezone.mutationOptions(),
     scope: { id: "emailAlerts.setTimezone" },
@@ -50,7 +54,7 @@ export default function TabsLayout() {
   return (
     <Tabs
       initialRouteName="groups/list"
-      tabBar={(props) => <TabBar {...props} />}
+      tabBar={(props) => <TabBar {...props} groupsBadge={unseenGroupIds.size > 0} />}
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: "transparent" },

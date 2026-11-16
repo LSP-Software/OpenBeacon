@@ -28,6 +28,7 @@ import { authClient } from "../lib/auth-client.ts";
 import { cn } from "../lib/cn.ts";
 import { errorReason } from "../lib/errorReason.ts";
 import {
+  isPlaceEditUnchanged,
   metersPerPixel,
   PLACE_EMOJI_CHOICES,
   PLACE_RADIUS_DEFAULT,
@@ -192,7 +193,7 @@ const PlaceEditor = ({
   const refreshPlaces = (quietPlaceIds: readonly string[]) =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: groupPlacesQueryKey(groupId) }),
-      queryClient.invalidateQueries({ queryKey: ["placeTransitions", groupId] }),
+      queryClient.invalidateQueries({ queryKey: ["groupHistory", groupId] }),
       userId ? tryCatch(syncGroupPlaces({ groupId, quietPlaceIds, userId })) : null,
     ]);
 
@@ -208,6 +209,22 @@ const PlaceEditor = ({
       return;
     }
     if (!center || busyRef.current) return;
+    const geometry = {
+      v: 1 as const,
+      latitude: center.latitude,
+      longitude: ((((center.longitude + 180) % 360) + 360) % 360) - 180,
+      radiusMeters,
+    };
+    if (
+      place &&
+      isPlaceEditUnchanged({
+        before: place,
+        after: { name: parsedName.data, emoji: parsedEmoji.data, geometry },
+      })
+    ) {
+      onClose();
+      return;
+    }
     busyRef.current = true;
     setBusy("saving");
     const result = await tryCatch(
@@ -216,12 +233,7 @@ const PlaceEditor = ({
         existing: place
           ? { expectedCiphertext: place.expectedCiphertext, placeId: place.id }
           : null,
-        geometry: {
-          v: 1,
-          latitude: center.latitude,
-          longitude: ((((center.longitude + 180) % 360) + 360) % 360) - 180,
-          radiusMeters,
-        },
+        geometry,
         groupId,
         name: parsedName.data,
       }),

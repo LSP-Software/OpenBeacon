@@ -402,7 +402,7 @@ const MapScreen = () => {
             onDeleted: () => {
               onDeleted();
               void queryClient.invalidateQueries({ queryKey: groupPlacesQueryKey(place.groupId) });
-              void queryClient.invalidateQueries({ queryKey: ["placeTransitions", place.groupId] });
+              void queryClient.invalidateQueries({ queryKey: ["groupHistory", place.groupId] });
             },
           })
         }

@@ -109,8 +109,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           expiresAt: new Date(Date.now() + 60_000),
         },
       });
-      await prisma.groupJoinAlert.create({
-        data: { groupId, recipientId: remainingUser, memberId: deletedUser, memberName: "Deleted" },
+      await prisma.groupEvent.createMany({
+        data: [
+          { groupId, type: "MEMBER_JOINED", subjectUserId: deletedUser },
+          {
+            groupId,
+            type: "MEMBER_REMOVED",
+            actorUserId: deletedUser,
+            subjectUserId: remainingUser,
+          },
+        ],
       });
       await prisma.feedback.createMany({
         data: [
@@ -207,14 +215,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
-    test("new alerts and shared invitations require an account reference", async () => {
-      await expect(
-        Promise.resolve(
-          prisma.groupJoinAlert.create({
-            data: { groupId, recipientId: remainingUser, memberName: "Missing" },
-          }),
-        ),
-      ).rejects.toThrow();
+    test("shared invitations require an account reference", async () => {
       await expect(
         Promise.resolve(
           prisma.groupSharedInvite.create({
@@ -268,7 +269,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(
         await prisma.personalGroupColor.findMany({ where: { owner: { groupId } } }),
       ).toMatchObject([{ ciphertext: "remaining" }]);
-      expect(await prisma.groupJoinAlert.count({ where: { groupId } })).toBe(0);
+      expect(
+        await prisma.groupEvent.findMany({
+          where: { groupId },
+          orderBy: { type: "asc" },
+          select: { type: true, actorUserId: true, subjectUserId: true },
+        }),
+      ).toEqual([
+        { type: "MEMBER_JOINED", actorUserId: null, subjectUserId: null },
+        { type: "MEMBER_REMOVED", actorUserId: null, subjectUserId: remainingUser },
+        { type: "ACCOUNT_DELETED", actorUserId: null, subjectUserId: null },
+        { type: "GROUP_IMAGE_CHANGED", actorUserId: null, subjectUserId: null },
+      ]);
       expect(
         await prisma.feedback.findMany({
           where: { message: { startsWith: `${prefix}-feedback` } },
@@ -497,6 +509,54 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       } finally {
         await prisma.group.deleteMany({ where: { id: uploadGroup } });
         await prisma.user.deleteMany({ where: { id: { in: [id, partner] } } });
+        await prisma.accountDeletionCleanup.deleteMany({ where: { userId: id } });
+      }
+    });
+
+    test("keeps a replacement image and emits no image event when deletion races an admin", async () => {
+      const id = `${prefix}-image-race-user`;
+      const imageGroup = `${prefix}-image-race-group`;
+      const replacement = "https://cdn.example/bucket/user/another-user/avatar/new";
+      await prisma.user.create({ data: { id, name: "Deleting", email: `${id}@example.test` } });
+      await prisma.group.create({
+        data: {
+          id: imageGroup,
+          name: "Former group",
+          image: `https://cdn.example/bucket/user/${id}/uploads/group/avatar/old`,
+        },
+      });
+      const updating = await holdRowLock({
+        db: prisma,
+        id: imageGroup,
+        table: "Group",
+        beforeCommit: (tx) =>
+          tx.group.update({ where: { id: imageGroup }, data: { image: replacement } }),
+      });
+      const deleting = deleteAccountRecords({
+        db: prisma,
+        userId: id,
+        mode: "immediate",
+        imageUrlPrefix: "https://cdn.example/bucket",
+        securityAlerts: null,
+      });
+      try {
+        await updating.waitForWaiters(1);
+      } finally {
+        await updating.release();
+      }
+      try {
+        expect(await deleting).toBe(true);
+        expect((await prisma.group.findUniqueOrThrow({ where: { id: imageGroup } })).image).toBe(
+          replacement,
+        );
+        expect(
+          await prisma.groupEvent.count({
+            where: { groupId: imageGroup, type: "GROUP_IMAGE_CHANGED" },
+          }),
+        ).toBe(0);
+      } finally {
+        await prisma.group.deleteMany({ where: { id: imageGroup } });
+        await prisma.user.deleteMany({ where: { id } });
         await prisma.accountDeletionCleanup.deleteMany({ where: { userId: id } });
       }
     });

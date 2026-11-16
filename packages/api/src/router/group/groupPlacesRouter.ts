@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@openbeacon/database";
-import { GroupRole, Prisma } from "@openbeacon/database";
+import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
 import {
   createPlaceSchema,
   deletePlaceSchema,
@@ -11,6 +11,7 @@ import {
 } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
 import { TRPCError } from "@trpc/server";
+import { recordGroupEvent } from "../../lib/groupHistory.ts";
 import type z from "zod";
 import {
   assertActiveDevices,
@@ -96,6 +97,15 @@ export const groupPlacesRouter = {
             },
             select: placeSelect,
           });
+          await recordGroupEvent(tx, {
+            data: {
+              groupId: input.groupId,
+              type: GroupEventType.PLACE_ADDED,
+              actorUserId: ctx.session.user.id,
+              name: input.name,
+              emoji: input.emoji,
+            },
+          });
           return { place: { ...place, kind: PLACE_GEOMETRY_KIND } };
         },
       }),
@@ -112,6 +122,10 @@ export const groupPlacesRouter = {
         needsAdmin: true,
         userId: ctx.session.user.id,
         write: async (tx) => {
+          const previous = await tx.place.findFirst({
+            where: { id: input.placeId, groupId: input.groupId },
+            select: { name: true },
+          });
           const updated = await tx.place.updateMany({
             where: {
               id: input.placeId,
@@ -140,6 +154,16 @@ export const groupPlacesRouter = {
           const place = await tx.place.findUniqueOrThrow({
             where: { id: input.placeId },
             select: placeSelect,
+          });
+          await recordGroupEvent(tx, {
+            data: {
+              groupId: input.groupId,
+              type: GroupEventType.PLACE_UPDATED,
+              actorUserId: ctx.session.user.id,
+              name: input.name,
+              emoji: input.emoji,
+              previousName: previous && previous.name !== input.name ? previous.name : null,
+            },
           });
           return { place: { ...place, kind: PLACE_GEOMETRY_KIND } };
         },
@@ -214,10 +238,23 @@ export const groupPlacesRouter = {
         needsAdmin: true,
         userId: ctx.session.user.id,
         write: async (tx) => {
+          const place = await tx.place.findFirst({
+            where: { id: input.placeId, groupId: input.groupId },
+            select: { name: true, emoji: true },
+          });
           const deleted = await tx.place.deleteMany({
             where: { id: input.placeId, groupId: input.groupId },
           });
-          if (deleted.count === 0) throw placeGone();
+          if (!place || deleted.count === 0) throw placeGone();
+          await recordGroupEvent(tx, {
+            data: {
+              groupId: input.groupId,
+              type: GroupEventType.PLACE_DELETED,
+              actorUserId: ctx.session.user.id,
+              name: place.name,
+              emoji: place.emoji,
+            },
+          });
           return {};
         },
       }),

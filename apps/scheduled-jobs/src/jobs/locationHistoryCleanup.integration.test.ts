@@ -4,7 +4,7 @@ import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 import {
   createEpochCleanup,
   createLocationHistoryCleanup,
-  createPlaceTransitionCleanup,
+  createGroupHistoryCleanup,
 } from "./locationHistoryCleanup.ts";
 
 const prefix = `location-history-cleanup-${crypto.randomUUID()}`;
@@ -235,7 +235,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     expect(await epochNumbers(groupId)).toEqual([2]);
   });
 
-  test("deletes place transitions that happened more than 14 days ago, in batches", async () => {
+  test("deletes place transitions and group events more than 14 days old, in batches up to the run limit", async () => {
     const groupId = await createGroup("transitions", [200]);
     const place = await prisma.place.create({
       data: {
@@ -270,13 +270,39 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
         createdAt: ago(0),
       })),
     });
-    await createPlaceTransitionCleanup({ batchSize: 2 })();
+    await prisma.groupEvent.createMany({
+      data: transitions.map(({ name, occurredAt }) => ({
+        id: `${groupId}-${name}`,
+        groupId,
+        type: "MEMBER_JOINED" as const,
+        subjectUserId: userId,
+        createdAt: occurredAt,
+      })),
+    });
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const run = createGroupHistoryCleanup({ batchSize: 2, runLimit: 2 });
+    await run();
+    expect(await prisma.placeTransition.count({ where: { groupId } })).toBe(3);
+    expect(await prisma.groupEvent.count({ where: { groupId } })).toBe(3);
+    expect(warn).toHaveBeenCalledTimes(2);
+    await run();
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
     const remaining = await prisma.placeTransition.findMany({
       where: { groupId },
       select: { id: true },
       orderBy: { id: "asc" },
     });
     expect(remaining.map(({ id }) => id.slice(groupId.length + 1))).toEqual([
+      "justUnder",
+      "recent",
+    ]);
+    const remainingEvents = await prisma.groupEvent.findMany({
+      where: { groupId },
+      select: { id: true },
+      orderBy: { id: "asc" },
+    });
+    expect(remainingEvents.map(({ id }) => id.slice(groupId.length + 1))).toEqual([
       "justUnder",
       "recent",
     ]);

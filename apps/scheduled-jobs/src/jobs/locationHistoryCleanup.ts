@@ -32,29 +32,54 @@ export const createLocationHistoryCleanup =
     );
   };
 
-export const createPlaceTransitionCleanup =
-  ({ batchSize = 1_000 }: { batchSize?: number } = {}) =>
+export const createGroupHistoryCleanup =
+  ({ batchSize = 1_000, runLimit = 500_000 }: { batchSize?: number; runLimit?: number } = {}) =>
   async () => {
     const cutoff = await retentionCutoff();
-    while (true) {
-      const result = await tryCatch(
-        services.db.$executeRaw`
-          DELETE FROM "PlaceTransition"
-          WHERE id IN (
-            SELECT id FROM "PlaceTransition"
-            WHERE "occurredAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')
-            ORDER BY "occurredAt"
-            LIMIT ${batchSize}
-          )
-        `,
-      );
-      if (result.error) {
-        const code = errorCode(result.error);
-        console.error(`Place transition clean-up failed${code ? ` (${code})` : ""}`);
-        return;
+    const deleteBatches = async (
+      table: string,
+      deleteBatch: (limit: number) => Promise<number>,
+    ) => {
+      let deleted = 0;
+      while (deleted < runLimit) {
+        const limit = Math.min(batchSize, runLimit - deleted);
+        const result = await tryCatch(deleteBatch(limit));
+        if (result.error) {
+          const code = errorCode(result.error);
+          console.error(`${table} clean-up failed${code ? ` (${code})` : ""}`);
+          return;
+        }
+        deleted += result.data;
+        if (result.data < limit) return;
       }
-      if (result.data < batchSize) return;
-    }
+      console.warn(
+        `${table} clean-up reached its limit of ${runLimit} rows; the rest will be deleted on later runs`,
+      );
+    };
+    await deleteBatches(
+      "Place transition",
+      (limit) => services.db.$executeRaw`
+        DELETE FROM "PlaceTransition"
+        WHERE id IN (
+          SELECT id FROM "PlaceTransition"
+          WHERE "occurredAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')
+          ORDER BY "occurredAt"
+          LIMIT ${limit}
+        )
+      `,
+    );
+    await deleteBatches(
+      "Group event",
+      (limit) => services.db.$executeRaw`
+        DELETE FROM "GroupEvent"
+        WHERE id IN (
+          SELECT id FROM "GroupEvent"
+          WHERE "createdAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')
+          ORDER BY "createdAt"
+          LIMIT ${limit}
+        )
+      `,
+    );
   };
 
 export const createEpochCleanup =

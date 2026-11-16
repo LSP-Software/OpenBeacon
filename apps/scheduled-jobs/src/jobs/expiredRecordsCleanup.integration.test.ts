@@ -87,21 +87,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Expired records 
         groupId,
       })),
     });
-    await prisma.groupJoinAlert.createMany({
-      data: [
-        { name: "oldAlert", createdAt: at(-30 * day - 60_000) },
-        { name: "monthOldAlert", createdAt: at(-30 * day + 60_000) },
-        { name: "newAlert", createdAt: at(-1_000) },
-        { name: "leftGroupAlert", createdAt: at(-1_000), recipientId: leaverId },
-      ].map(({ name, recipientId = memberId, createdAt }) => ({
-        id: `${prefix}-${name}`,
-        recipientId,
-        memberId: recipientId === memberId ? leaverId : memberId,
-        groupId,
-        memberName: "Joiner",
-        createdAt,
-      })),
-    });
     await prisma.groupMemberInvite.createMany({
       data: [
         {
@@ -161,10 +146,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Expired records 
       "recentlyExpiredInvite",
       "recentlyUsedInvite",
     ]);
-    expect(await ids(prisma.groupJoinAlert.findMany({ where: { groupId } }))).toEqual([
-      "monthOldAlert",
-      "newAlert",
-    ]);
     expect(await ids(prisma.groupMemberInvite.findMany({ where: { groupId } }))).toEqual([
       "recentInvite",
     ]);
@@ -177,10 +158,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Expired records 
     await runExpiredRecordsCleanup();
     expect(await ids(prisma.session.findMany({ where: { userId: memberId } }))).toEqual([
       "liveSession",
-    ]);
-    expect(await ids(prisma.groupJoinAlert.findMany({ where: { groupId } }))).toEqual([
-      "monthOldAlert",
-      "newAlert",
     ]);
   });
 });

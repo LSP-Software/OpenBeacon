@@ -1,8 +1,9 @@
-import { GroupRole, Prisma } from "@openbeacon/database";
+import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
 import { devicePlatformSchema, removeGroupMemberSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { errorCode, tryCatch } from "@openbeacon/shared";
+import { recordGroupEvent } from "../../lib/groupHistory.ts";
 import { deleteGroup } from "../../lib/deleteGroup.ts";
 import { deletePayloadsInBatches } from "../../lib/deletePayloadsInBatches.ts";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
@@ -290,10 +291,21 @@ export const groupMembershipRouter = {
                 message: "Cannot change the role of an account pending deletion.",
               });
             }
-            await tx.groupMember.update({
-              where: { id: successor.id },
-              data: { role: GroupRole.OWNER },
-            });
+            if (successor.role !== GroupRole.OWNER) {
+              await tx.groupMember.update({
+                where: { id: successor.id },
+                data: { role: GroupRole.OWNER },
+              });
+              await recordGroupEvent(tx, {
+                data: {
+                  groupId: input.groupId,
+                  type: GroupEventType.ROLE_CHANGED,
+                  actorUserId: ctx.session.user.id,
+                  subjectUserId: successor.userId,
+                  role: GroupRole.OWNER,
+                },
+              });
+            }
           }
 
           const isLeaving = actor.id === input.memberId;
@@ -312,6 +324,20 @@ export const groupMembershipRouter = {
             db: tx,
             groupId: input.groupId,
             memberId: input.memberId,
+          });
+          await recordGroupEvent(tx, {
+            data: isLeaving
+              ? {
+                  groupId: input.groupId,
+                  type: GroupEventType.MEMBER_LEFT,
+                  subjectUserId: member.userId,
+                }
+              : {
+                  groupId: input.groupId,
+                  type: GroupEventType.MEMBER_REMOVED,
+                  actorUserId: ctx.session.user.id,
+                  subjectUserId: member.userId,
+                },
           });
 
           await tx.groupEpochRecipientKey.deleteMany({
@@ -427,6 +453,17 @@ export const groupMembershipRouter = {
         if (input.role === GroupRole.MEMBER) {
           await tx.groupSharedInvite.deleteMany({
             where: { groupId: input.groupId, creatorId: member.userId, usedAt: null },
+          });
+        }
+        if (member.role !== input.role) {
+          await recordGroupEvent(tx, {
+            data: {
+              groupId: input.groupId,
+              type: GroupEventType.ROLE_CHANGED,
+              actorUserId: ctx.session.user.id,
+              subjectUserId: member.userId,
+              role: input.role,
+            },
           });
         }
         return tx.groupMember.update({

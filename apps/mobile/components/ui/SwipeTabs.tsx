@@ -26,6 +26,7 @@ export type SwipeTabsItem<T extends string> = {
   value: T;
   label: string;
   icon?: LucideIcon;
+  badge?: boolean;
 };
 
 export const SwipeTabs = <T extends string>({
@@ -206,12 +207,20 @@ export const SwipeTabs = <T extends string>({
                     <Pressable
                       onPress={() => handleTabPress(tab.value)}
                       accessibilityRole="tab"
-                      accessibilityLabel={tab.label}
+                      accessibilityLabel={tab.badge ? `${tab.label}, new activity` : tab.label}
                       accessibilityState={{ selected: isActive }}
                       className="h-11 items-center justify-center"
                     >
                       {tab.icon ? (
-                        <Icon as={tab.icon} size={20} color={colors.textSecondary} />
+                        <View>
+                          <Icon as={tab.icon} size={20} color={colors.textSecondary} />
+                          {tab.badge ? (
+                            <View
+                              className="absolute -right-1 -top-0.5 size-2 rounded-full"
+                              style={{ backgroundColor: colors.primary }}
+                            />
+                          ) : null}
+                        </View>
                       ) : (
                         <Text
                           className="text-sm font-semibold"
@@ -246,7 +255,17 @@ export const SwipeTabs = <T extends string>({
                     scrollX={scrollX}
                   >
                     <View className="h-11 flex-row items-center justify-center gap-2 px-3">
-                      {tab.icon ? <Icon as={tab.icon} size={18} color={colors.onPrimary} /> : null}
+                      {tab.icon ? (
+                        <View>
+                          <Icon as={tab.icon} size={18} color={colors.onPrimary} />
+                          {tab.badge ? (
+                            <View
+                              className="absolute -right-1 -top-0.5 size-2 rounded-full"
+                              style={{ backgroundColor: colors.onPrimary }}
+                            />
+                          ) : null}
+                        </View>
+                      ) : null}
                       <Text
                         className="shrink text-sm font-semibold leading-none"
                         style={{ color: colors.onPrimary }}

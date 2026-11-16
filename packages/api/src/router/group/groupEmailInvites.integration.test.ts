@@ -207,7 +207,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           .map((id) => `${id}-device`)
           .sort(),
       );
-      expect(await owner.groupInvites.joinAlerts()).toHaveLength(2);
+      expect(await prisma.groupEvent.count({ where: { groupId, type: "MEMBER_JOINED" } })).toBe(2);
       await owner.groupInvites.send({
         groupId,
         invites: [

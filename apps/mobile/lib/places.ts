@@ -75,6 +75,12 @@ export const metersBetween = (
   return 2 * 6_371_000 * Math.asin(Math.min(1, Math.sqrt(a)));
 };
 
+export const isPlaceEditUnchanged = ({ before, after }: { before: PlaceEdit; after: PlaceEdit }) =>
+  before.name === after.name &&
+  before.emoji === after.emoji &&
+  before.geometry.radiusMeters === after.geometry.radiusMeters &&
+  metersBetween(before.geometry, after.geometry) < 1;
+
 export const metersPerPixel = ({ latitude, zoom }: { latitude: number; zoom: number }) =>
   (78_271.516_964 * Math.cos((latitude * Math.PI) / 180)) / 2 ** zoom;
 
@@ -210,42 +216,6 @@ export const hiddenGroupWithPlace = <
       hiddenGroupIds.has(group.id) && (group.places ?? []).some((place) => place.id === placeId),
   ) ?? null;
 
-export const groupByDay = <T extends { occurredAt: Date }>({
-  items,
-  now,
-}: {
-  items: readonly T[];
-  now: Date;
-}) => {
-  const dayKey = (date: Date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-  const today = dayKey(now);
-  const yesterday = dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
-  const sections: { key: string; title: string; items: T[] }[] = [];
-  for (const item of items) {
-    const key = dayKey(item.occurredAt);
-    const section = sections.at(-1);
-    if (section?.key === key) {
-      section.items.push(item);
-      continue;
-    }
-    sections.push({
-      key,
-      title:
-        key === today
-          ? "Today"
-          : key === yesterday
-            ? "Yesterday"
-            : item.occurredAt.toLocaleDateString(undefined, {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              }),
-      items: [item],
-    });
-  }
-  return sections;
-};
-
 export const encryptPlaceGeometry = ({
   epochId,
   epochKey,
@@ -323,4 +293,10 @@ export const placeErrorMessage = (reason: ErrorReason | null, fallback: string) 
     return "This group’s keys are changing. Try again in a moment.";
   }
   return fallback;
+};
+
+type PlaceEdit = {
+  name: string;
+  emoji: string;
+  geometry: { latitude: number; longitude: number; radiusMeters: number };
 };

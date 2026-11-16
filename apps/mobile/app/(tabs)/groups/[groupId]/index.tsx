@@ -17,6 +17,7 @@ import { useGroupKeyHistoryAccess } from "../../../../hooks/useGroupKeyAccess.ts
 import { useCachedGroup } from "../../../../hooks/useCachedGroup.ts";
 import { useHeldHistoryKeyVersions } from "../../../../hooks/useHeldHistoryKeyVersions.ts";
 import { useLiveTrackingPositions } from "../../../../hooks/useLiveTrackingPositions.ts";
+import { useUnseenGroupHistory } from "../../../../hooks/useUnseenGroupHistory.ts";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
 import { storage } from "../../../../lib/storage.ts";
@@ -83,6 +84,9 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
   );
   const { group, isPending, isMissing } = useCachedGroup(groupId);
   const live = useLiveTrackingPositions({ groupId });
+  const history = useUnseenGroupHistory();
+  const historyLatestAt =
+    history.latest?.find((item) => item.groupId === groupId)?.latestAt ?? null;
   const [verifyFailedFor, setVerifyFailedFor] = useState<string | null>(null);
   const [verifyAttempt, setVerifyAttempt] = useState(0);
   const historyPartialFrom =
@@ -123,6 +127,14 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
       active = false;
     };
   }, [groupId, isFocused, isMissing, queryClient, router, verifyAttempt]);
+
+  useEffect(() => {
+    if (!isFocused || value !== "history" || !history.userId) return;
+    void queryClient.invalidateQueries(
+      { queryKey: ["groupHistory", groupId] },
+      { cancelRefetch: false },
+    );
+  }, [groupId, history.userId, historyLatestAt, isFocused, queryClient, value]);
 
   if (isPending || (isMissing && verifyFailedFor !== groupId)) {
     return <LoadingIndicator />;
@@ -193,7 +205,11 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
             )}
             <SwipeTabs
               ariaLabel="Group sections"
-              tabs={GROUP_TABS}
+              tabs={GROUP_TABS.map((tab) =>
+                tab.value === "history"
+                  ? { ...tab, badge: history.unseenGroupIds.has(groupId) && value !== "history" }
+                  : tab,
+              )}
               value={value}
               onValueChange={setValue}
               renderScene={(tabValue) => {
@@ -212,7 +228,7 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
                 }
 
                 if (tabValue === "history") {
-                  return <HistoryTab groupId={groupId} />;
+                  return <HistoryTab groupId={groupId} active={value === "history"} />;
                 }
 
                 return <SettingsTab groupId={groupId} />;

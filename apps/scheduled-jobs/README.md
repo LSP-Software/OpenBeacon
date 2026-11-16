@@ -30,7 +30,7 @@ Processes at most 100 due accounts and 100 image cleanup records per run, and de
 
 ### `expired-records-cleanup` (every hour)
 
-Deletes verification rows with one `DELETE`; they expire within minutes, so an hourly run only finds an hour's worth. It deletes the other tables (`Session`, `GoogleDeletionChallenge`, `GroupSharedInvite`, `GroupJoinAlert`, `GroupMemberInvite` and `Feedback`) 1,000 rows at a time, at most 10 times per table per run. A table that fails is logged by name, with the database error code when there is one, and the remaining tables are still cleaned.
+Deletes verification rows with one `DELETE`; they expire within minutes, so an hourly run only finds an hour's worth. It deletes the other tables (`Session`, `GoogleDeletionChallenge`, `GroupSharedInvite`, `GroupMemberInvite` and `Feedback`) 1,000 rows at a time, at most 10 times per table per run. A table that fails is logged by name, with the database error code when there is one, and the remaining tables are still cleaned.
 
 None of their `expiresAt` columns are indexed. `Session` can be large, but an index was left out on purpose: it would stop session refreshes from being HOT updates and slow them down, and an hourly scan measured about 40 ms on 1 million sessions.
 
@@ -50,9 +50,9 @@ A run stops after 500,000 points. When it stops at that limit it logs `Location 
 
 A benchmark with 1 million groups and 10 million points measured an empty hourly run at about 2 ms, 50,000 due points in under half a second, and a 3.4 million point backlog cleared at 100,000 to 175,000 points a second while the index was clean, slowing to about 15,000 a second when vacuum fell behind. The index made no measurable difference to upload speed.
 
-### `place-transition-cleanup` (every hour)
+### `group-history-cleanup` (every hour)
 
-Deletes `PlaceTransition` rows whose `occurredAt` is more than 14 days before the database time, oldest first, 1,000 per statement, using the `occurredAt` index, until none are due. Uploads refuse transitions that are already older than 14 days, so a row never lives much past its 14 days. A failed statement stops the run and logs one line with the database error code; the next run carries on.
+Deletes `PlaceTransition` rows whose `occurredAt`, and `GroupEvent` rows whose `createdAt`, is more than 14 days before the database time, oldest first, 1,000 per statement, using each table's time index. Uploads refuse transitions that are already older than 14 days, so a row never lives much past its 14 days. A run stops after 500,000 rows per table and logs, without any IDs, `Place transition clean-up reached its limit of 500000 rows; the rest will be deleted on later runs` (or `Group event ...`). A failed statement stops that table's clean-up and logs one line with the database error code; the other table is still cleaned, and the next run carries on.
 
 ### `epoch-cleanup` (every day)
 

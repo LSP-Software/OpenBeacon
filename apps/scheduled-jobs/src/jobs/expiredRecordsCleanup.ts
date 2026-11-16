@@ -54,23 +54,6 @@ export const runExpiredRecordsCleanup = async () => {
         ),
     },
     {
-      table: "GroupJoinAlert",
-      run: () =>
-        deleteInBatches(
-          () => services.db.$executeRaw`
-            DELETE FROM "GroupJoinAlert" WHERE id IN (
-              SELECT a.id FROM "GroupJoinAlert" a
-              WHERE a."createdAt" < (${monthAgo}::timestamptz AT TIME ZONE 'UTC')
-                OR NOT EXISTS (
-                  SELECT 1 FROM "GroupMember" m
-                  WHERE m."userId" = a."recipientId" AND m."groupId" = a."groupId"
-                )
-              LIMIT 1000
-            )
-          `,
-        ),
-    },
-    {
       table: "GroupMemberInvite",
       run: () =>
         deleteInBatches(
