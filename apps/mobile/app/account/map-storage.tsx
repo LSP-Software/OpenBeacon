@@ -17,7 +17,11 @@ import {
 
 const MapStorageScreen = () => {
   const [sizeMb, setSizeMb] = useState(getMapCacheSizeMb);
-  const changeSize = useMutation({ mutationFn: setMapCacheSizeMb, networkMode: "always" });
+  const changeSize = useMutation({
+    mutationFn: setMapCacheSizeMb,
+    networkMode: "always",
+    onError: () => setSizeMb(getMapCacheSizeMb()),
+  });
   const deleteSavedMap = useMutation({ mutationFn: clearSavedMap, networkMode: "always" });
 
   return (
@@ -49,6 +53,7 @@ const MapStorageScreen = () => {
           </View>
           <View
             accessibilityRole="radiogroup"
+            accessibilityLabel="Space for saved maps"
             className="overflow-hidden rounded-3xl border border-border bg-card"
           >
             {mapCacheSizesMb.map((size, index) => {
@@ -57,7 +62,8 @@ const MapStorageScreen = () => {
                 <Pressable
                   key={size}
                   accessibilityRole="radio"
-                  accessibilityState={{ checked: selected }}
+                  accessibilityState={{ checked: selected, disabled: changeSize.isPending }}
+                  disabled={changeSize.isPending}
                   className={cn(
                     "flex-row items-center justify-between px-5 py-4",
                     index < mapCacheSizesMb.length - 1 && "border-b border-border/50",

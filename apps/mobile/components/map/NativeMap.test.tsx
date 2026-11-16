@@ -63,8 +63,9 @@ let currentSignedPmtilesUrlQuery: {
   isPaused?: boolean;
   refetch: () => Promise<void>;
 };
-let lastMapSource: { archiveId: string | null; sourceUrl: string } | null = null;
-const savedMapSources: Array<{ archiveId: string | null; sourceUrl: string }> = [];
+type MapSource = { archiveId: string | null; sourceUrl: string };
+let lastMapSource: MapSource | null = null;
+const savedMapSources: MapSource[] = [];
 let cachedTileClears = 0;
 let forceRefreshMutationCalls = 0;
 let forceRefreshMutationPending = false;
@@ -72,6 +73,7 @@ let forceRefreshMutationSucceeds = true;
 let deferForceRefresh = false;
 let completeForceRefresh: (() => void) | null = null;
 let forceRefreshUrl = "https://forced.example/pmtiles";
+let forceRefreshArchiveId: string | undefined;
 const setQueryData = mock(() => {});
 const routerReplace = mock(() => {});
 let root: Root | null = null;
@@ -184,8 +186,10 @@ mock.module("@tanstack/react-query", () => ({
       }
 
       const resultUrl = forceRefreshUrl;
+      const resultArchiveId = forceRefreshArchiveId;
       const complete = () =>
         options.onSuccess?.({
+          archiveId: resultArchiveId,
           expiresAt: "2026-03-31T12:20:00.000Z",
           refreshAt: "2026-03-31T12:19:00.000Z",
           url: resultUrl,
@@ -279,12 +283,12 @@ mock.module("../../lib/protomaps-style.ts", () => ({
 }));
 
 mock.module("../../lib/mapCache.ts", () => ({
-  applyMapCacheSize: async () => {},
+  prepareMapCache: async () => {},
   clearCachedMapTiles: async () => {
     cachedTileClears += 1;
   },
   readLastMapSource: () => lastMapSource,
-  saveLastMapSource: (source: { archiveId: string | null; sourceUrl: string }) => {
+  saveLastMapSource: (source: MapSource) => {
     savedMapSources.push(source);
   },
 }));
@@ -483,6 +487,7 @@ describe("NativeMap integration harness", () => {
     deferForceRefresh = false;
     completeForceRefresh = null;
     forceRefreshUrl = "https://forced.example/pmtiles";
+    forceRefreshArchiveId = undefined;
     setQueryData.mockReset();
     routerReplace.mockReset();
     lastMapSource = null;
@@ -2432,7 +2437,7 @@ describe("NativeMap integration harness", () => {
     currentSignedPmtilesUrlQuery = {
       ...currentSignedPmtilesUrlQuery,
       data: null,
-      isLoading: true,
+      isLoading: false,
       isPaused: true,
     };
     await renderNativeMap();
@@ -2453,12 +2458,62 @@ describe("NativeMap integration harness", () => {
     await renderNativeMap();
     await flushEffects();
 
-    expect(getNativeMapViewMountCount()).toBe(1);
+    expect(getNativeMapViewMountCount()).toBe(2);
     expect(getNativeMapStyle()).toMatchObject({ pmtilesUrl: sourceUrl });
     expect(getNativeMapUrlTransforms().at(-1)?.replace).toBe(
       "https://tiles.example.com/planet-a.pmtiles?sig=1",
     );
     expect(cachedTileClears).toBe(0);
+  });
+
+  test("reloads the saved map once a signed link arrives after a failed fetch", async () => {
+    const sourceUrl = "https://tiles.example.com/planet-a.pmtiles?archive=a-20261001";
+    lastMapSource = { archiveId: "a-20261001", sourceUrl };
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: null,
+      failureCount: 1,
+      isFetching: true,
+      isLoading: true,
+    };
+    await renderNativeMap();
+    await flushEffects();
+    expect(getNativeMapStyle()).toMatchObject({ pmtilesUrl: sourceUrl });
+    emitNativeMapRegionDidChange({ latitude: 51.51, longitude: -0.13, zoomLevel: 12.5 });
+    expect(getNativeMapViewMountCount()).toBe(1);
+
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: {
+        ...defaultSignedUrl,
+        archiveId: "a-20261001",
+        url: "https://tiles.example.com/planet-a.pmtiles?sig=1",
+      },
+      failureCount: 0,
+      isFetching: false,
+      isLoading: false,
+    };
+    await renderNativeMap();
+    await flushEffects();
+    expect(getNativeMapViewMountCount()).toBe(2);
+    expect(getNativeMapStyle()).toMatchObject({ pmtilesUrl: sourceUrl });
+    expect(getNativeMapCameraDefaultSettings()).toEqual({
+      centerCoordinate: [-0.13, 51.51],
+      zoomLevel: 12.5,
+    });
+    expect(cachedTileClears).toBe(0);
+
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: {
+        ...defaultSignedUrl,
+        archiveId: "a-20261001",
+        url: "https://tiles.example.com/planet-a.pmtiles?sig=2",
+      },
+    };
+    await renderNativeMap();
+    await flushEffects();
+    expect(getNativeMapViewMountCount()).toBe(2);
   });
 
   test("falls back to the last map once fetching the map link has failed", async () => {
@@ -2479,15 +2534,18 @@ describe("NativeMap integration harness", () => {
     expect(getNativeMapStyle()).toMatchObject({ pmtilesUrl: sourceUrl });
   });
 
-  test("keeps loading offline when no map has been saved on the phone", async () => {
+  test("says the map needs a connection when offline with no map saved on the phone", async () => {
     currentSignedPmtilesUrlQuery = {
       ...currentSignedPmtilesUrlQuery,
       data: null,
-      isLoading: true,
+      isLoading: false,
       isPaused: true,
     };
     await renderNativeMap();
-    expect(getRenderedOutput()).toContain("activity-indicator");
+    expect(getRenderedOutput()).toContain(
+      "You’re offline. The map will appear when you reconnect.",
+    );
+    expect(getRenderedOutput()).not.toContain("activity-indicator");
     expect(getRenderedOutput()).not.toContain("map-view");
   });
 
@@ -2542,6 +2600,38 @@ describe("NativeMap integration harness", () => {
     await renderNativeMap();
     await flushEffects();
     expect(cachedTileClears).toBe(1);
+  });
+
+  test("clears cached map tiles once when a forced refresh switches to a new map", async () => {
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: {
+        ...defaultSignedUrl,
+        archiveId: "a-20261001",
+        url: "https://t.example/a.pmtiles?s=1",
+      },
+    };
+    forceRefreshArchiveId = "b-20261101";
+    forceRefreshUrl = "https://t.example/b.pmtiles?s=2";
+    await renderNativeMap();
+    await flushEffects();
+    await failMapLoad();
+    await flushEffects();
+    expect(forceRefreshMutationCalls).toBe(1);
+    expect(cachedTileClears).toBe(1);
+    expect(getNativeMapViewMountCount()).toBe(2);
+
+    currentSignedPmtilesUrlQuery = {
+      ...currentSignedPmtilesUrlQuery,
+      data: { ...defaultSignedUrl, archiveId: "b-20261101", url: forceRefreshUrl },
+    };
+    await renderNativeMap();
+    await flushEffects();
+    expect(cachedTileClears).toBe(1);
+    expect(getNativeMapViewMountCount()).toBe(2);
+    expect(getNativeMapStyle()).toMatchObject({
+      pmtilesUrl: "https://t.example/b.pmtiles?archive=b-20261101",
+    });
   });
 
   test("clears cached map tiles when the map changed while the app was closed", async () => {

@@ -8,8 +8,8 @@ import { Platform } from "react-native";
 import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
 import { queryClient, trpc } from "../../lib/api.ts";
 import {
-  applyMapCacheSize,
   clearCachedMapTiles,
+  prepareMapCache,
   readLastMapSource,
   saveLastMapSource,
 } from "../../lib/mapCache.ts";
@@ -27,6 +27,13 @@ export const useNativeMapStyle = () => {
   const { mapTheme } = useTheme();
   const signedPmtilesUrlQuery = useSignedPmtilesUrl();
   const [lastMapSource] = useState(readLastMapSource);
+  const [usingLastMapSource, setUsingLastMapSource] = useState(false);
+  if (
+    !usingLastMapSource &&
+    (signedPmtilesUrlQuery.isPaused || signedPmtilesUrlQuery.failureCount > 0)
+  ) {
+    setUsingLastMapSource(true);
+  }
   const autoForceRefreshAttemptsRef = useRef(0);
   const retryAfterUrlFetchRef = useRef(false);
   const mountedRef = useRef(false);
@@ -62,7 +69,7 @@ export const useNativeMapStyle = () => {
     setArchiveUrl(sourceUrl);
     saveLastMapSource({ archiveId, sourceUrl });
   };
-  const applyArchiveId = (archiveId: string | null) => {
+  const clearTilesIfArchiveChanged = (archiveId: string | null) => {
     const archiveChanged = hasPmtilesArchiveChanged({
       appliedArchiveId: appliedArchiveIdRef.current,
       archiveId,
@@ -72,7 +79,7 @@ export const useNativeMapStyle = () => {
     return archiveChanged;
   };
   useEffect(() => {
-    void tryCatch(applyMapCacheSize());
+    void tryCatch(prepareMapCache());
   }, []);
   useEffect(() => {
     mountedRef.current = true;
@@ -84,7 +91,7 @@ export const useNativeMapStyle = () => {
     ...trpc.maps.forceRefreshSignedPmtilesUrl.mutationOptions(),
     onSuccess: (signedPmtilesUrl) => {
       if (!mountedRef.current) return;
-      applyArchiveId(signedPmtilesUrl.archiveId ?? null);
+      clearTilesIfArchiveChanged(signedPmtilesUrl.archiveId ?? null);
       applySignedUrl({ archiveId: appliedArchiveIdRef.current, url: signedPmtilesUrl.url });
       queryClient.setQueryData(trpc.maps.getSignedPmtilesUrl.queryKey(), signedPmtilesUrl);
       setMapRevision((revision) => revision + 1);
@@ -125,24 +132,24 @@ export const useNativeMapStyle = () => {
   const rootNavigationState = useRootNavigationState();
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
   const pmtilesArchiveId = signedPmtilesUrlQuery.data?.archiveId ?? null;
-  const applySignedUrlEvent = useEffectEvent(applySignedUrl);
-  const applyArchiveIdEvent = useEffectEvent(applyArchiveId);
+  const applyQueriedSignedUrlEvent = useEffectEvent(
+    ({ archiveId, url }: { archiveId: string | null; url: string }) => {
+      const replacesLastMapSource =
+        usingLastMapSource && archiveUrl === null && lastMapSource !== null;
+      const archiveChanged = clearTilesIfArchiveChanged(archiveId);
+      applySignedUrl({ archiveId, url });
+      if (archiveChanged || replacesLastMapSource) setMapRevision((revision) => revision + 1);
+    },
+  );
   useEffect(() => {
     if (!pmtilesUrl) return;
-    const archiveChanged = applyArchiveIdEvent(pmtilesArchiveId);
-    applySignedUrlEvent({ archiveId: pmtilesArchiveId, url: pmtilesUrl });
-    if (archiveChanged) setMapRevision((revision) => revision + 1);
+    applyQueriedSignedUrlEvent({ archiveId: pmtilesArchiveId, url: pmtilesUrl });
   }, [pmtilesUrl, pmtilesArchiveId]);
   useEffect(() => {
     if (!archiveUrl) return;
     return () => TransformRequestManager.removeUrlTransform(`openbeacon-pmtiles:${archiveUrl}`);
   }, [archiveUrl]);
-  const usingLastMapSourceRef = useRef(false);
-  if (signedPmtilesUrlQuery.isPaused || signedPmtilesUrlQuery.failureCount > 0) {
-    usingLastMapSourceRef.current = true;
-  }
-  const sourceUrl =
-    archiveUrl ?? (usingLastMapSourceRef.current ? (lastMapSource?.sourceUrl ?? null) : null);
+  const sourceUrl = archiveUrl ?? (usingLastMapSource ? (lastMapSource?.sourceUrl ?? null) : null);
   const mapStyle = useMemo(() => {
     if (!sourceUrl) {
       return null;
@@ -262,6 +269,7 @@ export const useNativeMapStyle = () => {
     isLoading: signedPmtilesUrlQuery.isLoading,
     isError: signedPmtilesUrlQuery.isError,
     isFetching: signedPmtilesUrlQuery.isFetching,
+    isOffline: signedPmtilesUrlQuery.isPaused,
     isMapNotReady: signedPmtilesUrlQuery.failureReason?.data?.code === "SERVICE_UNAVAILABLE",
     isRefreshing: forceRefreshSignedPmtilesUrlMutation.isPending,
     retryUrl: () => {

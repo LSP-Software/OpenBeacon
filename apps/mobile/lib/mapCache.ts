@@ -3,23 +3,26 @@ import { storage } from "./storage.ts";
 
 export const mapCacheSizesMb = [100, 250, 500, 1000] as const;
 
-export type MapCacheSizeMb = (typeof mapCacheSizesMb)[number];
+type MapCacheSizeMb = (typeof mapCacheSizesMb)[number];
 
 const sizeKey = "map.cacheSizeMb";
 const lastSourceUrlKey = "map.lastSourceUrl";
 const lastArchiveIdKey = "map.lastArchiveId";
+const clearPendingKey = "map.clearPending";
 
 export const getMapCacheSizeMb = (): MapCacheSizeMb => {
   const stored = storage.getNumber(sizeKey);
   return mapCacheSizesMb.find((size) => size === stored) ?? 250;
 };
 
-export const applyMapCacheSize = () =>
-  OfflineManager.setMaximumAmbientCacheSize(getMapCacheSizeMb() * 1024 * 1024);
+const applySize = (size: MapCacheSizeMb) =>
+  OfflineManager.setMaximumAmbientCacheSize(size * 1_000_000);
 
-export const setMapCacheSizeMb = (size: MapCacheSizeMb) => {
+export const applyMapCacheSize = () => applySize(getMapCacheSizeMb());
+
+export const setMapCacheSizeMb = async (size: MapCacheSizeMb) => {
+  await applySize(size);
   storage.set(sizeKey, size);
-  return applyMapCacheSize();
 };
 
 export const readLastMapSource = () => {
@@ -42,8 +45,15 @@ export const saveLastMapSource = ({
 
 export const clearCachedMapTiles = () => OfflineManager.clearAmbientCache();
 
-export const clearSavedMap = () => {
+export const clearSavedMap = async () => {
+  storage.set(clearPendingKey, true);
   storage.remove(lastSourceUrlKey);
   storage.remove(lastArchiveIdKey);
-  return clearCachedMapTiles();
+  await clearCachedMapTiles();
+  storage.remove(clearPendingKey);
+};
+
+export const prepareMapCache = async () => {
+  if (storage.getBoolean(clearPendingKey)) await clearSavedMap();
+  await applyMapCacheSize();
 };

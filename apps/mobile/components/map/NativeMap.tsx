@@ -403,6 +403,19 @@ export const NativeMap = ({
     );
   }
 
+  if (!mapStyle && map.isOffline) {
+    return (
+      <View
+        className="flex-1 items-center justify-center bg-background px-8"
+        accessibilityLiveRegion="polite"
+      >
+        <Text className="text-center text-muted-foreground">
+          You’re offline. The map will appear when you reconnect.
+        </Text>
+      </View>
+    );
+  }
+
   if (!mapStyle && map.isError) {
     return (
       <View

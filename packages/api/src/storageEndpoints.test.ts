@@ -73,6 +73,6 @@ test("signed map URLs let phones keep map data without checking it again", () =>
   const urls = signUrls({});
 
   expect(new URL(urls.map).searchParams.get("response-cache-control")).toBe(
-    "public, max-age=31536000, immutable",
+    "private, max-age=31536000, immutable",
   );
 });
