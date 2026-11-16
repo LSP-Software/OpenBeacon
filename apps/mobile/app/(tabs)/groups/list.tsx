@@ -181,7 +181,7 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
               <Link
                 href={`/groups/${group.id}`}
                 key={group.id}
-                accessibilityLabel={`${group.name}, ${group.members.length} members${unseenGroupIds.has(group.id) ? ", new activity" : ""}`}
+                accessibilityLabel={`${group.name}, ${group.members.length} ${group.members.length === 1 ? "member" : "members"}${unseenGroupIds.has(group.id) ? ", new activity" : ""}`}
               >
                 <Card className="w-full">
                   <CardHeader className="flex-row items-center justify-between">
@@ -206,7 +206,9 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
                             <View className="size-2 rounded-full bg-primary" />
                           ) : null}
                         </View>
-                        <CardDescription>{group.members.length} members</CardDescription>
+                        <CardDescription>
+                          {group.members.length} {group.members.length === 1 ? "member" : "members"}
+                        </CardDescription>
                       </View>
                     </View>
 

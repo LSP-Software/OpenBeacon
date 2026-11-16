@@ -20,6 +20,7 @@ import { useLiveTrackingPositions } from "../../../../hooks/useLiveTrackingPosit
 import { useUnseenGroupHistory } from "../../../../hooks/useUnseenGroupHistory.ts";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
+import { rotateGroupEpochIfRequired } from "../../../../lib/groupEncryption.ts";
 import { catchUpGroupImageKeys } from "../../../../lib/imageKeyCatchUp.ts";
 import { storage } from "../../../../lib/storage.ts";
 import HistoryTab from "./HistoryTab.tsx";
@@ -85,8 +86,14 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
   );
   const { group, isPending, isMissing } = useCachedGroup(groupId);
   const userId = session?.user.id;
+  const imageKeyEpochs = group
+    ? [
+        group.imageKey?.epochId ?? null,
+        ...group.members.map((member) => [member.id, member.imageKey?.epochId ?? null]),
+      ]
+    : [];
   useQuery({
-    queryKey: ["imageKeyCatchUp", groupId, userId],
+    queryKey: ["imageKeyCatchUp", groupId, userId, imageKeyEpochs],
     enabled: Boolean(group && (group.imageKey || group.members.some((member) => member.image))),
     subscribed: isFocused,
     staleTime: 15 * 60_000,
@@ -94,6 +101,7 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
     retry: false,
     queryFn: userId
       ? async () => {
+          await tryCatch(rotateGroupEpochIfRequired(groupId));
           const moved = await catchUpGroupImageKeys({ groupId, userId });
           if (moved > 0) {
             await queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() });

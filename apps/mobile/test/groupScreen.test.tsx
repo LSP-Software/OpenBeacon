@@ -98,6 +98,7 @@ mock.module("../hooks/useGroupKeyAccess.ts", () => ({ useGroupKeyHistoryAccess: 
 mock.module("../components/headers/BackButton.tsx", () => ({ BackButton: () => null }));
 mock.module("../components/image/GroupImage.tsx", () => ({ GroupImage: () => null }));
 mock.module("../lib/imageKeyCatchUp.ts", () => ({ catchUpGroupImageKeys: async () => 0 }));
+mock.module("../lib/groupEncryption.ts", () => ({ rotateGroupEpochIfRequired: async () => false }));
 mock.module("../components/LoadingIndicator.tsx", () => ({
   LoadingIndicator: () => "Loading",
 }));
