@@ -78,21 +78,24 @@ describe("app", () => {
   test("adds the frozen announcements key to /health while one is showing", async () => {
     await refreshAnnouncements({
       announcement: {
-        findMany: async () => [
-          {
-            id: "0196a1b2-0000-7000-8000-000000000001",
-            message: "We're moving servers tonight.",
-            severity: "WARNING",
-            platform: "IOS",
-            minAppVersion: "1.0.0",
-            maxAppVersion: "2.0.0",
-            downtimeStartsAt: new Date("2999-01-01T00:00:00.000Z"),
-            downtimeEndsAt: new Date("2999-01-01T01:00:00.000Z"),
-            startsAt: new Date(Date.now() - 60_000),
-            endsAt: new Date("2999-01-01T01:00:00.000Z"),
-            createdAt: new Date(),
-          },
-        ],
+        findMany: async ({ where }: { where: { startsAt: { gt?: Date } } }) =>
+          where.startsAt.gt
+            ? []
+            : [
+                {
+                  id: "0196a1b2-0000-7000-8000-000000000001",
+                  message: "We're moving servers tonight.",
+                  severity: "WARNING",
+                  platform: "IOS",
+                  minAppVersion: "1.0.0",
+                  maxAppVersion: "2.0.0",
+                  downtimeStartsAt: new Date("2999-01-01T00:00:00.000Z"),
+                  downtimeEndsAt: new Date("2999-01-01T01:00:00.000Z"),
+                  startsAt: new Date(Date.now() - 60_000),
+                  endsAt: new Date("2999-01-01T01:00:00.000Z"),
+                  createdAt: new Date(),
+                },
+              ],
       },
     });
     const body: Record<string, unknown> = await (await app.request("/health")).json();

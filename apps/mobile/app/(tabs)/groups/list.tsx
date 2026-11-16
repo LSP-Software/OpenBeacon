@@ -45,6 +45,7 @@ export default function GroupsScreen() {
   if (!groups.data) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center gap-4 bg-background px-6">
+        <AnnouncementBanner className="self-stretch" />
         <Text className="text-center text-muted-foreground">
           We couldn’t load your groups. Check your connection and try again.
         </Text>

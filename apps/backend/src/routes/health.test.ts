@@ -42,7 +42,10 @@ describe("health endpoint", () => {
       createdAt: new Date(),
     };
     const database = (rows: (typeof showing)[]) => ({
-      announcement: { findMany: async () => rows },
+      announcement: {
+        findMany: async ({ where }: { where: { startsAt: { gt?: Date } } }) =>
+          where.startsAt.gt ? [] : rows,
+      },
     });
 
     await refreshAnnouncements(database([showing]));

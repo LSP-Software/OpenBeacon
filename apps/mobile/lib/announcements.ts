@@ -44,7 +44,7 @@ const loadSaved = () => {
     storage.remove(storageKey);
     return empty;
   }
-  return { announcements: saved.announcements, dismissed: unexpired(saved.dismissed) };
+  return { announcements: saved.announcements, dismissed: saved.dismissed };
 };
 
 let state: {
@@ -62,12 +62,14 @@ const setState = (next: typeof state) => {
 export const getAnnouncementState = () => state;
 
 export const saveAnnouncements = (announcements: Announcement[]) => {
-  const dismissed = unexpired(state.dismissed).map((dismissal) => {
-    const endsAt = announcements.find(({ id }) => id === dismissal.id)?.endsAt;
-    return endsAt && new Date(endsAt) > new Date(dismissal.endsAt)
-      ? { ...dismissal, endsAt }
-      : dismissal;
-  });
+  const dismissed = unexpired(
+    state.dismissed.map((dismissal) => {
+      const endsAt = announcements.find(({ id }) => id === dismissal.id)?.endsAt;
+      return endsAt && new Date(endsAt) > new Date(dismissal.endsAt)
+        ? { ...dismissal, endsAt }
+        : dismissal;
+    }),
+  );
   setState({ announcements, dismissed });
 };
 

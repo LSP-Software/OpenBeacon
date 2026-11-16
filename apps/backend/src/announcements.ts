@@ -8,7 +8,7 @@ export const refreshAnnouncements = async (
   database: {
     announcement: {
       findMany: (args: {
-        where: { startsAt: { lte: Date }; endsAt: { gt: Date } };
+        where: { startsAt: { gt?: Date; lte: Date }; endsAt: { gt: Date } };
         orderBy: [{ severity: "desc" }, { startsAt: "desc" }, { id: "asc" }];
         take: number;
       }) => Promise<AnnouncementRow[]>;
@@ -16,23 +16,39 @@ export const refreshAnnouncements = async (
   },
   now = new Date(),
 ) => {
+  const orderBy = [{ severity: "desc" }, { startsAt: "desc" }, { id: "asc" }] as const;
+  const soon = new Date(now.getTime() + 60_000);
   const rows = await tryCatch(
-    database.announcement.findMany({
-      where: { startsAt: { lte: new Date(now.getTime() + 60_000) }, endsAt: { gt: now } },
-      orderBy: [{ severity: "desc" }, { startsAt: "desc" }, { id: "asc" }],
-      take: 20,
-    }),
+    Promise.all([
+      database.announcement.findMany({
+        where: { startsAt: { lte: now }, endsAt: { gt: now } },
+        orderBy: [...orderBy],
+        take: 20,
+      }),
+      database.announcement.findMany({
+        where: { startsAt: { gt: now, lte: soon }, endsAt: { gt: now } },
+        orderBy: [...orderBy],
+        take: 20,
+      }),
+    ]),
   );
   if (rows.error) {
     console.error(`Could not load announcements: ${rows.error.message}`);
     return;
   }
-  upcoming = rows.data;
+  upcoming = rows.data.flat();
 };
 
 export const currentAnnouncements = (now = new Date()): Announcement[] =>
   upcoming
     .filter((row) => row.startsAt <= now && row.endsAt > now)
+    .sort(
+      (left, right) =>
+        Number(right.severity === "WARNING") - Number(left.severity === "WARNING") ||
+        right.startsAt.getTime() - left.startsAt.getTime() ||
+        left.id.localeCompare(right.id),
+    )
+    .slice(0, 20)
     .map((row) => ({
       id: row.id,
       message: row.message,

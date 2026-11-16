@@ -204,6 +204,21 @@ describe("announcement store", () => {
     ]);
   });
 
+  test("keeps a dismissal when the server extends the announcement after its original end", async () => {
+    const ended = new Date(Date.now() - 60_000).toISOString();
+    stored.set(
+      "announcements",
+      JSON.stringify({
+        serverUrl: "https://api.example.test",
+        announcements: [],
+        dismissed: [{ id: "a", endsAt: ended, dismissedAt: "2026-11-20T00:00:00.000Z" }],
+      }),
+    );
+    const relaunched = await importFresh("extended-late");
+    relaunched.saveAnnouncements([announcement({ id: "a", endsAt: future })]);
+    expect(shownId(relaunched)).toBeNull();
+  });
+
   test("forgets dismissals once their announcement has ended", async () => {
     const store = await importFresh("expired-save");
     store.dismissAnnouncement(announcement({ id: "current", endsAt: future }));
@@ -229,6 +244,7 @@ describe("announcement store", () => {
       }),
     );
     const relaunched = await importFresh("expired-load");
+    relaunched.saveAnnouncements([]);
     expect(relaunched.getAnnouncementState().dismissed).toEqual([
       { id: "current", endsAt: future, dismissedAt: "2026-11-20T00:00:00.000Z" },
     ]);
