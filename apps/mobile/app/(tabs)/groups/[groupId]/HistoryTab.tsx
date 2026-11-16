@@ -14,7 +14,7 @@ import {
   UserPlusIcon,
   UserXIcon,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { Button } from "../../../../components/ui/Button.tsx";
@@ -23,7 +23,11 @@ import { Text } from "../../../../components/ui/Text.tsx";
 import { useMemberNames } from "../../../../hooks/useMemberNames.ts";
 import { type RouterInputs, trpcClient } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
-import { describeGroupEvent, groupByDay } from "../../../../lib/groupHistory.ts";
+import {
+  describeGroupEvent,
+  groupByDay,
+  markGroupHistorySeen,
+} from "../../../../lib/groupHistory.ts";
 
 const eventIcons = {
   GROUP_CREATED: SparklesIcon,
@@ -52,7 +56,7 @@ const filters = [
   { label: "Places", category: "places", empty: "No place changes in the last 14 days." },
 ] as const;
 
-const HistoryTab = ({ groupId }: { groupId: string }) => {
+const HistoryTab = ({ groupId, active }: { groupId: string; active: boolean }) => {
   const isFocused = useIsFocused();
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
@@ -74,6 +78,29 @@ const HistoryTab = ({ groupId }: { groupId: string }) => {
     getNextPageParam: (page) => page.nextBefore,
     subscribed: isFocused,
   });
+
+  const displayedLatestAt =
+    category === null
+      ? (history.data?.pages
+          .flatMap((page) => page.items)
+          .find(
+            (item) =>
+              item.kind === "group" && (item.actor?.userId ?? item.subject?.userId) !== userId,
+          )?.at ?? null)
+      : null;
+
+  useEffect(() => {
+    if (!active || !isFocused || !history.isSuccess || history.isFetching || !userId) return;
+    markGroupHistorySeen({ groupId, latestAt: displayedLatestAt, userId });
+  }, [
+    active,
+    displayedLatestAt,
+    groupId,
+    history.isFetching,
+    history.isSuccess,
+    isFocused,
+    userId,
+  ]);
 
   const filterBar = (
     <View

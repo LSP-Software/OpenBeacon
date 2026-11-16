@@ -513,6 +513,54 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
     });
 
+    test("keeps a replacement image and emits no image event when deletion races an admin", async () => {
+      const id = `${prefix}-image-race-user`;
+      const imageGroup = `${prefix}-image-race-group`;
+      const replacement = "https://cdn.example/bucket/user/another-user/avatar/new";
+      await prisma.user.create({ data: { id, name: "Deleting", email: `${id}@example.test` } });
+      await prisma.group.create({
+        data: {
+          id: imageGroup,
+          name: "Former group",
+          image: `https://cdn.example/bucket/user/${id}/uploads/group/avatar/old`,
+        },
+      });
+      const updating = await holdRowLock({
+        db: prisma,
+        id: imageGroup,
+        table: "Group",
+        beforeCommit: (tx) =>
+          tx.group.update({ where: { id: imageGroup }, data: { image: replacement } }),
+      });
+      const deleting = deleteAccountRecords({
+        db: prisma,
+        userId: id,
+        mode: "immediate",
+        imageUrlPrefix: "https://cdn.example/bucket",
+        securityAlerts: null,
+      });
+      try {
+        await updating.waitForWaiters(1);
+      } finally {
+        await updating.release();
+      }
+      try {
+        expect(await deleting).toBe(true);
+        expect((await prisma.group.findUniqueOrThrow({ where: { id: imageGroup } })).image).toBe(
+          replacement,
+        );
+        expect(
+          await prisma.groupEvent.count({
+            where: { groupId: imageGroup, type: "GROUP_IMAGE_CHANGED" },
+          }),
+        ).toBe(0);
+      } finally {
+        await prisma.group.deleteMany({ where: { id: imageGroup } });
+        await prisma.user.deleteMany({ where: { id } });
+        await prisma.accountDeletionCleanup.deleteMany({ where: { userId: id } });
+      }
+    });
+
     test("a failed account deleted alert doesn't fail the deletion", async () => {
       const id = `${prefix}-send-failure`;
       await prisma.user.create({

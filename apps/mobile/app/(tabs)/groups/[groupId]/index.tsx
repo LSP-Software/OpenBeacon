@@ -20,7 +20,6 @@ import { useLiveTrackingPositions } from "../../../../hooks/useLiveTrackingPosit
 import { useUnseenGroupHistory } from "../../../../hooks/useUnseenGroupHistory.ts";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
-import { markGroupHistorySeen } from "../../../../lib/groupHistory.ts";
 import { storage } from "../../../../lib/storage.ts";
 import HistoryTab from "./HistoryTab.tsx";
 import MembersTab from "./MembersTab.tsx";
@@ -135,7 +134,6 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
       { queryKey: ["groupHistory", groupId] },
       { cancelRefetch: false },
     );
-    markGroupHistorySeen({ groupId, latestAt: historyLatestAt, userId: history.userId });
   }, [groupId, history.userId, historyLatestAt, isFocused, queryClient, value]);
 
   if (isPending || (isMissing && verifyFailedFor !== groupId)) {
@@ -230,7 +228,7 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
                 }
 
                 if (tabValue === "history") {
-                  return <HistoryTab groupId={groupId} />;
+                  return <HistoryTab groupId={groupId} active={value === "history"} />;
                 }
 
                 return <SettingsTab groupId={groupId} />;

@@ -186,13 +186,10 @@ export const deleteAccountRecords = async ({
         create: { userId, createdAt: clock.now, imageKeys },
         update: { imageKeys: { push: imageKeys } },
       });
-      const imageGroups = await tx.group.findMany({
+      const imageGroups = await tx.group.updateManyAndReturn({
         where: { image: { startsWith: `${imageUrlPrefix}/user/${userId}/` } },
-        select: { id: true },
-      });
-      await tx.group.updateMany({
-        where: { id: { in: imageGroups.map(({ id }) => id) } },
         data: { image: null },
+        select: { id: true },
       });
       const eventsAt = await readDatabaseTime(tx);
       await tx.groupEvent.createMany({

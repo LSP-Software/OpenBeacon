@@ -1,6 +1,7 @@
 import { beforeEach, expect, mock, test } from "bun:test";
 import React, { act } from "react";
 import { createRoot } from "test-renderer";
+import type { GroupHistoryItem } from "../lib/groupHistory.ts";
 import { createReactNativeTestModule } from "./reactNativeTestModule.ts";
 
 (
@@ -24,7 +25,16 @@ let keyAccess: {
 const replace = mock(() => {});
 let fetchGroups: () => Promise<{ id: string }[]> = async () => groups;
 const fetchQuery = mock(() => fetchGroups());
-const queryClient = { fetchQuery };
+const invalidateQueries = mock(async () => {});
+const queryClient = { fetchQuery, invalidateQueries };
+const latestAt = new Date("2026-11-16T12:00:00Z");
+let historyResult: {
+  data: { pages: { items: GroupHistoryItem[]; nextBefore: null }[] } | undefined;
+  isPending: boolean;
+  isError: boolean;
+  isSuccess: boolean;
+  isFetching: boolean;
+};
 const router = { replace };
 mock.module("@tanstack/react-query", () => ({
   skipToken: Symbol("skipToken"),
@@ -33,6 +43,7 @@ mock.module("@tanstack/react-query", () => ({
     data: select && queryResult.data !== undefined ? select(queryResult.data) : queryResult.data,
   }),
   useQueryClient: () => queryClient,
+  useInfiniteQuery: () => historyResult,
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => isFocused }));
 mock.module("expo-router", () => ({
@@ -45,12 +56,26 @@ mock.module("react-native-safe-area-context", () => ({
   SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
 }));
 mock.module("lucide-react-native", () => ({
+  ImageIcon: () => null,
+  LogInIcon: () => null,
+  LogOutIcon: () => null,
+  MapPinMinusIcon: () => null,
+  MapPinPenIcon: () => null,
+  MapPinPlusIcon: () => null,
+  PencilIcon: () => null,
+  ShieldIcon: () => null,
+  SparklesIcon: () => null,
+  UserMinusIcon: () => null,
+  UserPlusIcon: () => null,
+  UserXIcon: () => null,
+
   Clock3Icon: () => null,
   MapPinIcon: () => null,
   SlidersHorizontalIcon: () => null,
   UsersIcon: () => null,
 }));
 mock.module("../lib/api.ts", () => ({
+  trpcClient: {},
   trpc: {
     groupMembership: {
       list: { queryOptions: () => ({}) },
@@ -89,27 +114,36 @@ mock.module("../components/ui/Button.tsx", () => ({
     React.createElement("pressable", { onPress }, children),
 }));
 mock.module("../components/ui/SwipeTabs.tsx", () => ({
-  SwipeTabs: (props: { value: string; onValueChange: (value: string) => void }) => {
+  SwipeTabs: (props: {
+    value: string;
+    onValueChange: (value: string) => void;
+    renderScene: (value: string) => React.ReactNode;
+  }) => {
     selectedTab = props;
-    return null;
+    return props.renderScene(props.value);
   },
 }));
 mock.module("../components/ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) => children,
 }));
 mock.module("../app/(tabs)/groups/[groupId]/MembersTab.tsx", () => ({ default: () => null }));
-mock.module("../app/(tabs)/groups/[groupId]/HistoryTab.tsx", () => ({ default: () => null }));
+mock.module("../hooks/useMemberNames.ts", () => ({ useMemberNames: () => () => null }));
+mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
 mock.module("../app/(tabs)/groups/[groupId]/PlacesTab.tsx", () => ({ default: () => null }));
 mock.module("../hooks/useUnseenGroupHistory.ts", () => ({
-  useUnseenGroupHistory: () => ({ latest: [], unseenGroupIds: new Set(), userId: "user" }),
+  useUnseenGroupHistory: () => ({
+    latest: [{ groupId: routeGroupId, latestAt }],
+    unseenGroupIds: new Set([routeGroupId]),
+    userId: sessionUserId,
+  }),
 }));
-mock.module("../lib/groupHistory.ts", () => ({ markGroupHistorySeen: () => {} }));
 mock.module("../hooks/useLiveTrackingPositions.ts", () => ({
   useLiveTrackingPositions: () => ({ positions: [], status: { undecryptable: [] } }),
 }));
 mock.module("../app/(tabs)/groups/[groupId]/SettingsTab.tsx", () => ({ default: () => null }));
 
 const { default: GroupScreen } = await import("../app/(tabs)/groups/[groupId]/index.tsx");
+const { default: HistoryTab } = await import("../app/(tabs)/groups/[groupId]/HistoryTab.tsx");
 
 const family = (members: { role: string; userId: string }[], id = "group-1") => ({
   id,
@@ -123,6 +157,13 @@ beforeEach(() => {
   sessionUserId = "user-1";
   routeGroupId = "group-1";
   selectedTab = null;
+  historyResult = {
+    data: undefined,
+    isPending: false,
+    isError: true,
+    isSuccess: false,
+    isFetching: false,
+  };
   storedValues.clear();
   groups = [];
   fetchGroups = async () => groups;
@@ -345,4 +386,56 @@ test("opening another group starts from a fresh screen", async () => {
   expect(JSON.stringify(root.container.toJSON())).toContain(warning);
   expect(selectedTab?.value).toBe("members");
   await act(async () => root.unmount());
+});
+
+test("keeps history unread after a failed load, then marks only displayed activity seen", async () => {
+  const root = createRoot();
+  await act(async () => root.render(<GroupScreen />));
+  await act(async () => selectedTab?.onValueChange("history"));
+  expect(JSON.stringify(root.container.toJSON())).toContain("Couldn’t load history");
+  expect(storedValues.get("groupHistory.seenAt.user-1.group-1")).toBeUndefined();
+
+  const displayedAt = new Date(latestAt.getTime() - 60_000);
+  historyResult = {
+    data: {
+      pages: [
+        {
+          items: [
+            {
+              kind: "group",
+              id: "rename",
+              at: displayedAt,
+              type: "GROUP_RENAMED",
+              actor: { userId: "user-2", name: "Sam" },
+              subject: null,
+              name: "Family",
+              previousName: null,
+              emoji: null,
+              role: null,
+            },
+          ],
+          nextBefore: null,
+        },
+      ],
+    },
+    isPending: false,
+    isError: false,
+    isSuccess: true,
+    isFetching: false,
+  };
+  await act(async () => root.render(<GroupScreen />));
+  expect(JSON.stringify(root.container.toJSON())).toContain("Sam renamed the group");
+  expect(storedValues.get("groupHistory.seenAt.user-1.group-1")).toBe(displayedAt.getTime());
+  await act(async () => root.unmount());
+
+  const hidden = createRoot();
+  await act(async () => hidden.render(<HistoryTab groupId="group-2" active={false} />));
+  expect(storedValues.get("groupHistory.seenAt.user-1.group-2")).toBeUndefined();
+  isFocused = false;
+  await act(async () => hidden.render(<HistoryTab groupId="group-2" active />));
+  expect(storedValues.get("groupHistory.seenAt.user-1.group-2")).toBeUndefined();
+  isFocused = true;
+  await act(async () => hidden.render(<HistoryTab groupId="group-2" active />));
+  expect(storedValues.get("groupHistory.seenAt.user-1.group-2")).toBe(displayedAt.getTime());
+  await act(async () => hidden.unmount());
 });
