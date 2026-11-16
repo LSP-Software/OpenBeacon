@@ -24,6 +24,8 @@ type Groups = () => Promise<RouterOutputs["groupMembership"]["list"]>;
 
 const knownPlacesSchema = z.record(z.string(), z.string());
 
+const placeOwner = (userId: string) => JSON.stringify([baseUrl, userId]);
+
 const storageKey = (userId: string, name: string, groupId?: string) =>
   `places.${name}.${JSON.stringify([baseUrl, userId, ...(groupId ? [groupId] : [])])}`;
 
@@ -81,18 +83,26 @@ const readKnownPlaces = async (userId: string, groupId: string) => {
 };
 
 export const syncGroupPlaces = async ({
-  announce,
   groupId,
   groups = () => trpcClient.groupMembership.list.query(),
+  quietPlaceIds,
+  sharingOff = false,
   userId,
 }: {
-  announce: boolean;
   groupId: string;
   groups?: Groups;
+  quietPlaceIds: readonly string[] | "all";
+  sharingOff?: boolean;
   userId: string;
 }) => {
   const device = await getRegisteredDeviceKey();
   if (!device || device.userId !== userId) return false;
+  const trackingModule = await loadTrackingModule();
+  if (sharingOff) {
+    return trackingModule
+      ? trackingModule.setGroupPlaces(placeOwner(userId), device.deviceId, groupId, [])
+      : true;
+  }
   const [places, sharing] = await Promise.all([
     loadGroupPlaces(groupId),
     trpcClient.placeSharing.get.query({ groupId }),
@@ -100,10 +110,9 @@ export const syncGroupPlaces = async ({
   const ready = places.flatMap((place) =>
     place.geometry ? [{ ...place, geometry: place.geometry }] : [],
   );
-  const trackingModule = await loadTrackingModule();
   if (trackingModule) {
     const applied = await trackingModule.setGroupPlaces(
-      JSON.stringify([baseUrl, userId]),
+      placeOwner(userId),
       device.deviceId,
       groupId,
       sharing.enabled
@@ -125,9 +134,10 @@ export const syncGroupPlaces = async ({
     ]),
   );
   storage.set(storageKey(userId, "known", groupId), JSON.stringify(next));
-  if (!announce || !sharing.enabled) return true;
-  const added = ready.filter(({ id }) => known[id] === undefined);
-  const moved = ready.filter(({ id }) => known[id] !== undefined && known[id] !== next[id]);
+  if (quietPlaceIds === "all" || !sharing.enabled) return true;
+  const announced = ready.filter(({ id }) => !quietPlaceIds.includes(id));
+  const added = announced.filter(({ id }) => known[id] === undefined);
+  const moved = announced.filter(({ id }) => known[id] !== undefined && known[id] !== next[id]);
   if (added.length + moved.length === 0) return true;
   const group = (await groups()).find(({ id }) => id === groupId);
   if (!group) return true;
@@ -176,6 +186,19 @@ const showPlaceAlerts = async ({
   }
 };
 
+export const markPlacesUnsynced = ({ groupId, userId }: { groupId: string; userId: string }) =>
+  storage.remove(storageKey(userId, "revision", groupId));
+
+const listDetectedGroups = async (userId: string) => {
+  const [device, trackingModule] = await Promise.all([
+    getRegisteredDeviceKey(),
+    loadTrackingModule(),
+  ]);
+  if (!device || device.userId !== userId || !trackingModule) return null;
+  const groupIds = trackingModule.listPlaceGroups(placeOwner(userId), device.deviceId);
+  return groupIds ? new Set(groupIds) : null;
+};
+
 export const applyPlaceUpdates = async ({
   updates,
   userId,
@@ -188,11 +211,15 @@ export const applyPlaceUpdates = async ({
     groupList ??= trpcClient.groupMembership.list.query();
     return groupList;
   };
+  const detectedGroups = await listDetectedGroups(userId);
   for (const summary of updates.places ?? []) {
     const revisionKey = storageKey(userId, "revision", summary.groupId);
-    if (storage.getNumber(revisionKey) !== summary.revision) {
+    if (
+      storage.getNumber(revisionKey) !== summary.revision ||
+      (detectedGroups !== null && !detectedGroups.has(summary.groupId))
+    ) {
       const synced = await tryCatch(
-        syncGroupPlaces({ announce: true, groupId: summary.groupId, groups, userId }),
+        syncGroupPlaces({ groupId: summary.groupId, groups, quietPlaceIds: [], userId }),
       );
       if (synced.data) {
         storage.set(revisionKey, summary.revision);

@@ -35,6 +35,7 @@ const queueEvictions = new Map<
 >();
 const deleted: number[][] = [];
 const deletedGroups: Array<{ owner: string; groupId: string }> = [];
+let placeGroups: string[] | null = [];
 const requeued: Array<{ ids: number[]; error: string | null | undefined }> = [];
 const uploadCalls: Array<{
   groupId: string;
@@ -546,6 +547,7 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
     requeueCiphertexts: async (ids: number[], error?: string | null) => {
       requeued.push({ ids, error });
     },
+    listPlaceGroups: () => placeGroups,
     listPlaceTransitions: async () => queuedTransitions,
     deletePlaceTransitions: async (clientIds: string[]) => {
       deletedTransitions.push(clientIds);
@@ -608,6 +610,7 @@ describe("tracking service", () => {
     queueEvictions.clear();
     deleted.length = 0;
     deletedGroups.length = 0;
+    placeGroups = [];
     requeued.length = 0;
     uploadCalls.length = 0;
     rotationChecks.length = 0;
@@ -1217,6 +1220,13 @@ describe("tracking service", () => {
       ],
     ]);
     expect(startCaptureCalls).toBe(1);
+  });
+
+  test("stops detecting places in a group this phone has left", async () => {
+    placeGroups = ["group-1", "group-left"];
+    await reconcileTrackingKeys({ startCapture: true });
+
+    expect(revokedGroups).toEqual([["group-left"]]);
   });
 
   test("provisions a group's current epoch from a history wrap when there's no device wrap", async () => {

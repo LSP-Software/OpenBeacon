@@ -5,7 +5,7 @@ class InMemoryPlaceStore : PlaceStore {
 
   @Synchronized
   override fun replaceGroup(groupId: String, places: List<PlaceGeofence>) {
-    if (places.isEmpty()) placesByGroupId.remove(groupId) else placesByGroupId[groupId] = places
+    placesByGroupId[groupId] = places.filter { it.groupId == groupId }
   }
 
   @Synchronized
@@ -15,4 +15,7 @@ class InMemoryPlaceStore : PlaceStore {
 
   @Synchronized
   override fun list(): List<PlaceGeofence> = placesByGroupId.values.flatten()
+
+  @Synchronized
+  override fun groups(): Set<String> = placesByGroupId.keys.toSet()
 }

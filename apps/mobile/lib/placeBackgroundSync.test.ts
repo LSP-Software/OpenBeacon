@@ -18,6 +18,7 @@ let sharingEnabled = true;
 let nativeAccepts = true;
 let listCalls = 0;
 let failNotices = false;
+let detectedGroups: string[] | null = null;
 
 mock.module("./storage.ts", () => ({
   storage: {
@@ -69,6 +70,7 @@ mock.module("./notifications.ts", () => ({
 }));
 mock.module("./trackingModule.ts", () => ({
   loadTrackingModule: async () => ({
+    listPlaceGroups: () => detectedGroups,
     setGroupPlaces: async (
       _owner: string,
       _deviceId: string,
@@ -110,6 +112,7 @@ const {
   describePlaceAlert,
   describePlacesChanged,
   getPlaceAlertsCursor,
+  markPlacesUnsynced,
   syncGroupPlaces,
 } = await import("./placeBackgroundSync.ts");
 
@@ -155,6 +158,7 @@ beforeEach(() => {
   nativeAccepts = true;
   listCalls = 0;
   failNotices = false;
+  detectedGroups = null;
 });
 
 describe("wording", () => {
@@ -185,7 +189,7 @@ describe("wording", () => {
 describe("syncGroupPlaces", () => {
   test("gives native detection only places this phone can read, and announces them", async () => {
     places = [home, syncing];
-    expect(await syncGroupPlaces({ announce: true, groupId: "family", userId: "user-1" })).toBe(
+    expect(await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" })).toBe(
       true,
     );
     expect(nativePlaces).toEqual([
@@ -206,43 +210,62 @@ describe("syncGroupPlaces", () => {
 
   test("announces only added or moved places, and a place once it finishes syncing", async () => {
     places = [home, syncing];
-    await syncGroupPlaces({ announce: true, groupId: "family", userId: "user-1" });
+    await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" });
     notices.length = 0;
-    await syncGroupPlaces({ announce: true, groupId: "family", userId: "user-1" });
+    await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" });
     expect(notices).toEqual([]);
     places = [
       { ...home, name: "Our house" },
       { ...syncing, geometry: school.geometry },
     ];
-    await syncGroupPlaces({ announce: true, groupId: "family", userId: "user-1" });
+    await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" });
     expect(notices.map(({ title }) => title)).toEqual(["Family added ⚽ Football club"]);
     notices.length = 0;
     places = [{ ...home, geometry: { latitude: 51.5, longitude: -0.12, radiusMeters: 300 } }];
-    await syncGroupPlaces({ announce: true, groupId: "family", userId: "user-1" });
+    await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" });
     expect(notices.map(({ title }) => title)).toEqual(["Family moved 🏠 Home"]);
   });
 
   test("with the switch off, native detection gets no places and nothing is announced", async () => {
     sharingEnabled = false;
-    await syncGroupPlaces({ announce: true, groupId: "family", userId: "user-1" });
+    await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" });
     expect(nativePlaces).toEqual([{ groupId: "family", places: [] }]);
     expect(notices).toEqual([]);
   });
 
   test("a change made on this phone updates detection without a notice", async () => {
-    await syncGroupPlaces({ announce: false, groupId: "family", userId: "user-1" });
-    await syncGroupPlaces({ announce: true, groupId: "family", userId: "user-1" });
+    await syncGroupPlaces({ groupId: "family", quietPlaceIds: "all", userId: "user-1" });
+    await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" });
     expect(nativePlaces).toHaveLength(2);
     expect(notices).toEqual([]);
   });
 
+  test("a place saved on this phone stays quiet, but other admins' new places are announced", async () => {
+    await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" });
+    notices.length = 0;
+    places = [home, school, { ...syncing, geometry: home.geometry }];
+    await syncGroupPlaces({ groupId: "family", quietPlaceIds: ["school"], userId: "user-1" });
+    expect(notices.map(({ title }) => title)).toEqual(["Family added ⚽ Football club"]);
+  });
+
+  test("turning the switch off clears native detection without asking the server", async () => {
+    await syncGroupPlaces({
+      groupId: "family",
+      quietPlaceIds: "all",
+      sharingOff: true,
+      userId: "user-1",
+    });
+    expect(listCalls).toBe(0);
+    expect(nativePlaces).toEqual([{ groupId: "family", places: [] }]);
+  });
+
   test("doesn't remember places when native detection belongs to another account", async () => {
     nativeAccepts = false;
-    expect(await syncGroupPlaces({ announce: true, groupId: "family", userId: "user-1" })).toBe(
+    expect(await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" })).toBe(
       false,
     );
     nativeAccepts = true;
-    await syncGroupPlaces({ announce: true, groupId: "family", userId: "user-1" });
+    await syncGroupPlaces({ groupId: "family", quietPlaceIds: [], userId: "user-1" });
     expect(notices).toHaveLength(1);
   });
 });
@@ -257,6 +280,23 @@ describe("applyPlaceUpdates", () => {
     await applyPlaceUpdates({ updates: summary(1), userId: "user-1" });
     expect(listCalls).toBe(1);
     await applyPlaceUpdates({ updates: summary(2), userId: "user-1" });
+    expect(listCalls).toBe(2);
+  });
+
+  test("re-arms detection when the phone lost a group's places, even if the revision is unchanged", async () => {
+    await applyPlaceUpdates({ updates: summary(1), userId: "user-1" });
+    detectedGroups = ["family"];
+    await applyPlaceUpdates({ updates: summary(1), userId: "user-1" });
+    expect(listCalls).toBe(1);
+    detectedGroups = [];
+    await applyPlaceUpdates({ updates: summary(1), userId: "user-1" });
+    expect(listCalls).toBe(2);
+  });
+
+  test("reloads a group's places after this phone couldn't apply a change to them", async () => {
+    await applyPlaceUpdates({ updates: summary(1), userId: "user-1" });
+    markPlacesUnsynced({ groupId: "family", userId: "user-1" });
+    await applyPlaceUpdates({ updates: summary(1), userId: "user-1" });
     expect(listCalls).toBe(2);
   });
 

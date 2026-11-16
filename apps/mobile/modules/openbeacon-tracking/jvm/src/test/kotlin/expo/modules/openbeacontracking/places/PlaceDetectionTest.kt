@@ -124,4 +124,34 @@ class PlaceDetectionTest {
     detection.removeGroups(null)
     assertTrue(store.list().isEmpty())
   }
+
+  @Test
+  fun aFixFromFarInTheFutureDoesNotStopDetection() {
+    val detection = detection()
+    detection.setGroupPlaces("group-1", listOf(home))
+    detection.fix(home, 1_000.0, 0)
+    detection.onFix(
+      owner = owner,
+      deviceId = "device-1",
+      sharing = sharing,
+      nowMillis = 2_000,
+      latitude = home.latitude,
+      longitude = home.longitude,
+      accuracyMeters = 10.0,
+      timestampMillis = 86_400_000,
+    )
+    assertEquals(1, (30L..300L step 30).sumOf { detection.fix(home, 0.0, it) })
+  }
+
+  @Test
+  fun groupsAreRememberedUntilRemovedEvenWithNoPlaces() {
+    val detection = detection()
+    detection.setGroupPlaces("group-1", listOf(home))
+    detection.setGroupPlaces("group-2", emptyList())
+    assertEquals(setOf("group-1", "group-2"), detection.groups())
+    detection.removeGroups(listOf("group-2"))
+    assertEquals(setOf("group-1"), detection.groups())
+    detection.removeGroups(null)
+    assertEquals(emptySet(), detection.groups())
+  }
 }

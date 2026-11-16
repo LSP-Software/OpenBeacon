@@ -107,6 +107,7 @@ declare class OpenBeaconTrackingModule extends NativeModule {
     groupId: string,
     places: PlaceGeofenceInput[],
   ): Promise<boolean>;
+  listPlaceGroups(owner: string, deviceId: string): string[] | null;
   listPlaceTransitions(owner: string): Promise<QueuedPlaceTransition[]>;
   deletePlaceTransitions(clientIds: string[]): Promise<void>;
   showPlaceNotice(

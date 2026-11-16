@@ -27,6 +27,7 @@ class PlaceDetection(
       detector.reset()
       return 0
     }
+    if (timestampMillis > nowMillis + MAX_FUTURE_FIX_MILLIS) return 0
     val current = places ?: store.list().also { places = it }
     val rows =
       detector.onFix(current, latitude, longitude, accuracyMeters, timestampMillis).map { crossing ->
@@ -65,6 +66,9 @@ class PlaceDetection(
   }
 
   @Synchronized
+  fun groups(): Set<String> = store.groups()
+
+  @Synchronized
   fun restart() {
     detector.reset()
   }
@@ -78,5 +82,9 @@ class PlaceDetection(
   @Synchronized
   fun acknowledge(clientIds: List<String>) {
     queue.deleteByClientIds(clientIds)
+  }
+
+  companion object {
+    const val MAX_FUTURE_FIX_MILLIS = 5 * 60_000L
   }
 }

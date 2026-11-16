@@ -6,4 +6,6 @@ interface PlaceStore {
   fun removeGroups(groupIds: List<String>?)
 
   fun list(): List<PlaceGeofence>
+
+  fun groups(): Set<String>
 }

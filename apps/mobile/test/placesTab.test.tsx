@@ -79,7 +79,10 @@ mock.module("../hooks/useMemberNames.ts", () => ({
 }));
 mock.module("../lib/registeredDevice.ts", () => ({ readRegisteredDevice: async () => null }));
 mock.module("../lib/placeCatchUp.ts", () => ({ catchUpGroupPlaces: async () => 0 }));
-mock.module("../lib/placeBackgroundSync.ts", () => ({ syncGroupPlaces: async () => true }));
+mock.module("../lib/placeBackgroundSync.ts", () => ({
+  markPlacesUnsynced: () => {},
+  syncGroupPlaces: async () => true,
+}));
 mock.module("../lib/notifications.ts", () => ({
   requestNotificationPermissions: async () => {
     notificationRequests += 1;

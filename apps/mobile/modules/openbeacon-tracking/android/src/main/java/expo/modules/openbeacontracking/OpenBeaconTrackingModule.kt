@@ -79,6 +79,14 @@ class OpenBeaconTrackingModule : Module() {
         true
       }
 
+      Function("listPlaceGroups") { owner: String, deviceId: String ->
+        synchronized(TrackingRuntime.captureLock) {
+          val context = requireContext()
+          if (TrackingRuntime.queueOwner(context) != owner || TrackingRuntime.queueDeviceId(context) != deviceId) return@Function null
+          TrackingRuntime.placeDetection(context).groups().toList()
+        }
+      }
+
       AsyncFunction("listPlaceTransitions") { owner: String ->
         TrackingRuntime.placeDetection(requireContext()).queued(owner, MAX_PLACE_TRANSITIONS).map {
           mapOf(

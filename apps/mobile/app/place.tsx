@@ -189,11 +189,11 @@ const PlaceEditor = ({
     cameraRef.current?.jumpTo({ center: cameraCenterFor(selfLocation, 16), zoom: 16 });
   }, [center, place, selfLocation]);
 
-  const refreshPlaces = () =>
+  const refreshPlaces = (quietPlaceIds: readonly string[]) =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: groupPlacesQueryKey(groupId) }),
       queryClient.invalidateQueries({ queryKey: ["placeTransitions", groupId] }),
-      userId ? tryCatch(syncGroupPlaces({ announce: false, groupId, userId })) : null,
+      userId ? tryCatch(syncGroupPlaces({ groupId, quietPlaceIds, userId })) : null,
     ]);
 
   const save = async () => {
@@ -229,7 +229,7 @@ const PlaceEditor = ({
     if (result.error) {
       const reason = errorReason(result.error);
       if (reason === "PLACE_CHANGED") {
-        await refreshPlaces();
+        await refreshPlaces([]);
         Alert.alert(
           "Someone else changed this place",
           "It now shows their changes. Make your change again and save.",
@@ -242,12 +242,12 @@ const PlaceEditor = ({
       Alert.alert("Unable to save place", placeErrorMessage(reason, result.error.message));
       if (reason === "PLACE_GONE") {
         onClose();
-        void refreshPlaces();
+        void refreshPlaces([]);
       }
       return;
     }
     onClose();
-    void refreshPlaces();
+    void refreshPlaces([result.data.place.id]);
   };
 
   if (!mapStyleJson) {
@@ -483,7 +483,7 @@ const PlaceEditor = ({
                         },
                         onDeleted: () => {
                           onClose();
-                          void refreshPlaces();
+                          void refreshPlaces([]);
                         },
                       })
                     }

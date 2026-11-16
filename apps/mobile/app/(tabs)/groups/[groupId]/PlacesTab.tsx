@@ -26,7 +26,7 @@ import { authClient } from "../../../../lib/auth-client.ts";
 import type { LiveMapPosition } from "../../../../lib/mapTrackingTypes.ts";
 import { describePeopleHere, formatPlaceSize, peopleAtPlace } from "../../../../lib/places.ts";
 import { requestNotificationPermissions } from "../../../../lib/notifications.ts";
-import { syncGroupPlaces } from "../../../../lib/placeBackgroundSync.ts";
+import { markPlacesUnsynced, syncGroupPlaces } from "../../../../lib/placeBackgroundSync.ts";
 import { catchUpGroupPlaces } from "../../../../lib/placeCatchUp.ts";
 import { groupPlacesQueryKey, groupPlacesQueryOptions } from "../../../../lib/placeSync.ts";
 import { readRegisteredDevice } from "../../../../lib/registeredDevice.ts";
@@ -184,7 +184,12 @@ const PlacesTab = ({
               return;
             }
             await queryClient.invalidateQueries({ queryKey: sharingQueryOptions.queryKey });
-            if (userId) await tryCatch(syncGroupPlaces({ announce: false, groupId, userId }));
+            if (userId) {
+              const synced = await tryCatch(
+                syncGroupPlaces({ groupId, quietPlaceIds: "all", sharingOff: !enabled, userId }),
+              );
+              if (!synced.data) markPlacesUnsynced({ groupId, userId });
+            }
           }}
         />
       )}

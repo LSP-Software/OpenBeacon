@@ -411,6 +411,13 @@ const reconcileTrackingKeysInternal = async ({
     await trackingModule.deleteCiphertextsByGroup(owner, groupId);
   }
   if (!isCurrent()) return false;
+  const leftPlaceGroupIds = [
+    ...new Set([
+      ...leftGroupIds,
+      ...(trackingModule.listPlaceGroups(owner, deviceKeyContext.deviceId) ?? []),
+    ]),
+  ].filter((groupId) => !memberGroupIds.has(groupId));
+  if (leftPlaceGroupIds.length > 0) trackingModule.revokeEpochKeys(leftPlaceGroupIds);
   const keptGroupIds = new Set([...preserveGroupIds, ...reusedGroupIds]);
   const preservedKeys = currentKeys.filter(({ groupId }) => keptGroupIds.has(groupId));
   const desiredKeyMetadata = [...resolvedKeyMetadata, ...preservedKeys];

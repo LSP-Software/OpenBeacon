@@ -367,7 +367,7 @@ class TrackingCaptureService : Service() {
       return
     }
 
-    detectPlaces(location, nowMs)
+    detectPlaces(location, nowMs, generation)
 
     val refreshGeneration = synchronized(captureStateLock) { refreshState.pending() }
     val decision =
@@ -434,20 +434,23 @@ class TrackingCaptureService : Service() {
     }
   }
 
-  private fun detectPlaces(location: Location, nowMs: Long) {
-    val owner = TrackingRuntime.queueOwner(this) ?: return
-    val deviceId = TrackingRuntime.queueDeviceId(this) ?: return
+  private fun detectPlaces(location: Location, nowMs: Long, generation: Long) {
     try {
-      TrackingRuntime.placeDetection(this).onFix(
-        owner = owner,
-        deviceId = deviceId,
-        sharing = TrackingRuntime.sharingState(this),
-        nowMillis = nowMs,
-        latitude = location.latitude,
-        longitude = location.longitude,
-        accuracyMeters = location.accuracy.toDouble().takeIf { location.hasAccuracy() },
-        timestampMillis = location.time,
-      )
+      synchronized(TrackingRuntime.captureLock) {
+        if (!TrackingRuntime.captureCommands.isCurrent(generation)) return
+        val owner = TrackingRuntime.queueOwner(this) ?: return
+        val deviceId = TrackingRuntime.queueDeviceId(this) ?: return
+        TrackingRuntime.placeDetection(this).onFix(
+          owner = owner,
+          deviceId = deviceId,
+          sharing = TrackingRuntime.sharingState(this),
+          nowMillis = nowMs,
+          latitude = location.latitude,
+          longitude = location.longitude,
+          accuracyMeters = location.accuracy.toDouble().takeIf { location.hasAccuracy() },
+          timestampMillis = location.time,
+        )
+      }
     } catch (error: Exception) {
       Log.e(TAG, "Failed to check places.", error)
     }
