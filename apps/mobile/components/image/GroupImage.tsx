@@ -1,6 +1,6 @@
-import { useMutation } from "@tanstack/react-query";
-import { queryClient, trpc } from "../../lib/api.ts";
+import { queryClient, trpc, trpcClient } from "../../lib/api.ts";
 import { uploadImageFromUri } from "../../lib/image-upload.ts";
+import { confirmGroupImage } from "../../lib/imageKeys.ts";
 import { EditableImage } from "./EditableImage.tsx";
 
 export const GroupImage = ({
@@ -14,18 +14,16 @@ export const GroupImage = ({
   imageUrl?: string | null;
   size?: "sm" | "md" | "lg";
 }) => {
-  const requestGroupImageUploadMutation = useMutation(
-    trpc.groupSettings.requestGroupImageUpload.mutationOptions(),
-  );
-  const uploadGroupImage = async (uri: string) => {
-    return uploadImageFromUri({
+  const uploadGroupImage = (uri: string) =>
+    uploadImageFromUri({
       uri,
-      requestImageUpload: (input) =>
-        requestGroupImageUploadMutation.mutateAsync({ groupId, ...input }),
-      confirmImageUpload: () =>
-        Promise.reject(new Error("Group pictures can't be uploaded until they're encrypted.")),
+      ownerId: groupId,
+      purpose: "group-image",
+      request: () => trpcClient.groupSettings.requestGroupImageUpload.mutate({ groupId }),
+      presign: (input) =>
+        trpcClient.groupSettings.presignGroupImageUpload.mutate({ groupId, ...input }),
+      confirm: ({ fileName, imageKey }) => confirmGroupImage({ fileName, groupId, imageKey }),
     });
-  };
 
   const handleGroupImageUploaded = async (uploadedImageUrl: string) => {
     queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (currentGroups) =>
@@ -33,6 +31,7 @@ export const GroupImage = ({
         group.id === groupId ? { ...group, image: uploadedImageUrl } : group,
       ),
     );
+    await queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() });
   };
 
   return (

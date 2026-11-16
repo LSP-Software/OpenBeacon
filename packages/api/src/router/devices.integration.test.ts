@@ -399,8 +399,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account devices"
 });
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account profile", () => {
-  const contentHash = `${"a".repeat(43)}=`;
-
   test("only an active phone can change the name and photo other members see", async () => {
     const account = await createAccount();
     await linkSession(account);
@@ -412,7 +410,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account profile"
       const caller = callerFor(account, device);
       for (const call of [
         () => caller.account.updateName({ name: "Someone else" }),
-        () => caller.account.requestProfileImageUpload({ contentHash, fileSize: 100 }),
+        () => caller.account.requestProfileImageUpload(),
         () => caller.account.confirmProfileImageUpload({ wraps: [] }),
       ]) {
         const result = await tryCatch(call());
@@ -433,7 +431,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account profile"
     expect(await callerFor(account).account.updateName({ name: "New name" })).toEqual({
       name: "New name",
     });
-    await callerFor(account).account.requestProfileImageUpload({ contentHash, fileSize: 100 });
+    await callerFor(account).account.requestProfileImageUpload();
     expect(
       await prisma.pendingUpload.findFirst({ where: { userId: account.userId } }),
     ).not.toBeNull();

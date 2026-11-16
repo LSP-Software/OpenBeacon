@@ -10,6 +10,7 @@ import type z from "zod";
 import { trpc } from "../../lib/api.ts";
 import { buildCreateGroupInput, submitEpochChange } from "../../lib/groupEncryption.ts";
 import { groupLimitAlert } from "../../lib/groupLimitAlert.ts";
+import { storeOwnImageKeyInGroup } from "../../lib/imageKeys.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 import { Button } from "../ui/Button.tsx";
@@ -58,6 +59,7 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
             }
             return [createdGroup.newGroup, ...previous];
           });
+          void tryCatch(storeOwnImageKeyInGroup(createdGroup.newGroup.id));
           requestTrackingSync();
           closeForm();
         })(),

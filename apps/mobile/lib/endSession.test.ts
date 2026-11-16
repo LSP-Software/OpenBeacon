@@ -519,6 +519,31 @@ describe("ending a session", () => {
     });
   });
 
+  test.each([
+    ["signedOut", false],
+    ["phoneRemoved", false],
+    ["accountDeleted", false],
+    ["serverChanged", false],
+    ["sessionLost", true],
+  ] as const)("%s leaves this phone's own picture key: %p", async (reason, kept) => {
+    await seedSignedInPhone();
+    secureStoreValues.set("encryption.profileImage.user-a", "picture-key");
+
+    await endSession({ reason });
+
+    expect(secureStoreValues.has("encryption.profileImage.user-a")).toBe(kept);
+  });
+
+  test("a lost session's picture key is wiped along with its other keys", async () => {
+    await seedSignedInPhone();
+    secureStoreValues.set("encryption.profileImage.user-a", "picture-key");
+    await endSession({ reason: "sessionLost" });
+
+    await settleLostSessions({ userId: "user-b" });
+
+    expect(secureStoreValues.has("encryption.profileImage.user-a")).toBe(false);
+  });
+
   test("a sign-out keeps queued points that no pause is holding back", async () => {
     await seedSignedInPhone();
 

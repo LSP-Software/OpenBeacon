@@ -80,19 +80,37 @@ export const setPendingImageUploadForUser = async ({
   }
 };
 
-export const requestImageUpload = async ({
+export const presignImageUpload = async ({
+  db,
+  userId,
+  uploadType,
+  groupId,
   bucketName,
   contentHash,
   fileSize,
   imagePath,
   fileName,
+  noPendingImageUploadMessage,
 }: {
+  db: PrismaClient;
+  userId: string;
+  uploadType: ImageUploadType;
+  groupId?: string;
   bucketName: string;
   contentHash: string;
   fileSize: number;
   imagePath: string;
   fileName: string;
+  noPendingImageUploadMessage: string;
 }): Promise<{ presignedUrl: string }> => {
+  const pending = await db.pendingUpload.findUnique({
+    where: { userId_uploadType_groupId: { userId, uploadType, groupId: groupId ?? "" } },
+    select: { fileName: true },
+  });
+  if (pending?.fileName !== fileName) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: noPendingImageUploadMessage });
+  }
+
   const { data: presignedUrl, error: presignError } = await tryCatch(
     getPresignedUploadUrl(
       bucketName,

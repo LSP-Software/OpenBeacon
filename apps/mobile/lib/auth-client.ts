@@ -2,6 +2,7 @@ import { expoClient } from "@better-auth/expo/client";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { tryCatch } from "@openbeacon/shared";
+import { inferAdditionalFields } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import * as SecureStore from "expo-secure-store";
 import { apiCompatibilityFetch } from "./apiCompatibility.ts";
@@ -90,6 +91,9 @@ export const authClient = createAuthClient({
     },
   },
   plugins: [
+    inferAdditionalFields({
+      user: { imageKeySealed: { type: "string", required: false, input: false } },
+    }),
     expoClient({
       scheme: "openbeacon",
       storagePrefix: `openbeacon_${getServerKey(baseUrl)}`,

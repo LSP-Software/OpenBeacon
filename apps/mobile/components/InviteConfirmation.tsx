@@ -12,6 +12,7 @@ import {
   submitEpochChange,
 } from "../lib/groupEncryption.ts";
 import { groupLimitAlert } from "../lib/groupLimitAlert.ts";
+import { storeOwnImageKeyInGroup } from "../lib/imageKeys.ts";
 import { initials } from "../lib/initials.ts";
 import type { InviteToConfirm } from "../lib/inviteTypes.ts";
 import { requestTrackingSync } from "../lib/trackingEvents.ts";
@@ -75,6 +76,8 @@ export const InviteConfirmation = ({
         Alert.alert("Unable to join", result.error.message);
         return;
       }
+      const joinedGroupId = preview.data?.group.id;
+      if (joinedGroupId) void tryCatch(storeOwnImageKeyInGroup(joinedGroupId));
       void queryClient.invalidateQueries({
         predicate: (query) => query.queryKey[0] !== "invitePreview",
       });

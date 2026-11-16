@@ -3,7 +3,7 @@ import { tryCatch } from "@openbeacon/shared";
 import {
   confirmGroupImageUploadSchema,
   createGroupSchema,
-  requestImageUploadInputSchema,
+  presignImageUploadInputSchema,
 } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
@@ -18,7 +18,7 @@ import { imageKeyColumns } from "../../lib/imageKeys.ts";
 import {
   buildGroupAvatarPath,
   confirmImageUpload,
-  requestImageUpload,
+  presignImageUpload,
   setPendingImageUploadForUser,
 } from "../../lib/image-upload.ts";
 import { deleteFile, deleteImagePrefix } from "../../lib/storage.ts";
@@ -64,23 +64,9 @@ export const groupSettingsRouter = {
         windowMs: 60_000,
       },
     })
-    .input(
-      requestImageUploadInputSchema({ maxImageFileSize: env.MAX_IMAGE_FILE_SIZE }).extend({
-        groupId: z.string().min(1).max(128),
-      }),
-    )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const imagePath = buildGroupAvatarPath(userId, input.groupId);
       const fileName = crypto.randomUUID();
-
-      const { presignedUrl } = await requestImageUpload({
-        bucketName: env.IMAGES_S3_BUCKET_NAME,
-        contentHash: input.contentHash,
-        fileSize: input.fileSize,
-        imagePath,
-        fileName,
-      });
 
       await setPendingImageUploadForUser({
         db: ctx.db,
@@ -89,10 +75,37 @@ export const groupSettingsRouter = {
         fileName,
         groupId: input.groupId,
         bucketName: env.IMAGES_S3_BUCKET_NAME,
-        currentImagePath: imagePath,
+        currentImagePath: buildGroupAvatarPath(userId, input.groupId),
       });
 
-      return { presignedUrl, fileName };
+      return { fileName };
+    }),
+  presignGroupImageUpload: groupAdminProcedure
+    .meta({
+      rateLimit: {
+        limit: 32,
+        windowMs: 60_000,
+      },
+    })
+    .input(
+      presignImageUploadInputSchema({ maxImageFileSize: env.MAX_IMAGE_FILE_SIZE }).extend({
+        groupId: z.string().min(1).max(128),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      return presignImageUpload({
+        db: ctx.db,
+        userId,
+        uploadType: "groupAvatar",
+        groupId: input.groupId,
+        bucketName: env.IMAGES_S3_BUCKET_NAME,
+        contentHash: input.contentHash,
+        fileSize: input.fileSize,
+        imagePath: buildGroupAvatarPath(userId, input.groupId),
+        fileName: input.fileName,
+        noPendingImageUploadMessage: "No pending group image upload.",
+      });
     }),
   confirmGroupImageUpload: protectedProcedure
     .meta({ rateLimit: { limit: 32, windowMs: 60_000 } })

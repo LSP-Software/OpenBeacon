@@ -15,6 +15,7 @@ import {
   encryptImageKey,
   generateGroupEpochKey,
   generateImageKey,
+  MIN_ENCRYPTED_IMAGE_LENGTH,
   type ImageKeyKind,
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
@@ -264,28 +265,63 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
-    test("requesting an upload returns the file name the app binds the picture to", async () => {
-      const result = await caller(member).account.requestProfileImageUpload({
+    test("requesting an upload returns the file name before the app encrypts and presigns", async () => {
+      const { fileName } = await caller(member).account.requestProfileImageUpload();
+      const pending = await prisma.pendingUpload.findFirstOrThrow({ where: { userId: member } });
+      expect(fileName).toBe(pending.fileName);
+      expect(fileName).toMatch(/^[0-9a-f-]{36}$/);
+
+      const { presignedUrl } = await caller(member).account.presignProfileImageUpload({
+        fileName,
         fileSize: 1024,
         contentHash: Buffer.alloc(32).toString("base64"),
       });
-      const pending = await prisma.pendingUpload.findFirstOrThrow({ where: { userId: member } });
-      expect(result.fileName).toBe(pending.fileName);
-      expect(result.fileName).toMatch(/^[0-9a-f-]{36}$/);
-      const url = new URL(result.presignedUrl);
-      expect(url.pathname).toEndWith(`/user/${member}/uploads/avatar/${result.fileName}`);
+      expect(new URL(presignedUrl).pathname).toEndWith(
+        `/user/${member}/uploads/avatar/${fileName}`,
+      );
     });
 
-    test("upload requests are refused outside the size limits", async () => {
-      for (const fileSize of [0, env.MAX_IMAGE_FILE_SIZE + 1]) {
+    test("presigning is refused for a file name that isn't the pending upload", async () => {
+      await caller(member).account.requestProfileImageUpload();
+      await expect(
+        caller(member).account.presignProfileImageUpload({
+          fileName: crypto.randomUUID(),
+          fileSize: 1024,
+          contentHash: Buffer.alloc(32).toString("base64"),
+        }),
+      ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+
+      const { fileName } = await caller(admin).groupSettings.requestGroupImageUpload({ groupId });
+      await expect(
+        caller(admin).groupSettings.presignGroupImageUpload({
+          groupId: secondGroupId,
+          fileName,
+          fileSize: 1024,
+          contentHash: Buffer.alloc(32).toString("base64"),
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      const { presignedUrl } = await caller(admin).groupSettings.presignGroupImageUpload({
+        groupId,
+        fileName,
+        fileSize: 1024,
+        contentHash: Buffer.alloc(32).toString("base64"),
+      });
+      expect(new URL(presignedUrl).pathname).toEndWith(
+        `/user/${admin}/uploads/group/${groupId}/avatar/${fileName}`,
+      );
+    });
+
+    test("presigning is refused outside the size limits", async () => {
+      const { fileName } = await caller(member).account.requestProfileImageUpload();
+      for (const fileSize of [MIN_ENCRYPTED_IMAGE_LENGTH - 1, env.MAX_IMAGE_FILE_SIZE + 1]) {
         await expect(
-          caller(member).account.requestProfileImageUpload({
+          caller(member).account.presignProfileImageUpload({
+            fileName,
             fileSize,
             contentHash: Buffer.alloc(32).toString("base64"),
           }),
         ).rejects.toMatchObject({ code: "BAD_REQUEST" });
       }
-      expect(await prisma.pendingUpload.count({ where: { userId: member } })).toBe(0);
     });
 
     test("confirming a group picture stores its key in the same write", async () => {

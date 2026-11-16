@@ -13,7 +13,7 @@ import {
   setLocationSharingSchema,
   confirmProfileImageUploadSchema,
   removeDeviceSchema,
-  requestImageUploadInputSchema,
+  presignImageUploadInputSchema,
   updateDeviceSchema,
 } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
@@ -22,7 +22,7 @@ import { env } from "../env.ts";
 import {
   buildUserAvatarPath,
   confirmImageUpload,
-  requestImageUpload,
+  presignImageUpload,
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
 import { readAccountViewers } from "../lib/accountViewers.ts";
@@ -460,23 +460,9 @@ export const accountRouter = {
         windowMs: 60_000,
       },
     })
-    .input(
-      requestImageUploadInputSchema({
-        maxImageFileSize: env.MAX_IMAGE_FILE_SIZE,
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ ctx }) => {
       const userId = ctx.session.user.id;
-      const imagePath = buildUserAvatarPath(userId);
       const fileName = crypto.randomUUID();
-
-      const { presignedUrl } = await requestImageUpload({
-        bucketName: env.IMAGES_S3_BUCKET_NAME,
-        contentHash: input.contentHash,
-        fileSize: input.fileSize,
-        imagePath,
-        fileName,
-      });
 
       await setPendingImageUploadForUser({
         db: ctx.db,
@@ -484,10 +470,32 @@ export const accountRouter = {
         uploadType: "userAvatar",
         fileName,
         bucketName: env.IMAGES_S3_BUCKET_NAME,
-        currentImagePath: imagePath,
+        currentImagePath: buildUserAvatarPath(userId),
       });
 
-      return { presignedUrl, fileName };
+      return { fileName };
+    }),
+  presignProfileImageUpload: protectedProcedure
+    .meta({
+      rateLimit: {
+        limit: 10,
+        windowMs: 60_000,
+      },
+    })
+    .input(presignImageUploadInputSchema({ maxImageFileSize: env.MAX_IMAGE_FILE_SIZE }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      return presignImageUpload({
+        db: ctx.db,
+        userId,
+        uploadType: "userAvatar",
+        bucketName: env.IMAGES_S3_BUCKET_NAME,
+        contentHash: input.contentHash,
+        fileSize: input.fileSize,
+        imagePath: buildUserAvatarPath(userId),
+        fileName: input.fileName,
+        noPendingImageUploadMessage: "No pending profile image upload.",
+      });
     }),
   confirmProfileImageUpload: protectedProcedure
     .meta({

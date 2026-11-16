@@ -1,25 +1,24 @@
-import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { trpc } from "../../lib/api.ts";
+import { trpcClient } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { uploadImageFromUri } from "../../lib/image-upload.ts";
+import { confirmProfileImage } from "../../lib/imageKeys.ts";
 import { EditableImage } from "./EditableImage.tsx";
 
 export const ProfileImage = ({ imageUrl }: { imageUrl?: string | null }) => {
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const { data: session, refetch } = authClient.useSession();
-  const requestProfileImageUploadMutation = useMutation(
-    trpc.account.requestProfileImageUpload.mutationOptions(),
-  );
-  const confirmProfileImageUploadMutation = useMutation(
-    trpc.account.confirmProfileImageUpload.mutationOptions(),
-  );
+  const userId = session?.user?.id;
 
   const uploadProfileImage = async (uri: string) => {
+    if (!userId) return { error: "Sign in again to change your picture." };
     return uploadImageFromUri({
       uri,
-      requestImageUpload: (input) => requestProfileImageUploadMutation.mutateAsync(input),
-      confirmImageUpload: () => confirmProfileImageUploadMutation.mutateAsync({ wraps: [] }),
+      ownerId: userId,
+      purpose: "profile-image",
+      request: () => trpcClient.account.requestProfileImageUpload.mutate(),
+      presign: (input) => trpcClient.account.presignProfileImageUpload.mutate(input),
+      confirm: ({ fileName, imageKey }) => confirmProfileImage({ fileName, imageKey, userId }),
     });
   };
 

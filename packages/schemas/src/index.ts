@@ -76,7 +76,7 @@ import {
   reEncryptImageKeysSchema,
   storeImageKeySchema,
 } from "./schemas/image/imageKeys.ts";
-import { requestImageUploadInputSchema } from "./schemas/image/requestImageUpload.ts";
+import { presignImageUploadInputSchema } from "./schemas/image/presignImageUpload.ts";
 
 export {
   announcementMessageSchema,
@@ -134,7 +134,7 @@ export {
   setPlaceSharingSchema,
   registerDeviceKeySchema,
   removeGroupMemberSchema,
-  requestImageUploadInputSchema,
+  presignImageUploadInputSchema,
   resetAccountRecoverySchema,
   setupAccountRecoverySchema,
   signInSchema,

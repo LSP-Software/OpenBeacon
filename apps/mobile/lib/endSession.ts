@@ -13,6 +13,7 @@ import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { clearGroupColors } from "./groupColor.ts";
 import { deleteStoredHistoryKeys } from "./historyKeys.ts";
 import { clearPendingSharingChanges, getPendingSharingChanges } from "./locationSharing.ts";
+import { deleteOwnImageKey } from "./ownImageKey.ts";
 import { clearPendingJoinCodes } from "./pendingJoinCode.ts";
 import { readRegisteredDevice } from "./registeredDevice.ts";
 import { deleteSavedDeviceLink } from "./savedDeviceLink.ts";
@@ -127,6 +128,7 @@ const wipeKeyMaterial = async ({
     }),
   );
   if (deviceId) await tryCatch(deleteSavedDeviceLink({ deviceId, userId }));
+  await tryCatch(deleteOwnImageKey(userId));
   await tryCatch(deleteDeviceKey(userId));
   forgetLostSession(userId);
 };
@@ -183,6 +185,8 @@ export const endSession = async ({
   }
   if (userId && clears.keyMaterial === "wipe") {
     await wipeKeyMaterial({ deviceId, historyKeyVersion, userId });
+  } else if (userId && clears.credentials !== "keep") {
+    await tryCatch(deleteOwnImageKey(userId));
   }
   if (!keepPendingSharingChanges) clearPendingSharingChanges();
 
