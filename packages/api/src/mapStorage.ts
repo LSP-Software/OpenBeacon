@@ -103,6 +103,7 @@ export const createSignedPmtilesUrl = async (key: string) => {
   const command = new GetObjectCommand({
     Bucket: mapEnv.MAP_S3_BUCKET_NAME,
     Key: key,
+    ResponseCacheControl: "public, max-age=31536000, immutable",
   });
 
   const url = await getSignedUrl(mapStoragePresignClient, command, {

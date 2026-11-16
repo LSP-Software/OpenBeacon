@@ -68,3 +68,11 @@ test("without public addresses, signed URLs use the storage endpoints", () => {
   expect(urls.map).toStartWith("https://map.example.com/map/planet-a.pmtiles?");
   expect(urls.upload).toStartWith("https://images.example.com/pictures/groups/a.webp?");
 });
+
+test("signed map URLs let phones keep map data without checking it again", () => {
+  const urls = signUrls({});
+
+  expect(new URL(urls.map).searchParams.get("response-cache-control")).toBe(
+    "public, max-age=31536000, immutable",
+  );
+});
