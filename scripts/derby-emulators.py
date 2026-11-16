@@ -139,7 +139,7 @@ def free_port(start=8081, attempts=100):
     for port in range(start, start + attempts):
         with socket.socket() as probe:
             try:
-                probe.bind(("", port))
+                probe.bind(("127.0.0.1", port))
             except OSError:
                 continue
             return port
