@@ -9,6 +9,7 @@ import { Button } from "../components/ui/Button.tsx";
 import { Text } from "../components/ui/Text.tsx";
 import { authClient } from "../lib/auth-client.ts";
 import type { InviteToConfirm } from "../lib/inviteTypes.ts";
+import { withOwnScreen } from "../lib/ownScreen.ts";
 import { joinCodeFromInput } from "../lib/pendingJoinCode.ts";
 
 const Join = () => {
@@ -42,7 +43,7 @@ const Join = () => {
       setScanning(false);
       return;
     }
-    const granted = permission?.granted || (await requestPermission()).granted;
+    const granted = permission?.granted || (await withOwnScreen(requestPermission)).granted;
     if (!granted) {
       Alert.alert("Camera permission required", "Allow camera access to scan an invitation.");
       return;

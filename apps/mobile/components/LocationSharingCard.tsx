@@ -19,6 +19,7 @@ import {
   serverNow,
   toDeviceClock,
 } from "../lib/locationSharing.ts";
+import { useAppLock } from "../lib/appLock.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { formatResumeTime } from "../lib/formatResumeTime.ts";
 import { Button } from "./ui/Button.tsx";
@@ -44,6 +45,7 @@ export const LocationSharingCard = ({
     subscribed: isFocused,
   });
   const [open, setOpen] = useState(false);
+  const { locked, away } = useAppLock();
   const [scope, setScope] = useState<"device" | "account">("device");
   const [duration, setDuration] = useState<15 | 60 | 480 | 1440 | null>(60);
   const [now, setNow] = useState(serverNow);
@@ -253,7 +255,12 @@ export const LocationSharingCard = ({
           </Text>
         ) : null}
       </CardContent>
-      <Modal transparent visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
+      <Modal
+        transparent
+        visible={open && !locked && !away}
+        animationType="slide"
+        onRequestClose={() => setOpen(false)}
+      >
         <View className="flex-1 justify-end bg-black/50">
           <Pressable
             className="absolute inset-0"

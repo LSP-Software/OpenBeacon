@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { View } from "react-native";
 import { Alert } from "../lib/alert.ts";
+import { confirmWithPhoneLock, hasScreenLock } from "../lib/appLock.ts";
 import { trpc } from "../lib/api.ts";
 import { isNativeGoogleSignInConfigured, signInWithGoogle } from "../lib/auth.ts";
 import { authClient, saveSessionTokenToRevoke } from "../lib/auth-client.ts";
@@ -20,6 +21,11 @@ import { Text } from "./ui/Text.tsx";
 export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) => {
   const { data: session } = authClient.useSession();
   const methods = useQuery(trpc.account.deletionVerificationMethods.queryOptions());
+  const screenLock = useQuery({
+    queryKey: ["phoneScreenLock"],
+    queryFn: hasScreenLock,
+    staleTime: 0,
+  });
   const [pending, setPending] = useState(false);
   const form = useForm<{ password: string }>({ defaultValues: { password: "" } });
   const google = methods.data?.google === true && isNativeGoogleSignInConfigured;
@@ -85,19 +91,32 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
     return confirm(() => authClient.signIn.email({ email, password }));
   };
 
-  const confirmWithGoogle = () =>
-    confirm(async () => {
+  const confirmWithGoogle = async () => {
+    if (!session) return;
+    setPending(true);
+    const phoneLock = await confirmWithPhoneLock("Confirm it’s you");
+    if (phoneLock === "lockedOut" || phoneLock === "failed") {
+      setPending(false);
+      if (phoneLock === "lockedOut") {
+        Alert.alert("Unable to confirm it’s you", "Too many tries. Wait a moment, then try again.");
+      }
+      return;
+    }
+    await confirm(async () => {
       const result = await signInWithGoogle();
       return "error" in result || "data" in result ? result : { cancelled: true };
     });
+  };
 
   return (
     <View className="gap-4">
       <Text className="text-foreground text-3xl font-bold">Confirm it’s you</Text>
       <Text className="text-muted-foreground text-base leading-6">
-        {methods.data?.password === false
-          ? "Sign in with Google again to continue."
-          : "Sign in again to continue. This stops anyone who picks up your unlocked phone from making important changes to your account."}
+        {methods.data?.password !== false
+          ? "Sign in again to continue. This stops anyone who picks up your unlocked phone from making important changes to your account."
+          : screenLock.data === true
+            ? "Use your phone’s screen lock, then sign in with Google again to continue. This stops anyone who picks up your unlocked phone from making important changes to your account."
+            : "Sign in with Google again to continue."}
       </Text>
       {methods.data?.password && (
         <>

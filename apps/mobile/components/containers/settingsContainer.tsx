@@ -33,10 +33,10 @@ export const SettingsContainer = ({
                       isLastSetting ? "" : "border-b-[0.5px] border-border/30 pb-3"
                     }`}
                   >
-                    <View className="flex flex-row items-center gap-3">
+                    <View className="flex flex-1 flex-row items-center gap-3">
                       <Icon as={setting.icon} className="text-muted-foreground size-6" />
                       <Text
-                        className={`font-medium ${setting.href ? "text-foreground" : "text-muted-foreground"}`}
+                        className={`flex-1 font-medium ${setting.href ? "text-foreground" : "text-muted-foreground"}`}
                       >
                         {setting.label}
                       </Text>

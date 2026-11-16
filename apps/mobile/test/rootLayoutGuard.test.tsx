@@ -23,13 +23,21 @@ const Stack = Object.assign(
 
 mock.module("expo-router", () => ({ Stack }));
 mock.module("../global.css", () => ({}));
-mock.module("@rn-primitives/portal", () => ({ PortalHost: () => null }));
+mock.module("@rn-primitives/portal", () => ({
+  PortalHost: () => React.createElement("portal-host"),
+}));
 mock.module("@tanstack/react-query", () => ({ QueryClientProvider: Passthrough }));
 mock.module("../components/ApiCompatibilityGate.tsx", () => ({
   ApiCompatibilityGate: () => null,
   useApiCompatibilityGateShown: () => false,
 }));
-mock.module("../components/ui/Alert.tsx", () => ({ AlertHost: () => null }));
+mock.module("../components/AppLockScreen.tsx", () => ({
+  AppLockScreen: () => React.createElement("app-lock-screen"),
+}));
+mock.module("../lib/appLock.ts", () => ({ useAppLock: () => ({ locked: false, away: false }) }));
+mock.module("../components/ui/Alert.tsx", () => ({
+  AlertHost: () => React.createElement("alert-host"),
+}));
 mock.module("../components/OfflineBanner.tsx", () => ({ OfflineBanner: () => null }));
 mock.module("../components/InAppNoticeBanner.tsx", () => ({ InAppNoticeBanner: () => null }));
 mock.module("../lib/api.ts", () => ({ queryClient: {} }));
@@ -143,4 +151,14 @@ test("signed out, every route works as before so invite links still open", async
   session = { data: null, isPending: true };
   thisDeviceState = "unregistered";
   expect((await render()).guard).toBe(true);
+});
+
+test("the lock cover draws above alerts, dialogs and pickers", async () => {
+  await render();
+  const layers = root?.container
+    .queryAll((item) =>
+      ["alert-host", "portal-host", "app-lock-screen"].includes(String(item.type)),
+    )
+    .map((item) => item.type);
+  expect(layers).toEqual(["alert-host", "portal-host", "app-lock-screen"]);
 });

@@ -11,6 +11,10 @@ import { createRoot } from "test-renderer";
 const alerts: string[] = [];
 const events: string[] = [];
 let linkError: Error | null = null;
+const phone: { hasLock: boolean; result: "confirmed" | "noScreenLock" | "lockedOut" | "failed" } = {
+  hasLock: true,
+  result: "confirmed",
+};
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 
 mock.module("react-native", () => ({
@@ -22,7 +26,17 @@ mock.module("expo-router", () => ({
 }));
 mock.module("expo-secure-store", () => ({ setItemAsync: async () => {} }));
 mock.module("@tanstack/react-query", () => ({
-  useQuery: () => ({ data: { google: false, password: true }, isError: false, isLoading: false }),
+  useQuery: (options: { queryKey?: string[] }) =>
+    options.queryKey?.[0] === "phoneScreenLock"
+      ? { data: phone.hasLock }
+      : { data: { google: true, password: true }, isError: false, isLoading: false },
+}));
+mock.module("../lib/appLock.ts", () => ({
+  hasScreenLock: async () => phone.hasLock,
+  confirmWithPhoneLock: async () => {
+    events.push("phoneLock");
+    return phone.result;
+  },
 }));
 mock.module("../components/LoadingIndicator.tsx", () => ({ LoadingIndicator: () => null }));
 mock.module("../components/ui/Button.tsx", () => ({
@@ -40,8 +54,11 @@ mock.module("../lib/api.ts", () => ({
   trpcClient: {},
 }));
 mock.module("../lib/auth.ts", () => ({
-  isNativeGoogleSignInConfigured: false,
-  signInWithGoogle: async () => ({}),
+  isNativeGoogleSignInConfigured: true,
+  signInWithGoogle: async () => {
+    events.push("google");
+    return { data: {} };
+  },
 }));
 mock.module("../lib/auth-client.ts", () => ({
   saveSessionTokenToRevoke: async () => {},
@@ -78,12 +95,14 @@ const serverError = (code: string, httpStatus: number, cause: string | null = nu
     error: { code: -32003, data: { cause, code, httpStatus, reason: cause }, message: "Refused" },
   });
 
-const confirm = async () => {
+const confirm = async (method: "password" | "google" = "password") => {
   const root = createRoot();
   await act(async () =>
     root.render(<ConfirmIdentity onConfirmed={() => events.push("confirmed")} />),
   );
-  const button = root.container.queryAll((item) => item.type === "mock-button")[0];
+  const button = root.container.queryAll((item) => item.type === "mock-button")[
+    method === "password" ? 0 : 1
+  ];
   if (!button) throw new Error("Missing continue button");
   await act(async () => (button.props as { onPress: () => Promise<void> }).onPress());
   await act(async () => root.unmount());
@@ -93,6 +112,8 @@ beforeEach(() => {
   alerts.length = 0;
   events.length = 0;
   linkError = null;
+  phone.hasLock = true;
+  phone.result = "confirmed";
 });
 
 test("a removed phone shows no alert of its own", async () => {
@@ -144,4 +165,54 @@ test("a confirmed link finishes", async () => {
 
   expect(events).toEqual(["confirmed"]);
   expect(alerts).toEqual([]);
+});
+
+test("a password confirmation never asks for the phone's screen lock", async () => {
+  await confirm("password");
+
+  expect(events).toEqual(["confirmed"]);
+});
+
+test("Google asks for the phone's screen lock before signing in", async () => {
+  await confirm("google");
+
+  expect(events).toEqual(["phoneLock", "google", "confirmed"]);
+  expect(alerts).toEqual([]);
+});
+
+test("a cancelled or failed screen lock stops before Google", async () => {
+  phone.result = "failed";
+
+  await confirm("google");
+
+  expect(events).toEqual(["phoneLock"]);
+  expect(alerts).toEqual([]);
+});
+
+test("too many screen lock tries stops before Google and says to wait", async () => {
+  phone.result = "lockedOut";
+
+  await confirm("google");
+
+  expect(events).toEqual(["phoneLock"]);
+  expect(alerts).toEqual([
+    "Unable to confirm it’s you|Too many tries. Wait a moment, then try again.",
+  ]);
+});
+
+test("a phone with no screen lock goes on to Google", async () => {
+  phone.hasLock = false;
+  phone.result = "noScreenLock";
+
+  await confirm("google");
+
+  expect(events).toEqual(["phoneLock", "google", "confirmed"]);
+});
+
+test("a screen lock removed while confirming falls back to Google", async () => {
+  phone.result = "noScreenLock";
+
+  await confirm("google");
+
+  expect(events).toEqual(["phoneLock", "google", "confirmed"]);
 });

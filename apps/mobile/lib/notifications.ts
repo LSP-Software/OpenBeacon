@@ -10,6 +10,7 @@ import type { NoticeSlot } from "../modules/openbeacon-tracking/index.ts";
 import type { ApiCompatibilityProblem } from "./apiCompatibility.ts";
 import { showInAppNotice } from "./inAppNotices.ts";
 import { loadTrackingModule } from "./trackingModule.ts";
+import { withOwnScreen } from "./ownScreen.ts";
 import { useSingleFlight } from "./useSingleFlight.ts";
 
 export const showNotice = async (
@@ -89,7 +90,7 @@ export const requestNotificationPermissions = async (): Promise<
   if (Number(Platform.Version) >= 33 && !(await PermissionsAndroid.check(permission))) {
     const dialogWasShownBefore =
       (await loadTrackingModule())?.shouldShowNotificationRationale() ?? false;
-    const result = await PermissionsAndroid.request(permission);
+    const result = await withOwnScreen(() => PermissionsAndroid.request(permission));
     if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN && !dialogWasShownBefore) {
       return "blocked";
     }

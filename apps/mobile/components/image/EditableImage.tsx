@@ -8,6 +8,7 @@ import { ActivityIndicator, Pressable, View } from "react-native";
 import { cn } from "../../lib/cn.ts";
 import type { ImageUploadResult } from "../../lib/image-upload.ts";
 import { cleanupTempFile } from "../../lib/image-upload.ts";
+import { withOwnScreen } from "../../lib/ownScreen.ts";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
 import { Icon } from "../ui/Icon.tsx";
 
@@ -54,21 +55,23 @@ export const EditableImage = ({
   } as const;
 
   const pickAndCropImage = async (): Promise<{ ok: true; path: string } | undefined> => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permissionResult = await withOwnScreen(ImagePicker.requestMediaLibraryPermissionsAsync);
     if (!permissionResult.granted) {
       Alert.alert("Permission required", "Permission to access the media library is required.");
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.85,
-      allowsMultipleSelection: false,
-      exif: false,
-      shape: "oval",
-    });
+    const result = await withOwnScreen(() =>
+      ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+        allowsMultipleSelection: false,
+        exif: false,
+        shape: "oval",
+      }),
+    );
 
     if (result.canceled) {
       return;

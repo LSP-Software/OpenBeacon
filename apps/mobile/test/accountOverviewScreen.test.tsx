@@ -55,6 +55,7 @@ mock.module("lucide-react-native", () =>
       "MailIcon",
       "MapIcon",
       "MapPinIcon",
+      "ScanFaceIcon",
       "SmartphoneIcon",
       "SunIcon",
       "Trash2Icon",
