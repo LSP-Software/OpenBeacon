@@ -11,6 +11,7 @@ import {
 } from "./deviceKeys.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
 import { clearGroupColors } from "./groupColor.ts";
+import { clearImageCache } from "./imageCache.ts";
 import { deleteStoredHistoryKeys } from "./historyKeys.ts";
 import { clearPendingSharingChanges, getPendingSharingChanges } from "./locationSharing.ts";
 import { deleteOwnImageKey } from "./ownImageKey.ts";
@@ -201,6 +202,7 @@ export const endSession = async ({
   }
   if (clears.pendingJoinCodes) clearPendingJoinCodes();
   queryClient.clear();
+  await tryCatch(Promise.resolve().then(clearImageCache));
   clearGroupColors();
   clearTrackingUploadTimes();
   clearTrackingKeyCheck();

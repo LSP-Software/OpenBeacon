@@ -118,6 +118,27 @@ mock.module("./tracking.ts", () => ({
   },
 }));
 
+const cachedFiles = new Set<string>();
+
+mock.module("expo-file-system", () => ({
+  Paths: { cache: "cache" },
+  Directory: class {
+    path: string;
+    constructor(...parts: string[]) {
+      this.path = parts.join("/");
+    }
+    get exists() {
+      return [...cachedFiles].some((file) => file.startsWith(`${this.path}/`));
+    }
+    delete = () => {
+      for (const file of [...cachedFiles]) {
+        if (file.startsWith(`${this.path}/`)) cachedFiles.delete(file);
+      }
+    };
+  },
+  File: class {},
+}));
+
 mock.module("./groupColor.ts", () => ({ clearGroupColors: () => {} }));
 mock.module("./trackingKeyCheck.ts", () => ({ clearTrackingKeyCheck: () => {} }));
 mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => {} }));
@@ -532,6 +553,23 @@ describe("ending a session", () => {
     await endSession({ reason });
 
     expect(secureStoreValues.has("encryption.profileImage.user-a")).toBe(kept);
+  });
+
+  test.each([
+    "signedOut",
+    "phoneRemoved",
+    "accountDeleted",
+    "serverChanged",
+    "sessionLost",
+  ] as const)("%s deletes every decrypted picture on this phone", async (reason) => {
+    await seedSignedInPhone();
+    cachedFiles.add("cache/images/0d6c8c2e-2b1a-4c55-9a4e-6f1b2f3c4d5e");
+    cachedFiles.add("cache/images/7f0a1b2c-3d4e-4f50-8a6b-7c8d9e0f1a2b");
+    cachedFiles.add("cache/map/tiles.pmtiles");
+
+    await endSession({ reason });
+
+    expect([...cachedFiles]).toEqual(["cache/map/tiles.pmtiles"]);
   });
 
   test("a lost session's picture key is wiped along with its other keys", async () => {

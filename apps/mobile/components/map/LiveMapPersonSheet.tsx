@@ -4,7 +4,8 @@ import { useTimeSince } from "../../hooks/useTimeSince.ts";
 import { getBatteryVisual } from "../../lib/batteryVisual.ts";
 import { type DeviceIcon, deviceIconFor } from "../../lib/deviceIcons.ts";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
-import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
+import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
+import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapBottomSheet } from "./LiveMapBottomSheet.tsx";
@@ -67,7 +68,7 @@ export const LiveMapPersonSheet = ({
         <>
           <View className="flex-row items-center gap-3">
             <Avatar alt={name} className="size-12">
-              {image ? <AvatarImage source={{ uri: image }} /> : null}
+              <DecryptedAvatarImage url={image} />
               <AvatarFallback>
                 <Text className="font-bold">{initials}</Text>
               </AvatarFallback>

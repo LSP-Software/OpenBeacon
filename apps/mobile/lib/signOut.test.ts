@@ -15,6 +15,7 @@ let pendingSharingPause = false;
 let deleteQueueError: Error | null = null;
 const sharingEvents: string[] = [];
 
+mock.module("expo-file-system", () => ({ Directory: class {}, File: class {}, Paths: {} }));
 mock.module("./pendingJoinCode.ts", () => ({ clearPendingJoinCodes: () => {} }));
 mock.module("./locationSharing.ts", () => ({
   syncLocationSharing: async () => {

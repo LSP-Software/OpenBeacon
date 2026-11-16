@@ -9,7 +9,8 @@ import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from "react-native";
 import { InviteMemberToGroupDialog } from "../../../../components/dialogs/InviteMemberToGroupDialog.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
-import { Avatar, AvatarFallback, AvatarImage } from "../../../../components/ui/Avatar.tsx";
+import { DecryptedAvatarImage } from "../../../../components/image/DecryptedAvatarImage.tsx";
+import { Avatar, AvatarFallback } from "../../../../components/ui/Avatar.tsx";
 import { Button } from "../../../../components/ui/Button.tsx";
 import {
   Dialog,
@@ -438,7 +439,7 @@ const MemberCard = ({
       <View className="flex flex-row items-center gap-3">
         <View className="flex-row items-center gap-3">
           <Avatar alt={member.nickname ?? member.user.name} className="size-12">
-            <AvatarImage source={{ uri: member.user.image ?? "" }} />
+            <DecryptedAvatarImage url={member.user.image} />
             <AvatarFallback>
               <Text className="font-bold">{(member.nickname ?? member.user.name).slice(0, 2)}</Text>
             </AvatarFallback>

@@ -7,7 +7,8 @@ import { cn } from "../../lib/cn.ts";
 import { type DeviceIcon, deviceIconFor } from "../../lib/deviceIcons.ts";
 import { locationStaleAt } from "../../lib/locationStaleAt.ts";
 import type { MapPersonStatus } from "../../lib/mapPeopleTypes.ts";
-import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
+import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
+import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Text } from "../ui/Text.tsx";
 import { Icon } from "../ui/Icon.tsx";
 
@@ -176,14 +177,12 @@ export const LiveMapMarkerPin = ({
           }}
         >
           <Avatar alt={name} className="size-10" style={status ? { opacity: 0.45 } : undefined}>
-            {image ? (
-              <AvatarImage
-                source={{ uri: image }}
-                onLoadingStatusChange={(_status: "error" | "loaded") => {
-                  onBitmapContentChange?.();
-                }}
-              />
-            ) : null}
+            <DecryptedAvatarImage
+              url={image}
+              onLoadingStatusChange={(_status: "error" | "loaded") => {
+                onBitmapContentChange?.();
+              }}
+            />
             <AvatarFallback className={status ? "bg-neutral-500" : ""}>
               <Text className="font-bold">{initials}</Text>
             </AvatarFallback>

@@ -93,6 +93,9 @@ mock.module("../components/ui/Dialog.tsx", () => ({
   DialogHeader: passthrough,
   DialogTitle: passthrough,
 }));
+mock.module("../components/image/DecryptedAvatarImage.tsx", () => ({
+  DecryptedAvatarImage: () => null,
+}));
 mock.module("../components/ui/Avatar.tsx", () => ({
   Avatar: passthrough,
   AvatarFallback: passthrough,

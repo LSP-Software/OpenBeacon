@@ -9,7 +9,8 @@ import { cn } from "../../lib/cn.ts";
 import type { ImageUploadResult } from "../../lib/image-upload.ts";
 import { cleanupTempFile } from "../../lib/image-upload.ts";
 import { withOwnScreen } from "../../lib/ownScreen.ts";
-import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
+import { DecryptedAvatarImage } from "./DecryptedAvatarImage.tsx";
+import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Icon } from "../ui/Icon.tsx";
 
 interface EditableImageProps {
@@ -139,7 +140,7 @@ export const EditableImage = ({
   return (
     <View>
       <Avatar alt={alt} className={cn(sizeClassNames[size].avatar, "border-2 border-white")}>
-        <AvatarImage source={{ uri: imageUrl ?? "" }} />
+        <DecryptedAvatarImage url={imageUrl} />
         <AvatarFallback>
           <Icon
             as={UserIcon}

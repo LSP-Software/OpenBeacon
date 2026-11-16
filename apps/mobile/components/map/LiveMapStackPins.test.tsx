@@ -18,6 +18,7 @@ mock.module("react-native", () => ({
   Pressable: Passthrough,
   ScrollView: Passthrough,
 }));
+mock.module("../image/DecryptedAvatarImage.tsx", () => ({ DecryptedAvatarImage: () => null }));
 mock.module("../ui/Avatar.tsx", () => ({
   Avatar: Passthrough,
   AvatarFallback: Passthrough,
