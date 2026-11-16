@@ -1,9 +1,10 @@
 import { placeAlertsCursorSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import z from "zod";
-import { queryClient, type RouterOutputs, trpcClient } from "./api.ts";
+import { queryClient, type RouterOutputs, trpc, trpcClient } from "./api.ts";
 import { baseUrl } from "./currentServer.ts";
 import { getRegisteredDeviceKey } from "./deviceKeys.ts";
+import { catchUpGroupImageKeys } from "./imageKeyCatchUp.ts";
 import { showPlaceNotice } from "./notifications.ts";
 import { loadPersonalNicknames } from "./personalNicknames.ts";
 import { catchUpGroupPlaces } from "./placeCatchUp.ts";
@@ -18,6 +19,7 @@ type PlaceAlert = NonNullable<
 export type PlaceUpdates = {
   places?: RouterOutputs["groupTracking"]["uploadBatch"]["places"];
   placeAlerts?: RouterOutputs["groupTracking"]["uploadBatch"]["placeAlerts"];
+  imageKeysNeedCatchUp?: RouterOutputs["groupTracking"]["uploadBatch"]["imageKeysNeedCatchUp"];
 };
 
 type Groups = () => Promise<RouterOutputs["groupMembership"]["list"]>;
@@ -235,10 +237,21 @@ export const applyPlaceUpdates = async ({
       }
     }
   }
-  if (!updates.placeAlerts) return;
-  const shown = await tryCatch(
-    showPlaceAlerts({ alerts: updates.placeAlerts.alerts, groups, userId }),
-  );
-  if (shown.error) return;
-  storage.set(storageKey(userId, "alertsCursor"), updates.placeAlerts.cursor);
+  if (updates.placeAlerts) {
+    const shown = await tryCatch(
+      showPlaceAlerts({ alerts: updates.placeAlerts.alerts, groups, userId }),
+    );
+    if (!shown.error) storage.set(storageKey(userId, "alertsCursor"), updates.placeAlerts.cursor);
+  }
+  let imageKeysMoved = false;
+  for (const groupId of updates.imageKeysNeedCatchUp ?? []) {
+    const catchUpKey = storageKey(userId, "imageKeysCatchUpAt", groupId);
+    if (Date.now() - (storage.getNumber(catchUpKey) ?? 0) < 15 * 60_000) continue;
+    storage.set(catchUpKey, Date.now());
+    const moved = await tryCatch(catchUpGroupImageKeys({ groupId, userId }));
+    imageKeysMoved ||= Boolean(moved.data);
+  }
+  if (imageKeysMoved) {
+    await queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() });
+  }
 };

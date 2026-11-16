@@ -18,6 +18,11 @@ export const cachedImageUri = (fileName: string) => {
   return file.exists ? file.uri : null;
 };
 
+export const readCachedImage = async (fileName: string) => {
+  const file = imageCacheFile(fileName);
+  return file.exists ? file.bytes() : null;
+};
+
 export const writeCachedImage = ({
   bytes,
   fileName,

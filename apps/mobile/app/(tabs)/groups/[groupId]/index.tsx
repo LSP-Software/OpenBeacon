@@ -1,6 +1,6 @@
 import { useIsFocused } from "@react-navigation/native";
 import { tryCatch } from "@openbeacon/shared";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { Clock3Icon, MapPinIcon, SlidersHorizontalIcon, UsersIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
@@ -20,6 +20,7 @@ import { useLiveTrackingPositions } from "../../../../hooks/useLiveTrackingPosit
 import { useUnseenGroupHistory } from "../../../../hooks/useUnseenGroupHistory.ts";
 import { type RouterOutputs, trpc } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
+import { catchUpGroupImageKeys } from "../../../../lib/imageKeyCatchUp.ts";
 import { storage } from "../../../../lib/storage.ts";
 import HistoryTab from "./HistoryTab.tsx";
 import MembersTab from "./MembersTab.tsx";
@@ -83,6 +84,23 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
     recoveryStatus.data?.currentHistoryKey ?? undefined,
   );
   const { group, isPending, isMissing } = useCachedGroup(groupId);
+  const userId = session?.user.id;
+  useQuery({
+    queryKey: ["imageKeyCatchUp", groupId, userId],
+    enabled: Boolean(group && (group.imageKey || group.members.some((member) => member.image))),
+    subscribed: isFocused,
+    staleTime: 15 * 60_000,
+    retry: false,
+    queryFn: userId
+      ? async () => {
+          const moved = await catchUpGroupImageKeys({ groupId, userId });
+          if (moved > 0) {
+            await queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() });
+          }
+          return moved;
+        }
+      : skipToken,
+  });
   const live = useLiveTrackingPositions({ groupId });
   const history = useUnseenGroupHistory();
   const historyLatestAt =

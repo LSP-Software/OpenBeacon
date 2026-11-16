@@ -1,3 +1,4 @@
+import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Redirect, Tabs } from "expo-router";
 import { useCallback, useEffect, useRef } from "react";
@@ -6,9 +7,10 @@ import { TabBar } from "../../components/TabBar.tsx";
 import { useAppForeground } from "../../hooks/useAppForeground.ts";
 import { useRefetchWhileFocused } from "../../hooks/useRefetchWhileFocused.ts";
 import { useUnseenGroupHistory } from "../../hooks/useUnseenGroupHistory.ts";
-import { trpc } from "../../lib/api.ts";
+import { queryClient, trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { groupColorSyncQueryOptions } from "../../lib/groupColorSync.ts";
+import { checkImageKeys } from "../../lib/imageKeySelfCheck.ts";
 
 export default function TabsLayout() {
   const { data: session, isPending } = authClient.useSession();
@@ -41,6 +43,26 @@ export default function TabsLayout() {
   }, [userId, emailEnabled, setTimezone]);
 
   useEffect(reportTimezone, [reportTimezone]);
+
+  const { data: groups } = useQuery({
+    ...trpc.groupMembership.list.queryOptions(),
+    enabled: false,
+  });
+  const userImage = session?.user.image ?? null;
+  const userImageKeySealed = session?.user.imageKeySealed ?? null;
+  useEffect(() => {
+    if (!groups || !userId) return;
+    void tryCatch(
+      checkImageKeys({
+        groups,
+        user: { id: userId, image: userImage, imageKeySealed: userImageKeySealed },
+      }),
+    ).then(async (checked) => {
+      if (checked.data) {
+        await queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() });
+      }
+    });
+  }, [groups, userId, userImage, userImageKeySealed]);
   useAppForeground(reportTimezone);
 
   if (isPending) {

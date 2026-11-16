@@ -11,6 +11,9 @@ const storageValues = new Map<string, string | number | boolean>();
 const nativePlaces: { groupId: string; places: unknown[] }[] = [];
 const notices: { kind: string; title: string; body: string | null; key: string }[] = [];
 const catchUps: string[] = [];
+const imageCatchUps: string[] = [];
+let movedImageKeys = 0;
+let imageCatchUpFails = false;
 const invalidated: unknown[] = [];
 let movedByCatchUp = 0;
 let places: Place[] = [];
@@ -53,6 +56,13 @@ mock.module("./placeCatchUp.ts", () => ({
     return movedByCatchUp;
   },
 }));
+mock.module("./imageKeyCatchUp.ts", () => ({
+  catchUpGroupImageKeys: async ({ groupId }: { groupId: string }) => {
+    imageCatchUps.push(groupId);
+    if (imageCatchUpFails) throw new Error("offline");
+    return movedImageKeys;
+  },
+}));
 mock.module("./personalNicknames.ts", () => ({
   loadPersonalNicknames: async () => ({ "member-sam": { name: "Mum", ciphertext: "sealed" } }),
 }));
@@ -88,6 +98,7 @@ mock.module("./api.ts", () => ({
       invalidated.push(queryKey);
     },
   },
+  trpc: { groupMembership: { list: { queryKey: () => [["groupMembership", "list"]] } } },
   trpcClient: {
     placeSharing: { get: { query: async () => ({ enabled: sharingEnabled, arrivalsOff: [] }) } },
     groupMembership: {
@@ -151,6 +162,9 @@ beforeEach(() => {
   nativePlaces.length = 0;
   notices.length = 0;
   catchUps.length = 0;
+  imageCatchUps.length = 0;
+  movedImageKeys = 0;
+  imageCatchUpFails = false;
   invalidated.length = 0;
   movedByCatchUp = 0;
   places = [home];
@@ -382,5 +396,59 @@ describe("applyPlaceUpdates", () => {
       "not a cursor",
     );
     expect(getPlaceAlertsCursor("user-1")).toBeNull();
+  });
+});
+
+describe("picture key catch-up", () => {
+  test("runs for each listed group at most once every 15 minutes", async () => {
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(new Date("2026-11-16T10:00:00.000Z"));
+      await applyPlaceUpdates({
+        updates: { imageKeysNeedCatchUp: ["family", "school"] },
+        userId: "user-1",
+      });
+      expect(imageCatchUps).toEqual(["family", "school"]);
+      jest.setSystemTime(new Date("2026-11-16T10:14:00.000Z"));
+      await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-2" });
+      expect(imageCatchUps).toEqual(["family", "school", "family"]);
+      jest.setSystemTime(new Date("2026-11-16T10:15:00.000Z"));
+      await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+      expect(imageCatchUps).toEqual(["family", "school", "family", "family"]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("treats a missing list as unknown and an empty one as nothing to do", async () => {
+    await applyPlaceUpdates({ updates: {}, userId: "user-1" });
+    await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: [] }, userId: "user-1" });
+    expect(imageCatchUps).toEqual([]);
+    expect([...storageValues.keys()].some((key) => key.includes("imageKeysCatchUpAt"))).toBe(false);
+    await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+    expect(imageCatchUps).toEqual(["family"]);
+  });
+
+  test("reloads the group list only when keys moved", async () => {
+    await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["family"] }, userId: "user-1" });
+    expect(invalidated).toEqual([]);
+    movedImageKeys = 2;
+    await applyPlaceUpdates({ updates: { imageKeysNeedCatchUp: ["school"] }, userId: "user-1" });
+    expect(invalidated).toEqual([[["groupMembership", "list"]]]);
+  });
+
+  test("a failed catch-up still shows alerts and saves the cursor", async () => {
+    imageCatchUpFails = true;
+    await applyPlaceUpdates({
+      updates: {
+        imageKeysNeedCatchUp: ["family"],
+        placeAlerts: { alerts: [alert({})], cursor: "2026-11-16T10:00:00.000Z|alert-1" },
+      },
+      userId: "user-1",
+    });
+    expect(notices.map(({ key }) => key)).toEqual(["alert-1"]);
+    expect(getPlaceAlertsCursor("user-1")).toBe("2026-11-16T10:00:00.000Z|alert-1");
+    expect(imageCatchUps).toEqual(["family"]);
   });
 });

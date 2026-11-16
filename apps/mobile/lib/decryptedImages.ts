@@ -3,7 +3,7 @@ import { cachedImageUri, imageCacheGeneration, writeCachedImage } from "./imageC
 import { createImageDecryptor } from "./imageDecryptor.ts";
 import { getOwnImageKey } from "./imageKeys.ts";
 
-const downloadEncryptedImage = async (url: string) => {
+export const downloadEncryptedImage = async (url: string) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
   const response = await fetch(url, { signal: controller.signal }).finally(() =>

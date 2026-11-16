@@ -635,8 +635,16 @@ const settlePlaceResponse = async (
     const { accepted, duplicates, discarded } = response.placeTransitions;
     await trackingModule.deletePlaceTransitions([...accepted, ...duplicates, ...discarded]);
   }
-  if (response.places !== undefined || response.placeAlerts !== undefined) {
-    round.updates = { places: response.places, placeAlerts: response.placeAlerts };
+  if (
+    response.places !== undefined ||
+    response.placeAlerts !== undefined ||
+    response.imageKeysNeedCatchUp !== undefined
+  ) {
+    round.updates = {
+      places: response.places,
+      placeAlerts: response.placeAlerts,
+      imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
+    };
   }
 };
 
@@ -1016,7 +1024,11 @@ const pollPlaceUpdates = async () => {
     placeAlertsCursor: getPlaceAlertsCursor(device.userId),
   });
   await applyPlaceUpdates({
-    updates: { places: response.places, placeAlerts: response.placeAlerts },
+    updates: {
+      places: response.places,
+      placeAlerts: response.placeAlerts,
+      imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
+    },
     userId: device.userId,
   });
 };
