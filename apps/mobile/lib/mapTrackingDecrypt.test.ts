@@ -4,7 +4,7 @@ import {
   createInitialGroupEpoch,
   DEVICE_KEY_ALGORITHM,
   type DevicePrivateKeyMaterial,
-  encodeTrackingPointV1,
+  encodeTrackingPoint,
   encryptGroupPayload,
   TRACKING_POINT_KIND,
   unwrapEpochKey,
@@ -81,13 +81,14 @@ describe("createMapTrackingDecryptPoint", () => {
       epochKey,
       groupId: "group-1",
       kind: TRACKING_POINT_KIND,
-      payload: encodeTrackingPointV1({
+      payload: encodeTrackingPoint({
+        accuracy: null,
         battery: { charging: true, level: 42 },
         latitude: 51.5,
         longitude: -0.12,
         speed: 3.5,
-        timestamp: "2026-07-17T12:00:00.000Z",
-        v: 1,
+        stayUntil: null,
+        time: Date.parse("2026-07-17T12:00:00.000Z"),
       }),
       senderDeviceId: "device-sender",
     });
@@ -237,13 +238,14 @@ describe("createMapTrackingDecryptPoint", () => {
       epochKey,
       groupId: "group-1",
       kind: TRACKING_POINT_KIND,
-      payload: encodeTrackingPointV1({
+      payload: encodeTrackingPoint({
+        accuracy: null,
         battery: { charging: false, level: 10 },
         latitude: 1,
         longitude: 2,
         speed: null,
-        timestamp: "2026-07-17T12:00:00.000Z",
-        v: 1,
+        stayUntil: null,
+        time: Date.parse("2026-07-17T12:00:00.000Z"),
       }),
       senderDeviceId: "device-sender",
     });
@@ -308,13 +310,14 @@ describe("createMapTrackingDecryptPoint", () => {
       epochKey,
       groupId: "group-1",
       kind: TRACKING_POINT_KIND,
-      payload: encodeTrackingPointV1({
+      payload: encodeTrackingPoint({
+        accuracy: null,
         battery: { charging: true, level: 42 },
         latitude: 51.5,
         longitude: -0.12,
         speed: 3.5,
-        timestamp: "2026-07-17T12:00:00.000Z",
-        v: 1,
+        stayUntil: null,
+        time: Date.parse("2026-07-17T12:00:00.000Z"),
       }),
       senderDeviceId: "device-sender",
     });
@@ -412,13 +415,14 @@ describe("createMapTrackingDecryptPoint", () => {
       epochKey,
       groupId: "group-1",
       kind: TRACKING_POINT_KIND,
-      payload: encodeTrackingPointV1({
+      payload: encodeTrackingPoint({
+        accuracy: null,
         battery: { charging: true, level: 42 },
         latitude: 51.5,
         longitude: -0.12,
         speed: 3.5,
-        timestamp: "2026-07-17T12:00:00.000Z",
-        v: 1,
+        stayUntil: null,
+        time: Date.parse("2026-07-17T12:00:00.000Z"),
       }),
       senderDeviceId: "device-sender",
     });
@@ -486,13 +490,14 @@ describe("createMapTrackingDecryptPoint", () => {
       epochKey,
       groupId: "group-1",
       kind: TRACKING_POINT_KIND,
-      payload: encodeTrackingPointV1({
+      payload: encodeTrackingPoint({
+        accuracy: null,
         battery: { charging: true, level: 42 },
         latitude: 51.5,
         longitude: -0.12,
         speed: 3.5,
-        timestamp: "2026-07-17T12:00:00.000Z",
-        v: 1,
+        stayUntil: null,
+        time: Date.parse("2026-07-17T12:00:00.000Z"),
       }),
       senderDeviceId: "device-sender",
     });
@@ -582,13 +587,14 @@ describe("createMapTrackingDecryptPoint", () => {
       epochKey: first.epochKey,
       groupId: "a:b",
       kind: TRACKING_POINT_KIND,
-      payload: encodeTrackingPointV1({
+      payload: encodeTrackingPoint({
+        accuracy: null,
         battery: { charging: false, level: 10 },
         latitude: 1,
         longitude: 2,
         speed: null,
-        timestamp: "2026-07-17T12:00:00.000Z",
-        v: 1,
+        stayUntil: null,
+        time: Date.parse("2026-07-17T12:00:00.000Z"),
       }),
       senderDeviceId: "device-sender",
     });
@@ -649,13 +655,14 @@ describe("createMapTrackingDecryptPoint", () => {
       epochKey,
       groupId: "group-1",
       kind: TRACKING_POINT_KIND,
-      payload: encodeTrackingPointV1({
+      payload: encodeTrackingPoint({
+        accuracy: null,
         battery: { charging: true, level: 42 },
         latitude: 51.5,
         longitude: -0.12,
         speed: 3.5,
-        timestamp: "2026-07-17T12:00:00.000Z",
-        v: 1,
+        stayUntil: null,
+        time: Date.parse("2026-07-17T12:00:00.000Z"),
       }),
       senderDeviceId: "device-sender",
     });
@@ -728,13 +735,14 @@ describe("createMapTrackingDecryptPoint", () => {
       epochKey: groupOne.epochKey,
       groupId: "group-1",
       kind: TRACKING_POINT_KIND,
-      payload: encodeTrackingPointV1({
+      payload: encodeTrackingPoint({
+        accuracy: null,
         battery: { charging: false, level: 10 },
         latitude: 1,
         longitude: 2,
         speed: null,
-        timestamp: "2026-07-17T12:00:00.000Z",
-        v: 1,
+        stayUntil: null,
+        time: Date.parse("2026-07-17T12:00:00.000Z"),
       }),
       senderDeviceId: "device-sender",
     });
@@ -743,13 +751,14 @@ describe("createMapTrackingDecryptPoint", () => {
       epochKey: groupTwo.epochKey,
       groupId: "group-2",
       kind: TRACKING_POINT_KIND,
-      payload: encodeTrackingPointV1({
+      payload: encodeTrackingPoint({
+        accuracy: null,
         battery: { charging: true, level: 20 },
         latitude: 3,
         longitude: 4,
         speed: null,
-        timestamp: "2026-07-17T12:01:00.000Z",
-        v: 1,
+        stayUntil: null,
+        time: Date.parse("2026-07-17T12:01:00.000Z"),
       }),
       senderDeviceId: "device-sender",
     });
@@ -847,13 +856,14 @@ describe("createMapTrackingDecryptPoint", () => {
       epochKey,
       groupId: "group-1",
       kind: TRACKING_POINT_KIND,
-      payload: encodeTrackingPointV1({
+      payload: encodeTrackingPoint({
+        accuracy: null,
         battery: { charging: true, level: 42 },
         latitude: 51.5,
         longitude: -0.12,
         speed: 3.5,
-        timestamp: "2026-07-17T12:00:00.000Z",
-        v: 1,
+        stayUntil: null,
+        time: Date.parse("2026-07-17T12:00:00.000Z"),
       }),
       senderDeviceId: "device-sender",
     });

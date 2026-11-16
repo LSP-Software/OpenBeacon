@@ -1,7 +1,7 @@
 {
   "version": 1,
   "algorithm": "XChaCha20-Poly1305",
-  "description": "Cross-language group-payload encrypt interop vectors for OPE-70. Ciphertext must match between TypeScript (@noble/ciphers) and Kotlin (Tink InsecureNonceXChaCha20Poly1305).",
+  "description": "Cross-language group-payload encrypt interop vectors for OPE-70. Ciphertext must match between TypeScript (@noble/ciphers) and Kotlin (Tink InsecureNonceXChaCha20Poly1305). Each plaintext is the tracking point named by trackingPoint in tracking-point-v2.json.",
   "constants": {
     "domainContext": "openbeacon.group-epoch.v1",
     "purpose": "payload",
@@ -13,7 +13,8 @@
   },
   "cases": [
     {
-      "name": "tracking-point-with-speed",
+      "name": "tracking-point-moving",
+      "trackingPoint": "moving",
       "metadata": {
         "epochId": "epoch_interop_1",
         "groupId": "group_interop_1",
@@ -21,14 +22,13 @@
         "senderDeviceId": "device_interop_1"
       },
       "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_interop_1\",\"groupId\":\"group_interop_1\",\"kind\":\"trackingPoint\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_interop_1\"}",
-      "plaintextJson": "{\"v\":1,\"latitude\":51.5074,\"longitude\":-0.1278,\"timestamp\":\"2026-07-13T18:45:00.000Z\",\"speed\":1.4,\"battery\":{\"level\":72,\"charging\":false}}",
-      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6NTEuNTA3NCwibG9uZ2l0dWRlIjotMC4xMjc4LCJ0aW1lc3RhbXAiOiIyMDI2LTA3LTEzVDE4OjQ1OjAwLjAwMFoiLCJzcGVlZCI6MS40LCJiYXR0ZXJ5Ijp7ImxldmVsIjo3MiwiY2hhcmdpbmciOmZhbHNlfX0=",
-      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v5A3xpjaC1U1+RWBXjWtFNEQn49kLPnyVB3mFvRRwAL7IuJimkKTyqlA9TOoJBBVgDMJwmjBLIR741o0zFp8EV7T0Htso2fe3YHOCE0FB1glNTzShRNTQbBM0bBe8/+TqYsa0lHEh9civiG8dYjb7ZRiCqW4b1VXgRfgefB0jCFAjxmszlYZd",
-      "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3",
-      "trackingPointJson": "{\"v\":1,\"latitude\":51.5074,\"longitude\":-0.1278,\"timestamp\":\"2026-07-13T18:45:00.000Z\",\"speed\":1.4,\"battery\":{\"level\":72,\"charging\":false}}"
+      "plaintextBase64": "Ah6zZ9D/7H/QAZ9cy/vgAAAAMACMSAA=",
+      "ciphertextBase64": "H0f+rKvI+PTov8/hg7zh0T1V4TxT2waYjiW/zu6r5UBsxXzBT/Pf",
+      "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3"
     },
     {
-      "name": "tracking-point-null-speed",
+      "name": "tracking-point-stay",
+      "trackingPoint": "stay",
       "metadata": {
         "epochId": "epoch_interop_2",
         "groupId": "group_interop_1",
@@ -36,14 +36,13 @@
         "senderDeviceId": "device_interop_2"
       },
       "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_interop_2\",\"groupId\":\"group_interop_1\",\"kind\":\"trackingPoint\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_interop_2\"}",
-      "plaintextJson": "{\"v\":1,\"latitude\":51.5074,\"longitude\":-0.1278,\"timestamp\":\"2026-07-13T18:45:00.000Z\",\"speed\":null,\"battery\":{\"level\":5,\"charging\":true}}",
-      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6NTEuNTA3NCwibG9uZ2l0dWRlIjotMC4xMjc4LCJ0aW1lc3RhbXAiOiIyMDI2LTA3LTEzVDE4OjQ1OjAwLjAwMFoiLCJzcGVlZCI6bnVsbCwiYmF0dGVyeSI6eyJsZXZlbCI6NSwiY2hhcmdpbmciOnRydWV9fQ==",
-      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v5A3xpjaC1U1+RWBXjWtFNEQn49kLPnyVB3mFvRRwAL7IuJimkKTyqlA9TOoJBBVgDMJwmjBLIR741o0zFp8EV7T0Htso2fe3YHOCTBoZlgcNTCGhVcPbNwt1NVm17PfjLN65k3Eh9civiG8dYjb7ZQqRsHgD1dPzMuc4WHkDTRm084Nyt6g=",
-      "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3",
-      "trackingPointJson": "{\"v\":1,\"latitude\":51.5074,\"longitude\":-0.1278,\"timestamp\":\"2026-07-13T18:45:00.000Z\",\"speed\":null,\"battery\":{\"level\":5,\"charging\":true}}"
+      "plaintextBase64": "Ah6zZ9D/7H/QAZ9cy/vgABcAewAA5AE=",
+      "ciphertextBase64": "H0f+rKvI+PTov8/hg7zh0SpVqjzfdwf8YW+uXy3a1JM5tWUJQEZn",
+      "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3"
     },
     {
-      "name": "tracking-point-unknown-keys",
+      "name": "tracking-point-unknown-accuracy-speed-and-battery",
+      "trackingPoint": "unknown-accuracy-speed-and-battery",
       "metadata": {
         "epochId": "epoch_interop_3",
         "groupId": "group_interop_1",
@@ -51,26 +50,9 @@
         "senderDeviceId": "device_interop_3"
       },
       "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_interop_3\",\"groupId\":\"group_interop_1\",\"kind\":\"trackingPoint\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_interop_3\"}",
-      "plaintextJson": "{\"v\":1,\"latitude\":51.5074,\"longitude\":-0.1278,\"timestamp\":\"2026-07-13T18:45:00.000Z\",\"speed\":1.4,\"battery\":{\"level\":72,\"charging\":false,\"health\":\"good\"},\"accuracy\":12}",
-      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6NTEuNTA3NCwibG9uZ2l0dWRlIjotMC4xMjc4LCJ0aW1lc3RhbXAiOiIyMDI2LTA3LTEzVDE4OjQ1OjAwLjAwMFoiLCJzcGVlZCI6MS40LCJiYXR0ZXJ5Ijp7ImxldmVsIjo3MiwiY2hhcmdpbmciOmZhbHNlLCJoZWFsdGgiOiJnb29kIn0sImFjY3VyYWN5IjoxMn0=",
-      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v5A3xpjaC1U1+RWBXjWtFNEQn49kLPnyVB3mFvRRwAL7IuJimkKTyqlA9TOoJBBVgDMJwmjBLIR741o0zFp8EV7T0Htso2fe3YHOCE0FB1glNTzShRNTQbBM0bBe8/+TqYsa0lHEh9civiG8dYjb7ZRiCqW4bhArletzgUuJLceaLfeP6FYRmLx1UjwPOPaeA113KYJekNkYZAFBOa/BXmSrrp5mu",
-      "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3",
-      "trackingPointJson": "{\"v\":1,\"latitude\":51.5074,\"longitude\":-0.1278,\"timestamp\":\"2026-07-13T18:45:00.000Z\",\"speed\":1.4,\"battery\":{\"level\":72,\"charging\":false}}"
-    },
-    {
-      "name": "tracking-point-unknown-battery-level",
-      "metadata": {
-        "epochId": "epoch_interop_4",
-        "groupId": "group_interop_1",
-        "kind": "trackingPoint",
-        "senderDeviceId": "device_interop_4"
-      },
-      "aadJson": "{\"context\":\"openbeacon.group-epoch.v1\",\"epochId\":\"epoch_interop_4\",\"groupId\":\"group_interop_1\",\"kind\":\"trackingPoint\",\"purpose\":\"payload\",\"senderDeviceId\":\"device_interop_4\"}",
-      "plaintextJson": "{\"v\":1,\"latitude\":51.5074,\"longitude\":-0.1278,\"timestamp\":\"2026-07-13T18:45:00.000Z\",\"speed\":null,\"battery\":{\"level\":null,\"charging\":false}}",
-      "plaintextBase64": "eyJ2IjoxLCJsYXRpdHVkZSI6NTEuNTA3NCwibG9uZ2l0dWRlIjotMC4xMjc4LCJ0aW1lc3RhbXAiOiIyMDI2LTA3LTEzVDE4OjQ1OjAwLjAwMFoiLCJzcGVlZCI6bnVsbCwiYmF0dGVyeSI6eyJsZXZlbCI6bnVsbCwiY2hhcmdpbmciOmZhbHNlfX0=",
-      "ciphertextBase64": "Zns76UEGOKlU3yTUPDJltB9v5A3xpjaC1U1+RWBXjWtFNEQn49kLPnyVB3mFvRRwAL7IuJimkKTyqlA9TOoJBBVgDMJwmjBLIR741o0zFp8EV7T0Htso2fe3YHOCTBoZlgcNTCGhVcPbNwt1NVm17PfjLN65yChv+ozsmWAVfjawMRnB/3sfxFvoYsDfQ7gsb3P/fHnz+Ej79p3w",
-      "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3",
-      "trackingPointJson": "{\"v\":1,\"latitude\":51.5074,\"longitude\":-0.1278,\"timestamp\":\"2026-07-13T18:45:00.000Z\",\"speed\":null,\"battery\":{\"level\":null,\"charging\":false}}"
+      "plaintextBase64": "Ah6zZ9D/7H/QAZ9cy/vgAAD/////fwA=",
+      "ciphertextBase64": "H0f+rKvI+PTov8/hg7zh0T2qLsMg7AZmU6IRFL6sr2r/7zQDebF3",
+      "nonceBase64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3"
     }
   ]
 }

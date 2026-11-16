@@ -1,10 +1,9 @@
 import {
-  decodeJsonPayload,
+  decodeTrackingPoint,
   decryptGroupPayload,
   type EpochKeyMaterial,
   PAYLOAD_ENCRYPTION_ALGORITHM,
   TRACKING_POINT_KIND,
-  validateTrackingPointV1,
 } from "@openbeacon/encryption";
 import type { LiveMapEntry } from "./liveMapReducer.ts";
 import type { MapTrackingEncryptedPoint } from "./mapTrackingTypes.ts";
@@ -112,7 +111,7 @@ export const createMapTrackingDecryptPoint = ({
             senderDeviceId: point.senderDeviceId,
           },
         });
-        const trackingPoint = validateTrackingPointV1(decodeJsonPayload(decrypted.bytes));
+        const trackingPoint = decodeTrackingPoint(decrypted.bytes.expose());
 
         return {
           status: "ok",
@@ -125,7 +124,7 @@ export const createMapTrackingDecryptPoint = ({
             serverId: point.id,
             sourceGroupId: groupId,
             speed: trackingPoint.speed,
-            timestamp: trackingPoint.timestamp,
+            timestamp: new Date(trackingPoint.time).toISOString(),
             userId: point.senderUserId,
           },
         };

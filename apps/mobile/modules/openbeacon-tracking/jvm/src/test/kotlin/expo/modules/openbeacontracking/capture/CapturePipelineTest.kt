@@ -2,11 +2,11 @@ package expo.modules.openbeacontracking.capture
 
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.crypto.EncryptedGroupPayload
+import expo.modules.openbeacontracking.crypto.TrackingPointCodec
 import expo.modules.openbeacontracking.keys.InMemoryEpochKeyStore
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import expo.modules.openbeacontracking.queue.InMemoryCiphertextQueue
-import java.nio.charset.StandardCharsets
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -15,12 +15,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class CapturePipelineTest {
-  @Test
-  fun trackingTimestampsAreFormattedFromEpochMillisecondsInUtc() {
-    assertEquals("2026-07-13T18:45:00.123Z", formatTrackingTimestamp(1_783_968_300_123L))
-    assertEquals("1970-01-01T00:00:00.000Z", formatTrackingTimestamp(0L))
-  }
-
   @Test
   fun theCapturePathDoesNotUseJavaTimeWhichAndroid7Lacks() {
     val source = java.io.File("../android/src/main/java/expo/modules/openbeacontracking/capture/CapturePipeline.kt").readText()
@@ -267,15 +261,16 @@ class CapturePipelineTest {
     assertTrue(pending.all { it.kind == "trackingPoint" })
 
     val expectedPlaintext =
-      GroupPayloadEncrypt
-        .encodeTrackingPointV1Json(
-          latitude = 51.5074,
-          longitude = -0.1278,
-          timestamp = "2026-07-13T18:45:00.000Z",
-          speed = null,
-          batteryLevel = 40,
-          batteryCharging = true,
-        )!!.toByteArray(StandardCharsets.UTF_8)
+      TrackingPointCodec.encode(
+        latitude = 51.5074,
+        longitude = -0.1278,
+        timestampMillis = at("2026-07-13T18:45:00.000Z"),
+        stayUntilMillis = null,
+        accuracyMeters = null,
+        speedMetersPerSecond = null,
+        batteryLevel = 40,
+        batteryCharging = true,
+      )!!
 
     assertTrue(pending.none { row ->
       GroupPayloadEncrypt.decodeBase64(row.ciphertext).toList()
@@ -313,7 +308,7 @@ class CapturePipelineTest {
     }
     val pending = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10)
     assertEquals(listOf(CiphertextQueueRow.ROLE_POINT, CiphertextQueueRow.ROLE_LIVE), pending.map { it.role })
-    assertEquals(start + 40_000L, decrypt(pending.last()).timestampMillis)
+    assertEquals(start + 40_000L to null, decrypt(pending.last()))
   }
 
   @Test
@@ -334,7 +329,7 @@ class CapturePipelineTest {
     for (minute in 9L..13L) still(minute)
     val stays = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).filter { it.role == CiphertextQueueRow.ROLE_STAY }
     assertEquals(listOf(arrival.clientPointId), stays.map { it.clientPointId })
-    assertEquals(start, decrypt(stays.single()).timestampMillis)
+    assertEquals(start to start + 13 * 60_000L, decrypt(stays.single()))
     val point = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).first { it.role == CiphertextQueueRow.ROLE_POINT }
     assertTrue(point.clientPointId != arrival.clientPointId)
   }
@@ -360,17 +355,15 @@ class CapturePipelineTest {
     assertEquals(listOf(CiphertextQueueRow.ROLE_LIVE), emptyQueue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.role })
   }
 
-  private fun decrypt(row: CiphertextQueueRow): HistoryFix {
-    val json = org.json.JSONObject(
-      String(
-        GroupPayloadEncrypt.decryptGroupPayload(
-          ByteArray(32),
-          EncryptedGroupPayload(row.algorithm, row.ciphertext, row.epochId, row.groupId, row.kind, row.nonce, row.senderDeviceId),
-        ),
-        Charsets.UTF_8,
+  private fun decrypt(row: CiphertextQueueRow): Pair<Long, Long?> {
+    val point = java.nio.ByteBuffer.wrap(
+      GroupPayloadEncrypt.decryptGroupPayload(
+        ByteArray(32),
+        EncryptedGroupPayload(row.algorithm, row.ciphertext, row.epochId, row.groupId, row.kind, row.nonce, row.senderDeviceId),
       ),
     )
-    return HistoryFix(json.getDouble("latitude"), json.getDouble("longitude"), at(json.getString("timestamp")), null, null, null, false, null)
+    val time = (point.getShort(9).toLong() and 0xFFFF shl 32) or (point.getInt(11).toLong() and 0xFFFFFFFFL)
+    return time to if (point.get(22).toInt() == 1) time + (point.getShort(15).toLong() and 0xFFFF) * 60_000L else null
   }
 
   @Test

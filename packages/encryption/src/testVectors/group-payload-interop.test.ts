@@ -4,17 +4,17 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   decodeBase64,
-  decodeJsonPayload,
+  decodeTrackingPoint,
   decryptGroupPayload,
   EpochKeyMaterial,
   encodeBase64,
-  encodeTrackingPointV1,
   encryptGroupPayload,
   PAYLOAD_ENCRYPTION_ALGORITHM,
-  validateTrackingPointV1,
+  type TrackingPoint,
 } from "../index.ts";
 
-const vectorsPath = join(dirname(fileURLToPath(import.meta.url)), "group-payload-interop-v1.json");
+const vectorsDirectory = dirname(fileURLToPath(import.meta.url));
+const vectorsPath = join(vectorsDirectory, "group-payload-interop-v1.json");
 
 const vectors = JSON.parse(readFileSync(vectorsPath, "utf8")) as {
   algorithm: string;
@@ -30,8 +30,7 @@ const vectors = JSON.parse(readFileSync(vectorsPath, "utf8")) as {
     name: string;
     nonceBase64: string;
     plaintextBase64: string;
-    plaintextJson: string;
-    trackingPointJson: string;
+    trackingPoint: string;
   }[];
   constants: {
     domainContext: string;
@@ -75,7 +74,7 @@ describe("group-payload interop vectors", () => {
         groupId: testCase.metadata.groupId,
         kind: testCase.metadata.kind,
         nonce,
-        payload: JSON.parse(testCase.plaintextJson) as Record<string, unknown>,
+        payload: decodeBase64(testCase.plaintextBase64),
         senderDeviceId: testCase.metadata.senderDeviceId,
       });
 
@@ -109,20 +108,20 @@ describe("group-payload interop vectors", () => {
       });
 
       expect(encodeBase64(decrypted.bytes.expose())).toBe(testCase.plaintextBase64);
-      expect(decodeJsonPayload<Record<string, unknown>>(decrypted.bytes)).toEqual(
-        JSON.parse(testCase.plaintextJson),
-      );
     }
   });
 
-  test("the tracking point reader keeps only the v1 fields of each vector", () => {
-    for (const testCase of vectors.cases) {
-      const trackingPoint = validateTrackingPointV1(JSON.parse(testCase.plaintextJson));
+  test("each plaintext is the named tracking point vector", () => {
+    const points = JSON.parse(
+      readFileSync(join(vectorsDirectory, "tracking-point-v2.json"), "utf8"),
+    ) as { encode: { decoded: TrackingPoint; hex: string; name: string }[] };
 
-      expect(JSON.stringify(trackingPoint)).toBe(testCase.trackingPointJson);
-      expect(new TextDecoder().decode(encodeTrackingPointV1(trackingPoint))).toBe(
-        testCase.trackingPointJson,
-      );
+    for (const testCase of vectors.cases) {
+      const point = points.encode.find(({ name }) => name === testCase.trackingPoint);
+
+      expect(point).toBeDefined();
+      expect(Buffer.from(decodeBase64(testCase.plaintextBase64)).toString("hex")).toBe(point?.hex);
+      expect(decodeTrackingPoint(decodeBase64(testCase.plaintextBase64))).toEqual(point?.decoded);
     }
   });
 

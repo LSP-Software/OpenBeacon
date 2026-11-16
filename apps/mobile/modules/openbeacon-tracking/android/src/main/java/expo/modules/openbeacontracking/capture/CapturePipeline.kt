@@ -1,13 +1,10 @@
 package expo.modules.openbeacontracking.capture
 
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
+import expo.modules.openbeacontracking.crypto.TrackingPointCodec
 import expo.modules.openbeacontracking.keys.EpochKeyStore
 import expo.modules.openbeacontracking.queue.CiphertextQueue
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
 import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -75,15 +72,16 @@ class CapturePipeline(
       planned.map { (key, record, role) ->
         val point = record.fix
         val plaintext =
-          GroupPayloadEncrypt
-            .encodeTrackingPointV1Json(
-              latitude = point.latitude,
-              longitude = point.longitude,
-              timestamp = formatTrackingTimestamp(point.timestampMillis),
-              speed = point.speedMetersPerSecond,
-              batteryLevel = point.batteryLevel,
-              batteryCharging = point.batteryCharging,
-            )?.toByteArray(Charsets.UTF_8) ?: return 0
+          TrackingPointCodec.encode(
+            latitude = point.latitude,
+            longitude = point.longitude,
+            timestampMillis = point.timestampMillis,
+            stayUntilMillis = record.stayUntil,
+            accuracyMeters = point.accuracyMeters,
+            speedMetersPerSecond = point.speedMetersPerSecond,
+            batteryLevel = point.batteryLevel,
+            batteryCharging = point.batteryCharging,
+          ) ?: return 0
         val encrypted =
           GroupPayloadEncrypt.encryptGroupPayload(
             epochKey = key.epochKey,
@@ -137,10 +135,4 @@ class CapturePipeline(
     if (next != null) saveAllowance(group, next)
     return next != null
   }
-}
-
-internal fun formatTrackingTimestamp(epochMillis: Long): String {
-  val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-  formatter.timeZone = TimeZone.getTimeZone("UTC")
-  return formatter.format(Date(epochMillis))
 }
