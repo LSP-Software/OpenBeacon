@@ -14,6 +14,7 @@ import { emailInviteCreatedAfter } from "../../lib/emailInvites.ts";
 import { assertAccountBelowGroupLimit, maxGroupsPerAccount } from "../../lib/groupLimit.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
+import { imageKeySelect, toStoredImageKey } from "../../lib/imageKeys.ts";
 import type { GroupListItem } from "../../types/GroupListItem.ts";
 
 const creatorCanAdmit = async (
@@ -360,10 +361,12 @@ export const groupInvitesRouter = {
                 id: true,
                 name: true,
                 image: true,
+                ...imageKeySelect,
                 groupMembers: {
                   select: {
                     id: true,
                     role: true,
+                    ...imageKeySelect,
                     user: {
                       select: {
                         id: true,
@@ -418,11 +421,13 @@ export const groupInvitesRouter = {
           id: member.group.id,
           name: member.group.name,
           image: member.group.image,
+          imageKey: toStoredImageKey(member.group),
           members: member.group.groupMembers.map((groupMember) => ({
             id: groupMember.id,
             userId: groupMember.user.id,
             name: groupMember.user.name,
             image: groupMember.user.image,
+            imageKey: toStoredImageKey(groupMember),
             role: groupMember.role,
           })),
         } satisfies GroupListItem,

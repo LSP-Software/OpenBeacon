@@ -12,6 +12,7 @@ import {
   uploadGroupTrackingBatch,
 } from "../../lib/groupTracking.ts";
 import { lockGroupMemberForWrite } from "../../lib/groupWriteChecks.ts";
+import { readImageKeysNeedCatchUp } from "../../lib/imageKeys.ts";
 import {
   readPlaceAlerts,
   readPlacesSummary,
@@ -132,12 +133,17 @@ export const groupTrackingRouter = {
               Promise.all([
                 readPlacesSummary({ db: ctx.db, userId }),
                 readPlaceAlerts({ cursor: input.placeAlertsCursor, db: ctx.db, userId }),
+                readImageKeysNeedCatchUp({ db: ctx.db, userId }),
               ]),
             );
       const placeFields =
         !placeUpdates || placeUpdates.error
           ? {}
-          : { places: placeUpdates.data[0], placeAlerts: placeUpdates.data[1] };
+          : {
+              places: placeUpdates.data[0],
+              placeAlerts: placeUpdates.data[1],
+              imageKeysNeedCatchUp: placeUpdates.data[2],
+            };
       let timer: ReturnType<typeof setTimeout> | undefined;
       const keyState = await tryCatch(
         Promise.race([

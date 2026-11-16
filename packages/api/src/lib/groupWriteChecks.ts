@@ -131,7 +131,7 @@ export const assertLatestGroupEpoch = async (
   if (notLatest.length > 0) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Places can only be saved with the group's latest epoch.",
+      message: "This can only be saved with the group's latest keys.",
       cause: new ReasonError("EPOCH_NOT_LATEST"),
     });
   }

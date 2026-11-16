@@ -209,6 +209,11 @@ export const createAuth = ({
         },
       },
     },
+    user: {
+      additionalFields: {
+        imageKeySealed: { type: "string", required: false, input: false },
+      },
+    },
     account: { accountLinking: { enabled: false } },
     session: { freshAge: 30 * 60 },
     verification: {
@@ -234,6 +239,7 @@ export const createAuth = ({
               clientId: env.GOOGLE_CLIENT_ID,
               clientSecret: env.GOOGLE_CLIENT_SECRET,
               scope: ["email", "profile"],
+              mapProfileToUser: () => ({ image: undefined }),
               verifyIdToken: async (token, nonce) =>
                 (await verifyGoogleIdToken({
                   token,

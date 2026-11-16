@@ -17,16 +17,13 @@ export const GroupImage = ({
   const requestGroupImageUploadMutation = useMutation(
     trpc.groupSettings.requestGroupImageUpload.mutationOptions(),
   );
-  const confirmGroupImageUploadMutation = useMutation(
-    trpc.groupSettings.confirmGroupImageUpload.mutationOptions(),
-  );
-
   const uploadGroupImage = async (uri: string) => {
     return uploadImageFromUri({
       uri,
       requestImageUpload: (input) =>
         requestGroupImageUploadMutation.mutateAsync({ groupId, ...input }),
-      confirmImageUpload: () => confirmGroupImageUploadMutation.mutateAsync({ groupId }),
+      confirmImageUpload: () =>
+        Promise.reject(new Error("Group pictures can't be uploaded until they're encrypted.")),
     });
   };
 

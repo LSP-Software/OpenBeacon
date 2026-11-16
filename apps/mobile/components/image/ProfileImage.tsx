@@ -19,7 +19,7 @@ export const ProfileImage = ({ imageUrl }: { imageUrl?: string | null }) => {
     return uploadImageFromUri({
       uri,
       requestImageUpload: (input) => requestProfileImageUploadMutation.mutateAsync(input),
-      confirmImageUpload: () => confirmProfileImageUploadMutation.mutateAsync(),
+      confirmImageUpload: () => confirmProfileImageUploadMutation.mutateAsync({ wraps: [] }),
     });
   };
 

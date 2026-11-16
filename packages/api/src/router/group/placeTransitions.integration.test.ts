@@ -443,10 +443,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const plain = await upload([transition()]);
       expect(plain).not.toHaveProperty("places");
       expect(plain).not.toHaveProperty("placeAlerts");
+      expect(plain).not.toHaveProperty("imageKeysNeedCatchUp");
 
       const started = Date.now();
       const first = await readAlerts(owner, ownerPhone, null);
       expect(first.places).toEqual([{ groupId, revision: 0, needsCatchUp: false }]);
+      expect(first.imageKeysNeedCatchUp).toEqual([]);
       expect(first.placeAlerts?.alerts).toEqual([]);
       const cursorTime = Date.parse(first.placeAlerts?.cursor.split("|")[0] ?? "");
       expect(cursorTime).toBeGreaterThanOrEqual(started - 16_000);
@@ -455,6 +457,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.place.update({ where: { id: schoolId }, data: { epochId: oldEpochId } });
       const later = await readAlerts(owner, ownerPhone, first.placeAlerts?.cursor ?? null);
       expect(later.places).toEqual([{ groupId, revision: 0, needsCatchUp: true }]);
+
+      await prisma.user.update({
+        where: { id: member },
+        data: { image: "https://cdn.example.test/bucket/user/member/uploads/avatar/picture" },
+      });
+      const withPicture = await readAlerts(owner, ownerPhone, null);
+      await prisma.user.update({ where: { id: member }, data: { image: null } });
+      expect(withPicture.imageKeysNeedCatchUp).toEqual([groupId]);
     });
 
     test("the places summary still lists a group after its last place is deleted", async () => {

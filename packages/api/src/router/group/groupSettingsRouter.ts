@@ -1,10 +1,16 @@
 import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
 import { tryCatch } from "@openbeacon/shared";
-import { createGroupSchema, requestImageUploadInputSchema } from "@openbeacon/schemas";
+import {
+  confirmGroupImageUploadSchema,
+  createGroupSchema,
+  requestImageUploadInputSchema,
+} from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { env } from "../../env.ts";
 import { recordGroupEvent } from "../../lib/groupHistory.ts";
+import { assertActiveDevices, assertLatestGroupEpoch } from "../../lib/groupWriteChecks.ts";
+import { assertKeysFromThisDevice, imageKeyColumns } from "../../lib/imageKeys.ts";
 import {
   buildGroupAvatarPath,
   confirmImageUpload,
@@ -62,7 +68,7 @@ export const groupSettingsRouter = {
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const imagePath = buildGroupAvatarPath(userId, input.groupId);
-      const fileName = `${crypto.randomUUID()}.webp`;
+      const fileName = crypto.randomUUID();
 
       const { presignedUrl } = await requestImageUpload({
         bucketName: env.IMAGES_S3_BUCKET_NAME,
@@ -82,13 +88,14 @@ export const groupSettingsRouter = {
         currentImagePath: imagePath,
       });
 
-      return { presignedUrl };
+      return { presignedUrl, fileName };
     }),
   confirmGroupImageUpload: protectedProcedure
     .meta({ rateLimit: { limit: 32, windowMs: 60_000 } })
-    .input(z.object({ groupId: z.string().min(1).max(128) }))
+    .input(confirmGroupImageUploadSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      assertKeysFromThisDevice([input.key], ctx.deviceId);
       const imagePath = buildGroupAvatarPath(userId, input.groupId);
       const pending = await ctx.db.pendingUpload.findUnique({
         where: {
@@ -154,7 +161,15 @@ export const groupSettingsRouter = {
                   message: "No pending group image upload to confirm.",
                 });
               }
-              await tx.group.update({ where: { id: input.groupId }, data: { image: imageUrl } });
+              await assertActiveDevices(tx, { deviceIds: [ctx.deviceId], userId });
+              await assertLatestGroupEpoch(tx, {
+                epochIds: [input.key.epochId],
+                groupId: input.groupId,
+              });
+              await tx.group.update({
+                where: { id: input.groupId },
+                data: { image: imageUrl, ...imageKeyColumns(input.key) },
+              });
               await recordGroupEvent(tx, {
                 data: {
                   groupId: input.groupId,

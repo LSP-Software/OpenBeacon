@@ -28,6 +28,7 @@ const googleIdToken = (email: string) => {
     email,
     email_verified: true,
     name: "Google User",
+    picture: "https://lh3.googleusercontent.com/a/photo",
     iat: now,
     exp: now + 300,
   })}`;
@@ -72,6 +73,27 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           select: { providerId: true },
         }),
       ).toEqual([{ providerId: "google" }]);
+    });
+
+    test("Google sign-in never copies the Google photo and returns the sealed picture key", async () => {
+      const email = `${prefix}-photo@example.test`;
+      expect((await signInWithGoogle(email)).status).toBe(200);
+      const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+      expect(user.image).toBeNull();
+
+      const picture = "https://cdn.example.com/file/bucket/user/x/uploads/avatar/picture";
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { image: picture, imageKeySealed: "sealed-copy" },
+      });
+      const later = await signInWithGoogle(email);
+
+      expect(later.status).toBe(200);
+      expect((await later.json()).user).toMatchObject({
+        image: picture,
+        imageKeySealed: "sealed-copy",
+      });
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).image).toBe(picture);
     });
 
     test("Google can't be added to an account that signs in with a password", async () => {

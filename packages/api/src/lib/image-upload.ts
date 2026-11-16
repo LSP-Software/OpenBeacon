@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { GroupRole, Prisma, type PrismaClient } from "@openbeacon/database";
+import { MIN_ENCRYPTED_IMAGE_LENGTH } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import { env } from "../env.ts";
@@ -13,20 +14,7 @@ import {
 
 export type ImageUploadType = "userAvatar" | "groupAvatar";
 
-export const isWebpFile = (header: Uint8Array, size: number) => {
-  if (header.length < 16) return false;
-  const text = (start: number) => String.fromCharCode(...header.subarray(start, start + 4));
-  const riffLength = new DataView(header.buffer, header.byteOffset, header.length).getUint32(
-    4,
-    true,
-  );
-  return (
-    text(0) === "RIFF" &&
-    text(8) === "WEBP" &&
-    riffLength + 8 === size &&
-    ["VP8 ", "VP8L", "VP8X"].includes(text(12))
-  );
-};
+const encryptedImageContentType = "application/octet-stream";
 
 export const buildUserAvatarPath = (userId: string): string => `user/${userId}/uploads/avatar`;
 export const buildGroupAvatarPath = (userId: string, groupId: string): string =>
@@ -106,7 +94,14 @@ export const requestImageUpload = async ({
   fileName: string;
 }): Promise<{ presignedUrl: string }> => {
   const { data: presignedUrl, error: presignError } = await tryCatch(
-    getPresignedUploadUrl(bucketName, imagePath, fileName, "image/webp", contentHash, fileSize),
+    getPresignedUploadUrl(
+      bucketName,
+      imagePath,
+      fileName,
+      encryptedImageContentType,
+      contentHash,
+      fileSize,
+    ),
   );
 
   if (presignError) {
@@ -149,7 +144,7 @@ export const confirmImageUpload = async ({
   }
 
   const { data: file, error: verifyError } = await tryCatch(
-    getUploadedFile(bucketName, imagePath, pendingFileName, 16, env.MAX_IMAGE_FILE_SIZE),
+    getUploadedFile(bucketName, imagePath, pendingFileName),
   );
 
   if (verifyError) {
@@ -161,10 +156,10 @@ export const confirmImageUpload = async ({
   }
 
   if (
-    !file?.size ||
+    !file ||
+    file.size < MIN_ENCRYPTED_IMAGE_LENGTH ||
     file.size > env.MAX_IMAGE_FILE_SIZE ||
-    file.contentType !== "image/webp" ||
-    !isWebpFile(file.header, file.size)
+    file.contentType !== encryptedImageContentType
   ) {
     await deleteFile(bucketName, imagePath, pendingFileName);
     await db.pendingUpload.deleteMany({

@@ -136,11 +136,13 @@ export const groupLifecycleRouter = {
           id: group.id,
           name: group.name,
           image: group.image,
+          imageKey: null,
           members: group.groupMembers.map((member) => ({
             id: member.id,
             userId: member.user.id,
             name: member.user.name,
             image: member.user.image,
+            imageKey: null,
             role: member.role,
           })),
         } satisfies GroupListItem,

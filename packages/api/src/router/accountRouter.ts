@@ -11,6 +11,7 @@ import { TRPCError } from "@trpc/server";
 import {
   accountNameSchema,
   setLocationSharingSchema,
+  confirmProfileImageUploadSchema,
   removeDeviceSchema,
   requestImageUploadInputSchema,
   updateDeviceSchema,
@@ -25,6 +26,8 @@ import {
   setPendingImageUploadForUser,
 } from "../lib/image-upload.ts";
 import { readAccountViewers } from "../lib/accountViewers.ts";
+import { assertActiveDevices } from "../lib/groupWriteChecks.ts";
+import { assertKeysFromThisDevice, imageKeyColumns } from "../lib/imageKeys.ts";
 import { beginAccountDeletion, deleteAccountRecords } from "../lib/account-deletion.ts";
 import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
@@ -465,7 +468,7 @@ export const accountRouter = {
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const imagePath = buildUserAvatarPath(userId);
-      const fileName = `${crypto.randomUUID()}.webp`;
+      const fileName = crypto.randomUUID();
 
       const { presignedUrl } = await requestImageUpload({
         bucketName: env.IMAGES_S3_BUCKET_NAME,
@@ -484,7 +487,7 @@ export const accountRouter = {
         currentImagePath: imagePath,
       });
 
-      return { presignedUrl };
+      return { presignedUrl, fileName };
     }),
   confirmProfileImageUpload: protectedProcedure
     .meta({
@@ -493,8 +496,10 @@ export const accountRouter = {
         windowMs: 60_000,
       },
     })
-    .mutation(async ({ ctx }) => {
+    .input(confirmProfileImageUploadSchema)
+    .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      assertKeysFromThisDevice(input.wraps, ctx.deviceId);
 
       const pendingUpload = await ctx.db.pendingUpload.findUnique({
         where: { userId_uploadType_groupId: { userId, uploadType: "userAvatar", groupId: "" } },
@@ -533,8 +538,33 @@ export const accountRouter = {
             }
             await tx.user.update({
               where: { id: userId },
-              data: { image: imageUrl },
+              data: { image: imageUrl, imageKeySealed: input.sealed ?? null },
             });
+            await assertActiveDevices(tx, { deviceIds: [ctx.deviceId], userId });
+            const epochIds = [...new Set(input.wraps.map(({ epochId }) => epochId))];
+            const epochs = await tx.groupEpoch.findMany({
+              where: { id: { in: epochIds } },
+              select: { id: true, groupId: true },
+            });
+            const epochGroups = new Map(epochs.map(({ id, groupId }) => [id, groupId]));
+            if (input.wraps.some(({ epochId, groupId }) => epochGroups.get(epochId) !== groupId)) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Epoch does not belong to this group.",
+              });
+            }
+            const memberships = await tx.groupMember.findMany({
+              where: { userId },
+              orderBy: { id: "asc" },
+              select: { id: true, groupId: true },
+            });
+            const wraps = new Map(input.wraps.map((wrap) => [wrap.groupId, wrap]));
+            for (const membership of memberships) {
+              await tx.groupMember.update({
+                where: { id: membership.id },
+                data: imageKeyColumns(wraps.get(membership.groupId) ?? null),
+              });
+            }
           });
         },
       });
