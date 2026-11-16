@@ -77,7 +77,7 @@ export const dismissAnnouncement = ({ id, endsAt }: Announcement, now = new Date
   setState({
     ...state,
     dismissed: [
-      ...unexpired(state.dismissed).filter((dismissal) => dismissal.id !== id),
+      ...state.dismissed.filter((dismissal) => dismissal.id !== id),
       { id, endsAt, dismissedAt: now.toISOString() },
     ],
   });

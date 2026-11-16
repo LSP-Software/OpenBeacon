@@ -204,7 +204,7 @@ describe("announcement store", () => {
     ]);
   });
 
-  test("keeps a dismissal when the server extends the announcement after its original end", async () => {
+  test("keeps a dismissal when the server extends the announcement after its original end, even after dismissing another first", async () => {
     const ended = new Date(Date.now() - 60_000).toISOString();
     stored.set(
       "announcements",
@@ -215,6 +215,7 @@ describe("announcement store", () => {
       }),
     );
     const relaunched = await importFresh("extended-late");
+    relaunched.dismissAnnouncement(announcement({ id: "b", endsAt: future }));
     relaunched.saveAnnouncements([announcement({ id: "a", endsAt: future })]);
     expect(shownId(relaunched)).toBeNull();
   });
