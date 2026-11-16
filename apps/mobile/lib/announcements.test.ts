@@ -42,7 +42,7 @@ describe("pickAnnouncement", () => {
     return (
       pickAnnouncement({
         announcements,
-        dismissed: dismissedIds.map((id) => ({ id })),
+        dismissed: dismissedIds.map((id) => ({ id, dismissedAt: now.toISOString() })),
         platform: "android",
         appVersion: "1.20.0",
         now,
@@ -75,6 +75,59 @@ describe("pickAnnouncement", () => {
     expect(await pick(announcements)).toBe("warning");
     expect(await pick(announcements, ["warning"])).toBe("info");
     expect(await pick(announcements, ["warning", "info"])).toBeNull();
+  });
+});
+
+describe("planned downtime", () => {
+  const downtime = announcement({
+    id: "downtime",
+    severity: "warning",
+    downtimeStartsAt: "2026-11-21T09:00:00.000Z",
+    downtimeEndsAt: "2026-11-21T10:00:00.000Z",
+    endsAt: "2026-11-21T10:00:00.000Z",
+  });
+  const at = (iso: string) => new Date(iso);
+
+  const shownAt = async (dismissedAt: string, time: string) => {
+    const { pickAnnouncement } = await importFresh("downtime");
+    return (
+      pickAnnouncement({
+        announcements: [downtime],
+        dismissed: [{ id: "downtime", dismissedAt }],
+        platform: "android",
+        appVersion: "1.20.0",
+        now: at(time),
+      })?.id ?? null
+    );
+  };
+
+  test("shows a warning dismissed early again from an hour before the downtime until it ends", async () => {
+    const dismissedEarly = "2026-11-20T12:00:00.000Z";
+    expect(await shownAt(dismissedEarly, "2026-11-21T07:59:00.000Z")).toBeNull();
+    expect(await shownAt(dismissedEarly, "2026-11-21T08:00:00.000Z")).toBe("downtime");
+    expect(await shownAt(dismissedEarly, "2026-11-21T09:30:00.000Z")).toBe("downtime");
+  });
+
+  test("keeps it hidden when it was dismissed within the last hour before the downtime", async () => {
+    expect(await shownAt("2026-11-21T08:10:00.000Z", "2026-11-21T09:30:00.000Z")).toBeNull();
+  });
+
+  test("checks again at the next moment the banner could change", async () => {
+    const { nextAnnouncementCheck } = await importFresh("next-check");
+    const local = (hour: number, minute = 0) => new Date(2026, 10, 21, hour, minute);
+    const tomorrowsDowntime = announcement({
+      downtimeStartsAt: local(9).toISOString(),
+      downtimeEndsAt: local(10).toISOString(),
+      endsAt: local(10).toISOString(),
+    });
+
+    expect(nextAnnouncementCheck([], new Date(2026, 10, 20, 23, 30))).toEqual(local(0));
+    expect(nextAnnouncementCheck([tomorrowsDowntime], local(5))).toEqual(local(6));
+    expect(nextAnnouncementCheck([tomorrowsDowntime], local(7, 30))).toEqual(local(8));
+    expect(nextAnnouncementCheck([tomorrowsDowntime], local(9, 30))).toEqual(local(10));
+    expect(
+      nextAnnouncementCheck([announcement({ endsAt: local(7, 45).toISOString() })], local(7, 30)),
+    ).toEqual(local(7, 45));
   });
 });
 
@@ -146,7 +199,9 @@ describe("announcement store", () => {
     const soon = new Date(Date.now() + 60_000).toISOString();
     store.dismissAnnouncement(announcement({ id: "a", endsAt: soon }));
     store.saveAnnouncements([announcement({ id: "a", endsAt: future })]);
-    expect(store.getAnnouncementState().dismissed).toEqual([{ id: "a", endsAt: future }]);
+    expect(store.getAnnouncementState().dismissed).toEqual([
+      { id: "a", endsAt: future, dismissedAt: expect.any(String) },
+    ]);
   });
 
   test("forgets dismissals once their announcement has ended", async () => {
@@ -154,7 +209,9 @@ describe("announcement store", () => {
     store.dismissAnnouncement(announcement({ id: "current", endsAt: future }));
     store.dismissAnnouncement(announcement({ id: "old", endsAt: "2000-01-01T00:00:00.000Z" }));
     store.saveAnnouncements([]);
-    expect(store.getAnnouncementState().dismissed).toEqual([{ id: "current", endsAt: future }]);
+    expect(store.getAnnouncementState().dismissed).toEqual([
+      { id: "current", endsAt: future, dismissedAt: expect.any(String) },
+    ]);
 
     stored.set(
       "announcements",
@@ -162,14 +219,18 @@ describe("announcement store", () => {
         serverUrl: "https://api.example.test",
         announcements: [],
         dismissed: [
-          { id: "old", endsAt: "2000-01-01T00:00:00.000Z" },
-          { id: "current", endsAt: future },
+          {
+            id: "old",
+            endsAt: "2000-01-01T00:00:00.000Z",
+            dismissedAt: "1999-12-31T00:00:00.000Z",
+          },
+          { id: "current", endsAt: future, dismissedAt: "2026-11-20T00:00:00.000Z" },
         ],
       }),
     );
     const relaunched = await importFresh("expired-load");
     expect(relaunched.getAnnouncementState().dismissed).toEqual([
-      { id: "current", endsAt: future },
+      { id: "current", endsAt: future, dismissedAt: "2026-11-20T00:00:00.000Z" },
     ]);
   });
 

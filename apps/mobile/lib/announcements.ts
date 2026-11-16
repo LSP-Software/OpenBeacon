@@ -12,7 +12,11 @@ export const healthAnnouncementsSchema = z
     (announcements ?? []).filter((announcement) => announcement !== null).slice(0, 20),
   );
 
-const dismissalSchema = z.object({ id: z.string(), endsAt: z.iso.datetime() });
+const dismissalSchema = z.object({
+  id: z.string(),
+  endsAt: z.iso.datetime(),
+  dismissedAt: z.iso.datetime(),
+});
 
 const savedSchema = z.object({
   serverUrl: z.string(),
@@ -67,9 +71,32 @@ export const saveAnnouncements = (announcements: Announcement[]) => {
   setState({ announcements, dismissed });
 };
 
-export const dismissAnnouncement = ({ id, endsAt }: Announcement) => {
-  if (state.dismissed.some((dismissal) => dismissal.id === id)) return;
-  setState({ ...state, dismissed: [...unexpired(state.dismissed), { id, endsAt }] });
+export const dismissAnnouncement = ({ id, endsAt }: Announcement, now = new Date()) => {
+  setState({
+    ...state,
+    dismissed: [
+      ...unexpired(state.dismissed).filter((dismissal) => dismissal.id !== id),
+      { id, endsAt, dismissedAt: now.toISOString() },
+    ],
+  });
+};
+
+const reshowBeforeDowntimeMs = 60 * 60_000;
+
+const isDismissed = (
+  announcement: Announcement,
+  dismissed: { id: string; dismissedAt: string }[],
+  now: Date,
+) => {
+  const dismissal = dismissed.find(({ id }) => id === announcement.id);
+  if (!dismissal) return false;
+  if (!announcement.downtimeStartsAt || !announcement.downtimeEndsAt) return true;
+  const reshowAt = new Date(announcement.downtimeStartsAt).getTime() - reshowBeforeDowntimeMs;
+  return (
+    new Date(dismissal.dismissedAt).getTime() >= reshowAt ||
+    now.getTime() < reshowAt ||
+    now >= new Date(announcement.downtimeEndsAt)
+  );
 };
 
 export const pickAnnouncement = ({
@@ -80,14 +107,14 @@ export const pickAnnouncement = ({
   now,
 }: {
   announcements: Announcement[];
-  dismissed: { id: string }[];
+  dismissed: { id: string; dismissedAt: string }[];
   platform: NonNullable<Announcement["platform"]>;
   appVersion: string;
   now: Date;
 }) => {
   const shown = announcements.filter(
     (announcement) =>
-      !dismissed.some((dismissal) => dismissal.id === announcement.id) &&
+      !isDismissed(announcement, dismissed, now) &&
       new Date(announcement.endsAt) > now &&
       (announcement.platform === null || announcement.platform === platform) &&
       (announcement.minAppVersion === null ||
@@ -96,6 +123,27 @@ export const pickAnnouncement = ({
         compareAppVersions(appVersion, announcement.maxAppVersion) <= 0),
   );
   return shown.find((announcement) => announcement.severity === "warning") ?? shown[0] ?? null;
+};
+
+export const nextAnnouncementCheck = (announcements: Announcement[], now: Date) => {
+  const midnight = new Date(now);
+  midnight.setHours(24, 0, 0, 0);
+  const times = announcements.flatMap((announcement) => [
+    new Date(announcement.endsAt).getTime(),
+    ...(announcement.downtimeStartsAt && announcement.downtimeEndsAt
+      ? [
+          new Date(announcement.downtimeStartsAt).getTime() - reshowBeforeDowntimeMs,
+          new Date(announcement.downtimeEndsAt).getTime(),
+        ]
+      : []),
+  ]);
+  return new Date(
+    Math.min(
+      midnight.getTime(),
+      now.getTime() + 60 * 60_000,
+      ...times.filter((time) => time > now.getTime()),
+    ),
+  );
 };
 
 export const useAnnouncements = () =>

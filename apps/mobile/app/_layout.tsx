@@ -7,7 +7,6 @@ import {
   ApiCompatibilityGate,
   useApiCompatibilityGateShown,
 } from "../components/ApiCompatibilityGate.tsx";
-import { AnnouncementBanner } from "../components/AnnouncementBanner.tsx";
 import { AppLockScreen } from "../components/AppLockScreen.tsx";
 import { InAppNoticeBanner } from "../components/InAppNoticeBanner.tsx";
 import { AlertHost } from "../components/ui/Alert.tsx";
@@ -91,7 +90,6 @@ const RootLayout = () => {
               >
                 <ApiCompatibilityGate />
                 <OfflineBanner />
-                <AnnouncementBanner />
                 {session ? <InAppNoticeBanner /> : null}
               </View>
             </View>

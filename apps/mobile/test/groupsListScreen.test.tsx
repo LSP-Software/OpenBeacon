@@ -26,6 +26,7 @@ const query = (name: string, state: Partial<QueryState>): QueryState => ({
   ...state,
 });
 let queries: Record<string, QueryState>;
+mock.module("../components/AnnouncementBanner.tsx", () => ({ AnnouncementBanner: () => null }));
 mock.module("@tanstack/react-query", () => ({
   useQuery: ({ queryKey }: { queryKey: [string] }) => queries[queryKey[0]],
 }));

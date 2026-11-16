@@ -39,6 +39,7 @@ let queueEviction: {
   revision: number;
 } | null = null;
 const dismissedEvictions: unknown[] = [];
+mock.module("../components/AnnouncementBanner.tsx", () => ({ AnnouncementBanner: () => null }));
 mock.module("@tanstack/react-query", () => ({
   skipToken: Symbol("skipToken"),
   useQuery: ({ queryKey }: { queryKey?: unknown[] }) => ({

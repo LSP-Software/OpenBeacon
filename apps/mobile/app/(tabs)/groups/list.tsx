@@ -5,6 +5,7 @@ import { ChevronRightIcon, PlusIcon, ShieldIcon } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AnnouncementBanner } from "../../../components/AnnouncementBanner.tsx";
 import { CreateGroupDialog } from "../../../components/dialogs/CreateGroupDialog.tsx";
 import { LoadingIndicator } from "../../../components/LoadingIndicator.tsx";
 import { RefreshablePage } from "../../../components/RefreshablePage.tsx";
@@ -73,6 +74,7 @@ export default function GroupsScreen() {
             <PlusIcon color="white" size={16} />
           </Pressable>
         </View>
+        <AnnouncementBanner className="mb-4" />
         <Link href="/join" asChild>
           <Button variant="outline" className="mb-4">
             <Text>Scan QR or enter join code</Text>

@@ -29,6 +29,7 @@ import { useForm } from "react-hook-form";
 import { Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { z } from "zod";
+import { AnnouncementBanner } from "../../../components/AnnouncementBanner.tsx";
 import { SettingsContainer } from "../../../components/containers/settingsContainer.tsx";
 import { LocationSharingCard } from "../../../components/LocationSharingCard.tsx";
 import { ProfileImage } from "../../../components/image/ProfileImage.tsx";
@@ -359,6 +360,7 @@ const AccountScreen = () => {
         contentContainerClassName="px-6 gap-4 my-4 pb-32"
         showsVerticalScrollIndicator={false}
       >
+        <AnnouncementBanner />
         <View className="overflow-hidden rounded-lg border border-border bg-card">
           <View className="relative">
             <View className="flex flex-row justify-end p-3 bg-primary w-full h-20">

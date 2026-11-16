@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { z } from "zod";
+import { AnnouncementBanner } from "../components/AnnouncementBanner.tsx";
 import { EmailCodeEntry } from "../components/EmailCodeEntry.tsx";
 import { KeyboardFormScrollView } from "../components/KeyboardFormScrollView.tsx";
 import { ReturnToHomeHeader } from "../components/headers/ReturnToHomeHeader.tsx";
@@ -102,6 +103,7 @@ const SignIn = () => {
         {(formProps) => (
           <>
             <ReturnToHomeHeader />
+            <AnnouncementBanner />
             <View className="gap-2">
               <Text className="font-bold text-5xl">
                 {unverified ? "Verify your\nemail." : "Welcome\nback."}
