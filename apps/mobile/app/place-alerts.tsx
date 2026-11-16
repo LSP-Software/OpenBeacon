@@ -137,7 +137,7 @@ const PlaceAlertsScreen = () => {
                             <Text className="text-foreground flex-1 text-lg" numberOfLines={1}>
                               {name}
                             </Text>
-                            <Text className="text-muted-foreground text-sm">
+                            <Text className="text-muted-foreground w-20 text-right text-sm">
                               {member.alertsOn ? "Alerts on" : "Alerts off"}
                             </Text>
                             <Switch
