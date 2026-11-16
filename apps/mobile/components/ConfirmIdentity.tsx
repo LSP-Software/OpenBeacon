@@ -94,9 +94,7 @@ export const ConfirmIdentity = ({ onConfirmed }: { onConfirmed: () => void }) =>
   const confirmWithGoogle = async () => {
     if (!session) return;
     setPending(true);
-    const phoneLock = (await hasScreenLock())
-      ? await confirmWithPhoneLock("Confirm it’s you")
-      : "noScreenLock";
+    const phoneLock = await confirmWithPhoneLock("Confirm it’s you");
     if (phoneLock === "lockedOut" || phoneLock === "failed") {
       setPending(false);
       if (phoneLock === "lockedOut") {

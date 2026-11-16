@@ -200,12 +200,13 @@ test("too many screen lock tries stops before Google and says to wait", async ()
   ]);
 });
 
-test("a phone with no screen lock goes straight to Google", async () => {
+test("a phone with no screen lock goes on to Google", async () => {
   phone.hasLock = false;
+  phone.result = "noScreenLock";
 
   await confirm("google");
 
-  expect(events).toEqual(["google", "confirmed"]);
+  expect(events).toEqual(["phoneLock", "google", "confirmed"]);
 });
 
 test("a screen lock removed while confirming falls back to Google", async () => {
