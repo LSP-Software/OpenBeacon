@@ -12,6 +12,7 @@ import { Alert } from "../../lib/alert.ts";
 import { trpc, trpcClient } from "../../lib/api.ts";
 import { approveDeviceLink, lookUpDeviceLink } from "../../lib/deviceLink.ts";
 import { errorReason } from "../../lib/errorReason.ts";
+import { withOwnScreen } from "../../lib/ownScreen.ts";
 
 const AddDeviceScreen = () => {
   const queryClient = useQueryClient();
@@ -137,7 +138,7 @@ const AddDeviceScreen = () => {
             ) : (
               <Button
                 onPress={async () => {
-                  if (!(await requestPermission()).granted) {
+                  if (!(await withOwnScreen(requestPermission)).granted) {
                     Alert.alert(
                       "Camera permission required",
                       "Allow camera access to scan the code on the new device.",

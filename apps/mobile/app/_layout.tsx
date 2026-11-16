@@ -7,9 +7,11 @@ import {
   ApiCompatibilityGate,
   useApiCompatibilityGateShown,
 } from "../components/ApiCompatibilityGate.tsx";
+import { AppLockScreen } from "../components/AppLockScreen.tsx";
 import { AlertHost } from "../components/ui/Alert.tsx";
 import { OfflineBanner } from "../components/OfflineBanner.tsx";
 import { queryClient } from "../lib/api.ts";
+import { useAppLock } from "../lib/appLock.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { useThisDeviceState } from "../lib/deviceActivation.ts";
 import { useDismissNoticesWhenOpened } from "../lib/notifications.ts";
@@ -23,6 +25,8 @@ const RootLayout = () => {
   const compatibilityGateShown = useApiCompatibilityGateShown();
   const { data: session, isPending } = authClient.useSession();
   const thisDevice = useThisDeviceState();
+  const { locked, away } = useAppLock();
+  const covered = locked || away;
   useDismissNoticesWhenOpened();
 
   return (
@@ -35,8 +39,10 @@ const RootLayout = () => {
             <View className="flex-1 bg-background">
               <View
                 className="flex-1"
-                importantForAccessibility={compatibilityGateShown ? "no-hide-descendants" : "auto"}
-                accessibilityElementsHidden={compatibilityGateShown}
+                importantForAccessibility={
+                  compatibilityGateShown || covered ? "no-hide-descendants" : "auto"
+                }
+                accessibilityElementsHidden={compatibilityGateShown || covered}
               >
                 <Stack
                   screenOptions={{
@@ -56,6 +62,7 @@ const RootLayout = () => {
                     <Stack.Screen name="setup/remove-devices" />
                     <Stack.Screen name="account/about" />
                     <Stack.Screen name="account/add-device" />
+                    <Stack.Screen name="account/app-lock" />
                     <Stack.Screen name="account/contact-us" />
                     <Stack.Screen name="account/delete" />
                     <Stack.Screen name="account/devices" />
@@ -70,13 +77,28 @@ const RootLayout = () => {
                   </Stack.Protected>
                 </Stack>
               </View>
-              <ApiCompatibilityGate />
-              <OfflineBanner />
+              <View
+                className="absolute inset-0"
+                pointerEvents="box-none"
+                importantForAccessibility={covered ? "no-hide-descendants" : "auto"}
+                accessibilityElementsHidden={covered}
+              >
+                <ApiCompatibilityGate />
+                <OfflineBanner />
+              </View>
             </View>
           </TrackingProvider>
         </LocationPermissionProvider>
-        <AlertHost />
-        <PortalHost />
+        <View
+          className="absolute inset-0"
+          pointerEvents="box-none"
+          importantForAccessibility={covered ? "no-hide-descendants" : "auto"}
+          accessibilityElementsHidden={covered}
+        >
+          <AlertHost />
+          <PortalHost />
+        </View>
+        <AppLockScreen />
       </ThemeProvider>
     </QueryClientProvider>
   );

@@ -8,6 +8,7 @@ import { Platform } from "react-native";
 import { authClient, forgetSessionTokenToRevoke, readSessionTokenToRevoke } from "./auth-client.ts";
 import { ensureDeviceKeyRegistration } from "./deviceKeys.ts";
 import { isDeviceRemovedError } from "./deviceRemovedError.ts";
+import { withOwnScreen } from "./ownScreen.ts";
 import { resetSessionLinkRetries } from "./sessionLink.ts";
 
 const getGoogleWebClientId = () => process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
@@ -128,7 +129,7 @@ export const signInWithGoogle = async () => {
     }
   }
 
-  const googleSignInResult = await tryCatch(GoogleSignin.signIn());
+  const googleSignInResult = await tryCatch(withOwnScreen(() => GoogleSignin.signIn()));
   if (googleSignInResult.error) {
     return {
       error: {

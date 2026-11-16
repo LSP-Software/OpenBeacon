@@ -47,6 +47,8 @@ mock.module("react-native", () => ({
   Modal: ({ visible, children }: { visible: boolean; children?: React.ReactNode }) =>
     visible ? children : null,
 }));
+const appLock = { locked: false, away: false };
+mock.module("../lib/appLock.ts", () => ({ useAppLock: () => ({ ...appLock }) }));
 mock.module("lucide-react-native", () => ({ MapPinIcon: () => null, PauseIcon: () => null }));
 mock.module("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
@@ -138,6 +140,8 @@ beforeEach(() => {
   mutationStatus = "applied";
   pauseLocallyBeforeFailing = false;
   changes.length = 0;
+  appLock.locked = false;
+  appLock.away = false;
 });
 afterEach(async () => {
   await act(async () => root?.unmount());
@@ -340,4 +344,24 @@ test("a queued account resume does not hide a server account pause on another de
   });
   expect(tablet).toContain("Paused on all your devices");
   expect(tablet).toContain("Your change to all devices is waiting to reach your other devices.");
+});
+
+test("the pause sheet can't be used while the app is locked or away", async () => {
+  sharingData.device = preference({
+    sharingPaused: true,
+    sharingChangedAt: new Date(),
+    sharingRevision: 1,
+  });
+  await render();
+  await press("Change pause");
+  expect(selectedDurations()?.length).toBeGreaterThan(0);
+
+  for (const state of [
+    { locked: true, away: false },
+    { locked: false, away: true },
+  ]) {
+    Object.assign(appLock, state);
+    await act(async () => root?.render(<LocationSharingCard />));
+    expect(selectedDurations()).toEqual([]);
+  }
 });

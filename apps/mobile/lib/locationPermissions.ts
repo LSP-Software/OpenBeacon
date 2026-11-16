@@ -5,6 +5,7 @@ import {
   requestBackgroundPermissionsAsync,
   requestForegroundPermissionsAsync,
 } from "expo-location";
+import { withOwnScreen } from "./ownScreen.ts";
 
 export type LocationPermissionStatus = "granted" | "denied" | "undetermined";
 
@@ -182,7 +183,7 @@ export const requestForegroundLocationPermissions = async (): Promise<LocationPe
   let foregroundPermission = await getForegroundPermissionsAsync();
 
   if (!foregroundPermission.granted) {
-    foregroundPermission = await requestForegroundPermissionsAsync();
+    foregroundPermission = await withOwnScreen(requestForegroundPermissionsAsync);
   }
 
   const backgroundPermission = await getBackgroundPermissionsAsync();
@@ -202,7 +203,7 @@ export const requestBackgroundLocationPermissions = async (): Promise<LocationPe
     getPreciseEnabled(toLocationPermissionResponse(foregroundPermission)) &&
     !backgroundPermission.granted
   ) {
-    backgroundPermission = await requestBackgroundPermissionsAsync();
+    backgroundPermission = await withOwnScreen(requestBackgroundPermissionsAsync);
   }
 
   return normalizeLocationPermissionState({

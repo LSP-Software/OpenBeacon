@@ -84,6 +84,8 @@ declare class OpenBeaconTrackingModule extends NativeModule {
   areNotificationsEnabled(): boolean;
   shouldShowNotificationRationale(): boolean;
   showNotice(kind: NoticeKind): boolean;
+  setRecentsPreviewHidden(hidden: boolean): Promise<void>;
+  elapsedRealtime(): number;
   dismissNotice(slot: NoticeSlot): void;
 }
 

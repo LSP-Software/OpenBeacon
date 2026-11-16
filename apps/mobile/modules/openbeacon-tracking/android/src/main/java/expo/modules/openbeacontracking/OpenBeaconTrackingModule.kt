@@ -2,6 +2,8 @@ package expo.modules.openbeacontracking
 
 import android.Manifest
 import android.content.Intent
+import android.os.Build
+import android.os.SystemClock
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
@@ -11,6 +13,7 @@ import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -124,6 +127,16 @@ class OpenBeaconTrackingModule : Module() {
         appContext.currentActivity?.let {
           ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.POST_NOTIFICATIONS)
         } ?: false
+      }
+
+      AsyncFunction("setRecentsPreviewHidden") { hidden: Boolean ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          appContext.currentActivity?.setRecentsScreenshotEnabled(!hidden)
+        }
+      }.runOnQueue(Queues.MAIN)
+
+      Function("elapsedRealtime") {
+        SystemClock.elapsedRealtime().toDouble()
       }
 
       Function("showNotice") { kind: String ->

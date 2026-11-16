@@ -16,6 +16,7 @@ import {
   LockIcon,
   MailIcon,
   MapPinIcon,
+  ScanFaceIcon,
   SmartphoneIcon,
   SunIcon,
   Trash2Icon,
@@ -80,6 +81,11 @@ const categories = [
         label: "Password and Security",
         icon: LockIcon,
         href: "/account/password",
+      },
+      {
+        label: "App lock",
+        icon: ScanFaceIcon,
+        href: "/account/app-lock",
       },
       {
         label: "Recovery phrase",
