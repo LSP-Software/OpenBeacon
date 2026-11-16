@@ -1,4 +1,5 @@
 import { LogManager, TransformRequestManager } from "@maplibre/maplibre-react-native";
+import { tryCatch } from "@openbeacon/shared";
 import { useMutation } from "@tanstack/react-query";
 import { Paths } from "expo-file-system";
 import { router, useRootNavigationState } from "expo-router";
@@ -6,6 +7,12 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { useSignedPmtilesUrl } from "../../hooks/useSignedPmtilesUrl.ts";
 import { queryClient, trpc } from "../../lib/api.ts";
+import {
+  applyMapCacheSize,
+  clearCachedMapTiles,
+  readLastMapSource,
+  saveLastMapSource,
+} from "../../lib/mapCache.ts";
 import {
   MAX_AUTO_FORCE_REFRESH_ATTEMPTS,
   nextMapLoadFailureState,
@@ -19,11 +26,12 @@ import { useTheme } from "../../providers/ThemeProvider.tsx";
 export const useNativeMapStyle = () => {
   const { mapTheme } = useTheme();
   const signedPmtilesUrlQuery = useSignedPmtilesUrl();
+  const [lastMapSource] = useState(readLastMapSource);
   const autoForceRefreshAttemptsRef = useRef(0);
   const retryAfterUrlFetchRef = useRef(false);
   const mountedRef = useRef(false);
   const failedSourceRevisionRef = useRef<number | null>(null);
-  const appliedArchiveIdRef = useRef<string | null>(null);
+  const appliedArchiveIdRef = useRef<string | null>(lastMapSource?.archiveId ?? null);
   const showRecoverableErrorRef = useRef(false);
   const [showRecoverableError, setShowRecoverableError] = useState(false);
   const [archiveUrl, setArchiveUrl] = useState<string | null>(null);
@@ -52,7 +60,20 @@ export const useNativeMapStyle = () => {
       replace: url,
     });
     setArchiveUrl(sourceUrl);
+    saveLastMapSource({ archiveId, sourceUrl });
   };
+  const applyArchiveId = (archiveId: string | null) => {
+    const archiveChanged = hasPmtilesArchiveChanged({
+      appliedArchiveId: appliedArchiveIdRef.current,
+      archiveId,
+    });
+    appliedArchiveIdRef.current = archiveId;
+    if (archiveChanged) void tryCatch(clearCachedMapTiles());
+    return archiveChanged;
+  };
+  useEffect(() => {
+    void tryCatch(applyMapCacheSize());
+  }, []);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -63,7 +84,7 @@ export const useNativeMapStyle = () => {
     ...trpc.maps.forceRefreshSignedPmtilesUrl.mutationOptions(),
     onSuccess: (signedPmtilesUrl) => {
       if (!mountedRef.current) return;
-      appliedArchiveIdRef.current = signedPmtilesUrl.archiveId ?? null;
+      applyArchiveId(signedPmtilesUrl.archiveId ?? null);
       applySignedUrl({ archiveId: appliedArchiveIdRef.current, url: signedPmtilesUrl.url });
       queryClient.setQueryData(trpc.maps.getSignedPmtilesUrl.queryKey(), signedPmtilesUrl);
       setMapRevision((revision) => revision + 1);
@@ -105,13 +126,10 @@ export const useNativeMapStyle = () => {
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
   const pmtilesArchiveId = signedPmtilesUrlQuery.data?.archiveId ?? null;
   const applySignedUrlEvent = useEffectEvent(applySignedUrl);
+  const applyArchiveIdEvent = useEffectEvent(applyArchiveId);
   useEffect(() => {
     if (!pmtilesUrl) return;
-    const archiveChanged = hasPmtilesArchiveChanged({
-      appliedArchiveId: appliedArchiveIdRef.current,
-      archiveId: pmtilesArchiveId,
-    });
-    appliedArchiveIdRef.current = pmtilesArchiveId;
+    const archiveChanged = applyArchiveIdEvent(pmtilesArchiveId);
     applySignedUrlEvent({ archiveId: pmtilesArchiveId, url: pmtilesUrl });
     if (archiveChanged) setMapRevision((revision) => revision + 1);
   }, [pmtilesUrl, pmtilesArchiveId]);
@@ -119,21 +137,27 @@ export const useNativeMapStyle = () => {
     if (!archiveUrl) return;
     return () => TransformRequestManager.removeUrlTransform(`openbeacon-pmtiles:${archiveUrl}`);
   }, [archiveUrl]);
+  const usingLastMapSourceRef = useRef(false);
+  if (signedPmtilesUrlQuery.isPaused || signedPmtilesUrlQuery.failureCount > 0) {
+    usingLastMapSourceRef.current = true;
+  }
+  const sourceUrl =
+    archiveUrl ?? (usingLastMapSourceRef.current ? (lastMapSource?.sourceUrl ?? null) : null);
   const mapStyle = useMemo(() => {
-    if (!archiveUrl) {
+    if (!sourceUrl) {
       return null;
     }
 
     return getProtomapsMapStyle(
       mapTheme,
-      archiveUrl,
+      sourceUrl,
       Platform.OS === "ios"
         ? `${Paths.bundle.uri}/map/fonts/{fontstack}/{range}.pbf`
         : "asset://map-assets/fonts/{fontstack}/{range}.pbf",
       Platform.OS === "ios" ? `${Paths.bundle.uri}/map/sprites` : "asset://map-assets/sprites",
       showSymbolsRef.current,
     );
-  }, [mapTheme, archiveUrl]);
+  }, [mapTheme, sourceUrl]);
   const symbolLayerIds = useMemo(() => (mapStyle ? getSymbolLayerIds(mapStyle) : []), [mapStyle]);
 
   const retryMapLoad = () => {
@@ -231,7 +255,7 @@ export const useNativeMapStyle = () => {
   return {
     mapStyle,
     mapRevision,
-    pmtilesUrl: archiveUrl,
+    pmtilesUrl: sourceUrl,
     showSymbols,
     symbolLayerIds,
     showRecoverableError,

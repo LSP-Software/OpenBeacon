@@ -102,14 +102,15 @@ When the session ends, or another account signs in, the app:
 - Removes group colours and last-upload times from MMKV.
 - Removes provisioned epoch keys from native storage and stops capture. The removal is written synchronously.
 - Clears the auth client's cached session.
+- Deletes the saved map: the map data cached on the phone, which shows which areas were viewed, and the address of the last map.
 
-If the app starts signed out, it runs the cleanup again, in case it was closed before cleanup finished. The cleanup is in `apps/mobile/providers/SessionDataCleanup.tsx` and `apps/mobile/lib/tracking.ts`.
+If the app starts signed out, it runs the cleanup again, in case it was closed before cleanup finished. The cleanup is in `apps/mobile/providers/SessionDataCleanup.tsx`, `apps/mobile/lib/mapCache.ts` and `apps/mobile/lib/tracking.ts`.
 
 Some data is kept on purpose:
 
 - Queued tracking points stay in the offline queue as ciphertext only (OPE-63). They are scoped to the account and server, and only upload when that account signs in again. In-app sign-out tries to upload them for up to 10 seconds first. The phone no longer holds the epoch keys needed to read them. After account deletion they stay until the 10 MiB limit evicts them, oldest first.
 - The device private key, device ID and public key stay, so the same account can sign in again (see `docs/development/account-deletion.md`). History private keys stay in SecureStore for the same reason.
-- The server URL, theme and map preferences stay. They are not account data.
+- The server URL, theme and map preferences, including the map storage size, stay. They are not account data.
 - Profile and group images may stay in the React Native image cache. These images are not encrypted on the server either.
 
 ### When the phone is removed
