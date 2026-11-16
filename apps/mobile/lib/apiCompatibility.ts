@@ -205,6 +205,7 @@ const setState = (next: ApiCompatibilityState | null) => {
 };
 
 let revision = 0;
+let latestHealthCheck = 0;
 let lastBackgroundRefreshAt: number | null = null;
 
 const applyVerdict = ({
@@ -274,9 +275,11 @@ export const withApiCompatibilityHeader = (init?: RequestInit): RequestInit => {
 
 export const refreshApiCompatibility = async ({ userRequested }: { userRequested: boolean }) => {
   const startedAt = revision;
+  latestHealthCheck += 1;
+  const healthCheck = latestHealthCheck;
   const { verdict, serverVersion, message, announcements } =
     await checkServerCompatibility(baseUrl);
-  if (announcements) saveAnnouncements(announcements);
+  if (announcements && healthCheck === latestHealthCheck) saveAnnouncements(announcements);
   if (revision === startedAt) {
     applyVerdict({ verdict, serverVersion, message, sticky: false, userRequested });
   }

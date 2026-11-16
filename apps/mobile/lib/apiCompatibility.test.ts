@@ -593,6 +593,41 @@ describe("refreshApiCompatibility", () => {
     expect(getApiCompatibility()?.problem).toBe("appTooOld");
   });
 
+  test("keeps the announcements from the newest /health check when an older one answers last", async () => {
+    const answers: ((response: Response) => void)[] = [];
+    respond = () => new Promise<Response>((resolve) => answers.push(resolve));
+    const withAnnouncement = (id: string) =>
+      json({
+        status: "ok",
+        version: "9.9.9",
+        apiCompatibilityLevel,
+        minClientApiCompatibilityLevel: apiCompatibilityLevel,
+        announcements: [
+          {
+            id,
+            message: "Planned maintenance.",
+            severity: "info",
+            platform: null,
+            minAppVersion: null,
+            maxAppVersion: null,
+            downtimeStartsAt: null,
+            downtimeEndsAt: null,
+            endsAt: "2999-01-01T00:00:00.000Z",
+          },
+        ],
+      });
+
+    const older = refreshApiCompatibility({ userRequested: false });
+    const newer = refreshApiCompatibility({ userRequested: false });
+    answers[1]?.(withAnnouncement("newer"));
+    await newer;
+    answers[0]?.(withAnnouncement("older"));
+    await older;
+
+    const saved = JSON.parse(stored.get("announcements") ?? "{}").announcements;
+    expect(saved.map(({ id }: { id: string }) => id)).toEqual(["newer"]);
+  });
+
   test("saves the server's announcements and keeps them while the server can't be reached", async () => {
     const announcement = {
       id: "maintenance",
