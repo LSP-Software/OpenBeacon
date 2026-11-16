@@ -4,7 +4,7 @@ import { runImageStorageSweep, runStalePendingUploadCleanup } from "./imageUploa
 import {
   createEpochCleanup,
   createLocationHistoryCleanup,
-  createPlaceTransitionCleanup,
+  createGroupHistoryCleanup,
 } from "./locationHistoryCleanup.ts";
 import { runPendingDeviceCleanup } from "./pendingDeviceCleanup.ts";
 import { runUploadGrowthReport } from "./uploadGrowthReport.ts";
@@ -14,7 +14,7 @@ export const jobs = [
   { name: "expired-records-cleanup", delay: 3_600_000, run: runExpiredRecordsCleanup },
   { name: "pending-device-cleanup", delay: 3_600_000, run: runPendingDeviceCleanup },
   { name: "location-history-cleanup", delay: 3_600_000, run: createLocationHistoryCleanup() },
-  { name: "place-transition-cleanup", delay: 3_600_000, run: createPlaceTransitionCleanup() },
+  { name: "group-history-cleanup", delay: 3_600_000, run: createGroupHistoryCleanup() },
   { name: "epoch-cleanup", delay: 86_400_000, run: createEpochCleanup() },
   { name: "pending-upload-cleanup", delay: 3_600_000, run: runStalePendingUploadCleanup },
   { name: "image-storage-sweep", delay: 86_400_000, run: runImageStorageSweep },

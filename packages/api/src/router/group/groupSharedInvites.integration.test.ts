@@ -173,7 +173,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(
         await caller(users[0]!).groupInvites.sharedStatuses({ groupId, inviteIds: [id] }),
       ).toEqual([{ id, status: "active" }]);
-      expect(await caller(users[0]!).groupInvites.joinAlerts()).toHaveLength(0);
+      expect(await prisma.groupEvent.count({ where: { groupId, type: "MEMBER_JOINED" } })).toBe(0);
       expect(await prisma.groupMemberInvite.count({ where: { groupId } })).toBe(2);
       const otherContext = await caller(users[2]!).groupInvites.sharedAcceptanceContext({ code });
       const other = createNextGroupEpoch({
@@ -221,14 +221,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         }),
       ).toBeNull();
       expect(await prisma.groupMemberInvite.count({ where: { groupId } })).toBe(1);
-      const alerts = await caller(users[0]!).groupInvites.joinAlerts();
-      expect(alerts).toHaveLength(1);
-      expect(alerts[0]!.memberName).toBe(winner);
-      expect(await caller(winner).groupInvites.joinAlerts()).toHaveLength(0);
-      await caller(winner).groupInvites.dismissJoinAlert({ id: alerts[0]!.id });
-      expect(await caller(users[0]!).groupInvites.joinAlerts()).toHaveLength(1);
-      await caller(users[0]!).groupInvites.dismissJoinAlert({ id: alerts[0]!.id });
-      expect(await caller(users[0]!).groupInvites.joinAlerts()).toHaveLength(0);
+      expect(
+        await prisma.groupEvent.findMany({
+          where: { groupId, type: "MEMBER_JOINED" },
+          select: { type: true, subjectUserId: true, role: true },
+        }),
+      ).toEqual([{ type: "MEMBER_JOINED", subjectUserId: winner, role: "MEMBER" }]);
       const epochs = await prisma.groupEpoch.findMany({
         where: { groupId },
         orderBy: { epochNumber: "asc" },

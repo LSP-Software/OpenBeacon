@@ -1,9 +1,10 @@
-import { GroupRole, Prisma } from "@openbeacon/database";
+import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
 import { tryCatch } from "@openbeacon/shared";
 import { createGroupSchema, requestImageUploadInputSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { env } from "../../env.ts";
+import { recordGroupEvent } from "../../lib/groupHistory.ts";
 import {
   buildGroupAvatarPath,
   confirmImageUpload,
@@ -19,8 +20,8 @@ export const groupSettingsRouter = {
     .input(createGroupSchema.extend({ groupId: z.string().min(1).max(128) }))
     .mutation(async ({ ctx, input }) => {
       return ctx.db.$transaction(async (tx) => {
-        await tx.$queryRaw(
-          Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
+        const [group] = await tx.$queryRaw<Array<{ name: string }>>(
+          Prisma.sql`SELECT name FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
         );
         const actor = await tx.groupMember.findUnique({
           where: { userId_groupId: { userId: ctx.session.user.id, groupId: input.groupId } },
@@ -29,6 +30,17 @@ export const groupSettingsRouter = {
           throw new TRPCError({
             code: "FORBIDDEN",
             message: "Only owners and admins can rename the group.",
+          });
+        }
+        if (group && group.name !== input.name) {
+          await recordGroupEvent(tx, {
+            data: {
+              groupId: input.groupId,
+              type: GroupEventType.GROUP_RENAMED,
+              actorUserId: ctx.session.user.id,
+              name: input.name,
+              previousName: group.name,
+            },
           });
         }
         return tx.group.update({ where: { id: input.groupId }, data: { name: input.name } });
@@ -143,6 +155,13 @@ export const groupSettingsRouter = {
                 });
               }
               await tx.group.update({ where: { id: input.groupId }, data: { image: imageUrl } });
+              await recordGroupEvent(tx, {
+                data: {
+                  groupId: input.groupId,
+                  type: GroupEventType.GROUP_IMAGE_CHANGED,
+                  actorUserId: userId,
+                },
+              });
               return group.image;
             }),
         }),

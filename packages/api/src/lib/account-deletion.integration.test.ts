@@ -109,8 +109,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           expiresAt: new Date(Date.now() + 60_000),
         },
       });
-      await prisma.groupJoinAlert.create({
-        data: { groupId, recipientId: remainingUser, memberId: deletedUser, memberName: "Deleted" },
+      await prisma.groupEvent.createMany({
+        data: [
+          { groupId, type: "MEMBER_JOINED", subjectUserId: deletedUser },
+          {
+            groupId,
+            type: "MEMBER_REMOVED",
+            actorUserId: deletedUser,
+            subjectUserId: remainingUser,
+          },
+        ],
       });
       await prisma.feedback.createMany({
         data: [
@@ -207,14 +215,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
-    test("new alerts and shared invitations require an account reference", async () => {
-      await expect(
-        Promise.resolve(
-          prisma.groupJoinAlert.create({
-            data: { groupId, recipientId: remainingUser, memberName: "Missing" },
-          }),
-        ),
-      ).rejects.toThrow();
+    test("shared invitations require an account reference", async () => {
       await expect(
         Promise.resolve(
           prisma.groupSharedInvite.create({
@@ -268,7 +269,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(
         await prisma.personalGroupColor.findMany({ where: { owner: { groupId } } }),
       ).toMatchObject([{ ciphertext: "remaining" }]);
-      expect(await prisma.groupJoinAlert.count({ where: { groupId } })).toBe(0);
+      expect(
+        await prisma.groupEvent.findMany({
+          where: { groupId },
+          orderBy: { type: "asc" },
+          select: { type: true, actorUserId: true, subjectUserId: true },
+        }),
+      ).toEqual([
+        { type: "MEMBER_JOINED", actorUserId: null, subjectUserId: null },
+        { type: "MEMBER_REMOVED", actorUserId: null, subjectUserId: remainingUser },
+        { type: "ACCOUNT_DELETED", actorUserId: null, subjectUserId: null },
+        { type: "GROUP_IMAGE_CHANGED", actorUserId: null, subjectUserId: null },
+      ]);
       expect(
         await prisma.feedback.findMany({
           where: { message: { startsWith: `${prefix}-feedback` } },

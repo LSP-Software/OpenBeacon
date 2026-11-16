@@ -1,6 +1,6 @@
 import { logRateLimit } from "@openbeacon/shared";
 import { createHash, randomBytes } from "node:crypto";
-import { GroupRole, Prisma } from "@openbeacon/database";
+import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
 import { groupEpochBundleSchema, inviteMemberToGroupSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
@@ -9,8 +9,8 @@ import {
   getInviteAcceptanceContext,
   persistGroupEpoch,
 } from "../../lib/groupEpochs.ts";
+import { readDatabaseTime } from "../../lib/databaseTime.ts";
 import { emailInviteCreatedAfter } from "../../lib/emailInvites.ts";
-import { createGroupJoinAlerts } from "../../lib/groupJoinAlerts.ts";
 import { assertAccountBelowGroupLimit, maxGroupsPerAccount } from "../../lib/groupLimit.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
@@ -99,24 +99,12 @@ const getInvitePreview = async ({
 };
 
 export const groupInvitesRouter = {
-  joinAlerts: protectedProcedure.query(async ({ ctx }) =>
-    ctx.db.groupJoinAlert.findMany({
-      where: {
-        recipientId: ctx.session.user.id,
-        group: { groupMembers: { some: { userId: ctx.session.user.id } } },
-      },
-      select: { id: true, memberName: true, createdAt: true, group: { select: { name: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    }),
+  joinAlerts: protectedProcedure.query(
+    (): Array<{ id: string; memberName: string; createdAt: Date; group: { name: string } }> => [],
   ),
   dismissJoinAlert: protectedProcedure
     .input(z.object({ id: z.string().min(1).max(128) }))
-    .mutation(async ({ ctx, input }) => {
-      await ctx.db.groupJoinAlert.deleteMany({
-        where: { id: input.id, recipientId: ctx.session.user.id },
-      });
-    }),
+    .mutation(() => {}),
   createShared: groupAdminProcedure
     .meta({ rateLimit: { limit: 32, windowMs: 60_000 } })
     .input(z.object({ groupId: z.string().min(1).max(128) }))
@@ -237,13 +225,15 @@ export const groupInvitesRouter = {
         if (existing)
           throw new TRPCError({ code: "CONFLICT", message: "You are already a group member" });
         await assertAccountBelowGroupLimit(tx, ctx.session.user.id);
-        await tx.groupMember.create({
+        const joined = await tx.groupMember.create({
           data: {
             groupId: invite.groupId,
             joinedEpochNumber: input.nextEpoch.epochNumber,
             role: GroupRole.MEMBER,
             userId: ctx.session.user.id,
+            createdAt: await readDatabaseTime(tx),
           },
+          select: { createdAt: true },
         });
         await tx.groupMemberInvite.deleteMany({
           where: { groupId: invite.groupId, recipientId: ctx.session.user.id },
@@ -255,10 +245,14 @@ export const groupInvitesRouter = {
           groupId: invite.groupId,
           userId: ctx.session.user.id,
         });
-        await createGroupJoinAlerts({
-          db: tx,
-          groupId: invite.groupId,
-          userId: ctx.session.user.id,
+        await tx.groupEvent.create({
+          data: {
+            groupId: invite.groupId,
+            type: GroupEventType.MEMBER_JOINED,
+            subjectUserId: ctx.session.user.id,
+            role: GroupRole.MEMBER,
+            createdAt: joined.createdAt,
+          },
         });
       });
       return { message: "Invite accepted." };
@@ -348,9 +342,11 @@ export const groupInvitesRouter = {
             groupId: currentInvite.groupId,
             role: currentInvite.role,
             joinedEpochNumber: input.nextEpoch.epochNumber,
+            createdAt: await readDatabaseTime(tx),
           },
           select: {
             id: true,
+            createdAt: true,
             user: {
               select: {
                 id: true,
@@ -403,10 +399,14 @@ export const groupInvitesRouter = {
           groupId: invite.groupId,
           userId: ctx.session.user.id,
         });
-        await createGroupJoinAlerts({
-          db: tx,
-          groupId: invite.groupId,
-          userId: ctx.session.user.id,
+        await tx.groupEvent.create({
+          data: {
+            groupId: invite.groupId,
+            type: GroupEventType.MEMBER_JOINED,
+            subjectUserId: ctx.session.user.id,
+            role: createdMember.role,
+            createdAt: createdMember.createdAt,
+          },
         });
 
         return createdMember;

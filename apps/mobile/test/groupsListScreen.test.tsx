@@ -28,8 +28,6 @@ const query = (name: string, state: Partial<QueryState>): QueryState => ({
 let queries: Record<string, QueryState>;
 mock.module("@tanstack/react-query", () => ({
   useQuery: ({ queryKey }: { queryKey: [string] }) => queries[queryKey[0]],
-  useQueryClient: () => ({}),
-  useMutation: () => ({}),
 }));
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
 mock.module("expo-router", () => ({
@@ -51,17 +49,17 @@ mock.module("../lib/api.ts", () => ({
     groupMembership: {
       list: { queryOptions: () => ({ queryKey: ["groups"] }), queryKey: () => ["groups"] },
     },
+    groupHistory: {
+      latest: { queryKey: () => ["groupHistoryLatest"] },
+    },
     groupInvites: {
       list: { queryOptions: () => ({ queryKey: ["invites"] }), queryKey: () => ["invites"] },
-      joinAlerts: {
-        queryOptions: () => ({ queryKey: ["joinAlerts"] }),
-        queryKey: () => ["joinAlerts"],
-      },
-      dismissJoinAlert: { mutationOptions: () => ({}) },
     },
   },
 }));
-mock.module("../lib/alert.ts", () => ({ Alert: { alert: () => {} } }));
+mock.module("../hooks/useUnseenGroupHistory.ts", () => ({
+  useUnseenGroupHistory: () => ({ latest: [], unseenGroupIds: new Set(), userId: "user" }),
+}));
 mock.module("../lib/groupColor.ts", () => ({ getGroupColor: () => "#000000" }));
 mock.module("../hooks/useRefetchWhileFocused.ts", () => ({ useRefetchWhileFocused: () => {} }));
 mock.module("../hooks/useGroupColorRevision.ts", () => ({ useGroupColorRevision: () => 0 }));
@@ -107,7 +105,6 @@ beforeEach(() => {
   queries = {
     groups: query("groups", { data: [] }),
     invites: query("invites", { data: [] }),
-    joinAlerts: query("joinAlerts", { data: [] }),
   };
 });
 

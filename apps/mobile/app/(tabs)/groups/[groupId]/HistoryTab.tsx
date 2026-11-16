@@ -1,7 +1,21 @@
 import { useIsFocused } from "@react-navigation/native";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { LogInIcon, LogOutIcon } from "lucide-react-native";
-import { View } from "react-native";
+import {
+  ImageIcon,
+  LogInIcon,
+  LogOutIcon,
+  MapPinMinusIcon,
+  MapPinPenIcon,
+  MapPinPlusIcon,
+  PencilIcon,
+  ShieldIcon,
+  SparklesIcon,
+  UserMinusIcon,
+  UserPlusIcon,
+  UserXIcon,
+} from "lucide-react-native";
+import { useState } from "react";
+import { Pressable, View } from "react-native";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
 import { Button } from "../../../../components/ui/Button.tsx";
 import { Icon } from "../../../../components/ui/Icon.tsx";
@@ -9,93 +23,192 @@ import { Text } from "../../../../components/ui/Text.tsx";
 import { useMemberNames } from "../../../../hooks/useMemberNames.ts";
 import { type RouterInputs, trpcClient } from "../../../../lib/api.ts";
 import { authClient } from "../../../../lib/auth-client.ts";
-import { groupByDay } from "../../../../lib/places.ts";
+import { describeGroupEvent, groupByDay } from "../../../../lib/groupHistory.ts";
+
+const eventIcons = {
+  GROUP_CREATED: SparklesIcon,
+  MEMBER_JOINED: UserPlusIcon,
+  MEMBER_LEFT: UserMinusIcon,
+  MEMBER_REMOVED: UserMinusIcon,
+  ACCOUNT_DELETED: UserXIcon,
+  ROLE_CHANGED: ShieldIcon,
+  GROUP_RENAMED: PencilIcon,
+  GROUP_IMAGE_CHANGED: ImageIcon,
+  PLACE_ADDED: MapPinPlusIcon,
+  PLACE_UPDATED: MapPinPenIcon,
+  PLACE_DELETED: MapPinMinusIcon,
+} as const;
+
+const filters = [
+  { label: "All", category: null, empty: "Nothing has happened in the last 14 days." },
+  {
+    label: "Arrivals",
+    category: "arrivals",
+    empty: "No arrivals or departures in the last 14 days.",
+  },
+  { label: "Members", category: "members", empty: "No member changes in the last 14 days." },
+  { label: "Roles", category: "roles", empty: "No role changes in the last 14 days." },
+  { label: "Group", category: "group", empty: "No group changes in the last 14 days." },
+  { label: "Places", category: "places", empty: "No place changes in the last 14 days." },
+] as const;
 
 const HistoryTab = ({ groupId }: { groupId: string }) => {
   const isFocused = useIsFocused();
   const { data: session } = authClient.useSession();
+  const userId = session?.user.id;
   const memberName = useMemberNames(groupId);
+  const [category, setCategory] = useState<(typeof filters)[number]["category"]>(null);
   const history = useInfiniteQuery({
-    queryKey: ["placeTransitions", groupId, session?.user.id],
+    queryKey: ["groupHistory", groupId, userId, category],
     initialPageParam: null,
     queryFn: ({
       pageParam,
     }: {
-      pageParam: RouterInputs["placeTransitions"]["recent"]["before"] | null;
+      pageParam: RouterInputs["groupHistory"]["list"]["before"] | null;
     }) =>
-      trpcClient.placeTransitions.recent.query({
+      trpcClient.groupHistory.list.query({
         groupId,
         ...(pageParam ? { before: pageParam } : {}),
+        ...(category ? { categories: [category] } : {}),
       }),
     getNextPageParam: (page) => page.nextBefore,
     subscribed: isFocused,
   });
 
+  const filterBar = (
+    <View
+      accessibilityRole="tablist"
+      accessibilityLabel="Filter history"
+      className="flex-row flex-wrap gap-2 pb-1"
+    >
+      {filters.map((filter) => {
+        const selected = filter.category === category;
+        return (
+          <Pressable
+            key={filter.label}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            onPress={() => setCategory(filter.category)}
+            hitSlop={{ top: 4, bottom: 4 }}
+            className={`min-h-9 justify-center rounded-full border px-4 py-1.5 ${selected ? "border-primary bg-primary" : "border-border bg-card"}`}
+          >
+            <Text
+              className={`text-sm font-semibold ${selected ? "text-primary-foreground" : "text-foreground"}`}
+            >
+              {filter.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+
   if (history.isPending) {
-    return <LoadingIndicator />;
+    return (
+      <View className="gap-2 pt-1">
+        {filterBar}
+        <LoadingIndicator />
+      </View>
+    );
   }
 
-  if (history.isError) {
+  if (history.isError && !history.data) {
     return (
-      <View className="gap-3 rounded-2xl border border-border bg-card p-5">
-        <Text className="text-foreground text-lg font-semibold">Couldn’t load history</Text>
-        <Text className="text-muted-foreground">Check your connection and try again.</Text>
-        <Button
-          size="sm"
-          variant="outline"
-          className="self-start"
-          loading={history.isFetching}
-          onPress={() => void history.refetch()}
-        >
-          <Text>Try again</Text>
-        </Button>
+      <View className="gap-2 pt-1">
+        {filterBar}
+        <View className="gap-3 rounded-2xl border border-border bg-card p-5">
+          <Text className="text-foreground text-lg font-semibold">Couldn’t load history</Text>
+          <Text className="text-muted-foreground">Check your connection and try again.</Text>
+          <Button
+            size="sm"
+            variant="outline"
+            className="self-start"
+            loading={history.isFetching}
+            onPress={() => void history.refetch()}
+          >
+            <Text>Try again</Text>
+          </Button>
+        </View>
       </View>
     );
   }
 
   const sections = groupByDay({
-    items: history.data.pages.flatMap((page) => page.transitions),
+    items: history.data.pages.flatMap((page) => page.items),
     now: new Date(),
   });
 
   return (
     <View className="gap-2 pt-1">
+      {filterBar}
+      {history.isError ? (
+        <View className="flex-row items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-2">
+          <Text className="flex-1 text-sm text-foreground">
+            Couldn’t reach the server, so this may be out of date.
+          </Text>
+          <Button
+            size="sm"
+            variant="outline"
+            loading={history.isFetching}
+            onPress={() => void history.refetch()}
+          >
+            <Text>Retry</Text>
+          </Button>
+        </View>
+      ) : null}
       {sections.length === 0 ? (
         <Text className="py-6 text-center text-muted-foreground">
-          No arrivals or departures yet.
+          {filters.find((filter) => filter.category === category)?.empty}
         </Text>
       ) : null}
       {sections.map((section) => (
         <View key={section.key}>
-          <Text className="mb-1 mt-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+          <Text
+            accessibilityRole="header"
+            className="mb-1 mt-3 text-sm font-bold uppercase tracking-wider text-muted-foreground"
+          >
             {section.title}
           </Text>
-          {section.items.map((transition) => {
-            const arrived = transition.direction === "ARRIVE";
+          {section.items.map((item) => {
+            const time = item.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            if (item.kind === "group") {
+              const text = describeGroupEvent({ event: item, memberName, userId });
+              return (
+                <View
+                  key={item.id}
+                  accessible
+                  accessibilityLabel={`${text}, ${time}`}
+                  className="flex-row items-center gap-4 border-b border-border py-3"
+                >
+                  <View className="size-12 items-center justify-center rounded-xl bg-secondary">
+                    <Icon as={eventIcons[item.type]} size={22} className="text-primary-text" />
+                  </View>
+                  <View className="flex-1 gap-0.5">
+                    <Text className="text-foreground">{text}</Text>
+                    <Text className="text-sm text-muted-foreground">{time}</Text>
+                  </View>
+                </View>
+              );
+            }
+            const arrived = item.direction === "ARRIVE";
             const owner =
-              transition.userId === session?.user.id
-                ? "Your"
-                : `${memberName(transition.userId) ?? "Someone"}’s`;
-            const time = transition.occurredAt.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            });
+              item.userId === userId ? "Your" : `${memberName(item.userId) ?? "Someone"}’s`;
             return (
               <View
-                key={transition.id}
+                key={item.id}
                 accessible
-                accessibilityLabel={`${owner} ${transition.deviceName} ${arrived ? "arrived at" : "left"} ${transition.placeName}, ${time}`}
+                accessibilityLabel={`${owner} ${item.deviceName} ${arrived ? "arrived at" : "left"} ${item.placeName}, ${time}`}
                 className="flex-row items-center gap-4 border-b border-border py-3"
               >
                 <View className="size-12 items-center justify-center rounded-xl bg-primary/10">
-                  <Text className="text-2xl">{transition.placeEmoji}</Text>
+                  <Text className="text-2xl">{item.placeEmoji}</Text>
                 </View>
                 <View className="flex-1 gap-0.5">
                   <Text className="text-foreground">
                     <Text className="text-foreground font-bold">
-                      {owner} {transition.deviceName}
+                      {owner} {item.deviceName}
                     </Text>{" "}
-                    {arrived ? "arrived at" : "left"} {transition.placeName}
+                    {arrived ? "arrived at" : "left"} {item.placeName}
                   </Text>
                   <Text className="text-sm text-muted-foreground">{time}</Text>
                 </View>
@@ -125,7 +238,7 @@ const HistoryTab = ({ groupId }: { groupId: string }) => {
         </Button>
       ) : null}
       <Text className="mt-3 text-center text-sm text-muted-foreground">
-        Arrivals and departures are kept for 14 days.
+        History is kept for 14 days.
       </Text>
     </View>
   );

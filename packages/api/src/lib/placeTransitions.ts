@@ -2,11 +2,12 @@ import type { Prisma, PrismaClient } from "@openbeacon/database";
 import type { placeTransitionSchema } from "@openbeacon/schemas";
 import { resolveLocationSharing } from "@openbeacon/shared";
 import type z from "zod";
+import { readDatabaseTime } from "./databaseTime.ts";
 import { assertActiveDevices } from "./groupWriteChecks.ts";
 
-const PLACE_TRANSITION_RETENTION_MS = 14 * 24 * 60 * 60_000;
+export const HISTORY_RETENTION_MS = 14 * 24 * 60 * 60_000;
 
-const placeTransitionSelect = {
+export const placeTransitionSelect = {
   id: true,
   groupId: true,
   placeId: true,
@@ -26,7 +27,7 @@ const sharingPreferenceSelect = {
   sharingRevision: true,
 } as const;
 
-const toPlaceTransitionView = (
+export const toPlaceTransitionView = (
   transition: Prisma.PlaceTransitionGetPayload<{ select: typeof placeTransitionSelect }>,
 ) => ({
   id: transition.id,
@@ -40,12 +41,6 @@ const toPlaceTransitionView = (
   deviceId: transition.deviceId,
   deviceName: transition.device.name,
 });
-
-const readDatabaseTime = async (db: Pick<Prisma.TransactionClient, "$queryRaw">) => {
-  const [clock] = await db.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
-  if (!clock) throw new Error("Unable to read database time.");
-  return clock.now;
-};
 
 export const uploadPlaceTransitions = async ({
   db,
@@ -87,7 +82,7 @@ export const uploadPlaceTransitions = async ({
   const placeIds = new Set(places.map(({ id }) => id));
   const sharing = resolveLocationSharing(device.user, device, now.getTime());
   const earliest = Math.max(
-    now.getTime() - PLACE_TRANSITION_RETENTION_MS,
+    now.getTime() - HISTORY_RETENTION_MS,
     memberSince.getTime(),
     sharing.resumeAfter?.getTime() ?? 0,
     placeSharing?.updatedAt.getTime() ?? 0,
@@ -245,7 +240,7 @@ export const readRecentPlaceTransitions = async ({
   now: Date;
 }) => {
   const limit = 100;
-  const since = Math.max(now.getTime() - PLACE_TRANSITION_RETENTION_MS, memberSince.getTime());
+  const since = Math.max(now.getTime() - HISTORY_RETENTION_MS, memberSince.getTime());
   const rows = await db.placeTransition.findMany({
     where: {
       groupId,

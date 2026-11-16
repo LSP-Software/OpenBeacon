@@ -32,14 +32,13 @@ test("deletes only rows that expired before the database time, not the runner's 
     ["2000-12-31T00:00:00.000Z"],
     ["2000-12-02T00:00:00.000Z"],
     ["2000-12-02T00:00:00.000Z"],
-    ["2000-12-02T00:00:00.000Z"],
   ]);
 });
 
 test("keeps deleting full batches up to ten per table", async () => {
   deleteBatch.mockResolvedValue(1000);
   await runExpiredRecordsCleanup();
-  expect(deleteBatch).toHaveBeenCalledTimes(60);
+  expect(deleteBatch).toHaveBeenCalledTimes(50);
 });
 
 test("a failing table doesn't stop later tables and is logged without the error", async () => {
@@ -49,7 +48,7 @@ test("a failing table doesn't stop later tables and is logged without the error"
     Object.assign(new Error("session secret"), { code: "P2034", meta: { secret: "secret" } }),
   );
   await runExpiredRecordsCleanup();
-  expect(deleteBatch).toHaveBeenCalledTimes(6);
+  expect(deleteBatch).toHaveBeenCalledTimes(5);
   expect(error.mock.calls).toEqual([
     ["Expired records clean-up failed for Verification"],
     ["Expired records clean-up failed for Session (P2034)"],

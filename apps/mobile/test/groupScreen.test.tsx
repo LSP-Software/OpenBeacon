@@ -55,6 +55,9 @@ mock.module("../lib/api.ts", () => ({
     groupMembership: {
       list: { queryOptions: () => ({}) },
     },
+    groupHistory: {
+      latest: { queryKey: () => ["groupHistoryLatest"] },
+    },
     accountRecovery: {
       status: { queryOptions: () => ({}) },
     },
@@ -97,6 +100,10 @@ mock.module("../components/ui/Text.tsx", () => ({
 mock.module("../app/(tabs)/groups/[groupId]/MembersTab.tsx", () => ({ default: () => null }));
 mock.module("../app/(tabs)/groups/[groupId]/HistoryTab.tsx", () => ({ default: () => null }));
 mock.module("../app/(tabs)/groups/[groupId]/PlacesTab.tsx", () => ({ default: () => null }));
+mock.module("../hooks/useUnseenGroupHistory.ts", () => ({
+  useUnseenGroupHistory: () => ({ latest: [], unseenGroupIds: new Set(), userId: "user" }),
+}));
+mock.module("../lib/groupHistory.ts", () => ({ markGroupHistorySeen: () => {} }));
 mock.module("../hooks/useLiveTrackingPositions.ts", () => ({
   useLiveTrackingPositions: () => ({ positions: [], status: { undecryptable: [] } }),
 }));

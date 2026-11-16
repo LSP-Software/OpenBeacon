@@ -23,6 +23,20 @@ export const recentPlaceTransitionsSchema = z.object({
   before: z.object({ occurredAt: z.date(), id: z.string().min(1).max(128) }).optional(),
 });
 
+export const groupHistoryCategorySchema = z.enum([
+  "arrivals",
+  "members",
+  "roles",
+  "group",
+  "places",
+]);
+
+export const groupHistorySchema = z.object({
+  groupId: z.string().min(1),
+  before: z.object({ at: z.date(), id: z.string().min(1).max(128) }).optional(),
+  categories: z.array(groupHistoryCategorySchema).min(1).max(5).optional(),
+});
+
 export const setPlaceSharingSchema = z.object({
   groupId: z.string().min(1),
   enabled: z.boolean(),

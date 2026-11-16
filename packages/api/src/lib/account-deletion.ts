@@ -1,6 +1,7 @@
 import { findAlertRecipient, type SecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
-import { GroupRole, Prisma, type PrismaClient } from "@openbeacon/database";
+import { GroupEventType, GroupRole, Prisma, type PrismaClient } from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
+import { readDatabaseTime } from "./databaseTime.ts";
 import { deletePayloadsInBatches } from "./deletePayloadsInBatches.ts";
 import { lockUserGroups } from "./lockUserGroups.ts";
 
@@ -185,9 +186,22 @@ export const deleteAccountRecords = async ({
         create: { userId, createdAt: clock.now, imageKeys },
         update: { imageKeys: { push: imageKeys } },
       });
-      await tx.group.updateMany({
+      const imageGroups = await tx.group.findMany({
         where: { image: { startsWith: `${imageUrlPrefix}/user/${userId}/` } },
+        select: { id: true },
+      });
+      await tx.group.updateMany({
+        where: { id: { in: imageGroups.map(({ id }) => id) } },
         data: { image: null },
+      });
+      const eventsAt = await readDatabaseTime(tx);
+      await tx.groupEvent.createMany({
+        data: imageGroups.map(({ id }) => ({
+          createdAt: eventsAt,
+          groupId: id,
+          type: GroupEventType.GROUP_IMAGE_CHANGED,
+          actorUserId: userId,
+        })),
       });
       await tx.groupEncryptedPayload.deleteMany({
         where: { senderUserId: userId },
@@ -201,6 +215,19 @@ export const deleteAccountRecords = async ({
       await tx.group.updateMany({
         where: { id: { in: placeGroupIds } },
         data: { placesRevision: { increment: 1 } },
+      });
+      const deletedAt = await readDatabaseTime(tx);
+      const memberships = await tx.groupMember.findMany({
+        where: { userId },
+        select: { groupId: true },
+      });
+      await tx.groupEvent.createMany({
+        data: memberships.map(({ groupId }) => ({
+          createdAt: deletedAt,
+          groupId,
+          type: GroupEventType.ACCOUNT_DELETED,
+          subjectUserId: userId,
+        })),
       });
       await tx.user.delete({ where: { id: userId } });
       return user;

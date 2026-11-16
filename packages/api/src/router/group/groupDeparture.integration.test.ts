@@ -14,6 +14,7 @@ import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupEpochRouter } from "./groupEpochRouter.ts";
+import { groupHistoryRouter } from "./groupHistoryRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
@@ -22,6 +23,7 @@ import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 const router = createTRPCRouter({
   groupInvites: groupInvitesRouter,
   groupEpoch: groupEpochRouter,
+  groupHistory: groupHistoryRouter,
   groupLifecycle: groupLifecycleRouter,
   groupMembership: groupMembershipRouter,
   groupTracking: groupTrackingRouter,
@@ -132,6 +134,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         })),
       });
       await owner.groupLifecycle.create({ groupId, name: "Family", initialEpoch: bundle(initial) });
+      expect(
+        (await prisma.groupEvent.findFirstOrThrow({ where: { groupId, type: "GROUP_CREATED" } }))
+          .createdAt,
+      ).toEqual(
+        (
+          await prisma.groupMember.findUniqueOrThrow({
+            where: { userId_groupId: { userId: ownerId, groupId } },
+          })
+        ).createdAt,
+      );
       await owner.groupInvites.send({ groupId, invites: [{ email: memberEmail, role: "MEMBER" }] });
       const invite = (await member.groupInvites.list())[0];
       expect(invite).toBeDefined();
@@ -146,10 +158,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(
         (await prisma.group.findUniqueOrThrow({ where: { id: groupId } })).epochRotationRequired,
       ).toBe(false);
-      const alerts = await owner.groupInvites.joinAlerts();
-      expect(alerts).toHaveLength(1);
-      expect(alerts[0]!.memberName).toBe("Member");
-      expect(await member.groupInvites.joinAlerts()).toHaveLength(0);
+      const joins = (await owner.groupHistory.list({ groupId })).items.filter(
+        (item) => item.kind === "group" && item.type === "MEMBER_JOINED",
+      );
+      expect(joins).toMatchObject([{ subject: { name: "Member" }, role: "MEMBER" }]);
       const plaintext = { latitude: 51.5, longitude: -0.12 };
       const encrypted = encryptGroupPayload({
         epochId: joined.epoch.epochId,
@@ -348,6 +360,25 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           ?.role,
       ).toBe("MEMBER");
       await owner.groupMembership.remove(transfer);
+      const events = await prisma.groupEvent.findMany({
+        where: { groupId },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { type: true, actorUserId: true, subjectUserId: true, role: true },
+      });
+      expect(events.slice(0, -2)).toEqual([
+        { type: "GROUP_CREATED", actorUserId: ownerId, subjectUserId: null, role: null },
+        { type: "MEMBER_JOINED", actorUserId: null, subjectUserId: memberId, role: "MEMBER" },
+        { type: "MEMBER_LEFT", actorUserId: null, subjectUserId: memberId, role: null },
+        { type: "MEMBER_JOINED", actorUserId: null, subjectUserId: memberId, role: "MEMBER" },
+        { type: "MEMBER_REMOVED", actorUserId: ownerId, subjectUserId: memberId, role: null },
+        { type: "MEMBER_JOINED", actorUserId: null, subjectUserId: memberId, role: "MEMBER" },
+      ]);
+      expect(events.slice(-2)).toEqual(
+        expect.arrayContaining([
+          { type: "ROLE_CHANGED", actorUserId: ownerId, subjectUserId: memberId, role: "OWNER" },
+          { type: "MEMBER_LEFT", actorUserId: null, subjectUserId: ownerId, role: null },
+        ]),
+      );
       expect(
         (await member.groupMembership.members({ groupId })).find(
           (item) => item.user.id === memberId,

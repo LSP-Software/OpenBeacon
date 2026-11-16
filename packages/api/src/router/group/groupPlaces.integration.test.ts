@@ -209,6 +209,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     });
 
     test("members list places, admins manage them, and others are refused", async () => {
+      const start = new Date();
       const before = await revision();
       const { place, placesRevision } = await createPlace(admin);
       expect(placesRevision).toBe(before + 1);
@@ -271,6 +272,29 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(
         caller(admin).groupPlaces.delete({ groupId, placeId: place.id }),
       ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(
+        await prisma.groupEvent.findMany({
+          where: { groupId, createdAt: { gte: start } },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: { type: true, actorUserId: true, name: true, previousName: true, emoji: true },
+        }),
+      ).toEqual([
+        { type: "PLACE_ADDED", actorUserId: admin, name: "Home", previousName: null, emoji: "🏠" },
+        {
+          type: "PLACE_UPDATED",
+          actorUserId: owner,
+          name: "Grandma's",
+          previousName: "Home",
+          emoji: "👵",
+        },
+        {
+          type: "PLACE_DELETED",
+          actorUserId: admin,
+          name: "Grandma's",
+          previousName: null,
+          emoji: "👵",
+        },
+      ]);
     });
 
     test("stores the geometry only as ciphertext that the group key opens", async () => {
