@@ -23,10 +23,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           id,
           name: id.slice(prefix.length + 1),
           email: `${id}@example.test`,
+          image: `https://images.example.test/${id}.webp`,
         })),
       });
       await prisma.group.createMany({
-        data: [family, former, stranger].map((id) => ({ id, name: id.slice(prefix.length + 1) })),
+        data: [family, former, stranger].map((id) => ({ id, name: "renamed later" })),
       });
       await prisma.groupMember.createMany({
         data: [
@@ -54,6 +55,22 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           { groupId: family, type: "MEMBER_LEFT" as const, subjectUserId: old, createdAt: ago(20) },
           { groupId: former, type: "MEMBER_LEFT" as const, subjectUserId: me, createdAt: ago(1) },
           {
+            groupId: former,
+            type: "GROUP_RENAMED" as const,
+            actorUserId: jo,
+            previousName: "former",
+            name: "renamed later",
+            createdAt: ago(0.5),
+          },
+          {
+            groupId: family,
+            type: "GROUP_RENAMED" as const,
+            actorUserId: alex,
+            previousName: "family",
+            name: "renamed later",
+            createdAt: ago(0.5),
+          },
+          {
             groupId: stranger,
             type: "MEMBER_LEFT" as const,
             subjectUserId: sam,
@@ -69,15 +86,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
-    test("lists current viewers once, and past viewers only from your own groups and window", async () => {
+    test("lists current viewers once, and past viewers only from your own groups and window, without new pictures or names from groups you left", async () => {
       const viewers = await readAccountViewers({ db: prisma, now, userId: me });
 
       expect(viewers.current).toEqual([
         {
           userId: alex,
           name: "alex",
-          image: null,
-          groups: [{ id: family, name: "family", since: ago(3) }],
+          image: `https://images.example.test/${alex}.webp`,
+          groups: [{ id: family, name: "renamed later", since: ago(3) }],
         },
       ]);
       expect(viewers.past).toEqual([
@@ -93,7 +110,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         },
         {
           groupId: family,
-          groupName: "family",
+          groupName: "renamed later",
           userId: sam,
           name: "sam",
           image: null,

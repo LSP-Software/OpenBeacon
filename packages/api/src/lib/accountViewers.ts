@@ -14,7 +14,13 @@ export const pastViewers = ({
   userId,
 }: {
   currentMembers: { groupId: string; userId: string; since: Date }[];
-  events: MembershipEvent[];
+  events: {
+    id: string;
+    groupId: string;
+    type: GroupEventType;
+    createdAt: Date;
+    memberUserId: string | null;
+  }[];
   userId: string;
 }) => {
   const groups = new Map<string, Map<string, Span[]>>();
@@ -94,6 +100,19 @@ export const pastViewers = ({
   return viewers.sort((a, b) => b.to.getTime() - a.to.getTime());
 };
 
+export const groupNameAt = ({
+  at,
+  currentName,
+  renames,
+}: {
+  at: Date;
+  currentName: string;
+  renames: { createdAt: Date; previousName: string | null }[];
+}) =>
+  renames
+    .filter((rename) => rename.createdAt.getTime() > at.getTime())
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0]?.previousName ?? currentName;
+
 export const readAccountViewers = async ({
   db,
   now,
@@ -134,7 +153,7 @@ export const readAccountViewers = async ({
       where: {
         groupId: { in: groupIds },
         createdAt: { gte: since },
-        type: { in: [...startTypes, ...endTypes] },
+        type: { in: [...startTypes, ...endTypes, GroupEventType.GROUP_RENAMED] },
       },
       select: {
         id: true,
@@ -142,10 +161,12 @@ export const readAccountViewers = async ({
         type: true,
         actorUserId: true,
         subjectUserId: true,
+        previousName: true,
         createdAt: true,
       },
     }),
   ]);
+  const membershipEvents = events.filter((event) => event.type !== GroupEventType.GROUP_RENAMED);
   const current = new Map<
     string,
     {
@@ -169,7 +190,7 @@ export const readAccountViewers = async ({
       viewer.groups.push({
         id: group.id,
         name: group.name,
-        since: member.createdAt > joinedAt ? member.createdAt : joinedAt,
+        since: new Date(Math.max(member.createdAt.getTime(), joinedAt.getTime())),
       });
       current.set(member.user.id, viewer);
     }
@@ -184,7 +205,7 @@ export const readAccountViewers = async ({
         since: member.createdAt,
       })),
     ),
-    events: events.map((event) => ({
+    events: membershipEvents.map((event) => ({
       id: event.id,
       groupId: event.groupId,
       type: event.type,
@@ -198,7 +219,32 @@ export const readAccountViewers = async ({
     where: { id: { in: pastUserIds } },
     select: { id: true, name: true, image: true },
   });
-  const groupNames = new Map(groups.map((group) => [group.id, group.name]));
+  const groupNames = new Map(
+    groups.map((group) => {
+      const lastLeftAt = group.groupMembers.some((member) => member.user.id === userId)
+        ? -Infinity
+        : Math.max(
+            ...membershipEvents
+              .filter(
+                (event) =>
+                  event.groupId === group.id &&
+                  event.subjectUserId === userId &&
+                  endTypes.includes(event.type),
+              )
+              .map((event) => event.createdAt.getTime()),
+          );
+      const name = Number.isFinite(lastLeftAt)
+        ? groupNameAt({
+            at: new Date(lastLeftAt),
+            currentName: group.name,
+            renames: events.filter(
+              (event) => event.groupId === group.id && event.type === GroupEventType.GROUP_RENAMED,
+            ),
+          })
+        : group.name;
+      return [group.id, name] as const;
+    }),
+  );
   const peopleById = new Map(people.map((person) => [person.id, person]));
 
   return {
@@ -212,7 +258,7 @@ export const readAccountViewers = async ({
         {
           ...viewer,
           name: person.name,
-          image: person.image,
+          image: current.has(viewer.userId) ? person.image : null,
           groupName,
         },
       ];
@@ -225,13 +271,5 @@ const latest = (a: Date | null, b: Date | null) =>
 
 const earliest = (a: Date | undefined, b: Date | undefined) =>
   a === undefined ? b : b === undefined ? a : a.getTime() < b.getTime() ? a : b;
-
-type MembershipEvent = {
-  id: string;
-  groupId: string;
-  type: GroupEventType;
-  createdAt: Date;
-  memberUserId: string | null;
-};
 
 type Span = { from: Date | null; to: Date | undefined; ended: GroupEventType | null };

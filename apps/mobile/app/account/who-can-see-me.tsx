@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useIsFocused } from "@react-navigation/native";
+import { skipToken, useQueries, useQuery } from "@tanstack/react-query";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../../components/headers/BackButton.tsx";
@@ -8,11 +9,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/Avatar.
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
 import { trpc } from "../../lib/api.ts";
+import { authClient } from "../../lib/auth-client.ts";
 import { cn } from "../../lib/cn.ts";
 import { initials } from "../../lib/initials.ts";
-
-const formatDate = (date: Date) =>
-  date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+import { loadPersonalNicknames } from "../../lib/personalNicknames.ts";
+import { viewerName } from "../../lib/viewerNames.ts";
+import { formatViewerDate, formatViewerStretch } from "../../lib/viewerStretch.ts";
 
 const endedReason = {
   theyLeft: "They left the group",
@@ -24,12 +26,14 @@ const endedReason = {
 const Person = ({
   image,
   name,
+  accountName,
   details,
   last,
 }: {
   image: string | null;
   name: string;
-  details: string[];
+  accountName: string | null;
+  details: { key: string; text: string }[];
   last: boolean;
 }) => (
   <View
@@ -44,9 +48,10 @@ const Person = ({
     </Avatar>
     <View className="flex-1 gap-1">
       <Text className="text-foreground text-base font-medium">{name}</Text>
+      {accountName && <Text className="text-muted-foreground text-sm">{accountName}</Text>}
       {details.map((detail) => (
-        <Text key={detail} className="text-muted-foreground text-sm">
-          {detail}
+        <Text key={detail.key} className="text-muted-foreground text-sm">
+          {detail.text}
         </Text>
       ))}
     </View>
@@ -54,7 +59,29 @@ const Person = ({
 );
 
 const WhoCanSeeMeScreen = () => {
-  const viewers = useQuery(trpc.account.viewers.queryOptions());
+  const isFocused = useIsFocused();
+  const viewers = useQuery({ ...trpc.account.viewers.queryOptions(), subscribed: isFocused });
+  const { data: session } = authClient.useSession();
+  const userId = session?.user.id;
+  const groups = useQuery({ ...trpc.groupMembership.list.queryOptions(), subscribed: isFocused });
+  const nicknameQueries = useQueries({
+    queries: (groups.data ?? []).map((group) => ({
+      queryKey: ["personalNicknames", group.id, userId],
+      queryFn: userId ? () => loadPersonalNicknames(group.id, userId) : skipToken,
+      subscribed: isFocused,
+    })),
+  });
+  const nicknames = Object.fromEntries(
+    (groups.data ?? []).map((group, index) => [group.id, nicknameQueries[index]?.data]),
+  );
+  const nameFor = (viewer: { userId: string; name: string }, groupIds: string[]) =>
+    viewerName({
+      accountName: viewer.name,
+      groupIds,
+      groups: groups.data ?? [],
+      nicknames,
+      userId: viewer.userId,
+    });
 
   return (
     <View className="flex-1 bg-background">
@@ -85,9 +112,12 @@ const WhoCanSeeMeScreen = () => {
         >
           <LocationSharingCard />
 
-          <Text className="text-foreground text-lg font-semibold">Can see you now</Text>
+          <Text accessibilityRole="header" className="text-foreground text-lg font-semibold">
+            Can see you now
+          </Text>
           <Text className="text-muted-foreground text-base leading-6">
-            Everyone in a group with you can see your location while you’re sharing it.
+            Everyone in a group with you can see where you are while you’re sharing. While you’ve
+            paused, they can see that you’ve paused, but not where you are.
           </Text>
           {viewers.data.current.length === 0 ? (
             <Text className="text-muted-foreground text-base">
@@ -99,37 +129,63 @@ const WhoCanSeeMeScreen = () => {
                 <Person
                   key={viewer.userId}
                   image={viewer.image}
-                  name={viewer.name}
-                  details={viewer.groups.map(
-                    (group) => `${group.name} · since ${formatDate(group.since)}`,
+                  {...nameFor(
+                    viewer,
+                    viewer.groups.map((group) => group.id),
                   )}
+                  details={viewer.groups.map((group) => ({
+                    key: group.id,
+                    text: `${group.name} · since ${formatViewerDate(group.since)}`,
+                  }))}
                   last={index === viewers.data.current.length - 1}
                 />
               ))}
             </View>
           )}
 
-          <Text className="text-foreground text-lg font-semibold">Could see you recently</Text>
+          <Text accessibilityRole="header" className="text-foreground text-lg font-semibold">
+            Could see you recently
+          </Text>
           <Text className="text-muted-foreground text-base leading-6">
-            People who stopped being in a group with you since {formatDate(viewers.data.since)}.
-            They can’t see where you go now, but they may have kept what they saw before.
+            People who stopped being in a group with you since{" "}
+            {formatViewerDate(viewers.data.since)}. They can’t see where you go now, but they may
+            have kept what they saw before.
           </Text>
           {viewers.data.past.length === 0 ? (
             <Text className="text-muted-foreground text-base">No one.</Text>
           ) : (
             <View className="overflow-hidden rounded-3xl border border-border bg-card">
-              {viewers.data.past.map((viewer, index) => (
-                <Person
-                  key={`${viewer.groupId}-${viewer.userId}-${viewer.to.getTime()}`}
-                  image={viewer.image}
-                  name={viewer.name}
-                  details={[
-                    `${viewer.groupName} · ${viewer.from ? `${formatDate(viewer.from)} to ${formatDate(viewer.to)}` : `until ${formatDate(viewer.to)}`}`,
-                    endedReason[viewer.reason],
-                  ]}
-                  last={index === viewers.data.past.length - 1}
-                />
-              ))}
+              {viewers.data.past.map((viewer, index) => {
+                const stillSharing = viewers.data.current.find(
+                  (person) => person.userId === viewer.userId,
+                );
+                return (
+                  <Person
+                    key={`${viewer.groupId}-${viewer.userId}-${viewer.to.getTime()}`}
+                    image={viewer.image}
+                    {...nameFor(viewer, [
+                      viewer.groupId,
+                      ...(stillSharing?.groups.map((group) => group.id) ?? []),
+                    ])}
+                    details={[
+                      {
+                        key: "stretch",
+                        text: `${viewer.groupName} · ${formatViewerStretch(viewer)}`,
+                      },
+                      { key: "reason", text: endedReason[viewer.reason] },
+                      ...(stillSharing
+                        ? [
+                            {
+                              key: "stillSharing",
+                              text: `Can still see you in ${stillSharing.groups.map((group) => group.name).join(", ")}`,
+                            },
+                          ]
+                        : []),
+                    ]}
+                    last={index === viewers.data.past.length - 1}
+                  />
+                );
+              })}
             </View>
           )}
         </ScrollView>

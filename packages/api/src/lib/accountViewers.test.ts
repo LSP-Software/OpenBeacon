@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { GroupEventType } from "@openbeacon/database";
-import { pastViewers } from "./accountViewers.ts";
+import { groupNameAt, pastViewers } from "./accountViewers.ts";
 
 const at = (day: number) => new Date(Date.UTC(2026, 10, day));
 
@@ -138,5 +138,22 @@ describe("pastViewers", () => {
         ],
       }),
     ).toEqual([]);
+  });
+});
+
+describe("groupNameAt", () => {
+  const renames = [
+    { createdAt: at(6), previousName: "Second" },
+    { createdAt: at(3), previousName: "First" },
+  ];
+
+  test("uses the name from before the first rename after that time", () => {
+    expect(groupNameAt({ at: at(2), currentName: "Third", renames })).toBe("First");
+    expect(groupNameAt({ at: at(4), currentName: "Third", renames })).toBe("Second");
+  });
+
+  test("uses the current name when nothing was renamed later", () => {
+    expect(groupNameAt({ at: at(6), currentName: "Third", renames })).toBe("Third");
+    expect(groupNameAt({ at: at(2), currentName: "Third", renames: [] })).toBe("Third");
   });
 });
