@@ -182,8 +182,8 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
             <View className="items-center gap-2">
               <Text className="text-foreground font-bold text-2xl">No groups yet</Text>
               <Text className="text-sm text-muted text-center max-w-80">
-                Groups keep your family connected. Create one to start sharing locations privately;
-                only members of your group can see each other.
+                Groups keep your family connected. Create one to share your location with people you
+                choose.
               </Text>
             </View>
             <Button onPress={() => setCreateGroupDialogOpen(true)}>
@@ -201,11 +201,11 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
                   Privacy-first by default
                 </Text>
                 <Text className="text-base font-semibold text-foreground">
-                  Location data is encrypted end-to-end
+                  Locations are end-to-end encrypted
                 </Text>
                 <Text className="text-sm leading-6 text-muted-foreground">
-                  The server never stores your plaintext location, so only members of your group can
-                  read it.
+                  Your location is encrypted on this phone before it’s sent, and only your groups
+                  can decrypt it.
                 </Text>
               </View>
             </View>
