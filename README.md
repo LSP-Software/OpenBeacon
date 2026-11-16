@@ -28,9 +28,9 @@
 
 OpenBeacon lets your family see where each other are, without handing that information to anyone else.
 
-- **Encrypted on your phone.** Locations and battery levels are encrypted before they leave the phone. The server stores them but can't read them, whether it's ours or yours.
+- **Encrypted on your phone.** Locations, battery levels and pictures are encrypted before they leave the phone. The server stores them but can't read them, whether it's ours or yours.
 - **Use our server or run your own.** The hosted server and the self-hosted server are the same code.
-- **Honest about the limits.** Names, email addresses, group membership, pictures, place names and when people arrive at and leave places aren't end-to-end encrypted. Where places are stays encrypted. The docs list [exactly what a server can see](https://docs.openbeacon.net/docs/privacy-security/what-the-server-can-see) and the [known limits](https://docs.openbeacon.net/docs/privacy-security/known-limits).
+- **Honest about the limits.** Names, email addresses, group membership, place names and when people arrive at and leave places aren't end-to-end encrypted. Where places are stays encrypted. The docs list [exactly what a server can see](https://docs.openbeacon.net/docs/privacy-security/what-the-server-can-see) and the [known limits](https://docs.openbeacon.net/docs/privacy-security/known-limits).
 
 OpenBeacon is available on **Android 8.0 and newer**. An iPhone app is on the [roadmap](https://docs.openbeacon.net/docs/use-openbeacon/roadmap).
 

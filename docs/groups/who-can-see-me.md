@@ -12,7 +12,7 @@ Each time someone stopped sharing a Group with you in the last 14 days: who, whi
 
 ## Limits
 
-The list is built from Group events, so it has the same 14-day window. Groups you are still in show their current name. A Group you have left shows the name it had when you last left, so later renames stay hidden. Past viewers appear under their current account name, but their profile picture only shows while you still share a Group with them. Deleting a Group deletes its events, and deleting an account clears its references from events, so neither appears here afterwards. Nothing new is stored: the server already holds membership and Group events in plaintext (see the [Beta 1 privacy draft](../security/beta-1-privacy-draft.md)).
+The list is built from Group events, so it has the same 14-day window. Groups you are still in show their current name. A Group you have left shows the name it had when you last left, so later renames stay hidden. Past viewers appear under their current account name. Their profile picture is end-to-end encrypted with the keys of Groups you share, so it only shows while you still share a Group with them, or if it's still in this phone's picture cache. Otherwise they show initials. Deleting a Group deletes its events, and deleting an account clears its references from events, so neither appears here afterwards. Nothing new is stored: the server already holds membership and Group events in plaintext (see the [Beta 1 privacy draft](../security/beta-1-privacy-draft.md)).
 
 User-facing docs: [Who can see me](https://docs.openbeacon.net/docs/use-openbeacon/your-account/who-can-see-me).
 
