@@ -232,7 +232,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         epochKey: initial.epochKey,
         groupId: survivingGroup,
         kind: TRACKING_POINT_KIND,
-        payload: { latitude: 51, longitude: -1 },
+        payload: new Uint8Array(23),
         senderDeviceId: deviceId,
       });
       try {

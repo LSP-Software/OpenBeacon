@@ -38,7 +38,14 @@ if now_ms > last_ms then
 end
 
 local allowed = 0
-if tokens >= cost then
+local granted = 0
+if should_consume == 2 then
+  granted = math.max(0, math.min(cost, math.floor(tokens)))
+  tokens = tokens - granted
+  if granted == cost then
+    allowed = 1
+  end
+elseif tokens >= cost then
   allowed = 1
   if should_consume == 1 then
     tokens = math.min(limit, tokens - cost)
@@ -56,13 +63,17 @@ local ttl_ms = math.max(window_ms, reset_after_ms)
 redis.call("HSET", key, "tokens", tostring(tokens), "lastMs", tostring(last_ms))
 redis.call("PEXPIRE", key, ttl_ms)
 
-return {
+local result = {
   tostring(allowed),
   tostring(limit),
   tostring(math.max(0, math.floor(tokens))),
   tostring(retry_after_ms),
   tostring(reset_after_ms),
 }
+if should_consume == 2 then
+  table.insert(result, tostring(granted))
+end
+return result
 `;
 
 const buildRateLimitKey = ({
@@ -82,6 +93,9 @@ const buildRateLimitKey = ({
   if (identifier.type === "userId") {
     return `${keyPrefix}:ratelimit:${namespace}:userId:${identifier.value}`;
   }
+  if (identifier.type === "deviceGroup") {
+    return `${keyPrefix}:ratelimit:${namespace}:deviceGroup:${identifier.deviceId}:${identifier.groupId}`;
+  }
   if (!hashSecret) {
     throw new Error("Rate limiting by IP address or email address needs a hash secret.");
   }
@@ -92,11 +106,11 @@ const buildRateLimitKey = ({
 };
 
 const parseRateLimitResult = (result: unknown): RateLimitResult => {
-  if (!Array.isArray(result) || result.length !== 5) {
+  if (!Array.isArray(result) || (result.length !== 5 && result.length !== 6)) {
     throw new Error("Unexpected Redis rate limit response.");
   }
 
-  const [allowed, limit, remaining, retryAfterMs, resetAfterMs] = result;
+  const [allowed, limit, remaining, retryAfterMs, resetAfterMs, granted] = result;
 
   return {
     allowed: allowed === "1" || allowed === 1,
@@ -104,6 +118,7 @@ const parseRateLimitResult = (result: unknown): RateLimitResult => {
     remaining: Number(remaining),
     retryAfterMs: Number(retryAfterMs),
     resetAfterMs: Number(resetAfterMs),
+    ...(granted === undefined ? {} : { granted: Number(granted) }),
   };
 };
 
@@ -115,7 +130,7 @@ const executeRateLimitScript = async ({
   namespace,
   now,
   redis,
-  shouldConsume,
+  mode,
   windowMs,
   cost,
 }: {
@@ -126,7 +141,7 @@ const executeRateLimitScript = async ({
   namespace: string;
   now: () => number;
   redis: RedisLike;
-  shouldConsume: boolean;
+  mode: "peek" | "consume" | "take";
   windowMs: number;
   cost: number;
 }) => {
@@ -140,7 +155,7 @@ const executeRateLimitScript = async ({
     String(limit),
     String(windowMs),
     String(cost),
-    shouldConsume ? "1" : "0",
+    { peek: "0", consume: "1", take: "2" }[mode],
   ]);
 
   return parseRateLimitResult(result);
@@ -185,7 +200,7 @@ export const createRateLimits = ({ hashSecret, keyPrefix, now, redis }: RateLimi
           keyPrefix,
           now,
           ...parsedInput,
-          shouldConsume: false,
+          mode: "peek",
           cost: 0,
         }),
         options,
@@ -205,11 +220,36 @@ export const createRateLimits = ({ hashSecret, keyPrefix, now, redis }: RateLimi
           keyPrefix,
           now,
           ...parsedInput,
-          shouldConsume: true,
+          mode: "consume",
           cost: parsedInput.cost ?? 1,
         }),
         options,
       );
+    },
+    take: async (
+      input: Parameters<typeof rateLimitConsumeInputSchema.parse>[0],
+      options?: WhenRedisUnavailable,
+    ) => {
+      const parsedInput = rateLimitConsumeInputSchema.parse(input);
+      const cost = parsedInput.cost ?? 1;
+      const result = await withFallback(
+        parsedInput,
+        executeRateLimitScript({
+          redis,
+          hashSecret,
+          keyPrefix,
+          now,
+          ...parsedInput,
+          mode: "take",
+          cost,
+        }),
+        options,
+      );
+      return {
+        granted: result.unavailable ? (result.allowed ? cost : 0) : (result.granted ?? 0),
+        remaining: result.remaining,
+        ...(result.unavailable ? { unavailable: true as const } : {}),
+      };
     },
     refund: async (input: Parameters<typeof rateLimitConsumeInputSchema.parse>[0]) => {
       const parsedInput = rateLimitConsumeInputSchema.parse(input);
@@ -220,7 +260,7 @@ export const createRateLimits = ({ hashSecret, keyPrefix, now, redis }: RateLimi
         keyPrefix,
         now,
         ...parsedInput,
-        shouldConsume: true,
+        mode: "consume",
         cost: -(parsedInput.cost ?? 1),
       });
     },

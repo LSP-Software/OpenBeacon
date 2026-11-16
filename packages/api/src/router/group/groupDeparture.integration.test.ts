@@ -5,7 +5,6 @@ import {
   createDeviceKeyPair,
   createInitialGroupEpoch,
   createNextGroupEpoch,
-  decodeJsonPayload,
   decryptGroupPayload,
   encryptGroupPayload,
   type EpochKeyMaterial,
@@ -71,7 +70,6 @@ const ownerPoint = (
     epochId: epoch.epoch.epochId,
     epochKey: epoch.epochKey,
     groupId: readsGroupId,
-    payload: { latitude: 51.5, longitude: -0.12 },
     senderDeviceId: ownerDevice,
   });
 
@@ -162,7 +160,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         (item) => item.kind === "group" && item.type === "MEMBER_JOINED",
       );
       expect(joins).toMatchObject([{ subject: { name: "Member" }, role: "MEMBER" }]);
-      const plaintext = { latitude: 51.5, longitude: -0.12 };
+      const plaintext = new Uint8Array(23).fill(5);
       const encrypted = encryptGroupPayload({
         epochId: joined.epoch.epochId,
         epochKey: joined.epochKey,
@@ -204,7 +202,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           senderDeviceId: memberDevice,
         },
       });
-      expect(decodeJsonPayload(received.bytes)).toEqual(plaintext);
+      expect(received.bytes.expose()).toEqual(plaintext);
       const members = await member.groupMembership.members({ groupId });
       const self = members.find((item) => item.user.id === memberId)!;
       const ownerMember = members.find((item) => item.user.id === ownerId)!;

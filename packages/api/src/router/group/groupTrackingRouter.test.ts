@@ -24,6 +24,9 @@ const validNonce = Buffer.alloc(24, 1).toString("base64");
 const createMemberFindUniqueMock = (isMember: boolean) =>
   mock(async () => (isMember ? { id: "group-member-1", role: "OWNER", userId: "user-1" } : null));
 
+const pointIdsOf = (clientPointIds: string[]) =>
+  clientPointIds.map((clientPointId) => parseClientPointId(clientPointId).pointId.toString());
+
 const storedPoints = (stored: string[] = []) =>
   mock(async (pointIds: string[], _update: boolean) =>
     pointIds
@@ -50,8 +53,8 @@ const createCaller = async ({
   queryRawMock,
   now = () => 0,
   pending = false,
-  groupCount = 1,
   redisAvailable = true,
+  alreadyStored = [],
 }: {
   insertPointsMock?: ReturnType<typeof storedPoints>;
   findManyDevicesMock?: ReturnType<typeof mock>;
@@ -62,8 +65,8 @@ const createCaller = async ({
   queryRawMock?: ReturnType<typeof mock>;
   now?: () => number;
   pending?: boolean;
-  groupCount?: number;
   redisAvailable?: boolean;
+  alreadyStored?: string[];
 }) => {
   const [{ createTRPCRouter }, { groupTrackingRouter }] = await Promise.all([
     import("../../trpcRuntime.ts"),
@@ -82,7 +85,15 @@ const createCaller = async ({
     $queryRaw: async (query: { strings: string[]; values: unknown[] }) => {
       const sql = query.strings.join("");
       statements.push(sql);
-      if (sql.includes('JOIN "User" AS "account"')) return [sharingDeviceRow];
+      if (sql.includes('JOIN "User" AS "account"')) {
+        return [sharingDeviceRow, { ...sharingDeviceRow, deviceId: "device-2" }];
+      }
+      if (sql.includes('FROM "TrackingPoint" AS "point"')) {
+        const stored = pointIdsOf(alreadyStored);
+        return (query.values[1] as string[])
+          .filter((pointId) => stored.includes(pointId))
+          .map((pointId) => ({ streamId: "1", pointId }));
+      }
       if (sql.includes('INSERT INTO "TrackingPoint"')) {
         return (insertPointsMock ?? storedPoints())(
           query.values[1] as string[],
@@ -100,7 +111,6 @@ const createCaller = async ({
     },
     group: { findUnique: mock(async () => ({ id: "group-1" })) },
     groupMember: {
-      count: mock(async () => groupCount),
       findUnique: memberFindUniqueMock,
     },
     groupEpoch: {
@@ -187,7 +197,7 @@ describe("groupTrackingRouter", () => {
   });
 
   const trackingPoint = (seed: string, role: "POINT" | "STAY" | "LIVE" = "POINT") => ({
-    ciphertext: "Y2lwaGVydGV4dA==",
+    ciphertext: Buffer.alloc(39, 2).toString("base64"),
     clientPointId: testClientPointId(seed),
     epochId: "epoch-1",
     nonce: validNonce,
@@ -200,10 +210,10 @@ describe("groupTrackingRouter", () => {
     code: "TOO_MANY_REQUESTS",
     cause: { reason: "UPLOAD_LIMIT_REACHED" },
   };
-  const dailyBudget = (limit: number) => ({
-    namespace: "groupTracking.uploadBatch.daily",
-    identifier: { type: "userId" as const, value: "user-1" },
-    limit,
+  const allowance = (groupId = "group-1", deviceId = "device-1") => ({
+    namespace: "groupTracking.historyAllowance",
+    identifier: { type: "deviceGroup" as const, deviceId, groupId },
+    limit: 2_880,
     windowMs: 86_400_000,
   });
 
@@ -236,88 +246,102 @@ describe("groupTrackingRouter", () => {
     warn.mockRestore();
   });
 
-  for (const [groupCount, budget] of [
-    [3, 35_424],
-    [16, 147_744],
-  ] as const) {
-    test(`gives a user in ${groupCount} groups a daily budget of ${budget} accepted points`, async () => {
-      const insertPointsMock = storedPoints();
-      const { cache, caller } = await createCaller({
-        insertPointsMock,
-        groupCount,
-        memberFindUniqueMock: createMemberFindUniqueMock(true),
-      });
-      const consume = spyOn(cache.rateLimits, "consume");
-      const warn = spyOn(console, "warn").mockImplementation(() => {});
-
-      await caller.groupTracking.uploadBatch({
-        groupId: "group-1",
-        points: [trackingPoint("first")],
-      });
-      expect(consume).toHaveBeenCalledWith(
-        { ...dailyBudget(budget), cost: 1 },
-        { whenUnavailable: "allow" },
-      );
-      await cache.rateLimits.consume({
-        ...dailyBudget(budget),
-        cost: budget - 2,
-      });
-      await caller.groupTracking.uploadBatch({
-        groupId: "group-1",
-        points: [trackingPoint("last")],
-      });
-      await expect(
-        caller.groupTracking.uploadBatch({
-          groupId: "group-1",
-          points: [trackingPoint("over")],
-        }),
-      ).rejects.toMatchObject(uploadLimitReached);
-
-      expect(insertPointsMock).toHaveBeenCalledTimes(3);
-      expect(warn.mock.calls).toContainEqual([
-        "[rate-limit] upload limit reached",
-        { userId: "user-1", limit: "daily points" },
-      ]);
-      warn.mockRestore();
-    });
-  }
-
-  test("points the server already has don't count towards the daily budget", async () => {
+  test("discards history points over a device's 2,880 a day in a group, oldest kept", async () => {
+    let now = 0;
+    const insertPointsMock = storedPoints();
     const { cache, caller } = await createCaller({
-      insertPointsMock: storedPoints([
-        testClientPointId("stored-1"),
-        testClientPointId("stored-2"),
-      ]),
-      groupCount: 3,
+      insertPointsMock,
       memberFindUniqueMock: createMemberFindUniqueMock(true),
+      now: () => now,
     });
-    await cache.rateLimits.consume({ ...dailyBudget(35_424), cost: 35_423 });
+    const take = spyOn(cache.rateLimits, "take");
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    await cache.rateLimits.take({ ...allowance(), cost: 2_878 });
+    take.mockClear();
 
-    const result = await caller.groupTracking.uploadBatch({
-      groupId: "group-1",
-      points: [trackingPoint("stored-1"), trackingPoint("stored-2"), trackingPoint("new")],
-    });
-
-    expect(result.accepted).toEqual([testClientPointId("new")]);
-    expect(result.duplicates).toEqual([
-      testClientPointId("stored-1"),
-      testClientPointId("stored-2"),
-    ]);
-  });
-
-  test("a batch of only duplicates doesn't touch the daily budget", async () => {
-    const { cache, caller } = await createCaller({
-      insertPointsMock: storedPoints([testClientPointId("stored-1")]),
-      memberFindUniqueMock: createMemberFindUniqueMock(true),
-    });
-    await cache.rateLimits.consume({ ...dailyBudget(18_144), cost: 18_144 });
-
+    const [first, second, third] = trackingPoints("over", 3);
+    const live = trackingPoint("over-live", "LIVE");
     await expect(
       caller.groupTracking.uploadBatch({
         groupId: "group-1",
-        points: [trackingPoint("stored-1")],
+        points: [first!, live, second!, third!],
       }),
-    ).resolves.toMatchObject({ duplicates: [testClientPointId("stored-1")] });
+    ).resolves.toMatchObject({
+      accepted: [first!.clientPointId, live.clientPointId, second!.clientPointId],
+      discarded: [third!.clientPointId],
+      duplicates: [],
+    });
+    expect(take).toHaveBeenCalledWith({ ...allowance(), cost: 3 }, { whenUnavailable: "allow" });
+    expect(insertPointsMock.mock.calls[0]?.[0]).toEqual(
+      pointIdsOf([first!.clientPointId, second!.clientPointId]).sort(),
+    );
+    expect(warn.mock.calls).toContainEqual([
+      "[rate-limit] history allowance reached",
+      { userId: "user-1", discarded: 1 },
+    ]);
+
+    now = 30_000;
+    const refilled = trackingPoints("refilled", 2);
+    await expect(
+      caller.groupTracking.uploadBatch({ groupId: "group-1", points: refilled }),
+    ).resolves.toMatchObject({
+      accepted: [refilled[0]!.clientPointId],
+      discarded: [refilled[1]!.clientPointId],
+    });
+    warn.mockRestore();
+  });
+
+  test("duplicates, stay updates and live rows don't use the allowance", async () => {
+    const stay = trackingPoint("stored-stay", "STAY");
+    const duplicate = trackingPoint("stored-point");
+    const { cache, caller } = await createCaller({
+      alreadyStored: [stay.clientPointId, duplicate.clientPointId],
+      insertPointsMock: storedPoints([duplicate.clientPointId]),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
+    });
+    await cache.rateLimits.take({ ...allowance(), cost: 2_880 });
+    const take = spyOn(cache.rateLimits, "take");
+    const live = trackingPoint("live", "LIVE");
+
+    await expect(
+      caller.groupTracking.uploadBatch({ groupId: "group-1", points: [duplicate, stay, live] }),
+    ).resolves.toMatchObject({
+      accepted: [stay.clientPointId, live.clientPointId],
+      discarded: [],
+      duplicates: [duplicate.clientPointId],
+    });
+    expect(take).not.toHaveBeenCalled();
+
+    const newStay = trackingPoint("new-stay", "STAY");
+    await expect(
+      caller.groupTracking.uploadBatch({ groupId: "group-1", points: [newStay] }),
+    ).resolves.toMatchObject({ accepted: [], discarded: [newStay.clientPointId] });
+  });
+
+  test("each device has its own allowance in each group", async () => {
+    const { cache, caller } = await createCaller({
+      findManyDevicesMock: mock(async () => [
+        { id: "device-1", userId: "user-1" },
+        { id: "device-2", userId: "user-1" },
+      ]),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
+    });
+    await cache.rateLimits.take({ ...allowance(), cost: 2_880 });
+    const blocked = trackingPoint("device-1");
+    const otherDevice = { ...trackingPoint("device-2"), senderDeviceId: "device-2" };
+
+    await expect(
+      caller.groupTracking.uploadBatch({ groupId: "group-1", points: [blocked, otherDevice] }),
+    ).resolves.toMatchObject({
+      accepted: [otherDevice.clientPointId],
+      discarded: [blocked.clientPointId],
+    });
+    await expect(cache.rateLimits.peek(allowance("group-2"))).resolves.toMatchObject({
+      remaining: 2_880,
+    });
+    await expect(cache.rateLimits.peek(allowance("group-1", "device-2"))).resolves.toMatchObject({
+      remaining: 2_879,
+    });
   });
 
   test("uploads carry on, with a log line, when Redis is unavailable", async () => {
@@ -340,7 +364,7 @@ describe("groupTrackingRouter", () => {
     expect(error.mock.calls.map(([line]) => line)).toEqual(
       expect.arrayContaining([
         "[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so groupTracking.uploadBatch.points is allowed",
-        "[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so groupTracking.uploadBatch.daily is allowed",
+        "[rate-limit] Redis is unavailable (ERR_REDIS_CONNECTION_CLOSED), so groupTracking.historyAllowance is allowed",
       ]),
     );
     error.mockRestore();

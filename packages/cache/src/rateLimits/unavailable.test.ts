@@ -45,6 +45,21 @@ test("a caller that chose to stay closed is refused", async () => {
   error.mockRestore();
 });
 
+test("a take grants the whole cost when it stays open and nothing when it stays closed", async () => {
+  const error = spyOn(console, "error").mockImplementation(() => {});
+  expect(await cache.rateLimits.take({ ...limit, cost: 4 }, { whenUnavailable: "allow" })).toEqual({
+    granted: 4,
+    remaining: 10,
+    unavailable: true,
+  });
+  expect(await cache.rateLimits.take({ ...limit, cost: 4 }, { whenUnavailable: "deny" })).toEqual({
+    granted: 0,
+    remaining: 0,
+    unavailable: true,
+  });
+  error.mockRestore();
+});
+
 test("a caller that chose nothing gets the Redis error, and bad input still throws", async () => {
   await expect(cache.rateLimits.consume(limit)).rejects.toMatchObject({
     code: "ERR_REDIS_CONNECTION_CLOSED",

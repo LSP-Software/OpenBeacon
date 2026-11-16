@@ -29,18 +29,18 @@ export const parseClientPointId = (clientPointId: string) => {
 };
 
 export const uploadGroupTrackingBatch = async ({
-  consumeDailyBudget,
   db,
   groupId,
   memberSince,
   points,
+  takeAllowance,
   userId,
 }: {
-  consumeDailyBudget: (acceptedPoints: number) => Promise<void>;
   db: GroupTrackingDb;
   groupId: string;
   memberSince?: Date;
   points: TrackingPointUpload[];
+  takeAllowance: (senderDeviceId: string, cost: number) => Promise<number>;
   userId: string;
 }) => {
   const clientPointIds = points.map((point) => point.clientPointId);
@@ -105,7 +105,35 @@ export const uploadGroupTrackingBatch = async ({
     ...point,
     streamId: streamIds.get(streamKey(point)) ?? "",
   }));
-  const insertOrder = [...withStreams].sort((first, second) =>
+  const pointKey = (point: { pointId: bigint | string; streamId: string }) =>
+    `${point.streamId}:${point.pointId}`;
+  const history = withStreams.filter((point) => point.role !== "LIVE");
+  const alreadyStored =
+    history.length === 0
+      ? new Set<string>()
+      : new Set(
+          (
+            await db.$queryRaw<Array<{ streamId: string; pointId: string }>>(Prisma.sql`
+              SELECT "point"."streamId"::text AS "streamId", "point"."pointId"::text AS "pointId"
+              FROM "TrackingPoint" AS "point"
+              JOIN unnest(
+                ${history.map(({ streamId }) => streamId)}::text[],
+                ${history.map(({ pointId }) => pointId.toString())}::text[]
+              ) AS "row"("streamId", "pointId")
+                ON "point"."streamId" = "row"."streamId"::bigint
+                AND "point"."pointId" = "row"."pointId"::bigint
+            `)
+          ).map(pointKey),
+        );
+  const newRows = history.filter((point) => !alreadyStored.has(pointKey(point)));
+  const overAllowance: typeof newRows = [];
+  for (const senderDeviceId of new Set(newRows.map((point) => point.senderDeviceId))) {
+    const deviceRows = newRows.filter((point) => point.senderDeviceId === senderDeviceId);
+    const granted = await takeAllowance(senderDeviceId, deviceRows.length);
+    overAllowance.push(...deviceRows.slice(granted));
+  }
+  const allowed = withStreams.filter((point) => !overAllowance.includes(point));
+  const insertOrder = [...allowed].sort((first, second) =>
     first.streamId === second.streamId
       ? Number(first.pointId > second.pointId) - Number(first.pointId < second.pointId)
       : Number(BigInt(first.streamId) > BigInt(second.streamId)) -
@@ -132,16 +160,21 @@ export const uploadGroupTrackingBatch = async ({
       }
       RETURNING "streamId"::text AS "streamId", "pointId"::text AS "pointId"
     `);
-    return new Set(stored.map((row) => `${row.streamId}:${row.pointId}`));
+    return new Set(stored.map(pointKey));
   };
   const storedPoints = await storePoints("POINT");
   await storePoints("STAY");
-  const accepted = withStreams.filter(
-    (point) => point.role !== "POINT" || storedPoints.has(`${point.streamId}:${point.pointId}`),
+  const accepted = allowed.filter(
+    (point) => point.role !== "POINT" || storedPoints.has(pointKey(point)),
   );
 
   const latestByDevice = new Map(
-    accepted.filter((point) => point.role !== "STAY").map((point) => [point.senderDeviceId, point]),
+    withStreams
+      .filter(
+        (point) =>
+          point.role !== "STAY" && (accepted.includes(point) || overAllowance.includes(point)),
+      )
+      .map((point) => [point.senderDeviceId, point]),
   );
   for (const latest of latestByDevice.values()) {
     await db.$queryRaw(Prisma.sql`
@@ -155,7 +188,6 @@ export const uploadGroupTrackingBatch = async ({
   }
 
   if (accepted.length > 0) {
-    await consumeDailyBudget(accepted.length);
     await db.userDevice.updateMany({
       data: { lastLocationAt: new Date() },
       where: { id: { in: [...new Set(accepted.map((point) => point.senderDeviceId))] }, userId },
@@ -164,8 +196,8 @@ export const uploadGroupTrackingBatch = async ({
 
   return {
     accepted: accepted.map((point) => point.clientPointId),
-    discarded: discarded.map((point) => point.clientPointId),
-    duplicates: withStreams
+    discarded: [...discarded, ...overAllowance].map((point) => point.clientPointId),
+    duplicates: allowed
       .filter((point) => !accepted.includes(point))
       .map((point) => point.clientPointId),
     expired: expired.map((point) => point.clientPointId),

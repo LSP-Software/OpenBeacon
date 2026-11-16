@@ -21,7 +21,7 @@ export const encryptedTrackingPoint = ({
   epochId: string;
   epochKey: EpochKeyMaterial;
   groupId: string;
-  payload?: Record<string, unknown> | Uint8Array;
+  payload?: Uint8Array;
   role?: "POINT" | "STAY" | "LIVE";
   senderDeviceId: string;
 }) => {

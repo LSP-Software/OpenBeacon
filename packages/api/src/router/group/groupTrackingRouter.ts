@@ -90,19 +90,28 @@ export const groupTrackingRouter = {
                 memberSince: member.createdAt,
                 points: input.points,
                 userId,
-                consumeDailyBudget: async (acceptedPoints) => {
-                  const groupCount = await tx.groupMember.count({ where: { userId } });
-                  const budget = await ctx.cache.rateLimits.consume(
+                takeAllowance: async (senderDeviceId, cost) => {
+                  const allowance = await ctx.cache.rateLimits.take(
                     {
-                      namespace: "groupTracking.uploadBatch.daily",
-                      identifier: { type: "userId", value: userId },
-                      limit: 9_504 + 8_640 * groupCount,
+                      namespace: "groupTracking.historyAllowance",
+                      identifier: {
+                        type: "deviceGroup",
+                        deviceId: senderDeviceId,
+                        groupId: input.groupId,
+                      },
+                      limit: 2_880,
                       windowMs: 86_400_000,
-                      cost: acceptedPoints,
+                      cost,
                     },
                     { whenUnavailable: "allow" },
                   );
-                  if (!budget.allowed) throw uploadLimitReached("daily points");
+                  if (allowance.granted < cost) {
+                    console.warn("[rate-limit] history allowance reached", {
+                      userId,
+                      discarded: cost - allowance.granted,
+                    });
+                  }
+                  return allowance.granted;
                 },
               })
             : { accepted: [], discarded: [], duplicates: [], expired: [] };

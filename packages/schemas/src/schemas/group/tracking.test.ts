@@ -27,10 +27,16 @@ describe("groupTrackingPointSchema", () => {
     expect(accepts({ ...validPoint, role: "TRAIL" })).toBe(false);
   });
 
-  test("limits ciphertext to canonical base64 of at most 1,024 characters", () => {
-    expect(accepts({ ...validPoint, ciphertext: "a".repeat(1024) })).toBe(true);
-    expect(accepts({ ...validPoint, ciphertext: "a".repeat(1028) })).toBe(false);
-    expect(accepts({ ...validPoint, ciphertext: "not base64!" })).toBe(false);
+  test("takes only the 52-character canonical base64 of a 39-byte ciphertext", () => {
+    expect(validPoint.ciphertext).toHaveLength(52);
+    for (const length of [0, 1, 38, 40, 63, 768]) {
+      expect(
+        accepts({ ...validPoint, ciphertext: Buffer.alloc(length, 2).toString("base64") }),
+      ).toBe(false);
+    }
+    expect(accepts({ ...validPoint, ciphertext: "a".repeat(52) })).toBe(true);
+    expect(accepts({ ...validPoint, ciphertext: `${"a".repeat(51)}!` })).toBe(false);
+    expect(accepts({ ...validPoint, ciphertext: `${"a".repeat(50)}==` })).toBe(false);
     expect(accepts({ ...validPoint, ciphertext: `${validPoint.ciphertext}\n` })).toBe(false);
   });
 

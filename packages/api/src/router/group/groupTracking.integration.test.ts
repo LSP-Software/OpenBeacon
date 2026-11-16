@@ -1,10 +1,11 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
-  decodeJsonPayload,
+  decodeTrackingPoint,
   decryptGroupPayload,
+  encodeTrackingPoint,
   generateGroupEpochKey,
   PAYLOAD_ENCRYPTION_ALGORITHM,
 } from "@openbeacon/encryption";
@@ -171,11 +172,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
   const clearPoints = () => prisma.trackingStream.deleteMany({ where: { groupId } });
 
   test("stores opaque ciphertext once, authorizes the sender and rejects malformed input", async () => {
-    const payload = {
+    const trackingPoint = {
       latitude: 51.5074,
       longitude: -0.1278,
-      marker: "privacy-test-plaintext",
+      time: Date.UTC(2026, 10, 16, 12),
+      stayUntil: null,
+      accuracy: 8,
+      speed: 1.4,
+      battery: { level: 64, charging: false },
     };
+    const payload = encodeTrackingPoint(trackingPoint);
     const first = point("point", { payload });
     const accepted = await upload([first]);
     expect(accepted.accepted).toEqual([first.clientPointId]);
@@ -196,9 +202,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       Buffer.concat([Buffer.from(first.nonce, "base64"), Buffer.from(first.ciphertext, "base64")]),
     );
     expect(stored[0]!.pointId).toBe(Buffer.from(first.clientPointId, "base64").readBigInt64BE());
-    expect(Buffer.from(stored[0]!.payload).includes(Buffer.from(JSON.stringify(payload)))).toBe(
-      false,
-    );
+    expect(Buffer.from(stored[0]!.payload).includes(Buffer.from(payload))).toBe(false);
 
     const received = await caller(memberId, memberDeviceId).groupTracking.getLatest({ groupId });
     expect(received.points).toHaveLength(1);
@@ -211,7 +215,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       senderUserId: ownerId,
     });
     expect(
-      decodeJsonPayload(
+      decodeTrackingPoint(
         decryptGroupPayload({
           epochKey,
           encryptedPayload: {
@@ -230,9 +234,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
             kind: TRACKING_POINT_KIND,
             senderDeviceId: ownerDeviceId,
           },
-        }).bytes,
+        }).bytes.expose(),
       ),
-    ).toEqual(payload);
+    ).toEqual(trackingPoint);
 
     await expect(
       caller(memberId, memberDeviceId).groupTracking.uploadBatch({
@@ -249,6 +253,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     for (const input of [
       { ...first, nonce: `${" ".repeat(1_000_000)}${first.nonce}` },
       { ...first, ciphertext: "x".repeat(1025) },
+      { ...first, ciphertext: point("padded", { payload: new Uint8Array(24) }).ciphertext },
+      { ...first, ciphertext: point("short", { payload: new Uint8Array(22) }).ciphertext },
       { ...first, ciphertext: "not base64!" },
       { ...first, clientPointId: "x".repeat(200_000) },
       { ...first, clientPointId: Buffer.alloc(32, 1).toString("base64") },
@@ -268,7 +274,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
   });
 
   test("stays update their point in place and live rows only move the latest point", async () => {
-    const stay = (marker: number) => point("stay", { role: "STAY", payload: { marker } });
+    const stay = (marker: number) =>
+      point("stay", { role: "STAY", payload: new Uint8Array(23).fill(marker) });
     const firstStay = stay(1);
     expect((await upload([firstStay])).accepted).toEqual([firstStay.clientPointId]);
     const [arrival] = await storedPoints();
@@ -309,6 +316,36 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     const afterRetention = stay(3);
     expect((await upload([afterRetention])).accepted).toEqual([afterRetention.clientPointId]);
     expect((await storedPoints()).map(({ pointId }) => pointId)).toContain(arrival!.pointId);
+    await clearPoints();
+  });
+
+  test("history points over the device's daily allowance are discarded, not stored", async () => {
+    const allowance = {
+      namespace: "groupTracking.historyAllowance",
+      identifier: { type: "deviceGroup" as const, deviceId: ownerDeviceId, groupId },
+      limit: 2_880,
+      windowMs: 86_400_000,
+    };
+    await cache.rateLimits.reset(allowance);
+    await cache.rateLimits.take({ ...allowance, cost: 2_879 });
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const kept = point("allowance-kept");
+    const over = point("allowance-over");
+    const live = point("allowance-live", { role: "LIVE" });
+
+    expect(await upload([kept, live, over])).toMatchObject({
+      accepted: [kept.clientPointId, live.clientPointId],
+      discarded: [over.clientPointId],
+      duplicates: [],
+    });
+    const latest = await caller(memberId, memberDeviceId).groupTracking.getLatest({ groupId });
+    expect(latest.points.map(({ nonce }) => nonce)).toEqual([over.nonce]);
+    expect(await upload([kept])).toMatchObject({ duplicates: [kept.clientPointId] });
+    expect((await storedPoints()).map(({ pointId }) => pointId)).toEqual([
+      Buffer.from(kept.clientPointId, "base64").readBigInt64BE(),
+    ]);
+    warn.mockRestore();
+    await cache.rateLimits.reset(allowance);
     await clearPoints();
   });
 

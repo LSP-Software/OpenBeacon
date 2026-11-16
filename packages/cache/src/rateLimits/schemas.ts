@@ -15,6 +15,11 @@ export const rateLimitIdentifierSchema = z.discriminatedUnion("type", [
     value: z.string().min(1),
   }),
   z.object({
+    type: z.literal("deviceGroup"),
+    deviceId: z.string().min(1),
+    groupId: z.string().min(1),
+  }),
+  z.object({
     type: z.literal("server"),
   }),
 ]);

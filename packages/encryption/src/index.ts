@@ -32,6 +32,7 @@ import {
 import type { TrackingPoint } from "./trackingPoint.ts";
 import {
   decodeTrackingPoint,
+  ENCRYPTED_TRACKING_POINT_LENGTH,
   encodeTrackingPoint,
   TRACKING_POINT_KIND,
   TRACKING_POINT_LENGTH,
@@ -445,6 +446,7 @@ export {
   encodeBase64,
   encodePlaceGeometryV1,
   encodeTrackingPoint,
+  ENCRYPTED_TRACKING_POINT_LENGTH,
   EpochKeyMaterial,
   HISTORY_ESCROW_ALGORITHM,
   HistoryPrivateKeyMaterial,

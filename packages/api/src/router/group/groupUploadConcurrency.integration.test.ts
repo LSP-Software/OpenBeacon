@@ -92,7 +92,6 @@ const createGroup = async () => {
       epochId: joined.epoch.epochId,
       epochKey: joined.epochKey,
       groupId,
-      payload: { latitude: 51.5, longitude: -0.12 },
       senderDeviceId: deviceId,
     });
   return { groupId, epochId: joined.epoch.epochId, point };

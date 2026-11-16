@@ -1,5 +1,6 @@
 import {
   decodeBase64,
+  ENCRYPTED_TRACKING_POINT_LENGTH,
   encodeBase64,
   TRACKING_POINT_KIND,
   XCHACHA20_NONCE_LENGTH,
@@ -31,9 +32,12 @@ export const TRACKING_POINT_ROLES = ["POINT", "STAY", "LIVE"] as const;
 export const groupTrackingPointSchema = z.object({
   ciphertext: z
     .string()
-    .min(1)
-    .max(1024)
-    .refine((ciphertext) => decodesTo(ciphertext, () => true), "Invalid ciphertext."),
+    .length(Math.ceil(ENCRYPTED_TRACKING_POINT_LENGTH / 3) * 4)
+    .refine(
+      (ciphertext) =>
+        decodesTo(ciphertext, (decoded) => decoded.length === ENCRYPTED_TRACKING_POINT_LENGTH),
+      "Invalid ciphertext.",
+    ),
   clientPointId: z
     .string()
     .regex(

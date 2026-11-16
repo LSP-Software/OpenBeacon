@@ -19,7 +19,12 @@ const groupId = `${prefix}-group`;
 const epochId = `${prefix}-epoch`;
 const keys = createDeviceKeyPair();
 const epochKey = generateGroupEpochKey();
-const cache = { rateLimits: { consume: async () => ({ allowed: true }) } };
+const cache = {
+  rateLimits: {
+    consume: async () => ({ allowed: true }),
+    take: async (input: { cost?: number }) => ({ granted: input.cost ?? 1, remaining: 2_880 }),
+  },
+};
 const router = createTRPCRouter({ account: accountRouter, groupTracking: groupTrackingRouter });
 const caller = (ownerId = userId, deviceId = phoneId) =>
   router.createCaller(
