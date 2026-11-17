@@ -106,17 +106,22 @@ final class Notices: NSObject, UNUserNotificationCenterDelegate {
     return true
   }
 
-  static func showPlace(kind: String, key: String, title: String, body: String?, groupName: String, link: String) -> Bool {
-    guard kind == "alert" || kind == "placesChanged" else { return false }
+  static func showEvent(kind: String, key: String, title: String, body: String?, groupName: String?, link: String) -> Bool {
+    let tags = [
+      "alert": "openbeacon_place_alert",
+      "placesChanged": "openbeacon_places_changed",
+      "groupActivity": "openbeacon_group_activity",
+      "accountAlert": "openbeacon_account_alert",
+    ]
+    guard let tag = tags[kind] else { return false }
     if !areEnabled() { return false }
-    let tag = kind == "alert" ? "openbeacon_place_alert" : "openbeacon_places_changed"
     let content = UNMutableNotificationContent()
     content.title = title
-    content.subtitle = groupName
+    if let groupName { content.subtitle = groupName }
     if let body { content.body = body }
     content.threadIdentifier = tag
     content.userInfo = ["link": link]
-    if kind == "alert" { content.sound = .default }
+    if kind != "placesChanged" { content.sound = .default }
     center.add(UNNotificationRequest(identifier: "\(tag).\(key)", content: content, trigger: nil))
     return true
   }

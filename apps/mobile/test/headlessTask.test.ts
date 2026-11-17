@@ -30,6 +30,10 @@ mock.module("../lib/tracking.ts", () => ({
   },
 }));
 
+mock.module("../modules/openbeacon-tracking/index.ts", () => ({
+  default: { addListener: () => ({ remove: () => {} }) },
+}));
+
 mock.module("../lib/trackingModule.ts", () => ({
   loadTrackingModule: async () => ({
     finishUploadTask: (token: string) => {

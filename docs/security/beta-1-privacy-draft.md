@@ -158,7 +158,7 @@ On the hosted service Google, through Firebase Cloud Messaging, is a processor. 
 - **What Google sees.** Each phone's push token and Firebase installation, the app it belongs to, and when the server woke each phone. Because the server wakes the phones of one event together, the timing of wake-ups can suggest which phones belong to the same group or account. Google Play services already keeps its own connection to Google on Android phones that have it.
 - **What the server sees.** The push token of each device (see Push tokens above). It already knows who it wakes and when, because it chose them.
 
-Android may lower the priority of high-priority messages that often show no notification, and may delay wake-ups while the phone is idle. The pause check and normal uploads stay as the fallback.
+The iOS app has no push wake-ups yet: it never contacts Firebase or sends a push token, and gets new notices when it syncs. Android may lower the priority of high-priority messages that often show no notification, and may delay wake-ups while the phone is idle. The pause check and normal uploads stay as the fallback.
 
 ## Proposed contract, pending decisions and independent review
 

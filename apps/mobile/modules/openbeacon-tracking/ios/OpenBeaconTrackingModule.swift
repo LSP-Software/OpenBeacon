@@ -104,8 +104,22 @@ public class OpenBeaconTrackingModule: Module {
       try TrackingRuntime.places.acknowledge(clientIds: clientIds)
     }
 
-    Function("showPlaceNotice") { (kind: String, key: String, title: String, body: String?, groupName: String, link: String) -> Bool in
-      Notices.showPlace(kind: kind, key: key, title: title, body: body, groupName: groupName, link: link)
+    Function("showEventNotice") { (kind: String, key: String, title: String, body: String?, groupName: String?, link: String) -> Bool in
+      Notices.showEvent(kind: kind, key: key, title: title, body: body, groupName: groupName, link: link)
+    }
+
+    Function("pendingPushToken") { (_: String) -> String? in
+      nil
+    }
+
+    Function("confirmPushToken") { (_: String, _: String?, _: Bool) in
+    }
+
+    Function("forgetPushToken") { (_: String) -> Bool in
+      false
+    }
+
+    Function("finishUploadTask") { (_: String) in
     }
 
     Function("listProvisionedEpochKeys") { () -> [[String: Any]] in
