@@ -13,6 +13,13 @@ import {
 } from "./schemas/account/devices.ts";
 import { changePasswordSchema } from "./schemas/account/changePassword.ts";
 import { emailAlertSettingsSchema, timezoneSchema } from "./schemas/account/emailAlerts.ts";
+import {
+  effectiveNotificationSetting,
+  notificationChannelSchema,
+  notificationTypeSchema,
+  notificationTypes,
+  setNotificationSettingSchema,
+} from "./schemas/account/notificationSettings.ts";
 import { emailCodeSchema } from "./schemas/account/emailCode.ts";
 import { accountNameSchema } from "./schemas/account/fields.ts";
 import { signInSchema } from "./schemas/account/signIn.ts";
@@ -93,6 +100,11 @@ export {
   devicePlatformSchema,
   emailAlertSettingsSchema,
   timezoneSchema,
+  effectiveNotificationSetting,
+  notificationChannelSchema,
+  notificationTypeSchema,
+  notificationTypes,
+  setNotificationSettingSchema,
   accountNameSchema,
   addHistoryWrapsSchema,
   changePasswordSchema,

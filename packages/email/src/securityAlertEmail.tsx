@@ -6,8 +6,8 @@ import type { createSendEmail } from "./sender.ts";
 import {
   type AlertDevice,
   type EmailMessage,
-  isOptionalSecurityAlert,
   type SecurityAlert,
+  securityAlertSettings,
 } from "./types.ts";
 
 const secureGoogleAdvice =
@@ -167,7 +167,7 @@ export const renderSecurityAlertEmail = async ({
   timezone: string | null;
   hasPassword: boolean;
   serverName: string;
-}): Promise<Omit<EmailMessage, "to"> & { canTurnOff: boolean }> => {
+}): Promise<Omit<EmailMessage, "to"> & { cappable: boolean }> => {
   const formatTime = (date: Date) => formatAlertTime(date, timezone);
   if (alert.type === "alerts-turned-off") {
     const email = await renderAlertsTurnedOffEmail({
@@ -176,7 +176,7 @@ export const renderSecurityAlertEmail = async ({
       signedInAdvice: signedInAdvice(hasPassword),
       serverName,
     });
-    return { ...email, canTurnOff: false };
+    return { ...email, cappable: false };
   }
   const { subject, title, happened, details, ifNotYou } = alertCopy(
     alert,
@@ -184,7 +184,8 @@ export const renderSecurityAlertEmail = async ({
     formatTime,
     hasPassword,
   );
-  const canTurnOff = isOptionalSecurityAlert(alert.type);
+  const canTurnOff = securityAlertSettings[alert.type] !== null;
+  const cappable = alert.type === "new-sign-in" || alert.type === "deletion-scheduled";
   const rendered = await renderEmailLayout({
     serverName,
     title,
@@ -204,11 +205,11 @@ export const renderSecurityAlertEmail = async ({
     ...(canTurnOff
       ? {
           footerNote:
-            "To choose which emails you get, open the OpenBeacon app and go to Account → Email alerts.",
+            "To choose which emails you get, open the OpenBeacon app and go to Account → Notifications.",
         }
       : {}),
   });
-  return { subject, summary: { type: `alert:${alert.type}` }, ...rendered, canTurnOff };
+  return { subject, summary: { type: `alert:${alert.type}` }, ...rendered, cappable };
 };
 
 export const createSendSecurityAlertEmail =
@@ -227,8 +228,8 @@ export const createSendSecurityAlertEmail =
     to: string;
     userId: string;
   }) => {
-    const { canTurnOff, ...email } = await renderSecurityAlertEmail({ ...alert, serverName });
-    return sendEmail({ to, ...email, userId, optional: canTurnOff });
+    const { cappable, ...email } = await renderSecurityAlertEmail({ ...alert, serverName });
+    return sendEmail({ to, ...email, userId, optional: cappable });
   };
 
 export const formatAlertTime = (date: Date, timezone: string | null) => {

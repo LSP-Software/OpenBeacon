@@ -25,7 +25,6 @@ mock.module("../components/LocationSharingCard.tsx", () => ({ LocationSharingCar
 
 const View = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
 const query = { data: undefined, isError: false };
-const providersQuery: { data: { email: boolean } | undefined } = { data: undefined };
 const notificationSettings: { enabled: boolean | null } = { enabled: true };
 let settingLabels: string[] = [];
 mock.module("@react-navigation/native", () => ({ useIsFocused: () => true }));
@@ -35,7 +34,7 @@ mock.module("expo-router", () => ({
 }));
 mock.module("@tanstack/react-query", () => ({
   useMutation: () => ({ isPending: false, mutateAsync: async () => {} }),
-  useQuery: (options: { providers?: true }) => (options.providers ? providersQuery : query),
+  useQuery: () => query,
   useQueryClient: () => ({ invalidateQueries: async () => {} }),
 }));
 mock.module("react-hook-form", () => ({
@@ -116,7 +115,6 @@ mock.module("../lib/api.ts", () => ({
       updateName: { mutationOptions: () => ({}) },
     },
     accountRecovery: { status: { queryOptions: () => ({}) } },
-    auth: { providers: { queryOptions: () => ({ providers: true }) } },
     groupMembership: { list: { queryKey: () => [], queryOptions: () => ({}) } },
   },
 }));
@@ -189,7 +187,6 @@ const showsNotificationsCard = (screen: Root) =>
 
 beforeEach(() => {
   notificationSettings.enabled = true;
-  providersQuery.data = undefined;
   settingLabels = [];
   alerts.length = 0;
   replace.mockClear();
@@ -264,14 +261,8 @@ test("the notifications card shows only once notifications are known to be off",
   expect(showsNotificationsCard(await renderScreen())).toBe(true);
 });
 
-test("Email alerts is listed only when the server sends email", async () => {
-  providersQuery.data = { email: false };
+test("Notifications is listed, also on servers that don't send email", async () => {
   await renderScreen();
+  expect(settingLabels).toContain("Notifications");
   expect(settingLabels).not.toContain("Email alerts");
-  expect(settingLabels).toContain("Devices");
-  await act(async () => root?.unmount());
-
-  providersQuery.data = { email: true };
-  await renderScreen();
-  expect(settingLabels).toContain("Email alerts");
 });

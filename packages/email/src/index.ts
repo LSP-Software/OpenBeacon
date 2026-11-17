@@ -27,10 +27,9 @@ export {
   type EmailCodePurpose,
   type AlertDevice,
   type EmailMessage,
-  isOptionalSecurityAlert,
-  type OptionalSecurityAlert,
-  optionalSecurityAlerts,
   type SecurityAlert,
+  securityAlertSettings,
+  type TurnedOffNotification,
 } from "./types.ts";
 
 export const renderEmail = (email: Omit<Parameters<typeof renderEmailLayout>[0], "serverName">) =>

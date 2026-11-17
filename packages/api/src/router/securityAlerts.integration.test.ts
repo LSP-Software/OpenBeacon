@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { auth, createSecurityAlerts } from "@openbeacon/auth";
+import { auth, authCapabilities, createSecurityAlerts } from "@openbeacon/auth";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { type Prisma, prisma } from "@openbeacon/database";
 import type { SecurityAlert } from "@openbeacon/email";
@@ -62,6 +62,9 @@ const waitSeconds = async (seconds: number) => {
   });
   return sentAlerts();
 };
+
+const newSignInEmail = { type: "NEW_SIGN_IN", channel: "email" } as const;
+const deletionScheduledEmail = { type: "DELETION_SCHEDULED", channel: "email" } as const;
 
 let accountCounter = 0;
 const createAccount = async () => {
@@ -172,9 +175,13 @@ const changePhrase = async (account: Awaited<ReturnType<typeof createAccount>>) 
 };
 
 const turnOffOptionalAlerts = (userId: string) =>
-  prisma.user.update({
-    where: { id: userId },
-    data: { alertNewSignIn: false, alertDeletionScheduled: false },
+  prisma.notificationSetting.createMany({
+    data: (["NEW_SIGN_IN", "DELETION_SCHEDULED"] as const).map((type) => ({
+      userId,
+      type,
+      email: false,
+      phone: true,
+    })),
   });
 
 beforeEach(async () => {
@@ -429,7 +436,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
       {
         to: account.email,
         userId: account.userId,
-        alert: { type: "alerts-turned-off", alerts: ["deletion-scheduled"] },
+        alert: { type: "alerts-turned-off", alerts: [deletionScheduledEmail] },
         timezone: null,
         hasPassword: true,
       },
@@ -448,7 +455,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     });
 
     expect((await waitSeconds(60)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-sign-in", "deletion-scheduled"] },
+      { type: "alerts-turned-off", alerts: [newSignInEmail, deletionScheduledEmail] },
     ]);
   });
 
@@ -473,7 +480,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     expect(await waitSeconds(30)).toHaveLength(1);
     expect(await waitSeconds(60)).toHaveLength(1);
     expect(sent.map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-sign-in", "deletion-scheduled"] },
+      { type: "alerts-turned-off", alerts: [newSignInEmail, deletionScheduledEmail] },
     ]);
     expect(Math.abs((sentAt[0]?.getTime() ?? 0) - firstAt.getTime())).toBeLessThan(1000);
   });
@@ -496,7 +503,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     });
 
     expect((await waitSeconds(50)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-sign-in"] },
+      { type: "alerts-turned-off", alerts: [newSignInEmail] },
     ]);
   });
 
@@ -517,8 +524,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     });
 
     expect((await waitSeconds(60)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-sign-in"] },
-      { type: "alerts-turned-off", alerts: ["deletion-scheduled"] },
+      { type: "alerts-turned-off", alerts: [newSignInEmail] },
+      { type: "alerts-turned-off", alerts: [deletionScheduledEmail] },
     ]);
   });
 
@@ -538,7 +545,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
     expect(await waitSeconds(29)).toEqual([]);
     expect((await waitSeconds(1)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-sign-in", "deletion-scheduled"] },
+      { type: "alerts-turned-off", alerts: [newSignInEmail, deletionScheduledEmail] },
     ]);
   });
 
@@ -557,7 +564,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     createAlerts().schedulePendingAlertsTurnedOff();
 
     expect((await waitSeconds(0)).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-sign-in"] },
+      { type: "alerts-turned-off", alerts: [newSignInEmail] },
     ]);
   });
 
@@ -629,7 +636,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
     });
 
     expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
-      { type: "alerts-turned-off", alerts: ["new-sign-in"] },
+      { type: "alerts-turned-off", alerts: [newSignInEmail] },
     ]);
   });
 
@@ -782,5 +789,199 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("email alert sett
         where: { id: account.userId },
       }),
     ).toEqual({ timezone: null });
+  });
+});
+
+describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("notification settings", () => {
+  const switchable: SecurityAlert[] = [
+    { type: "new-sign-in", device: { model: null, platform: "android" } },
+    { type: "password-changed" },
+    { type: "password-reset" },
+    { type: "recovery-phrase-changed" },
+    { type: "recovery-phrase-reset" },
+    { type: "other-sessions-signed-out", device: null },
+    { type: "device-removed", device: { name: "Phone", model: null, platform: null } },
+    { type: "deletion-scheduled", deletionDate: new Date("2026-12-01T00:00:00Z") },
+  ];
+  const securityTypes = [
+    "NEW_SIGN_IN",
+    "PASSWORD_CHANGED",
+    "RECOVERY_PHRASE_CHANGED",
+    "OTHER_SESSIONS_SIGNED_OUT",
+    "DEVICE_REMOVED",
+    "DELETION_SCHEDULED",
+  ] as const;
+
+  test("everything starts on except role changes, and only security types have email", async () => {
+    const account = await createAccount();
+
+    expect(await (await account.activeCaller()).notificationSettings.get()).toEqual({
+      canSendEmail: authCapabilities.email,
+      settings: [
+        { type: "PLACE_ALERTS", email: null, phone: true },
+        { type: "MEMBER_JOINED", email: null, phone: true },
+        { type: "MEMBER_LEFT", email: null, phone: true },
+        { type: "ROLE_CHANGED", email: null, phone: false },
+        ...securityTypes.map((type) => ({ type, email: true, phone: true })),
+      ],
+    });
+    expect(await prisma.notificationSetting.count({ where: { userId: account.userId } })).toBe(0);
+  });
+
+  test("a change stores one row for that type and leaves its other channel and other accounts alone", async () => {
+    const account = await createAccount();
+    const other = await createAccount();
+
+    const { settings } = await (
+      await account.activeCaller()
+    ).notificationSettings.set({
+      type: "DEVICE_REMOVED",
+      channel: "phone",
+      enabled: false,
+    });
+
+    expect(settings.find(({ type }) => type === "DEVICE_REMOVED")).toEqual({
+      type: "DEVICE_REMOVED",
+      email: true,
+      phone: false,
+    });
+    expect(
+      await prisma.notificationSetting.findMany({
+        where: { userId: { in: [account.userId, other.userId] } },
+        select: { userId: true, type: true, email: true, phone: true },
+      }),
+    ).toEqual([{ userId: account.userId, type: "DEVICE_REMOVED", email: true, phone: false }]);
+    expect(
+      (await (await other.activeCaller()).notificationSettings.get()).settings.find(
+        ({ type }) => type === "DEVICE_REMOVED",
+      ),
+    ).toEqual({ type: "DEVICE_REMOVED", email: true, phone: true });
+  });
+
+  test("place and group types have no email switch", async () => {
+    const account = await createAccount();
+
+    for (const type of ["PLACE_ALERTS", "MEMBER_JOINED", "MEMBER_LEFT", "ROLE_CHANGED"] as const) {
+      await expect(
+        (await account.activeCaller()).notificationSettings.set({
+          type,
+          channel: "email",
+          enabled: false,
+        }),
+      ).rejects.toThrow("This message type has no email.");
+    }
+    expect(await prisma.notificationSetting.count({ where: { userId: account.userId } })).toBe(0);
+  });
+
+  test("every security email can be switched off, and switching off phone alone leaves the email on", async () => {
+    const account = await createAccount();
+    for (const type of securityTypes) {
+      await (
+        await account.activeCaller()
+      ).notificationSettings.set({
+        type,
+        channel: "phone",
+        enabled: false,
+      });
+    }
+    await waitSeconds(60);
+    sent.length = 0;
+
+    for (const alert of switchable) securityAlerts.send(account.userId, alert);
+    expect((await sentAlerts()).map(({ alert }) => alert.type)).toEqual(
+      switchable.map(({ type }) => type),
+    );
+    sent.length = 0;
+
+    for (const type of securityTypes) {
+      await (
+        await account.activeCaller()
+      ).notificationSettings.set({
+        type,
+        channel: "email",
+        enabled: false,
+      });
+    }
+    await waitSeconds(60);
+    sent.length = 0;
+
+    for (const alert of switchable) securityAlerts.send(account.userId, alert);
+    securityAlerts.send(account.userId, { type: "account-deleted" });
+    expect((await sentAlerts()).map(({ alert }) => alert.type)).toEqual(["account-deleted"]);
+  });
+
+  test("switching security notifications off, by email or phone, sends one alert naming each switch", async () => {
+    const account = await createAccount();
+    const caller = await account.activeCaller();
+
+    for (const { type, email } of (await caller.notificationSettings.get()).settings) {
+      await caller.notificationSettings.set({ type, channel: "phone", enabled: false });
+      if (email !== null)
+        await caller.notificationSettings.set({ type, channel: "email", enabled: false });
+    }
+
+    expect((await waitSeconds(60)).map(({ alert }) => alert)).toEqual([
+      {
+        type: "alerts-turned-off",
+        alerts: [
+          ...securityTypes.flatMap((type) => [
+            { type, channel: "phone" },
+            { type, channel: "email" },
+          ]),
+        ],
+      },
+    ]);
+  });
+
+  test("switching place or group notifications off sends nothing", async () => {
+    const account = await createAccount();
+    const caller = await account.activeCaller();
+
+    for (const type of ["PLACE_ALERTS", "MEMBER_JOINED", "MEMBER_LEFT"] as const) {
+      await caller.notificationSettings.set({ type, channel: "phone", enabled: false });
+    }
+
+    expect(await waitSeconds(60)).toEqual([]);
+  });
+
+  test("switching something on, or to the value it already has, sends nothing", async () => {
+    const account = await createAccount();
+    const caller = await account.activeCaller();
+
+    await caller.notificationSettings.set({
+      type: "ROLE_CHANGED",
+      channel: "phone",
+      enabled: false,
+    });
+    await caller.notificationSettings.set({
+      type: "ROLE_CHANGED",
+      channel: "phone",
+      enabled: true,
+    });
+    await caller.notificationSettings.set({ type: "NEW_SIGN_IN", channel: "email", enabled: true });
+
+    expect(await waitSeconds(60)).toEqual([]);
+  });
+
+  test("the older email alerts endpoints read and write the same settings", async () => {
+    const account = await createAccount();
+    const caller = await account.activeCaller();
+
+    await caller.notificationSettings.set({
+      type: "DELETION_SCHEDULED",
+      channel: "email",
+      enabled: false,
+    });
+    expect(await caller.emailAlerts.settings()).toEqual({
+      alertNewSignIn: true,
+      alertDeletionScheduled: false,
+    });
+    await caller.emailAlerts.updateSettings({
+      alertNewSignIn: false,
+      alertDeletionScheduled: false,
+    });
+    expect(
+      (await caller.notificationSettings.get()).settings.find(({ type }) => type === "NEW_SIGN_IN"),
+    ).toEqual({ type: "NEW_SIGN_IN", email: false, phone: true });
   });
 });

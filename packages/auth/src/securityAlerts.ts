@@ -1,12 +1,16 @@
 import type { OpenBeaconCache } from "@openbeacon/cache";
 import type { Prisma, PrismaClient } from "@openbeacon/database";
 import {
-  isOptionalSecurityAlert,
-  type OptionalSecurityAlert,
-  optionalSecurityAlerts,
   type SecurityAlert,
+  securityAlertSettings,
   type sendSecurityAlertEmail as sendAlert,
+  type TurnedOffNotification,
 } from "@openbeacon/email";
+import {
+  effectiveNotificationSetting,
+  notificationChannelSchema,
+  notificationTypeSchema,
+} from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 
 export const findAlertRecipient = async (
@@ -19,10 +23,9 @@ export const findAlertRecipient = async (
         select: { id: true },
         where: { providerId: "credential", password: { not: null } },
       },
-      alertDeletionScheduled: true,
-      alertNewSignIn: true,
       email: true,
       id: true,
+      notificationSettings: { select: { type: true, email: true, phone: true } },
       timezone: true,
     },
     where: { id: userId },
@@ -68,7 +71,14 @@ export const createSecurityAlerts = ({
     const send = async () => {
       const recipient = await findRecipient();
       if (!recipient) return;
-      if (isOptionalSecurityAlert(alert.type) && !recipient[optionalSecurityAlerts[alert.type]])
+      const setting = securityAlertSettings[alert.type];
+      if (
+        setting &&
+        !effectiveNotificationSetting(
+          setting,
+          recipient.notificationSettings.find(({ type }) => type === setting),
+        ).email
+      )
         return;
       await sendSecurityAlertEmail({
         alert,
@@ -87,9 +97,7 @@ export const createSecurityAlerts = ({
       firstAtOrBefore: now().getTime() - alertsTurnedOffDelayMs,
     });
     if (!taken) return;
-    const alerts = (Object.keys(optionalSecurityAlerts) as OptionalSecurityAlert[]).filter((type) =>
-      taken.alerts.includes(type),
-    );
+    const alerts = taken.alerts.flatMap(parseTurnedOff);
     if (!alerts.length) return;
     deliver(
       { type: "alerts-turned-off", alerts },
@@ -115,13 +123,19 @@ export const createSecurityAlerts = ({
       deliver(alert, () => findAlertRecipient(db, userId)),
     sendTo: (recipient: AlertRecipient, alert: SecurityAlert) =>
       deliver(alert, async () => recipient),
-    turnedOff: (userId: string, alerts: OptionalSecurityAlert[]) => {
+    turnedOff: (userId: string, alerts: TurnedOffNotification[]) => {
       const at = now();
       const sendNow = () =>
         deliver({ type: "alerts-turned-off", alerts }, () => findAlertRecipient(db, userId), at);
       if (!alertsTurnedOff) return sendNow();
       const hold = async () => {
-        const added = await tryCatch(alertsTurnedOff.add({ userId, alerts, at: at.getTime() }));
+        const added = await tryCatch(
+          alertsTurnedOff.add({
+            userId,
+            alerts: alerts.map(({ type, channel }) => `${type}:${channel}`),
+            at: at.getTime(),
+          }),
+        );
         if (!added.error) return scheduleAlertsTurnedOff(userId, added.data);
         logError("could not hold alerts-turned-off, so sending it now");
         sendNow();
@@ -144,3 +158,14 @@ export const createSecurityAlerts = ({
 };
 
 export type SecurityAlerts = ReturnType<typeof createSecurityAlerts>;
+
+const parseTurnedOff = (held: string): TurnedOffNotification[] => {
+  const [heldType = "", heldChannel = "email"] = held.split(":");
+  const type = notificationTypeSchema.safeParse(
+    { "new-sign-in": "NEW_SIGN_IN", "deletion-scheduled": "DELETION_SCHEDULED" }[heldType] ??
+      heldType,
+  );
+  const channel = notificationChannelSchema.safeParse(heldChannel);
+  if (!type.success || !channel.success) return [];
+  return [{ type: type.data, channel: channel.data }];
+};

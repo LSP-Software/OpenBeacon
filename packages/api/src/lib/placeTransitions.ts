@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@openbeacon/database";
 import type { placeTransitionSchema } from "@openbeacon/schemas";
+import { effectiveNotificationSetting } from "@openbeacon/schemas";
 import { resolveLocationSharing } from "@openbeacon/shared";
 import type z from "zod";
 import { readDatabaseTime } from "./databaseTime.ts";
@@ -154,6 +155,17 @@ export const readPlaceAlerts = async ({
     createdAt: new Date(cursor.slice(0, separator)),
     id: cursor.slice(separator + 1),
   };
+  const caughtUp =
+    settledBefore > after.createdAt
+      ? encodePlaceAlertsCursor({ createdAt: settledBefore, id: "" })
+      : cursor;
+  const placeAlertsSetting = await db.notificationSetting.findUnique({
+    where: { userId_type: { userId, type: "PLACE_ALERTS" } },
+    select: { email: true, phone: true },
+  });
+  if (!effectiveNotificationSetting("PLACE_ALERTS", placeAlertsSetting ?? undefined).phone) {
+    return { alerts: [], cursor: caughtUp };
+  }
   const memberships = await db.groupMember.findMany({
     where: { userId },
     select: { groupId: true, createdAt: true },
@@ -198,10 +210,7 @@ export const readPlaceAlerts = async ({
   }
   return {
     alerts: rows.map(toPlaceTransitionView),
-    cursor:
-      settledBefore > after.createdAt
-        ? encodePlaceAlertsCursor({ createdAt: settledBefore, id: "" })
-        : cursor,
+    cursor: caughtUp,
   };
 };
 

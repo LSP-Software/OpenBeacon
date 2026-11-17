@@ -188,6 +188,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             alertDeletionScheduled: false,
             alertNewSignIn: false,
           }),
+        () =>
+          pending.notificationSettings.set({
+            type: "NEW_SIGN_IN",
+            channel: "email",
+            enabled: false,
+          }),
         () => pending.groupInvites.decline({ inviteId: `${account.userId}-invite` }),
         () => pending.groupMembership.list(),
         () => pending.deviceLink.get({ linkId: crypto.randomUUID() }),
@@ -199,7 +205,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
 
       const user = await prisma.user.findUniqueOrThrow({ where: { id: account.userId } });
-      expect(user).toMatchObject({ alertNewSignIn: true, pendingDeletion: false });
+      expect(user).toMatchObject({ pendingDeletion: false });
+      expect(await prisma.notificationSetting.count({ where: { userId: account.userId } })).toBe(0);
       expect(
         (await prisma.userDevice.findUniqueOrThrow({ where: { id: account.pendingDeviceId } }))
           .name,

@@ -1218,17 +1218,30 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts"
     return response.status;
   };
 
-  test("a reset sends one alert, even with every optional alert turned off", async () => {
+  test("a reset sends one alert, even with the other alerts turned off", async () => {
     const { email, userId } = await createPasswordAccount("reset-alert");
-    await prisma.user.update({
-      where: { id: userId },
-      data: { alertNewSignIn: false, alertDeletionScheduled: false },
+    await prisma.notificationSetting.createMany({
+      data: (["NEW_SIGN_IN", "DELETION_SCHEDULED", "RECOVERY_PHRASE_CHANGED"] as const).map(
+        (type) => ({ userId, type, email: false, phone: false }),
+      ),
     });
 
     expect((await resetPassword(await resetTokenFor(email), "a brand new passphrase")).status).toBe(
       200,
     );
     expect(alerts).toEqual([{ to: email, userId, alert: { type: "password-reset" } }]);
+  });
+
+  test("a reset sends nothing when password emails are turned off", async () => {
+    const { email, userId } = await createPasswordAccount("reset-alert-off");
+    await prisma.notificationSetting.create({
+      data: { userId, type: "PASSWORD_CHANGED", email: false, phone: true },
+    });
+
+    expect((await resetPassword(await resetTokenFor(email), "a brand new passphrase")).status).toBe(
+      200,
+    );
+    expect(alerts).toEqual([]);
   });
 
   test("a password change sends one alert", async () => {

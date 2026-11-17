@@ -22,7 +22,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "net.openbeacon.app",
-      "buildNumber": "53",
+      "buildNumber": "54",
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
           {
@@ -44,7 +44,7 @@
       "predictiveBackGestureEnabled": false,
       "allowBackup": false,
       "package": "net.openbeacon.app",
-      "versionCode": 53,
+      "versionCode": 54,
       "blockedPermissions": [
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.RECORD_AUDIO",

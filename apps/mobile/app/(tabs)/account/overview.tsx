@@ -22,7 +22,6 @@ import {
   SmartphoneIcon,
   SunIcon,
   Trash2Icon,
-  type LucideIcon,
 } from "lucide-react-native";
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -33,14 +32,8 @@ import { AnnouncementBanner } from "../../../components/AnnouncementBanner.tsx";
 import { SettingsContainer } from "../../../components/containers/settingsContainer.tsx";
 import { LocationSharingCard } from "../../../components/LocationSharingCard.tsx";
 import { ProfileImage } from "../../../components/image/ProfileImage.tsx";
+import { PromptCard } from "../../../components/PromptCard.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../../../components/ui/Card.tsx";
 import {
   Dialog,
   DialogContent,
@@ -75,10 +68,9 @@ const categories = [
         href: "/account/who-can-see-me",
       },
       {
-        label: "Email alerts",
+        label: "Notifications",
         icon: BellIcon,
-        href: "/account/email-alerts",
-        requiresEmail: true,
+        href: "/account/notifications",
       },
       {
         label: "Devices",
@@ -145,42 +137,6 @@ const categories = [
 
 const schema = z.object({ name: accountNameSchema });
 
-const PromptCard = ({
-  icon,
-  tone,
-  title,
-  description,
-  children,
-}: {
-  icon: LucideIcon;
-  tone: "primary" | "warning";
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) => (
-  <Card>
-    <CardHeader className="flex flex-row items-start gap-3">
-      <View
-        className={`size-10 items-center justify-center rounded-full ${tone === "warning" ? "bg-warning-accent/15" : "bg-primary/10"}`}
-      >
-        <Icon
-          as={icon}
-          className={`size-5 ${tone === "warning" ? "text-warning-accent" : "text-primary"}`}
-        />
-      </View>
-      <View className="flex-1 gap-1.5">
-        <CardTitle>
-          <Text>{title}</Text>
-        </CardTitle>
-        <CardDescription>
-          <Text className="text-muted-foreground">{description}</Text>
-        </CardDescription>
-      </View>
-    </CardHeader>
-    <CardContent className="flex flex-row gap-3">{children}</CardContent>
-  </Card>
-);
-
 const AccountScreen = () => {
   const { data: session, refetch } = authClient.useSession();
   const queryClient = useQueryClient();
@@ -192,7 +148,6 @@ const AccountScreen = () => {
   });
   const isFocused = useIsFocused();
   const groups = useQuery({ ...trpc.groupMembership.list.queryOptions(), subscribed: isFocused });
-  const { data: providers } = useQuery(trpc.auth.providers.queryOptions());
   const devices = useQuery({ ...trpc.account.listDevices.queryOptions(), subscribed: isFocused });
   const { openLocationPermissionSettings, permissionState } = useLocationPermissions();
   const notifications = useNotificationSettings();
@@ -499,14 +454,7 @@ const AccountScreen = () => {
           </PromptCard>
         )}
 
-        <SettingsContainer
-          categories={categories.map((category) => ({
-            ...category,
-            settings: category.settings.filter(
-              (setting) => !("requiresEmail" in setting) || providers?.email,
-            ),
-          }))}
-        />
+        <SettingsContainer categories={categories} />
 
         <View className="mb-28 gap-3">
           {signOutPhase && (

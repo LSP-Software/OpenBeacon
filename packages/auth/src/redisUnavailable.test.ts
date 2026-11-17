@@ -69,10 +69,9 @@ test("alerts-turned-off is sent straight away when it can't be held in Redis", a
       user: {
         findUnique: async () => ({
           accounts: [],
-          alertDeletionScheduled: true,
-          alertNewSignIn: true,
           email: "owner@example.test",
           id: "user-1",
+          notificationSettings: [],
           timezone: "UTC",
         }),
       },
@@ -84,11 +83,11 @@ test("alerts-turned-off is sent straight away when it can't be held in Redis", a
       throw new Error("The alert shouldn't be batched");
     },
   });
-  alerts.turnedOff("user-1", ["new-sign-in"]);
+  alerts.turnedOff("user-1", [{ type: "NEW_SIGN_IN", channel: "phone" }]);
   while (tasks.length) await Promise.all(tasks.splice(0));
   expect(sendSecurityAlertEmail).toHaveBeenCalledTimes(1);
   expect(sendSecurityAlertEmail.mock.calls[0]?.[0]).toMatchObject({
-    alert: { type: "alerts-turned-off", alerts: ["new-sign-in"] },
+    alert: { type: "alerts-turned-off", alerts: [{ type: "NEW_SIGN_IN", channel: "phone" }] },
     to: "owner@example.test",
   });
   error.mockRestore();

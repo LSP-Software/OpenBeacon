@@ -1,42 +1,40 @@
-import { Prisma } from "@openbeacon/database";
-import { type OptionalSecurityAlert, optionalSecurityAlerts } from "@openbeacon/email";
 import { emailAlertSettingsSchema, timezoneSchema } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
 import { z } from "zod";
+import {
+  changeNotificationSettings,
+  readNotificationSettings,
+} from "../lib/notificationSettings.ts";
 import { protectedProcedure } from "../procedures/auth/runtime.ts";
 
-const settingsSelect = { alertDeletionScheduled: true, alertNewSignIn: true };
+const toEmailAlertSettings = (settings: Awaited<ReturnType<typeof readNotificationSettings>>) => ({
+  alertNewSignIn: settings.find(({ type }) => type === "NEW_SIGN_IN")?.email ?? true,
+  alertDeletionScheduled: settings.find(({ type }) => type === "DELETION_SCHEDULED")?.email ?? true,
+});
 
 export const emailAlertsRouter = {
-  settings: protectedProcedure.query(({ ctx }) =>
-    ctx.db.user.findUniqueOrThrow({ select: settingsSelect, where: { id: ctx.session.user.id } }),
+  settings: protectedProcedure.query(async ({ ctx }) =>
+    toEmailAlertSettings(await readNotificationSettings(ctx.db, ctx.session.user.id)),
   ),
   updateSettings: protectedProcedure
     .input(emailAlertSettingsSchema)
-    .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-      const { before, after } = await ctx.db.$transaction(async (tx) => {
-        await tx.$queryRaw(
-          Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
-        );
-        return {
-          before: await tx.user.findUniqueOrThrow({
-            select: settingsSelect,
-            where: { id: userId },
-          }),
-          after: await tx.user.update({
-            data: input,
-            select: settingsSelect,
-            where: { id: userId },
-          }),
-        };
-      });
-      const turnedOff = (Object.keys(optionalSecurityAlerts) as OptionalSecurityAlert[]).filter(
-        (type) => before[optionalSecurityAlerts[type]] && !after[optionalSecurityAlerts[type]],
-      );
-      if (turnedOff.length) ctx.securityAlerts?.turnedOff(userId, turnedOff);
-      return after;
-    }),
+    .mutation(async ({ ctx, input }) =>
+      toEmailAlertSettings(
+        await changeNotificationSettings({
+          db: ctx.db,
+          securityAlerts: ctx.securityAlerts,
+          userId: ctx.session.user.id,
+          changes: [
+            { type: "NEW_SIGN_IN", channel: "email", enabled: input.alertNewSignIn },
+            {
+              type: "DELETION_SCHEDULED",
+              channel: "email",
+              enabled: input.alertDeletionScheduled,
+            },
+          ],
+        }),
+      ),
+    ),
   setTimezone: protectedProcedure
     .input(z.object({ timezone: timezoneSchema }))
     .mutation(async ({ ctx, input }) => {

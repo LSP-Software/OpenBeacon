@@ -192,11 +192,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
     ).toBe(0);
   });
 
-  test("sends the always-on device removed alert", async () => {
+  test("sends the device removed alert, even with other alerts off", async () => {
     const account = await createAccount();
-    await prisma.user.update({
-      where: { id: account.userId },
-      data: { alertNewSignIn: false, alertDeletionScheduled: false },
+    await prisma.notificationSetting.createMany({
+      data: (["NEW_SIGN_IN", "DELETION_SCHEDULED"] as const).map((type) => ({
+        userId: account.userId,
+        type,
+        email: false,
+        phone: true,
+      })),
     });
 
     await callerFor(account).account.removeDevice({ deviceId: account.lostPhone.id });
