@@ -367,7 +367,7 @@ class TrackingCaptureService : Service() {
       return
     }
 
-    detectPlaces(location, nowMs, generation)
+    val placeTransitionQueued = detectPlaces(location, nowMs, generation)
 
     val refreshGeneration = synchronized(captureStateLock) { refreshState.pending() }
     val decision =
@@ -397,8 +397,8 @@ class TrackingCaptureService : Service() {
       currentUploadIntervalMs = decision.uploadIntervalMs
     }
 
+    var currentFixQueued = false
     try {
-      var currentFixQueued = false
       capturePipeline.onFix(
         latitude = location.latitude,
         longitude = location.longitude,
@@ -413,12 +413,6 @@ class TrackingCaptureService : Service() {
         onCurrentFixQueued = { currentFixQueued = true },
       )
       synchronized(captureStateLock) {
-        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && currentFixQueued && (decision.forceUpload || nowMs - lastUploadRequestMs >= decision.uploadIntervalMs) && isOnline()) {
-          startService(Intent(this, TrackingUploadService::class.java).putExtra(TrackingUploadService.EXTRA_REASON, "upload"))
-          lastUploadRequestMs = nowMs
-        }
-      }
-      synchronized(captureStateLock) {
         if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && currentFixQueued) {
           if (refreshGeneration != null) refreshState.complete(refreshGeneration)
           lastQueued =
@@ -432,14 +426,38 @@ class TrackingCaptureService : Service() {
     } catch (error: Exception) {
       Log.e(TAG, "Failed to encrypt and queue location fix.", error)
     }
+
+    val online = isOnline()
+    val paused = TrackingRuntime.sharingState(this).isPaused(nowMs)
+    try {
+      synchronized(captureStateLock) {
+        val startUpload =
+          UploadRequestPolicy.shouldStartAfterFix(
+            generationCurrent = TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation),
+            online = online,
+            paused = paused,
+            placeTransitionQueued = placeTransitionQueued,
+            pointQueued = currentFixQueued,
+            forceUpload = decision.forceUpload,
+            msSinceLastRequest = nowMs - lastUploadRequestMs,
+            uploadIntervalMs = decision.uploadIntervalMs,
+          )
+        if (startUpload) {
+          startService(Intent(this, TrackingUploadService::class.java).putExtra(TrackingUploadService.EXTRA_REASON, "upload"))
+          lastUploadRequestMs = nowMs
+        }
+      }
+    } catch (error: Exception) {
+      Log.e(TAG, "Failed to start background tracking sync.", error)
+    }
   }
 
-  private fun detectPlaces(location: Location, nowMs: Long, generation: Long) {
+  private fun detectPlaces(location: Location, nowMs: Long, generation: Long): Boolean =
     try {
       synchronized(TrackingRuntime.captureLock) {
-        if (!TrackingRuntime.captureCommands.isCurrent(generation)) return
-        val owner = TrackingRuntime.queueOwner(this) ?: return
-        val deviceId = TrackingRuntime.queueDeviceId(this) ?: return
+        if (!TrackingRuntime.captureCommands.isCurrent(generation)) return false
+        val owner = TrackingRuntime.queueOwner(this) ?: return false
+        val deviceId = TrackingRuntime.queueDeviceId(this) ?: return false
         TrackingRuntime.placeDetection(this).onFix(
           owner = owner,
           deviceId = deviceId,
@@ -449,12 +467,12 @@ class TrackingCaptureService : Service() {
           longitude = location.longitude,
           accuracyMeters = location.accuracy.toDouble().takeIf { location.hasAccuracy() },
           timestampMillis = location.time,
-        )
+        ) > 0
       }
     } catch (error: Exception) {
       Log.e(TAG, "Failed to check places.", error)
+      false
     }
-  }
 
   private fun hasPendingUploads(): Boolean =
     try {
