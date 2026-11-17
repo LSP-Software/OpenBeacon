@@ -95,3 +95,30 @@ export const groupTrackingGetLatestSchema = z.object({
 });
 
 export { TRACKING_POINT_KIND };
+
+export const groupTrackingHistoryDaysSchema = z.object({
+  groupId: z.string().min(1),
+});
+
+export const groupTrackingHistoryRangeSchema = z
+  .object({
+    groupId: z.string().min(1),
+    from: z.date(),
+    to: z.date(),
+    cursor: z
+      .object({
+        receivedAt: z.date(),
+        streamId: z.string().regex(/^\d{1,19}$/),
+        pointId: z.string().regex(/^-?\d{1,19}$/),
+      })
+      .optional(),
+    limit: z.number().int().min(1).max(2_000).optional(),
+  })
+  .refine((range) => range.from.getTime() < range.to.getTime(), {
+    message: "from must be before to",
+    path: ["to"],
+  })
+  .refine((range) => range.to.getTime() - range.from.getTime() <= 52 * 60 * 60_000, {
+    message: "A history range can be at most 52 hours long",
+    path: ["to"],
+  });

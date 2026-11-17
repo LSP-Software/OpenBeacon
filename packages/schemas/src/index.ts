@@ -70,6 +70,8 @@ import {
 import { removeGroupMemberSchema } from "./schemas/group/removeMember.ts";
 import {
   groupTrackingGetLatestSchema,
+  groupTrackingHistoryDaysSchema,
+  groupTrackingHistoryRangeSchema,
   groupTrackingPointSchema,
   groupTrackingPollSchema,
   groupTrackingUploadBatchSchema,
@@ -126,6 +128,8 @@ export {
   newGroupIdSchema,
   groupEpochBundleSchema,
   groupTrackingGetLatestSchema,
+  groupTrackingHistoryDaysSchema,
+  groupTrackingHistoryRangeSchema,
   groupTrackingPointSchema,
   groupTrackingPollSchema,
   groupTrackingUploadBatchSchema,

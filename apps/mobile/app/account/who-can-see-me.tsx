@@ -117,8 +117,9 @@ const WhoCanSeeMeScreen = () => {
             Can see you now
           </Text>
           <Text className="text-muted-foreground text-base leading-6">
-            Everyone in a group with you can see where you are while you’re sharing. While you’ve
-            paused, they can see that you’ve paused, but not where you are.
+            Everyone in a group with you can see where you are while you’re sharing, and where
+            you’ve been in the last 14 days since they joined. While you’ve paused, they can see
+            that you’ve paused, but not where you are.
           </Text>
           {viewers.data.current.length === 0 ? (
             <Text className="text-muted-foreground text-base">

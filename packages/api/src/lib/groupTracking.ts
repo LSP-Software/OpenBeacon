@@ -1,4 +1,4 @@
-import { Prisma } from "@openbeacon/database";
+import { Prisma, readDatabaseTime } from "@openbeacon/database";
 import { decodeBase64, encodeBase64, XCHACHA20_NONCE_LENGTH } from "@openbeacon/encryption";
 import type { groupTrackingPointSchema, TRACKING_POINT_ROLES } from "@openbeacon/schemas";
 import type { GroupDeviceSharingState } from "@openbeacon/shared";
@@ -7,6 +7,7 @@ import type z from "zod";
 import type { GroupWriteChecksDb } from "./groupWriteChecks.ts";
 import { assertActiveDevices, findGroupEpochs } from "./groupWriteChecks.ts";
 import { getGroupSharingStates } from "./locationSharing.ts";
+import { HISTORY_RETENTION_MS } from "./placeTransitions.ts";
 
 type GroupTrackingDb = GroupWriteChecksDb & {
   userDevice: {
@@ -279,12 +280,13 @@ const readLatestPoints = async ({
     ORDER BY "latest"."updatedAt", "latest"."senderDeviceId"
     ${limit === null ? Prisma.empty : Prisma.sql`LIMIT ${limit}`}
   `);
-  return rows.map(({ payload, ...row }) => ({
-    ...row,
-    ciphertext: encodeBase64(payload.subarray(XCHACHA20_NONCE_LENGTH)),
-    nonce: encodeBase64(payload.subarray(0, XCHACHA20_NONCE_LENGTH)),
-  }));
+  return rows.map(({ payload, ...row }) => ({ ...row, ...splitPayload(payload) }));
 };
+
+const splitPayload = (payload: Uint8Array) => ({
+  ciphertext: encodeBase64(payload.subarray(XCHACHA20_NONCE_LENGTH)),
+  nonce: encodeBase64(payload.subarray(0, XCHACHA20_NONCE_LENGTH)),
+});
 
 export const pollGroupTrackingPoints = async ({
   cursor,
@@ -351,3 +353,164 @@ const filterSharedPoints = <
         point.revisionPrefix === device.revisionPrefix,
     ),
   );
+
+type HistoryDb = Pick<Prisma.TransactionClient, "$queryRaw">;
+
+const utcTimestamp = (date: Date) =>
+  Prisma.sql`(${date.toISOString()}::timestamptz AT TIME ZONE 'UTC')`;
+
+const historyStreams = (groupId: string, joinedEpochNumber: number) => Prisma.sql`
+  SELECT "stream"."id", "stream"."senderUserId", "stream"."senderDeviceId", "stream"."epochId",
+    "epoch"."epochNumber", "stream"."revisionPrefix"
+  FROM "TrackingStream" AS "stream"
+  JOIN "GroupEpoch" AS "epoch" ON "epoch"."id" = "stream"."epochId"
+  JOIN "GroupMember" AS "member"
+    ON "member"."groupId" = "stream"."groupId" AND "member"."userId" = "stream"."senderUserId"
+  JOIN "UserDevice" AS "device"
+    ON "device"."id" = "stream"."senderDeviceId" AND "device"."userId" = "stream"."senderUserId"
+  WHERE "stream"."groupId" = ${groupId}
+    AND "epoch"."epochNumber" >= ${joinedEpochNumber}
+    AND "device"."revokedAt" IS NULL AND "device"."activatedAt" IS NOT NULL
+`;
+
+export const readGroupTrackingHistoryDays = async ({
+  db,
+  groupId,
+  joinedEpochNumber,
+}: {
+  db: HistoryDb;
+  groupId: string;
+  joinedEpochNumber: number;
+}) => {
+  const windowStart = new Date((await readDatabaseTime(db)).getTime() - HISTORY_RETENTION_MS);
+  const rows = await db.$queryRaw<
+    Array<{
+      count: number;
+      firstReceivedAt: Date;
+      hour: Date;
+      senderDeviceId: string;
+      senderUserId: string;
+    }>
+  >(Prisma.sql`
+    SELECT "stream"."senderUserId", "stream"."senderDeviceId",
+      date_trunc('hour', "point"."receivedAt") AS "hour", COUNT(*)::int AS "count",
+      MIN("point"."receivedAt") AS "firstReceivedAt"
+    FROM (${historyStreams(groupId, joinedEpochNumber)}) AS "stream"
+    JOIN "TrackingPoint" AS "point" ON "point"."streamId" = "stream"."id"
+    WHERE "point"."receivedAt" >= ${utcTimestamp(windowStart)}
+    GROUP BY "stream"."senderUserId", "stream"."senderDeviceId", "hour"
+    ORDER BY "stream"."senderUserId", "stream"."senderDeviceId", "hour"
+  `);
+  const devices = new Map<
+    string,
+    {
+      firstReceivedAt: Date;
+      hours: Array<{ count: number; hour: Date }>;
+      senderDeviceId: string;
+      senderUserId: string;
+    }
+  >();
+  for (const { count, firstReceivedAt, hour, senderDeviceId, senderUserId } of rows) {
+    const key = JSON.stringify([senderUserId, senderDeviceId]);
+    const device = devices.get(key) ?? { firstReceivedAt, hours: [], senderDeviceId, senderUserId };
+    device.hours.push({ count, hour });
+    devices.set(key, device);
+  }
+  return { devices: [...devices.values()], windowStart };
+};
+
+export const readGroupTrackingHistoryRange = async ({
+  cursor,
+  db,
+  from,
+  groupId,
+  joinedEpochNumber,
+  limit,
+  to,
+}: {
+  cursor: { pointId: string; receivedAt: Date; streamId: string } | undefined;
+  db: HistoryDb;
+  from: Date;
+  groupId: string;
+  joinedEpochNumber: number;
+  limit: number;
+  to: Date;
+}) => {
+  const now = await readDatabaseTime(db);
+  const windowStart = new Date(now.getTime() - HISTORY_RETENTION_MS);
+  const start = from > windowStart ? from : windowStart;
+  const end = to < now ? to : now;
+  const streams = historyStreams(groupId, joinedEpochNumber);
+  type Row = {
+    epochId: string;
+    epochNumber: number;
+    payload: Uint8Array;
+    pointId: string;
+    receivedAt: Date;
+    revisionPrefix: string;
+    senderDeviceId: string;
+    senderUserId: string;
+    streamId: string;
+  };
+  const columns = Prisma.sql`"stream"."id"::text AS "streamId", "stream"."senderUserId",
+    "stream"."senderDeviceId", "stream"."epochId", "stream"."epochNumber", "stream"."revisionPrefix",
+    "point"."pointId"::text AS "pointId", "point"."receivedAt", "point"."payload"`;
+  const [rows, lookbackRows] = await Promise.all([
+    db.$queryRaw<Row[]>(Prisma.sql`
+      SELECT ${columns}
+      FROM (${streams}) AS "stream"
+      JOIN "TrackingPoint" AS "point" ON "point"."streamId" = "stream"."id"
+      WHERE "point"."receivedAt" >= ${utcTimestamp(cursor && cursor.receivedAt > start ? cursor.receivedAt : start)}
+        AND "point"."receivedAt" < ${utcTimestamp(end)}
+        ${
+          cursor
+            ? Prisma.sql`AND ("point"."receivedAt", "point"."streamId", "point"."pointId")
+                > (${utcTimestamp(cursor.receivedAt)}, ${cursor.streamId}::bigint, ${cursor.pointId}::bigint)`
+            : Prisma.empty
+        }
+      ORDER BY "point"."receivedAt", "point"."streamId", "point"."pointId"
+      LIMIT ${limit}
+    `),
+    cursor
+      ? []
+      : db.$queryRaw<Row[]>(Prisma.sql`
+          SELECT DISTINCT ON ("stream"."senderUserId", "stream"."senderDeviceId") ${columns}
+          FROM (${streams}) AS "stream"
+          CROSS JOIN LATERAL (
+            SELECT "last"."pointId", "last"."receivedAt", "last"."payload"
+            FROM "TrackingPoint" AS "last"
+            WHERE "last"."streamId" = "stream"."id"
+              AND "last"."receivedAt" >= ${utcTimestamp(windowStart)}
+              AND "last"."receivedAt" < ${utcTimestamp(start)}
+            ORDER BY "last"."receivedAt" DESC, "last"."pointId" DESC
+            LIMIT 1
+          ) AS "point"
+          ORDER BY "stream"."senderUserId", "stream"."senderDeviceId",
+            "point"."receivedAt" DESC, "stream"."id" DESC, "point"."pointId" DESC
+        `),
+  ]);
+  const toPoint = ({ payload, pointId, receivedAt, streamId }: Row) => ({
+    pointId,
+    receivedAt,
+    streamId,
+    ...splitPayload(payload),
+  });
+  const involved = new Map(
+    [...lookbackRows, ...rows].map(
+      ({ epochId, epochNumber, revisionPrefix, senderDeviceId, senderUserId, streamId }) => [
+        streamId,
+        { id: streamId, senderUserId, senderDeviceId, epochId, epochNumber, revisionPrefix },
+      ],
+    ),
+  );
+  const last = rows.at(-1);
+  return {
+    streams: [...involved.values()],
+    points: rows.map(toPoint),
+    lookback: lookbackRows.map(toPoint),
+    cursor: last
+      ? { pointId: last.pointId, receivedAt: last.receivedAt, streamId: last.streamId }
+      : null,
+    hasMore: rows.length === limit,
+  };
+};

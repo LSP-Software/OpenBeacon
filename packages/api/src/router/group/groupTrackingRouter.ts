@@ -1,5 +1,7 @@
 import {
   groupTrackingGetLatestSchema,
+  groupTrackingHistoryDaysSchema,
+  groupTrackingHistoryRangeSchema,
   groupTrackingPollSchema,
   groupTrackingUploadBatchSchema,
 } from "@openbeacon/schemas";
@@ -9,6 +11,8 @@ import { TRPCError } from "@trpc/server";
 import {
   getLatestGroupTrackingPoints,
   pollGroupTrackingPoints,
+  readGroupTrackingHistoryDays,
+  readGroupTrackingHistoryRange,
   uploadGroupTrackingBatch,
 } from "../../lib/groupTracking.ts";
 import { readGroupNotices } from "../../lib/accountNotices.ts";
@@ -232,6 +236,30 @@ export const groupTrackingRouter = {
         db: ctx.db,
         groupId: input.groupId,
         joinedEpochNumber: ctx.groupMember.joinedEpochNumber,
+      });
+    }),
+  historyDays: groupMemberProcedure
+    .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })
+    .input(groupTrackingHistoryDaysSchema)
+    .query(async ({ ctx, input }) => {
+      return await readGroupTrackingHistoryDays({
+        db: ctx.db,
+        groupId: input.groupId,
+        joinedEpochNumber: ctx.groupMember.joinedEpochNumber,
+      });
+    }),
+  historyRange: groupMemberProcedure
+    .meta({ rateLimit: { limit: 240, windowMs: 60_000 } })
+    .input(groupTrackingHistoryRangeSchema)
+    .query(async ({ ctx, input }) => {
+      return await readGroupTrackingHistoryRange({
+        cursor: input.cursor,
+        db: ctx.db,
+        from: input.from,
+        groupId: input.groupId,
+        joinedEpochNumber: ctx.groupMember.joinedEpochNumber,
+        limit: input.limit ?? 1_000,
+        to: input.to,
       });
     }),
 } satisfies TRPCRouterRecord;
