@@ -66,7 +66,9 @@ export type NoticeKind =
 
 export type NoticeSlot = "compatibility" | "locationPermission" | "signedOut" | "sharingChanged";
 
-declare class OpenBeaconTrackingModule extends NativeModule {
+declare class OpenBeaconTrackingModule extends NativeModule<{
+  onSync: (event: { reason: "upload" | "sharing" | "parked" }) => void;
+}> {
   setSharingState(
     owner: string,
     deviceId: string,
@@ -99,6 +101,7 @@ declare class OpenBeaconTrackingModule extends NativeModule {
   requeueCiphertexts(ids: number[], error?: string | null): Promise<void>;
   areNotificationsEnabled(): boolean;
   shouldShowNotificationRationale(): boolean;
+  requestNotificationPermission(): Promise<"granted" | "denied" | "blocked">;
   showNotice(kind: NoticeKind): boolean;
   setRecentsPreviewHidden(hidden: boolean): Promise<void>;
   elapsedRealtime(): number;

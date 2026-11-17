@@ -265,7 +265,16 @@ const PlaceEditor = ({
   if (!mapStyleJson) {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-background px-8">
-        {map.isError ? (
+        {map.isMapNotReady ? (
+          <>
+            <Text className="text-center text-muted-foreground">
+              The server is still preparing the map. You can add places when it's ready.
+            </Text>
+            <Button variant="outline" onPress={onClose}>
+              <Text>Go back</Text>
+            </Button>
+          </>
+        ) : map.isError ? (
           <>
             <Text className="text-center text-muted-foreground">
               We couldn’t load the map. Check your connection and try again.

@@ -4,7 +4,7 @@ import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { PencilIcon, UserIcon } from "lucide-react-native";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, View } from "react-native";
 import { cn } from "../../lib/cn.ts";
 import type { ImageUploadResult } from "../../lib/image-upload.ts";
 import { cleanupTempFile } from "../../lib/image-upload.ts";
@@ -55,10 +55,12 @@ export const EditableImage = ({
   } as const;
 
   const pickAndCropImage = async (): Promise<{ ok: true; path: string } | undefined> => {
-    const permissionResult = await withOwnScreen(ImagePicker.requestMediaLibraryPermissionsAsync);
-    if (!permissionResult.granted) {
-      Alert.alert("Permission required", "Permission to access the media library is required.");
-      return;
+    if (Platform.OS !== "ios") {
+      const permissionResult = await withOwnScreen(ImagePicker.requestMediaLibraryPermissionsAsync);
+      if (!permissionResult.granted) {
+        Alert.alert("Permission required", "Permission to access the media library is required.");
+        return;
+      }
     }
 
     const result = await withOwnScreen(() =>

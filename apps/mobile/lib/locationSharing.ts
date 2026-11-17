@@ -129,7 +129,7 @@ export const hasLocallyPausedSharing = (userId: string) => {
 };
 
 const applyNativeSharingState = async (state: DeviceSharingState, isCurrent: () => boolean) => {
-  if (Platform.OS !== "android") return false;
+  if (Platform.OS !== "android" && Platform.OS !== "ios") return false;
   const module = (await import("../modules/openbeacon-tracking/index.ts")).default;
   if (!isCurrent()) return false;
   const pausedUntil = state.pausedUntil ? toDeviceClock(state.pausedUntil).getTime() : null;
@@ -327,7 +327,7 @@ export const changeLocationSharing = async (input: {
     if (
       !change.paused &&
       !(await applyLocalSharingState(device, isCurrent)) &&
-      Platform.OS === "android" &&
+      (Platform.OS === "android" || Platform.OS === "ios") &&
       isCurrent() &&
       storage.getString(key) === stored
     ) {

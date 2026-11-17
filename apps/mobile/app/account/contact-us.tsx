@@ -65,7 +65,11 @@ const ContactUsScreen = () => {
           <View className="w-10" />
         </View>
       </SafeAreaView>
-      <ScrollView contentContainerClassName="gap-5 px-6 py-6">
+      <ScrollView
+        contentContainerClassName="gap-5 px-6 py-6"
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
+      >
         <Text className="font-semibold text-foreground">
           Your feedback is sent directly to the developers of OpenBeacon
           {selfHosted ? ", rather than to the operator of your self-hosted server." : "."}

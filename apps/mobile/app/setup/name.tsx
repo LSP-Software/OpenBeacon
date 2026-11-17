@@ -76,6 +76,7 @@ const NameThisPhoneScreen = () => {
       <ScrollView
         className="flex-1"
         contentContainerClassName="gap-6 px-6 py-6 pb-16"
+        automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
