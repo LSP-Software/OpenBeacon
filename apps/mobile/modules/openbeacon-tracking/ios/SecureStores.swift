@@ -21,7 +21,11 @@ final class KeychainItem {
 
   static func removeLeftoversFromPreviousInstall() {
     if UserDefaults.standard.bool(forKey: installedKey) { return }
-    SecItemDelete([kSecClass: kSecClassGenericPassword, kSecAttrService: service] as CFDictionary)
+    let status = SecItemDelete([kSecClass: kSecClassGenericPassword, kSecAttrService: service] as CFDictionary)
+    guard status == errSecSuccess || status == errSecItemNotFound else {
+      NSLog("OpenBeaconTracking: failed to remove Keychain items left by a previous install: \(status)")
+      return
+    }
     UserDefaults.standard.set(true, forKey: installedKey)
   }
 
@@ -90,18 +94,25 @@ final class EpochKeyStore {
   func list() -> [ProvisionedEpochKey] {
     lock.lock()
     defer { lock.unlock() }
+    do {
+      return try storedKeys()
+    } catch {
+      NSLog("OpenBeaconTracking: failed to read provisioned epoch keys: \(error)")
+      return []
+    }
+  }
+
+  private func storedKeys() throws -> [ProvisionedEpochKey] {
     if let cached { return cached }
-    let keys = readKeys()
+    let keys = try readKeys()
     if !keys.isEmpty { cached = keys }
     return keys
   }
 
-  private func readKeys() -> [ProvisionedEpochKey] {
-    do {
-      guard let data = try item.read(), let array = try JSONSerialization.jsonObject(with: data) as? [[String: String]] else {
-        return []
-      }
-      return array.compactMap { entry in
+  private func readKeys() throws -> [ProvisionedEpochKey] {
+    guard let data = try item.read() else { return [] }
+    guard let array = (try? JSONSerialization.jsonObject(with: data)) as? [[String: String]] else { return [] }
+    return array.compactMap { entry in
         guard
           let groupId = entry["groupId"],
           let epochId = entry["epochId"],
@@ -109,11 +120,7 @@ final class EpochKeyStore {
           let senderDeviceId = entry["senderDeviceId"],
           let kind = entry["kind"]
         else { return nil }
-        return ProvisionedEpochKey(groupId: groupId, epochId: epochId, epochKey: epochKey, senderDeviceId: senderDeviceId, kind: kind)
-      }
-    } catch {
-      NSLog("OpenBeaconTracking: failed to read provisioned epoch keys: \(error)")
-      return []
+      return ProvisionedEpochKey(groupId: groupId, epochId: epochId, epochKey: epochKey, senderDeviceId: senderDeviceId, kind: kind)
     }
   }
 
@@ -137,7 +144,7 @@ final class EpochKeyStore {
     lock.lock()
     defer { lock.unlock() }
     let replacedGroupIds = Set(keys.map(\.groupId))
-    let preserved = list().filter { groupIds.contains($0.groupId) && !replacedGroupIds.contains($0.groupId) }
+    let preserved = try storedKeys().filter { groupIds.contains($0.groupId) && !replacedGroupIds.contains($0.groupId) }
     try replaceAll(preserved + keys)
   }
 
@@ -150,7 +157,7 @@ final class EpochKeyStore {
       try item.delete()
       return
     }
-    try replaceAll(list().filter { !groupIds.contains($0.groupId) })
+    try replaceAll(storedKeys().filter { !groupIds.contains($0.groupId) })
   }
 }
 
@@ -160,12 +167,20 @@ final class PlaceStore {
 
   private func read() -> (groups: Set<String>, places: [PlaceGeofence]) {
     do {
-      guard
-        let data = try item.read(),
-        let stored = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-        let array = stored["places"] as? [[String: Any]]
-      else { return ([], []) }
-      let places = array.compactMap { entry -> PlaceGeofence? in
+      return try storedPlaces()
+    } catch {
+      NSLog("OpenBeaconTracking: failed to read places: \(error)")
+      return ([], [])
+    }
+  }
+
+  private func storedPlaces() throws -> (groups: Set<String>, places: [PlaceGeofence]) {
+    guard
+      let data = try item.read(),
+      let stored = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+      let array = stored["places"] as? [[String: Any]]
+    else { return ([], []) }
+    let places = array.compactMap { entry -> PlaceGeofence? in
         guard
           let groupId = entry["groupId"] as? String,
           let placeId = entry["placeId"] as? String,
@@ -173,13 +188,9 @@ final class PlaceStore {
           let longitude = (entry["longitude"] as? NSNumber)?.doubleValue,
           let radiusMeters = (entry["radiusMeters"] as? NSNumber)?.doubleValue
         else { return nil }
-        return PlaceGeofence(groupId: groupId, placeId: placeId, latitude: latitude, longitude: longitude, radiusMeters: radiusMeters)
-      }
-      return (Set(stored["groups"] as? [String] ?? places.map(\.groupId)), places)
-    } catch {
-      NSLog("OpenBeaconTracking: failed to read places: \(error)")
-      return ([], [])
+      return PlaceGeofence(groupId: groupId, placeId: placeId, latitude: latitude, longitude: longitude, radiusMeters: radiusMeters)
     }
+    return (Set(stored["groups"] as? [String] ?? places.map(\.groupId)), places)
   }
 
   private func save(groups: Set<String>, places: [PlaceGeofence]) throws {
@@ -201,7 +212,7 @@ final class PlaceStore {
   func replaceGroup(_ groupId: String, places: [PlaceGeofence]) throws {
     lock.lock()
     defer { lock.unlock() }
-    let stored = read()
+    let stored = try storedPlaces()
     try save(
       groups: stored.groups.union([groupId]),
       places: stored.places.filter { $0.groupId != groupId } + places.filter { $0.groupId == groupId }
@@ -215,7 +226,7 @@ final class PlaceStore {
       try item.delete()
       return
     }
-    let stored = read()
+    let stored = try storedPlaces()
     try save(groups: stored.groups.subtracting(groupIds), places: stored.places.filter { !groupIds.contains($0.groupId) })
   }
 
