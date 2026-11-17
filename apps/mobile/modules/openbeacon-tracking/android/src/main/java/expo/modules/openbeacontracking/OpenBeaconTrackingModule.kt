@@ -31,6 +31,10 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.applySharingState(requireContext(), owner, deviceId, SharingCaptureState(prefix, paused, until?.toLong(), after?.toLong() ?: 0L))
       }
 
+      Function("isQueueOwner") { owner: String, deviceId: String ->
+        TrackingRuntime.queueOwner(requireContext()) == owner && TrackingRuntime.queueDeviceId(requireContext()) == deviceId
+      }
+
       Function("setQueueOwner") { owner: String, deviceId: String ->
         TrackingRuntime.setQueueOwner(requireContext(), owner, deviceId)
       }

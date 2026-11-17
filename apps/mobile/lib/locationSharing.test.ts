@@ -23,6 +23,7 @@ let rejectWith: Error | null = null;
 let loseReply = false;
 let nextRequestId = 0;
 let nativeAccepted = true;
+let nativeOwnerSet = true;
 let registeredDeviceId = "phone";
 let serverClockAhead = 0;
 let beforeMutation: (() => Promise<void>) | null = null;
@@ -114,6 +115,7 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
       if (paused) onNativePause();
       return true;
     },
+    isQueueOwner: () => nativeOwnerSet,
   },
 }));
 mock.module("./api.ts", () => ({
@@ -158,6 +160,7 @@ beforeEach(() => {
   rejectWith = null;
   loseReply = false;
   nativeAccepted = true;
+  nativeOwnerSet = true;
   registeredDeviceId = "phone";
   serverClockAhead = 0;
   beforeMutation = null;
@@ -424,6 +427,22 @@ test("an offline resume of a confirmed pause the native runtime rejected is not 
   ).rejects.toThrow();
   expect(hasPendingSharingPause("alex")).toBe(false);
   expect(hasLocallyPausedSharing("alex")).toBe(true);
+});
+
+test("an offline resume stays queued when this phone has no native owner yet", async () => {
+  changeFromAnotherPhone("device", true);
+  await syncLocationSharing();
+  offline = true;
+  nativeAccepted = false;
+  nativeOwnerSet = false;
+  expect(
+    await changeLocationSharing({
+      scope: "device",
+      paused: false,
+      durationMinutes: null,
+    }),
+  ).toBe("queued");
+  expect(getPendingSharingChanges("alex").device).toMatchObject({ paused: false });
 });
 
 test("a resume still wins when the queued pause reached the server but its reply was lost", async () => {

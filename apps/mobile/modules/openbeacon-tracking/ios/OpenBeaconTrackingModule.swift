@@ -30,6 +30,10 @@ public class OpenBeaconTrackingModule: Module {
       )
     }
 
+    Function("isQueueOwner") { (owner: String, deviceId: String) -> Bool in
+      TrackingRuntime.locked { TrackingRuntime.queueOwner() == owner && TrackingRuntime.queueDeviceId() == deviceId }
+    }
+
     Function("setQueueOwner") { (owner: String, deviceId: String) in
       try TrackingRuntime.setQueueOwner(owner: owner, deviceId: deviceId)
     }

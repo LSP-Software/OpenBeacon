@@ -149,6 +149,12 @@ const applyNativeSharingState = async (state: DeviceSharingState, isCurrent: () 
   return applied;
 };
 
+const isNativeQueueOwner = async (device: { userId: string; deviceId: string }) => {
+  if (Platform.OS !== "android" && Platform.OS !== "ios") return false;
+  const module = (await import("../modules/openbeacon-tracking/index.ts")).default;
+  return module.isQueueOwner(JSON.stringify([baseUrl, device.userId]), device.deviceId);
+};
+
 const applyLocalSharingState = (
   device: { userId: string; deviceId: string },
   isCurrent: () => boolean,
@@ -327,7 +333,7 @@ export const changeLocationSharing = async (input: {
     if (
       !change.paused &&
       !(await applyLocalSharingState(device, isCurrent)) &&
-      (Platform.OS === "android" || Platform.OS === "ios") &&
+      (await isNativeQueueOwner(device)) &&
       isCurrent() &&
       storage.getString(key) === stored
     ) {
