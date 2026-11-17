@@ -1,4 +1,7 @@
-FROM oven/bun:1.4.4 AS deps
+FROM oven/bun:1.4.4 AS base
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
+FROM base AS deps
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
 COPY apps/backend/package.json apps/backend/
@@ -20,7 +23,7 @@ FROM deps AS prisma
 COPY packages/database packages/database
 RUN DATABASE_URL=postgresql://localhost:5432/openbeacon bun run --cwd packages/database prisma generate
 
-FROM oven/bun:1.4.4
+FROM base
 WORKDIR /app
 COPY --from=deps /app ./
 COPY packages packages
