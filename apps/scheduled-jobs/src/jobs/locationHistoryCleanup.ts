@@ -1,6 +1,5 @@
-import { deletePayloadsInBatches } from "@openbeacon/api/deletePayloadsInBatches.ts";
+import { deleteTrackingPointsInBatches } from "@openbeacon/api/trackingCleanup.ts";
 import { Prisma } from "@openbeacon/database";
-import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 import { errorCode, tryCatch } from "@openbeacon/shared";
 import { getDatabaseTime } from "../databaseTime.ts";
 import { services } from "../services.ts";
@@ -13,13 +12,48 @@ export const createLocationHistoryCleanup =
   async () => {
     const cutoff = await retentionCutoff();
     const result = await tryCatch(
-      deletePayloadsInBatches({
-        db: services.db,
-        where: Prisma.sql`kind = ${TRACKING_POINT_KIND} AND "createdAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')`,
-        orderBy: Prisma.sql`ORDER BY "createdAt"`,
-        batchSize,
-        limit: runLimit,
-      }),
+      (async () => {
+        const deleted = await deleteTrackingPointsInBatches({
+          db: services.db,
+          streams: Prisma.sql`"stream"."createdAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')`,
+          points: Prisma.sql`"point"."receivedAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')`,
+          batchSize,
+          limit: runLimit,
+        });
+        await services.db.$executeRaw`
+          DELETE FROM "TrackingLatestPoint"
+          WHERE "updatedAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')
+        `;
+        let afterStream = "0";
+        while (true) {
+          const locked = await services.db.$transaction(async (tx) => {
+            const streams = await tx.$queryRaw<Array<{ id: string }>>`
+              SELECT "stream".id::text AS id FROM "TrackingStream" AS "stream"
+              WHERE "stream".id > ${afterStream}::bigint
+                AND NOT EXISTS (SELECT 1 FROM "TrackingPoint" AS "point" WHERE "point"."streamId" = "stream".id)
+                AND NOT EXISTS (
+                  SELECT 1 FROM "TrackingLatestPoint" AS "latest" WHERE "latest"."streamId" = "stream".id
+                )
+              ORDER BY "stream".id
+              LIMIT ${batchSize}
+              FOR UPDATE SKIP LOCKED
+            `;
+            if (streams.length === 0) return streams;
+            await tx.$executeRaw`
+              DELETE FROM "TrackingStream" AS "stream"
+              WHERE "stream".id = ANY(${streams.map(({ id }) => id)}::bigint[])
+                AND NOT EXISTS (SELECT 1 FROM "TrackingPoint" AS "point" WHERE "point"."streamId" = "stream".id)
+                AND NOT EXISTS (
+                  SELECT 1 FROM "TrackingLatestPoint" AS "latest" WHERE "latest"."streamId" = "stream".id
+                )
+            `;
+            return streams;
+          });
+          const last = locked.at(-1);
+          if (!last || locked.length < batchSize) return deleted;
+          afterStream = last.id;
+        }
+      })(),
     );
     if (result.error) {
       const code = errorCode(result.error);
@@ -110,7 +144,8 @@ export const createEpochCleanup =
                   AND n."createdAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')
               )
               AND NOT EXISTS (
-                SELECT 1 FROM "GroupEncryptedPayload" p WHERE p."epochId" = e.id
+                SELECT 1 FROM "TrackingStream" s
+                WHERE s."groupId" = e."groupId" AND s."epochId" = e.id
               )
               AND NOT EXISTS (
                 SELECT 1 FROM "Place" pl WHERE pl."epochId" = e.id

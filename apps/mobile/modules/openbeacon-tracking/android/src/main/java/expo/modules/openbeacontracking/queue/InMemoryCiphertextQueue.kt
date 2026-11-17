@@ -8,7 +8,12 @@ class InMemoryCiphertextQueue : CiphertextQueue {
   override fun insertAll(rows: List<CiphertextQueueRow>): Int {
     var inserted = 0
     for (row in rows) {
-      if (this.rows.any { it.clientPointId == row.clientPointId }) continue
+      val pending = this.rows.filter { it.status == CiphertextQueueRow.STATUS_PENDING }
+      when (row.role) {
+        CiphertextQueueRow.ROLE_STAY -> this.rows.removeAll(pending.filter { it.clientPointId == row.clientPointId })
+        CiphertextQueueRow.ROLE_LIVE -> this.rows.removeAll(pending.filter { it.role == CiphertextQueueRow.ROLE_LIVE && it.owner == row.owner && it.groupId == row.groupId && it.epochId == row.epochId && it.senderDeviceId == row.senderDeviceId && it.kind == row.kind })
+        else -> if (this.rows.any { it.clientPointId == row.clientPointId }) continue
+      }
       this.rows.add(row.copy(id = nextId++))
       inserted += 1
     }
@@ -21,10 +26,11 @@ class InMemoryCiphertextQueue : CiphertextQueue {
     limit: Int,
     owner: String?,
     afterId: Long,
+    exceptRole: String?,
   ): List<CiphertextQueueRow> =
     rows
       .asSequence()
-      .filter { it.status == status && it.id > afterId && (owner == null || it.owner == owner) }
+      .filter { it.status == status && it.id > afterId && (owner == null || it.owner == owner) && it.role != exceptRole }
       .sortedBy { it.id }
       .take(limit.coerceAtLeast(0))
       .toList()
@@ -54,7 +60,20 @@ class InMemoryCiphertextQueue : CiphertextQueue {
   @Synchronized
   override fun deleteByIds(ids: List<Long>) {
     val idSet = ids.toSet()
-    rows.removeAll { it.id in idSet }
+    val deleted = rows.filter { it.id in idSet }
+    rows.removeAll { row ->
+      row.id in idSet ||
+        deleted.any { newer ->
+          newer.id > row.id && newer.role == row.role && newer.owner == row.owner &&
+            when (row.role) {
+              CiphertextQueueRow.ROLE_STAY -> newer.clientPointId == row.clientPointId
+              CiphertextQueueRow.ROLE_LIVE ->
+                newer.groupId == row.groupId && newer.epochId == row.epochId &&
+                  newer.senderDeviceId == row.senderDeviceId && newer.kind == row.kind
+              else -> false
+            }
+        }
+    }
   }
 
   @Synchronized
@@ -77,6 +96,8 @@ class InMemoryCiphertextQueue : CiphertextQueue {
     error: String?,
   ) {
     val idSet = ids.toSet()
+    val superseded = rows.filter { row -> row.id in idSet && rows.any { newer -> newer.id > row.id && newer.supersedes(row) } }.map { it.id }.toSet()
+    rows.removeAll { it.id in superseded }
     for (index in rows.indices) {
       val row = rows[index]
       if (row.id in idSet) {
@@ -90,3 +111,13 @@ class InMemoryCiphertextQueue : CiphertextQueue {
     }
   }
 }
+
+private fun CiphertextQueueRow.supersedes(older: CiphertextQueueRow) =
+  owner == older.owner &&
+    when (older.role) {
+      CiphertextQueueRow.ROLE_STAY -> clientPointId == older.clientPointId
+      CiphertextQueueRow.ROLE_LIVE ->
+        role == CiphertextQueueRow.ROLE_LIVE && groupId == older.groupId && epochId == older.epochId &&
+          senderDeviceId == older.senderDeviceId && kind == older.kind
+      else -> false
+    }

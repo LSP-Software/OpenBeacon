@@ -8,7 +8,14 @@ class RoomCiphertextQueue(
 
   override fun insertAll(rows: List<CiphertextQueueRow>): Int =
     database.runInTransaction<Int> {
-      val inserted = dao.insertAll(rows.map { it.toEntity() }).count { it != -1L }
+      val inserted = rows.count { row ->
+        when (row.role) {
+          CiphertextQueueRow.ROLE_STAY -> dao.deletePendingByClientPointId(row.clientPointId)
+          CiphertextQueueRow.ROLE_LIVE -> dao.deletePendingLive(row.owner, row.groupId, row.epochId, row.senderDeviceId, row.kind)
+          else -> if (dao.countByClientPointId(row.clientPointId) > 0) return@count false
+        }
+        dao.insertAll(listOf(row.toEntity())).single() != -1L
+      }
       if (inserted > 0) evictOldestPendingOverLimit()
       inserted
     }
@@ -51,9 +58,14 @@ class RoomCiphertextQueue(
     limit: Int,
     owner: String?,
     afterId: Long,
+    exceptRole: String?,
   ): List<CiphertextQueueRow> {
-    dao.recoverInterrupted(System.currentTimeMillis() - 120_000L)
-    return dao.listByStatus(status, limit.coerceAtLeast(0), owner, afterId).map { it.toRow() }
+    val before = System.currentTimeMillis() - 120_000L
+    database.runInTransaction {
+      dao.deleteSupersededInterrupted(before)
+      dao.recoverInterrupted(before)
+    }
+    return dao.listByStatus(status, limit.coerceAtLeast(0), owner, afterId, exceptRole).map { it.toRow() }
   }
 
   override fun markInFlight(
@@ -74,7 +86,10 @@ class RoomCiphertextQueue(
     if (ids.isEmpty()) {
       return
     }
-    dao.deleteByIds(ids)
+    database.runInTransaction {
+      dao.deleteOlderCopies(ids)
+      dao.deleteByIds(ids)
+    }
   }
 
   override fun deleteByOwner(owner: String) = dao.deleteByOwner(owner)
@@ -92,7 +107,10 @@ class RoomCiphertextQueue(
     if (ids.isEmpty()) {
       return
     }
-    dao.requeue(ids = ids, attemptedAt = attemptedAt, error = error)
+    database.runInTransaction {
+      dao.deleteSuperseded(ids)
+      dao.requeue(ids = ids, attemptedAt = attemptedAt, error = error)
+    }
   }
 }
 
@@ -114,6 +132,7 @@ private fun CiphertextQueueRow.toEntity(): CiphertextQueueEntity =
     lastAttemptAt = lastAttemptAt,
     lastError = lastError,
     status = status,
+    role = role,
   )
 
 private fun CiphertextQueueEntity.toRow(): CiphertextQueueRow =
@@ -134,4 +153,5 @@ private fun CiphertextQueueEntity.toRow(): CiphertextQueueRow =
     lastAttemptAt = lastAttemptAt,
     lastError = lastError,
     status = status,
+    role = role,
   )

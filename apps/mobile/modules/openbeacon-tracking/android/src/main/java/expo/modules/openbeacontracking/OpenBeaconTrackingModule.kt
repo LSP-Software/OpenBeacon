@@ -240,6 +240,7 @@ class OpenBeaconTrackingModule : Module() {
       }
 
       AsyncFunction("deleteCiphertextsByOwner") { owner: String ->
+        TrackingRuntime.clearHistoryAllowance(requireContext(), owner)
         TrackingRuntime.ciphertextQueue(requireContext()).deleteByOwner(owner)
       }
 
@@ -274,6 +275,7 @@ class OpenBeaconTrackingModule : Module() {
       "algorithm" to algorithm,
       "nonce" to nonce,
       "ciphertext" to ciphertext,
+      "role" to role,
       "queuedAt" to queuedAt.toDouble(),
       "attemptCount" to attemptCount.toDouble(),
       "lastAttemptAt" to lastAttemptAt?.toDouble(),

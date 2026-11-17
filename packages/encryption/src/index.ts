@@ -29,11 +29,13 @@ import {
   RecoveryPrivateKeyMaterial,
   SensitivePayloadBytes,
 } from "./sensitive.ts";
-import type { TrackingPointV1 } from "./trackingPoint.ts";
+import type { TrackingPoint } from "./trackingPoint.ts";
 import {
-  encodeTrackingPointV1,
+  decodeTrackingPoint,
+  ENCRYPTED_TRACKING_POINT_LENGTH,
+  encodeTrackingPoint,
   TRACKING_POINT_KIND,
-  validateTrackingPointV1,
+  TRACKING_POINT_LENGTH,
 } from "./trackingPoint.ts";
 import type {
   DecryptedGroupPayload,
@@ -438,11 +440,13 @@ export const getRecordEpochId = <T extends { epochId: string }>(record: T) => re
 
 export {
   decodeBase64,
+  decodeTrackingPoint,
   DEVICE_KEY_ALGORITHM,
   DevicePrivateKeyMaterial,
   encodeBase64,
   encodePlaceGeometryV1,
-  encodeTrackingPointV1,
+  encodeTrackingPoint,
+  ENCRYPTED_TRACKING_POINT_LENGTH,
   EpochKeyMaterial,
   HISTORY_ESCROW_ALGORITHM,
   HistoryPrivateKeyMaterial,
@@ -454,8 +458,8 @@ export {
   RecoveryPrivateKeyMaterial,
   SensitivePayloadBytes,
   TRACKING_POINT_KIND,
+  TRACKING_POINT_LENGTH,
   validatePlaceGeometryV1,
-  validateTrackingPointV1,
   WRAPPED_EPOCH_KEY_ALGORITHM,
   X25519_KEY_ALGORITHM,
   XCHACHA20_NONCE_LENGTH,
@@ -476,7 +480,7 @@ export type {
   PersonalDataPurpose,
   PlaceGeometryV1,
   RecipientPublicKeyMaterial,
-  TrackingPointV1,
+  TrackingPoint,
   WrappedEpochKey,
   WrappedHistoryEpochKey,
 };

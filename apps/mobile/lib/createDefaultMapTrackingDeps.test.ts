@@ -128,15 +128,16 @@ test("decrypting an older epoch after a newer one does not refresh group key acc
   unsubscribe();
 });
 
-const point = (epochId: string, id: string, createdAt: string): MapTrackingEncryptedPoint => ({
-  algorithm: "xchacha20poly1305",
+const point = (
+  epochId: string,
+  senderDeviceId: string,
+  updatedAt: string,
+): MapTrackingEncryptedPoint => ({
   ciphertext: "ciphertext",
-  clientPointId: id,
-  createdAt: new Date(createdAt),
   epochId,
-  id,
-  kind: "location",
   nonce: "nonce",
-  senderDeviceId: "device",
+  revisionPrefix: "",
+  senderDeviceId,
   senderUserId: "user",
+  updatedAt: new Date(updatedAt),
 });

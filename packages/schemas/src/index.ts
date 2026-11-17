@@ -66,6 +66,7 @@ import {
   groupTrackingPollSchema,
   groupTrackingUploadBatchSchema,
   TRACKING_POINT_KIND,
+  TRACKING_POINT_ROLES,
 } from "./schemas/group/tracking.ts";
 import {
   confirmGroupImageUploadSchema,
@@ -142,6 +143,7 @@ export {
   storeImageKeySchema,
   submitFeedbackSchema,
   TRACKING_POINT_KIND,
+  TRACKING_POINT_ROLES,
   PLACE_GEOMETRY_KIND,
   removeDeviceSchema,
   updateDeviceSchema,

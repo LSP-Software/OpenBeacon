@@ -1,64 +1,63 @@
 import { describe, expect, test } from "bun:test";
-import { PAYLOAD_ENCRYPTION_ALGORITHM } from "@openbeacon/encryption";
 import {
   groupTrackingGetLatestSchema,
   groupTrackingPointSchema,
   groupTrackingPollSchema,
   groupTrackingUploadBatchSchema,
-  TRACKING_POINT_KIND,
 } from "./tracking.ts";
 
 const validNonce = Buffer.alloc(24, 1).toString("base64");
 
 const validPoint = {
-  algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-  ciphertext: "ciphertext",
-  clientPointId: "point-1",
+  ciphertext: Buffer.alloc(39, 2).toString("base64"),
+  clientPointId: "s1.2:AQIDBAUGBwg=",
   epochId: "epoch-1",
-  kind: TRACKING_POINT_KIND,
   nonce: validNonce,
+  role: "POINT",
   senderDeviceId: "device-1",
-};
+} as const;
 
 describe("groupTrackingPointSchema", () => {
-  test("accepts a valid tracking point envelope", () => {
+  const accepts = (point: object) => groupTrackingPointSchema.safeParse(point).success;
+
+  test("accepts a valid tracking point envelope for each role", () => {
     expect(groupTrackingPointSchema.parse(validPoint)).toEqual(validPoint);
+    expect(accepts({ ...validPoint, role: "STAY" })).toBe(true);
+    expect(accepts({ ...validPoint, role: "LIVE" })).toBe(true);
+    expect(accepts({ ...validPoint, role: "TRAIL" })).toBe(false);
   });
 
-  test("rejects wrong kind", () => {
-    expect(() =>
-      groupTrackingPointSchema.parse({
-        ...validPoint,
-        kind: "location",
-      }),
-    ).toThrow();
+  test("takes only the 52-character canonical base64 of a 39-byte ciphertext", () => {
+    expect(validPoint.ciphertext).toHaveLength(52);
+    for (const length of [0, 1, 38, 40, 63, 768]) {
+      expect(
+        accepts({ ...validPoint, ciphertext: Buffer.alloc(length, 2).toString("base64") }),
+      ).toBe(false);
+    }
+    expect(accepts({ ...validPoint, ciphertext: "a".repeat(52) })).toBe(true);
+    expect(accepts({ ...validPoint, ciphertext: `${"a".repeat(51)}!` })).toBe(false);
+    expect(accepts({ ...validPoint, ciphertext: `${"a".repeat(50)}==` })).toBe(false);
+    expect(accepts({ ...validPoint, ciphertext: `${validPoint.ciphertext}\n` })).toBe(false);
   });
 
-  test("limits ciphertext size", () => {
-    expect(
-      groupTrackingPointSchema.safeParse({ ...validPoint, ciphertext: "a".repeat(1024) }).success,
-    ).toBe(true);
-    expect(
-      groupTrackingPointSchema.safeParse({ ...validPoint, ciphertext: "a".repeat(1025) }).success,
-    ).toBe(false);
-  });
-
-  test("limits client point IDs", () => {
-    expect(
-      groupTrackingPointSchema.safeParse({ ...validPoint, clientPointId: "x".repeat(128) }).success,
-    ).toBe(true);
-    expect(
-      groupTrackingPointSchema.safeParse({ ...validPoint, clientPointId: "x".repeat(129) }).success,
-    ).toBe(false);
+  test("takes an optional sharing revision prefix and exactly 8 bytes of point ID", () => {
+    expect(accepts({ ...validPoint, clientPointId: "AQIDBAUGBwg=" })).toBe(true);
+    expect(accepts({ ...validPoint, clientPointId: "s0.0:AQIDBAUGBwg=" })).toBe(true);
+    for (const clientPointId of [
+      "AQIDBAUGBw==",
+      "AQIDBAUGBwgJ",
+      "AQIDBAUGBwh=",
+      Buffer.alloc(32, 1).toString("base64"),
+      "s1:AQIDBAUGBwg=",
+      "s1.2.3:AQIDBAUGBwg=",
+      "point-1",
+    ]) {
+      expect(accepts({ ...validPoint, clientPointId })).toBe(false);
+    }
   });
 
   test("rejects invalid nonce length", () => {
-    expect(() =>
-      groupTrackingPointSchema.parse({
-        ...validPoint,
-        nonce: Buffer.alloc(12, 1).toString("base64"),
-      }),
-    ).toThrow();
+    expect(accepts({ ...validPoint, nonce: Buffer.alloc(12, 1).toString("base64") })).toBe(false);
   });
 
   test("rejects oversized and noncanonical nonces", () => {
@@ -67,7 +66,7 @@ describe("groupTrackingPointSchema", () => {
       `${validNonce}\n`,
       "!".repeat(32),
     ]) {
-      expect(groupTrackingPointSchema.safeParse({ ...validPoint, nonce }).success).toBe(false);
+      expect(accepts({ ...validPoint, nonce })).toBe(false);
     }
   });
 });

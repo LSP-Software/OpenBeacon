@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
-import { prisma } from "@openbeacon/database";
+import { Prisma, prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
   createInitialGroupEpoch,
@@ -14,6 +14,7 @@ import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupEpochRouter } from "./groupEpochRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
+import { countTrackingPoints, testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
 
 const prefix = `rotation-${crypto.randomUUID()}`;
 const userId = `${prefix}-user`;
@@ -231,13 +232,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         epochKey: initial.epochKey,
         groupId: survivingGroup,
         kind: TRACKING_POINT_KIND,
-        payload: { latitude: 51, longitude: -1 },
+        payload: new Uint8Array(23),
         senderDeviceId: deviceId,
       });
       try {
         await caller.groupTracking.uploadBatch({
           groupId: survivingGroup,
-          points: [{ ...encrypted, clientPointId: `${prefix}-before` }],
+          points: [
+            { ...encrypted, clientPointId: testClientPointId(`${prefix}-before`), role: "POINT" },
+          ],
         });
         expect(
           await deleteAccountRecords({
@@ -257,7 +260,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         ).toBe(true);
         await caller.groupTracking.uploadBatch({
           groupId: survivingGroup,
-          points: [{ ...encrypted, clientPointId: `${prefix}-queued` }],
+          points: [
+            { ...encrypted, clientPointId: testClientPointId(`${prefix}-queued`), role: "POINT" },
+          ],
         });
         const context = await caller.groupEpoch.rotationContext({ groupId: survivingGroup });
         if (!context?.latestEpoch) throw new Error("Missing rotation context");
@@ -285,12 +290,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         ).toEqual(next.epochKey.expose());
         await caller.groupTracking.uploadBatch({
           groupId: survivingGroup,
-          points: [{ ...encrypted, clientPointId: `${prefix}-after` }],
+          points: [
+            { ...encrypted, clientPointId: testClientPointId(`${prefix}-after`), role: "POINT" },
+          ],
         });
         expect(
-          await prisma.groupEncryptedPayload.count({
-            where: { groupId: survivingGroup, senderUserId: userId },
-          }),
+          await countTrackingPoints(
+            prisma,
+            Prisma.sql`"stream"."groupId" = ${survivingGroup} AND "stream"."senderUserId" = ${userId}`,
+          ),
         ).toBe(3);
         expect(
           (await prisma.group.findUniqueOrThrow({ where: { id: survivingGroup } }))

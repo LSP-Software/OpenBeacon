@@ -397,12 +397,9 @@ class TrackingCaptureService : Service() {
       currentUploadIntervalMs = decision.uploadIntervalMs
     }
 
-    if (!decision.shouldQueue) {
-      return
-    }
-
     try {
-      val queuedCount = capturePipeline.onFix(
+      var currentFixQueued = false
+      capturePipeline.onFix(
         latitude = location.latitude,
         longitude = location.longitude,
         timestampMillis = location.time,
@@ -411,15 +408,18 @@ class TrackingCaptureService : Service() {
         batteryCharging = battery.charging,
         captureGeneration = generation,
         fixId = location.elapsedRealtimeNanos.takeIf { it > 0 },
+        accuracyMeters = location.accuracy.toDouble().takeIf { location.hasAccuracy() },
+        live = decision.shouldQueue,
+        onCurrentFixQueued = { currentFixQueued = true },
       )
       synchronized(captureStateLock) {
-        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && queuedCount > 0 && (decision.forceUpload || nowMs - lastUploadRequestMs >= decision.uploadIntervalMs) && isOnline()) {
+        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && currentFixQueued && (decision.forceUpload || nowMs - lastUploadRequestMs >= decision.uploadIntervalMs) && isOnline()) {
           startService(Intent(this, TrackingUploadService::class.java).putExtra(TrackingUploadService.EXTRA_REASON, "upload"))
           lastUploadRequestMs = nowMs
         }
       }
       synchronized(captureStateLock) {
-        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && queuedCount > 0) {
+        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && currentFixQueued) {
           if (refreshGeneration != null) refreshState.complete(refreshGeneration)
           lastQueued =
             LastQueuedFix(
@@ -461,7 +461,7 @@ class TrackingCaptureService : Service() {
       val owner = TrackingRuntime.queueOwner(this)
       TrackingRuntime
         .ciphertextQueue(this)
-        .listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, owner)
+        .listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, owner, exceptRole = CiphertextQueueRow.ROLE_STAY)
         .isNotEmpty() || (owner != null && TrackingRuntime.placeDetection(this).hasQueued(owner))
     } catch (error: Exception) {
       Log.e(TAG, "Failed to check for pending uploads.", error)

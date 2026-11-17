@@ -5,6 +5,7 @@ import android.app.Instrumentation
 import android.os.Bundle
 import androidx.room.Room
 import expo.modules.openbeacontracking.capture.CapturePipeline
+import expo.modules.openbeacontracking.capture.HistoryFilterSettings
 import expo.modules.openbeacontracking.keys.InMemoryEpochKeyStore
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import java.util.UUID
@@ -35,9 +36,16 @@ class OfflineQueueStorageBenchmark : Instrumentation() {
         ProvisionedEpochKey("group-1", "epoch", ByteArray(32), "device", "trackingPoint"),
         ProvisionedEpochKey("group-2", "epoch", ByteArray(32) { 1 }, "device", "trackingPoint"),
       ))
-      val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "server-a/user-a" }, bootId = "boot")
-      for (fixId in 1L..12_000L) {
-        check(pipeline.onFix(51.5 + fixId / 1e6, -0.1, at("2026-07-13T18:45:00.000Z"), 1.5, 80, false, fixId = fixId) == 2)
+      val pipeline = CapturePipeline(
+        epochKeyStore = keys,
+        ciphertextQueue = queue,
+        queueOwner = { "server-a/user-a" },
+        bootId = "boot",
+        historySettings = HistoryFilterSettings(dailyAllowance = 1_000_000),
+      )
+      for (fixId in 1L..12_002L) {
+        val queued = pipeline.onFix(51.5 + fixId / 1e4, -0.1 + (fixId % 2) / 1e3, at("2026-07-13T18:45:00.000Z") + fixId * 10_000L, 1.5, 80, false, fixId = fixId, live = false)
+        check(queued == if (fixId == 2L) 0 else 2) { "fix $fixId queued $queued rows" }
       }
       val files = listOf("", "-wal", "-shm").map { suffix -> targetContext.getDatabasePath(name + suffix) }
       val diskBytes = files.sumOf { it.length() }

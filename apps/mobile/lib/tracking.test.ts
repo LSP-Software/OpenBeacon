@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, jest, mock, test } from "bun:test";
+import { createHash } from "node:crypto";
 import {
   createDeviceKeyPair,
   createHistoryKeyPair,
@@ -80,6 +81,7 @@ let pendingCiphertexts: Array<{
   algorithm: string;
   nonce: string;
   ciphertext: string;
+  role: "POINT" | "STAY" | "LIVE";
   queuedAt: number;
   attemptCount: number;
   lastAttemptAt: number | null;
@@ -573,27 +575,35 @@ const {
 } = await import("./tracking.ts");
 const { noteGroupMembership } = await import("./trackingKeyCheck.ts");
 
+const pointId = (label: string) =>
+  encodeBase64(new Uint8Array(createHash("sha256").update(label).digest()).slice(0, 8));
+const queuedNonce = encodeBase64(new Uint8Array(24).fill(2));
+const queuedCiphertext = encodeBase64(new Uint8Array(39).fill(1));
+
 const createQueueItem = ({
   clientPointId,
   groupId,
   id,
+  role = "POINT",
   senderDeviceId = "device-1",
 }: {
   clientPointId: string;
   groupId: string;
   id: number;
+  role?: "POINT" | "STAY" | "LIVE";
   senderDeviceId?: string;
 }) => ({
   id,
-  clientPointId,
+  clientPointId: pointId(clientPointId),
   captureId: `capture-${id}`,
   groupId,
   epochId: `epoch-${groupId.slice(-1)}`,
   senderDeviceId,
   kind: "trackingPoint",
   algorithm: "XChaCha20-Poly1305",
-  nonce: "nonce",
-  ciphertext: "ciphertext",
+  nonce: queuedNonce,
+  ciphertext: queuedCiphertext,
+  role,
   queuedAt: id,
   attemptCount: 0,
   lastAttemptAt: null,
@@ -861,6 +871,95 @@ describe("tracking service", () => {
     expect(deleted).toEqual([[1]]);
   });
 
+  test("sends only the newest queued copy of a stay and drops the older ones", async () => {
+    const owner = JSON.stringify(["https://api.example.test", "user-1"]);
+    pendingCiphertexts = [
+      {
+        ...createQueueItem({ clientPointId: "stay", groupId: "group-1", id: 1, role: "STAY" }),
+        owner,
+      },
+      { ...createQueueItem({ clientPointId: "point", groupId: "group-1", id: 2 }), owner },
+      {
+        ...createQueueItem({ clientPointId: "stay", groupId: "group-1", id: 3, role: "STAY" }),
+        owner,
+      },
+    ];
+    await flushPendingTrackingPoints();
+    expect(uploadCalls[0]?.points).toEqual([
+      {
+        ciphertext: queuedCiphertext,
+        clientPointId: pointId("point"),
+        epochId: "epoch-1",
+        nonce: queuedNonce,
+        role: "POINT",
+        senderDeviceId: "device-1",
+      },
+      {
+        ciphertext: queuedCiphertext,
+        clientPointId: pointId("stay"),
+        epochId: "epoch-1",
+        nonce: queuedNonce,
+        role: "STAY",
+        senderDeviceId: "device-1",
+      },
+    ]);
+    expect(markedInFlight).toEqual([[2, 3]]);
+    expect(deleted).toEqual([[1], [2, 3]]);
+  });
+
+  test("drops an older stay or live copy that is waiting out its retry once a newer one is listed", async () => {
+    const backingOff = { attemptCount: 3, lastAttemptAt: Date.now() };
+    pendingCiphertexts = [
+      {
+        ...createQueueItem({ clientPointId: "stay", groupId: "group-1", id: 1, role: "STAY" }),
+        ...backingOff,
+      },
+      {
+        ...createQueueItem({ clientPointId: "live-1", groupId: "group-1", id: 2, role: "LIVE" }),
+        ...backingOff,
+      },
+      {
+        ...createQueueItem({
+          clientPointId: "other-live",
+          groupId: "group-2",
+          id: 3,
+          role: "LIVE",
+        }),
+        ...backingOff,
+      },
+      createQueueItem({ clientPointId: "stay", groupId: "group-1", id: 4, role: "STAY" }),
+      createQueueItem({ clientPointId: "live-2", groupId: "group-1", id: 5, role: "LIVE" }),
+    ];
+
+    await flushPendingTrackingPoints();
+
+    expect(deleted[0]).toEqual([1, 2]);
+    expect(markedInFlight).toEqual([[4, 5]]);
+    expect(requeued).toEqual([]);
+  });
+
+  test("deletes queued points the server would refuse instead of uploading them", async () => {
+    pendingCiphertexts = [
+      {
+        ...createQueueItem({ clientPointId: "old-format", groupId: "group-1", id: 1 }),
+        clientPointId: encodeBase64(new Uint8Array(32).fill(3)),
+        ciphertext: encodeBase64(new TextEncoder().encode(JSON.stringify({ v: 1, lat: 51.5 }))),
+      },
+      {
+        ...createQueueItem({ clientPointId: "old-id", groupId: "group-1", id: 2 }),
+        clientPointId: encodeBase64(new Uint8Array(32).fill(4)),
+      },
+      createQueueItem({ clientPointId: "current", groupId: "group-1", id: 3 }),
+    ];
+
+    await flushPendingTrackingPoints();
+
+    expect(deleted).toEqual([[1, 2], [3]]);
+    expect(uploadCalls.flatMap(({ points }) => points)).toEqual([
+      expect.objectContaining({ clientPointId: pointId("current") }),
+    ]);
+  });
+
   test("holds pre-pause points while a local pause hasn't reached the server", async () => {
     registeredDevice = {
       deviceId: "device-1",
@@ -1121,7 +1220,7 @@ describe("tracking service", () => {
       uploadGroup = async ({ points }) => {
         if (
           points.length > 1 ||
-          (points[0] as { clientPointId: string }).clientPointId === "invalid"
+          (points[0] as { clientPointId: string }).clientPointId === pointId("invalid")
         ) {
           throw Object.assign(new Error("invalid"), { data: { code: "BAD_REQUEST" } });
         }
@@ -1918,7 +2017,7 @@ describe("tracking service", () => {
     expect(Date.parse(recordedUploads[0]?.timestamp ?? "")).toBeGreaterThanOrEqual(before);
 
     recordedUploads.length = 0;
-    uploadGroup = async () => ({ accepted: [], duplicates: ["point-1"] });
+    uploadGroup = async () => ({ accepted: [], duplicates: [pointId("point-1")] });
     await flushPendingTrackingPoints();
     expect(recordedUploads).toHaveLength(0);
   });
@@ -1929,9 +2028,9 @@ describe("tracking service", () => {
       createQueueItem({ clientPointId: "point-expired", groupId: "group-1", id: 2 }),
     ];
     uploadGroup = async () => ({
-      accepted: ["point-accepted"],
+      accepted: [pointId("point-accepted")],
       duplicates: [],
-      expired: ["point-expired"],
+      expired: [pointId("point-expired")],
     });
 
     await flushPendingTrackingPoints();
@@ -1947,7 +2046,7 @@ describe("tracking service", () => {
       createQueueItem({ clientPointId: "point-accepted", groupId: "group-1", id: 1 }),
       createQueueItem({ clientPointId: "point-missing", groupId: "group-1", id: 2 }),
     ];
-    uploadGroup = async () => ({ accepted: ["point-accepted"], duplicates: [] });
+    uploadGroup = async () => ({ accepted: [pointId("point-accepted")], duplicates: [] });
 
     await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
 
@@ -2198,7 +2297,7 @@ describe("tracking service", () => {
     await flushPendingTrackingPoints();
 
     expect(uploadCalls.flatMap(({ points }) => points)).toEqual([
-      expect.objectContaining({ clientPointId: "kept" }),
+      expect.objectContaining({ clientPointId: pointId("kept") }),
     ]);
     expect(deleted).toEqual([[2]]);
     expect(requeued).toEqual([]);
@@ -2295,7 +2394,8 @@ describe("tracking service", () => {
     uploadGroup = async ({ points }) => {
       if (
         points.some(
-          (point) => (point as { clientPointId: string }).clientPointId === "point-invalid",
+          (point) =>
+            (point as { clientPointId: string }).clientPointId === pointId("point-invalid"),
         )
       ) {
         throw Object.assign(new Error("Epoch does not belong to this group."), {
@@ -2318,7 +2418,7 @@ describe("tracking service", () => {
       uploadCalls.some(
         ({ points }) =>
           points.length === 1 &&
-          (points[0] as { clientPointId: string }).clientPointId === "point-valid",
+          (points[0] as { clientPointId: string }).clientPointId === pointId("point-valid"),
       ),
     ).toBe(true);
     expect(deleted.flat().sort()).toEqual([1, 2]);
@@ -2359,7 +2459,8 @@ describe("tracking service", () => {
     expect(uploadCalls.map(({ points }) => points.length)).toEqual([1, 1]);
     expect(
       uploadCalls.some(
-        ({ points }) => (points[0] as { clientPointId: string }).clientPointId === "point-valid",
+        ({ points }) =>
+          (points[0] as { clientPointId: string }).clientPointId === pointId("point-valid"),
       ),
     ).toBe(true);
     expect(deleted.flat()).toEqual([1]);
@@ -2585,7 +2686,11 @@ describe("tracking service", () => {
       pendingCiphertexts = [
         createQueueItem({ clientPointId: "point-1", groupId: "group-1", id: 1 }),
       ];
-      uploadGroup = async () => ({ accepted: [], duplicates: [], expired: ["point-1"] });
+      uploadGroup = async () => ({
+        accepted: [],
+        duplicates: [],
+        expired: [pointId("point-1")],
+      });
 
       await syncBackgroundTracking();
 

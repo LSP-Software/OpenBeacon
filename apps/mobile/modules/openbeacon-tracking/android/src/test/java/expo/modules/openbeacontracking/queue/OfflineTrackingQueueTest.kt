@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import expo.modules.openbeacontracking.capture.CapturePipeline
 import expo.modules.openbeacontracking.crypto.EncryptedGroupPayload
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
+import expo.modules.openbeacontracking.crypto.TrackingPointCodec
 import expo.modules.openbeacontracking.keys.InMemoryEpochKeyStore
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import java.util.UUID
@@ -130,11 +131,30 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
+  fun `replaces pending stay and live rows but keeps ones being uploaded`() {
+    val owner = "server-a/user-a"
+    assertEquals(1, queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "first"))))
+    assertEquals(1, queue.insertAll(listOf(row("live-1", owner).copy(role = CiphertextQueueRow.ROLE_LIVE))))
+    val first = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner).first()
+    queue.markInFlight(listOf(first.id), attemptedAt = System.currentTimeMillis())
+    assertEquals(1, queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "second"))))
+    assertEquals(1, queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "third"))))
+    assertEquals(1, queue.insertAll(listOf(row("live-2", owner).copy(role = CiphertextQueueRow.ROLE_LIVE))))
+    assertEquals(1, queue.insertAll(listOf(row("live-3", owner).copy(role = CiphertextQueueRow.ROLE_LIVE, groupId = "other"))))
+    assertEquals(0, queue.insertAll(listOf(row("stay", owner))))
+
+    val pending = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner)
+    assertEquals(listOf("stay", "live-2", "live-3"), pending.map { it.clientPointId })
+    assertEquals("third", pending.first().ciphertext)
+    assertEquals("first", queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10, owner).single().ciphertext)
+  }
+
+  @Test
   fun `stores only ciphertext that decrypts with the group key`() {
     assertEquals(1, capture(pipeline(), 100))
     val stored = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a").single()
     val plaintext =
-      GroupPayloadEncrypt.encodeTrackingPointV1Json(51.5, -0.1, "2026-07-13T18:45:00.000Z", null, 80, false)!!.toByteArray(Charsets.UTF_8)
+      TrackingPointCodec.encode(51.5, -0.1, at("2026-07-13T18:45:00.000Z"), null, null, null, 80, false)!!
     val ciphertext = GroupPayloadEncrypt.decodeBase64(stored.ciphertext)
     assertFalse(ciphertext.toList().windowed(plaintext.size).contains(plaintext.toList()))
 
@@ -153,40 +173,131 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
-  fun `migrates version 1 queues to the current schema`() {
-    val name = "openbeacon-test-${UUID.randomUUID()}.db"
-    val file = context.getDatabasePath(name)
-    file.parentFile?.mkdirs()
-    SQLiteDatabase.openOrCreateDatabase(file, null).use { old ->
-      old.execSQL(
-        "CREATE TABLE ciphertext_queue (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, clientPointId TEXT NOT NULL, captureId TEXT NOT NULL, groupId TEXT NOT NULL, epochId TEXT NOT NULL, senderDeviceId TEXT NOT NULL, kind TEXT NOT NULL, algorithm TEXT NOT NULL, nonce TEXT NOT NULL, ciphertext TEXT NOT NULL, queuedAt INTEGER NOT NULL, attemptCount INTEGER NOT NULL, lastAttemptAt INTEGER, lastError TEXT, status TEXT NOT NULL)",
-      )
-      old.execSQL("CREATE UNIQUE INDEX index_ciphertext_queue_clientPointId ON ciphertext_queue (clientPointId)")
-      old.execSQL("CREATE INDEX index_ciphertext_queue_status_id ON ciphertext_queue (status, id)")
-      old.execSQL("CREATE INDEX index_ciphertext_queue_groupId_id ON ciphertext_queue (groupId, id)")
-      old.execSQL(
-        "INSERT INTO ciphertext_queue (clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, status) VALUES ('legacy', 'capture', 'group', 'epoch', 'device', 'trackingPoint', 'algorithm', 'nonce', 'ciphertext', 1, 0, 'PENDING')",
-      )
-      old.version = 1
-    }
+  fun `requeues an older stay or live copy only while no newer copy is queued`() {
+    val owner = "server-a/user-a"
+    queue.insertAll(
+      listOf(
+        row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "first"),
+        row("live-1", owner).copy(role = CiphertextQueueRow.ROLE_LIVE),
+        row("lone-stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY),
+        row("lone-live", owner).copy(role = CiphertextQueueRow.ROLE_LIVE, groupId = "other"),
+        row("point", owner),
+      ),
+    )
+    val inFlight = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner).map { it.id }
+    assertEquals(inFlight, queue.markInFlight(inFlight, System.currentTimeMillis()))
+    queue.insertAll(
+      listOf(
+        row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "second"),
+        row("live-2", owner).copy(role = CiphertextQueueRow.ROLE_LIVE),
+        row("lone-stay", "server-a/user-b").copy(role = CiphertextQueueRow.ROLE_STAY),
+      ),
+    )
 
-    val migrated =
-      Room
-        .databaseBuilder(context, CiphertextQueueDatabase::class.java, name)
-        .allowMainThreadQueries()
-        .addMigrations(*CiphertextQueueDatabase.MIGRATIONS)
-        .build()
-    try {
-      val dao = migrated.ciphertextQueueDao()
-      assertEquals(1, dao.countUnassigned("device"))
-      assertTrue(dao.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a", 0).isEmpty())
-      dao.assignUnassigned("device", "server-a/user-a")
-      assertEquals("ciphertext", dao.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a", 0).single().ciphertext)
-      assertTrue(dao.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-b", 0).isEmpty())
+    queue.requeue(inFlight, System.currentTimeMillis(), "offline")
+
+    val pending = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner)
+    assertEquals(listOf("lone-stay", "lone-live", "point", "stay", "live-2"), pending.map { it.clientPointId })
+    assertEquals("second", pending.single { it.clientPointId == "stay" }.ciphertext)
+    assertEquals(listOf("lone-stay"), pendingIds("server-a/user-b"))
+  }
+
+  @Test
+  fun `drops an interrupted stay or live copy once a newer copy is queued`() {
+    val owner = "server-a/user-a"
+    queue.insertAll(
+      listOf(
+        row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "first"),
+        row("live-1", owner).copy(role = CiphertextQueueRow.ROLE_LIVE),
+        row("lone-stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY),
+      ),
+    )
+    val interrupted = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner).map { it.id }
+    queue.markInFlight(interrupted, System.currentTimeMillis() - 200_000L)
+    queue.insertAll(
+      listOf(
+        row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "second"),
+        row("live-2", owner).copy(role = CiphertextQueueRow.ROLE_LIVE),
+      ),
+    )
+
+    val pending = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner)
+
+    assertEquals(listOf("lone-stay", "stay", "live-2"), pending.map { it.clientPointId })
+    assertEquals("second", pending.single { it.clientPointId == "stay" }.ciphertext)
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10, owner).isEmpty())
+  }
+
+  @Test
+  fun `removing an acknowledged stay or live copy also removes older copies still uploading`() {
+    val owner = "server-a/user-a"
+    queue.insertAll(
+      listOf(
+        row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "first"),
+        row("live-1", owner).copy(role = CiphertextQueueRow.ROLE_LIVE),
+        row("other-stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY),
+      ),
+    )
+    val uploading = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 2, owner).map { it.id }
+    queue.markInFlight(uploading, System.currentTimeMillis())
+    queue.insertAll(
+      listOf(
+        row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "second"),
+        row("live-2", owner).copy(role = CiphertextQueueRow.ROLE_LIVE),
+      ),
+    )
+    val newer = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner).filter { it.clientPointId != "other-stay" }
+
+    queue.deleteByIds(newer.map { it.id })
+
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10, owner).isEmpty())
+    assertEquals(listOf("other-stay"), pendingIds(owner))
+  }
+
+  @Test
+  fun `lists pending points other than stay updates so a lone stay update waits for the next upload`() {
+    val owner = "server-a/user-a"
+    queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY)))
+
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, owner, exceptRole = CiphertextQueueRow.ROLE_STAY).isEmpty())
+
+    queue.insertAll(listOf(row("live", owner).copy(role = CiphertextQueueRow.ROLE_LIVE)))
+
+    assertEquals(
+      listOf("live"),
+      queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, owner, exceptRole = CiphertextQueueRow.ROLE_STAY).map { it.clientPointId },
+    )
+    assertEquals(listOf("stay", "live"), pendingIds(owner))
+  }
+
+  @Test
+  fun `migrates version 1 queues to the current schema and drops their unsendable points`() {
+    migrate(
+      1,
+      "CREATE TABLE ciphertext_queue (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, clientPointId TEXT NOT NULL, captureId TEXT NOT NULL, groupId TEXT NOT NULL, epochId TEXT NOT NULL, senderDeviceId TEXT NOT NULL, kind TEXT NOT NULL, algorithm TEXT NOT NULL, nonce TEXT NOT NULL, ciphertext TEXT NOT NULL, queuedAt INTEGER NOT NULL, attemptCount INTEGER NOT NULL, lastAttemptAt INTEGER, lastError TEXT, status TEXT NOT NULL)",
+      "INSERT INTO ciphertext_queue (clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, status) VALUES ('legacy', 'capture', 'group', 'epoch', 'device', 'trackingPoint', 'algorithm', 'nonce', 'ciphertext', 1, 0, 'PENDING')",
+    ) { dao ->
+      assertEquals(0, dao.countUnassigned("device"))
       assertNull(dao.getEviction("server-a/user-a"))
-    } finally {
-      migrated.close()
-      context.deleteDatabase(name)
+    }
+  }
+
+  @Test
+  fun `migrates version 3 queues to the current schema and drops their unsendable points`() {
+    migrate(
+      3,
+      "CREATE TABLE ciphertext_queue (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, clientPointId TEXT NOT NULL, captureId TEXT NOT NULL, groupId TEXT NOT NULL, epochId TEXT NOT NULL, senderDeviceId TEXT NOT NULL, kind TEXT NOT NULL, algorithm TEXT NOT NULL, nonce TEXT NOT NULL, ciphertext TEXT NOT NULL, queuedAt INTEGER NOT NULL, attemptCount INTEGER NOT NULL, lastAttemptAt INTEGER, lastError TEXT, status TEXT NOT NULL, owner TEXT)",
+      "CREATE TABLE ciphertext_queue_eviction (owner TEXT NOT NULL, pointCount INTEGER NOT NULL, oldestQueuedAt INTEGER NOT NULL, newestQueuedAt INTEGER NOT NULL, revision INTEGER NOT NULL, PRIMARY KEY(owner))",
+      "INSERT INTO ciphertext_queue (clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, status, owner) VALUES ('${"a".repeat(43)}=', 'capture', 'group', 'epoch', 'device', 'trackingPoint', 'algorithm', 'nonce', '{\"v\":1}', 1, 0, 'PENDING', 'server-a/user-a')",
+      "INSERT INTO ciphertext_queue (clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, lastAttemptAt, status, owner) VALUES ('${"b".repeat(43)}=', 'capture', 'group', 'epoch', 'device', 'trackingPoint', 'algorithm', 'nonce', '{\"v\":1}', 2, 1, 2, 'IN_FLIGHT', 'server-a/user-a')",
+      "INSERT INTO ciphertext_queue (clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, status) VALUES ('${"c".repeat(43)}=', 'capture', 'group', 'epoch', 'device', 'trackingPoint', 'algorithm', 'nonce', '{\"v\":1}', 3, 0, 'PENDING')",
+      "INSERT INTO ciphertext_queue_eviction (owner, pointCount, oldestQueuedAt, newestQueuedAt, revision) VALUES ('server-a/user-a', 4, 1, 2, 7)",
+    ) { dao ->
+      assertEquals(0, dao.count())
+      assertEquals(0, dao.countUnassigned("device"))
+      assertEquals(4, dao.getEviction("server-a/user-a")?.pointCount)
+      dao.insertAll(listOf(CiphertextQueueEntity(owner = "server-a/user-a", clientPointId = "new", captureId = "capture", groupId = "group", epochId = "epoch", senderDeviceId = "device", kind = "trackingPoint", algorithm = "algorithm", nonce = "nonce", ciphertext = "ciphertext", queuedAt = 4, status = CiphertextQueueRow.STATUS_PENDING, role = CiphertextQueueRow.ROLE_STAY)))
+      assertEquals(listOf("new"), dao.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, "server-a/user-a", 0).map { it.clientPointId })
     }
   }
 
@@ -259,6 +370,36 @@ class OfflineTrackingQueueTest {
     boundedQueue.acknowledgeEviction("server-a/user-a", newer.revision)
     assertNull(dao.getEviction("server-a/user-a"))
     assertEquals(otherOwner, dao.getEviction("server-a/user-b"))
+  }
+
+  private fun migrate(
+    version: Int,
+    vararg statements: String,
+    check: (CiphertextQueueDao) -> Unit,
+  ) {
+    val name = "openbeacon-test-${UUID.randomUUID()}.db"
+    val file = context.getDatabasePath(name)
+    file.parentFile?.mkdirs()
+    SQLiteDatabase.openOrCreateDatabase(file, null).use { old ->
+      statements.forEach(old::execSQL)
+      old.execSQL("CREATE UNIQUE INDEX index_ciphertext_queue_clientPointId ON ciphertext_queue (clientPointId)")
+      old.execSQL("CREATE INDEX index_ciphertext_queue_status_id ON ciphertext_queue (status, id)")
+      old.execSQL("CREATE INDEX index_ciphertext_queue_groupId_id ON ciphertext_queue (groupId, id)")
+      old.version = version
+    }
+
+    val migrated =
+      Room
+        .databaseBuilder(context, CiphertextQueueDatabase::class.java, name)
+        .allowMainThreadQueries()
+        .addMigrations(*CiphertextQueueDatabase.MIGRATIONS)
+        .build()
+    try {
+      check(migrated.ciphertextQueueDao())
+    } finally {
+      migrated.close()
+      context.deleteDatabase(name)
+    }
   }
 
   private fun pendingIds(owner: String) = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner).map { it.clientPointId }

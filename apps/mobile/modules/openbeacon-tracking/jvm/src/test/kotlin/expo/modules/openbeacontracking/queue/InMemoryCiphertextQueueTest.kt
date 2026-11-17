@@ -70,4 +70,52 @@ class InMemoryCiphertextQueueTest {
       queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.clientPointId },
     )
   }
+
+  @Test
+  fun requeuesAnOlderStayOrLiveCopyOnlyWhileNoNewerCopyIsQueued() {
+    val queue = InMemoryCiphertextQueue()
+    val row = { clientPointId: String, owner: String, role: String, groupId: String ->
+      CiphertextQueueRow(
+        owner = owner,
+        clientPointId = clientPointId,
+        captureId = "capture",
+        groupId = groupId,
+        epochId = "epoch",
+        senderDeviceId = "device",
+        kind = "trackingPoint",
+        algorithm = "algorithm",
+        nonce = "nonce",
+        ciphertext = "ciphertext",
+        queuedAt = 1,
+        role = role,
+      )
+    }
+    val owner = "server-a/user-a"
+    queue.insertAll(
+      listOf(
+        row("stay", owner, CiphertextQueueRow.ROLE_STAY, "group"),
+        row("live-1", owner, CiphertextQueueRow.ROLE_LIVE, "group"),
+        row("lone-stay", owner, CiphertextQueueRow.ROLE_STAY, "group"),
+        row("lone-live", owner, CiphertextQueueRow.ROLE_LIVE, "other"),
+        row("point", owner, CiphertextQueueRow.ROLE_POINT, "group"),
+      ),
+    )
+    val inFlight = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner).map { it.id }
+    queue.markInFlight(inFlight, 1)
+    queue.insertAll(
+      listOf(
+        row("stay", owner, CiphertextQueueRow.ROLE_STAY, "group"),
+        row("live-2", owner, CiphertextQueueRow.ROLE_LIVE, "group"),
+        row("lone-stay", "server-a/user-b", CiphertextQueueRow.ROLE_STAY, "group"),
+      ),
+    )
+
+    queue.requeue(inFlight, 2, "offline")
+
+    assertEquals(
+      listOf("lone-stay", "lone-live", "point", "stay", "live-2"),
+      queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner).map { it.clientPointId },
+    )
+    assertEquals(emptyList(), queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10))
+  }
 }

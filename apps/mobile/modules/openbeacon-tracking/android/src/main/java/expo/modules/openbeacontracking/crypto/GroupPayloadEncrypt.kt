@@ -62,20 +62,6 @@ object GroupPayloadEncrypt {
     return cipher.decrypt(nonce, decodeBase64(encryptedPayload.ciphertext), associatedData)
   }
 
-  fun encodeTrackingPointV1Json(
-    latitude: Double,
-    longitude: Double,
-    timestamp: String,
-    speed: Double?,
-    batteryLevel: Int?,
-    batteryCharging: Boolean,
-  ): String? {
-    if (!latitude.isFinite() || !longitude.isFinite()) return null
-    val speedJson = speed?.takeIf { it.isFinite() }?.toString() ?: "null"
-    val batteryLevelJson = batteryLevel?.toString() ?: "null"
-    return """{"v":1,"latitude":$latitude,"longitude":$longitude,"timestamp":${jsonString(timestamp)},"speed":$speedJson,"battery":{"level":$batteryLevelJson,"charging":$batteryCharging}}"""
-  }
-
   fun buildAssociatedData(
     groupId: String,
     epochId: String,

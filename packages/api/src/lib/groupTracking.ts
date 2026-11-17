@@ -1,5 +1,6 @@
 import { Prisma } from "@openbeacon/database";
-import type { groupTrackingPointSchema } from "@openbeacon/schemas";
+import { decodeBase64, encodeBase64, XCHACHA20_NONCE_LENGTH } from "@openbeacon/encryption";
+import type { groupTrackingPointSchema, TRACKING_POINT_ROLES } from "@openbeacon/schemas";
 import type { GroupDeviceSharingState } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type z from "zod";
@@ -8,65 +9,6 @@ import { assertActiveDevices, findGroupEpochs } from "./groupWriteChecks.ts";
 import { getGroupSharingStates } from "./locationSharing.ts";
 
 type GroupTrackingDb = GroupWriteChecksDb & {
-  groupEncryptedPayload: {
-    createMany: (args: {
-      data: Array<{
-        algorithm: string;
-        ciphertext: string;
-        clientPointId: string;
-        epochId: string;
-        groupId: string;
-        kind: string;
-        nonce: string;
-        senderDeviceId: string;
-        senderUserId: string;
-      }>;
-      skipDuplicates: boolean;
-    }) => Promise<{ count: number }>;
-    findMany: (args: {
-      orderBy?: Array<{ createdAt: "asc" } | { id: "asc" }>;
-      select: {
-        algorithm?: true;
-        ciphertext?: true;
-        clientPointId: true;
-        createdAt?: true;
-        epochId?: true;
-        id?: true;
-        kind?: true;
-        nonce?: true;
-        senderDeviceId?: true;
-        senderUserId?: true;
-      };
-      take?: number;
-      where: {
-        AND?: Array<Record<string, unknown>>;
-        clientPointId?: { in: string[] };
-        createdAt?: { gte: Date };
-        epoch?: { epochNumber: { gte: number } };
-        groupId: string;
-        OR?: Array<Record<string, unknown>>;
-      };
-    }) => Promise<
-      Array<{
-        algorithm?: string;
-        ciphertext?: string;
-        clientPointId: string;
-        createdAt?: Date;
-        epochId?: string;
-        id?: string;
-        kind?: string;
-        nonce?: string;
-        senderDeviceId?: string;
-        senderUserId?: string;
-      }>
-    >;
-  };
-  groupEpoch: {
-    findUnique: (args: {
-      select: { createdAt: true };
-      where: { groupId_epochNumber: { epochNumber: number; groupId: string } };
-    }) => Promise<{ createdAt: Date } | null>;
-  };
   userDevice: {
     updateMany: (args: {
       data: { lastLocationAt: Date };
@@ -75,32 +17,32 @@ type GroupTrackingDb = GroupWriteChecksDb & {
   };
 };
 
-export type GroupEncryptedPayloadRow = {
-  algorithm: string;
-  ciphertext: string;
-  clientPointId: string;
-  createdAt: Date;
-  epochId: string;
-  id: string;
-  kind: string;
-  nonce: string;
-  senderDeviceId: string;
-  senderUserId: string;
+export const parseClientPointId = (clientPointId: string) => {
+  const separator = clientPointId.lastIndexOf(":");
+  const bytes = decodeBase64(clientPointId.slice(separator + 1));
+  return {
+    pointId: new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigInt64(0),
+    revisionPrefix: clientPointId.slice(0, separator + 1),
+  };
 };
 
+type TrackingStreamKey = { epochId: string; revisionPrefix: string; senderDeviceId: string };
+
 export const uploadGroupTrackingBatch = async ({
-  consumeDailyBudget,
   db,
   groupId,
   memberSince,
   points,
+  refundAllowance,
+  takeAllowance,
   userId,
 }: {
-  consumeDailyBudget: (acceptedPoints: number) => Promise<void>;
   db: GroupTrackingDb;
   groupId: string;
   memberSince?: Date;
   points: z.infer<typeof groupTrackingPointSchema>[];
+  refundAllowance: (senderDeviceId: string, count: number) => Promise<void>;
+  takeAllowance: (senderDeviceId: string, cost: number) => Promise<number>;
   userId: string;
 }) => {
   const clientPointIds = points.map((point) => point.clientPointId);
@@ -111,79 +53,237 @@ export const uploadGroupTrackingBatch = async ({
     });
   }
 
-  const senderDeviceIds = [...new Set(points.map((point) => point.senderDeviceId))];
-  const epochIds = [...new Set(points.map((point) => point.epochId))];
-
-  await assertActiveDevices(db, { deviceIds: senderDeviceIds, userId });
-  const [foundEpochIds, existingRows] = await Promise.all([
-    findGroupEpochs(db, { epochIds, groupId, ...(memberSince ? { memberSince } : {}) }),
-    db.groupEncryptedPayload.findMany({
-      select: {
-        clientPointId: true,
-      },
-      where: {
-        clientPointId: { in: clientPointIds },
-        groupId,
-      },
-    }),
-  ]);
-
-  const existingClientPointIds = new Set(existingRows.map((row) => row.clientPointId));
+  await assertActiveDevices(db, {
+    deviceIds: [...new Set(points.map((point) => point.senderDeviceId))],
+    userId,
+  });
+  const foundEpochIds = await findGroupEpochs(db, {
+    epochIds: [...new Set(points.map((point) => point.epochId))],
+    groupId,
+    ...(memberSince ? { memberSince } : {}),
+  });
   const sharing = await getGroupSharingStates(db, groupId);
-  const discarded = points.filter((point) => {
-    if (existingClientPointIds.has(point.clientPointId) || !foundEpochIds.has(point.epochId)) {
-      return false;
-    }
+
+  const expired = points.filter((point) => !foundEpochIds.has(point.epochId));
+  const current = points
+    .filter((point) => foundEpochIds.has(point.epochId))
+    .map((point) => ({ ...point, ...parseClientPointId(point.clientPointId) }));
+  const discarded = current.filter((point) => {
     const state = sharing.find(
       (device) => device.deviceId === point.senderDeviceId && device.userId === userId,
     );
-    return !state || state.paused || !point.clientPointId.startsWith(state.revisionPrefix);
+    return !state || state.paused || point.revisionPrefix !== state.revisionPrefix;
   });
-  const discardedIds = new Set(discarded.map((point) => point.clientPointId));
-  const pointsToInsert = points.filter(
-    (point) =>
-      foundEpochIds.has(point.epochId) &&
-      !existingClientPointIds.has(point.clientPointId) &&
-      !discardedIds.has(point.clientPointId),
+  const kept = current.filter((point) => !discarded.includes(point));
+
+  const streamKey = (point: TrackingStreamKey) =>
+    JSON.stringify([point.epochId, point.senderDeviceId, point.revisionPrefix]);
+  const streamRows = (streams: TrackingStreamKey[]) =>
+    Prisma.sql`unnest(
+      ${streams.map(({ epochId }) => epochId)}::text[],
+      ${streams.map(({ senderDeviceId }) => senderDeviceId)}::text[],
+      ${streams.map(({ revisionPrefix }) => revisionPrefix)}::text[]
+    ) AS "row"("epochId", "senderDeviceId", "revisionPrefix")`;
+  const lockStreams = async (streams: TrackingStreamKey[]) =>
+    streams.length === 0
+      ? []
+      : db.$queryRaw<Array<TrackingStreamKey & { id: string }>>(Prisma.sql`
+          SELECT id::text AS id, "epochId", "senderDeviceId", "revisionPrefix" FROM "TrackingStream"
+          WHERE "groupId" = ${groupId}
+            AND ("epochId", "senderDeviceId", "revisionPrefix") IN (
+              SELECT "epochId", "senderDeviceId", "revisionPrefix" FROM ${streamRows(streams)}
+            )
+          ORDER BY id
+          FOR SHARE
+        `);
+  const wantedStreams = [...new Map(kept.map((point) => [streamKey(point), point])).values()];
+  const foundStreams = await lockStreams(wantedStreams);
+  const foundKeys = new Set(foundStreams.map(streamKey));
+  const missingStreams = wantedStreams.filter((stream) => !foundKeys.has(streamKey(stream)));
+  if (missingStreams.length > 0) {
+    await db.$queryRaw(Prisma.sql`
+      INSERT INTO "TrackingStream" ("groupId", "epochId", "senderDeviceId", "senderUserId", "revisionPrefix", "createdAt")
+      SELECT ${groupId}, "epochId", "senderDeviceId", ${userId}, "revisionPrefix", (now() AT TIME ZONE 'UTC')
+      FROM ${streamRows(missingStreams)}
+      ORDER BY "epochId", "senderDeviceId", "revisionPrefix"
+      ON CONFLICT ("groupId", "epochId", "senderDeviceId", "revisionPrefix") DO NOTHING
+    `);
+  }
+  const streamIds = new Map(
+    [...foundStreams, ...(await lockStreams(missingStreams))].map((stream) => [
+      streamKey(stream),
+      stream.id,
+    ]),
+  );
+  const withStreams = kept.map((point) => {
+    const streamId = streamIds.get(streamKey(point));
+    if (!streamId) throw new Error("Tracking stream was not created.");
+    return { ...point, streamId };
+  });
+  const pointKey = (point: { pointId: bigint | string; streamId: string }) =>
+    `${point.streamId}:${point.pointId}`;
+  const history = withStreams.filter((point) => point.role !== "LIVE");
+  const alreadyStored =
+    history.length === 0
+      ? new Set<string>()
+      : new Set(
+          (
+            await db.$queryRaw<Array<{ streamId: string; pointId: string }>>(Prisma.sql`
+              SELECT "point"."streamId"::text AS "streamId", "point"."pointId"::text AS "pointId"
+              FROM "TrackingPoint" AS "point"
+              JOIN unnest(
+                ${history.map(({ streamId }) => streamId)}::text[],
+                ${history.map(({ pointId }) => pointId.toString())}::text[]
+              ) AS "row"("streamId", "pointId")
+                ON "point"."streamId" = "row"."streamId"::bigint
+                AND "point"."pointId" = "row"."pointId"::bigint
+            `)
+          ).map(pointKey),
+        );
+  const newRows = history.filter((point) => !alreadyStored.has(pointKey(point)));
+  const charged: typeof newRows = [];
+  const overAllowance: typeof newRows = [];
+  for (const senderDeviceId of new Set(newRows.map((point) => point.senderDeviceId))) {
+    const deviceRows = newRows.filter((point) => point.senderDeviceId === senderDeviceId);
+    const granted = await takeAllowance(senderDeviceId, deviceRows.length);
+    charged.push(...deviceRows.slice(0, granted));
+    overAllowance.push(...deviceRows.slice(granted));
+  }
+  const allowed = withStreams.filter((point) => !overAllowance.includes(point));
+  const insertOrder = [...allowed].sort((first, second) =>
+    first.streamId === second.streamId
+      ? Number(first.pointId > second.pointId) - Number(first.pointId < second.pointId)
+      : Number(BigInt(first.streamId) > BigInt(second.streamId)) -
+        Number(BigInt(first.streamId) < BigInt(second.streamId)),
   );
 
-  if (pointsToInsert.length > 0) {
-    await consumeDailyBudget(pointsToInsert.length);
-    await db.groupEncryptedPayload.createMany({
-      data: pointsToInsert
-        .map((point) => ({
-          algorithm: point.algorithm,
-          ciphertext: point.ciphertext,
-          clientPointId: point.clientPointId,
-          epochId: point.epochId,
-          groupId,
-          kind: point.kind,
-          nonce: point.nonce,
-          senderDeviceId: point.senderDeviceId,
-          senderUserId: userId,
-        }))
-        .sort((first, second) => (first.clientPointId < second.clientPointId ? -1 : 1)),
-      skipDuplicates: true,
-    });
+  const storePoints = async (role: Exclude<(typeof TRACKING_POINT_ROLES)[number], "LIVE">) => {
+    const rows = insertOrder.filter((point) => point.role === role);
+    if (rows.length === 0) return [];
+    return db.$queryRaw<Array<{ inserted: boolean; pointId: string; streamId: string }>>(Prisma.sql`
+      INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
+      SELECT "streamId"::bigint, "pointId"::bigint, (now() AT TIME ZONE 'UTC'),
+        decode("nonce", 'base64') || decode("ciphertext", 'base64')
+      FROM unnest(
+        ${rows.map(({ streamId }) => streamId)}::text[],
+        ${rows.map(({ pointId }) => pointId.toString())}::text[],
+        ${rows.map(({ nonce }) => nonce)}::text[],
+        ${rows.map(({ ciphertext }) => ciphertext)}::text[]
+      ) AS "row"("streamId", "pointId", "nonce", "ciphertext")
+      ON CONFLICT ("streamId", "pointId") ${
+        role === "STAY"
+          ? Prisma.sql`DO UPDATE SET "payload" = EXCLUDED."payload"`
+          : Prisma.sql`DO NOTHING`
+      }
+      RETURNING "streamId"::text AS "streamId", "pointId"::text AS "pointId", (xmax = 0) AS "inserted"
+    `);
+  };
+  const inserted = new Set(
+    [...(await storePoints("POINT")), ...(await storePoints("STAY"))]
+      .filter((row) => row.inserted)
+      .map(pointKey),
+  );
+  const unused = charged.filter((point) => !inserted.has(pointKey(point)));
+  for (const senderDeviceId of new Set(unused.map((point) => point.senderDeviceId))) {
+    await refundAllowance(
+      senderDeviceId,
+      unused.filter((point) => point.senderDeviceId === senderDeviceId).length,
+    );
+  }
+  const accepted = allowed.filter(
+    (point) => point.role !== "POINT" || inserted.has(pointKey(point)),
+  );
+
+  const latestByDeviceEpoch = new Map(
+    withStreams
+      .filter(
+        (point) =>
+          point.role !== "STAY" && (accepted.includes(point) || overAllowance.includes(point)),
+      )
+      .map((point) => [`${point.senderDeviceId}:${point.epochId}`, point]),
+  );
+  for (const latest of latestByDeviceEpoch.values()) {
+    await db.$queryRaw(Prisma.sql`
+      INSERT INTO "TrackingLatestPoint" ("groupId", "senderDeviceId", "streamId", "payload", "updatedAt")
+      VALUES (${groupId}, ${latest.senderDeviceId}, ${latest.streamId}::bigint,
+        decode(${latest.nonce}, 'base64') || decode(${latest.ciphertext}, 'base64'),
+        (now() AT TIME ZONE 'UTC'))
+      ON CONFLICT ("groupId", "senderDeviceId") DO UPDATE SET
+        "streamId" = EXCLUDED."streamId", "payload" = EXCLUDED."payload", "updatedAt" = EXCLUDED."updatedAt"
+      WHERE (
+        SELECT "epoch"."epochNumber" FROM "TrackingStream" AS "stream"
+        JOIN "GroupEpoch" AS "epoch" ON "epoch"."id" = "stream"."epochId"
+        WHERE "stream"."id" = EXCLUDED."streamId"
+      ) >= (
+        SELECT "epoch"."epochNumber" FROM "TrackingStream" AS "stream"
+        JOIN "GroupEpoch" AS "epoch" ON "epoch"."id" = "stream"."epochId"
+        WHERE "stream"."id" = "TrackingLatestPoint"."streamId"
+      )
+    `);
+  }
+
+  if (accepted.length > 0) {
     await db.userDevice.updateMany({
       data: { lastLocationAt: new Date() },
-      where: {
-        id: { in: [...new Set(pointsToInsert.map((point) => point.senderDeviceId))] },
-        userId,
-      },
+      where: { id: { in: [...new Set(accepted.map((point) => point.senderDeviceId))] }, userId },
     });
   }
 
   return {
-    accepted: pointsToInsert.map((point) => point.clientPointId),
-    discarded: [...discardedIds],
-    duplicates: points
-      .filter((point) => existingClientPointIds.has(point.clientPointId))
+    accepted: accepted.map((point) => point.clientPointId),
+    discarded: [...discarded, ...overAllowance].map((point) => point.clientPointId),
+    duplicates: allowed
+      .filter((point) => !accepted.includes(point))
       .map((point) => point.clientPointId),
-    expired: points
-      .filter((point) => !foundEpochIds.has(point.epochId))
-      .map((point) => point.clientPointId),
+    expired: expired.map((point) => point.clientPointId),
   };
+};
+
+type LatestPointCursor = { senderDeviceId: string; updatedAt: Date };
+
+const readLatestPoints = async ({
+  cursor,
+  db,
+  groupId,
+  joinedEpochNumber,
+  limit,
+}: {
+  cursor: LatestPointCursor | null;
+  db: GroupTrackingDb;
+  groupId: string;
+  joinedEpochNumber: number;
+  limit: number | null;
+}) => {
+  const rows = await db.$queryRaw<
+    Array<{
+      epochId: string;
+      payload: Uint8Array;
+      revisionPrefix: string;
+      senderDeviceId: string;
+      senderUserId: string;
+      updatedAt: Date;
+    }>
+  >(Prisma.sql`
+    SELECT "latest"."senderDeviceId", "stream"."senderUserId", "stream"."epochId",
+      "stream"."revisionPrefix", "latest"."payload", "latest"."updatedAt"
+    FROM "TrackingLatestPoint" AS "latest"
+    JOIN "TrackingStream" AS "stream" ON "stream"."id" = "latest"."streamId"
+    JOIN "GroupEpoch" AS "epoch" ON "epoch"."id" = "stream"."epochId"
+    WHERE "latest"."groupId" = ${groupId}
+      AND "epoch"."epochNumber" >= ${joinedEpochNumber}
+      ${
+        cursor
+          ? Prisma.sql`AND ("latest"."updatedAt", "latest"."senderDeviceId") > ((${cursor.updatedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC'), ${cursor.senderDeviceId})`
+          : Prisma.empty
+      }
+    ORDER BY "latest"."updatedAt", "latest"."senderDeviceId"
+    ${limit === null ? Prisma.empty : Prisma.sql`LIMIT ${limit}`}
+  `);
+  return rows.map(({ payload, ...row }) => ({
+    ...row,
+    ciphertext: encodeBase64(payload.subarray(XCHACHA20_NONCE_LENGTH)),
+    nonce: encodeBase64(payload.subarray(0, XCHACHA20_NONCE_LENGTH)),
+  }));
 };
 
 export const pollGroupTrackingPoints = async ({
@@ -193,57 +293,25 @@ export const pollGroupTrackingPoints = async ({
   joinedEpochNumber,
   limit,
 }: {
-  cursor: { createdAt: Date; id: string } | null | undefined;
+  cursor: LatestPointCursor | null | undefined;
   db: GroupTrackingDb;
   groupId: string;
   joinedEpochNumber: number;
   limit: number;
 }) => {
-  const joinEpoch = cursor
-    ? null
-    : await db.groupEpoch.findUnique({
-        select: { createdAt: true },
-        where: { groupId_epochNumber: { epochNumber: joinedEpochNumber, groupId } },
-      });
-  const points = await db.groupEncryptedPayload.findMany({
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: {
-      algorithm: true,
-      ciphertext: true,
-      clientPointId: true,
-      createdAt: true,
-      epochId: true,
-      id: true,
-      kind: true,
-      nonce: true,
-      senderDeviceId: true,
-      senderUserId: true,
-    },
-    take: limit,
-    where: {
-      groupId,
-      epoch: { epochNumber: { gte: joinedEpochNumber } },
-      ...(joinEpoch ? { createdAt: { gte: joinEpoch.createdAt } } : {}),
-      ...(cursor
-        ? {
-            createdAt: { gte: cursor.createdAt },
-            OR: [
-              { createdAt: { gt: cursor.createdAt } },
-              {
-                AND: [{ createdAt: cursor.createdAt }, { id: { gt: cursor.id } }],
-              },
-            ],
-          }
-        : {}),
-    },
+  const points = await readLatestPoints({
+    cursor: cursor ?? null,
+    db,
+    groupId,
+    joinedEpochNumber,
+    limit,
   });
-
   const sharing = await getGroupSharingStates(db, groupId);
   const last = points.at(-1);
   return {
-    points: filterSharedPoints(points as GroupEncryptedPayloadRow[], sharing),
+    points: filterSharedPoints(points, sharing),
     sharing,
-    cursor: last?.createdAt && last.id ? { createdAt: last.createdAt, id: last.id } : null,
+    cursor: last ? { senderDeviceId: last.senderDeviceId, updatedAt: last.updatedAt } : null,
     hasMore: points.length === limit,
   };
 };
@@ -257,44 +325,21 @@ export const getLatestGroupTrackingPoints = async ({
   groupId: string;
   joinedEpochNumber: number;
 }) => {
-  const points = await db.$queryRaw<GroupEncryptedPayloadRow[]>(Prisma.sql`
-    SELECT
-      "latest"."id",
-      "latest"."epochId",
-      "latest"."senderDeviceId",
-      "latest"."senderUserId",
-      "latest"."kind",
-      "latest"."algorithm",
-      "latest"."nonce",
-      "latest"."ciphertext",
-      "latest"."clientPointId",
-      "latest"."createdAt"
-    FROM "GroupMember" AS "member"
-    JOIN "UserDevice" AS "device"
-      ON "device"."userId" = "member"."userId"
-      AND "device"."revokedAt" IS NULL
-      AND "device"."activatedAt" IS NOT NULL
-    CROSS JOIN LATERAL (
-      SELECT "point".*
-      FROM "GroupEncryptedPayload" AS "point"
-      JOIN "GroupEpoch" AS "epoch" ON "epoch"."id" = "point"."epochId"
-      WHERE "point"."groupId" = "member"."groupId"
-        AND "epoch"."epochNumber" >= ${joinedEpochNumber}
-        AND "point"."senderDeviceId" = "device"."id"
-        AND "point"."senderUserId" = "member"."userId"
-      ORDER BY "point"."createdAt" DESC, "point"."id" DESC
-      LIMIT 1
-    ) AS "latest"
-    WHERE "member"."groupId" = ${groupId}
-    ORDER BY "latest"."senderUserId" ASC, "latest"."senderDeviceId" ASC
-  `);
-
+  const points = await readLatestPoints({
+    cursor: null,
+    db,
+    groupId,
+    joinedEpochNumber,
+    limit: null,
+  });
   const sharing = await getGroupSharingStates(db, groupId);
   return { points: filterSharedPoints(points, sharing), sharing };
 };
 
-const filterSharedPoints = (
-  points: GroupEncryptedPayloadRow[],
+const filterSharedPoints = <
+  T extends { revisionPrefix: string; senderDeviceId: string; senderUserId: string },
+>(
+  points: T[],
   sharing: GroupDeviceSharingState[],
 ) =>
   points.filter((point) =>
@@ -303,6 +348,6 @@ const filterSharedPoints = (
         device.deviceId === point.senderDeviceId &&
         device.userId === point.senderUserId &&
         !device.paused &&
-        point.clientPointId.startsWith(device.revisionPrefix),
+        point.revisionPrefix === device.revisionPrefix,
     ),
   );

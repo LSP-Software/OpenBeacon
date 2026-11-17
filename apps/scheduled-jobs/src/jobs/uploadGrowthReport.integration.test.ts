@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { prisma } from "@openbeacon/database";
-import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 import { findTopUploadGrowth, runUploadGrowthReport } from "./uploadGrowthReport.ts";
 
 const prefix = `upload-growth-${crypto.randomUUID()}`;
@@ -44,27 +43,24 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("upload growth re
         },
       });
     }
-    const points = (userId: string, groupId: string, count: number, hoursAgo: number) =>
-      Array.from({ length: count }, (_, index) => ({
-        groupId,
-        epochId: `${groupId}-epoch`,
-        senderDeviceId: `${userId}-device`,
-        senderUserId: userId,
-        kind: TRACKING_POINT_KIND,
-        algorithm: "xchacha20poly1305",
-        nonce: "nonce",
-        ciphertext: "ciphertext",
-        clientPointId: `${userId}-${hoursAgo}-${index}`,
-        createdAt: ago(hoursAgo),
-      }));
-    await prisma.groupEncryptedPayload.createMany({
-      data: [
-        ...points(heavyId, groupIds[0]!, 20, 1),
-        ...points(heavyId, groupIds[1]!, 10, 23),
-        ...points(lightId, groupIds[0]!, 3, 2),
-        ...points(lightId, groupIds[1]!, 40, 25),
-      ],
-    });
+    const points = async (userId: string, groupId: string, count: number, hoursAgo: number) => {
+      const [stream] = await prisma.$queryRaw<Array<{ id: bigint }>>`
+        INSERT INTO "TrackingStream" ("groupId", "epochId", "senderDeviceId", "senderUserId", "revisionPrefix")
+        VALUES (${groupId}, ${`${groupId}-epoch`}, ${`${userId}-device`}, ${userId}, '')
+        ON CONFLICT ("groupId", "epochId", "senderDeviceId", "revisionPrefix")
+          DO UPDATE SET "senderUserId" = EXCLUDED."senderUserId"
+        RETURNING id
+      `;
+      await prisma.$executeRaw`
+        INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
+        SELECT ${stream!.id}, ${hoursAgo * 1_000} + i, (${ago(hoursAgo).toISOString()}::timestamptz AT TIME ZONE 'UTC'), '\\x00'::bytea
+        FROM generate_series(1, ${count}) AS i
+      `;
+    };
+    await points(heavyId, groupIds[0]!, 20, 1);
+    await points(heavyId, groupIds[1]!, 10, 23);
+    await points(lightId, groupIds[0]!, 3, 2);
+    await points(lightId, groupIds[1]!, 40, 25);
   }, 30_000);
 
   afterAll(async () => {

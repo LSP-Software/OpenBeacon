@@ -1,12 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
-import { prisma } from "@openbeacon/database";
-import {
-  encodeBase64,
-  PAYLOAD_ENCRYPTION_ALGORITHM,
-  TRACKING_POINT_KIND,
-} from "@openbeacon/encryption";
+import { Prisma, prisma } from "@openbeacon/database";
+import { encodeBase64 } from "@openbeacon/encryption";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
+import { countTrackingPoints, testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
 import { encodePlaceAlertsCursor } from "../../lib/placeTransitions.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
@@ -354,12 +351,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("going over the hourly transition budget drops the transitions but keeps the points", async () => {
       const budgetCache = createIntegrationTestCache(() => 0);
       const point = (index: number) => ({
-        algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-        ciphertext: "ciphertext",
-        clientPointId: `${prefix}-budget-point-${index}`,
+        ciphertext: encodeBase64(new Uint8Array(39)),
+        clientPointId: testClientPointId(`${prefix}-budget-point-${index}`),
         epochId: latestEpochId,
-        kind: TRACKING_POINT_KIND,
         nonce: encodeBase64(new Uint8Array(24)),
+        role: "POINT" as const,
         senderDeviceId: memberPhone,
       });
       const send = (index: number) =>
@@ -376,14 +372,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(overBudget.placeTransitions?.accepted).toEqual([]);
       expect(overBudget.placeTransitions?.discarded).toHaveLength(50);
       expect(await storedCount()).toBe(200);
-      expect(
-        await prisma.groupEncryptedPayload.count({
-          where: { clientPointId: { startsWith: `${prefix}-budget-point-` } },
-        }),
-      ).toBe(5);
-      await prisma.groupEncryptedPayload.deleteMany({
-        where: { clientPointId: { startsWith: `${prefix}-budget-point-` } },
-      });
+      const memberStreams = Prisma.sql`"stream"."groupId" = ${groupId} AND "stream"."senderUserId" = ${member}`;
+      expect(await countTrackingPoints(prisma, memberStreams)).toBe(5);
+      await prisma.trackingStream.deleteMany({ where: { groupId, senderUserId: member } });
     });
 
     test("discards transitions from another device without failing the batch, and refuses a revoked device or a non-member", async () => {

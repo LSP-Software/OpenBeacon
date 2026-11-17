@@ -1,12 +1,13 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
   createDeviceKeyPair,
-  decodeJsonPayload,
+  decodeTrackingPoint,
   decryptGroupPayload,
-  encryptGroupPayload,
+  encodeTrackingPoint,
   generateGroupEpochKey,
+  PAYLOAD_ENCRYPTION_ALGORITHM,
 } from "@openbeacon/encryption";
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 import { DevicePendingError } from "../../lib/deviceActivation.ts";
@@ -15,6 +16,12 @@ import { authRouter } from "../authRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
+import {
+  encryptedTrackingPoint,
+  pointIdOf,
+  storeLatestTrackingPoint,
+  testClientPointId,
+} from "../../lib/trackingPoints.testUtil.ts";
 
 const prefix = `tracking-${crypto.randomUUID()}`;
 const groupId = `${prefix}-group`;
@@ -102,7 +109,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
 
   afterAll(async () => {
     await prisma.group.deleteMany({ where: { id: groupId } });
-    await prisma.user.deleteMany({ where: { id: { in: [ownerId, memberId, outsiderId] } } });
+    await prisma.user.deleteMany({
+      where: { id: { in: [ownerId, memberId, outsiderId] } },
+    });
     await prisma.$disconnect();
   });
 
@@ -128,52 +137,97 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     expect(await prisma.userDevice.findUnique({ where: { id: otherDeviceId } })).toBeNull();
     await caller(ownerId).auth.registerDeviceKey(input);
     expect(
-      (await prisma.userDevice.findUniqueOrThrow({ where: { id: otherDeviceId } })).userId,
+      (
+        await prisma.userDevice.findUniqueOrThrow({
+          where: { id: otherDeviceId },
+        })
+      ).userId,
     ).toBe(ownerId);
   });
 
-  test("stores opaque ciphertext once, authorizes the sender and rejects oversized input", async () => {
-    const payload = { latitude: 51.5074, longitude: -0.1278, marker: "privacy-test-plaintext" };
-    const encrypt = () =>
-      encryptGroupPayload({
-        epochId,
-        epochKey,
-        groupId,
-        kind: TRACKING_POINT_KIND,
-        payload,
-        senderDeviceId: ownerDeviceId,
-      });
-    const point = { ...encrypt(), clientPointId: `${prefix}-point` };
-    const accepted = await caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
+  const point = (
+    seed: string,
+    overrides: Partial<Parameters<typeof encryptedTrackingPoint>[0]> = {},
+  ) =>
+    encryptedTrackingPoint({
+      clientPointId: testClientPointId(`${prefix}-${seed}`),
+      epochId,
+      epochKey,
       groupId,
-      points: [point],
+      senderDeviceId: ownerDeviceId,
+      ...overrides,
     });
-    expect(accepted.accepted).toEqual([point.clientPointId]);
+  const upload = (points: ReturnType<typeof point>[]) =>
+    caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
+      groupId,
+      points,
+    });
+  const storedPoints = () =>
+    prisma.$queryRaw<Array<{ payload: Uint8Array; pointId: bigint; receivedAt: Date }>>`
+      SELECT "point"."payload", "point"."pointId", "point"."receivedAt"
+      FROM "TrackingPoint" AS "point"
+      JOIN "TrackingStream" AS "stream" ON "stream"."id" = "point"."streamId"
+      WHERE "stream"."groupId" = ${groupId}
+      ORDER BY "point"."receivedAt", "point"."pointId"
+    `;
+  const clearPoints = () => prisma.trackingStream.deleteMany({ where: { groupId } });
+
+  test("stores opaque ciphertext once, authorizes the sender and rejects malformed input", async () => {
+    const trackingPoint = {
+      latitude: 51.5074,
+      longitude: -0.1278,
+      time: Date.UTC(2026, 10, 16, 12),
+      stayUntil: null,
+      accuracy: 8,
+      speed: 1.4,
+      battery: { level: 64, charging: false },
+    };
+    const payload = encodeTrackingPoint(trackingPoint);
+    const first = point("point", { payload });
+    const accepted = await upload([first]);
+    expect(accepted.accepted).toEqual([first.clientPointId]);
     expect(
-      (await prisma.userDevice.findUniqueOrThrow({ where: { id: ownerDeviceId } })).lastLocationAt,
+      (
+        await prisma.userDevice.findUniqueOrThrow({
+          where: { id: ownerDeviceId },
+        })
+      ).lastLocationAt,
     ).toBeInstanceOf(Date);
-    const duplicate = await caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
-      groupId,
-      points: [{ ...encrypt(), clientPointId: point.clientPointId }],
-    });
-    expect(duplicate.duplicates).toEqual([point.clientPointId]);
-    const stored = await prisma.groupEncryptedPayload.findMany({ where: { groupId } });
+    const duplicate = await upload([point("point", { payload })]);
+    expect(duplicate.duplicates).toEqual([first.clientPointId]);
+    expect(duplicate.accepted).toEqual([]);
+
+    const stored = await storedPoints();
     expect(stored).toHaveLength(1);
-    expect(stored[0]!.ciphertext).toBe(point.ciphertext);
-    expect(
-      Buffer.from(stored[0]!.ciphertext, "base64").includes(Buffer.from(JSON.stringify(payload))),
-    ).toBe(false);
-    const received = await caller(memberId, memberDeviceId).groupTracking.poll({ groupId });
+    expect(Buffer.from(stored[0]!.payload)).toEqual(
+      Buffer.concat([Buffer.from(first.nonce, "base64"), Buffer.from(first.ciphertext, "base64")]),
+    );
+    expect(stored[0]!.pointId).toBe(Buffer.from(first.clientPointId, "base64").readBigInt64BE());
+    expect(Buffer.from(stored[0]!.payload).includes(Buffer.from(payload))).toBe(false);
+
+    const received = await caller(memberId, memberDeviceId).groupTracking.getLatest({ groupId });
     expect(received.points).toHaveLength(1);
-    expect(received.points[0]!.ciphertext).toBe(stored[0]!.ciphertext);
+    expect(received.points[0]).toMatchObject({
+      ciphertext: first.ciphertext,
+      epochId,
+      nonce: first.nonce,
+      revisionPrefix: "",
+      senderDeviceId: ownerDeviceId,
+      senderUserId: ownerId,
+    });
     expect(
-      decodeJsonPayload(
+      decodeTrackingPoint(
         decryptGroupPayload({
           epochKey,
           encryptedPayload: {
-            ...point,
+            algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
             ciphertext: received.points[0]!.ciphertext,
+            createdAt: received.points[0]!.updatedAt,
+            epochId,
+            groupId,
+            kind: TRACKING_POINT_KIND,
             nonce: received.points[0]!.nonce,
+            senderDeviceId: ownerDeviceId,
           },
           expectedMetadata: {
             groupId,
@@ -181,77 +235,254 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
             kind: TRACKING_POINT_KIND,
             senderDeviceId: ownerDeviceId,
           },
-        }).bytes,
+        }).bytes.expose(),
       ),
-    ).toEqual(payload);
+    ).toEqual(trackingPoint);
+
     await expect(
       caller(memberId, memberDeviceId).groupTracking.uploadBatch({
         groupId,
-        points: [{ ...point, clientPointId: `${prefix}-forged` }],
+        points: [{ ...first, clientPointId: testClientPointId(`${prefix}-forged`) }],
       }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(
       caller(outsiderId, outsiderDeviceId).groupTracking.poll({ groupId }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN", message: "You are not a member of this group" });
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "You are not a member of this group",
+    });
     for (const input of [
-      { ...point, nonce: `${" ".repeat(1_000_000)}${point.nonce}` },
-      { ...point, ciphertext: "x".repeat(1025) },
-      { ...point, clientPointId: "x".repeat(200_000) },
+      { ...first, nonce: `${" ".repeat(1_000_000)}${first.nonce}` },
+      { ...first, ciphertext: "x".repeat(1025) },
+      { ...first, ciphertext: point("padded", { payload: new Uint8Array(24) }).ciphertext },
+      { ...first, ciphertext: point("short", { payload: new Uint8Array(22) }).ciphertext },
+      { ...first, ciphertext: "not base64!" },
+      { ...first, clientPointId: "x".repeat(200_000) },
+      { ...first, clientPointId: Buffer.alloc(32, 1).toString("base64") },
+      { ...first, clientPointId: `s1:${testClientPointId("bad-prefix")}` },
+      { ...first, role: "TRAIL" as "POINT" },
     ]) {
-      await expect(
-        caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
-          groupId,
-          points: [input],
-        }),
-      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      await expect(upload([input])).rejects.toMatchObject({
+        code: "BAD_REQUEST",
+      });
     }
-    expect(await prisma.groupEncryptedPayload.count({ where: { groupId } })).toBe(1);
+    const twice = point("twice");
+    await expect(upload([twice, { ...twice, role: "LIVE" }])).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+    });
+    expect(await storedPoints()).toHaveLength(1);
+    await clearPoints();
+  });
+
+  test("stays update their point in place and live rows only move the latest point", async () => {
+    const stay = (marker: number) =>
+      point("stay", { role: "STAY", payload: new Uint8Array(23).fill(marker) });
+    const firstStay = stay(1);
+    expect((await upload([firstStay])).accepted).toEqual([firstStay.clientPointId]);
+    const [arrival] = await storedPoints();
+    expect(
+      await caller(memberId, memberDeviceId).groupTracking.getLatest({
+        groupId,
+      }),
+    ).toMatchObject({ points: [] });
+
+    const update = stay(2);
+    expect(await upload([update])).toMatchObject({
+      accepted: [update.clientPointId],
+      duplicates: [],
+    });
+    const [updated] = await storedPoints();
+    expect(Buffer.from(updated!.payload).subarray(0, 24)).toEqual(
+      Buffer.from(update.nonce, "base64"),
+    );
+    expect(updated!.receivedAt).toEqual(arrival!.receivedAt);
+    expect(updated!.pointId).toBe(arrival!.pointId);
+
+    const live = point("live", { role: "LIVE" });
+    const history = point("history");
+    const laterLive = point("later-live", { role: "LIVE" });
+    expect((await upload([history, live, update, laterLive])).accepted).toEqual([
+      history.clientPointId,
+      live.clientPointId,
+      update.clientPointId,
+      laterLive.clientPointId,
+    ]);
+    expect(await storedPoints()).toHaveLength(2);
+    const latest = await caller(memberId, memberDeviceId).groupTracking.getLatest({ groupId });
+    expect(latest.points.map(({ nonce }) => nonce)).toEqual([laterLive.nonce]);
+
+    await prisma.$executeRaw`
+      DELETE FROM "TrackingPoint" WHERE "pointId" = ${arrival!.pointId}
+    `;
+    const afterRetention = stay(3);
+    expect((await upload([afterRetention])).accepted).toEqual([afterRetention.clientPointId]);
+    expect((await storedPoints()).map(({ pointId }) => pointId)).toContain(arrival!.pointId);
+    await clearPoints();
+  });
+
+  test("history points over the device's daily allowance are discarded, not stored", async () => {
+    const allowance = {
+      namespace: "groupTracking.historyAllowance",
+      identifier: { type: "deviceGroup" as const, deviceId: ownerDeviceId, groupId },
+      limit: 2_880,
+      windowMs: 86_400_000,
+    };
+    await cache.rateLimits.reset(allowance);
+    await cache.rateLimits.take({ ...allowance, cost: 2_879 });
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const kept = point("allowance-kept");
+    const over = point("allowance-over");
+    const live = point("allowance-live", { role: "LIVE" });
+
+    expect(await upload([kept, live, over])).toMatchObject({
+      accepted: [kept.clientPointId, live.clientPointId],
+      discarded: [over.clientPointId],
+      duplicates: [],
+    });
+    const latest = await caller(memberId, memberDeviceId).groupTracking.getLatest({ groupId });
+    expect(latest.points.map(({ nonce }) => nonce)).toEqual([over.nonce]);
+    expect(await upload([kept])).toMatchObject({ duplicates: [kept.clientPointId] });
+    expect((await storedPoints()).map(({ pointId }) => pointId)).toEqual([
+      Buffer.from(kept.clientPointId, "base64").readBigInt64BE(),
+    ]);
+    warn.mockRestore();
+    await cache.rateLimits.reset(allowance);
+    await clearPoints();
+  });
+
+  test("a point another upload stores first gives its allowance back", async () => {
+    const allowance = {
+      namespace: "groupTracking.historyAllowance",
+      identifier: { type: "deviceGroup" as const, deviceId: ownerDeviceId, groupId },
+      limit: 2_880,
+      windowMs: 86_400_000,
+    };
+    await cache.rateLimits.reset(allowance);
+    await upload([point("race-stream")]);
+    const { id: streamId } = await prisma.trackingStream.findFirstOrThrow({
+      where: { groupId, senderDeviceId: ownerDeviceId },
+      select: { id: true },
+    });
+    const raced = point("race-point");
+    const inserted = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const otherUpload = prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
+        VALUES (${streamId}, ${pointIdOf(raced.clientPointId)}::bigint, (now() AT TIME ZONE 'UTC'), '\\x00'::bytea)
+      `;
+      inserted.resolve();
+      await release.promise;
+    });
+    await inserted.promise;
+    const racing = upload([raced]);
+    let waiting = 0;
+    for (let attempt = 0; attempt < 200 && waiting === 0; attempt += 1) {
+      await Bun.sleep(10);
+      const [row] = await prisma.$queryRaw<Array<{ waiting: number }>>`
+        SELECT count(*)::int AS waiting FROM pg_stat_activity
+        WHERE datname = current_database() AND wait_event_type = 'Lock'
+          AND query LIKE '%INSERT INTO "TrackingPoint"%'
+      `;
+      waiting = row?.waiting ?? 0;
+    }
+    release.resolve();
+    await otherUpload;
+
+    expect(waiting).toBe(1);
+    expect(await racing).toMatchObject({ accepted: [], duplicates: [raced.clientPointId] });
+    expect((await cache.rateLimits.peek(allowance)).remaining).toBe(2_879);
+    await cache.rateLimits.reset(allowance);
+    await clearPoints();
+  });
+
+  test("points from an old sharing revision or a paused phone are discarded", async () => {
+    await prisma.userDevice.update({
+      where: { id: ownerDeviceId },
+      data: { sharingRevision: 2 },
+    });
+    const current = point("revision-current", {
+      clientPointId: testClientPointId(`${prefix}-revision-current`, "s0.2:"),
+    });
+    const old = point("revision-old");
+    expect(await upload([current, old])).toMatchObject({
+      accepted: [current.clientPointId],
+      discarded: [old.clientPointId],
+    });
+    await prisma.userDevice.update({
+      where: { id: ownerDeviceId },
+      data: { sharingPaused: true },
+    });
+    const paused = point("revision-paused", {
+      clientPointId: testClientPointId(`${prefix}-revision-paused`, "s0.2:"),
+      role: "LIVE",
+    });
+    expect(await upload([paused])).toMatchObject({
+      accepted: [],
+      discarded: [paused.clientPointId],
+    });
+    expect(
+      (
+        await caller(memberId, memberDeviceId).groupTracking.getLatest({
+          groupId,
+        })
+      ).points,
+    ).toEqual([]);
+    await prisma.userDevice.update({
+      where: { id: ownerDeviceId },
+      data: { sharingPaused: false },
+    });
+    expect(
+      (
+        await caller(memberId, memberDeviceId).groupTracking.getLatest({
+          groupId,
+        })
+      ).points.map(({ nonce }) => nonce),
+    ).toEqual([current.nonce]);
+    await prisma.userDevice.update({
+      where: { id: ownerDeviceId },
+      data: { sharingRevision: 0 },
+    });
+    await clearPoints();
   });
 
   test("upload responses carry a key state that changes when tracking keys need checking", async () => {
-    const upload = async (clientPointId: string) =>
-      (
-        await caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
-          groupId,
-          points: [
-            {
-              ...encryptGroupPayload({
-                epochId,
-                epochKey,
-                groupId,
-                kind: TRACKING_POINT_KIND,
-                payload: { latitude: 1, longitude: 2 },
-                senderDeviceId: ownerDeviceId,
-              }),
-              clientPointId,
-            },
-          ],
-        })
-      ).keyState;
-    const first = await upload(`${prefix}-state-1`);
-    expect(await upload(`${prefix}-state-2`)).toBe(first);
+    const keyState = async (seed: string) => (await upload([point(seed)])).keyState;
+    const first = await keyState("state-1");
+    expect(await keyState("state-2")).toBe(first);
     await prisma.userDevice.update({
       where: { id: ownerDeviceId },
       data: { sharingRevision: { increment: 1 } },
     });
-    const afterSharing = await upload(`${prefix}-state-3`);
+    const afterSharing = await keyState("state-3");
     expect(afterSharing).not.toBe(first);
-    await prisma.group.update({ where: { id: groupId }, data: { epochRotationRequired: true } });
-    const afterRotation = await upload(`${prefix}-state-4`);
+    await prisma.group.update({
+      where: { id: groupId },
+      data: { epochRotationRequired: true },
+    });
+    const afterRotation = await keyState("state-4");
     expect(afterRotation).not.toBe(afterSharing);
-    await prisma.group.update({ where: { id: groupId }, data: { epochRotationRequired: false } });
+    await prisma.group.update({
+      where: { id: groupId },
+      data: { epochRotationRequired: false },
+    });
     await prisma.userDevice.update({
       where: { id: ownerDeviceId },
       data: { sharingRevision: { decrement: 1 } },
     });
-    expect(await upload(`${prefix}-state-5`)).toBe(first);
+    expect(await keyState("state-5")).toBe(first);
     const joined = await prisma.groupMember.create({
-      data: { groupId, userId: outsiderId, role: "MEMBER", joinedEpochNumber: 1 },
+      data: {
+        groupId,
+        userId: outsiderId,
+        role: "MEMBER",
+        joinedEpochNumber: 1,
+      },
     });
-    const afterJoin = await upload(`${prefix}-state-6`);
+    const afterJoin = await keyState("state-6");
     expect(afterJoin).not.toBe(first);
     await prisma.groupMember.delete({ where: { id: joined.id } });
-    expect(await upload(`${prefix}-state-7`)).toBe(first);
+    expect(await keyState("state-7")).toBe(first);
     const newEpochId = `${prefix}-state-epoch`;
     await prisma.groupEpoch.create({
       data: {
@@ -262,40 +493,22 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
         senderPublicKey: deviceKey.publicKey,
       },
     });
-    const afterEpoch = await upload(`${prefix}-state-8`);
+    const afterEpoch = await keyState("state-8");
     expect(afterEpoch).not.toBe(first);
     expect(afterEpoch).not.toBe(afterJoin);
     await prisma.groupEpoch.delete({ where: { id: newEpochId } });
-    expect(await upload(`${prefix}-state-9`)).toBe(first);
-    await prisma.groupEncryptedPayload.deleteMany({
-      where: { clientPointId: { startsWith: `${prefix}-state-` } },
-    });
+    expect(await keyState("state-9")).toBe(first);
+    await clearPoints();
   }, 30_000);
 
   test("reports points for a deleted epoch as expired but rejects another group's epoch", async () => {
-    const encrypt = (forEpochId: string, clientPointId: string) => ({
-      ...encryptGroupPayload({
-        epochId: forEpochId,
-        epochKey,
-        groupId,
-        kind: TRACKING_POINT_KIND,
-        payload: { latitude: 1, longitude: 2 },
-        senderDeviceId: ownerDeviceId,
-      }),
-      clientPointId,
-    });
-    const result = await caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
-      groupId,
-      points: [
-        encrypt(`${prefix}-deleted-epoch`, `${prefix}-expired`),
-        encrypt(epochId, `${prefix}-current`),
-      ],
-    });
-    expect(result).toEqual({
-      accepted: [`${prefix}-current`],
+    const expired = point("expired", { epochId: `${prefix}-deleted-epoch` });
+    const current = point("current");
+    expect(await upload([expired, current])).toEqual({
+      accepted: [current.clientPointId],
       discarded: [],
       duplicates: [],
-      expired: [`${prefix}-expired`],
+      expired: [expired.clientPointId],
       keyState: expect.any(String),
     });
     const otherGroupId = `${prefix}-other-group`;
@@ -314,52 +527,45 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       },
     });
     await expect(
-      caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
-        groupId,
-        points: [encrypt(`${prefix}-other-epoch`, `${prefix}-foreign`)],
-      }),
+      upload([point("foreign", { epochId: `${prefix}-other-epoch` })]),
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
       message: "Epoch does not belong to this group.",
     });
     await prisma.group.delete({ where: { id: otherGroupId } });
-    expect(
-      await prisma.groupEncryptedPayload.count({
-        where: { clientPointId: { in: [`${prefix}-expired`, `${prefix}-foreign`] } },
-      }),
-    ).toBe(0);
+    expect(await storedPoints()).toHaveLength(1);
+    await clearPoints();
   });
 
   test("uploadBatch rejections carry a reason for not a member, a deleted group and an unknown device", async () => {
-    const point = (senderDeviceId: string, clientPointId: string) => ({
-      ...encryptGroupPayload({
-        epochId,
-        epochKey,
-        groupId,
-        kind: TRACKING_POINT_KIND,
-        payload: { latitude: 1, longitude: 2 },
-        senderDeviceId,
-      }),
-      clientPointId,
-    });
     await expect(
       caller(outsiderId, outsiderDeviceId).groupTracking.uploadBatch({
         groupId,
-        points: [point(outsiderDeviceId, `${prefix}-reason-outsider`)],
+        points: [point("reason-outsider", { senderDeviceId: outsiderDeviceId })],
       }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN", cause: { reason: "NOT_GROUP_MEMBER" } });
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      cause: { reason: "NOT_GROUP_MEMBER" },
+    });
     await expect(
       caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
         groupId: `${prefix}-deleted-group`,
-        points: [point(ownerDeviceId, `${prefix}-reason-gone`)],
+        points: [point("reason-gone")],
       }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN", cause: { reason: "GROUP_GONE" } });
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      cause: { reason: "GROUP_GONE" },
+    });
     await expect(
-      caller(ownerId, ownerDeviceId).groupTracking.uploadBatch({
-        groupId,
-        points: [point(`${prefix}-unknown-device`, `${prefix}-reason-device`)],
-      }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN", cause: { reason: "DEVICE_NOT_REGISTERED" } });
+      upload([
+        point("reason-device", {
+          senderDeviceId: `${prefix}-unknown-device`,
+        }),
+      ]),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      cause: { reason: "DEVICE_NOT_REGISTERED" },
+    });
   });
 
   test("getLatest returns each active device's newest point and skips devices with none", async () => {
@@ -383,7 +589,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
           icon: "phone" as const,
           revokedAt: new Date(),
         },
-        { id: ownerSilentId, userId: ownerId, name: "Watch", icon: "watch" as const },
+        {
+          id: ownerSilentId,
+          userId: ownerId,
+          name: "Watch",
+          icon: "watch" as const,
+        },
       ].map((device) => ({
         ...device,
         activatedAt: new Date(),
@@ -401,49 +612,89 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
         publicKeyAlgorithm: "X25519",
       },
     });
-    const storePoint = (id: string, senderUserId: string, senderDeviceId: string, at: string) =>
-      prisma.groupEncryptedPayload.create({
-        data: {
-          id,
-          groupId,
-          epochId,
-          senderDeviceId,
-          senderUserId,
-          kind: TRACKING_POINT_KIND,
-          algorithm: "XChaCha20-Poly1305",
-          nonce: "nonce",
-          ciphertext: "ciphertext",
-          clientPointId: id,
-          createdAt: new Date(at),
-        },
+    const storeLatest = (
+      senderUserId: string,
+      senderDeviceId: string,
+      at: string,
+      marker: number,
+    ) =>
+      storeLatestTrackingPoint(prisma, {
+        epochId,
+        groupId,
+        payload: new Uint8Array(63).fill(marker),
+        senderDeviceId,
+        senderUserId,
+        updatedAt: new Date(at),
       });
+    const markerOf = (point: { nonce: string }) => Buffer.from(point.nonce, "base64")[0];
     const latest = async () =>
-      (await caller(memberId, memberDeviceId).groupTracking.getLatest({ groupId })).points.map(
-        (point) => [point.senderUserId, point.senderDeviceId, point.id],
-      );
+      (
+        await caller(memberId, memberDeviceId).groupTracking.getLatest({
+          groupId,
+        })
+      ).points
+        .map((point) => [point.senderUserId, point.senderDeviceId, markerOf(point)])
+        .sort((first, second) => first.join().localeCompare(second.join()));
 
-    await storePoint(`${prefix}-owner-old`, ownerId, ownerDeviceId, "2030-01-01T10:00:00.000Z");
-    await storePoint(`${prefix}-owner-tie-a`, ownerId, ownerDeviceId, "2030-01-01T12:00:00.000Z");
-    await storePoint(`${prefix}-owner-tie-b`, ownerId, ownerDeviceId, "2030-01-01T12:00:00.000Z");
-    expect(await latest()).toEqual([[ownerId, ownerDeviceId, `${prefix}-owner-tie-b`]]);
+    await storeLatest(ownerId, ownerDeviceId, "2030-01-01T10:00:00.000Z", 1);
+    await storeLatest(ownerId, ownerDeviceId, "2030-01-01T12:00:00.000Z", 2);
+    expect(await latest()).toEqual([[ownerId, ownerDeviceId, 2]]);
 
-    await storePoint(`${prefix}-tablet-old`, ownerId, ownerTabletId, "2030-01-01T08:00:00.000Z");
-    await storePoint(`${prefix}-removed-new`, ownerId, ownerRemovedId, "2030-01-01T13:00:00.000Z");
-    await storePoint(`${prefix}-pending-new`, ownerId, ownerPendingId, "2030-01-01T14:00:00.000Z");
-    await storePoint(`${prefix}-member-new`, memberId, memberDeviceId, "2030-01-01T11:00:00.000Z");
-    await storePoint(`${prefix}-member-old`, memberId, memberDeviceId, "2030-01-01T09:00:00.000Z");
-    expect(
-      (await latest()).sort((first, second) => first.join().localeCompare(second.join())),
-    ).toEqual(
+    await storeLatest(ownerId, ownerTabletId, "2030-01-01T08:00:00.000Z", 3);
+    await storeLatest(ownerId, ownerRemovedId, "2030-01-01T13:00:00.000Z", 4);
+    await storeLatest(ownerId, ownerPendingId, "2030-01-01T14:00:00.000Z", 5);
+    await storeLatest(memberId, memberDeviceId, "2030-01-01T11:00:00.000Z", 6);
+    expect(await latest()).toEqual(
       [
-        [memberId, memberDeviceId, `${prefix}-member-new`],
-        [ownerId, ownerDeviceId, `${prefix}-owner-tie-b`],
-        [ownerId, ownerTabletId, `${prefix}-tablet-old`],
+        [memberId, memberDeviceId, 6],
+        [ownerId, ownerDeviceId, 2],
+        [ownerId, ownerTabletId, 3],
       ].sort((first, second) => first.join().localeCompare(second.join())),
     );
 
+    const poll = (cursor: { senderDeviceId: string; updatedAt: Date } | null, limit?: number) =>
+      caller(memberId, memberDeviceId).groupTracking.poll({
+        groupId,
+        cursor,
+        ...(limit ? { limit } : {}),
+      });
+    const page = await poll(
+      {
+        senderDeviceId: ownerDeviceId,
+        updatedAt: new Date("2030-01-01T07:00:00.000Z"),
+      },
+      2,
+    );
+    expect(page.points.map(markerOf)).toEqual([3, 6]);
+    expect(page.hasMore).toBe(true);
+    expect(page.cursor).toEqual({
+      senderDeviceId: memberDeviceId,
+      updatedAt: new Date("2030-01-01T11:00:00.000Z"),
+    });
+    const rest = await poll(page.cursor);
+    expect(rest.points.map(markerOf)).toEqual([2]);
+    expect(rest.hasMore).toBe(false);
+    expect(rest.cursor).toEqual({
+      senderDeviceId: ownerPendingId,
+      updatedAt: new Date("2030-01-01T14:00:00.000Z"),
+    });
+    expect((await poll(rest.cursor)).points).toEqual([]);
+
+    await prisma.groupMember.update({
+      where: { userId_groupId: { groupId, userId: memberId } },
+      data: { joinedEpochNumber: 2 },
+    });
+    expect(await latest()).toEqual([]);
+    await prisma.groupMember.update({
+      where: { userId_groupId: { groupId, userId: memberId } },
+      data: { joinedEpochNumber: 1 },
+    });
+
     const pending = caller(ownerId, ownerPendingId).groupTracking;
-    const devicePending = { code: "FORBIDDEN", cause: expect.any(DevicePendingError) };
+    const devicePending = {
+      code: "FORBIDDEN",
+      cause: expect.any(DevicePendingError),
+    };
     await expect(pending.getLatest({ groupId })).rejects.toMatchObject(devicePending);
     await expect(pending.poll({ groupId })).rejects.toMatchObject(devicePending);
     await expect(
@@ -451,24 +702,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
         groupId,
         points: [
           {
-            ...encryptGroupPayload({
-              epochId,
-              epochKey,
-              groupId,
-              kind: TRACKING_POINT_KIND,
-              payload: { latitude: 1, longitude: 1 },
-              senderDeviceId: ownerPendingId,
-            }),
-            clientPointId: `${prefix}-pending-upload`,
+            ...point("pending-upload", { senderDeviceId: ownerPendingId }),
           },
         ],
       }),
     ).rejects.toMatchObject(devicePending);
-    expect(
-      await prisma.groupEncryptedPayload.count({
-        where: { clientPointId: `${prefix}-pending-upload` },
-      }),
-    ).toBe(0);
 
     const devices = await caller(memberId, memberDeviceId).groupMembership.listMemberDevices({
       groupId,
@@ -488,7 +726,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
     });
     expect(devices.find((device) => device.deviceId === ownerSilentId)?.platform).toBeNull();
     await expect(
-      caller(outsiderId, outsiderDeviceId).groupMembership.listMemberDevices({ groupId }),
-    ).rejects.toMatchObject({ code: "FORBIDDEN", message: "You are not a member of this group" });
+      caller(outsiderId, outsiderDeviceId).groupMembership.listMemberDevices({
+        groupId,
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "You are not a member of this group",
+    });
   });
 });

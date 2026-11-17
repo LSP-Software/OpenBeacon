@@ -1,9 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createSecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
-import { prisma } from "@openbeacon/database";
+import { Prisma, prisma } from "@openbeacon/database";
 import type { SecurityAlert } from "@openbeacon/email";
 import { deleteAccountRecords } from "./account-deletion.ts";
 import { holdRowLock } from "./databaseLocks.testUtil.ts";
+import {
+  countTrackingPoints,
+  storeLatestTrackingPoint,
+  storeTrackingPoints,
+} from "./trackingPoints.testUtil.ts";
 
 const prefix = `account-deletion-${crypto.randomUUID()}`;
 const deletedUser = `${prefix}-deleted`;
@@ -177,32 +182,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           },
         ],
       });
-      await prisma.groupEncryptedPayload.createMany({
-        data: [
-          {
-            groupId,
-            epochId,
-            senderDeviceId: deletedDevice,
-            senderUserId: deletedUser,
-            kind: "location",
-            algorithm: "a",
-            nonce: "a",
-            ciphertext: "a",
-            clientPointId: "a",
-          },
-          {
-            groupId,
-            epochId,
-            senderDeviceId: remainingDevice,
-            senderUserId: remainingUser,
-            kind: "location",
-            algorithm: "a",
-            nonce: "b",
-            ciphertext: "b",
-            clientPointId: "b",
-          },
-        ],
-      });
+      for (const [senderDeviceId, senderUserId] of [
+        [deletedDevice, deletedUser],
+        [remainingDevice, remainingUser],
+      ] as const) {
+        const stream = { epochId, groupId, senderDeviceId, senderUserId };
+        await storeTrackingPoints(prisma, stream);
+        await storeLatestTrackingPoint(prisma, stream);
+      }
     });
 
     afterAll(async () => {
@@ -240,7 +227,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await expect(deleteAccountRecords(input)).rejects.toThrow("Transfer ownership");
       expect(await prisma.user.findUnique({ where: { id: deletedUser } })).not.toBeNull();
       expect(
-        await prisma.groupEncryptedPayload.count({ where: { senderUserId: deletedUser } }),
+        await countTrackingPoints(prisma, Prisma.sql`"stream"."senderUserId" = ${deletedUser}`),
       ).toBe(1);
       expect(await sentAlerts()).toEqual([]);
       await prisma.groupMember.update({
@@ -290,9 +277,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(await prisma.groupEpoch.findUniqueOrThrow({ where: { id: epochId } })).toMatchObject({
         createdByDeviceId: null,
       });
-      expect(await prisma.groupEncryptedPayload.findMany({ where: { groupId } })).toMatchObject([
-        { senderUserId: remainingUser, senderDeviceId: remainingDevice },
-      ]);
+      expect(
+        await prisma.trackingStream.findMany({
+          where: { groupId },
+          select: { senderUserId: true, senderDeviceId: true },
+        }),
+      ).toEqual([{ senderUserId: remainingUser, senderDeviceId: remainingDevice }]);
+      expect(await countTrackingPoints(prisma, Prisma.sql`"stream"."groupId" = ${groupId}`)).toBe(
+        1,
+      );
+      expect(
+        await prisma.trackingLatestPoint.findMany({
+          where: { groupId },
+          select: { senderDeviceId: true },
+        }),
+      ).toEqual([{ senderDeviceId: remainingDevice }]);
       expect(await prisma.recoveryKey.count({ where: { userId: deletedUser } })).toBe(0);
       expect(await prisma.accountHistoryKey.count({ where: { userId: deletedUser } })).toBe(0);
       expect(
@@ -477,18 +476,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           id: uploadGroup,
           table: "Group",
           beforeCommit: (tx) =>
-            tx.groupEncryptedPayload.create({
-              data: {
-                groupId: uploadGroup,
-                epochId: epoch.id,
-                senderDeviceId: device,
-                senderUserId: id,
-                kind: "location",
-                algorithm: "a",
-                nonce: "u",
-                ciphertext: "u",
-                clientPointId: "u",
-              },
+            storeTrackingPoints(tx, {
+              epochId: epoch.id,
+              groupId: uploadGroup,
+              senderDeviceId: device,
+              senderUserId: id,
             }),
         });
         const deleting = deleteAccountRecords({
@@ -503,9 +495,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
         expect(await deleting).toBe(true);
         expect(await prisma.user.findUnique({ where: { id } })).toBeNull();
-        expect(await prisma.groupEncryptedPayload.count({ where: { groupId: uploadGroup } })).toBe(
-          0,
-        );
+        expect(await prisma.trackingStream.count({ where: { groupId: uploadGroup } })).toBe(0);
       } finally {
         await prisma.group.deleteMany({ where: { id: uploadGroup } });
         await prisma.user.deleteMany({ where: { id: { in: [id, partner] } } });

@@ -76,6 +76,35 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("OpenBeaconCache 
     },
   );
 
+  test.each(caches)("$name takes partial grants from the same bucket", async ({ cache }) => {
+    nowMs = 0;
+    const input = {
+      namespace: "groupTracking.historyAllowance",
+      identifier: { type: "deviceGroup" as const, deviceId: "device-1", groupId: "group-1" },
+      limit: 10,
+      windowMs: 10_000,
+    };
+    await cache.rateLimits.reset(input);
+
+    expect(await cache.rateLimits.take({ ...input, cost: 7 })).toEqual({
+      granted: 7,
+      remaining: 3,
+    });
+    expect(await cache.rateLimits.take({ ...input, cost: 7 })).toEqual({
+      granted: 3,
+      remaining: 0,
+    });
+    nowMs = 2_500;
+    expect(await cache.rateLimits.take({ ...input, cost: 5 })).toEqual({
+      granted: 2,
+      remaining: 0,
+    });
+    expect(await cache.rateLimits.peek({ ...input, cost: 0 })).toMatchObject({ remaining: 0 });
+    nowMs = 3_000;
+    expect(await cache.rateLimits.consume(input)).toMatchObject({ allowed: true, remaining: 0 });
+    expect(await cache.rateLimits.reset(input)).toBe(1);
+  });
+
   test.each(caches)("$name stores, replaces and resets signed map URLs", async ({ cache }) => {
     nowMs = Date.now();
     const store = cache.pmtilesSignedUrls;

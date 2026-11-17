@@ -220,6 +220,45 @@ describe("OpenBeaconCache rateLimits", () => {
     expect((await cache.rateLimits.consume(input)).remaining).toBe(1);
   });
 
+  test("a take grants as many whole tokens as are left, up to the cost", async () => {
+    let nowMs = 0;
+    const cache = new TestOpenBeaconCache({
+      redisUrl: "redis://localhost:6379",
+      hashSecret: testRedisHashSecret,
+      now: () => nowMs,
+    });
+    const input = {
+      namespace: "groupTracking.historyAllowance",
+      identifier: { type: "deviceGroup" as const, deviceId: "device-1", groupId: "group-1" },
+      limit: 10,
+      windowMs: 10_000,
+    };
+
+    expect(await cache.rateLimits.take({ ...input, cost: 7 })).toEqual({
+      granted: 7,
+      remaining: 3,
+    });
+    expect(await cache.rateLimits.take({ ...input, cost: 7 })).toEqual({
+      granted: 3,
+      remaining: 0,
+    });
+    expect(await cache.rateLimits.take(input)).toEqual({ granted: 0, remaining: 0 });
+
+    nowMs = 2_500;
+    expect(await cache.rateLimits.take({ ...input, cost: 5 })).toEqual({
+      granted: 2,
+      remaining: 0,
+    });
+    nowMs = 3_000;
+    expect(await cache.rateLimits.take(input)).toEqual({ granted: 1, remaining: 0 });
+    await expect(
+      cache.rateLimits.peek({
+        ...input,
+        identifier: { ...input.identifier, groupId: "group-2" },
+      }),
+    ).resolves.toMatchObject({ remaining: 10 });
+  });
+
   test("keeps IP addresses and email addresses out of rate limit keys", async () => {
     const keys: string[] = [];
     class RecordingCache extends OpenBeaconCache {

@@ -4,6 +4,7 @@ export type RateLimitResult = {
   remaining: number;
   retryAfterMs: number;
   resetAfterMs: number;
+  granted?: number;
   unavailable?: true;
 };
 

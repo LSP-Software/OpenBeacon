@@ -112,10 +112,11 @@ export class FakeRedis {
     if (windowMs <= 0) {
       throw new Error("windowMs must be > 0 for refillRate, retryAfterMs, and resetAfterMs.");
     }
-    if (shouldConsumeValue !== "0" && shouldConsumeValue !== "1") {
-      throw new Error('shouldConsumeValue must be "0" or "1".');
+    if (shouldConsumeValue !== "0" && shouldConsumeValue !== "1" && shouldConsumeValue !== "2") {
+      throw new Error('shouldConsumeValue must be "0", "1" or "2".');
     }
     const shouldConsume = shouldConsumeValue === "1";
+    const take = shouldConsumeValue === "2";
     const refillRate = limit / windowMs;
     const existingBucket = this.buckets.get(key);
     const activeBucket =
@@ -126,11 +127,13 @@ export class FakeRedis {
       nowMs > activeBucket.lastMs
         ? Math.min(limit, activeBucket.tokens + (nowMs - activeBucket.lastMs) * refillRate)
         : activeBucket.tokens;
-    const remainingTokens =
-      shouldConsume && refilledTokens >= cost
+    const granted = take ? Math.max(0, Math.min(cost, Math.floor(refilledTokens))) : 0;
+    const remainingTokens = take
+      ? refilledTokens - granted
+      : shouldConsume && refilledTokens >= cost
         ? Math.min(limit, refilledTokens - cost)
         : refilledTokens;
-    const allowed = refilledTokens >= cost;
+    const allowed = take ? granted === cost : refilledTokens >= cost;
     const retryAfterMs = allowed ? 0 : Math.ceil((cost - remainingTokens) / refillRate);
     const resetAfterMs = Math.ceil(Math.max(0, limit - remainingTokens) / refillRate);
 
@@ -146,6 +149,7 @@ export class FakeRedis {
       String(Math.max(0, Math.floor(remainingTokens))),
       String(Math.max(0, retryAfterMs)),
       String(Math.max(0, resetAfterMs)),
+      ...(take ? [String(granted)] : []),
     ];
   }
 

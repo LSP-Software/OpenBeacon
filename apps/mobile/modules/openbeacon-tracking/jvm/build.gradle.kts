@@ -48,6 +48,7 @@ sourceSets {
     resources {
       srcDir("../../../../../packages/encryption/src/testVectors")
       include("group-payload-interop-v1.json")
+      include("tracking-point-v2.json")
     }
   }
 }
