@@ -25,7 +25,7 @@ A Place Transition kind meaning the device exited the Place.
 _Avoid_: Exit, check-out
 
 **Place Alert**:
-A notification on a Group member's phone about another member's Place Transition. It names the Place, the member and the device. The receiving phone writes the text itself, using its own nicknames, when the Place Transition arrives with its next tracking upload. There's no push in v1.
+A notification on a Group member's phone about another member's Place Transition. It names the Place, the member and the device. The receiving phone writes the text itself, using its own nicknames, when the Place Transition arrives with its next tracking upload. On the hosted service, a Push wake-up makes that upload happen about 16 seconds after the Place Transition is uploaded.
 _Avoid_: Push, banner, toast, geofence notification
 
 **Place Alert Mute**:

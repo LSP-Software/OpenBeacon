@@ -80,6 +80,7 @@ export const createPushSender = ({
               userId: { in: userIds },
               activatedAt: { not: null },
               revokedAt: null,
+              sessions: { some: { expiresAt: { gt: new Date() } } },
               pushToken: { isNot: null },
               ...(excludeDeviceId ? { id: { not: excludeDeviceId } } : {}),
             },
@@ -202,7 +203,11 @@ export const createPushSender = ({
     const tokens = await db.pushToken.findMany({
       where: {
         deviceId: { in: deviceIds },
-        device: { activatedAt: { not: null }, revokedAt: null },
+        device: {
+          activatedAt: { not: null },
+          revokedAt: null,
+          sessions: { some: { expiresAt: { gt: new Date() } } },
+        },
       },
       select: { deviceId: true, token: true },
     });

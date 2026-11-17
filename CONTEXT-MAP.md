@@ -8,5 +8,5 @@
 
 ## Relationships
 
-- **Accounts → Encryption**: with email on, a Recovery reset needs an Email code, and a Phrase change or Recovery reset sends an Always-on alert. Removing a device sends an Always-on alert. When a Pending device registers, the server sends the new sign-in email, which is an Optional alert.
+- **Accounts → Encryption**: with email on, a Recovery reset needs an Email code, and a Phrase change or Recovery reset sends a Security alert. Removing a device sends a Security alert. When a Pending device registers, the server sends the new sign-in Security alert.
 - **Accounts ↔ Places**: a Security alert is an email to the account owner; a Place Alert is a notification about another Group member. They are separate.

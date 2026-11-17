@@ -148,6 +148,23 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.recoveryKey.create({
         data: { userId: deletedUser, publicKey: "r", algorithm: "X25519", derivationVersion: 1 },
       });
+      await prisma.pushToken.createMany({
+        data: [deletedDevice, remainingDevice].map((deviceId) => ({
+          deviceId,
+          token: `${prefix}-${deviceId}-token`,
+        })),
+      });
+      await prisma.accountNotice.createMany({
+        data: [deletedUser, remainingUser].map((userId) => ({ userId, type: "NEW_SIGN_IN" })),
+      });
+      await prisma.notificationSetting.createMany({
+        data: [deletedUser, remainingUser].map((userId) => ({
+          userId,
+          type: "ROLE_CHANGED",
+          email: true,
+          phone: true,
+        })),
+      });
       await prisma.accountHistoryKey.createMany({
         data: [deletedUser, remainingUser].map((userId) => ({
           id: `${userId}-history`,
@@ -292,6 +309,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           select: { senderDeviceId: true },
         }),
       ).toEqual([{ senderDeviceId: remainingDevice }]);
+      expect(
+        await prisma.pushToken.findMany({
+          where: { deviceId: { in: [deletedDevice, remainingDevice] } },
+          select: { deviceId: true },
+        }),
+      ).toEqual([{ deviceId: remainingDevice }]);
+      const bothUsers = { userId: { in: [deletedUser, remainingUser] } };
+      expect(
+        await prisma.accountNotice.findMany({ where: bothUsers, select: { userId: true } }),
+      ).toEqual([{ userId: remainingUser }]);
+      expect(
+        await prisma.notificationSetting.findMany({ where: bothUsers, select: { userId: true } }),
+      ).toEqual([{ userId: remainingUser }]);
       expect(await prisma.recoveryKey.count({ where: { userId: deletedUser } })).toBe(0);
       expect(await prisma.accountHistoryKey.count({ where: { userId: deletedUser } })).toBe(0);
       expect(

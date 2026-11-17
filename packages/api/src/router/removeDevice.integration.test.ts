@@ -149,6 +149,23 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
     expect(devices.map(({ id }) => id)).toEqual([account.thisPhone.id]);
   });
 
+  test("deletes the removed phone's push token and keeps this one's", async () => {
+    const account = await createAccount();
+    await prisma.pushToken.createMany({
+      data: [account.lostPhone.id, account.thisPhone.id].map((deviceId) => ({
+        deviceId,
+        token: `${deviceId}-token`,
+      })),
+    });
+
+    await callerFor(account).account.removeDevice({ deviceId: account.lostPhone.id });
+
+    const tokens = await prisma.pushToken.findMany({
+      where: { deviceId: { in: [account.lostPhone.id, account.thisPhone.id] } },
+    });
+    expect(tokens.map(({ deviceId }) => deviceId)).toEqual([account.thisPhone.id]);
+  });
+
   test("waits for an upload holding the group before touching the removed phone", async () => {
     const account = await createAccount();
     const epoch = await prisma.groupEpoch.create({

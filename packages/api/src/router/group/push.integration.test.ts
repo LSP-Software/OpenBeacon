@@ -103,6 +103,15 @@ const setup = async () => {
   await prisma.pushToken.createMany({
     data: Object.keys(devices).map((deviceId) => ({ deviceId, token: `${deviceId}-token` })),
   });
+  await prisma.session.createMany({
+    data: Object.entries(devices).map(([deviceId, { userId }]) => ({
+      id: `${deviceId}-session`,
+      token: `${deviceId}-session-token`,
+      userId,
+      deviceId,
+      expiresAt: new Date(Date.now() + 24 * hour),
+    })),
+  });
   await prisma.group.create({
     data: {
       id: groupId,
@@ -355,6 +364,32 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("push wake-ups", 
         `${f.bob}-phone`,
         `${f.bob}-tablet`,
       ]);
+    });
+
+    test("a device with no live session isn't woken", async () => {
+      const f = await setup();
+      await prisma.session.delete({ where: { id: `${f.alice}-tablet-session` } });
+      await prisma.session.update({
+        where: { id: `${f.bob}-tablet-session` },
+        data: { expiresAt: ago(minute) },
+      });
+      expect(await f.wakesForNotice(await f.notice(f.alice, "DEVICE_REMOVED"))).toEqual([
+        `${f.alice}-phone`,
+      ]);
+      sent.length = 0;
+      expect(await f.wakesForNotice(await f.notice(f.bob, "NEW_SIGN_IN"))).toEqual([
+        `${f.bob}-phone`,
+      ]);
+    });
+
+    test("a device signed out after it was picked isn't woken", async () => {
+      const f = await setup();
+      push.accountNotice(await f.notice(f.alice, "DEVICE_REMOVED", `${f.alice}-phone`));
+      await settle();
+      await runTimers(16_000);
+      await prisma.session.delete({ where: { id: `${f.alice}-tablet-session` } });
+      await runTimers(1_000);
+      expect(f.woken()).toEqual([]);
     });
 
     test("a notice whose Phone switch is off wakes nobody", async () => {
