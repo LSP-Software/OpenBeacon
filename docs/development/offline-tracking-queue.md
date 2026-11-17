@@ -2,6 +2,8 @@
 
 Android runs each location fix through a history filter for each group and encrypts the rows it keeps: history points, stay updates and live-only rows for the map. It stores the ciphertext in a local Room (SQLite) database until it uploads. The queue never holds plaintext locations. A new stay update replaces the pending copy of that stay, and a new live-only row replaces the pending live-only row for the same group, epoch and device, so neither piles up while offline. When an upload fails, an older stay or live-only copy is dropped instead of requeued if a newer copy is already queued. Updating to queue version 4 deletes rows queued by older app versions, because no level 10 server accepts them.
 
+An upload starts only when the current fix was queued as a live-only row or a history point, or when a row other than a stay update is still waiting. A stay update waits for the next upload, which comes within 5 minutes while the phone is still, so a still phone uploads as often as before history filtering.
+
 ## Storage limit
 
 The queue is bounded to 10 MiB (10,485,760 bytes) of disk space:

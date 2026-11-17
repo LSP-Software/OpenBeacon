@@ -26,10 +26,11 @@ class InMemoryCiphertextQueue : CiphertextQueue {
     limit: Int,
     owner: String?,
     afterId: Long,
+    exceptRole: String?,
   ): List<CiphertextQueueRow> =
     rows
       .asSequence()
-      .filter { it.status == status && it.id > afterId && (owner == null || it.owner == owner) }
+      .filter { it.status == status && it.id > afterId && (owner == null || it.owner == owner) && it.role != exceptRole }
       .sortedBy { it.id }
       .take(limit.coerceAtLeast(0))
       .toList()

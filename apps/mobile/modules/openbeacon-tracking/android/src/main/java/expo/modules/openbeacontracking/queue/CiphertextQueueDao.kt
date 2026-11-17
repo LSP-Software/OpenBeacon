@@ -52,6 +52,7 @@ interface CiphertextQueueDao {
     """
     SELECT * FROM ciphertext_queue
     WHERE status = :status AND id > :afterId AND (:owner IS NULL OR owner = :owner)
+      AND (:exceptRole IS NULL OR role != :exceptRole)
     ORDER BY id ASC
     LIMIT :limit
     """,
@@ -61,6 +62,7 @@ interface CiphertextQueueDao {
     limit: Int,
     owner: String?,
     afterId: Long,
+    exceptRole: String? = null,
   ): List<CiphertextQueueEntity>
 
   @Query(

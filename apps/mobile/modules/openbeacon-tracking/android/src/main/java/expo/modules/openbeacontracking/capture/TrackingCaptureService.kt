@@ -399,7 +399,7 @@ class TrackingCaptureService : Service() {
 
     try {
       var currentFixQueued = false
-      val queuedCount = capturePipeline.onFix(
+      capturePipeline.onFix(
         latitude = location.latitude,
         longitude = location.longitude,
         timestampMillis = location.time,
@@ -413,7 +413,7 @@ class TrackingCaptureService : Service() {
         onCurrentFixQueued = { currentFixQueued = true },
       )
       synchronized(captureStateLock) {
-        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && queuedCount > 0 && (decision.forceUpload || nowMs - lastUploadRequestMs >= decision.uploadIntervalMs) && isOnline()) {
+        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && currentFixQueued && (decision.forceUpload || nowMs - lastUploadRequestMs >= decision.uploadIntervalMs) && isOnline()) {
           startService(Intent(this, TrackingUploadService::class.java).putExtra(TrackingUploadService.EXTRA_REASON, "upload"))
           lastUploadRequestMs = nowMs
         }
@@ -461,7 +461,7 @@ class TrackingCaptureService : Service() {
       val owner = TrackingRuntime.queueOwner(this)
       TrackingRuntime
         .ciphertextQueue(this)
-        .listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, owner)
+        .listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, owner, exceptRole = CiphertextQueueRow.ROLE_STAY)
         .isNotEmpty() || (owner != null && TrackingRuntime.placeDetection(this).hasQueued(owner))
     } catch (error: Exception) {
       Log.e(TAG, "Failed to check for pending uploads.", error)

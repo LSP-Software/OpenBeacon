@@ -58,13 +58,14 @@ class RoomCiphertextQueue(
     limit: Int,
     owner: String?,
     afterId: Long,
+    exceptRole: String?,
   ): List<CiphertextQueueRow> {
     val before = System.currentTimeMillis() - 120_000L
     database.runInTransaction {
       dao.deleteSupersededInterrupted(before)
       dao.recoverInterrupted(before)
     }
-    return dao.listByStatus(status, limit.coerceAtLeast(0), owner, afterId).map { it.toRow() }
+    return dao.listByStatus(status, limit.coerceAtLeast(0), owner, afterId, exceptRole).map { it.toRow() }
   }
 
   override fun markInFlight(

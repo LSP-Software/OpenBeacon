@@ -229,6 +229,22 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
+  fun `lists pending points other than stay updates so a lone stay update waits for the next upload`() {
+    val owner = "server-a/user-a"
+    queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY)))
+
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, owner, exceptRole = CiphertextQueueRow.ROLE_STAY).isEmpty())
+
+    queue.insertAll(listOf(row("live", owner).copy(role = CiphertextQueueRow.ROLE_LIVE)))
+
+    assertEquals(
+      listOf("live"),
+      queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 1, owner, exceptRole = CiphertextQueueRow.ROLE_STAY).map { it.clientPointId },
+    )
+    assertEquals(listOf("stay", "live"), pendingIds(owner))
+  }
+
+  @Test
   fun `migrates version 1 queues to the current schema and drops their unsendable points`() {
     migrate(
       1,
