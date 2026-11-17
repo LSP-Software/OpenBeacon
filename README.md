@@ -26,7 +26,7 @@
 
 ## What is OpenBeacon?
 
-OpenBeacon is a family location sharing app that lets the people you choose see where each other are, without handing that information to anyone else. It's an open-source, self-hostable alternative to Life360 and other family locator apps.
+OpenBeacon is a family location sharing app that lets the people you choose see where each other are. Locations are encrypted on the phone, so the server that passes them on can't read them. It's an open-source, self-hostable alternative to Life360 and other family locator apps.
 
 - **Encrypted on your phone.** Locations, battery levels and pictures are encrypted before they leave the phone. The server stores them but can't read them, whether it's ours or yours.
 - **Use our server or run your own.** The hosted server and the self-hosted server are the same code.

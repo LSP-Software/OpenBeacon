@@ -20,7 +20,7 @@ Private, encrypted location sharing for families. Open source and self-hostable.
 OpenBeacon is a family location sharing app built around privacy. See where the people you choose are on a live map, get an alert when someone gets home or arrives at school, and stay in control of who sees you and when.
 
 YOUR LOCATION IS ENCRYPTED ON YOUR PHONE
-Locations, battery levels, nicknames and pictures are end-to-end encrypted before they leave your phone. The server stores them but can't read them, whether you use our server or run your own. We're upfront about what a server can see, such as account details, group membership, place names and when people arrive at and leave places. The full list is in our docs.
+Locations, battery levels, nicknames and pictures are end-to-end encrypted before they leave your phone. The server stores them but can't read them, whether you use our server or run your own. We're upfront about what a server can see, such as account details, group membership, place names and when people arrive at and leave places. Your phone also relies on the server for other members' public keys, so choose a server you trust. The full list is in our docs.
 
 FEATURES
 • Live map of everyone in your groups
