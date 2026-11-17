@@ -26,6 +26,11 @@ struct SharingCaptureState: Equatable {
     }
   }
 
+  func canReplace(_ current: SharingCaptureState, confirmedRevision: String) -> Bool {
+    (revisionPrefix.isEmpty && paused)
+      || (isAtLeastAsRecentAs(current) && isAtLeastAsRecentAs(SharingCaptureState(revisionPrefix: confirmedRevision)))
+  }
+
   private static func revisionParts(_ prefix: String) -> [Int64] {
     var trimmed = Substring(prefix)
     if trimmed.hasPrefix("s") { trimmed = trimmed.dropFirst() }

@@ -13,6 +13,15 @@ class SharingCaptureStateTest {
     assertFalse(SharingCaptureState().isAtLeastAsRecentAs(current))
     assertTrue(SharingCaptureState(revisionPrefix = "s2.4:").isAtLeastAsRecentAs(current))
   }
+
+  @Test
+  fun anUnconfirmedPauseDoesNotLetAnOlderResumeThrough() {
+    val unconfirmedPause = SharingCaptureState(paused = true)
+    assertTrue(unconfirmedPause.canReplace(SharingCaptureState(revisionPrefix = "s2.3:"), confirmedRevision = "s2.3:"))
+    assertFalse(SharingCaptureState(revisionPrefix = "s1.1:").canReplace(unconfirmedPause, confirmedRevision = "s2.3:"))
+    assertTrue(SharingCaptureState(revisionPrefix = "s2.4:").canReplace(unconfirmedPause, confirmedRevision = "s2.3:"))
+    assertTrue(SharingCaptureState(revisionPrefix = "s1.1:").canReplace(SharingCaptureState(), confirmedRevision = ""))
+  }
   @Test
   fun indefinitePauseNeverCaptures() {
     val state = SharingCaptureState(paused = true)

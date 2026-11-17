@@ -17,4 +17,11 @@ data class SharingCaptureState(
     val previous = current.revisionPrefix.removePrefix("s").removeSuffix(":").split(".").map { it.toLongOrNull() ?: 0L }
     return (0..1).all { revision.getOrElse(it) { 0L } >= previous.getOrElse(it) { 0L } }
   }
+
+  fun canReplace(
+    current: SharingCaptureState,
+    confirmedRevision: String,
+  ): Boolean =
+    (revisionPrefix.isEmpty() && paused) ||
+      (isAtLeastAsRecentAs(current) && isAtLeastAsRecentAs(SharingCaptureState(revisionPrefix = confirmedRevision)))
 }

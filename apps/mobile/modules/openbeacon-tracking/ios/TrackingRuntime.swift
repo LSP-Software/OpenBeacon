@@ -169,13 +169,18 @@ enum TrackingRuntime {
     defaults.set(state.paused, forKey: "\(scope).paused")
     defaults.set(NSNumber(value: state.pausedUntil ?? 0), forKey: "\(scope).until")
     defaults.set(NSNumber(value: state.resumeAfter), forKey: "\(scope).after")
+    if !state.revisionPrefix.isEmpty { defaults.set(state.revisionPrefix, forKey: "\(scope).confirmed") }
+  }
+
+  private static func confirmedRevision() -> String {
+    sharingScope().flatMap { defaults.string(forKey: "\($0).confirmed") } ?? ""
   }
 
   static func applySharingState(owner: String, deviceId: String, state: SharingCaptureState) -> Bool {
     let changed: Bool? = locked {
       if queueOwner() != owner || queueDeviceId() != deviceId { return nil }
       let current = sharingState()
-      if !(state.revisionPrefix.isEmpty && state.paused) && !state.isAtLeastAsRecentAs(current) { return nil }
+      if !state.canReplace(current, confirmedRevision: confirmedRevision()) { return nil }
       if current == state { return false }
       commands.stop()
       setSharingState(state)
@@ -251,6 +256,8 @@ enum TrackingRuntime {
       scheduleParkedCheck()
     } else if shouldRestoreCapture() {
       LocationCapture.shared.start(intervalMs: nil, generation: nil)
+    } else if hasLostLocationPermission() {
+      _ = Notices.show(.locationPermission)
     }
   }
 
@@ -297,6 +304,7 @@ enum TrackingRuntime {
         task.setTaskCompleted(success: success)
       }
       task.expirationHandler = { complete(false) }
+      scheduleParkedCheck()
       guard isCaptureParked() else {
         restoreCapture()
         complete(true)

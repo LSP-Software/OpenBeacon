@@ -124,14 +124,22 @@ object TrackingRuntime {
       .putBoolean("$scope.paused", state.paused)
       .putLong("$scope.until", state.pausedUntil ?: 0L)
       .putLong("$scope.after", state.resumeAfter)
+      .apply { if (state.revisionPrefix.isNotEmpty()) putString("$scope.confirmed", state.revisionPrefix) }
       .commit())
+  }
+
+  private fun confirmedRevision(context: Context): String {
+    val owner = queueOwner(context) ?: return ""
+    val deviceId = queueDeviceId(context) ?: return ""
+    val scope = org.json.JSONArray(listOf(owner, deviceId)).toString()
+    return context.getSharedPreferences("openbeacon_tracking_sharing", Context.MODE_PRIVATE).getString("$scope.confirmed", "") ?: ""
   }
 
   fun applySharingState(context: Context, owner: String, deviceId: String, state: SharingCaptureState): Boolean {
     val changed = synchronized(captureLock) {
       if (queueOwner(context) != owner || queueDeviceId(context) != deviceId) return false
       val current = sharingState(context)
-      if (!(state.revisionPrefix.isEmpty() && state.paused) && !state.isAtLeastAsRecentAs(current)) return false
+      if (!state.canReplace(current, confirmedRevision(context))) return false
       val changed = current != state
       if (changed) {
         captureCommands.stop()
