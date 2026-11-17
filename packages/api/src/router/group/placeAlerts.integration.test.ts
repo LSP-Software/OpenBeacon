@@ -4,7 +4,7 @@ import { prisma } from "@openbeacon/database";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { deleteAccountRecords } from "../../lib/account-deletion.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
-import { encodePlaceAlertsCursor } from "../../lib/placeTransitions.ts";
+import { encodeAlertsCursor } from "../../lib/placeTransitions.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { notificationSettingsRouter } from "../notificationSettingsRouter.ts";
 import { removeGroupMemberWithOwnerGuard } from "./assertGroupMemberCanBeRemoved.ts";
@@ -108,7 +108,7 @@ const pollAlerts = (userId: string, placeAlertsCursor: string) =>
 const alertIds = async (userId: string) => {
   const response = await pollAlerts(
     userId,
-    encodePlaceAlertsCursor({ createdAt: new Date(Date.now() - 10 * minute), id: "" }),
+    encodeAlertsCursor({ createdAt: new Date(Date.now() - 10 * minute), id: "" }),
   );
   return (response.placeAlerts?.alerts ?? []).map(({ id }) => id.slice(prefix.length + 1)).sort();
 };
@@ -244,7 +244,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("unmuting does not bring back arrivals that came in while muted", async () => {
       await setMute(owner, { mutedUserId: member });
       await seedArrivals([{ id: "muted-home", userId: member, placeId: homeId }]);
-      const start = encodePlaceAlertsCursor({
+      const start = encodeAlertsCursor({
         createdAt: new Date(Date.now() - 10 * minute),
         id: "",
       });
@@ -264,7 +264,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       await addMember(joiner);
       await seedArrivals([{ id: "while-off", userId: member, placeId: homeId }]);
-      const start = encodePlaceAlertsCursor({
+      const start = encodeAlertsCursor({
         createdAt: new Date(Date.now() - 10 * minute),
         id: "",
       });

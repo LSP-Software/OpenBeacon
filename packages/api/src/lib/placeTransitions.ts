@@ -132,7 +132,7 @@ export const uploadPlaceTransitions = async ({
   };
 };
 
-export const encodePlaceAlertsCursor = ({ createdAt, id }: { createdAt: Date; id: string }) =>
+export const encodeAlertsCursor = ({ createdAt, id }: { createdAt: Date; id: string }) =>
   `${createdAt.toISOString()}|${id}`;
 
 export const readPlaceAlerts = async ({
@@ -148,7 +148,7 @@ export const readPlaceAlerts = async ({
   const settledBefore = new Date(now.getTime() - 15_000);
   const oldestAlert = now.getTime() - 24 * 60 * 60_000;
   if (cursor === null) {
-    return { alerts: [], cursor: encodePlaceAlertsCursor({ createdAt: settledBefore, id: "" }) };
+    return { alerts: [], cursor: encodeAlertsCursor({ createdAt: settledBefore, id: "" }) };
   }
   const separator = cursor.indexOf("|");
   const after = {
@@ -157,7 +157,7 @@ export const readPlaceAlerts = async ({
   };
   const caughtUp =
     settledBefore > after.createdAt
-      ? encodePlaceAlertsCursor({ createdAt: settledBefore, id: "" })
+      ? encodeAlertsCursor({ createdAt: settledBefore, id: "" })
       : cursor;
   const placeAlertsSetting = await db.notificationSetting.findUnique({
     where: { userId_type: { userId, type: "PLACE_ALERTS" } },
@@ -206,7 +206,7 @@ export const readPlaceAlerts = async ({
   });
   const last = rows.at(-1);
   if (last && rows.length === 50) {
-    return { alerts: rows.map(toPlaceTransitionView), cursor: encodePlaceAlertsCursor(last) };
+    return { alerts: rows.map(toPlaceTransitionView), cursor: encodeAlertsCursor(last) };
   }
   return {
     alerts: rows.map(toPlaceTransitionView),

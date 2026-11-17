@@ -1,5 +1,5 @@
 import type { OpenBeaconCache } from "@openbeacon/cache";
-import type { Prisma, PrismaClient } from "@openbeacon/database";
+import type { AccountNoticeType, Prisma, PrismaClient } from "@openbeacon/database";
 import {
   type SecurityAlert,
   securityAlertSettings,
@@ -47,8 +47,8 @@ export const createSecurityAlerts = ({
     setTimeout(callback, ms);
   },
 }: {
-  db: Pick<PrismaClient, "user">;
-  sendSecurityAlertEmail: (email: Parameters<typeof sendAlert>[0]) => Promise<unknown>;
+  db: Pick<PrismaClient, "user" | "accountNotice">;
+  sendSecurityAlertEmail: ((email: Parameters<typeof sendAlert>[0]) => Promise<unknown>) | null;
   now?: () => Date;
   runInBackground?: (task: Promise<unknown>) => void;
   alertsTurnedOff?: OpenBeaconCache["alertsTurnedOff"];
@@ -67,27 +67,48 @@ export const createSecurityAlerts = ({
     alert: SecurityAlert,
     findRecipient: () => Promise<AlertRecipient | null>,
     at = now(),
+    excludeDeviceId: string | null = null,
   ) => {
     const send = async () => {
       const recipient = await findRecipient();
       if (!recipient) return;
       const setting = securityAlertSettings[alert.type];
-      if (
-        setting &&
-        !effectiveNotificationSetting(
-          setting,
-          recipient.notificationSettings.find(({ type }) => type === setting),
-        ).email
-      )
-        return;
-      await sendSecurityAlertEmail({
-        alert,
-        at,
-        timezone: recipient.timezone,
-        hasPassword: recipient.hasPassword,
-        to: recipient.email,
-        userId: recipient.id,
-      });
+      const enabled = setting
+        ? effectiveNotificationSetting(
+            setting,
+            recipient.notificationSettings.find(({ type }) => type === setting),
+          )
+        : null;
+      const noticeType = accountNoticeTypes[alert.type];
+      const device = "device" in alert ? alert.device : null;
+      await Promise.all([
+        noticeType && enabled?.phone
+          ? db.accountNotice.create({
+              data: {
+                userId: recipient.id,
+                type: noticeType,
+                excludeDeviceId,
+                deviceName:
+                  alert.type === "device-removed" || alert.type === "other-sessions-signed-out"
+                    ? (alert.device?.name ?? null)
+                    : null,
+                deviceModel: device?.model ?? null,
+                devicePlatform: device?.platform ?? null,
+                deletionDate: alert.type === "deletion-scheduled" ? alert.deletionDate : null,
+              },
+            })
+          : null,
+        sendSecurityAlertEmail && (enabled?.email ?? true)
+          ? sendSecurityAlertEmail({
+              alert,
+              at,
+              timezone: recipient.timezone,
+              hasPassword: recipient.hasPassword,
+              to: recipient.email,
+              userId: recipient.id,
+            })
+          : null,
+      ]);
     };
     background(send(), `could not send ${alert.type}`);
   };
@@ -119,8 +140,8 @@ export const createSecurityAlerts = ({
     );
   };
   return {
-    send: (userId: string, alert: SecurityAlert) =>
-      deliver(alert, () => findAlertRecipient(db, userId)),
+    send: (userId: string, alert: SecurityAlert, excludeDeviceId: string | null = null) =>
+      deliver(alert, () => findAlertRecipient(db, userId), now(), excludeDeviceId),
     sendTo: (recipient: AlertRecipient, alert: SecurityAlert) =>
       deliver(alert, async () => recipient),
     turnedOff: (userId: string, alerts: TurnedOffNotification[]) => {
@@ -158,6 +179,19 @@ export const createSecurityAlerts = ({
 };
 
 export type SecurityAlerts = ReturnType<typeof createSecurityAlerts>;
+
+const accountNoticeTypes = {
+  "new-sign-in": "NEW_SIGN_IN",
+  "password-changed": "PASSWORD_CHANGED",
+  "password-reset": "PASSWORD_RESET",
+  "recovery-phrase-changed": "RECOVERY_PHRASE_CHANGED",
+  "recovery-phrase-reset": "RECOVERY_PHRASE_RESET",
+  "other-sessions-signed-out": "OTHER_SESSIONS_SIGNED_OUT",
+  "device-removed": "DEVICE_REMOVED",
+  "deletion-scheduled": "DELETION_SCHEDULED",
+  "account-deleted": null,
+  "alerts-turned-off": null,
+} as const satisfies Record<SecurityAlert["type"], AccountNoticeType | null>;
 
 const parseTurnedOff = (held: string): TurnedOffNotification[] => {
   const [heldType = "", heldChannel = "email"] = held.split(":");

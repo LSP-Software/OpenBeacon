@@ -325,10 +325,11 @@ export const accountRouter = {
           );
         }
       } else {
-        ctx.securityAlerts?.send(userId, {
-          type: "deletion-scheduled",
-          deletionDate: result.deletionDate,
-        });
+        ctx.securityAlerts?.send(
+          userId,
+          { type: "deletion-scheduled", deletionDate: result.deletionDate },
+          ctx.deviceId,
+        );
       }
       return result;
     }),
@@ -354,7 +355,11 @@ export const accountRouter = {
         };
       });
       if (signedOut > 0)
-        ctx.securityAlerts?.send(userId, { type: "other-sessions-signed-out", device });
+        ctx.securityAlerts?.send(
+          userId,
+          { type: "other-sessions-signed-out", device },
+          ctx.deviceId,
+        );
       return { signedOut };
     }),
   deletionCancellationNotice: protectedProcedure.query(async ({ ctx }) => {
@@ -433,7 +438,11 @@ export const accountRouter = {
         currentSessionId: ctx.session.session.id,
         current: false,
       });
-      ctx.securityAlerts?.send(ctx.session.user.id, { type: "device-removed", device });
+      ctx.securityAlerts?.send(
+        ctx.session.user.id,
+        { type: "device-removed", device },
+        ctx.deviceId,
+      );
     }),
   removeThisDevice: setupProcedure
     .meta({ rateLimit: { limit: 5, windowMs: 60_000 } })
@@ -449,7 +458,11 @@ export const accountRouter = {
         currentSessionId: ctx.session.session.id,
         current: true,
       });
-      ctx.securityAlerts?.send(ctx.session.user.id, { type: "device-removed", device });
+      ctx.securityAlerts?.send(
+        ctx.session.user.id,
+        { type: "device-removed", device },
+        ctx.deviceId,
+      );
     }),
   version: setupProcedure.query(({ ctx }) => ctx.serverVersion),
   serverName: protectedProcedure.query(({ ctx }) => ctx.serverName),

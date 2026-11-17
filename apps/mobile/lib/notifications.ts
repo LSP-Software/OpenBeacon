@@ -32,7 +32,7 @@ export const showNotice = async (
   return result.data ?? false;
 };
 
-export const showPlaceNotice = async ({
+export const showEventNotice = async ({
   body,
   groupName,
   key,
@@ -41,9 +41,9 @@ export const showPlaceNotice = async ({
   title,
 }: {
   body: string | null;
-  groupName: string;
+  groupName: string | null;
   key: string;
-  kind: "alert" | "placesChanged";
+  kind: "alert" | "placesChanged" | "groupActivity" | "accountAlert";
   link: { href: Href; url: string };
   title: string;
 }): Promise<boolean> => {
@@ -55,7 +55,7 @@ export const showPlaceNotice = async ({
   if (!trackingModule) return false;
   const result = await tryCatch(
     Promise.resolve().then(() =>
-      trackingModule.showPlaceNotice(kind, key, title, body, groupName, link.url),
+      trackingModule.showEventNotice(kind, key, title, body, groupName, link.url),
     ),
   );
   return result.data ?? false;

@@ -111,8 +111,8 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.placeDetection(requireContext()).acknowledge(clientIds)
       }
 
-      Function("showPlaceNotice") { kind: String, key: String, title: String, body: String?, groupName: String, link: String ->
-        Notices.showPlace(requireContext(), PlaceNoticeKind.of(kind), key, title, body, groupName, link)
+      Function("showEventNotice") { kind: String, key: String, title: String, body: String?, groupName: String?, link: String ->
+        Notices.showEvent(requireContext(), EventNoticeKind.of(kind), key, title, body, groupName, link)
       }
 
       Function("listProvisionedEpochKeys") {

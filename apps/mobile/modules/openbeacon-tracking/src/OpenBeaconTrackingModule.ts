@@ -118,12 +118,12 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   listPlaceGroups(owner: string, deviceId: string): string[] | null;
   listPlaceTransitions(owner: string): Promise<QueuedPlaceTransition[]>;
   deletePlaceTransitions(clientIds: string[]): Promise<void>;
-  showPlaceNotice(
-    kind: "alert" | "placesChanged",
+  showEventNotice(
+    kind: "alert" | "placesChanged" | "groupActivity" | "accountAlert",
     key: string,
     title: string,
     body: string | null,
-    groupName: string,
+    groupName: string | null,
     link: string,
   ): boolean;
 }

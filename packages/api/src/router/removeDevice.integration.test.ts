@@ -214,6 +214,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
         },
       },
     ]);
+    expect(
+      await prisma.accountNotice.findMany({
+        where: { userId: account.userId },
+        select: { type: true, excludeDeviceId: true, deviceName: true },
+      }),
+    ).toEqual([
+      { type: "DEVICE_REMOVED", excludeDeviceId: account.thisPhone.id, deviceName: "Lost phone" },
+    ]);
   });
 
   test("refuses the current device", async () => {

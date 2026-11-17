@@ -1244,11 +1244,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("password alerts"
     expect(alerts).toEqual([]);
   });
 
-  test("a password change sends one alert", async () => {
+  test("a password change sends one alert, and its phone notice skips the phone that changed it", async () => {
     const { email, userId } = await createPasswordAccount("change-alert");
 
     expect(await changePassword(await signIn(email), password)).toBe(200);
     expect(alerts).toEqual([{ to: email, userId, alert: { type: "password-changed" } }]);
+    const [device] = await prisma.userDevice.findMany({ where: { userId }, select: { id: true } });
+    expect(
+      await prisma.accountNotice.findMany({
+        where: { userId },
+        select: { type: true, excludeDeviceId: true },
+      }),
+    ).toEqual([{ type: "PASSWORD_CHANGED", excludeDeviceId: device?.id ?? "missing" }]);
   });
 
   test("a failed password change sends no alert", async () => {

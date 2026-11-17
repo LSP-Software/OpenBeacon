@@ -89,6 +89,20 @@ describe("groupTrackingUploadBatchSchema", () => {
     expect(parse({ placeTransitions: [arrival] })).toBe(true);
     expect(parse({ placeAlertsCursor: null })).toBe(true);
     expect(parse({ placeAlertsCursor: "2026-11-15T10:00:00.000Z|" })).toBe(true);
+    expect(parse({ noticesCursor: null })).toBe(true);
+    expect(parse({ noticesCursor: "2026-11-15T10:00:00.000Z|" })).toBe(true);
+    expect(parse({ noticesCursor: "not a cursor" })).toBe(false);
+  });
+
+  test("drops fields it doesn't know, so an older server takes a batch with the notices cursor", () => {
+    const parsed = groupTrackingUploadBatchSchema.safeParse({
+      groupId: "group-1",
+      points: [],
+      placeAlertsCursor: null,
+      futureCursor: "2026-11-15T10:00:00.000Z|",
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual({ groupId: "group-1", points: [], placeAlertsCursor: null });
   });
 
   test("refuses repeated or malformed place transitions", () => {

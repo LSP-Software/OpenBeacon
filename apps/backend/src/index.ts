@@ -24,10 +24,8 @@ for (const warning of findHttpsWarnings({
   console.warn(warning);
 }
 
-if (securityAlerts) {
-  securityAlerts.schedulePendingAlertsTurnedOff();
-  setInterval(securityAlerts.schedulePendingAlertsTurnedOff, 60_000);
-}
+securityAlerts.schedulePendingAlertsTurnedOff();
+setInterval(securityAlerts.schedulePendingAlertsTurnedOff, 60_000);
 
 const scheduleAnnouncementRefresh = () =>
   setTimeout(() => void refreshAnnouncements(db).then(scheduleAnnouncementRefresh), 30_000);

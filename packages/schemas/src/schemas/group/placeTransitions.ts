@@ -8,14 +8,14 @@ export const placeTransitionSchema = z.object({
   senderDeviceId: z.string().min(1).max(128),
 });
 
-export const placeAlertsCursorSchema = z
+export const alertsCursorSchema = z
   .string()
   .max(160)
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[^|]{0,128}$/, {
-    message: "Invalid place alerts cursor",
+    message: "Invalid alerts cursor",
   })
   .refine((cursor) => !Number.isNaN(Date.parse(cursor.slice(0, cursor.indexOf("|")))), {
-    message: "Invalid place alerts cursor",
+    message: "Invalid alerts cursor",
   });
 
 export const recentPlaceTransitionsSchema = z.object({

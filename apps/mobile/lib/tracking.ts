@@ -31,6 +31,7 @@ import { errorReason } from "./errorReason.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
+import { getNoticesCursor } from "./noticeBackgroundSync.ts";
 import { dismissNotice, showNotice } from "./notifications.ts";
 import {
   applyPlaceUpdates,
@@ -609,7 +610,7 @@ const takePlaceAlertsCursor = (round: PlaceRound) => {
 
 const placeUploadFields = (
   transitions: readonly QueuedPlaceTransition[],
-  cursor: { value: string | null } | null,
+  cursor: { value: string | null; notices: string | null } | null,
 ) => ({
   ...(transitions.length > 0
     ? {
@@ -624,7 +625,7 @@ const placeUploadFields = (
         ),
       }
     : {}),
-  ...(cursor ? { placeAlertsCursor: cursor.value } : {}),
+  ...(cursor ? { placeAlertsCursor: cursor.value, noticesCursor: cursor.notices } : {}),
 });
 
 const settlePlaceResponse = async (
@@ -641,12 +642,14 @@ const settlePlaceResponse = async (
   if (
     response.places !== undefined ||
     response.placeAlerts !== undefined ||
-    response.imageKeysNeedCatchUp !== undefined
+    response.imageKeysNeedCatchUp !== undefined ||
+    response.notices !== undefined
   ) {
     round.updates = {
       places: response.places,
       placeAlerts: response.placeAlerts,
       imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
+      notices: response.notices,
     };
   }
 };
@@ -863,7 +866,7 @@ const flushGroup = async (
 };
 
 type PlaceRound = {
-  cursor: { value: string | null } | null;
+  cursor: { value: string | null; notices: string | null } | null;
   deviceId: string;
   retryAlone: Map<string, QueuedPlaceTransition[]>;
   transitions: Map<string, QueuedPlaceTransition[]>;
@@ -907,7 +910,10 @@ const startPlaceRound = async (
     if (group.length < 50) transitions.set(transition.groupId, [...group, transition]);
   }
   return {
-    cursor: { value: getPlaceAlertsCursor(device.userId) },
+    cursor: {
+      value: getPlaceAlertsCursor(device.userId),
+      notices: getNoticesCursor(device.userId),
+    },
     deviceId: device.deviceId,
     retryAlone: new Map(),
     transitions,
@@ -1031,12 +1037,14 @@ const pollPlaceUpdates = async () => {
     groupId,
     points: [],
     placeAlertsCursor: getPlaceAlertsCursor(device.userId),
+    noticesCursor: getNoticesCursor(device.userId),
   });
   await applyPlaceUpdates({
     updates: {
       places: response.places,
       placeAlerts: response.placeAlerts,
       imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
+      notices: response.notices,
     },
     userId: device.userId,
   });

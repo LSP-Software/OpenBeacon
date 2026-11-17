@@ -71,6 +71,19 @@ export const runExpiredRecordsCleanup = async () => {
         ),
     },
     {
+      table: "AccountNotice",
+      run: () =>
+        deleteInBatches(
+          () => services.db.$executeRaw`
+            DELETE FROM "AccountNotice" WHERE id IN (
+              SELECT id FROM "AccountNotice"
+              WHERE "createdAt" < (${dayAgo}::timestamptz AT TIME ZONE 'UTC')
+              LIMIT 1000
+            )
+          `,
+        ),
+    },
+    {
       table: "Feedback",
       run: () =>
         deleteInBatches(

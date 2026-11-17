@@ -47,6 +47,7 @@ model User {
   createdPlaces              Place[] @relation("PlaceCreatedBy")
   updatedPlaces              Place[] @relation("PlaceUpdatedBy")
   notificationSettings       NotificationSetting[]
+  accountNotices             AccountNotice[]
 
   @@index([pendingDeletion, deletionDate])
   @@index([image])
@@ -75,6 +76,33 @@ model NotificationSetting {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, type])
+}
+
+enum AccountNoticeType {
+  NEW_SIGN_IN
+  PASSWORD_CHANGED
+  PASSWORD_RESET
+  RECOVERY_PHRASE_CHANGED
+  RECOVERY_PHRASE_RESET
+  OTHER_SESSIONS_SIGNED_OUT
+  DEVICE_REMOVED
+  DELETION_SCHEDULED
+}
+
+model AccountNotice {
+  id              String            @id @default(uuid(7))
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type            AccountNoticeType
+  excludeDeviceId String?
+  deviceName      String?
+  deviceModel     String?
+  devicePlatform  String?
+  deletionDate    DateTime?
+  createdAt       DateTime          @default(now())
+
+  @@index([userId, createdAt, id])
+  @@index([createdAt])
 }
 
 model Session {

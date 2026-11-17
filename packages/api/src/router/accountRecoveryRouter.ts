@@ -184,7 +184,7 @@ export const accountRecoveryRouter = createTRPCRouter({
         await replaceEscrows(tx, userId, input.escrows);
         await tx.recoveryKey.update({ data: input.recoveryKey, where: { userId } });
       });
-      ctx.securityAlerts?.send(userId, { type: "recovery-phrase-changed" });
+      ctx.securityAlerts?.send(userId, { type: "recovery-phrase-changed" }, ctx.deviceId);
       return { historyKeyVersions: input.escrows.map(({ version }) => version) };
     }),
   requestResetCode: emailCodeProcedure.mutation(async ({ ctx }) => {
@@ -290,7 +290,7 @@ export const accountRecoveryRouter = createTRPCRouter({
         await tx.recoveryKey.create({ data: { ...input.recoveryKey, userId } });
         await createHistoryKey(tx, userId, input.historyKey);
       });
-      ctx.securityAlerts?.send(userId, { type: "recovery-phrase-reset" });
+      ctx.securityAlerts?.send(userId, { type: "recovery-phrase-reset" }, ctx.deviceId);
       return { historyKeyVersion: input.historyKey.version };
     }),
 });

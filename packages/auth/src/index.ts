@@ -40,9 +40,11 @@ export const emailCodes = cache
     })
   : null;
 
-export const securityAlerts = cache
-  ? createSecurityAlerts({ db, sendSecurityAlertEmail, alertsTurnedOff: cache.alertsTurnedOff })
-  : null;
+export const securityAlerts = createSecurityAlerts({
+  db,
+  sendSecurityAlertEmail: emailEnabled ? sendSecurityAlertEmail : null,
+  ...(cache ? { alertsTurnedOff: cache.alertsTurnedOff } : {}),
+});
 
 export const auth = createAuth({
   emailCodes,

@@ -132,10 +132,11 @@ describe("group epoch helpers", () => {
     });
     expect(create.mock.calls[0]?.[0].data).toMatchObject({ activatedAt: null, activatedBy: null });
     expect(updateMany).not.toHaveBeenCalled();
-    expect(send).toHaveBeenCalledWith("user-a", {
-      type: "new-sign-in",
-      device: { model: "Pixel 9", platform: "android" },
-    });
+    expect(send).toHaveBeenCalledWith(
+      "user-a",
+      { type: "new-sign-in", device: { model: "Pixel 9", platform: "android" } },
+      "device-b",
+    );
   });
 
   const storedDevice = {

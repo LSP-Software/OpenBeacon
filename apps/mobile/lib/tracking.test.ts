@@ -43,6 +43,7 @@ const uploadCalls: Array<{
   points: unknown[];
   placeTransitions?: { clientId: string }[];
   placeAlertsCursor?: string | null;
+  noticesCursor?: string | null;
 }> = [];
 let queuedTransitions: {
   clientId: string;
@@ -152,6 +153,7 @@ let uploadGroup = async ({
   duplicates: [],
 });
 
+const storedNoticesCursor: string | null = "2026-11-17T09:00:00.000Z|";
 mock.module("./secretStorage.ts", () => ({
   secretOwner: (userId: string) => ({ userId, generation: 0 }),
   invalidateSecretWrites: async () => {},
@@ -284,6 +286,10 @@ mock.module("./placeBackgroundSync.ts", () => ({
   },
   getPlaceAlertsCursor: () => storedPlaceCursor,
   settleImageKeyCatchUps: async () => {},
+}));
+
+mock.module("./noticeBackgroundSync.ts", () => ({
+  getNoticesCursor: () => storedNoticesCursor,
 }));
 
 mock.module("./apiCompatibility.ts", () => ({
@@ -475,6 +481,7 @@ mock.module("./api.ts", () => ({
           points: unknown[];
           placeTransitions?: { clientId: string }[];
           placeAlertsCursor?: string | null;
+          noticesCursor?: string | null;
         }) => {
           requests.push("groupTracking.uploadBatch");
           uploadCalls.push(input);
@@ -711,6 +718,7 @@ describe("tracking service", () => {
       points: unknown[];
       placeTransitions?: { clientId: string }[];
       placeAlertsCursor?: string | null;
+      noticesCursor?: string | null;
     }) => ({
       accepted: input.points.map((point) => (point as { clientPointId: string }).clientPointId),
       duplicates: [],
@@ -728,6 +736,9 @@ describe("tracking service", () => {
             places: [{ groupId: "group-1", revision: 3, needsCatchUp: false }],
             placeAlerts: { alerts: [], cursor: "2026-11-15T10:00:00.000Z|" },
           }
+        : {}),
+      ...(input.noticesCursor !== undefined
+        ? { notices: { notices: [], cursor: "2026-11-17T10:00:00.000Z|" } }
         : {}),
     });
 
@@ -752,8 +763,12 @@ describe("tracking service", () => {
       const withTransitions = uploadCalls.find((call) => call.groupId === "group-1");
       expect(withTransitions?.placeTransitions?.map(({ clientId }) => clientId)).toEqual([t1]);
       expect(uploadCalls.filter((call) => call.placeAlertsCursor !== undefined)).toEqual([
-        expect.objectContaining({ placeAlertsCursor: "2026-11-15T09:00:00.000Z|" }),
+        expect.objectContaining({
+          placeAlertsCursor: "2026-11-15T09:00:00.000Z|",
+          noticesCursor: "2026-11-17T09:00:00.000Z|",
+        }),
       ]);
+      expect(uploadCalls.filter((call) => call.noticesCursor !== undefined)).toHaveLength(1);
       expect(deletedTransitions).toEqual([[t1]]);
       expect(appliedPlaceUpdates).toEqual([
         {
@@ -761,6 +776,7 @@ describe("tracking service", () => {
           updates: {
             places: [{ groupId: "group-1", revision: 3, needsCatchUp: false }],
             placeAlerts: { alerts: [], cursor: "2026-11-15T10:00:00.000Z|" },
+            notices: { notices: [], cursor: "2026-11-17T10:00:00.000Z|" },
           },
         },
       ]);
