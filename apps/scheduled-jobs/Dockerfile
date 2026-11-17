@@ -1,4 +1,7 @@
-FROM oven/bun:1.4.4 AS prisma
+FROM oven/bun:1.4.4 AS base
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
+FROM base AS prisma
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
 COPY packages/database/package.json packages/database/
@@ -6,7 +9,7 @@ RUN bun install --frozen-lockfile --omit=peer --filter @openbeacon/database
 COPY packages/database packages/database
 RUN DATABASE_URL=postgresql://localhost:5432/openbeacon bun run --cwd packages/database prisma generate
 
-FROM oven/bun:1.4.4 AS deps
+FROM base AS deps
 WORKDIR /app
 COPY package.json bun.lock bunfig.toml ./
 COPY apps/backend/package.json apps/backend/
@@ -24,7 +27,7 @@ COPY packages/tsconfig/package.json packages/tsconfig/
 # --omit=peer stops bun installing optional peers (expo, react-native) that only the mobile app resolves in bun.lock.
 RUN bun install --frozen-lockfile --production --omit=peer --filter @openbeacon/scheduled-jobs
 
-FROM oven/bun:1.4.4
+FROM base
 WORKDIR /app
 COPY --from=deps /app ./
 COPY packages packages

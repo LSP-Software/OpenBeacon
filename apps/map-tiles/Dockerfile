@@ -1,9 +1,12 @@
-FROM oven/bun:1.4.4 AS build
+FROM oven/bun:1.4.4 AS base
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
+FROM base AS build
 WORKDIR /app
 COPY . .
 RUN bun install --frozen-lockfile --production --ignore-scripts --filter @openbeacon/map-tiles-cli
 
-FROM oven/bun:1.4.4
+FROM base
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
