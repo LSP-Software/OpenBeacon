@@ -37,6 +37,7 @@ final class CapturePipeline {
     let captureId = UUID().uuidString.lowercased()
     let queuedAt = TrackingRuntime.nowMillis()
     let planned: (sharing: SharingCaptureState, rows: [(ProvisionedEpochKey, HistoryRecord, String)])? = TrackingRuntime.locked {
+      guard isCurrent(), TrackingRuntime.queueOwner() == owner else { return nil }
       let sharing = TrackingRuntime.sharingState()
       guard sharing.canCapture(timestamp: fix.timestampMillis, now: queuedAt) else { return nil }
       var streams: [Stream: ProvisionedEpochKey] = [:]
