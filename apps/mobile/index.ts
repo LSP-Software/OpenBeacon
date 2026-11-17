@@ -1,4 +1,5 @@
 import "./lib/installCrypto.ts";
+import { tryCatch } from "@openbeacon/shared";
 import { AppRegistry, Platform } from "react-native";
 import OpenBeaconTracking from "./modules/openbeacon-tracking/index.ts";
 
@@ -15,7 +16,9 @@ AppRegistry.registerHeadlessTask(
 );
 
 if (Platform.OS === "ios") {
-  OpenBeaconTracking.addListener("onSync", ({ reason }) => void syncBackgroundTracking(reason));
+  OpenBeaconTracking.addListener("onSync", ({ reason }) => {
+    void tryCatch(syncBackgroundTracking(reason));
+  });
 }
 
 import "expo-router/entry";
