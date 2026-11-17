@@ -270,7 +270,10 @@ const PlaceEditor = ({
             <Text className="text-center text-muted-foreground">
               The server is still preparing the map. You can add places when it's ready.
             </Text>
-            <Button variant="outline" onPress={onClose}>
+            <Button variant="outline" onPress={map.retryUrl}>
+              <Text>Try again</Text>
+            </Button>
+            <Button variant="ghost" onPress={onClose}>
               <Text>Go back</Text>
             </Button>
           </>
