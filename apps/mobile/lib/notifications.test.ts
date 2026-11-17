@@ -32,6 +32,13 @@ mock.module("react-native", () => ({
 }));
 
 const settings = { opened: [] as string[], sendIntentFails: false };
+const inApp: { title: string; body: string | null }[] = [];
+
+mock.module("./inAppNotices.ts", () => ({
+  showInAppNotice: ({ title, body }: { title: string; body: string | null }) => {
+    inApp.push({ title, body });
+  },
+}));
 
 mock.module("expo-linking", () => ({
   openSettings: async () => {
@@ -55,7 +62,7 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
   },
 }));
 
-const { requestNotificationPermissions, showNotice, turnOnNotifications } =
+const { requestNotificationPermissions, showEventNotice, showNotice, turnOnNotifications } =
   await import("./notifications.ts");
 
 beforeEach(() => {
@@ -71,6 +78,22 @@ beforeEach(() => {
     result: "granted",
     notificationsEnabled: true,
     requests: 0,
+  });
+});
+
+describe("showEventNotice", () => {
+  test("an in-app banner without a body names the group instead", async () => {
+    appState.currentState = "active";
+    inApp.length = 0;
+    await showEventNotice({
+      body: null,
+      groupName: "Family",
+      key: "event-1",
+      kind: "groupActivity",
+      link: { href: "/", url: "openbeacon:///" },
+      title: "Mum joined",
+    });
+    expect(inApp).toEqual([{ title: "Mum joined", body: "Family" }]);
   });
 });
 

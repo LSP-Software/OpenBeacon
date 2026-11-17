@@ -820,6 +820,57 @@ describe("tracking service", () => {
       expect(pushForgets).toEqual([scope]);
       expect(uploadCalls).toEqual([]);
     });
+
+    test("the last upload while signing out asks for no token, alerts or notices", async () => {
+      pushHeldByServer = true;
+      pendingPushToken = "token-1";
+      pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
+      uploadGroup = async ({ points }) => ({
+        accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
+        duplicates: [],
+        pushAvailable: true,
+        notices: { notices: [], cursor: "2026-11-17T10:00:00.000Z|" },
+      });
+      await prepareTrackingSignOut();
+      expect(uploadCalls).toEqual([
+        { groupId: "group-1", points: [], pushToken: null },
+        { groupId: "group-1", points: [expect.anything()] },
+      ]);
+      expect(pushConfirms).toEqual([]);
+      expect(appliedPlaceUpdates).toEqual([]);
+    });
+
+    test("a push that arrives during an upload waits for it, so the cursor is sent once at a time", async () => {
+      pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
+      const events: string[] = [];
+      let releaseUpload = () => {};
+      const uploadHeld = new Promise<void>((resolve) => {
+        releaseUpload = resolve;
+      });
+      uploadGroup = async ({ points }) => {
+        events.push(points.length > 0 ? "upload started" : "push started");
+        if (points.length > 0) await uploadHeld;
+        events.push(points.length > 0 ? "upload finished" : "push finished");
+        return {
+          accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
+          duplicates: [],
+          pushAvailable: true,
+        };
+      };
+      const flush = flushPendingTrackingPoints();
+      await Bun.sleep(0);
+      const push = syncBackgroundTracking("push");
+      await Bun.sleep(5);
+      expect(events).toEqual(["upload started"]);
+      releaseUpload();
+      await Promise.all([flush, push]);
+      expect(events).toEqual([
+        "upload started",
+        "upload finished",
+        "push started",
+        "push finished",
+      ]);
+    });
   });
 
   describe("place transitions and alerts", () => {

@@ -1,8 +1,13 @@
 import type { PushSender } from "@openbeacon/auth/push.ts";
 import { findAlertRecipient, type SecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
-import { GroupEventType, GroupRole, Prisma, type PrismaClient } from "@openbeacon/database";
+import {
+  GroupEventType,
+  GroupRole,
+  Prisma,
+  type PrismaClient,
+  readDatabaseTime,
+} from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
-import { readDatabaseTime } from "./databaseTime.ts";
 import { deleteTrackingPointsInBatches, deleteTrackingStreams } from "./trackingCleanup.ts";
 import { imageKeyColumns } from "./imageKeys.ts";
 import { lockUserGroups } from "./lockUserGroups.ts";
@@ -218,21 +223,20 @@ export const deleteAccountRecords = async ({
         where: { id: { in: placeGroupIds } },
         data: { placesRevision: { increment: 1 } },
       });
-      const deletedAt = await readDatabaseTime(tx);
       const memberships = await tx.groupMember.findMany({
         where: { userId },
         select: { groupId: true },
       });
+      await tx.user.delete({ where: { id: userId } });
+      const deletedAt = await readDatabaseTime(tx);
       const deletionEvents = await tx.groupEvent.createManyAndReturn({
         data: memberships.map(({ groupId }) => ({
           createdAt: deletedAt,
           groupId,
           type: GroupEventType.ACCOUNT_DELETED,
-          subjectUserId: userId,
         })),
         select: { id: true },
       });
-      await tx.user.delete({ where: { id: userId } });
       return { user, eventIds: deletionEvents.map(({ id }) => id) };
     },
     { timeout: 60_000 },

@@ -206,6 +206,7 @@ object Notices {
         .setSmallIcon(R.drawable.openbeacon_notification_icon)
         .setColor(ContextCompat.getColor(context, R.color.openbeacon_notification_color))
         .setCategory(if (kind == EventNoticeKind.PLACES_CHANGED) NotificationCompat.CATEGORY_STATUS else NotificationCompat.CATEGORY_EVENT)
+        .setOnlyAlertOnce(true)
         .setAutoCancel(true)
         .setContentIntent(intent)
     if (body != null) builder.setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body))

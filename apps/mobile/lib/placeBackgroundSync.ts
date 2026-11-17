@@ -8,7 +8,7 @@ import { catchUpGroupImageKeys } from "./imageKeyCatchUp.ts";
 import { showNotices } from "./noticeBackgroundSync.ts";
 import { showEventNotice } from "./notifications.ts";
 import { parseJson } from "./parseJson.ts";
-import { loadPersonalNicknames } from "./personalNicknames.ts";
+import { nicknamesByGroup } from "./nicknamesByGroup.ts";
 import { catchUpGroupPlaces } from "./placeCatchUp.ts";
 import { groupPlacesQueryKey, loadGroupPlaces } from "./placeSync.ts";
 import { storage } from "./storage.ts";
@@ -172,14 +172,7 @@ const showPlaceAlerts = async ({
   groups: Groups;
   userId: string;
 }) => {
-  const nicknames = new Map<string, Promise<Record<string, { name: string | null }>>>();
-  const nicknamesFor = (groupId: string) => {
-    const loaded =
-      nicknames.get(groupId) ??
-      tryCatch(loadPersonalNicknames(groupId, userId)).then((result) => result.data ?? {});
-    nicknames.set(groupId, loaded);
-    return loaded;
-  };
+  const nicknamesFor = nicknamesByGroup(userId);
   for (const alert of alerts) {
     const group = (await groups()).find(({ id }) => id === alert.groupId);
     if (!group) continue;

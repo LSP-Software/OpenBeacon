@@ -5,7 +5,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class UploadWakeGateTest {
-  private val gate = UploadWakeGate()
+  private var now = 1_000_000L
+  private val gate = UploadWakeGate { now }
 
   @Test
   fun aPushOnAnIdlePhoneStartsAnUpload() {
@@ -76,5 +77,23 @@ class UploadWakeGateTest {
     gate.accept(push = true)
     assertTrue(gate.stopped())
     assertTrue(gate.accept(push = true))
+  }
+
+  @Test
+  fun anUploadThatNeverStartsStopsHoldingBackPushes() {
+    assertTrue(gate.accept(push = false))
+    now += UploadWakeGate.START_TIMEOUT_MS - 1
+    assertFalse(gate.accept(push = true))
+    now += 1
+    assertTrue(gate.accept(push = true))
+  }
+
+  @Test
+  fun aLateStartStillCountsAsRunning() {
+    assertTrue(gate.accept(push = false))
+    now += UploadWakeGate.START_TIMEOUT_MS
+    gate.started(1)
+    assertFalse(gate.accept(push = true))
+    assertTrue(gate.finished(1))
   }
 }

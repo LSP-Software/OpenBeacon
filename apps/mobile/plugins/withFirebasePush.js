@@ -32,6 +32,7 @@ const withFirebasePush = (config) =>
     return mod;
   });
 
+withFirebasePush.applyFirebaseStrings = applyFirebaseStrings;
+withFirebasePush.FIREBASE_ENV_NAMES = Object.keys(FIREBASE_RESOURCES);
+
 module.exports = withFirebasePush;
-module.exports.applyFirebaseStrings = applyFirebaseStrings;
-module.exports.FIREBASE_ENV_NAMES = Object.keys(FIREBASE_RESOURCES);

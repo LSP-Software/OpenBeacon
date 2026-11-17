@@ -321,6 +321,25 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("push wake-ups", 
       );
     });
 
+    test("a join by an account that has since been deleted still reaches the other members", async () => {
+      const f = await setup();
+      const erin = `${f.alice}-erin`;
+      createdUsers.push(erin);
+      await prisma.user.create({ data: { id: erin, name: erin, email: `${erin}@example.test` } });
+      const eventId = await f.event("MEMBER_JOINED", { subjectUserId: erin });
+      await prisma.user.delete({ where: { id: erin } });
+      expect(await f.wakesForEvent(eventId)).toEqual(
+        [
+          `${f.alice}-phone`,
+          `${f.alice}-tablet`,
+          `${f.bob}-phone`,
+          `${f.bob}-tablet`,
+          `${f.carol}-phone`,
+          `${f.dave}-phone`,
+        ].sort(),
+      );
+    });
+
     test("a removal skips the person who did it and anyone who turned it off", async () => {
       const f = await setup();
       await f.setting(f.dave, "MEMBER_LEFT", false);

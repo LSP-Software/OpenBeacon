@@ -1,9 +1,9 @@
-import type { Prisma, PrismaClient } from "@openbeacon/database";
+import { noticeLookbackMs, noticeSettleMs } from "@openbeacon/auth/push.ts";
+import { type Prisma, type PrismaClient, readDatabaseTime } from "@openbeacon/database";
 import type { placeTransitionSchema } from "@openbeacon/schemas";
 import { effectiveNotificationSetting } from "@openbeacon/schemas";
 import { resolveLocationSharing } from "@openbeacon/shared";
 import type z from "zod";
-import { readDatabaseTime } from "./databaseTime.ts";
 import { assertActiveDevices } from "./groupWriteChecks.ts";
 
 export const HISTORY_RETENTION_MS = 14 * 24 * 60 * 60_000;
@@ -135,6 +135,11 @@ export const uploadPlaceTransitions = async ({
 export const encodeAlertsCursor = ({ createdAt, id }: { createdAt: Date; id: string }) =>
   `${createdAt.toISOString()}|${id}`;
 
+export const decodeAlertsCursor = (cursor: string) => {
+  const separator = cursor.indexOf("|");
+  return { createdAt: new Date(cursor.slice(0, separator)), id: cursor.slice(separator + 1) };
+};
+
 export const readPlaceAlerts = async ({
   cursor,
   db,
@@ -145,16 +150,12 @@ export const readPlaceAlerts = async ({
   userId: string;
 }) => {
   const now = await readDatabaseTime(db);
-  const settledBefore = new Date(now.getTime() - 15_000);
-  const oldestAlert = now.getTime() - 24 * 60 * 60_000;
+  const settledBefore = new Date(now.getTime() - noticeSettleMs);
+  const oldestAlert = now.getTime() - noticeLookbackMs;
   if (cursor === null) {
     return { alerts: [], cursor: encodeAlertsCursor({ createdAt: settledBefore, id: "" }) };
   }
-  const separator = cursor.indexOf("|");
-  const after = {
-    createdAt: new Date(cursor.slice(0, separator)),
-    id: cursor.slice(separator + 1),
-  };
+  const after = decodeAlertsCursor(cursor);
   const caughtUp =
     settledBefore > after.createdAt
       ? encodeAlertsCursor({ createdAt: settledBefore, id: "" })

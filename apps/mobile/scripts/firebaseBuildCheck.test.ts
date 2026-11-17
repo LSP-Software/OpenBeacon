@@ -22,7 +22,7 @@ describe("checkFirebaseValues", () => {
     expect(result).toEqual({
       problem: "warn",
       message:
-        "FIREBASE_API_KEY not set in apps/mobile/.env, so this APK is built without push notifications.",
+        "FIREBASE_API_KEY not set in apps/mobile/.env, so this APK is built without push wake-ups.",
     });
   });
 

@@ -19,26 +19,30 @@ class PushTokens(
 ) {
   private var cached: PushTokenState? = null
   private var lastRequestAt: Long? = null
+  private var generation = 0L
+  private var acceptingTokens = true
 
   @Synchronized
   fun pending(scope: String): String? {
     val slot = slot(scope)
-    return slot.token?.takeIf { slot.pushAvailable != false && it != slot.sent }
+    return slot.token?.takeIf { slot.pushAvailable == true && it != slot.sent }
   }
 
   @Synchronized
-  fun confirm(scope: String, sent: String?, pushAvailable: Boolean): Boolean {
+  fun confirm(scope: String, sent: String?, pushAvailable: Boolean): Long? {
     val slot = slot(scope)
     update(slot.copy(pushAvailable = pushAvailable, sent = if (pushAvailable) sent ?: slot.sent else null))
-    if (!pushAvailable || slot.token != null) return false
+    if (!pushAvailable || slot.token != null) return null
     val now = clock()
-    if (lastRequestAt?.let { now - it < TOKEN_RETRY_MS } == true) return false
+    if (lastRequestAt?.let { now - it < TOKEN_RETRY_MS } == true) return null
     lastRequestAt = now
-    return true
+    acceptingTokens = true
+    return generation
   }
 
   @Synchronized
-  fun receive(token: String): Boolean {
+  fun receive(token: String, requested: Long? = null): Boolean {
+    if (!acceptingTokens || (requested != null && requested != generation)) return false
     val current = state()
     if (current.token == token) return false
     update(current.copy(token = token))
@@ -55,6 +59,8 @@ class PushTokens(
       )
     update(PushTokenState())
     lastRequestAt = null
+    generation += 1
+    acceptingTokens = false
     return forgotten
   }
 

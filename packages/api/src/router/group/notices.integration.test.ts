@@ -173,6 +173,27 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("phone notices", 
     expect((await fixture.poll(`${fixture.bob}-phone`, since(hour))).notices).toEqual([]);
   });
 
+  test("a security notice is timed by the database clock, not the server's", async () => {
+    const fixture = await setup();
+    const databaseNow = ago(5 * minute);
+    createSecurityAlerts({
+      db: {
+        user: prisma.user,
+        accountNotice: prisma.accountNotice,
+        $queryRaw: (async () => [{ now: databaseNow }]) as unknown as typeof prisma.$queryRaw,
+      },
+      sendSecurityAlertEmail: null,
+      runInBackground: (task) => tasks.push(task),
+    }).send(fixture.alice, { type: "password-changed" });
+    await settleAlerts();
+    expect(
+      await prisma.accountNotice.findMany({
+        where: { userId: fixture.alice },
+        select: { createdAt: true },
+      }),
+    ).toEqual([{ createdAt: databaseNow }]);
+  });
+
   test("every security alert with a phone switch writes a notice with its details", async () => {
     const fixture = await setup();
     const alerts = createAlerts(true);

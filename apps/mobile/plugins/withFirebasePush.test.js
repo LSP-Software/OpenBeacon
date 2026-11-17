@@ -1,6 +1,5 @@
 const { describe, expect, test } = require("bun:test");
-const { applyFirebaseStrings, FIREBASE_ENV_NAMES } = require("./withFirebasePush.js");
-const { FIREBASE_ENV_NAMES: BUILD_ENV_NAMES } = require("../scripts/firebaseBuildCheck.ts");
+const { applyFirebaseStrings } = require("./withFirebasePush.js");
 
 const values = {
   FIREBASE_APP_ID: "1:1234:android:abcd",
@@ -41,9 +40,5 @@ describe("withFirebasePush", () => {
       values,
     );
     expect(names(applyFirebaseStrings(written, {}))).toEqual(["app_name"]);
-  });
-
-  test("reads the same values the release build checks", () => {
-    expect(FIREBASE_ENV_NAMES).toEqual([...BUILD_ENV_NAMES]);
   });
 });

@@ -1,7 +1,11 @@
-import { GroupEventType, type Prisma, type PrismaClient } from "@openbeacon/database";
+import {
+  GroupEventType,
+  type Prisma,
+  type PrismaClient,
+  readDatabaseTime,
+} from "@openbeacon/database";
 import type { groupHistoryCategorySchema } from "@openbeacon/schemas";
 import type z from "zod";
-import { readDatabaseTime } from "./databaseTime.ts";
 import {
   HISTORY_RETENTION_MS,
   placeTransitionSelect,

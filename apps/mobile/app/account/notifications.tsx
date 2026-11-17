@@ -1,5 +1,5 @@
 import { notificationTypes } from "@openbeacon/schemas";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useMutationState, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BellOffIcon } from "lucide-react-native";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -24,7 +24,7 @@ const descriptions: Partial<Record<keyof typeof notificationTypes, string>> = {
   PLACE_ALERTS:
     "When someone arrives at or leaves a place. You can still mute people at each place.",
   ROLE_CHANGED: "When someone becomes an owner, admin or member.",
-  NEW_SIGN_IN: "A new phone or tablet signs in to your account.",
+  NEW_SIGN_IN: "When a new phone or tablet signs in to your account.",
 };
 
 const NotificationsScreen = () => {
@@ -32,27 +32,57 @@ const NotificationsScreen = () => {
   const notifications = useNotificationSettings();
   const settings = useQuery(trpc.notificationSettings.get.queryOptions());
   const settingsKey = trpc.notificationSettings.get.queryKey();
-  const setSetting = useMutation(
-    trpc.notificationSettings.set.mutationOptions({
-      onMutate: ({ type, channel, enabled }) => {
-        const previous = queryClient.getQueryData(settingsKey);
-        if (previous) {
-          queryClient.setQueryData(settingsKey, {
-            ...previous,
-            settings: previous.settings.map((setting) =>
-              setting.type === type ? { ...setting, [channel]: enabled } : setting,
-            ),
-          });
-        }
+  const mutationKey = trpc.notificationSettings.set.mutationKey();
+  const setCell = (
+    type: keyof typeof notificationTypes,
+    channel: "email" | "phone",
+    enabled: boolean,
+  ) => {
+    const current = queryClient.getQueryData(settingsKey);
+    if (!current) return;
+    queryClient.setQueryData(settingsKey, {
+      ...current,
+      settings: current.settings.map((setting) =>
+        setting.type === type ? { ...setting, [channel]: enabled } : setting,
+      ),
+    });
+  };
+  const setSetting = useMutation({
+    ...trpc.notificationSettings.set.mutationOptions({
+      onMutate: async ({ type, channel, enabled }) => {
+        await queryClient.cancelQueries({ queryKey: settingsKey });
+        const previous = queryClient
+          .getQueryData(settingsKey)
+          ?.settings.find((setting) => setting.type === type)?.[channel];
+        setCell(type, channel, enabled);
         return { previous };
       },
-      onSuccess: (data) => queryClient.setQueryData(settingsKey, data),
-      onError: (error, _change, context) => {
-        queryClient.setQueryData(settingsKey, context?.previous);
+      onSuccess: (data) => {
+        if (queryClient.isMutating({ mutationKey }) <= 1) {
+          queryClient.setQueryData(settingsKey, data);
+        }
+      },
+      onError: (error, { type, channel }, context) => {
+        if (typeof context?.previous === "boolean") setCell(type, channel, context.previous);
         Alert.alert("Unable to save your notification settings", error.message);
       },
     }),
-  );
+    networkMode: "always",
+  });
+  const saving = useMutationState({
+    filters: { mutationKey, status: "pending" },
+    select: (mutation) => mutation.state.variables,
+  });
+  const isSaving = (type: keyof typeof notificationTypes, channel: "email" | "phone") =>
+    saving.some(
+      (change) =>
+        typeof change === "object" &&
+        change !== null &&
+        "type" in change &&
+        "channel" in change &&
+        change.type === type &&
+        change.channel === channel,
+    );
   const showEmail = settings.data?.canSendEmail ?? false;
 
   return (
@@ -83,7 +113,7 @@ const NotificationsScreen = () => {
             icon={BellOffIcon}
             tone="warning"
             title="Notifications are off"
-            description="This phone can’t show that it’s sharing your location, or tell you if sharing stops."
+            description="This phone can’t show any of the notifications below, show that it’s sharing your location, or tell you if sharing stops."
           >
             <Button size="sm" onPress={notifications.turnOn} loading={notifications.turningOn}>
               <Text>Turn on notifications</Text>
@@ -113,6 +143,11 @@ const NotificationsScreen = () => {
                 <Text className="text-muted-foreground px-1 text-sm font-semibold uppercase tracking-wider">
                   {section.title}
                 </Text>
+                {section.key === "security" && showEmail && (
+                  <Text className="text-muted-foreground px-1 text-sm">
+                    Turning any of these off sends an email to your account’s address.
+                  </Text>
+                )}
                 <View className="overflow-hidden rounded-3xl border border-border bg-card">
                   {showEmail && (
                     <View className="flex-row justify-end gap-4 px-5 pt-3">
@@ -150,16 +185,16 @@ const NotificationsScreen = () => {
                             <Switch
                               accessibilityLabel={`${label}, email`}
                               value={row.email}
-                              disabled={setSetting.isPending}
+                              disabled={isSaving(row.type, "email")}
                               onValueChange={(enabled) => change("email", enabled)}
                             />
                           </View>
                         )}
                         <View className="w-12 items-center">
                           <Switch
-                            accessibilityLabel={showEmail ? `${label}, phone notifications` : label}
+                            accessibilityLabel={showEmail ? `${label}, phone` : label}
                             value={row.phone}
-                            disabled={setSetting.isPending}
+                            disabled={isSaving(row.type, "phone")}
                             onValueChange={(enabled) => change("phone", enabled)}
                           />
                         </View>
@@ -170,12 +205,6 @@ const NotificationsScreen = () => {
               </View>
             );
           })}
-
-        {showEmail && (
-          <Text className="text-muted-foreground px-1 text-sm">
-            Turning off a security notification sends an email to your account’s address to say so.
-          </Text>
-        )}
       </ScrollView>
     </View>
   );

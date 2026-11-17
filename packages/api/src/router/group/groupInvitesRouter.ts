@@ -1,6 +1,6 @@
 import { logRateLimit } from "@openbeacon/shared";
 import { createHash, randomBytes } from "node:crypto";
-import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
+import { GroupEventType, GroupRole, Prisma, readDatabaseTime } from "@openbeacon/database";
 import { groupEpochBundleSchema, inviteMemberToGroupSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
@@ -9,7 +9,6 @@ import {
   getInviteAcceptanceContext,
   persistGroupEpoch,
 } from "../../lib/groupEpochs.ts";
-import { readDatabaseTime } from "../../lib/databaseTime.ts";
 import { emailInviteCreatedAfter } from "../../lib/emailInvites.ts";
 import { assertAccountBelowGroupLimit, maxGroupsPerAccount } from "../../lib/groupLimit.ts";
 import { groupAdminProcedure } from "../../procedures/auth/group.ts";

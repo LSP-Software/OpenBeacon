@@ -1,10 +1,9 @@
 import { alertsCursorSchema } from "@openbeacon/schemas";
-import { tryCatch } from "@openbeacon/shared";
 import type { RouterOutputs } from "./api.ts";
 import { baseUrl } from "./currentServer.ts";
 import { describeGroupEvent } from "./groupHistory.ts";
 import { showEventNotice } from "./notifications.ts";
-import { loadPersonalNicknames } from "./personalNicknames.ts";
+import { nicknamesByGroup } from "./nicknamesByGroup.ts";
 import { storage } from "./storage.ts";
 
 export type Notices = NonNullable<RouterOutputs["groupTracking"]["uploadBatch"]["notices"]>;
@@ -23,32 +22,18 @@ const accountLink = (screen: "devices" | "password" | "recovery" | "delete") => 
   url: `openbeacon:///account/${screen}`,
 });
 
-const describeSignInDevice = (device: AccountNotice["device"]) => {
-  const named =
-    device?.model ??
-    (device?.platform === "android"
-      ? "Android device"
-      : device?.platform === "ios"
-        ? "iOS device"
-        : null);
-  if (!named) return null;
-  return `${/^[aeiou]/i.test(named) ? "an" : "a"} ${named}`;
-};
-
 export const describeAccountNotice = (notice: AccountNotice) => {
   switch (notice.type) {
-    case "NEW_SIGN_IN": {
-      const device = describeSignInDevice(notice.device);
+    case "NEW_SIGN_IN":
       return {
-        title: device ? `New sign-in on ${device}` : "New sign-in",
-        body: "If this wasn’t you, remove it in Devices.",
+        title: "New sign-in",
+        body: `${notice.device?.model ?? notice.device?.name ?? "A new phone or tablet"} signed in to your account. If this wasn’t you, remove it in Devices.`,
         link: accountLink("devices"),
       };
-    }
     case "PASSWORD_CHANGED":
       return {
         title: "Your password was changed",
-        body: "If this wasn’t you, reset your password and sign out other sessions.",
+        body: "If this wasn’t you, use Forgot password on the sign-in screen to choose a new one.",
         link: accountLink("password"),
       };
     case "PASSWORD_RESET":
@@ -67,13 +52,15 @@ export const describeAccountNotice = (notice: AccountNotice) => {
     case "OTHER_SESSIONS_SIGNED_OUT":
       return {
         title: "Your other sessions were signed out",
-        body: notice.device?.name ? `Signed out from ${notice.device.name}.` : null,
+        body: notice.device?.name
+          ? `${notice.device.name} signed out your other phones and tablets.`
+          : null,
         link: accountLink("devices"),
       };
     case "DEVICE_REMOVED":
       return {
         title: `${notice.device?.name ?? "A device"} was removed from your account`,
-        body: "It was signed out and won’t get new locations.",
+        body: "It was signed out and won’t receive new locations.",
         link: accountLink("devices"),
       };
     case "DELETION_SCHEDULED":
@@ -81,7 +68,7 @@ export const describeAccountNotice = (notice: AccountNotice) => {
         title: notice.deletionDate
           ? `Your account will be deleted on ${notice.deletionDate.toLocaleDateString(undefined, { day: "numeric", month: "short" })}`
           : "Your account is scheduled for deletion",
-        body: "If this wasn’t you, open the app to cancel it.",
+        body: "Sign in within 7 days to cancel it.",
         link: accountLink("delete"),
       };
   }
@@ -96,14 +83,7 @@ export const showNotices = async ({
   groups: () => Promise<RouterOutputs["groupMembership"]["list"]>;
   userId: string;
 }) => {
-  const nicknames = new Map<string, Promise<Record<string, { name: string | null }>>>();
-  const nicknamesFor = (groupId: string) => {
-    const loaded =
-      nicknames.get(groupId) ??
-      tryCatch(loadPersonalNicknames(groupId, userId)).then((result) => result.data ?? {});
-    nicknames.set(groupId, loaded);
-    return loaded;
-  };
+  const nicknamesFor = nicknamesByGroup(userId);
   for (const notice of notices.notices) {
     if (notice.kind === "account") {
       const { title, body, link } = describeAccountNotice(notice);

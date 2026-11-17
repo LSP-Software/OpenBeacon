@@ -52,6 +52,7 @@ class TrackingCaptureService : Service() {
   private var currentIntervalMs = DEFAULT_INTERVAL_MS
   private var lastQueued: LastQueuedFix? = null
   private var lastUploadRequestMs = 0L
+  private var placeUploadWaiting = false
   private var currentUploadIntervalMs = CaptureSamplingPolicy.UPLOAD_INTERVAL_MS
   private val refreshState = CaptureRefreshState()
 
@@ -266,13 +267,26 @@ class TrackingCaptureService : Service() {
 
   private fun requestUploadIfDue(generation: Long) {
     val nowMs = System.currentTimeMillis()
-    val uploadDue = synchronized(captureStateLock) { nowMs - lastUploadRequestMs >= currentUploadIntervalMs }
-    if (!uploadDue || TrackingRuntime.sharingState(this).isPaused(nowMs) || !hasPendingUploads()) return
+    val worthChecking =
+      synchronized(captureStateLock) { placeUploadWaiting || nowMs - lastUploadRequestMs >= currentUploadIntervalMs }
+    if (!worthChecking || TrackingRuntime.sharingState(this).isPaused(nowMs) || !hasPendingUploads()) return
     synchronized(captureStateLock) {
-      if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && nowMs - lastUploadRequestMs >= currentUploadIntervalMs) {
+      val startUpload =
+        UploadRequestPolicy.shouldStart(
+          generationCurrent = TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation),
+          online = true,
+          paused = false,
+          placeTransitionQueued = placeUploadWaiting,
+          pointQueued = true,
+          forceUpload = false,
+          msSinceLastRequest = nowMs - lastUploadRequestMs,
+          uploadIntervalMs = currentUploadIntervalMs,
+        )
+      if (startUpload) {
         try {
           startService(Intent(this, TrackingUploadService::class.java).putExtra(TrackingUploadService.EXTRA_REASON, "upload"))
           lastUploadRequestMs = nowMs
+          placeUploadWaiting = false
         } catch (error: Exception) {
           Log.e(TAG, "Failed to start background tracking sync.", error)
         }
@@ -320,6 +334,7 @@ class TrackingCaptureService : Service() {
         synchronized(captureStateLock) {
           lastQueued = null
           lastUploadRequestMs = 0L
+          placeUploadWaiting = false
           refreshState.request()
         }
         minimumFixElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
@@ -431,12 +446,13 @@ class TrackingCaptureService : Service() {
     val paused = TrackingRuntime.sharingState(this).isPaused(nowMs)
     try {
       synchronized(captureStateLock) {
+        if (placeTransitionQueued) placeUploadWaiting = true
         val startUpload =
-          UploadRequestPolicy.shouldStartAfterFix(
+          UploadRequestPolicy.shouldStart(
             generationCurrent = TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation),
             online = online,
             paused = paused,
-            placeTransitionQueued = placeTransitionQueued,
+            placeTransitionQueued = placeUploadWaiting,
             pointQueued = currentFixQueued,
             forceUpload = decision.forceUpload,
             msSinceLastRequest = nowMs - lastUploadRequestMs,
@@ -445,6 +461,7 @@ class TrackingCaptureService : Service() {
         if (startUpload) {
           startService(Intent(this, TrackingUploadService::class.java).putExtra(TrackingUploadService.EXTRA_REASON, "upload"))
           lastUploadRequestMs = nowMs
+          placeUploadWaiting = false
         }
       }
     } catch (error: Exception) {

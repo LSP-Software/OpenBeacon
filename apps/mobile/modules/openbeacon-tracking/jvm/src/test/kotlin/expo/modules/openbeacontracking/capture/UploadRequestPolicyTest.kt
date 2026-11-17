@@ -48,6 +48,12 @@ class UploadRequestPolicyTest {
   }
 
   @Test
+  fun aTransitionQueuedOfflineUploadsAsSoonAsThePhoneIsOnlineAgain() {
+    assertFalse(decide(placeTransitionQueued = true, online = false, msSinceLastRequest = 1_000L))
+    assertTrue(decide(placeTransitionQueued = true, pointQueued = true, msSinceLastRequest = 20_000L))
+  }
+
+  @Test
   fun offlineOrPausedBlocksDuePointsToo() {
     assertFalse(decide(pointQueued = true, online = false, msSinceLastRequest = 600_000L))
     assertFalse(decide(pointQueued = true, paused = true, msSinceLastRequest = 600_000L))
@@ -63,7 +69,7 @@ class UploadRequestPolicyTest {
     msSinceLastRequest: Long,
     uploadIntervalMs: Long = CaptureSamplingPolicy.UPLOAD_INTERVAL_MS,
   ): Boolean =
-    UploadRequestPolicy.shouldStartAfterFix(
+    UploadRequestPolicy.shouldStart(
       generationCurrent = generationCurrent,
       online = online,
       paused = paused,

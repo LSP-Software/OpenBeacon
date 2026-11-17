@@ -331,6 +331,52 @@ class TrackingCaptureServiceTest {
   }
 
   @Test
+  fun anArrivalQueuedOfflineUploadsWhenThePhoneIsBackOnline() {
+    queueField.set(null, RoomCiphertextQueue(Room.inMemoryDatabaseBuilder(application, CiphertextQueueDatabase::class.java).allowMainThreadQueries().build()))
+    val transitions = InMemoryPlaceTransitionQueue()
+    placeDetectionField.set(null, PlaceDetection(InMemoryPlaceStore().apply { replaceGroup("group", listOf(PlaceGeofence("group", "home", 51.5, -0.1, 100.0))) }, transitions))
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.2:"))
+    val connectivity = application.getSystemService(ConnectivityManager::class.java)
+    val setOnline = { online: Boolean ->
+      shadowOf(connectivity).setNetworkCapabilities(
+        connectivity.activeNetwork,
+        ShadowNetworkCapabilities.newInstance().apply { if (online) shadowOf(this).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) },
+      )
+    }
+    setOnline(true)
+    val generation = TrackingRuntime.captureCommands.start()
+    val service = createService()
+    service.onStartCommand(startIntent(generation), 0, 1)
+    val enqueue = TrackingCaptureService::class.java.getDeclaredMethod("enqueueEncryptedFix", Location::class.java, Long::class.javaPrimitiveType).apply { isAccessible = true }
+    val requestUploadIfDue = TrackingCaptureService::class.java.getDeclaredMethod("requestUploadIfDue", Long::class.javaPrimitiveType).apply { isAccessible = true }
+    val nowMs = System.currentTimeMillis()
+    val fix = { offset: Int, latitude: Double, atMs: Long ->
+      Location("test").apply {
+        this.latitude = latitude
+        longitude = -0.1
+        accuracy = 10f
+        time = atMs
+        elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos() + offset
+      }
+    }
+    while (shadowOf(application).nextStartedService != null) Unit
+
+    enqueue.invoke(service, fix(1, 51.51, nowMs - 300_000L), generation)
+    assertEquals("upload", shadowOf(application).nextStartedService.getStringExtra(TrackingUploadService.EXTRA_REASON))
+    setOnline(false)
+    enqueue.invoke(service, fix(2, 51.5, nowMs - 200_000L), generation)
+    enqueue.invoke(service, fix(3, 51.5, nowMs - 60_000L), generation)
+    assertTrue(transitions.hasAny("test-owner"))
+    assertEquals(null, shadowOf(application).nextStartedService)
+
+    setOnline(true)
+    requestUploadIfDue.invoke(service, generation)
+    assertEquals("upload", shadowOf(application).nextStartedService.getStringExtra(TrackingUploadService.EXTRA_REASON))
+    requestUploadIfDue.invoke(service, generation)
+    assertEquals(null, shadowOf(application).nextStartedService)
+  }
+
+  @Test
   fun aTimedPauseEndingOnAnotherDaySaysWhichDay() {
     val until = System.currentTimeMillis() + 2 * 86_400_000L
     TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.1:", paused = true, pausedUntil = until))

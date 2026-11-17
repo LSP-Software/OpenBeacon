@@ -1,23 +1,18 @@
-import type {
-  AccountNoticeType,
-  GroupEventType,
-  NotificationType,
-  PrismaClient,
+import {
+  type AccountNoticeType,
+  type GroupEventType,
+  type NotificationType,
+  type Prisma,
+  type PrismaClient,
+  readDatabaseTime,
 } from "@openbeacon/database";
 import { effectiveNotificationSetting } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import type { FcmClient } from "./fcm.ts";
+import { accountNoticeSettings } from "./securityAlerts.ts";
 
-export const accountNoticeSettings = {
-  NEW_SIGN_IN: "NEW_SIGN_IN",
-  PASSWORD_CHANGED: "PASSWORD_CHANGED",
-  PASSWORD_RESET: "PASSWORD_CHANGED",
-  RECOVERY_PHRASE_CHANGED: "RECOVERY_PHRASE_CHANGED",
-  RECOVERY_PHRASE_RESET: "RECOVERY_PHRASE_CHANGED",
-  OTHER_SESSIONS_SIGNED_OUT: "OTHER_SESSIONS_SIGNED_OUT",
-  DEVICE_REMOVED: "DEVICE_REMOVED",
-  DELETION_SCHEDULED: "DELETION_SCHEDULED",
-} as const satisfies Record<AccountNoticeType, NotificationType>;
+export const noticeSettleMs = 15_000;
+export const noticeLookbackMs = 24 * 60 * 60_000;
 
 export const groupNoticeSettings = {
   MEMBER_JOINED: "MEMBER_JOINED",
@@ -46,7 +41,7 @@ export const createPushSender = ({
   setTimer?: (callback: () => void, ms: number) => void;
   runInBackground?: (task: Promise<unknown>) => void;
 }) => {
-  const settleMs = 16_000;
+  const settleMs = noticeSettleMs + 1_000;
   const batchMs = 1_000;
   const logError = (message: string) =>
     console.error(`${new Date().toISOString()} [push] ${message}`);
@@ -57,7 +52,7 @@ export const createPushSender = ({
       }),
     );
 
-  const phoneOn = async (userIds: string[], type: NotificationType) => {
+  const usersWithPhoneOn = async (userIds: string[], type: NotificationType) => {
     const stored = await db.notificationSetting.findMany({
       where: { userId: { in: userIds }, type },
       select: { userId: true, email: true, phone: true },
@@ -71,16 +66,20 @@ export const createPushSender = ({
     );
   };
 
+  const usableDevice = (): Prisma.UserDeviceWhereInput => ({
+    activatedAt: { not: null },
+    revokedAt: null,
+    sessions: { some: { expiresAt: { gt: new Date() } } },
+  });
+
   const devicesOf = async (userIds: string[], excludeDeviceId: string | null = null) =>
     userIds.length === 0
       ? []
       : (
           await db.userDevice.findMany({
             where: {
+              ...usableDevice(),
               userId: { in: userIds },
-              activatedAt: { not: null },
-              revokedAt: null,
-              sessions: { some: { expiresAt: { gt: new Date() } } },
               pushToken: { isNot: null },
               ...(excludeDeviceId ? { id: { not: excludeDeviceId } } : {}),
             },
@@ -95,8 +94,7 @@ export const createPushSender = ({
     deviceId: string;
     clientIds: string[];
   }) => {
-    const [clock] = await db.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
-    const oldestAlert = new Date((clock?.now ?? new Date()).getTime() - 24 * 60 * 60_000);
+    const oldestAlert = new Date((await readDatabaseTime(db)).getTime() - noticeLookbackMs);
     const transitions = await db.placeTransition.findMany({
       where: { deviceId, clientId: { in: clientIds }, occurredAt: { gte: oldestAlert } },
       select: { groupId: true, placeId: true, userId: true, occurredAt: true },
@@ -120,7 +118,7 @@ export const createPushSender = ({
         select: { muterUserId: true },
       });
       const muted = new Set(mutes.map(({ muterUserId }) => muterUserId));
-      for (const userId of await phoneOn(
+      for (const userId of await usersWithPhoneOn(
         members.map(({ userId }) => userId).filter((userId) => !muted.has(userId)),
         "PLACE_ALERTS",
       )) {
@@ -158,7 +156,7 @@ export const createPushSender = ({
         .map(({ userId }) => userId)
         .filter((userId) => event.type !== "MEMBER_JOINED" || userId !== event.subjectUserId);
       const type = groupNoticeSettings[event.type as keyof typeof groupNoticeSettings];
-      for (const userId of await phoneOn(userIds, type)) recipients.add(userId);
+      for (const userId of await usersWithPhoneOn(userIds, type)) recipients.add(userId);
     }
     return devicesOf([...recipients]);
   };
@@ -169,7 +167,7 @@ export const createPushSender = ({
       select: { userId: true, type: true, excludeDeviceId: true },
     });
     if (!notice || signsOutOtherDevices.includes(notice.type)) return [];
-    const userIds = await phoneOn([notice.userId], accountNoticeSettings[notice.type]);
+    const userIds = await usersWithPhoneOn([notice.userId], accountNoticeSettings[notice.type]);
     return devicesOf(userIds, notice.excludeDeviceId);
   };
 
@@ -203,11 +201,7 @@ export const createPushSender = ({
     const tokens = await db.pushToken.findMany({
       where: {
         deviceId: { in: deviceIds },
-        device: {
-          activatedAt: { not: null },
-          revokedAt: null,
-          sessions: { some: { expiresAt: { gt: new Date() } } },
-        },
+        device: usableDevice(),
       },
       select: { deviceId: true, token: true },
     });

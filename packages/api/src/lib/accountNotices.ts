@@ -1,9 +1,14 @@
-import { accountNoticeSettings, groupNoticeSettings } from "@openbeacon/auth/push.ts";
-import { type AccountNoticeType, GroupEventType, type PrismaClient } from "@openbeacon/database";
-import { readDatabaseTime } from "./databaseTime.ts";
+import { groupNoticeSettings, noticeLookbackMs, noticeSettleMs } from "@openbeacon/auth/push.ts";
+import { accountNoticeSettings } from "@openbeacon/auth/securityAlerts.ts";
+import {
+  type AccountNoticeType,
+  GroupEventType,
+  type PrismaClient,
+  readDatabaseTime,
+} from "@openbeacon/database";
 import { groupEventSelect, toGroupEventView } from "./groupHistory.ts";
 import { readNotificationSettings } from "./notificationSettings.ts";
-import { encodeAlertsCursor } from "./placeTransitions.ts";
+import { decodeAlertsCursor, encodeAlertsCursor } from "./placeTransitions.ts";
 
 export const readNotices = async ({
   cursor,
@@ -18,24 +23,20 @@ export const readNotices = async ({
 }) => {
   const limit = 50;
   const now = await readDatabaseTime(db);
-  const settledBefore = new Date(now.getTime() - 15_000);
-  const oldestNotice = new Date(now.getTime() - 24 * 60 * 60_000);
+  const settledBefore = new Date(now.getTime() - noticeSettleMs);
+  const oldestNotice = new Date(now.getTime() - noticeLookbackMs);
   const caughtUp = encodeAlertsCursor({ createdAt: settledBefore, id: "" });
   if (cursor === null) return { notices: [], cursor: caughtUp };
-  const separator = cursor.indexOf("|");
-  const after = {
-    createdAt: new Date(cursor.slice(0, separator)),
-    id: cursor.slice(separator + 1),
-  };
+  const after = decodeAlertsCursor(cursor);
   if (after.createdAt >= settledBefore) return { notices: [], cursor };
-  const phoneOn = new Set(
+  const phoneOnTypes = new Set(
     (await readNotificationSettings(db, userId)).flatMap(({ type, phone }) => (phone ? type : [])),
   );
   const accountTypes = (Object.keys(accountNoticeSettings) as AccountNoticeType[]).filter((type) =>
-    phoneOn.has(accountNoticeSettings[type]),
+    phoneOnTypes.has(accountNoticeSettings[type]),
   );
   const groupTypes = (Object.keys(groupNoticeSettings) as (keyof typeof groupNoticeSettings)[])
-    .filter((type) => phoneOn.has(groupNoticeSettings[type]))
+    .filter((type) => phoneOnTypes.has(groupNoticeSettings[type]))
     .map((type) => GroupEventType[type]);
   const window = {
     createdAt: {
@@ -78,8 +79,14 @@ export const readNotices = async ({
           where: {
             ...window,
             type: { in: groupTypes },
-            NOT: { type: GroupEventType.MEMBER_JOINED, subjectUserId: userId },
             AND: [
+              {
+                OR: [
+                  { type: { not: GroupEventType.MEMBER_JOINED } },
+                  { subjectUserId: null },
+                  { subjectUserId: { not: userId } },
+                ],
+              },
               { OR: [{ actorUserId: null }, { actorUserId: { not: userId } }] },
               {
                 OR: memberships.map(({ groupId, createdAt }) => ({

@@ -1,7 +1,7 @@
 package expo.modules.openbeacontracking.capture
 
 object UploadRequestPolicy {
-  fun shouldStartAfterFix(
+  fun shouldStart(
     generationCurrent: Boolean,
     online: Boolean,
     paused: Boolean,

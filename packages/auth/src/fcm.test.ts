@@ -13,16 +13,26 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
     headers: { "content-type": "application/json", ...headers },
   });
 
-const fcmError = (status: number, errorStatus: string, errorCode?: string) =>
+const fcmError = (status: number, errorStatus: string, errorCode?: string, badField?: string) =>
   json(
     {
       error: {
         code: status,
         message: "Requested entity was not found.",
         status: errorStatus,
-        details: errorCode
-          ? [{ "@type": "type.googleapis.com/google.firebase.fcm.v1.FcmError", errorCode }]
-          : [],
+        details: [
+          ...(errorCode
+            ? [{ "@type": "type.googleapis.com/google.firebase.fcm.v1.FcmError", errorCode }]
+            : []),
+          ...(badField
+            ? [
+                {
+                  "@type": "type.googleapis.com/google.rpc.BadRequest",
+                  fieldViolations: [{ field: badField, description: "Invalid value" }],
+                },
+              ]
+            : []),
+        ],
       },
     },
     status,
@@ -163,15 +173,26 @@ describe("send", () => {
     });
   });
 
-  test("reports a token Google no longer knows", async () => {
+  test("reports a token Google no longer knows or says is malformed", async () => {
     const fcm = setup([
       () => fcmError(404, "NOT_FOUND", "UNREGISTERED"),
-      () => fcmError(400, "INVALID_ARGUMENT", "INVALID_ARGUMENT"),
-      () => fcmError(400, "INVALID_ARGUMENT"),
+      () => fcmError(400, "INVALID_ARGUMENT", "INVALID_ARGUMENT", "message.token"),
+      () => fcmError(400, "INVALID_ARGUMENT", undefined, "message.token"),
     ]);
     expect(await fcm.client.send("a")).toEqual({ outcome: "unregistered" });
     expect(await fcm.client.send("b")).toEqual({ outcome: "unregistered" });
     expect(await fcm.client.send("c")).toEqual({ outcome: "unregistered" });
+  });
+
+  test("an invalid argument that isn't the token is a failed send, keeping the token", async () => {
+    const fcm = setup([
+      () => fcmError(400, "INVALID_ARGUMENT", "INVALID_ARGUMENT"),
+      () => fcmError(400, "INVALID_ARGUMENT", "INVALID_ARGUMENT", "message.android.ttl"),
+      () => fcmError(400, "INVALID_ARGUMENT"),
+    ]);
+    expect(await fcm.client.send("a")).toEqual({ outcome: "failed", status: 400 });
+    expect(await fcm.client.send("a")).toEqual({ outcome: "failed", status: 400 });
+    expect(await fcm.client.send("a")).toEqual({ outcome: "failed", status: 400 });
   });
 
   test("asks for a retry when FCM is busy, honouring Retry-After up to a minute", async () => {
@@ -189,12 +210,31 @@ describe("send", () => {
     expect(await fcm.client.send("a")).toEqual({ outcome: "retry", afterMs: 5_000 });
   });
 
-  test("drops a rejected access token and asks for an immediate retry", async () => {
+  test("drops a rejected access token and sends again straight away with a new one", async () => {
     const fcm = setup([() => json({ error: { status: "UNAUTHENTICATED" } }, 401)]);
-    expect(await fcm.client.send("a")).toEqual({ outcome: "retry", afterMs: 0 });
     expect(await fcm.client.send("a")).toEqual({ outcome: "sent" });
+    expect(fcm.sends()).toHaveLength(2);
     expect(fcm.tokenRequests()).toHaveLength(2);
     expect(new Headers(fcm.sends()[1]?.init.headers).get("authorization")).toBe("Bearer access-2");
+  });
+
+  test("a refreshed token doesn't use up the retry for a busy FCM", async () => {
+    const fcm = setup([
+      () => json({ error: { status: "UNAUTHENTICATED" } }, 401),
+      () => json({ error: { status: "UNAVAILABLE" } }, 503),
+    ]);
+    expect(await fcm.client.send("a")).toEqual({ outcome: "retry", afterMs: 5_000 });
+    expect(fcm.sends()).toHaveLength(2);
+  });
+
+  test("a second rejected access token in a row is a failed send, not another refresh", async () => {
+    const fcm = setup([
+      () => json({ error: { status: "UNAUTHENTICATED" } }, 401),
+      () => json({ error: { status: "UNAUTHENTICATED" } }, 401),
+    ]);
+    expect(await fcm.client.send("a")).toEqual({ outcome: "failed", status: 401 });
+    expect(fcm.sends()).toHaveLength(2);
+    expect(fcm.tokenRequests()).toHaveLength(2);
   });
 
   test("reports other refusals as failed", async () => {

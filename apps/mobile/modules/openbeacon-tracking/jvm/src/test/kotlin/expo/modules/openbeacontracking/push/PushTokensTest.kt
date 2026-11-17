@@ -3,6 +3,7 @@ package expo.modules.openbeacontracking.push
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -26,15 +27,15 @@ class PushTokensTest {
   private val tokens = PushTokens(store) { now }
 
   private fun registered(token: String = "token-1") {
-    assertTrue(tokens.confirm(scope, null, pushAvailable = true))
+    assertNotNull(tokens.confirm(scope, null, pushAvailable = true))
     assertTrue(tokens.receive(token))
   }
 
   @Test
   fun asksForATokenOnlyOnceTheServerSaysPushIsAvailable() {
-    assertFalse(tokens.confirm(scope, null, pushAvailable = false))
+    assertNull(tokens.confirm(scope, null, pushAvailable = false))
     assertNull(tokens.pending(scope))
-    assertTrue(tokens.confirm(scope, null, pushAvailable = true))
+    assertNotNull(tokens.confirm(scope, null, pushAvailable = true))
   }
 
   @Test
@@ -87,18 +88,30 @@ class PushTokensTest {
 
   @Test
   fun aFailedTokenFetchIsRetriedAtMostHourly() {
-    assertTrue(tokens.confirm(scope, null, pushAvailable = true))
+    assertNotNull(tokens.confirm(scope, null, pushAvailable = true))
     now += PushTokens.TOKEN_RETRY_MS - 1
-    assertFalse(tokens.confirm(scope, null, pushAvailable = true))
+    assertNull(tokens.confirm(scope, null, pushAvailable = true))
     now += 1
-    assertTrue(tokens.confirm(scope, null, pushAvailable = true))
+    assertNotNull(tokens.confirm(scope, null, pushAvailable = true))
   }
 
   @Test
-  fun aNewDeviceRegistrationSendsTheTokenAgain() {
+  fun aNewDeviceRegistrationSendsTheTokenAgainOnceItsServerHasPush() {
     registered()
     tokens.confirm(scope, "token-1", pushAvailable = true)
-    assertEquals("token-1", tokens.pending("[\"https://api.openbeacon.net\",\"user-1\",\"device-2\"]"))
+    val next = "[\"https://api.openbeacon.net\",\"user-1\",\"device-2\"]"
+    assertNull(tokens.pending(next))
+    assertNull(tokens.confirm(next, null, pushAvailable = true))
+    assertEquals("token-1", tokens.pending(next))
+  }
+
+  @Test
+  fun noTokenIsSentBeforeTheServerSaysItHasPush() {
+    registered()
+    val next = "[\"https://self-hosted.example\",\"user-1\",\"device-2\"]"
+    assertNull(tokens.pending(next))
+    tokens.confirm(next, null, pushAvailable = false)
+    assertNull(tokens.pending(next))
   }
 
   @Test
@@ -124,13 +137,26 @@ class PushTokensTest {
   }
 
   @Test
-  fun aTokenFetchedAfterSigningOutWaitsForTheNextAccount() {
-    assertTrue(tokens.confirm(scope, null, pushAvailable = true))
+  fun aTokenArrivingAfterSigningOutIsIgnored() {
+    val requested = assertNotNull(tokens.confirm(scope, null, pushAvailable = true))
     tokens.forget(scope)
+    assertFalse(tokens.receive("token-1", requested))
     assertFalse(tokens.receive("token-1"))
     val next = "[\"https://api.openbeacon.net\",\"user-2\",\"device-3\"]"
-    assertFalse(tokens.confirm(next, null, pushAvailable = true))
-    assertEquals("token-1", tokens.pending(next))
+    assertNull(tokens.pending(next))
+    assertNotNull(tokens.confirm(next, null, pushAvailable = true))
+    assertNull(tokens.pending(next))
+  }
+
+  @Test
+  fun aTokenFromTheLastAccountsRequestIsIgnoredByTheNextAccount() {
+    val old = assertNotNull(tokens.confirm(scope, null, pushAvailable = true))
+    tokens.forget(scope)
+    val next = "[\"https://api.openbeacon.net\",\"user-2\",\"device-3\"]"
+    val current = assertNotNull(tokens.confirm(next, null, pushAvailable = true))
+    assertFalse(tokens.receive("token-old", old))
+    assertTrue(tokens.receive("token-new", current))
+    assertEquals("token-new", tokens.pending(next))
   }
 
   @Test

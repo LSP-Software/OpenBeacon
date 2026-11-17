@@ -68,6 +68,7 @@ let reconcileVersion = 0;
 let flushPromise: Promise<void> | null = null;
 let flushWork: Promise<void> | null = null;
 let flushController: AbortController | null = null;
+let placeRoundTail: Promise<void> = Promise.resolve();
 let revokePromise: Promise<void> | null = null;
 type RevokeNotice = Exclude<Parameters<typeof showNotice>[0]["kind"], "compatibility">;
 let revokeNotice: RevokeNotice | null = null;
@@ -619,7 +620,7 @@ const takePushToken = (round: PlaceRound) => {
 
 const placeUploadFields = (
   transitions: readonly QueuedPlaceTransition[],
-  cursor: { value: string | null; notices: string | null } | null,
+  cursor: PlaceRound["cursor"],
   pushToken: string | null,
 ) => ({
   ...(transitions.length > 0
@@ -635,7 +636,7 @@ const placeUploadFields = (
         ),
       }
     : {}),
-  ...(cursor ? { placeAlertsCursor: cursor.value, noticesCursor: cursor.notices } : {}),
+  ...(cursor ? { placeAlertsCursor: cursor.placeAlerts, noticesCursor: cursor.notices } : {}),
   ...(pushToken ? { pushToken } : {}),
 });
 
@@ -648,7 +649,7 @@ const settlePlaceResponse = async (
   } & PlaceUpdates,
   sentPushToken: string | null,
 ) => {
-  if (round.pushScope && response.pushAvailable !== undefined) {
+  if (round.pushScope && !trackingPaused && response.pushAvailable !== undefined) {
     trackingModule.confirmPushToken(round.pushScope, sentPushToken, response.pushAvailable);
   }
   if (response.placeTransitions) {
@@ -884,7 +885,7 @@ const flushGroup = async (
 };
 
 type PlaceRound = {
-  cursor: { value: string | null; notices: string | null } | null;
+  cursor: { placeAlerts: string | null; notices: string | null } | null;
   deviceId: string;
   pushScope: string | null;
   pushToken: string | null;
@@ -931,15 +932,17 @@ const startPlaceRound = async (
     const group = transitions.get(transition.groupId) ?? [];
     if (group.length < 50) transitions.set(transition.groupId, [...group, transition]);
   }
-  const pushScope = getPushScope(device);
+  const pushScope = trackingPaused ? null : getPushScope(device);
   return {
-    cursor: {
-      value: getPlaceAlertsCursor(device.userId),
-      notices: getNoticesCursor(device.userId),
-    },
+    cursor: trackingPaused
+      ? null
+      : {
+          placeAlerts: getPlaceAlertsCursor(device.userId),
+          notices: getNoticesCursor(device.userId),
+        },
     deviceId: device.deviceId,
     pushScope,
-    pushToken: trackingModule.pendingPushToken(pushScope),
+    pushToken: pushScope ? trackingModule.pendingPushToken(pushScope) : null,
     retryAlone: new Map(),
     transitions,
     updates: null,
@@ -1002,11 +1005,20 @@ const flushPendingTrackingPointsInternal = async (
       ),
     );
     failed ||= alone.some((result) => result.status === "rejected");
-    if (round.updates && !signal.aborted) {
+    if (round.updates && !signal.aborted && !trackingPaused) {
       await tryCatch(applyPlaceUpdates({ updates: round.updates, userId: round.userId }));
     }
   }
   if (failed) throw new Error("Tracking upload failed");
+};
+
+const inPlaceRound = <T>(work: () => Promise<T>): Promise<T> => {
+  const run = placeRoundTail.then(work);
+  placeRoundTail = run.then(
+    () => {},
+    () => {},
+  );
+  return run;
 };
 
 export const flushPendingTrackingPoints = (force = false): Promise<void> => {
@@ -1019,7 +1031,9 @@ export const flushPendingTrackingPoints = (force = false): Promise<void> => {
 
   const controller = new AbortController();
   flushController = controller;
-  const work = flushPendingTrackingPointsInternal(force, controller.signal);
+  const work = placeRoundTail.then(() =>
+    flushPendingTrackingPointsInternal(force, controller.signal),
+  );
   flushWork = work;
   const current = Promise.race([
     work,
@@ -1034,6 +1048,10 @@ export const flushPendingTrackingPoints = (force = false): Promise<void> => {
     }
   });
   flushPromise = current;
+  placeRoundTail = current.then(
+    () => {},
+    () => {},
+  );
   return current;
 };
 
@@ -1053,34 +1071,38 @@ const showApiCompatibilityNotice = async () => {
   if (shown) markApiCompatibilityNotified();
 };
 
-const pollPlaceUpdates = async () => {
-  if (trackingPaused) return;
-  const trackingModule = await loadTrackingModule();
-  const device = await getRegisteredDeviceKey();
-  const groupId = trackingModule?.listProvisionedEpochKeys()[0]?.groupId;
-  if (!trackingModule || !device || !groupId) return;
-  const pushScope = getPushScope(device);
-  const pushToken = trackingModule.pendingPushToken(pushScope);
-  const response = await trpcClient.groupTracking.uploadBatch.mutate({
-    groupId,
-    points: [],
-    placeAlertsCursor: getPlaceAlertsCursor(device.userId),
-    noticesCursor: getNoticesCursor(device.userId),
-    ...(pushToken ? { pushToken } : {}),
+const pollPlaceUpdates = () =>
+  inPlaceRound(async () => {
+    if (trackingPaused) return;
+    const trackingModule = await loadTrackingModule();
+    const device = await getRegisteredDeviceKey();
+    const groupId = trackingModule?.listProvisionedEpochKeys()[0]?.groupId;
+    if (!trackingModule || !device || !groupId) return;
+    const pushScope = getPushScope(device);
+    const pushToken = trackingModule.pendingPushToken(pushScope);
+    const response = await trpcClient.groupTracking.uploadBatch.mutate({
+      groupId,
+      points: [],
+      placeAlertsCursor: getPlaceAlertsCursor(device.userId),
+      noticesCursor: getNoticesCursor(device.userId),
+      ...(pushToken ? { pushToken } : {}),
+    });
+    if (trackingPaused) return;
+    trackingModule.confirmPushToken(pushScope, pushToken, response.pushAvailable);
+    await applyPlaceUpdates({
+      updates: {
+        places: response.places,
+        placeAlerts: response.placeAlerts,
+        imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
+        notices: response.notices,
+      },
+      userId: device.userId,
+    });
   });
-  trackingModule.confirmPushToken(pushScope, pushToken, response.pushAvailable);
-  await applyPlaceUpdates({
-    updates: {
-      places: response.places,
-      placeAlerts: response.placeAlerts,
-      imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
-      notices: response.notices,
-    },
-    userId: device.userId,
-  });
-};
 
-const syncBackgroundTrackingInternal = async (reason: "upload" | "sharing" | "parked" | "push") => {
+export type UploadReason = "upload" | "sharing" | "parked" | "push";
+
+const syncBackgroundTrackingInternal = async (reason: UploadReason) => {
   if (getApiCompatibility()) {
     await refreshApiCompatibilityInBackground();
     if (!getApiCompatibility()) await dismissNotice("compatibility");
@@ -1120,9 +1142,7 @@ const syncBackgroundTrackingInternal = async (reason: "upload" | "sharing" | "pa
   }
 };
 
-export const syncBackgroundTracking = async (
-  reason: "upload" | "sharing" | "parked" | "push" = "upload",
-) => {
+export const syncBackgroundTracking = async (reason: UploadReason = "upload") => {
   const synced = await tryCatch(syncBackgroundTrackingInternal(reason));
   await settleImageKeyCatchUps();
   if (synced.error) throw synced.error;

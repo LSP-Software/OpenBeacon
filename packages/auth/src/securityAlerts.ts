@@ -1,5 +1,11 @@
 import type { OpenBeaconCache } from "@openbeacon/cache";
-import type { AccountNoticeType, Prisma, PrismaClient } from "@openbeacon/database";
+import {
+  type AccountNoticeType,
+  type NotificationType,
+  type Prisma,
+  type PrismaClient,
+  readDatabaseTime,
+} from "@openbeacon/database";
 import {
   type SecurityAlert,
   securityAlertSettings,
@@ -49,7 +55,7 @@ export const createSecurityAlerts = ({
   },
   push = null,
 }: {
-  db: Pick<PrismaClient, "user" | "accountNotice">;
+  db: Pick<PrismaClient, "user" | "accountNotice" | "$queryRaw">;
   sendSecurityAlertEmail: ((email: Parameters<typeof sendAlert>[0]) => Promise<unknown>) | null;
   now?: () => Date;
   runInBackground?: (task: Promise<unknown>) => void;
@@ -86,22 +92,25 @@ export const createSecurityAlerts = ({
       const device = "device" in alert ? alert.device : null;
       await Promise.all([
         noticeType && enabled?.phone
-          ? db.accountNotice
-              .create({
-                data: {
-                  userId: recipient.id,
-                  type: noticeType,
-                  excludeDeviceId,
-                  deviceName:
-                    alert.type === "device-removed" || alert.type === "other-sessions-signed-out"
-                      ? (alert.device?.name ?? null)
-                      : null,
-                  deviceModel: device?.model ?? null,
-                  devicePlatform: device?.platform ?? null,
-                  deletionDate: alert.type === "deletion-scheduled" ? alert.deletionDate : null,
-                },
-                select: { id: true },
-              })
+          ? readDatabaseTime(db)
+              .then((createdAt) =>
+                db.accountNotice.create({
+                  data: {
+                    userId: recipient.id,
+                    type: noticeType,
+                    excludeDeviceId,
+                    deviceName:
+                      alert.type === "device-removed" || alert.type === "other-sessions-signed-out"
+                        ? (alert.device?.name ?? null)
+                        : null,
+                    deviceModel: device?.model ?? null,
+                    devicePlatform: device?.platform ?? null,
+                    deletionDate: alert.type === "deletion-scheduled" ? alert.deletionDate : null,
+                    createdAt,
+                  },
+                  select: { id: true },
+                }),
+              )
               .then(({ id }) => push?.accountNotice(id))
           : null,
         sendSecurityAlertEmail && (enabled?.email ?? true)
@@ -199,11 +208,23 @@ const accountNoticeTypes = {
   "alerts-turned-off": null,
 } as const satisfies Record<SecurityAlert["type"], AccountNoticeType | null>;
 
+export const accountNoticeSettings = {
+  NEW_SIGN_IN: "NEW_SIGN_IN",
+  PASSWORD_CHANGED: "PASSWORD_CHANGED",
+  PASSWORD_RESET: "PASSWORD_CHANGED",
+  RECOVERY_PHRASE_CHANGED: "RECOVERY_PHRASE_CHANGED",
+  RECOVERY_PHRASE_RESET: "RECOVERY_PHRASE_CHANGED",
+  OTHER_SESSIONS_SIGNED_OUT: "OTHER_SESSIONS_SIGNED_OUT",
+  DEVICE_REMOVED: "DEVICE_REMOVED",
+  DELETION_SCHEDULED: "DELETION_SCHEDULED",
+} as const satisfies Record<AccountNoticeType, NotificationType>;
+
 const parseTurnedOff = (held: string): TurnedOffNotification[] => {
   const [heldType = "", heldChannel = "email"] = held.split(":");
   const type = notificationTypeSchema.safeParse(
-    { "new-sign-in": "NEW_SIGN_IN", "deletion-scheduled": "DELETION_SCHEDULED" }[heldType] ??
-      heldType,
+    (heldType in securityAlertSettings
+      ? securityAlertSettings[heldType as SecurityAlert["type"]]
+      : null) ?? heldType,
   );
   const channel = notificationChannelSchema.safeParse(heldChannel);
   if (!type.success || !channel.success) return [];

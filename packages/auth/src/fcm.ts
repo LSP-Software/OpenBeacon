@@ -90,7 +90,7 @@ export const createFcmClient = ({
     return pending;
   };
 
-  const send = async (token: string): Promise<FcmSendResult> => {
+  const send = async (token: string, refreshed = false): Promise<FcmSendResult> => {
     const accessToken = await tryCatch(getAccessToken());
     if (accessToken.error) return { outcome: "retry", afterMs: 5_000 };
     const response = await tryCatch(
@@ -116,9 +116,9 @@ export const createFcmClient = ({
     if (response.error) return { outcome: "retry", afterMs: 5_000 };
     if (response.data.ok) return { outcome: "sent" };
     const { status } = response.data;
-    if (status === 401) {
+    if (status === 401 && !refreshed) {
       cached = null;
-      return { outcome: "retry", afterMs: 0 };
+      return send(token, true);
     }
     if (status === 429 || status >= 500) {
       const retryAfter = Number(response.data.headers.get("retry-after"));
@@ -139,10 +139,22 @@ export const createFcmClient = ({
     const errorCodes = details.flatMap((detail) =>
       detail && typeof detail === "object" && "errorCode" in detail ? [detail.errorCode] : [],
     );
+    const badFields = details.flatMap((detail) =>
+      detail &&
+      typeof detail === "object" &&
+      "fieldViolations" in detail &&
+      Array.isArray(detail.fieldViolations)
+        ? (detail.fieldViolations as unknown[]).flatMap((violation) =>
+            violation && typeof violation === "object" && "field" in violation
+              ? [violation.field]
+              : [],
+          )
+        : [],
+    );
     if (
       errorCodes.includes("UNREGISTERED") ||
-      errorCodes.includes("INVALID_ARGUMENT") ||
-      errorStatus === "INVALID_ARGUMENT"
+      ((errorCodes.includes("INVALID_ARGUMENT") || errorStatus === "INVALID_ARGUMENT") &&
+        badFields.includes("message.token"))
     ) {
       return { outcome: "unregistered" };
     }

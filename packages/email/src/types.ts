@@ -1,7 +1,7 @@
 import type {
   devicePlatformSchema,
   notificationChannelSchema,
-  notificationTypes,
+  notificationTypeSchema,
 } from "@openbeacon/schemas";
 import type { z } from "zod";
 
@@ -60,10 +60,8 @@ export type SecurityAlert =
   | { type: "deletion-scheduled"; deletionDate: Date }
   | { type: "alerts-turned-off"; alerts: TurnedOffNotification[] };
 
-type NotificationType = keyof typeof notificationTypes;
-
 export type TurnedOffNotification = {
-  type: NotificationType;
+  type: z.infer<typeof notificationTypeSchema>;
   channel: z.infer<typeof notificationChannelSchema>;
 };
 
@@ -78,4 +76,4 @@ export const securityAlertSettings = {
   "deletion-scheduled": "DELETION_SCHEDULED",
   "account-deleted": null,
   "alerts-turned-off": null,
-} as const satisfies Record<SecurityAlert["type"], NotificationType | null>;
+} as const satisfies Record<SecurityAlert["type"], TurnedOffNotification["type"] | null>;

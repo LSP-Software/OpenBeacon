@@ -34,7 +34,8 @@ object PushRuntime {
   }
 
   fun confirm(context: Context, scope: String, sent: String?, pushAvailable: Boolean) {
-    if (!tokens(context).confirm(scope, sent, pushAvailable) || !initialize(context)) return
+    val requested = tokens(context).confirm(scope, sent, pushAvailable) ?: return
+    if (!initialize(context)) return
     val messaging = FirebaseMessaging.getInstance()
     messaging.isAutoInitEnabled = true
     messaging.token.addOnCompleteListener { task ->
@@ -43,12 +44,12 @@ object PushRuntime {
         Log.w(TAG, "Couldn't get a push token, so push is off for now.", task.exception)
         return@addOnCompleteListener
       }
-      receive(context, token)
+      receive(context, token, requested)
     }
   }
 
-  fun receive(context: Context, token: String) {
-    if (tokens(context).receive(token)) TrackingUploadService.start(context, TrackingUploadService.REASON_PUSH)
+  fun receive(context: Context, token: String, requested: Long? = null) {
+    if (tokens(context).receive(token, requested)) TrackingUploadService.start(context, TrackingUploadService.REASON_PUSH)
   }
 
   fun forget(context: Context, scope: String): Boolean {

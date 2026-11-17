@@ -1,8 +1,10 @@
 package expo.modules.openbeacontracking.capture
 
-class UploadWakeGate {
+class UploadWakeGate(
+  private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
+) {
   private val running = mutableSetOf<Int>()
-  private var starting = 0
+  private val starting = ArrayDeque<Long>()
   private var followUp = false
 
   @Synchronized
@@ -11,13 +13,13 @@ class UploadWakeGate {
       followUp = true
       return false
     }
-    starting += 1
+    starting.addLast(clock())
     return true
   }
 
   @Synchronized
   fun started(taskId: Int) {
-    if (running.add(taskId) && starting > 0) starting -= 1
+    if (running.add(taskId)) starting.removeFirstOrNull()
   }
 
   @Synchronized
@@ -29,15 +31,23 @@ class UploadWakeGate {
   @Synchronized
   fun stopped(): Boolean {
     running.clear()
-    starting = 0
+    starting.clear()
     return takeFollowUp()
   }
 
-  private fun isBusy() = starting > 0 || running.isNotEmpty()
+  private fun isBusy(): Boolean {
+    val now = clock()
+    while (starting.firstOrNull()?.let { now - it >= START_TIMEOUT_MS } == true) starting.removeFirst()
+    return starting.isNotEmpty() || running.isNotEmpty()
+  }
 
   private fun takeFollowUp(): Boolean {
     if (isBusy() || !followUp) return false
     followUp = false
     return true
+  }
+
+  companion object {
+    const val START_TIMEOUT_MS = 30_000L
   }
 }

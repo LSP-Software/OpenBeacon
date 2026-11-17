@@ -43,12 +43,14 @@ export const showEventNotice = async ({
   body: string | null;
   groupName: string | null;
   key: string;
-  kind: "alert" | "placesChanged" | "groupActivity" | "accountAlert";
+  kind: Parameters<
+    NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>["showEventNotice"]
+  >[0];
   link: { href: Href; url: string };
   title: string;
 }): Promise<boolean> => {
   if (AppState.currentState === "active") {
-    showInAppNotice({ title, body, href: link.href });
+    showInAppNotice({ title, body: body ?? groupName, href: link.href });
     return true;
   }
   const trackingModule = await loadTrackingModule();

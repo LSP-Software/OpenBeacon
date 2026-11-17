@@ -1,9 +1,4 @@
-export const FIREBASE_ENV_NAMES = [
-  "FIREBASE_APP_ID",
-  "FIREBASE_API_KEY",
-  "FIREBASE_PROJECT_ID",
-  "FIREBASE_SENDER_ID",
-] as const;
+import { FIREBASE_ENV_NAMES } from "../plugins/withFirebasePush.js";
 
 export const checkFirebaseValues = ({
   apk,
@@ -18,10 +13,10 @@ export const checkFirebaseValues = ({
   return apk
     ? {
         problem: "warn",
-        message: `${names} not set in apps/mobile/.env, so this APK is built without push notifications.`,
+        message: `${names} not set in apps/mobile/.env, so this APK is built without push wake-ups.`,
       }
     : {
         problem: "fail",
-        message: `${names} not set, so push notifications would be turned off. Set them in apps/mobile/.env. See docs/development/android-release-builds.md.`,
+        message: `${names} not set, so push wake-ups would be turned off. Set them in apps/mobile/.env. See docs/development/android-release-builds.md.`,
       };
 };

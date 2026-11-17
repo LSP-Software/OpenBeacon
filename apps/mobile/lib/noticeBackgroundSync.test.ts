@@ -99,20 +99,28 @@ beforeEach(() => {
 });
 
 describe("account notices", () => {
-  test("name the signed-in device with the right article, or leave it out", () => {
+  test("name the signed-in device by its model or name, without an article", () => {
     const signIn = (
       device: { name: string | null; model: string | null; platform: string | null } | null,
-    ) => describeAccountNotice(account("NEW_SIGN_IN", { device })).title;
-    expect(signIn({ name: null, model: "Pixel 8", platform: "android" })).toBe(
-      "New sign-in on a Pixel 8",
+    ) => describeAccountNotice(account("NEW_SIGN_IN", { device }));
+    const advice = "signed in to your account. If this wasn’t you, remove it in Devices.";
+    expect(signIn({ name: "Sam’s phone", model: "SM-S911B", platform: "android" })).toMatchObject({
+      title: "New sign-in",
+      body: `SM-S911B ${advice}`,
+    });
+    expect(signIn({ name: "Sam’s phone", model: null, platform: "android" }).body).toBe(
+      `Sam’s phone ${advice}`,
     );
-    expect(signIn({ name: null, model: "iPhone 15", platform: "ios" })).toBe(
-      "New sign-in on an iPhone 15",
+    expect(signIn(null).body).toBe(`A new phone or tablet ${advice}`);
+  });
+
+  test("match the advice in the security emails", () => {
+    expect(describeAccountNotice(account("PASSWORD_CHANGED")).body).toBe(
+      "If this wasn’t you, use Forgot password on the sign-in screen to choose a new one.",
     );
-    expect(signIn({ name: null, model: null, platform: "android" })).toBe(
-      "New sign-in on an Android device",
+    expect(describeAccountNotice(account("DELETION_SCHEDULED")).body).toBe(
+      "Sign in within 7 days to cancel it.",
     );
-    expect(signIn(null)).toBe("New sign-in");
   });
 
   test("open the screen that deals with the change", () => {
@@ -146,7 +154,7 @@ describe("account notices", () => {
       "Old tablet was removed from your account",
     );
     expect(describeAccountNotice(account("OTHER_SESSIONS_SIGNED_OUT", { device })).body).toBe(
-      "Signed out from Old tablet.",
+      "Old tablet signed out your other phones and tablets.",
     );
     expect(describeAccountNotice(account("OTHER_SESSIONS_SIGNED_OUT")).body).toBeNull();
   });
@@ -198,7 +206,7 @@ describe("showing notices", () => {
       {
         kind: "accountAlert",
         title: "Your password was changed",
-        body: "If this wasn’t you, reset your password and sign out other sessions.",
+        body: "If this wasn’t you, use Forgot password on the sign-in screen to choose a new one.",
         groupName: null,
         url: "openbeacon:///account/password",
       },
