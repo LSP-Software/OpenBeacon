@@ -3,6 +3,8 @@ import { tryCatch } from "@openbeacon/shared";
 import { copyFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
+import { FIREBASE_ENV_NAMES } from "../plugins/withFirebasePush.js";
+import { checkFirebaseValues } from "./firebaseBuildCheck.ts";
 
 const projectRoot = resolve(import.meta.dir, "..");
 const allowDirty = process.argv.includes("--allow-dirty");
@@ -62,6 +64,13 @@ if (!googleWebClientId) {
     "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is not set, so Google sign-in would be turned off. Set it in apps/mobile/.env.",
   );
 }
+
+const firebaseEnv = Object.fromEntries(
+  FIREBASE_ENV_NAMES.map((name) => [name, process.env[name] ?? env[name]]),
+);
+const firebase = checkFirebaseValues({ apk, env: firebaseEnv });
+if (firebase.problem === "fail") fail(firebase.message);
+if (firebase.problem === "warn") console.warn(`\n${firebase.message}\n`);
 
 const credentialsPath = resolve(
   projectRoot,
@@ -153,7 +162,11 @@ console.log(`Signing with ${keyAlias}, SHA1 ${keySha1}`);
 if (allowDirty) console.log("Including uncommitted changes");
 
 runVisible(["bun", "run", "prisma", "generate"], resolve(projectRoot, "../../packages/database"));
-runVisible(["bunx", "expo", "prebuild", "-p", "android", "--clean"], projectRoot);
+runVisible(["bunx", "expo", "prebuild", "-p", "android", "--clean"], projectRoot, {
+  ...firebaseEnv,
+  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: googleWebClientId,
+  NODE_ENV: "production",
+});
 runVisible(["./gradlew", apk ? "assembleRelease" : "bundleRelease"], join(projectRoot, "android"), {
   ORG_GRADLE_PROJECT_openbeaconCredentials: credentialsPath,
 });

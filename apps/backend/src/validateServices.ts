@@ -1,5 +1,6 @@
 import { checkImageStorage } from "@openbeacon/api/checkStorage.ts";
 import { checkMapStorage } from "@openbeacon/api/mapStorage.ts";
+import { fcm } from "@openbeacon/auth";
 import { checkEmail, emailEnabled } from "@openbeacon/email";
 import { pingRedis } from "@openbeacon/cache";
 import { cache } from "./cache.ts";
@@ -23,4 +24,5 @@ await checkServices({
   "Image storage": checkImageStorage,
   "Map storage": checkMapStorage,
   ...(emailEnabled ? { Email: checkEmail } : {}),
+  ...(fcm ? { "Push (FCM)": fcm.getAccessToken } : {}),
 });

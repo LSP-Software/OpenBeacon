@@ -1,7 +1,11 @@
-import { GroupEventType, type Prisma, type PrismaClient } from "@openbeacon/database";
+import {
+  GroupEventType,
+  type Prisma,
+  type PrismaClient,
+  readDatabaseTime,
+} from "@openbeacon/database";
 import type { groupHistoryCategorySchema } from "@openbeacon/schemas";
 import type z from "zod";
-import { readDatabaseTime } from "./databaseTime.ts";
 import {
   HISTORY_RETENTION_MS,
   placeTransitionSelect,
@@ -26,6 +30,34 @@ const categoryEventTypes = {
   ],
   places: [GroupEventType.PLACE_ADDED, GroupEventType.PLACE_UPDATED, GroupEventType.PLACE_DELETED],
 } satisfies Record<z.infer<typeof groupHistoryCategorySchema>, GroupEventType[]>;
+
+export const groupEventSelect = {
+  id: true,
+  groupId: true,
+  type: true,
+  role: true,
+  name: true,
+  previousName: true,
+  emoji: true,
+  createdAt: true,
+  actor: personSelect,
+  subject: personSelect,
+} as const;
+
+export const toGroupEventView = (
+  event: Prisma.GroupEventGetPayload<{ select: typeof groupEventSelect }>,
+) => ({
+  kind: "group" as const,
+  id: event.id,
+  at: event.createdAt,
+  type: event.type,
+  role: event.role,
+  name: event.name,
+  previousName: event.previousName,
+  emoji: event.emoji,
+  actor: event.actor ? { userId: event.actor.id, name: event.actor.name } : null,
+  subject: event.subject ? { userId: event.subject.id, name: event.subject.name } : null,
+});
 
 export const recordGroupEvent = async (
   db: Prisma.TransactionClient,
@@ -66,17 +98,7 @@ export const readGroupHistory = async ({
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: limit,
-          select: {
-            id: true,
-            type: true,
-            role: true,
-            name: true,
-            previousName: true,
-            emoji: true,
-            createdAt: true,
-            actor: personSelect,
-            subject: personSelect,
-          },
+          select: groupEventSelect,
         }),
     !includeArrivals
       ? []
@@ -94,18 +116,7 @@ export const readGroupHistory = async ({
         }),
   ]);
   const items = [
-    ...events.map((event) => ({
-      kind: "group" as const,
-      id: event.id,
-      at: event.createdAt,
-      type: event.type,
-      role: event.role,
-      name: event.name,
-      previousName: event.previousName,
-      emoji: event.emoji,
-      actor: event.actor ? { userId: event.actor.id, name: event.actor.name } : null,
-      subject: event.subject ? { userId: event.subject.id, name: event.subject.name } : null,
-    })),
+    ...events.map(toGroupEventView),
     ...transitions.map((transition) => ({
       kind: "place" as const,
       at: transition.occurredAt,

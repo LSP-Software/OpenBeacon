@@ -1,10 +1,17 @@
 import { envSchema as apiEnvSchema, mapEnvSchema } from "@openbeacon/api/envSchema.ts";
+import { fcmEnvSchema, resolveFcmSettings } from "@openbeacon/auth/fcm.ts";
 import { emailEnvSchema, findEmailSettingsError } from "@openbeacon/email/config.ts";
 import { validateEnv } from "@openbeacon/shared";
 import { envSchema as backendEnvSchema } from "./envSchema.ts";
 
 validateEnv({
-  schemas: { ...backendEnvSchema, ...apiEnvSchema, ...mapEnvSchema, ...emailEnvSchema },
+  schemas: {
+    ...backendEnvSchema,
+    ...apiEnvSchema,
+    ...mapEnvSchema,
+    ...emailEnvSchema,
+    ...fcmEnvSchema,
+  },
   source: process.env,
   checks: [
     () =>
@@ -17,6 +24,7 @@ validateEnv({
       Boolean(process.env["GOOGLE_CLIENT_SECRET"]?.trim())
         ? "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET: both are required for Google sign-in"
         : null,
+    () => resolveFcmSettings(process.env).error,
     () => {
       const emailError = findEmailSettingsError();
       return emailError ? `Email: ${emailError}` : null;

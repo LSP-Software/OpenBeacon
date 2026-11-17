@@ -4,6 +4,7 @@ const query = mock(async () => []);
 const s3 = mock(async () => {});
 const mapStorage = mock(async () => {});
 const email = mock(async () => {});
+const getAccessToken = mock(async () => "access-token");
 const ping = mock(async (_redisUrl: string) => {});
 const findMissingPermissions = mock(async () => ({
   missing: [] as string[],
@@ -18,6 +19,7 @@ mock.module("@openbeacon/cache", () => ({ pingRedis: ping }));
 mock.module("@openbeacon/api/checkStorage.ts", () => ({ checkImageStorage: s3 }));
 mock.module("@openbeacon/api/mapStorage.ts", () => ({ checkMapStorage: mapStorage }));
 mock.module("@openbeacon/email", () => ({ checkEmail: email, emailEnabled: true }));
+mock.module("@openbeacon/auth", () => ({ fcm: { getAccessToken } }));
 mock.module("./checkServices.ts", () => ({
   checkServices: async (services: typeof checks) => {
     checks = services;
@@ -34,18 +36,21 @@ test("wires each configured service into startup validation", async () => {
     "Image storage",
     "Map storage",
     "Email",
+    "Push (FCM)",
   ]);
   await Promise.all([
     checks["PostgreSQL"]?.(),
     checks["Image storage"]?.(),
     checks["Map storage"]?.(),
     checks["Email"]?.(),
+    checks["Push (FCM)"]?.(),
   ]);
   expect(query).toHaveBeenCalledTimes(1);
   expect(query.mock.calls[0]?.[0]).toEqual(["SELECT 1"]);
   expect(s3).toHaveBeenCalledTimes(1);
   expect(mapStorage).toHaveBeenCalledTimes(1);
   expect(email).toHaveBeenCalledTimes(1);
+  expect(getAccessToken).toHaveBeenCalledTimes(1);
 });
 
 test("the Redis check fails and says how to grant the commands the Redis user can't run", async () => {

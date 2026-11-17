@@ -10,6 +10,7 @@ const queueDeletions: Array<{ deviceId: string | undefined; userId: string }> = 
 let signOuts = 0;
 let picturesAtSignOut = -1;
 let trackingRevocations = 0;
+let pushTokenForgets = 0;
 let sessionUserId: string | null = "user-a";
 let registerError: Error | null = null;
 let stalledDelete: string | null = null;
@@ -119,6 +120,10 @@ mock.module("./tracking.ts", () => ({
   },
   revokeTrackingAccess: async () => {
     trackingRevocations += 1;
+  },
+  forgetPushToken: async () => {
+    pushTokenForgets += 1;
+    return null;
   },
 }));
 
@@ -439,6 +444,7 @@ describe("ending a session", () => {
     queueDeletions.length = 0;
     signOuts = 0;
     trackingRevocations = 0;
+    pushTokenForgets = 0;
     sessionUserId = "user-a";
     providersError = null;
     providerRequests.length = 0;
@@ -459,6 +465,7 @@ describe("ending a session", () => {
   const observe = (deviceId: string) => ({
     signedOut: signOuts > 0,
     trackingRevoked: trackingRevocations > 0,
+    pushTokenForgotten: pushTokenForgets > 0,
     registration: storageValues.has("encryption.device.registered"),
     queuedPoints: queueDeletions.length === 0,
     pendingSharingChanges: storageValues.has(pendingSharingKey),
@@ -553,6 +560,7 @@ describe("ending a session", () => {
 
     expect(observe(device.deviceId)).toEqual({
       trackingRevoked: true,
+      pushTokenForgotten: true,
       registration: false,
       pendingJoinCodes: false,
       ...expected,

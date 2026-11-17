@@ -11,6 +11,7 @@ import {
   pollGroupTrackingPoints,
   uploadGroupTrackingBatch,
 } from "../../lib/groupTracking.ts";
+import { readGroupNotices } from "../../lib/accountNotices.ts";
 import { lockGroupMemberForWrite } from "../../lib/groupWriteChecks.ts";
 import { readImageKeysNeedCatchUp } from "../../lib/imageKeys.ts";
 import {
@@ -163,19 +164,30 @@ export const groupTrackingRouter = {
         throw transaction.error;
       }
       const result = transaction.data;
-      const [placeUpdates, imageKeysNeedCatchUp] =
+      if ("placeTransitions" in result) {
+        ctx.push?.placeTransitions({
+          deviceId: ctx.deviceId,
+          clientIds: result.placeTransitions.accepted,
+        });
+      }
+      const [placeUpdates, imageKeysNeedCatchUp, notices] = await Promise.all([
         input.placeAlertsCursor === undefined
-          ? [null, null]
-          : await Promise.all([
-              tryCatch(
-                Promise.all([
-                  readPlacesSummary({ db: ctx.db, userId }),
-                  readPlaceAlerts({ cursor: input.placeAlertsCursor, db: ctx.db, userId }),
-                ]),
-              ),
-              tryCatch(readImageKeysNeedCatchUp({ db: ctx.db, userId })),
-            ]);
+          ? null
+          : tryCatch(
+              Promise.all([
+                readPlacesSummary({ db: ctx.db, userId }),
+                readPlaceAlerts({ cursor: input.placeAlertsCursor, db: ctx.db, userId }),
+              ]),
+            ),
+        input.placeAlertsCursor === undefined
+          ? null
+          : tryCatch(readImageKeysNeedCatchUp({ db: ctx.db, userId })),
+        input.noticesCursor === undefined
+          ? null
+          : tryCatch(readGroupNotices({ cursor: input.noticesCursor, db: ctx.db, userId })),
+      ]);
       const catchUpFields = {
+        ...(notices && !notices.error ? { notices: notices.data } : {}),
         ...(placeUpdates && !placeUpdates.error
           ? { places: placeUpdates.data[0], placeAlerts: placeUpdates.data[1] }
           : {}),

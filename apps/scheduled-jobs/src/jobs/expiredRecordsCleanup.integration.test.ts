@@ -114,6 +114,17 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Expired records 
         role: "MEMBER" as const,
       })),
     });
+    await prisma.accountNotice.createMany({
+      data: [
+        { name: "oldNotice", createdAt: at(-day - 60_000) },
+        { name: "newNotice", createdAt: at(-day + 60_000) },
+      ].map(({ name, createdAt }) => ({
+        id: `${prefix}-${name}`,
+        userId: memberId,
+        type: "NEW_SIGN_IN" as const,
+        createdAt,
+      })),
+    });
     await prisma.feedback.createMany({
       data: [
         { name: "oldFeedback", createdAt: at(-30 * day - 60_000) },
@@ -151,6 +162,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Expired records 
     ]);
     expect(await ids(prisma.feedback.findMany({ where: { id: { startsWith: prefix } } }))).toEqual([
       "newFeedback",
+    ]);
+    expect(await ids(prisma.accountNotice.findMany({ where: { userId: memberId } }))).toEqual([
+      "newNotice",
     ]);
   });
 

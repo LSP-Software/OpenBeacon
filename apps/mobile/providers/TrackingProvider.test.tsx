@@ -23,6 +23,7 @@ let reconcileCalls: Array<{ startCapture: boolean; force: boolean }> = [];
 let reconcileChanged = false;
 let keyAccessChangePending = false;
 let flushCalls = 0;
+let accountSyncs = 0;
 let flushModes: boolean[] = [];
 let revokeCalls = 0;
 let revokeInputs: Array<{ keepDeviceRegistration: boolean }> = [];
@@ -57,6 +58,9 @@ const trackingService = {
     flushCalls += 1;
     flushModes.push(force);
     if (failFlush) throw new Error("offline");
+  },
+  syncAccountNotices: async () => {
+    accountSyncs += 1;
   },
   revokeTrackingAccess: async (input: { keepDeviceRegistration: boolean }) => {
     revokeCalls += 1;
@@ -160,6 +164,7 @@ describe("TrackingProvider", () => {
     reconcileGate = null;
     recoveryGate = null;
     flushCalls = 0;
+    accountSyncs = 0;
     flushModes = [];
     revokeCalls = 0;
     revokeInputs = [];
@@ -193,6 +198,26 @@ describe("TrackingProvider", () => {
     expect(flushCalls).toBe(1);
     expect(flushModes).toEqual([true]);
     expect(revokeCalls).toBe(0);
+  });
+
+  test("checks for account notices on launch and whenever the app comes back", async () => {
+    await renderProvider();
+    await flushEffects();
+    expect(accountSyncs).toBe(1);
+
+    appStateListener?.("background");
+    appStateListener?.("active");
+    await flushEffects();
+    expect(accountSyncs).toBe(2);
+  });
+
+  test("a phone that isn't set up yet doesn't check for account notices", async () => {
+    thisDeviceState = "registered";
+    await renderProvider();
+    appStateListener?.("background");
+    appStateListener?.("active");
+    await flushEffects();
+    expect(accountSyncs).toBe(0);
   });
 
   test("a phone that isn't set up yet doesn't contact the server until it's active", async () => {

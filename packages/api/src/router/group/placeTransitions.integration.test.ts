@@ -4,7 +4,7 @@ import { Prisma, prisma } from "@openbeacon/database";
 import { encodeBase64 } from "@openbeacon/encryption";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { countTrackingPoints, testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
-import { encodePlaceAlertsCursor } from "../../lib/placeTransitions.ts";
+import { encodeAlertsCursor } from "../../lib/placeTransitions.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
@@ -233,9 +233,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("a batch with neither points nor transitions is refused", async () => {
       await expect(
         caller(member, memberPhone).groupTracking.uploadBatch({ groupId, points: [] }),
-      ).rejects.toThrow(
-        "An upload needs at least one point, place transition or place alerts cursor",
-      );
+      ).rejects.toThrow("An upload needs at least one point, place transition or cursor");
     });
 
     test("a paused phone can read place updates with only a cursor", async () => {
@@ -476,7 +474,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       );
       await seedTransitions(ids.map((id) => ({ id, createdAt })));
       const seen: string[] = [];
-      let cursor = encodePlaceAlertsCursor({
+      let cursor = encodeAlertsCursor({
         createdAt: new Date(createdAt.getTime() - 1),
         id: "",
       });
@@ -515,7 +513,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         },
         { id: `${prefix}-unsettled`, createdAt: new Date(Date.now() - 1_000) },
       ]);
-      const start = encodePlaceAlertsCursor({ createdAt: new Date(base - 1_000), id: "" });
+      const start = encodeAlertsCursor({ createdAt: new Date(base - 1_000), id: "" });
       const firstPage = await readAlerts(owner, ownerPhone, start);
       expect(firstPage.placeAlerts?.alerts).toHaveLength(50);
       expect(firstPage.placeAlerts?.alerts[0]).toEqual({
@@ -551,7 +549,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("a short page moves the cursor to the settled boundary without skipping rows at it", async () => {
       const lateId = `${prefix}-late`;
       await seedTransitions([{ id: lateId, createdAt: new Date(Date.now() - 1_000) }]);
-      const start = encodePlaceAlertsCursor({ createdAt: new Date(Date.now() - minute), id: "" });
+      const start = encodeAlertsCursor({ createdAt: new Date(Date.now() - minute), id: "" });
       const shortPage = await readAlerts(owner, ownerPhone, start);
       expect(shortPage.placeAlerts?.alerts).toEqual([]);
       const boundary = shortPage.placeAlerts?.cursor ?? "";
@@ -576,7 +574,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const page = await readAlerts(
         owner,
         ownerPhone,
-        encodePlaceAlertsCursor({ createdAt: new Date(0), id: "" }),
+        encodeAlertsCursor({ createdAt: new Date(0), id: "" }),
       );
       expect(page.placeAlerts?.alerts.map(({ id }) => id)).toEqual([`${prefix}-after-join`]);
       const recent = await caller(owner, ownerPhone).placeTransitions.recent({ groupId });
@@ -608,7 +606,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const page = await readAlerts(
         owner,
         ownerPhone,
-        encodePlaceAlertsCursor({ createdAt: new Date(now - 3 * day), id: "" }),
+        encodeAlertsCursor({ createdAt: new Date(now - 3 * day), id: "" }),
       );
       expect(page.placeAlerts?.alerts.map(({ id }) => id)).toEqual([`${prefix}-today`]);
       const recent = await caller(owner, ownerPhone).placeTransitions.recent({ groupId });

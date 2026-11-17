@@ -6,7 +6,10 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.location.Location
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.SystemClock
 import android.text.format.DateFormat
 import android.text.format.DateUtils
 import androidx.room.Room
@@ -19,6 +22,10 @@ import expo.modules.openbeacontracking.Notices
 import expo.modules.openbeacontracking.TrackingRuntime
 import expo.modules.openbeacontracking.keys.InMemoryEpochKeyStore
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
+import expo.modules.openbeacontracking.places.InMemoryPlaceStore
+import expo.modules.openbeacontracking.places.InMemoryPlaceTransitionQueue
+import expo.modules.openbeacontracking.places.PlaceDetection
+import expo.modules.openbeacontracking.places.PlaceGeofence
 import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import expo.modules.openbeacontracking.queue.RoomCiphertextQueue
@@ -35,6 +42,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowNetwork
+import org.robolectric.shadows.ShadowNetworkCapabilities
 import java.util.Calendar
 import java.util.Date
 
@@ -44,6 +52,7 @@ class TrackingCaptureServiceTest {
   private var controller: ServiceController<TrackingCaptureService>? = null
   private val keysField = TrackingRuntime::class.java.getDeclaredField("epochKeyStore").apply { isAccessible = true }
   private val queueField = TrackingRuntime::class.java.getDeclaredField("ciphertextQueue").apply { isAccessible = true }
+  private val placeDetectionField = TrackingRuntime::class.java.getDeclaredField("placeDetection").apply { isAccessible = true }
 
   @Before
   fun setUp() {
@@ -66,6 +75,7 @@ class TrackingCaptureServiceTest {
     TrackingRuntime.setCaptureEnabled(application, false)
     keysField.set(null, null)
     queueField.set(null, null)
+    placeDetectionField.set(null, null)
   }
 
   @Test
@@ -280,6 +290,90 @@ class TrackingCaptureServiceTest {
       action = TrackingCaptureService.ACTION_STOP
     }, 0, 3)
     assertTrue(connectivity.networkCallbacks.isEmpty())
+  }
+
+  @Test
+  fun aConfirmedArrivalStartsOneUploadInsideTheUploadInterval() {
+    queueField.set(null, RoomCiphertextQueue(Room.inMemoryDatabaseBuilder(application, CiphertextQueueDatabase::class.java).allowMainThreadQueries().build()))
+    val transitions = InMemoryPlaceTransitionQueue()
+    placeDetectionField.set(null, PlaceDetection(InMemoryPlaceStore().apply { replaceGroup("group", listOf(PlaceGeofence("group", "home", 51.5, -0.1, 100.0))) }, transitions))
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.2:"))
+    val connectivity = application.getSystemService(ConnectivityManager::class.java)
+    shadowOf(connectivity).setNetworkCapabilities(connectivity.activeNetwork, ShadowNetworkCapabilities.newInstance().apply { shadowOf(this).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) })
+    val generation = TrackingRuntime.captureCommands.start()
+    val service = createService()
+    service.onStartCommand(startIntent(generation), 0, 1)
+    val enqueue = TrackingCaptureService::class.java.getDeclaredMethod("enqueueEncryptedFix", Location::class.java, Long::class.javaPrimitiveType).apply { isAccessible = true }
+    val requestUploadIfDue = TrackingCaptureService::class.java.getDeclaredMethod("requestUploadIfDue", Long::class.javaPrimitiveType).apply { isAccessible = true }
+    val nowMs = System.currentTimeMillis()
+    val fix = { offset: Int, latitude: Double, atMs: Long ->
+      Location("test").apply {
+        this.latitude = latitude
+        longitude = -0.1
+        accuracy = 10f
+        time = atMs
+        elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos() + offset
+      }
+    }
+    while (shadowOf(application).nextStartedService != null) Unit
+
+    enqueue.invoke(service, fix(1, 51.51, nowMs - 300_000L), generation)
+    assertEquals("upload", shadowOf(application).nextStartedService.getStringExtra(TrackingUploadService.EXTRA_REASON))
+    enqueue.invoke(service, fix(2, 51.5, nowMs - 200_000L), generation)
+    assertEquals(null, shadowOf(application).nextStartedService)
+    assertFalse(transitions.hasAny("test-owner"))
+
+    enqueue.invoke(service, fix(3, 51.5, nowMs - 60_000L), generation)
+    requestUploadIfDue.invoke(service, generation)
+    assertTrue(transitions.hasAny("test-owner"))
+    assertEquals("upload", shadowOf(application).nextStartedService.getStringExtra(TrackingUploadService.EXTRA_REASON))
+    assertEquals(null, shadowOf(application).nextStartedService)
+  }
+
+  @Test
+  fun anArrivalQueuedOfflineUploadsWhenThePhoneIsBackOnline() {
+    queueField.set(null, RoomCiphertextQueue(Room.inMemoryDatabaseBuilder(application, CiphertextQueueDatabase::class.java).allowMainThreadQueries().build()))
+    val transitions = InMemoryPlaceTransitionQueue()
+    placeDetectionField.set(null, PlaceDetection(InMemoryPlaceStore().apply { replaceGroup("group", listOf(PlaceGeofence("group", "home", 51.5, -0.1, 100.0))) }, transitions))
+    TrackingRuntime.setSharingState(application, SharingCaptureState(revisionPrefix = "s0.2:"))
+    val connectivity = application.getSystemService(ConnectivityManager::class.java)
+    val setOnline = { online: Boolean ->
+      shadowOf(connectivity).setNetworkCapabilities(
+        connectivity.activeNetwork,
+        ShadowNetworkCapabilities.newInstance().apply { if (online) shadowOf(this).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) },
+      )
+    }
+    setOnline(true)
+    val generation = TrackingRuntime.captureCommands.start()
+    val service = createService()
+    service.onStartCommand(startIntent(generation), 0, 1)
+    val enqueue = TrackingCaptureService::class.java.getDeclaredMethod("enqueueEncryptedFix", Location::class.java, Long::class.javaPrimitiveType).apply { isAccessible = true }
+    val requestUploadIfDue = TrackingCaptureService::class.java.getDeclaredMethod("requestUploadIfDue", Long::class.javaPrimitiveType).apply { isAccessible = true }
+    val nowMs = System.currentTimeMillis()
+    val fix = { offset: Int, latitude: Double, atMs: Long ->
+      Location("test").apply {
+        this.latitude = latitude
+        longitude = -0.1
+        accuracy = 10f
+        time = atMs
+        elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos() + offset
+      }
+    }
+    while (shadowOf(application).nextStartedService != null) Unit
+
+    enqueue.invoke(service, fix(1, 51.51, nowMs - 300_000L), generation)
+    assertEquals("upload", shadowOf(application).nextStartedService.getStringExtra(TrackingUploadService.EXTRA_REASON))
+    setOnline(false)
+    enqueue.invoke(service, fix(2, 51.5, nowMs - 200_000L), generation)
+    enqueue.invoke(service, fix(3, 51.5, nowMs - 60_000L), generation)
+    assertTrue(transitions.hasAny("test-owner"))
+    assertEquals(null, shadowOf(application).nextStartedService)
+
+    setOnline(true)
+    requestUploadIfDue.invoke(service, generation)
+    assertEquals("upload", shadowOf(application).nextStartedService.getStringExtra(TrackingUploadService.EXTRA_REASON))
+    requestUploadIfDue.invoke(service, generation)
+    assertEquals(null, shadowOf(application).nextStartedService)
   }
 
   @Test

@@ -1,4 +1,4 @@
-import type { Prisma } from "@openbeacon/database";
+import type { Prisma } from "../generated/client/client.ts";
 
 export const readDatabaseTime = async (db: Pick<Prisma.TransactionClient, "$queryRaw">) => {
   const [clock] = await db.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;

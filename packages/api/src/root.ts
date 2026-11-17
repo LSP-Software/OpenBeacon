@@ -1,3 +1,4 @@
+import { accountNoticesRouter } from "./router/accountNoticesRouter.ts";
 import { accountHistoryRouter } from "./router/accountHistoryRouter.ts";
 import { accountRecoveryRouter } from "./router/accountRecoveryRouter.ts";
 import { accountRouter } from "./router/accountRouter.ts";
@@ -19,11 +20,13 @@ import { placeAlertsRouter } from "./router/group/placeAlertsRouter.ts";
 import { placeSharingRouter } from "./router/group/placeSharingRouter.ts";
 import { placeTransitionsRouter } from "./router/group/placeTransitionsRouter.ts";
 import { mapsRouter } from "./router/mapsRouter.ts";
+import { notificationSettingsRouter } from "./router/notificationSettingsRouter.ts";
 import { createTRPCRouter } from "./trpcRuntime.ts";
 
 export const appRouter = createTRPCRouter({
   account: accountRouter,
   accountHistory: accountHistoryRouter,
+  accountNotices: accountNoticesRouter,
   accountRecovery: accountRecoveryRouter,
   groupSettings: groupSettingsRouter,
   groupLifecycle: groupLifecycleRouter,
@@ -40,6 +43,7 @@ export const appRouter = createTRPCRouter({
   emailAlerts: emailAlertsRouter,
   feedback: feedbackRouter,
   maps: mapsRouter,
+  notificationSettings: notificationSettingsRouter,
   placeAlerts: placeAlertsRouter,
   placeSharing: placeSharingRouter,
   placeTransitions: placeTransitionsRouter,

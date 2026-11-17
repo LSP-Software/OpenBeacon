@@ -6,6 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./fcm.ts": "./src/fcm.ts",
+    "./push.ts": "./src/push.ts",
     "./securityAlerts.ts": "./src/securityAlerts.ts"
   },
   "scripts": {

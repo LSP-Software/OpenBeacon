@@ -11,8 +11,16 @@ import {
   removeDeviceSchema,
   updateDeviceSchema,
 } from "./schemas/account/devices.ts";
+import { accountNoticesSyncSchema } from "./schemas/account/accountNotices.ts";
 import { changePasswordSchema } from "./schemas/account/changePassword.ts";
 import { emailAlertSettingsSchema, timezoneSchema } from "./schemas/account/emailAlerts.ts";
+import {
+  effectiveNotificationSetting,
+  notificationChannelSchema,
+  notificationTypeSchema,
+  notificationTypes,
+  setNotificationSettingSchema,
+} from "./schemas/account/notificationSettings.ts";
 import { emailCodeSchema } from "./schemas/account/emailCode.ts";
 import { accountNameSchema } from "./schemas/account/fields.ts";
 import { signInSchema } from "./schemas/account/signIn.ts";
@@ -53,7 +61,7 @@ import {
   getPlaceSharingSchema,
   groupHistoryCategorySchema,
   groupHistorySchema,
-  placeAlertsCursorSchema,
+  alertsCursorSchema,
   placeTransitionSchema,
   recentPlaceTransitionsSchema,
   setPlaceAlertMuteSchema,
@@ -88,11 +96,17 @@ export {
 export type { Announcement } from "./schemas/announcement/announcement.ts";
 
 export {
+  accountNoticesSyncSchema,
   deviceIconSchema,
   deviceNameSchema,
   devicePlatformSchema,
   emailAlertSettingsSchema,
   timezoneSchema,
+  effectiveNotificationSetting,
+  notificationChannelSchema,
+  notificationTypeSchema,
+  notificationTypes,
+  setNotificationSettingSchema,
   accountNameSchema,
   addHistoryWrapsSchema,
   changePasswordSchema,
@@ -123,7 +137,7 @@ export {
   MAX_IMAGE_KEY_REENCRYPTS,
   MAX_PLACES_PER_GROUP,
   optionalEnvString,
-  placeAlertsCursorSchema,
+  alertsCursorSchema,
   placeEmojiSchema,
   placeNameSchema,
   placeTransitionSchema,

@@ -24,8 +24,14 @@ const renderEveryEmail = async () => {
     { type: "device-removed", device: { name: "Pixel 8", model: "Pixel 8", platform: "android" } },
     { type: "new-sign-in", device: { model: "Pixel 8", platform: "android" } },
     { type: "deletion-scheduled", deletionDate: new Date("2026-07-16T13:32:00Z") },
-    { type: "alerts-turned-off", alerts: ["deletion-scheduled"] },
-    { type: "alerts-turned-off", alerts: ["new-sign-in", "deletion-scheduled"] },
+    { type: "alerts-turned-off", alerts: [{ type: "DELETION_SCHEDULED", channel: "email" }] },
+    {
+      type: "alerts-turned-off",
+      alerts: [
+        { type: "NEW_SIGN_IN", channel: "email" },
+        { type: "PLACE_ALERTS", channel: "phone" },
+      ],
+    },
     { type: "account-deleted" },
   ];
   return [
@@ -83,8 +89,14 @@ describe("every email", () => {
       })
       .map(({ subject }) => subject);
     expect([...new Set(subjects)].toSorted()).toEqual([
+      "A device was removed from your OpenBeacon account",
       "New sign-in to your OpenBeacon account",
       "Your OpenBeacon account is scheduled for deletion",
+      "Your OpenBeacon password was changed",
+      "Your OpenBeacon password was reset",
+      "Your OpenBeacon recovery phrase was changed",
+      "Your OpenBeacon recovery phrase was reset",
+      "Your other OpenBeacon sessions were signed out",
     ]);
   });
 

@@ -17,17 +17,19 @@ const render = (
   }: { timezone?: string; hasPassword?: boolean } = {},
 ) => renderSecurityAlertEmail({ alert, at, timezone, hasPassword, serverName: "Family" });
 
-const alwaysOn: SecurityAlert[] = [
+const neverSwitchable: SecurityAlert[] = [
+  { type: "alerts-turned-off", alerts: [{ type: "NEW_SIGN_IN", channel: "email" }] },
+  { type: "account-deleted" },
+];
+const uncapped: SecurityAlert[] = [
   { type: "password-changed" },
   { type: "password-reset" },
   { type: "recovery-phrase-changed" },
   { type: "recovery-phrase-reset" },
   { type: "other-sessions-signed-out", device: null },
   { type: "device-removed", device: { name: "Pixel 8", model: "Pixel 8", platform: "android" } },
-  { type: "alerts-turned-off", alerts: ["new-sign-in"] },
-  { type: "account-deleted" },
 ];
-const optional: SecurityAlert[] = [
+const capped: SecurityAlert[] = [
   { type: "new-sign-in", device: { model: "Pixel 8", platform: "android" } },
   { type: "deletion-scheduled", deletionDate: new Date("2026-07-16T13:32:00Z") },
 ];
@@ -65,7 +67,7 @@ describe("formatAlertTime", () => {
 
 describe("renderSecurityAlertEmail", () => {
   test("every alert has a title and says when it happened", async () => {
-    for (const alert of [...alwaysOn, ...optional]) {
+    for (const alert of [...neverSwitchable, ...uncapped, ...capped]) {
       const email = await render(alert);
       expect(email.html).toMatch(/<h1[^>]*>[^<]+<\/h1>/);
       expect(email.text).toMatch(/ at\nThursday, 9 July 2026 at 14:32 BST \(13:32 UTC\)\n/);
@@ -74,24 +76,22 @@ describe("renderSecurityAlertEmail", () => {
   });
 
   test("every alert except account deleted says what to do if it wasn't you", async () => {
-    for (const alert of [...alwaysOn, ...optional]) {
+    for (const alert of [...neverSwitchable, ...uncapped, ...capped]) {
       const email = await render(alert);
       expect(email.text.includes("If this wasn't you\n\n")).toBe(alert.type !== "account-deleted");
     }
   });
 
-  test("only optional alerts say where to choose which emails you get", async () => {
+  test("only alerts that can be switched off say where to choose which emails you get", async () => {
     const settingsLine =
-      "To choose which emails you get, open the OpenBeacon app and go to Account → Email alerts.";
-    for (const alert of alwaysOn) {
+      "To choose which emails you get, open the OpenBeacon app and go to Account → Notifications.";
+    for (const alert of neverSwitchable) {
       const email = await render(alert);
-      expect(email.canTurnOff).toBe(false);
       expect(email.text).not.toContain("To choose which emails you get");
       expect(email.html).not.toContain("To choose which emails you get");
     }
-    for (const alert of optional) {
+    for (const alert of [...uncapped, ...capped]) {
       const email = await render(alert);
-      expect(email.canTurnOff).toBe(true);
       expect(email.text).toContain(settingsLine);
       expect(email.html).toContain(settingsLine);
       expect(email.text).not.toContain("You can turn off this alert");
@@ -158,7 +158,7 @@ describe("renderSecurityAlertEmail", () => {
 
   test("accounts without a password are told to change their Google password, then sign out other sessions", async () => {
     for (const alert of [
-      ...optional,
+      ...capped,
       { type: "recovery-phrase-changed" as const },
       { type: "recovery-phrase-reset" as const },
       { type: "other-sessions-signed-out" as const, device: null },
@@ -166,7 +166,10 @@ describe("renderSecurityAlertEmail", () => {
         type: "device-removed" as const,
         device: { name: "Car tablet", model: null, platform: null },
       },
-      { type: "alerts-turned-off" as const, alerts: ["new-sign-in" as const] },
+      {
+        type: "alerts-turned-off" as const,
+        alerts: [{ type: "NEW_SIGN_IN" as const, channel: "email" as const }],
+      },
     ]) {
       const email = await render(alert, { hasPassword: false });
       expect(email.text).toContain(
@@ -247,7 +250,7 @@ describe("renderSecurityAlertEmail", () => {
 });
 
 describe("sendSecurityAlertEmail", () => {
-  test("always-on alerts ignore the per-account cap and optional ones respect it", async () => {
+  test("new sign-in and deletion scheduled respect the per-account cap and the rest ignore it", async () => {
     const send = mock(async () => {});
     const sendSecurityAlertEmail = createSendSecurityAlertEmail({
       sendEmail: createSendEmail({
@@ -274,10 +277,12 @@ describe("sendSecurityAlertEmail", () => {
         hasPassword: true,
       });
 
-    for (const alert of alwaysOn) expect(await sendAlert(alert)).toEqual({ sent: true });
-    for (const alert of optional) {
+    for (const alert of [...neverSwitchable, ...uncapped]) {
+      expect(await sendAlert(alert)).toEqual({ sent: true });
+    }
+    for (const alert of capped) {
       expect(await sendAlert(alert)).toEqual({ sent: false, reason: "capped" });
     }
-    expect(send).toHaveBeenCalledTimes(alwaysOn.length);
+    expect(send).toHaveBeenCalledTimes(neverSwitchable.length + uncapped.length);
   });
 });

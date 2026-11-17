@@ -26,6 +26,7 @@ const trackingService = {
     await (await import("../lib/endSession.ts")).endSession({ reason: "sessionLost" });
   },
   takeKeyAccessChange: async () => (await import("../lib/tracking.ts")).takeKeyAccessChange(),
+  syncAccountNotices: async () => (await import("../lib/tracking.ts")).syncAccountNotices(),
 };
 
 export const TrackingProvider = ({
@@ -185,11 +186,16 @@ export const TrackingProvider = ({
         sessionReadyRef.current = true;
       }
       await runTrackingCycle({ forceFlush: starting, forceKeyCheck: starting });
+      if (starting && version === cycleVersionRef.current) {
+        await tryCatch(service.syncAccountNotices());
+      }
     })();
   }, [isPending, runTrackingCycle, service, startCapture, thisDeviceActive, userId]);
 
   useAppForeground(() => {
-    if (userId) void runTrackingCycle({ forceKeyCheck: true });
+    if (!userId) return;
+    void runTrackingCycle({ forceKeyCheck: true });
+    if (sessionReadyRef.current) void tryCatch(service.syncAccountNotices());
   });
 
   useEffect(() => {

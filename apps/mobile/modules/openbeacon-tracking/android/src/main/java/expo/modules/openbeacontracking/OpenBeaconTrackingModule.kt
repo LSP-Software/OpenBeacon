@@ -9,9 +9,11 @@ import androidx.core.content.ContextCompat
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.capture.SharingCaptureState
 import expo.modules.openbeacontracking.capture.SharingResumeWorker
+import expo.modules.openbeacontracking.capture.TrackingUploadService
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import expo.modules.openbeacontracking.places.PlaceGeofence
+import expo.modules.openbeacontracking.push.PushRuntime
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import expo.modules.openbeacontracking.queue.CiphertextQueueDatabase
 import expo.modules.kotlin.functions.Queues
@@ -111,8 +113,20 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.placeDetection(requireContext()).acknowledge(clientIds)
       }
 
-      Function("showPlaceNotice") { kind: String, key: String, title: String, body: String?, groupName: String, link: String ->
-        Notices.showPlace(requireContext(), PlaceNoticeKind.of(kind), key, title, body, groupName, link)
+      Function("showEventNotice") { kind: String, key: String, title: String, body: String?, groupName: String?, link: String ->
+        Notices.showEvent(requireContext(), EventNoticeKind.of(kind), key, title, body, groupName, link)
+      }
+
+      Function("pendingPushToken") { scope: String ->
+        PushRuntime.tokens(requireContext()).pending(scope)
+      }
+
+      Function("confirmPushToken") { scope: String, sent: String?, pushAvailable: Boolean ->
+        PushRuntime.confirm(requireContext(), scope, sent, pushAvailable)
+      }
+
+      Function("forgetPushToken") { scope: String ->
+        PushRuntime.forget(requireContext(), scope)
       }
 
       Function("listProvisionedEpochKeys") {
@@ -188,6 +202,10 @@ class OpenBeaconTrackingModule : Module() {
           appContext.currentActivity?.setRecentsScreenshotEnabled(!hidden)
         }
       }.runOnQueue(Queues.MAIN)
+
+      Function("finishUploadTask") { token: String ->
+        TrackingUploadService.finish(token)
+      }
 
       Function("elapsedRealtime") {
         SystemClock.elapsedRealtime().toDouble()

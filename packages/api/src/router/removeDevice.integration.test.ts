@@ -149,6 +149,23 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
     expect(devices.map(({ id }) => id)).toEqual([account.thisPhone.id]);
   });
 
+  test("deletes the removed phone's push token and keeps this one's", async () => {
+    const account = await createAccount();
+    await prisma.pushToken.createMany({
+      data: [account.lostPhone.id, account.thisPhone.id].map((deviceId) => ({
+        deviceId,
+        token: `${deviceId}-token`,
+      })),
+    });
+
+    await callerFor(account).account.removeDevice({ deviceId: account.lostPhone.id });
+
+    const tokens = await prisma.pushToken.findMany({
+      where: { deviceId: { in: [account.lostPhone.id, account.thisPhone.id] } },
+    });
+    expect(tokens.map(({ deviceId }) => deviceId)).toEqual([account.thisPhone.id]);
+  });
+
   test("waits for an upload holding the group before touching the removed phone", async () => {
     const account = await createAccount();
     const epoch = await prisma.groupEpoch.create({
@@ -192,11 +209,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
     ).toBe(0);
   });
 
-  test("sends the always-on device removed alert", async () => {
+  test("sends the device removed alert, even with other alerts off", async () => {
     const account = await createAccount();
-    await prisma.user.update({
-      where: { id: account.userId },
-      data: { alertNewSignIn: false, alertDeletionScheduled: false },
+    await prisma.notificationSetting.createMany({
+      data: (["NEW_SIGN_IN", "DELETION_SCHEDULED"] as const).map((type) => ({
+        userId: account.userId,
+        type,
+        email: false,
+        phone: true,
+      })),
     });
 
     await callerFor(account).account.removeDevice({ deviceId: account.lostPhone.id });
@@ -209,6 +230,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("removing a devic
           device: { name: "Lost phone", model: "Pixel 9", platform: "android" },
         },
       },
+    ]);
+    expect(
+      await prisma.accountNotice.findMany({
+        where: { userId: account.userId },
+        select: { type: true, excludeDeviceId: true, deviceName: true },
+      }),
+    ).toEqual([
+      { type: "DEVICE_REMOVED", excludeDeviceId: account.thisPhone.id, deviceName: "Lost phone" },
     ]);
   });
 

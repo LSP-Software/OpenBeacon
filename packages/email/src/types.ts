@@ -1,4 +1,8 @@
-import type { devicePlatformSchema } from "@openbeacon/schemas";
+import type {
+  devicePlatformSchema,
+  notificationChannelSchema,
+  notificationTypeSchema,
+} from "@openbeacon/schemas";
 import type { z } from "zod";
 
 export type EmailMessage = {
@@ -32,13 +36,6 @@ export type EmailTransport = {
 export type EmailCodePurpose =
   "sign-up" | "email-verification" | "password-reset" | "recovery-reset";
 
-export const optionalSecurityAlerts = {
-  "new-sign-in": "alertNewSignIn",
-  "deletion-scheduled": "alertDeletionScheduled",
-} as const;
-
-export type OptionalSecurityAlert = keyof typeof optionalSecurityAlerts;
-
 export type AlertDevice = {
   name: string;
   model: string | null;
@@ -61,8 +58,22 @@ export type SecurityAlert =
       device: { model: string | null; platform: z.infer<typeof devicePlatformSchema> | null };
     }
   | { type: "deletion-scheduled"; deletionDate: Date }
-  | { type: "alerts-turned-off"; alerts: OptionalSecurityAlert[] };
+  | { type: "alerts-turned-off"; alerts: TurnedOffNotification[] };
 
-export const isOptionalSecurityAlert = (
-  type: SecurityAlert["type"],
-): type is OptionalSecurityAlert => type in optionalSecurityAlerts;
+export type TurnedOffNotification = {
+  type: z.infer<typeof notificationTypeSchema>;
+  channel: z.infer<typeof notificationChannelSchema>;
+};
+
+export const securityAlertSettings = {
+  "new-sign-in": "NEW_SIGN_IN",
+  "password-changed": "PASSWORD_CHANGED",
+  "password-reset": "PASSWORD_CHANGED",
+  "recovery-phrase-changed": "RECOVERY_PHRASE_CHANGED",
+  "recovery-phrase-reset": "RECOVERY_PHRASE_CHANGED",
+  "other-sessions-signed-out": "OTHER_SESSIONS_SIGNED_OUT",
+  "device-removed": "DEVICE_REMOVED",
+  "deletion-scheduled": "DELETION_SCHEDULED",
+  "account-deleted": null,
+  "alerts-turned-off": null,
+} as const satisfies Record<SecurityAlert["type"], TurnedOffNotification["type"] | null>;

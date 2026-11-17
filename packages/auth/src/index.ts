@@ -11,12 +11,15 @@ import { createAuth } from "./createAuth.ts";
 import { db } from "./db.ts";
 import { createEmailCodes } from "./emailCode.ts";
 import { env } from "./env.ts";
+import { createFcmClient, resolveFcmSettings } from "./fcm.ts";
 import { getPublicUrl } from "./publicUrl.ts";
+import { createPushSender } from "./push.ts";
 import { createSecurityAlerts } from "./securityAlerts.ts";
 
 export { clientIpHeader } from "./createAuth.ts";
 export { createEmailCodes, type EmailCodes } from "./emailCode.ts";
 export { createSecurityAlerts, type SecurityAlerts } from "./securityAlerts.ts";
+export { createPushSender, type PushSender } from "./push.ts";
 export { createGoogleDeletionAuthorization, verifyGoogleDeletionCode } from "./googleDeletion.ts";
 
 export const authPublicPath = getPublicUrl(env.BETTER_AUTH_URL).path;
@@ -40,9 +43,26 @@ export const emailCodes = cache
     })
   : null;
 
-export const securityAlerts = cache
-  ? createSecurityAlerts({ db, sendSecurityAlertEmail, alertsTurnedOff: cache.alertsTurnedOff })
-  : null;
+const { settings: fcmSettings } = resolveFcmSettings({
+  FCM_PROJECT_ID: env.FCM_PROJECT_ID,
+  FCM_CLIENT_EMAIL: env.FCM_CLIENT_EMAIL,
+  FCM_PRIVATE_KEY: env.FCM_PRIVATE_KEY,
+});
+
+export const fcm = fcmSettings ? createFcmClient(fcmSettings) : null;
+
+export const push = createPushSender({ db, fcm });
+
+export const securityAlerts = createSecurityAlerts({
+  db,
+  push,
+  sendSecurityAlertEmail: emailEnabled ? sendSecurityAlertEmail : null,
+  alertsTurnedOff: {
+    add: async (input) => sharedCache().alertsTurnedOff.add(input),
+    take: async (input) => sharedCache().alertsTurnedOff.take(input),
+    pending: async () => sharedCache().alertsTurnedOff.pending(),
+  },
+});
 
 export const auth = createAuth({
   emailCodes,

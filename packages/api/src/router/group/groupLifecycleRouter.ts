@@ -1,7 +1,6 @@
-import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
+import { GroupEventType, GroupRole, Prisma, readDatabaseTime } from "@openbeacon/database";
 import { createGroupSchema, groupEpochBundleSchema, newGroupIdSchema } from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
-import { readDatabaseTime } from "../../lib/databaseTime.ts";
 import z from "zod";
 import { deleteGroup } from "../../lib/deleteGroup.ts";
 import { persistGroupEpoch } from "../../lib/groupEpochs.ts";

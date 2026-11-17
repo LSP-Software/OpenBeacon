@@ -78,7 +78,7 @@ mock.module("./personalNicknames.ts", () => ({
   loadPersonalNicknames: async () => ({ "member-sam": { name: "Mum", ciphertext: "sealed" } }),
 }));
 mock.module("./notifications.ts", () => ({
-  showPlaceNotice: async (notice: {
+  showEventNotice: async (notice: {
     kind: string;
     title: string;
     body: string | null;

@@ -43,8 +43,19 @@ export const createAlertsTurnedOff = ({
 }) => {
   const indexKey = `${keyPrefix}:alertsTurnedOff:pending`;
   const userKey = (userId: string) => `${keyPrefix}:alertsTurnedOff:user:${userId}`;
+  const deviceField = "device:";
   return {
-    add: async ({ userId, alerts, at }: { userId: string; alerts: string[]; at: number }) =>
+    add: async ({
+      userId,
+      alerts,
+      deviceId,
+      at,
+    }: {
+      userId: string;
+      alerts: string[];
+      deviceId: string;
+      at: number;
+    }) =>
       Number(
         await redis.send("EVAL", [
           alertsTurnedOffScripts.add,
@@ -55,6 +66,7 @@ export const createAlertsTurnedOff = ({
           String(at),
           String(24 * 60 * 60 * 1000),
           ...alerts,
+          `${deviceField}${deviceId}`,
         ]),
       ),
     take: async ({
@@ -63,7 +75,7 @@ export const createAlertsTurnedOff = ({
     }: {
       userId: string;
       firstAtOrBefore: number;
-    }): Promise<{ firstAt: number; alerts: string[] } | null> => {
+    }): Promise<{ firstAt: number; alerts: string[]; deviceIds: string[] } | null> => {
       const result = await redis.send("EVAL", [
         alertsTurnedOffScripts.take,
         "2",
@@ -73,8 +85,14 @@ export const createAlertsTurnedOff = ({
         String(firstAtOrBefore),
       ]);
       if (!Array.isArray(result) || !result.length) return null;
-      const [firstAt, ...alerts] = result.map(String);
-      return { firstAt: Number(firstAt), alerts };
+      const [firstAt, ...fields] = result.map(String);
+      return {
+        firstAt: Number(firstAt),
+        alerts: fields.filter((field) => !field.startsWith(deviceField)),
+        deviceIds: fields.flatMap((field) =>
+          field.startsWith(deviceField) ? field.slice(deviceField.length) : [],
+        ),
+      };
     },
     pending: async () => {
       const result = await redis.send("EVAL", [alertsTurnedOffScripts.pending, "1", indexKey]);

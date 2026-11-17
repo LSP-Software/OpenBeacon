@@ -13,6 +13,9 @@ let deviceStatus: { data?: { accountHasActiveDevice?: boolean }; isError: boolea
   isError: false,
 };
 const refetchDeviceStatus = mock(async () => {});
+const refetchRecoveryStatus = mock(async () => {});
+const checkSessionAfterUnauthorized = mock(() => {});
+let recoveryStatusError: { data: { code: string } } | null = null;
 let signOutError: Error | null = null;
 let signOutStatus: "phoneRemoved" | "signedOut" | "serverUnreachable" = "phoneRemoved";
 let signOutGate: Promise<void> | null = null;
@@ -38,7 +41,14 @@ mock.module("@tanstack/react-query", () => ({
   useQuery: ({ queryKey }: { queryKey: string }) =>
     queryKey === "device"
       ? { ...deviceStatus, isPending: !deviceStatus.data, refetch: refetchDeviceStatus }
-      : { data: { recoveryKey }, isError: false, isPending: false },
+      : recoveryStatusError
+        ? {
+            error: recoveryStatusError,
+            isError: true,
+            isPending: false,
+            refetch: refetchRecoveryStatus,
+          }
+        : { data: { recoveryKey }, isError: false, isPending: false },
 }));
 mock.module("react-native", () => ({
   Pressable: ({ children, onPress }: { children?: React.ReactNode; onPress?: () => void }) =>
@@ -70,6 +80,11 @@ mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => ({ data: { session: { token: "session-token" } } }) },
 }));
 mock.module("../lib/signOut.ts", () => ({ signOutOfThisPhone }));
+mock.module("../lib/sessionCheck.ts", () => ({
+  checkSessionAfterUnauthorized,
+  isUnauthorizedError: (error: { data?: { code?: string } } | null) =>
+    error?.data?.code === "UNAUTHORIZED",
+}));
 mock.module("../lib/alert.ts", () => ({
   Alert: {
     alert: (title: string, message: string, buttons: AlertButton[]) => {
@@ -139,6 +154,9 @@ beforeEach(() => {
   recoveryKey = {};
   deviceStatus = { data: { accountHasActiveDevice: true }, isError: false };
   refetchDeviceStatus.mockClear();
+  refetchRecoveryStatus.mockClear();
+  checkSessionAfterUnauthorized.mockClear();
+  recoveryStatusError = null;
   signOutError = null;
   signOutStatus = "phoneRemoved";
   signOutGate = null;
@@ -365,4 +383,17 @@ test("Continue can't be pressed while cancelling", async () => {
   });
   expect(findByText("mock-button", "Continue").props["disabled"]).toBe(true);
   await act(async () => finish());
+});
+
+test.each([
+  ["UNAUTHORIZED", 1],
+  ["INTERNAL_SERVER_ERROR", 0],
+] as const)("Try again after a %s error checks the session %d times", async (code, checks) => {
+  recoveryStatusError = { data: { code } };
+  await render();
+  await act(async () =>
+    (findByText("mock-button", "Try again").props as { onPress: () => void }).onPress(),
+  );
+  expect(checkSessionAfterUnauthorized).toHaveBeenCalledTimes(checks);
+  expect(refetchRecoveryStatus).toHaveBeenCalledTimes(1);
 });

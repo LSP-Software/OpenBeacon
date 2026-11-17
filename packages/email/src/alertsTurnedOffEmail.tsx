@@ -1,6 +1,7 @@
+import { notificationTypes } from "@openbeacon/schemas";
 import { Text } from "@react-email/components";
 import { EmailDetails, EmailSubheading, renderEmailLayout } from "./layout.tsx";
-import type { EmailMessage, OptionalSecurityAlert } from "./types.ts";
+import type { EmailMessage, TurnedOffNotification } from "./types.ts";
 
 export const renderAlertsTurnedOffEmail = async ({
   alerts,
@@ -8,26 +9,27 @@ export const renderAlertsTurnedOffEmail = async ({
   signedInAdvice,
   serverName,
 }: {
-  alerts: OptionalSecurityAlert[];
+  alerts: TurnedOffNotification[];
   happenedAt: string;
   signedInAdvice: string;
   serverName: string;
 }): Promise<Omit<EmailMessage, "to">> => {
   if (!alerts.length) throw new Error("At least one turned off alert is required");
-  const labels = alerts.map(
-    (type) =>
-      ({
-        "new-sign-in": "New sign-in",
-        "deletion-scheduled": "Account deletion scheduled",
-      })[type],
+  const labels = (Object.keys(notificationTypes) as TurnedOffNotification["type"][]).flatMap(
+    (type) => {
+      const email = alerts.some((alert) => alert.type === type && alert.channel === "email");
+      const phone = alerts.some((alert) => alert.type === type && alert.channel === "phone");
+      if (!email && !phone) return [];
+      const channels =
+        email && phone ? "email and phone notifications" : email ? "email" : "phone notifications";
+      return [`${notificationTypes[type].label} (${channels})`];
+    },
   );
   const several = labels.length > 1;
-  const happened = several
-    ? "These email alerts were turned off:"
-    : "This email alert was turned off:";
+  const happened = several ? "These alerts were turned off:" : "This alert was turned off:";
   const rendered = await renderEmailLayout({
     serverName,
-    title: "Email alerts turned off",
+    title: "Alerts turned off",
     preview: `${happened} ${labels.join(", ")}.`,
     children: (
       <>
@@ -42,13 +44,13 @@ export const renderAlertsTurnedOffEmail = async ({
         <EmailDetails rows={[{ label: "Turned off at", value: happenedAt }]} />
         <EmailSubheading>If this wasn't you</EmailSubheading>
         <Text style={{ margin: 0 }}>
-          {`${signedInAdvice} Then turn ${several ? "these alerts" : "this alert"} back on in Account → Email alerts.`}
+          {`${signedInAdvice} Then turn ${several ? "these alerts" : "this alert"} back on in Account → Notifications.`}
         </Text>
       </>
     ),
   });
   return {
-    subject: "Email alerts were turned off on your OpenBeacon account",
+    subject: "Alerts were turned off on your OpenBeacon account",
     summary: { type: "alert:alerts-turned-off" },
     ...rendered,
   };

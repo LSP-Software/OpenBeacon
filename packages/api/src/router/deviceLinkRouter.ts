@@ -187,7 +187,7 @@ export const deviceLinkRouter = createTRPCRouter({
         current: false,
         pendingOnly: true,
       });
-      ctx.securityAlerts?.send(userId, { type: "device-removed", device });
+      ctx.securityAlerts?.send(userId, { type: "device-removed", device }, ctx.deviceId);
     }),
   status: setupDeviceProcedure
     .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })

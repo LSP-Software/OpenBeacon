@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 
 const shown: string[] = [];
+const shownEvents: { kind: string; title: string }[] = [];
 let showFails = false;
 const appState = {
   currentState: "background",
@@ -32,6 +33,13 @@ mock.module("react-native", () => ({
 }));
 
 const settings = { opened: [] as string[], sendIntentFails: false };
+const inApp: { title: string; body: string | null }[] = [];
+
+mock.module("./inAppNotices.ts", () => ({
+  showInAppNotice: ({ title, body }: { title: string; body: string | null }) => {
+    inApp.push({ title, body });
+  },
+}));
 
 mock.module("expo-linking", () => ({
   openSettings: async () => {
@@ -50,16 +58,22 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
       shown.push(kind);
       return true;
     },
+    showEventNotice: (kind: string, _key: string, title: string) => {
+      shownEvents.push({ kind, title });
+      return true;
+    },
     areNotificationsEnabled: () => android.notificationsEnabled,
     shouldShowNotificationRationale: () => android.rationale,
   },
 }));
 
-const { requestNotificationPermissions, showNotice, turnOnNotifications } =
+const { requestNotificationPermissions, showEventNotice, showNotice, turnOnNotifications } =
   await import("./notifications.ts");
 
 beforeEach(() => {
   shown.length = 0;
+  shownEvents.length = 0;
+  inApp.length = 0;
   settings.opened.length = 0;
   settings.sendIntentFails = false;
   showFails = false;
@@ -71,6 +85,40 @@ beforeEach(() => {
     result: "granted",
     notificationsEnabled: true,
     requests: 0,
+  });
+});
+
+describe("showEventNotice", () => {
+  test("an in-app banner without a body names the group instead", async () => {
+    appState.currentState = "active";
+    inApp.length = 0;
+    await showEventNotice({
+      body: null,
+      groupName: "Family",
+      key: "event-1",
+      kind: "groupActivity",
+      link: { href: "/", url: "openbeacon:///" },
+      title: "Mum joined",
+    });
+    expect(inApp).toEqual([{ title: "Mum joined", body: "Family" }]);
+    expect(shownEvents).toEqual([]);
+  });
+
+  test("a security alert while the app is open also goes to the notification shade", async () => {
+    appState.currentState = "active";
+    const shown = await showEventNotice({
+      body: "Every phone and tablet was signed out.",
+      groupName: null,
+      key: "notice-1",
+      kind: "accountAlert",
+      link: { href: "/account/password", url: "openbeacon:///account/password" },
+      title: "Your password was reset",
+    });
+    expect(shown).toBe(true);
+    expect(inApp).toEqual([
+      { title: "Your password was reset", body: "Every phone and tablet was signed out." },
+    ]);
+    expect(shownEvents).toEqual([{ kind: "accountAlert", title: "Your password was reset" }]);
   });
 });
 

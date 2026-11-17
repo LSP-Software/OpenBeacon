@@ -30,7 +30,7 @@ OpenBeacon lets your family see where each other are, without handing that infor
 
 - **Encrypted on your phone.** Locations, battery levels and pictures are encrypted before they leave the phone. The server stores them but can't read them, whether it's ours or yours.
 - **Use our server or run your own.** The hosted server and the self-hosted server are the same code.
-- **Honest about the limits.** Names, email addresses, group membership, place names and when people arrive at and leave places aren't end-to-end encrypted. Where places are stays encrypted. The server can also tell when someone has a picture, roughly how big it is and when it changes. The docs list [exactly what a server can see](https://docs.openbeacon.net/docs/privacy-security/what-the-server-can-see) and the [known limits](https://docs.openbeacon.net/docs/privacy-security/known-limits).
+- **Honest about the limits.** Names, email addresses, group membership, place names and when people arrive at and leave places aren't end-to-end encrypted. Where places are stays encrypted. The server can also tell when someone has a picture, roughly how big it is and when it changes. On our hosted server, Google's push service wakes phones when there's something new. Google sees a token for each phone and when it's woken, never what for. Self-hosted servers don't use it. The docs list [exactly what a server can see](https://docs.openbeacon.net/docs/privacy-security/what-the-server-can-see) and the [known limits](https://docs.openbeacon.net/docs/privacy-security/known-limits).
 
 OpenBeacon is available on **Android 8.0 and newer**. An iPhone app is on the [roadmap](https://docs.openbeacon.net/docs/use-openbeacon/roadmap).
 
@@ -44,7 +44,7 @@ OpenBeacon is available on **Android 8.0 and newer**. An iPhone app is on the [r
 - Use OpenBeacon on more than one phone or tablet, and link a new one by scanning a code
 - Optional 12-word recovery phrase to restore your history on a new phone
 - Works offline: locations are stored encrypted and sent when you reconnect
-- Security emails for important account changes
+- Notifications when people arrive at or leave places, join or leave a group, or when your account's security changes. Security alerts can come by email too, and you can turn each one off
 
 See the [user guide](https://docs.openbeacon.net/docs/use-openbeacon/welcome-to-openbeacon) for everything the app does.
 

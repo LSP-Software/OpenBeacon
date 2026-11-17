@@ -52,6 +52,7 @@ class TrackingCaptureService : Service() {
   private var currentIntervalMs = DEFAULT_INTERVAL_MS
   private var lastQueued: LastQueuedFix? = null
   private var lastUploadRequestMs = 0L
+  private var placeUploadWaiting = false
   private var currentUploadIntervalMs = CaptureSamplingPolicy.UPLOAD_INTERVAL_MS
   private val refreshState = CaptureRefreshState()
 
@@ -266,13 +267,26 @@ class TrackingCaptureService : Service() {
 
   private fun requestUploadIfDue(generation: Long) {
     val nowMs = System.currentTimeMillis()
-    val uploadDue = synchronized(captureStateLock) { nowMs - lastUploadRequestMs >= currentUploadIntervalMs }
-    if (!uploadDue || TrackingRuntime.sharingState(this).isPaused(nowMs) || !hasPendingUploads()) return
+    val worthChecking =
+      synchronized(captureStateLock) { placeUploadWaiting || nowMs - lastUploadRequestMs >= currentUploadIntervalMs }
+    if (!worthChecking || TrackingRuntime.sharingState(this).isPaused(nowMs) || !hasPendingUploads()) return
     synchronized(captureStateLock) {
-      if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && nowMs - lastUploadRequestMs >= currentUploadIntervalMs) {
+      val startUpload =
+        UploadRequestPolicy.shouldStart(
+          generationCurrent = TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation),
+          online = true,
+          paused = false,
+          placeTransitionQueued = placeUploadWaiting,
+          pointQueued = true,
+          forceUpload = false,
+          msSinceLastRequest = nowMs - lastUploadRequestMs,
+          uploadIntervalMs = currentUploadIntervalMs,
+        )
+      if (startUpload) {
         try {
           startService(Intent(this, TrackingUploadService::class.java).putExtra(TrackingUploadService.EXTRA_REASON, "upload"))
           lastUploadRequestMs = nowMs
+          placeUploadWaiting = false
         } catch (error: Exception) {
           Log.e(TAG, "Failed to start background tracking sync.", error)
         }
@@ -320,6 +334,7 @@ class TrackingCaptureService : Service() {
         synchronized(captureStateLock) {
           lastQueued = null
           lastUploadRequestMs = 0L
+          placeUploadWaiting = false
           refreshState.request()
         }
         minimumFixElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
@@ -367,7 +382,7 @@ class TrackingCaptureService : Service() {
       return
     }
 
-    detectPlaces(location, nowMs, generation)
+    val placeTransitionQueued = detectPlaces(location, nowMs, generation)
 
     val refreshGeneration = synchronized(captureStateLock) { refreshState.pending() }
     val decision =
@@ -397,8 +412,8 @@ class TrackingCaptureService : Service() {
       currentUploadIntervalMs = decision.uploadIntervalMs
     }
 
+    var currentFixQueued = false
     try {
-      var currentFixQueued = false
       capturePipeline.onFix(
         latitude = location.latitude,
         longitude = location.longitude,
@@ -413,12 +428,6 @@ class TrackingCaptureService : Service() {
         onCurrentFixQueued = { currentFixQueued = true },
       )
       synchronized(captureStateLock) {
-        if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && currentFixQueued && (decision.forceUpload || nowMs - lastUploadRequestMs >= decision.uploadIntervalMs) && isOnline()) {
-          startService(Intent(this, TrackingUploadService::class.java).putExtra(TrackingUploadService.EXTRA_REASON, "upload"))
-          lastUploadRequestMs = nowMs
-        }
-      }
-      synchronized(captureStateLock) {
         if (TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation) && currentFixQueued) {
           if (refreshGeneration != null) refreshState.complete(refreshGeneration)
           lastQueued =
@@ -432,14 +441,40 @@ class TrackingCaptureService : Service() {
     } catch (error: Exception) {
       Log.e(TAG, "Failed to encrypt and queue location fix.", error)
     }
+
+    val online = isOnline()
+    val paused = TrackingRuntime.sharingState(this).isPaused(nowMs)
+    try {
+      synchronized(captureStateLock) {
+        if (placeTransitionQueued) placeUploadWaiting = true
+        val startUpload =
+          UploadRequestPolicy.shouldStart(
+            generationCurrent = TrackingRuntime.isCaptureRunning && TrackingRuntime.captureCommands.isCurrent(generation),
+            online = online,
+            paused = paused,
+            placeTransitionQueued = placeUploadWaiting,
+            pointQueued = currentFixQueued,
+            forceUpload = decision.forceUpload,
+            msSinceLastRequest = nowMs - lastUploadRequestMs,
+            uploadIntervalMs = decision.uploadIntervalMs,
+          )
+        if (startUpload) {
+          startService(Intent(this, TrackingUploadService::class.java).putExtra(TrackingUploadService.EXTRA_REASON, "upload"))
+          lastUploadRequestMs = nowMs
+          placeUploadWaiting = false
+        }
+      }
+    } catch (error: Exception) {
+      Log.e(TAG, "Failed to start background tracking sync.", error)
+    }
   }
 
-  private fun detectPlaces(location: Location, nowMs: Long, generation: Long) {
+  private fun detectPlaces(location: Location, nowMs: Long, generation: Long): Boolean =
     try {
       synchronized(TrackingRuntime.captureLock) {
-        if (!TrackingRuntime.captureCommands.isCurrent(generation)) return
-        val owner = TrackingRuntime.queueOwner(this) ?: return
-        val deviceId = TrackingRuntime.queueDeviceId(this) ?: return
+        if (!TrackingRuntime.captureCommands.isCurrent(generation)) return false
+        val owner = TrackingRuntime.queueOwner(this) ?: return false
+        val deviceId = TrackingRuntime.queueDeviceId(this) ?: return false
         TrackingRuntime.placeDetection(this).onFix(
           owner = owner,
           deviceId = deviceId,
@@ -449,12 +484,12 @@ class TrackingCaptureService : Service() {
           longitude = location.longitude,
           accuracyMeters = location.accuracy.toDouble().takeIf { location.hasAccuracy() },
           timestampMillis = location.time,
-        )
+        ) > 0
       }
     } catch (error: Exception) {
       Log.e(TAG, "Failed to check places.", error)
+      false
     }
-  }
 
   private fun hasPendingUploads(): Boolean =
     try {

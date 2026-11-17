@@ -32,7 +32,7 @@ export const showNotice = async (
   return result.data ?? false;
 };
 
-export const showPlaceNotice = async ({
+export const showEventNotice = async ({
   body,
   groupName,
   key,
@@ -41,24 +41,27 @@ export const showPlaceNotice = async ({
   title,
 }: {
   body: string | null;
-  groupName: string;
+  groupName: string | null;
   key: string;
-  kind: "alert" | "placesChanged";
+  kind: Parameters<
+    NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>["showEventNotice"]
+  >[0];
   link: { href: Href; url: string };
   title: string;
 }): Promise<boolean> => {
-  if (AppState.currentState === "active") {
-    showInAppNotice({ title, body, href: link.href });
-    return true;
+  const active = AppState.currentState === "active";
+  if (active) {
+    showInAppNotice({ title, body: body ?? groupName, href: link.href });
+    if (kind !== "accountAlert") return true;
   }
   const trackingModule = await loadTrackingModule();
-  if (!trackingModule) return false;
+  if (!trackingModule) return active;
   const result = await tryCatch(
     Promise.resolve().then(() =>
-      trackingModule.showPlaceNotice(kind, key, title, body, groupName, link.url),
+      trackingModule.showEventNotice(kind, key, title, body, groupName, link.url),
     ),
   );
-  return result.data ?? false;
+  return active || (result.data ?? false);
 };
 
 export const dismissNotice = async (slot: NoticeSlot) => {

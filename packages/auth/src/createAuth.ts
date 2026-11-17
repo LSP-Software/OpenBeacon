@@ -34,8 +34,9 @@ export const createAuth = ({
   securityAlerts: SecurityAlerts | null;
   rateLimits: PasswordAttemptLimits;
   runInBackground?: (task: Promise<unknown>) => void;
-}) =>
-  betterAuth({
+}) => {
+  const passwordChangeDevices = new Map<string, string>();
+  return betterAuth({
     plugins: [expo(), emailCodePlugin(emailCodes)],
     disabledPaths: [
       "/send-verification-email",
@@ -71,12 +72,15 @@ export const createAuth = ({
             session &&
             (await db.session.findUnique({
               where: { id: session.session.id },
-              select: { device: { select: { activatedAt: true, revokedAt: true } } },
+              select: { device: { select: { id: true, activatedAt: true, revokedAt: true } } },
             }));
           if (session && (!linked?.device?.activatedAt || linked.device.revokedAt)) {
             throw new APIError("FORBIDDEN", { message: "Finish setting up this phone first." });
           }
-          if (session) await reservePasswordAttempt(rateLimits, session.user.email);
+          if (session) {
+            await reservePasswordAttempt(rateLimits, session.user.email);
+            if (linked?.device) passwordChangeDevices.set(session.session.id, linked.device.id);
+          }
         }
         const signInEmail: unknown = ctx.body?.email;
         if (ctx.path === "/sign-in/email" && typeof signInEmail === "string") {
@@ -106,8 +110,11 @@ export const createAuth = ({
           await settlePasswordAttempt(rateLimits, passwordEmail, ctx.context.returned);
         }
         const userId = ctx.context.session?.user.id;
+        const sessionId = ctx.context.session?.session.id;
+        const changedOn = sessionId ? passwordChangeDevices.get(sessionId) : undefined;
+        if (sessionId) passwordChangeDevices.delete(sessionId);
         if (ctx.path === "/change-password" && userId && !isAPIError(ctx.context.returned)) {
-          securityAlerts?.send(userId, { type: "password-changed" });
+          securityAlerts?.send(userId, { type: "password-changed" }, changedOn ?? null);
         }
       }),
     },
@@ -254,6 +261,7 @@ export const createAuth = ({
       ...(process.env["NODE_ENV"] === "development" ? ["exp://", "exp://**"] : []),
     ],
   });
+};
 
 const invalidSignUpToken = () =>
   new APIError("BAD_REQUEST", {

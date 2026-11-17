@@ -6,7 +6,7 @@ import {
   XCHACHA20_NONCE_LENGTH,
 } from "@openbeacon/encryption";
 import z from "zod";
-import { placeAlertsCursorSchema, placeTransitionSchema } from "./placeTransitions.ts";
+import { alertsCursorSchema, placeTransitionSchema } from "./placeTransitions.ts";
 
 const decodesTo = (value: string, isValid: (decoded: Uint8Array) => boolean) => {
   try {
@@ -63,15 +63,17 @@ export const groupTrackingUploadBatchSchema = z
         { message: "Each place transition can only be sent once per request" },
       )
       .optional(),
-    placeAlertsCursor: placeAlertsCursorSchema.nullable().optional(),
+    placeAlertsCursor: alertsCursorSchema.nullable().optional(),
+    noticesCursor: alertsCursorSchema.nullable().optional(),
   })
   .refine(
     (batch) =>
       batch.points.length > 0 ||
       (batch.placeTransitions?.length ?? 0) > 0 ||
-      batch.placeAlertsCursor !== undefined,
+      batch.placeAlertsCursor !== undefined ||
+      batch.noticesCursor !== undefined,
     {
-      message: "An upload needs at least one point, place transition or place alerts cursor",
+      message: "An upload needs at least one point, place transition or cursor",
       path: ["points"],
     },
   );

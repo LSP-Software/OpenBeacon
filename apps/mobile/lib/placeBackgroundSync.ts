@@ -1,13 +1,14 @@
-import { placeAlertsCursorSchema } from "@openbeacon/schemas";
+import { alertsCursorSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import z from "zod";
 import { queryClient, type RouterOutputs, trpc, trpcClient } from "./api.ts";
 import { baseUrl } from "./currentServer.ts";
 import { getRegisteredDeviceKey } from "./deviceKeys.ts";
 import { catchUpGroupImageKeys } from "./imageKeyCatchUp.ts";
-import { showPlaceNotice } from "./notifications.ts";
+import { showNotices } from "./noticeBackgroundSync.ts";
+import { showEventNotice } from "./notifications.ts";
 import { parseJson } from "./parseJson.ts";
-import { loadPersonalNicknames } from "./personalNicknames.ts";
+import { nicknamesByGroup } from "./nicknamesByGroup.ts";
 import { catchUpGroupPlaces } from "./placeCatchUp.ts";
 import { groupPlacesQueryKey, loadGroupPlaces } from "./placeSync.ts";
 import { storage } from "./storage.ts";
@@ -21,6 +22,7 @@ export type PlaceUpdates = {
   places?: RouterOutputs["groupTracking"]["uploadBatch"]["places"];
   placeAlerts?: RouterOutputs["groupTracking"]["uploadBatch"]["placeAlerts"];
   imageKeysNeedCatchUp?: RouterOutputs["groupTracking"]["uploadBatch"]["imageKeysNeedCatchUp"];
+  notices?: RouterOutputs["groupTracking"]["uploadBatch"]["notices"];
 };
 
 type Groups = () => Promise<RouterOutputs["groupMembership"]["list"]>;
@@ -49,7 +51,7 @@ const placeOnMapLink = (placeId: string) => ({
 });
 
 export const getPlaceAlertsCursor = (userId: string) => {
-  const parsed = placeAlertsCursorSchema.safeParse(
+  const parsed = alertsCursorSchema.safeParse(
     storage.getString(storageKey(userId, "alertsCursor")),
   );
   return parsed.success ? parsed.data : null;
@@ -151,7 +153,7 @@ export const syncGroupPlaces = async ({
   if (added.length + moved.length === 0) return true;
   const group = (await groups()).find(({ id }) => id === groupId);
   if (!group) return true;
-  await showPlaceNotice({
+  await showEventNotice({
     ...describePlacesChanged({ added, groupName: group.name, moved }),
     groupName: group.name,
     key: groupId,
@@ -170,14 +172,7 @@ const showPlaceAlerts = async ({
   groups: Groups;
   userId: string;
 }) => {
-  const nicknames = new Map<string, Promise<Record<string, { name: string | null }>>>();
-  const nicknamesFor = (groupId: string) => {
-    const loaded =
-      nicknames.get(groupId) ??
-      tryCatch(loadPersonalNicknames(groupId, userId)).then((result) => result.data ?? {});
-    nicknames.set(groupId, loaded);
-    return loaded;
-  };
+  const nicknamesFor = nicknamesByGroup(userId);
   for (const alert of alerts) {
     const group = (await groups()).find(({ id }) => id === alert.groupId);
     if (!group) continue;
@@ -185,7 +180,7 @@ const showPlaceAlerts = async ({
     const ownerName = member
       ? ((await nicknamesFor(alert.groupId))[member.id]?.name ?? member.name)
       : null;
-    await showPlaceNotice({
+    await showEventNotice({
       title: describePlaceAlert({ alert, ownerName }),
       body: null,
       groupName: group.name,
@@ -317,6 +312,9 @@ export const applyPlaceUpdates = async ({
       showPlaceAlerts({ alerts: updates.placeAlerts.alerts, groups, userId }),
     );
     if (!shown.error) storage.set(storageKey(userId, "alertsCursor"), updates.placeAlerts.cursor);
+  }
+  if (updates.notices) {
+    await tryCatch(showNotices({ notices: updates.notices, groups, userId }));
   }
   if (updates.imageKeysNeedCatchUp) {
     const catchUp = tryCatch(

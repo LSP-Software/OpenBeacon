@@ -21,6 +21,7 @@ import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { isThisDeviceActive } from "./deviceActivation.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
 import { secretOwner } from "./secretStorage.ts";
+import { checkSessionAfterUnauthorized } from "./sessionCheck.ts";
 import {
   cancelDeviceKeyRegistrations,
   ensureDeviceKeyRegistration,
@@ -31,6 +32,11 @@ import { errorReason } from "./errorReason.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
+import {
+  getAccountNoticesCursor,
+  getNoticesCursor,
+  showAccountNotices,
+} from "./noticeBackgroundSync.ts";
 import { dismissNotice, showNotice } from "./notifications.ts";
 import {
   applyPlaceUpdates,
@@ -67,6 +73,7 @@ let reconcileVersion = 0;
 let flushPromise: Promise<void> | null = null;
 let flushWork: Promise<void> | null = null;
 let flushController: AbortController | null = null;
+let placeRoundTail: Promise<void> = Promise.resolve();
 let revokePromise: Promise<void> | null = null;
 type RevokeNotice = Exclude<Parameters<typeof showNotice>[0]["kind"], "compatibility">;
 let revokeNotice: RevokeNotice | null = null;
@@ -78,6 +85,9 @@ const observedGroupEpochs = new Map<string, string>();
 const lastCleanBackfills = new Map<string, { at: number; missingVersion: number | null }>();
 
 const getOwner = (userId: string) => JSON.stringify([baseUrl, userId]);
+
+const getPushScope = (device: { userId: string; deviceId: string }) =>
+  JSON.stringify([baseUrl, device.userId, device.deviceId]);
 
 const getQueueOwner = async (signal?: AbortSignal) => {
   const device = await getRegisteredDeviceKey();
@@ -607,9 +617,53 @@ const takePlaceAlertsCursor = (round: PlaceRound) => {
   return cursor;
 };
 
+const startAccountSync = (
+  trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
+  device: { deviceId: string; userId: string },
+  signal?: AbortSignal,
+) => {
+  const pushScope = getPushScope(device);
+  const pushToken = trackingModule.pendingPushToken(pushScope);
+  return {
+    pushScope,
+    pushToken,
+    request: tryCatch(
+      trpcClient.accountNotices.sync.mutate(
+        { cursor: getAccountNoticesCursor(device.userId), ...(pushToken ? { pushToken } : {}) },
+        signal ? { signal } : undefined,
+      ),
+    ),
+    userId: device.userId,
+  };
+};
+
+const settleAccountSync = async (
+  trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
+  sync: ReturnType<typeof startAccountSync>,
+) => {
+  const response = await sync.request;
+  if (response.error) {
+    if (getErrorCode(response.error) === "UNAUTHORIZED") checkSessionAfterUnauthorized();
+    return;
+  }
+  if (trackingPaused) return;
+  trackingModule.confirmPushToken(sync.pushScope, sync.pushToken, response.data.pushAvailable);
+  await tryCatch(showAccountNotices({ notices: response.data, userId: sync.userId }));
+};
+
+const takeAccountSync = (
+  trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
+  round: PlaceRound,
+  signal: AbortSignal,
+) => {
+  if (!round.accountDevice || trackingPaused) return;
+  round.accountSync = startAccountSync(trackingModule, round.accountDevice, signal);
+  round.accountDevice = null;
+};
+
 const placeUploadFields = (
   transitions: readonly QueuedPlaceTransition[],
-  cursor: { value: string | null } | null,
+  cursor: PlaceRound["cursor"],
 ) => ({
   ...(transitions.length > 0
     ? {
@@ -624,7 +678,7 @@ const placeUploadFields = (
         ),
       }
     : {}),
-  ...(cursor ? { placeAlertsCursor: cursor.value } : {}),
+  ...(cursor ? { placeAlertsCursor: cursor.placeAlerts, noticesCursor: cursor.notices } : {}),
 });
 
 const settlePlaceResponse = async (
@@ -641,12 +695,14 @@ const settlePlaceResponse = async (
   if (
     response.places !== undefined ||
     response.placeAlerts !== undefined ||
-    response.imageKeysNeedCatchUp !== undefined
+    response.imageKeysNeedCatchUp !== undefined ||
+    response.notices !== undefined
   ) {
     round.updates = {
       places: response.places,
       placeAlerts: response.placeAlerts,
       imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
+      notices: response.notices,
     };
   }
 };
@@ -659,6 +715,7 @@ const uploadPlaceTransitionsAlone = async (
   signal: AbortSignal,
 ) => {
   const cursor = takePlaceAlertsCursor(round);
+  takeAccountSync(trackingModule, round, signal);
   const result = await tryCatch(
     trpcClient.groupTracking.uploadBatch.mutate(
       { groupId, points: [], ...placeUploadFields(transitions, cursor) },
@@ -697,6 +754,7 @@ const uploadClaimedItems = async (
   if (carriesPlaces) round.transitions.delete(groupId);
   const cursor = carriesPlaces ? takePlaceAlertsCursor(round) : null;
   const sentAt = new Date().toISOString();
+  takeAccountSync(trackingModule, round, signal);
   const uploadResult = await tryCatch(
     trpcClient.groupTracking.uploadBatch.mutate(
       {
@@ -863,7 +921,9 @@ const flushGroup = async (
 };
 
 type PlaceRound = {
-  cursor: { value: string | null } | null;
+  accountDevice: { deviceId: string; userId: string } | null;
+  accountSync: ReturnType<typeof startAccountSync> | null;
+  cursor: { placeAlerts: string | null; notices: string | null } | null;
   deviceId: string;
   retryAlone: Map<string, QueuedPlaceTransition[]>;
   transitions: Map<string, QueuedPlaceTransition[]>;
@@ -878,6 +938,8 @@ const startPlaceRound = async (
 ): Promise<PlaceRound> => {
   if (!device || owner !== getOwner(device.userId)) {
     return {
+      accountDevice: null,
+      accountSync: null,
       cursor: null,
       deviceId: "",
       retryAlone: new Map(),
@@ -907,7 +969,14 @@ const startPlaceRound = async (
     if (group.length < 50) transitions.set(transition.groupId, [...group, transition]);
   }
   return {
-    cursor: { value: getPlaceAlertsCursor(device.userId) },
+    accountDevice: trackingPaused ? null : device,
+    accountSync: null,
+    cursor: trackingPaused
+      ? null
+      : {
+          placeAlerts: getPlaceAlertsCursor(device.userId),
+          notices: getNoticesCursor(device.userId),
+        },
     deviceId: device.deviceId,
     retryAlone: new Map(),
     transitions,
@@ -971,11 +1040,23 @@ const flushPendingTrackingPointsInternal = async (
       ),
     );
     failed ||= alone.some((result) => result.status === "rejected");
-    if (round.updates && !signal.aborted) {
+    if (round.accountSync && !signal.aborted) {
+      await settleAccountSync(trackingModule, round.accountSync);
+    }
+    if (round.updates && !signal.aborted && !trackingPaused) {
       await tryCatch(applyPlaceUpdates({ updates: round.updates, userId: round.userId }));
     }
   }
   if (failed) throw new Error("Tracking upload failed");
+};
+
+const inPlaceRound = <T>(work: () => Promise<T>): Promise<T> => {
+  const run = placeRoundTail.then(work);
+  placeRoundTail = run.then(
+    () => {},
+    () => {},
+  );
+  return run;
 };
 
 export const flushPendingTrackingPoints = (force = false): Promise<void> => {
@@ -988,7 +1069,9 @@ export const flushPendingTrackingPoints = (force = false): Promise<void> => {
 
   const controller = new AbortController();
   flushController = controller;
-  const work = flushPendingTrackingPointsInternal(force, controller.signal);
+  const work = placeRoundTail.then(() =>
+    flushPendingTrackingPointsInternal(force, controller.signal),
+  );
   flushWork = work;
   const current = Promise.race([
     work,
@@ -1003,6 +1086,10 @@ export const flushPendingTrackingPoints = (force = false): Promise<void> => {
     }
   });
   flushPromise = current;
+  placeRoundTail = current.then(
+    () => {},
+    () => {},
+  );
   return current;
 };
 
@@ -1022,27 +1109,53 @@ const showApiCompatibilityNotice = async () => {
   if (shown) markApiCompatibilityNotified();
 };
 
-const pollPlaceUpdates = async () => {
-  const trackingModule = await loadTrackingModule();
-  const device = await getRegisteredDeviceKey();
-  const groupId = trackingModule?.listProvisionedEpochKeys()[0]?.groupId;
-  if (!device || !groupId) return;
-  const response = await trpcClient.groupTracking.uploadBatch.mutate({
-    groupId,
-    points: [],
-    placeAlertsCursor: getPlaceAlertsCursor(device.userId),
+const pollPlaceUpdates = () =>
+  inPlaceRound(async () => {
+    if (trackingPaused) return;
+    const trackingModule = await loadTrackingModule();
+    const device = await getRegisteredDeviceKey();
+    if (!trackingModule || !device) return;
+    const groupId = trackingModule.listProvisionedEpochKeys()[0]?.groupId;
+    const accountSync = startAccountSync(trackingModule, device);
+    const upload = groupId
+      ? tryCatch(
+          trpcClient.groupTracking.uploadBatch.mutate({
+            groupId,
+            points: [],
+            placeAlertsCursor: getPlaceAlertsCursor(device.userId),
+            noticesCursor: getNoticesCursor(device.userId),
+          }),
+        )
+      : null;
+    await settleAccountSync(trackingModule, accountSync);
+    if (!upload) return;
+    const uploaded = await upload;
+    if (uploaded.error) throw uploaded.error;
+    if (trackingPaused) return;
+    const response = uploaded.data;
+    await applyPlaceUpdates({
+      updates: {
+        places: response.places,
+        placeAlerts: response.placeAlerts,
+        imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
+        notices: response.notices,
+      },
+      userId: device.userId,
+    });
   });
-  await applyPlaceUpdates({
-    updates: {
-      places: response.places,
-      placeAlerts: response.placeAlerts,
-      imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
-    },
-    userId: device.userId,
-  });
-};
 
-const syncBackgroundTrackingInternal = async (reason: "upload" | "sharing" | "parked") => {
+export const syncAccountNotices = () =>
+  inPlaceRound(async () => {
+    if (trackingPaused || getApiCompatibility()) return;
+    const trackingModule = await loadTrackingModule();
+    const device = await getRegisteredDeviceKey();
+    if (!trackingModule || !device) return;
+    await settleAccountSync(trackingModule, startAccountSync(trackingModule, device));
+  });
+
+export type UploadReason = "upload" | "sharing" | "parked" | "push";
+
+const syncBackgroundTrackingInternal = async (reason: UploadReason) => {
   if (getApiCompatibility()) {
     await refreshApiCompatibilityInBackground();
     if (!getApiCompatibility()) await dismissNotice("compatibility");
@@ -1053,6 +1166,10 @@ const syncBackgroundTrackingInternal = async (reason: "upload" | "sharing" | "pa
   }
   if (reason === "parked") {
     await tryCatch(syncSharingPreference());
+    await tryCatch(pollPlaceUpdates());
+    return;
+  }
+  if (reason === "push") {
     await tryCatch(pollPlaceUpdates());
     return;
   }
@@ -1078,9 +1195,7 @@ const syncBackgroundTrackingInternal = async (reason: "upload" | "sharing" | "pa
   }
 };
 
-export const syncBackgroundTracking = async (
-  reason: "upload" | "sharing" | "parked" = "upload",
-) => {
+export const syncBackgroundTracking = async (reason: UploadReason = "upload") => {
   const synced = await tryCatch(syncBackgroundTrackingInternal(reason));
   await settleImageKeyCatchUps();
   if (synced.error) throw synced.error;
@@ -1138,12 +1253,20 @@ export const revokeTrackingAccess = ({
 };
 
 const revokeUnauthorizedTrackingAccess = (error: unknown, cancelFlush = true) => {
+  checkSessionAfterUnauthorized();
   const deviceRemoved = isDeviceRemovedError(error);
   return revokeTrackingAccess({
     cancelFlush,
     keepDeviceRegistration: deviceRemoved,
     notice: deviceRemoved ? "deviceRemoved" : "signedOut",
   });
+};
+
+export const forgetPushToken = async () => {
+  const trackingModule = await loadTrackingModule();
+  const device = await getRegisteredDeviceKey();
+  if (!trackingModule || !device) return false;
+  return trackingModule.forgetPushToken(getPushScope(device));
 };
 
 export const prepareTrackingSignOut = async (): Promise<void> => {
@@ -1158,7 +1281,16 @@ export const prepareTrackingSignOut = async (): Promise<void> => {
   try {
     await Promise.race([
       (async () => {
+        const clearPushToken = (await tryCatch(forgetPushToken())).data;
         await revokeTrackingAccess({ keepDeviceRegistration: true });
+        if (clearPushToken) {
+          await tryCatch(
+            trpcClient.accountNotices.sync.mutate(
+              { cursor: null, pushToken: null },
+              { signal: controller.signal },
+            ),
+          );
+        }
         if (previousFlush) await previousFlush;
         if (!controller.signal.aborted) {
           await flushPendingTrackingPointsInternal(true, controller.signal);

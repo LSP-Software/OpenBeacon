@@ -25,13 +25,17 @@ Taking a lost or stolen device off the account in Account → Devices. It needs 
 _Avoid_: Revoking, deleting a device, unlinking
 
 **Security alert**:
-An email telling the owner that something important happened to their account, such as a password change, a new sign-in or a deletion.
-_Avoid_: Email alert, notice, notification, Place Alert
+A message telling the owner that something important happened to their account: a new sign-in (sent when a Pending device registers), the password or Recovery phrase changed or reset, other sessions signed out, a device removed, or account deletion scheduled. It's sent by email, as an Account Notice, or both. The owner can turn off each one for email and for phone in Account › Notifications; turning one off always sends the "alerts turned off" email naming it. The "account deleted" email can't be turned off.
+_Avoid_: Email alert, Always-on alert, Optional alert, Place Alert
 
-**Always-on alert**:
-A Security alert the owner can't turn off: password changed or reset, Recovery phrase changed or reset, other sessions signed out, device removed, Security alerts turned off, and account deleted.
-_Avoid_: Mandatory alert, required alert
+**Account Notice**:
+A Security alert kept on the server for the account's other phones, never the device that made the change. Phones fetch it in the response to their tracking uploads and write the notification themselves. It's deleted 24 hours after it's created.
+_Avoid_: Push, message
 
-**Optional alert**:
-A Security alert the owner can turn off: new sign-in (sent when a Pending device registers) and account deletion scheduled.
-_Avoid_: Opt-out alert, preference
+**Notification Setting**:
+One Email or Phone switch for one message type in Account › Notifications. It's stored once per account, not per phone, and only once the owner changes it from its default.
+_Avoid_: Preference, per-device setting
+
+**Push wake-up**:
+A Firebase Cloud Messaging message with no content that makes a phone run its tracking upload straight away, to fetch new Place Alerts, Account Notices and group activity. Only a server with the `FCM_*` settings sends them, which means the hosted service. Self-hosted servers send none, and their phones get the same notifications on their next upload.
+_Avoid_: Push notification

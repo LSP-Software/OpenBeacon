@@ -229,6 +229,7 @@ export const groupMembershipRouter = {
     .mutation(async ({ ctx, input }) => {
       const removed = await ctx.db.$transaction(
         async (tx) => {
+          const eventIds: string[] = [];
           await tx.$queryRaw(
             Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
           );
@@ -301,7 +302,7 @@ export const groupMembershipRouter = {
                 where: { id: successor.id },
                 data: { role: GroupRole.OWNER },
               });
-              await recordGroupEvent(tx, {
+              const roleEvent = await recordGroupEvent(tx, {
                 data: {
                   groupId: input.groupId,
                   type: GroupEventType.ROLE_CHANGED,
@@ -310,6 +311,7 @@ export const groupMembershipRouter = {
                   role: GroupRole.OWNER,
                 },
               });
+              eventIds.push(roleEvent.id);
             }
           }
 
@@ -330,7 +332,7 @@ export const groupMembershipRouter = {
             groupId: input.groupId,
             memberId: input.memberId,
           });
-          await recordGroupEvent(tx, {
+          const departure = await recordGroupEvent(tx, {
             data: isLeaving
               ? {
                   groupId: input.groupId,
@@ -344,6 +346,7 @@ export const groupMembershipRouter = {
                   subjectUserId: member.userId,
                 },
           });
+          eventIds.push(departure.id);
 
           await tx.groupEpochRecipientKey.deleteMany({
             where: {
@@ -373,10 +376,11 @@ export const groupMembershipRouter = {
             SELECT max(id)::text AS id FROM "TrackingStream"
             WHERE "groupId" = ${input.groupId} AND "senderUserId" = ${member.userId}
           `);
-          return { userId: member.userId, lastStreamId: lastStream?.id ?? null };
+          return { userId: member.userId, lastStreamId: lastStream?.id ?? null, eventIds };
         },
         { timeout: 15_000 },
       );
+      ctx.push?.groupEvents(removed.eventIds);
       const cleanup = await tryCatch(
         removed.lastStreamId === null
           ? Promise.resolve(0)
@@ -402,7 +406,7 @@ export const groupMembershipRouter = {
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      return ctx.db.$transaction(async (tx) => {
+      const updated = await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "Group" WHERE id = ${input.groupId} FOR UPDATE`,
         );
@@ -466,21 +470,27 @@ export const groupMembershipRouter = {
             where: { groupId: input.groupId, creatorId: member.userId, usedAt: null },
           });
         }
-        if (member.role !== input.role) {
-          await recordGroupEvent(tx, {
-            data: {
-              groupId: input.groupId,
-              type: GroupEventType.ROLE_CHANGED,
-              actorUserId: ctx.session.user.id,
-              subjectUserId: member.userId,
-              role: input.role,
-            },
-          });
-        }
-        return tx.groupMember.update({
-          where: { id: member.id },
-          data: { role: input.role },
-        });
+        const roleEvent =
+          member.role === input.role
+            ? null
+            : await recordGroupEvent(tx, {
+                data: {
+                  groupId: input.groupId,
+                  type: GroupEventType.ROLE_CHANGED,
+                  actorUserId: ctx.session.user.id,
+                  subjectUserId: member.userId,
+                  role: input.role,
+                },
+              });
+        return {
+          member: await tx.groupMember.update({
+            where: { id: member.id },
+            data: { role: input.role },
+          }),
+          eventIds: roleEvent ? [roleEvent.id] : [],
+        };
       });
+      ctx.push?.groupEvents(updated.eventIds);
+      return updated.member;
     }),
 } satisfies TRPCRouterRecord;

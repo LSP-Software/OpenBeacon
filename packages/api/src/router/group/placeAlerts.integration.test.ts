@@ -4,8 +4,9 @@ import { prisma } from "@openbeacon/database";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { deleteAccountRecords } from "../../lib/account-deletion.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
-import { encodePlaceAlertsCursor } from "../../lib/placeTransitions.ts";
+import { encodeAlertsCursor } from "../../lib/placeTransitions.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
+import { notificationSettingsRouter } from "../notificationSettingsRouter.ts";
 import { removeGroupMemberWithOwnerGuard } from "./assertGroupMemberCanBeRemoved.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
@@ -14,6 +15,7 @@ import { placeAlertsRouter } from "./placeAlertsRouter.ts";
 const router = createTRPCRouter({
   groupMembership: groupMembershipRouter,
   groupTracking: groupTrackingRouter,
+  notificationSettings: notificationSettingsRouter,
   placeAlerts: placeAlertsRouter,
 });
 const cache = createIntegrationTestCache(() => 0);
@@ -106,7 +108,7 @@ const pollAlerts = (userId: string, placeAlertsCursor: string) =>
 const alertIds = async (userId: string) => {
   const response = await pollAlerts(
     userId,
-    encodePlaceAlertsCursor({ createdAt: new Date(Date.now() - 10 * minute), id: "" }),
+    encodeAlertsCursor({ createdAt: new Date(Date.now() - 10 * minute), id: "" }),
   );
   return (response.placeAlerts?.alerts ?? []).map(({ id }) => id.slice(prefix.length + 1)).sort();
 };
@@ -176,6 +178,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     beforeEach(async () => {
       await prisma.placeTransition.deleteMany({ where: { groupId } });
       await prisma.placeAlertMute.deleteMany({ where: { groupId } });
+      await prisma.notificationSetting.deleteMany({ where: { userId: { in: users } } });
       await prisma.groupMember.deleteMany({
         where: { groupId, userId: { in: [joiner, leaver] } },
       });
@@ -241,7 +244,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("unmuting does not bring back arrivals that came in while muted", async () => {
       await setMute(owner, { mutedUserId: member });
       await seedArrivals([{ id: "muted-home", userId: member, placeId: homeId }]);
-      const start = encodePlaceAlertsCursor({
+      const start = encodeAlertsCursor({
         createdAt: new Date(Date.now() - 10 * minute),
         id: "",
       });
@@ -251,6 +254,34 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await setMute(owner, { mutedUserId: member, muted: false });
       const afterUnmute = await pollAlerts(owner, whileMuted.placeAlerts?.cursor ?? start);
       expect(afterUnmute.placeAlerts?.alerts).toEqual([]);
+    });
+
+    test("with place alerts switched off none are returned, the cursor still moves on, and switching back on doesn't bring them back", async () => {
+      await caller(owner).notificationSettings.set({
+        type: "PLACE_ALERTS",
+        channel: "phone",
+        enabled: false,
+      });
+      await addMember(joiner);
+      await seedArrivals([{ id: "while-off", userId: member, placeId: homeId }]);
+      const start = encodeAlertsCursor({
+        createdAt: new Date(Date.now() - 10 * minute),
+        id: "",
+      });
+
+      const whileOff = await pollAlerts(owner, start);
+      expect(whileOff.placeAlerts?.alerts).toEqual([]);
+      expect(whileOff.placeAlerts?.cursor).not.toBe(start);
+      expect(await alertIds(joiner)).toEqual(["while-off"]);
+
+      await caller(owner).notificationSettings.set({
+        type: "PLACE_ALERTS",
+        channel: "phone",
+        enabled: true,
+      });
+      const afterOn = await pollAlerts(owner, whileOff.placeAlerts?.cursor ?? start);
+      expect(afterOn.placeAlerts?.alerts).toEqual([]);
+      expect(await alertIds(owner)).toEqual(["while-off"]);
     });
 
     test("leaving through the app clears the leaver's mutes and the mutes about them", async () => {

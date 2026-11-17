@@ -168,6 +168,7 @@ export const endSession = async ({
     0;
   const tracking = await import("./tracking.ts");
   await tryCatch(tracking.revokeTrackingAccess({ keepDeviceRegistration: true }));
+  await tryCatch(tracking.forgetPushToken());
 
   let keepPendingSharingChanges = !clears.pendingSharingChanges;
   if (userId && clears.queuedPoints === "all") {

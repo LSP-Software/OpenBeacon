@@ -84,6 +84,9 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   provisionEpochKeys(keys: ProvisionedEpochKeyInput[], preserveGroupIds?: string[]): void;
   revokeEpochKeys(groupIds?: string[] | null): void;
   listProvisionedEpochKeys(): ProvisionedEpochKeyInfo[];
+  pendingPushToken(scope: string): string | null;
+  confirmPushToken(scope: string, sent: string | null, pushAvailable: boolean): void;
+  forgetPushToken(scope: string): boolean;
   startCapture(intervalMs?: number | null): Promise<void>;
   refreshCapture(): Promise<void>;
   stopCapture(): Promise<void>;
@@ -107,6 +110,7 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   requestNotificationPermission(): Promise<"granted" | "denied" | "blocked">;
   showNotice(kind: NoticeKind): boolean;
   setRecentsPreviewHidden(hidden: boolean): Promise<void>;
+  finishUploadTask(token: string): void;
   elapsedRealtime(): number;
   dismissNotice(slot: NoticeSlot): void;
   setGroupPlaces(
@@ -118,12 +122,12 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   listPlaceGroups(owner: string, deviceId: string): string[] | null;
   listPlaceTransitions(owner: string): Promise<QueuedPlaceTransition[]>;
   deletePlaceTransitions(clientIds: string[]): Promise<void>;
-  showPlaceNotice(
-    kind: "alert" | "placesChanged",
+  showEventNotice(
+    kind: "alert" | "placesChanged" | "groupActivity" | "accountAlert",
     key: string,
     title: string,
     body: string | null,
-    groupName: string,
+    groupName: string | null,
     link: string,
   ): boolean;
 }
