@@ -19,17 +19,23 @@ final class KeychainItem {
     self.account = account
   }
 
-  static func removeLeftoversFromPreviousInstall() {
-    if UserDefaults.standard.bool(forKey: installedKey) { return }
-    let status = SecItemDelete([kSecClass: kSecClassGenericPassword, kSecAttrService: service] as CFDictionary)
-    guard status == errSecSuccess || status == errSecItemNotFound else {
-      NSLog("OpenBeaconTracking: failed to remove Keychain items left by a previous install: \(status)")
-      return
+  private static let cleanupLock = NSLock()
+  private static var leftoversRemoved = false
+
+  static func removeLeftoversFromPreviousInstall() throws {
+    cleanupLock.lock()
+    defer { cleanupLock.unlock() }
+    if leftoversRemoved { return }
+    if !UserDefaults.standard.bool(forKey: installedKey) {
+      let status = SecItemDelete([kSecClass: kSecClassGenericPassword, kSecAttrService: service] as CFDictionary)
+      guard status == errSecSuccess || status == errSecItemNotFound else { throw KeychainError(status: status) }
+      UserDefaults.standard.set(true, forKey: installedKey)
     }
-    UserDefaults.standard.set(true, forKey: installedKey)
+    leftoversRemoved = true
   }
 
   func read() throws -> Data? {
+    try Self.removeLeftoversFromPreviousInstall()
     var result: AnyObject?
     let status = SecItemCopyMatching(
       [
@@ -47,6 +53,7 @@ final class KeychainItem {
   }
 
   func write(_ data: Data) throws {
+    try Self.removeLeftoversFromPreviousInstall()
     let query = [kSecClass: kSecClassGenericPassword, kSecAttrService: Self.service, kSecAttrAccount: account] as [CFString: Any]
     let updated = SecItemUpdate(
       query as CFDictionary,
@@ -62,6 +69,7 @@ final class KeychainItem {
   }
 
   func delete() throws {
+    try Self.removeLeftoversFromPreviousInstall()
     let status = SecItemDelete(
       [kSecClass: kSecClassGenericPassword, kSecAttrService: Self.service, kSecAttrAccount: account] as CFDictionary
     )
