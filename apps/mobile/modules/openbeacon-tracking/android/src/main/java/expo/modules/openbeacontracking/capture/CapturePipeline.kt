@@ -40,6 +40,7 @@ class CapturePipeline(
     fixId: Long? = null,
     accuracyMeters: Double? = null,
     live: Boolean = true,
+    onCurrentFixQueued: () -> Unit = {},
   ): Int {
     val owner = synchronized(captureLock) {
       if (!canQueue(captureGeneration)) return 0
@@ -70,8 +71,9 @@ class CapturePipeline(
     }
     if (planned.isEmpty()) return 0
 
+    var currentFixEncoded = false
     val rows =
-      planned.map { (key, record, role) ->
+      planned.mapNotNull { (key, record, role) ->
         val point = record.fix
         val plaintext =
           TrackingPointCodec.encode(
@@ -83,7 +85,8 @@ class CapturePipeline(
             speedMetersPerSecond = point.speedMetersPerSecond,
             batteryLevel = point.batteryLevel,
             batteryCharging = point.batteryCharging,
-          ) ?: return 0
+          ) ?: return@mapNotNull null
+        if (role == CiphertextQueueRow.ROLE_LIVE || (role == CiphertextQueueRow.ROLE_POINT && point == fix)) currentFixEncoded = true
         val encrypted =
           GroupPayloadEncrypt.encryptGroupPayload(
             epochKey = key.epochKey,
@@ -94,11 +97,17 @@ class CapturePipeline(
             senderDeviceId = key.senderDeviceId,
           )
 
+        val identity =
+          when {
+            bootId != null && point.fixId != null -> listOf(bootId, point.fixId.toString())
+            role == CiphertextQueueRow.ROLE_STAY -> listOf("arrival-time", point.timestampMillis.toString())
+            else -> null
+          }
         CiphertextQueueRow(
-          clientPointId = if (bootId != null && point.fixId != null) {
+          clientPointId = if (identity != null) {
             val mac = Mac.getInstance("HmacSHA256")
             mac.init(SecretKeySpec(key.epochKey, "HmacSHA256"))
-            val parts = listOf("openbeacon.tracking-point-id.v1", owner, key.groupId, key.epochId, key.senderDeviceId, key.kind, bootId, point.fixId.toString())
+            val parts = listOf("openbeacon.tracking-point-id.v1", owner, key.groupId, key.epochId, key.senderDeviceId, key.kind) + identity
             val context = (if (role == CiphertextQueueRow.ROLE_POINT) parts else parts + role)
               .joinToString(":") { GroupPayloadEncrypt.encodeBase64(it.toByteArray(Charsets.UTF_8)) }
             GroupPayloadEncrypt.encodeBase64(mac.doFinal(context.toByteArray(Charsets.UTF_8)).copyOf(POINT_ID_BYTES))
@@ -123,7 +132,9 @@ class CapturePipeline(
       if (!canQueue(captureGeneration)) return@synchronized 0
       if (queueOwner() != owner) return@synchronized 0
       if (sharingState() != sharing || !sharing.canCapture(timestampMillis, nowMillis())) return@synchronized 0
-      ciphertextQueue.insertAll(rows.map { it.copy(owner = owner, clientPointId = sharing.revisionPrefix + it.clientPointId) })
+      val inserted = ciphertextQueue.insertAll(rows.map { it.copy(owner = owner, clientPointId = sharing.revisionPrefix + it.clientPointId) })
+      if (inserted > 0 && currentFixEncoded) onCurrentFixQueued()
+      inserted
     }
   }
 
@@ -133,7 +144,7 @@ class CapturePipeline(
   ): Boolean {
     val current = allowances[group] ?: loadAllowance(group) ?: HistoryAllowance.full(now, historySettings)
     val next = current.take(now, historySettings)
-    allowances[group] = next ?: current
+    allowances[group] = next ?: current.refill(now, historySettings)
     if (next != null) saveAllowance(group, next)
     return next != null
   }

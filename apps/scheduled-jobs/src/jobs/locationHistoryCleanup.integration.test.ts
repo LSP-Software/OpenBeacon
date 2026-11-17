@@ -203,6 +203,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     expect(await streamEpochs(freshGroupId)).toEqual([1]);
   });
 
+  test("keeps an empty stream that an upload in progress is filling, with its new point", async () => {
+    const groupId = await createGroup("filling", [200]);
+    const streamId = await streamFor(prisma, groupId, 1);
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "TrackingStream" WHERE id = ${streamId} FOR SHARE`;
+      await createLocationHistoryCleanup()();
+      await tx.$executeRaw`
+        INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
+        VALUES (${streamId}, 1, (now() AT TIME ZONE 'UTC'), '\\x00'::bytea)
+      `;
+    });
+    expect(await streamEpochs(groupId)).toEqual([1]);
+    expect(await payloadCount(groupId)).toBe(1);
+  });
+
   test("deletes empty epochs superseded before the cutoff, with their wraps", async () => {
     const groupId = await createGroup("epochs", [50, 30, 20, 15, 12, 3]);
     await addPayloads(groupId, [

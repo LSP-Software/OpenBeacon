@@ -4,7 +4,7 @@ import {
   groupTrackingUploadBatchSchema,
 } from "@openbeacon/schemas";
 import type { TRPCRouterRecord } from "@trpc/server";
-import { tryCatch } from "@openbeacon/shared";
+import { errorCode, tryCatch } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import {
   getLatestGroupTrackingPoints,
@@ -76,65 +76,93 @@ export const groupTrackingRouter = {
         });
       }
       const now = new Date();
-      const result = await ctx.db.$transaction(async (tx) => {
-        const member = await lockGroupMemberForWrite(tx, {
-          groupId: input.groupId,
-          groupLock: "FOR SHARE",
-          userId,
-        });
-        const points =
-          input.points.length > 0
-            ? await uploadGroupTrackingBatch({
-                db: tx,
-                groupId: input.groupId,
-                memberSince: member.createdAt,
-                points: input.points,
-                userId,
-                takeAllowance: async (senderDeviceId, cost) => {
-                  const allowance = await ctx.cache.rateLimits.take(
-                    {
-                      namespace: "groupTracking.historyAllowance",
-                      identifier: {
-                        type: "deviceGroup",
-                        deviceId: senderDeviceId,
-                        groupId: input.groupId,
-                      },
-                      limit: 2_880,
-                      windowMs: 86_400_000,
-                      cost,
-                    },
-                    { whenUnavailable: "allow" },
-                  );
-                  if (allowance.granted < cost) {
-                    console.warn("[rate-limit] history allowance reached", {
-                      userId,
-                      discarded: cost - allowance.granted,
-                    });
-                  }
-                  return allowance.granted;
-                },
-              })
-            : { accepted: [], discarded: [], duplicates: [], expired: [] };
-        if (placeTransitions.length === 0) return points;
-        return {
-          ...points,
-          placeTransitions: transitionBudget.allowed
-            ? await uploadPlaceTransitions({
-                db: tx,
-                deviceId: ctx.deviceId,
-                groupId: input.groupId,
-                memberSince: member.createdAt,
-                now,
-                transitions: placeTransitions,
-                userId,
-              })
-            : {
-                accepted: [],
-                duplicates: [],
-                discarded: placeTransitions.map(({ clientId }) => clientId),
-              },
-        };
+      const historyAllowance = (deviceId: string, cost: number) => ({
+        namespace: "groupTracking.historyAllowance",
+        identifier: { type: "deviceGroup" as const, deviceId, groupId: input.groupId },
+        limit: 2_880,
+        windowMs: 86_400_000,
+        cost,
       });
+      const charged = new Map<string, number>();
+      const refundAllowance = async (senderDeviceId: string, count: number) => {
+        const cost = Math.min(count, charged.get(senderDeviceId) ?? 0);
+        if (cost <= 0) return;
+        charged.set(senderDeviceId, (charged.get(senderDeviceId) ?? 0) - cost);
+        const refunded = await tryCatch(
+          ctx.cache.rateLimits.refund(historyAllowance(senderDeviceId, cost)),
+        );
+        if (refunded.error) {
+          const code = errorCode(refunded.error);
+          console.error(
+            `[rate-limit] could not give back history allowance${code ? ` (${code})` : ""}`,
+          );
+        }
+      };
+      const transaction = await tryCatch(
+        ctx.db.$transaction(async (tx) => {
+          const member = await lockGroupMemberForWrite(tx, {
+            groupId: input.groupId,
+            groupLock: "FOR SHARE",
+            userId,
+          });
+          const points =
+            input.points.length > 0
+              ? await uploadGroupTrackingBatch({
+                  db: tx,
+                  groupId: input.groupId,
+                  memberSince: member.createdAt,
+                  points: input.points,
+                  userId,
+                  refundAllowance,
+                  takeAllowance: async (senderDeviceId, cost) => {
+                    const allowance = await ctx.cache.rateLimits.take(
+                      historyAllowance(senderDeviceId, cost),
+                      { whenUnavailable: "allow" },
+                    );
+                    if (!allowance.unavailable) {
+                      charged.set(
+                        senderDeviceId,
+                        (charged.get(senderDeviceId) ?? 0) + allowance.granted,
+                      );
+                    }
+                    if (allowance.granted < cost) {
+                      console.warn("[rate-limit] history allowance reached", {
+                        userId,
+                        discarded: cost - allowance.granted,
+                      });
+                    }
+                    return allowance.granted;
+                  },
+                })
+              : { accepted: [], discarded: [], duplicates: [], expired: [] };
+          if (placeTransitions.length === 0) return points;
+          return {
+            ...points,
+            placeTransitions: transitionBudget.allowed
+              ? await uploadPlaceTransitions({
+                  db: tx,
+                  deviceId: ctx.deviceId,
+                  groupId: input.groupId,
+                  memberSince: member.createdAt,
+                  now,
+                  transitions: placeTransitions,
+                  userId,
+                })
+              : {
+                  accepted: [],
+                  duplicates: [],
+                  discarded: placeTransitions.map(({ clientId }) => clientId),
+                },
+          };
+        }),
+      );
+      if (transaction.error) {
+        await Promise.all(
+          [...charged].map(([senderDeviceId, cost]) => refundAllowance(senderDeviceId, cost)),
+        );
+        throw transaction.error;
+      }
+      const result = transaction.data;
       const [placeUpdates, imageKeysNeedCatchUp] =
         input.placeAlertsCursor === undefined
           ? [null, null]

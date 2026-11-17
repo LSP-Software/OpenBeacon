@@ -24,18 +24,35 @@ export const createLocationHistoryCleanup =
           DELETE FROM "TrackingLatestPoint"
           WHERE "updatedAt" < (${cutoff}::timestamptz AT TIME ZONE 'UTC')
         `;
-        await services.db.$executeRaw`
-          DELETE FROM "TrackingStream"
-          WHERE id IN (
-            SELECT "stream".id FROM "TrackingStream" AS "stream"
-            WHERE NOT EXISTS (SELECT 1 FROM "TrackingPoint" AS "point" WHERE "point"."streamId" = "stream".id)
-              AND NOT EXISTS (
-                SELECT 1 FROM "TrackingLatestPoint" AS "latest" WHERE "latest"."streamId" = "stream".id
-              )
-            FOR UPDATE SKIP LOCKED
-          )
-        `;
-        return deleted;
+        let afterStream = "0";
+        while (true) {
+          const locked = await services.db.$transaction(async (tx) => {
+            const streams = await tx.$queryRaw<Array<{ id: string }>>`
+              SELECT "stream".id::text AS id FROM "TrackingStream" AS "stream"
+              WHERE "stream".id > ${afterStream}::bigint
+                AND NOT EXISTS (SELECT 1 FROM "TrackingPoint" AS "point" WHERE "point"."streamId" = "stream".id)
+                AND NOT EXISTS (
+                  SELECT 1 FROM "TrackingLatestPoint" AS "latest" WHERE "latest"."streamId" = "stream".id
+                )
+              ORDER BY "stream".id
+              LIMIT ${batchSize}
+              FOR UPDATE SKIP LOCKED
+            `;
+            if (streams.length === 0) return streams;
+            await tx.$executeRaw`
+              DELETE FROM "TrackingStream" AS "stream"
+              WHERE "stream".id = ANY(${streams.map(({ id }) => id)}::bigint[])
+                AND NOT EXISTS (SELECT 1 FROM "TrackingPoint" AS "point" WHERE "point"."streamId" = "stream".id)
+                AND NOT EXISTS (
+                  SELECT 1 FROM "TrackingLatestPoint" AS "latest" WHERE "latest"."streamId" = "stream".id
+                )
+            `;
+            return streams;
+          });
+          const last = locked.at(-1);
+          if (!last || locked.length < batchSize) return deleted;
+          afterStream = last.id;
+        }
       })(),
     );
     if (result.error) {

@@ -1,6 +1,6 @@
 import { Prisma } from "@openbeacon/database";
 import { decodeBase64, encodeBase64, XCHACHA20_NONCE_LENGTH } from "@openbeacon/encryption";
-import type { groupTrackingPointSchema } from "@openbeacon/schemas";
+import type { groupTrackingPointSchema, TRACKING_POINT_ROLES } from "@openbeacon/schemas";
 import type { GroupDeviceSharingState } from "@openbeacon/shared";
 import { TRPCError } from "@trpc/server";
 import type z from "zod";
@@ -17,8 +17,6 @@ type GroupTrackingDb = GroupWriteChecksDb & {
   };
 };
 
-type TrackingPointUpload = z.infer<typeof groupTrackingPointSchema>;
-
 export const parseClientPointId = (clientPointId: string) => {
   const separator = clientPointId.lastIndexOf(":");
   const bytes = decodeBase64(clientPointId.slice(separator + 1));
@@ -28,18 +26,22 @@ export const parseClientPointId = (clientPointId: string) => {
   };
 };
 
+type TrackingStreamKey = { epochId: string; revisionPrefix: string; senderDeviceId: string };
+
 export const uploadGroupTrackingBatch = async ({
   db,
   groupId,
   memberSince,
   points,
+  refundAllowance,
   takeAllowance,
   userId,
 }: {
   db: GroupTrackingDb;
   groupId: string;
   memberSince?: Date;
-  points: TrackingPointUpload[];
+  points: z.infer<typeof groupTrackingPointSchema>[];
+  refundAllowance: (senderDeviceId: string, count: number) => Promise<void>;
   takeAllowance: (senderDeviceId: string, cost: number) => Promise<number>;
   userId: string;
 }) => {
@@ -74,37 +76,50 @@ export const uploadGroupTrackingBatch = async ({
   });
   const kept = current.filter((point) => !discarded.includes(point));
 
-  const streamKey = (point: { epochId: string; revisionPrefix: string; senderDeviceId: string }) =>
+  const streamKey = (point: TrackingStreamKey) =>
     JSON.stringify([point.epochId, point.senderDeviceId, point.revisionPrefix]);
-  const streamIds = new Map<string, string>();
-  for (const point of kept) {
-    const key = streamKey(point);
-    if (streamIds.has(key)) continue;
-    const findStream = async () => {
-      const [stream] = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        SELECT id::text AS id FROM "TrackingStream"
-        WHERE "groupId" = ${groupId} AND "epochId" = ${point.epochId}
-          AND "senderDeviceId" = ${point.senderDeviceId} AND "revisionPrefix" = ${point.revisionPrefix}
-        FOR SHARE
-      `);
-      return stream;
-    };
-    let stream = await findStream();
-    if (!stream) {
-      await db.$queryRaw(Prisma.sql`
-        INSERT INTO "TrackingStream" ("groupId", "epochId", "senderDeviceId", "senderUserId", "revisionPrefix", "createdAt")
-        VALUES (${groupId}, ${point.epochId}, ${point.senderDeviceId}, ${userId}, ${point.revisionPrefix}, (now() AT TIME ZONE 'UTC'))
-        ON CONFLICT ("groupId", "epochId", "senderDeviceId", "revisionPrefix") DO NOTHING
-      `);
-      stream = await findStream();
-    }
-    if (!stream) throw new Error("Tracking stream was not created.");
-    streamIds.set(key, stream.id);
+  const streamRows = (streams: TrackingStreamKey[]) =>
+    Prisma.sql`unnest(
+      ${streams.map(({ epochId }) => epochId)}::text[],
+      ${streams.map(({ senderDeviceId }) => senderDeviceId)}::text[],
+      ${streams.map(({ revisionPrefix }) => revisionPrefix)}::text[]
+    ) AS "row"("epochId", "senderDeviceId", "revisionPrefix")`;
+  const lockStreams = async (streams: TrackingStreamKey[]) =>
+    streams.length === 0
+      ? []
+      : db.$queryRaw<Array<TrackingStreamKey & { id: string }>>(Prisma.sql`
+          SELECT id::text AS id, "epochId", "senderDeviceId", "revisionPrefix" FROM "TrackingStream"
+          WHERE "groupId" = ${groupId}
+            AND ("epochId", "senderDeviceId", "revisionPrefix") IN (
+              SELECT "epochId", "senderDeviceId", "revisionPrefix" FROM ${streamRows(streams)}
+            )
+          ORDER BY id
+          FOR SHARE
+        `);
+  const wantedStreams = [...new Map(kept.map((point) => [streamKey(point), point])).values()];
+  const foundStreams = await lockStreams(wantedStreams);
+  const foundKeys = new Set(foundStreams.map(streamKey));
+  const missingStreams = wantedStreams.filter((stream) => !foundKeys.has(streamKey(stream)));
+  if (missingStreams.length > 0) {
+    await db.$queryRaw(Prisma.sql`
+      INSERT INTO "TrackingStream" ("groupId", "epochId", "senderDeviceId", "senderUserId", "revisionPrefix", "createdAt")
+      SELECT ${groupId}, "epochId", "senderDeviceId", ${userId}, "revisionPrefix", (now() AT TIME ZONE 'UTC')
+      FROM ${streamRows(missingStreams)}
+      ORDER BY "epochId", "senderDeviceId", "revisionPrefix"
+      ON CONFLICT ("groupId", "epochId", "senderDeviceId", "revisionPrefix") DO NOTHING
+    `);
   }
-  const withStreams = kept.map((point) => ({
-    ...point,
-    streamId: streamIds.get(streamKey(point)) ?? "",
-  }));
+  const streamIds = new Map(
+    [...foundStreams, ...(await lockStreams(missingStreams))].map((stream) => [
+      streamKey(stream),
+      stream.id,
+    ]),
+  );
+  const withStreams = kept.map((point) => {
+    const streamId = streamIds.get(streamKey(point));
+    if (!streamId) throw new Error("Tracking stream was not created.");
+    return { ...point, streamId };
+  });
   const pointKey = (point: { pointId: bigint | string; streamId: string }) =>
     `${point.streamId}:${point.pointId}`;
   const history = withStreams.filter((point) => point.role !== "LIVE");
@@ -126,10 +141,12 @@ export const uploadGroupTrackingBatch = async ({
           ).map(pointKey),
         );
   const newRows = history.filter((point) => !alreadyStored.has(pointKey(point)));
+  const charged: typeof newRows = [];
   const overAllowance: typeof newRows = [];
   for (const senderDeviceId of new Set(newRows.map((point) => point.senderDeviceId))) {
     const deviceRows = newRows.filter((point) => point.senderDeviceId === senderDeviceId);
     const granted = await takeAllowance(senderDeviceId, deviceRows.length);
+    charged.push(...deviceRows.slice(0, granted));
     overAllowance.push(...deviceRows.slice(granted));
   }
   const allowed = withStreams.filter((point) => !overAllowance.includes(point));
@@ -140,10 +157,10 @@ export const uploadGroupTrackingBatch = async ({
         Number(BigInt(first.streamId) < BigInt(second.streamId)),
   );
 
-  const storePoints = async (role: "POINT" | "STAY") => {
+  const storePoints = async (role: Exclude<(typeof TRACKING_POINT_ROLES)[number], "LIVE">) => {
     const rows = insertOrder.filter((point) => point.role === role);
-    if (rows.length === 0) return new Set<string>();
-    const stored = await db.$queryRaw<Array<{ streamId: string; pointId: string }>>(Prisma.sql`
+    if (rows.length === 0) return [];
+    return db.$queryRaw<Array<{ inserted: boolean; pointId: string; streamId: string }>>(Prisma.sql`
       INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
       SELECT "streamId"::bigint, "pointId"::bigint, (now() AT TIME ZONE 'UTC'),
         decode("nonce", 'base64') || decode("ciphertext", 'base64')
@@ -158,14 +175,23 @@ export const uploadGroupTrackingBatch = async ({
           ? Prisma.sql`DO UPDATE SET "payload" = EXCLUDED."payload"`
           : Prisma.sql`DO NOTHING`
       }
-      RETURNING "streamId"::text AS "streamId", "pointId"::text AS "pointId"
+      RETURNING "streamId"::text AS "streamId", "pointId"::text AS "pointId", (xmax = 0) AS "inserted"
     `);
-    return new Set(stored.map(pointKey));
   };
-  const storedPoints = await storePoints("POINT");
-  await storePoints("STAY");
+  const inserted = new Set(
+    [...(await storePoints("POINT")), ...(await storePoints("STAY"))]
+      .filter((row) => row.inserted)
+      .map(pointKey),
+  );
+  const unused = charged.filter((point) => !inserted.has(pointKey(point)));
+  for (const senderDeviceId of new Set(unused.map((point) => point.senderDeviceId))) {
+    await refundAllowance(
+      senderDeviceId,
+      unused.filter((point) => point.senderDeviceId === senderDeviceId).length,
+    );
+  }
   const accepted = allowed.filter(
-    (point) => point.role !== "POINT" || storedPoints.has(pointKey(point)),
+    (point) => point.role !== "POINT" || inserted.has(pointKey(point)),
   );
 
   const latestByDevice = new Map(
@@ -204,6 +230,8 @@ export const uploadGroupTrackingBatch = async ({
   };
 };
 
+type LatestPointCursor = { senderDeviceId: string; updatedAt: Date };
+
 const readLatestPoints = async ({
   cursor,
   db,
@@ -211,7 +239,7 @@ const readLatestPoints = async ({
   joinedEpochNumber,
   limit,
 }: {
-  cursor: { senderDeviceId: string; updatedAt: Date } | null;
+  cursor: LatestPointCursor | null;
   db: GroupTrackingDb;
   groupId: string;
   joinedEpochNumber: number;
@@ -256,7 +284,7 @@ export const pollGroupTrackingPoints = async ({
   joinedEpochNumber,
   limit,
 }: {
-  cursor: { senderDeviceId: string; updatedAt: Date } | null | undefined;
+  cursor: LatestPointCursor | null | undefined;
   db: GroupTrackingDb;
   groupId: string;
   joinedEpochNumber: number;

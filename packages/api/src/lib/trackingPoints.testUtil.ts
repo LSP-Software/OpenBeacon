@@ -1,6 +1,6 @@
 import { Prisma } from "@openbeacon/database";
 import { encryptGroupPayload, type EpochKeyMaterial } from "@openbeacon/encryption";
-import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
+import { TRACKING_POINT_KIND, type TRACKING_POINT_ROLES } from "@openbeacon/schemas";
 import { parseClientPointId } from "./groupTracking.ts";
 
 export const testClientPointId = (seed: string | number, revisionPrefix = "") => {
@@ -22,7 +22,7 @@ export const encryptedTrackingPoint = ({
   epochKey: EpochKeyMaterial;
   groupId: string;
   payload?: Uint8Array;
-  role?: "POINT" | "STAY" | "LIVE";
+  role?: (typeof TRACKING_POINT_ROLES)[number];
   senderDeviceId: string;
 }) => {
   const encrypted = encryptGroupPayload({

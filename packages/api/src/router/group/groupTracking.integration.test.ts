@@ -18,6 +18,7 @@ import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import {
   encryptedTrackingPoint,
+  pointIdOf,
   storeLatestTrackingPoint,
   testClientPointId,
 } from "../../lib/trackingPoints.testUtil.ts";
@@ -345,6 +346,52 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       Buffer.from(kept.clientPointId, "base64").readBigInt64BE(),
     ]);
     warn.mockRestore();
+    await cache.rateLimits.reset(allowance);
+    await clearPoints();
+  });
+
+  test("a point another upload stores first gives its allowance back", async () => {
+    const allowance = {
+      namespace: "groupTracking.historyAllowance",
+      identifier: { type: "deviceGroup" as const, deviceId: ownerDeviceId, groupId },
+      limit: 2_880,
+      windowMs: 86_400_000,
+    };
+    await cache.rateLimits.reset(allowance);
+    await upload([point("race-stream")]);
+    const { id: streamId } = await prisma.trackingStream.findFirstOrThrow({
+      where: { groupId, senderDeviceId: ownerDeviceId },
+      select: { id: true },
+    });
+    const raced = point("race-point");
+    const inserted = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const otherUpload = prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
+        VALUES (${streamId}, ${pointIdOf(raced.clientPointId)}::bigint, (now() AT TIME ZONE 'UTC'), '\\x00'::bytea)
+      `;
+      inserted.resolve();
+      await release.promise;
+    });
+    await inserted.promise;
+    const racing = upload([raced]);
+    let waiting = 0;
+    for (let attempt = 0; attempt < 200 && waiting === 0; attempt += 1) {
+      await Bun.sleep(10);
+      const [row] = await prisma.$queryRaw<Array<{ waiting: number }>>`
+        SELECT count(*)::int AS waiting FROM pg_stat_activity
+        WHERE datname = current_database() AND wait_event_type = 'Lock'
+          AND query LIKE '%INSERT INTO "TrackingPoint"%'
+      `;
+      waiting = row?.waiting ?? 0;
+    }
+    release.resolve();
+    await otherUpload;
+
+    expect(waiting).toBe(1);
+    expect(await racing).toMatchObject({ accepted: [], duplicates: [raced.clientPointId] });
+    expect((await cache.rateLimits.peek(allowance)).remaining).toBe(2_879);
     await cache.rateLimits.reset(allowance);
     await clearPoints();
   });

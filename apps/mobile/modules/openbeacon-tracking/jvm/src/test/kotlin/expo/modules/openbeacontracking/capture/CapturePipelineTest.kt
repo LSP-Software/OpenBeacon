@@ -354,6 +354,79 @@ class CapturePipelineTest {
     assertEquals(listOf(CiphertextQueueRow.ROLE_LIVE), emptyQueue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.role })
   }
 
+  @Test
+  fun stayUpdatesKeepTheArrivalIdWithoutABootOrFixId() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))
+    val queue = InMemoryCiphertextQueue()
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" })
+    val start = at("2026-07-13T18:45:00.000Z")
+    for (minute in 0L..13L) {
+      pipeline.onFix(51.5, -0.1, start + minute * 60_000L, 0.0, 80, false, accuracyMeters = 5.0, live = false)
+      queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).filter { it.role == CiphertextQueueRow.ROLE_STAY }.forEach { queue.markInFlight(listOf(it.id), attemptedAt = 1L) }
+    }
+    val stays = queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10)
+    assertEquals(3, stays.size)
+    assertEquals(1, stays.map { it.clientPointId }.toSet().size)
+    assertEquals(start to start + 13 * 60_000L, decrypt(stays.last()))
+  }
+
+  @Test
+  fun aRecordThatCannotBeEncodedIsSkippedWithoutDroppingTheOthers() {
+    val keys = InMemoryEpochKeyStore()
+    val key = ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")
+    keys.replaceAll(listOf(key, key.copy(groupId = "group_b", epochId = "epoch_b")))
+    val queue = InMemoryCiphertextQueue()
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" })
+    val start = at("2026-07-13T18:45:00.000Z")
+    var currentFixQueued = false
+    assertEquals(2, pipeline.onFix(51.5, -0.1, start, 1.4, 80, false))
+    pipeline.onFix(51.5, -0.0998, start + 10_000L, 1.4, 80, false)
+    assertEquals(2, pipeline.onFix(95.0, -0.0996, start + 20_000L, 1.4, 80, false, onCurrentFixQueued = { currentFixQueued = true }))
+    val pending = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).filter { it.role == CiphertextQueueRow.ROLE_POINT }
+    assertEquals(listOf(start, start, start + 10_000L, start + 10_000L), pending.map { decrypt(it).first })
+    assertTrue(!currentFixQueued)
+  }
+
+  @Test
+  fun onlyALiveRowOrAPointForTheCurrentFixSatisfiesTheLiveCadence() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))
+    val queue = InMemoryCiphertextQueue()
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" })
+    val start = at("2026-07-13T18:45:00.000Z")
+    fun capture(at: Long, longitude: Double, latitude: Double = 51.5, live: Boolean = false): Pair<Int, Boolean> {
+      var current = false
+      val queued = pipeline.onFix(latitude, longitude, at, 1.4, 80, false, accuracyMeters = 5.0, live = live, onCurrentFixQueued = { current = true })
+      return queued to current
+    }
+    assertEquals(1 to true, capture(start, -0.1))
+    assertEquals(0 to false, capture(start + 10_000L, -0.0998))
+    assertEquals(1 to false, capture(start + 20_000L, -0.0998, latitude = 51.5005))
+    assertEquals(2 to true, capture(start + 30_000L, -0.0998, latitude = 51.5007, live = true))
+
+    val still = CapturePipeline(epochKeyStore = keys, ciphertextQueue = InMemoryCiphertextQueue(), queueOwner = { "owner" })
+    val results = (0L..3L).map { minute ->
+      var current = false
+      still.onFix(51.6, -0.1, start + minute * 60_000L, 0.0, 80, false, accuracyMeters = 5.0, live = false, onCurrentFixQueued = { current = true }) to current
+    }
+    assertEquals(listOf(1 to true, 0 to false, 1 to true, 1 to false), results)
+  }
+
+  @Test
+  fun anAllowanceSavedWithAFutureTimeStillRefills() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(listOf(ProvisionedEpochKey("group_a", "epoch_a", ByteArray(32), "device_1", "trackingPoint")))
+    val queue = InMemoryCiphertextQueue()
+    val start = at("2026-07-13T18:45:00.000Z")
+    var now = start
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, nowMillis = { now }, loadAllowance = { HistoryAllowance(0.0, start + 86_400_000L) })
+    assertEquals(0, pipeline.onFix(51.5, -0.1, start, 1.4, 80, false, live = false))
+    now = start + 31_000L
+    assertEquals(1, pipeline.onFix(51.5, -0.1, now, 1.4, 80, false, live = false))
+    assertEquals(listOf(CiphertextQueueRow.ROLE_POINT), queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.role })
+  }
+
   private fun decrypt(row: CiphertextQueueRow): Pair<Long, Long?> {
     val point = java.nio.ByteBuffer.wrap(
       GroupPayloadEncrypt.decryptGroupPayload(

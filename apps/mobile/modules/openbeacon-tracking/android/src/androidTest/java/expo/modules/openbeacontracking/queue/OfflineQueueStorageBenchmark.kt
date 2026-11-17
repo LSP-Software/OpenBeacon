@@ -44,7 +44,8 @@ class OfflineQueueStorageBenchmark : Instrumentation() {
         historySettings = HistoryFilterSettings(dailyAllowance = 1_000_000),
       )
       for (fixId in 1L..12_002L) {
-        pipeline.onFix(51.5 + fixId / 1e4, -0.1 + (fixId % 2) / 1e3, at("2026-07-13T18:45:00.000Z") + fixId * 10_000L, 1.5, 80, false, fixId = fixId, live = false)
+        val queued = pipeline.onFix(51.5 + fixId / 1e4, -0.1 + (fixId % 2) / 1e3, at("2026-07-13T18:45:00.000Z") + fixId * 10_000L, 1.5, 80, false, fixId = fixId, live = false)
+        check(queued == if (fixId == 2L) 0 else 2) { "fix $fixId queued $queued rows" }
       }
       val files = listOf("", "-wal", "-shm").map { suffix -> targetContext.getDatabasePath(name + suffix) }
       val diskBytes = files.sumOf { it.length() }

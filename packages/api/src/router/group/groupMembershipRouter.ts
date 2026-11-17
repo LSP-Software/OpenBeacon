@@ -369,15 +369,21 @@ export const groupMembershipRouter = {
             }
           }
 
-          return member;
+          const [lastStream] = await tx.$queryRaw<Array<{ id: string | null }>>(Prisma.sql`
+            SELECT max(id)::text AS id FROM "TrackingStream"
+            WHERE "groupId" = ${input.groupId} AND "senderUserId" = ${member.userId}
+          `);
+          return { userId: member.userId, lastStreamId: lastStream?.id ?? null };
         },
         { timeout: 15_000 },
       );
       const cleanup = await tryCatch(
-        deleteTrackingStreams({
-          db: ctx.db,
-          streams: Prisma.sql`"stream"."groupId" = ${input.groupId} AND "stream"."senderUserId" = ${removed.userId}`,
-        }),
+        removed.lastStreamId === null
+          ? Promise.resolve(0)
+          : deleteTrackingStreams({
+              db: ctx.db,
+              streams: Prisma.sql`"stream"."groupId" = ${input.groupId} AND "stream"."senderUserId" = ${removed.userId} AND "stream"."id" <= ${removed.lastStreamId}::bigint`,
+            }),
       );
       if (cleanup.error) {
         const code = errorCode(cleanup.error);

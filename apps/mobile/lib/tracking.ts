@@ -3,7 +3,7 @@ import {
   PAYLOAD_ENCRYPTION_ALGORITHM,
   TRACKING_POINT_KIND,
 } from "@openbeacon/encryption";
-import { placeTransitionSchema } from "@openbeacon/schemas";
+import { groupTrackingPointSchema, placeTransitionSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import type {
   CiphertextQueueItem,
@@ -597,7 +597,9 @@ type UploadableQueueItem = CiphertextQueueItem & {
 };
 
 const isUploadableQueueItem = (item: CiphertextQueueItem): item is UploadableQueueItem =>
-  item.algorithm === PAYLOAD_ENCRYPTION_ALGORITHM && item.kind === TRACKING_POINT_KIND;
+  item.algorithm === PAYLOAD_ENCRYPTION_ALGORITHM &&
+  item.kind === TRACKING_POINT_KIND &&
+  groupTrackingPointSchema.safeParse(item).success;
 
 const takePlaceAlertsCursor = (round: PlaceRound) => {
   const cursor = round.cursor;
@@ -823,37 +825,18 @@ const uploadClaimedItems = async (
   }
 };
 
+const getSupersedingKey = (item: CiphertextQueueItem) =>
+  item.role === "LIVE"
+    ? JSON.stringify([item.role, item.groupId, item.epochId, item.senderDeviceId, item.kind])
+    : item.clientPointId;
+
 const flushGroup = async (
-  trackingModule: Awaited<ReturnType<typeof loadTrackingModule>>,
+  trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
   owner: string,
-  items: CiphertextQueueItem[],
+  validItems: UploadableQueueItem[],
   signal: AbortSignal,
   round: PlaceRound,
 ) => {
-  if (!trackingModule || items.length === 0) {
-    return;
-  }
-
-  const newestIds = new Map<string, number>();
-  for (const item of items) {
-    newestIds.set(item.clientPointId, Math.max(item.id, newestIds.get(item.clientPointId) ?? 0));
-  }
-  const superseded = items.filter((item) => newestIds.get(item.clientPointId) !== item.id);
-  if (superseded.length > 0) {
-    const deleted = await tryCatch(
-      trackingModule.deleteCiphertexts(superseded.map(({ id }) => id)),
-    );
-    if (deleted.error) throw deleted.error;
-  }
-  const newestItems = items.filter((item) => newestIds.get(item.clientPointId) === item.id);
-  const invalidItems = newestItems.filter((item) => !isUploadableQueueItem(item));
-  const validItems = newestItems.filter(isUploadableQueueItem);
-
-  if (validItems.length === 0) {
-    if (invalidItems.length > 0) throw new Error("Unsupported tracking queue item");
-    return;
-  }
-
   const validIds = validItems.map(({ id }) => id);
   const markResult = await tryCatch(trackingModule.markCiphertextsInFlight(validIds));
   if (markResult.error) {
@@ -874,7 +857,7 @@ const flushGroup = async (
       uploadClaimedItems(trackingModule, owner, senderItems, signal, round),
     ),
   );
-  if (invalidItems.length > 0 || results.some((result) => result.status === "rejected")) {
+  if (results.some((result) => result.status === "rejected")) {
     throw new Error("Tracking upload failed");
   }
 };
@@ -953,8 +936,22 @@ const flushPendingTrackingPointsInternal = async (
     if (signal.aborted) return;
     const pending = await trackingModule.listPendingCiphertexts(owner, 100, afterId);
     if (signal.aborted) return;
-    const pendingItems = pending.filter((item) => force || isReadyForRetry(item, Date.now()));
-    const itemsByGroup = new Map<string, CiphertextQueueItem[]>();
+    const newestIds = new Map<string, number>();
+    for (const item of pending) {
+      const key = getSupersedingKey(item);
+      newestIds.set(key, Math.max(item.id, newestIds.get(key) ?? 0));
+    }
+    const newest = pending.filter((item) => newestIds.get(getSupersedingKey(item)) === item.id);
+    const uploadable = newest.filter(isUploadableQueueItem);
+    const uploadableIds = new Set(uploadable.map(({ id }) => id));
+    const dropped = pending.filter(({ id }) => !uploadableIds.has(id)).map(({ id }) => id);
+    const deleted =
+      dropped.length > 0 ? await tryCatch(trackingModule.deleteCiphertexts(dropped)) : null;
+    failed ||= Boolean(deleted?.error);
+    const pendingItems = deleted?.error
+      ? []
+      : uploadable.filter((item) => force || isReadyForRetry(item, Date.now()));
+    const itemsByGroup = new Map<string, UploadableQueueItem[]>();
     for (const item of pendingItems) {
       itemsByGroup.set(item.groupId, [...(itemsByGroup.get(item.groupId) ?? []), item]);
     }

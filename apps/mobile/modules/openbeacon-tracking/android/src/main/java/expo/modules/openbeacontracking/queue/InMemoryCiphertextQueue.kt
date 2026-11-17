@@ -82,6 +82,8 @@ class InMemoryCiphertextQueue : CiphertextQueue {
     error: String?,
   ) {
     val idSet = ids.toSet()
+    val superseded = rows.filter { row -> row.id in idSet && rows.any { newer -> newer.id > row.id && newer.supersedes(row) } }.map { it.id }.toSet()
+    rows.removeAll { it.id in superseded }
     for (index in rows.indices) {
       val row = rows[index]
       if (row.id in idSet) {
@@ -95,3 +97,13 @@ class InMemoryCiphertextQueue : CiphertextQueue {
     }
   }
 }
+
+private fun CiphertextQueueRow.supersedes(older: CiphertextQueueRow) =
+  owner == older.owner &&
+    when (older.role) {
+      CiphertextQueueRow.ROLE_STAY -> clientPointId == older.clientPointId
+      CiphertextQueueRow.ROLE_LIVE ->
+        role == CiphertextQueueRow.ROLE_LIVE && groupId == older.groupId && epochId == older.epochId &&
+          senderDeviceId == older.senderDeviceId && kind == older.kind
+      else -> false
+    }

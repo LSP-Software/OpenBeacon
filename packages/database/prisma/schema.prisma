@@ -499,6 +499,8 @@ model TrackingStream {
 
   @@unique([groupId, epochId, senderDeviceId, revisionPrefix])
   @@index([senderUserId, groupId])
+  @@index([epochId])
+  @@index([senderDeviceId])
 }
 
 model TrackingPoint {

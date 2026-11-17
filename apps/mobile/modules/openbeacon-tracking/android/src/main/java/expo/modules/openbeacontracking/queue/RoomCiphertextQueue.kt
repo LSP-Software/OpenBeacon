@@ -59,7 +59,11 @@ class RoomCiphertextQueue(
     owner: String?,
     afterId: Long,
   ): List<CiphertextQueueRow> {
-    dao.recoverInterrupted(System.currentTimeMillis() - 120_000L)
+    val before = System.currentTimeMillis() - 120_000L
+    database.runInTransaction {
+      dao.deleteSupersededInterrupted(before)
+      dao.recoverInterrupted(before)
+    }
     return dao.listByStatus(status, limit.coerceAtLeast(0), owner, afterId).map { it.toRow() }
   }
 
@@ -99,7 +103,10 @@ class RoomCiphertextQueue(
     if (ids.isEmpty()) {
       return
     }
-    dao.requeue(ids = ids, attemptedAt = attemptedAt, error = error)
+    database.runInTransaction {
+      dao.deleteSuperseded(ids)
+      dao.requeue(ids = ids, attemptedAt = attemptedAt, error = error)
+    }
   }
 }
 

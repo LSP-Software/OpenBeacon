@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { OpenBeaconCache } from "@openbeacon/cache";
 import { FakeRedis, testRedisHashSecret, UnavailableRedis } from "@openbeacon/cache/testing";
+import type { TRACKING_POINT_ROLES } from "@openbeacon/schemas";
 import { TRPCError } from "@trpc/server";
 
 class TestOpenBeaconCache extends OpenBeaconCache {
@@ -28,15 +29,14 @@ const pointIdsOf = (clientPointIds: string[]) =>
   clientPointIds.map((clientPointId) => parseClientPointId(clientPointId).pointId.toString());
 
 const storedPoints = (stored: string[] = []) =>
-  mock(async (pointIds: string[], _update: boolean) =>
+  mock(async (pointIds: string[], update: boolean, streamIds: string[] = []) =>
     pointIds
-      .filter(
-        (pointId) =>
-          !stored.some(
-            (clientPointId) => parseClientPointId(clientPointId).pointId.toString() === pointId,
-          ),
-      )
-      .map((pointId) => ({ streamId: "1", pointId })),
+      .map((pointId, index) => ({
+        inserted: !pointIdsOf(stored).includes(pointId),
+        pointId,
+        streamId: streamIds[index] ?? "1",
+      }))
+      .filter((row) => update || row.inserted),
   );
 
 let originalBetterAuthUrl: string | undefined;
@@ -98,10 +98,24 @@ const createCaller = async ({
         return (insertPointsMock ?? storedPoints())(
           query.values[1] as string[],
           sql.includes("DO UPDATE"),
+          query.values[0] as string[],
         );
       }
       if (sql.includes('INSERT INTO "Tracking')) return [];
-      if (sql.includes('FROM "TrackingStream"')) return [{ id: "1" }];
+      if (sql.includes('FROM "TrackingStream"')) {
+        const [, epochIds, senderDeviceIds, revisionPrefixes] = query.values as [
+          string,
+          string[],
+          string[],
+          string[],
+        ];
+        return epochIds.map((epochId, index) => ({
+          epochId,
+          id: "1",
+          revisionPrefix: revisionPrefixes[index],
+          senderDeviceId: senderDeviceIds[index],
+        }));
+      }
       if (sql.includes('FROM "TrackingLatestPoint"')) return latestRows;
       if (sql.includes('FROM "User" WHERE')) return [];
       if (sql.includes('FROM "Group"')) return [{ id: "group-1" }];
@@ -196,7 +210,7 @@ describe("groupTrackingRouter", () => {
     }
   });
 
-  const trackingPoint = (seed: string, role: "POINT" | "STAY" | "LIVE" = "POINT") => ({
+  const trackingPoint = (seed: string, role: (typeof TRACKING_POINT_ROLES)[number] = "POINT") => ({
     ciphertext: Buffer.alloc(39, 2).toString("base64"),
     clientPointId: testClientPointId(seed),
     epochId: "epoch-1",
@@ -316,6 +330,63 @@ describe("groupTrackingRouter", () => {
     await expect(
       caller.groupTracking.uploadBatch({ groupId: "group-1", points: [newStay] }),
     ).resolves.toMatchObject({ accepted: [], discarded: [newStay.clientPointId] });
+  });
+
+  test("points another upload stored first give their allowance back", async () => {
+    const raced = trackingPoint("raced-point");
+    const racedStay = trackingPoint("raced-stay", "STAY");
+    const fresh = trackingPoint("fresh-point");
+    const { cache, caller } = await createCaller({
+      insertPointsMock: storedPoints([raced.clientPointId, racedStay.clientPointId]),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
+    });
+    const take = spyOn(cache.rateLimits, "take");
+
+    await expect(
+      caller.groupTracking.uploadBatch({ groupId: "group-1", points: [raced, racedStay, fresh] }),
+    ).resolves.toMatchObject({
+      accepted: [racedStay.clientPointId, fresh.clientPointId],
+      discarded: [],
+      duplicates: [raced.clientPointId],
+    });
+    expect(take).toHaveBeenCalledWith({ ...allowance(), cost: 3 }, { whenUnavailable: "allow" });
+    await expect(cache.rateLimits.peek(allowance())).resolves.toMatchObject({ remaining: 2_879 });
+  });
+
+  test("an upload that rolls back gives all its allowance back", async () => {
+    const { cache, caller } = await createCaller({
+      insertPointsMock: mock(async () => {
+        throw new Error("deadlock detected");
+      }),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
+    });
+
+    await expect(
+      caller.groupTracking.uploadBatch({
+        groupId: "group-1",
+        points: trackingPoints("rollback", 3),
+      }),
+    ).rejects.toThrow("deadlock detected");
+    await expect(cache.rateLimits.peek(allowance())).resolves.toMatchObject({ remaining: 2_880 });
+  });
+
+  test("an upload still succeeds when giving allowance back fails", async () => {
+    const raced = trackingPoint("raced-point");
+    const { cache, caller } = await createCaller({
+      insertPointsMock: storedPoints([raced.clientPointId]),
+      memberFindUniqueMock: createMemberFindUniqueMock(true),
+    });
+    const refund = spyOn(cache.rateLimits, "refund").mockRejectedValue(new Error("Redis down"));
+    const error = spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      caller.groupTracking.uploadBatch({ groupId: "group-1", points: [raced] }),
+    ).resolves.toMatchObject({ duplicates: [raced.clientPointId] });
+    expect(refund).toHaveBeenCalledWith({ ...allowance(), cost: 1 });
+    expect(error.mock.calls.map(([line]) => line)).toContain(
+      "[rate-limit] could not give back history allowance",
+    );
+    error.mockRestore();
   });
 
   test("each device has its own allowance in each group", async () => {

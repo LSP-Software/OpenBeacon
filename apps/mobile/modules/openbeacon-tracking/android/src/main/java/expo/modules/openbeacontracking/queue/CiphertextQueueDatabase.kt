@@ -43,6 +43,7 @@ abstract class CiphertextQueueDatabase : RoomDatabase() {
 
     val MIGRATION_3_4 = object : Migration(3, 4) {
       override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DELETE FROM ciphertext_queue")
         db.execSQL("ALTER TABLE ciphertext_queue ADD COLUMN role TEXT NOT NULL DEFAULT 'POINT'")
         db.execSQL("DROP INDEX IF EXISTS index_ciphertext_queue_clientPointId")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_ciphertext_queue_clientPointId ON ciphertext_queue (clientPointId)")

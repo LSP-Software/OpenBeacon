@@ -85,10 +85,12 @@ object TrackingRuntime {
       bootId = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1).takeIf { it >= 0 }?.toString(),
       sharingState = { sharingState(context) },
       loadAllowance = { group ->
-        context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
+        val parts = context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
           .getString(org.json.JSONArray(group).toString(), null)
           ?.split(":")
-          ?.let { (tokens, updatedAt) -> HistoryAllowance(tokens.toDouble(), updatedAt.toLong()) }
+        val tokens = parts?.getOrNull(0)?.toDoubleOrNull()?.takeIf { it.isFinite() }
+        val updatedAt = parts?.getOrNull(1)?.toLongOrNull()
+        if (parts?.size == 2 && tokens != null && updatedAt != null) HistoryAllowance(tokens, updatedAt) else null
       },
       saveAllowance = { group, allowance ->
         context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
@@ -168,10 +170,19 @@ object TrackingRuntime {
         epochKeyStore(context).revoke(null)
         placeDetection(context).removeGroups(null)
       }
+      if (previousOwner != null && previousOwner != owner) clearHistoryAllowance(context, previousOwner)
       if (previousOwner != owner || previousDeviceId != deviceId) {
         check(preferences.edit().putString("owner", owner).putString("deviceId", deviceId).commit())
       }
     }
+  }
+
+  fun clearHistoryAllowance(context: Context, owner: String) {
+    val preferences = context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
+    val ownerPrefix = org.json.JSONArray(listOf(owner)).toString().removeSuffix("]") + ","
+    val editor = preferences.edit()
+    preferences.all.keys.filter { it.startsWith(ownerPrefix) }.forEach { editor.remove(it) }
+    editor.apply()
   }
 
   fun isCaptureEnabled(context: Context): Boolean =

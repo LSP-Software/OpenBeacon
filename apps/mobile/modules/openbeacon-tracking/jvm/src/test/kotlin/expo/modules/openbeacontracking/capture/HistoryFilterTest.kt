@@ -104,7 +104,7 @@ class HistoryFilterTest {
   }
 
   @Test
-  fun anEmptyAllowanceKeepsNothingAndTheNextTokenResumesFromTheLastStoredPoint() {
+  fun anEmptyAllowanceDropsTheUnkeptRouteAndTheNextTokenStartsAtTheCurrentFix() {
     val filter = HistoryFilter()
     val fixes = track(0 until 40) { second -> Triple(second * 14.0, if (second % 2 == 0) 0.0 else 30.0, 1.4) }
     var tokens = 1
@@ -112,7 +112,71 @@ class HistoryFilterTest {
     assertEquals(listOf(fixes[0]), kept.map { it.fix })
     tokens = 1
     val next = fix(fixes.last().timestampMillis + 10_000L, 40 * 14.0, 0.0, 1.4)
-    assertEquals(1, filter.onFix(next) { if (tokens > 0) { tokens -= 1; true } else false }.size)
+    assertEquals(listOf(next), filter.onFix(next) { if (tokens > 0) { tokens -= 1; true } else false }.map { it.fix })
+  }
+
+  @Test
+  fun aPhoneSittingStillIndoorsWithPoorAccuracyStartsOneStay() {
+    val fixes = (0..120).map { step ->
+      val angle = step * 2.5
+      fix(start + step * 30_000L, 30.0 * cos(angle), 30.0 * sin(angle), 0.0).copy(accuracyMeters = 35.0)
+    }
+    val records = run(HistoryFilter(), fixes)
+    val stays = records.filter { it.stayUntil != null }
+    assertEquals(1, stays.map { it.fix.timestampMillis }.toSet().size)
+    assertTrue(stays.first().fix.timestampMillis <= start + 30_000L)
+    assertTrue(stays.last().stayUntil!! >= fixes.last().timestampMillis - 300_000L)
+    val points = records.filter { it.stayUntil == null }
+    assertTrue(points.size <= 8, "kept ${points.size} route points")
+  }
+
+  @Test
+  fun oneOutlierDuringAStayIsDroppedAndTheStayCarriesOn() {
+    val still = track(0 until 180) { step -> Triple(jitter(step), jitter(step + 5), 0.0) }
+    val outlier = still[90].copy(latitude = latitude(300.0), timestampMillis = still[90].timestampMillis + 5_000L, fixId = null)
+    val records = run(HistoryFilter(), still.take(91) + outlier + still.drop(91))
+    val stays = records.filter { it.stayUntil != null }
+    assertEquals(1, stays.map { it.fix.timestampMillis }.toSet().size)
+    assertTrue(still.last().timestampMillis - stays.last().stayUntil!! < 300_000L)
+    val points = records.filter { it.stayUntil == null }
+    assertTrue(points.none { it.fix.timestampMillis >= stays.first().fix.timestampMillis + 180_000L }, "kept route points during the stay")
+    assertTrue(records.none { it.fix == outlier })
+  }
+
+  @Test
+  fun leavingClosesTheStayAtTheLastFixInsideAndTheRouteStartsAtTheFirstFixOutside() {
+    val still = track(0 until 60) { step -> Triple(jitter(step), jitter(step + 5), 0.0) }
+    val leftAt = still.last().timestampMillis
+    val walkOut = (1..6).map { step -> fix(leftAt + step * 10_000L, step * 25.0, 0.0, 2.5) }
+    val filter = HistoryFilter()
+    run(filter, still + walkOut.take(3))
+    val departure = filter.onFix(walkOut[3]) { true }
+    assertEquals(walkOut[1].timestampMillis, departure.first().stayUntil)
+    assertEquals(walkOut[2], departure[1].fix)
+    assertNull(departure[1].stayUntil)
+  }
+
+  @Test
+  fun aFixLongBeforeAWrongFutureFixRestartsHistoryInsteadOfFreezingIt() {
+    val filter = HistoryFilter()
+    val first = fix(start, 0.0, 0.0, 1.0)
+    assertEquals(1, filter.onFix(first) { true }.size)
+    assertEquals(1, filter.onFix(fix(start + 86_400_000L, 0.0, 0.0, 1.0)) { true }.size)
+    assertTrue(filter.onFix(fix(start + 86_400_000L - 60_000L, 0.0, 0.0, 1.0)) { true }.isEmpty())
+    val corrected = fix(start + 10_000L, 14.0, 0.0, 1.0)
+    assertEquals(listOf(corrected), filter.onFix(corrected) { true }.map { it.fix })
+    assertTrue(filter.onFix(fix(start + 20_000L, 28.0, 0.0, 1.0)) { true }.isEmpty())
+  }
+
+  @Test
+  fun aFutureAllowanceTimeIsRebasedSoTheBucketStillRefills() {
+    val settings = HistoryFilterSettings()
+    val future = HistoryAllowance(0.0, start + 86_400_000L)
+    assertNull(future.take(start, settings))
+    val rebased = future.refill(start, settings)
+    assertEquals(HistoryAllowance(0.0, start), rebased)
+    assertNull(rebased.take(start + 29_000L, settings))
+    assertEquals(0.0, rebased.take(start + 30_000L, settings)!!.tokens, 1e-9)
   }
 
   @Test

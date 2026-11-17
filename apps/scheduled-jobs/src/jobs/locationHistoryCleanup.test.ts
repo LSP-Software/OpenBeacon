@@ -17,21 +17,44 @@ const epochPages: Array<{ cutoff: unknown; after: unknown[]; limit: unknown }> =
 const epochDeletes: string[][] = [];
 let historyBacklog = { PlaceTransition: 0, GroupEvent: 0 };
 const historyDeletes: Array<{ table: string; cutoff: unknown; limit: number }> = [];
+let emptyStreams: string[] = [];
+const streamLocks: Array<{ after: unknown; limit: unknown }> = [];
 
 const queryRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args: unknown[]) => {
   const [strings, values] = Array.isArray(query) ? [query, args] : [query.strings, query.values];
   if (strings.join("?").includes("clock_timestamp")) return [{ now: databaseNow }];
+  if (
+    strings.join("?").trimStart().startsWith('SELECT "stream".id::text AS id FROM "TrackingStream"')
+  ) {
+    const [after, limit] = values;
+    streamLocks.push({ after, limit });
+    return emptyStreams
+      .filter((id) => BigInt(id) > BigInt(String(after)))
+      .slice(0, Number(limit))
+      .map((id) => ({ id }));
+  }
   if (strings.join("?").trimStart().startsWith('DELETE FROM "TrackingPoint"')) {
     const failure = failures.shift();
     if (failure) throw failure;
     const [pointCutoff, limit, streamCutoff, fromStream] = values;
-    payloadDeletes.push({ cutoff: pointCutoff, fromStream, limit: Number(limit), streamCutoff });
+    payloadDeletes.push({
+      cutoff: pointCutoff,
+      fromStream,
+      limit: Number(limit),
+      streamCutoff,
+    });
     const count = Math.min(Number(limit), backlog);
     backlog -= count;
-    return Array.from({ length: count }, (_, index) => ({ streamId: String(index + 1) }));
+    return Array.from({ length: count }, (_, index) => ({
+      streamId: String(index + 1),
+    }));
   }
   const [pageCutoff, afterCreatedAt, afterId, limit] = values;
-  epochPages.push({ cutoff: pageCutoff, after: [afterCreatedAt, afterId], limit });
+  epochPages.push({
+    cutoff: pageCutoff,
+    after: [afterCreatedAt, afterId],
+    limit,
+  });
   return epochs
     .filter(
       ({ id, createdAt }) =>
@@ -71,7 +94,15 @@ const executeRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args
 });
 
 mock.module("../services.ts", () => ({
-  services: { db: { $queryRaw: queryRaw, $executeRaw: executeRaw } },
+  services: {
+    db: {
+      $queryRaw: queryRaw,
+      $executeRaw: executeRaw,
+      $transaction: async (
+        callback: (tx: { $queryRaw: typeof queryRaw; $executeRaw: typeof executeRaw }) => unknown,
+      ) => callback({ $queryRaw: queryRaw, $executeRaw: executeRaw }),
+    },
+  },
 }));
 const { createEpochCleanup, createGroupHistoryCleanup, createLocationHistoryCleanup } =
   await import("./locationHistoryCleanup.ts");
@@ -86,6 +117,8 @@ beforeEach(() => {
   epochDeletes.length = 0;
   historyBacklog = { PlaceTransition: 0, GroupEvent: 0 };
   historyDeletes.length = 0;
+  emptyStreams = [];
+  streamLocks.length = 0;
 });
 
 test("deletes location points older than database time minus exactly 14 days in batches, then stale latest points and empty streams", async () => {
@@ -97,9 +130,23 @@ test("deletes location points older than database time minus exactly 14 days in 
     { cutoff, fromStream: "1000", limit: 1000, streamCutoff: cutoff },
   ]);
   expect(backlog).toBe(0);
+  expect(tidyDeletes).toEqual([{ table: "TrackingLatestPoint", values: [cutoff] }]);
+  expect(streamLocks).toEqual([{ after: "0", limit: 1000 }]);
+});
+
+test("locks empty streams in batches and deletes only the locked ones", async () => {
+  emptyStreams = ["3", "8", "12", "20", "31"];
+  await createLocationHistoryCleanup({ batchSize: 2 })();
+  expect(streamLocks).toEqual([
+    { after: "0", limit: 2 },
+    { after: "8", limit: 2 },
+    { after: "20", limit: 2 },
+  ]);
   expect(tidyDeletes).toEqual([
     { table: "TrackingLatestPoint", values: [cutoff] },
-    { table: "TrackingStream", values: [] },
+    { table: "TrackingStream", values: [["3", "8"]] },
+    { table: "TrackingStream", values: [["12", "20"]] },
+    { table: "TrackingStream", values: [["31"]] },
   ]);
 });
 

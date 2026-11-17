@@ -13,6 +13,9 @@ interface CiphertextQueueDao {
   @Query("UPDATE ciphertext_queue SET owner = :owner WHERE owner IS NULL AND senderDeviceId = :senderDeviceId")
   fun assignUnassigned(senderDeviceId: String, owner: String)
 
+  @Query("DELETE FROM ciphertext_queue WHERE status = 'IN_FLIGHT' AND lastAttemptAt < :before AND $SUPERSEDED")
+  fun deleteSupersededInterrupted(before: Long)
+
   @Query("UPDATE ciphertext_queue SET status = 'PENDING' WHERE status = 'IN_FLIGHT' AND lastAttemptAt < :before")
   fun recoverInterrupted(before: Long)
 
@@ -115,6 +118,9 @@ interface CiphertextQueueDao {
     revision: Long,
   )
 
+  @Query("DELETE FROM ciphertext_queue WHERE id IN (:ids) AND $SUPERSEDED")
+  fun deleteSuperseded(ids: List<Long>)
+
   @Query(
     """
     UPDATE ciphertext_queue
@@ -131,3 +137,19 @@ interface CiphertextQueueDao {
     pendingStatus: String = CiphertextQueueRow.STATUS_PENDING,
   )
 }
+
+private const val SUPERSEDED =
+  """
+  (
+    (role = 'STAY' AND EXISTS (
+      SELECT 1 FROM ciphertext_queue AS newer
+      WHERE newer.owner IS ciphertext_queue.owner AND newer.clientPointId = ciphertext_queue.clientPointId AND newer.id > ciphertext_queue.id
+    ))
+    OR (role = 'LIVE' AND EXISTS (
+      SELECT 1 FROM ciphertext_queue AS newer
+      WHERE newer.role = 'LIVE' AND newer.owner IS ciphertext_queue.owner AND newer.groupId = ciphertext_queue.groupId
+        AND newer.epochId = ciphertext_queue.epochId AND newer.senderDeviceId = ciphertext_queue.senderDeviceId
+        AND newer.kind = ciphertext_queue.kind AND newer.id > ciphertext_queue.id
+    ))
+  )
+  """

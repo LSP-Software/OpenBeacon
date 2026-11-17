@@ -1,6 +1,6 @@
 # Offline tracking queue
 
-Android encrypts each location fix once per group and stores the ciphertext in a local Room (SQLite) database until it uploads. The queue never holds plaintext locations.
+Android runs each location fix through a history filter for each group and encrypts the rows it keeps: history points, stay updates and live-only rows for the map. It stores the ciphertext in a local Room (SQLite) database until it uploads. The queue never holds plaintext locations. A new stay update replaces the pending copy of that stay, and a new live-only row replaces the pending live-only row for the same group, epoch and device, so neither piles up while offline. When an upload fails, an older stay or live-only copy is dropped instead of requeued if a newer copy is already queued. Updating to queue version 4 deletes rows queued by older app versions, because no level 10 server accepts them.
 
 ## Storage limit
 
@@ -25,7 +25,7 @@ The limit is enforced in `RoomCiphertextQueue.insertAll`, in the same transactio
 
 ## Measured capacity
 
-The `OfflineQueueStorageBenchmark` instrumentation (`bun run benchmark:offline-queue-storage`) runs on a connected device or boots the first emulator AVD. It captures 12,000 fixes for two groups at the production limit and reports actual usage. CI doesn't run it. On an x86_64 emulator it retained 16,813 group-points (about 561 bytes each) using 10,149,784 bytes on disk. That's about 1.9 days of continuous movement at one point every 10 seconds for one group, or half that with two groups.
+The `OfflineQueueStorageBenchmark` instrumentation (`bun run benchmark:offline-queue-storage`) runs on a connected device or boots the first emulator AVD. It captures 12,000 fixes for two groups at the production limit and reports actual usage. CI doesn't run it. On an x86_64 emulator it retained 16,813 group-points (about 561 bytes each) using 10,149,784 bytes on disk. That's about 1.9 days of continuous movement at one point every 10 seconds for one group, or half that with two groups. That run predates the 23-byte point format and the history filter: rows are now smaller and far fewer fixes are queued, so capacity is higher, but it hasn't been measured again.
 
 ## Limitations
 

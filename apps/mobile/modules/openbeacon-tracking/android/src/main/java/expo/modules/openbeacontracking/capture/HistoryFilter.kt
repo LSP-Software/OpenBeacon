@@ -38,17 +38,19 @@ data class HistoryAllowance(
   val tokens: Double,
   val updatedAt: Long,
 ) {
+  fun refill(
+    now: Long,
+    settings: HistoryFilterSettings,
+  ): HistoryAllowance {
+    val limit = settings.dailyAllowance.toDouble()
+    return HistoryAllowance(min(limit, tokens + max(0L, now - updatedAt) * limit / settings.allowanceWindowMs), now)
+  }
+
   fun take(
     now: Long,
     settings: HistoryFilterSettings,
   ): HistoryAllowance? {
-    val limit = settings.dailyAllowance.toDouble()
-    val refilled =
-      if (now > updatedAt) {
-        HistoryAllowance(min(limit, tokens + (now - updatedAt) * limit / settings.allowanceWindowMs), now)
-      } else {
-        this
-      }
+    val refilled = refill(now, settings)
     return if (refilled.tokens >= 1.0) refilled.copy(tokens = refilled.tokens - 1.0) else null
   }
 
@@ -91,46 +93,64 @@ class HistoryFilter(
   private val pending = mutableListOf<HistoryFix>()
   private val still = mutableListOf<HistoryFix>()
   private var stay: Stay? = null
+  private var leaving: HistoryFix? = null
 
   fun onFix(
     fix: HistoryFix,
     takeAllowance: () -> Boolean,
   ): List<HistoryRecord> {
-    if (fix.timestampMillis <= lastTimestamp) return emptyList()
     if (fix.accuracyMeters != null && fix.accuracyMeters > settings.maxAccuracyMeters) return emptyList()
-    lastTimestamp = fix.timestampMillis
-
-    val current = stay
-    if (current != null) {
-      val distance = PlaceDwellDetector.distanceMeters(current.latitude, current.longitude, fix.latitude, fix.longitude)
-      val gap = fix.timestampMillis - current.latest.timestampMillis > settings.stayGapMs
-      if (!gap && distance - (fix.accuracyMeters ?: 0.0) <= settings.stayRadiusMeters) {
-        val next = current.copy(
-          latest = fix,
-          latitudeSum = current.latitudeSum + fix.latitude,
-          longitudeSum = current.longitudeSum + fix.longitude,
-          count = current.count + 1,
-        )
-        val due = fix.timestampMillis - (next.sentUntil ?: next.arrival.timestampMillis) >= settings.stayUpdateMs
-        if (due && takeAllowance()) {
-          stay = next.copy(sentUntil = fix.timestampMillis)
-          return listOf(next.record())
-        }
-        stay = next
-        return emptyList()
-      }
-      val records = if (current.sentUntil != current.latest.timestampMillis && takeAllowance()) listOf(current.record()) else emptyList()
+    if (fix.timestampMillis <= lastTimestamp) {
+      if (lastTimestamp - fix.timestampMillis <= settings.stayGapMs) return emptyList()
       stay = null
-      lastKept = if (gap) null else current.latest.copy(latitude = current.latitude, longitude = current.longitude)
+      leaving = null
+      lastKept = null
       pending.clear()
       still.clear()
-      still.add(fix)
-      return records + keepRoute(fix, takeAllowance)
     }
+    lastTimestamp = fix.timestampMillis
 
+    val current = stay ?: return onMovingFix(fix, takeAllowance)
+    val distance = PlaceDwellDetector.distanceMeters(current.latitude, current.longitude, fix.latitude, fix.longitude)
+    val gap = fix.timestampMillis - current.latest.timestampMillis > settings.stayGapMs
+    if (!gap && distance - (fix.accuracyMeters ?: 0.0) <= settings.stayRadiusMeters) {
+      leaving = null
+      val next = current.copy(
+        latest = fix,
+        latitudeSum = current.latitudeSum + fix.latitude,
+        longitudeSum = current.longitudeSum + fix.longitude,
+        count = current.count + 1,
+      )
+      val due = fix.timestampMillis - (next.sentUntil ?: next.arrival.timestampMillis) >= settings.stayUpdateMs
+      if (due && takeAllowance()) {
+        stay = next.copy(sentUntil = fix.timestampMillis)
+        return listOf(next.record())
+      }
+      stay = next
+      return emptyList()
+    }
+    val firstOutside = leaving
+    if (!gap && firstOutside == null) {
+      leaving = fix
+      return emptyList()
+    }
+    val records = if (current.sentUntil != current.latest.timestampMillis && takeAllowance()) listOf(current.record()) else emptyList()
+    stay = null
+    leaving = null
+    lastKept = if (gap) null else current.latest.copy(latitude = current.latitude, longitude = current.longitude)
+    pending.clear()
+    still.clear()
+    val departure = if (gap || firstOutside == null) emptyList() else onMovingFix(firstOutside, takeAllowance)
+    return records + departure + onMovingFix(fix, takeAllowance)
+  }
+
+  private fun onMovingFix(
+    fix: HistoryFix,
+    takeAllowance: () -> Boolean,
+  ): List<HistoryRecord> {
     val records = keepRoute(fix, takeAllowance)
     val anchor = still.firstOrNull()
-    if (anchor != null && (fix.timestampMillis - still.last().timestampMillis > settings.stayGapMs || PlaceDwellDetector.distanceMeters(anchor.latitude, anchor.longitude, fix.latitude, fix.longitude) > settings.stayRadiusMeters)) {
+    if (anchor != null && (fix.timestampMillis - still.last().timestampMillis > settings.stayGapMs || PlaceDwellDetector.distanceMeters(anchor.latitude, anchor.longitude, fix.latitude, fix.longitude) - (fix.accuracyMeters ?: 0.0) > settings.stayRadiusMeters)) {
       still.clear()
     }
     still.add(fix)
@@ -168,20 +188,35 @@ class HistoryFilter(
     }
     val records = mutableListOf<HistoryRecord>()
     val previous = pending.lastOrNull()
-    if (previous != null && pending.any { routeError(kept, fix, it) > tolerance(it) } && takeAllowance()) {
-      records.add(HistoryRecord(previous))
-      lastKept = previous
-      pending.clear()
-    }
-    val start = lastKept ?: kept
-    if (fix.timestampMillis - start.timestampMillis >= maxGapMs(fix) && takeAllowance()) {
-      records.add(HistoryRecord(fix))
-      lastKept = fix
-      pending.clear()
-    } else {
+    val start =
+      if (previous != null && pending.any { routeError(kept, fix, it) > tolerance(it) }) {
+        if (!takeAllowance()) {
+          dropRoute()
+          return emptyList()
+        }
+        records.add(HistoryRecord(previous))
+        lastKept = previous
+        pending.clear()
+        previous
+      } else {
+        kept
+      }
+    if (fix.timestampMillis - start.timestampMillis < maxGapMs(fix)) {
       pending.add(fix)
+      return records
     }
-    return records
+    if (!takeAllowance()) {
+      dropRoute()
+      return records
+    }
+    lastKept = fix
+    pending.clear()
+    return records + HistoryRecord(fix)
+  }
+
+  private fun dropRoute() {
+    lastKept = null
+    pending.clear()
   }
 
   private fun routeError(

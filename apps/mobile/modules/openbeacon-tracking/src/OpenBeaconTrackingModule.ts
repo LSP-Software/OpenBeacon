@@ -1,3 +1,4 @@
+import type { TRACKING_POINT_ROLES } from "@openbeacon/schemas";
 import { NativeModule, requireNativeModule } from "expo";
 
 export type ProvisionedEpochKeyInput = {
@@ -26,7 +27,7 @@ export type CiphertextQueueItem = {
   algorithm: string;
   nonce: string;
   ciphertext: string;
-  role: "POINT" | "STAY" | "LIVE";
+  role: (typeof TRACKING_POINT_ROLES)[number];
   queuedAt: number;
   attemptCount: number;
   lastAttemptAt: number | null;
