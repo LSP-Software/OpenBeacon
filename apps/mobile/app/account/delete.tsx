@@ -105,7 +105,11 @@ const DeleteAccountScreen = () => {
           <View className="w-10" />
         </View>
       </SafeAreaView>
-      <ScrollView contentContainerClassName="gap-4 p-6">
+      <ScrollView
+        contentContainerClassName="gap-4 p-6"
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
+      >
         <Text>
           You will be signed out on all devices. Your account and its data will be permanently
           deleted and cannot be recovered after deletion.

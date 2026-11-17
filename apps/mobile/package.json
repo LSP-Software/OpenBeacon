@@ -12,7 +12,7 @@
     "build-apk": "bun scripts/build-release.ts --apk",
     "typecheck": "bun check",
     "test": "bun test --isolate && bun run test:native",
-    "test:native": "(cd modules/openbeacon-tracking/jvm && ./gradlew test --no-daemon) && bash ../../scripts/test-offline-tracking-queue.sh",
+    "test:native": "(cd modules/openbeacon-tracking/jvm && ./gradlew test --no-daemon) && bash ../../scripts/test-offline-tracking-queue.sh && bash modules/openbeacon-tracking/ios-tests/run.sh",
     "benchmark:offline-queue-storage": "bash ../../scripts/benchmark-offline-queue-storage.sh",
     "test:map-assets:package": "bun scripts/check-map-assets-package.ts"
   },

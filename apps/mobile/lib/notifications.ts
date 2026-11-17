@@ -85,6 +85,9 @@ export const areNotificationsEnabled = async (): Promise<boolean> => {
 export const requestNotificationPermissions = async (): Promise<
   "granted" | "denied" | "blocked"
 > => {
+  if (Platform.OS === "ios") {
+    return (await loadTrackingModule())?.requestNotificationPermission() ?? "granted";
+  }
   if (Platform.OS !== "android") return "granted";
   const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
   if (Number(Platform.Version) >= 33 && !(await PermissionsAndroid.check(permission))) {
@@ -102,6 +105,10 @@ export const requestNotificationPermissions = async (): Promise<
 export const turnOnNotifications = async () => {
   const permission = await tryCatch(requestNotificationPermissions());
   if (permission.data !== "blocked") return;
+  if (Platform.OS === "ios") {
+    await tryCatch(Linking.openSettings());
+    return;
+  }
   const opened = await tryCatch(
     Linking.sendIntent("android.settings.APP_NOTIFICATION_SETTINGS", [
       { key: "android.provider.extra.APP_PACKAGE", value: appConfig.expo.android.package },

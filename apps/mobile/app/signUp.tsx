@@ -154,7 +154,7 @@ const SignUp = () => {
       keyboardType="email-address"
       autoCapitalize="none"
       autoComplete="email"
-      textContentType="emailAddress"
+      textContentType="username"
       {...(verifiesEmail
         ? { returnKeyType: "done", onSubmitEditing: isSubmitting ? undefined : handleEmailContinue }
         : {})}
@@ -245,8 +245,8 @@ const SignUp = () => {
                     placeholder="Password"
                     secureTextEntry
                     autoCapitalize="none"
-                    autoComplete="password"
-                    textContentType="password"
+                    autoComplete="new-password"
+                    textContentType="newPassword"
                   />
                   <Input
                     control={form.control}

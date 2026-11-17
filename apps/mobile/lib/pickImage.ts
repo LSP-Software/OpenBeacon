@@ -1,15 +1,18 @@
 import { tryCatch } from "@openbeacon/shared";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
+import { Platform } from "react-native";
 import { Alert } from "./alert.ts";
 import { cleanupTempFile } from "./image-upload.ts";
 import { withOwnScreen } from "./ownScreen.ts";
 
 export const pickImage = async () => {
-  const permissionResult = await withOwnScreen(ImagePicker.requestMediaLibraryPermissionsAsync);
-  if (!permissionResult.granted) {
-    Alert.alert("Permission required", "Permission to access the media library is required.");
-    return null;
+  if (Platform.OS !== "ios") {
+    const permissionResult = await withOwnScreen(ImagePicker.requestMediaLibraryPermissionsAsync);
+    if (!permissionResult.granted) {
+      Alert.alert("Permission required", "Permission to access the media library is required.");
+      return null;
+    }
   }
 
   const result = await withOwnScreen(() =>

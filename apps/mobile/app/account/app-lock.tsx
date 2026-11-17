@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../../components/headers/BackButton.tsx";
 import { RadioCardGroup } from "../../components/ui/RadioCardGroup.tsx";
@@ -81,10 +81,9 @@ const AppLockSettingsScreen = () => {
         <View className="gap-2">
           <Text className="text-foreground text-3xl font-bold">Lock OpenBeacon</Text>
           <Text className="text-muted-foreground text-base leading-6">
-            Ask for your face, fingerprint or screen lock before anyone can open OpenBeacon on this
-            phone. Location sharing keeps running while the app is locked, and the sharing
-            notification stays on. On Android 13 and later, OpenBeacon’s preview in recent apps is
-            hidden while app lock is on.
+            {Platform.OS === "ios"
+              ? "Ask for Face ID, Touch ID or your passcode before anyone can open OpenBeacon on this phone. Location sharing keeps running while the app is locked, and the location indicator stays on. OpenBeacon’s preview in the app switcher is hidden while app lock is on."
+              : "Ask for your face, fingerprint or screen lock before anyone can open OpenBeacon on this phone. Location sharing keeps running while the app is locked, and the sharing notification stays on. On Android 13 and later, OpenBeacon’s preview in recent apps is hidden while app lock is on."}
           </Text>
         </View>
 

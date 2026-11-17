@@ -1,6 +1,7 @@
 package expo.modules.openbeacontracking.capture
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -12,6 +13,28 @@ class SharingCaptureStateTest {
     assertFalse(SharingCaptureState(revisionPrefix = "s2.2:").isAtLeastAsRecentAs(current))
     assertFalse(SharingCaptureState().isAtLeastAsRecentAs(current))
     assertTrue(SharingCaptureState(revisionPrefix = "s2.4:").isAtLeastAsRecentAs(current))
+  }
+
+  @Test
+  fun anUnconfirmedPauseDoesNotLetAnOlderResumeThrough() {
+    val unconfirmedPause = SharingCaptureState(paused = true)
+    assertTrue(unconfirmedPause.canReplace(SharingCaptureState(revisionPrefix = "s2.3:"), confirmedRevision = "s2.3:"))
+    assertFalse(SharingCaptureState(revisionPrefix = "s1.1:").canReplace(unconfirmedPause, confirmedRevision = "s2.3:"))
+    assertTrue(SharingCaptureState(revisionPrefix = "s2.4:").canReplace(unconfirmedPause, confirmedRevision = "s2.3:"))
+    assertTrue(SharingCaptureState(revisionPrefix = "s1.1:").canReplace(SharingCaptureState(), confirmedRevision = ""))
+  }
+
+  @Test
+  fun anUpgradedPhoneKeepsItsRevisionThroughAnUnconfirmedPause() {
+    val unconfirmedPause = SharingCaptureState(paused = true)
+    val seeded = SharingCaptureState.confirmedRevision(stored = null, current = SharingCaptureState(revisionPrefix = "s2.3:"))
+    val afterPause = unconfirmedPause.confirmedRevision(replacing = seeded)
+    assertEquals("s2.3:", afterPause)
+    assertFalse(
+      SharingCaptureState(revisionPrefix = "s1.1:")
+        .canReplace(unconfirmedPause, SharingCaptureState.confirmedRevision(stored = afterPause, current = unconfirmedPause)),
+    )
+    assertEquals("s2.4:", SharingCaptureState(revisionPrefix = "s2.4:").confirmedRevision(replacing = "s2.3:"))
   }
   @Test
   fun indefinitePauseNeverCaptures() {

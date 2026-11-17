@@ -3,8 +3,8 @@
     "name": "Open Beacon",
     "slug": "open-beacon",
     "description": "Privacy-first family location sharing. You own your data.",
-    "version": "1.24.0",
-    "platforms": ["android"],
+    "version": "1.25.0",
+    "platforms": ["android", "ios"],
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -22,7 +22,19 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "net.openbeacon.app",
-      "buildNumber": "52"
+      "buildNumber": "53",
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": ["35F9.1"]
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -32,7 +44,7 @@
       "predictiveBackGestureEnabled": false,
       "allowBackup": false,
       "package": "net.openbeacon.app",
-      "versionCode": 52,
+      "versionCode": 53,
       "blockedPermissions": [
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.RECORD_AUDIO",
@@ -52,9 +64,23 @@
             "usesCleartextTraffic": false,
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true
+          },
+          "ios": {
+            "deploymentTarget": "16.0",
+            "extraPods": [
+              {
+                "name": "GoogleUtilities",
+                "modular_headers": true
+              },
+              {
+                "name": "RecaptchaInterop",
+                "modular_headers": true
+              }
+            ]
           }
         }
       ],
+      "@maplibre/maplibre-react-native",
       "./plugins/withMapFonts.js",
       [
         "expo-camera",
@@ -69,7 +95,8 @@
           "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your precise location to center the map and prepare private family location sharing.",
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to access your precise location in the background so you can share your location privately with your family.",
           "isAndroidBackgroundLocationEnabled": true,
-          "isAndroidForegroundServiceEnabled": false
+          "isAndroidForegroundServiceEnabled": false,
+          "isIosBackgroundLocationEnabled": true
         }
       ],
       "./modules/openbeacon-tracking/app.plugin.js",
@@ -80,7 +107,8 @@
           "microphonePermission": false
         }
       ],
-      "./plugins/withReleaseSigning.js"
+      "./plugins/withReleaseSigning.js",
+      "./plugins/withPodDeploymentTarget.js"
     ]
   }
 }

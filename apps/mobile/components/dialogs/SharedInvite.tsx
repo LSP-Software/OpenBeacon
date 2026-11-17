@@ -2,7 +2,7 @@ import { Alert } from "../../lib/alert.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { focusManager, useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Share, View } from "react-native";
+import { Platform, Share, View } from "react-native";
 import { useCachedGroup } from "../../hooks/useCachedGroup.ts";
 import { trpc } from "../../lib/api.ts";
 import { BrandedQrCode } from "../BrandedQrCode.tsx";
@@ -89,6 +89,7 @@ export const SharedInvite = ({
               <Text selectable>{invite.data.code}</Text>
               <Button
                 onPress={async () => {
+                  if (Platform.OS === "ios") setOpen(false);
                   const result = await tryCatch(
                     Share.share({
                       message: `Join my Open Beacon group: openbeacon://join?code=${invite.data.code}`,

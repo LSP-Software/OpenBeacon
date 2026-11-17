@@ -58,6 +58,7 @@ export const RecoveryPhraseGrid = ({
           return (
             <Pressable
               key={numberOf(index)}
+              accessible={false}
               onPress={() => inputs.current[index]?.focus()}
               className={cn(
                 "w-[48%] flex-row items-center gap-2 rounded-lg border border-border bg-card px-3",

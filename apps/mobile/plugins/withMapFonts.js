@@ -24,6 +24,7 @@ const withMapFonts = (config) => {
     const project = mod.modResults;
     if (!project.pbxGroupByName("Resources")) {
       const group = project.addPbxGroup([], "Resources");
+      delete group.pbxGroup.path;
       project.addToPbxGroup(group.uuid, project.getFirstProject().firstProject.mainGroup);
     }
     if (project.hasFile("../assets/map/fonts")) {

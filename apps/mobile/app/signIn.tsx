@@ -171,7 +171,7 @@ const SignIn = () => {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoComplete="email"
-                  textContentType="emailAddress"
+                  textContentType="username"
                   returnKeyType="next"
                 />
                 <Input
