@@ -82,6 +82,11 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.title=OpenBeacon backend
+            org.opencontainers.image.description=The API server for OpenBeacon, privacy-first family location sharing with end-to-end encryption.
+            org.opencontainers.image.url=https://openbeacon.net
+            org.opencontainers.image.documentation=https://docs.openbeacon.net/docs/self-host/self-hosting-overview
+            org.opencontainers.image.vendor=LSP Software Ltd
           provenance: mode=max
           sbom: true
           tags: docker.io/lspsoftware/openbeacon-backend:${{ steps.version.outputs.version }}
@@ -98,6 +103,11 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.title=OpenBeacon scheduled jobs
+            org.opencontainers.image.description=Clean-up jobs and account deletion for a self-hosted OpenBeacon server.
+            org.opencontainers.image.url=https://openbeacon.net
+            org.opencontainers.image.documentation=https://docs.openbeacon.net/docs/self-host/self-hosting-overview
+            org.opencontainers.image.vendor=LSP Software Ltd
           provenance: mode=max
           sbom: true
           tags: docker.io/lspsoftware/openbeacon-scheduled-jobs:${{ steps.version.outputs.version }}
@@ -114,6 +124,11 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.title=OpenBeacon map tiles
+            org.opencontainers.image.description=Keeps the map for a self-hosted OpenBeacon server up to date.
+            org.opencontainers.image.url=https://openbeacon.net
+            org.opencontainers.image.documentation=https://docs.openbeacon.net/docs/self-host/self-hosting-overview
+            org.opencontainers.image.vendor=LSP Software Ltd
           provenance: mode=max
           sbom: true
           tags: docker.io/lspsoftware/openbeacon-map-tiles:${{ steps.version.outputs.version }}

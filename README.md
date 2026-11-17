@@ -1,12 +1,12 @@
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="store-assets/play-store-icon-dark.png">
-    <img src="store-assets/play-store-icon-light.png" alt="OpenBeacon" width="96">
+    <img src="store-assets/play-store-icon-light.png" alt="OpenBeacon logo" width="96">
   </picture>
 
   <h1>OpenBeacon</h1>
 
-  <p><strong>Privacy-first family location sharing.</strong><br>
+  <p><strong>Privacy-first family location sharing app for Android.</strong><br>
   Open source, end-to-end encrypted and self-hostable.</p>
 
   <p>
@@ -26,7 +26,7 @@
 
 ## What is OpenBeacon?
 
-OpenBeacon lets your family see where each other are, without handing that information to anyone else.
+OpenBeacon is a family location sharing app that lets the people you choose see where each other are. Locations are encrypted on the phone, so the server that passes them on can't read them. It's an open-source, self-hostable alternative to Life360 and other family locator apps.
 
 - **Encrypted on your phone.** Locations, battery levels and pictures are encrypted before they leave the phone. The server stores them but can't read them, whether it's ours or yours.
 - **Use our server or run your own.** The hosted server and the self-hosted server are the same code.
@@ -34,9 +34,16 @@ OpenBeacon lets your family see where each other are, without handing that infor
 
 OpenBeacon is available on **Android 8.0 and newer**. An iPhone app is on the [roadmap](https://docs.openbeacon.net/docs/use-openbeacon/roadmap).
 
+<p align="center">
+  <img src="store-assets/screenshots/live-map.jpg" alt="The OpenBeacon live map showing three family members" width="240">
+  <img src="store-assets/screenshots/places.png" alt="A group's places, with alerts when someone arrives or leaves" width="240">
+  <img src="store-assets/screenshots/pause-sharing.png" alt="Pausing location sharing for a set time" width="240">
+</p>
+
 ## Features
 
 - Live map of everyone in your groups, with one pin per phone
+- Places such as home or school, with alerts when someone arrives or leaves
 - Pause sharing for a set time or until you turn it back on
 - See who can see your location now, and who could in the last 14 days
 - Several groups, with owner, admin and member roles
