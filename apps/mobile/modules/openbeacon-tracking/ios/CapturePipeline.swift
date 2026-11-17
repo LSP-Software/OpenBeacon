@@ -1,6 +1,8 @@
 import Foundation
 
 final class CapturePipeline {
+  static let shared = CapturePipeline()
+
   private struct Stream: Hashable {
     let owner: String
     let groupId: String
@@ -129,14 +131,6 @@ final class CapturePipeline {
     }
   }
 
-  func reset() {
-    TrackingRuntime.locked {
-      filters = [:]
-      allowances = [:]
-      previousStreams = [:]
-    }
-  }
-
   private func takeAllowance(_ group: [String], now: Int64) -> Bool {
     let current = allowances[group] ?? Self.loadAllowance(group) ?? HistoryAllowance.full(now: now, settings: settings)
     let next = current.take(now: now, settings: settings)
@@ -162,9 +156,12 @@ final class CapturePipeline {
   }
 
   static func clearAllowances(owner: String) {
-    guard var all = UserDefaults.standard.dictionary(forKey: allowanceDefaultsKey) else { return }
-    let prefix = allowanceKey([owner]) + "|"
-    all = all.filter { !$0.key.hasPrefix(prefix) }
-    UserDefaults.standard.set(all, forKey: allowanceDefaultsKey)
+    TrackingRuntime.locked {
+      shared.allowances = shared.allowances.filter { $0.key.first != owner }
+      guard var all = UserDefaults.standard.dictionary(forKey: allowanceDefaultsKey) else { return }
+      let prefix = allowanceKey([owner]) + "|"
+      all = all.filter { !$0.key.hasPrefix(prefix) }
+      UserDefaults.standard.set(all, forKey: allowanceDefaultsKey)
+    }
   }
 }

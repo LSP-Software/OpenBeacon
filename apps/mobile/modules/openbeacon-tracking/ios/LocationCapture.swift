@@ -24,7 +24,6 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate {
   private var lastUploadRequestMs: Int64 = 0
   private var lastQueued: (latitude: Double, longitude: Double, atMs: Int64)?
   private var refreshState = CaptureRefreshState()
-  private let pipeline = CapturePipeline()
 
   override private init() {
     super.init()
@@ -253,7 +252,7 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate {
       batteryCharging: battery.charging
     )
     do {
-      let result = try pipeline.onFix(fix, live: decision.shouldQueue) { isCurrent(generation) }
+      let result = try CapturePipeline.shared.onFix(fix, live: decision.shouldQueue) { isCurrent(generation) }
       TrackingRuntime.locked {
         guard isCurrent(generation), result.currentFixQueued else { return }
         if (decision.forceUpload || now - lastUploadRequestMs >= decision.uploadIntervalMs) && online {
