@@ -458,10 +458,21 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         groupId: readsGroupId,
         points: [ownerPoint(initial, `${prefix}-old-epoch-after-join`)],
       });
-      expect(await latestEpochs(member)).toEqual([]);
-      expect(await polledEpochs(member)).toEqual([]);
-      expect(await latestEpochs(owner)).toEqual([initial.epoch.epochId]);
+      expect(await latestEpochs(member)).toEqual([joined.epoch.epochId]);
+      expect(await polledEpochs(member)).toEqual([joined.epoch.epochId]);
+      expect(await latestEpochs(owner)).toEqual([joined.epoch.epochId]);
       expect((await owner.groupTracking.poll({ groupId: readsGroupId })).points).toHaveLength(1);
+
+      const joinedInBatch = ownerPoint(joined, `${prefix}-joined-in-batch`);
+      await owner.groupTracking.uploadBatch({
+        groupId: readsGroupId,
+        points: [joinedInBatch, ownerPoint(initial, `${prefix}-old-epoch-in-batch`)],
+      });
+      expect(
+        (await member.groupTracking.getLatest({ groupId: readsGroupId })).points.map(
+          (point) => point.ciphertext,
+        ),
+      ).toEqual([joinedInBatch.ciphertext]);
 
       const self = (await member.groupMembership.members({ groupId: readsGroupId })).find(
         (item) => item.user.id === memberId,

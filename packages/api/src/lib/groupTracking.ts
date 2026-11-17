@@ -194,15 +194,15 @@ export const uploadGroupTrackingBatch = async ({
     (point) => point.role !== "POINT" || inserted.has(pointKey(point)),
   );
 
-  const latestByDevice = new Map(
+  const latestByDeviceEpoch = new Map(
     withStreams
       .filter(
         (point) =>
           point.role !== "STAY" && (accepted.includes(point) || overAllowance.includes(point)),
       )
-      .map((point) => [point.senderDeviceId, point]),
+      .map((point) => [`${point.senderDeviceId}:${point.epochId}`, point]),
   );
-  for (const latest of latestByDevice.values()) {
+  for (const latest of latestByDeviceEpoch.values()) {
     await db.$queryRaw(Prisma.sql`
       INSERT INTO "TrackingLatestPoint" ("groupId", "senderDeviceId", "streamId", "payload", "updatedAt")
       VALUES (${groupId}, ${latest.senderDeviceId}, ${latest.streamId}::bigint,
@@ -210,6 +210,15 @@ export const uploadGroupTrackingBatch = async ({
         (now() AT TIME ZONE 'UTC'))
       ON CONFLICT ("groupId", "senderDeviceId") DO UPDATE SET
         "streamId" = EXCLUDED."streamId", "payload" = EXCLUDED."payload", "updatedAt" = EXCLUDED."updatedAt"
+      WHERE (
+        SELECT "epoch"."epochNumber" FROM "TrackingStream" AS "stream"
+        JOIN "GroupEpoch" AS "epoch" ON "epoch"."id" = "stream"."epochId"
+        WHERE "stream"."id" = EXCLUDED."streamId"
+      ) >= (
+        SELECT "epoch"."epochNumber" FROM "TrackingStream" AS "stream"
+        JOIN "GroupEpoch" AS "epoch" ON "epoch"."id" = "stream"."epochId"
+        WHERE "stream"."id" = "TrackingLatestPoint"."streamId"
+      )
     `);
   }
 
