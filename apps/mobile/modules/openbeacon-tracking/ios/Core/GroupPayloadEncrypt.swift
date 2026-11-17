@@ -86,30 +86,16 @@ enum GroupPayloadEncrypt {
     )
   }
 
-  static func trackingPointV1Json(
-    latitude: Double,
-    longitude: Double,
-    timestamp: String,
-    speed: Double?,
-    batteryLevel: Int?,
-    batteryCharging: Bool
-  ) -> String? {
-    guard latitude.isFinite, longitude.isFinite else { return nil }
-    let speedJson = speed.flatMap { $0.isFinite ? "\($0)" : nil } ?? "null"
-    let batteryLevelJson = batteryLevel.map(String.init) ?? "null"
-    return "{\"v\":1,\"latitude\":\(latitude),\"longitude\":\(longitude),\"timestamp\":\(jsonString(timestamp)),\"speed\":\(speedJson),\"battery\":{\"level\":\(batteryLevelJson),\"charging\":\(batteryCharging)}}"
-  }
-
   static func associatedData(groupId: String, epochId: String, kind: String, senderDeviceId: String) -> Data {
     Data(
       "{\"context\":\(jsonString(domainContext)),\"epochId\":\(jsonString(epochId)),\"groupId\":\(jsonString(groupId)),\"kind\":\(jsonString(kind)),\"purpose\":\(jsonString(purpose)),\"senderDeviceId\":\(jsonString(senderDeviceId))}".utf8
     )
   }
 
-  static func clientPointId(epochKey: Data, parts: [String]) -> String {
+  static func clientPointId(epochKey: Data, parts: [String], byteCount: Int) -> String {
     let context = parts.map { Data($0.utf8).base64EncodedString() }.joined(separator: ":")
     let mac = HMAC<SHA256>.authenticationCode(for: Data(context.utf8), using: SymmetricKey(data: epochKey))
-    return Data(mac).base64EncodedString()
+    return Data(mac).prefix(byteCount).base64EncodedString()
   }
 
   static func randomBytes(_ count: Int) -> Data {
@@ -178,9 +164,3 @@ enum GroupPayloadEncrypt {
   }
 }
 
-func formatTrackingTimestamp(_ epochMillis: Int64) -> String {
-  let formatter = ISO8601DateFormatter()
-  formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-  formatter.timeZone = TimeZone(identifier: "UTC")
-  return formatter.string(from: Date(timeIntervalSince1970: Double(epochMillis) / 1000))
-}

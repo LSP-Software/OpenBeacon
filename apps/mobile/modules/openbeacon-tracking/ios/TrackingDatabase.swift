@@ -4,6 +4,9 @@ import SQLite3
 struct CiphertextQueueRow {
   static let statusPending = "PENDING"
   static let statusInFlight = "IN_FLIGHT"
+  static let rolePoint = "POINT"
+  static let roleStay = "STAY"
+  static let roleLive = "LIVE"
 
   var id: Int64 = 0
   var owner: String? = nil
@@ -21,6 +24,7 @@ struct CiphertextQueueRow {
   var lastAttemptAt: Int64? = nil
   var lastError: String? = nil
   var status = CiphertextQueueRow.statusPending
+  var role = CiphertextQueueRow.rolePoint
 }
 
 struct PlaceTransitionRow {
@@ -101,11 +105,21 @@ final class TrackingDatabase {
         attemptCount INTEGER NOT NULL DEFAULT 0,
         lastAttemptAt INTEGER,
         lastError TEXT,
-        status TEXT NOT NULL
+        status TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'POINT'
       )
       """
     )
-    try execute("CREATE UNIQUE INDEX IF NOT EXISTS ciphertext_queue_clientPointId ON ciphertext_queue (clientPointId)")
+    if try query("PRAGMA user_version") { sqlite3_column_int64($0, 0) }.first ?? 0 < 1 {
+      let columns = try query("PRAGMA table_info(ciphertext_queue)") { Self.text($0, 1) }
+      if !columns.contains("role") {
+        try execute("DELETE FROM ciphertext_queue")
+        try execute("ALTER TABLE ciphertext_queue ADD COLUMN role TEXT NOT NULL DEFAULT 'POINT'")
+      }
+      try execute("DROP INDEX IF EXISTS ciphertext_queue_clientPointId")
+      try execute("PRAGMA user_version = 1")
+    }
+    try execute("CREATE INDEX IF NOT EXISTS ciphertext_queue_clientPointId_id ON ciphertext_queue (clientPointId, id)")
     try execute("CREATE INDEX IF NOT EXISTS ciphertext_queue_status_id ON ciphertext_queue (status, id)")
     try execute("CREATE INDEX IF NOT EXISTS ciphertext_queue_groupId_id ON ciphertext_queue (groupId, id)")
     try execute(
@@ -241,27 +255,52 @@ final class TrackingDatabase {
       attemptCount: sqlite3_column_int64(statement, 12),
       lastAttemptAt: integer(statement, 13),
       lastError: text(statement, 14),
-      status: text(statement, 15) ?? CiphertextQueueRow.statusPending
+      status: text(statement, 15) ?? CiphertextQueueRow.statusPending,
+      role: text(statement, 16) ?? CiphertextQueueRow.rolePoint
     )
   }
 
   private static let ciphertextColumns =
-    "id, owner, clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, lastAttemptAt, lastError, status"
+    "id, owner, clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, lastAttemptAt, lastError, status, role"
 
   func insertCiphertexts(_ rows: [CiphertextQueueRow]) throws -> Int {
     try transaction {
       var inserted = 0
       for row in rows {
+        switch row.role {
+        case CiphertextQueueRow.roleStay:
+          try execute(
+            "DELETE FROM ciphertext_queue WHERE clientPointId = ? AND status = ?",
+            [.text(row.clientPointId), .text(CiphertextQueueRow.statusPending)]
+          )
+        case CiphertextQueueRow.roleLive:
+          try execute(
+            """
+            DELETE FROM ciphertext_queue
+            WHERE owner IS ? AND groupId = ? AND epochId = ? AND senderDeviceId = ? AND kind = ? AND role = ? AND status = ?
+            """,
+            [
+              .text(row.owner), .text(row.groupId), .text(row.epochId), .text(row.senderDeviceId), .text(row.kind),
+              .text(CiphertextQueueRow.roleLive), .text(CiphertextQueueRow.statusPending),
+            ]
+          )
+        default:
+          let existing = try query("SELECT COUNT(*) FROM ciphertext_queue WHERE clientPointId = ?", [.text(row.clientPointId)]) {
+            sqlite3_column_int64($0, 0)
+          }.first ?? 0
+          if existing > 0 { continue }
+        }
         inserted += try execute(
           """
-          INSERT OR IGNORE INTO ciphertext_queue
-          (owner, clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, lastAttemptAt, lastError, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO ciphertext_queue
+          (owner, clientPointId, captureId, groupId, epochId, senderDeviceId, kind, algorithm, nonce, ciphertext, queuedAt, attemptCount, lastAttemptAt, lastError, status, role)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           """,
           [
             .text(row.owner), .text(row.clientPointId), .text(row.captureId), .text(row.groupId), .text(row.epochId),
             .text(row.senderDeviceId), .text(row.kind), .text(row.algorithm), .text(row.nonce), .text(row.ciphertext),
             .integer(row.queuedAt), .integer(row.attemptCount), .integer(row.lastAttemptAt), .text(row.lastError), .text(row.status),
+            .text(row.role),
           ]
         )
       }
@@ -283,7 +322,9 @@ final class TrackingDatabase {
         Self.ciphertextRow
       )
       if evicted.isEmpty { return }
-      try deleteCiphertexts(ids: evicted.map(\.id))
+      try forEachChunk(evicted.map(\.id)) { chunk in
+        try execute("DELETE FROM ciphertext_queue WHERE id IN (\(placeholders(chunk.count)))", chunk.map { .integer($0) })
+      }
       for (owner, ownerRows) in Dictionary(grouping: evicted, by: \.owner) {
         guard let owner else { continue }
         let existing = try ciphertextEviction(owner: owner)
@@ -312,17 +353,43 @@ final class TrackingDatabase {
     try execute("DELETE FROM ciphertext_queue_eviction WHERE owner = ? AND revision = ?", [.text(owner), .integer(revision)])
   }
 
-  func listCiphertexts(status: String, limit: Int, owner: String?, afterId: Int64) throws -> [CiphertextQueueRow] {
-    try execute(
-      "UPDATE ciphertext_queue SET status = ? WHERE status = ? AND lastAttemptAt < ?",
-      [.text(CiphertextQueueRow.statusPending), .text(CiphertextQueueRow.statusInFlight), .integer(Int64(Date().timeIntervalSince1970 * 1000) - 120_000)]
-    )
+  func listCiphertexts(status: String, limit: Int, owner: String?, afterId: Int64, exceptRole: String? = nil) throws -> [CiphertextQueueRow] {
+    let before = Int64(Date().timeIntervalSince1970 * 1000) - 120_000
+    try transaction {
+      try execute(
+        "DELETE FROM ciphertext_queue WHERE status = ? AND lastAttemptAt < ? AND \(Self.superseded)",
+        [.text(CiphertextQueueRow.statusInFlight), .integer(before)]
+      )
+      try execute(
+        "UPDATE ciphertext_queue SET status = ? WHERE status = ? AND lastAttemptAt < ?",
+        [.text(CiphertextQueueRow.statusPending), .text(CiphertextQueueRow.statusInFlight), .integer(before)]
+      )
+    }
     return try query(
-      "SELECT \(Self.ciphertextColumns) FROM ciphertext_queue WHERE status = ? AND id > ? AND (? IS NULL OR owner = ?) ORDER BY id ASC LIMIT ?",
-      [.text(status), .integer(afterId), .text(owner), .text(owner), .integer(Int64(max(limit, 0)))],
+      """
+      SELECT \(Self.ciphertextColumns) FROM ciphertext_queue
+      WHERE status = ? AND id > ? AND (? IS NULL OR owner = ?) AND (? IS NULL OR role != ?)
+      ORDER BY id ASC LIMIT ?
+      """,
+      [.text(status), .integer(afterId), .text(owner), .text(owner), .text(exceptRole), .text(exceptRole), .integer(Int64(max(limit, 0)))],
       Self.ciphertextRow
     )
   }
+
+  private static let superseded = """
+    (
+      (role = 'STAY' AND EXISTS (
+        SELECT 1 FROM ciphertext_queue AS newer
+        WHERE newer.owner IS ciphertext_queue.owner AND newer.clientPointId = ciphertext_queue.clientPointId AND newer.id > ciphertext_queue.id
+      ))
+      OR (role = 'LIVE' AND EXISTS (
+        SELECT 1 FROM ciphertext_queue AS newer
+        WHERE newer.role = 'LIVE' AND newer.owner IS ciphertext_queue.owner AND newer.groupId = ciphertext_queue.groupId
+          AND newer.epochId = ciphertext_queue.epochId AND newer.senderDeviceId = ciphertext_queue.senderDeviceId
+          AND newer.kind = ciphertext_queue.kind AND newer.id > ciphertext_queue.id
+      ))
+    )
+    """
 
   func markCiphertextsInFlight(ids: [Int64], attemptedAt: Int64) throws -> [Int64] {
     if ids.isEmpty { return [] }
@@ -345,17 +412,41 @@ final class TrackingDatabase {
   }
 
   func requeueCiphertexts(ids: [Int64], attemptedAt: Int64, error: String?) throws {
-    try forEachChunk(ids) { chunk in
-      try execute(
-        "UPDATE ciphertext_queue SET status = ?, lastAttemptAt = ?, lastError = ? WHERE id IN (\(placeholders(chunk.count)))",
-        [.text(CiphertextQueueRow.statusPending), .integer(attemptedAt), .text(error)] + chunk.map { .integer($0) }
-      )
+    try transaction {
+      try forEachChunk(ids) { chunk in
+        try execute(
+          "DELETE FROM ciphertext_queue WHERE id IN (\(placeholders(chunk.count))) AND \(Self.superseded)",
+          chunk.map { .integer($0) }
+        )
+        try execute(
+          "UPDATE ciphertext_queue SET status = ?, lastAttemptAt = ?, lastError = ? WHERE id IN (\(placeholders(chunk.count)))",
+          [.text(CiphertextQueueRow.statusPending), .integer(attemptedAt), .text(error)] + chunk.map { .integer($0) }
+        )
+      }
     }
   }
 
   func deleteCiphertexts(ids: [Int64]) throws {
-    try forEachChunk(ids) { chunk in
-      try execute("DELETE FROM ciphertext_queue WHERE id IN (\(placeholders(chunk.count)))", chunk.map { .integer($0) })
+    try transaction {
+      try forEachChunk(ids) { chunk in
+        try execute(
+          """
+          DELETE FROM ciphertext_queue
+          WHERE id NOT IN (\(placeholders(chunk.count))) AND role IN ('STAY', 'LIVE') AND EXISTS (
+            SELECT 1 FROM ciphertext_queue AS newer
+            WHERE newer.id IN (\(placeholders(chunk.count))) AND newer.id > ciphertext_queue.id AND newer.role = ciphertext_queue.role
+              AND newer.owner IS ciphertext_queue.owner
+              AND (
+                (newer.role = 'STAY' AND newer.clientPointId = ciphertext_queue.clientPointId)
+                OR (newer.role = 'LIVE' AND newer.groupId = ciphertext_queue.groupId AND newer.epochId = ciphertext_queue.epochId
+                  AND newer.senderDeviceId = ciphertext_queue.senderDeviceId AND newer.kind = ciphertext_queue.kind)
+              )
+          )
+          """,
+          chunk.map { .integer($0) } + chunk.map { .integer($0) }
+        )
+        try execute("DELETE FROM ciphertext_queue WHERE id IN (\(placeholders(chunk.count)))", chunk.map { .integer($0) })
+      }
     }
   }
 

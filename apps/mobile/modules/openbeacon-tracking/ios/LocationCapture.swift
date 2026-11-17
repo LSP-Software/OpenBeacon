@@ -24,6 +24,7 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate {
   private var lastUploadRequestMs: Int64 = 0
   private var lastQueued: (latitude: Double, longitude: Double, atMs: Int64)?
   private var refreshState = CaptureRefreshState()
+  private let pipeline = CapturePipeline()
 
   override private init() {
     super.init()
@@ -242,19 +243,19 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate {
       currentIntervalMs = max(decision.intervalMs, Self.minIntervalMs)
       currentUploadIntervalMs = decision.uploadIntervalMs
     }
-    guard decision.shouldQueue else { return }
-
+    let fix = HistoryFix(
+      latitude: location.coordinate.latitude,
+      longitude: location.coordinate.longitude,
+      timestampMillis: fixMs,
+      accuracyMeters: location.horizontalAccuracy >= 0 ? location.horizontalAccuracy : nil,
+      speedMetersPerSecond: speed,
+      batteryLevel: battery.levelKnown ? battery.level : nil,
+      batteryCharging: battery.charging
+    )
     do {
-      let queuedCount = try queueFix(
-        latitude: location.coordinate.latitude,
-        longitude: location.coordinate.longitude,
-        timestampMillis: fixMs,
-        speed: speed,
-        battery: battery,
-        generation: generation
-      )
+      let result = try pipeline.onFix(fix, live: decision.shouldQueue) { isCurrent(generation) }
       TrackingRuntime.locked {
-        guard isCurrent(generation), queuedCount > 0 else { return }
+        guard isCurrent(generation), result.currentFixQueued else { return }
         if (decision.forceUpload || now - lastUploadRequestMs >= decision.uploadIntervalMs) && online {
           TrackingRuntime.requestSync("upload")
           lastUploadRequestMs = now
@@ -264,63 +265,6 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate {
       }
     } catch {
       NSLog("OpenBeaconTracking: failed to encrypt and queue a location fix: \(error)")
-    }
-  }
-
-  private func queueFix(
-    latitude: Double,
-    longitude: Double,
-    timestampMillis: Int64,
-    speed: Double?,
-    battery: BatterySnapshot,
-    generation: Int64
-  ) throws -> Int {
-    guard let owner = TrackingRuntime.locked({ isCurrent(generation) ? TrackingRuntime.queueOwner() : nil }) else { return 0 }
-    let keys = TrackingRuntime.epochKeys.list()
-    if keys.isEmpty { return 0 }
-    let captureId = UUID().uuidString.lowercased()
-    let queuedAt = TrackingRuntime.nowMillis()
-    let sharing = TrackingRuntime.locked { TrackingRuntime.sharingState() }
-    guard sharing.canCapture(timestamp: timestampMillis, now: queuedAt) else { return 0 }
-    guard
-      let plaintext = GroupPayloadEncrypt.trackingPointV1Json(
-        latitude: latitude,
-        longitude: longitude,
-        timestamp: formatTrackingTimestamp(timestampMillis),
-        speed: speed,
-        batteryLevel: battery.levelKnown ? battery.level : nil,
-        batteryCharging: battery.charging
-      )
-    else { return 0 }
-
-    let rows = try keys.map { key in
-      let encrypted = try GroupPayloadEncrypt.encrypt(
-        epochKey: key.epochKey,
-        plaintext: Data(plaintext.utf8),
-        groupId: key.groupId,
-        epochId: key.epochId,
-        kind: key.kind,
-        senderDeviceId: key.senderDeviceId
-      )
-      return CiphertextQueueRow(
-        owner: owner,
-        clientPointId: sharing.revisionPrefix + UUID().uuidString.lowercased(),
-        captureId: captureId,
-        groupId: encrypted.groupId,
-        epochId: encrypted.epochId,
-        senderDeviceId: encrypted.senderDeviceId,
-        kind: encrypted.kind,
-        algorithm: encrypted.algorithm,
-        nonce: encrypted.nonce,
-        ciphertext: encrypted.ciphertext,
-        queuedAt: queuedAt
-      )
-    }
-
-    return try TrackingRuntime.locked {
-      guard isCurrent(generation), TrackingRuntime.queueOwner() == owner else { return 0 }
-      guard TrackingRuntime.sharingState() == sharing, sharing.canCapture(timestamp: timestampMillis, now: TrackingRuntime.nowMillis()) else { return 0 }
-      return try TrackingDatabase.shared().insertCiphertexts(rows)
     }
   }
 
@@ -362,7 +306,7 @@ final class LocationCapture: NSObject, CLLocationManagerDelegate {
   private func hasPendingUploads() -> Bool {
     do {
       let owner = TrackingRuntime.queueOwner()
-      if try !TrackingDatabase.shared().listCiphertexts(status: CiphertextQueueRow.statusPending, limit: 1, owner: owner, afterId: 0).isEmpty {
+      if try !TrackingDatabase.shared().listCiphertexts(status: CiphertextQueueRow.statusPending, limit: 1, owner: owner, afterId: 0, exceptRole: CiphertextQueueRow.roleStay).isEmpty {
         return true
       }
       guard let owner else { return false }

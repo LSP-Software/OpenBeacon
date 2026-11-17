@@ -205,6 +205,7 @@ enum TrackingRuntime {
         try epochKeys.revoke(nil)
         try places.removeGroups(nil)
       }
+      if let previousOwner, previousOwner != owner { CapturePipeline.clearAllowances(owner: previousOwner) }
       defaults.set(owner, forKey: "openbeacon_tracking_queue.owner")
       defaults.set(deviceId, forKey: "openbeacon_tracking_queue.deviceId")
     }

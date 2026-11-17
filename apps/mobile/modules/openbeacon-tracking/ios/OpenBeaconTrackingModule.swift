@@ -197,6 +197,7 @@ public class OpenBeaconTrackingModule: Module {
             "lastAttemptAt": row.lastAttemptAt.map { Double($0) as Any } ?? NSNull(),
             "lastError": row.lastError as Any? ?? NSNull(),
             "status": row.status,
+            "role": row.role,
           ]
         }
     }
@@ -227,6 +228,7 @@ public class OpenBeaconTrackingModule: Module {
     }
 
     AsyncFunction("deleteCiphertextsByOwner") { (owner: String) in
+      CapturePipeline.clearAllowances(owner: owner)
       try TrackingDatabase.shared().deleteCiphertexts(owner: owner)
     }
 

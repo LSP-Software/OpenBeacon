@@ -72,10 +72,31 @@ struct KeychainError: Error {
 final class EpochKeyStore {
   private let item = KeychainItem(account: "epochKeys.v1")
   private let lock = NSRecursiveLock()
+  private var cached: [ProvisionedEpochKey]?
+  private var revocationCount: Int64 = 0
+
+  var revocations: Int64 {
+    lock.lock()
+    defer { lock.unlock() }
+    return revocationCount
+  }
+
+  func listWithRevocations() -> (revocations: Int64, keys: [ProvisionedEpochKey]) {
+    lock.lock()
+    defer { lock.unlock() }
+    return (revocationCount, list())
+  }
 
   func list() -> [ProvisionedEpochKey] {
     lock.lock()
     defer { lock.unlock() }
+    if let cached { return cached }
+    let keys = readKeys()
+    if !keys.isEmpty { cached = keys }
+    return keys
+  }
+
+  private func readKeys() -> [ProvisionedEpochKey] {
     do {
       guard let data = try item.read(), let array = try JSONSerialization.jsonObject(with: data) as? [[String: String]] else {
         return []
@@ -108,6 +129,7 @@ final class EpochKeyStore {
         "kind": key.kind,
       ]
     }
+    defer { cached = nil }
     try item.write(JSONSerialization.data(withJSONObject: array))
   }
 
@@ -122,6 +144,8 @@ final class EpochKeyStore {
   func revoke(_ groupIds: [String]?) throws {
     lock.lock()
     defer { lock.unlock() }
+    revocationCount += 1
+    defer { cached = nil }
     guard let groupIds, !groupIds.isEmpty else {
       try item.delete()
       return
