@@ -3,7 +3,7 @@ import {
   PAYLOAD_ENCRYPTION_ALGORITHM,
   TRACKING_POINT_KIND,
 } from "@openbeacon/encryption";
-import { placeTransitionSchema } from "@openbeacon/schemas";
+import { groupTrackingPointSchema, placeTransitionSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import type {
   CiphertextQueueItem,
@@ -36,6 +36,7 @@ import {
   applyPlaceUpdates,
   getPlaceAlertsCursor,
   type PlaceUpdates,
+  settleImageKeyCatchUps,
 } from "./placeBackgroundSync.ts";
 import { backfillHistoryWraps } from "./recovery.ts";
 import { resealPersonalData } from "./resealPersonalData.ts";
@@ -596,7 +597,9 @@ type UploadableQueueItem = CiphertextQueueItem & {
 };
 
 const isUploadableQueueItem = (item: CiphertextQueueItem): item is UploadableQueueItem =>
-  item.algorithm === PAYLOAD_ENCRYPTION_ALGORITHM && item.kind === TRACKING_POINT_KIND;
+  item.algorithm === PAYLOAD_ENCRYPTION_ALGORITHM &&
+  item.kind === TRACKING_POINT_KIND &&
+  groupTrackingPointSchema.safeParse(item).success;
 
 const takePlaceAlertsCursor = (round: PlaceRound) => {
   const cursor = round.cursor;
@@ -635,8 +638,16 @@ const settlePlaceResponse = async (
     const { accepted, duplicates, discarded } = response.placeTransitions;
     await trackingModule.deletePlaceTransitions([...accepted, ...duplicates, ...discarded]);
   }
-  if (response.places !== undefined || response.placeAlerts !== undefined) {
-    round.updates = { places: response.places, placeAlerts: response.placeAlerts };
+  if (
+    response.places !== undefined ||
+    response.placeAlerts !== undefined ||
+    response.imageKeysNeedCatchUp !== undefined
+  ) {
+    round.updates = {
+      places: response.places,
+      placeAlerts: response.placeAlerts,
+      imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
+    };
   }
 };
 
@@ -692,13 +703,12 @@ const uploadClaimedItems = async (
         groupId,
         ...placeUploadFields(transitions, cursor),
         points: items.map(
-          ({ algorithm, ciphertext, clientPointId, epochId, kind, nonce, senderDeviceId }) => ({
-            algorithm,
+          ({ ciphertext, clientPointId, epochId, nonce, role, senderDeviceId }) => ({
             ciphertext,
             clientPointId,
             epochId,
-            kind,
             nonce,
+            role,
             senderDeviceId,
           }),
         ),
@@ -815,25 +825,18 @@ const uploadClaimedItems = async (
   }
 };
 
+const getSupersedingKey = (item: CiphertextQueueItem) =>
+  item.role === "LIVE"
+    ? JSON.stringify([item.role, item.groupId, item.epochId, item.senderDeviceId, item.kind])
+    : item.clientPointId;
+
 const flushGroup = async (
-  trackingModule: Awaited<ReturnType<typeof loadTrackingModule>>,
+  trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
   owner: string,
-  items: CiphertextQueueItem[],
+  validItems: UploadableQueueItem[],
   signal: AbortSignal,
   round: PlaceRound,
 ) => {
-  if (!trackingModule || items.length === 0) {
-    return;
-  }
-
-  const invalidItems = items.filter((item) => !isUploadableQueueItem(item));
-  const validItems = items.filter(isUploadableQueueItem);
-
-  if (validItems.length === 0) {
-    if (invalidItems.length > 0) throw new Error("Unsupported tracking queue item");
-    return;
-  }
-
   const validIds = validItems.map(({ id }) => id);
   const markResult = await tryCatch(trackingModule.markCiphertextsInFlight(validIds));
   if (markResult.error) {
@@ -854,7 +857,7 @@ const flushGroup = async (
       uploadClaimedItems(trackingModule, owner, senderItems, signal, round),
     ),
   );
-  if (invalidItems.length > 0 || results.some((result) => result.status === "rejected")) {
+  if (results.some((result) => result.status === "rejected")) {
     throw new Error("Tracking upload failed");
   }
 };
@@ -933,8 +936,22 @@ const flushPendingTrackingPointsInternal = async (
     if (signal.aborted) return;
     const pending = await trackingModule.listPendingCiphertexts(owner, 100, afterId);
     if (signal.aborted) return;
-    const pendingItems = pending.filter((item) => force || isReadyForRetry(item, Date.now()));
-    const itemsByGroup = new Map<string, CiphertextQueueItem[]>();
+    const newestIds = new Map<string, number>();
+    for (const item of pending) {
+      const key = getSupersedingKey(item);
+      newestIds.set(key, Math.max(item.id, newestIds.get(key) ?? 0));
+    }
+    const newest = pending.filter((item) => newestIds.get(getSupersedingKey(item)) === item.id);
+    const uploadable = newest.filter(isUploadableQueueItem);
+    const uploadableIds = new Set(uploadable.map(({ id }) => id));
+    const dropped = pending.filter(({ id }) => !uploadableIds.has(id)).map(({ id }) => id);
+    const deleted =
+      dropped.length > 0 ? await tryCatch(trackingModule.deleteCiphertexts(dropped)) : null;
+    failed ||= Boolean(deleted?.error);
+    const pendingItems = deleted?.error
+      ? []
+      : uploadable.filter((item) => force || isReadyForRetry(item, Date.now()));
+    const itemsByGroup = new Map<string, UploadableQueueItem[]>();
     for (const item of pendingItems) {
       itemsByGroup.set(item.groupId, [...(itemsByGroup.get(item.groupId) ?? []), item]);
     }
@@ -1016,14 +1033,16 @@ const pollPlaceUpdates = async () => {
     placeAlertsCursor: getPlaceAlertsCursor(device.userId),
   });
   await applyPlaceUpdates({
-    updates: { places: response.places, placeAlerts: response.placeAlerts },
+    updates: {
+      places: response.places,
+      placeAlerts: response.placeAlerts,
+      imageKeysNeedCatchUp: response.imageKeysNeedCatchUp,
+    },
     userId: device.userId,
   });
 };
 
-export const syncBackgroundTracking = async (
-  reason: "upload" | "sharing" | "parked" = "upload",
-) => {
+const syncBackgroundTrackingInternal = async (reason: "upload" | "sharing" | "parked") => {
   if (getApiCompatibility()) {
     await refreshApiCompatibilityInBackground();
     if (!getApiCompatibility()) await dismissNotice("compatibility");
@@ -1057,6 +1076,14 @@ export const syncBackgroundTracking = async (
   if (result.error && !(await isDeviceOffline())) {
     throw result.error;
   }
+};
+
+export const syncBackgroundTracking = async (
+  reason: "upload" | "sharing" | "parked" = "upload",
+) => {
+  const synced = await tryCatch(syncBackgroundTrackingInternal(reason));
+  await settleImageKeyCatchUps();
+  if (synced.error) throw synced.error;
 };
 
 const revokeTrackingAccessInternal = async (): Promise<void> => {
@@ -1135,6 +1162,7 @@ export const prepareTrackingSignOut = async (): Promise<void> => {
         if (previousFlush) await previousFlush;
         if (!controller.signal.aborted) {
           await flushPendingTrackingPointsInternal(true, controller.signal);
+          await settleImageKeyCatchUps();
         }
       })(),
       new Promise<void>((resolve) =>

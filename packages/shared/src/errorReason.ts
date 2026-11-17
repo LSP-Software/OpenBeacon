@@ -23,6 +23,7 @@ export const errorReasons = [
   "PLACE_GONE",
   "EPOCH_NOT_LATEST",
   "EPOCH_ROTATION_PENDING",
+  "IMAGE_CHANGED",
 ] as const;
 
 export type ErrorReason = (typeof errorReasons)[number];

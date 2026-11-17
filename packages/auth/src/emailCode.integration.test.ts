@@ -897,7 +897,7 @@ const requestSignUpCode = (email: string, ip = nextIp()) =>
   request("/email-code/request-sign-up-code", { body: { email }, ip });
 
 const signUp = (
-  body: { email: string; password: string; name: string; signUpToken?: string },
+  body: { email: string; password: string; name: string; signUpToken?: string; image?: string },
   handler = auth.handler,
 ) => request("/sign-up/email", { body, ip: nextIp() }, handler);
 
@@ -1065,6 +1065,34 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("sign-up verifica
       emailOff.handler,
     );
     expect(signedIn.status).toBe(200);
+  });
+
+  test("sign-up ignores a picture sent in the request, with email on or off", async () => {
+    const image = "https://attacker.example/tracking.png";
+    const verifiedEmail = nextAddress("signup-image");
+    const signUpToken = await verifiedSignUpToken(verifiedEmail);
+    const offEmail = nextAddress("signup-image-email-off");
+
+    const verified = await signUp({
+      email: verifiedEmail,
+      password,
+      name: "New Tester",
+      signUpToken,
+      image,
+    });
+    const off = await signUp(
+      { email: offEmail, password, name: "New Tester", image },
+      emailOff.handler,
+    );
+
+    expect([verified.status, off.status]).toEqual([200, 200]);
+    expect(
+      await prisma.user.findMany({
+        where: { email: { in: [verifiedEmail, offEmail] } },
+        orderBy: { email: "asc" },
+        select: { email: true, image: true },
+      }),
+    ).toEqual([verifiedEmail, offEmail].sort().map((email) => ({ email, image: null })));
   });
 });
 

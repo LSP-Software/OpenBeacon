@@ -112,7 +112,14 @@ describe("deleteUserImages", () => {
 describe("getPresignedUploadUrl", () => {
   test("signs the content type so the upload can't choose another one", async () => {
     const url = new URL(
-      await getPresignedUploadUrl("bucket", "path", "image.webp", "image/webp", "aGFzaA==", 10),
+      await getPresignedUploadUrl(
+        "bucket",
+        "path",
+        "image",
+        "application/octet-stream",
+        "aGFzaA==",
+        10,
+      ),
     );
     expect(url.searchParams.get("X-Amz-SignedHeaders")?.split(";")).toEqual(
       expect.arrayContaining(["content-type", "x-amz-checksum-sha256"]),
@@ -121,16 +128,16 @@ describe("getPresignedUploadUrl", () => {
 });
 
 describe("getUploadedFile", () => {
-  test("doesn't read an upload that is already over the size limit", async () => {
+  test("only reads the stored object's size and type", async () => {
     send.mockResolvedValueOnce({
       $metadata: {},
       ContentLength: 50_000_000,
-      ContentType: "image/webp",
+      ContentType: "application/octet-stream",
     });
 
-    const file = await getUploadedFile("bucket", "path", "image.webp", 16, 5_242_880);
+    const file = await getUploadedFile("bucket", "path", "image");
 
-    expect(file?.header).toEqual(new Uint8Array());
+    expect(file).toEqual({ size: 50_000_000, contentType: "application/octet-stream" });
     expect(send.mock.calls.some(([command]) => command instanceof GetObjectCommand)).toBe(false);
   });
 });

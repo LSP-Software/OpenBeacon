@@ -4,7 +4,9 @@ import { TRPCClientError } from "@trpc/client";
 import { useEffect, useRef } from "react";
 import { useAppForeground } from "../hooks/useAppForeground.ts";
 import { authClient } from "../lib/auth-client.ts";
+import { baseUrl } from "../lib/currentServer.ts";
 import { clearGroupColors } from "../lib/groupColor.ts";
+import { claimImageCache } from "../lib/imageCache.ts";
 import { clearTrackingUploadTimes } from "../lib/trackingUploadTime.ts";
 
 export const SessionDataCleanup = () => {
@@ -22,6 +24,11 @@ export const SessionDataCleanup = () => {
 
   useEffect(() => {
     if (isPending) return;
+    void tryCatch(
+      Promise.resolve().then(() =>
+        claimImageCache(userId ? JSON.stringify([baseUrl, userId]) : null),
+      ),
+    );
     void tryCatch(
       import("../lib/endSession.ts").then(({ settleLostSessions }) =>
         settleLostSessions({ userId }),

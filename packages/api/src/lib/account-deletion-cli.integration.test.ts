@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { prisma } from "@openbeacon/database";
+import { Prisma, prisma } from "@openbeacon/database";
+import { countTrackingPoints, storeTrackingPoints } from "./trackingPoints.testUtil.ts";
 
 const userId = `cli-deletion-${crypto.randomUUID()}`;
 const memberId = `${userId}-member`;
@@ -36,18 +37,12 @@ const seedHistory = async (groupId: string) => {
       senderPublicKey: "sender-key",
     },
   });
-  await prisma.groupEncryptedPayload.createMany({
-    data: [1, 2, 3].map(() => ({
-      algorithm: "test",
-      ciphertext: "ciphertext",
-      clientPointId: crypto.randomUUID(),
-      epochId: epoch.id,
-      groupId,
-      kind: "location",
-      nonce: "nonce",
-      senderDeviceId: device.id,
-      senderUserId: userId,
-    })),
+  await storeTrackingPoints(prisma, {
+    count: 3,
+    epochId: epoch.id,
+    groupId,
+    senderDeviceId: device.id,
+    senderUserId: userId,
   });
   await prisma.session.create({
     data: {
@@ -60,7 +55,7 @@ const seedHistory = async (groupId: string) => {
   });
 };
 const accountState = async () => ({
-  payloads: await prisma.groupEncryptedPayload.count({ where: { senderUserId: userId } }),
+  payloads: await countTrackingPoints(prisma, Prisma.sql`"stream"."senderUserId" = ${userId}`),
   memberships: await prisma.groupMember.count({ where: { userId } }),
   sessions: await prisma.session.count({ where: { userId } }),
   user: await prisma.user.findUnique({
@@ -69,7 +64,7 @@ const accountState = async () => ({
   }),
 });
 const removeSeededData = async () => {
-  await prisma.groupEncryptedPayload.deleteMany({ where: { senderUserId: userId } });
+  await prisma.trackingStream.deleteMany({ where: { senderUserId: userId } });
   await prisma.group.deleteMany({ where: { groupMembers: { some: { userId } } } });
   await prisma.session.deleteMany({ where: { userId } });
   await prisma.userDevice.deleteMany({ where: { userId } });

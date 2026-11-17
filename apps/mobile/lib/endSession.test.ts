@@ -8,6 +8,7 @@ const storageValues = new Map<string, string | boolean>();
 const navigations: unknown[] = [];
 const queueDeletions: Array<{ deviceId: string | undefined; userId: string }> = [];
 let signOuts = 0;
+let picturesAtSignOut = -1;
 let trackingRevocations = 0;
 let sessionUserId: string | null = "user-a";
 let registerError: Error | null = null;
@@ -104,6 +105,9 @@ mock.module("./auth-client.ts", () => ({
   authClient: {
     signOut: async () => {
       signOuts += 1;
+      picturesAtSignOut = [...cachedFiles].filter((file) =>
+        file.startsWith("cache/images/"),
+      ).length;
       return { error: null };
     },
   },
@@ -118,7 +122,34 @@ mock.module("./tracking.ts", () => ({
   },
 }));
 
+const cachedFiles = new Set<string>();
+let imageKeyCheckResets = 0;
+
+mock.module("expo-file-system", () => ({
+  Paths: { cache: "cache" },
+  Directory: class {
+    path: string;
+    constructor(...parts: string[]) {
+      this.path = parts.join("/");
+    }
+    get exists() {
+      return [...cachedFiles].some((file) => file.startsWith(`${this.path}/`));
+    }
+    delete = () => {
+      for (const file of [...cachedFiles]) {
+        if (file.startsWith(`${this.path}/`)) cachedFiles.delete(file);
+      }
+    };
+  },
+  File: class {},
+}));
+
 mock.module("./groupColor.ts", () => ({ clearGroupColors: () => {} }));
+mock.module("./imageKeySelfCheck.ts", () => ({
+  resetImageKeyCheck: () => {
+    imageKeyCheckResets += 1;
+  },
+}));
 mock.module("./trackingKeyCheck.ts", () => ({ clearTrackingKeyCheck: () => {} }));
 mock.module("./trackingUploadTime.ts", () => ({ clearTrackingUploadTimes: () => {} }));
 
@@ -389,6 +420,15 @@ describe("wiping a removed phone", () => {
     expect(providerRequests).toEqual([]);
     expect(signOuts).toBe(0);
   });
+
+  test("a lost session still deletes decrypted pictures when it stops early", async () => {
+    await seedSignedOutPhone();
+    cachedFiles.add("cache/images/0d6c8c2e-2b1a-4c55-9a4e-6f1b2f3c4d5e");
+
+    await endSession({ reason: "sessionLost" });
+
+    expect([...cachedFiles].filter((file) => file.startsWith("cache/images/"))).toEqual([]);
+  });
 });
 
 describe("ending a session", () => {
@@ -517,6 +557,66 @@ describe("ending a session", () => {
       pendingJoinCodes: false,
       ...expected,
     });
+  });
+
+  test.each([
+    ["signedOut", false],
+    ["phoneRemoved", false],
+    ["accountDeleted", false],
+    ["serverChanged", false],
+    ["sessionLost", true],
+  ] as const)("%s leaves this phone's own picture key: %p", async (reason, kept) => {
+    await seedSignedInPhone();
+    secureStoreValues.set("encryption.profileImage.user-a", "picture-key");
+
+    await endSession({ reason });
+
+    expect(secureStoreValues.has("encryption.profileImage.user-a")).toBe(kept);
+  });
+
+  test.each([
+    "signedOut",
+    "phoneRemoved",
+    "accountDeleted",
+    "serverChanged",
+    "sessionLost",
+  ] as const)("%s deletes every decrypted picture on this phone", async (reason) => {
+    await seedSignedInPhone();
+    cachedFiles.add("cache/images/0d6c8c2e-2b1a-4c55-9a4e-6f1b2f3c4d5e");
+    cachedFiles.add("cache/images/7f0a1b2c-3d4e-4f50-8a6b-7c8d9e0f1a2b");
+    cachedFiles.add("cache/map/tiles.pmtiles");
+
+    await endSession({ reason });
+
+    expect([...cachedFiles]).toEqual(["cache/map/tiles.pmtiles"]);
+  });
+
+  test("a plain sign-out stops the picture key check", async () => {
+    await seedSignedInPhone();
+    const before = imageKeyCheckResets;
+
+    await endSession({ reason: "signedOut" });
+
+    expect(imageKeyCheckResets).toBe(before + 1);
+  });
+
+  test("deletes decrypted pictures before contacting the server", async () => {
+    await seedSignedInPhone();
+    cachedFiles.add("cache/images/0d6c8c2e-2b1a-4c55-9a4e-6f1b2f3c4d5e");
+
+    await endSession({ reason: "signedOut" });
+
+    expect(picturesAtSignOut).toBe(0);
+  });
+
+  test("a lost session's picture key is wiped along with its other keys", async () => {
+    await seedSignedInPhone();
+    secureStoreValues.set("encryption.profileImage.user-a", "picture-key");
+    await endSession({ reason: "sessionLost" });
+
+    await settleLostSessions({ userId: "user-b" });
+
+    expect(secureStoreValues.has("encryption.profileImage.user-a")).toBe(false);
   });
 
   test("a sign-out keeps queued points that no pause is holding back", async () => {

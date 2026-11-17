@@ -1,33 +1,52 @@
 import {
   decodeBase64,
+  ENCRYPTED_TRACKING_POINT_LENGTH,
   encodeBase64,
-  PAYLOAD_ENCRYPTION_ALGORITHM,
   TRACKING_POINT_KIND,
   XCHACHA20_NONCE_LENGTH,
 } from "@openbeacon/encryption";
 import z from "zod";
 import { placeAlertsCursorSchema, placeTransitionSchema } from "./placeTransitions.ts";
 
+const decodesTo = (value: string, isValid: (decoded: Uint8Array) => boolean) => {
+  try {
+    const decoded = decodeBase64(value);
+    return isValid(decoded) && encodeBase64(decoded) === value;
+  } catch {
+    return false;
+  }
+};
+
 export const groupPayloadNonceSchema = z
   .string()
   .min(1)
-  .refine((nonce) => {
-    if (nonce.length !== 32) return false;
-    try {
-      const decoded = decodeBase64(nonce);
-      return decoded.length === XCHACHA20_NONCE_LENGTH && encodeBase64(decoded) === nonce;
-    } catch {
-      return false;
-    }
-  }, "Invalid payload nonce.");
+  .refine(
+    (nonce) =>
+      nonce.length === 32 &&
+      decodesTo(nonce, (decoded) => decoded.length === XCHACHA20_NONCE_LENGTH),
+    "Invalid payload nonce.",
+  );
+
+export const TRACKING_POINT_ROLES = ["POINT", "STAY", "LIVE"] as const;
 
 export const groupTrackingPointSchema = z.object({
-  algorithm: z.literal(PAYLOAD_ENCRYPTION_ALGORITHM),
-  ciphertext: z.string().min(1).max(1024),
-  clientPointId: z.string().min(1).max(128),
+  ciphertext: z
+    .string()
+    .length(Math.ceil(ENCRYPTED_TRACKING_POINT_LENGTH / 3) * 4)
+    .refine(
+      (ciphertext) =>
+        decodesTo(ciphertext, (decoded) => decoded.length === ENCRYPTED_TRACKING_POINT_LENGTH),
+      "Invalid ciphertext.",
+    ),
+  clientPointId: z
+    .string()
+    .regex(
+      /^(s\d{1,9}\.\d{1,9}:)?[A-Za-z0-9+/]{10}[AEIMQUYcgkosw048]=$/,
+      "Invalid client point ID.",
+    ),
   epochId: z.string().min(1).max(128),
-  kind: z.literal(TRACKING_POINT_KIND),
   nonce: groupPayloadNonceSchema,
+  role: z.enum(TRACKING_POINT_ROLES),
   senderDeviceId: z.string().min(1).max(128),
 });
 
@@ -60,8 +79,8 @@ export const groupTrackingUploadBatchSchema = z
 export const groupTrackingPollSchema = z.object({
   cursor: z
     .object({
-      createdAt: z.date(),
-      id: z.string().min(1),
+      senderDeviceId: z.string().min(1).max(128),
+      updatedAt: z.date(),
     })
     .nullable()
     .optional(),

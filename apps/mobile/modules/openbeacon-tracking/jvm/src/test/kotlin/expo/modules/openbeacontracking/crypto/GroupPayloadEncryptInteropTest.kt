@@ -5,7 +5,6 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
-import kotlin.test.assertNull
 import org.json.JSONObject
 
 class GroupPayloadEncryptInteropTest {
@@ -76,7 +75,6 @@ class GroupPayloadEncryptInteropTest {
         )
 
       assertContentEquals(expectedPlaintext, decrypted)
-      assertEquals(testCase.getString("plaintextJson"), String(decrypted, StandardCharsets.UTF_8))
     }
   }
 
@@ -96,87 +94,6 @@ class GroupPayloadEncryptInteropTest {
         )
 
       assertEquals(testCase.getString("aadJson"), String(aad, StandardCharsets.UTF_8))
-    }
-  }
-
-  private fun vectorPlaintext(name: String): String {
-    val cases = vectors.getJSONArray("cases")
-    for (index in 0 until cases.length()) {
-      val testCase = cases.getJSONObject(index)
-      if (testCase.getString("name") == name) return testCase.getString("plaintextJson")
-    }
-    error("Missing vector $name")
-  }
-
-  @Test
-  fun trackingPointJsonHelperMatchesVectorPlaintext() {
-    assertEquals(
-      vectorPlaintext("tracking-point-with-speed"),
-      GroupPayloadEncrypt.encodeTrackingPointV1Json(
-        latitude = 51.5074,
-        longitude = -0.1278,
-        timestamp = "2026-07-13T18:45:00.000Z",
-        speed = 1.4,
-        batteryLevel = 72,
-        batteryCharging = false,
-      ),
-    )
-
-    assertEquals(
-      vectorPlaintext("tracking-point-null-speed"),
-      GroupPayloadEncrypt.encodeTrackingPointV1Json(
-        latitude = 51.5074,
-        longitude = -0.1278,
-        timestamp = "2026-07-13T18:45:00.000Z",
-        speed = null,
-        batteryLevel = 5,
-        batteryCharging = true,
-      ),
-    )
-
-    assertEquals(
-      vectorPlaintext("tracking-point-unknown-battery-level"),
-      GroupPayloadEncrypt.encodeTrackingPointV1Json(
-        latitude = 51.5074,
-        longitude = -0.1278,
-        timestamp = "2026-07-13T18:45:00.000Z",
-        speed = null,
-        batteryLevel = null,
-        batteryCharging = false,
-      ),
-    )
-  }
-
-  @Test
-  fun nonFiniteSpeedIsWrittenAsNull() {
-    for (speed in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
-      assertEquals(
-        vectorPlaintext("tracking-point-null-speed"),
-        GroupPayloadEncrypt.encodeTrackingPointV1Json(
-          latitude = 51.5074,
-          longitude = -0.1278,
-          timestamp = "2026-07-13T18:45:00.000Z",
-          speed = speed,
-          batteryLevel = 5,
-          batteryCharging = true,
-        ),
-      )
-    }
-  }
-
-  @Test
-  fun nonFiniteCoordinatesProduceNoPoint() {
-    for ((latitude, longitude) in listOf(Double.NaN to -0.1278, 51.5074 to Double.POSITIVE_INFINITY)) {
-      assertNull(
-        GroupPayloadEncrypt.encodeTrackingPointV1Json(
-          latitude = latitude,
-          longitude = longitude,
-          timestamp = "2026-07-13T18:45:00.000Z",
-          speed = 1.4,
-          batteryLevel = 72,
-          batteryCharging = false,
-        ),
-      )
     }
   }
 

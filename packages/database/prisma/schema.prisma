@@ -14,6 +14,7 @@ model User {
   email          String          @unique
   emailVerified  Boolean         @default(false)
   image          String?
+  imageKeySealed String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   pendingDeletion Boolean        @default(false)
@@ -37,7 +38,7 @@ model User {
   devices                    UserDevice[]
   sentGroupMemberInvites     GroupMemberInvite[] @relation("GroupMemberInviteInviter")
   receivedGroupMemberInvites GroupMemberInvite[] @relation("GroupMemberInviteRecipient")
-  groupEncryptedPayloads     GroupEncryptedPayload[]
+  trackingStreams            TrackingStream[]
   groupEventsActed           GroupEvent[] @relation("GroupEventActor")
   groupEventsAbout           GroupEvent[] @relation("GroupEventSubject")
   feedback                   Feedback[]
@@ -126,6 +127,11 @@ model Group {
   id             String          @id @default(uuid(7))
   name           String
   image          String?
+  imageKeyEpochId        String?
+  imageKeySenderDeviceId String?
+  imageKeyAlgorithm      String?
+  imageKeyNonce          String?
+  imageKeyCiphertext     String?
   epochRotationRequired Boolean @default(false)
   placesRevision Int @default(0)
   groupMembers           GroupMember[]
@@ -133,7 +139,8 @@ model Group {
   sharedInvites          GroupSharedInvite[]
   events                 GroupEvent[]
   groupEpochs            GroupEpoch[]
-  groupEncryptedPayloads GroupEncryptedPayload[]
+  trackingStreams        TrackingStream[]
+  latestTrackingPoints   TrackingLatestPoint[]
   places                 Place[]
 
   createdAt DateTime @default(now())
@@ -226,11 +233,13 @@ model PlaceSharing {
 }
 
 model PendingUpload {
-  userId     String
-  uploadType ImageUploadType
-  fileName   String
-  createdAt  DateTime        @default(now())
-  groupId    String          @default("")
+  userId      String
+  uploadType  ImageUploadType
+  fileName    String
+  contentHash String?
+  fileSize    Int?
+  createdAt   DateTime        @default(now())
+  groupId     String          @default("")
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -318,6 +327,11 @@ model GroupMember {
 
   role GroupRole
   joinedEpochNumber Int
+  imageKeyEpochId        String?
+  imageKeySenderDeviceId String?
+  imageKeyAlgorithm      String?
+  imageKeyNonce          String?
+  imageKeyCiphertext     String?
   personalNicknames PersonalGroupNickname[] @relation("NicknameTarget")
   ownedNicknames PersonalGroupNickname[] @relation("NicknameOwner")
   personalColor PersonalGroupColor?
@@ -372,7 +386,8 @@ model UserDevice {
   sessions               Session[]
   createdGroupEpochs     GroupEpoch[]             @relation("GroupEpochCreatedByDevice")
   recipientEpochKeys     GroupEpochRecipientKey[] @relation("GroupEpochRecipientDevice")
-  groupEncryptedPayloads GroupEncryptedPayload[]  @relation("GroupEncryptedPayloadSenderDevice")
+  trackingStreams        TrackingStream[]
+  latestTrackingPoints   TrackingLatestPoint[]
   sentHistoryWraps       GroupEpochHistoryWrap[]
   deviceLink             DeviceLink?              @relation("DeviceLinkNewDevice")
   approvedDeviceLinks    DeviceLink[]             @relation("DeviceLinkApprover")
@@ -459,7 +474,7 @@ model GroupEpoch {
   createdAt              DateTime                 @default(now())
   recipientKeys          GroupEpochRecipientKey[]
   historyWraps           GroupEpochHistoryWrap[]
-  groupEncryptedPayloads GroupEncryptedPayload[]
+  trackingStreams        TrackingStream[]
 
   @@unique([groupId, epochNumber])
   @@index([groupId, createdAt])
@@ -467,29 +482,51 @@ model GroupEpoch {
   @@index([createdByDeviceId])
 }
 
-model GroupEncryptedPayload {
-  id             String     @id @default(uuid(7))
+model TrackingStream {
+  id             BigInt                @id @default(autoincrement())
   groupId        String
-  group          Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group          Group                 @relation(fields: [groupId], references: [id], onDelete: Cascade)
   epochId        String
-  epoch          GroupEpoch @relation(fields: [epochId], references: [id], onDelete: Restrict)
+  epoch          GroupEpoch            @relation(fields: [epochId], references: [id], onDelete: Restrict)
   senderDeviceId String
-  senderDevice   UserDevice @relation("GroupEncryptedPayloadSenderDevice", fields: [senderDeviceId], references: [id], onDelete: Restrict)
+  senderDevice   UserDevice            @relation(fields: [senderDeviceId], references: [id], onDelete: Restrict)
   senderUserId   String
-  senderUser     User       @relation(fields: [senderUserId], references: [id], onDelete: Restrict)
-  kind           String
-  algorithm      String
-  nonce          String
-  ciphertext     String
-  clientPointId  String
-  createdAt      DateTime   @default(now())
+  senderUser     User                  @relation(fields: [senderUserId], references: [id], onDelete: Restrict)
+  revisionPrefix String
+  createdAt      DateTime              @default(now())
+  points         TrackingPoint[]
+  latestPoints   TrackingLatestPoint[]
 
-  @@unique([groupId, clientPointId])
-  @@index([groupId, createdAt, id])
-  @@index([kind, createdAt])
-  @@index([senderDeviceId, groupId, createdAt, id])
+  @@unique([groupId, epochId, senderDeviceId, revisionPrefix])
   @@index([senderUserId, groupId])
   @@index([epochId])
+  @@index([senderDeviceId])
+}
+
+model TrackingPoint {
+  streamId   BigInt
+  stream     TrackingStream @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  pointId    BigInt
+  receivedAt DateTime       @default(now())
+  payload    Bytes
+
+  @@id([streamId, pointId])
+  @@index([streamId, receivedAt])
+}
+
+model TrackingLatestPoint {
+  groupId        String
+  group          Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  senderDeviceId String
+  senderDevice   UserDevice     @relation(fields: [senderDeviceId], references: [id], onDelete: Cascade)
+  streamId       BigInt
+  stream         TrackingStream @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  payload        Bytes
+  updatedAt      DateTime       @default(now())
+
+  @@id([groupId, senderDeviceId])
+  @@index([streamId])
+  @@index([senderDeviceId])
 }
 
 model GroupEpochRecipientKey {

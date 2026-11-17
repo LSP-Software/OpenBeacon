@@ -59,3 +59,9 @@ export class HistoryPrivateKeyMaterial extends SensitiveBytes {
     super(bytes, "history private key");
   }
 }
+
+export class ImageKeyMaterial extends SensitiveBytes {
+  constructor(bytes: Uint8Array) {
+    super(bytes, "image key");
+  }
+}

@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
-import { prisma } from "@openbeacon/database";
-import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
+import { type Prisma, prisma } from "@openbeacon/database";
 import {
   createEpochCleanup,
   createLocationHistoryCleanup,
@@ -52,34 +51,70 @@ const createGroup = async (name: string, epochDaysAgo: number[]) => {
   return groupId;
 };
 
-const addPayloads = (
+const pointNames = new Map<string, string>();
+let nextPointId = 0;
+
+const streamFor = async (
+  db: Pick<Prisma.TransactionClient, "$queryRaw">,
   groupId: string,
-  payloads: Array<{ epoch: number; createdAt: Date; kind?: string; name?: string }>,
-) =>
-  prisma.groupEncryptedPayload.createMany({
-    data: payloads.map(({ epoch, createdAt, kind = TRACKING_POINT_KIND, name }, index) => ({
-      id: `${groupId}-${name ?? `point-${index}`}`,
-      groupId,
-      epochId: `${groupId}-epoch-${epoch}`,
-      senderDeviceId: deviceId,
-      senderUserId: userId,
-      kind,
-      algorithm: "XChaCha20-Poly1305",
-      nonce: "nonce",
-      ciphertext: "ciphertext",
-      clientPointId: `${name ?? "point"}-${index}`,
-      createdAt,
-    })),
-  });
+  epoch: number,
+) => {
+  const [stream] = await db.$queryRaw<Array<{ id: bigint }>>`
+    INSERT INTO "TrackingStream" ("groupId", "epochId", "senderDeviceId", "senderUserId", "revisionPrefix", "createdAt")
+    VALUES (${groupId}, ${`${groupId}-epoch-${epoch}`}, ${deviceId}, ${userId}, '',
+      (${ago(400).toISOString()}::timestamptz AT TIME ZONE 'UTC'))
+    ON CONFLICT ("groupId", "epochId", "senderDeviceId", "revisionPrefix")
+      DO UPDATE SET "senderUserId" = EXCLUDED."senderUserId"
+    RETURNING id
+  `;
+  if (!stream) throw new Error("Tracking stream was not stored.");
+  return stream.id;
+};
+
+const addPayloads = async (
+  groupId: string,
+  payloads: Array<{ epoch: number; receivedAt: Date; name?: string }>,
+) => {
+  for (const [index, { epoch, receivedAt, name }] of payloads.entries()) {
+    const streamId = await streamFor(prisma, groupId, epoch);
+    nextPointId += 1;
+    pointNames.set(String(nextPointId), name ?? `point-${index}`);
+    await prisma.$executeRaw`
+      INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
+      VALUES (${streamId}, ${nextPointId}, (${receivedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC'), '\\x00'::bytea)
+    `;
+  }
+};
+
+const addLatest = async (groupId: string, epoch: number, updatedAt: Date) => {
+  const streamId = await streamFor(prisma, groupId, epoch);
+  await prisma.$executeRaw`
+    INSERT INTO "TrackingLatestPoint" ("groupId", "senderDeviceId", "streamId", "payload", "updatedAt")
+    VALUES (${groupId}, ${deviceId}, ${streamId}, '\\x00'::bytea, (${updatedAt.toISOString()}::timestamptz AT TIME ZONE 'UTC'))
+  `;
+};
 
 const payloadNames = async (groupId: string) =>
   (
-    await prisma.groupEncryptedPayload.findMany({
+    await prisma.$queryRaw<Array<{ pointId: string }>>`
+      SELECT "point"."pointId"::text AS "pointId"
+      FROM "TrackingPoint" AS "point"
+      JOIN "TrackingStream" AS "stream" ON "stream"."id" = "point"."streamId"
+      WHERE "stream"."groupId" = ${groupId}
+    `
+  )
+    .map(({ pointId }) => pointNames.get(pointId) ?? pointId)
+    .sort();
+
+const streamEpochs = async (groupId: string) =>
+  (
+    await prisma.trackingStream.findMany({
       where: { groupId },
-      select: { id: true },
-      orderBy: { id: "asc" },
+      select: { epoch: { select: { epochNumber: true } } },
     })
-  ).map(({ id }) => id.slice(groupId.length + 1));
+  )
+    .map(({ epoch }) => epoch.epochNumber)
+    .sort();
 
 const epochNumbers = async (groupId: string) =>
   (
@@ -90,8 +125,7 @@ const epochNumbers = async (groupId: string) =>
     })
   ).map(({ epochNumber }) => epochNumber);
 
-const payloadCount = (groupId: string) =>
-  prisma.groupEncryptedPayload.count({ where: { groupId } });
+const payloadCount = async (groupId: string) => (await payloadNames(groupId)).length;
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history clean-up", () => {
   beforeAll(async () => {
@@ -99,15 +133,15 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     if (!clock) throw new Error("Unable to read database time.");
     databaseNow = clock.now;
     const leftover = "location-history-cleanup-";
-    await prisma.groupEncryptedPayload.deleteMany({
+    await prisma.trackingStream.deleteMany({
       where: {
-        OR: [
-          { groupId: { startsWith: leftover } },
-          { senderUserId: { startsWith: leftover } },
-          { kind: TRACKING_POINT_KIND, createdAt: { lt: ago(14) } },
-        ],
+        OR: [{ groupId: { startsWith: leftover } }, { senderUserId: { startsWith: leftover } }],
       },
     });
+    await prisma.$executeRaw`
+      DELETE FROM "TrackingPoint"
+      WHERE "receivedAt" < (${ago(14).toISOString()}::timestamptz AT TIME ZONE 'UTC')
+    `;
     await prisma.group.deleteMany({ where: { id: { startsWith: leftover } } });
     await prisma.user.deleteMany({ where: { id: { startsWith: leftover } } });
     await prisma.user.create({
@@ -133,7 +167,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
   });
 
   afterAll(async () => {
-    await prisma.groupEncryptedPayload.deleteMany({ where: { senderUserId: userId } });
+    await prisma.trackingStream.deleteMany({ where: { senderUserId: userId } });
     await prisma.group.deleteMany({ where: { id: { startsWith: prefix } } });
     await prisma.user.deleteMany({ where: { id: userId } });
     await prisma.$disconnect();
@@ -143,24 +177,53 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     const groupId = await createGroup("boundary", [200]);
     const otherGroupId = await createGroup("other", [200]);
     await addPayloads(groupId, [
-      { epoch: 1, createdAt: ago(90), name: "old" },
-      { epoch: 1, createdAt: ago(14 + 1 / 24), name: "justOver" },
-      { epoch: 1, createdAt: ago(14 - 1 / 24), name: "justUnder" },
-      { epoch: 1, createdAt: ago(1), name: "recent" },
-      { epoch: 1, createdAt: ago(90), kind: "other", name: "oldOtherKind" },
+      { epoch: 1, receivedAt: ago(90), name: "old" },
+      { epoch: 1, receivedAt: ago(14 + 1 / 24), name: "justOver" },
+      { epoch: 1, receivedAt: ago(14 - 1 / 24), name: "justUnder" },
+      { epoch: 1, receivedAt: ago(1), name: "recent" },
     ]);
-    await addPayloads(otherGroupId, [{ epoch: 1, createdAt: ago(10), name: "recent" }]);
+    await addPayloads(otherGroupId, [{ epoch: 1, receivedAt: ago(10), name: "recent" }]);
     await createLocationHistoryCleanup()();
-    expect(await payloadNames(groupId)).toEqual(["justUnder", "oldOtherKind", "recent"]);
+    expect(await payloadNames(groupId)).toEqual(["justUnder", "recent"]);
     expect(await payloadNames(otherGroupId)).toEqual(["recent"]);
+  });
+
+  test("deletes latest points more than 14 days old and streams left with no point and no latest point", async () => {
+    const staleGroupId = await createGroup("stale-latest", [200, 100, 50]);
+    await addLatest(staleGroupId, 1, ago(15));
+    await addPayloads(staleGroupId, [{ epoch: 2, receivedAt: ago(20) }]);
+    await addPayloads(staleGroupId, [{ epoch: 3, receivedAt: ago(2), name: "kept" }]);
+    const freshGroupId = await createGroup("fresh-latest", [200]);
+    await addLatest(freshGroupId, 1, ago(13));
+    await createLocationHistoryCleanup()();
+    expect(await prisma.trackingLatestPoint.count({ where: { groupId: staleGroupId } })).toBe(0);
+    expect(await streamEpochs(staleGroupId)).toEqual([3]);
+    expect(await payloadNames(staleGroupId)).toEqual(["kept"]);
+    expect(await prisma.trackingLatestPoint.count({ where: { groupId: freshGroupId } })).toBe(1);
+    expect(await streamEpochs(freshGroupId)).toEqual([1]);
+  });
+
+  test("keeps an empty stream that an upload in progress is filling, with its new point", async () => {
+    const groupId = await createGroup("filling", [200]);
+    const streamId = await streamFor(prisma, groupId, 1);
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "TrackingStream" WHERE id = ${streamId} FOR SHARE`;
+      await createLocationHistoryCleanup()();
+      await tx.$executeRaw`
+        INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
+        VALUES (${streamId}, 1, (now() AT TIME ZONE 'UTC'), '\\x00'::bytea)
+      `;
+    });
+    expect(await streamEpochs(groupId)).toEqual([1]);
+    expect(await payloadCount(groupId)).toBe(1);
   });
 
   test("deletes empty epochs superseded before the cutoff, with their wraps", async () => {
     const groupId = await createGroup("epochs", [50, 30, 20, 15, 12, 3]);
     await addPayloads(groupId, [
-      { epoch: 1, createdAt: ago(40) },
-      { epoch: 3, createdAt: ago(1), name: "lateUpload" },
-      { epoch: 5, createdAt: ago(8) },
+      { epoch: 1, receivedAt: ago(40) },
+      { epoch: 3, receivedAt: ago(1), name: "lateUpload" },
+      { epoch: 5, receivedAt: ago(8) },
     ]);
     const lonelyGroupId = await createGroup("lonely", [300]);
     const staleGroupId = await createGroup("stale", [300, 200]);
@@ -185,7 +248,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     );
   });
 
-  test("deletes the oldest points first across groups, up to the run limit", async () => {
+  test("deletes old points across groups in batches, up to the run limit", async () => {
     const groupIds = [
       await createGroup("cap-a", [200]),
       await createGroup("cap-b", [200]),
@@ -194,18 +257,19 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     for (const groupId of groupIds) {
       await addPayloads(
         groupId,
-        Array.from({ length: 5 }, (_, index) => ({ epoch: 1, createdAt: ago(90 + index) })),
+        Array.from({ length: 5 }, (_, index) => ({ epoch: 1, receivedAt: ago(90 + index) })),
       );
     }
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     const run = createLocationHistoryCleanup({ batchSize: 2, runLimit: 6 });
-    const counts = () => Promise.all(groupIds.map(payloadCount));
+    const remaining = async () =>
+      (await Promise.all(groupIds.map(payloadCount))).reduce((sum, count) => sum + count, 0);
     await run();
-    expect(await counts()).toEqual([3, 3, 3]);
+    expect(await remaining()).toBe(9);
     await run();
-    expect(await counts()).toEqual([1, 1, 1]);
+    expect(await remaining()).toBe(3);
     await run();
-    expect(await counts()).toEqual([0, 0, 0]);
+    expect(await remaining()).toBe(0);
     expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();
   });
@@ -314,20 +378,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     let epochsDuringUpload: number[] = [];
     const rollback = new Error("roll back the upload");
     const upload = prisma.$transaction(async (tx) => {
-      await tx.groupEncryptedPayload.create({
-        data: {
-          id: `${groupId}-late`,
-          groupId,
-          epochId: `${groupId}-epoch-1`,
-          senderDeviceId: deviceId,
-          senderUserId: userId,
-          kind: TRACKING_POINT_KIND,
-          algorithm: "XChaCha20-Poly1305",
-          nonce: "nonce",
-          ciphertext: "ciphertext",
-          clientPointId: "late",
-        },
-      });
+      await streamFor(tx, groupId, 1);
       await createEpochCleanup()();
       epochsDuringUpload = await epochNumbers(groupId);
       throw rollback;
@@ -336,7 +387,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     expect(epochsDuringUpload).toEqual([1, 2]);
     expect(error).not.toHaveBeenCalled();
     error.mockRestore();
-    expect(await payloadNames(groupId)).toEqual([]);
+    expect(await streamEpochs(groupId)).toEqual([]);
     await createEpochCleanup()();
     expect(await epochNumbers(groupId)).toEqual([2]);
   });

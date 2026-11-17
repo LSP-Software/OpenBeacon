@@ -3,13 +3,18 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { createGroupSchema } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CameraIcon } from "lucide-react-native";
+import { CameraIcon, XIcon } from "lucide-react-native";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { View } from "react-native";
+import { ActivityIndicator, Image, Pressable, View } from "react-native";
 import type z from "zod";
 import { trpc } from "../../lib/api.ts";
 import { buildCreateGroupInput, submitEpochChange } from "../../lib/groupEncryption.ts";
+import { uploadNewGroupImage } from "../../lib/groupImageUpload.ts";
 import { groupLimitAlert } from "../../lib/groupLimitAlert.ts";
+import { cleanupTempFile } from "../../lib/image-upload.ts";
+import { storeOwnImageKeyInGroup } from "../../lib/imageKeys.ts";
+import { pickImage, processImage } from "../../lib/pickImage.ts";
 import { requestTrackingSync } from "../../lib/trackingEvents.ts";
 import { useSingleFlight } from "../../lib/useSingleFlight.ts";
 import { Button } from "../ui/Button.tsx";
@@ -24,15 +29,18 @@ import { Icon } from "../ui/Icon.tsx";
 import { Input } from "../ui/Input.tsx";
 import { Text } from "../ui/Text.tsx";
 
-interface CreateGroupDialogProps {
+export const CreateGroupDialog = ({
+  open,
+  setOpen,
+}: {
   open: boolean;
   setOpen: (open: boolean) => void;
-}
-
-export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => {
+}) => {
   const queryClient = useQueryClient();
   const createGroupMutation = useMutation(trpc.groupLifecycle.create.mutationOptions());
   const createGroupSubmission = useSingleFlight<"create-group">();
+  const picturePicker = useSingleFlight<"pick-picture">();
+  const [pictureUri, setPictureUri] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof createGroupSchema>>({
     resolver: zodResolver(createGroupSchema),
@@ -58,8 +66,14 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
             }
             return [createdGroup.newGroup, ...previous];
           });
+          void tryCatch(storeOwnImageKeyInGroup(createdGroup.newGroup.id));
           requestTrackingSync();
-          closeForm();
+          setOpen(false);
+          form.reset();
+          setPictureUri(null);
+          if (pictureUri) {
+            void uploadNewGroupImage({ groupId: createdGroup.newGroup.id, uri: pictureUri });
+          }
         })(),
       );
 
@@ -77,13 +91,35 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
     });
   };
 
+  const removePicture = () => {
+    if (pictureUri) cleanupTempFile(pictureUri);
+    setPictureUri(null);
+  };
+
+  const choosePicture = () =>
+    picturePicker.run("pick-picture", async () => {
+      const pickedUri = await pickImage();
+      if (!pickedUri) return;
+      const processedUri = await processImage(pickedUri);
+      if (!processedUri) return;
+      if (pictureUri) cleanupTempFile(pictureUri);
+      setPictureUri(processedUri);
+    });
+
   const closeForm = () => {
     setOpen(false);
     form.reset();
+    removePicture();
   };
 
   return (
-    <Dialog open={open} onOpenChange={(open) => setOpen(open)}>
+    <Dialog
+      open={open}
+      onOpenChange={(open) => {
+        if (open) setOpen(true);
+        else closeForm();
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create a new group</DialogTitle>
@@ -94,8 +130,34 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
         </DialogHeader>
 
         <View className="flex flex-row items-center gap-4">
-          <View className="relative flex size-20 shrink-0  items-center justify-center rounded-lg border-border border-2 border-dashed transition-all">
-            <Icon as={CameraIcon} size={20} className="text-secondary" />
+          <View className="relative size-20 shrink-0">
+            <Pressable
+              onPress={choosePicture}
+              disabled={picturePicker.isPending || createGroupSubmission.isPending}
+              accessibilityRole="button"
+              accessibilityLabel={pictureUri ? "Change group picture" : "Choose group picture"}
+              className={`size-20 items-center justify-center overflow-hidden rounded-lg ${pictureUri ? "" : "border-border border-2 border-dashed"}`}
+            >
+              {pictureUri ? (
+                <Image source={{ uri: pictureUri }} className="size-full" />
+              ) : picturePicker.isPending ? (
+                <ActivityIndicator className="text-secondary" />
+              ) : (
+                <Icon as={CameraIcon} size={20} className="text-secondary" />
+              )}
+            </Pressable>
+            {pictureUri && (
+              <Pressable
+                onPress={removePicture}
+                disabled={createGroupSubmission.isPending}
+                accessibilityRole="button"
+                accessibilityLabel="Remove group picture"
+                hitSlop={8}
+                className="absolute -right-2 -top-2 size-6 items-center justify-center rounded-full bg-secondary"
+              >
+                <Icon as={XIcon} size={14} className="text-secondary-foreground" />
+              </Pressable>
+            )}
           </View>
           <Input
             control={form.control}
@@ -107,13 +169,19 @@ export const CreateGroupDialog = ({ open, setOpen }: CreateGroupDialogProps) => 
         </View>
 
         <View className="flex-row gap-4 justify-between">
-          <Button className="flex-1" onPress={closeForm} variant={"secondary"}>
+          <Button
+            className="flex-1"
+            onPress={closeForm}
+            disabled={picturePicker.isPending}
+            variant={"secondary"}
+          >
             <Text>Cancel</Text>
           </Button>
           <Button
             className="flex-1"
             onPress={form.handleSubmit(onSubmit)}
             loading={createGroupSubmission.isPending || createGroupMutation.isPending}
+            disabled={picturePicker.isPending}
           >
             <Text>Create Group</Text>
           </Button>

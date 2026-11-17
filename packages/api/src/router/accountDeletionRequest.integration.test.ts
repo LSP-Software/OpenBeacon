@@ -7,6 +7,7 @@ import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { deleteAccountRecords } from "../lib/account-deletion.ts";
 import { appRouter } from "../root.ts";
 import { withDeviceActive } from "../lib/deviceContext.testUtil.ts";
+import { countTrackingPoints, storeTrackingPoints } from "../lib/trackingPoints.testUtil.ts";
 
 const email = `deletion-${crypto.randomUUID()}@example.test`;
 const password = "testing-password-123";
@@ -488,13 +489,13 @@ test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           senderPublicKey: "k",
         },
       });
-      await prisma.$executeRaw`
-        INSERT INTO "GroupEncryptedPayload"
-          (id, "groupId", "epochId", "senderDeviceId", "senderUserId", kind, algorithm, nonce, ciphertext, "clientPointId", "createdAt")
-        SELECT ${heavyUserId} || lpad(i::text, 7, '0'), ${heavyGroup}, ${epoch.id}, ${`${heavyUserId}-device`}, ${heavyUserId},
-          'location', 'a', 'n', repeat('c', 64), lpad(i::text, 7, '0'), now() - i * interval '10 seconds'
-        FROM generate_series(1, 60000) AS i
-      `;
+      await storeTrackingPoints(prisma, {
+        count: 60_000,
+        epochId: epoch.id,
+        groupId: heavyGroup,
+        senderDeviceId: `${heavyUserId}-device`,
+        senderUserId: heavyUserId,
+      });
       await prisma.session.deleteMany({ where: { userId: heavyUserId } });
       await prisma.user.update({
         where: { id: heavyUserId },
@@ -513,8 +514,10 @@ test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       while (
         !deletionSettled &&
-        (await prisma.groupEncryptedPayload.count({ where: { senderUserId: heavyUserId } })) ===
-          60_000
+        (await countTrackingPoints(
+          prisma,
+          Prisma.sql`"stream"."senderUserId" = ${heavyUserId}`,
+        )) === 60_000
       )
         await Bun.sleep(5);
 
@@ -525,14 +528,16 @@ test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
       expect(await deletion).toBe(true);
       expect(await prisma.user.findUnique({ where: { id: heavyUserId } })).toBeNull();
-      expect(await prisma.groupEncryptedPayload.count({ where: { groupId: heavyGroup } })).toBe(0);
+      expect(await prisma.trackingStream.count({ where: { groupId: heavyGroup } })).toBe(0);
+      expect(
+        await countTrackingPoints(prisma, Prisma.sql`"stream"."groupId" = ${heavyGroup}`),
+      ).toBe(0);
       expect(await prisma.session.count({ where: { userId: heavyUserId } })).toBe(0);
     } finally {
-      await prisma.groupEncryptedPayload.deleteMany({ where: { groupId: heavyGroup } });
       await prisma.group.deleteMany({ where: { id: heavyGroup } });
       await prisma.accountDeletionCleanup.deleteMany({ where: { userId: heavyUserId } });
       await prisma.user.deleteMany({ where: { id: { in: [heavyUserId, partner] } } });
-      await prisma.$executeRaw`VACUUM "GroupEncryptedPayload"`;
+      await prisma.$executeRaw`VACUUM "TrackingPoint"`;
     }
   },
   60_000,

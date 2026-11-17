@@ -6,6 +6,7 @@ import { deviceLinkRouter } from "./router/deviceLinkRouter.ts";
 import { deviceRouter } from "./router/deviceRouter.ts";
 import { emailAlertsRouter } from "./router/emailAlertsRouter.ts";
 import { feedbackRouter } from "./router/feedbackRouter.ts";
+import { groupImageKeysRouter } from "./router/group/groupImageKeysRouter.ts";
 import { groupHistoryRouter } from "./router/group/groupHistoryRouter.ts";
 import { groupEpochRouter } from "./router/group/groupEpochRouter.ts";
 import { groupInvitesRouter } from "./router/group/groupInvitesRouter.ts";
@@ -29,6 +30,7 @@ export const appRouter = createTRPCRouter({
   groupInvites: groupInvitesRouter,
   groupEpoch: groupEpochRouter,
   groupHistory: groupHistoryRouter,
+  groupImageKeys: groupImageKeysRouter,
   groupMembership: groupMembershipRouter,
   groupPlaces: groupPlacesRouter,
   groupTracking: groupTrackingRouter,

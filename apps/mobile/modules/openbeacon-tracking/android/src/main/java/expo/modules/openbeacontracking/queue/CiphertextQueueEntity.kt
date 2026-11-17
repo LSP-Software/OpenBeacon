@@ -8,7 +8,7 @@ import androidx.room.PrimaryKey
 @Entity(
   tableName = "ciphertext_queue",
   indices = [
-    Index(value = ["clientPointId"], unique = true),
+    Index(value = ["clientPointId"]),
     Index(value = ["status", "id"]),
     Index(value = ["groupId", "id"]),
   ],
@@ -30,4 +30,5 @@ data class CiphertextQueueEntity(
   @ColumnInfo(name = "lastAttemptAt") val lastAttemptAt: Long? = null,
   @ColumnInfo(name = "lastError") val lastError: String? = null,
   @ColumnInfo(name = "status") val status: String,
+  @ColumnInfo(name = "role") val role: String = CiphertextQueueRow.ROLE_POINT,
 )

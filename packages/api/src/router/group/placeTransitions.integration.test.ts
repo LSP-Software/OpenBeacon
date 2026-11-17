@@ -1,12 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
-import { prisma } from "@openbeacon/database";
-import {
-  encodeBase64,
-  PAYLOAD_ENCRYPTION_ALGORITHM,
-  TRACKING_POINT_KIND,
-} from "@openbeacon/encryption";
+import { Prisma, prisma } from "@openbeacon/database";
+import { encodeBase64 } from "@openbeacon/encryption";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
+import { countTrackingPoints, testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
 import { encodePlaceAlertsCursor } from "../../lib/placeTransitions.ts";
 import { tryCatch } from "@openbeacon/shared";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
@@ -354,12 +351,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("going over the hourly transition budget drops the transitions but keeps the points", async () => {
       const budgetCache = createIntegrationTestCache(() => 0);
       const point = (index: number) => ({
-        algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
-        ciphertext: "ciphertext",
-        clientPointId: `${prefix}-budget-point-${index}`,
+        ciphertext: encodeBase64(new Uint8Array(39)),
+        clientPointId: testClientPointId(`${prefix}-budget-point-${index}`),
         epochId: latestEpochId,
-        kind: TRACKING_POINT_KIND,
         nonce: encodeBase64(new Uint8Array(24)),
+        role: "POINT" as const,
         senderDeviceId: memberPhone,
       });
       const send = (index: number) =>
@@ -376,14 +372,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(overBudget.placeTransitions?.accepted).toEqual([]);
       expect(overBudget.placeTransitions?.discarded).toHaveLength(50);
       expect(await storedCount()).toBe(200);
-      expect(
-        await prisma.groupEncryptedPayload.count({
-          where: { clientPointId: { startsWith: `${prefix}-budget-point-` } },
-        }),
-      ).toBe(5);
-      await prisma.groupEncryptedPayload.deleteMany({
-        where: { clientPointId: { startsWith: `${prefix}-budget-point-` } },
-      });
+      const memberStreams = Prisma.sql`"stream"."groupId" = ${groupId} AND "stream"."senderUserId" = ${member}`;
+      expect(await countTrackingPoints(prisma, memberStreams)).toBe(5);
+      await prisma.trackingStream.deleteMany({ where: { groupId, senderUserId: member } });
     });
 
     test("discards transitions from another device without failing the batch, and refuses a revoked device or a non-member", async () => {
@@ -443,10 +434,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const plain = await upload([transition()]);
       expect(plain).not.toHaveProperty("places");
       expect(plain).not.toHaveProperty("placeAlerts");
+      expect(plain).not.toHaveProperty("imageKeysNeedCatchUp");
 
       const started = Date.now();
       const first = await readAlerts(owner, ownerPhone, null);
       expect(first.places).toEqual([{ groupId, revision: 0, needsCatchUp: false }]);
+      expect(first.imageKeysNeedCatchUp).toEqual([]);
       expect(first.placeAlerts?.alerts).toEqual([]);
       const cursorTime = Date.parse(first.placeAlerts?.cursor.split("|")[0] ?? "");
       expect(cursorTime).toBeGreaterThanOrEqual(started - 16_000);
@@ -455,6 +448,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.place.update({ where: { id: schoolId }, data: { epochId: oldEpochId } });
       const later = await readAlerts(owner, ownerPhone, first.placeAlerts?.cursor ?? null);
       expect(later.places).toEqual([{ groupId, revision: 0, needsCatchUp: true }]);
+
+      await prisma.user.update({
+        where: { id: owner },
+        data: { image: "https://cdn.example.test/bucket/user/owner/uploads/avatar/picture" },
+      });
+      const withPicture = await readAlerts(owner, ownerPhone, null);
+      await prisma.user.update({ where: { id: owner }, data: { image: null } });
+      expect(withPicture.imageKeysNeedCatchUp).toEqual([groupId]);
     });
 
     test("the places summary still lists a group after its last place is deleted", async () => {

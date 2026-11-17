@@ -1,0 +1,621 @@
+{
+  "version": 2,
+  "length": 23,
+  "description": "Tracking point format v2 (OPE-310): 23 big-endian bytes. Kotlin and TypeScript must encode each point to exactly these bytes, and TypeScript must decode them back to the decoded point and refuse each rejected payload.",
+  "encode": [
+    {
+      "name": "moving",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c4800",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "stay",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": 1783969739999,
+        "accuracy": 12.34,
+        "speed": 0,
+        "battery": {
+          "level": 100,
+          "charging": true
+        }
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe00017007b0000e401",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": 1783969680000,
+        "accuracy": 12.3,
+        "speed": 0,
+        "battery": {
+          "level": 100,
+          "charging": true
+        }
+      }
+    },
+    {
+      "name": "unknown-accuracy-speed-and-battery",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": null,
+        "speed": null,
+        "battery": {
+          "level": null,
+          "charging": false
+        }
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe00000ffffffff7f00",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": null,
+        "speed": null,
+        "battery": {
+          "level": null,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "unknown-battery-level-while-charging",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": null,
+          "charging": true
+        }
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008cff00",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": null,
+          "charging": true
+        }
+      }
+    },
+    {
+      "name": "southern-and-eastern-hemispheres",
+      "point": {
+        "latitude": -33.8678512,
+        "longitude": 151.2073249,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 3.25,
+        "speed": 13.405,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      },
+      "hex": "02ebd02d105a206821019f5ccbfbe000000021053d4800",
+      "decoded": {
+        "latitude": -33.8678512,
+        "longitude": 151.2073249,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 3.3,
+        "speed": 13.41,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "rounds-coordinates-to-the-nearest-1e-7",
+      "point": {
+        "latitude": 12.34567895,
+        "longitude": -12.34567895,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      },
+      "hex": "02075bcd16f8a432eb019f5ccbfbe000000030008c4800",
+      "decoded": {
+        "latitude": 12.345679,
+        "longitude": -12.3456789,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "coordinate-limits",
+      "point": {
+        "latitude": 90,
+        "longitude": 180,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      },
+      "hex": "0235a4e9006b49d200019f5ccbfbe000000030008c4800",
+      "decoded": {
+        "latitude": 90,
+        "longitude": 180,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "negative-coordinate-limits",
+      "point": {
+        "latitude": -90,
+        "longitude": -180,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      },
+      "hex": "02ca5b170094b62e00019f5ccbfbe000000030008c4800",
+      "decoded": {
+        "latitude": -90,
+        "longitude": -180,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "earliest-time",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 0,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      },
+      "hex": "021eb367d0ffec7fd000000000000000000030008c4800",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 0,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "latest-time",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 281474976710655,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      },
+      "hex": "021eb367d0ffec7fd0ffffffffffff00000030008c4800",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 281474976710655,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "clamps-accuracy-and-speed",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 7000,
+        "speed": 700,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe00000fffefffe4800",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 6553.4,
+        "speed": 655.34,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "negative-accuracy-and-speed-are-unknown",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": -1,
+        "speed": -0.5,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe00000ffffffff4800",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": null,
+        "speed": null,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "clamps-battery-level",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 150,
+          "charging": false
+        }
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c6400",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 100,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "clamps-negative-battery-level",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": -5,
+          "charging": true
+        }
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c8000",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 0,
+          "charging": true
+        }
+      }
+    },
+    {
+      "name": "stay-until-before-time",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": 1783968299999,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c4801",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": 1783968300000,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "stay-under-a-minute",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": 1783968359999,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c4801",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": 1783968300000,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "clamps-long-stay",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": 1788288300000,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      },
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe0ffff0030008c4801",
+      "decoded": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": 1787900400000,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    }
+  ],
+  "encodeReject": [
+    {
+      "name": "latitude-above-90",
+      "point": {
+        "latitude": 90.0000001,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "latitude-below-minus-90",
+      "point": {
+        "latitude": -91,
+        "longitude": -0.1278,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "longitude-above-180",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": 180.5,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "longitude-below-minus-180",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -181,
+        "time": 1783968300000,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "negative-time",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": -1,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    },
+    {
+      "name": "time-past-48-bits",
+      "point": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "time": 281474976710656,
+        "stayUntil": null,
+        "accuracy": 4.8,
+        "speed": 1.4,
+        "battery": {
+          "level": 72,
+          "charging": false
+        }
+      }
+    }
+  ],
+  "decodeReject": [
+    {
+      "name": "too-short",
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c48"
+    },
+    {
+      "name": "too-long",
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c480000"
+    },
+    {
+      "name": "version-1-json",
+      "hex": "7b2276223a312c226c61746974756465223a35312e357d"
+    },
+    {
+      "name": "version-1",
+      "hex": "011eb367d0ffec7fd0019f5ccbfbe000000030008c4800"
+    },
+    {
+      "name": "version-3",
+      "hex": "031eb367d0ffec7fd0019f5ccbfbe000000030008c4800"
+    },
+    {
+      "name": "latitude-above-90",
+      "hex": "0235a4e901ffec7fd0019f5ccbfbe000000030008c4800"
+    },
+    {
+      "name": "longitude-below-minus-180",
+      "hex": "021eb367d094b62dff019f5ccbfbe000000030008c4800"
+    },
+    {
+      "name": "battery-level-101",
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c6500"
+    },
+    {
+      "name": "battery-level-126-while-charging",
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008cfe00"
+    },
+    {
+      "name": "unknown-flag",
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000000030008c4802"
+    },
+    {
+      "name": "stay-minutes-without-stay-flag",
+      "hex": "021eb367d0ffec7fd0019f5ccbfbe000050030008c4800"
+    }
+  ]
+}

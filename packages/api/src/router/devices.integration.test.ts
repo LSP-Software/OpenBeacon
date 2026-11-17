@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
-import { storedWebpResponse } from "../lib/storedWebp.testUtil.ts";
+import { storedEncryptedImageResponse } from "../lib/storedEncryptedImage.testUtil.ts";
 import { auth } from "@openbeacon/auth";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
@@ -399,8 +399,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account devices"
 });
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account profile", () => {
-  const contentHash = `${"a".repeat(43)}=`;
-
   test("only an active phone can change the name and photo other members see", async () => {
     const account = await createAccount();
     await linkSession(account);
@@ -412,8 +410,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account profile"
       const caller = callerFor(account, device);
       for (const call of [
         () => caller.account.updateName({ name: "Someone else" }),
-        () => caller.account.requestProfileImageUpload({ contentHash, fileSize: 100 }),
-        () => caller.account.confirmProfileImageUpload(),
+        () => caller.account.requestProfileImageUpload(),
+        () => caller.account.confirmProfileImageUpload({ wraps: [] }),
       ]) {
         const result = await tryCatch(call());
         expect(result.error).toMatchObject({ code: "FORBIDDEN" });
@@ -433,7 +431,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account profile"
     expect(await callerFor(account).account.updateName({ name: "New name" })).toEqual({
       name: "New name",
     });
-    await callerFor(account).account.requestProfileImageUpload({ contentHash, fileSize: 100 });
+    await callerFor(account).account.requestProfileImageUpload();
     expect(
       await prisma.pendingUpload.findFirst({ where: { userId: account.userId } }),
     ).not.toBeNull();
@@ -454,10 +452,12 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("account profile"
     await pendingUpload("old.webp");
     const send = spyOn(s3Client, "send").mockImplementation(async (command) => {
       if (command instanceof HeadObjectCommand) await pendingUpload("new.webp");
-      return storedWebpResponse(command);
+      return storedEncryptedImageResponse(command);
     });
     try {
-      await expect(callerFor(account).account.confirmProfileImageUpload()).rejects.toMatchObject({
+      await expect(
+        callerFor(account).account.confirmProfileImageUpload({ wraps: [] }),
+      ).rejects.toMatchObject({
         code: "PRECONDITION_FAILED",
         message: "No pending profile image upload to confirm.",
       });

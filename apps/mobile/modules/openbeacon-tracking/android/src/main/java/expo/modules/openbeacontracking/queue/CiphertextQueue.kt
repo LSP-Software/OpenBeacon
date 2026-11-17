@@ -8,6 +8,7 @@ interface CiphertextQueue {
     limit: Int,
     owner: String? = null,
     afterId: Long = 0,
+    exceptRole: String? = null,
   ): List<CiphertextQueueRow>
 
   fun markInFlight(

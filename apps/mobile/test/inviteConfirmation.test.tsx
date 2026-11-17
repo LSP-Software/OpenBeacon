@@ -34,6 +34,7 @@ let declineError: Error | null;
 let pendingAccept: Promise<void> | null;
 let focused: boolean;
 let limitReached: boolean;
+let imageKeyError: Error | null = null;
 const calls: string[] = [];
 const dismissals: unknown[] = [];
 const alerts: string[] = [];
@@ -94,6 +95,13 @@ mock.module("../lib/groupEncryption.ts", () => ({
     build: () => Promise<unknown>;
     submit: (input: unknown) => Promise<unknown>;
   }) => submit(await build()),
+}));
+mock.module("../lib/imageKeys.ts", () => ({
+  storeOwnImageKeyInGroup: async (groupId: string) => {
+    calls.push(`storeImageKey:${groupId}`);
+    if (imageKeyError) throw imageKeyError;
+    return true;
+  },
 }));
 mock.module("../lib/groupLimitAlert.ts", () => ({
   groupLimitAlert: () =>
@@ -179,6 +187,7 @@ beforeEach(() => {
   pendingAccept = null;
   focused = true;
   limitReached = false;
+  imageKeyError = null;
   triedAnotherCode = false;
   calls.length = 0;
   dismissals.length = 0;
@@ -211,14 +220,14 @@ test("a group of one says member, not members", async () => {
 test("Join Group accepts a code and returns to the groups list", async () => {
   const root = await render(code);
   await press(root, "Join Group");
-  expect(calls).toEqual(["acceptShared", "invalidate:all", "sync"]);
+  expect(calls).toEqual(["acceptShared", "storeImageKey:group-1", "invalidate:all", "sync"]);
   expect(dismissals).toEqual(["/(tabs)/groups/list"]);
 });
 
 test("Join Group accepts an email invite, refreshes groups, syncs and leaves", async () => {
   const root = await render(email);
   await press(root, "Join Group");
-  expect(calls).toEqual(["accept", "invalidate:all", "sync"]);
+  expect(calls).toEqual(["accept", "storeImageKey:group-1", "invalidate:all", "sync"]);
   expect(dismissals).toEqual(["/(tabs)/groups/list"]);
 });
 
@@ -253,8 +262,23 @@ test("a join that finishes after the user left doesn't pull them back", async ()
   const root = await render(code);
   focused = false;
   await press(root, "Join Group");
-  expect(calls).toEqual(["acceptShared", "invalidate:all", "sync"]);
+  expect(calls).toEqual(["acceptShared", "storeImageKey:group-1", "invalidate:all", "sync"]);
   expect(dismissals).toEqual([]);
+});
+
+test("a picture key that can't be stored doesn't stop the join", async () => {
+  imageKeyError = new Error("offline");
+  const root = await render(code);
+  await press(root, "Join Group");
+  expect(alerts).toEqual([]);
+  expect(dismissals).toEqual(["/(tabs)/groups/list"]);
+});
+
+test("a failed join stores no picture key", async () => {
+  acceptError = refusal("INTERNAL_SERVER_ERROR", "Something broke");
+  const root = await render(email);
+  await press(root, "Join Group");
+  expect(calls.some((call) => call.startsWith("storeImageKey"))).toBe(false);
 });
 
 test("hitting the group limit explains it and stays", async () => {

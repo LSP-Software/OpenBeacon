@@ -10,7 +10,8 @@ import type {
   MapUnreadablePerson,
   MapWaitingForLocationPerson,
 } from "../../lib/mapPeopleTypes.ts";
-import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
+import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
+import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Text } from "../ui/Text.tsx";
@@ -49,7 +50,7 @@ export const LiveMapMissingPersonSheet = ({
       header={
         <View className="flex-row items-center gap-3">
           <Avatar alt={person.name} className="size-12" style={{ opacity: 0.45 }}>
-            {person.image ? <AvatarImage source={{ uri: person.image }} /> : null}
+            <DecryptedAvatarImage url={person.image} />
             <AvatarFallback className="bg-neutral-500">
               <Text className="font-bold">{person.initials}</Text>
             </AvatarFallback>

@@ -13,6 +13,10 @@ class SecureEpochKeyStore(
     context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
   private val sealer = KeystoreSealer(KEY_ALIAS)
 
+  override var revocations = 0L
+    @Synchronized get
+    private set
+
   @Synchronized
   override fun replaceAll(keys: List<ProvisionedEpochKey>) {
     preferences.edit().putString(KEYS_JSON, sealer.seal(encodeKeys(keys))).apply()
@@ -20,6 +24,7 @@ class SecureEpochKeyStore(
 
   @Synchronized
   override fun revoke(groupIds: List<String>?) {
+    revocations += 1
     if (groupIds == null || groupIds.isEmpty()) {
       check(preferences.edit().remove(KEYS_JSON).commit())
       return

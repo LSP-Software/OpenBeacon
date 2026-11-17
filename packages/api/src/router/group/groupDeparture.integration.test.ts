@@ -5,9 +5,9 @@ import {
   createDeviceKeyPair,
   createInitialGroupEpoch,
   createNextGroupEpoch,
-  decodeJsonPayload,
   decryptGroupPayload,
   encryptGroupPayload,
+  type EpochKeyMaterial,
   unwrapEpochKey,
 } from "@openbeacon/encryption";
 import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
@@ -19,6 +19,7 @@ import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
 import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
+import { encryptedTrackingPoint, testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
 
 const router = createTRPCRouter({
   groupInvites: groupInvitesRouter,
@@ -61,19 +62,16 @@ const bundle = (result: ReturnType<typeof createInitialGroupEpoch>) => ({
   recipientKeys: result.wrappedKeys,
 });
 const ownerPoint = (
-  epoch: { epoch: { epochId: string }; epochKey: Uint8Array },
+  epoch: { epoch: { epochId: string }; epochKey: EpochKeyMaterial },
   clientPointId: string,
-) => ({
-  ...encryptGroupPayload({
+) =>
+  encryptedTrackingPoint({
+    clientPointId: testClientPointId(clientPointId),
     epochId: epoch.epoch.epochId,
     epochKey: epoch.epochKey,
     groupId: readsGroupId,
-    kind: TRACKING_POINT_KIND,
-    payload: { latitude: 51.5, longitude: -0.12 },
     senderDeviceId: ownerDevice,
-  }),
-  clientPointId,
-});
+  });
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "group departure with PostgreSQL",
@@ -162,7 +160,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         (item) => item.kind === "group" && item.type === "MEMBER_JOINED",
       );
       expect(joins).toMatchObject([{ subject: { name: "Member" }, role: "MEMBER" }]);
-      const plaintext = { latitude: 51.5, longitude: -0.12 };
+      const plaintext = new Uint8Array(23).fill(5);
       const encrypted = encryptGroupPayload({
         epochId: joined.epoch.epochId,
         epochKey: joined.epochKey,
@@ -173,7 +171,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       const point = {
         ...encrypted,
-        clientPointId: `${prefix}-point`,
+        clientPointId: testClientPointId(`${prefix}-point`),
+        role: "POINT" as const,
       };
       await member.groupTracking.uploadBatch({ groupId, points: [point] });
       const polled = (await owner.groupTracking.poll({ groupId })).points;
@@ -190,7 +189,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         wrappedEpochKey: wrapped!,
       });
       const received = decryptGroupPayload({
-        encryptedPayload: { ...polled[0]!, groupId },
+        encryptedPayload: {
+          ...encrypted,
+          ciphertext: polled[0]!.ciphertext,
+          nonce: polled[0]!.nonce,
+        },
         epochKey: receivedKey,
         expectedMetadata: {
           groupId,
@@ -199,7 +202,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           senderDeviceId: memberDevice,
         },
       });
-      expect(decodeJsonPayload(received.bytes)).toEqual(plaintext);
+      expect(received.bytes.expose()).toEqual(plaintext);
       const members = await member.groupMembership.members({ groupId });
       const self = members.find((item) => item.user.id === memberId)!;
       const ownerMember = members.find((item) => item.user.id === ownerId)!;
@@ -307,7 +310,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         member.groupTracking.uploadBatch({
           groupId,
           points: [
-            { ...point, clientPointId: `${prefix}-concurrent`, epochId: rejoined.epoch.epochId },
+            {
+              ...point,
+              clientPointId: testClientPointId(`${prefix}-concurrent`),
+              epochId: rejoined.epoch.epochId,
+            },
           ],
         }),
       ]);
@@ -425,47 +432,47 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         recipients: joinContext.recipients,
       });
       await member.groupInvites.accept({ inviteId: invite.id, nextEpoch: bundle(joined) });
+      const latestEpochs = async (reader: typeof owner) =>
+        (await reader.groupTracking.getLatest({ groupId: readsGroupId })).points.map(
+          (point) => point.epochId,
+        );
+      const polledEpochs = async (reader: typeof owner) =>
+        (
+          await reader.groupTracking.poll({
+            groupId: readsGroupId,
+            cursor: { senderDeviceId: "0", updatedAt: new Date(0) },
+          })
+        ).points.map((point) => point.epochId);
+      expect(await latestEpochs(member)).toEqual([]);
+      expect(await polledEpochs(member)).toEqual([]);
+      expect(await latestEpochs(owner)).toEqual([initial.epoch.epochId]);
+
       await owner.groupTracking.uploadBatch({
         groupId: readsGroupId,
         points: [ownerPoint(joined, `${prefix}-after-join`)],
       });
+      expect(await latestEpochs(member)).toEqual([joined.epoch.epochId]);
+      expect(await polledEpochs(member)).toEqual([joined.epoch.epochId]);
+
       await owner.groupTracking.uploadBatch({
         groupId: readsGroupId,
         points: [ownerPoint(initial, `${prefix}-old-epoch-after-join`)],
       });
+      expect(await latestEpochs(member)).toEqual([joined.epoch.epochId]);
+      expect(await polledEpochs(member)).toEqual([joined.epoch.epochId]);
+      expect(await latestEpochs(owner)).toEqual([joined.epoch.epochId]);
+      expect((await owner.groupTracking.poll({ groupId: readsGroupId })).points).toHaveLength(1);
 
-      expect(
-        (await owner.groupTracking.poll({ groupId: readsGroupId })).points.map(
-          (point) => point.clientPointId,
-        ),
-      ).toEqual([
-        `${prefix}-before-join`,
-        `${prefix}-after-join`,
-        `${prefix}-old-epoch-after-join`,
-      ]);
-      expect(
-        (await member.groupTracking.poll({ groupId: readsGroupId })).points.map(
-          (point) => point.clientPointId,
-        ),
-      ).toEqual([`${prefix}-after-join`]);
-      expect(
-        (
-          await member.groupTracking.poll({
-            groupId: readsGroupId,
-            cursor: { createdAt: new Date(0), id: "0" },
-          })
-        ).points.map((point) => point.clientPointId),
-      ).toEqual([`${prefix}-after-join`]);
+      const joinedInBatch = ownerPoint(joined, `${prefix}-joined-in-batch`);
+      await owner.groupTracking.uploadBatch({
+        groupId: readsGroupId,
+        points: [joinedInBatch, ownerPoint(initial, `${prefix}-old-epoch-in-batch`)],
+      });
       expect(
         (await member.groupTracking.getLatest({ groupId: readsGroupId })).points.map(
-          (point) => point.clientPointId,
+          (point) => point.ciphertext,
         ),
-      ).toEqual([`${prefix}-after-join`]);
-      expect(
-        (await owner.groupTracking.getLatest({ groupId: readsGroupId })).points.map(
-          (point) => point.clientPointId,
-        ),
-      ).toEqual([`${prefix}-old-epoch-after-join`]);
+      ).toEqual([joinedInBatch.ciphertext]);
 
       const self = (await member.groupMembership.members({ groupId: readsGroupId })).find(
         (item) => item.user.id === memberId,

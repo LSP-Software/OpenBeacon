@@ -1,10 +1,14 @@
 export const TRACKING_POINT_KIND = "trackingPoint" as const;
+export const TRACKING_POINT_VERSION = 2;
+export const TRACKING_POINT_LENGTH = 23;
+export const ENCRYPTED_TRACKING_POINT_LENGTH = TRACKING_POINT_LENGTH + 16;
 
-export type TrackingPointV1 = {
-  v: 1;
+export type TrackingPoint = {
   latitude: number;
   longitude: number;
-  timestamp: string;
+  time: number;
+  stayUntil: number | null;
+  accuracy: number | null;
   speed: number | null;
   battery: {
     level: number | null;
@@ -12,101 +16,102 @@ export type TrackingPointV1 = {
   };
 };
 
-const textEncoder = new TextEncoder();
+const UNKNOWN_UINT16 = 0xffff;
+const UNKNOWN_BATTERY_LEVEL = 127;
+const STAY_FLAG = 1;
+const MINUTE_MS = 60_000;
+const UINT32 = 2 ** 32;
 
-const isIsoUtcTimestamp = (value: string) => {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?Z$/.exec(value);
-
-  if (!match) {
-    return false;
+const encodeUint16 = (value: number | null, scale: number) => {
+  if (value === null || !Number.isFinite(value) || value < 0) {
+    return UNKNOWN_UINT16;
   }
-
-  const [, yearValue, monthValue, dayValue, hourValue, minuteValue, secondValue] = match;
-  const year = Number(yearValue);
-  const month = Number(monthValue);
-  const day = Number(dayValue);
-  const daysInMonth = [
-    31,
-    year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28,
-    31,
-    30,
-    31,
-    30,
-    31,
-    31,
-    30,
-    31,
-    30,
-    31,
-  ];
-
-  return (
-    month >= 1 &&
-    month <= 12 &&
-    day >= 1 &&
-    day <= (daysInMonth[month - 1] ?? 0) &&
-    Number(hourValue) <= 23 &&
-    Number(minuteValue) <= 59 &&
-    Number(secondValue) <= 59
-  );
+  return Math.min(Math.round(value * scale), UNKNOWN_UINT16 - 1);
 };
 
-export const validateTrackingPointV1 = (value: unknown): TrackingPointV1 => {
+const decodeUint16 = (value: number, scale: number) =>
+  value === UNKNOWN_UINT16 ? null : value / scale;
+
+const invalid = () => new Error("Invalid tracking point.");
+
+export const encodeTrackingPoint = (point: TrackingPoint) => {
+  const { latitude, longitude, time, stayUntil, battery } = point;
   if (
-    typeof value !== "object" ||
-    value === null ||
-    !("v" in value) ||
-    value.v !== 1 ||
-    !("latitude" in value) ||
-    typeof value.latitude !== "number" ||
-    !Number.isFinite(value.latitude) ||
-    value.latitude < -90 ||
-    value.latitude > 90 ||
-    !("longitude" in value) ||
-    typeof value.longitude !== "number" ||
-    !Number.isFinite(value.longitude) ||
-    value.longitude < -180 ||
-    value.longitude > 180 ||
-    !("timestamp" in value) ||
-    typeof value.timestamp !== "string" ||
-    !isIsoUtcTimestamp(value.timestamp) ||
-    !("speed" in value) ||
-    (typeof value.speed !== "number" && value.speed !== null) ||
-    (typeof value.speed === "number" && !Number.isFinite(value.speed)) ||
-    !("battery" in value) ||
-    typeof value.battery !== "object" ||
-    value.battery === null ||
-    !("level" in value.battery) ||
-    (value.battery.level !== null &&
-      (typeof value.battery.level !== "number" ||
-        !Number.isInteger(value.battery.level) ||
-        value.battery.level < 0 ||
-        value.battery.level > 100)) ||
-    !("charging" in value.battery) ||
-    typeof value.battery.charging !== "boolean"
+    !Number.isFinite(latitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    !Number.isFinite(longitude) ||
+    longitude < -180 ||
+    longitude > 180 ||
+    !Number.isSafeInteger(time) ||
+    time < 0 ||
+    time >= 2 ** 48 ||
+    (stayUntil !== null && !Number.isFinite(stayUntil))
   ) {
-    throw new Error("Invalid tracking point.");
+    throw invalid();
+  }
+
+  const bytes = new Uint8Array(TRACKING_POINT_LENGTH);
+  const view = new DataView(bytes.buffer);
+  const level =
+    battery.level === null || !Number.isFinite(battery.level)
+      ? UNKNOWN_BATTERY_LEVEL
+      : Math.min(Math.max(Math.round(battery.level), 0), 100);
+
+  view.setUint8(0, TRACKING_POINT_VERSION);
+  view.setInt32(1, Math.round(latitude * 1e7));
+  view.setInt32(5, Math.round(longitude * 1e7));
+  view.setUint16(9, Math.floor(time / UINT32));
+  view.setUint32(11, time % UINT32);
+  view.setUint16(
+    15,
+    stayUntil === null
+      ? 0
+      : Math.min(Math.max(Math.floor((stayUntil - time) / MINUTE_MS), 0), UNKNOWN_UINT16),
+  );
+  view.setUint16(17, encodeUint16(point.accuracy, 10));
+  view.setUint16(19, encodeUint16(point.speed, 100));
+  view.setUint8(21, (battery.charging ? 0x80 : 0) | level);
+  view.setUint8(22, stayUntil === null ? 0 : STAY_FLAG);
+
+  return bytes;
+};
+
+export const decodeTrackingPoint = (bytes: Uint8Array): TrackingPoint => {
+  if (bytes.length !== TRACKING_POINT_LENGTH) {
+    throw invalid();
+  }
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const latitude = view.getInt32(1);
+  const longitude = view.getInt32(5);
+  const time = view.getUint16(9) * UINT32 + view.getUint32(11);
+  const stayMinutes = view.getUint16(15);
+  const battery = view.getUint8(21);
+  const level = battery & 0x7f;
+  const flags = view.getUint8(22);
+
+  if (
+    view.getUint8(0) !== TRACKING_POINT_VERSION ||
+    Math.abs(latitude) > 900_000_000 ||
+    Math.abs(longitude) > 1_800_000_000 ||
+    (level > 100 && level !== UNKNOWN_BATTERY_LEVEL) ||
+    (flags & ~STAY_FLAG) !== 0 ||
+    (flags !== STAY_FLAG && stayMinutes !== 0)
+  ) {
+    throw invalid();
   }
 
   return {
-    v: 1,
-    latitude: value.latitude,
-    longitude: value.longitude,
-    timestamp: value.timestamp,
-    speed: value.speed,
-    battery: { level: value.battery.level, charging: value.battery.charging },
+    latitude: latitude / 1e7,
+    longitude: longitude / 1e7,
+    time,
+    stayUntil: flags === STAY_FLAG ? time + stayMinutes * MINUTE_MS : null,
+    accuracy: decodeUint16(view.getUint16(17), 10),
+    speed: decodeUint16(view.getUint16(19), 100),
+    battery: {
+      level: level === UNKNOWN_BATTERY_LEVEL ? null : level,
+      charging: (battery & 0x80) !== 0,
+    },
   };
-};
-
-export const encodeTrackingPointV1 = (trackingPoint: TrackingPointV1) => {
-  if (
-    Object.keys(trackingPoint).length !== 6 ||
-    typeof trackingPoint.battery !== "object" ||
-    trackingPoint.battery === null ||
-    Object.keys(trackingPoint.battery).length !== 2
-  ) {
-    throw new Error("Invalid tracking point.");
-  }
-
-  return textEncoder.encode(JSON.stringify(validateTrackingPointV1(trackingPoint)));
 };

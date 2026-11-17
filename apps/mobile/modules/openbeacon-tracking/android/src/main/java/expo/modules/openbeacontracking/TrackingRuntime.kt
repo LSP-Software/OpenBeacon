@@ -11,9 +11,11 @@ import androidx.core.content.ContextCompat
 import expo.modules.openbeacontracking.capture.CapturePipeline
 import expo.modules.openbeacontracking.capture.CaptureCommandState
 import expo.modules.openbeacontracking.capture.SharingCaptureState
+import expo.modules.openbeacontracking.capture.HistoryAllowance
 import expo.modules.openbeacontracking.capture.BootRestartPolicy
 import expo.modules.openbeacontracking.capture.SharingResumeWorker
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
+import expo.modules.openbeacontracking.keys.CachedEpochKeyStore
 import expo.modules.openbeacontracking.keys.EpochKeyStore
 import expo.modules.openbeacontracking.keys.SecureEpochKeyStore
 import expo.modules.openbeacontracking.places.PlaceDetection
@@ -45,7 +47,7 @@ object TrackingRuntime {
 
     return synchronized(this) {
       epochKeyStore
-        ?: SecureEpochKeyStore(context.applicationContext).also { epochKeyStore = it }
+        ?: CachedEpochKeyStore(SecureEpochKeyStore(context.applicationContext)).also { epochKeyStore = it }
     }
   }
 
@@ -83,6 +85,20 @@ object TrackingRuntime {
       queueOwner = { queueOwner(context) },
       bootId = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1).takeIf { it >= 0 }?.toString(),
       sharingState = { sharingState(context) },
+      loadAllowance = { group ->
+        val parts = context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
+          .getString(org.json.JSONArray(group).toString(), null)
+          ?.split(":")
+        val tokens = parts?.getOrNull(0)?.toDoubleOrNull()?.takeIf { it.isFinite() }
+        val updatedAt = parts?.getOrNull(1)?.toLongOrNull()
+        if (parts?.size == 2 && tokens != null && updatedAt != null) HistoryAllowance(tokens, updatedAt) else null
+      },
+      saveAllowance = { group, allowance ->
+        context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
+          .edit()
+          .putString(org.json.JSONArray(group).toString(), "${allowance.tokens}:${allowance.updatedAt}")
+          .apply()
+      },
     )
 
   fun sharingState(context: Context): SharingCaptureState {
@@ -155,10 +171,19 @@ object TrackingRuntime {
         epochKeyStore(context).revoke(null)
         placeDetection(context).removeGroups(null)
       }
+      if (previousOwner != null && previousOwner != owner) clearHistoryAllowance(context, previousOwner)
       if (previousOwner != owner || previousDeviceId != deviceId) {
         check(preferences.edit().putString("owner", owner).putString("deviceId", deviceId).commit())
       }
     }
+  }
+
+  fun clearHistoryAllowance(context: Context, owner: String) {
+    val preferences = context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
+    val ownerPrefix = org.json.JSONArray(listOf(owner)).toString().removeSuffix("]") + ","
+    val editor = preferences.edit()
+    preferences.all.keys.filter { it.startsWith(ownerPrefix) }.forEach { editor.remove(it) }
+    editor.apply()
   }
 
   fun isCaptureEnabled(context: Context): Boolean =

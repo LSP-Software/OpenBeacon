@@ -116,7 +116,16 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         owner.groupInvites.send({ groupId, invites }),
       ]);
       expect(await prisma.groupMemberInvite.count({ where: { groupId } })).toBe(2);
+      await prisma.user.update({
+        where: { id: users[0]! },
+        data: { image: "https://images.example.test/inviter" },
+      });
+      await prisma.group.update({
+        where: { id: groupId },
+        data: { image: "https://images.example.test/group" },
+      });
       const firstInvite = (await first.groupInvites.list())[0]!;
+      expect(firstInvite).toMatchObject({ inviter: { image: null }, group: { image: null } });
       const secondInvite = (await second.groupInvites.list())[0]!;
       expect(await outsider.groupInvites.list()).toHaveLength(0);
       await expect(

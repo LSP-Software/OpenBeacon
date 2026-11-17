@@ -5,7 +5,8 @@ import z from "zod";
 import { errorCode, tryCatch } from "@openbeacon/shared";
 import { recordGroupEvent } from "../../lib/groupHistory.ts";
 import { deleteGroup } from "../../lib/deleteGroup.ts";
-import { deletePayloadsInBatches } from "../../lib/deletePayloadsInBatches.ts";
+import { imageKeySelect, toStoredImageKey } from "../../lib/imageKeys.ts";
+import { deleteTrackingStreams } from "../../lib/trackingCleanup.ts";
 import { getGroupRemovalContext, persistGroupEpoch } from "../../lib/groupEpochs.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
 import { protectedProcedure } from "../../procedures/auth/runtime.ts";
@@ -26,10 +27,12 @@ export const groupMembershipRouter = {
         id: true,
         name: true,
         image: true,
+        ...imageKeySelect,
         groupMembers: {
           select: {
             id: true,
             role: true,
+            ...imageKeySelect,
             user: {
               select: {
                 id: true,
@@ -48,11 +51,13 @@ export const groupMembershipRouter = {
           id: group.id,
           name: group.name,
           image: group.image,
+          imageKey: toStoredImageKey(group),
           members: group.groupMembers.map((member) => ({
             id: member.id,
             userId: member.user.id,
             name: member.user.name,
             image: member.user.image,
+            imageKey: toStoredImageKey(member),
             role: member.role,
           })),
         }) satisfies GroupListItem,
@@ -364,15 +369,21 @@ export const groupMembershipRouter = {
             }
           }
 
-          return member;
+          const [lastStream] = await tx.$queryRaw<Array<{ id: string | null }>>(Prisma.sql`
+            SELECT max(id)::text AS id FROM "TrackingStream"
+            WHERE "groupId" = ${input.groupId} AND "senderUserId" = ${member.userId}
+          `);
+          return { userId: member.userId, lastStreamId: lastStream?.id ?? null };
         },
         { timeout: 15_000 },
       );
       const cleanup = await tryCatch(
-        deletePayloadsInBatches({
-          db: ctx.db,
-          where: Prisma.sql`"groupId" = ${input.groupId} AND "senderUserId" = ${removed.userId}`,
-        }),
+        removed.lastStreamId === null
+          ? Promise.resolve(0)
+          : deleteTrackingStreams({
+              db: ctx.db,
+              streams: Prisma.sql`"stream"."groupId" = ${input.groupId} AND "stream"."senderUserId" = ${removed.userId} AND "stream"."id" <= ${removed.lastStreamId}::bigint`,
+            }),
       );
       if (cleanup.error) {
         const code = errorCode(cleanup.error);

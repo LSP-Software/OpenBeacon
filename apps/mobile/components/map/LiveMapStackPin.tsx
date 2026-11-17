@@ -1,6 +1,7 @@
 import { View } from "react-native";
 import type { LiveMapMarker } from "../../lib/buildLiveMapMarkers.ts";
-import { Avatar, AvatarFallback, AvatarImage } from "../ui/Avatar.tsx";
+import { DecryptedAvatarImage } from "../image/DecryptedAvatarImage.tsx";
+import { Avatar, AvatarFallback } from "../ui/Avatar.tsx";
 import { Text } from "../ui/Text.tsx";
 import { LiveMapMarkerPin } from "./LiveMapMarkerPin.tsx";
 
@@ -33,7 +34,7 @@ export const LiveMapStackPin = ({ members }: { members: readonly LiveMapMarker[]
           }}
         >
           <Avatar alt={member.name} className="size-7">
-            {member.image ? <AvatarImage source={{ uri: member.image }} /> : null}
+            <DecryptedAvatarImage url={member.image} />
             <AvatarFallback>
               <Text className="text-[10px] font-bold">{member.initials}</Text>
             </AvatarFallback>

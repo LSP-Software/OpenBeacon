@@ -182,7 +182,7 @@ export const createAuth = ({
                 message: result.error.issues[0]?.message ?? "Invalid name",
               });
             if (context?.path !== "/sign-up/email" || !emailCodes) {
-              return { data: { ...user, name: result.data } };
+              return { data: { ...user, name: result.data, image: null } };
             }
             const signUpToken: unknown = context.body?.signUpToken;
             const consumed =
@@ -193,7 +193,7 @@ export const createAuth = ({
                 value: normalizeEmail(user.email),
               }));
             if (!consumed) throw invalidSignUpToken();
-            return { data: { ...user, name: result.data, emailVerified: true } };
+            return { data: { ...user, name: result.data, image: null, emailVerified: true } };
           },
         },
         update: {
@@ -207,6 +207,11 @@ export const createAuth = ({
             return { data: { ...user, name: result.data } };
           },
         },
+      },
+    },
+    user: {
+      additionalFields: {
+        imageKeySealed: { type: "string", required: false, input: false },
       },
     },
     account: { accountLinking: { enabled: false } },
@@ -234,6 +239,7 @@ export const createAuth = ({
               clientId: env.GOOGLE_CLIENT_ID,
               clientSecret: env.GOOGLE_CLIENT_SECRET,
               scope: ["email", "profile"],
+              mapProfileToUser: () => ({ image: undefined }),
               verifyIdToken: async (token, nonce) =>
                 (await verifyGoogleIdToken({
                   token,

@@ -1,22 +1,60 @@
 import { afterAll, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import type { Prisma } from "@openbeacon/database";
-import { TRACKING_POINT_KIND } from "@openbeacon/schemas";
 
 const databaseNow = new Date("2001-03-02T00:00:00.000Z");
 const cutoff = "2001-02-16T00:00:00.000Z";
 let backlog = 0;
 let failures: unknown[] = [];
 let epochs: Array<{ id: string; createdAt: Date }> = [];
-const payloadDeletes: Array<{ kind: unknown; cutoff: unknown; limit: number }> = [];
+const payloadDeletes: Array<{
+  cutoff: unknown;
+  fromStream: unknown;
+  limit: number;
+  streamCutoff: unknown;
+}> = [];
+const tidyDeletes: Array<{ table: string; values: unknown[] }> = [];
 const epochPages: Array<{ cutoff: unknown; after: unknown[]; limit: unknown }> = [];
 const epochDeletes: string[][] = [];
 let historyBacklog = { PlaceTransition: 0, GroupEvent: 0 };
 const historyDeletes: Array<{ table: string; cutoff: unknown; limit: number }> = [];
+let emptyStreams: string[] = [];
+const streamLocks: Array<{ after: unknown; limit: unknown }> = [];
 
-const queryRaw = mock(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+const queryRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args: unknown[]) => {
+  const [strings, values] = Array.isArray(query) ? [query, args] : [query.strings, query.values];
   if (strings.join("?").includes("clock_timestamp")) return [{ now: databaseNow }];
+  if (
+    strings.join("?").trimStart().startsWith('SELECT "stream".id::text AS id FROM "TrackingStream"')
+  ) {
+    const [after, limit] = values;
+    streamLocks.push({ after, limit });
+    return emptyStreams
+      .filter((id) => BigInt(id) > BigInt(String(after)))
+      .slice(0, Number(limit))
+      .map((id) => ({ id }));
+  }
+  if (strings.join("?").trimStart().startsWith('DELETE FROM "TrackingPoint"')) {
+    const failure = failures.shift();
+    if (failure) throw failure;
+    const [pointCutoff, limit, streamCutoff, fromStream] = values;
+    payloadDeletes.push({
+      cutoff: pointCutoff,
+      fromStream,
+      limit: Number(limit),
+      streamCutoff,
+    });
+    const count = Math.min(Number(limit), backlog);
+    backlog -= count;
+    return Array.from({ length: count }, (_, index) => ({
+      streamId: String(index + 1),
+    }));
+  }
   const [pageCutoff, afterCreatedAt, afterId, limit] = values;
-  epochPages.push({ cutoff: pageCutoff, after: [afterCreatedAt, afterId], limit });
+  epochPages.push({
+    cutoff: pageCutoff,
+    after: [afterCreatedAt, afterId],
+    limit,
+  });
   return epochs
     .filter(
       ({ id, createdAt }) =>
@@ -45,17 +83,26 @@ const executeRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args
     historyBacklog[historyTable] -= count;
     return count;
   }
-  const failure = failures.shift();
-  if (failure) throw failure;
-  const limit = Number(values[2]);
-  payloadDeletes.push({ kind: values[0], cutoff: values[1], limit });
-  const count = Math.min(limit, backlog);
-  backlog -= count;
-  return count;
+  const tidyTable = (["TrackingLatestPoint", "TrackingStream"] as const).find((table) =>
+    strings.join("?").trimStart().startsWith(`DELETE FROM "${table}"`),
+  );
+  if (tidyTable) {
+    tidyDeletes.push({ table: tidyTable, values });
+    return 0;
+  }
+  throw new Error(`Unexpected statement: ${strings.join("?")}`);
 });
 
 mock.module("../services.ts", () => ({
-  services: { db: { $queryRaw: queryRaw, $executeRaw: executeRaw } },
+  services: {
+    db: {
+      $queryRaw: queryRaw,
+      $executeRaw: executeRaw,
+      $transaction: async (
+        callback: (tx: { $queryRaw: typeof queryRaw; $executeRaw: typeof executeRaw }) => unknown,
+      ) => callback({ $queryRaw: queryRaw, $executeRaw: executeRaw }),
+    },
+  },
 }));
 const { createEpochCleanup, createGroupHistoryCleanup, createLocationHistoryCleanup } =
   await import("./locationHistoryCleanup.ts");
@@ -65,21 +112,42 @@ beforeEach(() => {
   failures = [];
   epochs = [];
   payloadDeletes.length = 0;
+  tidyDeletes.length = 0;
   epochPages.length = 0;
   epochDeletes.length = 0;
   historyBacklog = { PlaceTransition: 0, GroupEvent: 0 };
   historyDeletes.length = 0;
+  emptyStreams = [];
+  streamLocks.length = 0;
 });
 
-test("deletes location points older than database time minus exactly 14 days in batches", async () => {
+test("deletes location points older than database time minus exactly 14 days in batches, then stale latest points and empty streams", async () => {
   backlog = 2_500;
   await createLocationHistoryCleanup()();
   expect(payloadDeletes).toEqual([
-    { kind: TRACKING_POINT_KIND, cutoff, limit: 1000 },
-    { kind: TRACKING_POINT_KIND, cutoff, limit: 1000 },
-    { kind: TRACKING_POINT_KIND, cutoff, limit: 1000 },
+    { cutoff, fromStream: "0", limit: 1000, streamCutoff: cutoff },
+    { cutoff, fromStream: "1000", limit: 1000, streamCutoff: cutoff },
+    { cutoff, fromStream: "1000", limit: 1000, streamCutoff: cutoff },
   ]);
   expect(backlog).toBe(0);
+  expect(tidyDeletes).toEqual([{ table: "TrackingLatestPoint", values: [cutoff] }]);
+  expect(streamLocks).toEqual([{ after: "0", limit: 1000 }]);
+});
+
+test("locks empty streams in batches and deletes only the locked ones", async () => {
+  emptyStreams = ["3", "8", "12", "20", "31"];
+  await createLocationHistoryCleanup({ batchSize: 2 })();
+  expect(streamLocks).toEqual([
+    { after: "0", limit: 2 },
+    { after: "8", limit: 2 },
+    { after: "20", limit: 2 },
+  ]);
+  expect(tidyDeletes).toEqual([
+    { table: "TrackingLatestPoint", values: [cutoff] },
+    { table: "TrackingStream", values: [["3", "8"]] },
+    { table: "TrackingStream", values: [["12", "20"]] },
+    { table: "TrackingStream", values: [["31"]] },
+  ]);
 });
 
 test("stops at the run limit, logs it and leaves the rest for later runs", async () => {
@@ -107,6 +175,7 @@ test("logs a failed batch with only its code and stops the run", async () => {
   failures = [Object.assign(new Error("row secret"), { code: "P2010" })];
   await createLocationHistoryCleanup()();
   expect(payloadDeletes).toEqual([]);
+  expect(tidyDeletes).toEqual([]);
   expect(error.mock.calls).toEqual([["Location history clean-up failed (P2010)"]]);
   error.mockRestore();
 });

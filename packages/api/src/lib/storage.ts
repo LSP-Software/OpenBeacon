@@ -1,7 +1,6 @@
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
-  GetObjectCommand,
   HeadObjectCommand,
   ListObjectVersionsCommand,
   PutObjectCommand,
@@ -37,30 +36,16 @@ export const getPresignedUploadUrl = async (
   });
 };
 
-export const getUploadedFile = async (
-  bucketName: string,
-  path: string,
-  fileName: string,
-  headerLength: number,
-  maxSize: number,
-) => {
-  const key = buildKey(path, fileName);
+export const getUploadedFile = async (bucketName: string, path: string, fileName: string) => {
   const { data: head, error: headError } = await tryCatch(
-    s3Client.send(new HeadObjectCommand({ Bucket: bucketName, Key: key })),
+    s3Client.send(new HeadObjectCommand({ Bucket: bucketName, Key: buildKey(path, fileName) })),
   );
   if (headError) {
     const name = (headError as { name?: string }).name ?? "";
     if (name === "NotFound" || name === "NoSuchKey") return null;
     throw headError;
   }
-  const size = head.ContentLength ?? 0;
-  if (size < headerLength || size > maxSize)
-    return { size, contentType: head.ContentType, header: new Uint8Array() };
-  const object = await s3Client.send(
-    new GetObjectCommand({ Bucket: bucketName, Key: key, Range: `bytes=0-${headerLength - 1}` }),
-  );
-  const header = object.Body ? await object.Body.transformToByteArray() : new Uint8Array();
-  return { size, contentType: head.ContentType, header };
+  return { size: head.ContentLength ?? 0, contentType: head.ContentType };
 };
 
 const deleteImageVersions = async (bucketName: string, key: string, exact: boolean) => {

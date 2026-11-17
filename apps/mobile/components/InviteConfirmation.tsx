@@ -12,11 +12,12 @@ import {
   submitEpochChange,
 } from "../lib/groupEncryption.ts";
 import { groupLimitAlert } from "../lib/groupLimitAlert.ts";
+import { storeOwnImageKeyInGroup } from "../lib/imageKeys.ts";
 import { initials } from "../lib/initials.ts";
 import type { InviteToConfirm } from "../lib/inviteTypes.ts";
 import { requestTrackingSync } from "../lib/trackingEvents.ts";
 import { useSingleFlight } from "../lib/useSingleFlight.ts";
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/Avatar.tsx";
+import { Avatar, AvatarFallback } from "./ui/Avatar.tsx";
 import { Button } from "./ui/Button.tsx";
 import { Text } from "./ui/Text.tsx";
 
@@ -75,6 +76,8 @@ export const InviteConfirmation = ({
         Alert.alert("Unable to join", result.error.message);
         return;
       }
+      const joinedGroupId = preview.data?.group.id;
+      if (joinedGroupId) void tryCatch(storeOwnImageKeyInGroup(joinedGroupId));
       void queryClient.invalidateQueries({
         predicate: (query) => query.queryKey[0] !== "invitePreview",
       });
@@ -175,14 +178,12 @@ export const InviteConfirmation = ({
       <View className="flex-1 items-center justify-center py-6">
         <View className="relative">
           <Avatar alt={`${group.name}'s image`} className="size-28">
-            <AvatarImage source={{ uri: group.image ?? "" }} />
             <AvatarFallback>
               <Text className="text-4xl font-bold">{initials(group.name)}</Text>
             </AvatarFallback>
           </Avatar>
           <View className="absolute -bottom-1 -right-1 rounded-full border-4 border-background">
             <Avatar alt={`${inviter.name}'s profile picture`} className="size-11">
-              <AvatarImage source={{ uri: inviter.image ?? "" }} />
               <AvatarFallback>
                 <Text className="text-sm font-bold">{initials(inviter.name)}</Text>
               </AvatarFallback>

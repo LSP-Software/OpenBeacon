@@ -7,9 +7,9 @@ import {
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { tryCatch } from "@openbeacon/shared";
-import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
+import { PAYLOAD_ENCRYPTION_ALGORITHM, WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
 import { env } from "../../env.ts";
-import { storedWebpResponse } from "../../lib/storedWebp.testUtil.ts";
+import { storedEncryptedImageResponse } from "../../lib/storedEncryptedImage.testUtil.ts";
 import { DevicePendingError } from "../../lib/deviceActivation.ts";
 import { DeviceUnverifiedError } from "../../lib/deviceUnverified.ts";
 import { buildGroupAvatarPath, setPendingImageUploadForUser } from "../../lib/image-upload.ts";
@@ -52,6 +52,13 @@ const caller = (
       session: { user: { id: userId } },
     }) as Parameters<typeof router.createCaller>[0],
   );
+const pictureKey = (userId: string, epochId: string) => ({
+  algorithm: PAYLOAD_ENCRYPTION_ALGORITHM,
+  ciphertext: Buffer.alloc(48, 1).toString("base64"),
+  epochId,
+  nonce: Buffer.alloc(24, 2).toString("base64"),
+  senderDeviceId: `${userId}-device`,
+});
 const unopenableEpoch = (createdByDeviceId: string) => {
   const epochId = crypto.randomUUID();
   return {
@@ -404,14 +411,20 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         expect(await prisma.pendingUpload.count({ where: { groupId: uploadGroupId } })).toBe(0);
         send.mockClear();
         await expect(
-          caller(users[2]!).groupSettings.confirmGroupImageUpload({ groupId: uploadGroupId }),
+          caller(users[2]!).groupSettings.confirmGroupImageUpload({
+            groupId: uploadGroupId,
+            key: pictureKey(users[2]!, "epoch"),
+          }),
         ).rejects.toThrow("No pending group image upload to confirm.");
         expect(send.mock.calls.some(([command]) => command instanceof DeleteObjectsCommand)).toBe(
           false,
         );
         send.mockClear();
         await expect(
-          caller(users[0]!).groupSettings.confirmGroupImageUpload({ groupId: uploadGroupId }),
+          caller(users[0]!).groupSettings.confirmGroupImageUpload({
+            groupId: uploadGroupId,
+            key: pictureKey(users[0]!, "epoch"),
+          }),
         ).rejects.toThrow("No pending group image upload to confirm.");
         const deleted = send.mock.calls.find(
           ([command]) => command instanceof DeleteObjectsCommand,
@@ -433,11 +446,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             id,
             name: "Upload test",
             groupMembers: { create: { userId, role: "OWNER", joinedEpochNumber: 1 } },
+            groupEpochs: {
+              create: { id: `${id}-epoch`, epochNumber: 1, senderPublicKey: "public-key" },
+            },
           },
         });
       }
       const send = spyOn(s3Client, "send").mockImplementation(async (command) =>
-        storedWebpResponse(command),
+        storedEncryptedImageResponse(command),
       );
       try {
         await Promise.all(
@@ -459,6 +475,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         for (const id of groupIds) {
           const result = await caller(userId).groupSettings.confirmGroupImageUpload({
             groupId: id,
+            key: pictureKey(userId, `${id}-epoch`),
           });
           expect((await prisma.group.findUniqueOrThrow({ where: { id } })).image).toBe(
             result.imageUrl,
@@ -483,6 +500,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           id: uploadGroupId,
           name: "Upload success",
           groupMembers: { create: { userId: users[0]!, role: "OWNER", joinedEpochNumber: 1 } },
+          groupEpochs: {
+            create: { id: `${uploadGroupId}-epoch`, epochNumber: 1, senderPublicKey: "public-key" },
+          },
         },
       });
       await prisma.pendingUpload.create({
@@ -494,15 +514,24 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         },
       });
       const send = spyOn(s3Client, "send").mockImplementation(async (command) =>
-        storedWebpResponse(command),
+        storedEncryptedImageResponse(command),
       );
       try {
+        const key = pictureKey(users[0]!, `${uploadGroupId}-epoch`);
         const result = await caller(users[0]!).groupSettings.confirmGroupImageUpload({
           groupId: uploadGroupId,
+          key,
         });
-        expect((await prisma.group.findUniqueOrThrow({ where: { id: uploadGroupId } })).image).toBe(
-          result.imageUrl,
-        );
+        expect(
+          await prisma.group.findUniqueOrThrow({ where: { id: uploadGroupId } }),
+        ).toMatchObject({
+          image: result.imageUrl,
+          imageKeyEpochId: key.epochId,
+          imageKeySenderDeviceId: key.senderDeviceId,
+          imageKeyAlgorithm: key.algorithm,
+          imageKeyNonce: key.nonce,
+          imageKeyCiphertext: key.ciphertext,
+        });
         expect(
           await prisma.groupEvent.findMany({
             where: { groupId: uploadGroupId },
@@ -669,7 +698,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
             () =>
               api.groupMembership.updateRole({ groupId: lockedGroupId, memberId, role: "ADMIN" }),
             () => api.groupSettings.rename({ groupId: lockedGroupId, name: "Taken" }),
-            () => api.groupSettings.confirmGroupImageUpload({ groupId: lockedGroupId }),
+            () =>
+              api.groupSettings.confirmGroupImageUpload({
+                groupId: lockedGroupId,
+                key: pictureKey(owner, "epoch"),
+              }),
           ];
           for (const attempt of attempts) {
             const { error } = await tryCatch(attempt());

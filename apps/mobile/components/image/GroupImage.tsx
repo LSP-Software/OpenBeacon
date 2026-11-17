@@ -1,6 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
-import { queryClient, trpc } from "../../lib/api.ts";
-import { uploadImageFromUri } from "../../lib/image-upload.ts";
+import { showUploadedGroupImage, uploadGroupImage } from "../../lib/groupImageUpload.ts";
 import { EditableImage } from "./EditableImage.tsx";
 
 export const GroupImage = ({
@@ -13,39 +11,15 @@ export const GroupImage = ({
   groupId: string;
   imageUrl?: string | null;
   size?: "sm" | "md" | "lg";
-}) => {
-  const requestGroupImageUploadMutation = useMutation(
-    trpc.groupSettings.requestGroupImageUpload.mutationOptions(),
-  );
-  const confirmGroupImageUploadMutation = useMutation(
-    trpc.groupSettings.confirmGroupImageUpload.mutationOptions(),
-  );
-
-  const uploadGroupImage = async (uri: string) => {
-    return uploadImageFromUri({
-      uri,
-      requestImageUpload: (input) =>
-        requestGroupImageUploadMutation.mutateAsync({ groupId, ...input }),
-      confirmImageUpload: () => confirmGroupImageUploadMutation.mutateAsync({ groupId }),
-    });
-  };
-
-  const handleGroupImageUploaded = async (uploadedImageUrl: string) => {
-    queryClient.setQueryData(trpc.groupMembership.list.queryKey(), (currentGroups) =>
-      currentGroups?.map((group) =>
-        group.id === groupId ? { ...group, image: uploadedImageUrl } : group,
-      ),
-    );
-  };
-
-  return (
-    <EditableImage
-      accessibilityLabel="Edit group photo"
-      alt="Group avatar"
-      imageUrl={imageUrl}
-      onImageUploaded={handleGroupImageUploaded}
-      size={size}
-      {...(editable ? { uploadImage: uploadGroupImage } : {})}
-    />
-  );
-};
+}) => (
+  <EditableImage
+    accessibilityLabel="Edit group picture"
+    alt="Group avatar"
+    imageUrl={imageUrl}
+    onImageUploaded={(uploadedImageUrl) =>
+      showUploadedGroupImage({ groupId, imageUrl: uploadedImageUrl })
+    }
+    size={size}
+    {...(editable ? { uploadImage: (uri: string) => uploadGroupImage({ groupId, uri }) } : {})}
+  />
+);

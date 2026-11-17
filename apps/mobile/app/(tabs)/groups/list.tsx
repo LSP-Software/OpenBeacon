@@ -9,7 +9,8 @@ import { AnnouncementBanner } from "../../../components/AnnouncementBanner.tsx";
 import { CreateGroupDialog } from "../../../components/dialogs/CreateGroupDialog.tsx";
 import { LoadingIndicator } from "../../../components/LoadingIndicator.tsx";
 import { RefreshablePage } from "../../../components/RefreshablePage.tsx";
-import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/Avatar.tsx";
+import { DecryptedAvatarImage } from "../../../components/image/DecryptedAvatarImage.tsx";
+import { Avatar, AvatarFallback } from "../../../components/ui/Avatar.tsx";
 import { Button } from "../../../components/ui/Button.tsx";
 import { Card, CardDescription, CardHeader, CardTitle } from "../../../components/ui/Card.tsx";
 import { Icon } from "../../../components/ui/Icon.tsx";
@@ -180,7 +181,7 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
               <Link
                 href={`/groups/${group.id}`}
                 key={group.id}
-                accessibilityLabel={`${group.name}, ${group.members.length} members${unseenGroupIds.has(group.id) ? ", new activity" : ""}`}
+                accessibilityLabel={`${group.name}, ${group.members.length} ${group.members.length === 1 ? "member" : "members"}${unseenGroupIds.has(group.id) ? ", new activity" : ""}`}
               >
                 <Card className="w-full">
                   <CardHeader className="flex-row items-center justify-between">
@@ -190,7 +191,7 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
                         style={{ borderWidth: 3, borderColor: getGroupColor(group.id) }}
                       >
                         <Avatar alt={`${group.name}'s image`} className="size-12">
-                          <AvatarImage source={{ uri: group.image ?? "" }} />
+                          <DecryptedAvatarImage url={group.image} />
                           <AvatarFallback>
                             <Text className="font-bold">{initials(group.name)}</Text>
                           </AvatarFallback>
@@ -205,7 +206,9 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
                             <View className="size-2 rounded-full bg-primary" />
                           ) : null}
                         </View>
-                        <CardDescription>{group.members.length} members</CardDescription>
+                        <CardDescription>
+                          {group.members.length} {group.members.length === 1 ? "member" : "members"}
+                        </CardDescription>
                       </View>
                     </View>
 
@@ -217,7 +220,7 @@ export const GroupList = ({ groupList, setCreateGroupDialogOpen }: GroupListProp
                             alt={member.name}
                             className="border border-card size-8 -mr-2"
                           >
-                            <AvatarImage source={{ uri: member.image ?? "" }} />
+                            <DecryptedAvatarImage url={member.image} />
                             <AvatarFallback>
                               <Text className="font-bold">{initials(member.name)}</Text>
                             </AvatarFallback>

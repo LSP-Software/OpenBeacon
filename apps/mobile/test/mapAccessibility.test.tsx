@@ -57,6 +57,9 @@ mock.module("../components/map/LiveMapBottomSheet.tsx", () => ({
     </>
   ),
 }));
+mock.module("../components/image/DecryptedAvatarImage.tsx", () => ({
+  DecryptedAvatarImage: () => null,
+}));
 mock.module("../components/ui/Avatar.tsx", () => ({
   Avatar: Passthrough,
   AvatarFallback: Passthrough,

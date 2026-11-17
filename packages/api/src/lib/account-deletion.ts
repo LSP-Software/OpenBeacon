@@ -2,7 +2,8 @@ import { findAlertRecipient, type SecurityAlerts } from "@openbeacon/auth/securi
 import { GroupEventType, GroupRole, Prisma, type PrismaClient } from "@openbeacon/database";
 import { TRPCError } from "@trpc/server";
 import { readDatabaseTime } from "./databaseTime.ts";
-import { deletePayloadsInBatches } from "./deletePayloadsInBatches.ts";
+import { deleteTrackingPointsInBatches, deleteTrackingStreams } from "./trackingCleanup.ts";
+import { imageKeyColumns } from "./imageKeys.ts";
 import { lockUserGroups } from "./lockUserGroups.ts";
 
 export const lockDeletableGroups = async (
@@ -132,9 +133,9 @@ export const deleteAccountRecords = async ({
     return true;
   });
   if (!ready) return false;
-  await deletePayloadsInBatches({
+  await deleteTrackingPointsInBatches({
     db,
-    where: Prisma.sql`"senderUserId" = ${userId}`,
+    streams: Prisma.sql`"stream"."senderUserId" = ${userId}`,
   });
 
   const recipient = await db.$transaction(
@@ -188,7 +189,7 @@ export const deleteAccountRecords = async ({
       });
       const imageGroups = await tx.group.updateManyAndReturn({
         where: { image: { startsWith: `${imageUrlPrefix}/user/${userId}/` } },
-        data: { image: null },
+        data: { image: null, ...imageKeyColumns(null) },
         select: { id: true },
       });
       const eventsAt = await readDatabaseTime(tx);
@@ -200,8 +201,9 @@ export const deleteAccountRecords = async ({
           actorUserId: userId,
         })),
       });
-      await tx.groupEncryptedPayload.deleteMany({
-        where: { senderUserId: userId },
+      await deleteTrackingStreams({
+        db: tx,
+        streams: Prisma.sql`"stream"."senderUserId" = ${userId}`,
       });
       await tx.groupEpochRecipientKey.deleteMany({
         where: { recipientDevice: { userId } },

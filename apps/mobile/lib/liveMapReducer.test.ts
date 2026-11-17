@@ -6,8 +6,7 @@ const entry = ({
   deviceId,
   latitude,
   longitude,
-  serverCreatedAt,
-  serverId,
+  serverUpdatedAt,
   sourceGroupId,
   speed = null,
   timestamp,
@@ -17,8 +16,7 @@ const entry = ({
   deviceId?: string;
   latitude: number;
   longitude: number;
-  serverCreatedAt: Date;
-  serverId: string;
+  serverUpdatedAt: Date;
   sourceGroupId: string;
   speed?: number | null;
   timestamp: string;
@@ -28,8 +26,7 @@ const entry = ({
   deviceId: deviceId ?? userId,
   latitude,
   longitude,
-  serverCreatedAt,
-  serverId,
+  serverUpdatedAt,
   sourceGroupId,
   speed,
   timestamp,
@@ -44,8 +41,7 @@ describe("reduceLivePositions", () => {
         entry({
           latitude: 51.5,
           longitude: -0.1,
-          serverCreatedAt: new Date("2026-07-17T12:00:00.000Z"),
-          serverId: "a",
+          serverUpdatedAt: new Date("2026-07-17T12:00:00.000Z"),
           sourceGroupId: "group-old",
           timestamp: "2026-07-17T12:00:00.000Z",
           userId: "user-1",
@@ -57,8 +53,7 @@ describe("reduceLivePositions", () => {
       entry({
         latitude: 51.6,
         longitude: -0.2,
-        serverCreatedAt: new Date("2026-07-17T11:00:00.000Z"),
-        serverId: "b",
+        serverUpdatedAt: new Date("2026-07-17T11:00:00.000Z"),
         sourceGroupId: "group-new",
         timestamp: "2026-07-17T12:00:01.000Z",
         userId: "user-1",
@@ -69,8 +64,7 @@ describe("reduceLivePositions", () => {
       entry({
         latitude: 51.6,
         longitude: -0.2,
-        serverCreatedAt: new Date("2026-07-17T11:00:00.000Z"),
-        serverId: "b",
+        serverUpdatedAt: new Date("2026-07-17T11:00:00.000Z"),
         sourceGroupId: "group-new",
         timestamp: "2026-07-17T12:00:01.000Z",
         userId: "user-1",
@@ -85,8 +79,7 @@ describe("reduceLivePositions", () => {
         entry({
           latitude: 51.5,
           longitude: -0.1,
-          serverCreatedAt: new Date("2026-07-17T12:00:00.000Z"),
-          serverId: "a",
+          serverUpdatedAt: new Date("2026-07-17T12:00:00.000Z"),
           sourceGroupId: "group-a",
           timestamp: "2026-07-17T12:00:00.000Z",
           userId: "user-1",
@@ -98,8 +91,7 @@ describe("reduceLivePositions", () => {
       entry({
         latitude: 51.6,
         longitude: -0.2,
-        serverCreatedAt: new Date("2026-07-17T13:00:00.000Z"),
-        serverId: "z",
+        serverUpdatedAt: new Date("2026-07-17T13:00:00.000Z"),
         sourceGroupId: "group-b",
         timestamp: "2026-07-17T11:59:59.000Z",
         userId: "user-1",
@@ -109,15 +101,14 @@ describe("reduceLivePositions", () => {
     expect(next.get("user-1")?.sourceGroupId).toBe("group-a");
   });
 
-  test("tie-breaks equal timestamps with greater server createdAt then id", () => {
+  test("tie-breaks equal timestamps with the later server update", () => {
     const current = new Map([
       [
         "user-1",
         entry({
           latitude: 1,
           longitude: 1,
-          serverCreatedAt: new Date("2026-07-17T12:00:00.000Z"),
-          serverId: "id-1",
+          serverUpdatedAt: new Date("2026-07-17T12:00:00.000Z"),
           sourceGroupId: "group-a",
           timestamp: "2026-07-17T12:00:00.000Z",
           userId: "user-1",
@@ -125,31 +116,29 @@ describe("reduceLivePositions", () => {
       ],
     ]);
 
-    const byCreatedAt = reduceLivePositions(current, [
+    const later = reduceLivePositions(current, [
       entry({
         latitude: 2,
         longitude: 2,
-        serverCreatedAt: new Date("2026-07-17T12:00:01.000Z"),
-        serverId: "id-0",
+        serverUpdatedAt: new Date("2026-07-17T12:00:01.000Z"),
         sourceGroupId: "group-b",
         timestamp: "2026-07-17T12:00:00.000Z",
         userId: "user-1",
       }),
     ]);
-    expect(byCreatedAt.get("user-1")?.sourceGroupId).toBe("group-b");
+    expect(later.get("user-1")?.sourceGroupId).toBe("group-b");
 
-    const byId = reduceLivePositions(byCreatedAt, [
+    const same = reduceLivePositions(later, [
       entry({
         latitude: 3,
         longitude: 3,
-        serverCreatedAt: new Date("2026-07-17T12:00:01.000Z"),
-        serverId: "id-2",
+        serverUpdatedAt: new Date("2026-07-17T12:00:01.000Z"),
         sourceGroupId: "group-c",
         timestamp: "2026-07-17T12:00:00.000Z",
         userId: "user-1",
       }),
     ]);
-    expect(byId.get("user-1")?.sourceGroupId).toBe("group-c");
+    expect(same.get("user-1")?.sourceGroupId).toBe("group-b");
   });
 
   test("adds a new user without clearing existing markers", () => {
@@ -159,8 +148,7 @@ describe("reduceLivePositions", () => {
         entry({
           latitude: 1,
           longitude: 1,
-          serverCreatedAt: new Date("2026-07-17T12:00:00.000Z"),
-          serverId: "a",
+          serverUpdatedAt: new Date("2026-07-17T12:00:00.000Z"),
           sourceGroupId: "group-a",
           timestamp: "2026-07-17T12:00:00.000Z",
           userId: "user-1",
@@ -172,8 +160,7 @@ describe("reduceLivePositions", () => {
       entry({
         latitude: 2,
         longitude: 2,
-        serverCreatedAt: new Date("2026-07-17T12:00:00.000Z"),
-        serverId: "b",
+        serverUpdatedAt: new Date("2026-07-17T12:00:00.000Z"),
         sourceGroupId: "group-b",
         timestamp: "2026-07-17T12:00:00.000Z",
         userId: "user-2",
@@ -189,8 +176,7 @@ describe("reduceLivePositions", () => {
       deviceId: "phone",
       latitude: 51.5,
       longitude: -0.1,
-      serverCreatedAt: new Date("2026-07-17T12:05:00.000Z"),
-      serverId: "a",
+      serverUpdatedAt: new Date("2026-07-17T12:05:00.000Z"),
       sourceGroupId: "group-a",
       timestamp: "2026-07-17T12:05:00.000Z",
       userId: "user-1",
@@ -200,8 +186,7 @@ describe("reduceLivePositions", () => {
       deviceId: "tablet",
       latitude: 52.2,
       longitude: 0.1,
-      serverCreatedAt: new Date("2026-07-17T12:00:00.000Z"),
-      serverId: "b",
+      serverUpdatedAt: new Date("2026-07-17T12:00:00.000Z"),
       sourceGroupId: "group-a",
       timestamp: "2026-07-17T12:00:00.000Z",
       userId: "user-1",
@@ -214,6 +199,24 @@ describe("reduceLivePositions", () => {
     expect(next.get("tablet")).toEqual(tablet);
     expect(again).toEqual(next);
   });
+
+  test("returns the same map and keeps the stored entry when a point is repeated", () => {
+    const stored = entry({
+      deviceId: "phone",
+      latitude: 51.5,
+      longitude: -0.1,
+      serverUpdatedAt: new Date("2026-07-17T12:05:00.000Z"),
+      sourceGroupId: "group-a",
+      timestamp: "2026-07-17T12:05:00.000Z",
+      userId: "user-1",
+    });
+    const current = new Map([["phone", stored]]);
+
+    const next = reduceLivePositions(current, [{ ...stored }]);
+
+    expect(next).toBe(current);
+    expect(next.get("phone")).toBe(stored);
+  });
 });
 
 describe("dropInactiveDevices", () => {
@@ -222,8 +225,7 @@ describe("dropInactiveDevices", () => {
       deviceId,
       latitude: 51.5,
       longitude: -0.1,
-      serverCreatedAt: new Date(timestamp),
-      serverId: `point-${deviceId}`,
+      serverUpdatedAt: new Date(timestamp),
       sourceGroupId: "group-a",
       timestamp,
       userId: "user-1",

@@ -1,14 +1,24 @@
 import { GroupEventType, GroupRole, Prisma } from "@openbeacon/database";
 import { tryCatch } from "@openbeacon/shared";
-import { createGroupSchema, requestImageUploadInputSchema } from "@openbeacon/schemas";
+import {
+  confirmGroupImageUploadSchema,
+  createGroupSchema,
+  presignImageUploadInputSchema,
+} from "@openbeacon/schemas";
 import { TRPCError, type TRPCRouterRecord } from "@trpc/server";
 import z from "zod";
 import { env } from "../../env.ts";
 import { recordGroupEvent } from "../../lib/groupHistory.ts";
 import {
+  assertActiveDevices,
+  assertLatestGroupEpoch,
+  assertSentFromThisDevice,
+} from "../../lib/groupWriteChecks.ts";
+import { imageChanged, imageFileName, imageKeyColumns } from "../../lib/imageKeys.ts";
+import {
   buildGroupAvatarPath,
   confirmImageUpload,
-  requestImageUpload,
+  presignImageUpload,
   setPendingImageUploadForUser,
 } from "../../lib/image-upload.ts";
 import { deleteFile, deleteImagePrefix } from "../../lib/storage.ts";
@@ -54,23 +64,9 @@ export const groupSettingsRouter = {
         windowMs: 60_000,
       },
     })
-    .input(
-      requestImageUploadInputSchema({ maxImageFileSize: env.MAX_IMAGE_FILE_SIZE }).extend({
-        groupId: z.string().min(1).max(128),
-      }),
-    )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const imagePath = buildGroupAvatarPath(userId, input.groupId);
-      const fileName = `${crypto.randomUUID()}.webp`;
-
-      const { presignedUrl } = await requestImageUpload({
-        bucketName: env.IMAGES_S3_BUCKET_NAME,
-        contentHash: input.contentHash,
-        fileSize: input.fileSize,
-        imagePath,
-        fileName,
-      });
+      const fileName = crypto.randomUUID();
 
       await setPendingImageUploadForUser({
         db: ctx.db,
@@ -79,16 +75,48 @@ export const groupSettingsRouter = {
         fileName,
         groupId: input.groupId,
         bucketName: env.IMAGES_S3_BUCKET_NAME,
-        currentImagePath: imagePath,
+        currentImagePath: buildGroupAvatarPath(userId, input.groupId),
       });
 
-      return { presignedUrl };
+      return { fileName };
+    }),
+  presignGroupImageUpload: groupAdminProcedure
+    .meta({
+      rateLimit: {
+        limit: 32,
+        windowMs: 60_000,
+      },
+    })
+    .input(
+      presignImageUploadInputSchema({ maxImageFileSize: env.MAX_IMAGE_FILE_SIZE }).extend({
+        groupId: z.string().min(1).max(128),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      return presignImageUpload({
+        db: ctx.db,
+        userId,
+        uploadType: "groupAvatar",
+        groupId: input.groupId,
+        bucketName: env.IMAGES_S3_BUCKET_NAME,
+        contentHash: input.contentHash,
+        fileSize: input.fileSize,
+        imagePath: buildGroupAvatarPath(userId, input.groupId),
+        fileName: input.fileName,
+        noPendingImageUploadMessage: "No pending group image upload.",
+      });
     }),
   confirmGroupImageUpload: protectedProcedure
     .meta({ rateLimit: { limit: 32, windowMs: 60_000 } })
-    .input(z.object({ groupId: z.string().min(1).max(128) }))
+    .input(confirmGroupImageUploadSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      assertSentFromThisDevice(
+        [input.key],
+        ctx.deviceId,
+        "Picture keys must be sent from this device.",
+      );
       const imagePath = buildGroupAvatarPath(userId, input.groupId);
       const pending = await ctx.db.pendingUpload.findUnique({
         where: {
@@ -140,6 +168,12 @@ export const groupSettingsRouter = {
                   message: "You are not an admin of this group.",
                 });
               }
+              if (
+                input.expectedFileName !== undefined &&
+                imageFileName(group.image) !== input.expectedFileName
+              ) {
+                throw imageChanged();
+              }
               const deleted = await tx.pendingUpload.deleteMany({
                 where: {
                   userId,
@@ -154,7 +188,15 @@ export const groupSettingsRouter = {
                   message: "No pending group image upload to confirm.",
                 });
               }
-              await tx.group.update({ where: { id: input.groupId }, data: { image: imageUrl } });
+              await assertActiveDevices(tx, { deviceIds: [ctx.deviceId], userId });
+              await assertLatestGroupEpoch(tx, {
+                epochIds: [input.key.epochId],
+                groupId: input.groupId,
+              });
+              await tx.group.update({
+                where: { id: input.groupId },
+                data: { image: imageUrl, ...imageKeyColumns(input.key) },
+              });
               await recordGroupEvent(tx, {
                 data: {
                   groupId: input.groupId,
