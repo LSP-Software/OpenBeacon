@@ -84,6 +84,9 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   provisionEpochKeys(keys: ProvisionedEpochKeyInput[], preserveGroupIds?: string[]): void;
   revokeEpochKeys(groupIds?: string[] | null): void;
   listProvisionedEpochKeys(): ProvisionedEpochKeyInfo[];
+  pendingPushToken(scope: string): string | null;
+  confirmPushToken(scope: string, sent: string | null, pushAvailable: boolean): void;
+  forgetPushToken(scope: string): boolean;
   startCapture(intervalMs?: number | null): Promise<void>;
   refreshCapture(): Promise<void>;
   stopCapture(): Promise<void>;

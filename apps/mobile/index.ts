@@ -6,7 +6,7 @@ import OpenBeaconTracking from "./modules/openbeacon-tracking/index.ts";
 const syncBackgroundTracking = async (reason: string | undefined) => {
   const tracking = await import("./lib/tracking.ts");
   await tracking.syncBackgroundTracking(
-    reason === "sharing" || reason === "parked" ? reason : "upload",
+    reason === "sharing" || reason === "parked" || reason === "push" ? reason : "upload",
   );
 };
 

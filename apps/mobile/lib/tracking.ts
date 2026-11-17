@@ -80,6 +80,9 @@ const lastCleanBackfills = new Map<string, { at: number; missingVersion: number 
 
 const getOwner = (userId: string) => JSON.stringify([baseUrl, userId]);
 
+const getPushScope = (device: { userId: string; deviceId: string }) =>
+  JSON.stringify([baseUrl, device.userId, device.deviceId]);
+
 const getQueueOwner = async (signal?: AbortSignal) => {
   const device = await getRegisteredDeviceKey();
   if (device) return getOwner(device.userId);
@@ -608,9 +611,16 @@ const takePlaceAlertsCursor = (round: PlaceRound) => {
   return cursor;
 };
 
+const takePushToken = (round: PlaceRound) => {
+  const pushToken = round.pushToken;
+  round.pushToken = null;
+  return pushToken;
+};
+
 const placeUploadFields = (
   transitions: readonly QueuedPlaceTransition[],
   cursor: { value: string | null; notices: string | null } | null,
+  pushToken: string | null,
 ) => ({
   ...(transitions.length > 0
     ? {
@@ -626,6 +636,7 @@ const placeUploadFields = (
       }
     : {}),
   ...(cursor ? { placeAlertsCursor: cursor.value, noticesCursor: cursor.notices } : {}),
+  ...(pushToken ? { pushToken } : {}),
 });
 
 const settlePlaceResponse = async (
@@ -633,8 +644,13 @@ const settlePlaceResponse = async (
   round: PlaceRound,
   response: {
     placeTransitions?: { accepted: string[]; duplicates: string[]; discarded: string[] };
+    pushAvailable?: boolean;
   } & PlaceUpdates,
+  sentPushToken: string | null,
 ) => {
+  if (round.pushScope && response.pushAvailable !== undefined) {
+    trackingModule.confirmPushToken(round.pushScope, sentPushToken, response.pushAvailable);
+  }
   if (response.placeTransitions) {
     const { accepted, duplicates, discarded } = response.placeTransitions;
     await trackingModule.deletePlaceTransitions([...accepted, ...duplicates, ...discarded]);
@@ -662,14 +678,15 @@ const uploadPlaceTransitionsAlone = async (
   signal: AbortSignal,
 ) => {
   const cursor = takePlaceAlertsCursor(round);
+  const pushToken = takePushToken(round);
   const result = await tryCatch(
     trpcClient.groupTracking.uploadBatch.mutate(
-      { groupId, points: [], ...placeUploadFields(transitions, cursor) },
+      { groupId, points: [], ...placeUploadFields(transitions, cursor, pushToken) },
       { signal },
     ),
   );
   if (!result.error) {
-    await settlePlaceResponse(trackingModule, round, result.data);
+    await settlePlaceResponse(trackingModule, round, result.data, pushToken);
     return;
   }
   const code = getErrorCode(result.error);
@@ -699,12 +716,13 @@ const uploadClaimedItems = async (
   const transitions = carriesPlaces ? (round.transitions.get(groupId) ?? []) : [];
   if (carriesPlaces) round.transitions.delete(groupId);
   const cursor = carriesPlaces ? takePlaceAlertsCursor(round) : null;
+  const pushToken = carriesPlaces ? takePushToken(round) : null;
   const sentAt = new Date().toISOString();
   const uploadResult = await tryCatch(
     trpcClient.groupTracking.uploadBatch.mutate(
       {
         groupId,
-        ...placeUploadFields(transitions, cursor),
+        ...placeUploadFields(transitions, cursor, pushToken),
         points: items.map(
           ({ ciphertext, clientPointId, epochId, nonce, role, senderDeviceId }) => ({
             ciphertext,
@@ -727,7 +745,7 @@ const uploadClaimedItems = async (
   if (
     uploadResult.error &&
     getErrorCode(uploadResult.error) === "BAD_REQUEST" &&
-    (transitions.length > 0 || cursor)
+    (transitions.length > 0 || cursor || pushToken)
   ) {
     if (transitions.length > 0) round.retryAlone.set(groupId, transitions);
     return uploadClaimedItems(trackingModule, owner, items, signal, round);
@@ -799,7 +817,7 @@ const uploadClaimedItems = async (
   } = uploadResult.data;
 
   if (keyState && noteTrackingKeyState(keyState)) uploadRejectedKeys = true;
-  await settlePlaceResponse(trackingModule, round, uploadResult.data);
+  await settlePlaceResponse(trackingModule, round, uploadResult.data, pushToken);
 
   if (accepted.length > 0 && items[0]) {
     const { senderDeviceId, groupId } = items[0];
@@ -868,6 +886,8 @@ const flushGroup = async (
 type PlaceRound = {
   cursor: { value: string | null; notices: string | null } | null;
   deviceId: string;
+  pushScope: string | null;
+  pushToken: string | null;
   retryAlone: Map<string, QueuedPlaceTransition[]>;
   transitions: Map<string, QueuedPlaceTransition[]>;
   updates: PlaceUpdates | null;
@@ -883,6 +903,8 @@ const startPlaceRound = async (
     return {
       cursor: null,
       deviceId: "",
+      pushScope: null,
+      pushToken: null,
       retryAlone: new Map(),
       transitions: new Map(),
       updates: null,
@@ -909,12 +931,15 @@ const startPlaceRound = async (
     const group = transitions.get(transition.groupId) ?? [];
     if (group.length < 50) transitions.set(transition.groupId, [...group, transition]);
   }
+  const pushScope = getPushScope(device);
   return {
     cursor: {
       value: getPlaceAlertsCursor(device.userId),
       notices: getNoticesCursor(device.userId),
     },
     deviceId: device.deviceId,
+    pushScope,
+    pushToken: trackingModule.pendingPushToken(pushScope),
     retryAlone: new Map(),
     transitions,
     updates: null,
@@ -1029,16 +1054,21 @@ const showApiCompatibilityNotice = async () => {
 };
 
 const pollPlaceUpdates = async () => {
+  if (trackingPaused) return;
   const trackingModule = await loadTrackingModule();
   const device = await getRegisteredDeviceKey();
   const groupId = trackingModule?.listProvisionedEpochKeys()[0]?.groupId;
-  if (!device || !groupId) return;
+  if (!trackingModule || !device || !groupId) return;
+  const pushScope = getPushScope(device);
+  const pushToken = trackingModule.pendingPushToken(pushScope);
   const response = await trpcClient.groupTracking.uploadBatch.mutate({
     groupId,
     points: [],
     placeAlertsCursor: getPlaceAlertsCursor(device.userId),
     noticesCursor: getNoticesCursor(device.userId),
+    ...(pushToken ? { pushToken } : {}),
   });
+  trackingModule.confirmPushToken(pushScope, pushToken, response.pushAvailable);
   await applyPlaceUpdates({
     updates: {
       places: response.places,
@@ -1050,7 +1080,7 @@ const pollPlaceUpdates = async () => {
   });
 };
 
-const syncBackgroundTrackingInternal = async (reason: "upload" | "sharing" | "parked") => {
+const syncBackgroundTrackingInternal = async (reason: "upload" | "sharing" | "parked" | "push") => {
   if (getApiCompatibility()) {
     await refreshApiCompatibilityInBackground();
     if (!getApiCompatibility()) await dismissNotice("compatibility");
@@ -1061,6 +1091,10 @@ const syncBackgroundTrackingInternal = async (reason: "upload" | "sharing" | "pa
   }
   if (reason === "parked") {
     await tryCatch(syncSharingPreference());
+    await tryCatch(pollPlaceUpdates());
+    return;
+  }
+  if (reason === "push") {
     await tryCatch(pollPlaceUpdates());
     return;
   }
@@ -1087,7 +1121,7 @@ const syncBackgroundTrackingInternal = async (reason: "upload" | "sharing" | "pa
 };
 
 export const syncBackgroundTracking = async (
-  reason: "upload" | "sharing" | "parked" = "upload",
+  reason: "upload" | "sharing" | "parked" | "push" = "upload",
 ) => {
   const synced = await tryCatch(syncBackgroundTrackingInternal(reason));
   await settleImageKeyCatchUps();
@@ -1154,6 +1188,14 @@ const revokeUnauthorizedTrackingAccess = (error: unknown, cancelFlush = true) =>
   });
 };
 
+export const forgetPushToken = async () => {
+  const trackingModule = await loadTrackingModule();
+  const device = await getRegisteredDeviceKey();
+  if (!trackingModule || !device) return null;
+  const groupId = trackingModule.listProvisionedEpochKeys()[0]?.groupId;
+  return trackingModule.forgetPushToken(getPushScope(device)) && groupId ? groupId : null;
+};
+
 export const prepareTrackingSignOut = async (): Promise<void> => {
   trackingPaused = true;
   const controller = new AbortController();
@@ -1166,7 +1208,16 @@ export const prepareTrackingSignOut = async (): Promise<void> => {
   try {
     await Promise.race([
       (async () => {
+        const pushGroupId = (await tryCatch(forgetPushToken())).data;
         await revokeTrackingAccess({ keepDeviceRegistration: true });
+        if (pushGroupId) {
+          await tryCatch(
+            trpcClient.groupTracking.uploadBatch.mutate(
+              { groupId: pushGroupId, points: [], pushToken: null },
+              { signal: controller.signal },
+            ),
+          );
+        }
         if (previousFlush) await previousFlush;
         if (!controller.signal.aborted) {
           await flushPendingTrackingPointsInternal(true, controller.signal);

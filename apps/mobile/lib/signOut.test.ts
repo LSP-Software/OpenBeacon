@@ -139,6 +139,7 @@ mock.module("./tracking.ts", () => ({
     events.push("resumeTracking");
   },
   revokeTrackingAccess: async () => {},
+  forgetPushToken: async () => null,
 }));
 
 mock.module("./trackingEvents.ts", () => ({

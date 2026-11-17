@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
@@ -7,6 +7,20 @@
   <uses-permission android:name="android.permission.WAKE_LOCK" />
 
   <application>
+    <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false" />
+    <meta-data android:name="firebase_data_collection_default_enabled" android:value="false" />
+    <meta-data android:name="firebase_analytics_collection_deactivated" android:value="true" />
+    <meta-data android:name="firebase_messaging_notification_delegation_enabled" android:value="false" />
+    <meta-data android:name="delivery_metrics_exported_to_big_query_enabled" android:value="false" />
+    <provider
+      android:name="com.google.firebase.provider.FirebaseInitProvider"
+      android:authorities="${applicationId}.firebaseinitprovider"
+      tools:node="remove" />
+    <service android:name=".push.PushWakeService" android:exported="false">
+      <intent-filter>
+        <action android:name="com.google.firebase.MESSAGING_EVENT" />
+      </intent-filter>
+    </service>
     <service android:name=".capture.TrackingUploadService" android:exported="false" />
     <service
       android:name=".capture.TrackingCaptureService"

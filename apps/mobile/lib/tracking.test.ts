@@ -44,7 +44,12 @@ const uploadCalls: Array<{
   placeTransitions?: { clientId: string }[];
   placeAlertsCursor?: string | null;
   noticesCursor?: string | null;
+  pushToken?: string | null;
 }> = [];
+let pendingPushToken: string | null = null;
+let pushHeldByServer = false;
+const pushConfirms: Array<{ scope: string; sent: string | null; pushAvailable: boolean }> = [];
+const pushForgets: string[] = [];
 let queuedTransitions: {
   clientId: string;
   senderDeviceId: string;
@@ -148,6 +153,7 @@ let uploadGroup = async ({
   placeTransitions?: { accepted: string[]; duplicates: string[]; discarded: string[] };
   places?: { groupId: string; revision: number; needsCatchUp: boolean }[];
   placeAlerts?: { alerts: unknown[]; cursor: string };
+  pushAvailable?: boolean;
 }> => ({
   accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
   duplicates: [],
@@ -482,6 +488,7 @@ mock.module("./api.ts", () => ({
           placeTransitions?: { clientId: string }[];
           placeAlertsCursor?: string | null;
           noticesCursor?: string | null;
+          pushToken?: string | null;
         }) => {
           requests.push("groupTracking.uploadBatch");
           uploadCalls.push(input);
@@ -520,6 +527,17 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
       provisionedKeys.splice(0, provisionedKeys.length, ...kept);
     },
     listProvisionedEpochKeys: () => provisionedKeys,
+    pendingPushToken: () => pendingPushToken,
+    confirmPushToken: (scope: string, sent: string | null, pushAvailable: boolean) => {
+      pushConfirms.push({ scope, sent, pushAvailable });
+    },
+    forgetPushToken: (scope: string) => {
+      pushForgets.push(scope);
+      const held = pushHeldByServer;
+      pendingPushToken = null;
+      pushHeldByServer = false;
+      return held;
+    },
     startCapture: async () => {
       startCaptureCalls += 1;
     },
@@ -701,6 +719,107 @@ describe("tracking service", () => {
     deletedTransitions.length = 0;
     appliedPlaceUpdates.length = 0;
     storedPlaceCursor = null;
+    pendingPushToken = null;
+    pushHeldByServer = false;
+    pushConfirms.length = 0;
+    pushForgets.length = 0;
+  });
+
+  describe("push token", () => {
+    const scope = JSON.stringify(["https://api.example.test", "user-1", "device-1"]);
+
+    beforeEach(() => {
+      registeredDevice = {
+        deviceId: "device-1",
+        privateKey: deviceKeyPair.privateKey,
+        userId: "user-1",
+      };
+      provisionedKeys.push({
+        groupId: "group-1",
+        epochId: "epoch-1",
+        senderDeviceId: "device-1",
+        kind: "trackingPoint",
+      });
+      uploadGroup = async ({ points }) => ({
+        accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
+        duplicates: [],
+        pushAvailable: true,
+      });
+    });
+
+    test("a push runs one cursor-only upload that carries a pending token", async () => {
+      captureRunning = true;
+      pendingPushToken = "token-1";
+      pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
+      await syncBackgroundTracking("push");
+      expect(uploadCalls).toEqual([
+        {
+          groupId: "group-1",
+          points: [],
+          placeAlertsCursor: null,
+          noticesCursor: "2026-11-17T09:00:00.000Z|",
+          pushToken: "token-1",
+        },
+      ]);
+      expect(pushConfirms).toEqual([{ scope, sent: "token-1", pushAvailable: true }]);
+      expect(locationSharingCalls).toBe(0);
+      expect(provisionCalls).toHaveLength(0);
+    });
+
+    test("a push with no pending token still tells the phone whether the server has push", async () => {
+      uploadGroup = async () => ({ accepted: [], duplicates: [], pushAvailable: false });
+      await syncBackgroundTracking("push");
+      expect(uploadCalls[0]).not.toHaveProperty("pushToken");
+      expect(pushConfirms).toEqual([{ scope, sent: null, pushAvailable: false }]);
+    });
+
+    test("a push while signing out sends nothing", async () => {
+      pendingPushToken = "token-1";
+      const signingOut = prepareTrackingSignOut();
+      await syncBackgroundTracking("push");
+      await signingOut;
+      expect(uploadCalls.filter((call) => call.pushToken !== undefined)).toEqual([]);
+    });
+
+    test("the token rides the one upload that carries the cursor", async () => {
+      pendingPushToken = "token-1";
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 }),
+        createQueueItem({ clientPointId: "p2", groupId: "group-2", id: 2 }),
+      ];
+      await flushPendingTrackingPoints();
+      expect(uploadCalls).toHaveLength(2);
+      expect(uploadCalls.filter((call) => call.pushToken !== undefined)).toEqual([
+        expect.objectContaining({ pushToken: "token-1", placeAlertsCursor: null }),
+      ]);
+      expect(pushConfirms.filter(({ sent }) => sent !== null)).toEqual([
+        { scope, sent: "token-1", pushAvailable: true },
+      ]);
+    });
+
+    test("a token is only confirmed by an upload that succeeded", async () => {
+      pendingPushToken = "token-1";
+      pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
+      uploadGroup = async () => {
+        throw new Error("offline");
+      };
+      await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
+      expect(uploadCalls[0]?.pushToken).toBe("token-1");
+      expect(pushConfirms).toEqual([]);
+    });
+
+    test("signing out tells the server to drop a token it holds", async () => {
+      pushHeldByServer = true;
+      await prepareTrackingSignOut();
+      expect(pushForgets).toEqual([scope]);
+      expect(uploadCalls).toEqual([{ groupId: "group-1", points: [], pushToken: null }]);
+    });
+
+    test("signing out sends no null when the server never had the token", async () => {
+      await prepareTrackingSignOut();
+      expect(pushForgets).toEqual([scope]);
+      expect(uploadCalls).toEqual([]);
+    });
   });
 
   describe("place transitions and alerts", () => {

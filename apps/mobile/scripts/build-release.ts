@@ -3,6 +3,7 @@ import { tryCatch } from "@openbeacon/shared";
 import { copyFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
+import { checkFirebaseValues, FIREBASE_ENV_NAMES } from "./firebaseBuildCheck.ts";
 
 const projectRoot = resolve(import.meta.dir, "..");
 const allowDirty = process.argv.includes("--allow-dirty");
@@ -62,6 +63,13 @@ if (!googleWebClientId) {
     "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is not set, so Google sign-in would be turned off. Set it in apps/mobile/.env.",
   );
 }
+
+const firebase = checkFirebaseValues({
+  apk,
+  env: Object.fromEntries(FIREBASE_ENV_NAMES.map((name) => [name, process.env[name] ?? env[name]])),
+});
+if (firebase.problem === "fail") fail(firebase.message);
+if (firebase.problem === "warn") console.warn(`\n${firebase.message}\n`);
 
 const credentialsPath = resolve(
   projectRoot,
