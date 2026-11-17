@@ -1,3 +1,4 @@
+import { accountNoticesRouter } from "./router/accountNoticesRouter.ts";
 import { accountHistoryRouter } from "./router/accountHistoryRouter.ts";
 import { accountRecoveryRouter } from "./router/accountRecoveryRouter.ts";
 import { accountRouter } from "./router/accountRouter.ts";
@@ -25,6 +26,7 @@ import { createTRPCRouter } from "./trpcRuntime.ts";
 export const appRouter = createTRPCRouter({
   account: accountRouter,
   accountHistory: accountHistoryRouter,
+  accountNotices: accountNoticesRouter,
   accountRecovery: accountRecoveryRouter,
   groupSettings: groupSettingsRouter,
   groupLifecycle: groupLifecycleRouter,

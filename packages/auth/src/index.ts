@@ -57,7 +57,11 @@ export const securityAlerts = createSecurityAlerts({
   db,
   push,
   sendSecurityAlertEmail: emailEnabled ? sendSecurityAlertEmail : null,
-  ...(cache ? { alertsTurnedOff: cache.alertsTurnedOff } : {}),
+  alertsTurnedOff: {
+    add: async (input) => sharedCache().alertsTurnedOff.add(input),
+    take: async (input) => sharedCache().alertsTurnedOff.take(input),
+    pending: async () => sharedCache().alertsTurnedOff.pending(),
+  },
 });
 
 export const auth = createAuth({

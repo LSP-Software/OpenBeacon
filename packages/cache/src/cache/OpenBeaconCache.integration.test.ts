@@ -138,15 +138,30 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("OpenBeaconCache 
     async ({ cache }) => {
       const store = cache.alertsTurnedOff;
 
-      expect(await store.add({ userId: "user-1", alerts: ["new-sign-in"], at: 1_000 })).toBe(1_000);
+      expect(
+        await store.add({
+          userId: "user-1",
+          alerts: ["new-sign-in"],
+          deviceId: "device-1",
+          at: 1_000,
+        }),
+      ).toBe(1_000);
       expect(
         await store.add({
           userId: "user-1",
           alerts: ["new-sign-in", "deletion-scheduled"],
+          deviceId: "device-1",
           at: 5_000,
         }),
       ).toBe(1_000);
-      expect(await store.add({ userId: "user-2", alerts: ["new-sign-in"], at: 3_000 })).toBe(3_000);
+      expect(
+        await store.add({
+          userId: "user-2",
+          alerts: ["new-sign-in"],
+          deviceId: "device-1",
+          at: 3_000,
+        }),
+      ).toBe(3_000);
       expect(await store.pending()).toEqual([
         { userId: "user-1", firstAt: 1_000 },
         { userId: "user-2", firstAt: 3_000 },
@@ -162,6 +177,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("OpenBeaconCache 
       expect(await store.take({ userId: "user-2", firstAtOrBefore: 3_000 })).toEqual({
         firstAt: 3_000,
         alerts: ["new-sign-in"],
+        deviceIds: ["device-1"],
       });
       expect(await store.pending()).toEqual([]);
     },

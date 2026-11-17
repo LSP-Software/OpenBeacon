@@ -31,6 +31,6 @@
   <string name="openbeacon_places_changed_manage">Manage</string>
   <string name="openbeacon_group_activity_channel">Group activity</string>
   <string name="openbeacon_group_activity_channel_description">When someone joins or leaves your groups, or a role changes.</string>
-  <string name="openbeacon_account_alerts_channel">Account alerts</string>
-  <string name="openbeacon_account_alerts_channel_description">Security changes to your account made on another phone or tablet.</string>
+  <string name="openbeacon_account_alerts_channel">Security alerts</string>
+  <string name="openbeacon_account_alerts_channel_description">When your account\'s security changes, like a new sign-in or a changed password.</string>
 </resources>

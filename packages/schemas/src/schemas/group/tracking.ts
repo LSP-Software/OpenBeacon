@@ -65,17 +65,15 @@ export const groupTrackingUploadBatchSchema = z
       .optional(),
     placeAlertsCursor: alertsCursorSchema.nullable().optional(),
     noticesCursor: alertsCursorSchema.nullable().optional(),
-    pushToken: z.string().min(1).max(4096).nullable().optional(),
   })
   .refine(
     (batch) =>
       batch.points.length > 0 ||
       (batch.placeTransitions?.length ?? 0) > 0 ||
       batch.placeAlertsCursor !== undefined ||
-      batch.noticesCursor !== undefined ||
-      batch.pushToken !== undefined,
+      batch.noticesCursor !== undefined,
     {
-      message: "An upload needs at least one point, place transition, cursor or push token",
+      message: "An upload needs at least one point, place transition or cursor",
       path: ["points"],
     },
   );

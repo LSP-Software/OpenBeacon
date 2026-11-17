@@ -1,7 +1,6 @@
 import type { OpenBeaconCache } from "@openbeacon/cache";
 import {
   type AccountNoticeType,
-  type NotificationType,
   type Prisma,
   type PrismaClient,
   readDatabaseTime,
@@ -16,6 +15,7 @@ import {
   effectiveNotificationSetting,
   notificationChannelSchema,
   notificationTypeSchema,
+  notificationTypes,
 } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import type { PushSender } from "./push.ts";
@@ -91,7 +91,7 @@ export const createSecurityAlerts = ({
       const noticeType = accountNoticeTypes[alert.type];
       const device = "device" in alert ? alert.device : null;
       await Promise.all([
-        noticeType && enabled?.phone
+        noticeType && (enabled === null || enabled.phone)
           ? readDatabaseTime(db)
               .then((createdAt) =>
                 db.accountNotice.create({
@@ -106,6 +106,16 @@ export const createSecurityAlerts = ({
                     deviceModel: device?.model ?? null,
                     devicePlatform: device?.platform ?? null,
                     deletionDate: alert.type === "deletion-scheduled" ? alert.deletionDate : null,
+                    ...(alert.type === "alerts-turned-off"
+                      ? {
+                          turnedOffEmail: alert.alerts.flatMap(({ type, channel }) =>
+                            channel === "email" ? type : [],
+                          ),
+                          turnedOffPhone: alert.alerts.flatMap(({ type, channel }) =>
+                            channel === "phone" ? type : [],
+                          ),
+                        }
+                      : {}),
                     createdAt,
                   },
                   select: { id: true },
@@ -133,12 +143,21 @@ export const createSecurityAlerts = ({
       firstAtOrBefore: now().getTime() - alertsTurnedOffDelayMs,
     });
     if (!taken) return;
-    const alerts = taken.alerts.flatMap(parseTurnedOff);
+    const typeOrder = Object.keys(notificationTypes);
+    const alerts = taken.alerts
+      .flatMap(parseTurnedOff)
+      .sort(
+        (a, b) =>
+          typeOrder.indexOf(a.type) - typeOrder.indexOf(b.type) ||
+          (a.channel === b.channel ? 0 : a.channel === "phone" ? -1 : 1),
+      );
     if (!alerts.length) return;
+    const [deviceId, ...otherDevices] = new Set(taken.deviceIds);
     deliver(
       { type: "alerts-turned-off", alerts },
       () => findAlertRecipient(db, userId),
       new Date(taken.firstAt),
+      deviceId !== undefined && otherDevices.length === 0 ? deviceId : null,
     );
   };
   const scheduled = new Set<string>();
@@ -159,16 +178,22 @@ export const createSecurityAlerts = ({
       deliver(alert, () => findAlertRecipient(db, userId), now(), excludeDeviceId),
     sendTo: (recipient: AlertRecipient, alert: SecurityAlert) =>
       deliver(alert, async () => recipient),
-    turnedOff: (userId: string, alerts: TurnedOffNotification[]) => {
+    turnedOff: (userId: string, alerts: TurnedOffNotification[], deviceId: string) => {
       const at = now();
       const sendNow = () =>
-        deliver({ type: "alerts-turned-off", alerts }, () => findAlertRecipient(db, userId), at);
+        deliver(
+          { type: "alerts-turned-off", alerts },
+          () => findAlertRecipient(db, userId),
+          at,
+          deviceId,
+        );
       if (!alertsTurnedOff) return sendNow();
       const hold = async () => {
         const added = await tryCatch(
           alertsTurnedOff.add({
             userId,
             alerts: alerts.map(({ type, channel }) => `${type}:${channel}`),
+            deviceId,
             at: at.getTime(),
           }),
         );
@@ -205,19 +230,8 @@ const accountNoticeTypes = {
   "device-removed": "DEVICE_REMOVED",
   "deletion-scheduled": "DELETION_SCHEDULED",
   "account-deleted": null,
-  "alerts-turned-off": null,
+  "alerts-turned-off": "ALERTS_TURNED_OFF",
 } as const satisfies Record<SecurityAlert["type"], AccountNoticeType | null>;
-
-export const accountNoticeSettings = {
-  NEW_SIGN_IN: "NEW_SIGN_IN",
-  PASSWORD_CHANGED: "PASSWORD_CHANGED",
-  PASSWORD_RESET: "PASSWORD_CHANGED",
-  RECOVERY_PHRASE_CHANGED: "RECOVERY_PHRASE_CHANGED",
-  RECOVERY_PHRASE_RESET: "RECOVERY_PHRASE_CHANGED",
-  OTHER_SESSIONS_SIGNED_OUT: "OTHER_SESSIONS_SIGNED_OUT",
-  DEVICE_REMOVED: "DEVICE_REMOVED",
-  DELETION_SCHEDULED: "DELETION_SCHEDULED",
-} as const satisfies Record<AccountNoticeType, NotificationType>;
 
 const parseTurnedOff = (held: string): TurnedOffNotification[] => {
   const [heldType = "", heldChannel = "email"] = held.split(":");

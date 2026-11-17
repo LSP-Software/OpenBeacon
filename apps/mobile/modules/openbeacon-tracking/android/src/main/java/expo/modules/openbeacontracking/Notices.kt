@@ -107,6 +107,7 @@ enum class EventChannel(
 
 object Notices {
   private const val CHANNEL_ID = "openbeacon_sharing_alerts"
+  private const val SUMMARY_TAG = "openbeacon_summary"
 
   fun removeOldChannels(context: Context) {
     NotificationManagerCompat.from(context).deleteNotificationChannel("openbeacon_app_compatibility")
@@ -175,12 +176,13 @@ object Notices {
     link: String,
   ): Boolean {
     val manager = NotificationManagerCompat.from(context)
+    val channelName = context.getString(kind.channel?.title ?: R.string.openbeacon_notice_channel)
     val channelId =
       kind.channel?.let { channel ->
         manager.createNotificationChannel(
           NotificationChannelCompat
             .Builder(channel.id, channel.importance)
-            .setName(context.getString(channel.title))
+            .setName(channelName)
             .setDescription(context.getString(channel.description))
             .build(),
         )
@@ -198,9 +200,11 @@ object Notices {
         Intent(Intent.ACTION_VIEW, Uri.parse(link)).setPackage(context.packageName),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
       )
+    val group = "openbeacon_group_$channelId"
     val builder =
       NotificationCompat
         .Builder(context, channelId)
+        .setGroup(group)
         .setContentTitle(title)
         .setSubText(groupName)
         .setSmallIcon(R.drawable.openbeacon_notification_icon)
@@ -212,6 +216,25 @@ object Notices {
     if (body != null) builder.setContentText(body).setStyle(NotificationCompat.BigTextStyle().bigText(body))
     if (kind == EventNoticeKind.PLACES_CHANGED) builder.addAction(0, context.getString(R.string.openbeacon_places_changed_manage), intent)
     manager.notify(kind.tag, id, builder.build())
+    manager.notify(
+      SUMMARY_TAG,
+      channelId.hashCode(),
+      NotificationCompat
+        .Builder(context, channelId)
+        .setGroup(group)
+        .setGroupSummary(true)
+        .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+        .setOnlyAlertOnce(true)
+        .setContentTitle(channelName)
+        .setSmallIcon(R.drawable.openbeacon_notification_icon)
+        .setColor(ContextCompat.getColor(context, R.color.openbeacon_notification_color))
+        .setAutoCancel(true)
+        .setContentIntent(
+          context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
+            PendingIntent.getActivity(context, channelId.hashCode(), it, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+          },
+        ).build(),
+    )
     return true
   }
 

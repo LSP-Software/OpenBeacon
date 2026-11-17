@@ -11,7 +11,7 @@ import {
   pollGroupTrackingPoints,
   uploadGroupTrackingBatch,
 } from "../../lib/groupTracking.ts";
-import { readNotices } from "../../lib/accountNotices.ts";
+import { readGroupNotices } from "../../lib/accountNotices.ts";
 import { lockGroupMemberForWrite } from "../../lib/groupWriteChecks.ts";
 import { readImageKeysNeedCatchUp } from "../../lib/imageKeys.ts";
 import {
@@ -136,18 +136,6 @@ export const groupTrackingRouter = {
                   },
                 })
               : { accepted: [], discarded: [], duplicates: [], expired: [] };
-          if (input.pushToken === null) {
-            await tx.pushToken.deleteMany({ where: { deviceId: ctx.deviceId } });
-          } else if (input.pushToken !== undefined && ctx.push?.enabled) {
-            await tx.pushToken.deleteMany({
-              where: { token: input.pushToken, deviceId: { not: ctx.deviceId } },
-            });
-            await tx.pushToken.upsert({
-              where: { deviceId: ctx.deviceId },
-              create: { deviceId: ctx.deviceId, token: input.pushToken },
-              update: { token: input.pushToken },
-            });
-          }
           if (placeTransitions.length === 0) return points;
           return {
             ...points,
@@ -196,17 +184,9 @@ export const groupTrackingRouter = {
           : tryCatch(readImageKeysNeedCatchUp({ db: ctx.db, userId })),
         input.noticesCursor === undefined
           ? null
-          : tryCatch(
-              readNotices({
-                cursor: input.noticesCursor,
-                db: ctx.db,
-                deviceId: ctx.deviceId,
-                userId,
-              }),
-            ),
+          : tryCatch(readGroupNotices({ cursor: input.noticesCursor, db: ctx.db, userId })),
       ]);
       const catchUpFields = {
-        pushAvailable: ctx.push?.enabled ?? false,
         ...(notices && !notices.error ? { notices: notices.data } : {}),
         ...(placeUpdates && !placeUpdates.error
           ? { places: placeUpdates.data[0], placeAlerts: placeUpdates.data[1] }

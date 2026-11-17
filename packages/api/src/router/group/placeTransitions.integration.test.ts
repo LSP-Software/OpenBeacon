@@ -233,9 +233,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
     test("a batch with neither points nor transitions is refused", async () => {
       await expect(
         caller(member, memberPhone).groupTracking.uploadBatch({ groupId, points: [] }),
-      ).rejects.toThrow(
-        "An upload needs at least one point, place transition, cursor or push token",
-      );
+      ).rejects.toThrow("An upload needs at least one point, place transition or cursor");
     });
 
     test("a paused phone can read place updates with only a cursor", async () => {

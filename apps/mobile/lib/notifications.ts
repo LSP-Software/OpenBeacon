@@ -49,18 +49,19 @@ export const showEventNotice = async ({
   link: { href: Href; url: string };
   title: string;
 }): Promise<boolean> => {
-  if (AppState.currentState === "active") {
+  const active = AppState.currentState === "active";
+  if (active) {
     showInAppNotice({ title, body: body ?? groupName, href: link.href });
-    return true;
+    if (kind !== "accountAlert") return true;
   }
   const trackingModule = await loadTrackingModule();
-  if (!trackingModule) return false;
+  if (!trackingModule) return active;
   const result = await tryCatch(
     Promise.resolve().then(() =>
       trackingModule.showEventNotice(kind, key, title, body, groupName, link.url),
     ),
   );
-  return result.data ?? false;
+  return active || (result.data ?? false);
 };
 
 export const dismissNotice = async (slot: NoticeSlot) => {

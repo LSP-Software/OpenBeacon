@@ -60,12 +60,15 @@ test("a code can't be checked while Redis is unavailable, so guesses aren't unco
   error.mockRestore();
 });
 
-test("alerts-turned-off is sent straight away when it can't be held in Redis", async () => {
+test("alerts-turned-off is sent and noticed straight away when it can't be held in Redis", async () => {
   const error = spyOn(console, "error").mockImplementation(() => {});
   const tasks: Promise<unknown>[] = [];
   const sendSecurityAlertEmail = mock(async () => ({ sent: true }) as const);
+  const createNotice = mock(async (_notice: unknown) => ({ id: "notice-1" }));
   const alerts = createSecurityAlerts({
     db: {
+      $queryRaw: async () => [{ now: new Date() }],
+      accountNotice: { create: createNotice },
       user: {
         findUnique: async () => ({
           accounts: [],
@@ -75,7 +78,7 @@ test("alerts-turned-off is sent straight away when it can't be held in Redis", a
           timezone: "UTC",
         }),
       },
-    } as unknown as Pick<PrismaClient, "user">,
+    } as unknown as Pick<PrismaClient, "user" | "accountNotice" | "$queryRaw">,
     sendSecurityAlertEmail,
     alertsTurnedOff: cache.alertsTurnedOff,
     runInBackground: (task) => tasks.push(task),
@@ -83,8 +86,16 @@ test("alerts-turned-off is sent straight away when it can't be held in Redis", a
       throw new Error("The alert shouldn't be batched");
     },
   });
-  alerts.turnedOff("user-1", [{ type: "NEW_SIGN_IN", channel: "phone" }]);
+  alerts.turnedOff("user-1", [{ type: "NEW_SIGN_IN", channel: "phone" }], "device-1");
   while (tasks.length) await Promise.all(tasks.splice(0));
+  expect(createNotice.mock.calls[0]?.[0]).toMatchObject({
+    data: {
+      type: "ALERTS_TURNED_OFF",
+      excludeDeviceId: "device-1",
+      turnedOffPhone: ["NEW_SIGN_IN"],
+      turnedOffEmail: [],
+    },
+  });
   expect(sendSecurityAlertEmail).toHaveBeenCalledTimes(1);
   expect(sendSecurityAlertEmail.mock.calls[0]?.[0]).toMatchObject({
     alert: { type: "alerts-turned-off", alerts: [{ type: "NEW_SIGN_IN", channel: "phone" }] },

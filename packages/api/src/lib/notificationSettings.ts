@@ -24,11 +24,13 @@ export const changeNotificationSettings = async ({
   db,
   securityAlerts,
   userId,
+  deviceId,
   changes,
 }: {
   db: PrismaClient;
   securityAlerts: SecurityAlerts | null;
   userId: string;
+  deviceId: string;
   changes: (TurnedOffNotification & { enabled: boolean })[];
 }) => {
   const { settings, turnedOff } = await db.$transaction(async (tx) => {
@@ -50,6 +52,6 @@ export const changeNotificationSettings = async ({
     }
     return { settings: await readNotificationSettings(tx, userId), turnedOff };
   });
-  if (turnedOff.length) securityAlerts?.turnedOff(userId, turnedOff);
+  if (turnedOff.length) securityAlerts?.turnedOff(userId, turnedOff, deviceId);
   return settings;
 };

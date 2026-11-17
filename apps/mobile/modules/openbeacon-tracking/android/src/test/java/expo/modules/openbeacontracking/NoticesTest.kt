@@ -118,6 +118,36 @@ class NoticesTest {
     assertEquals(NoticeSlot.SIGNED_OUT, NoticeSlot.of("signedOut"))
   }
 
+  @Test
+  fun eventsAreGroupedPerChannelUnderOneQuietSummary() {
+    Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-1", "Your password was reset", null, null, "openbeacon:///account/password")
+    Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-2", "New sign-in", null, null, "openbeacon:///account/devices")
+    Notices.showEvent(application, EventNoticeKind.ALERT, "alert-1", "Mum arrived at Home", null, "Family", "openbeacon:///map")
+
+    val notifications = shadowOf(manager).allNotifications
+    val summaries = notifications.filter { it.flags and Notification.FLAG_GROUP_SUMMARY != 0 }
+    assertEquals(5, notifications.size)
+    assertEquals(
+      mapOf(
+        "openbeacon_group_openbeacon_account_alerts" to "Security alerts",
+        "openbeacon_group_openbeacon_place_alerts" to "Place alerts",
+      ),
+      summaries.associate { it.group to it.extras.getCharSequence(Notification.EXTRA_TITLE).toString() },
+    )
+    assertTrue(summaries.all { it.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0 && it.groupAlertBehavior == Notification.GROUP_ALERT_CHILDREN })
+    assertEquals(
+      listOf("openbeacon_group_openbeacon_account_alerts", "openbeacon_group_openbeacon_account_alerts", "openbeacon_group_openbeacon_place_alerts"),
+      notifications.filter { it.flags and Notification.FLAG_GROUP_SUMMARY == 0 }.map { it.group }.sorted(),
+    )
+  }
+
+  @Test
+  fun theAccountChannelIsNamedSecurityAlerts() {
+    Notices.showEvent(application, EventNoticeKind.ACCOUNT_ALERT, "notice-1", "Your password was reset", null, null, "openbeacon:///account/password")
+
+    assertEquals("Security alerts", manager.getNotificationChannel("openbeacon_account_alerts").name)
+  }
+
   private fun texts() =
     shadowOf(manager).allNotifications.map { it.extras.getCharSequence(Notification.EXTRA_TEXT).toString() }
 }

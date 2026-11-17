@@ -32,19 +32,30 @@ const tasks: Promise<unknown>[] = [];
 let clockOffset = 0;
 const now = () => new Date(Date.now() + clockOffset);
 const timers: { dueAt: number; run: () => void }[] = [];
-const createAlerts = (alertsTurnedOff = cache.alertsTurnedOff) =>
+const createAlerts = ({
+  alertsTurnedOff = cache.alertsTurnedOff,
+  withEmail = true,
+  push = null,
+}: {
+  alertsTurnedOff?: typeof cache.alertsTurnedOff;
+  withEmail?: boolean;
+  push?: Parameters<typeof createSecurityAlerts>[0]["push"];
+} = {}) =>
   createSecurityAlerts({
     db: prisma,
-    sendSecurityAlertEmail: async ({ to, userId, alert, at, timezone, hasPassword }) => {
-      if (sendFailure) throw sendFailure;
-      await sendGate;
-      sent.push({ to, userId, alert, timezone, hasPassword });
-      sentAt.push(at);
-    },
+    sendSecurityAlertEmail: withEmail
+      ? async ({ to, userId, alert, at, timezone, hasPassword }) => {
+          if (sendFailure) throw sendFailure;
+          await sendGate;
+          sent.push({ to, userId, alert, timezone, hasPassword });
+          sentAt.push(at);
+        }
+      : null,
     now,
     runInBackground: (task) => tasks.push(task),
     alertsTurnedOff,
     setTimer: (run, ms) => timers.push({ dueAt: now().getTime() + ms, run }),
+    push,
   });
 const sentAt: Date[] = [];
 const securityAlerts = createAlerts();
@@ -616,9 +627,11 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
         db: prisma,
         emailCodes: null,
         securityAlerts: createAlerts({
-          ...cache.alertsTurnedOff,
-          add: async () => {
-            throw new Error("Redis is down");
+          alertsTurnedOff: {
+            ...cache.alertsTurnedOff,
+            add: async () => {
+              throw new Error("Redis is down");
+            },
           },
         }),
         clientIp: `ip-${account.userId}`,
@@ -637,6 +650,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
 
     expect((await sentAlerts()).map(({ alert }) => alert)).toEqual([
       { type: "alerts-turned-off", alerts: [newSignInEmail] },
+    ]);
+    expect(
+      await prisma.accountNotice.findMany({
+        where: { userId: account.userId },
+        select: { type: true, excludeDeviceId: true, turnedOffEmail: true },
+      }),
+    ).toEqual([
+      { type: "ALERTS_TURNED_OFF", excludeDeviceId: device.id, turnedOffEmail: ["NEW_SIGN_IN"] },
     ]);
   });
 
@@ -931,6 +952,79 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("notification set
         ],
       },
     ]);
+  });
+
+  const turnedOffNotices = (userId: string) =>
+    prisma.accountNotice.findMany({
+      where: { userId, type: "ALERTS_TURNED_OFF" },
+      select: { excludeDeviceId: true, turnedOffEmail: true, turnedOffPhone: true },
+    });
+
+  test("switching every security notification off still writes one phone notice for the batch, skipping the device that did it", async () => {
+    const account = await createAccount();
+    const caller = await account.activeCaller();
+    const device = await prisma.userDevice.findFirstOrThrow({ where: { userId: account.userId } });
+
+    for (const type of securityTypes) {
+      await caller.notificationSettings.set({ type, channel: "phone", enabled: false });
+      await caller.notificationSettings.set({ type, channel: "email", enabled: false });
+    }
+    await waitSeconds(59);
+    expect(await turnedOffNotices(account.userId)).toEqual([]);
+    await waitSeconds(1);
+
+    expect(await turnedOffNotices(account.userId)).toEqual([
+      {
+        excludeDeviceId: device.id,
+        turnedOffEmail: [...securityTypes],
+        turnedOffPhone: [...securityTypes],
+      },
+    ]);
+  });
+
+  test("a batch with changes from two devices skips no device", async () => {
+    const account = await createAccount();
+    await (
+      await account.activeCaller()
+    ).notificationSettings.set({ type: "NEW_SIGN_IN", channel: "phone", enabled: false });
+    await waitSeconds(10);
+    await (
+      await account.activeCaller()
+    ).notificationSettings.set({ type: "DEVICE_REMOVED", channel: "email", enabled: false });
+    await waitSeconds(50);
+
+    expect(await turnedOffNotices(account.userId)).toEqual([
+      {
+        excludeDeviceId: null,
+        turnedOffEmail: ["DEVICE_REMOVED"],
+        turnedOffPhone: ["NEW_SIGN_IN"],
+      },
+    ]);
+  });
+
+  test("a server without email still batches the notice and pushes it", async () => {
+    const account = await createAccount();
+    const pushed: string[] = [];
+    const alerts = createAlerts({
+      withEmail: false,
+      push: { accountNotice: (noticeId) => pushed.push(noticeId) },
+    });
+
+    alerts.turnedOff(account.userId, [{ type: "NEW_SIGN_IN", channel: "phone" }], "phone-1");
+    await waitSeconds(30);
+    alerts.turnedOff(account.userId, [{ type: "PASSWORD_CHANGED", channel: "phone" }], "phone-1");
+    await waitSeconds(29);
+    expect(await turnedOffNotices(account.userId)).toEqual([]);
+    await waitSeconds(1);
+
+    const notices = await prisma.accountNotice.findMany({ where: { userId: account.userId } });
+    expect(
+      notices.map(({ excludeDeviceId, turnedOffPhone }) => ({ excludeDeviceId, turnedOffPhone })),
+    ).toEqual([
+      { excludeDeviceId: "phone-1", turnedOffPhone: ["NEW_SIGN_IN", "PASSWORD_CHANGED"] },
+    ]);
+    expect(pushed).toEqual(notices.map(({ id }) => id));
+    expect(sent).toEqual([]);
   });
 
   test("switching place or group notifications off sends nothing", async () => {

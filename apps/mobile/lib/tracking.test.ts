@@ -44,9 +44,19 @@ const uploadCalls: Array<{
   placeTransitions?: { clientId: string }[];
   placeAlertsCursor?: string | null;
   noticesCursor?: string | null;
-  pushToken?: string | null;
 }> = [];
 let pendingPushToken: string | null = null;
+const storedAccountCursor = "2026-11-17T08:00:00.000Z|";
+const accountSyncResult = {
+  notices: [],
+  cursor: "2026-11-17T10:00:00.000Z|",
+  pushAvailable: true,
+};
+const accountSyncCalls: Array<{ cursor: string | null; pushToken?: string | null }> = [];
+let accountSyncResponse = async (): Promise<typeof accountSyncResult> => accountSyncResult;
+let syncInBatch = false;
+const uploadsBatchedWithSync: boolean[] = [];
+const shownAccountNotices: Array<{ notices: unknown; userId: string }> = [];
 let pushHeldByServer = false;
 const pushConfirms: Array<{ scope: string; sent: string | null; pushAvailable: boolean }> = [];
 const pushForgets: string[] = [];
@@ -153,7 +163,7 @@ let uploadGroup = async ({
   placeTransitions?: { accepted: string[]; duplicates: string[]; discarded: string[] };
   places?: { groupId: string; revision: number; needsCatchUp: boolean }[];
   placeAlerts?: { alerts: unknown[]; cursor: string };
-  pushAvailable?: boolean;
+  notices?: { notices: unknown[]; cursor: string };
 }> => ({
   accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
   duplicates: [],
@@ -296,6 +306,10 @@ mock.module("./placeBackgroundSync.ts", () => ({
 
 mock.module("./noticeBackgroundSync.ts", () => ({
   getNoticesCursor: () => storedNoticesCursor,
+  getAccountNoticesCursor: () => storedAccountCursor,
+  showAccountNotices: async (input: { notices: unknown; userId: string }) => {
+    shownAccountNotices.push(input);
+  },
 }));
 
 mock.module("./apiCompatibility.ts", () => ({
@@ -480,6 +494,18 @@ mock.module("./api.ts", () => ({
         },
       },
     },
+    accountNotices: {
+      sync: {
+        mutate: async (input: { cursor: string | null; pushToken?: string | null }) => {
+          accountSyncCalls.push(input);
+          syncInBatch = true;
+          setTimeout(() => {
+            syncInBatch = false;
+          });
+          return accountSyncResponse();
+        },
+      },
+    },
     groupTracking: {
       uploadBatch: {
         mutate: async (input: {
@@ -488,10 +514,10 @@ mock.module("./api.ts", () => ({
           placeTransitions?: { clientId: string }[];
           placeAlertsCursor?: string | null;
           noticesCursor?: string | null;
-          pushToken?: string | null;
         }) => {
           requests.push("groupTracking.uploadBatch");
           uploadCalls.push(input);
+          uploadsBatchedWithSync.push(syncInBatch);
           return uploadGroup(input);
         },
       },
@@ -595,6 +621,7 @@ const {
   recoverUnassignedTrackingPoints,
   resumeTracking,
   revokeTrackingAccess,
+  syncAccountNotices,
   syncBackgroundTracking,
   takeKeyAccessChange,
 } = await import("./tracking.ts");
@@ -723,9 +750,13 @@ describe("tracking service", () => {
     pushHeldByServer = false;
     pushConfirms.length = 0;
     pushForgets.length = 0;
+    accountSyncCalls.length = 0;
+    accountSyncResponse = async () => accountSyncResult;
+    uploadsBatchedWithSync.length = 0;
+    shownAccountNotices.length = 0;
   });
 
-  describe("push token", () => {
+  describe("account notices and push token", () => {
     const scope = JSON.stringify(["https://api.example.test", "user-1", "device-1"]);
 
     beforeEach(() => {
@@ -740,14 +771,29 @@ describe("tracking service", () => {
         senderDeviceId: "device-1",
         kind: "trackingPoint",
       });
-      uploadGroup = async ({ points }) => ({
-        accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
-        duplicates: [],
-        pushAvailable: true,
-      });
     });
 
-    test("a push runs one cursor-only upload that carries a pending token", async () => {
+    test("an upload round asks for account notices in the same request as its first upload", async () => {
+      pendingPushToken = "token-1";
+      pendingCiphertexts = [
+        createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 }),
+        createQueueItem({ clientPointId: "p2", groupId: "group-2", id: 2 }),
+      ];
+      await flushPendingTrackingPoints();
+      expect(uploadCalls).toHaveLength(2);
+      expect(uploadCalls.every((call) => !("pushToken" in call))).toBe(true);
+      expect(accountSyncCalls).toEqual([{ cursor: storedAccountCursor, pushToken: "token-1" }]);
+      expect(uploadsBatchedWithSync[0]).toBe(true);
+      expect(pushConfirms).toEqual([{ scope, sent: "token-1", pushAvailable: true }]);
+      expect(shownAccountNotices).toEqual([{ notices: accountSyncResult, userId: "user-1" }]);
+    });
+
+    test("an upload round with nothing to send doesn't ask for account notices", async () => {
+      await flushPendingTrackingPoints();
+      expect(accountSyncCalls).toEqual([]);
+    });
+
+    test("a push checks account notices alongside the cursor-only upload", async () => {
       captureRunning = true;
       pendingPushToken = "token-1";
       pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
@@ -758,67 +804,79 @@ describe("tracking service", () => {
           points: [],
           placeAlertsCursor: null,
           noticesCursor: "2026-11-17T09:00:00.000Z|",
-          pushToken: "token-1",
         },
       ]);
+      expect(uploadsBatchedWithSync).toEqual([true]);
+      expect(accountSyncCalls).toEqual([{ cursor: storedAccountCursor, pushToken: "token-1" }]);
       expect(pushConfirms).toEqual([{ scope, sent: "token-1", pushAvailable: true }]);
       expect(locationSharingCalls).toBe(0);
       expect(provisionCalls).toHaveLength(0);
     });
 
-    test("a push with no pending token still tells the phone whether the server has push", async () => {
-      uploadGroup = async () => ({ accepted: [], duplicates: [], pushAvailable: false });
+    test("a push or parked check on a phone in no group still checks account notices", async () => {
+      provisionedKeys.length = 0;
+      pendingPushToken = "token-1";
       await syncBackgroundTracking("push");
-      expect(uploadCalls[0]).not.toHaveProperty("pushToken");
+      await syncBackgroundTracking("parked");
+      expect(uploadCalls).toEqual([]);
+      expect(accountSyncCalls).toEqual([
+        { cursor: storedAccountCursor, pushToken: "token-1" },
+        { cursor: storedAccountCursor, pushToken: "token-1" },
+      ]);
+      expect(shownAccountNotices).toHaveLength(2);
+    });
+
+    test("coming to the foreground checks account notices without a group", async () => {
+      provisionedKeys.length = 0;
+      await syncAccountNotices();
+      expect(accountSyncCalls).toEqual([{ cursor: storedAccountCursor }]);
+      expect(pushConfirms).toEqual([{ scope, sent: null, pushAvailable: true }]);
+    });
+
+    test("the server's answer says whether the phone should get a token", async () => {
+      accountSyncResponse = async () => ({ ...accountSyncResult, pushAvailable: false });
+      await syncAccountNotices();
+      expect(accountSyncCalls[0]).not.toHaveProperty("pushToken");
       expect(pushConfirms).toEqual([{ scope, sent: null, pushAvailable: false }]);
     });
 
-    test("a push while signing out sends nothing", async () => {
+    test("a failed check confirms nothing and shows nothing", async () => {
+      pendingPushToken = "token-1";
+      accountSyncResponse = async () => {
+        throw new Error("offline");
+      };
+      await syncAccountNotices();
+      expect(accountSyncCalls).toEqual([{ cursor: storedAccountCursor, pushToken: "token-1" }]);
+      expect(pushConfirms).toEqual([]);
+      expect(shownAccountNotices).toEqual([]);
+    });
+
+    test("a push while signing out sends no token and shows nothing", async () => {
       pendingPushToken = "token-1";
       const signingOut = prepareTrackingSignOut();
       await syncBackgroundTracking("push");
+      await syncAccountNotices();
       await signingOut;
-      expect(uploadCalls.filter((call) => call.pushToken !== undefined)).toEqual([]);
-    });
-
-    test("the token rides the one upload that carries the cursor", async () => {
-      pendingPushToken = "token-1";
-      pendingCiphertexts = [
-        createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 }),
-        createQueueItem({ clientPointId: "p2", groupId: "group-2", id: 2 }),
-      ];
-      await flushPendingTrackingPoints();
-      expect(uploadCalls).toHaveLength(2);
-      expect(uploadCalls.filter((call) => call.pushToken !== undefined)).toEqual([
-        expect.objectContaining({ pushToken: "token-1", placeAlertsCursor: null }),
-      ]);
-      expect(pushConfirms.filter(({ sent }) => sent !== null)).toEqual([
-        { scope, sent: "token-1", pushAvailable: true },
-      ]);
-    });
-
-    test("a token is only confirmed by an upload that succeeded", async () => {
-      pendingPushToken = "token-1";
-      pendingCiphertexts = [createQueueItem({ clientPointId: "p1", groupId: "group-1", id: 1 })];
-      uploadGroup = async () => {
-        throw new Error("offline");
-      };
-      await expect(flushPendingTrackingPoints()).rejects.toThrow("Tracking upload failed");
-      expect(uploadCalls[0]?.pushToken).toBe("token-1");
+      expect(accountSyncCalls.filter((call) => call.pushToken !== undefined)).toEqual([]);
       expect(pushConfirms).toEqual([]);
+      expect(shownAccountNotices).toEqual([]);
     });
 
-    test("signing out tells the server to drop a token it holds", async () => {
+    test("signing out tells the server to drop a token it holds, even in no group", async () => {
+      provisionedKeys.length = 0;
       pushHeldByServer = true;
       await prepareTrackingSignOut();
       expect(pushForgets).toEqual([scope]);
-      expect(uploadCalls).toEqual([{ groupId: "group-1", points: [], pushToken: null }]);
+      expect(accountSyncCalls).toEqual([{ cursor: null, pushToken: null }]);
+      expect(uploadCalls).toEqual([]);
+      expect(pushConfirms).toEqual([]);
+      expect(shownAccountNotices).toEqual([]);
     });
 
     test("signing out sends no null when the server never had the token", async () => {
       await prepareTrackingSignOut();
       expect(pushForgets).toEqual([scope]);
-      expect(uploadCalls).toEqual([]);
+      expect(accountSyncCalls).toEqual([]);
     });
 
     test("the last upload while signing out asks for no token, alerts or notices", async () => {
@@ -828,16 +886,14 @@ describe("tracking service", () => {
       uploadGroup = async ({ points }) => ({
         accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
         duplicates: [],
-        pushAvailable: true,
         notices: { notices: [], cursor: "2026-11-17T10:00:00.000Z|" },
       });
       await prepareTrackingSignOut();
-      expect(uploadCalls).toEqual([
-        { groupId: "group-1", points: [], pushToken: null },
-        { groupId: "group-1", points: [expect.anything()] },
-      ]);
+      expect(accountSyncCalls).toEqual([{ cursor: null, pushToken: null }]);
+      expect(uploadCalls).toEqual([{ groupId: "group-1", points: [expect.anything()] }]);
       expect(pushConfirms).toEqual([]);
       expect(appliedPlaceUpdates).toEqual([]);
+      expect(shownAccountNotices).toEqual([]);
     });
 
     test("a push that arrives during an upload waits for it, so the cursor is sent once at a time", async () => {
@@ -854,7 +910,6 @@ describe("tracking service", () => {
         return {
           accepted: points.map((point) => (point as { clientPointId: string }).clientPointId),
           duplicates: [],
-          pushAvailable: true,
         };
       };
       const flush = flushPendingTrackingPoints();
@@ -862,6 +917,7 @@ describe("tracking service", () => {
       const push = syncBackgroundTracking("push");
       await Bun.sleep(5);
       expect(events).toEqual(["upload started"]);
+      expect(accountSyncCalls).toHaveLength(1);
       releaseUpload();
       await Promise.all([flush, push]);
       expect(events).toEqual([
@@ -870,6 +926,7 @@ describe("tracking service", () => {
         "push started",
         "push finished",
       ]);
+      expect(accountSyncCalls).toHaveLength(2);
     });
   });
 
@@ -2107,6 +2164,7 @@ describe("tracking service", () => {
     await syncBackgroundTracking("parked");
     expect(locationSharingCalls).toBe(1);
     expect(requests).toEqual([]);
+    expect(accountSyncCalls).toHaveLength(1);
     expect(provisionCalls).toHaveLength(0);
   });
 

@@ -6,9 +6,13 @@ import type { SecurityAlert } from "@openbeacon/email";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { encodeAlertsCursor } from "../../lib/placeTransitions.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
+import { accountNoticesRouter } from "../accountNoticesRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 
-const router = createTRPCRouter({ groupTracking: groupTrackingRouter });
+const router = createTRPCRouter({
+  accountNotices: accountNoticesRouter,
+  groupTracking: groupTrackingRouter,
+});
 const cache = createIntegrationTestCache(() => 0);
 const prefix = `notices-${crypto.randomUUID()}`;
 const minute = 60_000;
@@ -84,23 +88,31 @@ const setup = async () => {
       },
     },
   });
+  const caller = (deviceId: string, sessionCreatedAt = longAgo) =>
+    router.createCaller(
+      withDeviceActive({
+        cache,
+        db: prisma,
+        clientIp: "127.0.0.1",
+        deviceId,
+        unverifiedDeviceId: null,
+        session: {
+          user: { id: deviceId.slice(0, deviceId.lastIndexOf("-")) },
+          session: { id: `${deviceId}-session`, createdAt: sessionCreatedAt },
+        },
+      }) as Parameters<typeof router.createCaller>[0],
+    );
   const poll = async (deviceId: string, noticesCursor: string | null) => {
-    const userId = deviceId.slice(0, deviceId.lastIndexOf("-"));
-    const response = await router
-      .createCaller(
-        withDeviceActive({
-          cache,
-          db: prisma,
-          clientIp: "127.0.0.1",
-          deviceId,
-          unverifiedDeviceId: null,
-          session: { user: { id: userId }, session: { id: `${deviceId}-session` } },
-        }) as Parameters<typeof router.createCaller>[0],
-      )
-      .groupTracking.uploadBatch({ groupId, points: [], noticesCursor });
+    const response = await caller(deviceId).groupTracking.uploadBatch({
+      groupId,
+      points: [],
+      noticesCursor,
+    });
     if (!response.notices) throw new Error("No notices in the response.");
     return response.notices;
   };
+  const sync = (deviceId: string, cursor: string | null, sessionCreatedAt = longAgo) =>
+    caller(deviceId, sessionCreatedAt).accountNotices.sync({ cursor });
   const event = (
     name: string,
     type: GroupEventType,
@@ -116,7 +128,7 @@ const setup = async () => {
         subjectUserId: data.subjectUserId ?? null,
       },
     });
-  return { id, alice, bob, carol, groupId, otherGroupId, poll, event };
+  return { id, alice, bob, carol, groupId, otherGroupId, caller, poll, sync, event };
 };
 
 const since = (ms: number) => encodeAlertsCursor({ createdAt: ago(ms), id: "" });
@@ -143,11 +155,18 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("phone notices", 
       createdAt: ago(minute),
       subjectUserId: fixture.bob,
     });
-    const first = await fixture.poll(`${fixture.alice}-phone`, null);
-    expect(first.notices).toEqual([]);
-    const cursorAt = Date.parse(first.cursor.slice(0, first.cursor.indexOf("|")));
-    expect(Date.now() - cursorAt).toBeGreaterThanOrEqual(14_000);
-    expect(Date.now() - cursorAt).toBeLessThan(20_000);
+    createAlerts(false).send(fixture.alice, { type: "password-changed" });
+    await settleAlerts();
+    await backdateNotices(fixture.alice, minute);
+    for (const first of [
+      await fixture.poll(`${fixture.alice}-phone`, null),
+      await fixture.sync(`${fixture.alice}-phone`, null),
+    ]) {
+      expect(first.notices).toEqual([]);
+      const cursorAt = Date.parse(first.cursor.slice(0, first.cursor.indexOf("|")));
+      expect(Date.now() - cursorAt).toBeGreaterThanOrEqual(14_000);
+      expect(Date.now() - cursorAt).toBeLessThan(20_000);
+    }
   });
 
   test("a security notice is written without email and reaches every device but the one that made the change", async () => {
@@ -160,17 +179,76 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("phone notices", 
     await settleAlerts();
     await backdateNotices(fixture.alice, minute);
 
-    expect((await fixture.poll(`${fixture.alice}-tablet`, since(hour))).notices).toEqual([]);
-    const phone = await fixture.poll(`${fixture.alice}-phone`, since(hour));
+    expect((await fixture.sync(`${fixture.alice}-tablet`, since(hour))).notices).toEqual([]);
+    const phone = await fixture.sync(`${fixture.alice}-phone`, since(hour));
     expect(phone.notices).toEqual([
       expect.objectContaining({
         kind: "account",
         type: "NEW_SIGN_IN",
         device: { name: null, model: "Pixel 8", platform: "android" },
         deletionDate: null,
+        turnedOff: [],
       }),
     ]);
-    expect((await fixture.poll(`${fixture.bob}-phone`, since(hour))).notices).toEqual([]);
+    expect((await fixture.sync(`${fixture.bob}-phone`, since(hour))).notices).toEqual([]);
+  });
+
+  test("account notices come only through the account sync and group notices only through the upload", async () => {
+    const fixture = await setup();
+    createAlerts(false).send(fixture.alice, { type: "password-changed" });
+    await settleAlerts();
+    await backdateNotices(fixture.alice, minute);
+    await fixture.event("joined", "MEMBER_JOINED", {
+      createdAt: ago(minute),
+      subjectUserId: fixture.carol,
+    });
+
+    expect(
+      (await fixture.poll(`${fixture.alice}-phone`, since(hour))).notices.map(({ kind }) => kind),
+    ).toEqual(["group"]);
+    expect(
+      (await fixture.sync(`${fixture.alice}-phone`, since(hour))).notices.map(({ type }) => type),
+    ).toEqual(["PASSWORD_CHANGED"]);
+  });
+
+  test("the account sync works for a phone in no group", async () => {
+    const fixture = await setup();
+    await prisma.groupMember.deleteMany({ where: { userId: fixture.alice } });
+    createAlerts(false).send(fixture.alice, { type: "recovery-phrase-changed" });
+    await settleAlerts();
+    await backdateNotices(fixture.alice, minute);
+
+    const response = await fixture.sync(`${fixture.alice}-phone`, since(hour));
+    expect(response.notices.map(({ type }) => type)).toEqual(["RECOVERY_PHRASE_CHANGED"]);
+    expect(response.pushAvailable).toBe(false);
+  });
+
+  test("a phone only gets account notices from after its session started", async () => {
+    const fixture = await setup();
+    await prisma.accountNotice.createMany({
+      data: [
+        {
+          id: fixture.id("before"),
+          userId: fixture.alice,
+          type: "NEW_SIGN_IN",
+          createdAt: ago(20 * minute),
+        },
+        {
+          id: fixture.id("after"),
+          userId: fixture.alice,
+          type: "DEVICE_REMOVED",
+          createdAt: ago(5 * minute),
+        },
+      ],
+    });
+
+    expect(
+      names(await fixture.sync(`${fixture.alice}-phone`, since(hour), ago(10 * minute)), fixture),
+    ).toEqual(["after"]);
+    expect(names(await fixture.sync(`${fixture.alice}-tablet`, since(hour)), fixture)).toEqual([
+      "before",
+      "after",
+    ]);
   });
 
   test("a security notice is timed by the database clock, not the server's", async () => {
@@ -194,7 +272,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("phone notices", 
     ).toEqual([{ createdAt: databaseNow }]);
   });
 
-  test("every security alert with a phone switch writes a notice with its details", async () => {
+  test("every security alert with a phone notice writes it with its details", async () => {
     const fixture = await setup();
     const alerts = createAlerts(true);
     const device = { name: "Old tablet", model: "Tab S9", platform: "android" as const };
@@ -208,7 +286,14 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("phone notices", 
       { type: "device-removed", device },
       { type: "deletion-scheduled", deletionDate },
       { type: "account-deleted" },
-      { type: "alerts-turned-off", alerts: [{ type: "NEW_SIGN_IN", channel: "email" }] },
+      {
+        type: "alerts-turned-off",
+        alerts: [
+          { type: "NEW_SIGN_IN", channel: "email" },
+          { type: "NEW_SIGN_IN", channel: "phone" },
+          { type: "DEVICE_REMOVED", channel: "phone" },
+        ],
+      },
     ] satisfies SecurityAlert[]) {
       alerts.send(fixture.alice, alert);
       await settleAlerts();
@@ -218,17 +303,70 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("phone notices", 
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     expect(
-      notices.map(({ type, deviceName, deletionDate }) => ({ type, deviceName, deletionDate })),
+      notices.map(({ type, deviceName, deletionDate, turnedOffEmail, turnedOffPhone }) => ({
+        type,
+        deviceName,
+        deletionDate,
+        turnedOffEmail,
+        turnedOffPhone,
+      })),
     ).toEqual([
-      { type: "PASSWORD_CHANGED", deviceName: null, deletionDate: null },
-      { type: "PASSWORD_RESET", deviceName: null, deletionDate: null },
-      { type: "RECOVERY_PHRASE_CHANGED", deviceName: null, deletionDate: null },
-      { type: "RECOVERY_PHRASE_RESET", deviceName: null, deletionDate: null },
-      { type: "OTHER_SESSIONS_SIGNED_OUT", deviceName: "Old tablet", deletionDate: null },
-      { type: "DEVICE_REMOVED", deviceName: "Old tablet", deletionDate: null },
-      { type: "DELETION_SCHEDULED", deviceName: null, deletionDate },
+      ...(
+        [
+          "PASSWORD_CHANGED",
+          "PASSWORD_RESET",
+          "RECOVERY_PHRASE_CHANGED",
+          "RECOVERY_PHRASE_RESET",
+        ] as const
+      ).map((type) => ({
+        type,
+        deviceName: null,
+        deletionDate: null,
+        turnedOffEmail: [],
+        turnedOffPhone: [],
+      })),
+      {
+        type: "OTHER_SESSIONS_SIGNED_OUT",
+        deviceName: "Old tablet",
+        deletionDate: null,
+        turnedOffEmail: [],
+        turnedOffPhone: [],
+      },
+      {
+        type: "DEVICE_REMOVED",
+        deviceName: "Old tablet",
+        deletionDate: null,
+        turnedOffEmail: [],
+        turnedOffPhone: [],
+      },
+      {
+        type: "DELETION_SCHEDULED",
+        deviceName: null,
+        deletionDate,
+        turnedOffEmail: [],
+        turnedOffPhone: [],
+      },
+      {
+        type: "ALERTS_TURNED_OFF",
+        deviceName: null,
+        deletionDate: null,
+        turnedOffEmail: ["NEW_SIGN_IN"],
+        turnedOffPhone: ["NEW_SIGN_IN", "DEVICE_REMOVED"],
+      },
     ]);
     expect(emails).toHaveLength(9);
+
+    await backdateNotices(fixture.alice, minute);
+    const turnedOff = (await fixture.sync(`${fixture.alice}-phone`, since(hour))).notices.at(-1);
+    expect(turnedOff).toMatchObject({
+      type: "ALERTS_TURNED_OFF",
+      device: null,
+      turnedOff: [
+        { type: "NEW_SIGN_IN", channel: "phone" },
+        { type: "DEVICE_REMOVED", channel: "phone" },
+        { type: "NEW_SIGN_IN", channel: "email" },
+      ],
+    });
   });
 
   test("the phone switch decides the notice and the email switch decides the email", async () => {
@@ -255,7 +393,33 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("phone notices", 
     expect(emails.map(({ alert }) => alert.type)).toEqual(["device-removed"]);
   });
 
-  test("switching a type off after the notice was written stops it, and the cursor still moves on", async () => {
+  test("the alerts-turned-off notice is written even with every phone switch off", async () => {
+    const fixture = await setup();
+    await prisma.notificationSetting.createMany({
+      data: (
+        [
+          "NEW_SIGN_IN",
+          "PASSWORD_CHANGED",
+          "RECOVERY_PHRASE_CHANGED",
+          "OTHER_SESSIONS_SIGNED_OUT",
+          "DEVICE_REMOVED",
+          "DELETION_SCHEDULED",
+        ] as const
+      ).map((type) => ({ userId: fixture.alice, type, email: false, phone: false })),
+    });
+    createAlerts(false).send(fixture.alice, {
+      type: "alerts-turned-off",
+      alerts: [{ type: "NEW_SIGN_IN", channel: "phone" }],
+    });
+    await settleAlerts();
+    await backdateNotices(fixture.alice, minute);
+
+    expect(
+      (await fixture.sync(`${fixture.alice}-phone`, since(hour))).notices.map(({ type }) => type),
+    ).toEqual(["ALERTS_TURNED_OFF"]);
+  });
+
+  test("switching a type off after the notice was written stops a group notice but not an account notice", async () => {
     const fixture = await setup();
     createAlerts(false).send(fixture.alice, { type: "recovery-phrase-reset" });
     await settleAlerts();
@@ -275,6 +439,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("phone notices", 
     expect(response.notices).toEqual([]);
     const cursorAt = Date.parse(response.cursor.slice(0, response.cursor.indexOf("|")));
     expect(cursorAt).toBeGreaterThan(Date.now() - 20_000);
+    expect(
+      (await fixture.sync(`${fixture.alice}-phone`, since(hour))).notices.map(({ type }) => type),
+    ).toEqual(["RECOVERY_PHRASE_RESET"]);
   });
 
   test("group notices come from the caller's groups after they joined, never their own actions, and follow the switches", async () => {
@@ -365,7 +532,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("phone notices", 
     expect((await fixture.poll(`${fixture.alice}-phone`, second.cursor)).notices).toEqual([]);
   });
 
-  test("pages of 50 across both kinds have no repeats and no gaps", async () => {
+  test("pages of 50 of each kind have no repeats and no gaps", async () => {
     const fixture = await setup();
     const sameTime = ago(30 * minute);
     await prisma.accountNotice.createMany({
@@ -385,19 +552,24 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("phone notices", 
         createdAt: index < 20 ? sameTime : ago(40 * minute - index * 1_000 - 500),
       })),
     });
-    const seen: string[] = [];
-    const pageSizes: number[] = [];
-    let cursor = since(hour);
-    for (let page = 0; page < 5; page++) {
-      const response = await fixture.poll(`${fixture.alice}-phone`, cursor);
-      pageSizes.push(response.notices.length);
-      seen.push(...names(response, fixture));
-      const times = response.notices.map(({ at }) => at.getTime());
-      expect(times).toEqual([...times].sort((a, b) => a - b));
-      cursor = response.cursor;
-      if (response.notices.length < 50) break;
+    for (const read of [
+      (cursor: string) => fixture.poll(`${fixture.alice}-phone`, cursor),
+      (cursor: string) => fixture.sync(`${fixture.alice}-phone`, cursor),
+    ]) {
+      const seen: string[] = [];
+      const pageSizes: number[] = [];
+      let cursor = since(hour);
+      for (let page = 0; page < 5; page++) {
+        const response = await read(cursor);
+        pageSizes.push(response.notices.length);
+        seen.push(...names(response, fixture));
+        const times = response.notices.map(({ at }) => at.getTime());
+        expect(times).toEqual([...times].sort((a, b) => a - b));
+        cursor = response.cursor;
+        if (response.notices.length < 50) break;
+      }
+      expect(pageSizes).toEqual([50, 10]);
+      expect(new Set(seen).size).toBe(60);
     }
-    expect(pageSizes).toEqual([50, 50, 20]);
-    expect(new Set(seen).size).toBe(120);
   });
 });

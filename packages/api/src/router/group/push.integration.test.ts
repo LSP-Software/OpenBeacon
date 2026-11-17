@@ -4,13 +4,17 @@ import { createPushSender } from "@openbeacon/auth/push.ts";
 import { createSecurityAlerts } from "@openbeacon/auth/securityAlerts.ts";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { type AccountNoticeType, type GroupEventType, prisma } from "@openbeacon/database";
-import { readNotices } from "../../lib/accountNotices.ts";
+import { readAccountNotices, readGroupNotices } from "../../lib/accountNotices.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { encodeAlertsCursor, readPlaceAlerts } from "../../lib/placeTransitions.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
+import { accountNoticesRouter } from "../accountNoticesRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
 
-const router = createTRPCRouter({ groupTracking: groupTrackingRouter });
+const router = createTRPCRouter({
+  accountNotices: accountNoticesRouter,
+  groupTracking: groupTrackingRouter,
+});
 const cache = createIntegrationTestCache(() => 0);
 const prefix = `push-${crypto.randomUUID()}`;
 const minute = 60_000;
@@ -33,12 +37,16 @@ const fakeFcm = {
     return typeof reply === "function" ? reply() : reply;
   },
 };
-const testPush = (fcm: Parameters<typeof createPushSender>[0]["fcm"] = fakeFcm) =>
+const testPush = (
+  fcm: Parameters<typeof createPushSender>[0]["fcm"] = fakeFcm,
+  now = () => Date.now(),
+) =>
   createPushSender({
     db: prisma,
     fcm,
     setTimer: (run, ms) => timers.push({ ms, run }),
     runInBackground: (task) => tasks.push(task),
+    now,
   });
 const push = testPush();
 
@@ -184,9 +192,7 @@ const setup = async () => {
       })
     ).id;
 
-  const readersFor = async (
-    item: { kind: "place"; id: string } | { kind: "notice"; id: string },
-  ) => {
+  const readersFor = async (item: { kind: "place" | "event" | "notice"; id: string }) => {
     const readers: string[] = [];
     for (const { deviceId, userId } of activeDevices) {
       const ids =
@@ -194,9 +200,19 @@ const setup = async () => {
           ? (await readPlaceAlerts({ cursor: before, db: prisma, userId })).alerts.map(
               ({ id }) => id,
             )
-          : (await readNotices({ cursor: before, db: prisma, deviceId, userId })).notices.map(
-              ({ id }) => id,
-            );
+          : item.kind === "event"
+            ? (await readGroupNotices({ cursor: before, db: prisma, userId })).notices.map(
+                ({ id }) => id,
+              )
+            : (
+                await readAccountNotices({
+                  cursor: before,
+                  db: prisma,
+                  deviceId,
+                  sessionCreatedAt: longAgo,
+                  userId,
+                })
+              ).notices.map(({ id }) => id);
       if (ids.includes(item.id)) readers.push(deviceId);
     }
     return readers.sort();
@@ -211,7 +227,7 @@ const setup = async () => {
   const wakesForEvent = async (eventId: string) => {
     push.groupEvents([eventId]);
     await deliver();
-    expect(woken()).toEqual(await readersFor({ kind: "notice", id: eventId }));
+    expect(woken()).toEqual(await readersFor({ kind: "event", id: eventId }));
     return woken();
   };
   const wakesForNotice = async (noticeId: string) => {
@@ -233,7 +249,10 @@ const setup = async () => {
         deviceId,
         unverifiedDeviceId: null,
         push: pushSender,
-        session: { user: { id: userId }, session: { id: `${deviceId}-session` } },
+        session: {
+          user: { id: userId },
+          session: { id: `${deviceId}-session`, createdAt: longAgo },
+        },
       }) as Parameters<typeof router.createCaller>[0],
     );
 
@@ -411,12 +430,22 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("push wake-ups", 
       expect(f.woken()).toEqual([]);
     });
 
-    test("a notice whose Phone switch is off wakes nobody", async () => {
+    test("a written notice wakes and reaches the other devices even if its Phone switch is now off", async () => {
       const f = await setup();
       await f.setting(f.alice, "PASSWORD_CHANGED", false);
       const noticeId = await f.notice(f.alice, "PASSWORD_CHANGED", `${f.alice}-phone`);
-      expect(await f.wakesForNotice(noticeId)).toEqual([]);
-      expect(await f.readersFor({ kind: "notice", id: noticeId })).toEqual([]);
+      expect(await f.wakesForNotice(noticeId)).toEqual([`${f.alice}-tablet`]);
+      expect(await f.readersFor({ kind: "notice", id: noticeId })).toEqual([`${f.alice}-tablet`]);
+    });
+
+    test("an alerts-turned-off notice wakes the account's other devices", async () => {
+      const f = await setup();
+      for (const type of ["NEW_SIGN_IN", "PASSWORD_CHANGED", "DEVICE_REMOVED"] as const) {
+        await f.setting(f.alice, type, false);
+      }
+      const noticeId = await f.notice(f.alice, "ALERTS_TURNED_OFF", `${f.alice}-phone`);
+      expect(await f.wakesForNotice(noticeId)).toEqual([`${f.alice}-tablet`]);
+      expect(await f.readersFor({ kind: "notice", id: noticeId })).toEqual([`${f.alice}-tablet`]);
     });
 
     test("notices that sign the other devices out aren't pushed", async () => {
@@ -449,13 +478,57 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("push wake-ups", 
       expect(sent.sort()).toEqual([`${f.alice}-phone-token`, `${f.alice}-tablet-token`]);
     });
 
-    test("a device picked again after its batch went out is woken again", async () => {
+    test("a device is woken at most once a minute, with one follow-up wake when the minute is up", async () => {
       const f = await setup();
-      push.accountNotice(await f.notice(f.alice, "RECOVERY_PHRASE_CHANGED", `${f.alice}-phone`));
-      await deliver();
-      push.accountNotice(await f.notice(f.alice, "RECOVERY_PHRASE_CHANGED", `${f.alice}-phone`));
-      await deliver();
-      expect(sent).toEqual([`${f.alice}-tablet-token`, `${f.alice}-tablet-token`]);
+      let clock = 1_000_000;
+      const throttled = testPush(fakeFcm, () => clock);
+      const pick = async () => {
+        throttled.accountNotice(
+          await f.notice(f.alice, "RECOVERY_PHRASE_CHANGED", `${f.alice}-phone`),
+        );
+        await settle();
+        await runTimers(16_000);
+        await runTimers(1_000);
+      };
+      const tablet = `${f.alice}-tablet-token`;
+
+      await pick();
+      expect(sent).toEqual([tablet]);
+      clock += 20_000;
+      await pick();
+      clock += 5_000;
+      await pick();
+      expect(sent).toEqual([tablet]);
+      expect(timers.map(({ ms }) => ms)).toEqual([40_000]);
+
+      clock += 35_000;
+      await runTimers(40_000);
+      await runTimers(1_000);
+      expect(sent).toEqual([tablet, tablet]);
+      expect(timers).toEqual([]);
+
+      clock += 60_000;
+      await pick();
+      expect(sent).toEqual([tablet, tablet, tablet]);
+      expect(timers).toEqual([]);
+    });
+
+    test("a device only goes into the minute's limit when it is woken", async () => {
+      const f = await setup();
+      let clock = 1_000_000;
+      const throttled = testPush(fakeFcm, () => clock);
+      const pick = async (noticeId: string) => {
+        throttled.accountNotice(noticeId);
+        await settle();
+        await runTimers(16_000);
+        await runTimers(1_000);
+      };
+
+      await pick(await f.notice(f.alice, "RECOVERY_PHRASE_CHANGED", `${f.alice}-phone`));
+      clock += 1_000;
+      await pick(await f.notice(f.alice, "RECOVERY_PHRASE_CHANGED", `${f.alice}-tablet`));
+      expect(sent).toEqual([`${f.alice}-tablet-token`, `${f.alice}-phone-token`]);
+      expect(timers).toEqual([]);
     });
 
     test("a security alert's notice is pushed 16 s after it is written", async () => {
@@ -599,34 +672,46 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("push wake-ups", 
     });
   });
 
-  describe("uploads", () => {
-    test("store, replace, move and clear the device's token, and say push is available", async () => {
+  describe("account sync", () => {
+    test("stores, replaces, moves and clears the device's token, and says push is available", async () => {
       const f = await setup();
       const phone = `${f.alice}-phone`;
-      const upload = (deviceId: string, pushToken: string | null) =>
-        f
-          .caller(deviceId, f.alice)
-          .groupTracking.uploadBatch({ groupId: f.groupId, points: [], pushToken });
+      const sync = (deviceId: string, pushToken: string | null) =>
+        f.caller(deviceId, f.alice).accountNotices.sync({ cursor: null, pushToken });
       const tokenOf = async (deviceId: string) =>
         (await prisma.pushToken.findUnique({ where: { deviceId } }))?.token ?? null;
 
-      expect((await upload(phone, "first")).pushAvailable).toBe(true);
+      expect((await sync(phone, "first")).pushAvailable).toBe(true);
       expect(await tokenOf(phone)).toBe("first");
-      await upload(phone, "second");
+      await sync(phone, "second");
       expect(await tokenOf(phone)).toBe("second");
-      await upload(`${f.alice}-tablet`, "second");
+      await sync(`${f.alice}-tablet`, "second");
       expect(await tokenOf(`${f.alice}-tablet`)).toBe("second");
       expect(await tokenOf(phone)).toBeNull();
-      await upload(`${f.alice}-tablet`, null);
+      await sync(`${f.alice}-tablet`, null);
       expect(await tokenOf(`${f.alice}-tablet`)).toBeNull();
     });
 
-    test("an upload without the field leaves the token alone", async () => {
+    test("a sync without the field leaves the token alone", async () => {
       const f = await setup();
       const response = await f
         .caller(`${f.alice}-phone`, f.alice)
-        .groupTracking.uploadBatch({ groupId: f.groupId, points: [], noticesCursor: null });
+        .accountNotices.sync({ cursor: null });
       expect(response.pushAvailable).toBe(true);
+      expect(
+        await prisma.pushToken.findUnique({ where: { deviceId: `${f.alice}-phone` } }),
+      ).toMatchObject({ token: `${f.alice}-phone-token` });
+    });
+
+    test("uploads no longer touch the token or say whether push is available", async () => {
+      const f = await setup();
+      const response = await f.caller(`${f.alice}-phone`, f.alice).groupTracking.uploadBatch({
+        groupId: f.groupId,
+        points: [],
+        noticesCursor: null,
+        ...{ pushToken: null },
+      });
+      expect(response).not.toHaveProperty("pushAvailable");
       expect(
         await prisma.pushToken.findUnique({ where: { deviceId: `${f.alice}-phone` } }),
       ).toMatchObject({ token: `${f.alice}-phone-token` });
@@ -636,17 +721,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("push wake-ups", 
       const f = await setup();
       const off = testPush(null);
       const caller = f.caller(`${f.alice}-phone`, f.alice, off);
-      const response = await caller.groupTracking.uploadBatch({
-        groupId: f.groupId,
-        points: [],
-        pushToken: "new-token",
-      });
+      const response = await caller.accountNotices.sync({ cursor: null, pushToken: "new-token" });
       expect(off.enabled).toBe(false);
       expect(response.pushAvailable).toBe(false);
       expect(
         await prisma.pushToken.findUnique({ where: { deviceId: `${f.alice}-phone` } }),
       ).toMatchObject({ token: `${f.alice}-phone-token` });
-      await caller.groupTracking.uploadBatch({ groupId: f.groupId, points: [], pushToken: null });
+      await caller.accountNotices.sync({ cursor: null, pushToken: null });
       expect(
         await prisma.pushToken.findUnique({ where: { deviceId: `${f.alice}-phone` } }),
       ).toBeNull();

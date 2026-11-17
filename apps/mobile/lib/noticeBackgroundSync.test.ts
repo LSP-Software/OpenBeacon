@@ -43,8 +43,13 @@ mock.module("./notifications.ts", () => ({
   },
 }));
 
-const { describeAccountNotice, getNoticesCursor, showNotices } =
-  await import("./noticeBackgroundSync.ts");
+const {
+  describeAccountNotice,
+  getAccountNoticesCursor,
+  getNoticesCursor,
+  showAccountNotices,
+  showNotices,
+} = await import("./noticeBackgroundSync.ts");
 
 const at = new Date("2026-11-17T10:00:00.000Z");
 const account = (
@@ -57,6 +62,7 @@ const account = (
   type,
   device: null,
   deletionDate: null,
+  turnedOff: [],
   ...extra,
 });
 
@@ -134,6 +140,7 @@ describe("account notices", () => {
         "OTHER_SESSIONS_SIGNED_OUT",
         "DEVICE_REMOVED",
         "DELETION_SCHEDULED",
+        "ALERTS_TURNED_OFF",
       ] as const
     ).map((type) => describeAccountNotice(account(type)).link.url);
     expect(urls).toEqual([
@@ -145,7 +152,29 @@ describe("account notices", () => {
       "openbeacon:///account/devices",
       "openbeacon:///account/devices",
       "openbeacon:///account/delete",
+      "openbeacon:///account/notifications",
     ]);
+  });
+
+  test("list the security alerts that were turned off and where", () => {
+    const turnedOff = [
+      { type: "NEW_SIGN_IN", channel: "phone" },
+      { type: "PASSWORD_CHANGED", channel: "email" },
+    ] as const;
+    expect(
+      describeAccountNotice(account("ALERTS_TURNED_OFF", { turnedOff: [...turnedOff] })),
+    ).toMatchObject({
+      title: "Security alerts turned off",
+      body: "New sign-in (phone), Password changed or reset (email).",
+    });
+    expect(
+      describeAccountNotice(
+        account("ALERTS_TURNED_OFF", {
+          turnedOff: [{ type: "DEVICE_REMOVED", channel: "email" }],
+          device: { name: "Old tablet", model: "Tab S9", platform: "android" },
+        }),
+      ).body,
+    ).toBe("Device removed (email). Turned off on Old tablet.");
   });
 
   test("say which device was removed or did the signing out", () => {
@@ -175,7 +204,6 @@ describe("showing notices", () => {
           }),
           groupEvent({ type: "MEMBER_LEFT", subject: { userId: "user-gone", name: "Alex" } }),
           groupEvent({ groupId: "left-group" }),
-          account("PASSWORD_CHANGED"),
         ],
       },
       groups,
@@ -203,6 +231,21 @@ describe("showing notices", () => {
         groupName: "Family",
         url: "openbeacon:///groups/family?tab=history",
       },
+    ]);
+    expect(getNoticesCursor("user-1")).toBe("2026-11-17T10:00:00.000Z|event-2");
+    expect(getNoticesCursor("user-2")).toBeNull();
+    expect(getAccountNoticesCursor("user-1")).toBeNull();
+  });
+
+  test("account notices are security alerts with their own cursor", async () => {
+    await showAccountNotices({
+      notices: {
+        cursor: "2026-11-17T11:00:00.000Z|notice-1",
+        notices: [account("PASSWORD_CHANGED")],
+      },
+      userId: "user-1",
+    });
+    expect(shown).toEqual([
       {
         kind: "accountAlert",
         title: "Your password was changed",
@@ -211,19 +254,26 @@ describe("showing notices", () => {
         url: "openbeacon:///account/password",
       },
     ]);
-    expect(getNoticesCursor("user-1")).toBe("2026-11-17T10:00:00.000Z|event-2");
-    expect(getNoticesCursor("user-2")).toBeNull();
+    expect(getAccountNoticesCursor("user-1")).toBe("2026-11-17T11:00:00.000Z|notice-1");
+    expect(getNoticesCursor("user-1")).toBeNull();
   });
 
   test("keeps the old cursor when showing fails, so the notices come again", async () => {
     failNotices = true;
     await expect(
       showNotices({
-        notices: { cursor: "2026-11-17T10:00:00.000Z|", notices: [account("PASSWORD_RESET")] },
+        notices: { cursor: "2026-11-17T10:00:00.000Z|", notices: [groupEvent({})] },
         groups,
         userId: "user-1",
       }),
     ).rejects.toThrow("Notifications unavailable");
+    await expect(
+      showAccountNotices({
+        notices: { cursor: "2026-11-17T10:00:00.000Z|", notices: [account("PASSWORD_RESET")] },
+        userId: "user-1",
+      }),
+    ).rejects.toThrow("Notifications unavailable");
     expect(getNoticesCursor("user-1")).toBeNull();
+    expect(getAccountNoticesCursor("user-1")).toBeNull();
   });
 });

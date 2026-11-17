@@ -31,7 +31,11 @@ import { errorReason } from "./errorReason.ts";
 import { resolveEpochKey } from "./epochKeys.ts";
 import { rotateGroupEpochIfRequired } from "./groupEncryption.ts";
 import { isDeviceOffline } from "./networkStatus.ts";
-import { getNoticesCursor } from "./noticeBackgroundSync.ts";
+import {
+  getAccountNoticesCursor,
+  getNoticesCursor,
+  showAccountNotices,
+} from "./noticeBackgroundSync.ts";
 import { dismissNotice, showNotice } from "./notifications.ts";
 import {
   applyPlaceUpdates,
@@ -612,16 +616,49 @@ const takePlaceAlertsCursor = (round: PlaceRound) => {
   return cursor;
 };
 
-const takePushToken = (round: PlaceRound) => {
-  const pushToken = round.pushToken;
-  round.pushToken = null;
-  return pushToken;
+const startAccountSync = (
+  trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
+  device: { deviceId: string; userId: string },
+  signal?: AbortSignal,
+) => {
+  const pushScope = getPushScope(device);
+  const pushToken = trackingModule.pendingPushToken(pushScope);
+  return {
+    pushScope,
+    pushToken,
+    request: tryCatch(
+      trpcClient.accountNotices.sync.mutate(
+        { cursor: getAccountNoticesCursor(device.userId), ...(pushToken ? { pushToken } : {}) },
+        signal ? { signal } : undefined,
+      ),
+    ),
+    userId: device.userId,
+  };
+};
+
+const settleAccountSync = async (
+  trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
+  sync: ReturnType<typeof startAccountSync>,
+) => {
+  const response = await sync.request;
+  if (response.error || trackingPaused) return;
+  trackingModule.confirmPushToken(sync.pushScope, sync.pushToken, response.data.pushAvailable);
+  await tryCatch(showAccountNotices({ notices: response.data, userId: sync.userId }));
+};
+
+const takeAccountSync = (
+  trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>,
+  round: PlaceRound,
+  signal: AbortSignal,
+) => {
+  if (!round.accountDevice || trackingPaused) return;
+  round.accountSync = startAccountSync(trackingModule, round.accountDevice, signal);
+  round.accountDevice = null;
 };
 
 const placeUploadFields = (
   transitions: readonly QueuedPlaceTransition[],
   cursor: PlaceRound["cursor"],
-  pushToken: string | null,
 ) => ({
   ...(transitions.length > 0
     ? {
@@ -637,7 +674,6 @@ const placeUploadFields = (
       }
     : {}),
   ...(cursor ? { placeAlertsCursor: cursor.placeAlerts, noticesCursor: cursor.notices } : {}),
-  ...(pushToken ? { pushToken } : {}),
 });
 
 const settlePlaceResponse = async (
@@ -645,13 +681,8 @@ const settlePlaceResponse = async (
   round: PlaceRound,
   response: {
     placeTransitions?: { accepted: string[]; duplicates: string[]; discarded: string[] };
-    pushAvailable?: boolean;
   } & PlaceUpdates,
-  sentPushToken: string | null,
 ) => {
-  if (round.pushScope && !trackingPaused && response.pushAvailable !== undefined) {
-    trackingModule.confirmPushToken(round.pushScope, sentPushToken, response.pushAvailable);
-  }
   if (response.placeTransitions) {
     const { accepted, duplicates, discarded } = response.placeTransitions;
     await trackingModule.deletePlaceTransitions([...accepted, ...duplicates, ...discarded]);
@@ -679,15 +710,15 @@ const uploadPlaceTransitionsAlone = async (
   signal: AbortSignal,
 ) => {
   const cursor = takePlaceAlertsCursor(round);
-  const pushToken = takePushToken(round);
+  takeAccountSync(trackingModule, round, signal);
   const result = await tryCatch(
     trpcClient.groupTracking.uploadBatch.mutate(
-      { groupId, points: [], ...placeUploadFields(transitions, cursor, pushToken) },
+      { groupId, points: [], ...placeUploadFields(transitions, cursor) },
       { signal },
     ),
   );
   if (!result.error) {
-    await settlePlaceResponse(trackingModule, round, result.data, pushToken);
+    await settlePlaceResponse(trackingModule, round, result.data);
     return;
   }
   const code = getErrorCode(result.error);
@@ -717,13 +748,13 @@ const uploadClaimedItems = async (
   const transitions = carriesPlaces ? (round.transitions.get(groupId) ?? []) : [];
   if (carriesPlaces) round.transitions.delete(groupId);
   const cursor = carriesPlaces ? takePlaceAlertsCursor(round) : null;
-  const pushToken = carriesPlaces ? takePushToken(round) : null;
   const sentAt = new Date().toISOString();
+  takeAccountSync(trackingModule, round, signal);
   const uploadResult = await tryCatch(
     trpcClient.groupTracking.uploadBatch.mutate(
       {
         groupId,
-        ...placeUploadFields(transitions, cursor, pushToken),
+        ...placeUploadFields(transitions, cursor),
         points: items.map(
           ({ ciphertext, clientPointId, epochId, nonce, role, senderDeviceId }) => ({
             ciphertext,
@@ -746,7 +777,7 @@ const uploadClaimedItems = async (
   if (
     uploadResult.error &&
     getErrorCode(uploadResult.error) === "BAD_REQUEST" &&
-    (transitions.length > 0 || cursor || pushToken)
+    (transitions.length > 0 || cursor)
   ) {
     if (transitions.length > 0) round.retryAlone.set(groupId, transitions);
     return uploadClaimedItems(trackingModule, owner, items, signal, round);
@@ -818,7 +849,7 @@ const uploadClaimedItems = async (
   } = uploadResult.data;
 
   if (keyState && noteTrackingKeyState(keyState)) uploadRejectedKeys = true;
-  await settlePlaceResponse(trackingModule, round, uploadResult.data, pushToken);
+  await settlePlaceResponse(trackingModule, round, uploadResult.data);
 
   if (accepted.length > 0 && items[0]) {
     const { senderDeviceId, groupId } = items[0];
@@ -885,10 +916,10 @@ const flushGroup = async (
 };
 
 type PlaceRound = {
+  accountDevice: { deviceId: string; userId: string } | null;
+  accountSync: ReturnType<typeof startAccountSync> | null;
   cursor: { placeAlerts: string | null; notices: string | null } | null;
   deviceId: string;
-  pushScope: string | null;
-  pushToken: string | null;
   retryAlone: Map<string, QueuedPlaceTransition[]>;
   transitions: Map<string, QueuedPlaceTransition[]>;
   updates: PlaceUpdates | null;
@@ -902,10 +933,10 @@ const startPlaceRound = async (
 ): Promise<PlaceRound> => {
   if (!device || owner !== getOwner(device.userId)) {
     return {
+      accountDevice: null,
+      accountSync: null,
       cursor: null,
       deviceId: "",
-      pushScope: null,
-      pushToken: null,
       retryAlone: new Map(),
       transitions: new Map(),
       updates: null,
@@ -932,8 +963,9 @@ const startPlaceRound = async (
     const group = transitions.get(transition.groupId) ?? [];
     if (group.length < 50) transitions.set(transition.groupId, [...group, transition]);
   }
-  const pushScope = trackingPaused ? null : getPushScope(device);
   return {
+    accountDevice: trackingPaused ? null : device,
+    accountSync: null,
     cursor: trackingPaused
       ? null
       : {
@@ -941,8 +973,6 @@ const startPlaceRound = async (
           notices: getNoticesCursor(device.userId),
         },
     deviceId: device.deviceId,
-    pushScope,
-    pushToken: pushScope ? trackingModule.pendingPushToken(pushScope) : null,
     retryAlone: new Map(),
     transitions,
     updates: null,
@@ -1005,6 +1035,9 @@ const flushPendingTrackingPointsInternal = async (
       ),
     );
     failed ||= alone.some((result) => result.status === "rejected");
+    if (round.accountSync && !signal.aborted) {
+      await settleAccountSync(trackingModule, round.accountSync);
+    }
     if (round.updates && !signal.aborted && !trackingPaused) {
       await tryCatch(applyPlaceUpdates({ updates: round.updates, userId: round.userId }));
     }
@@ -1076,19 +1109,25 @@ const pollPlaceUpdates = () =>
     if (trackingPaused) return;
     const trackingModule = await loadTrackingModule();
     const device = await getRegisteredDeviceKey();
-    const groupId = trackingModule?.listProvisionedEpochKeys()[0]?.groupId;
-    if (!trackingModule || !device || !groupId) return;
-    const pushScope = getPushScope(device);
-    const pushToken = trackingModule.pendingPushToken(pushScope);
-    const response = await trpcClient.groupTracking.uploadBatch.mutate({
-      groupId,
-      points: [],
-      placeAlertsCursor: getPlaceAlertsCursor(device.userId),
-      noticesCursor: getNoticesCursor(device.userId),
-      ...(pushToken ? { pushToken } : {}),
-    });
+    if (!trackingModule || !device) return;
+    const groupId = trackingModule.listProvisionedEpochKeys()[0]?.groupId;
+    const accountSync = startAccountSync(trackingModule, device);
+    const upload = groupId
+      ? tryCatch(
+          trpcClient.groupTracking.uploadBatch.mutate({
+            groupId,
+            points: [],
+            placeAlertsCursor: getPlaceAlertsCursor(device.userId),
+            noticesCursor: getNoticesCursor(device.userId),
+          }),
+        )
+      : null;
+    await settleAccountSync(trackingModule, accountSync);
+    if (!upload) return;
+    const uploaded = await upload;
+    if (uploaded.error) throw uploaded.error;
     if (trackingPaused) return;
-    trackingModule.confirmPushToken(pushScope, pushToken, response.pushAvailable);
+    const response = uploaded.data;
     await applyPlaceUpdates({
       updates: {
         places: response.places,
@@ -1098,6 +1137,15 @@ const pollPlaceUpdates = () =>
       },
       userId: device.userId,
     });
+  });
+
+export const syncAccountNotices = () =>
+  inPlaceRound(async () => {
+    if (trackingPaused || getApiCompatibility()) return;
+    const trackingModule = await loadTrackingModule();
+    const device = await getRegisteredDeviceKey();
+    if (!trackingModule || !device) return;
+    await settleAccountSync(trackingModule, startAccountSync(trackingModule, device));
   });
 
 export type UploadReason = "upload" | "sharing" | "parked" | "push";
@@ -1211,9 +1259,8 @@ const revokeUnauthorizedTrackingAccess = (error: unknown, cancelFlush = true) =>
 export const forgetPushToken = async () => {
   const trackingModule = await loadTrackingModule();
   const device = await getRegisteredDeviceKey();
-  if (!trackingModule || !device) return null;
-  const groupId = trackingModule.listProvisionedEpochKeys()[0]?.groupId;
-  return trackingModule.forgetPushToken(getPushScope(device)) && groupId ? groupId : null;
+  if (!trackingModule || !device) return false;
+  return trackingModule.forgetPushToken(getPushScope(device));
 };
 
 export const prepareTrackingSignOut = async (): Promise<void> => {
@@ -1228,12 +1275,12 @@ export const prepareTrackingSignOut = async (): Promise<void> => {
   try {
     await Promise.race([
       (async () => {
-        const pushGroupId = (await tryCatch(forgetPushToken())).data;
+        const clearPushToken = (await tryCatch(forgetPushToken())).data;
         await revokeTrackingAccess({ keepDeviceRegistration: true });
-        if (pushGroupId) {
+        if (clearPushToken) {
           await tryCatch(
-            trpcClient.groupTracking.uploadBatch.mutate(
-              { groupId: pushGroupId, points: [], pushToken: null },
+            trpcClient.accountNotices.sync.mutate(
+              { cursor: null, pushToken: null },
               { signal: controller.signal },
             ),
           );

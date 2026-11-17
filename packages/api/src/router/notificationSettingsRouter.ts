@@ -18,6 +18,7 @@ export const notificationSettingsRouter = {
       db: ctx.db,
       securityAlerts: ctx.securityAlerts,
       userId: ctx.session.user.id,
+      deviceId: ctx.deviceId,
       changes: [input],
     }),
   })),

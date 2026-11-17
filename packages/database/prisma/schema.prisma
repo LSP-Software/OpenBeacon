@@ -87,19 +87,22 @@ enum AccountNoticeType {
   OTHER_SESSIONS_SIGNED_OUT
   DEVICE_REMOVED
   DELETION_SCHEDULED
+  ALERTS_TURNED_OFF
 }
 
 model AccountNotice {
-  id              String            @id @default(uuid(7))
+  id              String             @id @default(uuid(7))
   userId          String
-  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   type            AccountNoticeType
   excludeDeviceId String?
   deviceName      String?
   deviceModel     String?
   devicePlatform  String?
   deletionDate    DateTime?
-  createdAt       DateTime          @default(now())
+  turnedOffEmail  NotificationType[] @default([])
+  turnedOffPhone  NotificationType[] @default([])
+  createdAt       DateTime           @default(now())
 
   @@index([userId, createdAt, id])
   @@index([createdAt])

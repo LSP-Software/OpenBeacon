@@ -9,7 +9,6 @@ import {
 import { effectiveNotificationSetting } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
 import type { FcmClient } from "./fcm.ts";
-import { accountNoticeSettings } from "./securityAlerts.ts";
 
 export const noticeSettleMs = 15_000;
 export const noticeLookbackMs = 24 * 60 * 60_000;
@@ -35,14 +34,17 @@ export const createPushSender = ({
     setTimeout(callback, ms);
   },
   runInBackground = () => {},
+  now = () => Date.now(),
 }: {
   db: PrismaClient;
   fcm: Pick<FcmClient, "send"> | null;
   setTimer?: (callback: () => void, ms: number) => void;
   runInBackground?: (task: Promise<unknown>) => void;
+  now?: () => number;
 }) => {
   const settleMs = noticeSettleMs + 1_000;
   const batchMs = 1_000;
+  const wakeGapMs = 60_000;
   const logError = (message: string) =>
     console.error(`${new Date().toISOString()} [push] ${message}`);
   const background = (task: () => Promise<unknown>, failure: string) =>
@@ -167,11 +169,12 @@ export const createPushSender = ({
       select: { userId: true, type: true, excludeDeviceId: true },
     });
     if (!notice || signsOutOtherDevices.includes(notice.type)) return [];
-    const userIds = await usersWithPhoneOn([notice.userId], accountNoticeSettings[notice.type]);
-    return devicesOf(userIds, notice.excludeDeviceId);
+    return devicesOf([notice.userId], notice.excludeDeviceId);
   };
 
   const queued = new Set<string>();
+  const lastWokenAt = new Map<string, number>();
+  const followUps = new Set<string>();
 
   const sendTo = async (deviceId: string, token: string, retried = false): Promise<void> => {
     if (!fcm) return;
@@ -195,12 +198,40 @@ export const createPushSender = ({
     );
   };
 
+  const queue = (deviceIds: string[]) => {
+    const fresh = deviceIds.filter((deviceId) => !queued.has(deviceId));
+    if (fresh.length === 0) return;
+    const startBatch = queued.size === 0;
+    for (const deviceId of fresh) queued.add(deviceId);
+    if (startBatch) setTimer(() => background(flush, "could not send wakes"), batchMs);
+  };
+
   const flush = async () => {
-    const deviceIds = [...queued];
+    const at = now();
+    for (const [deviceId, wokenAt] of lastWokenAt) {
+      if (at - wokenAt >= wakeGapMs) lastWokenAt.delete(deviceId);
+    }
+    const due = [...queued].filter((deviceId) => {
+      const wokenAt = lastWokenAt.get(deviceId);
+      if (wokenAt === undefined) return true;
+      if (!followUps.has(deviceId)) {
+        followUps.add(deviceId);
+        setTimer(
+          () => {
+            followUps.delete(deviceId);
+            queue([deviceId]);
+          },
+          wokenAt + wakeGapMs - at,
+        );
+      }
+      return false;
+    });
     queued.clear();
+    if (due.length === 0) return;
+    for (const deviceId of due) lastWokenAt.set(deviceId, at);
     const tokens = await db.pushToken.findMany({
       where: {
-        deviceId: { in: deviceIds },
+        deviceId: { in: due },
         device: usableDevice(),
       },
       select: { deviceId: true, token: true },
@@ -217,14 +248,7 @@ export const createPushSender = ({
   const wakeAfterSettle = (pick: () => Promise<string[]>) => {
     if (!fcm) return;
     setTimer(
-      () =>
-        background(async () => {
-          const deviceIds = (await pick()).filter((deviceId) => !queued.has(deviceId));
-          if (deviceIds.length === 0) return;
-          const startBatch = queued.size === 0;
-          for (const deviceId of deviceIds) queued.add(deviceId);
-          if (startBatch) setTimer(() => background(flush, "could not send wakes"), batchMs);
-        }, "could not choose who to wake"),
+      () => background(async () => queue(await pick()), "could not choose who to wake"),
       settleMs,
     );
   };

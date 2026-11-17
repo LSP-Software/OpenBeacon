@@ -1,4 +1,4 @@
-import { alertsCursorSchema } from "@openbeacon/schemas";
+import { alertsCursorSchema, notificationTypes } from "@openbeacon/schemas";
 import type { RouterOutputs } from "./api.ts";
 import { baseUrl } from "./currentServer.ts";
 import { describeGroupEvent } from "./groupHistory.ts";
@@ -8,21 +8,28 @@ import { storage } from "./storage.ts";
 
 export type Notices = NonNullable<RouterOutputs["groupTracking"]["uploadBatch"]["notices"]>;
 
-type AccountNotice = Extract<Notices["notices"][number], { kind: "account" }>;
+type AccountNotices = RouterOutputs["accountNotices"]["sync"];
 
 const cursorKey = (userId: string) => `notices.cursor.${JSON.stringify([baseUrl, userId])}`;
 
-export const getNoticesCursor = (userId: string) => {
-  const parsed = alertsCursorSchema.safeParse(storage.getString(cursorKey(userId)));
+const accountCursorKey = (userId: string) =>
+  `notices.accountCursor.${JSON.stringify([baseUrl, userId])}`;
+
+const readCursor = (key: string) => {
+  const parsed = alertsCursorSchema.safeParse(storage.getString(key));
   return parsed.success ? parsed.data : null;
 };
 
-const accountLink = (screen: "devices" | "password" | "recovery" | "delete") => ({
+export const getNoticesCursor = (userId: string) => readCursor(cursorKey(userId));
+
+export const getAccountNoticesCursor = (userId: string) => readCursor(accountCursorKey(userId));
+
+const accountLink = (screen: "devices" | "password" | "recovery" | "delete" | "notifications") => ({
   href: `/account/${screen}` as const,
   url: `openbeacon:///account/${screen}`,
 });
 
-export const describeAccountNotice = (notice: AccountNotice) => {
+export const describeAccountNotice = (notice: AccountNotices["notices"][number]) => {
   switch (notice.type) {
     case "NEW_SIGN_IN":
       return {
@@ -71,7 +78,44 @@ export const describeAccountNotice = (notice: AccountNotice) => {
         body: "Sign in within 7 days to cancel it.",
         link: accountLink("delete"),
       };
+    case "ALERTS_TURNED_OFF": {
+      const turnedOff = notice.turnedOff
+        .map(({ type, channel }) => `${notificationTypes[type].label} (${channel})`)
+        .join(", ");
+      return {
+        title: "Security alerts turned off",
+        body:
+          [
+            turnedOff && `${turnedOff}.`,
+            notice.device?.name && `Turned off on ${notice.device.name}.`,
+          ]
+            .filter(Boolean)
+            .join(" ") || null,
+        link: accountLink("notifications"),
+      };
+    }
   }
+};
+
+export const showAccountNotices = async ({
+  notices,
+  userId,
+}: {
+  notices: Pick<AccountNotices, "cursor" | "notices">;
+  userId: string;
+}) => {
+  for (const notice of notices.notices) {
+    const { title, body, link } = describeAccountNotice(notice);
+    await showEventNotice({
+      title,
+      body,
+      groupName: null,
+      key: notice.id,
+      kind: "accountAlert",
+      link,
+    });
+  }
+  storage.set(accountCursorKey(userId), notices.cursor);
 };
 
 export const showNotices = async ({
@@ -85,18 +129,6 @@ export const showNotices = async ({
 }) => {
   const nicknamesFor = nicknamesByGroup(userId);
   for (const notice of notices.notices) {
-    if (notice.kind === "account") {
-      const { title, body, link } = describeAccountNotice(notice);
-      await showEventNotice({
-        title,
-        body,
-        groupName: null,
-        key: notice.id,
-        kind: "accountAlert",
-        link,
-      });
-      continue;
-    }
     const group = (await groups()).find(({ id }) => id === notice.groupId);
     if (!group) continue;
     const groupNicknames = await nicknamesFor(notice.groupId);

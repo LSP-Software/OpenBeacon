@@ -11,6 +11,7 @@ import {
   removeDeviceSchema,
   updateDeviceSchema,
 } from "./schemas/account/devices.ts";
+import { accountNoticesSyncSchema } from "./schemas/account/accountNotices.ts";
 import { changePasswordSchema } from "./schemas/account/changePassword.ts";
 import { emailAlertSettingsSchema, timezoneSchema } from "./schemas/account/emailAlerts.ts";
 import {
@@ -95,6 +96,7 @@ export {
 export type { Announcement } from "./schemas/announcement/announcement.ts";
 
 export {
+  accountNoticesSyncSchema,
   deviceIconSchema,
   deviceNameSchema,
   devicePlatformSchema,

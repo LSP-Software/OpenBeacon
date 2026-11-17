@@ -24,6 +24,7 @@ export const emailAlertsRouter = {
           db: ctx.db,
           securityAlerts: ctx.securityAlerts,
           userId: ctx.session.user.id,
+          deviceId: ctx.deviceId,
           changes: [
             { type: "NEW_SIGN_IN", channel: "email", enabled: input.alertNewSignIn },
             {
