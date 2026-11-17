@@ -510,6 +510,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("tracking with Po
       duplicates: [],
       expired: [expired.clientPointId],
       keyState: expect.any(String),
+      pushAvailable: false,
     });
     const otherGroupId = `${prefix}-other-group`;
     await prisma.group.create({

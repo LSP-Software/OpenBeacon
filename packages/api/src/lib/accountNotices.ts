@@ -1,32 +1,9 @@
-import {
-  type AccountNoticeType,
-  GroupEventType,
-  type NotificationType,
-  type PrismaClient,
-} from "@openbeacon/database";
+import { accountNoticeSettings, groupNoticeSettings } from "@openbeacon/auth/push.ts";
+import { type AccountNoticeType, GroupEventType, type PrismaClient } from "@openbeacon/database";
 import { readDatabaseTime } from "./databaseTime.ts";
 import { groupEventSelect, toGroupEventView } from "./groupHistory.ts";
 import { readNotificationSettings } from "./notificationSettings.ts";
 import { encodeAlertsCursor } from "./placeTransitions.ts";
-
-const accountNoticeSettings = {
-  NEW_SIGN_IN: "NEW_SIGN_IN",
-  PASSWORD_CHANGED: "PASSWORD_CHANGED",
-  PASSWORD_RESET: "PASSWORD_CHANGED",
-  RECOVERY_PHRASE_CHANGED: "RECOVERY_PHRASE_CHANGED",
-  RECOVERY_PHRASE_RESET: "RECOVERY_PHRASE_CHANGED",
-  OTHER_SESSIONS_SIGNED_OUT: "OTHER_SESSIONS_SIGNED_OUT",
-  DEVICE_REMOVED: "DEVICE_REMOVED",
-  DELETION_SCHEDULED: "DELETION_SCHEDULED",
-} as const satisfies Record<AccountNoticeType, NotificationType>;
-
-const groupNoticeSettings = {
-  MEMBER_JOINED: "MEMBER_JOINED",
-  MEMBER_LEFT: "MEMBER_LEFT",
-  MEMBER_REMOVED: "MEMBER_LEFT",
-  ACCOUNT_DELETED: "MEMBER_LEFT",
-  ROLE_CHANGED: "ROLE_CHANGED",
-} as const satisfies Partial<Record<GroupEventType, NotificationType>>;
 
 export const readNotices = async ({
   cursor,

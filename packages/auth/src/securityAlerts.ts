@@ -12,6 +12,7 @@ import {
   notificationTypeSchema,
 } from "@openbeacon/schemas";
 import { tryCatch } from "@openbeacon/shared";
+import type { PushSender } from "./push.ts";
 
 export const findAlertRecipient = async (
   db: Pick<Prisma.TransactionClient, "user">,
@@ -46,6 +47,7 @@ export const createSecurityAlerts = ({
   setTimer = (callback, ms) => {
     setTimeout(callback, ms);
   },
+  push = null,
 }: {
   db: Pick<PrismaClient, "user" | "accountNotice">;
   sendSecurityAlertEmail: ((email: Parameters<typeof sendAlert>[0]) => Promise<unknown>) | null;
@@ -53,6 +55,7 @@ export const createSecurityAlerts = ({
   runInBackground?: (task: Promise<unknown>) => void;
   alertsTurnedOff?: OpenBeaconCache["alertsTurnedOff"];
   setTimer?: (callback: () => void, ms: number) => void;
+  push?: Pick<PushSender, "accountNotice"> | null;
 }) => {
   const alertsTurnedOffDelayMs = 60_000;
   const logError = (message: string) =>
@@ -83,20 +86,23 @@ export const createSecurityAlerts = ({
       const device = "device" in alert ? alert.device : null;
       await Promise.all([
         noticeType && enabled?.phone
-          ? db.accountNotice.create({
-              data: {
-                userId: recipient.id,
-                type: noticeType,
-                excludeDeviceId,
-                deviceName:
-                  alert.type === "device-removed" || alert.type === "other-sessions-signed-out"
-                    ? (alert.device?.name ?? null)
-                    : null,
-                deviceModel: device?.model ?? null,
-                devicePlatform: device?.platform ?? null,
-                deletionDate: alert.type === "deletion-scheduled" ? alert.deletionDate : null,
-              },
-            })
+          ? db.accountNotice
+              .create({
+                data: {
+                  userId: recipient.id,
+                  type: noticeType,
+                  excludeDeviceId,
+                  deviceName:
+                    alert.type === "device-removed" || alert.type === "other-sessions-signed-out"
+                      ? (alert.device?.name ?? null)
+                      : null,
+                  deviceModel: device?.model ?? null,
+                  devicePlatform: device?.platform ?? null,
+                  deletionDate: alert.type === "deletion-scheduled" ? alert.deletionDate : null,
+                },
+                select: { id: true },
+              })
+              .then(({ id }) => push?.accountNotice(id))
           : null,
         sendSecurityAlertEmail && (enabled?.email ?? true)
           ? sendSecurityAlertEmail({

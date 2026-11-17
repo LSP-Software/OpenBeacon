@@ -2,6 +2,7 @@ import { redisHashSecretSchema } from "@openbeacon/cache";
 import { optionalEnvString } from "@openbeacon/schemas";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
+import { fcmEnvSchema } from "./fcm.ts";
 
 export const env = createEnv({
   server: {
@@ -10,6 +11,7 @@ export const env = createEnv({
     REDIS_HASH_SECRET: redisHashSecretSchema,
     GOOGLE_CLIENT_ID: optionalEnvString,
     GOOGLE_CLIENT_SECRET: optionalEnvString,
+    ...fcmEnvSchema,
   },
   runtimeEnv: process.env,
 });

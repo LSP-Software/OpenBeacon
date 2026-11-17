@@ -316,6 +316,7 @@ export const accountRouter = {
             imageUrlPrefix: `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}`,
             mode: "scheduled",
             securityAlerts: ctx.securityAlerts,
+            push: ctx.push,
           }),
         );
         if (deletion.error) {

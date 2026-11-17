@@ -204,7 +204,7 @@ export const groupInvitesRouter = {
     )
     .mutation(async ({ ctx, input }) => {
       const codeHash = sharedCodeHash(input.code);
-      await ctx.db.$transaction(async (tx) => {
+      const joinEvent = await ctx.db.$transaction(async (tx) => {
         await assertAccountCanJoinGroup(tx, ctx.session.user.id);
         const invite = await tx.groupSharedInvite.findUnique({ where: { codeHash } });
         if (!invite)
@@ -246,7 +246,7 @@ export const groupInvitesRouter = {
           groupId: invite.groupId,
           userId: ctx.session.user.id,
         });
-        await tx.groupEvent.create({
+        return tx.groupEvent.create({
           data: {
             groupId: invite.groupId,
             type: GroupEventType.MEMBER_JOINED,
@@ -254,8 +254,10 @@ export const groupInvitesRouter = {
             role: GroupRole.MEMBER,
             createdAt: joined.createdAt,
           },
+          select: { id: true },
         });
       });
+      ctx.push?.groupEvents([joinEvent.id]);
       return { message: "Invite accepted." };
     }),
   preview: protectedProcedure
@@ -402,7 +404,7 @@ export const groupInvitesRouter = {
           groupId: invite.groupId,
           userId: ctx.session.user.id,
         });
-        await tx.groupEvent.create({
+        const joinEvent = await tx.groupEvent.create({
           data: {
             groupId: invite.groupId,
             type: GroupEventType.MEMBER_JOINED,
@@ -410,10 +412,12 @@ export const groupInvitesRouter = {
             role: createdMember.role,
             createdAt: createdMember.createdAt,
           },
+          select: { id: true },
         });
 
-        return createdMember;
+        return { ...createdMember, joinEventId: joinEvent.id };
       });
+      ctx.push?.groupEvents([member.joinEventId]);
 
       return {
         message: "Invite accepted.",

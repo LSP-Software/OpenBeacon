@@ -446,8 +446,16 @@ model UserDevice {
   challenges             DeviceChallenge[]
   placeTransitions       PlaceTransition[]
   placeSharing           PlaceSharing[]
+  pushToken              PushToken?
 
   @@index([userId])
+}
+
+model PushToken {
+  deviceId  String     @id
+  device    UserDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  token     String     @unique
+  updatedAt DateTime   @updatedAt
 }
 
 model DeviceLink {

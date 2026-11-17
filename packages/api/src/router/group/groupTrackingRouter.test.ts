@@ -516,6 +516,7 @@ describe("groupTrackingRouter", () => {
       discarded: [],
       duplicates: [],
       expired: [],
+      pushAvailable: false,
       keyState: expect.any(String),
     });
     expect(insertPointsMock).toHaveBeenCalled();
@@ -543,6 +544,7 @@ describe("groupTrackingRouter", () => {
       discarded: [],
       duplicates: [],
       expired: [],
+      pushAvailable: false,
     });
     expect(result).not.toHaveProperty("keyState");
     expect(insertPointsMock).toHaveBeenCalled();
@@ -570,6 +572,7 @@ describe("groupTrackingRouter", () => {
       discarded: [],
       duplicates: [],
       expired: [],
+      pushAvailable: false,
     });
   }, 10_000);
 

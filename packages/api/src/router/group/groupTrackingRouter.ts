@@ -136,6 +136,18 @@ export const groupTrackingRouter = {
                   },
                 })
               : { accepted: [], discarded: [], duplicates: [], expired: [] };
+          if (input.pushToken === null) {
+            await tx.pushToken.deleteMany({ where: { deviceId: ctx.deviceId } });
+          } else if (input.pushToken !== undefined && ctx.push?.enabled) {
+            await tx.pushToken.deleteMany({
+              where: { token: input.pushToken, deviceId: { not: ctx.deviceId } },
+            });
+            await tx.pushToken.upsert({
+              where: { deviceId: ctx.deviceId },
+              create: { deviceId: ctx.deviceId, token: input.pushToken },
+              update: { token: input.pushToken },
+            });
+          }
           if (placeTransitions.length === 0) return points;
           return {
             ...points,
@@ -164,6 +176,12 @@ export const groupTrackingRouter = {
         throw transaction.error;
       }
       const result = transaction.data;
+      if ("placeTransitions" in result) {
+        ctx.push?.placeTransitions({
+          deviceId: ctx.deviceId,
+          clientIds: result.placeTransitions.accepted,
+        });
+      }
       const [placeUpdates, imageKeysNeedCatchUp, notices] = await Promise.all([
         input.placeAlertsCursor === undefined
           ? null
@@ -188,6 +206,7 @@ export const groupTrackingRouter = {
             ),
       ]);
       const catchUpFields = {
+        pushAvailable: ctx.push?.enabled ?? false,
         ...(notices && !notices.error ? { notices: notices.data } : {}),
         ...(placeUpdates && !placeUpdates.error
           ? { places: placeUpdates.data[0], placeAlerts: placeUpdates.data[1] }
