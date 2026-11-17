@@ -229,6 +229,32 @@ class OfflineTrackingQueueTest {
   }
 
   @Test
+  fun `removing an acknowledged stay or live copy also removes older copies still uploading`() {
+    val owner = "server-a/user-a"
+    queue.insertAll(
+      listOf(
+        row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "first"),
+        row("live-1", owner).copy(role = CiphertextQueueRow.ROLE_LIVE),
+        row("other-stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY),
+      ),
+    )
+    val uploading = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 2, owner).map { it.id }
+    queue.markInFlight(uploading, System.currentTimeMillis())
+    queue.insertAll(
+      listOf(
+        row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY, ciphertext = "second"),
+        row("live-2", owner).copy(role = CiphertextQueueRow.ROLE_LIVE),
+      ),
+    )
+    val newer = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10, owner).filter { it.clientPointId != "other-stay" }
+
+    queue.deleteByIds(newer.map { it.id })
+
+    assertTrue(queue.listByStatus(CiphertextQueueRow.STATUS_IN_FLIGHT, 10, owner).isEmpty())
+    assertEquals(listOf("other-stay"), pendingIds(owner))
+  }
+
+  @Test
   fun `lists pending points other than stay updates so a lone stay update waits for the next upload`() {
     val owner = "server-a/user-a"
     queue.insertAll(listOf(row("stay", owner).copy(role = CiphertextQueueRow.ROLE_STAY)))

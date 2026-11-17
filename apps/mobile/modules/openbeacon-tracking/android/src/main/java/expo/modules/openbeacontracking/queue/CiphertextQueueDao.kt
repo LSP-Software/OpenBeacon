@@ -90,6 +90,23 @@ interface CiphertextQueueDao {
   @Query("DELETE FROM ciphertext_queue WHERE id IN (:ids)")
   fun deleteByIds(ids: List<Long>)
 
+  @Query(
+    """
+    DELETE FROM ciphertext_queue
+    WHERE id NOT IN (:ids) AND role IN ('STAY', 'LIVE') AND EXISTS (
+      SELECT 1 FROM ciphertext_queue AS newer
+      WHERE newer.id IN (:ids) AND newer.id > ciphertext_queue.id AND newer.role = ciphertext_queue.role
+        AND newer.owner IS ciphertext_queue.owner
+        AND (
+          (newer.role = 'STAY' AND newer.clientPointId = ciphertext_queue.clientPointId)
+          OR (newer.role = 'LIVE' AND newer.groupId = ciphertext_queue.groupId AND newer.epochId = ciphertext_queue.epochId
+            AND newer.senderDeviceId = ciphertext_queue.senderDeviceId AND newer.kind = ciphertext_queue.kind)
+        )
+    )
+    """,
+  )
+  fun deleteOlderCopies(ids: List<Long>)
+
   @Query("DELETE FROM ciphertext_queue WHERE owner = :owner")
   fun deleteByOwner(owner: String)
 

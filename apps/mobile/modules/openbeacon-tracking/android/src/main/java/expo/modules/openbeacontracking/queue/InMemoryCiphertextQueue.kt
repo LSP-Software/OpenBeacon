@@ -60,7 +60,20 @@ class InMemoryCiphertextQueue : CiphertextQueue {
   @Synchronized
   override fun deleteByIds(ids: List<Long>) {
     val idSet = ids.toSet()
-    rows.removeAll { it.id in idSet }
+    val deleted = rows.filter { it.id in idSet }
+    rows.removeAll { row ->
+      row.id in idSet ||
+        deleted.any { newer ->
+          newer.id > row.id && newer.role == row.role && newer.owner == row.owner &&
+            when (row.role) {
+              CiphertextQueueRow.ROLE_STAY -> newer.clientPointId == row.clientPointId
+              CiphertextQueueRow.ROLE_LIVE ->
+                newer.groupId == row.groupId && newer.epochId == row.epochId &&
+                  newer.senderDeviceId == row.senderDeviceId && newer.kind == row.kind
+              else -> false
+            }
+        }
+    }
   }
 
   @Synchronized

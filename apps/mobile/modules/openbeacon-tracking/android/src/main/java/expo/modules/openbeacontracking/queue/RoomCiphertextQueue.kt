@@ -86,7 +86,10 @@ class RoomCiphertextQueue(
     if (ids.isEmpty()) {
       return
     }
-    dao.deleteByIds(ids)
+    database.runInTransaction {
+      dao.deleteOlderCopies(ids)
+      dao.deleteByIds(ids)
+    }
   }
 
   override fun deleteByOwner(owner: String) = dao.deleteByOwner(owner)
