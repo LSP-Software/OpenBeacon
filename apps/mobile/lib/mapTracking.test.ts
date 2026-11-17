@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { LiveMapEntry } from "./liveMapReducer.ts";
-import { createMapTrackingSession, REQUEST_TIMEOUT_MS } from "./mapTracking.ts";
+import { createMapTrackingSession, isCursorAfter, REQUEST_TIMEOUT_MS } from "./mapTracking.ts";
 import type { MapTrackingDeps, MapTrackingEncryptedPoint } from "./mapTrackingTypes.ts";
 
 const point = ({
@@ -28,6 +28,8 @@ const point = ({
 });
 
 const idOf = (row: MapTrackingEncryptedPoint) => row.ciphertext.slice("cipher-".length);
+
+const tenSecondsBefore = (date: Date) => new Date(date.getTime() - 10_000);
 
 const liveEntry = ({
   deviceId,
@@ -214,7 +216,7 @@ describe("createMapTrackingSession", () => {
       {
         cursor: {
           senderDeviceId: "device-user-2",
-          updatedAt: new Date("2026-07-17T12:00:01.000Z"),
+          updatedAt: new Date("2026-07-17T11:59:51.000Z"),
         },
         groupId: "group-1",
         limit: 100,
@@ -353,7 +355,7 @@ describe("createMapTrackingSession", () => {
     expect(session.getLivePositions()[0]?.timestamp).toBe("2026-07-17T12:05:00.000Z");
 
     await session.tick();
-    expect(pollCalls[1]?.cursor?.updatedAt).toEqual(latestRow.updatedAt);
+    expect(pollCalls[1]?.cursor?.updatedAt).toEqual(tenSecondsBefore(latestRow.updatedAt));
   });
 
   test("undecryptable points skip marker updates but still advance the cursor", async () => {
@@ -408,7 +410,7 @@ describe("createMapTrackingSession", () => {
     ).toEqual(["user-1", "user-3"]);
     expect(pollCalls[1]?.cursor).toEqual({
       senderDeviceId: "device-user-2",
-      updatedAt: new Date("2026-07-17T12:00:01.000Z"),
+      updatedAt: new Date("2026-07-17T11:59:51.000Z"),
     });
   });
 
@@ -698,7 +700,7 @@ describe("createMapTrackingSession", () => {
     await session.tick();
     await session.tick();
 
-    expect(pollCalls[1]?.cursor?.updatedAt).toEqual(fullPage[99]?.updatedAt);
+    expect(pollCalls[1]?.cursor?.updatedAt).toEqual(new Date(Date.UTC(2026, 6, 17, 12, 1, 30)));
   });
 
   test("stops catch-up when the session becomes inactive", async () => {
@@ -1889,6 +1891,156 @@ describe("createMapTrackingSession removed devices", () => {
   });
 });
 
+describe("createMapTrackingSession poll overlap", () => {
+  const latestPointTable = () => {
+    const rows = new Map<string, MapTrackingEncryptedPoint>();
+    const ordered = () =>
+      [...rows.values()].sort((a, b) => (isCursorAfter(a, b) ? 1 : isCursorAfter(b, a) ? -1 : 0));
+    const getLatest: MapTrackingDeps["getLatest"] = async () => ({ points: ordered() });
+    const poll: MapTrackingDeps["poll"] = async ({ cursor, limit }) => {
+      const page = ordered()
+        .filter((row) => !cursor || isCursorAfter(row, cursor))
+        .slice(0, limit);
+      const last = page.at(-1);
+      return {
+        points: page,
+        cursor: last ? { senderDeviceId: last.senderDeviceId, updatedAt: last.updatedAt } : null,
+        hasMore: page.length === limit,
+      };
+    };
+    return {
+      commit: (row: MapTrackingEncryptedPoint) => rows.set(row.senderDeviceId, row),
+      getLatest,
+      poll,
+    };
+  };
+
+  test("picks up an upload that commits after a later one with an earlier updatedAt", async () => {
+    const table = latestPointTable();
+    table.commit(
+      point({ createdAt: new Date("2026-07-17T12:00:00Z"), id: "a-0", senderUserId: "a" }),
+    );
+    table.commit(
+      point({ createdAt: new Date("2026-07-17T12:00:00Z"), id: "b-0", senderUserId: "b" }),
+    );
+    const { pollCalls, session } = createSession({
+      getLatest: table.getLatest,
+      poll: table.poll,
+    });
+    const timestampOf = (userId: string) =>
+      session.getLivePositions().find((position) => position.userId === userId)?.timestamp;
+
+    session.setActive(true);
+    await session.tick();
+    table.commit(
+      point({ createdAt: new Date("2026-07-17T12:00:03Z"), id: "b-1", senderUserId: "b" }),
+    );
+    await session.tick();
+    expect(timestampOf("b")).toBe("2026-07-17T12:00:03.000Z");
+
+    table.commit(
+      point({ createdAt: new Date("2026-07-17T12:00:01Z"), id: "a-1", senderUserId: "a" }),
+    );
+    await session.tick();
+    await session.tick();
+
+    expect(timestampOf("a")).toBe("2026-07-17T12:00:01.000Z");
+    expect(pollCalls.map(({ cursor }) => cursor)).toEqual([
+      { senderDeviceId: "device-b", updatedAt: new Date("2026-07-17T11:59:50Z") },
+      { senderDeviceId: "device-b", updatedAt: new Date("2026-07-17T11:59:53Z") },
+      { senderDeviceId: "device-b", updatedAt: new Date("2026-07-17T11:59:53Z") },
+    ]);
+  });
+
+  test("makes one request per round when more rows than the limit fall in the overlap", async () => {
+    const table = latestPointTable();
+    const startedAt = Date.parse("2026-07-17T12:00:00Z");
+    for (let index = 0; index < 150; index += 1) {
+      table.commit(
+        point({
+          createdAt: new Date(startedAt),
+          id: `row-${index}`,
+          senderUserId: `user-${String(index).padStart(3, "0")}`,
+        }),
+      );
+    }
+    const { getLatestCalls, pollCalls, session } = createSession({
+      getLatest: table.getLatest,
+      poll: table.poll,
+    });
+
+    session.setActive(true);
+    await session.tick();
+    await session.tick();
+    expect(pollCalls).toHaveLength(1);
+    expect(getLatestCalls).toHaveLength(2);
+
+    table.commit(
+      point({ createdAt: new Date(startedAt + 20_000), id: "moved", senderUserId: "user-000" }),
+    );
+    await session.tick();
+    await session.tick();
+
+    expect(pollCalls.map(({ cursor }) => cursor?.updatedAt)).toEqual([
+      new Date(startedAt - 10_000),
+      new Date(startedAt - 10_000),
+      new Date(startedAt + 10_000),
+    ]);
+    expect(getLatestCalls).toHaveLength(3);
+    expect(session.getLivePositions()).toHaveLength(150);
+    expect(
+      session.getLivePositions().find((position) => position.userId === "user-000")?.timestamp,
+    ).toBe("2026-07-17T12:00:20.000Z");
+  });
+
+  test("repeated rows leave pins, unreadable senders and listeners untouched", async () => {
+    const table = latestPointTable();
+    table.commit(
+      point({ createdAt: new Date("2026-07-17T12:00:00Z"), id: "ok", senderUserId: "ok" }),
+    );
+    table.commit(
+      point({ createdAt: new Date("2026-07-17T12:00:01Z"), id: "bad", senderUserId: "bad" }),
+    );
+    const decrypted: string[] = [];
+    const { session } = createSession({
+      decryptPoint: async ({ groupId, point: row }) => {
+        decrypted.push(idOf(row));
+        if (idOf(row) === "bad") return { status: "undecryptable" };
+        return {
+          status: "ok",
+          entry: liveEntry({
+            serverUpdatedAt: row.updatedAt,
+            sourceGroupId: groupId,
+            timestamp: row.updatedAt.toISOString(),
+            userId: row.senderUserId,
+          }),
+        };
+      },
+      getLatest: table.getLatest,
+      poll: table.poll,
+    });
+
+    session.setActive(true);
+    await session.tick();
+    const status = session.getStatus();
+    const positions = session.getLivePositions();
+    let notifications = 0;
+    session.subscribe(() => {
+      notifications += 1;
+    });
+    await session.tick();
+    await session.tick();
+
+    expect(decrypted).toEqual(["ok", "bad", "ok", "bad", "ok", "bad"]);
+    expect(notifications).toBe(0);
+    expect(session.getStatus()).toBe(status);
+    expect(status.undecryptable).toEqual([
+      { deviceId: "device-bad", groupId: "group-1", userId: "bad" },
+    ]);
+    expect(session.getLivePositions()).toEqual(positions);
+  });
+});
+
 describe("paused map devices", () => {
   test("removes cached tablet pins on an empty poll and rejects older sharing snapshots", async () => {
     const old = point({
@@ -2043,7 +2195,10 @@ describe("paused map devices", () => {
     await session.tick();
     await session.tick();
     await session.tick();
-    expect(pollCalls.at(-1)?.cursor).toEqual(cursor);
+    expect(pollCalls.at(-1)?.cursor).toEqual({
+      ...cursor,
+      updatedAt: tenSecondsBefore(cursor.updatedAt),
+    });
     session.destroy();
   });
 });

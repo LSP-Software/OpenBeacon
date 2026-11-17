@@ -191,6 +191,53 @@ class HistoryFilterTest {
     assertEquals(2_880.0, allowance.take(start + 200_000_000L, settings)!!.tokens + 1.0)
   }
 
+  @Test
+  fun handingOverMidRouteKeepsTheRouteTheFilterWouldHaveKept() {
+    val fixes = track(0 until 60) { step -> Triple(step * 14.0, 0.0, 1.4) }
+    val before = HistoryFilter()
+    val kept = run(before, fixes.take(25))
+    val (after, closing) = before.handOver { true }
+    assertTrue(closing.isEmpty())
+    assertEquals(run(HistoryFilter(), fixes), kept + run(after, fixes.drop(25)))
+  }
+
+  @Test
+  fun handingOverMidStayClosesTheOldStayAndStartsANewOneAtTheNextFix() {
+    val still = track(0 until 80) { step -> Triple(jitter(step), jitter(step + 5), 0.0) }
+    val walkOut = (1..6).map { step -> fix(still.last().timestampMillis + step * 10_000L, step * 25.0, 0.0, 2.5) }
+    val before = HistoryFilter()
+    val arrival = run(before, still.take(40)).single { it.stayUntil != null }
+    val (after, closing) = before.handOver { true }
+    assertEquals(listOf(arrival.fix.timestampMillis to still[39].timestampMillis), closing.map { it.fix.timestampMillis to it.stayUntil })
+    val records = run(after, still.drop(40) + walkOut)
+    val stays = records.filter { it.stayUntil != null }
+    assertEquals(still[40].timestampMillis to still[40].timestampMillis, stays.first().fix.timestampMillis to stays.first().stayUntil)
+    assertEquals(setOf(still[40].timestampMillis), stays.map { it.fix.timestampMillis }.toSet())
+    assertEquals(walkOut[1].timestampMillis, stays.last().stayUntil)
+    assertTrue(records.none { it.fix.timestampMillis < still[40].timestampMillis })
+  }
+
+  @Test
+  fun aStayAlreadySentUpToItsLastFixHandsOverWithoutAnotherRecord() {
+    val still = track(0 until 19) { step -> Triple(jitter(step), jitter(step + 5), 0.0) }
+    val before = HistoryFilter()
+    assertEquals(still.last().timestampMillis, run(before, still).last().stayUntil)
+    assertTrue(before.handOver { true }.second.isEmpty())
+  }
+
+  @Test
+  fun leavingStraightAfterAHandOverSendsNoStayInTheNewStream() {
+    val still = track(0 until 40) { step -> Triple(jitter(step), jitter(step + 5), 0.0) }
+    val walkOut = (1..6).map { step -> fix(still.last().timestampMillis + step * 10_000L, 100.0 + step * 25.0, 0.0, 2.5) }
+    val before = HistoryFilter()
+    run(before, still)
+    val (after, closing) = before.handOver { true }
+    assertEquals(still.last().timestampMillis, closing.single().stayUntil)
+    val records = run(after, walkOut)
+    assertTrue(records.none { it.stayUntil != null })
+    assertEquals(walkOut[0], records.first().fix)
+  }
+
   private fun run(
     filter: HistoryFilter,
     fixes: List<HistoryFix>,

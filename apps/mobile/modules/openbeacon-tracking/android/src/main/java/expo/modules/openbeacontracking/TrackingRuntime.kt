@@ -15,6 +15,7 @@ import expo.modules.openbeacontracking.capture.HistoryAllowance
 import expo.modules.openbeacontracking.capture.BootRestartPolicy
 import expo.modules.openbeacontracking.capture.SharingResumeWorker
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
+import expo.modules.openbeacontracking.keys.CachedEpochKeyStore
 import expo.modules.openbeacontracking.keys.EpochKeyStore
 import expo.modules.openbeacontracking.keys.SecureEpochKeyStore
 import expo.modules.openbeacontracking.places.PlaceDetection
@@ -46,7 +47,7 @@ object TrackingRuntime {
 
     return synchronized(this) {
       epochKeyStore
-        ?: SecureEpochKeyStore(context.applicationContext).also { epochKeyStore = it }
+        ?: CachedEpochKeyStore(SecureEpochKeyStore(context.applicationContext)).also { epochKeyStore = it }
     }
   }
 

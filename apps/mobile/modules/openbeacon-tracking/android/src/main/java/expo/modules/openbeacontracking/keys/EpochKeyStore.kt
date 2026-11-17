@@ -1,6 +1,8 @@
 package expo.modules.openbeacontracking.keys
 
 interface EpochKeyStore {
+  val revocations: Long
+
   fun replaceAll(keys: List<ProvisionedEpochKey>)
 
   fun replacePreserving(keys: List<ProvisionedEpochKey>, groupIds: List<String>) = synchronized(this) {

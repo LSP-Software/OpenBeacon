@@ -66,7 +66,7 @@ class HistoryFilter(
   private val settings: HistoryFilterSettings = HistoryFilterSettings(),
 ) {
   private data class Stay(
-    val arrival: HistoryFix,
+    val arrival: HistoryFix?,
     val latest: HistoryFix,
     val latitudeSum: Double,
     val longitudeSum: Double,
@@ -77,15 +77,17 @@ class HistoryFilter(
     val longitude get() = longitudeSum / count
 
     fun record() =
-      HistoryRecord(
-        fix = arrival.copy(
-          latitude = latitude,
-          longitude = longitude,
-          batteryLevel = latest.batteryLevel,
-          batteryCharging = latest.batteryCharging,
-        ),
-        stayUntil = latest.timestampMillis,
-      )
+      arrival?.let {
+        HistoryRecord(
+          fix = it.copy(
+            latitude = latitude,
+            longitude = longitude,
+            batteryLevel = latest.batteryLevel,
+            batteryCharging = latest.batteryCharging,
+          ),
+          stayUntil = latest.timestampMillis,
+        )
+      }
   }
 
   private var lastTimestamp = Long.MIN_VALUE
@@ -115,16 +117,18 @@ class HistoryFilter(
     val gap = fix.timestampMillis - current.latest.timestampMillis > settings.stayGapMs
     if (!gap && distance - (fix.accuracyMeters ?: 0.0) <= settings.stayRadiusMeters) {
       leaving = null
+      val arrival = current.arrival ?: fix
       val next = current.copy(
+        arrival = arrival,
         latest = fix,
         latitudeSum = current.latitudeSum + fix.latitude,
         longitudeSum = current.longitudeSum + fix.longitude,
         count = current.count + 1,
       )
-      val due = fix.timestampMillis - (next.sentUntil ?: next.arrival.timestampMillis) >= settings.stayUpdateMs
+      val due = current.arrival == null || fix.timestampMillis - (next.sentUntil ?: arrival.timestampMillis) >= settings.stayUpdateMs
       if (due && takeAllowance()) {
         stay = next.copy(sentUntil = fix.timestampMillis)
-        return listOf(next.record())
+        return listOfNotNull(next.record())
       }
       stay = next
       return emptyList()
@@ -134,7 +138,7 @@ class HistoryFilter(
       leaving = fix
       return emptyList()
     }
-    val records = if (current.sentUntil != current.latest.timestampMillis && takeAllowance()) listOf(current.record()) else emptyList()
+    val records = close(current, takeAllowance)
     stay = null
     leaving = null
     lastKept = if (gap) null else current.latest.copy(latitude = current.latitude, longitude = current.longitude)
@@ -172,7 +176,24 @@ class HistoryFilter(
       return records
     }
     stay = arrived.copy(sentUntil = fix.timestampMillis)
-    return records + arrived.record()
+    return records + listOfNotNull(arrived.record())
+  }
+
+  fun handOver(takeAllowance: () -> Boolean): Pair<HistoryFilter, List<HistoryRecord>> {
+    val current = stay
+    val next = HistoryFilter(settings)
+    next.lastTimestamp = lastTimestamp
+    next.lastKept = lastKept
+    next.stay = current?.copy(arrival = null, sentUntil = null)
+    return next to if (current == null) emptyList() else close(current, takeAllowance)
+  }
+
+  private fun close(
+    current: Stay,
+    takeAllowance: () -> Boolean,
+  ): List<HistoryRecord> {
+    val record = current.record() ?: return emptyList()
+    return if (current.sentUntil != current.latest.timestampMillis && takeAllowance()) listOf(record) else emptyList()
   }
 
   private fun keepRoute(

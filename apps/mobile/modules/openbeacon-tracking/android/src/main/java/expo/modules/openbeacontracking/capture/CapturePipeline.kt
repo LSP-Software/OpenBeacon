@@ -3,6 +3,7 @@ package expo.modules.openbeacontracking.capture
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.crypto.TrackingPointCodec
 import expo.modules.openbeacontracking.keys.EpochKeyStore
+import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import expo.modules.openbeacontracking.queue.CiphertextQueue
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import java.security.SecureRandom
@@ -25,9 +26,20 @@ class CapturePipeline(
   private val loadAllowance: (List<String>) -> HistoryAllowance? = { null },
   private val saveAllowance: (List<String>, HistoryAllowance) -> Unit = { _, _ -> },
 ) {
-  private val lastFixByKey = mutableMapOf<List<String>, Long>()
-  private val filters = mutableMapOf<List<String>, HistoryFilter>()
+  private data class Stream(
+    val owner: String,
+    val groupId: String,
+    val epochId: String,
+    val senderDeviceId: String,
+    val kind: String,
+    val revisionPrefix: String,
+  )
+
+  private val lastFixByKey = mutableMapOf<Stream, Long>()
+  private val filters = mutableMapOf<Stream, HistoryFilter>()
   private val allowances = mutableMapOf<List<String>, HistoryAllowance>()
+  private var previousStreams = mapOf<Stream, ProvisionedEpochKey>()
+  private var previousRevocations = 0L
 
   fun onFix(
     latitude: Double,
@@ -46,8 +58,9 @@ class CapturePipeline(
       if (!canQueue(captureGeneration)) return 0
       queueOwner()
     } ?: return 0
-    val keys = epochKeyStore.list()
+    val (revocations, keys) = synchronized(epochKeyStore) { epochKeyStore.revocations to epochKeyStore.list() }
     if (keys.isEmpty()) {
+      synchronized(captureLock) { previousStreams = emptyMap() }
       return 0
     }
     if (!latitude.isFinite() || !longitude.isFinite()) return 0
@@ -58,10 +71,19 @@ class CapturePipeline(
     val (sharing, planned) = synchronized(captureLock) {
       val sharing = sharingState()
       if (!sharing.canCapture(timestampMillis, queuedAt)) return 0
-      val streams = keys.associateBy { key -> listOf(owner, key.groupId, key.epochId, key.senderDeviceId, key.kind, sharing.revisionPrefix) }
+      val streams = keys.associateBy { key -> Stream(owner, key.groupId, key.epochId, key.senderDeviceId, key.kind, sharing.revisionPrefix) }
+      val closing = if (revocations != previousRevocations) emptyList() else previousStreams.filterKeys { it !in streams }.flatMap { (stream, key) ->
+        val filter = filters[stream] ?: return@flatMap emptyList()
+        val next = streams.keys.firstOrNull { it !in filters && it.copy(epochId = stream.epochId) == stream } ?: return@flatMap emptyList()
+        val (carried, records) = filter.handOver { takeAllowance(listOf(owner, stream.groupId), queuedAt) }
+        filters[next] = carried
+        records.map { record -> Triple(key, record, CiphertextQueueRow.ROLE_STAY) }
+      }
+      previousStreams = streams
+      previousRevocations = revocations
       filters.keys.retainAll(streams.keys)
       lastFixByKey.keys.retainAll(streams.keys)
-      sharing to streams.flatMap { (stream, key) ->
+      sharing to closing + streams.flatMap { (stream, key) ->
         if (fixId != null && lastFixByKey[stream] == fixId) return@flatMap emptyList()
         if (fixId != null) lastFixByKey[stream] = fixId
         val records = filters.getOrPut(stream) { HistoryFilter(historySettings) }.onFix(fix) { takeAllowance(listOf(owner, key.groupId), queuedAt) }

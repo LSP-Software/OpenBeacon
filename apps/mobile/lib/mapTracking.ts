@@ -22,10 +22,11 @@ const STEADY_INTERVAL_MS = 5_000;
 const MAX_BACKOFF_MS = 60_000;
 const RECONCILE_INTERVAL_MS = 5 * 60_000;
 const POLL_LIMIT = 100;
+const POLL_OVERLAP_MS = 10_000;
 export const REQUEST_TIMEOUT_MS = 15_000;
 const DUE_WINDOW_MS = 1_000;
 
-const maxCursor = (points: readonly MapTrackingEncryptedPoint[]): MapTrackingCursor | null => {
+const maxCursor = (points: readonly MapTrackingCursor[]): MapTrackingCursor | null => {
   let cursor: MapTrackingCursor | null = null;
 
   for (const point of points) {
@@ -201,17 +202,6 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
   };
 
-  const getLiveMap = () => {
-    let live = new Map<string, LiveMapEntry>();
-    for (const groupEntries of positionsByGroup.values()) {
-      live = reduceLivePositions(live, [...groupEntries.values()]);
-    }
-    for (const [deviceId, entry] of live) {
-      if (!canShowSharedLocation(entry, status.sharing)) live.delete(deviceId);
-    }
-    return live;
-  };
-
   const clearSchedule = () => {
     scheduled?.cancel();
     scheduled = null;
@@ -361,13 +351,6 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         undecryptableByGroup.delete(groupId);
       }
       refreshStatus();
-      if (entries.length === 0) {
-        notify();
-      }
-    }
-
-    if (entries.length === 0 || !isCurrent(groupId, runId)) {
-      return;
     }
 
     const groupEntries = positionsByGroup.get(groupId) ?? new Map<string, LiveMapEntry>();
@@ -380,8 +363,9 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
         );
       })
       .map(({ entry }) => entry);
-    positionsByGroup.set(groupId, reduceLivePositions(groupEntries, currentEntries));
-    notify();
+    const nextEntries = reduceLivePositions(groupEntries, currentEntries);
+    if (nextEntries !== groupEntries) positionsByGroup.set(groupId, nextEntries);
+    if (undecryptableChanged || nextEntries !== groupEntries) notify();
   };
 
   const snapshotGroup = (groupId: string) => ({
@@ -465,7 +449,7 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       return;
     }
 
-    state.cursor = maxCursor(points);
+    state.cursor = maxCursor(state.cursor ? [state.cursor, ...points] : points);
     state.mode = "live";
   };
 
@@ -475,7 +459,10 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       return;
     }
 
-    const cursor = state.cursor;
+    const cursor = {
+      senderDeviceId: state.cursor.senderDeviceId,
+      updatedAt: new Date(state.cursor.updatedAt.getTime() - POLL_OVERLAP_MS),
+    };
     const {
       points,
       sharing,
@@ -492,24 +479,18 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
     }
 
     const nextCursor = responseCursor ?? maxCursor(points);
-    if (!nextCursor || !isCursorAfter(nextCursor, cursor)) {
+    if (!nextCursor) {
       return;
     }
 
     if (hasMore ?? points.length === POLL_LIMIT) {
       await coldTick(groupId, runId);
-      if (isCurrent(groupId, runId) && !isCursorAfter(state.cursor, nextCursor)) {
-        state.cursor = nextCursor;
-      }
-      return;
+    } else {
+      await mergeDecrypted({ groupId, points, runId });
     }
-
-    await mergeDecrypted({ groupId, points, runId });
-    if (!isCurrent(groupId, runId)) {
-      return;
+    if (isCurrent(groupId, runId)) {
+      state.cursor = maxCursor(state.cursor ? [state.cursor, nextCursor] : [nextCursor]);
     }
-
-    state.cursor = nextCursor;
   };
 
   const tickGroup = async (groupId: string, tickStartedAt: number) => {
@@ -703,7 +684,15 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       activeDeviceIds: ReadonlySet<string>;
       groupId: string;
     }) => dropRemovedDevices({ activeDeviceIds, groupId }),
-    getLivePositions: () => [...getLiveMap().values()].map(toLiveMapPosition),
+    getLivePositions: () => {
+      let live: ReadonlyMap<string, LiveMapEntry> = new Map();
+      for (const groupEntries of positionsByGroup.values()) {
+        live = reduceLivePositions(live, [...groupEntries.values()]);
+      }
+      return [...live.values()]
+        .filter((entry) => canShowSharedLocation(entry, status.sharing))
+        .map(toLiveMapPosition);
+    },
     getStatus: () => status,
     setActive: (nextActive: boolean) => {
       if (active === nextActive) {

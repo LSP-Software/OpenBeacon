@@ -199,6 +199,24 @@ describe("reduceLivePositions", () => {
     expect(next.get("tablet")).toEqual(tablet);
     expect(again).toEqual(next);
   });
+
+  test("returns the same map and keeps the stored entry when a point is repeated", () => {
+    const stored = entry({
+      deviceId: "phone",
+      latitude: 51.5,
+      longitude: -0.1,
+      serverUpdatedAt: new Date("2026-07-17T12:05:00.000Z"),
+      sourceGroupId: "group-a",
+      timestamp: "2026-07-17T12:05:00.000Z",
+      userId: "user-1",
+    });
+    const current = new Map([["phone", stored]]);
+
+    const next = reduceLivePositions(current, [{ ...stored }]);
+
+    expect(next).toBe(current);
+    expect(next.get("phone")).toBe(stored);
+  });
 });
 
 describe("dropInactiveDevices", () => {

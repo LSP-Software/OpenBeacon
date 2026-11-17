@@ -27,16 +27,17 @@ export const reduceLivePositions = (
   current: ReadonlyMap<string, LiveMapEntry>,
   candidates: readonly LiveMapEntry[],
 ) => {
-  const next = new Map(current);
+  let next: Map<string, LiveMapEntry> | null = null;
 
   for (const candidate of candidates) {
-    const existing = next.get(candidate.deviceId);
+    const existing = (next ?? current).get(candidate.deviceId);
     if (!existing || isNewerThan(candidate, existing)) {
+      next ??= new Map(current);
       next.set(candidate.deviceId, candidate);
     }
   }
 
-  return next;
+  return next ?? current;
 };
 
 export const dropInactiveDevices = (

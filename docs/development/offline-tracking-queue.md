@@ -33,4 +33,7 @@ The `OfflineQueueStorageBenchmark` instrumentation (`bun run benchmark:offline-q
 - A long-running reader can delay a WAL checkpoint, so the WAL can briefly grow past 1 MiB.
 - If every queued point is in flight, nothing is evicted until uploads finish or time out.
 - Points queued before an account was assigned (legacy, ownerless rows) can be evicted, but their loss isn't reported because they don't belong to an account yet.
+- The history filter keeps its state in memory. If Android stops the tracking service, an open stay keeps its last sent end time (up to 5 minutes early) and the route restarts with the next fix.
+- When a group's key rotates, an open stay is closed under the old key and continues as a new stay under the new key, and the route carries on. Route fixes from before the rotation that weren't kept yet are dropped, so a member who joins at that moment never receives a point from before they joined.
+- If an older stay or live-only copy is still uploading when its newer copy has already uploaded, and the older upload then fails and is retried, it can overwrite the newer one on the server. This needs two uploads to overlap, so it's rare.
 - Capacity depends on payload size, SQLite page allocation and how often Android delivers fixes. The figures above are measurements, not guarantees.
