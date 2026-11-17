@@ -21,6 +21,7 @@ import { getCurrentHistoryKeyState } from "./currentHistoryKey.ts";
 import { isThisDeviceActive } from "./deviceActivation.ts";
 import { getStoredHistoryKey } from "./historyKeys.ts";
 import { secretOwner } from "./secretStorage.ts";
+import { checkSessionAfterUnauthorized } from "./sessionCheck.ts";
 import {
   cancelDeviceKeyRegistrations,
   ensureDeviceKeyRegistration,
@@ -641,7 +642,11 @@ const settleAccountSync = async (
   sync: ReturnType<typeof startAccountSync>,
 ) => {
   const response = await sync.request;
-  if (response.error || trackingPaused) return;
+  if (response.error) {
+    if (getErrorCode(response.error) === "UNAUTHORIZED") checkSessionAfterUnauthorized();
+    return;
+  }
+  if (trackingPaused) return;
   trackingModule.confirmPushToken(sync.pushScope, sync.pushToken, response.data.pushAvailable);
   await tryCatch(showAccountNotices({ notices: response.data, userId: sync.userId }));
 };
@@ -1248,6 +1253,7 @@ export const revokeTrackingAccess = ({
 };
 
 const revokeUnauthorizedTrackingAccess = (error: unknown, cancelFlush = true) => {
+  checkSessionAfterUnauthorized();
   const deviceRemoved = isDeviceRemovedError(error);
   return revokeTrackingAccess({
     cancelFlush,

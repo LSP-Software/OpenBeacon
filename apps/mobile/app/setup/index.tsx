@@ -13,6 +13,7 @@ import { trpc } from "../../lib/api.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { isThisDeviceActive } from "../../lib/deviceActivation.ts";
 import { clearPendingJoinCodes, openAppAfterSetup } from "../../lib/pendingJoinCode.ts";
+import { checkSessionAfterUnauthorized, isUnauthorizedError } from "../../lib/sessionCheck.ts";
 import { signOutOfThisPhone } from "../../lib/signOut.ts";
 import { thisDeviceNoun } from "../../lib/thisDeviceNoun.ts";
 
@@ -158,7 +159,13 @@ const SetUpPhoneScreen = () => {
             <Text className="text-muted-foreground text-base leading-6">
               We couldn’t reach the server. Check your connection and try again.
             </Text>
-            <Button variant="outline" onPress={() => status.refetch()}>
+            <Button
+              variant="outline"
+              onPress={() => {
+                if (isUnauthorizedError(status.error)) checkSessionAfterUnauthorized();
+                void status.refetch();
+              }}
+            >
               <Text>Try again</Text>
             </Button>
           </View>

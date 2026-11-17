@@ -1,19 +1,31 @@
 import { tryCatch } from "@openbeacon/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { TRPCClientError } from "@trpc/client";
+import { router, useSegments } from "expo-router";
 import { useEffect, useRef } from "react";
 import { useAppForeground } from "../hooks/useAppForeground.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { baseUrl } from "../lib/currentServer.ts";
 import { clearGroupColors } from "../lib/groupColor.ts";
 import { claimImageCache } from "../lib/imageCache.ts";
+import { checkSessionAfterUnauthorized, isUnauthorizedError } from "../lib/sessionCheck.ts";
 import { clearTrackingUploadTimes } from "../lib/trackingUploadTime.ts";
+
+const signedOutScreens = new Set<string | undefined>([
+  undefined,
+  "(tabs)",
+  "device-removed",
+  "forgotPassword",
+  "serverUrl",
+  "signIn",
+  "signUp",
+]);
 
 export const SessionDataCleanup = () => {
   const { data: session, isPending } = authClient.useSession();
   const queryClient = useQueryClient();
+  const screen: string | undefined = useSegments()[0];
+  const screenRef = useRef(screen);
   const previousUserIdRef = useRef<string | null | undefined>(undefined);
-  const lastSessionCheckRef = useRef(0);
   const lastResumeCheckRef = useRef(Date.now());
   const userId = session?.user.id ?? null;
   const userIdRef = useRef(userId);
@@ -21,6 +33,10 @@ export const SessionDataCleanup = () => {
   useEffect(() => {
     userIdRef.current = userId;
   }, [userId]);
+
+  useEffect(() => {
+    screenRef.current = screen;
+  }, [screen]);
 
   useEffect(() => {
     if (isPending) return;
@@ -41,6 +57,8 @@ export const SessionDataCleanup = () => {
         ? userId === null
         : !!previousUserId && previousUserId !== userId;
     if (!sessionEnded) return;
+    if (previousUserId && !userId && !signedOutScreens.has(screenRef.current))
+      void tryCatch(Promise.resolve().then(() => router.replace("/")));
     queryClient.clear();
     clearGroupColors();
     clearTrackingUploadTimes();
@@ -49,10 +67,7 @@ export const SessionDataCleanup = () => {
 
   useEffect(() => {
     const checkSession = (error: unknown) => {
-      if (!(error instanceof TRPCClientError) || error.data?.code !== "UNAUTHORIZED") return;
-      if (!userIdRef.current || Date.now() - lastSessionCheckRef.current < 5_000) return;
-      lastSessionCheckRef.current = Date.now();
-      authClient.$store.notify("$sessionSignal");
+      if (isUnauthorizedError(error) && userIdRef.current) checkSessionAfterUnauthorized();
     };
     const unsubscribeQueries = queryClient.getQueryCache().subscribe((event) => {
       if (event.type === "updated" && event.action.type === "error")

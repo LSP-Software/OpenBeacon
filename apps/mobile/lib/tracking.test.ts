@@ -174,6 +174,12 @@ mock.module("./secretStorage.ts", () => ({
   secretOwner: (userId: string) => ({ userId, generation: 0 }),
   invalidateSecretWrites: async () => {},
 }));
+let sessionChecks = 0;
+mock.module("./sessionCheck.ts", () => ({
+  checkSessionAfterUnauthorized: () => {
+    sessionChecks += 1;
+  },
+}));
 mock.module("./trackingUploadTime.ts", () => ({
   recordTrackingUpload: (deviceId: string, groupId: string, timestamp: string) => {
     recordedUploads.push({ deviceId, groupId, timestamp });
@@ -749,6 +755,7 @@ describe("tracking service", () => {
     pendingPushToken = null;
     pushHeldByServer = false;
     pushConfirms.length = 0;
+    sessionChecks = 0;
     pushForgets.length = 0;
     accountSyncCalls.length = 0;
     accountSyncResponse = async () => accountSyncResult;
@@ -847,6 +854,17 @@ describe("tracking service", () => {
       };
       await syncAccountNotices();
       expect(accountSyncCalls).toEqual([{ cursor: storedAccountCursor, pushToken: "token-1" }]);
+      expect(pushConfirms).toEqual([]);
+      expect(shownAccountNotices).toEqual([]);
+    });
+
+    test("a rejected session asks for the session to be checked and confirms nothing", async () => {
+      pendingPushToken = "token-1";
+      accountSyncResponse = async () => {
+        throw Object.assign(new Error("Session revoked"), { data: { code: "UNAUTHORIZED" } });
+      };
+      await syncAccountNotices();
+      expect(sessionChecks).toBe(1);
       expect(pushConfirms).toEqual([]);
       expect(shownAccountNotices).toEqual([]);
     });
@@ -1850,6 +1868,7 @@ describe("tracking service", () => {
 
     expect(revokedGroups).toHaveLength(1);
     expect(captureRunning).toBe(false);
+    expect(sessionChecks).toBeGreaterThan(0);
   });
 
   test("backfills when capture is off", async () => {

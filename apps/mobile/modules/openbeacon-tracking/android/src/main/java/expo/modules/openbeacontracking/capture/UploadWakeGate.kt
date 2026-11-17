@@ -1,26 +1,34 @@
 package expo.modules.openbeacontracking.capture
 
+import java.util.UUID
+
 class UploadWakeGate(
   private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
-  private val running = mutableSetOf<Int>()
-  private val starting = ArrayDeque<Long>()
+  private val running = mutableMapOf<Int, String?>()
+  private val starting = ArrayDeque<Pair<String, Long>>()
   private var followUp = false
 
   @Synchronized
-  fun accept(push: Boolean): Boolean {
+  fun accept(push: Boolean): String? {
+    dropStaleStarts()
     if (push && isBusy()) {
       followUp = true
-      return false
+      return null
     }
-    starting.addLast(clock())
-    return true
+    val token = UUID.randomUUID().toString()
+    starting.addLast(token to clock())
+    return token
   }
 
   @Synchronized
   fun started(taskId: Int) {
-    if (running.add(taskId)) starting.removeFirstOrNull()
+    dropStaleStarts()
+    if (taskId !in running) running[taskId] = starting.removeFirstOrNull()?.first
   }
+
+  @Synchronized
+  fun taskFor(token: String): Int? = running.entries.firstOrNull { it.value == token }?.key
 
   @Synchronized
   fun finished(taskId: Int): Boolean {
@@ -35,9 +43,13 @@ class UploadWakeGate(
     return takeFollowUp()
   }
 
-  private fun isBusy(): Boolean {
+  private fun dropStaleStarts() {
     val now = clock()
-    while (starting.firstOrNull()?.let { now - it >= START_TIMEOUT_MS } == true) starting.removeFirst()
+    while (starting.firstOrNull()?.let { now - it.second >= START_TIMEOUT_MS } == true) starting.removeFirst()
+  }
+
+  private fun isBusy(): Boolean {
+    dropStaleStarts()
     return starting.isNotEmpty() || running.isNotEmpty()
   }
 

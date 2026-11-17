@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.capture.SharingCaptureState
 import expo.modules.openbeacontracking.capture.SharingResumeWorker
+import expo.modules.openbeacontracking.capture.TrackingUploadService
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
 import expo.modules.openbeacontracking.places.PlaceGeofence
@@ -201,6 +202,10 @@ class OpenBeaconTrackingModule : Module() {
           appContext.currentActivity?.setRecentsScreenshotEnabled(!hidden)
         }
       }.runOnQueue(Queues.MAIN)
+
+      Function("finishUploadTask") { token: String ->
+        TrackingUploadService.finish(token)
+      }
 
       Function("elapsedRealtime") {
         SystemClock.elapsedRealtime().toDouble()

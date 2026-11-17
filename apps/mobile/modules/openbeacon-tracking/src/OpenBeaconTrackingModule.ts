@@ -110,6 +110,7 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
   requestNotificationPermission(): Promise<"granted" | "denied" | "blocked">;
   showNotice(kind: NoticeKind): boolean;
   setRecentsPreviewHidden(hidden: boolean): Promise<void>;
+  finishUploadTask(token: string): void;
   elapsedRealtime(): number;
   dismissNotice(slot: NoticeSlot): void;
   setGroupPlaces(

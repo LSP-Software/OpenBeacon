@@ -17,6 +17,8 @@ const notify = mock((_signal: string) => {});
 const settledUsers: Array<string | null> = [];
 let savedMapClears = 0;
 const imageCacheClaims: Array<string | null> = [];
+const replace = mock((_href: string) => {});
+let segments: string[] = [];
 
 mock.module("../lib/storage.ts", () => ({
   storage: {
@@ -27,6 +29,10 @@ mock.module("../lib/storage.ts", () => ({
     remove: (key: string) => storageValues.delete(key),
     getAllKeys: () => [...storageValues.keys()],
   },
+}));
+mock.module("expo-router", () => ({
+  router: { replace },
+  useSegments: () => segments,
 }));
 mock.module("../lib/auth-client.ts", () => ({
   authClient: { useSession: () => sessionState, $store: { notify } },
@@ -106,6 +112,8 @@ beforeEach(() => {
   settledUsers.length = 0;
   savedMapClears = 0;
   imageCacheClaims.length = 0;
+  replace.mockClear();
+  segments = [];
 });
 
 afterEach(async () => {
@@ -232,3 +240,41 @@ test("hands the picture cache to whoever is signed in on this server", async () 
     null,
   ]);
 });
+
+test("leaves screens outside the tabs for the start screen when the session ends", async () => {
+  segments = ["setup"];
+  signIn("user-1");
+  await render();
+
+  signOut();
+  await render();
+
+  expect(replace.mock.calls).toEqual([["/"]]);
+});
+
+test("stays put when the app starts signed out or another user signs in", async () => {
+  segments = ["setup"];
+  await render();
+  signOut();
+  await render();
+  signIn("user-1");
+  await render();
+  signIn("user-2");
+  await render();
+
+  expect(replace).not.toHaveBeenCalled();
+});
+
+test.each([[[]], [["(tabs)", "map"]], [["device-removed"]], [["serverUrl"]], [["signIn"]]])(
+  "leaves screens that handle signing out themselves alone: %p",
+  async (screen) => {
+    segments = screen;
+    signIn("user-1");
+    await render();
+
+    signOut();
+    await render();
+
+    expect(replace).not.toHaveBeenCalled();
+  },
+);
