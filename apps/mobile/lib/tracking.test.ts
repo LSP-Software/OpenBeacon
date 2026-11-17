@@ -1220,7 +1220,7 @@ describe("tracking service", () => {
       uploadGroup = async ({ points }) => {
         if (
           points.length > 1 ||
-          (points[0] as { clientPointId: string }).clientPointId === "invalid"
+          (points[0] as { clientPointId: string }).clientPointId === pointId("invalid")
         ) {
           throw Object.assign(new Error("invalid"), { data: { code: "BAD_REQUEST" } });
         }
