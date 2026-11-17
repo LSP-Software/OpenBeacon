@@ -165,15 +165,16 @@ enum TrackingRuntime {
 
   private static func setSharingState(_ state: SharingCaptureState) {
     guard let scope = sharingScope() else { return }
+    let previous = SharingCaptureState.confirmedRevision(stored: defaults.string(forKey: "\(scope).confirmed"), current: sharingState())
     defaults.set(state.revisionPrefix, forKey: "\(scope).prefix")
     defaults.set(state.paused, forKey: "\(scope).paused")
     defaults.set(NSNumber(value: state.pausedUntil ?? 0), forKey: "\(scope).until")
     defaults.set(NSNumber(value: state.resumeAfter), forKey: "\(scope).after")
-    if !state.revisionPrefix.isEmpty { defaults.set(state.revisionPrefix, forKey: "\(scope).confirmed") }
+    defaults.set(state.confirmedRevision(replacing: previous), forKey: "\(scope).confirmed")
   }
 
   private static func confirmedRevision() -> String {
-    sharingScope().flatMap { defaults.string(forKey: "\($0).confirmed") } ?? ""
+    SharingCaptureState.confirmedRevision(stored: sharingScope().flatMap { defaults.string(forKey: "\($0).confirmed") }, current: sharingState())
   }
 
   static func applySharingState(owner: String, deviceId: String, state: SharingCaptureState) -> Bool {

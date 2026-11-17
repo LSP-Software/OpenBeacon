@@ -119,12 +119,13 @@ object TrackingRuntime {
     val deviceId = queueDeviceId(context) ?: return
     val scope = org.json.JSONArray(listOf(owner, deviceId)).toString()
     val preferences = context.getSharedPreferences("openbeacon_tracking_sharing", Context.MODE_PRIVATE)
+    val previous = SharingCaptureState.confirmedRevision(preferences.getString("$scope.confirmed", null), sharingState(context))
     check(preferences.edit()
       .putString("$scope.prefix", state.revisionPrefix)
       .putBoolean("$scope.paused", state.paused)
       .putLong("$scope.until", state.pausedUntil ?: 0L)
       .putLong("$scope.after", state.resumeAfter)
-      .apply { if (state.revisionPrefix.isNotEmpty()) putString("$scope.confirmed", state.revisionPrefix) }
+      .putString("$scope.confirmed", state.confirmedRevision(replacing = previous))
       .commit())
   }
 
@@ -132,7 +133,8 @@ object TrackingRuntime {
     val owner = queueOwner(context) ?: return ""
     val deviceId = queueDeviceId(context) ?: return ""
     val scope = org.json.JSONArray(listOf(owner, deviceId)).toString()
-    return context.getSharedPreferences("openbeacon_tracking_sharing", Context.MODE_PRIVATE).getString("$scope.confirmed", "") ?: ""
+    val preferences = context.getSharedPreferences("openbeacon_tracking_sharing", Context.MODE_PRIVATE)
+    return SharingCaptureState.confirmedRevision(preferences.getString("$scope.confirmed", null), sharingState(context))
   }
 
   fun applySharingState(context: Context, owner: String, deviceId: String, state: SharingCaptureState): Boolean {

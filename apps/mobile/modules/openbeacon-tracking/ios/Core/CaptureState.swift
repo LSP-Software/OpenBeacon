@@ -31,6 +31,14 @@ struct SharingCaptureState: Equatable {
       || (isAtLeastAsRecentAs(current) && isAtLeastAsRecentAs(SharingCaptureState(revisionPrefix: confirmedRevision)))
   }
 
+  static func confirmedRevision(stored: String?, current: SharingCaptureState) -> String {
+    stored ?? current.revisionPrefix
+  }
+
+  func confirmedRevision(replacing previous: String) -> String {
+    revisionPrefix.isEmpty ? previous : revisionPrefix
+  }
+
   private static func revisionParts(_ prefix: String) -> [Int64] {
     var trimmed = Substring(prefix)
     if trimmed.hasPrefix("s") { trimmed = trimmed.dropFirst() }
