@@ -21,6 +21,7 @@ let historyBacklog = { PlaceTransition: 0, GroupEvent: 0 };
 const historyDeletes: Array<{ table: string; cutoff: unknown; limit: number }> = [];
 let emptyStreams: string[] = [];
 const windowDeletes: Array<{ values: unknown[] }> = [];
+const departedDeletes: Array<{ limit: unknown }> = [];
 const streamLocks: Array<{ after: unknown; limit: unknown }> = [];
 
 const queryRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args: unknown[]) => {
@@ -41,6 +42,13 @@ const queryRaw = mock(async (query: TemplateStringsArray | Prisma.Sql, ...args: 
     strings.join("?").includes('"member"."historyShare"')
   ) {
     windowDeletes.push({ values });
+    return [];
+  }
+  if (
+    strings.join("?").trimStart().startsWith('DELETE FROM "TrackingPoint"') &&
+    strings.join("?").includes('NOT EXISTS (\n          SELECT 1 FROM "GroupMember"')
+  ) {
+    departedDeletes.push({ limit: values[0] });
     return [];
   }
   if (strings.join("?").trimStart().startsWith('DELETE FROM "TrackingPoint"')) {
@@ -131,6 +139,7 @@ beforeEach(() => {
   emptyStreams = [];
   streamLocks.length = 0;
   windowDeletes.length = 0;
+  departedDeletes.length = 0;
 });
 
 test("deletes location points older than database time minus exactly 14 days in batches, then stale latest points and empty streams", async () => {
@@ -148,7 +157,11 @@ test("deletes location points older than database time minus exactly 14 days in 
   expect(backlog).toBe(0);
   expect(windowDeletes).toHaveLength(1);
   expect(windowDeletes[0]?.values).toContain(272_856 + 14 * 24 - 5);
-  expect(tidyDeletes).toEqual([{ table: "TrackingLatestPoint", values: [cutoff] }]);
+  expect(departedDeletes).toEqual([{ limit: 1000 }]);
+  expect(tidyDeletes).toEqual([
+    { table: "TrackingLatestPoint", values: [cutoff] },
+    { table: "TrackingLatestPoint", values: [] },
+  ]);
   expect(streamLocks).toEqual([{ after: "0", limit: 1000 }]);
 });
 
@@ -162,6 +175,7 @@ test("locks empty streams in batches and deletes only the locked ones", async ()
   ]);
   expect(tidyDeletes).toEqual([
     { table: "TrackingLatestPoint", values: [cutoff] },
+    { table: "TrackingLatestPoint", values: [] },
     { table: "TrackingStream", values: [["3", "8"]] },
     { table: "TrackingStream", values: [["12", "20"]] },
     { table: "TrackingStream", values: [["31"]] },
@@ -175,6 +189,7 @@ test("stops at the run limit, logs it and leaves the rest for later runs", async
   await run();
   expect(payloadDeletes.map(({ limit }) => limit)).toEqual([4, 2]);
   expect(windowDeletes).toEqual([]);
+  expect(departedDeletes).toEqual([]);
   expect(backlog).toBe(4);
   expect(warn.mock.calls).toEqual([
     [

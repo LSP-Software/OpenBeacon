@@ -106,7 +106,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         db: deletion.db,
         userId: deletedUser,
         imageUrlPrefix,
-        mode: "scheduled",
         securityAlerts: null,
       });
       await gate.waitForWaiters(1);

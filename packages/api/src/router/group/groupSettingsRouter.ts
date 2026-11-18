@@ -179,7 +179,7 @@ export const groupSettingsRouter = {
           userId_uploadType_groupId: { userId, uploadType: "groupAvatar", groupId: input.groupId },
         },
       });
-      if (!pending || pending.groupId !== input.groupId) {
+      if (!pending) {
         if (
           !(await ctx.db.group.findUnique({ where: { id: input.groupId }, select: { id: true } }))
         ) {

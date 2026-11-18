@@ -12,7 +12,7 @@ import {
   validatePlaceGeometryV1,
 } from "@openbeacon/encryption";
 import { MAX_PLACES_PER_GROUP } from "@openbeacon/schemas";
-import { deleteAccountRecords } from "../../lib/account-deletion.ts";
+import { deleteDueAccount } from "../../lib/accountDeletion.testUtil.ts";
 import { holdRowLock } from "../../lib/databaseLocks.testUtil.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
@@ -640,11 +640,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       const before = await revision();
       const otherBefore = await revision(otherGroupId);
       await expect(
-        deleteAccountRecords({
+        deleteDueAccount({
           db: prisma,
           userId: creator,
           imageUrlPrefix: "https://cdn.example/bucket",
-          mode: "immediate",
           securityAlerts: null,
         }),
       ).resolves.toBe(true);

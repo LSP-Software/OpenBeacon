@@ -5,8 +5,7 @@ import { effectiveNotificationSetting } from "@openbeacon/schemas";
 import { resolveLocationSharing } from "@openbeacon/shared";
 import type z from "zod";
 import { assertActiveDevices } from "./groupWriteChecks.ts";
-
-export const HISTORY_RETENTION_MS = 14 * 24 * 60 * 60_000;
+import { HISTORY_RETENTION_MS } from "./historyShare.ts";
 
 export const placeTransitionSelect = {
   id: true,

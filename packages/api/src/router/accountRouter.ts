@@ -339,6 +339,7 @@ export const accountRouter = {
         if (check === "incorrect")
           throw new TRPCError({ code: "UNAUTHORIZED", message: "Password is incorrect." });
       }
+      const imageUrlPrefix = `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}`;
       const result = await ctx.db.$transaction(async (tx) => {
         await tx.$queryRaw(
           Prisma.sql`SELECT id FROM "User" WHERE id = ${userId} FOR NO KEY UPDATE`,
@@ -371,15 +372,18 @@ export const accountRouter = {
               message: "Google verification expired. Please try again.",
             });
         }
-        return beginAccountDeletion(tx, { userId, delayHours: input.immediate ? 0 : 168 });
+        return beginAccountDeletion(tx, {
+          userId,
+          imageUrlPrefix,
+          delayHours: input.immediate ? 0 : 168,
+        });
       });
       if (input.immediate) {
         const deletion = await tryCatch(
           deleteAccountRecords({
             db: ctx.db,
             userId,
-            imageUrlPrefix: `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}`,
-            mode: "scheduled",
+            imageUrlPrefix,
             securityAlerts: ctx.securityAlerts,
             push: ctx.push,
           }),

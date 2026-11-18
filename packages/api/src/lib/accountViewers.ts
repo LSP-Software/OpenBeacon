@@ -1,5 +1,5 @@
 import { GroupEventType, type PrismaClient } from "@openbeacon/database";
-import { HISTORY_RETENTION_MS } from "./placeTransitions.ts";
+import { HISTORY_RETENTION_MS } from "./historyShare.ts";
 
 const startTypes: GroupEventType[] = [GroupEventType.GROUP_CREATED, GroupEventType.MEMBER_JOINED];
 const endTypes: GroupEventType[] = [

@@ -1,5 +1,5 @@
 import { expo } from "@better-auth/expo";
-import { Prisma } from "@openbeacon/database";
+import { Prisma, prisma as db } from "@openbeacon/database";
 import { accountNameSchema } from "@openbeacon/schemas";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
@@ -9,7 +9,6 @@ import {
   getAuthoritativeSessionFromCtx,
   isAPIError,
 } from "better-auth/api";
-import { db } from "./db.ts";
 import { type EmailCodes, normalizeEmail } from "./emailCode.ts";
 import { emailCodePlugin } from "./emailCodePlugin.ts";
 import { env } from "./env.ts";
@@ -157,7 +156,7 @@ export const createAuth = ({
           after: async (session) => {
             const expired = await db.$transaction(async (tx) => {
               await tx.$queryRaw(
-                Prisma.sql`SELECT id FROM "User" WHERE id = ${session.userId} FOR UPDATE`,
+                Prisma.sql`SELECT id FROM "User" WHERE id = ${session.userId} FOR NO KEY UPDATE`,
               );
               const [user] = await tx.$queryRaw<
                 Array<{ pendingDeletion: boolean; deletionExpired: boolean }>

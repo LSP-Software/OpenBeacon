@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:tes
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import { WRAPPED_EPOCH_KEY_ALGORITHM } from "@openbeacon/encryption";
-import { deleteAccountRecords } from "../../lib/account-deletion.ts";
+import { deleteDueAccount } from "../../lib/accountDeletion.testUtil.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { encodeAlertsCursor } from "../../lib/placeTransitions.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
@@ -347,11 +347,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
 
       await setMute(joiner, { mutedUserId: owner });
       await expect(
-        deleteAccountRecords({
+        deleteDueAccount({
           db: prisma,
           userId: joiner,
           imageUrlPrefix: "https://cdn.example/bucket",
-          mode: "immediate",
           securityAlerts: null,
         }),
       ).resolves.toBe(true);

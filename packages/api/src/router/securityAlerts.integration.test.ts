@@ -717,7 +717,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("security alerts"
       db: prisma,
       userId: account.userId,
       imageUrlPrefix: "https://cdn.example/bucket",
-      mode: "scheduled",
       securityAlerts,
     });
 

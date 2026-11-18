@@ -1,8 +1,8 @@
-import { getDatabaseTime } from "../databaseTime.ts";
+import { readDatabaseTime } from "@openbeacon/database";
 import { services } from "../services.ts";
 
 export const runPendingDeviceCleanup = async () => {
-  const now = await getDatabaseTime();
+  const now = await readDatabaseTime(services.db);
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60_000).toISOString();
   await services.db.$transaction(async (tx) => {
     const expired = await tx.$queryRaw<Array<{ id: string }>>`

@@ -2,11 +2,10 @@ import { checkImageStorage } from "@openbeacon/api/checkStorage.ts";
 import { checkMapStorage } from "@openbeacon/api/mapStorage.ts";
 import { fcm } from "@openbeacon/auth";
 import { checkEmail, emailEnabled, emailUnreachableCode } from "@openbeacon/email";
-import { errorCode } from "@openbeacon/shared";
+import { checkServices, errorCode } from "@openbeacon/shared";
 import { pingRedis } from "@openbeacon/cache";
 import { cache } from "./cache.ts";
 import { checkOptionalServices } from "./checkOptionalServices.ts";
-import { checkServices } from "./checkServices.ts";
 import { db } from "./db.ts";
 import { env } from "./env.ts";
 

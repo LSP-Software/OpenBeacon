@@ -16,7 +16,7 @@ import {
   historyFirstHourSql,
   readUploaderHistoryWindow,
 } from "./historyShare.ts";
-import { HISTORY_RETENTION_MS } from "./placeTransitions.ts";
+import { HISTORY_RETENTION_MS } from "./historyShare.ts";
 
 const HOUR_MS = 3_600_000;
 const HISTORY_RETENTION_HOURS = HISTORY_RETENTION_MS / HOUR_MS;

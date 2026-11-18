@@ -28,7 +28,9 @@ mock.module("@openbeacon/email", () => ({
   emailUnreachableCode: "EMAIL_UNREACHABLE",
 }));
 mock.module("@openbeacon/auth", () => ({ fcm: { getAccessToken } }));
-mock.module("./checkServices.ts", () => ({
+const shared = await import("@openbeacon/shared");
+mock.module("@openbeacon/shared", () => ({
+  ...shared,
   checkServices: async (services: typeof checks) => {
     checks = services;
   },

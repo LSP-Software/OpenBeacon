@@ -9,7 +9,7 @@ import {
 import { createBackgroundWork } from "./backgroundWork.ts";
 import { getAuthCapabilities } from "./capabilities.ts";
 import { createAuth } from "./createAuth.ts";
-import { db } from "./db.ts";
+import { prisma as db } from "@openbeacon/database";
 import { createEmailCodes } from "./emailCode.ts";
 import { env } from "./env.ts";
 import { createFcmClient, resolveFcmSettings } from "./fcm.ts";
@@ -83,8 +83,3 @@ export const auth = createAuth({
     refund: (input) => sharedCache().rateLimits.refund(input),
   },
 });
-
-export type AuthType = {
-  user: typeof auth.$Infer.Session.user | null;
-  session: typeof auth.$Infer.Session.session | null;
-};

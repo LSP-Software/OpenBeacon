@@ -52,6 +52,46 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       await prisma.$disconnect();
     });
 
+    test("a group picture the server can't clean up refuses the request before anything changes", async () => {
+      const pictureEmail = `deletion-picture-${crypto.randomUUID()}@example.test`;
+      const created = await auth.api.signUpEmail({
+        body: { email: pictureEmail, password, name: "Picture Test" },
+      });
+      const id = created.user.id;
+      await addActiveDevice(id);
+      await prisma.group.create({
+        data: {
+          name: "Old bucket",
+          image: "https://old-cdn.example/old-bucket/user/someone/avatar.webp",
+          groupMembers: { create: { userId: id, role: "OWNER", joinedEpochNumber: 1 } },
+        },
+      });
+      const session = await prisma.session.findFirstOrThrow({ where: { userId: id } });
+      const pictureCaller = appRouter.createCaller(
+        withDeviceActive({
+          cache,
+          db: prisma,
+          deviceId: `${id}-device`,
+          session: { user: { id, email: pictureEmail }, session: { id: session.id } },
+        }) as Parameters<typeof appRouter.createCaller>[0],
+      );
+      try {
+        await expect(
+          pictureCaller.account.requestDeletion({ password, immediate: true }),
+        ).rejects.toThrow("Cannot identify group image for cleanup.");
+        expect(
+          await prisma.user.findUniqueOrThrow({
+            where: { id },
+            select: { pendingDeletion: true, deletionDate: true },
+          }),
+        ).toEqual({ pendingDeletion: false, deletionDate: null });
+        expect(await prisma.session.count({ where: { userId: id } })).toBe(1);
+      } finally {
+        await prisma.group.deleteMany({ where: { groupMembers: { some: { userId: id } } } });
+        await prisma.user.deleteMany({ where: { id } });
+      }
+    });
+
     test("a wrong password counts towards the account's password lockout, which then refuses even the right one", async () => {
       const lockoutEmail = `deletion-lockout-${crypto.randomUUID()}@example.test`;
       const created = await auth.api.signUpEmail({
@@ -431,7 +471,6 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
           db: prisma,
           userId,
           imageUrlPrefix: "https://cdn.example/bucket",
-          mode: "scheduled",
         }),
       ]);
       expect(deletion.status).toBe("fulfilled");
@@ -534,7 +573,6 @@ test.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         db: prisma,
         userId: heavyUserId,
         imageUrlPrefix: "https://cdn.example/bucket",
-        mode: "scheduled",
         securityAlerts: null,
       }).finally(() => {
         deletionSettled = true;

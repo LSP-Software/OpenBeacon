@@ -1,8 +1,8 @@
-import { getDatabaseTime } from "../databaseTime.ts";
+import { readDatabaseTime } from "@openbeacon/database";
 import { services } from "../services.ts";
 
 export const findTopUploadGrowth = async ({ limit = 10 }: { limit?: number } = {}) => {
-  const dayAgoHour = Math.floor((await getDatabaseTime()).getTime() / 3_600_000) - 24;
+  const dayAgoHour = Math.floor((await readDatabaseTime(services.db)).getTime() / 3_600_000) - 24;
   return services.db.$queryRaw<Array<{ userId: string; groups: number; points: number }>>`
     SELECT "stream"."senderUserId" AS "userId",
       COUNT(DISTINCT "stream"."groupId")::int AS groups,

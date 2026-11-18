@@ -20,7 +20,7 @@ import {
 } from "@openbeacon/encryption";
 import { tryCatch } from "@openbeacon/shared";
 import { env } from "../../env.ts";
-import { deleteAccountRecords } from "../../lib/account-deletion.ts";
+import { deleteDueAccount } from "../../lib/accountDeletion.testUtil.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
 import { buildGroupAvatarPath, buildUserAvatarPath } from "../../lib/image-upload.ts";
 import { imageKeyColumns, readImageKeysNeedCatchUp } from "../../lib/imageKeys.ts";
@@ -899,11 +899,10 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         data: { image: groupUrl(deletedUploader, groupId, fileName), ...imageKeyColumns(key) },
       });
 
-      await deleteAccountRecords({
+      await deleteDueAccount({
         db: prisma,
         userId: deletedUploader,
         imageUrlPrefix: `${env.IMAGES_S3_CDN_URL}/${env.IMAGES_S3_BUCKET_NAME}`,
-        mode: "immediate",
         securityAlerts: null,
       });
 

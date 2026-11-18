@@ -18,7 +18,13 @@ const hourOf = (date: Date) => Math.floor(date.getTime() / 3_600_000);
 
 const createGroup = async (name: string, epochDaysAgo: number[]) => {
   const groupId = `${prefix}-${name}`;
-  await prisma.group.create({ data: { id: groupId, name } });
+  await prisma.group.create({
+    data: {
+      id: groupId,
+      name,
+      groupMembers: { create: { userId, role: "OWNER", joinedEpochNumber: 1 } },
+    },
+  });
   for (const [index, daysAgo] of epochDaysAgo.entries()) {
     const id = `${groupId}-epoch-${index + 1}`;
     await prisma.groupEpoch.create({
@@ -330,14 +336,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
       data: { imageKeyEpochId: `${groupPicture}-epoch-1` },
     });
     const profilePicture = await createGroup("profile-picture", [200, 100]);
-    await prisma.groupMember.create({
-      data: {
-        groupId: profilePicture,
-        userId,
-        role: "OWNER",
-        joinedEpochNumber: 1,
-        imageKeyEpochId: `${profilePicture}-epoch-1`,
-      },
+    await prisma.groupMember.update({
+      where: { userId_groupId: { userId, groupId: profilePicture } },
+      data: { imageKeyEpochId: `${profilePicture}-epoch-1` },
     });
 
     await createEpochCleanup()();
@@ -454,18 +455,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     const overridden = await createGroup("share-override", [200]);
     const maximum = await createGroup("share-maximum", [200]);
     await prisma.user.update({ where: { id: userId }, data: { historyShare: "DAY_1" } });
-    await prisma.groupMember.createMany({
-      data: [
-        { groupId: followsAccount, userId, role: "OWNER", joinedEpochNumber: 1 },
-        {
-          groupId: overridden,
-          userId,
-          role: "OWNER",
-          joinedEpochNumber: 1,
-          historyShare: "HOURS_6",
-        },
-        { groupId: maximum, userId, role: "OWNER", joinedEpochNumber: 1, historyShare: "MAXIMUM" },
-      ],
+    await prisma.groupMember.update({
+      where: { userId_groupId: { userId, groupId: overridden } },
+      data: { historyShare: "HOURS_6" },
+    });
+    await prisma.groupMember.update({
+      where: { userId_groupId: { userId, groupId: maximum } },
+      data: { historyShare: "MAXIMUM" },
     });
     for (const groupId of [followsAccount, overridden, maximum]) {
       await addPayloads(
@@ -486,5 +482,26 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("Location history
     expect(await payloadNames(maximum)).toEqual(["23h", "24h", "30h", "3h", "5h", "6h"]);
     expect(await prisma.trackingLatestPoint.count({ where: { groupId: overridden } })).toBe(1);
     await prisma.user.update({ where: { id: userId }, data: { historyShare: "MAXIMUM" } });
+  });
+
+  test("deletes the history and latest points a departed member left behind and keeps a current member's", async () => {
+    const departedGroupId = await createGroup("departed", [200]);
+    const memberGroupId = await createGroup("still-member", [200]);
+    for (const groupId of [departedGroupId, memberGroupId]) {
+      await addPayloads(groupId, [{ epoch: 1, receivedAt: ago(1), name: "recent" }]);
+      await addLatest(groupId, 1, ago(1 / 24));
+    }
+    await prisma.groupMember.delete({
+      where: { userId_groupId: { userId, groupId: departedGroupId } },
+    });
+
+    await createLocationHistoryCleanup()();
+
+    expect(await payloadCount(departedGroupId)).toBe(0);
+    expect(await prisma.trackingLatestPoint.count({ where: { groupId: departedGroupId } })).toBe(0);
+    expect(await streamEpochs(departedGroupId)).toEqual([]);
+    expect(await payloadNames(memberGroupId)).toEqual(["recent"]);
+    expect(await prisma.trackingLatestPoint.count({ where: { groupId: memberGroupId } })).toBe(1);
+    expect(await streamEpochs(memberGroupId)).toEqual([1]);
   });
 });
