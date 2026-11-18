@@ -176,9 +176,13 @@ const SignIn = () => {
                 <Pressable
                   className="items-center py-1"
                   onPress={() => setSignInCode(null)}
+                  disabled={emailLoading}
                   accessibilityRole="button"
+                  accessibilityState={{ disabled: emailLoading }}
                 >
-                  <Text className="text-secondary">Back to sign in</Text>
+                  <Text className={emailLoading ? "text-muted" : "text-secondary"}>
+                    Back to sign in
+                  </Text>
                 </Pressable>
               </View>
             ) : unverified ? (
