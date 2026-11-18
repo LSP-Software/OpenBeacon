@@ -187,6 +187,17 @@ const recordCleanBackfill = ({
   }
 };
 
+const isBlockedAsTooOld = () => {
+  const problem = getApiCompatibility()?.problem;
+  return problem === "appTooOld" || problem === "outOfSync";
+};
+
+export const parkCaptureWhileBlocked = async () => {
+  if (!isBlockedAsTooOld()) return;
+  const trackingModule = await loadTrackingModule();
+  if (trackingModule?.isCaptureRunning()) await trackingModule.stopCapture();
+};
+
 const applyCaptureState = async ({
   hasKeys,
   isCurrent,
@@ -198,7 +209,7 @@ const applyCaptureState = async ({
   onlyIfRunning: boolean;
   trackingModule: NonNullable<Awaited<ReturnType<typeof loadTrackingModule>>>;
 }) => {
-  if (!hasKeys) {
+  if (!hasKeys || isBlockedAsTooOld()) {
     if (trackingModule.isCaptureRunning()) await trackingModule.stopCapture();
     return;
   }
@@ -1163,6 +1174,7 @@ const syncBackgroundTrackingInternal = async (reason: UploadReason) => {
     if (!getApiCompatibility()) await dismissNotice("compatibility");
   }
   if (getApiCompatibility()) {
+    await parkCaptureWhileBlocked();
     await showApiCompatibilityNotice();
     return;
   }
@@ -1186,6 +1198,7 @@ const syncBackgroundTrackingInternal = async (reason: UploadReason) => {
   uploadRejectedKeys = false;
   const result = await tryCatch(flushPendingTrackingPoints());
   if (getApiCompatibility()) {
+    await parkCaptureWhileBlocked();
     await showApiCompatibilityNotice();
     return;
   }

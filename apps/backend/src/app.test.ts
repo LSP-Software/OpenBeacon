@@ -33,7 +33,7 @@ const expectLevelHeaders = (response: Response) => {
 };
 
 describe("app", () => {
-  test.each(["/api/trpc/account.version", "/api/auth/get-session"])(
+  test.each(["/api/trpc/account.version", "/api/auth/list-sessions"])(
     "turns away %s from an app that sends no level, leaving out the optional message when unset",
     async (path) => {
       const response = await app.request(path);
@@ -45,6 +45,16 @@ describe("app", () => {
       expectLevelHeaders(response);
     },
   );
+
+  test("lets an app that sends no level check its session and sign out", async () => {
+    const session = await app.request("/api/auth/get-session");
+    expect(session.status).toBe(200);
+    expect(await session.json()).toBeNull();
+    expectLevelHeaders(session);
+    const signOut = await app.request("/api/auth/sign-out", { method: "POST" });
+    expect(signOut.status).not.toBe(426);
+    expectLevelHeaders(signOut);
+  });
 
   test("answers a call to a procedure this server doesn't have with the frozen 404 body", async () => {
     const response = await app.request("/api/trpc/places.fromTheFuture", {

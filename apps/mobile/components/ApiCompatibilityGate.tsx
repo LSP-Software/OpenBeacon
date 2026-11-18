@@ -1,5 +1,6 @@
+import { tryCatch } from "@openbeacon/shared";
 import { Link, usePathname } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, AppState, BackHandler, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppForeground } from "../hooks/useAppForeground.ts";
@@ -9,9 +10,12 @@ import {
   refreshApiCompatibilityInBackground,
   useApiCompatibility,
 } from "../lib/apiCompatibility.ts";
+import { authClient } from "../lib/auth-client.ts";
 import { baseUrl, getBaseUrl, hasCustomServerUrl } from "../lib/currentServer.ts";
+import { endSession } from "../lib/endSession.ts";
 import { dismissNotice } from "../lib/notifications.ts";
 import { openPlayStore } from "../lib/openPlayStore.ts";
+import { requestTrackingSync } from "../lib/trackingEvents.ts";
 import { appVersion } from "../lib/versions.ts";
 import { Button } from "./ui/Button.tsx";
 import { Text } from "./ui/Text.tsx";
@@ -27,9 +31,12 @@ export const ApiCompatibilityGate = () => {
   const shown = useApiCompatibilityGateShown();
   const [checking, setChecking] = useState(false);
   const [unreachable, setUnreachable] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const { data: session } = authClient.useSession();
   const selfHosted = hasCustomServerUrl();
   const switchedServer = getBaseUrl() !== baseUrl;
   const problem = compatibility?.problem ?? null;
+  const previousProblem = useRef(problem);
   const title =
     problem === "appTooOld"
       ? "Update OpenBeacon"
@@ -57,7 +64,14 @@ export const ApiCompatibilityGate = () => {
 
   useEffect(() => {
     setUnreachable(false);
-    if (!problem) void dismissNotice("compatibility");
+    if (problem === "appTooOld" || problem === "outOfSync") {
+      void import("../lib/tracking.ts").then((tracking) => tracking.parkCaptureWhileBlocked());
+    }
+    if (!problem) {
+      void dismissNotice("compatibility");
+      if (previousProblem.current) requestTrackingSync();
+    }
+    previousProblem.current = problem;
   }, [problem]);
 
   useEffect(() => {
@@ -75,6 +89,12 @@ export const ApiCompatibilityGate = () => {
     const verdict = await refreshApiCompatibility({ userRequested: true });
     setChecking(false);
     setUnreachable(verdict === null);
+  };
+
+  const signOut = async () => {
+    setSigningOut(true);
+    await tryCatch(endSession({ reason: "signedOut" }));
+    setSigningOut(false);
   };
 
   const serverVersion = compatibility.serverVersion ?? "unknown";
@@ -162,6 +182,11 @@ export const ApiCompatibilityGate = () => {
                 <Text>Use a different server</Text>
               </Button>
             </Link>
+            {session && (
+              <Button variant="secondary" loading={signingOut} onPress={signOut}>
+                <Text>Sign out</Text>
+              </Button>
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>

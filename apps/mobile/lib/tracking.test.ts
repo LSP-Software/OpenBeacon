@@ -2380,6 +2380,41 @@ describe("tracking service", () => {
     expect(notices).toEqual([{ kind: "compatibility", problem: "appTooOld", selfHosted: false }]);
   });
 
+  test.each(["appTooOld", "outOfSync"] as const)(
+    "background sync parks capture while the problem is %s, so nothing is recorded for later",
+    async (problem) => {
+      captureRunning = true;
+      apiCompatibility = { problem, serverVersion: null, notified: false };
+
+      await syncBackgroundTracking();
+
+      expect(stopCaptureCalls).toBe(1);
+      expect(captureRunning).toBe(false);
+      expect(uploadCalls).toEqual([]);
+    },
+  );
+
+  test("background sync keeps capture running while the server is being updated", async () => {
+    captureRunning = true;
+    apiCompatibility = { problem: "serverTooOld", serverVersion: "0.1.0", notified: false };
+
+    await syncBackgroundTracking();
+
+    expect(stopCaptureCalls).toBe(0);
+    expect(captureRunning).toBe(true);
+  });
+
+  test("starting capture does nothing while the app is too old, and works once it's updated", async () => {
+    apiCompatibility = { problem: "appTooOld", serverVersion: null, notified: false };
+    await reconcileTrackingKeys({ startCapture: true, force: true });
+    expect(startCaptureCalls).toBe(0);
+    expect(captureRunning).toBe(false);
+
+    apiCompatibility = null;
+    await reconcileTrackingKeys({ startCapture: true, force: true });
+    expect(startCaptureCalls).toBe(1);
+  });
+
   test("background sync uploads again once a fresh check shows the server was updated", async () => {
     captureRunning = true;
     apiCompatibility = { problem: "serverTooOld", serverVersion: "0.1.0", notified: true };
