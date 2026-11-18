@@ -1,5 +1,6 @@
 import { useIsFocused } from "@react-navigation/native";
 import { skipToken, useQueries, useQuery } from "@tanstack/react-query";
+import { Link } from "expo-router";
 import { ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BackButton } from "../../components/headers/BackButton.tsx";
@@ -9,7 +10,9 @@ import { DecryptedAvatarImage } from "../../components/image/DecryptedAvatarImag
 import { Avatar, AvatarFallback } from "../../components/ui/Avatar.tsx";
 import { Button } from "../../components/ui/Button.tsx";
 import { Text } from "../../components/ui/Text.tsx";
+import { useHistoryShare } from "../../hooks/useHistoryShare.ts";
 import { trpc } from "../../lib/api.ts";
+import { groupHistoryShare, historyShareAmount } from "../../lib/historyShare.ts";
 import { authClient } from "../../lib/auth-client.ts";
 import { cn } from "../../lib/cn.ts";
 import { initials } from "../../lib/initials.ts";
@@ -65,6 +68,7 @@ const WhoCanSeeMeScreen = () => {
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
   const groups = useQuery({ ...trpc.groupMembership.list.queryOptions(), subscribed: isFocused });
+  const historyShare = useHistoryShare(isFocused);
   const nicknameQueries = useQueries({
     queries: (groups.data ?? []).map((group) => ({
       queryKey: ["personalNicknames", group.id, userId],
@@ -118,10 +122,16 @@ const WhoCanSeeMeScreen = () => {
           </Text>
           <Text className="text-muted-foreground text-base leading-6">
             Everyone in a group with you can see where you are while you’re sharing. They can also
-            replay where you’ve been in the last 14 days, but only from when they joined that group,
-            and see roughly when you paused and resumed sharing. While you’ve paused, they can see
-            that you’ve paused, but not where you are.
+            replay where you’ve been, as far back as you chose for that group (shown below, at most
+            14 days), but only from when they joined that group, and see roughly when you paused and
+            resumed sharing. While you’ve paused, they can see that you’ve paused, but not where you
+            are.
           </Text>
+          <Link href="/account/location-history" asChild>
+            <Button variant="outline" className="self-start">
+              <Text>Choose how much history to share</Text>
+            </Button>
+          </Link>
           {viewers.data.current.length === 0 ? (
             <Text className="text-muted-foreground text-base">
               No one. You’re not in a group with anyone else.
@@ -138,7 +148,17 @@ const WhoCanSeeMeScreen = () => {
                   )}
                   details={viewer.groups.map((group) => ({
                     key: group.id,
-                    text: `${group.name} · since ${formatViewerDate(group.since)}`,
+                    text: [
+                      group.name,
+                      `since ${formatViewerDate(group.since)}`,
+                      ...(historyShare.setting
+                        ? [
+                            historyShareAmount(
+                              groupHistoryShare(historyShare.setting, group.id).share,
+                            ),
+                          ]
+                        : []),
+                    ].join(" · "),
                   }))}
                   last={index === viewers.data.current.length - 1}
                 />

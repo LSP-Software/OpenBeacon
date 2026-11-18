@@ -13,6 +13,7 @@ const AVATAR_WIDTH = 30;
 
 type Lane = {
   color: string;
+  historyStart: number;
   id: string;
   initials: string;
   runs: ReadonlyArray<{
@@ -193,50 +194,65 @@ const TimelineLanes = memo(
         </Defs>
         {lanes.map((lane, index) => {
           const y = index * (LANE_HEIGHT + LANE_GAP);
-          return lane.runs.map((run) => {
-            const x = xOf(run.start);
-            const runWidth = Math.max(xOf(run.end) - x, 1);
-            const key = `${lane.id}:${run.start}`;
-            if (run.kind === "pause") {
-              return (
-                <Rect
-                  key={key}
-                  x={x + 0.75}
-                  y={y + 0.75}
-                  width={Math.max(runWidth - 1.5, 0.5)}
-                  height={LANE_HEIGHT - 1.5}
-                  fill="none"
-                  stroke={colors.textSecondary}
-                  strokeWidth={1.5}
-                  strokeDasharray="2 2"
-                />
-              );
-            }
-            if (run.kind === "stay") {
+          const laneShaded = Math.min(xOf(lane.historyStart), width) - shadedWidth;
+          return [
+            ...(laneShaded > 0
+              ? [
+                  <Rect
+                    key={`${lane.id}:shaded`}
+                    x={shadedWidth}
+                    y={y}
+                    width={laneShaded}
+                    height={LANE_HEIGHT}
+                    fill="url(#timeline-hatch)"
+                  />,
+                ]
+              : []),
+            ...lane.runs.map((run) => {
+              const x = xOf(run.start);
+              const runWidth = Math.max(xOf(run.end) - x, 1);
+              const key = `${lane.id}:${run.start}`;
+              if (run.kind === "pause") {
+                return (
+                  <Rect
+                    key={key}
+                    x={x + 0.75}
+                    y={y + 0.75}
+                    width={Math.max(runWidth - 1.5, 0.5)}
+                    height={LANE_HEIGHT - 1.5}
+                    fill="none"
+                    stroke={colors.textSecondary}
+                    strokeWidth={1.5}
+                    strokeDasharray="2 2"
+                  />
+                );
+              }
+              if (run.kind === "stay") {
+                return (
+                  <Rect
+                    key={key}
+                    x={x}
+                    y={y + (LANE_HEIGHT - STOPPED_HEIGHT) / 2}
+                    width={runWidth}
+                    height={STOPPED_HEIGHT}
+                    fill={lane.color}
+                    opacity={0.45}
+                  />
+                );
+              }
               return (
                 <Rect
                   key={key}
                   x={x}
-                  y={y + (LANE_HEIGHT - STOPPED_HEIGHT) / 2}
+                  y={y}
                   width={runWidth}
-                  height={STOPPED_HEIGHT}
-                  fill={lane.color}
-                  opacity={0.45}
+                  height={LANE_HEIGHT}
+                  fill={run.kind === "noLocation" ? "url(#timeline-hatch)" : lane.color}
+                  opacity={run.kind === "noLocation" ? 0.6 : 1}
                 />
               );
-            }
-            return (
-              <Rect
-                key={key}
-                x={x}
-                y={y}
-                width={runWidth}
-                height={LANE_HEIGHT}
-                fill={run.kind === "noLocation" ? "url(#timeline-hatch)" : lane.color}
-                opacity={run.kind === "noLocation" ? 0.6 : 1}
-              />
-            );
-          });
+            }),
+          ];
         })}
         {shadedWidth > 0 ? (
           <Rect x={0} y={0} width={shadedWidth} height={height} fill="url(#timeline-hatch)" />

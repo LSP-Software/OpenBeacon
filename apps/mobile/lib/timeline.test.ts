@@ -243,6 +243,38 @@ describe("buildTimeline", () => {
     expect(kinds([])).toEqual([["noLocation", 0, 1440]]);
   });
 
+  test("each person's own history window shades and clips only their lane", () => {
+    const timeline = buildTimeline({
+      day,
+      devices: [
+        { ...device([point({ time: at(8) }), point({ time: at(20) })]), userId: "sam" },
+        {
+          ...device([point({ time: at(8) }), point({ time: at(20) })]),
+          deviceId: "b",
+          userId: "bea",
+        },
+        { ...device([]), deviceId: "c", userId: "cal" },
+      ],
+      joinStart: null,
+      now: at(22),
+      senders: [
+        { userId: "sam", firstHour: at(17) / HOUR_MS },
+        { userId: "bea", firstHour: null },
+        { userId: "cal", firstHour: at(23) / HOUR_MS },
+      ],
+      windowStart: dayStart - 14 * 24 * HOUR_MS,
+    });
+    const [sam, bea, cal] = timeline.devices;
+    expect(timeline.historyStart).toBe(dayStart - 14 * 24 * HOUR_MS);
+    expect(sam?.historyStart).toBe(at(17));
+    expect(sam?.segments[0]?.start).toBe(at(17));
+    expect(sam?.segments.some((segment) => segment.start < at(17))).toBe(false);
+    expect(bea?.historyStart).toBe(timeline.historyStart);
+    expect(bea?.segments[0]?.start).toBe(dayStart);
+    expect(cal?.historyStart).toBe(at(23));
+    expect(cal?.segments).toEqual([]);
+  });
+
   test("counts only points timed inside the day", () => {
     const timeline = buildTimeline({
       day,

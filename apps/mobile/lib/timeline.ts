@@ -1,4 +1,5 @@
 import type { PlaceGeometryV1 } from "@openbeacon/encryption";
+import { senderHistoryStart } from "./historyShare.ts";
 import { metersBetween } from "./places.ts";
 import type {
   TimelineDay,
@@ -101,12 +102,14 @@ export const buildTimeline = ({
   devices,
   joinStart,
   now,
+  senders = [],
   windowStart,
 }: {
   day: TimelineDay;
   devices: readonly TimelineDeviceData[];
   joinStart: number | null;
   now: number;
+  senders?: ReadonlyArray<{ firstHour: number | null; userId: string }>;
   windowStart: number;
 }) => {
   const historyStart = Math.max(windowStart, joinStart ?? windowStart);
@@ -117,13 +120,19 @@ export const buildTimeline = ({
     from,
     historyStart,
     to,
-    devices: devices.map(({ deviceId, points, undecryptable, userId }) => ({
-      deviceId,
-      pointCount: points.filter((point) => point.time >= day.start && point.time < day.end).length,
-      segments: from < to ? clipSegments(deviceSegments(points), from, to) : [],
-      undecryptable,
-      userId,
-    })),
+    devices: devices.map(({ deviceId, points, undecryptable, userId }) => {
+      const personStart = Math.max(historyStart, senderHistoryStart(senders, userId) ?? 0);
+      const personFrom = Math.max(from, personStart);
+      return {
+        deviceId,
+        historyStart: personStart,
+        pointCount: points.filter((point) => point.time >= day.start && point.time < day.end)
+          .length,
+        segments: personFrom < to ? clipSegments(deviceSegments(points), personFrom, to) : [],
+        undecryptable,
+        userId,
+      };
+    }),
   };
 };
 

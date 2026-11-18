@@ -29,11 +29,13 @@ export const useTimelineDays = (groupId: string, userId?: string) => {
 export const useTimelineDay = ({
   day,
   groupId,
+  senders,
   userIds,
   windowStart,
 }: {
   day: TimelineDay | null;
   groupId: string;
+  senders: ReadonlyArray<{ firstHour: number | null; userId: string }>;
   userIds: readonly string[];
   windowStart: Date | null;
 }) => {
@@ -103,9 +105,10 @@ export const useTimelineDay = ({
       devices: loaded.devices,
       joinStart: loaded.joinStart,
       now: loaded.now,
+      senders,
       windowStart: windowStart.getTime(),
     });
-  }, [data, dataUpdatedAt, day, shownPartial, windowStart]);
+  }, [data, dataUpdatedAt, day, senders, shownPartial, windowStart]);
   return {
     joinStart: data?.joinStart ?? shownPartial?.joinStart ?? null,
     progress: progress?.loadKey === loadKey ? progress.people : null,

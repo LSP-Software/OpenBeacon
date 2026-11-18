@@ -39,6 +39,7 @@ const calls: string[] = [];
 const dismissals: unknown[] = [];
 const alerts: string[] = [];
 const invalidatePredicates: ((query: { queryKey: unknown[] }) => boolean)[] = [];
+const acceptInputs: unknown[] = [];
 
 mock.module("@tanstack/react-query", () => ({ useQuery: () => previewState }));
 mock.module("expo-router", () => ({
@@ -76,8 +77,18 @@ mock.module("../lib/api.ts", () => ({
   trpc: { groupInvites: { list: { queryKey: () => ["invites"] } } },
   trpcClient: {
     groupInvites: {
-      accept: { mutate: () => settle("accept", acceptError) },
-      acceptShared: { mutate: () => settle("acceptShared", acceptError) },
+      accept: {
+        mutate: (input: unknown) => {
+          acceptInputs.push(input);
+          return settle("accept", acceptError);
+        },
+      },
+      acceptShared: {
+        mutate: (input: unknown) => {
+          acceptInputs.push(input);
+          return settle("acceptShared", acceptError);
+        },
+      },
       decline: { mutate: () => settle("decline", declineError) },
     },
   },
@@ -120,6 +131,30 @@ mock.module("../components/ui/Button.tsx", () => ({
     disabled?: boolean;
     onPress?: () => void;
   }) => React.createElement("pressable", { disabled: disabled ?? false, onPress }, children),
+}));
+mock.module("../hooks/useHistoryShare.ts", () => ({
+  useHistoryShare: () => ({ setting: { account: "WEEK_1", changedAt: null, groups: [] } }),
+}));
+mock.module("../components/ui/Dialog.tsx", () => ({
+  Dialog: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
+    open ? React.createElement("dialog", null, children) : null,
+  DialogContent: PassThrough,
+  DialogHeader: PassThrough,
+  DialogTitle: PassThrough,
+}));
+mock.module("../components/HistoryShareChoices.tsx", () => ({
+  HistoryShareChoices: ({ onChange }: { onChange: (value: string | null) => void }) =>
+    React.createElement(
+      "view",
+      null,
+      ["DAY_1", "LAST_LOCATION"].map((value) =>
+        React.createElement(
+          "pressable",
+          { key: value, onPress: () => onChange(value) },
+          React.createElement("text", null, `choose ${value}`),
+        ),
+      ),
+    ),
 }));
 mock.module("../components/ui/Avatar.tsx", () => ({
   Avatar: PassThrough,
@@ -193,6 +228,7 @@ beforeEach(() => {
   dismissals.length = 0;
   alerts.length = 0;
   invalidatePredicates.length = 0;
+  acceptInputs.length = 0;
 });
 
 test("shows who invited you, the group and its size before asking", async () => {
@@ -206,8 +242,24 @@ test("shows who invited you, the group and its size before asking", async () => 
     "Do you want to join this group?",
   ])
     expect(text).toContain(expected);
-  expect(labels(root)).toEqual(["Join Group", "No"]);
+  expect(labels(root)).toEqual(["Change", "Join Group", "No"]);
   expect(text).toContain('"accessibilityLabel":"Alex Smith invited you to join Smith Family"');
+});
+
+test("says how much history you'll share, from your account setting unless you change it for this group", async () => {
+  const root = await render(code);
+  expect(output(root)).toContain('"1 week of history"," (","your account setting",") ·"');
+  await press(root, "Change");
+  await press(root, "choose DAY_1");
+  expect(output(root)).toContain('"1 day of history"," (","this group only",") ·"');
+  await press(root, "Join Group");
+  expect(acceptInputs).toEqual([{ historyShare: "DAY_1" }]);
+});
+
+test("joining without changing it follows the account setting", async () => {
+  const root = await render(email);
+  await press(root, "Join Group");
+  expect(acceptInputs).toEqual([{ historyShare: null }]);
 });
 
 test("a group of one says member, not members", async () => {

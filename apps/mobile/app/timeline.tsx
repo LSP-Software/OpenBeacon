@@ -39,6 +39,7 @@ import { useTimelineDay, useTimelineDays } from "../hooks/useTimeline.ts";
 import { trpc } from "../lib/api.ts";
 import { authClient } from "../lib/auth-client.ts";
 import { initialsFromName } from "../lib/buildLiveMapMarkers.ts";
+import { historyShareNote } from "../lib/historyShare.ts";
 import { cn } from "../lib/cn.ts";
 import { GROUP_COLOR_PALETTE, getGroupColor } from "../lib/groupColor.ts";
 import { loadPersonalNicknames } from "../lib/personalNicknames.ts";
@@ -52,6 +53,7 @@ import { timelineLaneRuns, timelineRoute } from "../lib/timelineMap.ts";
 const SPEEDS = [60, 300, 900] as const;
 const STEP_MS = 15 * 60_000;
 const DRAW_IN_MS = 1200;
+const NO_SENDERS: ReadonlyArray<{ firstHour: number | null; userId: string }> = [];
 
 const TimelineScreen = () => {
   const { groupId, userId } = useLocalSearchParams<{ groupId: string; userId?: string }>();
@@ -209,8 +211,17 @@ const TimelineView = ({
   } = useTimelineDay({
     day,
     groupId: group.id,
+    senders: daysQuery.data?.senders ?? NO_SENDERS,
     userIds: budget?.shown ?? [],
     windowStart,
+  });
+  const shareNotes = (daysQuery.data?.senders ?? []).flatMap((sender) => {
+    if (personId !== null && sender.userId !== personId) return [];
+    const member = members.find((item) => item.userId === sender.userId);
+    const note = member
+      ? historyShareNote(member.isSelf ? null : member.name, sender.historyShare)
+      : null;
+    return note ? [{ note, userId: sender.userId }] : [];
   });
   const peopleWithLocations = budget?.people.filter((person) => person.points > 0) ?? [];
   const hiddenCount = peopleWithLocations.filter(
@@ -691,6 +702,7 @@ const TimelineView = ({
     () =>
       routes.map((route) => ({
         color: route.color,
+        historyStart: route.person.device.historyStart,
         id: route.deviceId,
         initials: route.person.initials,
         runs: route.lanes,
@@ -999,6 +1011,15 @@ const TimelineView = ({
                   label="End of day"
                   onPress={() => scrubTo(timeline.to)}
                 />
+              </View>
+            ) : null}
+            {shareNotes.length > 0 ? (
+              <View className="gap-1 rounded-xl bg-background p-3">
+                {shareNotes.map((item) => (
+                  <Text key={item.userId} className="text-sm text-foreground">
+                    {item.note}
+                  </Text>
+                ))}
               </View>
             ) : null}
             {timeline.historyStart > timeline.day.start ? (
