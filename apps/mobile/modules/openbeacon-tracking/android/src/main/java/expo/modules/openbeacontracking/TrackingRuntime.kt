@@ -10,6 +10,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import expo.modules.openbeacontracking.capture.CapturePipeline
 import expo.modules.openbeacontracking.capture.CaptureCommandState
+import expo.modules.openbeacontracking.capture.CaptureHistoryShare
 import expo.modules.openbeacontracking.capture.SharingCaptureState
 import expo.modules.openbeacontracking.capture.HistoryAllowance
 import expo.modules.openbeacontracking.capture.BootRestartPolicy
@@ -85,6 +86,7 @@ object TrackingRuntime {
       queueOwner = { queueOwner(context) },
       bootId = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1).takeIf { it >= 0 }?.toString(),
       sharingState = { sharingState(context) },
+      historyShare = { historyShare(context) },
       loadAllowance = { group ->
         val parts = context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
           .getString(org.json.JSONArray(group).toString(), null)
@@ -128,6 +130,30 @@ object TrackingRuntime {
       .putString("$scope.confirmed", state.confirmedRevision(replacing = previous))
       .commit())
   }
+
+  fun historyShare(context: Context): CaptureHistoryShare {
+    val owner = queueOwner(context) ?: return CaptureHistoryShare()
+    val deviceId = queueDeviceId(context) ?: return CaptureHistoryShare()
+    val stored = context.getSharedPreferences("openbeacon_tracking_history_share", Context.MODE_PRIVATE)
+      .getString(org.json.JSONArray(listOf(owner, deviceId)).toString(), null) ?: return CaptureHistoryShare()
+    val setting = org.json.JSONObject(stored)
+    val groups = setting.getJSONObject("groups")
+    return CaptureHistoryShare(
+      account = setting.getString("account"),
+      groups = groups.keys().asSequence().associateWith { groups.getString(it) },
+    )
+  }
+
+  fun setHistoryShare(context: Context, owner: String, deviceId: String, account: String, groups: Map<String, String>): Boolean =
+    synchronized(captureLock) {
+      if (queueOwner(context) != owner || queueDeviceId(context) != deviceId) return false
+      val setting = org.json.JSONObject().put("account", account).put("groups", org.json.JSONObject(groups))
+      check(context.getSharedPreferences("openbeacon_tracking_history_share", Context.MODE_PRIVATE)
+        .edit()
+        .putString(org.json.JSONArray(listOf(owner, deviceId)).toString(), setting.toString())
+        .commit())
+      true
+    }
 
   private fun confirmedRevision(context: Context): String {
     val owner = queueOwner(context) ?: return ""

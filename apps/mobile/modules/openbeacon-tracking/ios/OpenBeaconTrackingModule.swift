@@ -17,6 +17,10 @@ public class OpenBeaconTrackingModule: Module {
       TrackingRuntime.setSyncListener(nil)
     }
 
+    Function("setHistoryShare") { (owner: String, deviceId: String, account: String, groups: [String: String]) -> Bool in
+      TrackingRuntime.setHistoryShare(owner: owner, deviceId: deviceId, account: account, groups: groups)
+    }
+
     Function("setSharingState") { (owner: String, deviceId: String, prefix: String, paused: Bool, until: Double?, after: Double?) -> Bool in
       TrackingRuntime.applySharingState(
         owner: owner,

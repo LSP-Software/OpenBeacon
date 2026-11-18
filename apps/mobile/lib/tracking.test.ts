@@ -350,6 +350,7 @@ mock.module("./api.ts", () => ({
             userId: currentUserId,
             deviceId: "device-1",
             serverTime: new Date(),
+            historyShare: { account: "MAXIMUM" as const, changedAt: null, groups: [] },
             paused: false,
             pausedUntil: null,
             resumeAfter: null,
@@ -538,6 +539,7 @@ mock.module("../modules/openbeacon-tracking/index.ts", () => ({
       sharingStates.push({ owner, deviceId, prefix, paused });
       return true;
     },
+    setHistoryShare: () => true,
     setQueueOwner: () => {},
     countUnassignedCiphertexts: async () => unassignedCount,
     assignUnassignedCiphertexts: async (deviceId: string, owner: string) => {

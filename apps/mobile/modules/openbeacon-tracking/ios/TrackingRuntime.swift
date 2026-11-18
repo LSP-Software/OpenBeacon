@@ -143,13 +143,21 @@ enum TrackingRuntime {
     defaults.string(forKey: "openbeacon_tracking_queue.deviceId")
   }
 
-  private static func sharingScope() -> String? {
+  private static func ownerScope() -> String? {
     guard
       let owner = queueOwner(),
       let deviceId = queueDeviceId(),
       let data = try? JSONSerialization.data(withJSONObject: [owner, deviceId])
     else { return nil }
-    return "openbeacon_tracking_sharing." + String(decoding: data, as: UTF8.self)
+    return String(decoding: data, as: UTF8.self)
+  }
+
+  private static func sharingScope() -> String? {
+    ownerScope().map { "openbeacon_tracking_sharing." + $0 }
+  }
+
+  private static func historyShareKey() -> String? {
+    ownerScope().map { "openbeacon_tracking_history_share." + $0 }
   }
 
   static func sharingState() -> SharingCaptureState {
@@ -171,6 +179,24 @@ enum TrackingRuntime {
     defaults.set(NSNumber(value: state.pausedUntil ?? 0), forKey: "\(scope).until")
     defaults.set(NSNumber(value: state.resumeAfter), forKey: "\(scope).after")
     defaults.set(state.confirmedRevision(replacing: previous), forKey: "\(scope).confirmed")
+  }
+
+  static func historyShare() -> CaptureHistoryShare {
+    guard
+      let key = historyShareKey(),
+      let stored = defaults.dictionary(forKey: key),
+      let account = stored["account"] as? String,
+      let groups = stored["groups"] as? [String: String]
+    else { return CaptureHistoryShare() }
+    return CaptureHistoryShare(account: account, groups: groups)
+  }
+
+  static func setHistoryShare(owner: String, deviceId: String, account: String, groups: [String: String]) -> Bool {
+    locked {
+      guard queueOwner() == owner, queueDeviceId() == deviceId, let key = historyShareKey() else { return false }
+      defaults.set(["account": account, "groups": groups] as [String: Any], forKey: key)
+      return true
+    }
   }
 
   private static func confirmedRevision() -> String {

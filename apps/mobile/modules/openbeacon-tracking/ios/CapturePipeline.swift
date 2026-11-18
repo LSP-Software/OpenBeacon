@@ -40,13 +40,14 @@ final class CapturePipeline {
       guard isCurrent(), TrackingRuntime.queueOwner() == owner else { return nil }
       let sharing = TrackingRuntime.sharingState()
       guard sharing.canCapture(timestamp: fix.timestampMillis, now: queuedAt) else { return nil }
+      let share = TrackingRuntime.historyShare()
       var streams: [Stream: ProvisionedEpochKey] = [:]
       for key in keys {
         streams[Stream(owner: owner, groupId: key.groupId, epochId: key.epochId, senderDeviceId: key.senderDeviceId, kind: key.kind, revisionPrefix: sharing.revisionPrefix)] = key
       }
       var rows: [(ProvisionedEpochKey, HistoryRecord, String)] = []
       if revocations == previousRevocations {
-        for (stream, key) in previousStreams where streams[stream] == nil {
+        for (stream, key) in previousStreams where streams[stream] == nil && !share.isLiveOnly(stream.groupId) {
           guard let filter = filters[stream] else { continue }
           let next = streams.keys.first { candidate in
             filters[candidate] == nil
@@ -61,8 +62,12 @@ final class CapturePipeline {
       }
       previousStreams = streams
       previousRevocations = revocations
-      filters = filters.filter { streams[$0.key] != nil }
+      filters = filters.filter { streams[$0.key] != nil && !share.isLiveOnly($0.key.groupId) }
       for (stream, key) in streams {
+        if share.isLiveOnly(key.groupId) {
+          if live { rows.append((key, HistoryRecord(fix: fix), CiphertextQueueRow.roleLive)) }
+          continue
+        }
         let filter = filters[stream] ?? HistoryFilter(settings: settings)
         filters[stream] = filter
         let records = filter.onFix(fix) { takeAllowance([owner, key.groupId], now: queuedAt) }

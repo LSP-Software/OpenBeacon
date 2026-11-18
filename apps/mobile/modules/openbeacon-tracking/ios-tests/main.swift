@@ -253,6 +253,12 @@ check(CaptureSamplingPolicy.evaluate(battery: lowBattery, speedMetersPerSecond: 
 check(!CaptureSamplingPolicy.evaluate(battery: battery, speedMetersPerSecond: 0, distanceFromLastQueuedMeters: 5, timeSinceLastQueuedMs: 1000).shouldQueue, "a stationary phone skips nearby fixes")
 check(CaptureSamplingPolicy.evaluate(battery: battery, speedMetersPerSecond: 0, distanceFromLastQueuedMeters: 5, timeSinceLastQueuedMs: 300_000).shouldQueue, "a stationary phone still queues every five minutes")
 
+let historyShare = CaptureHistoryShare(account: "LAST_LOCATION", groups: ["family": "MAXIMUM", "club": "LAST_LOCATION"])
+check(!historyShare.isLiveOnly("family"), "a group's own history choice beats the account setting")
+check(historyShare.isLiveOnly("club"), "a group set to last location only queues no history")
+check(historyShare.isLiveOnly("new-group"), "a group with no choice of its own follows the account setting")
+check(!CaptureHistoryShare().isLiveOnly("new-group"), "the default shares history")
+
 if failures > 0 {
   print("\(failures) iOS tracking core checks failed")
   exit(1)

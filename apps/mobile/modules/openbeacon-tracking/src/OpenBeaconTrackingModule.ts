@@ -80,6 +80,12 @@ declare class OpenBeaconTrackingModule extends NativeModule<{
     pausedUntil: number | null,
     resumeAfter: number | null,
   ): boolean;
+  setHistoryShare(
+    owner: string,
+    deviceId: string,
+    account: string,
+    groups: Record<string, string>,
+  ): boolean;
   isQueueOwner(owner: string, deviceId: string): boolean;
   setQueueOwner(owner: string, deviceId: string): void;
   provisionEpochKeys(keys: ProvisionedEpochKeyInput[], preserveGroupIds?: string[]): void;

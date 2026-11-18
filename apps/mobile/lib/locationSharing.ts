@@ -149,6 +149,22 @@ const applyNativeSharingState = async (state: DeviceSharingState, isCurrent: () 
   return applied;
 };
 
+const applyNativeHistoryShare = async (state: LoadedSharingState, abandoned: () => boolean) => {
+  if (Platform.OS !== "android" && Platform.OS !== "ios") return;
+  const module = (await import("../modules/openbeacon-tracking/index.ts")).default;
+  if (abandoned()) return;
+  module.setHistoryShare(
+    JSON.stringify([baseUrl, state.userId]),
+    state.deviceId,
+    state.historyShare.account,
+    Object.fromEntries(
+      state.historyShare.groups.flatMap(({ groupId, historyShare }) =>
+        historyShare ? [[groupId, historyShare]] : [],
+      ),
+    ),
+  );
+};
+
 const isNativeQueueOwner = async (device: { userId: string; deviceId: string }) => {
   if (Platform.OS !== "android" && Platform.OS !== "ios") return false;
   const module = (await import("../modules/openbeacon-tracking/index.ts")).default;
@@ -242,6 +258,7 @@ const loadSharingState = async (
   const isCurrent = () =>
     !abandoned() && !hasPendingSharingPause(device.userId) && changeRevision === revision;
   await applyNativeSharingState(state, isCurrent);
+  await applyNativeHistoryShare(state, abandoned);
   return state;
 };
 
