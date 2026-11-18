@@ -34,8 +34,8 @@ class OpenBeaconTrackingModule : Module() {
         TrackingRuntime.applySharingState(requireContext(), owner, deviceId, SharingCaptureState(prefix, paused, until?.toLong(), after?.toLong() ?: 0L))
       }
 
-      Function("setSeatHoldNotice") { owner: String, deviceId: String, sharing: List<String>, held: List<String> ->
-        TrackingRuntime.setSeatHoldNotice(requireContext(), owner, deviceId, SeatHoldNotice(sharing, held))
+      Function("setSeatHoldNotice") { owner: String, deviceId: String, sharing: List<String>, held: List<String>, heldGroupIds: List<String> ->
+        TrackingRuntime.setSeatHoldNotice(requireContext(), owner, deviceId, SeatHoldNotice(sharing, held, heldGroupIds))
       }
 
       Function("clearSeatHoldNotices") {

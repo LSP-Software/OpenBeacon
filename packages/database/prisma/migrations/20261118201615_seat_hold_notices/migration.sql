@@ -8,6 +8,7 @@
 
 ALTER TYPE "AccountNoticeType" ADD VALUE 'SEATS_ENDING';
 ALTER TYPE "AccountNoticeType" ADD VALUE 'SEATS_ENDING_SOON';
+ALTER TYPE "AccountNoticeType" ADD VALUE 'SEATS_ENDED';
 ALTER TYPE "AccountNoticeType" ADD VALUE 'SEAT_HOLD_COMING';
 
 -- AlterTable

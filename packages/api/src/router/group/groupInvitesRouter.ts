@@ -107,7 +107,7 @@ const getInvitePreview = async ({
     },
     inviter: { name: inviter.name, image: null },
     owner: { name: seats.owner.name },
-    seats: { needed, free: seats.free, perGroup: seats.seatsPerGroup },
+    seats: { needed, perGroup: seats.seatsPerGroup },
     alreadyMember,
     joinBlockedBy: alreadyMember
       ? null
@@ -173,7 +173,6 @@ export const groupInvitesRouter = {
     });
     const blockedBy = joinBlockedBy({ free: state.free, groupSeats: state.groupSeats, needed: 1 });
     return {
-      ...state,
       blockedBy,
       message:
         blockedBy === "GROUP_FULL"

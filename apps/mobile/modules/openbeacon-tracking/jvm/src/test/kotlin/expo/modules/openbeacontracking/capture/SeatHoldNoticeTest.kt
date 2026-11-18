@@ -30,8 +30,8 @@ class SeatHoldNoticeTest {
   @Test
   fun storedHoldsReadBack() {
     assertEquals(
-      SeatHoldNotice(sharing = listOf("Family"), held = listOf("Work")),
-      SeatHoldNotice.parse("""{"sharing":["Family"],"held":["Work"]}"""),
+      SeatHoldNotice(sharing = listOf("Family"), held = listOf("Work"), heldGroupIds = listOf("work")),
+      SeatHoldNotice.parse("""{"sharing":["Family"],"held":["Work"],"heldGroupIds":["work"]}"""),
     )
   }
 
@@ -40,5 +40,6 @@ class SeatHoldNoticeTest {
     assertEquals(SeatHoldNotice(), SeatHoldNotice.parse("not json"))
     assertEquals(SeatHoldNotice(), SeatHoldNotice.parse("""{"sharing":["Family"]}"""))
     assertEquals(SeatHoldNotice(), SeatHoldNotice.parse("""{"sharing":"Family","held":[]}"""))
+    assertEquals(SeatHoldNotice(), SeatHoldNotice.parse("""{"sharing":["Family"],"held":["Work"]}"""))
   }
 }

@@ -38,6 +38,20 @@ DELETE FROM "Group" WHERE "ownerId" IS NULL;
 
 ALTER TABLE "Group" ALTER COLUMN "ownerId" SET NOT NULL;
 
+UPDATE "User" AS "user"
+SET "seats" = GREATEST("user"."seats", LEAST("used"."count", 1024))
+FROM (
+  SELECT "group"."ownerId", count(*)::int AS "count"
+  FROM "Group" AS "group"
+  JOIN "GroupMember" AS "member" ON "member"."groupId" = "group"."id"
+  JOIN "UserDevice" AS "device"
+    ON "device"."userId" = "member"."userId"
+    AND "device"."activatedAt" IS NOT NULL
+    AND "device"."revokedAt" IS NULL
+  GROUP BY "group"."ownerId"
+) AS "used"
+WHERE "user"."id" = "used"."ownerId";
+
 -- CreateIndex
 CREATE INDEX "AccountNotice_groupId_idx" ON "AccountNotice"("groupId");
 

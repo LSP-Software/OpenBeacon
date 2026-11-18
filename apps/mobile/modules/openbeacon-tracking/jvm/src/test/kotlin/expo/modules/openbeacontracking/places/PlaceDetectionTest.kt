@@ -101,6 +101,31 @@ class PlaceDetectionTest {
   }
 
   @Test
+  fun aHeldGroupDetectsNothingAndDropsItsQueueUntilTheHoldLifts() {
+    val detection = detection()
+    detection.setGroupPlaces("group-1", listOf(home))
+    detection.setGroupPlaces("group-2", listOf(school))
+    detection.arriveAtHome(0)
+    detection.fix(school, 1_000.0, 400)
+    (430L..700L step 30).forEach { detection.fix(school, 0.0, it) }
+    detection.dropQueued(listOf("group-1"))
+    assertEquals(listOf("group-2"), detection.queued(owner, 10).map { it.groupId })
+    detection.acknowledge(detection.queued(owner, 10).map { it.clientId })
+
+    val held = setOf("group-1")
+    fun heldFix(metersNorth: Double, atSeconds: Long) =
+      detection.onFix(owner, "device-1", sharing, (atSeconds + 1) * 1_000, home.latitude + metersNorth / 111_195.0, home.longitude, 10.0, (atSeconds + 1) * 1_000, held)
+    heldFix(1_000.0, 800)
+    (830L..1_100L step 30).forEach { heldFix(0.0, it) }
+    assertEquals(listOf("group-2" to PlaceTransitionRow.LEAVE), detection.queued(owner, 10).map { it.groupId to it.direction })
+    detection.acknowledge(detection.queued(owner, 10).map { it.clientId })
+
+    detection.fix(home, 0.0, 1_130)
+    assertEquals(0, (1_160L..1_400L step 30).sumOf { detection.fix(home, 0.0, it) })
+    assertEquals(1, (1_430L..1_700L step 30).sumOf { detection.fix(home, 1_000.0, it) })
+  }
+
+  @Test
   fun deletingAPlaceClearsOnlyThatPlacesTransitions() {
     val queue = InMemoryPlaceTransitionQueue()
     val detection = detection(queue = queue)

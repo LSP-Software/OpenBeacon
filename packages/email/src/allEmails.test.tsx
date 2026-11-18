@@ -59,11 +59,11 @@ const renderEveryEmail = async () => {
     )),
     await renderGoogleSignInEmail({ serverName }),
     ...(await Promise.all(
-      [true, false].map((reminder) =>
+      (["ending", "reminder", "ended"] as const).map((kind) =>
         renderSeatsEndingEmail({
           holds: [{ groupName: "Family", memberName: "Alice", deviceName: "Pixel 8" }],
           holdsFrom: new Date("2026-07-16T13:32:00Z"),
-          reminder,
+          kind,
           serverName,
           timezone: "Europe/London",
         }),

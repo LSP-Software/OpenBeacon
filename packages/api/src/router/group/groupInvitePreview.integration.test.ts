@@ -108,7 +108,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         group: { id: groupId, name: "Smith Family", image: null, memberCount: 1 },
         inviter: { name: `Name ${owner}`, image: null },
         owner: { name: `Name ${owner}` },
-        seats: { needed: 1, free: null, perGroup: 64 },
+        seats: { needed: 1, perGroup: 64 },
         alreadyMember: false,
         joinBlockedBy: null,
       });
@@ -163,7 +163,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         group: { id: groupId, name: "Smith Family", image: null, memberCount: 1 },
         inviter: { name: `Name ${owner}`, image: null },
         owner: { name: `Name ${owner}` },
-        seats: { needed: 1, free: null, perGroup: 64 },
+        seats: { needed: 1, perGroup: 64 },
         alreadyMember: false,
         joinBlockedBy: null,
       });

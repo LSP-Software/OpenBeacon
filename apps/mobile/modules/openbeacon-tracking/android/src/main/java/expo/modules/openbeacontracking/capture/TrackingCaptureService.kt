@@ -492,6 +492,7 @@ class TrackingCaptureService : Service() {
           longitude = location.longitude,
           accuracyMeters = location.accuracy.toDouble().takeIf { location.hasAccuracy() },
           timestampMillis = location.time,
+          heldGroupIds = TrackingRuntime.seatHoldNotice(this).heldGroupIds.toSet(),
         ) > 0
       }
     } catch (error: Exception) {

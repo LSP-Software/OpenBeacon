@@ -33,6 +33,7 @@ model User {
   seats          Int             @default(2)
   paidPeriodEndsAt DateTime?
   lastGracePeriodStartedAt DateTime?
+  seatsEndedNoticeFor DateTime?
   sessions       Session[]
   accounts       Account[]
   pendingUploads PendingUpload[]
@@ -109,6 +110,7 @@ enum AccountNoticeType {
   OWNERSHIP_OFFERED
   SEATS_ENDING
   SEATS_ENDING_SOON
+  SEATS_ENDED
   SEAT_HOLD_COMING
 }
 

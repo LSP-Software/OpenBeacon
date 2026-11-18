@@ -88,6 +88,7 @@ object TrackingRuntime {
       bootId = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1).takeIf { it >= 0 }?.toString(),
       sharingState = { sharingState(context) },
       historyShare = { historyShare(context) },
+      heldGroupIds = { seatHoldNotice(context).heldGroupIds.toSet() },
       loadAllowance = { group ->
         val parts = context.getSharedPreferences("openbeacon_tracking_history_allowance", Context.MODE_PRIVATE)
           .getString(org.json.JSONArray(group).toString(), null)
@@ -149,15 +150,19 @@ object TrackingRuntime {
   fun setSeatHoldNotice(context: Context, owner: String, deviceId: String, notice: SeatHoldNotice): Boolean {
     val changed = synchronized(captureLock) {
       if (queueOwner(context) != owner || queueDeviceId(context) != deviceId) return false
-      if (seatHoldNotice(context) == notice) return true
-      val stored = org.json.JSONObject()
-        .put("sharing", org.json.JSONArray(notice.sharing))
-        .put("held", org.json.JSONArray(notice.held))
-      check(context.getSharedPreferences("openbeacon_tracking_seat_holds", Context.MODE_PRIVATE)
-        .edit()
-        .putString(org.json.JSONArray(listOf(owner, deviceId)).toString(), stored.toString())
-        .commit())
-      true
+      val unchanged = seatHoldNotice(context) == notice
+      if (!unchanged) {
+        val stored = org.json.JSONObject()
+          .put("sharing", org.json.JSONArray(notice.sharing))
+          .put("held", org.json.JSONArray(notice.held))
+          .put("heldGroupIds", org.json.JSONArray(notice.heldGroupIds))
+        check(context.getSharedPreferences("openbeacon_tracking_seat_holds", Context.MODE_PRIVATE)
+          .edit()
+          .putString(org.json.JSONArray(listOf(owner, deviceId)).toString(), stored.toString())
+          .commit())
+      }
+      notice.dropHeldRecords(owner, ciphertextQueue(context), placeDetection(context))
+      !unchanged
     }
     if (changed && isCaptureRunning) {
       try {

@@ -16,14 +16,14 @@ const preview: {
   group: { id: string; name: string; image: null; memberCount: number };
   inviter: { name: string; image: null };
   owner: { name: string };
-  seats: { needed: number; free: number | null; perGroup: number };
+  seats: { needed: number; perGroup: number };
   alreadyMember: boolean;
   joinBlockedBy: "GROUP_LIMIT" | "PENDING_DELETION" | "NO_FREE_SEATS" | "GROUP_FULL" | null;
 } = {
   group: { id: "group-1", name: "Smith Family", image: null, memberCount: 4 },
   inviter: { name: "Alex Smith", image: null },
   owner: { name: "Sam Smith" },
-  seats: { needed: 2, free: 1, perGroup: 64 },
+  seats: { needed: 2, perGroup: 64 },
   alreadyMember: false,
   joinBlockedBy: null,
 };
@@ -415,7 +415,10 @@ test.each([
 test.each([
   ["GROUP_LIMIT" as const, "as many groups as your account allows"],
   ["PENDING_DELETION" as const, "scheduled for deletion"],
-  ["NO_FREE_SEATS" as const, "(you need 2, 1 is free). Ask Sam Smith to add seats."],
+  [
+    "NO_FREE_SEATS" as const,
+    "This group has no free seats for your phones. Ask Sam Smith to add seats.",
+  ],
   ["GROUP_FULL" as const, "A group can have up to 64 phones."],
 ])("a %s block shows the group but not Join group", async (joinBlockedBy, expected) => {
   showPreview({ joinBlockedBy });

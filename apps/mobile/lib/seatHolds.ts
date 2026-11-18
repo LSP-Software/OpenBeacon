@@ -50,6 +50,7 @@ export const noteHeldGroups = async ({
       deviceId,
       groups.filter((group) => !heldGroupIds.includes(group.id)).map((group) => group.name),
       groups.filter((group) => heldGroupIds.includes(group.id)).map((group) => group.name),
+      heldGroupIds,
     );
     if (applied === false) return;
   }

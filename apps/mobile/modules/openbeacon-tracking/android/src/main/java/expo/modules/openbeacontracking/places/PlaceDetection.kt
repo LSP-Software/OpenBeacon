@@ -22,13 +22,14 @@ class PlaceDetection(
     longitude: Double,
     accuracyMeters: Double?,
     timestampMillis: Long,
+    heldGroupIds: Set<String> = emptySet(),
   ): Int {
     if (!sharing.canCapture(timestampMillis, nowMillis)) {
       detector.reset()
       return 0
     }
     if (timestampMillis > nowMillis + MAX_FUTURE_FIX_MILLIS) return 0
-    val current = places ?: store.list().also { places = it }
+    val current = (places ?: store.list().also { places = it }).filter { it.groupId !in heldGroupIds }
     val rows =
       detector.onFix(current, latitude, longitude, accuracyMeters, timestampMillis).map { crossing ->
         PlaceTransitionRow(
@@ -57,6 +58,11 @@ class PlaceDetection(
     store.removeGroups(groupIds)
     places = null
     if (groupIds == null) queue.deleteByOwner(null) else queue.deleteByGroups(groupIds)
+  }
+
+  @Synchronized
+  fun dropQueued(groupIds: List<String>) {
+    queue.deleteByGroups(groupIds)
   }
 
   @Synchronized

@@ -12,7 +12,7 @@ describe("renderSeatsEndingEmail", () => {
     const email = await renderSeatsEndingEmail({
       holds,
       holdsFrom: new Date("2026-07-16T13:32:00Z"),
-      reminder: false,
+      kind: "ending",
       serverName: "Family Server",
       timezone: "Europe/London",
     });
@@ -29,7 +29,7 @@ describe("renderSeatsEndingEmail", () => {
     const email = await renderSeatsEndingEmail({
       holds,
       holdsFrom: new Date("2026-07-16T13:32:00Z"),
-      reminder: true,
+      kind: "reminder",
       serverName: "Family Server",
       timezone: null,
     });
@@ -37,12 +37,29 @@ describe("renderSeatsEndingEmail", () => {
     expect(email.summary.type).toBe("seats:ending-soon");
   });
 
+  test("the ended form says the phones are on hold now", async () => {
+    const email = await renderSeatsEndingEmail({
+      holds,
+      holdsFrom: new Date("2026-07-16T13:32:00Z"),
+      kind: "ended",
+      serverName: "Family Server",
+      timezone: "Europe/London",
+    });
+    expect(email.subject).toBe("Phones in your OpenBeacon groups are on hold");
+    expect(email.summary.type).toBe("seats:ended");
+    expect(email.text).toContain(
+      "Your seats ended on Thursday, 16 July 2026 at 14:32 BST (13:32 UTC) and these phones are on hold until you renew:",
+    );
+    expect(email.text).toContain("Family\n\n * Alice (Pixel 8)\n * Bob (Pixel 7)");
+    expect(email.text).toContain("Renew your seats and sharing starts again on its own.");
+  });
+
   test("refuses to send with nobody going on hold", async () => {
     expect(
       renderSeatsEndingEmail({
         holds: [],
         holdsFrom: new Date(),
-        reminder: false,
+        kind: "ending",
         serverName: "Family Server",
         timezone: null,
       }),

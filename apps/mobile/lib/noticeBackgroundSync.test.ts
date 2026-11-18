@@ -172,6 +172,11 @@ describe("account notices", () => {
       body: `From ${date}, phones in the groups you own go on hold until you renew your seats. Open Account › Usage to see which.`,
       link: { url: "openbeacon:///account/usage" },
     });
+    expect(describeAccountNotice(account("SEATS_ENDED", { holdsFrom }))).toMatchObject({
+      title: "Your seats have ended",
+      body: "Phones in the groups you own are on hold until you renew your seats. Open Account › Usage to see which.",
+      link: { url: "openbeacon:///account/usage" },
+    });
     expect(describeAccountNotice(account("SEATS_ENDING_SOON", { holdsFrom })).title).toBe(
       "Phones in your groups go on hold tomorrow",
     );

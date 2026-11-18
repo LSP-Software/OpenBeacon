@@ -177,28 +177,20 @@ export const noFreeSeatsToInviteMessage = ({
   used: number | null;
   userId: string;
 }) => {
+  if (owner.userId !== userId) {
+    return `${owner.name} owns this group and has no free seats. Ask ${owner.name} to add seats or to remove someone.`;
+  }
   const count = seats ?? 0;
   const inUse = used ?? 0;
-  if (owner.userId === userId) {
-    const using =
-      count === 0
-        ? "You have no seats."
-        : inUse > count
-          ? `You're using ${seatCount(inUse)} but have ${count}.`
-          : count === 1
-            ? "You're using your only seat."
-            : `You're using all ${count} of your seats.`;
-    return `${using} Add seats or remove someone to invite more people.`;
-  }
   const using =
     count === 0
-      ? "has no seats"
+      ? "You have no seats."
       : inUse > count
-        ? `is using ${seatCount(inUse)} but has ${count}`
+        ? `You're using ${seatCount(inUse)} but have ${count}.`
         : count === 1
-          ? "is using their only seat"
-          : `is using all ${count} of their seats`;
-  return `${owner.name} owns this group and ${using}. Ask ${owner.name} to add seats or to remove someone.`;
+          ? "You're using your only seat."
+          : `You're using all ${count} of your seats.`;
+  return `${using} Add seats or remove someone to invite more people.`;
 };
 
 export const lockOwnerThenGroup = async ({
@@ -247,7 +239,7 @@ export const assertRoomToJoin = async ({
   if (blockedBy === "GROUP_FULL") throw groupFullError();
   if (blockedBy === "NO_FREE_SEATS") {
     throw noFreeSeatsError(
-      `This group has no free seats for your phones. You need ${seatCount(needed)} and ${state.free} ${state.free === 1 ? "is" : "are"} free. Ask ${state.owner.name} to add seats.`,
+      `This group has no free seats for your phones. Ask ${state.owner.name} to add seats.`,
     );
   }
 };

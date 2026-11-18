@@ -113,6 +113,12 @@ export const describeAccountNotice = (notice: AccountNotices["notices"][number])
         body: `${notice.holdsFrom ? `From ${shortDate(notice.holdsFrom)}, phones` : "Phones"} in the groups you own go on hold until you renew your seats. Open Account › Usage to see which.`,
         link: accountLink("usage"),
       };
+    case "SEATS_ENDED":
+      return {
+        title: "Your seats have ended",
+        body: "Phones in the groups you own are on hold until you renew your seats. Open Account › Usage to see which.",
+        link: accountLink("usage"),
+      };
     case "SEAT_HOLD_COMING":
       return {
         title: `Your phones go on hold in ${notice.group?.name ?? "a group"}${notice.holdsFrom ? ` on ${shortDate(notice.holdsFrom)}` : ""}`,

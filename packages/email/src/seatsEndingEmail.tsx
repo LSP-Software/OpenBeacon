@@ -6,30 +6,53 @@ import type { EmailMessage } from "./types.ts";
 export const renderSeatsEndingEmail = async ({
   holds,
   holdsFrom,
-  reminder,
+  kind,
   serverName,
   timezone,
 }: {
   holds: { groupName: string; memberName: string; deviceName: string }[];
   holdsFrom: Date;
-  reminder: boolean;
+  kind: "ending" | "reminder" | "ended";
   serverName: string;
   timezone: string | null;
 }): Promise<Omit<EmailMessage, "to">> => {
   if (!holds.length) throw new Error("At least one phone going on hold is required");
   const when = formatAlertTime(holdsFrom, timezone);
   const groups = [...new Set(holds.map(({ groupName }) => groupName))];
-  const title = reminder ? "Holds start tomorrow" : "Your seats have ended";
-  const intro = reminder
-    ? `Your groups keep working until ${when}. Then these phones go on hold:`
-    : `Your groups keep working as they are until ${when}. Then these phones go on hold:`;
+  const phones = holds.length === 1 ? "phone" : "phones";
+  const renewBefore =
+    "Renew your seats before then. If phones are already on hold, sharing starts again on its own as soon as you add seats.";
+  const goOnHold = `${holds.length} ${phones} ${holds.length === 1 ? "goes" : "go"} on hold on ${when}.`;
+  const text = {
+    ending: {
+      title: "Your seats have ended",
+      intro: `Your groups keep working as they are until ${when}. Then these phones go on hold:`,
+      preview: goOnHold,
+      renew: renewBefore,
+      subject: "Your OpenBeacon seats have ended",
+    },
+    reminder: {
+      title: "Holds start tomorrow",
+      intro: `Your groups keep working until ${when}. Then these phones go on hold:`,
+      preview: goOnHold,
+      renew: renewBefore,
+      subject: "Phones in your OpenBeacon groups go on hold tomorrow",
+    },
+    ended: {
+      title: "Your seats have ended",
+      intro: `Your seats ended on ${when} and these phones are on hold until you renew:`,
+      preview: `${holds.length} ${phones} ${holds.length === 1 ? "is" : "are"} on hold.`,
+      renew: "Renew your seats and sharing starts again on its own.",
+      subject: "Phones in your OpenBeacon groups are on hold",
+    },
+  }[kind];
   const rendered = await renderEmailLayout({
     serverName,
-    title,
-    preview: `${holds.length} ${holds.length === 1 ? "phone goes" : "phones go"} on hold on ${when}.`,
+    title: text.title,
+    preview: text.preview,
     children: (
       <>
-        <Text style={{ margin: "0 0 8px" }}>{intro}</Text>
+        <Text style={{ margin: "0 0 8px" }}>{text.intro}</Text>
         {groups.map((groupName) => (
           <div key={groupName}>
             <Text style={{ margin: "0 0 4px", fontWeight: 600 }}>{groupName}</Text>
@@ -51,18 +74,15 @@ export const renderSeatsEndingEmail = async ({
           account.
         </Text>
         <EmailSubheading>Keep them sharing</EmailSubheading>
-        <Text style={{ margin: 0 }}>
-          Renew your seats before then. If phones are already on hold, sharing starts again on its
-          own as soon as you add seats.
-        </Text>
+        <Text style={{ margin: 0 }}>{text.renew}</Text>
       </>
     ),
   });
   return {
-    subject: reminder
-      ? "Phones in your OpenBeacon groups go on hold tomorrow"
-      : "Your OpenBeacon seats have ended",
-    summary: { type: reminder ? "seats:ending-soon" : "seats:ending" },
+    subject: text.subject,
+    summary: {
+      type: { ending: "seats:ending", reminder: "seats:ending-soon", ended: "seats:ended" }[kind],
+    },
     ...rendered,
   };
 };

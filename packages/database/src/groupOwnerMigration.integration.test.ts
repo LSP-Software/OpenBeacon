@@ -6,7 +6,7 @@ const migrationsPath = `${import.meta.dir}/../prisma/migrations`;
 const target = "20261118154141_group_owner";
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migration", () => {
-  test("each group's earliest-joined OWNER not being deleted becomes its owner and every role is renamed", async () => {
+  test("each group's earliest-joined OWNER not being deleted becomes its owner, every role is renamed and owners get a seat for every phone", async () => {
     const schema = `migration_${crypto.randomUUID().replaceAll("-", "")}`;
     const sql = new SQL(process.env["DATABASE_URL"] ?? "");
     const connection = await sql.reserve();
@@ -22,8 +22,9 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migr
         INSERT INTO "User" ("id", "name", "email", "updatedAt") VALUES
           ('ann', 'Ann', 'ann@example.test', now()),
           ('ben', 'Ben', 'ben@example.test', now()),
-          ('cat', 'Cat', 'cat@example.test', now()),
           ('dan', 'Dan', 'dan@example.test', now());
+        INSERT INTO "User" ("id", "name", "email", "updatedAt", "seats") VALUES
+          ('cat', 'Cat', 'cat@example.test', now(), 5);
         INSERT INTO "User" ("id", "name", "email", "updatedAt", "pendingDeletion") VALUES
           ('eve', 'Eve', 'eve@example.test', now(), true);
         INSERT INTO "Group" ("id", "name", "updatedAt") VALUES
@@ -47,6 +48,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migr
         INSERT INTO "GroupEvent" ("id", "groupId", "type", "subjectUserId", "role") VALUES
           ('made-owner', 'several', 'ROLE_CHANGED', 'ann', 'OWNER'),
           ('made-admin', 'several', 'ROLE_CHANGED', 'ben', 'ADMIN');
+        INSERT INTO "UserDevice" ("id", "userId", "publicKey", "publicKeyAlgorithm", "name", "icon", "activatedAt", "revokedAt") VALUES
+          ('ann-phone', 'ann', 'key', 'x25519', 'Phone', 'phone', now(), NULL),
+          ('ann-tablet', 'ann', 'key', 'x25519', 'Tablet', 'tablet', now(), NULL),
+          ('ben-phone', 'ben', 'key', 'x25519', 'Phone', 'phone', now(), NULL),
+          ('ben-old', 'ben', 'key', 'x25519', 'Old phone', 'phone', now(), now()),
+          ('cat-phone', 'cat', 'key', 'x25519', 'Phone', 'phone', NULL, NULL),
+          ('eve-phone', 'eve', 'key', 'x25519', 'Phone', 'phone', now(), NULL);
       `);
 
       await migrate(target);
@@ -77,6 +85,13 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")("group owner migr
       ).toEqual([
         { id: "made-admin", role: "EDITOR" },
         { id: "made-owner", role: "ADMIN" },
+      ]);
+      expect(await connection.unsafe(`SELECT "id", "seats" FROM "User" ORDER BY "id"`)).toEqual([
+        { id: "ann", seats: 3 },
+        { id: "ben", seats: 3 },
+        { id: "cat", seats: 5 },
+        { id: "dan", seats: 2 },
+        { id: "eve", seats: 2 },
       ]);
     } finally {
       await connection.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);

@@ -5,6 +5,9 @@ import expo.modules.openbeacontracking.crypto.EncryptedGroupPayload
 import expo.modules.openbeacontracking.crypto.TrackingPointCodec
 import expo.modules.openbeacontracking.keys.InMemoryEpochKeyStore
 import expo.modules.openbeacontracking.keys.ProvisionedEpochKey
+import expo.modules.openbeacontracking.places.InMemoryPlaceStore
+import expo.modules.openbeacontracking.places.InMemoryPlaceTransitionQueue
+import expo.modules.openbeacontracking.places.PlaceDetection
 import expo.modules.openbeacontracking.queue.CiphertextQueueRow
 import expo.modules.openbeacontracking.queue.InMemoryCiphertextQueue
 import java.util.concurrent.CountDownLatch
@@ -576,6 +579,76 @@ class CapturePipelineTest {
       assertEquals(CiphertextQueueRow.ROLE_POINT, fresh.role)
       assertEquals(start + 6 * 60_000L to null, decrypt(fresh))
     }
+  }
+
+  @Test
+  fun aHeldGroupRecordsNothingAndDropsWhatItQueuedUntilTheHoldLifts() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(
+      listOf(
+        ProvisionedEpochKey("family", "epoch_a", ByteArray(32), "device_1", "trackingPoint"),
+        ProvisionedEpochKey("work", "epoch_b", ByteArray(32), "device_1", "trackingPoint"),
+      ),
+    )
+    val queue = InMemoryCiphertextQueue()
+    val places = PlaceDetection(InMemoryPlaceStore(), InMemoryPlaceTransitionQueue())
+    var notice = SeatHoldNotice()
+    var state = SharingCaptureState()
+    val pipeline = CapturePipeline(
+      epochKeyStore = keys,
+      ciphertextQueue = queue,
+      queueOwner = { "owner" },
+      sharingState = { state },
+      heldGroupIds = { notice.heldGroupIds.toSet() },
+    )
+    val start = at("2026-07-13T18:45:00.000Z")
+    fun capture(minute: Long) = pipeline.onFix(51.5 + minute / 1_000.0, -0.1, start + minute * 60_000L, 5.0, 80, false, accuracyMeters = 5.0)
+    fun queued(groupId: String) = queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 100).filter { it.groupId == groupId }
+
+    capture(0)
+    capture(1)
+    val familyBefore = queued("family")
+    assertTrue(queued("work").isNotEmpty())
+
+    notice = SeatHoldNotice(sharing = listOf("Family"), held = listOf("Work"), heldGroupIds = listOf("work"))
+    notice.dropHeldRecords("owner", queue, places)
+    assertTrue(queued("work").isEmpty())
+    assertEquals(familyBefore, queued("family"))
+
+    for (minute in 2L..4L) capture(minute)
+    assertTrue(queued("work").isEmpty())
+    assertTrue(queued("family").size > familyBefore.size)
+
+    state = SharingCaptureState(revisionPrefix = "s1.1:", paused = true)
+    val familyWhilePaused = queued("family")
+    assertEquals(0, capture(5))
+    assertEquals(familyWhilePaused, queued("family"))
+    state = SharingCaptureState(revisionPrefix = "s1.2:")
+
+    notice = SeatHoldNotice(sharing = listOf("Family", "Work"))
+    capture(6)
+    val resumed = queued("work")
+    assertTrue(resumed.isNotEmpty())
+    assertTrue(resumed.all { decrypt(it).first == start + 6 * 60_000L })
+  }
+
+  @Test
+  fun aHoldThatStartsDuringEncryptionKeepsTheFixOutOfTheQueue() {
+    val keys = InMemoryEpochKeyStore()
+    keys.replaceAll(
+      listOf(
+        ProvisionedEpochKey("family", "epoch_a", ByteArray(32), "device_1", "trackingPoint"),
+        ProvisionedEpochKey("work", "epoch_b", ByteArray(32), "device_1", "trackingPoint"),
+      ),
+    )
+    val queue = InMemoryCiphertextQueue()
+    var held = emptySet<String>()
+    val pipeline = CapturePipeline(epochKeyStore = keys, ciphertextQueue = queue, queueOwner = { "owner" }, heldGroupIds = { held }, newPointId = {
+      held = setOf("work")
+      ByteArray(8)
+    })
+    assertEquals(1, pipeline.onFix(51.5, 0.0, at("2026-07-13T18:45:00.000Z"), null, 80, false))
+    assertEquals(listOf("family"), queue.listByStatus(CiphertextQueueRow.STATUS_PENDING, 10).map { it.groupId })
   }
 
   @Test

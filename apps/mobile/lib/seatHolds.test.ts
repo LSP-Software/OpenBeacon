@@ -4,6 +4,7 @@ import { createReactNativeTestModule } from "../test/reactNativeTestModule.ts";
 const storageValues = new Map<string, string>();
 const shown: Array<{ title: string; body: string | null; kind: string }> = [];
 const nativeNotices: Array<{ sharing: string[]; held: string[] }> = [];
+const nativeHeldGroupIds: string[][] = [];
 let paused = false;
 let listQueries = 0;
 let groups = [
@@ -50,8 +51,15 @@ mock.module("./notifications.ts", () => ({
 }));
 mock.module("./trackingModule.ts", () => ({
   loadTrackingModule: async () => ({
-    setSeatHoldNotice: (_owner: string, _deviceId: string, sharing: string[], held: string[]) => {
+    setSeatHoldNotice: (
+      _owner: string,
+      _deviceId: string,
+      sharing: string[],
+      held: string[],
+      heldGroupIds: string[],
+    ) => {
       nativeNotices.push({ sharing, held });
+      nativeHeldGroupIds.push(heldGroupIds);
       return noticeApplied;
     },
     clearSeatHoldNotices: () => {
@@ -76,6 +84,7 @@ beforeEach(() => {
   storageValues.clear();
   shown.length = 0;
   nativeNotices.length = 0;
+  nativeHeldGroupIds.length = 0;
   paused = false;
   listQueries = 0;
   groups = [
@@ -97,6 +106,19 @@ test("the sharing notice lists only the groups this phone shares with", async ()
 
   await note(["family", "work"]);
   expect(nativeNotices.at(-1)).toEqual({ sharing: [], held: ["Family", "Work"] });
+});
+
+test("the phone is told which groups to stop recording for until the hold lifts", async () => {
+  await note(["work"]);
+  await note(["family", "work"]);
+  await note([]);
+  expect(nativeHeldGroupIds).toEqual([["work"], ["family", "work"], []]);
+});
+
+test("a held group the phone hasn't listed yet still stops recording", async () => {
+  await note(["club"]);
+  expect(nativeHeldGroupIds).toEqual([["club"]]);
+  expect(nativeNotices).toEqual([{ sharing: ["Family", "Work"], held: [] }]);
 });
 
 test("a phone that has never been on hold doesn't touch the notice", async () => {

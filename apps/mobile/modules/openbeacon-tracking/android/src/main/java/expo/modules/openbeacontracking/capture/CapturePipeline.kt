@@ -26,6 +26,7 @@ class CapturePipeline(
   private val historySettings: HistoryFilterSettings = HistoryFilterSettings(),
   private val loadAllowance: (List<String>) -> HistoryAllowance? = { null },
   private val saveAllowance: (List<String>, HistoryAllowance) -> Unit = { _, _ -> },
+  private val heldGroupIds: () -> Set<String> = { emptySet() },
 ) {
   private data class Stream(
     val owner: String,
@@ -73,7 +74,8 @@ class CapturePipeline(
       val sharing = sharingState()
       if (!sharing.canCapture(timestampMillis, queuedAt)) return 0
       val share = historyShare()
-      val streams = keys.associateBy { key -> Stream(owner, key.groupId, key.epochId, key.senderDeviceId, key.kind, sharing.revisionPrefix) }
+      val held = heldGroupIds()
+      val streams = keys.filter { it.groupId !in held }.associateBy { key -> Stream(owner, key.groupId, key.epochId, key.senderDeviceId, key.kind, sharing.revisionPrefix) }
       val closing = if (revocations != previousRevocations) emptyList() else previousStreams.filterKeys { it !in streams && !share.isLiveOnly(it.groupId) }.flatMap { (stream, key) ->
         val filter = filters[stream] ?: return@flatMap emptyList()
         val next = streams.keys.firstOrNull { it !in filters && it.copy(epochId = stream.epochId) == stream } ?: return@flatMap emptyList()
@@ -158,7 +160,8 @@ class CapturePipeline(
       if (!canQueue(captureGeneration)) return@synchronized 0
       if (queueOwner() != owner) return@synchronized 0
       if (sharingState() != sharing || !sharing.canCapture(timestampMillis, nowMillis())) return@synchronized 0
-      val inserted = ciphertextQueue.insertAll(rows.map { it.copy(owner = owner, clientPointId = sharing.revisionPrefix + it.clientPointId) })
+      val held = heldGroupIds()
+      val inserted = ciphertextQueue.insertAll(rows.filter { it.groupId !in held }.map { it.copy(owner = owner, clientPointId = sharing.revisionPrefix + it.clientPointId) })
       if (inserted > 0 && currentFixEncoded) onCurrentFixQueued()
       inserted
     }
