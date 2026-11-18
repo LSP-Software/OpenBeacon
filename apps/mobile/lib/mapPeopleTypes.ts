@@ -11,7 +11,7 @@ export type MapPerson = {
 };
 
 export type MapPersonStatus =
-  "cantLocate" | "cantRead" | "hidden" | "paused" | "waitingForLocation";
+  "cantLocate" | "cantRead" | "hidden" | "onHold" | "paused" | "waitingForLocation";
 
 export type MapUnreadablePerson = MapPerson & {
   groupId: string;
@@ -25,6 +25,8 @@ export type MapHiddenPerson = MapPerson & {
 
 export type MapPausedPerson = MapPerson & { sharingPaused: true; timelineGroupId: string };
 
+export type MapOnHoldPerson = MapPerson & { onHold: true };
+
 export type MapWaitingForLocationPerson = MapPerson & { waitingForLocation: true };
 
 export type MapPeople = {
@@ -33,6 +35,7 @@ export type MapPeople = {
   cantRead: MapUnreadablePerson[];
   finding: MapPerson[];
   hidden: MapHiddenPerson[];
+  onHold: MapOnHoldPerson[];
   outOfDate: LiveMapMarker[];
   paused: MapPausedPerson[];
   upToDate: LiveMapMarker[];

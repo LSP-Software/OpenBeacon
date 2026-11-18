@@ -106,6 +106,14 @@ class TrackingCaptureService : Service() {
           return START_NOT_STICKY
         }
       }
+      ACTION_NOTICE_CHANGED -> {
+        if (!TrackingRuntime.isCaptureRunning) {
+          stopSelf()
+          return START_NOT_STICKY
+        }
+        getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, buildNotification())
+        return START_STICKY
+      }
       ACTION_STOP -> {
         stopCapture()
         stopSelf()
@@ -542,8 +550,16 @@ class TrackingCaptureService : Service() {
     val sharing = TrackingRuntime.sharingState(this)
     val paused = sharing.isPaused(System.currentTimeMillis())
     val pausedUntil = sharing.pausedUntil
+    val holds = TrackingRuntime.seatHoldNotice(this)
     val body =
       when {
+        !paused && holds.sharesNowhere -> getString(R.string.openbeacon_tracking_notification_on_hold_body)
+        !paused && holds.sharesSomewhere ->
+          getString(
+            R.string.openbeacon_tracking_notification_some_on_hold_body,
+            SeatHoldNotice.join(holds.sharing),
+            SeatHoldNotice.join(holds.held),
+          )
         !paused -> getString(R.string.openbeacon_tracking_notification_body)
         pausedUntil == null -> getString(R.string.openbeacon_tracking_notification_paused_body)
         isOnDay(pausedUntil, 0) ->
@@ -559,7 +575,15 @@ class TrackingCaptureService : Service() {
       }
     return NotificationCompat
       .Builder(this, CHANNEL_ID)
-      .setContentTitle(getString(if (paused) R.string.openbeacon_tracking_notification_paused_title else R.string.openbeacon_tracking_notification_title))
+      .setContentTitle(
+        getString(
+          when {
+            paused -> R.string.openbeacon_tracking_notification_paused_title
+            holds.sharesNowhere -> R.string.openbeacon_tracking_notification_on_hold_title
+            else -> R.string.openbeacon_tracking_notification_title
+          },
+        ),
+      )
       .setContentText(body)
       .setStyle(NotificationCompat.BigTextStyle().bigText(body))
       .setSmallIcon(R.drawable.openbeacon_notification_icon)
@@ -594,6 +618,7 @@ class TrackingCaptureService : Service() {
     const val ACTION_SHARING_CHANGED = "expo.modules.openbeacontracking.action.SHARING_CHANGED"
     const val ACTION_CHECK_SHARING = "expo.modules.openbeacontracking.action.CHECK_SHARING"
     const val ACTION_STOP = "expo.modules.openbeacontracking.action.STOP"
+    const val ACTION_NOTICE_CHANGED = "expo.modules.openbeacontracking.action.NOTICE_CHANGED"
     const val EXTRA_INTERVAL_MS = "intervalMs"
     const val EXTRA_COMMAND_GENERATION = "captureCommandGeneration"
     const val EXTRA_RESUMING_SHARING = "resumingSharing"

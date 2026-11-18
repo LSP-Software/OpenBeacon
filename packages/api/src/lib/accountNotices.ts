@@ -83,6 +83,7 @@ export const readAccountNotices = ({
             deviceModel: true,
             devicePlatform: true,
             deletionDate: true,
+            holdsFrom: true,
             turnedOffEmail: true,
             turnedOffPhone: true,
             group: { select: { id: true, name: true } },
@@ -105,6 +106,7 @@ export const readAccountNotices = ({
                 platform: notice.devicePlatform,
               },
         deletionDate: notice.deletionDate,
+        holdsFrom: notice.holdsFrom,
         turnedOff: [
           ...notice.turnedOffPhone.map((type) => ({ type, channel: "phone" as const })),
           ...notice.turnedOffEmail.map((type) => ({ type, channel: "email" as const })),
@@ -116,10 +118,12 @@ export const readAccountNotices = ({
 export const readGroupNotices = ({
   cursor,
   db,
+  heldGroupIds,
   userId,
 }: {
   cursor: string | null;
   db: PrismaClient;
+  heldGroupIds: string[];
   userId: string;
 }) =>
   readNoticePage({
@@ -136,7 +140,7 @@ export const readGroupNotices = ({
         .map((type) => GroupEventType[type]);
       if (groupTypes.length === 0) return [];
       const memberships = await db.groupMember.findMany({
-        where: { userId },
+        where: { userId, groupId: { notIn: heldGroupIds } },
         select: { groupId: true, createdAt: true },
       });
       if (memberships.length === 0) return [];

@@ -387,6 +387,14 @@ const MembersTab = ({
                     (device) => device.userId !== member.user.id || device.paused,
                   )
                 }
+                sharingOnHold={
+                  liveStatus.sharing?.some(
+                    (device) => device.userId === member.user.id && device.onHold,
+                  ) === true &&
+                  liveStatus.sharing.every(
+                    (device) => device.userId !== member.user.id || device.paused || device.onHold,
+                  )
+                }
               />
             </View>
           </Pressable>
@@ -562,10 +570,12 @@ const MembersTab = ({
 const MemberStatus = ({
   arrivalsOff,
   member,
+  sharingOnHold,
   sharingPaused,
 }: {
   arrivalsOff: string | null;
   member: ReturnType<typeof buildMemberLiveStatuses<(typeof groupRoles)[number]>>[number];
+  sharingOnHold: boolean;
   sharingPaused: boolean;
 }) => {
   const batteryVisual = member.battery
@@ -581,6 +591,11 @@ const MemberStatus = ({
         <View className="flex-row items-center gap-1.5 self-start rounded-full bg-warning px-2.5 py-1">
           <Icon as={CirclePauseIcon} className="text-warning-text size-3.5" />
           <Text className="text-warning-text text-xs font-semibold">Location sharing paused</Text>
+        </View>
+      ) : sharingOnHold ? (
+        <View className="flex-row items-center gap-1.5 self-start rounded-full bg-warning px-2.5 py-1">
+          <Icon as={CirclePauseIcon} className="text-warning-text size-3.5" />
+          <Text className="text-warning-text text-xs font-semibold">On hold</Text>
         </View>
       ) : member.activeDeviceCount >= 2 && member.devices.length > 0 ? (
         member.devices.map((device) => {

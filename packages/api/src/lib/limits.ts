@@ -1,7 +1,6 @@
 export const limits = {
   historyDays: 30,
   groupsPerAccount: 16,
-  activatedDevicesPerAccount: 3,
   seatsPerGroup: 64,
   dailyHistoryAllowance: 2_880,
   placesPerGroup: 50,

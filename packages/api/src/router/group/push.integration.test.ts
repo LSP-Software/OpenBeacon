@@ -198,13 +198,13 @@ const setup = async () => {
     for (const { deviceId, userId } of activeDevices) {
       const ids =
         item.kind === "place"
-          ? (await readPlaceAlerts({ cursor: before, db: prisma, userId })).alerts.map(
-              ({ id }) => id,
-            )
+          ? (
+              await readPlaceAlerts({ cursor: before, db: prisma, heldGroupIds: [], userId })
+            ).alerts.map(({ id }) => id)
           : item.kind === "event"
-            ? (await readGroupNotices({ cursor: before, db: prisma, userId })).notices.map(
-                ({ id }) => id,
-              )
+            ? (
+                await readGroupNotices({ cursor: before, db: prisma, heldGroupIds: [], userId })
+              ).notices.map(({ id }) => id)
             : (
                 await readAccountNotices({
                   cursor: before,

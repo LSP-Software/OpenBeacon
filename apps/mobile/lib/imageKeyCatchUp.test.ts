@@ -33,6 +33,7 @@ type Group = {
   imageKey: EncryptedImageKey | null;
   ownerId: string;
   ownershipOfferedToId: string | null;
+  onHold: boolean;
   members: Member[];
 };
 type ReEncryptInput = {
@@ -222,6 +223,7 @@ beforeEach(() => {
     image: url(GROUP_FILE),
     ownerId: "user-d",
     ownershipOfferedToId: null,
+    onHold: false,
     imageKey: groupKey("epoch-1"),
     members: [
       {

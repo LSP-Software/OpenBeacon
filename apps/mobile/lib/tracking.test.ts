@@ -51,12 +51,14 @@ const accountSyncResult = {
   notices: [],
   cursor: "2026-11-17T10:00:00.000Z|",
   pushAvailable: true,
+  heldGroupIds: ["group-2"],
 };
 const accountSyncCalls: Array<{ cursor: string | null; pushToken?: string | null }> = [];
 let accountSyncResponse = async (): Promise<typeof accountSyncResult> => accountSyncResult;
 let syncInBatch = false;
 const uploadsBatchedWithSync: boolean[] = [];
 const shownAccountNotices: Array<{ notices: unknown; userId: string }> = [];
+const notedHeldGroups: Array<{ deviceId: string; heldGroupIds: string[]; userId: string }> = [];
 let pushHeldByServer = false;
 const pushConfirms: Array<{ scope: string; sent: string | null; pushAvailable: boolean }> = [];
 const pushForgets: string[] = [];
@@ -316,6 +318,12 @@ mock.module("./noticeBackgroundSync.ts", () => ({
   getAccountNoticesCursor: () => storedAccountCursor,
   showAccountNotices: async (input: { notices: unknown; userId: string }) => {
     shownAccountNotices.push(input);
+  },
+}));
+
+mock.module("./seatHolds.ts", () => ({
+  noteHeldGroups: async (input: { deviceId: string; heldGroupIds: string[]; userId: string }) => {
+    notedHeldGroups.push(input);
   },
 }));
 
@@ -799,6 +807,10 @@ describe("tracking service", () => {
       expect(uploadsBatchedWithSync[0]).toBe(true);
       expect(pushConfirms).toEqual([{ scope, sent: "token-1", pushAvailable: true }]);
       expect(shownAccountNotices).toEqual([{ notices: accountSyncResult, userId: "user-1" }]);
+      expect(notedHeldGroups.at(-1)).toMatchObject({
+        heldGroupIds: ["group-2"],
+        userId: "user-1",
+      });
     });
 
     test("an upload round with nothing to send doesn't ask for account notices", async () => {

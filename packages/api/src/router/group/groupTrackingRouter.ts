@@ -24,7 +24,7 @@ import {
   uploadPlaceTransitions,
 } from "../../lib/placeTransitions.ts";
 import { limits } from "../../lib/limits.ts";
-import { heldDeviceIds, seatOnHoldError } from "../../lib/seats.ts";
+import { assertNotOnHold } from "../../lib/seats.ts";
 import { getTrackingKeyState } from "../../lib/trackingKeyState.ts";
 import { ReasonError } from "../../lib/reasonError.ts";
 import { groupMemberProcedure } from "../../procedures/auth/group.ts";
@@ -105,17 +105,13 @@ export const groupTrackingRouter = {
           );
         }
       };
+      const held = await ctx.seatHolds.heldIn(input.groupId);
       const transaction = await tryCatch(
         ctx.db.$transaction(async (tx) => {
           const member = await lockGroupMemberForWrite(tx, {
             groupId: input.groupId,
             groupLock: "FOR SHARE",
             userId,
-          });
-          const held = await heldDeviceIds({
-            db: tx,
-            groupId: input.groupId,
-            selfHosted: ctx.selfHosted,
           });
           const sharedPoints = input.points.filter((point) => !held.has(point.senderDeviceId));
           const heldPointIds = input.points
@@ -187,13 +183,22 @@ export const groupTrackingRouter = {
           clientIds: result.placeTransitions.accepted,
         });
       }
+      const heldGroupIds =
+        input.placeAlertsCursor === undefined && input.noticesCursor === undefined
+          ? []
+          : await ctx.seatHolds.heldGroupIds({ deviceId: ctx.deviceId, userId });
       const [placeUpdates, imageKeysNeedCatchUp, notices] = await Promise.all([
         input.placeAlertsCursor === undefined
           ? null
           : tryCatch(
               Promise.all([
                 readPlacesSummary({ db: ctx.db, userId }),
-                readPlaceAlerts({ cursor: input.placeAlertsCursor, db: ctx.db, userId }),
+                readPlaceAlerts({
+                  cursor: input.placeAlertsCursor,
+                  db: ctx.db,
+                  heldGroupIds,
+                  userId,
+                }),
               ]),
             ),
         input.placeAlertsCursor === undefined
@@ -201,7 +206,9 @@ export const groupTrackingRouter = {
           : tryCatch(readImageKeysNeedCatchUp({ db: ctx.db, userId })),
         input.noticesCursor === undefined
           ? null
-          : tryCatch(readGroupNotices({ cursor: input.noticesCursor, db: ctx.db, userId })),
+          : tryCatch(
+              readGroupNotices({ cursor: input.noticesCursor, db: ctx.db, heldGroupIds, userId }),
+            ),
       ]);
       const catchUpFields = {
         ...(notices && !notices.error ? { notices: notices.data } : {}),
@@ -238,6 +245,7 @@ export const groupTrackingRouter = {
         cursor: input.cursor,
         db: ctx.db,
         groupId: input.groupId,
+        held: await ctx.seatHolds.heldIn(input.groupId),
         joinedEpochNumber: ctx.groupMember.joinedEpochNumber,
         limit: input.limit ?? DEFAULT_POLL_LIMIT,
       });
@@ -250,6 +258,7 @@ export const groupTrackingRouter = {
       return await getLatestGroupTrackingPoints({
         db: ctx.db,
         groupId: input.groupId,
+        held: await ctx.seatHolds.heldIn(input.groupId),
         joinedEpochNumber: ctx.groupMember.joinedEpochNumber,
       });
     }),
@@ -280,11 +289,3 @@ export const groupTrackingRouter = {
       });
     }),
 } satisfies TRPCRouterRecord;
-
-const assertNotOnHold = async (
-  ctx: { db: Parameters<typeof heldDeviceIds>[0]["db"]; deviceId: string; selfHosted: boolean },
-  groupId: string,
-) => {
-  const held = await heldDeviceIds({ db: ctx.db, groupId, selfHosted: ctx.selfHosted });
-  if (held.has(ctx.deviceId)) throw seatOnHoldError();
-};

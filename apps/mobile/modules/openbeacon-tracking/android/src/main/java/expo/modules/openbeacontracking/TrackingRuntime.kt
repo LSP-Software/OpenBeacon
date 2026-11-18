@@ -12,6 +12,7 @@ import expo.modules.openbeacontracking.capture.CapturePipeline
 import expo.modules.openbeacontracking.capture.CaptureCommandState
 import expo.modules.openbeacontracking.capture.CaptureHistoryShare
 import expo.modules.openbeacontracking.capture.SharingCaptureState
+import expo.modules.openbeacontracking.capture.SeatHoldNotice
 import expo.modules.openbeacontracking.capture.HistoryAllowance
 import expo.modules.openbeacontracking.capture.BootRestartPolicy
 import expo.modules.openbeacontracking.capture.SharingResumeWorker
@@ -129,6 +130,41 @@ object TrackingRuntime {
       .putLong("$scope.after", state.resumeAfter)
       .putString("$scope.confirmed", state.confirmedRevision(replacing = previous))
       .commit())
+  }
+
+  fun seatHoldNotice(context: Context): SeatHoldNotice {
+    val owner = queueOwner(context) ?: return SeatHoldNotice()
+    val deviceId = queueDeviceId(context) ?: return SeatHoldNotice()
+    val stored = context.getSharedPreferences("openbeacon_tracking_seat_holds", Context.MODE_PRIVATE)
+      .getString(org.json.JSONArray(listOf(owner, deviceId)).toString(), null) ?: return SeatHoldNotice()
+    val notice = org.json.JSONObject(stored)
+    val names = { key: String -> notice.getJSONArray(key).let { list -> (0 until list.length()).map(list::getString) } }
+    return SeatHoldNotice(sharing = names("sharing"), held = names("held"))
+  }
+
+  fun setSeatHoldNotice(context: Context, owner: String, deviceId: String, notice: SeatHoldNotice): Boolean {
+    val changed = synchronized(captureLock) {
+      if (queueOwner(context) != owner || queueDeviceId(context) != deviceId) return false
+      if (seatHoldNotice(context) == notice) return true
+      val stored = org.json.JSONObject()
+        .put("sharing", org.json.JSONArray(notice.sharing))
+        .put("held", org.json.JSONArray(notice.held))
+      check(context.getSharedPreferences("openbeacon_tracking_seat_holds", Context.MODE_PRIVATE)
+        .edit()
+        .putString(org.json.JSONArray(listOf(owner, deviceId)).toString(), stored.toString())
+        .commit())
+      true
+    }
+    if (changed && isCaptureRunning) {
+      try {
+        context.startService(Intent(context, TrackingCaptureService::class.java).apply {
+          action = TrackingCaptureService.ACTION_NOTICE_CHANGED
+        })
+      } catch (error: IllegalStateException) {
+        Log.e("TrackingRuntime", "Failed to update the location sharing notice.", error)
+      }
+    }
+    return true
   }
 
   fun historyShare(context: Context): CaptureHistoryShare {

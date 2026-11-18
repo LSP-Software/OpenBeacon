@@ -164,6 +164,7 @@ export const groupLifecycleRouter = {
           imageKey: null,
           ownerId: group.ownerId,
           ownershipOfferedToId: null,
+          onHold: false,
           members: group.groupMembers.map((member) => ({
             id: member.id,
             userId: member.user.id,

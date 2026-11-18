@@ -47,8 +47,11 @@ export const groupMembershipRouter = {
       },
     });
 
+    const held = await Promise.all(
+      groups.map((group) => ctx.seatHolds.heldIn(group.id, group.ownerId)),
+    );
     return groups.map(
-      (group) =>
+      (group, index) =>
         ({
           id: group.id,
           name: group.name,
@@ -56,6 +59,7 @@ export const groupMembershipRouter = {
           imageKey: toStoredImageKey(group),
           ownerId: group.ownerId,
           ownershipOfferedToId: group.ownershipOfferedToId,
+          onHold: held[index]?.has(ctx.deviceId) ?? false,
           members: group.groupMembers.map((member) => ({
             id: member.id,
             userId: member.user.id,

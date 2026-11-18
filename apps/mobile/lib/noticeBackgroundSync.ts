@@ -29,6 +29,9 @@ const accountLink = (screen: "devices" | "password" | "recovery" | "delete" | "n
   url: `openbeacon:///account/${screen}`,
 });
 
+const shortDate = (date: Date) =>
+  date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+
 export const describeAccountNotice = (notice: AccountNotices["notices"][number]) => {
   switch (notice.type) {
     case "NEW_SIGN_IN":
@@ -73,7 +76,7 @@ export const describeAccountNotice = (notice: AccountNotices["notices"][number])
     case "DELETION_SCHEDULED":
       return {
         title: notice.deletionDate
-          ? `Your account will be deleted on ${notice.deletionDate.toLocaleDateString(undefined, { day: "numeric", month: "short" })}`
+          ? `Your account will be deleted on ${shortDate(notice.deletionDate)}`
           : "Your account is scheduled for deletion",
         body: "Sign in within 7 days to cancel it.",
         link: accountLink("delete"),
@@ -96,6 +99,22 @@ export const describeAccountNotice = (notice: AccountNotices["notices"][number])
           ? `You’ve been asked to become the owner of ${notice.group.name}`
           : "You’ve been asked to become a group’s owner",
         body: "Open Groups to see what it means and accept or decline.",
+        link: { href: "/(tabs)/groups/list" as const, url: "openbeacon:///groups/list" },
+      };
+    case "SEATS_ENDING":
+    case "SEATS_ENDING_SOON":
+      return {
+        title:
+          notice.type === "SEATS_ENDING"
+            ? "Your seats have ended"
+            : "Phones in your groups go on hold tomorrow",
+        body: `${notice.holdsFrom ? `From ${shortDate(notice.holdsFrom)}, phones` : "Phones"} in the groups you own go on hold until you renew your seats. Open the map to see which.`,
+        link: { href: "/(tabs)/map" as const, url: "openbeacon:///map" },
+      };
+    case "SEAT_HOLD_COMING":
+      return {
+        title: `Your phones go on hold in ${notice.group?.name ?? "a group"}${notice.holdsFrom ? ` on ${shortDate(notice.holdsFrom)}` : ""}`,
+        body: "The group’s owner has no seats after then, so your location won’t be shared there until they add seats. You can leave the group at any time.",
         link: { href: "/(tabs)/groups/list" as const, url: "openbeacon:///groups/list" },
       };
     case "ALERTS_TURNED_OFF": {

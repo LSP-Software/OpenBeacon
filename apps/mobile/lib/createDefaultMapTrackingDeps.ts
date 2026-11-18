@@ -39,7 +39,7 @@ export const createDefaultMapTrackingDeps = (): MapTrackingDeps => {
       const groups = await trpcClient.groupMembership.list.query(undefined, { signal });
       queryClient.setQueryData(trpc.groupMembership.list.queryKey(), groups);
       noteGroupMembership(groups);
-      return groups;
+      return groups.filter((group) => !group.onHold);
     },
     now: () => Date.now(),
     poll: async (input, signal) => trpcClient.groupTracking.poll.query(input, { signal }),

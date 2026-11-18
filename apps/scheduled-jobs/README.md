@@ -82,6 +82,12 @@ It checks each listed page of versions against users, groups and pending uploads
 
 Logs the 10 accounts that stored the most location history points in the last 24 hours (live-only uploads aren't stored, so they don't count), with how many groups each is in. It logs nothing when there were no uploads.
 
+### `seat-grace-warnings` (every hour)
+
+Finds accounts whose paid period ended in the last 7 days and that are in their grace period. The first run after a paid period ends records the start of the grace period in `lastGracePeriodStartedAt`, then sends the owner an email and a `SEATS_ENDING` account notice, and gives every member whose phones will go on hold a `SEAT_HOLD_COMING` notice for that group. From 1 day before the grace period ends it sends a reminder (`SEATS_ENDING_SOON` and a second email), once. Nothing is sent when no phone would go on hold. Holds themselves are worked out live by the backend, so this job only warns.
+
+Self-hosted servers never set `paidPeriodEndsAt`, so the job finds nothing to do there.
+
 ## Releases
 
 The runner image is built and released with the backend's and doesn't apply migrations; the backend owns them. Future schema changes must stay compatible while old and new containers overlap. See [Publishing releases](https://docs.openbeacon.net/docs/contribute/publishing-releases).

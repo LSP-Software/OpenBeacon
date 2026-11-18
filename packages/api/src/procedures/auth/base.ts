@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { devicePendingError } from "../../lib/deviceActivation.ts";
 import { deviceUnverifiedError } from "../../lib/deviceUnverified.ts";
+import { createSeatHolds } from "../../lib/seats.ts";
 import { createRateLimitMiddleware } from "../../middlewares/rateLimitMiddleware.ts";
 import { createTimingMiddleware } from "../../middlewares/timingMiddleware.ts";
 import type { createTRPCComponents } from "../../trpc.ts";
@@ -34,7 +35,12 @@ export const createAuthProcedures = ({
   const protectedProcedure = setupProcedure.use(({ ctx, next }) => {
     if (!ctx.deviceId && ctx.unverifiedDeviceId) throw deviceUnverifiedError();
     if (!ctx.deviceId || !ctx.deviceActive) throw devicePendingError();
-    return next({ ctx: { deviceId: ctx.deviceId } });
+    return next({
+      ctx: {
+        deviceId: ctx.deviceId,
+        seatHolds: createSeatHolds({ db: ctx.db, selfHosted: ctx.selfHosted }),
+      },
+    });
   });
 
   return {

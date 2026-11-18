@@ -4,6 +4,9 @@
   <string name="openbeacon_tracking_notification_channel_description">Shows while this phone is sharing its location or sharing is paused.</string>
   <string name="openbeacon_tracking_notification_title">Sharing your location</string>
   <string name="openbeacon_tracking_notification_body">Your location is end-to-end encrypted. Your groups can see it.</string>
+  <string name="openbeacon_tracking_notification_on_hold_title">Location sharing on hold</string>
+  <string name="openbeacon_tracking_notification_on_hold_body">This phone is on hold in all your groups, so nobody can see where you are. Open OpenBeacon to see why.</string>
+  <string name="openbeacon_tracking_notification_some_on_hold_body">%1$s can see your location, end-to-end encrypted. This phone is on hold in %2$s.</string>
   <string name="openbeacon_tracking_notification_paused_title">Location sharing paused</string>
   <string name="openbeacon_tracking_notification_paused_body">Your groups can\'t see where you are.</string>
   <string name="openbeacon_tracking_notification_paused_until_body">Sharing starts again at %1$s.</string>

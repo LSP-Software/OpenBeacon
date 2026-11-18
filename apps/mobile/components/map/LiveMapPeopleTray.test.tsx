@@ -65,6 +65,7 @@ const emptyPeople: MapPeople = {
   connectionLost: false,
   finding: [],
   hidden: [],
+  onHold: [],
   outOfDate: [],
   paused: [],
   upToDate: [],

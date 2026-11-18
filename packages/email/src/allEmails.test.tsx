@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { renderAccountExistsEmail } from "./accountExistsEmail.tsx";
 import { renderCodeEmail } from "./codeEmail.tsx";
 import { renderGoogleSignInEmail } from "./googleSignInEmail.tsx";
+import { renderSeatsEndingEmail } from "./seatsEndingEmail.tsx";
 import { renderSecurityAlertEmail } from "./securityAlertEmail.tsx";
 import type { EmailCodePurpose, SecurityAlert } from "./types.ts";
 
@@ -57,6 +58,17 @@ const renderEveryEmail = async () => {
       ]),
     )),
     await renderGoogleSignInEmail({ serverName }),
+    ...(await Promise.all(
+      [true, false].map((reminder) =>
+        renderSeatsEndingEmail({
+          holds: [{ groupName: "Family", memberName: "Alice", deviceName: "Pixel 8" }],
+          holdsFrom: new Date("2026-07-16T13:32:00Z"),
+          reminder,
+          serverName,
+          timezone: "Europe/London",
+        }),
+      ),
+    )),
   ];
 };
 

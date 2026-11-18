@@ -26,6 +26,7 @@ export const LiveMapPeopleTray = ({
     { key: "upToDate", label: "Up to date", people: people.upToDate, status: null },
     { key: "outOfDate", label: "Out of date", people: people.outOfDate, status: null },
     { key: "paused", label: "Paused", people: people.paused, status: "paused" as const },
+    { key: "onHold", label: "On hold", people: people.onHold, status: "onHold" as const },
     {
       key: "waitingForLocation",
       label: "Waiting for location",

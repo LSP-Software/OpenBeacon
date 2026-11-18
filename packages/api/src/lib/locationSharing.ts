@@ -8,6 +8,7 @@ import {
 export const getGroupSharingStates = async (
   db: { $queryRaw: <T>(query: Prisma.Sql) => Promise<T> },
   groupId: string,
+  held: ReadonlySet<string> = new Set(),
 ): Promise<GroupDeviceSharingState[]> => {
   const devices = await db.$queryRaw<
     (SharingPreference & {
@@ -48,6 +49,7 @@ export const getGroupSharingStates = async (
       deviceId: device.deviceId,
       userId: device.userId,
       paused: sharing.paused,
+      onHold: held.has(device.deviceId),
       revisionPrefix: sharing.revisionPrefix,
     };
   });

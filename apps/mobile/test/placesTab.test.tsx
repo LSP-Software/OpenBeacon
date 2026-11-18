@@ -47,6 +47,7 @@ mock.module("react-native", () => createReactNativeTestModule());
 mock.module("lucide-react-native", () => ({
   BellIcon: () => null,
   ChevronRightIcon: () => null,
+  CircleSlashIcon: () => null,
   HourglassIcon: () => null,
   InfoIcon: () => null,
   MapPinIcon: () => null,

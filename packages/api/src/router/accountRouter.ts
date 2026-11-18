@@ -35,7 +35,13 @@ import { deviceRemovedError } from "../lib/deviceRemoved.ts";
 import { deviceUnverifiedError } from "../lib/deviceUnverified.ts";
 import { removeUserDevice, toAlertDevice } from "../lib/removeDevice.ts";
 import { limits, maxAccountSeats } from "../lib/limits.ts";
-import { accountSeats, seatsEnforced, seatsUsed } from "../lib/seats.ts";
+import {
+  seatAccountSelect,
+  seatPeriod,
+  seatsEndingHolds,
+  seatsEnforced,
+  seatsUsed,
+} from "../lib/seats.ts";
 import {
   freshSessionProcedure,
   protectedProcedure,
@@ -454,34 +460,53 @@ export const accountRouter = {
       });
     }),
   seats: protectedProcedure.query(async ({ ctx }) => {
-    const [seats, used] = await Promise.all([
-      accountSeats(ctx.db, ctx.session.user.id),
-      seatsUsed(ctx.db, ctx.session.user.id),
+    const userId = ctx.session.user.id;
+    const [account, used] = await Promise.all([
+      ctx.db.user.findUniqueOrThrow({ where: { id: userId }, select: seatAccountSelect }),
+      seatsUsed(ctx.db, userId),
     ]);
+    const enforced = seatsEnforced(ctx);
+    const period = seatPeriod(account, new Date());
     return {
-      enforced: seatsEnforced(ctx),
+      enforced,
       selfSetAllowed: ctx.allowSelfSetSeats && !ctx.selfHosted,
-      seats,
+      seats: period.seats,
+      paidSeats: account.seats,
       used,
       max: maxAccountSeats,
+      paidPeriodEndsAt: enforced ? account.paidPeriodEndsAt : null,
+      grace:
+        enforced && period.grace
+          ? {
+              endsAt: period.grace.endsAt,
+              holds: await seatsEndingHolds({ db: ctx.db, ownerId: userId, seats: period.seats }),
+            }
+          : null,
     };
   }),
   setSeats: protectedProcedure
     .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
     .input(z.object({ seats: z.number().int().min(0).max(maxAccountSeats) }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.allowSelfSetSeats || ctx.selfHosted) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "This server doesn't let you set your own seats.",
-        });
-      }
+      assertSelfSetSeats(ctx);
       const user = await ctx.db.user.update({
         where: { id: ctx.session.user.id },
         data: { seats: input.seats },
         select: { seats: true },
       });
       return { seats: user.seats };
+    }),
+  setPaidPeriodEnded: protectedProcedure
+    .meta({ rateLimit: { limit: 30, windowMs: 60_000 } })
+    .input(z.object({ ended: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      assertSelfSetSeats(ctx);
+      const user = await ctx.db.user.update({
+        where: { id: ctx.session.user.id },
+        data: { paidPeriodEndsAt: input.ended ? new Date() : null },
+        select: { paidPeriodEndsAt: true },
+      });
+      return { paidPeriodEndsAt: user.paidPeriodEndsAt };
     }),
   viewers: protectedProcedure
     .meta({ rateLimit: { limit: 60, windowMs: 60_000 } })
@@ -689,3 +714,11 @@ export const accountRouter = {
       });
     }),
 } satisfies TRPCRouterRecord;
+
+const assertSelfSetSeats = (ctx: { allowSelfSetSeats: boolean; selfHosted: boolean }) => {
+  if (ctx.allowSelfSetSeats && !ctx.selfHosted) return;
+  throw new TRPCError({
+    code: "FORBIDDEN",
+    message: "This server doesn't let you set your own seats.",
+  });
+};

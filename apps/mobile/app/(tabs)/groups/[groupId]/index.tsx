@@ -7,6 +7,7 @@ import { View } from "react-native";
 import { BackButton } from "../../../../components/headers/BackButton.tsx";
 import { GroupImage } from "../../../../components/image/GroupImage.tsx";
 import { LoadingIndicator } from "../../../../components/LoadingIndicator.tsx";
+import { SeatHoldBanner } from "../../../../components/SeatHoldBanner.tsx";
 import { RefreshablePage } from "../../../../components/RefreshablePage.tsx";
 import { Button } from "../../../../components/ui/Button.tsx";
 import { SwipeTabs, type SwipeTabsItem } from "../../../../components/ui/SwipeTabs.tsx";
@@ -174,6 +175,7 @@ const GroupBody = ({ groupId, initialTab }: { groupId: string; initialTab: Group
         </View>
         <View className="gap-4 px-4">
           <GroupHeader group={group} userId={session?.user.id} />
+          <SeatHoldBanner groups={[group]} linkToGroup={false} userId={session?.user.id ?? ""} />
           {keyAccess?.data?.current === "missing" && (
             <View className="gap-2 rounded-2xl border border-destructive-text bg-card p-4">
               <Text className="font-semibold text-destructive-text">

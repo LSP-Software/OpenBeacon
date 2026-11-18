@@ -46,6 +46,7 @@ import {
 } from "./placeBackgroundSync.ts";
 import { backfillHistoryWraps } from "./recovery.ts";
 import { resealPersonalData } from "./resealPersonalData.ts";
+import { noteHeldGroups } from "./seatHolds.ts";
 import {
   clearTrackingKeyCheck,
   getMembershipSignature,
@@ -634,6 +635,7 @@ const startAccountSync = (
         signal ? { signal } : undefined,
       ),
     ),
+    deviceId: device.deviceId,
     userId: device.userId,
   };
 };
@@ -650,6 +652,13 @@ const settleAccountSync = async (
   if (trackingPaused) return;
   trackingModule.confirmPushToken(sync.pushScope, sync.pushToken, response.data.pushAvailable);
   await tryCatch(showAccountNotices({ notices: response.data, userId: sync.userId }));
+  await tryCatch(
+    noteHeldGroups({
+      deviceId: sync.deviceId,
+      heldGroupIds: response.data.heldGroupIds,
+      userId: sync.userId,
+    }),
+  );
 };
 
 const takeAccountSync = (

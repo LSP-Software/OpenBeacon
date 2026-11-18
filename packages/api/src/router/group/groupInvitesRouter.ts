@@ -507,6 +507,7 @@ export const groupInvitesRouter = {
           imageKey: toStoredImageKey(member.group),
           ownerId: member.group.ownerId,
           ownershipOfferedToId: member.group.ownershipOfferedToId,
+          onHold: false,
           members: member.group.groupMembers.map((groupMember) => ({
             id: groupMember.id,
             userId: groupMember.user.id,

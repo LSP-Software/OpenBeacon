@@ -7,6 +7,7 @@ import {
   createGroupHistoryCleanup,
 } from "./locationHistoryCleanup.ts";
 import { runPendingDeviceCleanup } from "./pendingDeviceCleanup.ts";
+import { runSeatGraceWarnings } from "./seatGraceWarnings.ts";
 import { runUploadGrowthReport } from "./uploadGrowthReport.ts";
 
 export const jobs = [
@@ -19,4 +20,5 @@ export const jobs = [
   { name: "pending-upload-cleanup", delay: 3_600_000, run: runStalePendingUploadCleanup },
   { name: "image-storage-sweep", delay: 86_400_000, run: runImageStorageSweep },
   { name: "upload-growth-report", delay: 86_400_000, run: runUploadGrowthReport },
+  { name: "seat-grace-warnings", delay: 3_600_000, run: runSeatGraceWarnings },
 ];

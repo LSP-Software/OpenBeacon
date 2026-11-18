@@ -5,6 +5,7 @@ import { deviceIconFor } from "../../lib/deviceIcons.ts";
 import type {
   MapHiddenPerson,
   MapMemberDevice,
+  MapOnHoldPerson,
   MapPausedPerson,
   MapPerson,
   MapUnreadablePerson,
@@ -24,7 +25,7 @@ export const LiveMapMissingPersonSheet = ({
   onShowGroup,
   person,
 }: {
-  devices: readonly (MapMemberDevice & { paused: boolean })[];
+  devices: readonly (MapMemberDevice & { onHold: boolean; paused: boolean })[];
   onDismiss: () => void;
   onHeightChange: (height: number) => void;
   onShowGroup: (groupId: string) => void;
@@ -32,10 +33,12 @@ export const LiveMapMissingPersonSheet = ({
     | MapPerson
     | MapUnreadablePerson
     | MapHiddenPerson
+    | MapOnHoldPerson
     | MapPausedPerson
     | MapWaitingForLocationPerson;
 }) => {
   const paused = "sharingPaused" in person;
+  const onHold = "onHold" in person;
   const waitingForLocation = "waitingForLocation" in person;
   const unreadable = "reason" in person ? person : null;
   const hidden = "hiddenGroups" in person ? person : null;
@@ -60,13 +63,15 @@ export const LiveMapMissingPersonSheet = ({
             <Text className="text-secondary text-sm">
               {paused
                 ? "Location sharing paused"
-                : waitingForLocation
-                  ? "Waiting for location"
-                  : hidden
-                    ? "Hidden on this phone"
-                    : unreadable
-                      ? "Can’t read their location"
-                      : "Location unknown"}
+                : onHold
+                  ? "On hold"
+                  : waitingForLocation
+                    ? "Waiting for location"
+                    : hidden
+                      ? "Hidden on this phone"
+                      : unreadable
+                        ? "Can’t read their location"
+                        : "Location unknown"}
             </Text>
           </View>
         </View>
@@ -98,6 +103,14 @@ export const LiveMapMissingPersonSheet = ({
               <Text>See today’s route</Text>
             </Button>
           </Link>
+        </View>
+      ) : onHold ? (
+        <View className="mt-3 rounded-xl bg-background p-3">
+          <Text className="text-sm">
+            {person.isSelf
+              ? "Your phones are on hold, because the group’s owner has no free seats for them. Open Groups to see what you can do."
+              : `${person.name}’s phones are on hold, because the group’s owner has no free seat for them. Their location shows again on its own once a seat is free.`}
+          </Text>
         </View>
       ) : waitingForLocation ? (
         <View className="mt-3 gap-3">

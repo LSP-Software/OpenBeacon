@@ -11,6 +11,31 @@ const activeDeviceJoin = Prisma.sql`
     AND "device"."activatedAt" IS NOT NULL
     AND "device"."revokedAt" IS NULL`;
 
+const gracePeriodMs = 7 * 86_400_000;
+
+export const seatAccountSelect = {
+  seats: true,
+  paidPeriodEndsAt: true,
+  lastGracePeriodStartedAt: true,
+} as const;
+
+export const seatPeriod = (
+  account: { seats: number; paidPeriodEndsAt: Date | null; lastGracePeriodStartedAt: Date | null },
+  now: Date,
+) => {
+  const endedAt = account.paidPeriodEndsAt;
+  if (!endedAt || now < endedAt) return { seats: account.seats, grace: null };
+  const lastGrace = account.lastGracePeriodStartedAt;
+  const sixMonthsBefore = new Date(endedAt);
+  sixMonthsBefore.setUTCMonth(sixMonthsBefore.getUTCMonth() - 6);
+  const graceGiven =
+    !lastGrace || lastGrace.getTime() === endedAt.getTime() || lastGrace <= sixMonthsBefore;
+  const endsAt = new Date(endedAt.getTime() + gracePeriodMs);
+  return graceGiven && now < endsAt
+    ? { seats: account.seats, grace: { startedAt: endedAt, endsAt } }
+    : { seats: 0, grace: null };
+};
+
 const countSeats = async (db: RawDb, groupIds: Prisma.Sql) => {
   const [row] = await db.$queryRaw<[{ used: number }]>(Prisma.sql`
     SELECT count(*)::int AS "used"
@@ -22,7 +47,10 @@ const countSeats = async (db: RawDb, groupIds: Prisma.Sql) => {
 };
 
 export const accountSeats = async (db: Pick<Prisma.TransactionClient, "user">, userId: string) =>
-  (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { seats: true } })).seats;
+  seatPeriod(
+    await db.user.findUniqueOrThrow({ where: { id: userId }, select: seatAccountSelect }),
+    new Date(),
+  ).seats;
 
 export const seatsUsed = (db: RawDb, userId: string) =>
   countSeats(db, Prisma.sql`SELECT "id" FROM "Group" WHERE "ownerId" = ${userId}`);
@@ -71,16 +99,17 @@ export const groupSeatState = async ({
 }) => {
   const group = await db.group.findUniqueOrThrow({
     where: { id: groupId },
-    select: { owner: { select: { id: true, name: true, seats: true } } },
+    select: { owner: { select: { id: true, name: true, ...seatAccountSelect } } },
   });
+  const ownerSeats = seatPeriod(group.owner, new Date()).seats;
   const [inGroup, used] = await Promise.all([
     groupSeats(db, groupId),
     seatsEnforced({ selfHosted }) ? seatsUsed(db, group.owner.id) : null,
   ]);
   return {
     owner: { userId: group.owner.id, name: group.owner.name },
-    seats: used === null ? null : group.owner.seats,
-    free: used === null ? null : Math.max(0, group.owner.seats - used),
+    seats: used === null ? null : ownerSeats,
+    free: used === null ? null : Math.max(0, ownerSeats - used),
     groupSeats: inGroup,
     seatsPerGroup: limits.seatsPerGroup,
   };
@@ -198,40 +227,157 @@ export const assertRoomToJoin = async ({
   }
 };
 
-export const heldDeviceIds = async ({
+export const heldSeats = async ({
   db,
-  groupId,
-  selfHosted,
+  ownerId,
+  seats,
 }: {
   db: RawDb;
-  groupId: string;
-  selfHosted: boolean;
+  ownerId: string;
+  seats: number | null;
 }) => {
-  const rows = await db.$queryRaw<Array<{ deviceId: string }>>(Prisma.sql`
-    WITH "owner" AS (
-      SELECT "account"."id", "account"."seats"
-      FROM "Group" AS "group"
-      JOIN "User" AS "account" ON "account"."id" = "group"."ownerId"
-      WHERE "group"."id" = ${groupId}
-    ), "seat" AS (
+  const rows = await db.$queryRaw<Array<{ groupId: string; deviceId: string }>>(Prisma.sql`
+    WITH "seat" AS (
       SELECT "member"."groupId", "device"."id" AS "deviceId",
         GREATEST("member"."createdAt", "device"."activatedAt") AS "takenAt"
       FROM "Group" AS "group"
       JOIN "GroupMember" AS "member" ON "member"."groupId" = "group"."id"
       ${activeDeviceJoin}
-      WHERE "group"."ownerId" = (SELECT "id" FROM "owner")
+      WHERE "group"."ownerId" = ${ownerId}
     ), "ranked" AS (
       SELECT "groupId", "deviceId",
         row_number() OVER (ORDER BY "takenAt", "groupId", "deviceId") AS "ownerRank",
         row_number() OVER (PARTITION BY "groupId" ORDER BY "takenAt", "deviceId") AS "groupRank"
       FROM "seat"
     )
-    SELECT "deviceId" FROM "ranked"
-    WHERE "groupId" = ${groupId}
-      AND ("groupRank" > ${limits.seatsPerGroup}
-        OR (${seatsEnforced({ selfHosted })} AND "ownerRank" > (SELECT "seats" FROM "owner")))
+    SELECT "groupId", "deviceId" FROM "ranked"
+    WHERE "groupRank" > ${limits.seatsPerGroup}
+      OR (${seats !== null} AND "ownerRank" > ${seats ?? 0})
   `);
-  return new Set(rows.map(({ deviceId }) => deviceId));
+  const held = new Map<string, Set<string>>();
+  for (const { groupId, deviceId } of rows) {
+    held.set(groupId, (held.get(groupId) ?? new Set()).add(deviceId));
+  }
+  return held;
+};
+
+export const seatsEndingHolds = async ({
+  db,
+  ownerId,
+  seats,
+}: {
+  db: RawDb & Pick<Prisma.TransactionClient, "group" | "userDevice">;
+  ownerId: string;
+  seats: number;
+}) => {
+  const [before, after] = await Promise.all([
+    heldSeats({ db, ownerId, seats }),
+    heldSeats({ db, ownerId, seats: 0 }),
+  ]);
+  const holds = [...after].flatMap(([groupId, deviceIds]) =>
+    [...deviceIds]
+      .filter((deviceId) => !before.get(groupId)?.has(deviceId))
+      .map((deviceId) => ({ groupId, deviceId })),
+  );
+  if (holds.length === 0) return [];
+  const [groups, devices] = await Promise.all([
+    db.group.findMany({
+      where: { id: { in: [...new Set(holds.map(({ groupId }) => groupId))] } },
+      select: { id: true, name: true },
+    }),
+    db.userDevice.findMany({
+      where: { id: { in: [...new Set(holds.map(({ deviceId }) => deviceId))] } },
+      select: { id: true, name: true, user: { select: { id: true, name: true } } },
+    }),
+  ]);
+  return holds
+    .flatMap(({ groupId, deviceId }) => {
+      const group = groups.find(({ id }) => id === groupId);
+      const device = devices.find(({ id }) => id === deviceId);
+      return group && device
+        ? [
+            {
+              groupId,
+              groupName: group.name,
+              userId: device.user.id,
+              memberName: device.user.name,
+              deviceId,
+              deviceName: device.name,
+            },
+          ]
+        : [];
+    })
+    .sort(
+      (a, b) =>
+        a.groupName.localeCompare(b.groupName) ||
+        a.memberName.localeCompare(b.memberName) ||
+        a.deviceName.localeCompare(b.deviceName),
+    );
+};
+
+export const createSeatHolds = ({
+  db,
+  selfHosted,
+}: {
+  db: RawDb & Pick<Prisma.TransactionClient, "group" | "groupMember" | "user">;
+  selfHosted: boolean;
+}) => {
+  const owners = new Map<string, Promise<Map<string, Set<string>>>>();
+  const groupOwners = new Map<string, Promise<string | null>>();
+  const heldByOwner = (ownerId: string) => {
+    const cached = owners.get(ownerId);
+    if (cached) return cached;
+    const held = (async () => {
+      const seats = seatsEnforced({ selfHosted })
+        ? seatPeriod(
+            await db.user.findUniqueOrThrow({ where: { id: ownerId }, select: seatAccountSelect }),
+            new Date(),
+          ).seats
+        : null;
+      return heldSeats({ db, ownerId, seats });
+    })();
+    owners.set(ownerId, held);
+    return held;
+  };
+  const ownerOf = (groupId: string) => {
+    const cached = groupOwners.get(groupId);
+    if (cached) return cached;
+    const owner = db.group
+      .findUnique({ where: { id: groupId }, select: { ownerId: true } })
+      .then((group) => group?.ownerId ?? null);
+    groupOwners.set(groupId, owner);
+    return owner;
+  };
+  const heldIn = async (groupId: string, knownOwnerId?: string) => {
+    const ownerId = knownOwnerId ?? (await ownerOf(groupId));
+    if (!ownerId) return new Set<string>();
+    return (await heldByOwner(ownerId)).get(groupId) ?? new Set<string>();
+  };
+  return {
+    heldIn,
+    isHeld: async (groupId: string, deviceId: string) => (await heldIn(groupId)).has(deviceId),
+    heldGroupIds: async ({ deviceId, userId }: { deviceId: string; userId: string }) => {
+      const memberships = await db.groupMember.findMany({
+        where: { userId },
+        select: { groupId: true, group: { select: { ownerId: true } } },
+      });
+      const held = await Promise.all(
+        memberships.map(async ({ groupId, group }) =>
+          (await heldIn(groupId, group.ownerId)).has(deviceId) ? groupId : null,
+        ),
+      );
+      return held.filter((groupId) => groupId !== null);
+    },
+  };
+};
+
+export type SeatHolds = ReturnType<typeof createSeatHolds>;
+
+export const assertNotOnHold = async (
+  ctx: { deviceId: string; seatHolds: SeatHolds },
+  groupId: string,
+) => {
+  if (await ctx.seatHolds.isHeld(groupId, ctx.deviceId)) throw seatOnHoldError();
 };
 
 export const seatOnHoldError = () =>

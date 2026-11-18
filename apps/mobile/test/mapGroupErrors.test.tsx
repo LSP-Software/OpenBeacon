@@ -89,6 +89,7 @@ mock.module("../components/map/NativeMap.tsx", () => ({
   },
 }));
 mock.module("../components/NewSignInBanner.tsx", () => ({ NewSignInBanner: () => null }));
+mock.module("../components/SeatsEndingBanner.tsx", () => ({ SeatsEndingBanner: () => null }));
 mock.module("../components/map/LocationSharingPausedBanner.tsx", () => ({
   LocationSharingPausedBanner: () => null,
 }));

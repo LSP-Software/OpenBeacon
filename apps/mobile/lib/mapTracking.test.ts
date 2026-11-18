@@ -2055,6 +2055,7 @@ describe("paused map devices", () => {
         deviceId: "tablet",
         userId: "alex",
         paused: false,
+        onHold: false,
         revisionPrefix: "",
       },
     ];
@@ -2076,14 +2077,14 @@ describe("paused map devices", () => {
     session.setActive(true);
     await session.tick();
     expect(session.getLivePositions()).toHaveLength(1);
-    sharing = [{ ...sharing[0]!, paused: true, revisionPrefix: "s0.1:" }];
+    sharing = [{ ...sharing[0]!, paused: true, onHold: false, revisionPrefix: "s0.1:" }];
     await session.tick();
     expect(session.getLivePositions()).toEqual([]);
     expect(session.getStatus().sharing?.[0]?.paused).toBe(true);
-    sharing = [{ ...sharing[0]!, paused: false, revisionPrefix: "" }];
+    sharing = [{ ...sharing[0]!, paused: false, onHold: false, revisionPrefix: "" }];
     await session.tick();
     expect(session.getLivePositions()).toEqual([]);
-    sharing = [{ ...sharing[0]!, paused: false, revisionPrefix: "s0.2:" }];
+    sharing = [{ ...sharing[0]!, paused: false, onHold: false, revisionPrefix: "s0.2:" }];
     await session.tick();
     expect(session.getLivePositions()).toEqual([]);
     points = [
@@ -2102,7 +2103,9 @@ describe("paused map devices", () => {
   });
 
   test("a revision change forgets an unreadable point from before it", async () => {
-    let sharing = [{ deviceId: "tablet", userId: "alex", paused: false, revisionPrefix: "" }];
+    let sharing = [
+      { deviceId: "tablet", userId: "alex", paused: false, onHold: false, revisionPrefix: "" },
+    ];
     const { session } = createSession({
       getLatest: async () => ({
         points: [
@@ -2135,6 +2138,7 @@ describe("paused map devices", () => {
         deviceId: "tablet",
         userId: "alex",
         paused: false,
+        onHold: false,
         revisionPrefix: "s0.2:",
       },
     ];
@@ -2219,6 +2223,7 @@ test("does not commit an earlier decrypted pin after another group reports a res
     deviceId: "tablet",
     userId: "alex",
     paused: false,
+    onHold: false,
     revisionPrefix: "",
   };
   let blocked = () => {};
@@ -2300,6 +2305,7 @@ test("a slower group's stale snapshot cannot bring back a pin another group repo
     deviceId: "tablet",
     userId: "alex",
     paused: false,
+    onHold: false,
     revisionPrefix: "",
   };
   const tabletPoint = (id: string, createdAt: Date) =>
@@ -2323,6 +2329,7 @@ test("a slower group's stale snapshot cannot bring back a pin another group repo
             {
               ...sharing,
               paused: true,
+              onHold: false,
               revisionPrefix: "s0.1:",
             },
           ],

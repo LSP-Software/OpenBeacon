@@ -8,6 +8,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import expo.modules.openbeacontracking.capture.TrackingCaptureService
 import expo.modules.openbeacontracking.capture.SharingCaptureState
+import expo.modules.openbeacontracking.capture.SeatHoldNotice
 import expo.modules.openbeacontracking.capture.SharingResumeWorker
 import expo.modules.openbeacontracking.capture.TrackingUploadService
 import expo.modules.openbeacontracking.crypto.GroupPayloadEncrypt
@@ -31,6 +32,10 @@ class OpenBeaconTrackingModule : Module() {
 
       Function("setSharingState") { owner: String, deviceId: String, prefix: String, paused: Boolean, until: Double?, after: Double? ->
         TrackingRuntime.applySharingState(requireContext(), owner, deviceId, SharingCaptureState(prefix, paused, until?.toLong(), after?.toLong() ?: 0L))
+      }
+
+      Function("setSeatHoldNotice") { owner: String, deviceId: String, sharing: List<String>, held: List<String> ->
+        TrackingRuntime.setSeatHoldNotice(requireContext(), owner, deviceId, SeatHoldNotice(sharing, held))
       }
 
       Function("setHistoryShare") { owner: String, deviceId: String, account: String, groups: Map<String, String> ->

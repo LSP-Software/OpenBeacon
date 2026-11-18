@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, mock, test } from "bun:test";
 import { createIntegrationTestCache } from "@openbeacon/cache/integration";
 import { prisma } from "@openbeacon/database";
 import {
@@ -10,21 +10,30 @@ import {
 } from "@openbeacon/encryption";
 import { activateDevice } from "../../lib/deviceActivation.ts";
 import { withDeviceActive } from "../../lib/deviceContext.testUtil.ts";
-import { heldDeviceIds, seatsUsed } from "../../lib/seats.ts";
+import { sendSeatGraceWarnings } from "../../lib/seatGraceWarnings.ts";
+import { createSeatHolds, seatsUsed } from "../../lib/seats.ts";
 import { encryptedTrackingPoint, testClientPointId } from "../../lib/trackingPoints.testUtil.ts";
 import { createTRPCRouter } from "../../trpcRuntime.ts";
+import { accountNoticesRouter } from "../accountNoticesRouter.ts";
 import { accountRouter } from "../accountRouter.ts";
+import { groupHistoryRouter } from "./groupHistoryRouter.ts";
 import { groupInvitesRouter } from "./groupInvitesRouter.ts";
 import { groupLifecycleRouter } from "./groupLifecycleRouter.ts";
+import { groupMembershipRouter } from "./groupMembershipRouter.ts";
 import { groupOwnershipRouter } from "./groupOwnershipRouter.ts";
 import { groupTrackingRouter } from "./groupTrackingRouter.ts";
+import { placeTransitionsRouter } from "./placeTransitionsRouter.ts";
 
 const router = createTRPCRouter({
   account: accountRouter,
+  accountNotices: accountNoticesRouter,
+  groupHistory: groupHistoryRouter,
   groupInvites: groupInvitesRouter,
   groupLifecycle: groupLifecycleRouter,
+  groupMembership: groupMembershipRouter,
   groupOwnership: groupOwnershipRouter,
   groupTracking: groupTrackingRouter,
+  placeTransitions: placeTransitionsRouter,
 });
 const cache = createIntegrationTestCache(() => 0);
 const prefix = `seat-checks-${crypto.randomUUID()}`;
@@ -32,6 +41,9 @@ const keys = new Map<string, DeviceKeyPair>();
 let userCount = 0;
 
 type TestUser = { id: string; deviceIds: string[] };
+
+const heldDeviceIds = ({ groupId, selfHosted }: { groupId: string; selfHosted: boolean }) =>
+  createSeatHolds({ db: prisma, selfHosted }).heldIn(groupId);
 
 const noFreeSeats = { code: "PRECONDITION_FAILED", cause: { reason: "NO_FREE_SEATS" } };
 const groupFull = { code: "PRECONDITION_FAILED", cause: { reason: "GROUP_FULL" } };
@@ -170,6 +182,53 @@ const addMembers = async (groupId: string, count: number) => {
     data: ids.map((userId) => ({ groupId, userId, role: "MEMBER" as const, joinedEpochNumber: 1 })),
   });
 };
+
+const leave = async (member: TestUser, groupId: string) => {
+  const membership = await prisma.groupMember.findUniqueOrThrow({
+    where: { userId_groupId: { userId: member.id, groupId } },
+  });
+  const context = await caller(member).groupMembership.removalContext({
+    groupId,
+    memberId: membership.id,
+  });
+  const nextEpoch = bundle(
+    createNextGroupEpoch({
+      creator: {
+        deviceId: member.deviceIds[0]!,
+        privateKey: keys.get(member.deviceIds[0]!)!.privateKey,
+      },
+      previousEpoch: context.latestEpoch!,
+      recipients: context.recipients,
+    }),
+  );
+  await caller(member).groupMembership.remove({ groupId, memberId: membership.id, nextEpoch });
+};
+
+const upload = async (sender: TestUser, groupId: string, seed: string) => {
+  const epoch = await prisma.groupEpoch.findFirstOrThrow({
+    where: { groupId },
+    orderBy: { epochNumber: "desc" },
+  });
+  const clientPointId = testClientPointId(seed);
+  const result = await caller(sender).groupTracking.uploadBatch({
+    groupId,
+    points: [
+      encryptedTrackingPoint({
+        clientPointId,
+        epochId: epoch.id,
+        epochKey: generateGroupEpochKey(),
+        groupId,
+        senderDeviceId: sender.deviceIds[0]!,
+      }),
+    ],
+  });
+  return { clientPointId, result };
+};
+
+const setSeats = (user: TestUser, seats: number) =>
+  prisma.user.update({ where: { id: user.id }, data: { seats } });
+
+const onHold = { code: "FORBIDDEN", cause: { reason: "SEAT_ON_HOLD" } };
 
 describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
   "seat checks with PostgreSQL",
@@ -370,10 +429,8 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         activateDevice({ activatedBy: "phrase", db: tx, deviceId: newDeviceId, userId: member.id }),
       );
 
-      expect(await heldDeviceIds({ db: prisma, groupId, selfHosted: false })).toEqual(
-        new Set([newDeviceId]),
-      );
-      expect(await heldDeviceIds({ db: prisma, groupId, selfHosted: true })).toEqual(new Set());
+      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(new Set([newDeviceId]));
+      expect(await heldDeviceIds({ groupId, selfHosted: true })).toEqual(new Set());
       await expect(
         caller(member, { deviceId: newDeviceId }).groupTracking.getLatest({ groupId }),
       ).rejects.toMatchObject({ code: "FORBIDDEN", cause: { reason: "SEAT_ON_HOLD" } });
@@ -399,7 +456,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       expect(uploaded).toMatchObject({ accepted: [], discarded: [clientPointId] });
 
       await prisma.user.update({ where: { id: owner.id }, data: { seats: 3 } });
-      expect(await heldDeviceIds({ db: prisma, groupId, selfHosted: false })).toEqual(new Set());
+      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(new Set());
     });
 
     test("taking over a group needs a free seat for every seat in it", async () => {
@@ -459,7 +516,7 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
         seats: null,
       });
       expect(await caller(owner, selfHosted).account.seats()).toMatchObject({ enforced: false });
-      expect(await heldDeviceIds({ db: prisma, groupId, selfHosted: true })).toEqual(new Set());
+      expect(await heldDeviceIds({ groupId, selfHosted: true })).toEqual(new Set());
 
       const membership = await prisma.groupMember.update({
         where: { userId_groupId: { userId: joiner.id, groupId } },
@@ -467,6 +524,233 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       });
       await caller(owner, selfHosted).groupOwnership.offer({ groupId, memberId: membership.id });
       await caller(joiner, selfHosted).groupOwnership.accept({ groupId });
+    });
+
+    test("holds follow seat order across an owner's groups and lift when seats are added, someone leaves or a phone is removed", async () => {
+      const owner = await createUser({ seats: 5 });
+      const [first, second, third] = [await createUser(), await createUser(), await createUser()];
+      const family = await createGroup(owner);
+      const friends = await createGroup(owner);
+      await joinWithCode(first, await invite(owner, family));
+      await joinWithCode(second, await invite(owner, friends));
+      await joinWithCode(third, await invite(owner, family));
+      const held = async () => {
+        const holds = createSeatHolds({ db: prisma, selfHosted: false });
+        return [...(await holds.heldIn(family)), ...(await holds.heldIn(friends))].toSorted();
+      };
+      expect(await held()).toEqual([]);
+
+      await setSeats(owner, 3);
+      expect(await held()).toEqual([second.deviceIds[0], third.deviceIds[0]].toSorted());
+      expect(
+        (await caller(third).groupMembership.list()).find(({ id }) => id === family)?.onHold,
+      ).toBe(true);
+      expect(
+        (await caller(first).groupMembership.list()).find(({ id }) => id === family)?.onHold,
+      ).toBe(false);
+      expect(await caller(second).accountNotices.sync({ cursor: null })).toMatchObject({
+        heldGroupIds: [friends],
+      });
+
+      await setSeats(owner, 4);
+      expect(await held()).toEqual([third.deviceIds[0]]);
+
+      await leave(first, family);
+      expect(await held()).toEqual([]);
+
+      await setSeats(owner, 3);
+      expect(await held()).toEqual([third.deviceIds[0]]);
+      await prisma.userDevice.update({
+        where: { id: second.deviceIds[0]! },
+        data: { revokedAt: new Date() },
+      });
+      expect(await held()).toEqual([]);
+    });
+
+    test("a held phone can't upload to or read that group, but still shares in its other groups and can leave", async () => {
+      const owner = await createUser({ seats: 2 });
+      const otherOwner = await createUser({ seats: 4 });
+      const member = await createUser();
+      const family = await createGroup(owner);
+      const friends = await createGroup(otherOwner);
+      await joinWithCode(member, await invite(owner, family));
+      await joinWithCode(member, await invite(otherOwner, friends));
+      await upload(member, family, "before-hold");
+      await setSeats(owner, 1);
+
+      const held = await upload(member, family, "held");
+      expect(held.result).toMatchObject({ accepted: [], discarded: [held.clientPointId] });
+      const member_ = caller(member);
+      for (const read of [
+        () => member_.groupTracking.poll({ groupId: family }),
+        () => member_.groupTracking.getLatest({ groupId: family }),
+        () => member_.groupTracking.historyDays({ groupId: family }),
+        () => member_.groupTracking.historyRange({ groupId: family, fromHour: 0, toHour: 1 }),
+        () => member_.groupHistory.list({ groupId: family }),
+        () => member_.placeTransitions.recent({ groupId: family }),
+      ]) {
+        await expect(read()).rejects.toMatchObject(onHold);
+      }
+
+      const shared = await upload(member, friends, "shared");
+      expect(shared.result).toMatchObject({ accepted: [shared.clientPointId] });
+      await member_.groupTracking.getLatest({ groupId: friends });
+
+      const ownerView = await caller(owner).groupTracking.getLatest({ groupId: family });
+      expect(ownerView.sharing.find(({ deviceId }) => deviceId === member.deviceIds[0])).toEqual(
+        expect.objectContaining({ onHold: true, paused: false }),
+      );
+      expect(
+        ownerView.points.some(({ senderDeviceId }) => senderDeviceId === member.deviceIds[0]),
+      ).toBe(false);
+      expect(
+        (await member_.groupMembership.list())
+          .map(({ id, onHold }) => ({ id, onHold }))
+          .toSorted((a, b) => a.id.localeCompare(b.id)),
+      ).toEqual(
+        [
+          { id: family, onHold: true },
+          { id: friends, onHold: false },
+        ].toSorted((a, b) => a.id.localeCompare(b.id)),
+      );
+
+      await leave(member, family);
+      expect(
+        await prisma.groupMember.count({ where: { groupId: family, userId: member.id } }),
+      ).toBe(0);
+    });
+
+    test("a pause survives a hold lifting", async () => {
+      const owner = await createUser({ seats: 2 });
+      const member = await createUser();
+      const groupId = await createGroup(owner);
+      await joinWithCode(member, await invite(owner, groupId));
+      await prisma.user.update({ where: { id: member.id }, data: { sharingPaused: true } });
+      await setSeats(owner, 1);
+      const memberState = async () =>
+        (await caller(owner).groupTracking.getLatest({ groupId })).sharing.find(
+          ({ deviceId }) => deviceId === member.deviceIds[0],
+        );
+      expect(await memberState()).toMatchObject({ paused: true, onHold: true });
+
+      await setSeats(owner, 2);
+      expect(await memberState()).toMatchObject({ paused: true, onHold: false });
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: member.id } })).sharingPaused,
+      ).toBe(true);
+    });
+
+    test("a paid period ending gives 7 days' grace with warnings, then puts the seats on hold", async () => {
+      const owner = await createUser({ seats: 2 });
+      const member = await createUser();
+      const groupId = await createGroup(owner);
+      await joinWithCode(member, await invite(owner, groupId));
+      const endedAt = new Date(Date.now() - 3_600_000);
+      await prisma.user.update({ where: { id: owner.id }, data: { paidPeriodEndsAt: endedAt } });
+      const graceEndsAt = new Date(endedAt.getTime() + 7 * 86_400_000);
+
+      const seats = await caller(owner).account.seats();
+      expect(seats).toMatchObject({ seats: 2, paidPeriodEndsAt: endedAt });
+      expect(seats.grace?.endsAt).toEqual(graceEndsAt);
+      expect(seats.grace?.holds.map(({ deviceId }) => deviceId).toSorted()).toEqual(
+        [owner.deviceIds[0], member.deviceIds[0]].toSorted(),
+      );
+      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(new Set());
+
+      const emails: Array<{ reminder: boolean; to: string; holds: unknown[] }> = [];
+      const warn = (now: Date) =>
+        sendSeatGraceWarnings({
+          db: prisma,
+          now,
+          sendEmail: async (email) => {
+            if (email.userId === owner.id) emails.push(email);
+          },
+        });
+      const notices = () =>
+        prisma.accountNotice.findMany({
+          where: { userId: { in: [owner.id, member.id] } },
+          select: { userId: true, type: true, groupId: true, holdsFrom: true },
+          orderBy: { createdAt: "asc" },
+        });
+      await warn(new Date());
+      await warn(new Date());
+      expect(await notices()).toEqual([
+        { userId: owner.id, type: "SEATS_ENDING", groupId: null, holdsFrom: graceEndsAt },
+        { userId: member.id, type: "SEAT_HOLD_COMING", groupId, holdsFrom: graceEndsAt },
+      ]);
+      expect(emails).toMatchObject([{ reminder: false, to: `${owner.id}@example.test` }]);
+      expect(emails[0]?.holds).toHaveLength(2);
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).lastGracePeriodStartedAt,
+      ).toEqual(endedAt);
+
+      const dayBeforeEnd = new Date(graceEndsAt.getTime() - 12 * 3_600_000);
+      await warn(dayBeforeEnd);
+      await warn(dayBeforeEnd);
+      expect((await notices()).map(({ type }) => type)).toEqual([
+        "SEATS_ENDING",
+        "SEAT_HOLD_COMING",
+        "SEATS_ENDING_SOON",
+      ]);
+      expect(emails.map(({ reminder }) => reminder)).toEqual([false, true]);
+
+      await prisma.user.update({
+        where: { id: owner.id },
+        data: { paidPeriodEndsAt: new Date(Date.now() - 8 * 86_400_000) },
+      });
+      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(
+        new Set([owner.deviceIds[0], member.deviceIds[0]]),
+      );
+      expect(await caller(owner).account.seats()).toMatchObject({ seats: 0, grace: null });
+    });
+
+    test("a second grace period within 6 months isn't given", async () => {
+      const owner = await createUser({ seats: 2 });
+      const member = await createUser();
+      const groupId = await createGroup(owner);
+      await joinWithCode(member, await invite(owner, groupId));
+      await prisma.user.update({
+        where: { id: owner.id },
+        data: {
+          paidPeriodEndsAt: new Date(Date.now() - 3_600_000),
+          lastGracePeriodStartedAt: new Date(Date.now() - 60 * 86_400_000),
+        },
+      });
+
+      expect(await caller(owner).account.seats()).toMatchObject({ seats: 0, grace: null });
+      expect(await heldDeviceIds({ groupId, selfHosted: false })).toEqual(
+        new Set([owner.deviceIds[0], member.deviceIds[0]]),
+      );
+      const sendEmail = mock(async () => {});
+      await sendSeatGraceWarnings({ db: prisma, now: new Date(), sendEmail });
+      expect(sendEmail).not.toHaveBeenCalled();
+      expect(await prisma.accountNotice.count({ where: { userId: owner.id } })).toBe(0);
+      await expect(
+        caller(owner).groupLifecycle.create(await createInput(owner)),
+      ).rejects.toMatchObject(noFreeSeats);
+    });
+
+    test("the debug setting ends and renews the paid period only where self-set seats are allowed", async () => {
+      const owner = await createUser({ seats: 2 });
+      await expect(caller(owner).account.setPaidPeriodEnded({ ended: true })).rejects.toMatchObject(
+        { code: "FORBIDDEN" },
+      );
+      await expect(
+        caller(owner, { allowSelfSetSeats: true, selfHosted: true }).account.setPaidPeriodEnded({
+          ended: true,
+        }),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      const ended = await caller(owner, { allowSelfSetSeats: true }).account.setPaidPeriodEnded({
+        ended: true,
+      });
+      expect(ended.paidPeriodEndsAt).toBeInstanceOf(Date);
+      expect((await caller(owner).account.seats()).grace).not.toBeNull();
+      await caller(owner, { allowSelfSetSeats: true }).account.setPaidPeriodEnded({ ended: false });
+      expect(await caller(owner).account.seats()).toMatchObject({
+        paidPeriodEndsAt: null,
+        grace: null,
+        seats: 2,
+      });
     });
   },
 );

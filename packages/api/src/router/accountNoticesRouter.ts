@@ -23,6 +23,10 @@ export const accountNoticesRouter = {
           }),
         ]);
       }
+      const heldGroupIds = await ctx.seatHolds.heldGroupIds({
+        deviceId: ctx.deviceId,
+        userId: ctx.session.user.id,
+      });
       const notices = await readAccountNotices({
         cursor: input.cursor,
         db: ctx.db,
@@ -30,6 +34,6 @@ export const accountNoticesRouter = {
         sessionCreatedAt: new Date(ctx.session.session.createdAt),
         userId: ctx.session.user.id,
       });
-      return { ...notices, pushAvailable };
+      return { ...notices, pushAvailable, heldGroupIds };
     }),
 } satisfies TRPCRouterRecord;

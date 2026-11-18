@@ -18,6 +18,7 @@ type PersonDevice = {
   icon: DeviceIcon;
   isThisDevice: boolean;
   name: string;
+  onHold: boolean;
   paused: boolean;
   platform: string | null;
   timestamp: string | null;
@@ -169,11 +170,13 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
   const label = device.isThisDevice ? `${device.name} (this phone)` : device.name;
   const updated = device.paused
     ? "Location sharing paused"
-    : device.unreadable
-      ? "Newer location can’t be read"
-      : updatedAge === null
-        ? "No location yet"
-        : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`;
+    : device.onHold
+      ? "On hold"
+      : device.unreadable
+        ? "Newer location can’t be read"
+        : updatedAge === null
+          ? "No location yet"
+          : `${device.isThisDevice ? "Location sent" : "Updated"} ${updatedAge}`;
   const batteryLevel = batteryVisual?.label ?? null;
 
   const content = (
@@ -191,7 +194,7 @@ const PersonDeviceRow = ({ device, onPress }: { device: PersonDevice; onPress: (
         </Text>
         <Text
           className={
-            device.unreadable && !device.paused
+            device.unreadable && !device.paused && !device.onHold
               ? "text-destructive-text text-sm"
               : "text-secondary text-sm"
           }

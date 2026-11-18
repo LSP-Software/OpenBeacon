@@ -1,4 +1,10 @@
-import { ClockIcon, EyeOffIcon, HourglassIcon, PauseIcon } from "lucide-react-native";
+import {
+  CircleSlashIcon,
+  ClockIcon,
+  EyeOffIcon,
+  HourglassIcon,
+  PauseIcon,
+} from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from "react-native-svg";
@@ -227,6 +233,10 @@ export const LiveMapMarkerPin = ({
         {status === "paused" ? (
           <StatusBadge label="Location sharing paused">
             <Icon as={PauseIcon} size={12} className="text-foreground" />
+          </StatusBadge>
+        ) : status === "onHold" ? (
+          <StatusBadge label="On hold">
+            <Icon as={CircleSlashIcon} size={12} className="text-foreground" />
           </StatusBadge>
         ) : status === "hidden" ? (
           <StatusBadge label="Hidden on the map">

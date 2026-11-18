@@ -13,10 +13,11 @@ export const SeatsSetting = ({ subscribed }: { subscribed: boolean }) => {
   const queryClient = useQueryClient();
   const seats = useQuery({ ...trpc.account.seats.queryOptions(), subscribed });
   const setSeats = useMutation(trpc.account.setSeats.mutationOptions());
+  const setPaidPeriodEnded = useMutation(trpc.account.setPaidPeriodEnded.mutationOptions());
   const [draft, setDraft] = useState<number | null>(null);
   if (!seats.data?.selfSetAllowed) return null;
-  const { max, used } = seats.data;
-  const value = draft ?? seats.data.seats;
+  const { grace, max, paidPeriodEndsAt, paidSeats, used } = seats.data;
+  const value = draft ?? paidSeats;
   const save = async () => {
     const result = await tryCatch(setSeats.mutateAsync({ seats: value }));
     if (result.error) {
@@ -26,6 +27,19 @@ export const SeatsSetting = ({ subscribed }: { subscribed: boolean }) => {
     await queryClient.invalidateQueries({ queryKey: trpc.account.seats.queryKey() });
     setDraft(null);
   };
+  const endPaidPeriod = async (ended: boolean) => {
+    const result = await tryCatch(setPaidPeriodEnded.mutateAsync({ ended }));
+    if (result.error) {
+      Alert.alert("Unable to change the paid period", result.error.message);
+      return;
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: trpc.account.seats.queryKey() }),
+      queryClient.invalidateQueries({ queryKey: trpc.groupMembership.list.queryKey() }),
+    ]);
+  };
+  const formatDate = (date: Date) =>
+    date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
   const step = (by: number) => setDraft(Math.min(max, Math.max(0, value + by)));
 
   return (
@@ -38,6 +52,7 @@ export const SeatsSetting = ({ subscribed }: { subscribed: boolean }) => {
             <Text className="font-medium">Seats (beta testing)</Text>
             <Text className="text-sm text-muted-foreground">
               Using {used} of {seats.data.seats}
+              {seats.data.seats !== paidSeats ? ` (${paidSeats} paid)` : ""}
             </Text>
           </View>
           <Pressable
@@ -66,11 +81,28 @@ export const SeatsSetting = ({ subscribed }: { subscribed: boolean }) => {
             <Icon as={PlusIcon} className="size-5 text-secondary-foreground" />
           </Pressable>
         </View>
-        {value !== seats.data.seats && (
+        {value !== paidSeats && (
           <Button size="sm" onPress={save} loading={setSeats.isPending}>
             <Text>Save {value} seats</Text>
           </Button>
         )}
+        <View className="gap-2 border-t border-border pt-3">
+          <Text className="text-sm text-muted-foreground">
+            {paidPeriodEndsAt === null
+              ? "Ending the paid period starts a 7-day grace period, at most once every 6 months. After it, this account has no seats, so every phone in the groups you own goes on hold."
+              : grace
+                ? `Your paid period ended ${formatDate(paidPeriodEndsAt)}. You keep your seats until ${formatDate(grace.endsAt)}.`
+                : `Your paid period ended ${formatDate(paidPeriodEndsAt)} with no grace period left, so you have no seats.`}
+          </Text>
+          <Button
+            size="sm"
+            variant="secondary"
+            onPress={() => endPaidPeriod(paidPeriodEndsAt === null)}
+            loading={setPaidPeriodEnded.isPending}
+          >
+            <Text>{paidPeriodEndsAt === null ? "End paid period now" : "Renew paid period"}</Text>
+          </Button>
+        </View>
       </View>
     </View>
   );

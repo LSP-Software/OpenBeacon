@@ -25,7 +25,7 @@ Turning email off on a server locks accounts with sign-in codes on out of passwo
 
 `bun run announce` adds, lists and ends the banners the app shows at the top of its main tabs and sign-in screens, for example before planned downtime. Run it with no arguments for its options. Announcements live in the `Announcement` table and the app filters them by platform and app version itself, so it never sends those to the server for this. See [Announcements](https://docs.openbeacon.net/docs/self-host/running-your-server/announcements).
 
-`bun run seats` shows or sets an account's seat count, found by email: `bun run seats show <email>` or `bun run seats set <email> <seats>`. It prints the seats the account uses, which is every activated device in every group it owns. Self-hosted servers never check seats.
+`bun run seats` shows or sets an account's seat count, found by email: `bun run seats show <email>` or `bun run seats set <email> <seats>`. It prints the seats the account uses, which is every activated device in every group it owns. Self-hosted servers never check seats. To test grace periods before billing exists, `bun run seats end-period <email> [hours-ago]` ends the account's paid period, `bun run seats renew <email>` clears it, and `bun run seats reset-grace <email>` forgets the last grace period. After a paid period ends the account keeps its seats for 7 days, at most once every 6 months, and then has 0 seats, so its newest seats go on hold.
 
 ## Startup
 

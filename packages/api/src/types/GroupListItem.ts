@@ -10,6 +10,7 @@ export interface GroupListItem {
   imageKey: StoredImageKey | null;
   ownerId: string;
   ownershipOfferedToId: string | null;
+  onHold: boolean;
   members: {
     id: string;
     userId: string;

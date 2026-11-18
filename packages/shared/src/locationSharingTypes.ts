@@ -17,4 +17,4 @@ export type DeviceSharingState = {
 export type GroupDeviceSharingState = Pick<
   DeviceSharingState,
   "deviceId" | "userId" | "paused" | "revisionPrefix"
->;
+> & { onHold: boolean };

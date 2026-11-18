@@ -27,6 +27,35 @@ describe("parseSeatsCommand", () => {
     }
   });
 
+  test("ends and renews the paid period and forgets the last grace period", () => {
+    expect(parseSeatsCommand(["end-period", "sam@example.test"])).toEqual({
+      command: "end-period",
+      email: "sam@example.test",
+      hoursAgo: 0,
+    });
+    expect(parseSeatsCommand(["end-period", "sam@example.test", "150"])).toEqual({
+      command: "end-period",
+      email: "sam@example.test",
+      hoursAgo: 150,
+    });
+    expect(parseSeatsCommand(["renew", "sam@example.test"])).toEqual({
+      command: "renew",
+      email: "sam@example.test",
+    });
+    expect(parseSeatsCommand(["reset-grace", "sam@example.test"])).toEqual({
+      command: "reset-grace",
+      email: "sam@example.test",
+    });
+    for (const args of [
+      ["end-period", "sam@example.test", "-1"],
+      ["end-period", "sam@example.test", "9000"],
+      ["renew", "sam@example.test", "1"],
+      ["reset-grace"],
+    ]) {
+      expect(parseSeatsCommand(args)).toMatchObject({ command: "error" });
+    }
+  });
+
   test("shows help with no arguments and refuses anything else", () => {
     expect(parseSeatsCommand([])).toEqual({ command: "help" });
     expect(parseSeatsCommand(["help"])).toEqual({ command: "help" });

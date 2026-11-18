@@ -22,6 +22,7 @@ test("group members learn a device is paused without learning its planned resume
       deviceId: "device-1",
       userId: "user-1",
       paused: true,
+      onHold: false,
       revisionPrefix: "s0.1:",
     },
   ]);
@@ -44,12 +45,28 @@ test("an ended pause shows the device sharing under the pause revision without i
     "group-1",
   );
   expect(states).toEqual([
-    { deviceId: "device-1", userId: "user-1", paused: false, revisionPrefix: "s0.1:" },
+    {
+      deviceId: "device-1",
+      userId: "user-1",
+      paused: false,
+      onHold: false,
+      revisionPrefix: "s0.1:",
+    },
   ]);
   expect(Object.keys(states[0]!).sort()).toEqual([
     "deviceId",
+    "onHold",
     "paused",
     "revisionPrefix",
     "userId",
   ]);
+});
+
+test("a device on hold in the group shows as on hold", async () => {
+  const states = await getGroupSharingStates(
+    { $queryRaw: mock(async () => [sharingDeviceRow]) },
+    "group-1",
+    new Set(["device-1"]),
+  );
+  expect(states).toEqual([expect.objectContaining({ deviceId: "device-1", onHold: true })]);
 });

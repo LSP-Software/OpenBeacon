@@ -11,6 +11,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LocationSharingPausedBanner } from "../../../components/map/LocationSharingPausedBanner.tsx";
+import { SeatHoldBanner } from "../../../components/SeatHoldBanner.tsx";
+import { SeatsEndingBanner } from "../../../components/SeatsEndingBanner.tsx";
 import { NativeMap } from "../../../components/map/NativeMap.tsx";
 import { AnnouncementBanner } from "../../../components/AnnouncementBanner.tsx";
 import { NewSignInBanner } from "../../../components/NewSignInBanner.tsx";
@@ -72,7 +74,8 @@ const MapScreen = () => {
     ...trpc.groupMembership.list.queryOptions(),
     enabled: false,
   });
-  const groups = useMembershipSnapshot(groupsQueryData);
+  const allGroups = useMembershipSnapshot(groupsQueryData);
+  const groups = useMemo(() => allGroups?.filter((group) => !group.onHold) ?? null, [allGroups]);
   const nicknames = useQueries({
     queries: (groups ?? []).map((group) => ({
       queryKey: ["personalNicknames", group.id, userId],
@@ -389,6 +392,9 @@ const MapScreen = () => {
           paused:
             trackingStatus.sharing?.find((state) => state.deviceId === device.deviceId)?.paused ??
             false,
+          onHold:
+            trackingStatus.sharing?.find((state) => state.deviceId === device.deviceId)?.onHold ??
+            false,
           unreadable: trackingStatus.undecryptable.some(
             (item) => item.deviceId === device.deviceId && item.userId === device.userId,
           ),
@@ -447,6 +453,8 @@ const MapScreen = () => {
           subscribed={isFocused}
           userId={selfUserId}
         />
+        <SeatsEndingBanner subscribed={isFocused} />
+        <SeatHoldBanner groups={allGroups ?? []} linkToGroup userId={selfUserId} />
         {queueEviction && (
           <View className="mb-2 gap-2 rounded-2xl border border-warning-accent bg-card p-4">
             <Text className="font-semibold text-warning-text">

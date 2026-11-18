@@ -107,6 +107,9 @@ enum AccountNoticeType {
   SIGN_IN_CODES_TURNED_ON
   SIGN_IN_CODES_TURNED_OFF
   OWNERSHIP_OFFERED
+  SEATS_ENDING
+  SEATS_ENDING_SOON
+  SEAT_HOLD_COMING
 }
 
 model AccountNotice {
@@ -119,6 +122,7 @@ model AccountNotice {
   deviceModel     String?
   devicePlatform  String?
   deletionDate    DateTime?
+  holdsFrom       DateTime?
   turnedOffEmail  NotificationType[] @default([])
   turnedOffPhone  NotificationType[] @default([])
   groupId         String?

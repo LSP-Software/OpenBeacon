@@ -64,7 +64,11 @@ export const NativeMap = ({
   selectedDeviceId = null,
   timelineGroupId = null,
 }: {
-  devices?: readonly (MapMemberDevice & { paused: boolean; unreadable: boolean })[];
+  devices?: readonly (MapMemberDevice & {
+    onHold: boolean;
+    paused: boolean;
+    unreadable: boolean;
+  })[];
   focusPlaceId?: string | null;
   groupOptions?: readonly MapGroupOption[] | null;
   markers?: readonly LiveMapMarker[];
@@ -118,6 +122,7 @@ export const NativeMap = ({
   const missingPerson =
     [
       ...(people?.paused ?? []),
+      ...(people?.onHold ?? []),
       ...(people?.waitingForLocation ?? []),
       ...(people?.cantLocate ?? []),
       ...(people?.cantRead ?? []),
@@ -809,6 +814,7 @@ export const NativeMap = ({
                   isThisDevice: device.marker?.isSelf ?? false,
                   name: device.name,
                   platform: device.platform,
+                  onHold: device.onHold,
                   paused: device.paused,
                   timestamp: device.marker?.timestamp ?? null,
                   unreadable: device.unreadable || device.marker?.unreadableGroup !== undefined,

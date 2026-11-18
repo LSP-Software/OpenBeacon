@@ -141,11 +141,18 @@ export const createMapTrackingSession = (deps: MapTrackingDeps) => {
       )
         sharing.set(device.deviceId, device);
     }
+    for (const [deviceId, device] of sharing) {
+      const onHold = devices
+        .filter((current) => current.deviceId === deviceId)
+        .every((current) => current.onHold);
+      if (device.onHold !== onHold) sharing.set(deviceId, { ...device, onHold });
+    }
     const hiddenDeviceIds = new Set(
       [...sharing.values()]
         .filter(
           (device) =>
             device.paused ||
+            device.onHold ||
             previousSharing.get(device.deviceId)?.revisionPrefix !== device.revisionPrefix,
         )
         .map((device) => device.deviceId),

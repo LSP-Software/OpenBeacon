@@ -138,6 +138,7 @@ test("a device row without a location on the map isn't a button", async () => {
     isThisDevice: false,
     paused: false,
     platform: null,
+    onHold: false,
     unreadable: false,
   };
   const rows = await pressables(
@@ -178,6 +179,7 @@ test("someone with several devices still gets a way to open the group whose key 
     battery: null,
     icon: "phone" as const,
     isThisDevice: false,
+    onHold: false,
     paused: false,
     platform: null,
     timestamp: null,

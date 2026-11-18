@@ -311,12 +311,14 @@ export const pollGroupTrackingPoints = async ({
   cursor,
   db,
   groupId,
+  held,
   joinedEpochNumber,
   limit,
 }: {
   cursor: LatestPointCursor | null | undefined;
   db: GroupTrackingDb;
   groupId: string;
+  held: ReadonlySet<string>;
   joinedEpochNumber: number;
   limit: number;
 }) => {
@@ -327,7 +329,7 @@ export const pollGroupTrackingPoints = async ({
     joinedEpochNumber,
     limit,
   });
-  const sharing = await getGroupSharingStates(db, groupId);
+  const sharing = await getGroupSharingStates(db, groupId, held);
   const last = points.at(-1);
   return {
     points: filterSharedPoints(points, sharing),
@@ -340,10 +342,12 @@ export const pollGroupTrackingPoints = async ({
 export const getLatestGroupTrackingPoints = async ({
   db,
   groupId,
+  held,
   joinedEpochNumber,
 }: {
   db: GroupTrackingDb;
   groupId: string;
+  held: ReadonlySet<string>;
   joinedEpochNumber: number;
 }) => {
   const points = await readLatestPoints({
@@ -353,7 +357,7 @@ export const getLatestGroupTrackingPoints = async ({
     joinedEpochNumber,
     limit: null,
   });
-  const sharing = await getGroupSharingStates(db, groupId);
+  const sharing = await getGroupSharingStates(db, groupId, held);
   return { points: filterSharedPoints(points, sharing), sharing };
 };
 
@@ -369,6 +373,7 @@ const filterSharedPoints = <
         device.deviceId === point.senderDeviceId &&
         device.userId === point.senderUserId &&
         !device.paused &&
+        !device.onHold &&
         point.revisionPrefix === device.revisionPrefix,
     ),
   );

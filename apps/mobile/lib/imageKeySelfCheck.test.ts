@@ -25,6 +25,7 @@ type Group = {
   imageKey: EncryptedImageKey | null;
   ownerId: string;
   ownershipOfferedToId: string | null;
+  onHold: boolean;
   members: {
     id: string;
     userId: string;
@@ -187,6 +188,7 @@ const makeGroup = ({
   image: url(GROUP_FILE),
   ownerId: "user-a",
   ownershipOfferedToId: null,
+  onHold: false,
   imageKey:
     groupKey === undefined
       ? wrap({

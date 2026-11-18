@@ -25,6 +25,7 @@ export const classifyMapPeople = ({
     connectionLost: status.connection === "failing",
     finding: [],
     hidden: [],
+    onHold: [],
     outOfDate: [],
     paused: [],
     upToDate: [],
@@ -76,6 +77,10 @@ export const classifyMapPeople = ({
       const devices = status.sharing?.filter((device) => device.userId === member.userId) ?? [];
       if (devices.length > 0 && devices.every((device) => device.paused)) {
         people.paused.push({ ...person, sharingPaused: true, timelineGroupId: group.id });
+        continue;
+      }
+      if (devices.length > 0 && devices.every((device) => device.paused || device.onHold)) {
+        people.onHold.push({ ...person, onHold: true });
         continue;
       }
 
@@ -131,6 +136,7 @@ export const classifyMapPeople = ({
   people.finding.sort(selfFirstThenByName);
   people.waiting.sort(selfFirstThenByName);
   people.paused.sort(selfFirstThenByName);
+  people.onHold.sort(selfFirstThenByName);
   people.waitingForLocation.sort(selfFirstThenByName);
 
   return people;

@@ -62,6 +62,7 @@ const account = (
   type,
   device: null,
   deletionDate: null,
+  holdsFrom: null,
   turnedOff: [],
   group: null,
   ...extra,
@@ -161,6 +162,27 @@ describe("account notices", () => {
       "openbeacon:///account/password",
       "openbeacon:///groups/list",
     ]);
+  });
+
+  test("say when seats end and which group a member's phones go on hold in", () => {
+    const holdsFrom = new Date(2026, 10, 25, 12);
+    const date = holdsFrom.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    expect(describeAccountNotice(account("SEATS_ENDING", { holdsFrom }))).toMatchObject({
+      title: "Your seats have ended",
+      body: `From ${date}, phones in the groups you own go on hold until you renew your seats. Open the map to see which.`,
+      link: { url: "openbeacon:///map" },
+    });
+    expect(describeAccountNotice(account("SEATS_ENDING_SOON", { holdsFrom })).title).toBe(
+      "Phones in your groups go on hold tomorrow",
+    );
+    expect(
+      describeAccountNotice(
+        account("SEAT_HOLD_COMING", { group: { id: "g1", name: "Family" }, holdsFrom }),
+      ),
+    ).toMatchObject({
+      title: `Your phones go on hold in Family on ${date}`,
+      body: "The group’s owner has no seats after then, so your location won’t be shared there until they add seats. You can leave the group at any time.",
+    });
   });
 
   test("name the group a request to become its owner is about", () => {

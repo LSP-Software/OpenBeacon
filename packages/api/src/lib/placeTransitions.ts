@@ -142,10 +142,12 @@ export const decodeAlertsCursor = (cursor: string) => {
 export const readPlaceAlerts = async ({
   cursor,
   db,
+  heldGroupIds,
   userId,
 }: {
   cursor: string | null;
   db: PrismaClient;
+  heldGroupIds: string[];
   userId: string;
 }) => {
   const now = await readDatabaseTime(db);
@@ -167,7 +169,7 @@ export const readPlaceAlerts = async ({
     return { alerts: [], cursor: caughtUp };
   }
   const memberships = await db.groupMember.findMany({
-    where: { userId },
+    where: { userId, groupId: { notIn: heldGroupIds } },
     select: { groupId: true, createdAt: true },
   });
   if (memberships.length === 0) return { alerts: [], cursor };

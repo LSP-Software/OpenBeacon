@@ -398,6 +398,7 @@ test("paused members have their own ribbon status even when an old pin or missin
           userId: "mum",
           deviceId: "mum-phone",
           paused: true,
+          onHold: false,
           revisionPrefix: "s0.1:",
         },
       ],
@@ -424,12 +425,14 @@ test("pausing a tablet leaves a member in the normal ribbon section when their p
           userId: "mum",
           deviceId: "mum-phone",
           paused: false,
+          onHold: false,
           revisionPrefix: "",
         },
         {
           userId: "mum",
           deviceId: "mum-tablet",
           paused: true,
+          onHold: false,
           revisionPrefix: "s0.1:",
         },
       ],
@@ -450,10 +453,46 @@ describe("waiting for location after resuming", () => {
       status: { ...loaded, ...(sharing ? { sharing } : {}) },
     });
 
+  test("someone whose phones are all on hold or paused is on hold, and a pause alone stays paused", () => {
+    const phone = { userId: "mum", deviceId: "mum-phone", revisionPrefix: "s0.1:" };
+    const tablet = { userId: "mum", deviceId: "mum-tablet", revisionPrefix: "s0.1:" };
+    const held = classifyMum([
+      { ...phone, paused: false, onHold: true },
+      { ...tablet, paused: true, onHold: false },
+    ]);
+    expect(held.onHold).toEqual([expect.objectContaining({ userId: "mum", onHold: true })]);
+    expect(held.paused).toEqual([]);
+
+    const paused = classifyMum([
+      { ...phone, paused: true, onHold: true },
+      { ...tablet, paused: true, onHold: false },
+    ]);
+    expect(paused.paused.map((person) => person.userId)).toEqual(["mum"]);
+    expect(paused.onHold).toEqual([]);
+
+    const sharing = classifyMum([
+      { ...phone, paused: false, onHold: true },
+      { ...tablet, paused: false, onHold: false },
+    ]);
+    expect(sharing.onHold).toEqual([]);
+  });
+
   test("a resumed device with no new point waits instead of counting as unlocatable", () => {
     const people = classifyMum([
-      { userId: "mum", deviceId: "mum-phone", paused: true, revisionPrefix: "s0.1:" },
-      { userId: "mum", deviceId: "mum-tablet", paused: false, revisionPrefix: "s0.2:" },
+      {
+        userId: "mum",
+        deviceId: "mum-phone",
+        paused: true,
+        onHold: false,
+        revisionPrefix: "s0.1:",
+      },
+      {
+        userId: "mum",
+        deviceId: "mum-tablet",
+        paused: false,
+        onHold: false,
+        revisionPrefix: "s0.2:",
+      },
     ]);
 
     expect(people.waitingForLocation).toEqual([
@@ -465,7 +504,13 @@ describe("waiting for location after resuming", () => {
 
   test("a resumed account waits for any of the member's devices", () => {
     const people = classifyMum([
-      { userId: "mum", deviceId: "mum-phone", paused: false, revisionPrefix: "s2.0:" },
+      {
+        userId: "mum",
+        deviceId: "mum-phone",
+        paused: false,
+        onHold: false,
+        revisionPrefix: "s2.0:",
+      },
     ]);
 
     expect(people.waitingForLocation.map((person) => person.userId)).toEqual(["mum"]);
@@ -473,7 +518,7 @@ describe("waiting for location after resuming", () => {
 
   test("a member who has never paused keeps the unknown location status", () => {
     const people = classifyMum([
-      { userId: "mum", deviceId: "mum-phone", paused: false, revisionPrefix: "" },
+      { userId: "mum", deviceId: "mum-phone", paused: false, onHold: false, revisionPrefix: "" },
     ]);
 
     expect(people.waitingForLocation).toEqual([]);
@@ -489,7 +534,15 @@ describe("waiting for location after resuming", () => {
 
   test("a fresh point from the resumed device shows the member as located", () => {
     const people = classifyMum(
-      [{ userId: "mum", deviceId: "mum-phone", paused: false, revisionPrefix: "s0.2:" }],
+      [
+        {
+          userId: "mum",
+          deviceId: "mum-phone",
+          paused: false,
+          onHold: false,
+          revisionPrefix: "s0.2:",
+        },
+      ],
       [marker("mum", 0)],
     );
 
@@ -499,8 +552,20 @@ describe("waiting for location after resuming", () => {
 
   test("a member whose devices are all paused stays paused", () => {
     const people = classifyMum([
-      { userId: "mum", deviceId: "mum-phone", paused: true, revisionPrefix: "s0.1:" },
-      { userId: "mum", deviceId: "mum-tablet", paused: true, revisionPrefix: "s0.3:" },
+      {
+        userId: "mum",
+        deviceId: "mum-phone",
+        paused: true,
+        onHold: false,
+        revisionPrefix: "s0.1:",
+      },
+      {
+        userId: "mum",
+        deviceId: "mum-tablet",
+        paused: true,
+        onHold: false,
+        revisionPrefix: "s0.3:",
+      },
     ]);
 
     expect(people.waitingForLocation).toEqual([]);
