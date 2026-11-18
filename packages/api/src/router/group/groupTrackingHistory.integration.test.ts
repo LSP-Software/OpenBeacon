@@ -348,6 +348,41 @@ describe.skipIf(process.env["OPENBEACON_INTEGRATION"] !== "1")(
       }
     });
 
+    test("the lookback is every point of each device's last batch before the range", async () => {
+      const { groupId, store } = await createGroup("lookback-batch");
+      const batchAt = ago(minutes(400));
+      await store({ receivedAt: ago(minutes(500)), count: 2 });
+      const stayStream = await store({ receivedAt: batchAt, epochNumber: 2 });
+      const movingStream = await store({ receivedAt: ago(minutes(700)) });
+      await prisma.$executeRaw`
+        INSERT INTO "TrackingPoint" ("streamId", "pointId", "receivedAt", "payload")
+        VALUES (${movingStream}, ${-9_000_000_000_000_000_000n}, (${batchAt.toISOString()}::timestamptz AT TIME ZONE 'UTC'), '\\x00'::bytea)
+      `;
+      await store({
+        receivedAt: ago(minutes(450)),
+        count: 120,
+        senderDeviceId: viewerDeviceId,
+        senderUserId: viewerId,
+      });
+
+      const range = await caller(viewerId, viewerDeviceId).historyRange({
+        groupId,
+        from: ago(minutes(300)),
+        to: ago(0),
+      });
+
+      const memberLookback = range.lookback.filter(({ streamId }) =>
+        [String(stayStream), String(movingStream)].includes(streamId),
+      );
+      expect(memberLookback).toHaveLength(2);
+      expect(memberLookback.map(({ receivedAt }) => receivedAt)).toEqual([batchAt, batchAt]);
+      expect(memberLookback.map(({ pointId }) => pointId)).toContain("-9000000000000000000");
+      expect(range.lookback).toHaveLength(102);
+      expect(range.streams.map(({ id }) => id)).toEqual(
+        expect.arrayContaining([String(stayStream), String(movingStream)]),
+      );
+    });
+
     test("paging returns every point once in receive order", async () => {
       const { groupId, store } = await createGroup("paging");
       const tiedAt = ago(minutes(45));

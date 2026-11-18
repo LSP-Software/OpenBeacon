@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { timelineLaneRuns, timelineRoute, timelineRouteGradient } from "./timelineMap.ts";
-import type { TimelinePosition, TimelineSegment } from "./timelineTypes.ts";
+import {
+  timelineArrows,
+  timelineLaneRuns,
+  timelineRoute,
+  timelineRouteGradient,
+} from "./timelineMap.ts";
+import type { Coordinate, TimelinePosition, TimelineSegment } from "./timelineTypes.ts";
 
 const at = (latitude: number, longitude = 0): TimelinePosition => ({
   accuracy: 5,
@@ -109,6 +114,72 @@ describe("timelineRouteGradient", () => {
       1,
       "rgba(255, 20, 100, 1)",
     ]);
+  });
+
+  test("spreads a custom alpha range along the line", () => {
+    expect(
+      timelineRouteGradient({
+        alpha: { from: 0.2, to: 0.4 },
+        color: "#000000",
+        drawn: 1,
+        gaps: [],
+      }),
+    ).toEqual([0, "rgba(0, 0, 0, 0.2)", 1, "rgba(0, 0, 0, 0.4)"]);
+  });
+});
+
+describe("timelineArrows", () => {
+  const world: [number, number, number, number] = [-180, -80, 180, 80];
+  const eastward: Coordinate[] = [
+    [0, 0],
+    [0.5, 0],
+    [1, 0],
+  ];
+  const arrows = (runs: Coordinate[][], zoom: number, bounds = world) =>
+    timelineArrows({ runs, sizePx: 5, spacingPx: 44, viewport: { bounds, zoom } });
+
+  test("places a chevron every spacing in screen pixels", () => {
+    const lengthPx = (zoom: number) => (512 * 2 ** zoom) / 360;
+    expect(arrows([eastward], 8)).toHaveLength(Math.round(lengthPx(8) / 44));
+    expect(arrows([eastward], 9)).toHaveLength(Math.round(lengthPx(9) / 44));
+  });
+
+  test("points each chevron along the direction of travel", () => {
+    const westward = [...eastward].reverse();
+    for (const [run, sign] of [
+      [eastward, 1],
+      [westward, -1],
+    ] as const) {
+      for (const [armA, tip, armB] of arrows([run], 8)) {
+        expect(tip && armA && armB).toBeTruthy();
+        if (!tip || !armA || !armB) continue;
+        expect(sign * (tip[0] - armA[0])).toBeGreaterThan(0);
+        expect(sign * (tip[0] - armB[0])).toBeGreaterThan(0);
+        expect(Math.sign(armA[1] - tip[1])).toBe(-Math.sign(armB[1] - tip[1]));
+      }
+    }
+  });
+
+  test("drops chevrons well outside the visible area", () => {
+    const all = arrows([eastward], 10);
+    const visible = arrows([eastward], 10, [0, -0.1, 0.2, 0.1]);
+    expect(visible.length).toBeGreaterThan(0);
+    expect(visible.length).toBeLessThan(all.length / 2);
+    expect(visible.every(([, tip]) => tip !== undefined && tip[0] <= 0.3)).toBe(true);
+  });
+
+  test("caps the number of chevrons", () => {
+    expect(arrows([eastward], 15)).toHaveLength(600);
+  });
+
+  test("gives a short leg one chevron and skips a tiny one", () => {
+    const short: Coordinate[] = [
+      [0, 0],
+      [0.0005, 0],
+    ];
+    expect(arrows([short], 14)).toHaveLength(1);
+    expect(arrows([short], 9)).toHaveLength(0);
+    expect(arrows([], 9)).toEqual([]);
   });
 });
 

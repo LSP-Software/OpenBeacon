@@ -3,6 +3,7 @@ import {
   type CameraRef,
   Layer,
   Map as MapLibreMap,
+  type MapRef,
   Marker,
 } from "@maplibre/maplibre-react-native";
 import { useQuery } from "@tanstack/react-query";
@@ -18,8 +19,8 @@ import {
   SkipBackIcon,
   SkipForwardIcon,
 } from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, BackHandler, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNativeMapStyle } from "../components/map/useNativeMapStyle.ts";
 import { TimelineMapLayers } from "../components/timeline/TimelineMapLayers.tsx";
@@ -53,13 +54,17 @@ const TimelineScreen = () => {
   const { data: session } = authClient.useSession();
   const selfUserId = session?.user.id;
   const { group, isPending } = useCachedGroup(groupId);
-  const close = () => {
+  const close = useCallback(() => {
     if (router.canGoBack()) {
       router.back();
       return;
     }
     router.replace("/(tabs)/map");
-  };
+  }, [router]);
+  const switchGroup = useCallback(
+    (id: string) => router.setParams({ groupId: id, userId: undefined }),
+    [router],
+  );
 
   if (isPending || !selfUserId) {
     return (
@@ -88,7 +93,7 @@ const TimelineScreen = () => {
       group={group}
       initialPersonId={userId ?? null}
       onClose={close}
-      onSwitchGroup={(id) => router.setParams({ groupId: id, userId: undefined })}
+      onSwitchGroup={switchGroup}
       selfUserId={selfUserId}
     />
   );
@@ -114,6 +119,11 @@ const TimelineView = ({
   const insets = useSafeAreaInsets();
   const map = useNativeMapStyle();
   const cameraRef = useRef<CameraRef>(null);
+  const mapRef = useRef<MapRef>(null);
+  const [viewport, setViewport] = useState<{
+    bounds: [number, number, number, number];
+    zoom: number;
+  } | null>(null);
   const [styleLoaded, setStyleLoaded] = useState(false);
   const [topHeight, setTopHeight] = useState(0);
   const [panelHeight, setPanelHeight] = useState(0);
@@ -125,7 +135,7 @@ const TimelineView = ({
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(60);
   const [following, setFollowing] = useState(true);
   const [timeState, setTimeState] = useState<{ key: string; time: number } | null>(null);
-  const [drawnState, setDrawnState] = useState({ key: "", value: 0 });
+  const [drawIn, setDrawIn] = useState({ key: "", progress: 0 });
   const timeRef = useRef(0);
   const dayStripRef = useRef<ScrollView>(null);
 
@@ -145,7 +155,7 @@ const TimelineView = ({
   const { days, query: daysQuery, windowStart } = useTimelineDays(group.id, personId ?? undefined);
   const day =
     days?.find((item) => item.key === pickedDayKey && item.selectable) ??
-    [...(days ?? [])].reverse().find((item) => item.selectable) ??
+    days?.findLast((item) => item.selectable) ??
     null;
   const {
     progress,
@@ -161,6 +171,26 @@ const TimelineView = ({
     rememberTimelineGroup(selfUserId, group.id);
   }, [group.id, selfUserId]);
 
+  const members = useMemo(
+    () =>
+      group.members
+        .map((member, memberIndex) => {
+          const isSelf = member.userId === selfUserId;
+          const name = isSelf ? "You" : (nicknames.data?.[member.id]?.name ?? member.name);
+          return {
+            color:
+              GROUP_COLOR_PALETTE[memberIndex % GROUP_COLOR_PALETTE.length] ??
+              GROUP_COLOR_PALETTE[0],
+            image: member.image,
+            initials: initialsFromName(name),
+            isSelf,
+            name,
+            userId: member.userId,
+          };
+        })
+        .sort((first, second) => Number(first.isSelf) - Number(second.isSelf)),
+    [group.members, nicknames.data, selfUserId],
+  );
   const people = useMemo(() => {
     if (!timeline) return [];
     const userIds = [...new Set(timeline.devices.map((device) => device.userId))];
@@ -168,40 +198,39 @@ const TimelineView = ({
       .flatMap((userId) => {
         const picked = pickPersonDevices(timeline.devices, userId);
         if (!picked) return [];
-        const memberIndex = group.members.findIndex((member) => member.userId === userId);
-        const member = group.members[memberIndex];
-        const isSelf = userId === selfUserId;
-        const name = isSelf
-          ? "You"
-          : ((member && nicknames.data?.[member.id]?.name) ?? member?.name ?? "Former member");
         const devices = [picked.selected, ...picked.others];
         return [
           {
-            color:
-              GROUP_COLOR_PALETTE[Math.max(memberIndex, 0) % GROUP_COLOR_PALETTE.length] ??
-              GROUP_COLOR_PALETTE[0],
+            ...(members.find((member) => member.userId === userId) ?? {
+              color: GROUP_COLOR_PALETTE[0],
+              image: null,
+              initials: initialsFromName("Former member"),
+              isSelf: false,
+              name: "Former member",
+              userId,
+            }),
             device:
               devices.find((device) => device.deviceId === deviceChoice[userId]) ?? picked.selected,
             devices,
-            image: member?.image ?? null,
-            initials: initialsFromName(name),
-            isSelf,
-            memberIndex,
-            name,
-            userId,
           },
         ];
       })
-      .sort(
-        (first, second) =>
-          Number(first.isSelf) - Number(second.isSelf) || first.memberIndex - second.memberIndex,
-      );
-  }, [deviceChoice, group.members, nicknames.data, selfUserId, timeline]);
+      .sort((first, second) => {
+        const firstIndex = members.findIndex((member) => member.userId === first.userId);
+        const secondIndex = members.findIndex((member) => member.userId === second.userId);
+        return (
+          (firstIndex === -1 ? members.length : firstIndex) -
+          (secondIndex === -1 ? members.length : secondIndex)
+        );
+      });
+  }, [deviceChoice, members, timeline]);
   const shownPeople = useMemo(
     () => (personId ? people.filter((person) => person.userId === personId) : people),
     [people, personId],
   );
   const selectedPerson = personId ? (shownPeople[0] ?? null) : null;
+  const selectedName =
+    members.find((member) => member.userId === personId)?.name ?? selectedPerson?.name;
 
   const routes = useMemo(() => {
     const placeList = places.data ?? [];
@@ -219,7 +248,7 @@ const TimelineView = ({
     });
   }, [places.data, shownPeople]);
   const routeKey = `${timeline?.day.key ?? ""}:${routes.map((route) => route.deviceId).join(",")}`;
-  const drawn = drawnState.key === routeKey ? drawnState.value : 0;
+  const drawInProgress = drawIn.key === routeKey ? drawIn.progress : 0;
   const visitedPlaces = useMemo(
     () =>
       (places.data ?? []).filter(
@@ -230,21 +259,26 @@ const TimelineView = ({
     [places.data, routes],
   );
 
-  const lastSeenAt = Math.max(
-    0,
-    ...shownPeople.map(
-      (person) =>
-        person.device.segments.findLast((segment) => segment.kind !== "noLocation")?.end ?? 0,
-    ),
+  const showingToday = timeline !== null && timeline.to < timeline.day.end;
+  const located = shownPeople.flatMap((person) =>
+    person.device.segments.filter((segment) => segment.kind !== "noLocation"),
   );
-  const startTime = timeline && lastSeenAt > timeline.from ? lastSeenAt : (timeline?.to ?? 0);
+  const startTime = !timeline
+    ? 0
+    : showingToday
+      ? located.length > 0
+        ? Math.max(...located.map((segment) => segment.end))
+        : timeline.to
+      : Math.min(timeline.to, ...located.map((segment) => segment.start));
   const time = timeline
     ? Math.min(
         Math.max(timeState?.key === timeline.day.key ? timeState.time : startTime, timeline.from),
         timeline.to,
       )
     : 0;
-  timeRef.current = time;
+  useLayoutEffect(() => {
+    timeRef.current = time;
+  });
   const setTime = (value: number) => {
     if (timeline) setTimeState({ key: timeline.day.key, time: value });
   };
@@ -261,38 +295,53 @@ const TimelineView = ({
     right: 40,
   };
 
+  const timelineDayKey = timeline?.day.key;
+  const timelineTo = timeline?.to;
   useEffect(() => {
-    if (!playing || !timeline) return;
-    const { day: playingDay, to } = timeline;
+    if (!playing || timelineDayKey === undefined || timelineTo === undefined) return;
     let current = timeRef.current;
     let last = performance.now();
     let rendered = last;
-    let frame = requestAnimationFrame(function tick(now) {
-      current = Math.min(current + (now - last) * speed, to);
+    let frame = 0;
+    const tick = (now: number) => {
+      current = Math.min(current + (now - last) * speed, timelineTo);
       last = now;
-      if (now - rendered >= 33 || current >= to) {
+      if (now - rendered >= 33 || current >= timelineTo) {
         rendered = now;
-        setTimeState({ key: playingDay.key, time: current });
+        setTimeState({ key: timelineDayKey, time: current });
       }
-      if (current >= to) {
+      if (current >= timelineTo) {
         setPlaying(false);
         return;
       }
       frame = requestAnimationFrame(tick);
-    });
+    };
+    frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [playing, speed, timeline]);
+  }, [playing, speed, timelineDayKey, timelineTo]);
+
+  const hasTimeline = timeline !== null;
+  useEffect(() => {
+    if (!hasTimeline) return;
+    const start = performance.now();
+    let frame = 0;
+    const step = (now: number) => {
+      const progress = Math.min((now - start) / 1200, 1);
+      setDrawIn({ key: routeKey, progress });
+      if (progress < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [hasTimeline, routeKey]);
 
   useEffect(() => {
-    if (!timeline) return;
-    const start = performance.now();
-    let frame = requestAnimationFrame(function step(now) {
-      const value = Math.min((now - start) / 1200, 1);
-      setDrawnState({ key: routeKey, value });
-      if (value < 1) frame = requestAnimationFrame(step);
+    if (!groupMenuOpen) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      setGroupMenuOpen(false);
+      return true;
     });
-    return () => cancelAnimationFrame(frame);
-  }, [routeKey, timeline]);
+    return () => subscription.remove();
+  }, [groupMenuOpen]);
 
   const fitKey = `${routeKey}:${styleLoaded}:${personId ?? ""}:${topHeight > 0 && panelHeight > 0}`;
   // biome-ignore lint/correctness/useExhaustiveDependencies: the camera moves only when the day, people or layout change, not on every frame
@@ -351,6 +400,24 @@ const TimelineView = ({
   );
   const placeName = (placeId: string | null) =>
     places.data?.find((place) => place.id === placeId)?.name ?? null;
+  const placeStopLabel = (placeId: string) => {
+    if (!selectedRoute || !timeline) return null;
+    const distance = (stop: { end: number; start: number }) =>
+      time < stop.start ? stop.start - time : time > stop.end ? time - stop.end : 0;
+    const stop = selectedRoute.stats.stops
+      .filter((item) => item.placeId === placeId)
+      .reduce<{ end: number; start: number } | null>(
+        (closest, item) => (!closest || distance(item) < distance(closest) ? item : closest),
+        null,
+      );
+    if (!stop) return null;
+    const fromBefore = stop.start <= timeline.from;
+    const toAfter = stop.end >= timeline.to;
+    if (fromBefore && toAfter) return null;
+    if (fromBefore) return `until ${formatClock(stop.end)}`;
+    if (toAfter) return `from ${formatClock(stop.start)}`;
+    return `${formatClock(stop.start)}–${formatClock(stop.end)}`;
+  };
   const undecryptable = shownPeople.reduce(
     (total, person) => total + person.device.undecryptable,
     0,
@@ -478,7 +545,7 @@ const TimelineView = ({
                 <Pressable
                   key={item.key}
                   accessibilityRole="button"
-                  accessibilityLabel={`${formatDate(item.start)}${item.pointCount > 0 ? "" : ", no new locations"}`}
+                  accessibilityLabel={`${formatDate(item.start)}${isToday ? ", today" : ""}${item.pointCount > 0 ? "" : ", no new locations"}`}
                   accessibilityState={{ disabled: !item.selectable, selected }}
                   disabled={!item.selectable}
                   onPress={() => {
@@ -518,36 +585,45 @@ const TimelineView = ({
             })}
           </ScrollView>
         ) : null}
-        {people.length > 0 || personId !== null ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerClassName="gap-1.5"
-          >
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerClassName="gap-1.5"
+        >
+          <PersonChip
+            label="Everyone"
+            selected={personId === null}
+            onPress={() => setPersonId(null)}
+          />
+          {members.map((member) => (
             <PersonChip
-              label="Everyone"
-              selected={personId === null}
-              onPress={() => setPersonId(null)}
+              key={member.userId}
+              color={member.color}
+              image={member.image}
+              initials={member.initials}
+              label={member.name}
+              selected={member.userId === personId}
+              onPress={() => {
+                setPersonId(member.userId);
+                setFollowing(true);
+              }}
             />
-            {people.map((person) => (
-              <PersonChip
-                key={person.userId}
-                color={person.color}
-                image={person.image}
-                initials={person.initials}
-                label={person.name}
-                selected={person.userId === personId}
-                onPress={() => {
-                  setPersonId(person.userId);
-                  setFollowing(true);
-                }}
-              />
-            ))}
-          </ScrollView>
-        ) : null}
+          ))}
+        </ScrollView>
       </View>
     ),
-    [day, days, group, groupMenuOpen, groups, insets.top, onClose, onSwitchGroup, people, personId],
+    [
+      day,
+      days,
+      group,
+      groupMenuOpen,
+      groups,
+      insets.top,
+      members,
+      onClose,
+      onSwitchGroup,
+      personId,
+    ],
   );
   const lanes = useMemo(
     () =>
@@ -560,6 +636,7 @@ const TimelineView = ({
     [routes],
   );
 
+  const nextSpeed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] ?? 60;
   const clockLabel = timeline && time >= timeline.day.end ? "24:00" : formatClock(time);
 
   const scrubTo = (value: number) => {
@@ -572,6 +649,7 @@ const TimelineView = ({
       {mapStyleJson ? (
         <MapLibreMap
           key={map.mapRevision}
+          ref={mapRef}
           style={{ flex: 1 }}
           mapStyle={mapStyleJson}
           attribution={false}
@@ -582,10 +660,17 @@ const TimelineView = ({
           onRegionWillChange={(event) => {
             if (event.nativeEvent.userInteraction) setFollowing(false);
           }}
+          onRegionDidChange={(event) => {
+            const { bounds, zoom } = event.nativeEvent;
+            setViewport({ bounds, zoom });
+          }}
           onDidFailLoadingMap={map.onMapLoadFailure}
           onDidFinishLoadingStyle={() => {
             map.onStyleLoaded();
             setStyleLoaded(true);
+            void mapRef.current
+              ?.getViewState()
+              .then(({ bounds, zoom }) => setViewport({ bounds, zoom }));
           }}
         >
           <Camera
@@ -603,28 +688,34 @@ const TimelineView = ({
               layout={{ visibility: getSymbolVisibility(map.showSymbols) }}
             />
           ))}
-          <TimelineMapLayers drawn={drawn} routes={routes} />
-          {visitedPlaces.map((place) =>
-            place.geometry ? (
+          <TimelineMapLayers drawn={drawInProgress} routes={routes} viewport={viewport} />
+          {visitedPlaces.map((place) => {
+            if (!place.geometry) return null;
+            const stopLabel = placeStopLabel(place.id);
+            return (
               <Marker
                 key={place.id}
                 anchor="bottom"
-                offset={[0, -8]}
                 lngLat={[place.geometry.longitude, place.geometry.latitude]}
               >
-                <View
-                  accessible
-                  accessibilityLabel={`Stopped at ${place.name}`}
-                  className="flex-row items-center gap-1 rounded-full border border-border bg-card px-2.5 py-1 shadow-sm shadow-black/10"
-                >
-                  <Text className="text-xs">{place.emoji}</Text>
-                  <Text className="text-xs font-semibold text-foreground" numberOfLines={1}>
-                    {place.name}
-                  </Text>
+                <View style={{ paddingBottom: 30 }}>
+                  <View
+                    accessible
+                    accessibilityLabel={`Stopped at ${place.name}${stopLabel ? `, ${stopLabel}` : ""}`}
+                    className="flex-row items-center gap-1 rounded-full border border-border bg-card px-2.5 py-1 shadow-sm shadow-black/10"
+                  >
+                    <Text className="text-xs">{place.emoji}</Text>
+                    <Text className="text-xs font-semibold text-foreground" numberOfLines={1}>
+                      {place.name}
+                      {stopLabel ? (
+                        <Text className="text-xs font-normal text-muted"> · {stopLabel}</Text>
+                      ) : null}
+                    </Text>
+                  </View>
                 </View>
               </Marker>
-            ) : null,
-          )}
+            );
+          })}
           {pins.map((pin) => (
             <TimelinePin
               key={pin.route.deviceId}
@@ -657,6 +748,15 @@ const TimelineView = ({
           )}
         </View>
       )}
+
+      {groupMenuOpen ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close group menu"
+          className="absolute inset-0"
+          onPress={() => setGroupMenuOpen(false)}
+        />
+      ) : null}
 
       {topOverlay}
 
@@ -734,7 +834,11 @@ const TimelineView = ({
             <View className="flex-row items-center gap-3">
               <Text className="text-3xl font-semibold text-foreground">{clockLabel}</Text>
               <View className="min-w-0 flex-1">
-                <Text className="font-semibold text-foreground" numberOfLines={1}>
+                <Text
+                  accessibilityLiveRegion="polite"
+                  className="font-semibold text-foreground"
+                  numberOfLines={1}
+                >
                   {status?.title}
                 </Text>
                 {status?.detail ? (
@@ -745,8 +849,8 @@ const TimelineView = ({
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Playback speed ${speed} times. Change speed`}
-                onPress={() => setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] ?? 60)}
+                accessibilityLabel={`Playback speed, ${speed} times. Double tap for ${nextSpeed} times`}
+                onPress={() => setSpeed(nextSpeed)}
                 className="min-h-11 min-w-14 items-center justify-center rounded-full bg-background px-3"
               >
                 <Text className="font-semibold text-foreground">{speed}×</Text>
@@ -758,26 +862,29 @@ const TimelineView = ({
                 from={timeline.from}
                 historyStart={timeline.historyStart}
                 lanes={lanes}
+                step={STEP_MS}
                 time={time}
-                timeLabel={clockLabel}
                 to={timeline.to}
+                valueLabel={status ? `${clockLabel}, ${status.title}` : clockLabel}
                 onScrub={scrubTo}
               />
             ) : (
               <Text className="py-2 text-center text-muted-foreground">
                 {personId
-                  ? `No locations from ${selectedPerson?.name ?? "this person"} on this day.`
+                  ? `No locations from ${selectedName ?? "this person"} on this day.`
                   : "No locations on this day."}
               </Text>
             )}
+            {routes.length > 0 ? (
+              <View className="flex-row flex-wrap gap-x-3 gap-y-1">
+                <LegendItem kind="moving" label="Moving" color={selectedPerson?.color} />
+                <LegendItem kind="stopped" label="Stopped" color={selectedPerson?.color} />
+                <LegendItem kind="paused" label="Paused" />
+                <LegendItem kind="noLocation" label="No location" />
+              </View>
+            ) : null}
             {selectedPerson && selectedRoute ? (
               <>
-                <View className="flex-row flex-wrap gap-x-3 gap-y-1">
-                  <LegendItem label="Moving" color={selectedPerson.color} />
-                  <LegendItem label="Stayed" color={selectedPerson.color} faded />
-                  <LegendItem label="Paused" dashed />
-                  <LegendItem label="No location" hatched />
-                </View>
                 <View className="flex-row gap-2">
                   <StatCard
                     value={formatDistance(selectedRoute.stats.distanceMeters)}
@@ -818,7 +925,7 @@ const TimelineView = ({
                 />
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={playing ? "Pause playback" : "Play"}
+                  accessibilityLabel={playing ? "Pause" : "Play"}
                   onPress={() => {
                     if (playing) {
                       setPlaying(false);
@@ -896,7 +1003,7 @@ const PersonChip = ({
       <View className="rounded-full p-[2px]" style={{ backgroundColor: color }}>
         <Avatar alt={label} className="size-6">
           <DecryptedAvatarImage url={image ?? null} />
-          <AvatarFallback>
+          <AvatarFallback style={{ backgroundColor: color }}>
             <Text className="text-[10px] font-bold">{initials}</Text>
           </AvatarFallback>
         </Avatar>
@@ -913,26 +1020,29 @@ const PersonChip = ({
 
 const LegendItem = ({
   color,
-  dashed = false,
-  faded = false,
-  hatched = false,
+  kind,
   label,
 }: {
-  color?: string;
-  dashed?: boolean;
-  faded?: boolean;
-  hatched?: boolean;
+  color?: string | undefined;
+  kind: "moving" | "noLocation" | "paused" | "stopped";
   label: string;
 }) => (
   <View className="flex-row items-center gap-1.5">
-    <View
-      className={cn(
-        "h-2.5 w-4 rounded-sm",
-        dashed && "border border-dashed border-muted",
-        hatched && "bg-muted/40",
-      )}
-      style={color ? { backgroundColor: color, opacity: faded ? 0.3 : 1 } : undefined}
-    />
+    <View className="h-2.5 w-4 justify-center">
+      <View
+        className={cn(
+          "rounded-sm",
+          kind === "stopped" ? "h-1.5" : "h-full",
+          (kind === "moving" || kind === "stopped") && "bg-foreground",
+          kind === "paused" && "border border-dashed border-muted",
+          kind === "noLocation" && "bg-muted/40",
+        )}
+        style={{
+          ...(color && (kind === "moving" || kind === "stopped") ? { backgroundColor: color } : {}),
+          opacity: kind === "stopped" ? 0.45 : 1,
+        }}
+      />
+    </View>
     <Text className="text-xs text-muted">{label}</Text>
   </View>
 );
@@ -963,8 +1073,8 @@ const DeviceSwitch = ({
       <Text className="shrink text-sm text-muted" numberOfLines={1}>
         Showing {nameOf(current)}
       </Text>
-      <Button size="sm" variant="outline" onPress={() => onSwitch(next)}>
-        <Text numberOfLines={1}>Show {nameOf(next)}</Text>
+      <Button size="sm" variant="ghost" onPress={() => onSwitch(next)}>
+        <Text numberOfLines={1}>Switch to {nameOf(next)}</Text>
       </Button>
     </View>
   );

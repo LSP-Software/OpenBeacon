@@ -35,7 +35,11 @@ export const useTimelineDay = ({
   groupId: string;
   windowStart: Date | null;
 }) => {
-  const [progress, setProgress] = useState<{ decrypted: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{
+    dayKey: string;
+    decrypted: number;
+    total: number;
+  } | null>(null);
   const query = useQuery({
     enabled: day !== null,
     queryKey: ["timelineDay", groupId, day?.key],
@@ -44,7 +48,6 @@ export const useTimelineDay = ({
       if (!day) throw new Error("No day is selected.");
       const device = await ensureDeviceKeyRegistration();
       const getHistoryKey = createHistoryKeyReader(device.userId);
-      setProgress(null);
       return loadTimelineDay({
         day,
         fetchRange: (input) => trpcClient.groupTracking.historyRange.query(input, { signal }),
@@ -55,7 +58,9 @@ export const useTimelineDay = ({
             { signal },
           ),
         now: Date.now(),
-        onProgress: setProgress,
+        onProgress: (value) => {
+          if (!signal.aborted) setProgress({ ...value, dayKey: day.key });
+        },
         signal,
         unwrapEpoch: (epoch) =>
           unwrapEpochKeyFromWraps({ device, epochId: epoch.epochId, getHistoryKey, wraps: epoch }),
@@ -77,5 +82,9 @@ export const useTimelineDay = ({
         : null,
     [data, dataUpdatedAt, day, windowStart],
   );
-  return { progress, query, timeline };
+  return {
+    progress: progress && progress.dayKey === day?.key ? progress : null,
+    query,
+    timeline,
+  };
 };

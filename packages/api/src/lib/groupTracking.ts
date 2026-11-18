@@ -474,19 +474,35 @@ export const readGroupTrackingHistoryRange = async ({
     cursor
       ? []
       : db.$queryRaw<Row[]>(Prisma.sql`
-          SELECT DISTINCT ON ("stream"."senderUserId", "stream"."senderDeviceId") ${columns}
-          FROM (${streams}) AS "stream"
+          WITH "stream" AS (${streams}),
+          "lastBatch" AS (
+            SELECT "stream"."senderUserId", "stream"."senderDeviceId",
+              max("last"."receivedAt") AS "receivedAt"
+            FROM "stream"
+            CROSS JOIN LATERAL (
+              SELECT "receivedAt"
+              FROM "TrackingPoint"
+              WHERE "TrackingPoint"."streamId" = "stream"."id"
+                AND "TrackingPoint"."receivedAt" >= ${utcTimestamp(windowStart)}
+                AND "TrackingPoint"."receivedAt" < ${utcTimestamp(start)}
+              ORDER BY "TrackingPoint"."receivedAt" DESC
+              LIMIT 1
+            ) AS "last"
+            GROUP BY "stream"."senderUserId", "stream"."senderDeviceId"
+          )
+          SELECT "batch".*
+          FROM "lastBatch"
           CROSS JOIN LATERAL (
-            SELECT "last"."pointId", "last"."receivedAt", "last"."payload"
-            FROM "TrackingPoint" AS "last"
-            WHERE "last"."streamId" = "stream"."id"
-              AND "last"."receivedAt" >= ${utcTimestamp(windowStart)}
-              AND "last"."receivedAt" < ${utcTimestamp(start)}
-            ORDER BY "last"."receivedAt" DESC, "last"."pointId" DESC
-            LIMIT 1
-          ) AS "point"
-          ORDER BY "stream"."senderUserId", "stream"."senderDeviceId",
-            "point"."receivedAt" DESC, "stream"."id" DESC, "point"."pointId" DESC
+            SELECT ${columns}
+            FROM "stream"
+            JOIN "TrackingPoint" AS "point"
+              ON "point"."streamId" = "stream"."id" AND "point"."receivedAt" = "lastBatch"."receivedAt"
+            WHERE "stream"."senderUserId" = "lastBatch"."senderUserId"
+              AND "stream"."senderDeviceId" = "lastBatch"."senderDeviceId"
+            ORDER BY "stream"."id", "point"."pointId"
+            LIMIT 100
+          ) AS "batch"
+          ORDER BY "batch"."senderUserId", "batch"."senderDeviceId", "batch"."streamId", "batch"."pointId"
         `),
   ]);
   const toPoint = ({ payload, pointId, receivedAt, streamId }: Row) => ({

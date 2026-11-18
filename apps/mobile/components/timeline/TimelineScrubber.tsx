@@ -1,4 +1,4 @@
-import { memo, useRef, useState } from "react";
+import { memo, useLayoutEffect, useRef, useState } from "react";
 import { PanResponder, View } from "react-native";
 import Svg, { Defs, Line, Pattern, Rect } from "react-native-svg";
 import type { TimelineSegment } from "../../lib/timelineTypes.ts";
@@ -6,6 +6,8 @@ import { useColors } from "../../lib/theme.ts";
 import { Text } from "../ui/Text.tsx";
 
 const LANE_HEIGHT = 16;
+const STOPPED_HEIGHT = 8;
+const KNOB_SIZE = 20;
 const LANE_GAP = 8;
 const AVATAR_WIDTH = 30;
 
@@ -26,24 +28,28 @@ export const TimelineScrubber = ({
   historyStart,
   lanes,
   onScrub,
+  step,
   time,
-  timeLabel,
   to,
+  valueLabel,
 }: {
   day: { end: number; start: number };
   from: number;
   historyStart: number;
   lanes: readonly Lane[];
   onScrub: (time: number) => void;
+  step: number;
   time: number;
-  timeLabel: string;
   to: number;
+  valueLabel: string;
 }) => {
   const [width, setWidth] = useState(0);
   const span = day.end - day.start;
   const xOf = (value: number) => ((value - day.start) / span) * width;
   const latest = useRef({ day, from, onScrub, span, to, width });
-  latest.current = { day, from, onScrub, span, to, width };
+  useLayoutEffect(() => {
+    latest.current = { day, from, onScrub, span, to, width };
+  });
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -69,7 +75,7 @@ export const TimelineScrubber = ({
   return (
     <View>
       <View className="flex-row">
-        <View style={{ width: AVATAR_WIDTH, gap: LANE_GAP }}>
+        <View style={{ width: AVATAR_WIDTH, gap: LANE_GAP - 2, paddingTop: KNOB_SIZE / 2 + 5 }}>
           {lanes.map((lane) => (
             <View
               key={lane.id}
@@ -88,16 +94,16 @@ export const TimelineScrubber = ({
         </View>
         <View
           className="flex-1"
-          style={{ height: height + 12, paddingTop: 6 }}
+          style={{ minHeight: 44, paddingBottom: 8, paddingTop: KNOB_SIZE / 2 + 6 }}
           onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
           accessible
           accessibilityRole="adjustable"
           accessibilityLabel="Time of day"
-          accessibilityValue={{ text: timeLabel }}
+          accessibilityValue={{ text: valueLabel }}
           accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
           onAccessibilityAction={(event) => {
-            const step = event.nativeEvent.actionName === "increment" ? 15 * 60_000 : -15 * 60_000;
-            onScrub(Math.min(Math.max(time + step, from), to));
+            const change = event.nativeEvent.actionName === "increment" ? step : -step;
+            onScrub(Math.min(Math.max(time + change, from), to));
           }}
           {...panResponder.panHandlers}
         >
@@ -121,7 +127,12 @@ export const TimelineScrubber = ({
               />
               <View
                 className="absolute rounded-full border-2 border-card bg-foreground"
-                style={{ left: xOf(time) - 7, top: -10, width: 14, height: 14 }}
+                style={{
+                  left: xOf(time) - KNOB_SIZE / 2,
+                  top: -6 - KNOB_SIZE / 2,
+                  width: KNOB_SIZE,
+                  height: KNOB_SIZE,
+                }}
               />
             </View>
           ) : null}
@@ -176,7 +187,7 @@ const TimelineLanes = memo(
             patternUnits="userSpaceOnUse"
             patternTransform="rotate(45)"
           >
-            <Rect width={6} height={6} fill={colors.isDark ? "#1E1830" : "#EEEAF4"} />
+            <Rect width={6} height={6} fill={colors.background} />
             <Line x1={0} y1={0} x2={0} y2={6} stroke={colors.textMuted} strokeWidth={2} />
           </Pattern>
         </Defs>
@@ -201,6 +212,19 @@ const TimelineLanes = memo(
                 />
               );
             }
+            if (run.kind === "stay") {
+              return (
+                <Rect
+                  key={key}
+                  x={x}
+                  y={y + (LANE_HEIGHT - STOPPED_HEIGHT) / 2}
+                  width={runWidth}
+                  height={STOPPED_HEIGHT}
+                  fill={lane.color}
+                  opacity={0.45}
+                />
+              );
+            }
             return (
               <Rect
                 key={key}
@@ -209,7 +233,7 @@ const TimelineLanes = memo(
                 width={runWidth}
                 height={LANE_HEIGHT}
                 fill={run.kind === "noLocation" ? "url(#timeline-hatch)" : lane.color}
-                opacity={run.kind === "stay" ? 0.3 : run.kind === "noLocation" ? 0.6 : 1}
+                opacity={run.kind === "noLocation" ? 0.6 : 1}
               />
             );
           });

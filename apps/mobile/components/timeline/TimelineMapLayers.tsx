@@ -1,13 +1,14 @@
 import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 import { memo, useMemo } from "react";
-import { timelineRouteGradient } from "../../lib/timelineMap.ts";
-
-type Coordinate = [longitude: number, latitude: number];
+import { useColors } from "../../lib/theme.ts";
+import { timelineArrows, timelineRouteGradient } from "../../lib/timelineMap.ts";
+import type { Coordinate } from "../../lib/timelineTypes.ts";
 
 export const TimelineMapLayers = memo(
   ({
     drawn,
     routes,
+    viewport,
   }: {
     drawn: number;
     routes: ReadonlyArray<{
@@ -19,21 +20,34 @@ export const TimelineMapLayers = memo(
       runs: ReadonlyArray<readonly Coordinate[]>;
       stops: ReadonlyArray<{ latitude: number; longitude: number }>;
     }>;
+    viewport: { bounds: [number, number, number, number]; zoom: number } | null;
   }) => {
+    const colors = useColors();
+    const casing = colors.isDark ? colors.background : colors.text;
+    const zoom = viewport ? Math.round(viewport.zoom * 4) / 4 : null;
+    const bounds = viewport?.bounds;
+    const arrows = useMemo(
+      () =>
+        JSON.stringify({
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "MultiLineString",
+            coordinates:
+              bounds && zoom !== null
+                ? timelineArrows({
+                    runs: routes.flatMap((route) => route.runs),
+                    sizePx: 6,
+                    spacingPx: 44,
+                    viewport: { bounds, zoom },
+                  })
+                : [],
+          },
+        }),
+      [bounds, routes, zoom],
+    );
     const data = useMemo(
       () => ({
-        arrows: JSON.stringify({
-          type: "FeatureCollection",
-          features: routes.map((route) => ({
-            type: "Feature" as const,
-            id: route.deviceId,
-            properties: {},
-            geometry: {
-              type: "MultiLineString" as const,
-              coordinates: route.runs.map((run) => run.map((point) => [...point])),
-            },
-          })),
-        }),
         lines: new Map(
           routes.map((route) => [
             route.deviceId,
@@ -83,19 +97,20 @@ export const TimelineMapLayers = memo(
             type="line"
             layout={{ "line-cap": "round" }}
             paint={{
-              "line-color": "#6B5F80",
+              "line-color": colors.textSecondary,
               "line-opacity": 0.6 * drawn,
-              "line-width": 6,
+              "line-width": 7,
             }}
           />
           <Layer
             id="timeline-pause-dots"
             type="line"
+            layout={{ "line-cap": "round" }}
             paint={{
               "line-color": "#FFFFFF",
-              "line-dasharray": [1, 1.5],
+              "line-dasharray": [0, 2],
               "line-opacity": drawn,
-              "line-width": 3,
+              "line-width": 4,
             }}
           />
         </GeoJSONSource>
@@ -109,12 +124,32 @@ export const TimelineMapLayers = memo(
               data={data.lines.get(route.deviceId) ?? ""}
             >
               <Layer
-                id={`timeline-route-line-${route.deviceId}`}
+                id={`timeline-route-casing-${route.deviceId}`}
                 type="line"
-                beforeId="timeline-arrows-text"
+                beforeId="timeline-arrow-lines"
                 layout={{ "line-cap": "round", "line-join": "round" }}
                 paint={{
-                  "line-width": 5,
+                  "line-width": 9,
+                  "line-gradient": [
+                    "interpolate",
+                    ["linear"],
+                    ["line-progress"],
+                    ...timelineRouteGradient({
+                      alpha: { from: 0.2, to: 0.45 },
+                      color: casing,
+                      drawn,
+                      gaps: route.gaps,
+                    }),
+                  ],
+                }}
+              />
+              <Layer
+                id={`timeline-route-line-${route.deviceId}`}
+                type="line"
+                beforeId="timeline-arrow-lines"
+                layout={{ "line-cap": "round", "line-join": "round" }}
+                paint={{
+                  "line-width": 6,
                   "line-gradient": [
                     "interpolate",
                     ["linear"],
@@ -130,24 +165,15 @@ export const TimelineMapLayers = memo(
             </GeoJSONSource>
           ) : null,
         )}
-        <GeoJSONSource id="timeline-arrows" tolerance={0.6} data={data.arrows}>
+        <GeoJSONSource id="timeline-arrows" tolerance={0} data={arrows}>
           <Layer
-            id="timeline-arrows-text"
-            type="symbol"
-            layout={{
-              "symbol-placement": "line",
-              "symbol-spacing": 70,
-              "text-allow-overlap": true,
-              "text-field": "›",
-              "text-font": ["Noto Sans Medium"],
-              "text-ignore-placement": true,
-              "text-keep-upright": false,
-              "text-rotation-alignment": "map",
-              "text-size": 18,
-            }}
+            id="timeline-arrow-lines"
+            type="line"
+            layout={{ "line-cap": "round", "line-join": "round" }}
             paint={{
-              "text-color": "#FFFFFF",
-              "text-opacity": drawn >= 1 ? 1 : 0,
+              "line-color": "#FFFFFF",
+              "line-opacity": drawn,
+              "line-width": 3,
             }}
           />
         </GeoJSONSource>
@@ -156,7 +182,7 @@ export const TimelineMapLayers = memo(
             id="timeline-stop-circles"
             type="circle"
             paint={{
-              "circle-color": "#FFFFFF",
+              "circle-color": colors.surface,
               "circle-opacity": drawn,
               "circle-radius": 6,
               "circle-stroke-color": ["get", "color"],

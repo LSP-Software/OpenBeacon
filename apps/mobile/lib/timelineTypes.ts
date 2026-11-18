@@ -30,3 +30,5 @@ export type TimelineSegment =
   | { kind: "stay"; start: number; end: number; position: TimelinePosition }
   | { kind: "noLocation"; start: number; end: number }
   | { kind: "pause"; start: number; end: number; from: TimelinePosition; to: TimelinePosition };
+
+export type Coordinate = [longitude: number, latitude: number];

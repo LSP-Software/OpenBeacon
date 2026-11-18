@@ -147,6 +147,47 @@ describe("buildTimeline", () => {
     ]);
   });
 
+  test("a stay that ends before its own time covers nothing and segments never overlap", () => {
+    const points = [
+      point({ time: at(9) }),
+      point({ latitude: 51.501, stayUntil: at(8), time: at(9, 5) }),
+      point({ latitude: 51.502, time: at(9, 8) }),
+    ];
+
+    expect(kinds(points)).toEqual([
+      ["noLocation", 0, 540],
+      ["moving", 540, 545],
+      ["moving", 545, 548],
+      ["noLocation", 548, 1440],
+    ]);
+    expect(timelinePositionAt(segmentsOf(points), at(9, 6))).toMatchObject({ state: "moving" });
+  });
+
+  test("orders points by time and skips zero-length gaps between points at the same time", () => {
+    const segments = segmentsOf([
+      point({ latitude: 51.502, time: at(9, 10) }),
+      point({ time: at(9) }),
+      point({ latitude: 51.501, stayUntil: at(9, 5), time: at(9) }),
+    ]);
+
+    expect(
+      segments.map(({ end, kind, start }) => [
+        kind,
+        (start - dayStart) / MINUTE_MS,
+        (end - dayStart) / MINUTE_MS,
+      ]),
+    ).toEqual([
+      ["noLocation", 0, 540],
+      ["stay", 540, 545],
+      ["moving", 545, 550],
+      ["noLocation", 550, 1440],
+    ]);
+    for (const segment of segments) expect(segment.end).toBeGreaterThan(segment.start);
+    segments.slice(1).forEach((segment, index) => {
+      expect(segment.start).toBe(segments[index]?.end ?? Number.NaN);
+    });
+  });
+
   test("more than 10 minutes without a point is no location, 10 minutes or less is moving", () => {
     expect(
       kinds([point({ time: at(10) }), point({ time: at(10, 10) }), point({ time: at(10, 21) })]),

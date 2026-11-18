@@ -9,6 +9,7 @@ import {
   type TrackingPoint,
 } from "@openbeacon/encryption";
 import type { RouterInputs, RouterOutputs } from "./api.ts";
+import { buildTimeline, timelinePositionAt } from "./timeline.ts";
 import { loadTimelineDay } from "./timelineLoad.ts";
 
 type RangePage = RouterOutputs["groupTracking"]["historyRange"];
@@ -320,6 +321,116 @@ describe("loadTimelineDay", () => {
 
     expect(cursors).toEqual([null, 6]);
     expect(result.joinStart).toBeNull();
+  });
+
+  test("keeps every point of the last batch before the range so a later stay wins", async () => {
+    const epochKey = generateGroupEpochKey();
+    const batchAt = dayStart - 10 * 60_000;
+    const stay = encryptPoint({
+      epochId: "epoch-1",
+      epochKey,
+      payload: encodeTrackingPoint({
+        accuracy: 10,
+        battery: { charging: false, level: 80 },
+        latitude: 51.5,
+        longitude: -0.1,
+        speed: null,
+        stayUntil: dayStart + 8 * HOUR_MS,
+        time: dayStart - 15 * 60_000,
+      }),
+      pointId: "1",
+      receivedAt: batchAt,
+      streamId: "10",
+    });
+    const moving = encryptPoint({
+      epochId: "epoch-1",
+      epochKey,
+      payload: movingPoint(dayStart - 20 * 60_000, 51.4),
+      pointId: "2",
+      receivedAt: batchAt,
+      streamId: "10",
+    });
+    const fetched = [stay, moving];
+
+    const result = await loadTimelineDay({
+      day,
+      fetchRange: async () => ({
+        cursor: { pointId: "2", receivedAt: new Date(batchAt), streamId: "10" },
+        hasMore: false,
+        lookback: fetched,
+        points: [moving],
+        streams: [stream("10", "epoch-1")],
+      }),
+      groupId,
+      listEpochs: async () => ({
+        epochs: [epoch("epoch-1", 1, dayStart - 40 * HOUR_MS)],
+        nextCursor: null,
+      }),
+      now: dayStart + 9 * HOUR_MS,
+      unwrapEpoch: async () => epochKey,
+      yieldToUi: async () => {},
+    });
+
+    expect(result.devices[0]?.points.map(({ pointId }) => pointId)).toEqual(["2", "1"]);
+    const timeline = buildTimeline({
+      day,
+      devices: result.devices,
+      joinStart: result.joinStart,
+      now: dayStart + 9 * HOUR_MS,
+      windowStart: dayStart - 14 * 24 * HOUR_MS,
+    });
+    expect(timelinePositionAt(timeline.devices[0]?.segments ?? [], dayStart + 7 * HOUR_MS)).toEqual(
+      {
+        position: { accuracy: 10, latitude: 51.5, longitude: -0.1 },
+        state: "stay",
+      },
+    );
+  });
+
+  test("doesn't report progress or finish once cancelled mid-decrypt", async () => {
+    const epochKey = generateGroupEpochKey();
+    const controller = new AbortController();
+    const points = [1, 2, 3].map((index) =>
+      encryptPoint({
+        epochId: "epoch-1",
+        epochKey,
+        payload: movingPoint(dayStart + index * HOUR_MS, 51.5),
+        pointId: String(index),
+        receivedAt: dayStart + index * HOUR_MS,
+        streamId: "10",
+      }),
+    );
+    const progress: Array<{ decrypted: number; total: number }> = [];
+
+    await expect(
+      loadTimelineDay({
+        chunkSize: 2,
+        day,
+        fetchRange: async () => ({
+          cursor: null,
+          hasMore: false,
+          lookback: [],
+          points,
+          streams: [stream("10", "epoch-1")],
+        }),
+        groupId,
+        listEpochs: async () => ({
+          epochs: [epoch("epoch-1", 1, dayStart - 40 * HOUR_MS)],
+          nextCursor: null,
+        }),
+        now: day.end,
+        onProgress: (value) => progress.push(value),
+        signal: controller.signal,
+        unwrapEpoch: async () => epochKey,
+        yieldToUi: async () => {
+          if (progress.length === 2) controller.abort();
+        },
+      }),
+    ).rejects.toThrow("Timeline load cancelled.");
+    expect(progress).toEqual([
+      { decrypted: 2, total: 3 },
+      { decrypted: 3, total: 3 },
+    ]);
   });
 
   test("gives up when cancelled", async () => {

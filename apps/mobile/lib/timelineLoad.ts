@@ -44,6 +44,7 @@ export const loadTimelineDay = async ({
 
   const streams = new Map<string, RangePage["streams"][number]>();
   const encrypted: RangePage["points"] = [];
+  const seen = new Set<string>();
   let cursor: RangePage["cursor"] = null;
   while (from < to) {
     stopIfCancelled();
@@ -55,7 +56,12 @@ export const loadTimelineDay = async ({
       to,
     });
     for (const stream of page.streams) streams.set(stream.id, stream);
-    encrypted.push(...page.lookback, ...page.points);
+    for (const point of [...page.lookback, ...page.points]) {
+      const key = `${point.streamId}:${point.pointId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      encrypted.push(point);
+    }
     if (!page.hasMore || !page.cursor) break;
     cursor = page.cursor;
   }
@@ -128,6 +134,7 @@ export const loadTimelineDay = async ({
         device.undecryptable += 1;
       }
     }
+    stopIfCancelled();
     onProgress?.({
       decrypted: Math.min(index + chunkSize, encrypted.length),
       total: encrypted.length,
@@ -135,6 +142,7 @@ export const loadTimelineDay = async ({
     await yieldToUi();
   }
 
+  stopIfCancelled();
   for (const device of devices.values()) {
     device.points.sort((a, b) => a.time - b.time || a.pointId.localeCompare(b.pointId));
   }

@@ -31,6 +31,7 @@ export const TimelinePin = ({
 
   const pin = (
     <LiveMapMarkerPin
+      fillColor={color}
       image={image}
       initials={initials}
       name={name}

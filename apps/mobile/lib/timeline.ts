@@ -17,12 +17,15 @@ const positionOf = ({ accuracy, latitude, longitude }: TimelinePoint): TimelineP
   longitude,
 });
 
-const deviceSegments = (points: readonly TimelinePoint[]) => {
+const deviceSegments = (unsorted: readonly TimelinePoint[]) => {
+  const points = [...unsorted].sort((a, b) => a.time - b.time);
   const segments: TimelineSegment[] = [];
   points.forEach((point, index) => {
     const next = points[index + 1];
-    const coveredUntil =
-      point.stayUntil === null ? point.time : Math.min(point.stayUntil, next?.time ?? Infinity);
+    const coveredUntil = Math.max(
+      point.time,
+      Math.min(point.stayUntil ?? point.time, next?.time ?? Infinity),
+    );
     if (coveredUntil > point.time) {
       segments.push({
         kind: "stay",
