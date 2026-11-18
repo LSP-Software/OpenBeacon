@@ -354,14 +354,38 @@ test("a queued pause is dropped when another phone changed this device since", a
     durationMinutes: null,
     expectedRevision: 1,
   });
+  setSystemTime(new Date(Date.now() + 60_000));
   changeFromAnotherPhone("device", false);
   offline = false;
   await syncLocationSharing();
-  expect(changes.at(-1)?.expectedRevision).toBe(1);
+  expect(changes.at(-1)?.expectedRevision).toBeNull();
   expect(server.device.sharingPaused).toBe(false);
   expect(server.device.sharingRevision).toBe(2);
   expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasRejectedSharingChange("alex")).toBe(true);
   expect(nativeStates.at(-1)).toMatchObject({ paused: false, prefix: "s0.2:" });
+});
+
+test("an offline pause is applied when another phone changed sharing before the tap", async () => {
+  setSystemTime(new Date("2026-11-18T08:00:00Z"));
+  await syncLocationSharing();
+  setSystemTime(new Date("2026-11-18T09:00:00Z"));
+  changeFromAnotherPhone("account", true);
+  setSystemTime(new Date("2026-11-18T09:15:00Z"));
+  changeFromAnotherPhone("account", false);
+  setSystemTime(new Date("2026-11-18T10:00:00Z"));
+  offline = true;
+  expect(
+    await changeLocationSharing({ scope: "account", paused: true, durationMinutes: null }),
+  ).toBe("queued");
+  setSystemTime(new Date("2026-11-18T10:10:00Z"));
+  offline = false;
+  await syncLocationSharing();
+  expect(changes.at(-1)?.expectedRevision).toBeNull();
+  expect(server.account).toMatchObject({ sharingPaused: true, sharingRevision: 3 });
+  expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasRejectedSharingChange("alex")).toBe(false);
+  expect(nativeStates.at(-1)).toMatchObject({ paused: true, prefix: "s3.0:" });
 });
 
 test("a fresh change reports when another phone got there first", async () => {
@@ -826,11 +850,13 @@ test("a replayed pause whose reply was lost cannot undo a resume made on another
   ).toBe("queued");
   loseReply = false;
   expect(changes.at(-1)?.expectedRevision).toBeNull();
+  setSystemTime(new Date(Date.now() + 60_000));
   changeFromAnotherPhone("device", false);
   await syncLocationSharing();
-  expect(changes.at(-1)).toMatchObject({ requestId: "request-1", expectedRevision: 0 });
+  expect(changes.at(-1)).toMatchObject({ requestId: "request-1", expectedRevision: null });
   expect(server.device).toMatchObject({ sharingPaused: false, sharingRevision: 2 });
   expect(hasPendingSharingPause("alex")).toBe(false);
+  expect(hasRejectedSharingChange("alex")).toBe(true);
   expect(nativeStates.at(-1)).toMatchObject({ paused: false, prefix: "s0.2:" });
 });
 

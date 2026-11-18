@@ -222,7 +222,11 @@ const synchronizeSharing = async (requestedGeneration: number) => {
       if (storage.getString(key) === pending.stored) storage.remove(key);
       continue;
     }
-    const replay = await tryCatch(trpcClient.account.setLocationSharing.mutate(pending.input));
+    const replay = await tryCatch(
+      trpcClient.account.setLocationSharing.mutate(
+        pending.input.paused ? { ...pending.input, expectedRevision: null } : pending.input,
+      ),
+    );
     if (abandoned()) return;
     if (replay.error && !isRejectedForGood(replay.error)) {
       replayError ??= replay.error;
@@ -230,7 +234,8 @@ const synchronizeSharing = async (requestedGeneration: number) => {
     }
     if (storage.getString(key) !== pending.stored) continue;
     storage.remove(key);
-    if (replay.error) storage.set(rejectedKey(device.userId), "true");
+    if (replay.error || replay.data.status === "superseded")
+      storage.set(rejectedKey(device.userId), "true");
   }
   const state = await loadSharingState(device, revision, abandoned);
   if (replayError) throw replayError;
