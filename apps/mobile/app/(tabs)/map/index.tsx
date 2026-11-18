@@ -39,6 +39,7 @@ import {
 import { canShowSharedLocation } from "../../../lib/locationSharingVisibility.ts";
 import { getGroupColor } from "../../../lib/groupColor.ts";
 import { setMapGroupHidden } from "../../../lib/hiddenMapGroups.ts";
+import { pickTimelineGroupId } from "../../../lib/timelineGroup.ts";
 import {
   hideMapGroupMarkers,
   listHiddenMapPeople,
@@ -421,6 +422,15 @@ const MapScreen = () => {
           setPeopleTrayOverride({ open, userId: selfUserId });
         }}
         selectedDeviceId={selectedDeviceId}
+        timelineGroupId={
+          selfUserId && isFocused
+            ? pickTimelineGroupId({
+                groupIds: groups?.map((group) => group.id) ?? [],
+                hiddenGroupIds,
+                userId: selfUserId,
+              })
+            : null
+        }
         onSelectDeviceId={(deviceId) => {
           setSelectedDeviceId((current) => nextMapMarkerSelection(current, deviceId));
         }}

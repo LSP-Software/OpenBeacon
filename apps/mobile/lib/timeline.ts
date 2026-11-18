@@ -9,7 +9,7 @@ import type {
 } from "./timelineTypes.ts";
 
 const NO_LOCATION_AFTER_MS = 10 * 60_000;
-const SAME_STOP_METERS = 100;
+export const SAME_STOP_METERS = 100;
 
 const positionOf = ({ accuracy, latitude, longitude }: TimelinePoint): TimelinePosition => ({
   accuracy,
@@ -141,8 +141,8 @@ export const timelinePositionAt = (
   segments: readonly TimelineSegment[],
   time: number,
 ):
-  | { position: TimelinePosition; state: "moving" | "stay" }
-  | { position: null; state: "noLocation" | "pause" } => {
+  | { position: TimelinePosition; state: "moving" | "pause" | "stay" }
+  | { position: null; state: "noLocation" } => {
   let low = 0;
   let high = segments.length - 1;
   let index = -1;
@@ -171,9 +171,10 @@ export const timelinePositionAt = (
       return { position: interpolate(segment, time), state: "moving" };
     case "stay":
       return { position: segment.position, state: "stay" };
-    case "noLocation":
     case "pause":
-      return { position: null, state: segment.kind };
+      return { position: segment.from, state: "pause" };
+    case "noLocation":
+      return { position: null, state: "noLocation" };
   }
 };
 

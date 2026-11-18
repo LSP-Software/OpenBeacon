@@ -264,8 +264,11 @@ describe("timelinePositionAt", () => {
     });
   });
 
-  test("has no position during a pause", () => {
-    expect(timelinePositionAt(segments, at(10, 30))).toEqual({ position: null, state: "pause" });
+  test("stays at the last position before a pause", () => {
+    expect(timelinePositionAt(segments, at(10, 30))).toMatchObject({
+      position: { latitude: 52 },
+      state: "pause",
+    });
   });
 
   test("holds the stay's position, and shows it at the stay's start", () => {

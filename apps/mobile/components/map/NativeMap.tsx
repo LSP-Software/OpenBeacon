@@ -1,6 +1,8 @@
 import { Camera, GeoJSONSource, Layer, Map as MapLibreMap } from "@maplibre/maplibre-react-native";
+import { Link } from "expo-router";
 import {
   EyeOffIcon,
+  HistoryIcon,
   LayersIcon,
   LocateFixedIcon,
   MapPinIcon,
@@ -68,6 +70,7 @@ export const NativeMap = ({
   peopleTrayOpen = false,
   places = [],
   selectedDeviceId = null,
+  timelineGroupId = null,
 }: {
   devices?: readonly (MapMemberDevice & { paused: boolean; unreadable: boolean })[];
   focusPlaceId?: string | null;
@@ -83,6 +86,7 @@ export const NativeMap = ({
   peopleTrayOpen?: boolean;
   places?: readonly MapPlace[];
   selectedDeviceId?: string | null;
+  timelineGroupId?: string | null;
 } = {}) => {
   const insets = useSafeAreaInsets();
   const colors = useColors();
@@ -213,6 +217,7 @@ export const NativeMap = ({
     setGroupMenuOpen(true);
   };
   const selfMarker = markers.find((marker) => marker.isSelf) ?? null;
+  const personTimelineGroupId = selectedMarker?.sourceGroupId || timelineGroupId;
   const hasMarkers = markers.length > 0;
   const camera = useLiveMapCamera({
     bottomOverlayHeight: trayPeople ? trayHeight : 0,
@@ -659,6 +664,17 @@ export const NativeMap = ({
             ) : null}
           </Pressable>
         ) : null}
+        {timelineGroupId ? (
+          <Link href={{ pathname: "/timeline", params: { groupId: timelineGroupId } }} asChild>
+            <Pressable
+              accessibilityLabel="Timeline"
+              accessibilityRole="link"
+              className="size-11 items-center justify-center rounded-full border border-border bg-card shadow-sm shadow-black/10"
+            >
+              <Icon as={HistoryIcon} size={20} className="text-foreground" />
+            </Pressable>
+          </Link>
+        ) : null}
         {hasMarkers ? (
           <>
             <Pressable
@@ -779,6 +795,11 @@ export const NativeMap = ({
           isSelf={selectedMarker.isSelf}
           name={selectedMarker.name}
           otherSharedGroupNames={selectedMarker.otherSharedGroupNames}
+          timeline={
+            personTimelineGroupId
+              ? { groupId: personTimelineGroupId, userId: selectedMarker.userId }
+              : undefined
+          }
           timestamp={selectedMarker.timestamp}
           unreadableGroup={selectedMarker.unreadableGroup}
           onHeightChange={(height) => {

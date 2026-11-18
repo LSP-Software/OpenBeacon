@@ -61,6 +61,7 @@ const RootLayout = () => {
                     <Stack.Screen name="join" />
                     <Stack.Screen name="place" />
                     <Stack.Screen name="place-alerts" />
+                    <Stack.Screen name="timeline" />
                     <Stack.Screen name="setup/name" />
                     <Stack.Screen name="setup/remove-devices" />
                     <Stack.Screen name="account/about" />
