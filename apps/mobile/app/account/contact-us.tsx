@@ -57,9 +57,9 @@ const ContactUsScreen = () => {
 
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title="Contact Us" />
+      <ScreenHeader title="Contact us" />
       <ScrollView
-        contentContainerClassName="gap-5 px-6 py-6"
+        contentContainerClassName="gap-5 px-4 pb-6 pt-2"
         automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
       >

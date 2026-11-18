@@ -66,21 +66,20 @@ const AppLockSettingsScreen = () => {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-8 px-6 py-6 pb-32"
+        contentContainerClassName="gap-6 px-4 pb-32 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <View className="gap-2">
-          <Text className="text-foreground text-3xl font-bold">Lock OpenBeacon</Text>
-          <Text className="text-tertiary text-base leading-6">
+        <View>
+          <Text className="text-secondary text-base">
             {Platform.OS === "ios"
               ? "Ask for Face ID, Touch ID or your passcode before anyone can open OpenBeacon on this phone. Location sharing keeps running while the app is locked, and the location indicator stays on. OpenBeacon’s preview in the app switcher is hidden while app lock is on."
               : "Ask for your face, fingerprint or screen lock before anyone can open OpenBeacon on this phone. Location sharing keeps running while the app is locked, and the sharing notification stays on. On Android 13 and later, OpenBeacon’s preview in recent apps is hidden while app lock is on."}
           </Text>
         </View>
 
-        <View className="flex-row items-center gap-4 rounded-3xl border border-border bg-card px-5 py-4">
+        <View className="flex-row items-center gap-4 rounded-2xl border border-border bg-card px-4 py-3.5">
           <View className="flex-1 gap-1">
-            <Text className="text-foreground text-base font-medium">App lock</Text>
+            <Text className="text-foreground font-medium">App lock</Text>
             <Text className="text-tertiary text-sm">
               {unavailable
                 ? "This phone has no screen lock. Set one in your phone’s settings to use app lock."
@@ -98,20 +97,18 @@ const AppLockSettingsScreen = () => {
         </View>
 
         {enabled && (
-          <View className="gap-3">
-            <View className="gap-1">
-              <Text className="text-foreground text-xl font-semibold">Lock again</Text>
-              <Text className="text-tertiary text-sm">
-                Choose how long you can be away before OpenBeacon asks again. It always asks when
-                it’s opened after being closed. Choosing a longer time asks for your screen lock.
-              </Text>
-            </View>
+          <View className="gap-2">
+            <Text variant="label">Lock again</Text>
             <ChoiceList
               accessibilityLabel="Lock again"
               options={relockOptions}
               selected={relockAfter}
               onChange={(next) => void changeRelock(next)}
             />
+            <Text className="text-tertiary text-sm">
+              Choose how long you can be away before OpenBeacon asks again. It always asks when it’s
+              opened after being closed. Choosing a longer time asks for your screen lock.
+            </Text>
           </View>
         )}
       </ScrollView>

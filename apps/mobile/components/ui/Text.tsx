@@ -19,7 +19,7 @@ const textVariants = cva("text-foreground text-base", {
       large: "text-lg font-semibold",
       small: "text-sm font-medium leading-none",
       muted: "text-tertiary text-sm",
-      label: "text-secondary px-1 text-sm font-semibold",
+      label: "text-secondary text-sm font-semibold",
     },
   },
   defaultVariants: {

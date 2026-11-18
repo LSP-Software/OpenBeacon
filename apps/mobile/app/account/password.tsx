@@ -78,17 +78,14 @@ const PasswordScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-6 py-6 pb-32"
+          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {hasPassword && (
-            <View className="gap-2">
-              <Text className="text-foreground text-3xl font-bold">Change password</Text>
-              <Text className="text-tertiary text-base leading-6">
-                Enter your current password, then choose a new one.
-              </Text>
-            </View>
+            <Text className="text-secondary text-base">
+              Enter your current password, then choose a new one.
+            </Text>
           )}
 
           {accounts.isError && <Text>Unable to load your sign-in methods. Please try again.</Text>}
@@ -105,7 +102,6 @@ const PasswordScreen = () => {
                 control={form.control}
                 name="currentPassword"
                 label="Current password"
-                placeholder="Current password"
                 secureTextEntry
                 autoCapitalize="none"
                 autoComplete="current-password"
@@ -115,7 +111,6 @@ const PasswordScreen = () => {
                 control={form.control}
                 name="newPassword"
                 label="New password"
-                placeholder="New password"
                 secureTextEntry
                 autoCapitalize="none"
                 autoComplete="new-password"
@@ -125,7 +120,6 @@ const PasswordScreen = () => {
                 control={form.control}
                 name="confirmNewPassword"
                 label="Confirm new password"
-                placeholder="Confirm new password"
                 secureTextEntry
                 autoCapitalize="none"
                 autoComplete="new-password"
@@ -140,7 +134,7 @@ const PasswordScreen = () => {
           )}
           <View className="gap-4">
             {hasPassword && (
-              <Text className="text-tertiary text-base leading-6">
+              <Text className="text-secondary text-base">
                 Lost a phone or tablet? Sign out everywhere else without changing your password.
               </Text>
             )}
@@ -151,9 +145,9 @@ const PasswordScreen = () => {
             </Link>
           </View>
           {hasPassword && signInCodes.isError && (
-            <View className="gap-4">
-              <Text className="text-foreground text-xl font-bold">Sign-in codes</Text>
-              <Text className="text-tertiary text-base leading-6">
+            <View className="gap-2">
+              <Text variant="label">Sign-in codes</Text>
+              <Text className="text-secondary text-base">
                 We couldn’t load this setting. Check your connection and try again.
               </Text>
             </View>
@@ -161,9 +155,9 @@ const PasswordScreen = () => {
           {hasPassword &&
             signInCodes.data &&
             (signInCodes.data.on || signInCodes.data.canTurnOn) && (
-              <View className="gap-4">
-                <Text className="text-foreground text-xl font-bold">Sign-in codes</Text>
-                <Text className="text-tertiary text-base leading-6">
+              <View className="gap-3">
+                <Text variant="label">Sign-in codes</Text>
+                <Text className="text-secondary text-base">
                   {signInCodes.data.on
                     ? "On. Signing in on a new phone also needs a code we email you."
                     : "Off. Turn on to also need a code from your email when you sign in on a new phone, so your password alone isn’t enough."}

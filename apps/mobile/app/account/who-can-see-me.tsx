@@ -105,7 +105,7 @@ const WhoCanSeeMeScreen = () => {
       ) : (
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-4 px-6 py-6 pb-32"
+          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
           showsVerticalScrollIndicator={false}
         >
           <LocationSharingCard />
@@ -113,7 +113,7 @@ const WhoCanSeeMeScreen = () => {
           <Text accessibilityRole="header" className="text-foreground text-lg font-semibold">
             Can see you now
           </Text>
-          <Text className="text-tertiary text-base leading-6">
+          <Text className="text-secondary text-base">
             Everyone in a group with you can see where you are while you’re sharing. They can also
             replay where you’ve been, as far back as you chose for that group (shown below, at most
             14 days), but only from when they joined that group, and see roughly when you paused and
@@ -130,7 +130,7 @@ const WhoCanSeeMeScreen = () => {
               No one. You’re not in a group with anyone else.
             </Text>
           ) : (
-            <View className="overflow-hidden rounded-3xl border border-border bg-card">
+            <View className="overflow-hidden rounded-2xl border border-border bg-card">
               {viewers.data.current.map((viewer, index) => (
                 <Person
                   key={viewer.userId}
@@ -162,7 +162,7 @@ const WhoCanSeeMeScreen = () => {
           <Text accessibilityRole="header" className="text-foreground text-lg font-semibold">
             Could see you recently
           </Text>
-          <Text className="text-tertiary text-base leading-6">
+          <Text className="text-secondary text-base">
             People who stopped being in a group with you since{" "}
             {formatViewerDate(viewers.data.since)}. They can’t see where you go now, but they may
             have kept what they saw before.
@@ -170,7 +170,7 @@ const WhoCanSeeMeScreen = () => {
           {viewers.data.past.length === 0 ? (
             <Text className="text-tertiary text-base">No one.</Text>
           ) : (
-            <View className="overflow-hidden rounded-3xl border border-border bg-card">
+            <View className="overflow-hidden rounded-2xl border border-border bg-card">
               {viewers.data.past.map((viewer, index) => {
                 const stillSharing = viewers.data.current.find(
                   (person) => person.userId === viewer.userId,

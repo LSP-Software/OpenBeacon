@@ -40,7 +40,7 @@ export const RecoveryCoverage = ({ userId }: { userId: string | undefined }) => 
         const groupRecovery = recovery[index];
         const result = groupRecovery?.data;
         return (
-          <View key={group.id} className="gap-1 rounded-xl border border-border bg-card p-4">
+          <View key={group.id} className="gap-1 rounded-2xl border border-border bg-card p-4">
             <Text className="font-semibold">{group.name}</Text>
             {groupRecovery?.isError || status.isError ? (
               <Text className="text-tertiary">Unable to check this group.</Text>

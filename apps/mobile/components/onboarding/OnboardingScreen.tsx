@@ -1,5 +1,5 @@
 import { Stack, useFocusEffect } from "expo-router";
-import { ChevronLeftIcon } from "lucide-react-native";
+import { ArrowLeftIcon } from "lucide-react-native";
 import type React from "react";
 import { useCallback, useRef, useState } from "react";
 import { BackHandler, Pressable, ScrollView, View } from "react-native";
@@ -49,15 +49,15 @@ export const OnboardingProgress = ({ step }: { step: OnboardingStep }) => {
   if (!position) return null;
 
   return (
-    <View className="flex-row items-center gap-2 px-4 pt-2">
+    <View className="flex-row items-center gap-2 px-2 pt-1">
       {previous ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Go back"
           onPress={goBack}
-          className="size-11 items-center justify-center"
+          className="size-11 items-center justify-center rounded-full active:bg-secondary"
         >
-          <Icon as={ChevronLeftIcon} className="text-foreground size-6" />
+          <Icon as={ArrowLeftIcon} className="text-foreground size-6" />
         </Pressable>
       ) : (
         <View className="size-11" />
@@ -115,7 +115,7 @@ export const OnboardingScreen = ({
     {step && <OnboardingProgress step={step} />}
     <ScrollView
       className="flex-1"
-      contentContainerClassName="flex-grow gap-6 px-6 py-6"
+      contentContainerClassName="flex-grow gap-6 px-5 py-5"
       automaticallyAdjustKeyboardInsets
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
@@ -125,11 +125,11 @@ export const OnboardingScreen = ({
         <Text accessibilityRole="header" className="text-foreground text-3xl font-bold">
           {title}
         </Text>
-        <Text className="text-tertiary text-base leading-6">{description}</Text>
+        <Text className="text-secondary text-base">{description}</Text>
       </View>
       {children}
     </ScrollView>
-    <View className="gap-2 px-6 pb-6 pt-2">
+    <View className="gap-2 px-5 pb-6 pt-2">
       <Button
         accessibilityLabel={primary.label}
         onPress={primary.onPress}
@@ -167,13 +167,13 @@ export const OnboardingPoint = ({
   title: string;
   description: string;
 }) => (
-  <View className="flex-row gap-4 rounded-3xl border border-border bg-card p-4">
-    <View className="size-10 items-center justify-center rounded-full bg-primary/10">
-      <Icon as={icon} className="text-primary size-5" />
+  <View className="flex-row gap-4 rounded-2xl border border-border bg-card p-4">
+    <View className="size-10 items-center justify-center rounded-full bg-primary-soft">
+      <Icon as={icon} className="text-primary-text size-5" />
     </View>
     <View className="flex-1 gap-1">
       <Text className="text-foreground text-base font-semibold">{title}</Text>
-      <Text className="text-tertiary text-sm leading-5">{description}</Text>
+      <Text className="text-secondary text-sm">{description}</Text>
     </View>
   </View>
 );

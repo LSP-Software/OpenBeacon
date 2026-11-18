@@ -36,7 +36,7 @@ describe("withFirebasePush", () => {
 
   test("removes values an earlier prebuild wrote", () => {
     const written = applyFirebaseStrings(
-      { resources: { string: [{ $: { name: "app_name" }, _: "Open Beacon" }] } },
+      { resources: { string: [{ $: { name: "app_name" }, _: "OpenBeacon" }] } },
       values,
     );
     expect(names(applyFirebaseStrings(written, {}))).toEqual(["app_name"]);

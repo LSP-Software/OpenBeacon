@@ -30,7 +30,7 @@ const RecoveryScreen = () => {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-6 py-6 pb-32"
+        contentContainerClassName="gap-6 px-4 pb-32 pt-2"
         showsVerticalScrollIndicator={false}
       >
         {(status.isLoading || heldVersions.isLoading) && <LoadingIndicator />}
@@ -44,12 +44,12 @@ const RecoveryScreen = () => {
         )}
         {status.data && !status.data.recoveryKey && (
           <View className="gap-4">
-            <Text className="text-foreground text-3xl font-bold">Protect your history</Text>
-            <Text className="text-tertiary text-base leading-6">
+            <Text className="text-foreground text-2xl font-bold">Protect your history</Text>
+            <Text className="text-secondary text-base">
               A recovery phrase is 12 words that let you read your encrypted location history on a
               new phone. Only you have it. OpenBeacon never sees it and can’t give it back to you.
             </Text>
-            <Text className="text-tertiary text-base leading-6">
+            <Text className="text-secondary text-base">
               Without a phrase, losing every phone you’re signed in on means losing your location
               history.
             </Text>
@@ -62,8 +62,8 @@ const RecoveryScreen = () => {
         )}
         {status.data?.recoveryKey && heldVersions.data && holdsCurrent && (
           <View className="gap-4">
-            <Text className="text-foreground text-3xl font-bold">Your phrase is set up</Text>
-            <Text className="text-tertiary text-base leading-6">
+            <Text className="text-foreground text-2xl font-bold">Your phrase is set up</Text>
+            <Text className="text-secondary text-base">
               Keep your recovery phrase somewhere safe. You’ll need it to read your history on a new
               phone.
             </Text>
@@ -97,8 +97,8 @@ const RecoveryScreen = () => {
         )}
         {status.data?.recoveryKey && heldVersions.data && !holdsCurrent && (
           <View className="gap-4">
-            <Text className="text-foreground text-3xl font-bold">Restore your history</Text>
-            <Text className="text-tertiary text-base leading-6">
+            <Text className="text-foreground text-2xl font-bold">Restore your history</Text>
+            <Text className="text-secondary text-base">
               {heldVersions.data.length > 0
                 ? "Your recovery phrase was reset on another phone. Enter the new phrase to keep reading new history here."
                 : "Your account already has a recovery phrase, set up on another phone. Enter it on this phone to read your history here."}

@@ -97,14 +97,14 @@ const NameThisPhoneScreen = () => {
       {devices.isPending ? (
         <LoadingIndicator />
       ) : devices.isError ? (
-        <Text className="text-tertiary text-base leading-6">
+        <Text className="text-secondary text-base">
           We couldn’t load this {noun}’s details. Check your connection and try again, or skip and
           name it later in Account → Devices.
         </Text>
       ) : (
         <View className="gap-6">
           <View
-            className="overflow-hidden rounded-3xl border border-border bg-card"
+            className="overflow-hidden rounded-2xl border border-border bg-card"
             importantForAccessibility="no-hide-descendants"
             accessibilityElementsHidden
           >
@@ -122,8 +122,8 @@ const NameThisPhoneScreen = () => {
               </View>
               <View className="flex-1 flex-row flex-wrap items-center gap-2">
                 <Text className="text-foreground text-base font-medium">{previewName}</Text>
-                <View className="rounded-full bg-primary/10 px-2 py-0.5">
-                  <Text className="text-primary text-xs font-medium">This {noun}</Text>
+                <View className="rounded-full bg-primary-soft px-2 py-0.5">
+                  <Text className="text-primary-text text-xs font-medium">This {noun}</Text>
                 </View>
               </View>
             </View>
@@ -154,7 +154,7 @@ const NameThisPhoneScreen = () => {
                   onPress={() => form.setValue("icon", icon)}
                   className={cn(
                     "size-12 items-center justify-center rounded-2xl border",
-                    selected ? "border-primary bg-primary/10" : "border-border bg-background",
+                    selected ? "border-primary bg-primary-soft" : "border-border bg-background",
                   )}
                 >
                   <Icon

@@ -147,5 +147,5 @@ test("group colors are scoped to the caller's own memberships", async () => {
       ciphertext: "resealed",
       expectedCiphertext: "stale",
     }),
-  ).rejects.toThrow("Group color changed");
+  ).rejects.toThrow("Group colour changed");
 });

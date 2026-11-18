@@ -144,7 +144,7 @@ const BackgroundLocationStepScreen = () => {
             <Text className="text-tertiary text-xs font-semibold uppercase tracking-wide">
               {choices.heading}
             </Text>
-            <View className="overflow-hidden rounded-3xl border border-border bg-card">
+            <View className="overflow-hidden rounded-2xl border border-border bg-card">
               {choices.options.map((option, index) => {
                 const chosen = option === choices.pick;
                 return (

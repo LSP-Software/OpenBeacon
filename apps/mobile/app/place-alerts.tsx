@@ -40,10 +40,10 @@ const PlaceAlertsScreen = () => {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-4 px-6 py-6 pb-32"
+        contentContainerClassName="gap-6 px-4 pb-32 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-tertiary text-base leading-6">
+        <Text className="text-secondary text-base">
           Choose whose arrivals and departures you hear about. This only changes your alerts.
           Everyone else still gets theirs.
         </Text>
@@ -78,11 +78,11 @@ const PlaceAlertsScreen = () => {
                   <AccordionItem
                     key={place.id}
                     value={place.id}
-                    className="rounded-3xl border border-border bg-card px-5"
+                    className="rounded-2xl border border-border bg-card px-5"
                   >
                     <AccordionTrigger className="items-center">
                       <View className="flex-1 flex-row items-center gap-4">
-                        <View className="size-12 items-center justify-center rounded-xl bg-primary/10">
+                        <View className="size-12 items-center justify-center rounded-xl bg-primary-soft">
                           <Text className="text-2xl">{place.emoji}</Text>
                         </View>
                         <View className="min-w-0 flex-1">

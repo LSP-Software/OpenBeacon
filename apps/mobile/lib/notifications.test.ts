@@ -182,7 +182,7 @@ describe("requestNotificationPermissions", () => {
 });
 
 describe("turnOnNotifications", () => {
-  test("opens Open Beacon’s notification settings when Android won’t ask", async () => {
+  test("opens OpenBeacon’s notification settings when Android won’t ask", async () => {
     android.result = "never_ask_again";
     await turnOnNotifications();
     expect(settings.opened).toEqual([

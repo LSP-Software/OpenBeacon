@@ -140,7 +140,7 @@ describe("readApiCompatibilityResponse", () => {
     expect((await readApiCompatibilityResponse(response)).verdict).toBe("outOfSync");
   });
 
-  test("ignores a 426 that didn't come from an Open Beacon server", async () => {
+  test("ignores a 426 that didn't come from an OpenBeacon server", async () => {
     expect(
       (await readApiCompatibilityResponse(new Response("Upgrade", { status: 426 }))).verdict,
     ).toBe(null);

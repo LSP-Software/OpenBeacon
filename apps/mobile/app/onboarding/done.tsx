@@ -86,7 +86,7 @@ const OnboardingDoneScreen = () => {
       description={`This ${noun} is ready. Create a group or scan an invite from the Groups tab to start sharing.`}
       primary={{ label: "Go to the map", onPress: finishOnboarding }}
     >
-      <View className="rounded-3xl border border-border bg-card px-4">
+      <View className="rounded-2xl border border-border bg-card px-4">
         {rows.map((row, index) => (
           <View
             key={row.label}
@@ -98,7 +98,7 @@ const OnboardingDoneScreen = () => {
             <View
               className={cn(
                 "size-7 items-center justify-center rounded-full",
-                row.tone === "on" && "bg-primary/10",
+                row.tone === "on" && "bg-primary-soft",
                 row.tone === "missing" && "bg-warning-accent/15",
                 row.tone === "off" && "bg-secondary",
               )}

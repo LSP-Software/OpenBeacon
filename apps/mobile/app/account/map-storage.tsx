@@ -1,12 +1,10 @@
 import { useMutation } from "@tanstack/react-query";
-import { CheckIcon } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { ScreenHeader } from "../../components/headers/ScreenHeader.tsx";
 import { Button } from "../../components/ui/Button.tsx";
-import { Icon } from "../../components/ui/Icon.tsx";
+import { ChoiceList } from "../../components/ui/ChoiceList.tsx";
 import { Text } from "../../components/ui/Text.tsx";
-import { cn } from "../../lib/cn.ts";
 import {
   clearSavedMap,
   getMapCacheSizeMb,
@@ -30,60 +28,32 @@ const MapStorageScreen = () => {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-8 px-6 py-6 pb-32"
+        contentContainerClassName="gap-6 px-4 pb-32 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-tertiary text-base leading-6">
+        <Text className="text-secondary text-base">
           Parts of the map you’ve looked at are saved on this phone, so the map opens faster and
           still shows those areas without a connection. They are deleted when you sign out.
         </Text>
 
-        <View className="gap-3">
-          <View className="gap-1">
-            <Text className="text-foreground text-xl font-semibold">Space for saved maps</Text>
-            <Text className="text-tertiary text-sm">
-              When it’s full, the areas you looked at longest ago are removed first.
-            </Text>
-          </View>
-          <View
-            accessibilityRole="radiogroup"
+        <View className="gap-2">
+          <Text variant="label">Space for saved maps</Text>
+          <ChoiceList
             accessibilityLabel="Space for saved maps"
-            className="overflow-hidden rounded-3xl border border-border bg-card"
-          >
-            {mapCacheSizesMb.map((size, index) => {
-              const selected = sizeMb === size;
-              return (
-                <Pressable
-                  key={size}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: selected, disabled: changeSize.isPending }}
-                  disabled={changeSize.isPending}
-                  className={cn(
-                    "flex-row items-center justify-between px-5 py-4",
-                    index < mapCacheSizesMb.length - 1 && "border-b border-border/50",
-                  )}
-                  onPress={() => {
-                    setSizeMb(size);
-                    changeSize.mutate(size);
-                  }}
-                >
-                  <Text className="text-foreground text-base font-medium">
-                    {formatMapCacheSize(size)}
-                  </Text>
-                  <View
-                    className={cn(
-                      "size-6 items-center justify-center rounded-full border",
-                      selected ? "border-primary bg-primary" : "border-border bg-background",
-                    )}
-                  >
-                    {selected ? (
-                      <Icon as={CheckIcon} className="size-4 text-primary-foreground" />
-                    ) : null}
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
+            options={mapCacheSizesMb.map((size) => ({
+              value: size,
+              title: formatMapCacheSize(size),
+            }))}
+            selected={sizeMb}
+            disabled={changeSize.isPending}
+            onChange={(size) => {
+              setSizeMb(size);
+              changeSize.mutate(size);
+            }}
+          />
+          <Text className="text-tertiary text-sm">
+            When it’s full, the areas you looked at longest ago are removed first.
+          </Text>
           {changeSize.isError ? (
             <Text accessibilityLiveRegion="polite" className="text-destructive-text text-sm">
               Couldn’t change the space for saved maps. Try again.

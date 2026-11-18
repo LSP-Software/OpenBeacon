@@ -43,7 +43,7 @@ const AppLockStepScreen = () => {
       step="appLock"
       illustration={
         <View className="items-center py-6">
-          <View className="size-24 items-center justify-center rounded-3xl border border-border bg-card">
+          <View className="size-24 items-center justify-center rounded-2xl border border-border bg-card">
             <Icon
               as={Platform.OS === "ios" ? ScanFaceIcon : FingerprintIcon}
               className="text-primary size-12"

@@ -139,7 +139,7 @@ const SignUp = () => {
       </Button>
       <View className="flex-row items-center gap-4">
         <View className="flex-1 h-px bg-border" />
-        <Text className="text-sm uppercase tracking-[0.18em] text-secondary">or</Text>
+        <Text className="text-secondary text-sm">or</Text>
         <View className="flex-1 h-px bg-border" />
       </View>
     </>
@@ -163,16 +163,16 @@ const SignUp = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <KeyboardFormScrollView contentContainerClassName="px-8 pt-2 pb-6 gap-6">
+      <KeyboardFormScrollView contentContainerClassName="gap-6 px-6 pb-6 pt-1">
         {(formProps) => (
           <>
             <ReturnToHomeHeader />
 
             <View className="gap-2">
-              <Text className="font-bold text-5xl">
-                {step.name === "code" ? "Check your\nemail." : "Create\naccount."}
+              <Text accessibilityRole="header" className="text-3xl font-bold">
+                {step.name === "code" ? "Check your email" : "Create your account"}
               </Text>
-              <Text className="text-lg text-secondary">
+              <Text className="text-secondary text-base">
                 {step.name === "code"
                   ? "Enter the code we emailed you"
                   : step.name === "details"
@@ -242,7 +242,6 @@ const SignUp = () => {
                     control={form.control}
                     name="password"
                     label="Password"
-                    placeholder="Password"
                     secureTextEntry
                     autoCapitalize="none"
                     autoComplete="new-password"
@@ -252,7 +251,6 @@ const SignUp = () => {
                     control={form.control}
                     name="confirmPassword"
                     label="Confirm password"
-                    placeholder="Confirm password"
                     secureTextEntry
                     autoCapitalize="none"
                     autoComplete="new-password"
@@ -261,7 +259,7 @@ const SignUp = () => {
                     onSubmitEditing={isSubmitting ? undefined : form.handleSubmit(handleSignUp)}
                   />
                   <Button onPress={form.handleSubmit(handleSignUp)} disabled={isSubmitting}>
-                    <Text>{emailLoading ? "Creating account…" : "Create Account"}</Text>
+                    <Text>{emailLoading ? "Creating account…" : "Create account"}</Text>
                   </Button>
                 </>
               )}

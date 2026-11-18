@@ -111,7 +111,7 @@ export const LocationSharingPausedBanner = ({
   return (
     <View
       accessibilityLiveRegion="polite"
-      className="mb-2 gap-1 rounded-xl border border-border bg-card px-3 py-2"
+      className="mb-2 gap-1 rounded-2xl border border-border bg-card px-3 py-2"
     >
       <View className="flex-row items-center gap-3">
         <Icon as={PauseIcon} size={16} className="text-foreground" />

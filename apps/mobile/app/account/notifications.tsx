@@ -90,16 +90,13 @@ const NotificationsScreen = () => {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-6 py-6 pb-32"
+        contentContainerClassName="gap-6 px-4 pb-32 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <View className="gap-2">
-          <Text className="text-foreground text-3xl font-bold">Notifications</Text>
-          <Text className="text-tertiary text-base leading-6">
-            Choose what you hear about. These settings are the same on all your phones. Security
-            notifications go to your other phones, not the one that made the change.
-          </Text>
-        </View>
+        <Text className="text-secondary text-base">
+          Choose what you hear about. These settings are the same on all your phones. Security
+          notifications go to your other phones, not the one that made the change.
+        </Text>
 
         {notifications.enabled === false && (
           <PromptCard
@@ -133,17 +130,15 @@ const NotificationsScreen = () => {
             const emailColumn = showEmail && rows.some(({ email }) => email !== null);
             return (
               <View key={section.key} className="gap-2">
-                <Text className="text-tertiary px-1 text-sm font-semibold uppercase tracking-wider">
-                  {section.title}
-                </Text>
+                <Text variant="label">{section.title}</Text>
                 {section.key === "security" && showEmail && (
-                  <Text className="text-tertiary px-1 text-sm">
+                  <Text className="text-tertiary text-sm">
                     Turning any of these off sends an email to your account’s address.
                   </Text>
                 )}
-                <View className="overflow-hidden rounded-3xl border border-border bg-card">
+                <View className="overflow-hidden rounded-2xl border border-border bg-card">
                   {showEmail && (
-                    <View className="flex-row justify-end gap-4 px-5 pt-3">
+                    <View className="flex-row justify-end gap-4 px-4 pt-3">
                       {emailColumn && (
                         <Text className="text-tertiary w-12 text-center text-xs font-semibold">
                           Email
@@ -163,12 +158,12 @@ const NotificationsScreen = () => {
                       <View
                         key={row.type}
                         className={cn(
-                          "flex-row items-center gap-4 px-5 py-4",
-                          index > 0 && "border-t border-border/50",
+                          "flex-row items-center gap-4 px-4 py-3.5",
+                          index > 0 && "border-t border-border/60",
                         )}
                       >
                         <View className="flex-1 gap-1">
-                          <Text className="text-foreground text-base font-medium">{label}</Text>
+                          <Text className="text-foreground font-medium">{label}</Text>
                           {description && (
                             <Text className="text-tertiary text-sm">{description}</Text>
                           )}

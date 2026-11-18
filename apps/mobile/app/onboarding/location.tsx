@@ -36,7 +36,7 @@ const LocationStepScreen = () => {
         >
           <View className="flex-1 items-center gap-2">
             <View className="h-36 w-full items-center justify-center rounded-3xl border-2 border-primary bg-secondary/60">
-              <View className="size-11 items-center justify-center rounded-full bg-primary/15">
+              <View className="size-11 items-center justify-center rounded-full bg-primary-soft">
                 <View className="size-4 rounded-full border-2 border-white bg-primary" />
               </View>
             </View>
@@ -62,7 +62,7 @@ const LocationStepScreen = () => {
         disabled: asking,
       }}
     >
-      <View className="gap-3 rounded-3xl border border-border bg-card p-4">
+      <View className="gap-3 rounded-2xl border border-border bg-card p-4">
         <View className="flex-row gap-3">
           <Text className="text-primary-text text-sm font-bold">1</Text>
           {Platform.OS === "ios" ? (

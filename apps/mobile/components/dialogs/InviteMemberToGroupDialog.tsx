@@ -128,7 +128,7 @@ export const InviteMembersInputs = ({
   return (
     <View className="flex flex-col gap-4">
       <View className="flex flex-col gap-2">
-        <Text className="text-foreground font-semibold">Email Addresses</Text>
+        <Text className="text-foreground font-semibold">Email addresses</Text>
         <Text className="text-secondary text-sm">
           If there are accounts associated with the provided emails an invite will be sent to them.
         </Text>
@@ -175,11 +175,11 @@ export const InviteMembersInputs = ({
           className="mt-2 h-12 rounded-xl border-border bg-card"
         >
           <Icon as={PlusIcon} className="size-5 text-primary" />
-          <Text className="text-primary">Add another email</Text>
+          <Text className="text-primary-text">Add another email</Text>
         </Button>
       </View>
       <View className="flex flex-col gap-2 rounded-xl p-2">
-        <Text className=" font-semibold">Role Permissions:</Text>
+        <Text className=" font-semibold">Role permissions</Text>
         <View className="flex flex-col">
           <Text className="text-secondary text-sm">
             <Text className="font-semibold">Member:</Text> Can view locations of all family members

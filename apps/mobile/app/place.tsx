@@ -443,7 +443,7 @@ const PlaceEditor = ({
                         }}
                         className={cn(
                           "h-12 items-center justify-center rounded-xl border",
-                          selected ? "border-2 border-primary bg-primary/10" : "border-border",
+                          selected ? "border-2 border-primary bg-primary-soft" : "border-border",
                         )}
                         style={{ width: "15%" }}
                       >
@@ -470,7 +470,7 @@ const PlaceEditor = ({
                       setEmoji("");
                     }}
                   >
-                    <Text className="font-semibold text-primary">Choose another emoji</Text>
+                    <Text className="font-semibold text-primary-text">Choose another emoji</Text>
                   </Pressable>
                 )}
                 <View className="flex-row gap-3 pt-1">

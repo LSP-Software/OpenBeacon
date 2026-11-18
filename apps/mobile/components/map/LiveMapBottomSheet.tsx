@@ -86,13 +86,13 @@ export const LiveMapBottomSheet = ({
       }}
     >
       <View
-        className="rounded-2xl border border-border bg-card px-5 pb-4 pt-3 shadow-md shadow-black/15"
+        className="rounded-2xl border border-border bg-card px-5 pb-5 pt-3 shadow-md shadow-black/15"
         onLayout={(event) => onHeightChange?.(event.nativeEvent.layout.height)}
       >
         {onDismiss ? (
           <View {...panResponder.panHandlers}>
             <View className="mb-3 items-center">
-              <View className="h-1 w-10 rounded-full bg-border" />
+              <View className="h-1 w-9 rounded-full bg-border-strong" />
             </View>
             {header}
           </View>

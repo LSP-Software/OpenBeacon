@@ -252,7 +252,7 @@ export const InviteConfirmation = ({
                   hitSlop={12}
                   onPress={() => setChoosingShare(true)}
                 >
-                  <Text className="text-sm font-semibold text-primary">Change</Text>
+                  <Text className="text-sm font-semibold text-primary-text">Change</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -306,7 +306,7 @@ export const InviteConfirmation = ({
               loading={action.pendingKey === "join"}
               disabled={action.pendingKey === "decline" || historyShare.query.isPending}
             >
-              <Text>Join Group</Text>
+              <Text>Join group</Text>
             </Button>
             <Button
               variant="secondary"

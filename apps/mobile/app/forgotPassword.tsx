@@ -152,17 +152,17 @@ const ForgotPassword = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <KeyboardFormScrollView contentContainerClassName="px-8 pt-2 pb-6 gap-6">
+      <KeyboardFormScrollView contentContainerClassName="gap-6 px-6 pb-6 pt-1">
         {(formProps) => (
           <>
             <ReturnToHomeHeader />
             <View className="gap-2">
-              <Text className="font-bold text-5xl">
+              <Text accessibilityRole="header" className="text-3xl font-bold">
                 {step.name === "code" || step.name === "signInCode"
-                  ? "Check your\nemail."
-                  : "Reset\npassword."}
+                  ? "Check your email"
+                  : "Reset your password"}
               </Text>
-              <Text className="text-lg text-secondary">
+              <Text className="text-secondary text-base">
                 {step.name === "email"
                   ? "We'll email you a code to reset it"
                   : step.name === "code" || step.name === "signInCode"
@@ -260,7 +260,6 @@ const ForgotPassword = () => {
                     control={form.control}
                     name="password"
                     label="New password"
-                    placeholder="New password"
                     secureTextEntry
                     autoCapitalize="none"
                     autoComplete="new-password"
@@ -271,7 +270,6 @@ const ForgotPassword = () => {
                     control={form.control}
                     name="confirmPassword"
                     label="Confirm new password"
-                    placeholder="Confirm new password"
                     secureTextEntry
                     autoCapitalize="none"
                     autoComplete="new-password"

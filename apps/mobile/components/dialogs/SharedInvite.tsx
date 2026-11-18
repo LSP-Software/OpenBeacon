@@ -109,7 +109,7 @@ export const SharedInvite = ({
                     if (Platform.OS === "ios") setOpen(false);
                     const result = await tryCatch(
                       Share.share({
-                        message: `Join my Open Beacon group: openbeacon://join?code=${invite.data.code}`,
+                        message: `Join my OpenBeacon group: openbeacon://join?code=${invite.data.code}`,
                       }),
                     );
                     if (result.error) Alert.alert("Unable to share invitation");

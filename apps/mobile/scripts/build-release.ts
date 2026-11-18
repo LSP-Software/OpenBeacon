@@ -157,7 +157,7 @@ const appJson = z
 const { version } = appJson.expo;
 const { versionCode } = appJson.expo.android;
 
-console.log(`Building Open Beacon ${version} (${versionCode}) as ${apk ? "an APK" : "a bundle"}`);
+console.log(`Building OpenBeacon ${version} (${versionCode}) as ${apk ? "an APK" : "a bundle"}`);
 console.log(`Signing with ${keyAlias}, SHA1 ${keySha1}`);
 if (allowDirty) console.log("Including uncommitted changes");
 

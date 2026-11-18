@@ -28,10 +28,10 @@ const LocationHistoryScreen = () => {
       ) : (
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-4 px-6 py-6 pb-32"
+          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
           showsVerticalScrollIndicator={false}
         >
-          <Text className="text-tertiary text-base leading-6">
+          <Text className="text-secondary text-base">
             Choose how much of your location history your groups can play back in Timeline. They can
             always see where you are now while you’re sharing.
           </Text>

@@ -234,11 +234,11 @@ const LinkWithOtherPhoneScreen = () => {
       <ScreenHeader title="Set up" hideBack={!!handover && !problem} fallback="/setup" />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-6 py-6 pb-16"
+        contentContainerClassName="gap-6 px-4 pb-16 pt-2"
         showsVerticalScrollIndicator={false}
       >
-        <Text className="text-foreground text-3xl font-bold">Link with your other device</Text>
-        <Text className="text-tertiary text-base leading-6">
+        <Text className="text-foreground text-2xl font-bold">Link with your other device</Text>
+        <Text className="text-secondary text-base">
           Open OpenBeacon on your other phone or tablet and scan this code. You’ll find the scanner
           in Account → Devices → Add a device.
         </Text>
@@ -297,7 +297,7 @@ const LinkWithOtherPhoneScreen = () => {
           </View>
         ) : expired ? (
           <View className="gap-4">
-            <Text className="text-tertiary text-base leading-6">
+            <Text className="text-secondary text-base">
               This code has expired. Codes only work for 10 minutes.
             </Text>
             <Button onPress={showNewCode} loading={createLink.isPending}>
@@ -306,7 +306,7 @@ const LinkWithOtherPhoneScreen = () => {
           </View>
         ) : link?.active && unreachable ? (
           <View className="gap-4">
-            <Text className="text-tertiary text-base leading-6">
+            <Text className="text-secondary text-base">
               {status.error instanceof TRPCClientError && status.error.data
                 ? `We couldn’t finish linking. This ${noun} is already set up, so you can carry on.`
                 : `We can’t reach the server right now. This ${noun} is already set up, so you can carry on and we’ll finish linking next time you open the app.`}

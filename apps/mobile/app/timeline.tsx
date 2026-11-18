@@ -631,9 +631,7 @@ const TimelineView = ({
                     !item.selectable && "opacity-40",
                   )}
                 >
-                  <Text
-                    className={cn("text-[11px]", selected ? "text-background" : "text-secondary")}
-                  >
+                  <Text className={cn("text-xs", selected ? "text-background" : "text-secondary")}>
                     {isToday ? "Today" : date.toLocaleDateString(undefined, { weekday: "short" })}
                   </Text>
                   <Text

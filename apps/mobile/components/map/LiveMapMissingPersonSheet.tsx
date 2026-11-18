@@ -57,7 +57,7 @@ export const LiveMapMissingPersonSheet = ({
           </Avatar>
           <View className="min-w-0 flex-1 gap-1">
             <Text className="text-foreground text-xl font-bold">{name}</Text>
-            <Text className="text-secondary dark:text-tertiary text-sm">
+            <Text className="text-secondary text-sm">
               {paused
                 ? "Location sharing paused"
                 : waitingForLocation
@@ -73,7 +73,7 @@ export const LiveMapMissingPersonSheet = ({
       }
     >
       {paused ? (
-        <View className="mt-3 rounded-xl bg-background p-3">
+        <View className="mt-3 rounded-xl bg-secondary p-3">
           <Text className="text-sm">
             {person.isSelf
               ? "You’ve paused location sharing on all your devices."
@@ -93,15 +93,15 @@ export const LiveMapMissingPersonSheet = ({
             }}
             asChild
           >
-            <Button className="mt-3" accessibilityRole="link">
-              <Icon as={HistoryIcon} size={18} className="text-primary-foreground" />
+            <Button variant="secondary" className="mt-3" accessibilityRole="link">
+              <Icon as={HistoryIcon} size={18} className="text-foreground" />
               <Text>See today’s route</Text>
             </Button>
           </Link>
         </View>
       ) : waitingForLocation ? (
         <View className="mt-3 gap-3">
-          <View className="rounded-xl bg-background p-3">
+          <View className="rounded-xl bg-secondary p-3">
             <Text className="text-sm">
               {person.isSelf
                 ? "You’ve turned location sharing back on. Your location will show when one of your devices sends an update."
@@ -134,7 +134,7 @@ export const LiveMapMissingPersonSheet = ({
         </View>
       ) : hidden ? (
         <View className="mt-3 gap-3">
-          <View className="rounded-xl bg-background p-3">
+          <View className="rounded-xl bg-secondary p-3">
             <Text className="text-sm">
               {person.name} is only in{" "}
               {hiddenGroupNames.length > 1
@@ -180,7 +180,7 @@ export const LiveMapMissingPersonSheet = ({
           </Link>
         </View>
       ) : (
-        <View className="mt-3 rounded-xl bg-background p-3">
+        <View className="mt-3 rounded-xl bg-secondary p-3">
           <Text className="text-sm">
             {person.isSelf
               ? "Your location hasn’t been shared from this phone yet. Check OpenBeacon has location permission and background location turned on."
@@ -189,9 +189,7 @@ export const LiveMapMissingPersonSheet = ({
         </View>
       )}
       {hidden ? null : (
-        <Text className="text-secondary dark:text-tertiary mt-2 text-sm">
-          In {person.groupNames.join(", ")}
-        </Text>
+        <Text className="text-secondary mt-2 text-sm">In {person.groupNames.join(", ")}</Text>
       )}
     </LiveMapBottomSheet>
   );

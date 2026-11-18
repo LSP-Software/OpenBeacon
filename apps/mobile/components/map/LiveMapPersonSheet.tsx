@@ -100,7 +100,7 @@ export const LiveMapPersonSheet = ({
             </View>
           ) : null}
           {!isMultiDevice && isOutOfDate && !unreadableGroup ? (
-            <View className="mt-3 rounded-xl bg-background p-3">
+            <View className="mt-3 rounded-xl bg-secondary p-3">
               <Text className="text-sm">
                 {name}’s phone hasn’t sent a location since then. It might be offline, out of
                 battery, or have location turned off.
@@ -108,10 +108,14 @@ export const LiveMapPersonSheet = ({
             </View>
           ) : null}
           {!isMultiDevice && batteryVisual?.label ? (
-            <View className="mt-3 flex-row items-center gap-2">
-              <Icon as={batteryVisual.icon} size={20} className={batteryVisual.colorClass} />
-              <Text className={`${batteryVisual.colorClass} text-sm`}>
-                Battery: {batteryVisual.label}
+            <View
+              accessible
+              accessibilityLabel={`Battery ${batteryVisual.label}`}
+              className="mt-3 flex-row items-center gap-1.5 self-start rounded-full bg-secondary px-3 py-1.5"
+            >
+              <Icon as={batteryVisual.icon} size={16} className={batteryVisual.colorClass} />
+              <Text className={`${batteryVisual.colorClass} text-sm font-medium`}>
+                {batteryVisual.label}
               </Text>
             </View>
           ) : null}
@@ -122,8 +126,8 @@ export const LiveMapPersonSheet = ({
           ) : null}
           {timeline ? (
             <Link href={{ pathname: "/timeline", params: timeline }} asChild>
-              <Button className="mt-3" accessibilityRole="link">
-                <Icon as={HistoryIcon} size={18} className="text-primary-foreground" />
+              <Button variant="secondary" className="mt-4" accessibilityRole="link">
+                <Icon as={HistoryIcon} size={18} className="text-foreground" />
                 <Text>See today’s route</Text>
               </Button>
             </Link>
@@ -132,7 +136,7 @@ export const LiveMapPersonSheet = ({
       }
     >
       {unreadableGroup ? (
-        <View className="mt-3 gap-2 rounded-xl border border-destructive p-3">
+        <View className="mt-3 gap-2 rounded-xl bg-destructive-soft p-3">
           <Text className="text-sm">
             {isMultiDevice
               ? `Some of ${name}’s newer locations were encrypted with a key this phone doesn’t have.`

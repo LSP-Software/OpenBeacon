@@ -28,7 +28,7 @@ export const LiveMapPlaceSheet = ({
     accessibilityLabel={`${place.name}, ${place.groupName}`}
     header={
       <View className="flex-row items-center gap-4 pb-2">
-        <View className="size-14 items-center justify-center rounded-2xl bg-primary/10">
+        <View className="size-14 items-center justify-center rounded-2xl bg-secondary">
           <Text className="text-3xl">{place.emoji}</Text>
         </View>
         <View className="min-w-0 flex-1">
@@ -44,9 +44,9 @@ export const LiveMapPlaceSheet = ({
     onDismiss={onDismiss}
     onHeightChange={onHeightChange}
   >
-    <Text className="mt-2 text-xs font-bold uppercase tracking-wider text-tertiary">Here now</Text>
+    <Text className="text-secondary mt-3 text-sm font-semibold">Here now</Text>
     {here.length === 0 ? (
-      <Text className="py-2 text-tertiary">Nobody here now</Text>
+      <Text className="text-secondary py-2">Nobody here now</Text>
     ) : (
       <ScrollView style={{ maxHeight: 180 }} bounces={false} overScrollMode="never">
         {here.map((marker) => (
@@ -54,7 +54,7 @@ export const LiveMapPlaceSheet = ({
             <View className="size-10 items-center justify-center rounded-full bg-primary">
               <Text className="font-bold text-white">{marker.initials}</Text>
             </View>
-            <Text className="text-foreground text-lg" numberOfLines={1}>
+            <Text className="text-foreground text-base font-medium" numberOfLines={1}>
               {marker.isSelf ? `${marker.name} (you)` : marker.name}
             </Text>
           </View>
@@ -69,13 +69,13 @@ export const LiveMapPlaceSheet = ({
           asChild
         >
           <Button variant="secondary" className="flex-1">
-            <Icon as={PencilIcon} size={18} className="text-primary-text" />
+            <Icon as={PencilIcon} size={18} className="text-foreground" />
             <Text>Edit</Text>
           </Button>
         </Link>
-        <Button variant="secondary" className="flex-1 border-destructive" onPress={onDelete}>
+        <Button variant="danger" className="flex-1" onPress={onDelete}>
           <Icon as={Trash2Icon} size={18} className="text-destructive-text" />
-          <Text className="text-destructive-text">Delete</Text>
+          <Text>Delete</Text>
         </Button>
       </View>
     ) : null}
@@ -95,7 +95,7 @@ const MuteEveryoneRow = ({
   return (
     <View className="mt-3 flex-row items-center gap-4 border-t border-border py-4">
       <View className="flex-1 gap-0.5">
-        <Text className="text-foreground text-base font-semibold">Mute everyone here</Text>
+        <Text className="text-foreground font-semibold">Mute everyone here</Text>
         <Text className="text-tertiary text-sm">
           {mutes.isError ? "Couldn’t load this setting." : "Only changes your alerts"}
         </Text>

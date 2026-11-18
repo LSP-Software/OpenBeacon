@@ -47,6 +47,9 @@ mock.module("../components/ui/Button.tsx", () => ({
   Button: ({ children, onPress }: { children: React.ReactNode; onPress?: () => void }) =>
     React.createElement("pressable", { onPress }, children),
 }));
+mock.module("../components/headers/ScreenHeader.tsx", () => ({ ScreenHeader: () => null }));
+mock.module("../components/ui/Icon.tsx", () => ({ Icon: () => null }));
+mock.module("lucide-react-native", () => ({ QrCodeIcon: () => null }));
 mock.module("../components/ui/Text.tsx", () => ({
   Text: ({ children }: { children: React.ReactNode }) =>
     React.createElement("text", null, children),
@@ -79,7 +82,7 @@ test("a QR code that isn't an invite is reported once, however many frames see i
     scanned("https://example.test/");
     scanned("https://example.test/");
   });
-  expect(alerts).toEqual([["Invalid code", "That QR code isn’t an Open Beacon invite."]]);
+  expect(alerts).toEqual([["Invalid code", "That QR code isn’t an OpenBeacon invite."]]);
   expect(confirming).toEqual([]);
 });
 

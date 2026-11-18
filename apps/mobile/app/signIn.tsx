@@ -143,20 +143,20 @@ const SignIn = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <KeyboardFormScrollView contentContainerClassName="px-8 pt-2 pb-6 gap-6">
+      <KeyboardFormScrollView contentContainerClassName="gap-6 px-6 pb-6 pt-1">
         {(formProps) => (
           <>
             <ReturnToHomeHeader />
             <AnnouncementBanner />
             <View className="gap-2">
-              <Text className="font-bold text-5xl">
+              <Text accessibilityRole="header" className="text-3xl font-bold">
                 {unverified
-                  ? "Verify your\nemail."
+                  ? "Verify your email"
                   : signInCode
-                    ? "Check your\nemail."
-                    : "Welcome\nback."}
+                    ? "Check your email"
+                    : "Welcome back"}
               </Text>
-              <Text className="text-lg text-secondary">
+              <Text className="text-secondary text-base">
                 {unverified
                   ? "Confirm your email address to finish signing in"
                   : signInCode
@@ -229,7 +229,7 @@ const SignIn = () => {
                     </Button>
                     <View className="flex-row items-center gap-4">
                       <View className="flex-1 h-px bg-border" />
-                      <Text className="text-sm uppercase tracking-[0.18em] text-secondary">or</Text>
+                      <Text className="text-secondary text-sm">or</Text>
                       <View className="flex-1 h-px bg-border" />
                     </View>
                   </>
@@ -249,7 +249,6 @@ const SignIn = () => {
                   control={form.control}
                   name="password"
                   label="Password"
-                  placeholder="Password"
                   secureTextEntry
                   autoCapitalize="none"
                   autoComplete="password"
@@ -271,7 +270,7 @@ const SignIn = () => {
                   </Link>
                 ) : null}
                 <Button onPress={form.handleSubmit(signInWithForm)} disabled={isSubmitting}>
-                  <Text>{emailLoading ? "Signing in…" : "Sign In"}</Text>
+                  <Text>{emailLoading ? "Signing in…" : "Sign in"}</Text>
                 </Button>
               </View>
             )}

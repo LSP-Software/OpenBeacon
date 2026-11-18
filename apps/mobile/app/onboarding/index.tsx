@@ -96,7 +96,7 @@ const WelcomeScreen = () => {
       description={`Let’s get this ${noun} ready to share with the people you choose. It takes about two minutes.`}
       primary={{ label: "Get started", onPress: start, loading: starting }}
     >
-      <View className="rounded-3xl border border-border bg-card px-4">
+      <View className="rounded-2xl border border-border bg-card px-4">
         {[
           `Name this ${noun}`,
           "Choose what OpenBeacon can use",
@@ -106,7 +106,7 @@ const WelcomeScreen = () => {
             key={item}
             className={`flex-row items-center gap-4 py-3 ${index < items.length - 1 ? "border-b border-border/50" : ""}`}
           >
-            <View className="size-8 items-center justify-center rounded-full bg-primary/10">
+            <View className="size-8 items-center justify-center rounded-full bg-primary-soft">
               <Text className="text-primary-text text-sm font-bold">{index + 1}</Text>
             </View>
             <Text className="text-foreground text-base font-medium">{item}</Text>

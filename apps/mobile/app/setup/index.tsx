@@ -145,14 +145,14 @@ const SetUpPhoneScreen = () => {
       <OnboardingProgress step="restore" />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-6 py-6 pb-16"
+        contentContainerClassName="gap-6 px-4 pb-16 pt-2"
         showsVerticalScrollIndicator={false}
       >
         <View className="gap-4">
           <Text accessibilityRole="header" className="text-foreground text-3xl font-bold">
             Bring your history to this {noun}
           </Text>
-          <Text className="text-tertiary text-base leading-6">
+          <Text className="text-secondary text-base">
             You’re signed in, but this {noun} can’t see anyone’s location until it’s set up. You
             can’t skip this step: it keeps your family’s locations safe if someone else learns your
             password.
@@ -162,7 +162,7 @@ const SetUpPhoneScreen = () => {
         {status.isPending && <LoadingIndicator />}
         {status.isError && (
           <View className="gap-4">
-            <Text className="text-tertiary text-base leading-6">
+            <Text className="text-secondary text-base">
               We couldn’t reach the server. Check your connection and try again.
             </Text>
             <Button
@@ -178,7 +178,7 @@ const SetUpPhoneScreen = () => {
         )}
 
         {status.data && noOtherPhone && (
-          <Text className="text-tertiary text-base leading-6">
+          <Text className="text-secondary text-base">
             None of your other devices are signed in, so you’ll need your recovery phrase or to
             start fresh.
           </Text>

@@ -100,7 +100,7 @@ const DeleteAccountScreen = () => {
     <SafeAreaView className="flex-1 bg-background" edges={["bottom"]}>
       <ScreenHeader title="Delete account" />
       <ScrollView
-        contentContainerClassName="gap-4 p-6"
+        contentContainerClassName="gap-4 px-4 pb-6 pt-2"
         automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
       >
@@ -112,7 +112,9 @@ const DeleteAccountScreen = () => {
           Groups where you are the only member will be deleted. Transfer ownership or delete groups
           where you are the only owner before continuing.
         </Text>
-        <Text className="font-semibold">Choose when to delete your account:</Text>
+        <Text variant="label" className="pt-2">
+          When to delete your account
+        </Text>
         <ChoiceList
           accessibilityLabel="Deletion timing"
           options={[

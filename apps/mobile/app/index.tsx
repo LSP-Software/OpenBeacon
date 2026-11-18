@@ -144,7 +144,7 @@ export default function HomeScreen() {
     return (
       <LoadingScreen colors={colors}>
         {session && failures > 0 && (
-          <View className="absolute bottom-0 left-0 right-0 gap-3 px-8 pb-12">
+          <View className="absolute bottom-0 left-0 right-0 gap-3 px-6 pb-12">
             <AnnouncementBanner />
             <Text className="text-center text-secondary" accessibilityLiveRegion="polite">
               {hasCustomServerUrl()
@@ -177,7 +177,7 @@ export default function HomeScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <SafeAreaView className="flex-1 px-8 py-6 justify-between min-h-[600]">
+        <SafeAreaView className="min-h-[600] flex-1 justify-between px-6 py-6">
           <View
             className="absolute inset-0 items-center justify-center top-[-15%]"
             pointerEvents="none"
@@ -201,7 +201,7 @@ export default function HomeScreen() {
           <View className="flex-1 items-center justify-center gap-10 pt-10">
             <BeaconIcon size={96} color={colors.primary} />
             <View className="items-center gap-4">
-              <Text className="font-bold text-5xl">OPENBEACON</Text>
+              <Text className="text-4xl font-bold">OpenBeacon</Text>
               <Text className="text-xl text-secondary text-center">
                 Your family.{"\n"}Your data.
               </Text>
@@ -211,10 +211,10 @@ export default function HomeScreen() {
           <View className="gap-6 pb-8">
             <View className="gap-3">
               <Button onPress={() => router.push("/signIn")}>
-                <Text>Sign In</Text>
+                <Text>Sign in</Text>
               </Button>
               <Button variant="secondary" onPress={() => router.push("/signUp")}>
-                <Text>Create Account</Text>
+                <Text>Create account</Text>
               </Button>
             </View>
 
@@ -224,7 +224,9 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="Configure custom server"
             >
-              <Text className="text-sm text-secondary">Using a self-hosted server?</Text>
+              <Text className="text-primary-text text-sm font-medium">
+                Using a self-hosted server?
+              </Text>
             </Pressable>
           </View>
         </SafeAreaView>

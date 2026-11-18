@@ -50,7 +50,7 @@ export const PlaceSizeSlider = ({
     <View className="gap-3">
       <View className="flex-row items-center justify-between">
         <Text className="text-foreground font-semibold">Size</Text>
-        <Text className="font-semibold text-primary">{formatPlaceSize(radiusMeters)}</Text>
+        <Text className="font-semibold text-primary-text">{formatPlaceSize(radiusMeters)}</Text>
       </View>
       <View
         {...panResponder.panHandlers}
@@ -105,10 +105,12 @@ export const PlaceSizeSlider = ({
               onPress={() => onChange(stop.radiusMeters)}
               className={cn(
                 "flex-1 items-center rounded-xl border px-2 py-2",
-                selected ? "border-primary bg-primary/10" : "border-border",
+                selected ? "border-primary bg-primary-soft" : "border-border",
               )}
             >
-              <Text className={cn("font-semibold", selected ? "text-primary" : "text-foreground")}>
+              <Text
+                className={cn("font-semibold", selected ? "text-primary-text" : "text-foreground")}
+              >
                 {stop.label}
               </Text>
               <Text className="text-xs text-tertiary">

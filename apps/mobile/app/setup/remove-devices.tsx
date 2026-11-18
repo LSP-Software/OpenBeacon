@@ -68,14 +68,14 @@ const RemoveOldDevicesScreen = () => {
       <Stack.Screen options={{ gestureEnabled: false }} />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-6 px-6 py-6 pb-16"
+        contentContainerClassName="gap-6 px-4 pb-16 pt-2"
         showsVerticalScrollIndicator={false}
       >
         <View className="gap-4">
           <Text className="text-foreground text-3xl font-bold">
             Remove devices you no longer have
           </Text>
-          <Text className="text-tertiary text-base leading-6">
+          <Text className="text-secondary text-base">
             Removed devices are signed out and won’t receive new locations. Untick any device you
             still use.
           </Text>
@@ -83,7 +83,7 @@ const RemoveOldDevicesScreen = () => {
         {devices.isPending && <LoadingIndicator />}
         {devices.isError && (
           <View className="gap-4">
-            <Text className="text-tertiary text-base leading-6">
+            <Text className="text-secondary text-base">
               We couldn’t load your devices. Check your connection and try again, or keep them all
               and remove any later in Account → Devices.
             </Text>
@@ -93,7 +93,7 @@ const RemoveOldDevicesScreen = () => {
           </View>
         )}
         {otherDevices.length > 0 && (
-          <View className="overflow-hidden rounded-3xl border border-border bg-card">
+          <View className="overflow-hidden rounded-2xl border border-border bg-card">
             {otherDevices.map((device, index) => {
               const checked = ticked.has(device.id);
               return (

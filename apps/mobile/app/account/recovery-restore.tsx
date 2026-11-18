@@ -146,14 +146,14 @@ const RecoveryRestoreScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-6 py-6 pb-32"
+          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {entering && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Restore your history</Text>
-              <Text className="text-tertiary text-base leading-6">
+              <Text className="text-foreground text-2xl font-bold">Restore your history</Text>
+              <Text className="text-secondary text-base">
                 {setup
                   ? `Enter the 12 words of your recovery phrase to set up this ${thisDeviceNoun()}. It then gets your groups’ location history too.`
                   : `Your account has a recovery phrase. Enter its 12 words to read your groups’ location history on this ${thisDeviceNoun()}.`}
@@ -194,13 +194,13 @@ const RecoveryRestoreScreen = () => {
 
           {(step === "activating" || step === "activationFailed") && userId && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Your history is restored</Text>
+              <Text className="text-foreground text-2xl font-bold">Your history is restored</Text>
               <Text
                 accessibilityLiveRegion="polite"
                 className={
                   activationProblem
                     ? "text-destructive-text text-base leading-6"
-                    : "text-tertiary text-base leading-6"
+                    : "text-secondary text-base"
                 }
               >
                 {activationProblem ?? `Setting up this ${thisDeviceNoun()}…`}
@@ -213,8 +213,8 @@ const RecoveryRestoreScreen = () => {
 
           {step === "done" && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Your history is restored</Text>
-              <Text className="text-tertiary text-base leading-6">
+              <Text className="text-foreground text-2xl font-bold">Your history is restored</Text>
+              <Text className="text-secondary text-base">
                 This phone can now read the history your recovery phrase protects.
               </Text>
               <RecoveryCoverage userId={userId} />

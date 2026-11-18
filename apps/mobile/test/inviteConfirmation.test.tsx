@@ -245,7 +245,7 @@ test("shows who invited you, the group and its size before asking", async () => 
     "Do you want to join this group?",
   ])
     expect(text).toContain(expected);
-  expect(labels(root)).toEqual(["Change", "Join Group", "No"]);
+  expect(labels(root)).toEqual(["Change", "Join group", "No"]);
   expect(text).toContain('"accessibilityLabel":"Alex Smith invited you to join Smith Family"');
 });
 
@@ -255,13 +255,13 @@ test("says how much history you'll share, from your account setting unless you c
   await press(root, "Change");
   await press(root, "choose DAY_1");
   expect(output(root)).toContain('"1 day of history"," (","this group only",") ·"');
-  await press(root, "Join Group");
+  await press(root, "Join group");
   expect(acceptInputs).toEqual([{ historyShare: "DAY_1" }]);
 });
 
 test("joining without changing it follows the account setting", async () => {
   const root = await render(email);
-  await press(root, "Join Group");
+  await press(root, "Join group");
   expect(acceptInputs).toEqual([{ historyShare: null }]);
 });
 
@@ -272,23 +272,23 @@ test("a group of one says member, not members", async () => {
   expect(text).not.toContain('"members"');
 });
 
-test("Join Group accepts a code and returns to the groups list", async () => {
+test("Join group accepts a code and returns to the groups list", async () => {
   const root = await render(code);
-  await press(root, "Join Group");
+  await press(root, "Join group");
   expect(calls).toEqual(["acceptShared", "storeImageKey:group-1", "invalidate:all", "sync"]);
   expect(dismissals).toEqual(["/(tabs)/groups/list"]);
 });
 
-test("Join Group accepts an email invite, refreshes groups, syncs and leaves", async () => {
+test("Join group accepts an email invite, refreshes groups, syncs and leaves", async () => {
   const root = await render(email);
-  await press(root, "Join Group");
+  await press(root, "Join group");
   expect(calls).toEqual(["accept", "storeImageKey:group-1", "invalidate:all", "sync"]);
   expect(dismissals).toEqual(["/(tabs)/groups/list"]);
 });
 
 test("joining refreshes everything except the used invite's preview", async () => {
   const root = await render(code);
-  await press(root, "Join Group");
+  await press(root, "Join group");
   const [predicate] = invalidatePredicates;
   expect(predicate?.({ queryKey: ["invitePreview", code] })).toBe(false);
   expect(predicate?.({ queryKey: [["groupMembership", "list"]] })).toBe(true);
@@ -303,7 +303,7 @@ test("while joining, both buttons are locked", async () => {
   const root = await render(email);
   let joining: unknown;
   await act(async () => {
-    joining = button(root, "Join Group").props["onPress"]();
+    joining = button(root, "Join group").props["onPress"]();
   });
   expect(button(root, "No").props["disabled"]).toBe(true);
   await act(async () => {
@@ -316,7 +316,7 @@ test("while joining, both buttons are locked", async () => {
 test("a join that finishes after the user left doesn't pull them back", async () => {
   const root = await render(code);
   focused = false;
-  await press(root, "Join Group");
+  await press(root, "Join group");
   expect(calls).toEqual(["acceptShared", "storeImageKey:group-1", "invalidate:all", "sync"]);
   expect(dismissals).toEqual([]);
 });
@@ -324,7 +324,7 @@ test("a join that finishes after the user left doesn't pull them back", async ()
 test("a picture key that can't be stored doesn't stop the join", async () => {
   imageKeyError = new Error("offline");
   const root = await render(code);
-  await press(root, "Join Group");
+  await press(root, "Join group");
   expect(alerts).toEqual([]);
   expect(dismissals).toEqual(["/(tabs)/groups/list"]);
 });
@@ -332,7 +332,7 @@ test("a picture key that can't be stored doesn't stop the join", async () => {
 test("a failed join stores no picture key", async () => {
   acceptError = refusal("INTERNAL_SERVER_ERROR", "Something broke");
   const root = await render(email);
-  await press(root, "Join Group");
+  await press(root, "Join group");
   expect(calls.some((call) => call.startsWith("storeImageKey"))).toBe(false);
 });
 
@@ -340,7 +340,7 @@ test("hitting the group limit explains it and stays", async () => {
   limitReached = true;
   acceptError = new Error("limit");
   const root = await render(email);
-  await press(root, "Join Group");
+  await press(root, "Join group");
   expect(alerts).toEqual(["Too many groups"]);
   expect(dismissals).toEqual([]);
 });
@@ -348,7 +348,7 @@ test("hitting the group limit explains it and stays", async () => {
 test("any other join failure says it couldn't join", async () => {
   acceptError = refusal("INTERNAL_SERVER_ERROR", "Something broke");
   const root = await render(email);
-  await press(root, "Join Group");
+  await press(root, "Join group");
   expect(alerts).toEqual(["Unable to join"]);
   expect(dismissals).toEqual([]);
 });
@@ -375,7 +375,7 @@ test("a failed decline stays on the invite", async () => {
 test("an invite that expires while deciding shows it is unavailable", async () => {
   acceptError = refusal("NOT_FOUND");
   const root = await render(email);
-  await press(root, "Join Group");
+  await press(root, "Join group");
   expect(output(root)).toContain("Invite unavailable");
   expect(calls).toEqual(["accept", "invalidate:invites"]);
   expect(dismissals).toEqual([]);
@@ -411,7 +411,7 @@ test.each([
 test.each([
   ["GROUP_LIMIT" as const, "as many groups as your account allows"],
   ["PENDING_DELETION" as const, "scheduled for deletion"],
-])("a %s block shows the group but not Join Group", async (joinBlockedBy, expected) => {
+])("a %s block shows the group but not Join group", async (joinBlockedBy, expected) => {
   showPreview({ joinBlockedBy });
   const codeRoot = await render(code);
   expect(output(codeRoot)).toContain("Smith Family");

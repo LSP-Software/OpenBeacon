@@ -80,7 +80,7 @@ const RecoveryPhraseSetupScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-6 py-6 pb-32"
+          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -104,7 +104,7 @@ const RecoveryPhraseSetupScreen = () => {
 
           {step === "protecting" && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Protecting your history</Text>
+              <Text className="text-foreground text-2xl font-bold">Protecting your history</Text>
               <Text accessibilityLiveRegion="polite" className="text-tertiary text-base">
                 {progress.total === 0
                   ? "Checking your groups…"
@@ -115,12 +115,12 @@ const RecoveryPhraseSetupScreen = () => {
 
           {step === "done" && (
             <View className="gap-4">
-              <Text className="text-foreground text-3xl font-bold">Your phrase is set up</Text>
-              <Text className="text-tertiary text-base leading-6">
+              <Text className="text-foreground text-2xl font-bold">Your phrase is set up</Text>
+              <Text className="text-secondary text-base">
                 Use it to get your location history back if you lose or replace your phone.
               </Text>
               {progress.failed > 0 && (
-                <Text className="text-tertiary text-base leading-6">
+                <Text className="text-secondary text-base">
                   Some history couldn’t be protected yet. OpenBeacon will keep trying in the
                   background.
                 </Text>

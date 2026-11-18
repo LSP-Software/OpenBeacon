@@ -96,17 +96,17 @@ const SignInCodesScreen = () => {
       >
         <ScrollView
           className="flex-1"
-          contentContainerClassName="gap-6 px-6 py-6 pb-32"
+          contentContainerClassName="gap-6 px-4 pb-32 pt-2"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <View className="gap-2">
-            <Text className="text-tertiary text-base leading-6">
+            <Text className="text-secondary text-base">
               With sign-in codes on, signing in with your password also needs a 6-digit code we
               email you. Someone who learns your password can’t sign in unless they can also read
               your email.
             </Text>
-            <Text className="text-tertiary text-base leading-6">
+            <Text className="text-secondary text-base">
               Phones and tablets that are already signed in stay signed in, and confirming it’s you
               on them still only needs your password.
             </Text>
@@ -124,7 +124,7 @@ const SignInCodesScreen = () => {
             </View>
           )}
           {status.data && !on && !status.data.canTurnOn && (
-            <Text className="text-tertiary text-base leading-6">
+            <Text className="text-secondary text-base">
               Sign-in codes are only for accounts that sign in with a password, on servers that can
               send email.
             </Text>

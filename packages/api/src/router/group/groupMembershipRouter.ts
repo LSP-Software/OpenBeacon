@@ -208,7 +208,7 @@ export const groupMembershipRouter = {
         if (result.count === 0)
           throw new TRPCError({
             code: "CONFLICT",
-            message: "Group color changed. Reload and try again.",
+            message: "Group colour changed. Reload and try again.",
           });
         return;
       }

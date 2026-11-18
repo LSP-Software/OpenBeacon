@@ -58,7 +58,7 @@ export const NewRecoveryPhrase = ({
     return (
       <View className="gap-4">
         <Text className="text-foreground text-3xl font-bold">Write these words down</Text>
-        <Text className="text-tertiary text-base leading-6">
+        <Text className="text-secondary text-base">
           Write them on paper, in order, and keep it somewhere safe. Anyone with these words who can
           sign in to your account can read your location history.
         </Text>
@@ -73,9 +73,7 @@ export const NewRecoveryPhrase = ({
   return (
     <View className="gap-4">
       <Text className="text-foreground text-3xl font-bold">Check your phrase</Text>
-      <Text className="text-tertiary text-base leading-6">
-        Enter these words from your written phrase.
-      </Text>
+      <Text className="text-secondary text-base">Enter these words from your written phrase.</Text>
       <RecoveryPhraseGrid
         words={words}
         positions={confirmationIndexes.map((index) => index + 1)}
