@@ -1,5 +1,6 @@
-import { LogManager, TransformRequestManager } from "@maplibre/maplibre-react-native";
+import { TransformRequestManager } from "@maplibre/maplibre-react-native";
 import { tryCatch } from "@openbeacon/shared";
+import { useIsFocused } from "@react-navigation/native";
 import { useMutation } from "@tanstack/react-query";
 import { Paths } from "expo-file-system";
 import { router, useRootNavigationState } from "expo-router";
@@ -14,6 +15,7 @@ import {
   saveLastMapSource,
 } from "../../lib/mapCache.ts";
 import {
+  automaticMapRetryDelayMs,
   MAX_AUTO_FORCE_REFRESH_ATTEMPTS,
   nextMapLoadFailureState,
   shouldForceRefreshAfterMapLoadFailure,
@@ -22,6 +24,7 @@ import { getPmtilesSource, hasPmtilesArchiveChanged } from "../../lib/pmtilesUrl
 import { getProtomapsMapStyle, getSymbolLayerIds } from "../../lib/protomaps-style.ts";
 import { storage } from "../../lib/storage.ts";
 import { useTheme } from "../../providers/ThemeProvider.tsx";
+import { retainUrlTransform, subscribeToMapLibreLogs } from "./mapLibreShared.ts";
 
 export const useNativeMapStyle = () => {
   const { mapTheme } = useTheme();
@@ -34,7 +37,9 @@ export const useNativeMapStyle = () => {
   ) {
     setUsingLastMapSource(true);
   }
+  const isFocused = useIsFocused();
   const autoForceRefreshAttemptsRef = useRef(0);
+  const [automaticRetries, setAutomaticRetries] = useState(0);
   const retryAfterUrlFetchRef = useRef(false);
   const mountedRef = useRef(false);
   const failedSourceRevisionRef = useRef<number | null>(null);
@@ -107,28 +112,29 @@ export const useNativeMapStyle = () => {
     },
   });
   const applyMapLoadFailureStateEvent = useEffectEvent(applyMapLoadFailureState);
-  useEffect(() => {
-    LogManager.onLog((log) => {
-      if (
-        log.level !== "error" ||
-        !log.message.includes("Failed to load source protomaps") ||
-        !log.message.includes("PMTiles")
-      )
-        return false;
+  useEffect(
+    () =>
+      subscribeToMapLibreLogs((log) => {
+        if (
+          log.level !== "error" ||
+          !log.message.includes("Failed to load source protomaps") ||
+          !log.message.includes("PMTiles")
+        )
+          return false;
 
-      failedSourceRevisionRef.current = mapRevisionRef.current;
-      if (!showRecoverableErrorRef.current) {
-        applyMapLoadFailureStateEvent(
-          nextMapLoadFailureState({
-            autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
-            event: "force_refresh_failed",
-          }),
-        );
-      }
-      return true;
-    });
-    return () => LogManager.onLog(() => false);
-  }, []);
+        failedSourceRevisionRef.current = mapRevisionRef.current;
+        if (!showRecoverableErrorRef.current) {
+          applyMapLoadFailureStateEvent(
+            nextMapLoadFailureState({
+              autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,
+              event: "force_refresh_failed",
+            }),
+          );
+        }
+        return true;
+      }),
+    [],
+  );
   const rootNavigationState = useRootNavigationState();
   const pmtilesUrl = signedPmtilesUrlQuery.data?.url ?? null;
   const pmtilesArchiveId = signedPmtilesUrlQuery.data?.archiveId ?? null;
@@ -147,7 +153,7 @@ export const useNativeMapStyle = () => {
   }, [pmtilesUrl, pmtilesArchiveId]);
   useEffect(() => {
     if (!archiveUrl) return;
-    return () => TransformRequestManager.removeUrlTransform(`openbeacon-pmtiles:${archiveUrl}`);
+    return retainUrlTransform(`openbeacon-pmtiles:${archiveUrl}`);
   }, [archiveUrl]);
   const sourceUrl = archiveUrl ?? (usingLastMapSource ? (lastMapSource?.sourceUrl ?? null) : null);
   const mapStyle = useMemo(() => {
@@ -236,6 +242,7 @@ export const useNativeMapStyle = () => {
 
   useEffect(() => {
     if (
+      !isFocused ||
       !showRecoverableError ||
       forceRefreshSignedPmtilesUrlMutation.isPending ||
       signedPmtilesUrlQuery.isFetching
@@ -243,9 +250,16 @@ export const useNativeMapStyle = () => {
       return;
     }
 
-    const timer = setTimeout(() => retryMapLoadEvent(), 5_000);
+    const delay = automaticMapRetryDelayMs(automaticRetries);
+    if (delay === null) return;
+    const timer = setTimeout(() => {
+      setAutomaticRetries((retries) => retries + 1);
+      retryMapLoadEvent();
+    }, delay);
     return () => clearTimeout(timer);
   }, [
+    automaticRetries,
+    isFocused,
     showRecoverableError,
     forceRefreshSignedPmtilesUrlMutation.isPending,
     signedPmtilesUrlQuery.isFetching,
@@ -265,13 +279,15 @@ export const useNativeMapStyle = () => {
     pmtilesUrl: sourceUrl,
     showSymbols,
     symbolLayerIds,
-    showRecoverableError,
+    showRecoverableError: showRecoverableError || forceRefreshSignedPmtilesUrlMutation.isPaused,
     isLoading: signedPmtilesUrlQuery.isLoading,
     isError: signedPmtilesUrlQuery.isError,
     isFetching: signedPmtilesUrlQuery.isFetching,
     isOffline: signedPmtilesUrlQuery.isPaused,
     isMapNotReady: signedPmtilesUrlQuery.failureReason?.data?.code === "SERVICE_UNAVAILABLE",
-    isRefreshing: forceRefreshSignedPmtilesUrlMutation.isPending,
+    isRefreshing:
+      forceRefreshSignedPmtilesUrlMutation.isPending &&
+      !forceRefreshSignedPmtilesUrlMutation.isPaused,
     retryUrl: () => {
       void signedPmtilesUrlQuery.refetch();
     },
@@ -280,6 +296,7 @@ export const useNativeMapStyle = () => {
     onStyleLoaded: () => {
       if (failedSourceRevisionRef.current === mapRevision) return;
       failedSourceRevisionRef.current = null;
+      setAutomaticRetries(0);
       applyMapLoadFailureState(
         nextMapLoadFailureState({
           autoForceRefreshAttempts: autoForceRefreshAttemptsRef.current,

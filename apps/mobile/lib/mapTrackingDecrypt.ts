@@ -117,7 +117,9 @@ export const createMapTrackingDecryptPoint = ({
             serverUpdatedAt: point.updatedAt,
             sourceGroupId: groupId,
             speed: trackingPoint.speed,
-            timestamp: new Date(trackingPoint.time).toISOString(),
+            timestamp: new Date(
+              Math.min(trackingPoint.time, point.updatedAt.getTime()),
+            ).toISOString(),
             userId: point.senderUserId,
           },
         };

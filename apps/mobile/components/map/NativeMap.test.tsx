@@ -69,6 +69,7 @@ const savedMapSources: MapSource[] = [];
 let cachedTileClears = 0;
 let forceRefreshMutationCalls = 0;
 let forceRefreshMutationPending = false;
+let forceRefreshMutationPaused = false;
 let forceRefreshMutationSucceeds = true;
 let deferForceRefresh = false;
 let completeForceRefresh: (() => void) | null = null;
@@ -179,6 +180,7 @@ mock.module("@tanstack/react-query", () => ({
     onError?: (error: Error) => void;
     onSuccess?: (data: unknown) => void;
   }) => ({
+    isPaused: forceRefreshMutationPaused,
     isPending: forceRefreshMutationPending,
     mutate: () => {
       forceRefreshMutationCalls += 1;
@@ -204,6 +206,11 @@ mock.module("@tanstack/react-query", () => ({
 }));
 
 mock.module("@maplibre/maplibre-react-native", createMapLibreMockModule);
+
+let screenFocused = true;
+mock.module("@react-navigation/native", () => ({
+  useIsFocused: () => screenFocused,
+}));
 
 mock.module("expo-file-system", () => ({
   Paths: { bundle: { uri: "file:///app" } },
@@ -423,6 +430,33 @@ const failMapLoad = async () => {
   });
 };
 
+const mapErrorText = "We couldn’t load the map";
+
+const pressMapTryAgain = async () => {
+  expect(getRenderedOutput()).toContain("Try again");
+  const button = root?.container.queryAll((node) => node.type === "mock-button")[0];
+  const onPress = button?.props["onPress"];
+  if (typeof onPress !== "function") throw new Error("Missing Try again button");
+  await act(async () => onPress());
+};
+
+const captureTimers = () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const timers = new Map<number, () => void>();
+  globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
+    if (delay === 5_000 || delay === 300_000) {
+      timers.set(delay, callback as () => void);
+    }
+    return originalSetTimeout(callback, delay);
+  }) as typeof setTimeout;
+  return {
+    timers,
+    restore: () => {
+      globalThis.setTimeout = originalSetTimeout;
+    },
+  };
+};
+
 const finishLoadingStyle = async () => {
   await act(async () => {
     emitNativeMapDidFinishLoadingStyle();
@@ -486,7 +520,9 @@ describe("NativeMap integration harness", () => {
     };
     forceRefreshMutationCalls = 0;
     forceRefreshMutationPending = false;
+    forceRefreshMutationPaused = false;
     forceRefreshMutationSucceeds = true;
+    screenFocused = true;
     deferForceRefresh = false;
     completeForceRefresh = null;
     forceRefreshUrl = "https://forced.example/pmtiles";
@@ -1043,12 +1079,7 @@ describe("NativeMap integration harness", () => {
   });
 
   test("keeps the source retry scheduled if the style loads after a PMTiles error", async () => {
-    const originalSetTimeout = globalThis.setTimeout;
-    let retry: (() => void) | undefined;
-    globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
-      if (delay === 5_000) retry = callback as () => void;
-      return originalSetTimeout(callback, delay);
-    }) as typeof setTimeout;
+    const { restore, timers } = captureTimers();
     try {
       await renderNativeMap();
       await act(async () => {
@@ -1059,19 +1090,19 @@ describe("NativeMap integration harness", () => {
             "[Style]: Failed to load source protomaps: Error fetching PMTiles header: timeout",
         });
       });
-      expect(getRenderedOutput()).toContain("activity-indicator");
+      expect(getRenderedOutput()).toContain(mapErrorText);
       await finishLoadingStyle();
-      expect(getRenderedOutput()).toContain("activity-indicator");
-      expect(retry).toBeDefined();
+      expect(getRenderedOutput()).toContain(mapErrorText);
+      expect(timers.get(5_000)).toBeDefined();
       await act(async () => {
-        retry?.();
+        timers.get(5_000)?.();
       });
       expect(forceRefreshMutationCalls).toBe(1);
       expect(getNativeMapViewMountCount()).toBe(2);
       await finishLoadingStyle();
-      expect(getRenderedOutput()).not.toContain("activity-indicator");
+      expect(getRenderedOutput()).not.toContain(mapErrorText);
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
+      restore();
     }
   });
 
@@ -1090,12 +1121,7 @@ describe("NativeMap integration harness", () => {
   });
 
   test("recovers from PMTiles header errors reported through the native logger", async () => {
-    const originalSetTimeout = globalThis.setTimeout;
-    let retry: (() => void) | undefined;
-    globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
-      if (delay === 5_000) retry = callback as () => void;
-      return originalSetTimeout(callback, delay);
-    }) as typeof setTimeout;
+    const { restore, timers } = captureTimers();
     try {
       await renderNativeMap();
       expect(emitNativeMapLog({ level: "error", tag: "Mbgl", message: "unrelated error" })).toBe(
@@ -1111,24 +1137,19 @@ describe("NativeMap integration harness", () => {
           }),
         ).toBe(true);
       });
-      expect(retry).toBeDefined();
+      expect(timers.get(5_000)).toBeDefined();
       await act(async () => {
-        retry?.();
+        timers.get(5_000)?.();
       });
       expect(forceRefreshMutationCalls).toBe(1);
       expect(getNativeMapViewMountCount()).toBe(2);
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
+      restore();
     }
   });
 
-  test("keeps retrying a PMTiles source failure when the first credential refresh fails", async () => {
-    const originalSetTimeout = globalThis.setTimeout;
-    let retry: (() => void) | undefined;
-    globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
-      if (delay === 5_000) retry = callback as () => void;
-      return originalSetTimeout(callback, delay);
-    }) as typeof setTimeout;
+  test("retries a PMTiles source failure again later when the first credential refresh fails", async () => {
+    const { restore, timers } = captureTimers();
     try {
       await renderNativeMap();
       forceRefreshMutationSucceeds = false;
@@ -1141,19 +1162,19 @@ describe("NativeMap integration harness", () => {
         });
       });
       await act(async () => {
-        retry?.();
+        timers.get(5_000)?.();
       });
       expect(forceRefreshMutationCalls).toBe(1);
       expect(getNativeMapViewMountCount()).toBe(1);
-      expect(getRenderedOutput()).toContain("activity-indicator");
+      expect(getRenderedOutput()).toContain(mapErrorText);
       forceRefreshMutationSucceeds = true;
       await act(async () => {
-        retry?.();
+        timers.get(300_000)?.();
       });
       expect(forceRefreshMutationCalls).toBe(2);
       expect(getNativeMapViewMountCount()).toBe(2);
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
+      restore();
     }
   });
 
@@ -1215,7 +1236,7 @@ describe("NativeMap integration harness", () => {
     await failMapLoad();
 
     expect(forceRefreshMutationCalls).toBe(1);
-    expect(getRenderedOutput()).toContain("activity-indicator");
+    expect(getRenderedOutput()).toContain(mapErrorText);
   });
 
   test("retries a map failure that occurs during a scheduled URL refresh", async () => {
@@ -1239,31 +1260,90 @@ describe("NativeMap integration harness", () => {
     expect(forceRefreshMutationCalls).toBe(0);
   });
 
-  test("automatically retries a failed refresh while showing a loading indicator", async () => {
-    const originalSetTimeout = globalThis.setTimeout;
-    let retry: (() => void) | undefined;
-    globalThis.setTimeout = ((callback: TimerHandler, delay?: number) => {
-      if (delay === 5_000) retry = callback as () => void;
-      return originalSetTimeout(callback, delay);
-    }) as typeof setTimeout;
-
+  test("shows the map error after a failed refresh and retries it shortly after", async () => {
+    const { restore, timers } = captureTimers();
     try {
       forceRefreshMutationSucceeds = false;
       await renderNativeMap();
       await failMapLoad();
       expect(forceRefreshMutationCalls).toBe(1);
-      expect(getRenderedOutput()).toContain("activity-indicator");
-      expect(retry).toBeDefined();
+      expect(getRenderedOutput()).toContain(mapErrorText);
+      expect(getRenderedOutput()).not.toContain("activity-indicator");
+      expect(timers.get(5_000)).toBeDefined();
 
       forceRefreshMutationSucceeds = true;
       await act(async () => {
-        retry?.();
+        timers.get(5_000)?.();
       });
       expect(forceRefreshMutationCalls).toBe(2);
       expect(setQueryData).toHaveBeenCalled();
     } finally {
-      globalThis.setTimeout = originalSetTimeout;
+      restore();
     }
+  });
+
+  test("stops retrying a failing map source on its own after two more attempts", async () => {
+    const { restore, timers } = captureTimers();
+    try {
+      forceRefreshMutationSucceeds = false;
+      await renderNativeMap();
+      await failMapLoad();
+      for (const delay of [5_000, 300_000]) {
+        const retry = timers.get(delay);
+        timers.clear();
+        expect(retry).toBeDefined();
+        await act(async () => {
+          retry?.();
+        });
+      }
+      await flushEffects();
+
+      expect(forceRefreshMutationCalls).toBe(3);
+      expect(timers.size).toBe(0);
+      expect(getRenderedOutput()).toContain(mapErrorText);
+    } finally {
+      restore();
+    }
+  });
+
+  test("Try again on the map error retries the map source", async () => {
+    forceRefreshMutationSucceeds = false;
+    await renderNativeMap();
+    await failMapLoad();
+    expect(forceRefreshMutationCalls).toBe(1);
+
+    forceRefreshMutationSucceeds = true;
+    await pressMapTryAgain();
+
+    expect(forceRefreshMutationCalls).toBe(2);
+    expect(getNativeMapViewMountCount()).toBe(2);
+    expect(getRenderedOutput()).not.toContain(mapErrorText);
+  });
+
+  test("does not retry the map source while the map screen is in the background", async () => {
+    const { restore, timers } = captureTimers();
+    try {
+      screenFocused = false;
+      forceRefreshMutationSucceeds = false;
+      await renderNativeMap();
+      await failMapLoad();
+
+      expect(timers.size).toBe(0);
+    } finally {
+      restore();
+    }
+  });
+
+  test("shows the map error instead of a spinner while the refresh waits for a connection", async () => {
+    deferForceRefresh = true;
+    await renderNativeMap();
+    await failMapLoad();
+    forceRefreshMutationPending = true;
+    forceRefreshMutationPaused = true;
+    await renderNativeMap();
+
+    expect(getRenderedOutput()).toContain(mapErrorText);
+    expect(getRenderedOutput()).not.toContain("activity-indicator");
   });
 
   test("resets the failure retry gate after the style finishes loading", async () => {
@@ -1436,7 +1516,7 @@ describe("NativeMap integration harness", () => {
     });
   });
 
-  test("repeated map-load failures show recoverable UI instead of looping", async () => {
+  test("repeated map-load failures show the map error instead of looping", async () => {
     await renderNativeMap();
 
     await failMapLoad();
@@ -1454,7 +1534,7 @@ describe("NativeMap integration harness", () => {
     await failMapLoad();
 
     expect(forceRefreshMutationCalls).toBe(1);
-    expect(getRenderedOutput()).toContain("activity-indicator");
+    expect(getRenderedOutput()).toContain(mapErrorText);
 
     await failMapLoad();
     await failMapLoad();

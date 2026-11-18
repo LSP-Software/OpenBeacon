@@ -15,6 +15,12 @@ import { createRoot, type Root } from "test-renderer";
 let fetches = 0;
 let screenFocused = true;
 let requestedArchiveIds: (string | undefined)[] = [];
+let serverClockAheadMs = 0;
+let serverRefreshInMs = 30_000;
+
+mock.module("../lib/locationSharing.ts", () => ({
+  serverNow: () => Date.now() + serverClockAheadMs,
+}));
 
 mock.module("@react-navigation/native", () => ({
   useIsFocused: () => screenFocused,
@@ -43,8 +49,8 @@ mock.module("../lib/api.ts", () => ({
             archiveId: "a-20261107",
             mapBuild: "20261107",
             mapSlot: "a" as const,
-            expiresAt: new Date(Date.now() + 90_000).toISOString(),
-            refreshAt: new Date(Date.now() + 30_000).toISOString(),
+            expiresAt: new Date(Date.now() + serverClockAheadMs + 90_000).toISOString(),
+            refreshAt: new Date(Date.now() + serverClockAheadMs + serverRefreshInMs).toISOString(),
             url: `https://example.com/map.pmtiles?signature=${fetches}`,
           };
         },
@@ -94,6 +100,8 @@ describe("useSignedPmtilesUrl", () => {
     environmentManager.setIsServer(() => false);
     fetches = 0;
     requestedArchiveIds = [];
+    serverClockAheadMs = 0;
+    serverRefreshInMs = 30_000;
     screenFocused = true;
     focusManager.setFocused(true);
     queryClient = new QueryClient();
@@ -164,6 +172,37 @@ describe("useSignedPmtilesUrl", () => {
     await settle();
 
     expect(fetches).toBe(1);
+  });
+
+  test("a phone clock ahead of the server still waits for the server's refresh time", async () => {
+    serverClockAheadMs = -10 * 60_000;
+    await render();
+
+    await advance(29_000);
+    expect(fetches).toBe(1);
+    await advance(1_000);
+
+    expect(fetches).toBe(2);
+  });
+
+  test("a phone clock behind the server refreshes before the URL expires", async () => {
+    serverClockAheadMs = 5 * 60_000;
+    await render();
+
+    await advance(30_000);
+
+    expect(fetches).toBe(2);
+  });
+
+  test("asks at most every 15 seconds when the server hands back a URL already due", async () => {
+    serverRefreshInMs = -1_000;
+    await render();
+
+    await advance(14_000);
+    expect(fetches).toBe(1);
+    await advance(1_000);
+
+    expect(fetches).toBe(2);
   });
 
   test("requests the archive the map already uses so refreshes never switch archives", async () => {

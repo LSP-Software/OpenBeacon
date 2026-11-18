@@ -596,13 +596,26 @@ export const NativeMap = ({
           y={chip.y}
         />
       ))}
-      {map.showRecoverableError || map.isRefreshing ? (
+      {map.isRefreshing ? (
         <View
           className="absolute left-3 rounded-full bg-card p-3"
           style={{ top: insets.top + 56 }}
           accessibilityLabel="Loading map"
         >
           <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : map.showRecoverableError ? (
+        <View
+          className="absolute left-3 right-16 gap-3 rounded-2xl border border-border bg-card p-4 shadow-md shadow-black/15"
+          style={{ top: insets.top + 56 }}
+          accessibilityLiveRegion="polite"
+        >
+          <Text className="text-tertiary">
+            We couldn’t load the map. Check your connection and try again.
+          </Text>
+          <Button variant="secondary" onPress={map.retryMapLoad}>
+            <Text>Try again</Text>
+          </Button>
         </View>
       ) : null}
       <View

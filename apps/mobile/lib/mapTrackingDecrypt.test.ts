@@ -144,6 +144,53 @@ describe("createMapTrackingDecryptPoint", () => {
     expect(wrappedKeyFetches).toEqual([epoch.epochId]);
   });
 
+  test("never dates a point later than the server received it", async () => {
+    const { keyPair, recipient } = createRecipient("device-1", "user-1");
+    const { epoch, epochKey, wrappedKeys } = createInitialGroupEpoch({
+      creator: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+      groupId: "group-1",
+      recipients: [recipient],
+    });
+    const receivedAt = new Date("2026-07-17T12:00:00.000Z");
+    const encrypted = encryptGroupPayload({
+      epochId: epoch.epochId,
+      epochKey,
+      groupId: "group-1",
+      kind: TRACKING_POINT_KIND,
+      payload: encodeTrackingPoint({
+        accuracy: null,
+        battery: { charging: false, level: 80 },
+        latitude: 51.5,
+        longitude: -0.12,
+        speed: null,
+        stayUntil: null,
+        time: receivedAt.getTime() + 30 * 60_000,
+      }),
+      senderDeviceId: "device-sender",
+    });
+    const decryptPoint = createMapTrackingDecryptPoint({
+      resolveEpochKey: resolveFromDeviceWrap({
+        device: { deviceId: recipient.deviceId, privateKey: keyPair.privateKey },
+        getWrappedEpochKey: async () => wrappedKeys[0] ?? null,
+      }),
+    });
+
+    const result = await decryptPoint({
+      groupId: "group-1",
+      point: {
+        ciphertext: encrypted.ciphertext,
+        revisionPrefix: "",
+        updatedAt: receivedAt,
+        epochId: encrypted.epochId,
+        nonce: encrypted.nonce,
+        senderDeviceId: encrypted.senderDeviceId,
+        senderUserId: "user-sender",
+      },
+    });
+
+    expect(result.status === "ok" ? result.entry.timestamp : null).toBe("2026-07-17T12:00:00.000Z");
+  });
+
   test("returns undecryptable when the wrapped epoch key is missing", async () => {
     const { keyPair, recipient } = createRecipient("device-1", "user-1");
     const decryptPoint = createMapTrackingDecryptPoint({
